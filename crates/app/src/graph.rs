@@ -221,9 +221,12 @@ pub fn changed_files(host: &dyn Host, root: &str, hash: &str) -> Result<Vec<(cha
     if !out.ok() {
         return Err(out.stderr_str());
     }
-    Ok(out
-        .stdout_str()
-        .lines()
+    Ok(parse_name_status(&out.stdout_str()))
+}
+
+/// `--name-status` lines: (status letter, path, old path on a rename).
+pub fn parse_name_status(out: &str) -> Vec<(char, String, Option<String>)> {
+    out.lines()
         .filter_map(|l| {
             let mut it = l.split('\t');
             let status = it.next()?.chars().next()?;
@@ -233,7 +236,7 @@ pub fn changed_files(host: &dyn Host, root: &str, hash: &str) -> Result<Vec<(cha
                 None => Some((status, a, None)),
             }
         })
-        .collect())
+        .collect()
 }
 
 /// A file change: status letter, path, old path (on rename), added/deleted lines.
