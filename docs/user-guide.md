@@ -19,6 +19,7 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Workspaces with several folders](#workspaces-with-several-folders)
 - [Language servers](#language-servers)
 - [JSON and YAML schemas](#json-and-yaml-schemas)
+- [Data tools](#data-tools)
 - [Colours](#colours)
 - [Spell check](#spell-check)
 - [Merge editor](#merge-editor)
@@ -622,6 +623,38 @@ Schemas from the internet are downloaded with `curl` and cached for a week (`~/L
 catalogue; turn `json.schemaDownload.enable` off to stop all of them. A `$schema` that points to any host other than SchemaStore
 asks first, once per host and session (`"http.confirmRequests"`, see [HTTP files](#http-files); declining is remembered until you
 restart, and the file keeps a note that the schema was not loaded). Custom YAML tags (`!Ref`, `!reference`) are skipped.
+
+## Data tools
+
+Command palette entries (no default keys; bind `data.convert`, `data.query`, `data.copyPath` or `data.decodeSelection` in
+`keybindings.jsonc` if you want them). Everything happens on your computer: nothing is sent anywhere, nothing in a document is
+executed, and decoded tokens are not logged.
+
+- **Data: Convert To…** converts the selection, or the whole file when nothing is selected, to JSON, YAML, TOML or `.env`, into a
+  new scratch tab or in place (*Replace the text with…*). Key order is kept (TOML writes plain values before tables, as it must),
+  integers beyond 2^53 stay exact, multi-document YAML becomes a list. The format of the source comes from the file name, or is
+  guessed for a selection. What a format cannot hold is never guessed: TOML has no null and wants arrays of one kind, so
+  converting `null` or `[1, "a"]` to TOML fails and names the path (`.servers[1].port`); `.env` holds flat text, so nested values
+  fail unless you pick *.env, nested keys joined with __*. A repeated key stops the conversion at its line. Comments (and YAML
+  anchors, expanded on the way) are lost and the status bar says so (*Comments are not kept.*); JSON with comments is read too.
+- **Data: Query…** opens a bar above the editor. Type a [jq](https://jqlang.org/manual/) filter and the result appears in a
+  `query.json` tab about 100 ms after you stop typing, computed off the interface thread. Esc closes the bar; Enter closes it and
+  moves to the results. A syntax error shows its column in the bar. It works on JSON, YAML, TOML and `.env` files up to 20 MB;
+  results longer than 5 MB are cut and the bar says so.
+  Supported: paths (`.a.b[0]`, `.["a b"]`, `.[]`, `.[2:4]`, `..`, `?`), `|`, `,`, `//`, `==` `!=` `<` `<=` `>` `>=`, `and` `or` `not`,
+  `+ - * / %`, `[...]`, `{a, b: .c}`, `if … then … elif … else … end`, and `length`, `keys`, `values`, `map`, `select`, `has`,
+  `contains`, `add`, `any`, `all`, `first`, `last`, `limit`, `sort`, `sort_by`, `group_by`, `unique`, `unique_by`, `reverse`, `min`,
+  `max`, `flatten`, `to_entries`, `from_entries`, `with_entries`, `map_values`, `tostring`, `tonumber`, `tojson`, `fromjson`,
+  `ascii_downcase`, `ascii_upcase`, `startswith`, `endswith`, `ltrimstr`, `rtrimstr`, `join`, `split`, `floor`, `type`, `empty`. There are no
+  variables, regular expressions, assignments or functions that read files, the environment or the clock.
+- **Data: Copy Path at Cursor** copies the path of the value or key under the cursor in a JSON, YAML or TOML file, for example
+  `.servers[2].host` (keys that are not plain words are written `."my key"`). The same path is shown in the status bar for
+  files up to 512 KB; click it to copy.
+- **Data: Decode Selection…** shows a selected JWT (header and payload; the signature is **not** verified, and the list says so) or
+  Unix timestamps in seconds or milliseconds as UTC and local time. Local time needs macOS or Linux; on Windows only UTC is shown.
+
+Settings: `data.indent` (spaces per level in JSON and YAML output, default 2) and `data.sortKeys` (default off), see
+[Settings](settings.md).
 
 ## Colours
 

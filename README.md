@@ -62,6 +62,8 @@ screen buffers are part of the number. Files over 32 MB open in a chunked read-o
 - **Git inside.** Source control, branch graph, timeline and local history, blame, a three-way merge editor, GitHub pull requests.
 - **Everyday tools without extensions.** JSON/YAML schema validation, spell check (English built in, more on demand), colour picker,
   `.http` requests, log follow and filter, Markdown preview, hex view.
+- **Data tools.** Convert between JSON, YAML, TOML and `.env`, query a file with a jq-style language as you type, copy the path
+  under the cursor, decode a JWT or a Unix timestamp. All local; see [Data tools](docs/user-guide.md#data-tools).
 - **Turkish interface.** The whole interface is translated to Turkish; the system language is followed by default
   (see [Interface language](docs/user-guide.md#interface-language)).
 
