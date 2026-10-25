@@ -1496,10 +1496,10 @@ impl Workbench {
             return;
         }
         // With hot exit on, dirty files are backed up and come back when returning to the folder.
-        if !cx.global::<Settings>().hot_exit && self.refuse_if_dirty(cx) {
+        self.flush_backups(cx);
+        if (!cx.global::<Settings>().hot_exit || self.has_unbacked_dirty(cx)) && self.refuse_if_dirty(cx) {
             return;
         }
-        self.flush_backups(cx);
         self.persist_session(cx);
         self.shutdown_lsp(cx);
         self.roots.extra_roots.clear();
