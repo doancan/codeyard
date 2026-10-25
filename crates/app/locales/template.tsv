@@ -5,6 +5,8 @@
 (nothing)	
 (the lines are removed)	
 + Create new branch…	
+.env needs a flat set of keys and values, but this document is a {}	
+.env, nested keys joined with __	
 A file named “{}” is already there; a folder cannot replace it. Rename or remove it first.	
 A file that is only partly transferred is removed, and so is a new folder. A folder you merge into keeps what was already copied.	
 A file you opened names a schema that is hosted on {}. Downloading it sends a request to that server (your IP address and the schema's address). Only allow it if you trust the file and the host.	
@@ -59,6 +61,7 @@ Already minified
 Always open *.{0} as {1}	
 Amended {}	
 An existing file with the same name is never overwritten.	
+Anchors and aliases were expanded.	
 App: Quit	
 Applied {}	
 Apply (keep the stash)	
@@ -98,7 +101,16 @@ Cancel Transfer
 Cancel “{}”?	
 Cancelling…	
 Cannot check out #{}: you have uncommitted changes that would be overwritten. Commit or stash them, then try again	
+Cannot check whether {0} has a key of type {1}	
+Cannot index {0} with {1}	
+Cannot index {0} with “{1}”	
+Cannot index {} with object	
+Cannot iterate over {}	
+Cannot join {}	
 Cannot open this link: {}	
+Cannot parse {} as a number	
+Cannot use {} as an entry	
+Cannot use {} as an object key	
 Change All Occurrences	
 Changed	
 Changed {0} file ({1} file operations skipped)|Changed {0} files ({1} file operations skipped)	
@@ -166,9 +178,11 @@ Color matching brackets by nesting depth
 Color symbols by their meaning, from the language server	
 Color theme of the whole window and the editor	
 Colorful Folders	
+Column {0}: {1}	
 Command Palette	
 Command Palette…	
 Command palette	
+Comments are not kept.	
 Commit	
 Commit (Amend)	
 Commit ({})	
@@ -210,6 +224,8 @@ Continue (F5)
 Continuing rebase…	
 Convert indentation to spaces	
 Convert indentation to tabs	
+Convert to…	
+Converted to {}	
 Copied {}	
 Copied {} item ({}) to {}|Copied {} items ({}) to {}	
 Copied {} item.|Copied {} items.	
@@ -227,6 +243,7 @@ Copy Version
 Copy branch name	
 Copy link	
 Copy the full hash	
+Copy the path at the cursor	
 Copy to the left	
 Copy to the right	
 Copy “{0}” to {1}?	
@@ -305,6 +322,10 @@ Customize
 Cut	
 Data breakpoint set: the program stops when {} is written.	
 Data breakpoint: {}	
+Data: Convert To…	
+Data: Copy Path at Cursor	
+Data: Decode Selection…	
+Data: Query…	
 Days	
 Debug	
 Debug Console	
@@ -333,6 +354,7 @@ Debug: Step Over
 Debug: Stop	
 Debug: Toggle Breakpoint	
 Dec	
+Decoded here only: nothing is sent or logged	
 Delay for afterDelay (ms)	
 Delete	
 Delete Permanently	
@@ -387,6 +409,8 @@ Drop
 Drop Stash…	
 Dropped {}	
 Duplicate	
+Duplicate key	
+Duplicate key “{}”	
 Edit	
 Edit a host	
 Edit which SSH host?	
@@ -499,6 +523,8 @@ Expand Emmet abbreviations (div.box>ul>li*3) with Tab
 Expand Folders (the selected one, or the open file's folders)	
 Expand Selection	
 Expand all results	
+Expected KEY=value	
+Expected “{}”	
 Explorer	
 Explorer (⇧⌘E)	
 Export as Text…	
@@ -573,6 +599,7 @@ Font size of the terminal
 Format Document	
 Format Selection	
 Format pasted text with the language server	
+Format strings are not supported	
 Format with the language server when saving	
 Formatted	
 Forward	
@@ -655,6 +682,7 @@ HOME is not set
 HTTP: Send Request	
 HTTP: Show Last Response Headers	
 Hard reset to {}?	
+Header	
 Help	
 Help: About Codeyard	
 Help: Check for Updates…	
@@ -706,6 +734,7 @@ Installing — Codeyard will restart.
 Installing…	
 Into a folder on this computer or the connected host	
 Invalid pattern	
+Invalid string	
 It can't be moved to the Trash ({}). Deleting it permanently can't be undone.	
 JSON: Minify Document	
 Jan	
@@ -733,6 +762,7 @@ Later
 Learn	
 Left is writable	
 Left ↔ Right	
+Let programs in the terminal write to the clipboard	
 Let the language server format while typing }, ; or Enter	
 Lightweight editing, on this machine or over SSH.	
 Line endings for this file (applied on save)	
@@ -749,6 +779,7 @@ Loading pull requests…
 Loading…	
 Local	
 Local history	
+Local time is not available on this system	
 Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it	
 Lost the connection to {}: {}. Your open files stay here and unsaved changes are kept, but they cannot be saved until you reconnect (File: Save a Copy to This Computer… keeps one locally).	
 Lost the connection to {}: {}. Your open files stay here.	
@@ -918,6 +949,8 @@ Nothing was installed. What the update server sent didn't match the signed check
 Nothing yet.	
 Nothing yet: open a folder to see it here.	
 Nov	
+Numbers and booleans were written as text.	
+Object keys must be strings, not {}	
 Oct	
 On this computer	
 Once a day, Codeyard can look for a newer version. It downloads two small files from github.com: the checksum list of the latest release and its signature. GitHub sees your IP address and that the request comes from curl; no account, no cookies, nothing about your files.	
@@ -983,11 +1016,13 @@ Paste
 Path (relative to the folder, or absolute)	
 Path of the folder (~ is your home folder)	
 Path on this computer (~ is your home folder)	
+Paths are shown for JSON, YAML and TOML files	
 Paths can't end with / or contain . or .. parts	
 Pattern, e.g. foo($X, $$$REST)	
 Pause	
 Pause the program first (a breakpoint or ⏸): the variable has to be in scope.	
 Paused on exception: {}	
+Payload	
 Pick a file from the tree, or:	
 Pick a stash to apply	
 Pick a stash to drop	
@@ -1043,6 +1078,8 @@ Pushed
 Pushing…	
 Put the cursor inside a merge conflict	
 Put the cursor on a symbol to rename it	
+Query	
+Query, e.g. .items[].name	
 Query: {}	
 Quick Fix…	
 Quick fix	
@@ -1052,6 +1089,7 @@ Quit without saving
 Quitting loses everything since the last save.	
 Quitting now can leave the installation unfinished. It takes a few seconds.	
 Reading folders… {0} and {1} entries	
+Reading the file…	
 Rebase	
 Rebase aborted	
 Rebase finished	
@@ -1126,6 +1164,7 @@ Replace Anyway
 Replace all (⌥⌘↵)	
 Replace every match in these files (↵ in the field)	
 Replace in this file	
+Replace the text with {}	
 Replace {0} match in 1 file with “{1}”?|Replace {0} matches in 1 file with “{1}”?	
 Replace {0} match in {1} files with “{2}”?|Replace {0} matches in {1} files with “{2}”?	
 Replaced {0}; could not change {1}	
@@ -1207,12 +1246,14 @@ Select All
 Select All Occurrences	
 Select Folder for Compare	
 Select Language Mode	
+Select a JWT or a Unix timestamp first	
 Select a branch to check out	
 Select a color theme	
 Select a debug configuration	
 Select a file icon theme	
 Select a word and press ⌘D to add the next match as another cursor.	
 Select all matches (⌥↵)	
+Select at most 20 timestamps	
 Select for Compare	
 Select the active file in the explorer	
 Selected {} for compare. Right-click another file and choose Compare.	
@@ -1264,6 +1305,7 @@ Showing the current branch (click: all branches)
 Showing the first 100,000 files of a very large folder	
 Shrink Selection	
 Side by side	
+Signature not verified: the token is only decoded, not checked	
 Skip This Version	
 Skip Those Files	
 Small colored badges with the language's letters	
@@ -1272,11 +1314,13 @@ Snippets: Insert Snippet…
 Software Update	
 Solid blue folders like Finder, outline files with a language dot like GitHub	
 Solid folders colored and marked by purpose, solid files colored by language	
+Sort object keys alphabetically in the output of Data: Convert To… and Data: Query… (off: keep the file's order)	
 Source Control	
 Source Control (⌃⇧G)	
 Source Control graph view: graph (branch lanes), compact (one line per commit) or dates (grouped by day)	
 Source control	
 Spaces per indent level (empty: detect per file)	
+Spaces per level in the JSON and YAML written by Data: Convert To… and Data: Query…	
 Spelling: Fix Word at Cursor…	
 Spelling: Install Dictionary…	
 Spelling: Toggle Spell Check	
@@ -1293,6 +1337,7 @@ Staging changes needs a UTF-8 file
 Staging changes needs a UTF-8 file (this one is stored in another encoding)	
 Start	
 Start a debug session first (F5): the adapter says which exceptions it can break on.	
+Start and end of a slice must be numbers	
 Start language servers	
 Start search results folded or open	
 Starting the download…	
@@ -1309,6 +1354,7 @@ Stop
 Stop (⇧F5)	
 Stop a search after this many matches	
 Stopped.	
+String interpolation is not supported	
 Structural search: the pattern is code; $X matches one node, $$$X several	
 Suggest words from the file when there is no language server	
 Suggestions pop up while typing (off: only Ctrl+Space)	
@@ -1317,6 +1363,8 @@ Switch Workspace or Connect to Host…
 Switched to {}	
 Synced	
 Syncing…	
+TOML dates were turned into text.	
+TOML needs a table at the top level, but this document is a {}	
 Tabs	
 Tagged {0} as {1}	
 Tasks: Configure Tasks	
@@ -1357,24 +1405,36 @@ The debug adapter stopped (exit code {})
 The download finished but js-debug was not found in it.	
 The element can't be renamed.	
 The file changed on disk while you were editing. Nothing was saved.	
+The file could not be read.	
 The file is empty.	
+The file is not open any more.	
 The file is too large for an outline.	
 The folder and everything in it will be deleted.	
 The folder could not be read on the server: {}	
 The new version couldn't be installed from here. You can download it from the release page instead.	
+The number {} cannot be written in JSON	
 The pattern does not parse: {0} (line {1}, column {2})	
 The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code.	
+The query ends too early	
+The query is nested too deeply	
+The query is too long	
+The query needs more work than allowed; narrow it down	
+The quoted value is not closed	
 The release notes are longer: read the rest at {}	
 The release notes are longer: read the rest on GitHub.	
 The remote “{}” is not reachable as a git repository (it may be private or renamed); check `git remote -v`	
+The repeated string would be too long	
 The request failed.	
 The response could not be saved (curl write error).	
 The response is larger than {} and was not downloaded.	
 The result would not parse in {0} file: {1}|The result would not parse in {0} files: {1}	
 The search stopped at the result limit: only the files listed are changed. Open files can be undone; closed files are written to disk.	
+The selection is neither a JWT nor a Unix timestamp	
 The server did not answer within 60 seconds.	
 The server wants credentials: run the command once in the terminal (or set up an SSH key).	
 The state database was damaged ({0}). It was moved to {1} and a new one was started; recent folders and open tabs were forgotten.	
+The string is not closed	
+The token has no signature.	
 The update couldn't be installed	
 The update couldn't be verified	
 The update failed part-way and Codeyard couldn't put the previous version back. It may be at {0}. If Codeyard doesn't start, move it back to {1}.	
@@ -1407,6 +1467,7 @@ This file is already on this computer. Use Save As instead.
 This file is not in the repository.	
 This file is outside the open folder.	
 This file is outside the repository root	
+This file is {0} MB; Data: Query handles files up to {1} MB.	
 This file mixes line endings; saving writes all of them as {}, like its first line. Change it in the status bar.	
 This file was deleted on disk. Saving will create it again.	
 This folder is not a git repository.	
@@ -1442,12 +1503,15 @@ Type a commit message first
 Type a line number between 1 and {}	
 Type a name	
 Type a name from ~/.ssh/config or user@host	
+Type a query. Esc closes the bar.	
 Type the shortcut for {} (e.g. cmd-shift-d), then save	
 UI font of the whole window (empty: system font)	
 Underline misspelled words in prose files and in code comments	
 Undid commit “{}”	
 Undo	
 Undo Last Commit	
+Unexpected text after the closing quote	
+Unexpected “{}”	
 Unfold	
 Unfold All	
 Unknown theme '{0}'. Available: {1}	
@@ -1473,6 +1537,7 @@ Uploading needs the connection to {}, which failed: use Reconnect first.
 Uploading works with a connected SSH host: connect first (⌃R).	
 VS Code settings.json could not be read	
 Variables	
+Variables are not supported	
 Verifying and installing…	
 Version {}	
 View	
@@ -1577,6 +1642,7 @@ curl returned no response headers
 current	
 dark	
 data breakpoint	
+debug output was dropped: the debugger could not keep up	
 decoded as {}	
 default	
 destination	
@@ -1605,6 +1671,7 @@ field
 file	
 files.associations.{}: expected a language name or extension	
 files.autoSave: unknown value {} (off, afterDelay, onFocusChange)	
+flatten depth must not be negative	
 folder	
 from ~/.ssh/config (a backup is kept)	
 function	
@@ -1630,16 +1697,19 @@ it could not be compared
 it is a file on one side and a folder or link on the other	
 it is not a regular file or folder	
 its name differs from another entry only in letter case	
+join needs a string separator, got {}	
 just now	
 language server is not running	
 latest {} open	
 left	
 light	
+limit needs a whole number	
 lines {0}–{1}	
 link target differs	
 listening on the server	
 local agent, protocol test	
 method	
+milliseconds	
 module	
 name url (e.g. origin https://host/repo.git)	
 namespace	
@@ -1672,11 +1742,13 @@ remote
 request failed	
 review needed	
 right	
+seconds	
 send the request named “{}” first	
 sends {} to {}	
 setting	
 size differs	
 source	
+split input and separator must be strings	
 starting	
 step	
 string	
@@ -1742,8 +1814,17 @@ via the public GitHub API (set GITHUB_TOKEN or use gh for private repositories a
 whole file	
 workbench.colorCustomizations: unknown color role {0} (see crates/theme/design/tokens.json: {1})	
 your words	
+{0} (line {1}, column {2})	
 {0} (saved) ↔ {1} (editor)	
 {0} (stopped at {1})	
+{0} (while parsing {1})	
+{0} and {1} cannot be added	
+{0} and {1} cannot be divided	
+{0} and {1} cannot be divided because the divisor is zero	
+{0} and {1} cannot be multiplied	
+{0} and {1} cannot be subtracted	
+{0} and {1} cannot have their containment checked	
+{0} cannot be used with {1}	
 {0} commit{1} only exist on this branch and will be lost (the reflog keeps them for a while).	
 {0} could not be read ({1})	
 {0} errors, {1} warnings	
@@ -1756,6 +1837,7 @@ your words
 {0} lines · {1}	
 {0} lines · {1} MB · read-only	
 {0} lines, showing from line {1}	
+{0} needs strings, got {1} and {2}	
 {0} of {1} MB	
 {0} of {1}{2}	
 {0} on {1} is deleted for good, with everything in it. It is not moved to the Trash.	
@@ -1763,6 +1845,7 @@ your words
 {0} result in {1} files|{0} results in {1} files	
 {0} was left alone: {1}|{0} were left alone, the first one {1}	
 {0}, {1} {2} {3}	
+{0}: a TOML array holds one kind of value, but this one has {1} and {2}	
 {0}: each entry needs {1} and {2}	
 {0}: expected a color like {1}	
 {0}: expected an array like {1}	
@@ -1772,9 +1855,13 @@ your words
 {0}: expected {1} or a list of kinds	
 {0}: expected {1} or null	
 {0}: no answer from {1}	
+{0}: {1} cannot be written in TOML	
+{0}: {1} does not fit in a TOML integer (64 bits, signed)	
+{0}: “{1}” is not a name .env files can hold (letters, digits and _)	
 {0}{1} found	
 {{$processEnv}} needs a name	
 {} (curl exit {})	
+{} (cut at 5 MB)	
 {} (diff)	
 {} (empty removes the setting)	
 {} (exited)	
@@ -1784,9 +1871,14 @@ your words
 {} (“{}” failed; {} of {} items were transferred before it)	
 {} KB · image preview	
 {} MB · image preview	
+{} YAML documents became one list.	
 {} accepted the connection but sent no reply.	
 {} already exists. Choose another name.	
 {} bookmark|{} bookmarks	
+{} cannot be negated	
+{} cannot be parsed as JSON	
+{} cannot be parsed as a number	
+{} cannot be rounded	
 {} changed no files (merge or empty commit).	
 {} command|{} commands	
 {} conflict left|{} conflicts left	
@@ -1802,14 +1894,20 @@ your words
 {} forwarded	
 {} has more entries than compare.folders.maxFiles allows, so the result is partial.	
 {} has no commits yet.	
+{} has no keys	
+{} has no length	
 {} hour ago|{} hours ago	
 {} implementation|{} implementations	
+{} in a new tab	
 {} incoming call|{} incoming calls	
 {} is a binary file: there is no text diff.	
+{} is a date:	
 {} is already in the workspace.	
 {} is not a trusted folder, so nothing is deleted from it. Open it as a folder and trust it first.	
 {} is not a trusted folder, so nothing is written to it. Open it as a folder and trust it first.	
+{} is not an array	
 {} is not installed	
+{} is too large to be a time in seconds or milliseconds	
 {} isn't available. Or set “lsp.servers” in settings.	
 {} item already exists. Replace it?|{} items already exist. Replace them?	
 {} item|{} items	
@@ -1835,6 +1933,9 @@ your words
 {} · VS Code import	
 {} · user	
 {} ↔ Clipboard	
+{}: .env has no null; give it a value or remove it	
+{}: .env holds only text; nested values need the “joined with __” choice	
+{}: TOML has no null; give it a value or remove it	
 {}: connection failed	
 {}: expected a file pattern or a list of patterns	
 {}: expected a list of numbers ({}–{})	
@@ -1874,12 +1975,17 @@ your words
 “{}” already exists. Replace it?	
 “{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	
 “{}” can't be opened	
+“{}” is called with the wrong number of arguments	
 “{}” is missing here	
+“{}” is not a function this query language has	
+“{}” is not a number	
 “{}” is not a port number	
 “{}” is not a usable branch or remote name	
 “{}” is not a valid http(s) address	
+“{}” is not a valid variable name	
 “{}” is not in the SSH config (or shares a Host line with other names: edit the file).	
 “{}” is not in the dictionary. Quick Fix shows suggestions.	
+“{}” is not supported	
 “{}” was not found in ~/.ssh/config	
 “{}”: {} = {}	
 … {} more line|… {} more lines	

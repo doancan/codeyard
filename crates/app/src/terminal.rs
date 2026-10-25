@@ -76,6 +76,14 @@ impl OutputBacklog {
     }
 }
 
+/// The text a terminal event wants on the clipboard, if `allowed`.
+fn clipboard_text(ev: TermEvent, allowed: bool) -> Option<String> {
+    match ev {
+        TermEvent::ClipboardStore(_, s) if allowed => Some(s),
+        _ => None,
+    }
+}
+
 #[derive(Clone, Copy)]
 struct TermSize {
     cols: usize,
@@ -261,7 +269,7 @@ impl TerminalView {
     fn drain_events(&mut self, cx: &mut Context<Self>) {
         let events: Vec<TermEvent> = std::mem::take(&mut *self.events.0.borrow_mut());
         for ev in events {
-            match ev {
+            match ev.clone() {
                 // The terminal is answering a query (like the cursor position): write it back to the shell.
                 TermEvent::PtyWrite(s) => self.write(s.into_bytes()),
                 TermEvent::Title(_) | TermEvent::ResetTitle if self.title_locked => {}
@@ -273,7 +281,13 @@ impl TerminalView {
                     self.title = "terminal".into();
                     cx.emit(TerminalEvent::TitleChanged);
                 }
-                TermEvent::ClipboardStore(_, s) => cx.write_to_clipboard(ClipboardItem::new_string(s)),
+                // OSC 52: only when the setting allows it (a program could otherwise replace what the user copied).
+                TermEvent::ClipboardStore(..) => {
+                    let allowed = cx.global::<crate::settings::Settings>().terminal_allow_clipboard_write;
+                    if let Some(s) = clipboard_text(ev, allowed) {
+                        cx.write_to_clipboard(ClipboardItem::new_string(s))
+                    }
+                }
                 _ => {}
             }
         }
@@ -1067,6 +1081,20 @@ mod tests {
         assert_eq!(exit, Some(Some(0)), "the exit event is never dropped");
         assert!(held >= MAX_BACKLOG - chunk.len(), "output up to the cap is delivered ({held})");
         assert!(backlog.take_dropped(), "the user is told");
+    }
+
+    #[test]
+    fn osc_52_reaches_the_clipboard_only_when_the_setting_allows_it() {
+        let events = Listener::default();
+        let mut term = Term::new(Config::default(), &TermSize { cols: 80, rows: 24 }, events.clone());
+        let mut parser = Processor::<StdSyncHandler>::default();
+        parser.advance(&mut term, b"\x1b]52;c;Zm9v\x07");
+        let queued = std::mem::take(&mut *events.0.borrow_mut());
+        assert!(queued.iter().any(|e| matches!(e, TermEvent::ClipboardStore(..))), "the terminal reports the store request");
+        let texts = |allowed| queued.iter().cloned().filter_map(|e| clipboard_text(e, allowed)).collect::<Vec<_>>();
+        assert!(texts(false).is_empty(), "off by default: nothing is written");
+        assert_eq!(texts(true), ["foo"]);
+        assert!(!crate::settings::Settings::default().terminal_allow_clipboard_write);
     }
 
     #[test]
