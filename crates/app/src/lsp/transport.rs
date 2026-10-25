@@ -131,44 +131,63 @@ pub struct Client {
 impl Client {
     /// Start the server and handshake. Error if the command is not found or fails to start.
     pub fn start(host: Arc<dyn Host>, config: ServerConfig, root: &str, events: mpsc::Sender<ServerEvent>) -> Result<Arc<Client>, String> {
+        Self::start_with(host, config, root, events, Duration::from_secs(60))
+    }
+
+    fn start_with(
+        host: Arc<dyn Host>,
+        config: ServerConfig,
+        root: &str,
+        events: mpsc::Sender<ServerEvent>,
+        init_timeout: Duration,
+    ) -> Result<Arc<Client>, String> {
         let proc = host.proc_spawn(&config.command, config.args.clone(), Some(root.to_string())).map_err(|e| e.to_string())?;
         let pending: Pending = Arc::default();
         let alive = Arc::new(AtomicBool::new(true));
         let (writer_host, id) = (host.clone(), proc.id);
         // Reader: responses go to whoever is waiting, notifications to the event channel; it answers
         // the server's own requests (configuration, registration) itself.
-        {
+        let reader = {
             let (pending, alive) = (pending.clone(), alive.clone());
-            std::thread::Builder::new()
-                .name(format!("lsp-{}", config.language))
-                .spawn(move || {
-                    let mut dec = Decoder::default();
-                    while let Ok(ev) = proc.events.recv() {
-                        match ev {
-                            ProcEvent::Output(data) => {
-                                for msg in dec.push(&data) {
-                                    route(msg, &pending, &events, &writer_host, id);
-                                }
-                            }
-                            ProcEvent::Exit(code) => {
-                                alive.store(false, Ordering::Relaxed);
-                                for (_, tx) in pending.lock().unwrap().drain() {
-                                    let _ = tx.send(Err(match code {
-                                        Some(127) => "not found".to_string(),
-                                        Some(c) => format!("exited with code {c}"),
-                                        None => "stopped".to_string(),
-                                    }));
-                                }
-                                let _ = events.send(ServerEvent::Exited(code));
-                                break;
+            std::thread::Builder::new().name(format!("lsp-{}", config.language)).spawn(move || {
+                let mut dec = Decoder::default();
+                while let Ok(ev) = proc.events.recv() {
+                    match ev {
+                        ProcEvent::Output(data) => {
+                            for msg in dec.push(&data) {
+                                route(msg, &pending, &events, &writer_host, id);
                             }
                         }
+                        ProcEvent::Exit(code) => {
+                            alive.store(false, Ordering::Relaxed);
+                            for (_, tx) in pending.lock().unwrap().drain() {
+                                let _ = tx.send(Err(match code {
+                                    Some(127) => "not found".to_string(),
+                                    Some(c) => format!("exited with code {c}"),
+                                    None => "stopped".to_string(),
+                                }));
+                            }
+                            let _ = events.send(ServerEvent::Exited(code));
+                            break;
+                        }
                     }
-                })
-                .map_err(|e| e.to_string())?;
+                }
+            })
+        };
+        if let Err(e) = reader {
+            host.proc_kill(id);
+            return Err(e.to_string());
         }
         let mut client = Client { config, host, proc: id, next_id: AtomicI64::new(1), pending, alive, capabilities: Value::Null };
-        let init = client.request("initialize", initialize_params(root), Duration::from_secs(60))?;
+        // A server that never answers (or answers with an error) must not be left running: the caller only sees the Err and
+        // marks the slot failed, and a later restart would spawn a second process next to this one.
+        let init = match client.request("initialize", initialize_params(root), init_timeout) {
+            Ok(init) => init,
+            Err(e) => {
+                client.host.proc_kill(client.proc);
+                return Err(e);
+            }
+        };
         client.capabilities = init["capabilities"].clone();
         client.notify("initialized", json!({}));
         client.notify("workspace/didChangeConfiguration", json!({ "settings": {} }));
@@ -475,6 +494,79 @@ mod tests {
         // A later empty list clears the file (the UI removes the entry), so it must replace, not be skipped.
         merge_server_event(&mut q, diag("/a.rs", 0));
         assert_eq!(latest(&q, "/a.rs"), Some(0));
+    }
+
+    /// The local host with a count of `proc_kill` calls.
+    struct KillCounter {
+        inner: host::RemoteHost,
+        kills: std::sync::atomic::AtomicUsize,
+    }
+
+    impl Host for KillCounter {
+        fn info(&self) -> &proto::HostInfo {
+            self.inner.info()
+        }
+        fn label(&self) -> String {
+            self.inner.label()
+        }
+        fn is_remote(&self) -> bool {
+            false
+        }
+        fn call(&self, req: proto::Request) -> host::Result<proto::Response> {
+            self.inner.call(req)
+        }
+        fn search(&self, query: proto::SearchQuery) -> host::Result<host::SearchStream> {
+            self.inner.search(query)
+        }
+        fn hash_tree(&self, root: &str, ignore: Vec<String>, gitignore: bool, limit: u32, only: Option<Vec<String>>) -> host::Result<host::HashStream> {
+            self.inner.hash_tree(root, ignore, gitignore, limit, only)
+        }
+        fn cancel(&self, id: u32) {
+            self.inner.cancel(id)
+        }
+        fn pty_spawn(&self, cols: u16, rows: u16, cwd: Option<String>, shell: Option<String>) -> host::Result<host::Pty> {
+            self.inner.pty_spawn(cols, rows, cwd, shell)
+        }
+        fn pty_input(&self, pty: u32, data: Vec<u8>) {
+            self.inner.pty_input(pty, data)
+        }
+        fn pty_resize(&self, pty: u32, cols: u16, rows: u16) {
+            self.inner.pty_resize(pty, cols, rows)
+        }
+        fn pty_kill(&self, pty: u32) {
+            self.inner.pty_kill(pty)
+        }
+        fn watch(&self, paths: Vec<String>) {
+            self.inner.watch(paths)
+        }
+        fn fs_events(&self) -> mpsc::Receiver<host::FsChanges> {
+            self.inner.fs_events()
+        }
+        fn status_events(&self) -> mpsc::Receiver<host::ConnStatus> {
+            self.inner.status_events()
+        }
+        fn proc_spawn(&self, program: &str, args: Vec<String>, cwd: Option<String>) -> host::Result<host::Proc> {
+            self.inner.proc_spawn(program, args, cwd)
+        }
+        fn proc_input(&self, proc: u32, data: Vec<u8>) {
+            self.inner.proc_input(proc, data)
+        }
+        fn proc_kill(&self, proc: u32) {
+            self.kills.fetch_add(1, Ordering::SeqCst);
+            self.inner.proc_kill(proc)
+        }
+    }
+
+    #[test]
+    fn a_server_that_never_answers_initialize_is_killed() {
+        let host = Arc::new(KillCounter { inner: host::local(), kills: Default::default() });
+        // `sleep` never reads the request, let alone answers it.
+        let cfg = ServerConfig { language: "x".into(), command: "sleep".into(), args: vec!["30".into()] };
+        let (tx, _rx) = mpsc::channel();
+        let dir = std::env::temp_dir().to_string_lossy().into_owned();
+        let err = Client::start_with(host.clone(), cfg, &dir, tx, Duration::from_millis(300)).err().expect("no answer is an error");
+        assert!(err.contains("no answer"), "{err}");
+        assert_eq!(host.kills.load(Ordering::SeqCst), 1, "the silent server must not be left running");
     }
 
     /// Real language server (if clangd is available): handshake, diagnostics, hover, definition.
