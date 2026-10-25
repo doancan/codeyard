@@ -127,3 +127,38 @@ fn a_save_right_after_the_conflict_appears_does_not_overwrite(cx: &mut TestAppCo
     let path = ed.read_with(cx, |e, _| e.path.clone());
     assert!(crate::history::list(&crate::history::dir_for(&data, "", &path)).is_empty());
 }
+
+#[gpui::test]
+fn a_damaged_state_database_is_reported_set_aside_and_replaced(cx: &mut TestAppContext) {
+    let dir = home("corrupt-db");
+    let db = dir.join("state.db");
+    std::fs::write(&db, "this is not a database, just text that happens to be long enough to look like a header").unwrap();
+    globals(cx);
+    let path = db.clone();
+    let (wb, cx) = cx.add_window_view(move |window, cx| Workbench::new_at(Some(path), None, window, cx));
+    let (error, text) = wb.read_with(cx, |wb, _| wb.notice_for_test()).expect("the user must be told");
+    assert!(error && text.contains("state.db.corrupt-"), "{text}");
+    let aside = std::fs::read_dir(&dir).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().starts_with("state.db.corrupt-")).count();
+    assert_eq!(aside, 1);
+    assert!(wb.read_with(cx, |wb, _| wb.has_state_for_test()));
+    drop(wb);
+    assert!(state::State::open(&db).is_ok(), "a second open must find a usable database");
+}
+
+#[gpui::test]
+fn a_database_from_a_newer_version_is_left_in_place_but_reported(cx: &mut TestAppContext) {
+    let dir = home("newer-db");
+    let db = dir.join("state.db");
+    drop(state::State::open(&db).unwrap());
+    // `user_version` lives at byte 60 of the file header.
+    let mut bytes = std::fs::read(&db).unwrap();
+    bytes[60..64].copy_from_slice(&9999u32.to_be_bytes());
+    std::fs::write(&db, bytes).unwrap();
+    globals(cx);
+    let path = db.clone();
+    let (wb, cx) = cx.add_window_view(move |window, cx| Workbench::new_at(Some(path), None, window, cx));
+    let (error, text) = wb.read_with(cx, |wb, _| wb.notice_for_test()).expect("the user must be told");
+    assert!(error && text.contains("newer Codeyard"), "{text}");
+    assert!(std::fs::read_dir(&dir).unwrap().flatten().all(|e| !e.file_name().to_string_lossy().contains("corrupt")));
+    assert!(!wb.read_with(cx, |wb, _| wb.has_state_for_test()));
+}

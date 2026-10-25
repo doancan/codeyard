@@ -604,6 +604,10 @@ impl Workbench {
         self.persist.state.as_ref().expect("a state database").set(key, value).expect("state write");
     }
 
+    pub fn has_state_for_test(&self) -> bool {
+        self.persist.state.is_some()
+    }
+
     pub fn notice_for_test(&self) -> Option<(bool, String)> {
         match &self.notice {
             Some(Notice::Info(m)) => Some((false, m.to_string())),
