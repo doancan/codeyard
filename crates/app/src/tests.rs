@@ -108,7 +108,8 @@ fn external_change_is_a_conflict_not_an_overwrite(cx: &mut TestAppContext) {
     assert_eq!(std::fs::read_to_string(&file).unwrap(), "başkası değiştirdi\n", "must not overwrite silently");
     assert!(wb.read_with(cx, |wb, cx| wb.any_dirty(cx)));
 
-    // Save again while the conflict banner is open: deliberate overwrite.
+    // Save again once the user has had time to read the banner: deliberate overwrite.
+    wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap().update(cx, |e, _| e.expire_conflict_grace());
     cx.simulate_keystrokes("cmd-s");
     cx.run_until_parked();
     assert_eq!(std::fs::read_to_string(&file).unwrap(), "benim ilk\n");

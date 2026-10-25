@@ -120,6 +120,12 @@ fn retry_locked<T>(mut f: impl FnMut() -> Result<T, Error>) -> Result<T, Error> 
     }
 }
 
+/// The file is not a usable database (overwritten, truncated, damaged pages). Retrying cannot help; only moving it away can.
+pub fn is_corrupt(e: &Error) -> bool {
+    use rusqlite::ErrorCode::{DatabaseCorrupt, NotADatabase};
+    matches!(e, Error::SqliteFailure(f, _) if matches!(f.code, NotADatabase | DatabaseCorrupt))
+}
+
 /// `host<TAB>path` lines; malformed lines are skipped.
 fn parse_pinned(text: &str) -> Vec<(Option<String>, String)> {
     text.lines()

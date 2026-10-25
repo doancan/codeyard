@@ -212,6 +212,8 @@ pub enum EditorEvent {
     Changed,
     /// Written to disk (refresh the git status).
     Saved,
+    /// A forced save replaced another version of the file (its text): keep a copy so it can be recovered.
+    Overwrote(String),
     /// Breakpoints changed (sent to the adapter if a session is open).
     BreakpointsChanged,
     /// Go to definition: position in another (or the same) file (0-based line, UTF-16 column).
@@ -454,6 +456,8 @@ pub struct EditorView {
     column_drag: bool,
     saving: bool,
     conflict: bool,
+    /// When `conflict` was raised: a Cmd+S right after it is not a decision to overwrite.
+    conflict_at: Option<std::time::Instant>,
     /// File was deleted from disk (re-created on save).
     deleted_on_disk: bool,
     /// Preview tab (italic; replaced by the next preview).
@@ -960,6 +964,7 @@ impl EditorView {
             column_drag: false,
             saving: false,
             conflict: false,
+            conflict_at: None,
             deleted_on_disk: false,
             preview: false,
             pinned: false,
