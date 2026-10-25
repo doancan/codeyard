@@ -2979,6 +2979,9 @@ fn git_branches_push_pull_against_a_local_remote(cx: &mut TestAppContext) {
     run(cx, "Git: Fetch");
     wait_ticking(cx, "1 geride", |cx| status(cx).is_some_and(|s| s.behind == 1));
     run(cx, "Git: Sync");
+    // Sync asks before it pulls or pushes (git.confirmSync).
+    wait_ticking(cx, "the question", |cx| cx.has_pending_prompt());
+    cx.simulate_prompt_answer("Sync");
     // The file watcher schedules a delayed refresh: advance the test clock.
     wait_ticking(cx, "pull", |cx| status(cx).is_some_and(|s| s.behind == 0) && notice(cx) == "Pulled");
     assert!(std::fs::read_to_string(dir.join("README.md")).unwrap().contains("uzaktan"));

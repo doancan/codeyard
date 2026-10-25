@@ -50,6 +50,8 @@ mod folder_settings;
 mod fsutil;
 mod fuzzy;
 mod git;
+#[cfg(test)]
+mod git_sync_tests;
 mod github;
 mod graph;
 #[cfg(test)]

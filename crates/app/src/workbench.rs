@@ -91,10 +91,13 @@ mod session_glue;
 pub mod settings_ui;
 #[path = "workbench_spell.rs"]
 mod spell_glue;
+// --- git-sync ---
 #[path = "workbench_state.rs"]
 mod state_glue;
 #[path = "workbench_structural.rs"]
 mod structural_glue;
+#[path = "workbench_sync.rs"]
+mod sync_glue;
 #[path = "workbench_tasks.rs"]
 pub mod tasks;
 #[path = "workbench_terminals.rs"]
@@ -267,6 +270,15 @@ actions!(
         GitPush,
         GitFetch,
         GitSync,
+        // --- git-sync ---
+        GitPullRebase,
+        GitPullFrom,
+        GitPushTo,
+        GitFetchAll,
+        GitCommitSignedOff,
+        GitCommitNoVerify,
+        GitCommitAndPush,
+        GitCommitAndSync,
         FocusLeftGroup,
         FocusRightGroup,
         GitCommitAmend,
@@ -887,6 +899,10 @@ impl Workbench {
                 crate::scm::ScmEvent::Refresh => this.refresh_git(0, cx),
                 crate::scm::ScmEvent::OpenDiff { path, staged } => this.open_diff(path.clone(), *staged, window, cx),
                 crate::scm::ScmEvent::MoreActions(position) => this.open_scm_menu(*position, window, cx),
+                // --- git-sync ---
+                crate::scm::ScmEvent::Sync => this.git_sync_auto(window, cx),
+                crate::scm::ScmEvent::Publish => this.git_publish_branch(cx),
+                crate::scm::ScmEvent::PostCommit(then) => this.git_post_commit(*then, cx),
                 crate::scm::ScmEvent::OpenCommit(commit) => this.show_commit_files(commit.clone(), window, cx),
                 crate::scm::ScmEvent::OpenCommitFile(commit, file) => this.open_commit_file(commit.clone(), file.clone(), window, cx),
                 crate::scm::ScmEvent::CommitMenu(commit, position) => this.open_commit_menu(commit.clone(), *position, window, cx),
@@ -1007,6 +1023,7 @@ impl Workbench {
                 refresh: None,
                 refreshing: false,
                 refresh_again: false,
+                sync: Default::default(),
                 error: None,
                 scm_root: None,
                 marks_busy: Default::default(),
@@ -1107,6 +1124,7 @@ impl Workbench {
         wb.reload_config(window, cx);
         wb.watch_config(window, cx);
         wb.poll_git(window, cx);
+        wb.poll_autofetch(window, cx);
         wb.listen_fs(cx);
         wb
     }
