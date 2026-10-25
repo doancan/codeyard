@@ -1903,3 +1903,4 @@ Software Update	Yazılım Güncelleme
 # --- security-batch ---
 redirects to {}; not followed, send a request to that address to continue	{} adresine yönlendiriyor; izlenmedi, devam etmek için o adrese yeni bir istek gönderin
 Ignored the language server's edit to {} file outside the open folders|Ignored the language server's edit to {} files outside the open folders	Dil sunucusunun açık klasörlerin dışındaki {} dosyaya yönelik düzenlemesi yok sayıldı
+the GitHub token contains characters that cannot be sent	GitHub belirteci gönderilemeyen karakterler içeriyor
