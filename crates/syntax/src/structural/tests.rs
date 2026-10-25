@@ -335,7 +335,8 @@ fn a_megabyte_of_source_matches_in_reasonable_time() {
     // Tree-sitter's own parse is most of the time (about 70 ms per MB of this code on a 2023 laptop, release build).
     let parse_only = std::time::Instant::now();
     drop(parse(p.language(), &text).unwrap());
-    eprintln!("parse alone {:?}", parse_only.elapsed());
+    let parse_time = parse_only.elapsed();
+    eprintln!("parse alone {parse_time:?}");
     let rare = pat("Rust", "$R.unwrap_or($X.len())");
     let sparse = std::time::Instant::now();
     assert!(find_all(&rare, &text).is_empty());
@@ -345,8 +346,8 @@ fn a_megabyte_of_source_matches_in_reasonable_time() {
     let took = start.elapsed();
     eprintln!("{} bytes matched in {took:?}", text.len());
     assert_eq!(n, 1_000_000 / unit.len());
-    let limit = if cfg!(debug_assertions) { 3000 } else { 150 };
-    assert!(took.as_millis() < limit, "1 MB took {took:?}");
+    // Relative to the parse on the same machine: a fixed number fails on a slow runner, a quadratic walk fails at any speed.
+    assert!(took < parse_time * 12 + std::time::Duration::from_millis(250), "1 MB took {took:?}, parsing alone {parse_time:?}");
     let t = std::time::Instant::now();
     for _ in 0..100 {
         let _ = compile(lang("Rust"), "unwrap_or($X.clone())").unwrap();
