@@ -231,7 +231,7 @@ impl Workbench {
             let message = tf("This file is {0} MB; Data: Query handles files up to {1} MB.", &[&(bytes >> 20), &(MAX_QUERY_BYTES >> 20)]);
             return self.data_notice(Notice::Error(message.into()), cx);
         }
-        let field = cx.new(|cx| TextField::new(crate::i18n::tr("Query, e.g. .items[] | select(.id == 3)"), cx));
+        let field = cx.new(|cx| TextField::new(crate::i18n::tr("Query, e.g. .items[].name"), cx));
         let sub = cx.subscribe_in(&field, window, |this, _, event: &FieldEvent, window, cx| match event {
             FieldEvent::Changed => this.schedule_query(QUERY_DEBOUNCE_MS, window, cx),
             FieldEvent::Submit => this.close_query(true, window, cx),

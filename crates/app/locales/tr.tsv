@@ -1990,16 +1990,14 @@ Replace the text with {}	Metni {} ile değiştir
 Convert to…	Dönüştür…
 Converted to {}	{} biçimine dönüştürüldü
 This file is {0} MB; Data: Query handles files up to {1} MB.	Bu dosya {0} MB; Veri: Sorgula en çok {1} MB'a kadar dosyalarla çalışır.
-Query, e.g. .items[] | select(.id == 3)	Sorgu, örn. .items[] | select(.id == 3)
+Query, e.g. .items[].name	Sorgu, örn. .items[].name
 The file is not open any more.	Dosya artık açık değil.
 The file could not be read.	Dosya okunamadı.
 Reading the file…	Dosya okunuyor…
 Type a query. Esc closes the bar.	Bir sorgu yazın. Esc çubuğu kapatır.
-{} result|{} results	{} sonuç
 {} (cut at 5 MB)	{} (5 MB'ta kesildi)
 Column {0}: {1}	Sütun {0}: {1}
 Query	Sorgu
-Copied {}	{} kopyalandı
 Decoded here only: nothing is sent or logged	Yalnızca burada çözüldü: hiçbir şey gönderilmez ya da günlüğe yazılmaz
 Copy the path at the cursor	İmlecin altındaki yolu kopyala
 Spaces per level in the JSON and YAML written by Data: Convert To… and Data: Query…	Veri: Şuna Dönüştür… ve Veri: Sorgula… ile yazılan JSON ve YAML'da her düzey için boşluk sayısı
