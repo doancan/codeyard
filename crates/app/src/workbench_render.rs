@@ -235,6 +235,29 @@ impl Render for Workbench {
             .on_action(cx.listener(|this, _: &GitPopStash, window, cx| this.show_stash_picker(git_glue::StashOp::Pop, window, cx)))
             .on_action(cx.listener(|this, _: &GitApplyStash, window, cx| this.show_stash_picker(git_glue::StashOp::Apply, window, cx)))
             .on_action(cx.listener(|this, _: &GitDropStash, window, cx| this.show_stash_picker(git_glue::StashOp::Drop, window, cx)))
+            // --- git-refs ---
+            .on_action(cx.listener(|this, _: &GitDeleteTag, window, cx| this.show_branch_op_picker(git_glue::BranchOp::DeleteTag, window, cx)))
+            .on_action(cx.listener(|this, _: &GitDeleteRemoteTag, window, cx| this.show_branch_op_picker(git_glue::BranchOp::DeleteRemoteTag, window, cx)))
+            .on_action(cx.listener(|this, _: &GitPushTags, window, cx| this.git_push_tags(window, cx)))
+            .on_action(cx.listener(|this, _: &GitPushTag, window, cx| this.show_branch_op_picker(git_glue::BranchOp::PushTag, window, cx)))
+            .on_action(cx.listener(|this, _: &GitCheckoutDetached, window, cx| this.show_branch_op_picker(git_glue::BranchOp::CheckoutDetached, window, cx)))
+            .on_action(cx.listener(|this, _: &GitCreateBranchFrom, window, cx| this.show_branch_op_picker(git_glue::BranchOp::CreateFrom, window, cx)))
+            .on_action(
+                cx.listener(|this, _: &GitDeleteRemoteBranch, window, cx| this.show_branch_op_picker(git_glue::BranchOp::DeleteRemoteBranch, window, cx)),
+            )
+            .on_action(cx.listener(|this, _: &GitSetUpstream, window, cx| this.show_branch_op_picker(git_glue::BranchOp::SetUpstream, window, cx)))
+            .on_action(cx.listener(|this, _: &GitRenameRemote, window, cx| this.show_branch_op_picker(git_glue::BranchOp::RenameRemote, window, cx)))
+            .on_action(cx.listener(|this, _: &GitSetRemoteUrl, window, cx| this.show_branch_op_picker(git_glue::BranchOp::SetRemoteUrl, window, cx)))
+            .on_action(cx.listener(|this, _: &GitRemoveWorktree, window, cx| this.show_branch_op_picker(git_glue::BranchOp::RemoveWorktree, window, cx)))
+            .on_action(cx.listener(|this, _: &GitPruneWorktrees, _, cx| this.git_prune_worktrees(cx)))
+            .on_action(cx.listener(|this, _: &GitStashStaged, _, cx| this.git_stash_with(crate::git::StashOptions { staged: true, ..Default::default() }, cx)))
+            .on_action(cx.listener(|this, _: &GitStashNamed, window, cx| this.git_stash_named(window, cx)))
+            .on_action(cx.listener(|this, _: &GitShowStash, window, cx| this.show_stash_picker(git_glue::StashOp::Show, window, cx)))
+            .on_action(cx.listener(|this, _: &GitOpenChanges, window, cx| this.git_open_active(false, window, cx)))
+            .on_action(cx.listener(|this, _: &GitOpenFileHead, window, cx| this.git_open_active(true, window, cx)))
+            .on_action(cx.listener(|this, _: &GitCompareBranch, window, cx| this.show_branch_op_picker(git_glue::BranchOp::CompareBranch, window, cx)))
+            .on_action(cx.listener(|this, _: &GitCompareCommit, window, cx| this.show_compare_commit_picker(window, cx)))
+            .on_action(cx.listener(|this, _: &GitAddToGitignore, _, cx| this.git_ignore_active(cx)))
             .on_action(cx.listener(|this, _: &GitDiscardAll, window, cx| {
                 if this.repo_root(cx).is_some() {
                     this.chrome.panel = Some(Panel::Scm);

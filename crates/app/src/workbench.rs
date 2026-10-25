@@ -76,8 +76,11 @@ mod ports_glue;
 pub mod projects;
 #[path = "workbench_pulls.rs"]
 mod pulls_glue;
+// --- git-refs ---
 #[path = "workbench_recover.rs"]
 mod recover_glue;
+#[path = "workbench_refs.rs"]
+mod refs_glue;
 #[path = "workbench_render.rs"]
 mod render_glue;
 #[path = "workbench_replace.rs"]
@@ -289,6 +292,27 @@ actions!(
         GitPopStash,
         GitApplyStash,
         GitDropStash,
+        // --- git-refs ---
+        GitDeleteTag,
+        GitDeleteRemoteTag,
+        GitPushTags,
+        GitPushTag,
+        GitCheckoutDetached,
+        GitCreateBranchFrom,
+        GitDeleteRemoteBranch,
+        GitSetUpstream,
+        GitStashStaged,
+        GitStashNamed,
+        GitShowStash,
+        GitOpenChanges,
+        GitOpenFileHead,
+        GitCompareBranch,
+        GitCompareCommit,
+        GitAddToGitignore,
+        GitRenameRemote,
+        GitSetRemoteUrl,
+        GitRemoveWorktree,
+        GitPruneWorktrees,
         GitDiscardAll,
         RestartLanguageServers,
         ShowSettings,

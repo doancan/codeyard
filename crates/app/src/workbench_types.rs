@@ -224,6 +224,22 @@ pub(super) enum InputPurpose {
     CommitTag {
         hash: String,
     },
+    // --- git-refs ---
+    /// Name of a new branch that starts at `start`.
+    CreateBranchFrom {
+        root: String,
+        start: String,
+    },
+    RenameRemote {
+        root: String,
+        old: String,
+    },
+    SetRemoteUrl {
+        root: String,
+        name: String,
+    },
+    /// Description of a new stash.
+    StashNamed,
     /// Add the open folder to the saved projects under its name.
     SaveProject {
         path: String,
@@ -278,6 +294,10 @@ pub(super) enum MenuCmd {
     CommitCherryPick,
     CommitRevert,
     CommitReset(crate::graph::ResetMode),
+    // --- git-refs ---
+    GitIgnore,
+    GitOpenChanges,
+    GitOpenHead,
     /// Send the action in `MenuState::actions` to the focused item.
     Dispatch(usize),
     AppSubmenu(usize),

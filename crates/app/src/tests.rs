@@ -4164,3 +4164,49 @@ fn open_with_picker_lists_alternatives(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert!(wb.read_with(cx, |wb, _| wb.diff_view().is_some()), "comparison with the saved version opened");
 }
+
+// --- git-refs ---
+
+#[gpui::test]
+fn git_tag_with_a_message_is_annotated_and_open_file_head_shows_the_commit(cx: &mut TestAppContext) {
+    let Some(dir) = git_repo("refscmds") else { return };
+    let dir = std::fs::canonicalize(dir).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir.join("README.md"), cx);
+    wait_for(cx, "git durumu", |cx| wb.read_with(cx, |wb, _| wb.git_status().is_some()));
+    // The first word is the tag, the rest its message.
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Create Tag…", window, cx));
+    cx.simulate_input("v1 first release");
+    cx.simulate_keystrokes("enter");
+    wait_for(cx, "açıklamalı etiket", |_| git_in(&dir, &["tag", "-n1", "-l", "v1"]).contains("first release"));
+    assert_eq!(git_in(&dir, &["cat-file", "-t", "v1"]).trim(), "tag");
+    // The committed text of the file, not the edited one.
+    std::fs::write(dir.join("README.md"), "# değişti\n").unwrap();
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Open File (HEAD)", window, cx));
+    wait_for(cx, "HEAD sekmesi", |cx| wb.read_with(cx, |wb, cx| wb.active_path(cx)).is_some_and(|p| p.contains("README (HEAD)")));
+    let text = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap().read_with(cx, |e, _| e.text());
+    assert_eq!(text, "# proje\n");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[gpui::test]
+fn git_add_to_gitignore_and_named_stash_through_the_palette(cx: &mut TestAppContext) {
+    let Some(dir) = git_repo("refsignore") else { return };
+    let dir = std::fs::canonicalize(dir).unwrap();
+    std::fs::write(dir.join("secret.env"), "k=1\n").unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir.join("secret.env"), cx);
+    wait_for(cx, "git durumu", |cx| wb.read_with(cx, |wb, _| wb.git_status().is_some_and(|g| g.changes.iter().any(|c| c.path == "secret.env"))));
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Add to .gitignore", window, cx));
+    // The fixture already has a .gitignore: the entry is appended to it.
+    wait_for(cx, ".gitignore", |_| std::fs::read_to_string(dir.join(".gitignore")).is_ok_and(|t| t == "ignored.txt\n/secret.env\n"));
+    wait_for(cx, "durum yenilendi", |cx| wb.read_with(cx, |wb, _| wb.git_status().is_some_and(|g| g.changes.iter().all(|c| c.path != "secret.env"))));
+    // A named stash of a tracked edit.
+    std::fs::write(dir.join("README.md"), "# yarım\n").unwrap();
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Stash with Name…", window, cx));
+    cx.simulate_input("yarım iş");
+    cx.simulate_keystrokes("enter");
+    wait_for(cx, "stash", |_| git_in(&dir, &["stash", "list"]).contains("yarım iş"));
+    assert_eq!(std::fs::read_to_string(dir.join("README.md")).unwrap(), "# proje\n");
+    let _ = std::fs::remove_dir_all(&dir);
+}
