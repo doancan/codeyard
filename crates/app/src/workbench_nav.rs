@@ -115,6 +115,7 @@ impl Workbench {
                 return;
             }
         };
+        let written_version = ed.read(cx).version();
         let host = self.remote.host.clone();
         let t = target.clone();
         let task = cx.background_executor().spawn(async move {
@@ -130,8 +131,15 @@ impl Workbench {
                     Ok(()) => {
                         this.roots.primary.update(cx, |t, cx| t.reload(&parent_of(&target), cx));
                         this.roots.file_index = None;
-                        // The old tab's unsaved changes live on in the new file, so close it.
-                        if let Some(ix) = this.tabs.editors.iter().position(|e| *e == ed) {
+                        // The old tab's unsaved changes live on in the new file, so close it: unless more was typed while the write was in
+                        // flight, which only the old tab has.
+                        if ed.read(cx).version() != written_version {
+                            let note = crate::i18n::tf(
+                                "Saved as {}. You kept typing while it was saving, so the original tab stays open with your latest changes.",
+                                &[&target],
+                            );
+                            this.notice = Some(Notice::Info(note.into()));
+                        } else if let Some(ix) = this.tabs.editors.iter().position(|e| *e == ed) {
                             this.remove_editor(ix, window, cx);
                         }
                         this.open_file(target, window, cx);

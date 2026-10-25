@@ -135,10 +135,10 @@ impl Workbench {
         if self.root(cx).is_none() {
             return;
         }
-        if !cx.global::<crate::settings::Settings>().hot_exit && self.refuse_if_dirty(cx) {
+        self.flush_backups(cx);
+        if (!cx.global::<crate::settings::Settings>().hot_exit || self.has_unbacked_dirty(cx)) && self.refuse_if_dirty(cx) {
             return;
         }
-        self.flush_backups(cx);
         self.persist_session(cx);
         self.shutdown_lsp(cx);
         self.persist.backed_up.clear();
