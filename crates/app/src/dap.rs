@@ -291,7 +291,10 @@ impl Session {
                         }
                     }
                 })
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| {
+                    host.proc_kill(id);
+                    e.to_string()
+                })?;
         }
         let session = match transport {
             Transport::Stdio => Session::build(Writer::Proc { host: host.clone(), id }, Some((host.clone(), id)), None, events),
@@ -335,7 +338,10 @@ impl Session {
                 };
                 let _ = stream.set_nonblocking(false);
                 let _ = stream.set_nodelay(true);
-                let reader = stream.try_clone().map_err(|e| e.to_string())?;
+                let reader = match stream.try_clone() {
+                    Ok(r) => r,
+                    Err(e) => return fail(&e.to_string()),
+                };
                 let s = Session::build(Writer::Tcp(Mutex::new(stream)), Some((host.clone(), id)), Some(SocketAddr::from(([127, 0, 0, 1], port))), events);
                 *s.forward.lock().unwrap() = forward;
                 *slot.lock().unwrap() = Arc::downgrade(&s);
