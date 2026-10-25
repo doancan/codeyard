@@ -129,6 +129,7 @@ status bar reports it.
 | `search.maxResults` | number 1–100000 | `2000` | Stop a search after this many matches |
 | `search.showLineNumbers` | `true` / `false` | `true` | Show line numbers in search results |
 | `search.smartCase` | `true` / `false` | `false` | Ignore case unless the query has capital letters |
+| `search.structural.maxFiles` | number 1–100000 | `5000` | Most files a structural search reads and parses |
 
 ## `security`
 
