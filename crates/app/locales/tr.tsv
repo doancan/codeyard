@@ -628,8 +628,6 @@ Name of the new branch (starts at this commit)	Yeni dalın adı (bu commit'ten b
 Rename branch	Dalı yeniden adlandır
 New branch name	Yeni dal adı
 Create tag	Etiket oluştur
-Name of the tag	Etiketin adı
-Name of the tag (at HEAD)	Etiketin adı (HEAD'de)
 Add worktree	Çalışma ağacı ekle
 path branch (new branch is created if it does not exist)	yol dal (dal yoksa yeni dal oluşturulur)
 Add remote	Uzak depo ekle
@@ -2166,3 +2164,97 @@ Pull also fetches all tags	Pull tüm etiketleri de getirsin
 Fetch every remote before pulling	Pull'dan önce tüm uzak depoları Fetch et
 What runs after a commit: nothing, push or sync. Your own settings only; a folder cannot change it	Commit'ten sonra ne çalışsın: hiçbir şey, push ya da eşitleme. Yalnızca kendi ayarlarınız; bir klasör değiştiremez
 Commit all tracked changes when nothing is staged	Stage'de bir şey yokken izlenen tüm değişiklikleri commit et
+# --- git-refs ---
+Git: Delete Tag…	Git: Etiketi Sil…
+Git: Delete Remote Tag…	Git: Uzak Etiketi Sil…
+Git: Push Tags	Git: Etiketleri Gönder
+Git: Push Tag…	Git: Etiketi Gönder…
+Git: Checkout (Detached)…	Git: Ayrık Olarak Geç…
+Git: Create Branch From…	Git: Şundan Dal Oluştur…
+Git: Delete Remote Branch…	Git: Uzak Dalı Sil…
+Git: Set Upstream Branch…	Git: Takip Edilen Dalı Ayarla…
+Git: Stash Staged Changes	Git: Hazırlanan Değişiklikleri Stash'e Al
+Git: Stash with Name…	Git: Adlı Stash…
+Git: Show Stash…	Git: Stash'i Göster…
+Git: Open Changes	Git: Değişiklikleri Aç
+Git: Open File (HEAD)	Git: Dosyayı Aç (HEAD)
+Git: Compare with Branch…	Git: Dalla Karşılaştır…
+Git: Compare with Commit…	Git: Commit ile Karşılaştır…
+Git: Add to .gitignore	Git: .gitignore'a Ekle
+Git: Rename Remote…	Git: Uzak Depoyu Yeniden Adlandır…
+Git: Edit Remote URL…	Git: Uzak Depo Adresini Düzenle…
+Git: Remove Worktree…	Git: Çalışma Ağacını Kaldır…
+Git: Prune Worktrees	Git: Çalışma Ağaçlarını Temizle
+Stash Staged Changes	Hazırlanan Değişiklikleri Stash'e Al
+Stash with Name…	Adlı Stash…
+Show Stash…	Stash'i Göster…
+Create Tag…	Etiket Oluştur…
+Delete Tag…	Etiketi Sil…
+Push Tags	Etiketleri Gönder
+Add to .gitignore	.gitignore'a Ekle
+Open Changes	Değişiklikleri Aç
+Open File (HEAD)	Dosyayı Aç (HEAD)
+Compare with Branch…	Dalla Karşılaştır…
+Compare with Commit…	Commit ile Karşılaştır…
++ Create new branch from…	+ Şundan yeni dal oluştur…
+Check out detached…	Ayrık olarak geç…
+Pick a stash to show	Gösterilecek stash'i seçin
+upstream gone	uzak dal silinmiş
+Tag name, then an optional message for an annotated tag (at HEAD)	Etiket adı, ardından açıklamalı etiket için isteğe bağlı bir mesaj (HEAD'de)
+Tag name, then an optional message for an annotated tag	Etiket adı, ardından açıklamalı etiket için isteğe bağlı bir mesaj
+Change the URL of which remote?	Hangi uzak deponun adresi değişsin?
+Check out which branch, tag or commit (detached)?	Hangi dal, etiket veya commit ayrık olarak açılsın?
+Compare the file with which branch or tag?	Dosya hangi dal veya etiketle karşılaştırılsın?
+Compare the file with which commit?	Dosya hangi commit ile karşılaştırılsın?
+Delete which branch on the remote?	Uzak depoda hangi dal silinsin?
+Delete which tag on the remote?	Uzak depoda hangi etiket silinsin?
+Delete which tag?	Hangi etiket silinsin?
+Its folder is deleted. Git refuses when the worktree has uncommitted changes; the branch stays.	Klasörü silinir. Çalışma ağacında kaydedilmemiş değişiklik varsa Git reddeder; dal kalır.
+Name of the stash (shown in the stash list)	Stash'in adı (stash listesinde görünür)
+New name of the remote	Uzak deponun yeni adı
+Only the local tag is removed. A copy on a remote stays until you delete it there (Git: Delete Remote Tag…).	Yalnızca yerel etiket silinir. Uzak depodaki kopya, orada da silene kadar durur (Git: Uzak Etiketi Sil…).
+Pruning worktrees…	Çalışma ağaçları temizleniyor…
+Push which tag?	Hangi etiket gönderilsin?
+Pushing tags…	Etiketler gönderiliyor…
+Remove which worktree?	Hangi çalışma ağacı kaldırılsın?
+Rename remote	Uzak depoyu yeniden adlandır
+Rename which remote?	Hangi uzak depo yeniden adlandırılsın?
+Set URL	Adresi ayarla
+Start the new branch from…	Yeni dal şuradan başlasın…
+Stashing…	Stash'e alınıyor…
+The branch is removed from the remote repository for everyone. Local branches are not touched.	Dal uzak depodan herkes için kaldırılır. Yerel dallara dokunulmaz.
+The tag disappears from the remote repository for everyone. Your local copy is kept.	Etiket uzak depodan herkes için kalkar. Yerel kopyanız korunur.
+There are no staged changes to stash	Stash'e alınacak hazırlanmış değişiklik yok
+There is nothing to ignore here	Burada yoksayılacak bir şey yok
+Track which remote branch?	Hangi uzak dalı takip etsin?
+Updating .gitignore…	.gitignore güncelleniyor…
+tag	etiket
+Added {} to .gitignore	{} .gitignore'a eklendi
+Checking out {}…	{} açılıyor…
+Compare {} with a commit	{} dosyasını bir commit ile karşılaştır
+Could not read the stash: {}	Stash okunamadı: {}
+Creating {}…	{} oluşturuluyor…
+Delete branch {} on the remote?	{} dalı uzak depoda silinsin mi?
+Delete tag {} on the remote?	{} etiketi uzak depoda silinsin mi?
+Delete tag {}?	{} etiketi silinsin mi?
+Deleted tag {0} on {1}	{0} etiketi {1} üzerinde silindi
+Deleted tag {}	{} etiketi silindi
+Name of the new branch (starts at {})	Yeni dalın adı ({} noktasından başlar)
+New URL of {}	{} için yeni adres
+Pushed tag {0} to {1}	{0} etiketi {1} deposuna gönderildi
+Pushed tags to {}	Etiketler {} deposuna gönderildi
+Pushing {}…	{} gönderiliyor…
+Remove worktree {}?	{} çalışma ağacı kaldırılsın mı?
+Removed worktree {}	{} çalışma ağacı kaldırıldı
+Setting upstream of {}…	{} için takip edilen dal ayarlanıyor…
+Updated the URL of {}	{} adresi güncellendi
+Updating {}…	{} güncelleniyor…
+{0} now tracks {1}	{0} artık {1} dalını takip ediyor
+{} has no changes.	{} dosyasında değişiklik yok.
+{} holds no changes to tracked files.	{} izlenen dosyalarda değişiklik içermiyor.
+{} is already in .gitignore	{} zaten .gitignore içinde
+{} is not in HEAD yet.	{} henüz HEAD'de yok.
+“{}” is not a branch of a known remote	“{}” bilinen bir uzak deponun dalı değil
+“{}” is not a usable remote URL	“{}” kullanılabilir bir uzak depo adresi değil
+Pruned {} stale worktree entry|Pruned {} stale worktree entries	{} eski çalışma ağacı kaydı temizlendi
+Renamed remote {0} to {1}	{0} uzak deposu {1} olarak yeniden adlandırıldı

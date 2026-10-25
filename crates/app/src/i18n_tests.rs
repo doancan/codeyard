@@ -459,7 +459,7 @@ fn the_new_surfaces_have_turkish_entries() {
         ("git prompts", "Create branch", "Dal oluştur"),
         ("git prompts", "Name of the new branch (from the current one)", "Yeni dalın adı (geçerli daldan)"),
         ("git prompts", "Select a branch to check out", "Checkout edilecek dalı seçin"),
-        ("git prompts", "Name of the tag", "Etiketin adı"),
+        ("git prompts", "Tag name, then an optional message for an annotated tag", "Etiket adı, ardından açıklamalı etiket için isteğe bağlı bir mesaj"),
     ];
     for (surface, key, want) in samples {
         assert_eq!(lookup(TR, key), Some(*want), "{surface}: {key}");

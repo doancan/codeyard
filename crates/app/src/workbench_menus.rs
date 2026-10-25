@@ -79,6 +79,11 @@ impl Workbench {
         let fav = self.rel(&target.path, cx).is_some_and(|r| self.roots.favorites.contains(&r));
         items.push(MenuItem::new(if fav { crate::i18n::t("Remove from Favorites") } else { crate::i18n::t("Add to Favorites") }).enabled(!is_root).separator());
         commands.push(MenuCmd::Favorite);
+        // --- git-refs ---
+        if !is_root && self.git_status().is_some() {
+            items.push(MenuItem::new(crate::i18n::t("Add to .gitignore")).separator());
+            commands.push(MenuCmd::GitIgnore);
+        }
         if local_mac {
             items.push(MenuItem::new(crate::i18n::t("Reveal in Finder")).separator());
             commands.push(MenuCmd::Reveal);
@@ -123,6 +128,13 @@ impl Workbench {
             MenuCmd::CopyRelativePath,
             MenuCmd::Favorite,
         ];
+        // --- git-refs ---
+        if self.git_status().is_some() {
+            items.push(MenuItem::new(crate::i18n::t("Open Changes")).separator());
+            commands.push(MenuCmd::GitOpenChanges);
+            items.push(MenuItem::new(crate::i18n::t("Open File (HEAD)")));
+            commands.push(MenuCmd::GitOpenHead);
+        }
         if local_mac {
             items.push(MenuItem::new(crate::i18n::t("Reveal in Finder")).separator());
             commands.push(MenuCmd::Reveal);
@@ -155,6 +167,11 @@ impl Workbench {
             (crate::i18n::t("Toggle Bookmark"), Box::new(e::ToggleBookmark), false),
             (crate::i18n::t("View File History"), Box::new(GitFileHistory), true),
             (crate::i18n::t("Blame Line"), Box::new(GitBlameLine), false),
+            // --- git-refs ---
+            (crate::i18n::t("Open Changes"), Box::new(GitOpenChanges), false),
+            (crate::i18n::t("Open File (HEAD)"), Box::new(GitOpenFileHead), false),
+            (crate::i18n::t("Compare with Branch…"), Box::new(GitCompareBranch), false),
+            (crate::i18n::t("Compare with Commit…"), Box::new(GitCompareCommit), false),
             (crate::i18n::t("Command Palette…"), Box::new(CommandPalette), true),
         ];
         self.show_action_menu(entries, position, window, cx);
@@ -346,9 +363,14 @@ impl Workbench {
                 window,
                 cx,
             ),
-            MenuCmd::CommitTag => {
-                self.show_input(InputPurpose::CommitTag { hash: target.path }, crate::i18n::t("Create tag"), crate::i18n::t("Name of the tag"), "", window, cx)
-            }
+            MenuCmd::CommitTag => self.show_input(
+                InputPurpose::CommitTag { hash: target.path },
+                crate::i18n::t("Create tag"),
+                crate::i18n::t("Tag name, then an optional message for an annotated tag"),
+                "",
+                window,
+                cx,
+            ),
             MenuCmd::CommitCheckout | MenuCmd::CommitCherryPick | MenuCmd::CommitRevert | MenuCmd::CommitReset(_) => {
                 use crate::graph::CommitOp;
                 let op = match cmd {
@@ -360,6 +382,10 @@ impl Workbench {
                 };
                 self.scm.update(cx, |s, cx| s.commit_op(target.path, op, window, cx));
             }
+            // --- git-refs ---
+            MenuCmd::GitIgnore => self.git_ignore_path(target.path, target.is_dir, cx),
+            MenuCmd::GitOpenChanges => self.git_open_changes(target.path, window, cx),
+            MenuCmd::GitOpenHead => self.git_open_head_file(target.path, window, cx),
             MenuCmd::Download => self.start_download(target.path.clone(), target.is_dir, window, cx),
             MenuCmd::Upload => self.start_upload(target.path.clone(), window, cx),
             MenuCmd::Reveal => {
