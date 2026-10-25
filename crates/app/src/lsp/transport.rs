@@ -131,44 +131,63 @@ pub struct Client {
 impl Client {
     /// Start the server and handshake. Error if the command is not found or fails to start.
     pub fn start(host: Arc<dyn Host>, config: ServerConfig, root: &str, events: mpsc::Sender<ServerEvent>) -> Result<Arc<Client>, String> {
+        Self::start_with(host, config, root, events, Duration::from_secs(60))
+    }
+
+    fn start_with(
+        host: Arc<dyn Host>,
+        config: ServerConfig,
+        root: &str,
+        events: mpsc::Sender<ServerEvent>,
+        init_timeout: Duration,
+    ) -> Result<Arc<Client>, String> {
         let proc = host.proc_spawn(&config.command, config.args.clone(), Some(root.to_string())).map_err(|e| e.to_string())?;
         let pending: Pending = Arc::default();
         let alive = Arc::new(AtomicBool::new(true));
         let (writer_host, id) = (host.clone(), proc.id);
         // Reader: responses go to whoever is waiting, notifications to the event channel; it answers
         // the server's own requests (configuration, registration) itself.
-        {
+        let reader = {
             let (pending, alive) = (pending.clone(), alive.clone());
-            std::thread::Builder::new()
-                .name(format!("lsp-{}", config.language))
-                .spawn(move || {
-                    let mut dec = Decoder::default();
-                    while let Ok(ev) = proc.events.recv() {
-                        match ev {
-                            ProcEvent::Output(data) => {
-                                for msg in dec.push(&data) {
-                                    route(msg, &pending, &events, &writer_host, id);
-                                }
-                            }
-                            ProcEvent::Exit(code) => {
-                                alive.store(false, Ordering::Relaxed);
-                                for (_, tx) in pending.lock().unwrap().drain() {
-                                    let _ = tx.send(Err(match code {
-                                        Some(127) => "not found".to_string(),
-                                        Some(c) => format!("exited with code {c}"),
-                                        None => "stopped".to_string(),
-                                    }));
-                                }
-                                let _ = events.send(ServerEvent::Exited(code));
-                                break;
+            std::thread::Builder::new().name(format!("lsp-{}", config.language)).spawn(move || {
+                let mut dec = Decoder::default();
+                while let Ok(ev) = proc.events.recv() {
+                    match ev {
+                        ProcEvent::Output(data) => {
+                            for msg in dec.push(&data) {
+                                route(msg, &pending, &events, &writer_host, id);
                             }
                         }
+                        ProcEvent::Exit(code) => {
+                            alive.store(false, Ordering::Relaxed);
+                            for (_, tx) in pending.lock().unwrap().drain() {
+                                let _ = tx.send(Err(match code {
+                                    Some(127) => "not found".to_string(),
+                                    Some(c) => format!("exited with code {c}"),
+                                    None => "stopped".to_string(),
+                                }));
+                            }
+                            let _ = events.send(ServerEvent::Exited(code));
+                            break;
+                        }
                     }
-                })
-                .map_err(|e| e.to_string())?;
+                }
+            })
+        };
+        if let Err(e) = reader {
+            host.proc_kill(id);
+            return Err(e.to_string());
         }
         let mut client = Client { config, host, proc: id, next_id: AtomicI64::new(1), pending, alive, capabilities: Value::Null };
-        let init = client.request("initialize", initialize_params(root), Duration::from_secs(60))?;
+        // A server that never answers (or answers with an error) must not be left running: the caller only sees the Err and
+        // marks the slot failed, and a later restart would spawn a second process next to this one.
+        let init = match client.request("initialize", initialize_params(root), init_timeout) {
+            Ok(init) => init,
+            Err(e) => {
+                client.host.proc_kill(client.proc);
+                return Err(e);
+            }
+        };
         client.capabilities = init["capabilities"].clone();
         client.notify("initialized", json!({}));
         client.notify("workspace/didChangeConfiguration", json!({ "settings": {} }));
@@ -235,6 +254,20 @@ impl Client {
     }
 }
 
+/// The most the UI is shown of one server-supplied message, option title and option count. A server can send megabytes
+/// in a single `showMessage`; the status bar, the toast and the output panel all lay the text out in full.
+const MAX_MESSAGE_CHARS: usize = 2000;
+const MAX_ACTION_CHARS: usize = 200;
+const MAX_ACTIONS: usize = 20;
+
+/// Cuts `text` to `max` characters (never inside one) and marks the cut with an ellipsis.
+pub fn clip_text(text: &str, max: usize) -> String {
+    match text.char_indices().nth(max) {
+        Some((end, _)) => format!("{}…", &text[..end]),
+        None => text.to_string(),
+    }
+}
+
 fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host: &Arc<dyn Host>, proc: u32) {
     let method = msg["method"].as_str();
     if std::env::var_os("CODEYARD_LSP_TRACE").is_some() {
@@ -246,7 +279,7 @@ fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host
             let Some(id) = id.as_i64() else { return };
             if let Some(tx) = pending.lock().unwrap().remove(&id) {
                 let result = match msg.get("error") {
-                    Some(e) => Err(e["message"].as_str().unwrap_or("error").to_string()),
+                    Some(e) => Err(clip_text(e["message"].as_str().unwrap_or("error"), MAX_MESSAGE_CHARS)),
                     None => Ok(msg.get("result").cloned().unwrap_or(Value::Null)),
                 };
                 let _ = tx.send(result);
@@ -263,9 +296,11 @@ fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host
                 "workspace/workspaceFolders" => Value::Null,
                 "window/showMessageRequest" => {
                     let p = &msg["params"];
-                    let actions =
-                        p["actions"].as_array().map(|a| a.iter().filter_map(|x| x["title"].as_str().map(str::to_string)).collect()).unwrap_or_default();
-                    let message = p["message"].as_str().unwrap_or_default().to_string();
+                    let actions = p["actions"]
+                        .as_array()
+                        .map(|a| a.iter().filter_map(|x| x["title"].as_str().map(|t| clip_text(t, MAX_ACTION_CHARS))).take(MAX_ACTIONS).collect())
+                        .unwrap_or_default();
+                    let message = clip_text(p["message"].as_str().unwrap_or_default(), MAX_MESSAGE_CHARS);
                     let _ = events.send(ServerEvent::Question { id: id.clone(), message, actions });
                     return; // the UI answers once the user chooses
                 }
@@ -291,10 +326,10 @@ fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host
             let text = match v["kind"].as_str() {
                 Some("end") => None,
                 _ => {
-                    let title = v["title"].as_str().or(v["message"].as_str()).unwrap_or("working");
+                    let title = clip_text(v["title"].as_str().or(v["message"].as_str()).unwrap_or("working"), MAX_ACTION_CHARS);
                     Some(match v["percentage"].as_u64() {
                         Some(p) => format!("{title} {p}%"),
-                        None => title.to_string(),
+                        None => title,
                     })
                 }
             };
@@ -306,7 +341,7 @@ fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host
             let _ = events.send(ServerEvent::Log { level: p["type"].as_u64().unwrap_or(4) as u8, text: p["message"].as_str().unwrap_or_default().to_string() });
         }
         (None, Some("window/showMessage")) if msg["params"]["type"].as_u64().is_some_and(|t| t <= 2) => {
-            let _ = events.send(ServerEvent::Message(msg["params"]["message"].as_str().unwrap_or_default().to_string()));
+            let _ = events.send(ServerEvent::Message(clip_text(msg["params"]["message"].as_str().unwrap_or_default(), MAX_MESSAGE_CHARS)));
         }
         _ => {}
     }
@@ -475,6 +510,104 @@ mod tests {
         // A later empty list clears the file (the UI removes the entry), so it must replace, not be skipped.
         merge_server_event(&mut q, diag("/a.rs", 0));
         assert_eq!(latest(&q, "/a.rs"), Some(0));
+    }
+
+    /// The local host with a count of `proc_kill` calls.
+    struct KillCounter {
+        inner: host::RemoteHost,
+        kills: std::sync::atomic::AtomicUsize,
+    }
+
+    impl Host for KillCounter {
+        fn info(&self) -> &proto::HostInfo {
+            self.inner.info()
+        }
+        fn label(&self) -> String {
+            self.inner.label()
+        }
+        fn is_remote(&self) -> bool {
+            false
+        }
+        fn call(&self, req: proto::Request) -> host::Result<proto::Response> {
+            self.inner.call(req)
+        }
+        fn search(&self, query: proto::SearchQuery) -> host::Result<host::SearchStream> {
+            self.inner.search(query)
+        }
+        fn hash_tree(&self, root: &str, ignore: Vec<String>, gitignore: bool, limit: u32, only: Option<Vec<String>>) -> host::Result<host::HashStream> {
+            self.inner.hash_tree(root, ignore, gitignore, limit, only)
+        }
+        fn cancel(&self, id: u32) {
+            self.inner.cancel(id)
+        }
+        fn pty_spawn(&self, cols: u16, rows: u16, cwd: Option<String>, shell: Option<String>) -> host::Result<host::Pty> {
+            self.inner.pty_spawn(cols, rows, cwd, shell)
+        }
+        fn pty_input(&self, pty: u32, data: Vec<u8>) {
+            self.inner.pty_input(pty, data)
+        }
+        fn pty_resize(&self, pty: u32, cols: u16, rows: u16) {
+            self.inner.pty_resize(pty, cols, rows)
+        }
+        fn pty_kill(&self, pty: u32) {
+            self.inner.pty_kill(pty)
+        }
+        fn watch(&self, paths: Vec<String>) {
+            self.inner.watch(paths)
+        }
+        fn fs_events(&self) -> mpsc::Receiver<host::FsChanges> {
+            self.inner.fs_events()
+        }
+        fn status_events(&self) -> mpsc::Receiver<host::ConnStatus> {
+            self.inner.status_events()
+        }
+        fn proc_spawn(&self, program: &str, args: Vec<String>, cwd: Option<String>) -> host::Result<host::Proc> {
+            self.inner.proc_spawn(program, args, cwd)
+        }
+        fn proc_input(&self, proc: u32, data: Vec<u8>) {
+            self.inner.proc_input(proc, data)
+        }
+        fn proc_kill(&self, proc: u32) {
+            self.kills.fetch_add(1, Ordering::SeqCst);
+            self.inner.proc_kill(proc)
+        }
+    }
+
+    #[test]
+    fn a_server_that_never_answers_initialize_is_killed() {
+        let host = Arc::new(KillCounter { inner: host::local(), kills: Default::default() });
+        // `sleep` never reads the request, let alone answers it.
+        let cfg = ServerConfig { language: "x".into(), command: "sleep".into(), args: vec!["30".into()] };
+        let (tx, _rx) = mpsc::channel();
+        let dir = std::env::temp_dir().to_string_lossy().into_owned();
+        let err = Client::start_with(host.clone(), cfg, &dir, tx, Duration::from_millis(300)).err().expect("no answer is an error");
+        assert!(err.contains("no answer"), "{err}");
+        assert_eq!(host.kills.load(Ordering::SeqCst), 1, "the silent server must not be left running");
+    }
+
+    #[test]
+    fn server_messages_reach_the_ui_clipped() {
+        let host: Arc<dyn Host> = Arc::new(host::local());
+        let (tx, rx) = mpsc::channel();
+        let pending: Pending = Arc::default();
+        let big = "ğ".repeat(5 * 1024 * 1024 / 2);
+        route(json!({ "method": "window/showMessage", "params": { "type": 1, "message": big } }), &pending, &tx, &host, 0);
+        let Ok(ServerEvent::Message(m)) = rx.try_recv() else { panic!("no message") };
+        assert!(m.chars().count() <= MAX_MESSAGE_CHARS + 1 && m.ends_with('…'), "{} chars", m.chars().count());
+
+        let actions: Vec<Value> = (0..500).map(|_| json!({ "title": "x".repeat(10_000) })).collect();
+        route(json!({ "id": 3, "method": "window/showMessageRequest", "params": { "message": big, "actions": actions } }), &pending, &tx, &host, 0);
+        let Ok(ServerEvent::Question { message, actions, .. }) = rx.try_recv() else { panic!("no question") };
+        assert!(message.chars().count() <= MAX_MESSAGE_CHARS + 1);
+        assert_eq!(actions.len(), MAX_ACTIONS);
+        assert!(actions.iter().all(|a| a.chars().count() <= MAX_ACTION_CHARS + 1));
+
+        let (rtx, rrx) = mpsc::channel();
+        pending.lock().unwrap().insert(7, rtx);
+        route(json!({ "id": 7, "error": { "message": big } }), &pending, &tx, &host, 0);
+        assert!(rrx.try_recv().unwrap().unwrap_err().chars().count() <= MAX_MESSAGE_CHARS + 1);
+        assert_eq!(clip_text("kısa", 10), "kısa");
+        assert_eq!(clip_text("şğüiö", 3), "şğü…");
     }
 
     /// Real language server (if clangd is available): handshake, diagnostics, hover, definition.

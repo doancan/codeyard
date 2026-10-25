@@ -762,6 +762,7 @@ Later
 Learn	
 Left is writable	
 Left ↔ Right	
+Let programs in the terminal write to the clipboard	
 Let the language server format while typing }, ; or Enter	
 Lightweight editing, on this machine or over SSH.	
 Line endings for this file (applied on save)	
@@ -1641,6 +1642,7 @@ curl returned no response headers
 current	
 dark	
 data breakpoint	
+debug output was dropped: the debugger could not keep up	
 decoded as {}	
 default	
 destination	
