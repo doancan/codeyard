@@ -16,6 +16,8 @@ mod commands;
 // --- compare ---
 mod compare_folders;
 mod compare_logic;
+#[cfg(test)]
+mod compare_tests;
 mod conflict;
 mod crash;
 mod dap;

@@ -16,7 +16,12 @@ pub const FILE_ONLY: &[(&str, &str, &str, &str)] = &[
         "`[\".git\", \"node_modules\", \"target\"]`",
         "Names and paths *Compare: Folders…* leaves out on both sides (gitignore syntax).",
     ),
-    ("compare.folders.maxFiles", "number 100–5000000", "`50000`", "Entries per side *Compare: Folders…* reads before it stops and reports that the result is partial."),
+    (
+        "compare.folders.maxFiles",
+        "number 100–5000000",
+        "`50000`",
+        "Entries per side *Compare: Folders…* reads before it stops and reports that the result is partial.",
+    ),
     ("workbench.startupEditor", "string", "`welcome`", "VS Code compatible alias of `window.startup`."),
     (
         "editor.codeActionsOnSave",
