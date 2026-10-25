@@ -1035,7 +1035,7 @@ impl Workbench {
                 conn: Conn::Local,
                 pending_path: None,
                 ssh_hosts: host::ssh::list_hosts(),
-                bundle: Arc::new(AgentBundle::discover()),
+                bundle: Arc::new(crate::bundled_agents::discover()),
                 asks: Default::default(),
                 transfer: None,
             },

@@ -10,6 +10,7 @@ publish = false
 [dependencies]
 agent = { version = "0.2.2", path = "../agent" }
 proto = { version = "0.2.2", path = "../proto" }
+dirs = "7.0.0"
 sha2 = "0.11.1"
 
 [target.'cfg(unix)'.dependencies]

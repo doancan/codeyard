@@ -51,6 +51,12 @@ agent, proto, buffer, syntax, state, theme). The whole suite takes roughly 75 se
 
 ## Gates
 
+On Windows, `scripts/check-windows.ps1` also validates agent inputs and checks that the release EXE contains both Linux
+agents after copying it alone to an empty directory. The check also requires the Windows GUI subsystem and native
+application icon resource, preventing extra console windows and generic EXE icons. `scripts/build-windows.ps1` performs that standalone check for
+local builds too. Build-script validation tests can be run with
+`rustc --edition=2024 --test crates/app/build.rs -o target/agent-build-tests.exe`, then `target/agent-build-tests.exe`.
+
 `scripts/check.sh` runs all of these in order (`--quick` skips `cargo test`, `--strict` turns a missing `cargo-deny` or
 `cargo-audit` into a failure instead of a skip, `--budgets` adds `scripts/memcheck.sh` on macOS). Run them before every
 release (see `releasing.md`) and before a pull request:

@@ -16,6 +16,9 @@ files, search, terminals, git and language servers goes through that one interfa
   (`codeyard-agent-<triple>`) to `~/.cache/codeyard/agent-v<VERSION>-<sha12>` and verifies its SHA-256 before
   running it. The server never downloads anything, so offline servers work. The version in the path lets agents of
   different protocol versions coexist; `proto::VERSION` is checked in the `Hello` handshake.
+- Windows embeds these agents in the EXE and sends the bytes directly over SSH; no separate agent directory,
+  local extraction or extra download is needed. Embedded agents take precedence over old sidecar files; an explicit
+  `CODEYARD_AGENT_DIR` can override them for development. They ship inside the app's normal signed update.
 - `Remote: Test SSH Connection…` reports reachability, architecture and whether a matching agent is bundled.
 
 ## Authentication prompts

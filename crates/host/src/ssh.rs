@@ -1,6 +1,7 @@
 //! SSH: the system `ssh` binary. ~/.ssh/config, ProxyJump, ssh-agent and
 //! hardware keys work unchanged; no crypto of our own.
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -98,25 +99,59 @@ fn bundle_dirs_for(exe: &Path) -> Vec<PathBuf> {
 }
 
 /// Agent binaries bundled with the app.
+pub struct EmbeddedAgent {
+    pub triple: &'static str,
+    pub bytes: &'static [u8],
+}
+
 pub struct AgentBundle {
     dirs: Vec<PathBuf>,
+    override_dir: Option<PathBuf>,
+    embedded: &'static [EmbeddedAgent],
 }
 
 impl AgentBundle {
     /// Search order: $CODEYARD_AGENT_DIR, `<exe>/agents/`, `<exe>/../Resources/agents/` (macOS bundle), `<exe>/`, and
-    /// `target/<triple>/<profile>/` in development (see `find`).
+    /// `target/agents/` and `target/<triple>/<profile>/` in development (see `find`).
     pub fn discover() -> Self {
         let mut dirs = Vec::new();
-        if let Some(d) = std::env::var_os("CODEYARD_AGENT_DIR") {
-            dirs.push(PathBuf::from(d));
+        let override_dir = std::env::var_os("CODEYARD_AGENT_DIR").map(PathBuf::from);
+        if let Some(d) = &override_dir {
+            dirs.push(d.clone());
         }
         if let Ok(exe) = std::env::current_exe() {
             dirs.extend(bundle_dirs_for(&exe));
         }
-        AgentBundle { dirs }
+        AgentBundle { dirs, override_dir, embedded: &[] }
+    }
+
+    pub fn with_embedded(mut self, embedded: &'static [EmbeddedAgent]) -> Self {
+        self.embedded = embedded;
+        self
+    }
+
+    pub fn supports(&self, triple: &str) -> bool {
+        self.embedded.iter().any(|a| a.triple == triple) || self.find(triple).is_some()
+    }
+
+    /// An explicit developer override wins; otherwise use the bytes signed into the app.
+    /// Sidecar files remain a fallback for Unix bundles and unbundled source builds.
+    pub fn binary(&self, triple: &str) -> Result<Option<Cow<'static, [u8]>>> {
+        let override_file = self.override_dir.as_ref().map(|dir| dir.join(format!("codeyard-agent-{triple}"))).filter(|p| p.is_file());
+        if override_file.is_none()
+            && let Some(agent) = self.embedded.iter().find(|a| a.triple == triple)
+        {
+            return Ok(Some(Cow::Borrowed(agent.bytes)));
+        }
+        let Some(path) = override_file.or_else(|| self.find(triple)) else { return Ok(None) };
+        std::fs::read(&path).map(|bytes| Some(Cow::Owned(bytes))).map_err(|e| HostError::Disconnected(format!("{}: {e}", path.display())))
     }
 
     pub fn find(&self, triple: &str) -> Option<PathBuf> {
+        self.find_with_exe(triple, std::env::current_exe().ok().as_deref())
+    }
+
+    fn find_with_exe(&self, triple: &str, exe: Option<&Path>) -> Option<PathBuf> {
         let named = format!("codeyard-agent-{triple}");
         let mut candidates = Vec::new();
         for d in &self.dirs {
@@ -125,10 +160,12 @@ impl AgentBundle {
                 candidates.push(d.join("codeyard-agent"));
             }
         }
-        // target/<triple>/{release-agent,release,debug}/codeyard-agent
-        if let Ok(exe) = std::env::current_exe()
-            && let Some(target) = exe.parent().and_then(Path::parent)
+        // target/agents or target/<triple>/{release-agent,release,debug}/codeyard-agent.
+        // Test binaries live one level deeper, in <profile>/deps.
+        if let Some(profile) = exe.and_then(Path::parent).and_then(|dir| if dir.file_name().is_some_and(|n| n == "deps") { dir.parent() } else { Some(dir) })
+            && let Some(target) = profile.parent()
         {
+            candidates.push(target.join("agents").join(&named));
             for profile in ["release-agent", "release", "debug"] {
                 candidates.push(target.join(triple).join(profile).join("codeyard-agent"));
             }
@@ -461,7 +498,7 @@ pub fn probe(alias: &str, bundle: &AgentBundle) -> Result<Probe> {
     let out = run(alias, "uname -sm", None)?;
     let uname = out.lines().next().unwrap_or_default().trim().to_string();
     let triple = triple_for_uname(&uname);
-    let agent_bundled = triple.is_some_and(|t| bundle.find(t).is_some());
+    let agent_bundled = triple.is_some_and(|t| bundle.supports(t));
     Ok(Probe { uname, triple, agent_bundled, millis: start.elapsed().as_millis() })
 }
 
@@ -497,8 +534,12 @@ pub fn connect(alias: &str, bundle: &AgentBundle, mut progress: impl FnMut(Step)
     let uname = lines.next().unwrap_or_default();
     let home = lines.next().unwrap_or_default().trim().to_string();
     let triple = triple_for_uname(uname).ok_or_else(|| HostError::Disconnected(format!("unsupported server: {uname}")))?;
-    let local = bundle.find(triple).ok_or_else(|| HostError::Disconnected(format!("no agent binary bundled for {triple} (codeyard-agent-{triple})")))?;
-    let binary = std::fs::read(&local).map_err(|e| HostError::Disconnected(format!("{}: {e}", local.display())))?;
+    let binary = bundle.binary(triple)?.ok_or_else(|| {
+        HostError::Disconnected(format!(
+            "no agent binary bundled for {triple} (codeyard-agent-{triple}). Reinstall the complete Codeyard package or set CODEYARD_AGENT_DIR.{}",
+            if cfg!(windows) { " For a source build, run scripts/build-windows.ps1." } else { "" },
+        ))
+    })?;
     let sha: String = Sha256::digest(&binary).iter().map(|b| format!("{b:02x}")).collect();
 
     // CODEYARD_REMOTE_DIR: agent location on the server (default ~/.cache/codeyard).
@@ -640,6 +681,56 @@ pub fn spawn_local_agent(bundle: &AgentBundle) -> Result<RemoteHost> {
 
 #[cfg(test)]
 mod tests {
+    static EMBEDDED: &[EmbeddedAgent] = &[EmbeddedAgent { triple: "x86_64-unknown-linux-musl", bytes: b"embedded agent" }];
+
+    #[test]
+    fn embedded_agents_work_without_files_and_take_precedence_over_old_sidecars() {
+        let triple = "x86_64-unknown-linux-musl";
+        let dir = std::env::temp_dir().join(format!("codeyard-embedded-agents-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let sidecar = dir.join(format!("codeyard-agent-{triple}"));
+        let mut bundle = AgentBundle { dirs: vec![dir.clone()], override_dir: None, embedded: EMBEDDED };
+        assert!(bundle.supports(triple));
+        assert_eq!(bundle.binary(triple).unwrap().unwrap().as_ref(), b"embedded agent");
+        assert!(matches!(bundle.binary(triple).unwrap().unwrap(), Cow::Borrowed(_)), "no extraction or extra allocation is needed");
+        assert!(!bundle.supports("unsupported"));
+        assert!(bundle.binary("unsupported").unwrap().is_none());
+        std::fs::write(&sidecar, b"old sidecar").unwrap();
+        assert_eq!(bundle.binary(triple).unwrap().unwrap().as_ref(), b"embedded agent");
+        bundle.override_dir = Some(dir.clone());
+        assert_eq!(bundle.binary(triple).unwrap().unwrap().as_ref(), b"old sidecar", "explicit developer overrides still work");
+        bundle.embedded = &[];
+        bundle.override_dir = None;
+        assert_eq!(bundle.binary(triple).unwrap().unwrap().as_ref(), b"old sidecar", "Unix sidecar bundles still work");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn agent_discovery_prefers_bundled_files_then_development_agents_and_cross_builds() {
+        let dir = std::env::temp_dir().join(format!("codeyard-agent-discovery-{}", std::process::id()));
+        let triple = "x86_64-unknown-linux-musl";
+        let named = format!("codeyard-agent-{triple}");
+        let exe = dir.join("target/debug/codeyard.exe");
+        let bundled = dir.join("target/debug/agents").join(&named);
+        let staged = dir.join("target/agents").join(&named);
+        let built = dir.join(format!("target/{triple}/release-agent/codeyard-agent"));
+        for file in [&bundled, &staged, &built] {
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, b"fixture").unwrap();
+        }
+        let bundle = AgentBundle { dirs: bundle_dirs_for(&exe), override_dir: None, embedded: &[] };
+        assert_eq!(bundle.find_with_exe(triple, Some(&exe)), Some(bundled.clone()));
+        std::fs::remove_file(&bundled).unwrap();
+        assert_eq!(bundle.find_with_exe(triple, Some(&exe)), Some(staged.clone()));
+        let test_exe = dir.join("target/debug/deps/codeyard-tests.exe");
+        assert_eq!(bundle.find_with_exe(triple, Some(&test_exe)), Some(staged.clone()));
+        std::fs::remove_file(&staged).unwrap();
+        assert_eq!(bundle.find_with_exe(triple, Some(&exe)), Some(built.clone()));
+        std::fs::remove_file(&built).unwrap();
+        assert!(bundle.find_with_exe(triple, Some(&exe)).is_none());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
     #[test]
     fn agents_are_looked_up_next_to_the_binary_and_in_the_macos_bundle() {
         let plain = bundle_dirs_for(Path::new("/opt/codeyard/codeyard"));

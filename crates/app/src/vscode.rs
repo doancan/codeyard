@@ -2,19 +2,28 @@
 //! touched; entries with an equivalent go into codeyard's files, the rest are
 //! counted and reported. Pure converters (file I/O is in the workbench).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value, json};
 
 /// VS Code's user directory (`None` if missing).
 pub fn user_dir() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME").map(PathBuf::from)?;
-    let candidates = [
-        home.join("Library/Application Support/Code/User"),
-        home.join(".config/Code/User"),
-        home.join("Library/Application Support/VSCodium/User"),
-        home.join(".config/VSCodium/User"),
-    ];
+    user_dir_in(dirs::config_dir().as_deref(), dirs::home_dir().as_deref())
+}
+
+fn user_dir_in(config: Option<&Path>, home: Option<&Path>) -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Some(config) = config {
+        candidates.extend([config.join("Code/User"), config.join("VSCodium/User")]);
+    }
+    if let Some(home) = home {
+        candidates.extend([
+            home.join("Library/Application Support/Code/User"),
+            home.join(".config/Code/User"),
+            home.join("Library/Application Support/VSCodium/User"),
+            home.join(".config/VSCodium/User"),
+        ]);
+    }
     candidates.into_iter().find(|d| d.join("settings.json").is_file() || d.join("keybindings.json").is_file())
 }
 
@@ -147,14 +156,31 @@ fn match_theme(name: &str, themes: &[(String, String)]) -> Option<String> {
 /// Find a theme installed in VS Code by name (extensions and built-ins);
 /// returns one JSON with `include` inheritance merged.
 pub fn find_theme(name: &str) -> Option<Value> {
-    let home = std::env::var_os("HOME").map(PathBuf::from)?;
-    let roots = [
-        home.join(".vscode/extensions"),
+    let mut installs = Vec::new();
+    if cfg!(windows) {
+        if let Some(local) = dirs::data_local_dir() {
+            installs.extend([local.join("Programs/Microsoft VS Code"), local.join("Programs/VSCodium")]);
+        }
+        for dir in ["ProgramFiles", "ProgramFiles(x86)"].into_iter().filter_map(std::env::var_os) {
+            let dir = PathBuf::from(dir);
+            installs.extend([dir.join("Microsoft VS Code"), dir.join("VSCodium")]);
+        }
+    }
+    find_theme_in(&theme_roots(dirs::home_dir().as_deref(), &installs), name)
+}
+
+fn theme_roots(home: Option<&Path>, installs: &[PathBuf]) -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if let Some(home) = home {
+        roots.extend([home.join(".vscode/extensions"), home.join(".vscode-oss/extensions")]);
+    }
+    roots.extend(installs.iter().map(|dir| dir.join("resources/app/extensions")));
+    roots.extend([
         PathBuf::from("/Applications/Visual Studio Code.app/Contents/Resources/app/extensions"),
         PathBuf::from("/usr/share/code/resources/app/extensions"),
         PathBuf::from("/usr/lib/code/resources/app/extensions"),
-    ];
-    find_theme_in(&roots, name)
+    ]);
+    roots
 }
 
 pub fn find_theme_in(roots: &[PathBuf], name: &str) -> Option<Value> {
@@ -428,6 +454,32 @@ pub fn merge_keybindings(ours: &str, entries: &[Value]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn windows_import_finds_roaming_settings_and_installed_themes_without_home() {
+        let dir = std::env::temp_dir().join(format!("codeyard-vscode-windows-{}", std::process::id()));
+        let roaming = dir.join("AppData/Roaming");
+        let user = roaming.join("Code/User");
+        std::fs::create_dir_all(&user).unwrap();
+        std::fs::write(user.join("settings.json"), "{}").unwrap();
+        assert_eq!(user_dir_in(Some(&roaming), None), Some(user));
+        let codium = roaming.join("VSCodium/User");
+        std::fs::create_dir_all(&codium).unwrap();
+        std::fs::write(codium.join("keybindings.json"), "[]").unwrap();
+        assert_eq!(user_dir_in(Some(&roaming), None).unwrap(), roaming.join("Code/User"));
+        std::fs::remove_file(roaming.join("Code/User/settings.json")).unwrap();
+        assert_eq!(user_dir_in(Some(&roaming), None), Some(codium));
+
+        let install = dir.join("Local/Programs/Microsoft VS Code");
+        let extension = install.join("resources/app/extensions/theme-test");
+        std::fs::create_dir_all(&extension).unwrap();
+        std::fs::write(extension.join("package.json"), r#"{"contributes":{"themes":[{"label":"Windows Fixture","path":"theme.json"}]}}"#).unwrap();
+        std::fs::write(extension.join("theme.json"), r##"{"colors":{"editor.background":"#123456"}}"##).unwrap();
+        let roots = theme_roots(None, &[install]);
+        let theme = find_theme_in(&roots, "Windows Fixture").unwrap();
+        assert_eq!(theme["colors"]["editor.background"], "#123456");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn converts_settings() {

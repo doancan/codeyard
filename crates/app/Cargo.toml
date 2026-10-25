@@ -7,6 +7,9 @@ description = "Codeyard editor application: GPUI views, commands and the workben
 repository.workspace = true
 publish = false
 
+[build-dependencies]
+embed-resource = "3.0.12"
+
 [dependencies]
 accesskit = "0.25.1"
 alacritty_terminal = "0.26.0"
@@ -49,6 +52,9 @@ ring = { version = "0.17.14", default-features = false, features = ["alloc"] }
 # Update install: atomic app swap and process liveness checks (libc is already used by host, agent and syntax).
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.191"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = ["Win32_System_Com", "Win32_UI_Shell"] }
 
 # macOS: Dock icon (also when run unbundled: cargo run, bare binary).
 [target.'cfg(target_os = "macos")'.dependencies]
