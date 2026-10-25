@@ -192,7 +192,7 @@ An untrusted folder (anything not opened before the trust gate existed and not t
 | tasks, tests, debugger | ask first (“Do you trust the authors of this folder?”) | run |
 | project `terminal.shell`, `lsp.servers`, `json.schemas`, `yaml.schemas` | ignored (the status bar names them) | applied |
 | language servers | **not started**; one notice per folder says how to turn them on; trusting starts them at once | start on opening a file |
-| `$schema` URLs and schema `$ref`s | downloaded only from SchemaStore (cached copies still work) | any `http(s)` address |
+| `$schema` URLs and schema `$ref`s | downloaded only from SchemaStore (cached copies still work); a network-share path (`//host/share`, `file://host/…`) is never opened, since Windows would log in to that host | any `http(s)` address |
 | `git status` (every 4 s) | `core.fsmonitor` turned off | as in a terminal |
 | `git show` / `blame` | `--no-textconv` always (raw bytes are also what hunk staging needs) | same |
 
