@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Structural search and replace.** *Search: Structural Search…* (⌥⇧⌘F) and *Search: Structural Replace…* find code by its shape, not its text:
+  a pattern is code in the file's language where `$X` matches one node and `$$$X` any run of siblings (`$R.unwrap_or($X.clone())`
+  becomes `$R.unwrap_or_else(|| $X.clone())`). It works in 15 languages with the tree-sitter grammars Codeyard already ships, reads
+  only the files that can match, shows a pattern that does not parse inline, and replaces through the same flow as *Replace in Files*
+  (files that would no longer parse are named first). Setting `search.structural.maxFiles`.
+- **Compare folders.** *Compare: Folders…* (and the tree menu) compares two folders, each on this computer or on the connected server, by
+  size and content hash: only left, only right, changed, identical. A changed file opens in the diff view; files and folders can be
+  copied either way or deleted on a side you mark writable, always after a confirmation and never over a file that changed since the
+  scan. Over SSH only the file list and hashes travel. This raises the agent protocol to version 10, so servers get the new agent on the
+  next connect. Settings `compare.folders.ignore` and `compare.folders.maxFiles`.
+- **Data tools.** *Data: Convert To…* turns JSON, YAML, TOML and `.env` into one another (and says what a format cannot hold),
+  *Data: Query…* runs a jq-style query live, *Data: Copy Path at Cursor* copies `.servers[2].host` (also shown in the status bar), and
+  *Data: Decode Selection…* reads a JWT or a Unix timestamp. Everything is local. Settings `data.indent` and `data.sortKeys`.
+
+### Security
+
+- Pull request checkout took the remote name from the repository's `.git/config` and handed it to `git fetch` as an option, which could
+  run a program named there. Remote names that start with `-` are refused and `--` ends the options.
+- `.http` requests no longer follow redirects by themselves: a 307 to `127.0.0.1` or the metadata address re-sent the body and the custom
+  headers. The redirect is shown with its target instead.
+- A folder trusted on this computer was also trusted when an SSH window opened the same path on a server; trust now includes the host.
+- A language server can no longer make Codeyard write to files outside the open folders (`workspace/applyEdit`).
+- Developer flags that run palette commands (`--do`) are ignored unless Codeyard is a debug build or `CODEYARD_DEV` is set.
+- HTTP responses kept for the response tab, crash reports and the restart manifest are private to your account, and responses are
+  deleted when the tab closes. The GitHub token no longer appears in the process list.
+- A restricted (untrusted) folder can no longer make Codeyard read a network share through `$schema` on Windows.
+- A manual run of the release workflow signed with the real update key; only tag builds see it now.
+- A language server that never answers `initialize` is stopped instead of left running; its messages and a debuggee's output are clipped
+  and bounded so one chatty process cannot freeze the window.
+
+### Fixed
+
+- Unsaved work: quitting or switching folders now asks when a dirty file cannot be backed up (a file outside the folder, a full disk, no
+  state database); a forced save over a file that changed on disk keeps the overwritten version in local history, and a second Cmd+S
+  within half a second no longer forces it; Save As keeps the old tab when you kept typing during the write.
+- A state database that cannot be opened is reported, and a damaged one is set aside (`state.db.corrupt-<time>`) and replaced.
+- Over SSH, a large write no longer freezes the window while it uploads: the connection has its own writer thread. A write that fails
+  in the agent no longer leaves a hard-linked file empty, and a target that grew past the size limit is refused instead of read whole.
+- The `.http` response tab no longer closes the request file itself when you send twice.
+
 ## [0.2.2] - 2026-10-26
 
 ### Changed
