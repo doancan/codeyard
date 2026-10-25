@@ -57,6 +57,7 @@ into private state any other way.
 | Syntax | `tree-sitter` with highlight queries | incremental, only the visible range is coloured; only the front tab keeps a tree |
 | Fuzzy matching | `nucleo-matcher` | quick open and palettes |
 | Search | `ignore` + `regex` in the agent | respects `.gitignore`, streams results, cancellable; the same matcher serves find-in-file (Turkish i/ı/İ/I folding) |
+| Structural search | `tree-sitter` in the app; the agent's text search picks the files | App-side on purpose: the agent has no tree-sitter and stays a 1.5 MB binary, and no protocol request is added. The agent finds files that contain the pattern's longest token, the app reads only those and parses them one at a time |
 | Terminal | `alacritty_terminal`; the agent opens the pty | mature VT emulation, same path locally and over SSH |
 | SSH | the system `ssh` with ControlMaster | `~/.ssh/config`, ProxyJump, agents, 2FA and certificates come for free |
 | Protocol | length-prefixed `postcard` frames | small and fast; file contents travel as raw bytes |
