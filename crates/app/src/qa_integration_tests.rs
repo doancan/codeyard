@@ -2519,6 +2519,40 @@ fn workspace_edits_outside_the_open_folders_are_dropped(cx: &mut TestAppContext)
     assert!(applied);
 }
 
+/// A response is whatever the server sent, tokens included: the file behind its tab is owner-only and goes away with the tab or the app.
+#[cfg(unix)]
+#[gpui::test]
+fn the_response_file_is_private_and_removed_at_quit(cx: &mut TestAppContext) {
+    use std::os::unix::fs::PermissionsExt;
+    let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+    let (wb, cx) = setup_trusting(cx, "qa-response-private");
+    let r = crate::http_client::Response {
+        status: 200,
+        reason: "OK".into(),
+        headers: vec![("Content-Type".into(), "application/json".into())],
+        body: br#"{"token":"abc"}"#.to_vec(),
+        millis: 1,
+        size: 15,
+    };
+    let f = qa_dir("qa-response-private-src").join("a.http");
+    std::fs::write(&f, "GET http://a/\n").unwrap();
+    open(&wb, &f, cx);
+    wb.update_in(cx, |wb, window, cx| wb.show_response_for_test(r.clone(), window, cx));
+    let path = wb.read_with(cx, |wb, _| wb.response_tab_for_test()).expect("response file");
+    let path = Path::new(&path);
+    assert!(path.ends_with("response.json"), "{path:?}");
+    wait_for(cx, "response tab", |cx| wb.read_with(cx, |wb, cx| wb.active_editor_entity().is_some_and(|e| e.read(cx).path == path.to_string_lossy())));
+    assert_eq!(mode(path) & 0o077, 0, "file readable by others: {:o}", mode(path));
+    assert_eq!(mode(path.parent().unwrap()) & 0o077, 0, "folder readable by others");
+    // The next response replaces it; the request file was never the response tab.
+    open(&wb, &f, cx);
+    wb.update_in(cx, |wb, window, cx| wb.show_response_for_test(r, window, cx));
+    cx.run_until_parked();
+    assert!(f.exists(), "sending again must not delete the .http file");
+    wb.update(cx, |wb, _| wb.discard_response_on_quit_for_test());
+    assert!(!path.exists() && f.exists());
+}
+
 /// Trust is per host: a folder trusted on this computer says nothing about the same path on a server.
 #[gpui::test]
 fn trusting_a_local_folder_does_not_trust_the_same_path_on_a_server(cx: &mut TestAppContext) {
