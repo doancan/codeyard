@@ -76,6 +76,8 @@ mod qa_editor_tests;
 mod qa_integration_tests;
 #[cfg(test)]
 mod qa_workbench_tests;
+#[cfg(test)]
+mod reliability_data_tests;
 mod scm;
 mod search;
 mod sections;
