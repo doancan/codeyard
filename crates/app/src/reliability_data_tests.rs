@@ -162,3 +162,39 @@ fn a_database_from_a_newer_version_is_left_in_place_but_reported(cx: &mut TestAp
     assert!(std::fs::read_dir(&dir).unwrap().flatten().all(|e| !e.file_name().to_string_lossy().contains("corrupt")));
     assert!(!wb.read_with(cx, |wb, _| wb.has_state_for_test()));
 }
+
+#[gpui::test]
+fn save_as_keeps_the_old_tab_when_typing_continued_during_the_write(cx: &mut TestAppContext) {
+    let (dir, data) = (project("saveas"), home("saveas"));
+    let (wb, cx) = setup_persistent(cx, &data);
+    open(&wb, &dir, cx);
+    let main = dir.join("src/main.rs");
+    open_in(&wb, &main, cx);
+    cx.simulate_input("// before\n");
+    let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
+    let (from, copy) = (main.to_string_lossy().into_owned(), dir.join("src/copy.rs").to_string_lossy().into_owned());
+    wb.update_in(cx, |wb, window, cx| wb.save_as_for_test(from.clone(), copy, window, cx));
+    // The write has been handed to the background but has not finished: this is typed in the meantime.
+    ed.update(cx, |e, cx| e.apply_buffer_edits(|_| vec![(0..0, "// during\n".to_string())], cx));
+    cx.run_until_parked();
+    assert_eq!(std::fs::read_to_string(dir.join("src/copy.rs")).unwrap(), "// before\nfn main() {}\n");
+    assert!(wb.read_with(cx, |wb, cx| wb.open_paths(cx)).contains(&from), "the tab holding the late edit must stay");
+    assert!(ed.read_with(cx, |e, _| e.text().starts_with("// during\n")));
+    assert!(wb.read_with(cx, |wb, cx| wb.any_dirty(cx)));
+    assert!(wb.read_with(cx, |wb, _| wb.notice_for_test()).is_some_and(|(_, m)| m.contains("kept typing")));
+}
+
+#[gpui::test]
+fn save_as_closes_the_old_tab_when_nothing_changed_meanwhile(cx: &mut TestAppContext) {
+    let (dir, data) = (project("saveas2"), home("saveas2"));
+    let (wb, cx) = setup_persistent(cx, &data);
+    open(&wb, &dir, cx);
+    let main = dir.join("src/main.rs");
+    open_in(&wb, &main, cx);
+    cx.simulate_input("// before\n");
+    let (from, copy) = (main.to_string_lossy().into_owned(), dir.join("src/copy.rs").to_string_lossy().into_owned());
+    wb.update_in(cx, |wb, window, cx| wb.save_as_for_test(from.clone(), copy, window, cx));
+    cx.run_until_parked();
+    assert!(!wb.read_with(cx, |wb, cx| wb.open_paths(cx)).contains(&from));
+    assert!(!wb.read_with(cx, |wb, cx| wb.any_dirty(cx)));
+}

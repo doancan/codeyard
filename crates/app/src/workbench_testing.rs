@@ -604,6 +604,11 @@ impl Workbench {
         self.persist.state.as_ref().expect("a state database").set(key, value).expect("state write");
     }
 
+    /// Save As without the prompt: the write is only spawned, so a test can type before it completes.
+    pub fn save_as_for_test(&mut self, from: String, name: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.save_as_to(from, name, window, cx);
+    }
+
     pub fn has_state_for_test(&self) -> bool {
         self.persist.state.is_some()
     }
