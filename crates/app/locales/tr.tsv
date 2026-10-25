@@ -1901,3 +1901,6 @@ Keep Waiting	Beklemeye Devam Et
 “{}” is not a usable branch or remote name	“{}” kullanılabilir bir dal ya da uzak sunucu adı değil
 Codeyard already has Full Disk Access.	Codeyard'ın zaten Tam Disk Erişimi var.
 Software Update	Yazılım Güncelleme
+# --- reliability-data ---
+The version that was on disk has been kept in Local History.	Diskteki sürüm yerel geçmişe kaydedildi.
+Could not keep a copy of the version that was on disk: {}	Diskteki sürümün kopyası saklanamadı: {}

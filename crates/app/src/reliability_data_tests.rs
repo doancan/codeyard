@@ -84,3 +84,46 @@ fn switching_folders_keeps_an_unprotected_edit_open(cx: &mut TestAppContext) {
     assert!(wb.read_with(cx, |wb, cx| wb.any_dirty(cx)));
     assert!(wb.read_with(cx, |wb, _| wb.notice_for_test()).is_some_and(|(error, _)| error));
 }
+
+/// A dirty buffer whose file was then rewritten by someone else, with the watcher's notice delivered.
+type Conflicted<'a> = (gpui::Entity<Workbench>, &'a mut VisualTestContext, PathBuf, PathBuf, gpui::Entity<crate::editor::EditorView>);
+
+fn conflicted<'a>(cx: &'a mut TestAppContext, name: &str) -> Conflicted<'a> {
+    let (data, dir) = (home(name), project(name));
+    let (wb, cx) = setup_persistent(cx, &data);
+    open(&wb, &dir, cx);
+    let file = dir.join("src/main.rs");
+    open_in(&wb, &file, cx);
+    cx.simulate_input("// mine\n");
+    std::fs::write(&file, "fn main() { println!(\"theirs\"); }\n").unwrap();
+    let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
+    ed.update(cx, |e, cx| e.on_disk_change(proto::ChangeKind::Modified, cx));
+    cx.run_until_parked();
+    assert!(ed.read_with(cx, |e, _| e.disk_state().0), "the watcher should have raised the conflict");
+    (wb, cx, data, file, ed)
+}
+
+#[gpui::test]
+fn a_forced_save_keeps_the_version_it_overwrites(cx: &mut TestAppContext) {
+    let (wb, cx, data, file, ed) = conflicted(cx, "force");
+    ed.update(cx, |e, _| e.expire_conflict_grace());
+    cx.simulate_keystrokes("cmd-s");
+    cx.run_until_parked();
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "// mine\nfn main() {}\n");
+    let path = ed.read_with(cx, |e, _| e.path.clone());
+    let copies = crate::history::list(&crate::history::dir_for(&data, "", &path));
+    let kept: Vec<String> = copies.iter().map(|c| crate::history::read(c).unwrap()).collect();
+    assert!(kept.contains(&"fn main() { println!(\"theirs\"); }\n".to_string()), "the other version must be recoverable: {kept:?}");
+    assert!(wb.read_with(cx, |wb, _| wb.notice_for_test()).is_some());
+}
+
+#[gpui::test]
+fn a_save_right_after_the_conflict_appears_does_not_overwrite(cx: &mut TestAppContext) {
+    let (_wb, cx, data, file, ed) = conflicted(cx, "rapid");
+    cx.simulate_keystrokes("cmd-s");
+    cx.run_until_parked();
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "fn main() { println!(\"theirs\"); }\n");
+    assert!(ed.read_with(cx, |e, _| e.disk_state().0), "the banner stays until the user decides");
+    let path = ed.read_with(cx, |e, _| e.path.clone());
+    assert!(crate::history::list(&crate::history::dir_for(&data, "", &path)).is_empty());
+}
