@@ -32,7 +32,7 @@ passphrase-protected key stands in for a password because a non-root `sshd` cann
 ## Agent and protocol
 
 `crates/proto` defines the messages; frames are length-prefixed `postcard`, requests carry an id, so many calls and
-streams are multiplexed. Current protocol version: **9**.
+streams are multiplexed. Current protocol version: **10**.
 
 | Group | Requests | Notes |
 | --- | --- | --- |
@@ -42,7 +42,11 @@ streams are multiplexed. Current protocol version: **9**.
 | watch | `Watch` | polls the given path set once a second; change events are pushed |
 | terminals | `PtySpawn`, `PtyInput`, `PtyResize`, `PtyKill` | output is a pushed event; the agent keeps 256 KB of scrollback per pty for resume |
 | processes | `Exec`, `ProcSpawn`, `ProcInput`, `ProcKill` | `Exec` runs a one-shot command with bounded output (git, curl for `.http`, helper scripts); `Proc*` runs long-lived processes (language servers, debug adapters) |
+| folders | `HashTree`, `Cancel` | Compare Folders: one pass walks a folder (`.gitignore` and extra globs, symlinks never followed) and streams size, mtime and link target; a second pass hashes only the files the client names. Version 10 added it, so agents from earlier releases are replaced on the next connect |
 | big files | `LineIndex`, `ReadLines` | the agent samples a byte offset every 4096 lines and extends the index incrementally; used by the large-file view and log follow |
+
+Compare Folders works with the window's one connection: a side is a folder on this computer or on the connected host. Comparing two
+SSH hosts would need a second connection per window and is left for a later version.
 
 Git and language servers are **not** agent features: the agent only runs processes, and parsing, diffing and
 JSON-RPC are in the app. That keeps the agent small and gives local and remote exactly one code path. Port

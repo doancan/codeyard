@@ -22,6 +22,7 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Colours](#colours)
 - [Spell check](#spell-check)
 - [Merge editor](#merge-editor)
+- [Compare folders](#compare-folders)
 - [GitHub pull requests](#github-pull-requests)
 - [HTTP files](#http-files)
 - [Port forwarding](#port-forwarding)
@@ -649,6 +650,43 @@ Current and Incoming side by side (plus the common ancestor when the file has `d
 *Accept Current*, *Accept Incoming*, *Accept Both* or *Both, Incoming First*; hovering an option previews the **Result**.
 Each resolution is an undoable edit of the file itself (⌘Z works from the page); when none are left, *Save File* writes it.
 Closing the file's tab closes the page; with very many conflicts the first 40 are shown and the header still counts all of them.
+
+## Compare folders
+
+**Compare: Folders…** (command palette) asks for the left folder, then the right one. A side is a folder on this computer or on the
+host the window is connected to: the window's folder comes first, *Choose a folder on this computer…* opens the system dialog, and
+over SSH *Enter a folder path on …* takes a typed path. Two different SSH hosts cannot be compared yet (a window has one connection).
+In the Explorer, right-click a folder and choose *Select Folder for Compare*, then right-click another one and choose
+*Compare Folder with Selected*.
+
+The comparison opens as a tab. Each side's agent walks its folder, skipping the globs in `compare.folders.ignore` (`.git`,
+`node_modules` and `target` by default) and, with *Respect .gitignore* on, what `.gitignore` ignores. The list shows what is
+**only on the left**, **only on the right** and **changed** (size, content, a file against a folder or link, a different link
+target); identical entries are hidden until you turn on *Show identical*. Folders that exist on one side only start folded.
+Names appear while the folders are still being read, and the line above the list says when the second pass (reading the hashes of
+files that have the same size on both sides) is running. **Stop** cancels. Only hashes cross the network, never file contents; the
+modification time is shown but never decides whether two files match.
+
+- A click on a changed text file opens the diff, labelled *Left ↔ Right*. Binary files and files over 2 MB are compared by size and
+  hash only and get no diff.
+- *Ignore whitespace* and *Ignore line endings* read the changed text files (up to 2000) and file the ones that then match under
+  *Same apart from whitespace*. Without them a file whose only difference is CRLF against LF counts as changed.
+- Symbolic links are compared by their target and never followed. A folder or file that cannot be read shows its error on its row and
+  the scan goes on. Names that differ only in letter case (`Readme` and `readme`) are flagged and are never copied, because they
+  would overwrite each other on a case-insensitive disk. If both sides are the same folder the tab says so.
+- **→** and **←** on a row copy that file, or everything below that folder that is missing or different, to the other side after a
+  confirmation. A file is written only if the destination still looks the way the scan saw it (same hash, or same size and time when
+  it was never hashed; a name that did not exist must still not exist), otherwise it is left alone and named in the message. Links
+  are not copied, new files do not get the source's executable bit, and files over 32 MB go through a temporary copy.
+- **✕** deletes from one side, but only after you tick *Left is writable* or *Right is writable*. The confirmation names the host,
+  the delete is permanent, the folder is listed again first and refused if anything in it changed, and entries the comparison hides
+  (ignored ones) are counted because they are deleted too.
+- Nothing is written to a folder that is not trusted (see *Workspace Trust* in [architecture.md](architecture.md)); open and trust it
+  as a folder first.
+- *Copy Report* puts the counts and every difference on the clipboard, *Export as Text…* saves them. Results are kept in memory
+  only. If the connection drops during a scan the tab keeps what it has, says that the result is partial and offers *Scan Again*.
+
+`compare.folders.maxFiles` (50000) is the number of entries read per side before the scan stops and says so. Times are shown in UTC.
 
 ## GitHub pull requests
 
