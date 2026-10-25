@@ -4,7 +4,8 @@ name: release
 # Nothing is published until every platform has built: macos and windows only upload artifacts,
 # the last job creates the release in one step, so a failed Windows build never leaves a half release.
 # Run it by hand (Actions > release > Run workflow) for a dry run: everything is built, bundled and checked
-# and the files stay as artifacts, but no release is created. It signs too, so the signing path is exercised before a tag.
+# and the files stay as artifacts, but no release is created. It signs too, with a throw-away key: the real signing key is
+# only ever given to a run for a tag, because files signed with it verify in every installed app, whichever branch built them.
 # Every release carries SHA256SUMS.txt.sig (Ed25519 over SHA256SUMS.txt, secret UPDATE_SIGNING_KEY) and RELEASE_NOTES.md:
 # see docs/releasing.md.
 on:
@@ -36,7 +37,9 @@ jobs:
       - run: scripts/verify-release.sh --self-test
       # An unsigned release would make every installed app refuse to update, so a missing or wrong key fails here,
       # minutes in, not after the builds. The check signs a dummy file and verifies it with scripts/update-public-key.pem.
+      # Tags only: a dry run never sees the key.
       - name: Check the update signing key
+        if: github.ref_type == 'tag'
         env:
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
         run: |
@@ -222,18 +225,28 @@ jobs:
           ! grep -q "$(printf '\r')" SHA256SUMS.txt || { echo "SHA256SUMS.txt contains CR characters"; exit 1; }
           [ "$(grep -c . SHA256SUMS.txt)" -ge 5 ] || { echo "expected at least the DMG, tar.gz, ZIP, setup EXE and RELEASE_NOTES.md"; exit 1; }
           ls -l
-      # Signs SHA256SUMS.txt (the only thing the in-app updater trusts) and checks the signature with the public key in the
-      # repo before anything is published. Runs in a dry run too. The key is only in this step's environment.
+      # Signs SHA256SUMS.txt (the only thing the in-app updater trusts) and checks the signature before anything is published.
+      # A tag gets the real key, which is only in this step's environment. A dry run signs with a key made on the spot and checks
+      # against its public half, so the signing path is exercised without handing out files that installed apps would accept.
       - name: Sign SHA256SUMS.txt
+        if: github.ref_type == 'tag'
         env:
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
         run: |
           set +x
           [ -n "$UPDATE_SIGNING_KEY" ] || { echo "::error title=UPDATE_SIGNING_KEY is empty::Refusing to build an unsigned release."; exit 1; }
           scripts/sign-release.sh dist
+      - name: Sign SHA256SUMS.txt with a throw-away key (dry run)
+        if: github.ref_type != 'tag'
+        run: |
+          key="$(mktemp -d)"
+          openssl genpkey -algorithm ed25519 -out "$key/k.pem"
+          openssl pkey -in "$key/k.pem" -pubout -out "$key/k.pub"
+          scripts/sign-release.sh dist --key-file "$key/k.pem" --pubkey "$key/k.pub"
+          echo "THROWAWAY_PUBKEY=$key/k.pub" >> "$GITHUB_ENV"
       - name: Verify the signature and every file as a user would
         run: |
-          scripts/verify-release.sh --dir dist
+          if [ "$GITHUB_REF_TYPE" = tag ]; then scripts/verify-release.sh --dir dist; else scripts/verify-release.sh --dir dist --key "$THROWAWAY_PUBKEY"; fi
           [ "$(wc -c < dist/SHA256SUMS.txt.sig | tr -d ' ')" = 64 ]
           ls -l dist
       - name: Create the release
@@ -250,8 +263,8 @@ jobs:
           ls -l dist
           echo "--- release notes ---"
           cat dist/RELEASE_NOTES.md
-      # The signed files of a dry run, to test the updater against the real signature before a tag exists.
-      - name: Keep the signed dry-run files
+      # The files of a dry run (signed with the throw-away key: they only prove the pipeline, no installed app accepts them).
+      - name: Keep the dry-run files
         if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
         with:
