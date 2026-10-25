@@ -102,6 +102,14 @@ pub struct Pattern {
     path: Vec<usize>,
     vars: Vec<Var>,
     keep_comments: bool,
+    /// See `literal_hint`; computed once.
+    hint: Option<String>,
+}
+
+impl std::fmt::Debug for Pattern {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Pattern").field("language", &self.lang.name).field("source", &self.src).finish()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -169,9 +177,12 @@ fn is_name_char(c: char) -> bool {
     c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_'
 }
 
+/// (range in the rewritten text, range as typed) of each placeholder.
+type SpanMap = Vec<(Range<usize>, Range<usize>)>;
+
 /// Replace metavariables by placeholder identifiers. Returns the new text, the variables, and for every placeholder the
 /// (rewritten range, original range) pair so error spans can be mapped back.
-fn rewrite(pattern: &str) -> (String, Vec<Var>, Vec<(Range<usize>, Range<usize>)>) {
+fn rewrite(pattern: &str) -> (String, Vec<Var>, SpanMap) {
     let mut out = String::with_capacity(pattern.len() + 16);
     let mut vars: Vec<Var> = Vec::new();
     let mut spans = Vec::new();
@@ -342,7 +353,9 @@ pub fn compile(lang: &'static Language, pattern: &str) -> Result<Pattern, Patter
         if only_var {
             return Err(PatternError { kind: PatternErrorKind::OnlyMetavariable, span: 0..pattern.len() });
         }
-        return Ok(Pattern { lang, src, tree, path, vars, keep_comments });
+        let mut pattern = Pattern { lang, src, tree, path, vars, keep_comments, hint: None };
+        pattern.hint = pattern.find_hint();
+        return Ok(pattern);
     }
     let (kind, span) =
         if not_one_node { (PatternErrorKind::NotOneNode, body.clone()) } else { first_failure.unwrap_or((PatternErrorKind::Syntax, body.clone())) };
@@ -413,6 +426,10 @@ impl Pattern {
     /// identifier-like token of the pattern (or, failing that, the longest token). Sound because all tokens must
     /// appear in a match, so the longest one alone already rules files out.
     pub fn literal_hint(&self) -> Option<String> {
+        self.hint.clone()
+    }
+
+    fn find_hint(&self) -> Option<String> {
         fn leaves<'t>(n: Node<'t>, keep_comments: bool, out: &mut Vec<Node<'t>>) {
             if !keep_comments && is_comment(n) {
                 return;
@@ -533,18 +550,25 @@ impl<'a> Run<'a> {
 
 /// All matches of `pattern` in `text`, parsed with the pattern's own grammar; `Err` if the text has syntax errors.
 pub fn find_all_in(pattern: &Pattern, lang: &Language, text: &str) -> Result<Vec<Match>, ParseFailed> {
+    // A match contains the hint, so a file without it needs no parse (open buffers get here without the text search).
+    if pattern.hint.as_ref().is_some_and(|h| !text.contains(h.as_str())) {
+        return Ok(Vec::new());
+    }
     let tree = parse(lang, text).ok_or(ParseFailed)?;
     if tree.root_node().has_error() {
         return Err(ParseFailed);
     }
     let root = pattern.root();
+    // Kind names are looked up once per grammar kind instead of once per node: this loop visits every node of the file.
+    let wanted: Vec<bool> =
+        (0..lang.ts.node_kind_count() as u16).map(|id| lang.ts.node_kind_is_named(id) && lang.ts.node_kind_for_id(id) == Some(root.kind())).collect();
     let mut run = Run { pat: pattern, text, binds: vec![None; pattern.vars.len()], trail: Vec::new(), steps: 0 };
     let mut out = Vec::new();
     let mut cursor = tree.walk();
     // Pre-order over the whole tree: an outer match comes before the matches inside it.
     'walk: loop {
         let t = cursor.node();
-        if t.is_named() && t.kind() == root.kind() && (pattern.keep_comments || !is_comment(t)) {
+        if wanted.get(t.kind_id() as usize).copied().unwrap_or(false) && (pattern.keep_comments || !is_comment(t)) {
             run.binds.iter_mut().for_each(|b| *b = None);
             run.trail.clear();
             run.steps = 0;

@@ -325,15 +325,25 @@ fn many_triple_dollar_variables_cannot_run_away() {
     assert!(start.elapsed().as_secs() < 5, "{:?}", start.elapsed());
 }
 
-/// 1 MB of Rust source is matched in tens of milliseconds in a release build; this only guards against a quadratic walk.
+/// 1 MB of dense Rust: parsing alone takes about 70 ms in a release build, the walk about as much again here (a match every
+/// 125 bytes). The limits only guard against a quadratic walk; the numbers are printed with --nocapture.
 #[test]
 fn a_megabyte_of_source_matches_in_reasonable_time() {
     let unit = "fn item(a: Option<String>, b: Vec<u8>) -> String {\n    let x = a.unwrap_or(b.len().to_string().clone());\n    x // trailing\n}\n\n";
     let text = unit.repeat(1_000_000 / unit.len());
     let p = pat("Rust", "$R.unwrap_or($X.clone())");
+    // Tree-sitter's own parse is most of the time (about 70 ms per MB of this code on a 2023 laptop, release build).
+    let parse_only = std::time::Instant::now();
+    drop(parse(p.language(), &text).unwrap());
+    eprintln!("parse alone {:?}", parse_only.elapsed());
+    let rare = pat("Rust", "$R.unwrap_or($X.len())");
+    let sparse = std::time::Instant::now();
+    assert!(find_all(&rare, &text).is_empty());
+    eprintln!("parse and walk, nothing matches: {:?}", sparse.elapsed());
     let start = std::time::Instant::now();
     let n = find_all(&p, &text).len();
     let took = start.elapsed();
+    eprintln!("{} bytes matched in {took:?}", text.len());
     assert_eq!(n, 1_000_000 / unit.len());
     let limit = if cfg!(debug_assertions) { 3000 } else { 150 };
     assert!(took.as_millis() < limit, "1 MB took {took:?}");
@@ -341,5 +351,51 @@ fn a_megabyte_of_source_matches_in_reasonable_time() {
     for _ in 0..100 {
         let _ = compile(lang("Rust"), "unwrap_or($X.clone())").unwrap();
     }
+    eprintln!("compile {:?} each", t.elapsed() / 100);
     assert!(t.elapsed().as_millis() / 100 < if cfg!(debug_assertions) { 20 } else { 5 }, "compile took {:?} each", t.elapsed() / 100);
+}
+
+/// The recipes of the user guide, as written there.
+#[test]
+fn the_recipes_in_the_user_guide_work() {
+    let rewrite = |id: &str, pattern: &str, template: &str, input: &str| -> String {
+        let p = pat(id, pattern);
+        let ms = find_all(&p, input);
+        let mut out = input.to_string();
+        for m in outermost(&ms).into_iter().rev() {
+            out.replace_range(m.range.clone(), &expand(template, &m.captures));
+        }
+        assert!(parses_cleanly(p.language(), &out), "{out}");
+        out
+    };
+    assert_eq!(
+        rewrite("Rust", "$R.unwrap_or($X.clone())", "$R.unwrap_or_else(|| $X.clone())", "fn f() { let n = opt.unwrap_or(default.clone()); }"),
+        "fn f() { let n = opt.unwrap_or_else(|| default.clone()); }"
+    );
+    assert_eq!(rewrite("Python", "$X == None", "$X is None", "if value == None:\n    pass\n"), "if value is None:\n    pass\n");
+    assert_eq!(
+        rewrite("TypeScript", "console.log($$$ARGS)", "logger.debug($$$ARGS)", "console.log('a', b, c);\nconsole.log();\n"),
+        "logger.debug('a', b, c);\nlogger.debug();\n"
+    );
+    assert_eq!(
+        rewrite("Go", "fmt.Println($$$A)", "log.Println($$$A)", "package p\n\nfunc f() {\n\tfmt.Println(\"x\", 1)\n}\n"),
+        "package p\n\nfunc f() {\n\tlog.Println(\"x\", 1)\n}\n"
+    );
+    assert_eq!(
+        rewrite("Rust", "Box<Vec<$T>>", "Box<[$T]>", "fn f(a: Box<Vec<u8>>) -> Box<Vec<String>> { todo!() }"),
+        "fn f(a: Box<[u8]>) -> Box<[String]> { todo!() }"
+    );
+    assert_eq!(found("Rust", "$X == $X", "fn f(a: i32, b: i32) -> bool { a == a || a == b }"), ["a == a"]);
+    assert_eq!(found("Rust", "if $C { $$$B }", "fn f() { if a { b(); } if c { } }").len(), 2);
+}
+
+#[test]
+fn rust_macro_arguments_are_token_lists() {
+    assert_eq!(found("Rust", "println!($$$A)", "fn f() { println!(\"{}\", x.y); println!(); }"), ["println!(\"{}\", x.y)", "println!()"]);
+}
+
+#[test]
+fn python_blocks_can_be_written_on_one_line() {
+    let src = "if ok:\n    a()\n    b()\nif other:\n    c()\n";
+    assert_eq!(found("Python", "if ok: $$$BODY", src), ["if ok:\n    a()\n    b()"]);
 }
