@@ -193,6 +193,10 @@ impl Workbench {
         let r_empty = r.body.is_empty();
         let decoded = r.decoded();
         let mut note = decoded.as_ref().and_then(|(_, n)| n.clone());
+        if let Some(to) = http::redirect_target(&r) {
+            // Not followed: the next hop was never approved, so the user decides whether to send there.
+            note = Some(crate::i18n::tf("redirects to {}; not followed, send a request to that address to continue", &[&to]));
+        }
         let (name, content) = match decoded {
             Some((t, _)) if r.extension() == "json" => {
                 let pretty = crate::jsonfmt::format(&t, "  ").unwrap_or(t);

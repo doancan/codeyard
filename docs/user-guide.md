@@ -668,8 +668,9 @@ before sending. **Where it goes is asked too:** `"http.confirmRequests"` is `"re
 request to each host that is not on this computer (`localhost`, `127.x.x.x`, `::1`) in a session; the host is read from the address
 after variables are filled in, so `{{base}}` cannot hide it, and an address whose host cannot be read reliably (a backslash in front of
 `@`) always asks. Choose `"never"` for the old behaviour (no question) or `"always"` to confirm every request; only your own settings file can
-set it (a folder's `.codeyard/settings.jsonc` is ignored for this key). Redirects are followed
-by `curl` (up to 10) and are not asked about again. Connection problems are explained with the machine the request ran on (`http.runOn`: `workspace` or `local`);
+set it (a folder's `.codeyard/settings.jsonc` is ignored for this key). Redirects are
+not followed: a 3xx answer is shown with its `Location` in the status bar, because the next address was never approved and would
+receive the method, body and headers again; send a new request to it if you want to go there. Connection problems are explained with the machine the request ran on (`http.runOn`: `workspace` or `local`);
 responses over 20 MB are refused, and binary bodies open as a hex dump.
 
 ```http

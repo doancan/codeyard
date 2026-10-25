@@ -1641,7 +1641,6 @@ Could not resolve “{}”: check the spelling and the network (the request ran 
 Could not connect to {}: nothing is listening there, or a firewall blocks it (the request ran on {}).	{0} sunucusuna bağlanılamadı: orada dinleyen yok ya da bir güvenlik duvarı engelliyor (istek {1} üzerinde çalıştı).
 The server did not answer within 60 seconds.	Sunucu 60 saniye içinde yanıt vermedi.
 The TLS/SSL handshake with {} failed (certificate or protocol problem): {}	{0} ile TLS/SSL el sıkışması başarısız oldu (sertifika ya da protokol sorunu): {1}
-Too many redirects (more than 10): the server keeps redirecting.	Çok fazla yönlendirme (10'dan fazla): sunucu sürekli yönlendiriyor.
 {} accepted the connection but sent no reply.	{} bağlantıyı kabul etti ancak yanıt göndermedi.
 The connection to {} dropped while the data was being exchanged.	{} ile bağlantı, veri alışverişi sürerken koptu.
 The response is larger than {} and was not downloaded.	Yanıt {} boyutundan büyük; indirilmedi.
@@ -1901,3 +1900,5 @@ Keep Waiting	Beklemeye Devam Et
 “{}” is not a usable branch or remote name	“{}” kullanılabilir bir dal ya da uzak sunucu adı değil
 Codeyard already has Full Disk Access.	Codeyard'ın zaten Tam Disk Erişimi var.
 Software Update	Yazılım Güncelleme
+# --- security-batch ---
+redirects to {}; not followed, send a request to that address to continue	{} adresine yönlendiriyor; izlenmedi, devam etmek için o adrese yeni bir istek gönderin
