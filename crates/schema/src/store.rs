@@ -33,6 +33,15 @@ fn read_local(path: &str) -> Result<String, String> {
     Ok(text)
 }
 
+/// A network share (`\\host\share`, `//host/share`, `\\?\UNC\host\share`). Windows authenticates to the named host the moment such a path is
+/// opened, handing over the user's NTLM hash; `file://host/share/x` becomes one of these in `file_uri::to_path`.
+fn is_network_path(path: &str) -> bool {
+    if let Some(rest) = path.strip_prefix(r"\\?\") {
+        return rest.get(..4).is_some_and(|p| p.eq_ignore_ascii_case(r"UNC\"));
+    }
+    path.starts_with(r"\\") || path.starts_with("//")
+}
+
 /// Local file reader: in an SSH workspace schema files live on the file's host, not on this machine.
 pub trait FileSource: Send + Sync {
     fn read(&self, path: &str) -> Result<String, String>;
@@ -109,6 +118,15 @@ impl Store {
         self.restricted.store(on, Ordering::Relaxed);
     }
 
+    /// A schema in an untrusted folder must not point the editor at a network share: opening it, even to see whether it exists,
+    /// would make Windows log in to that host. Called before the first filesystem access for a path.
+    pub fn check_local(&self, path: &str) -> Result<(), String> {
+        if self.restricted.load(Ordering::Relaxed) && is_network_path(path) {
+            return Err(format!("{path} is not read: it is a network share and this folder is not trusted (Workspace: Trust This Folder)"));
+        }
+        Ok(())
+    }
+
     /// The policy and the session's answers for downloads from hosts other than SchemaStore.
     pub fn gate(&self) -> &Arc<crate::gate::HostGate> {
         &self.gate
@@ -127,9 +145,11 @@ impl Store {
     pub fn text(&self, url: &str) -> Result<String, String> {
         if url.starts_with("file://") {
             let path = crate::file_uri::to_path(url).ok_or_else(|| format!("Invalid file URI: {url}"))?;
+            self.check_local(&path)?;
             return read_local(&path);
         }
         if !url.contains("://") {
+            self.check_local(url)?;
             return read_local(url);
         }
         let file = self.cache_file(url);
@@ -186,6 +206,7 @@ impl Store {
             (true, Some(f)) => {
                 let path =
                     if url.starts_with("file://") { crate::file_uri::to_path(url).ok_or_else(|| format!("Invalid file URI: {url}"))? } else { url.into() };
+                self.check_local(&path)?;
                 f.read(&path)?
             }
             _ => self.text(url)?,
@@ -374,6 +395,37 @@ mod tests {
         std::fs::write(&ok, "{}").unwrap();
         assert_eq!(store.text(ok.to_str().unwrap()).unwrap(), "{}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Records every call; an untrusted folder's network-share schema must not reach it.
+    struct Spy(AtomicUsize);
+    impl FileSource for Spy {
+        fn read(&self, _: &str) -> Result<String, String> {
+            self.0.fetch_add(1, Ordering::Relaxed);
+            Ok("{}".into())
+        }
+        fn mtime(&self, _: &str) -> Option<i64> {
+            self.0.fetch_add(1, Ordering::Relaxed);
+            None
+        }
+    }
+
+    #[test]
+    fn untrusted_folders_do_not_open_network_shares() {
+        let store = Store::new(None, false);
+        store.set_restricted(true);
+        let spy = Spy(AtomicUsize::new(0));
+        for url in ["//host/share/x.json", r"\\host\share\x.json", r"\\?\UNC\host\share\x.json", "file://host/share/x.json"] {
+            let e = store.json_with(url, Some(&spy)).unwrap_err();
+            assert!(e.contains("network share"), "{url}: {e}");
+            assert!(store.text(url).unwrap_err().contains("network share"), "{url}");
+        }
+        assert_eq!(spy.0.load(Ordering::Relaxed), 0, "the file source was never asked");
+        // Ordinary local paths still work in an untrusted folder, and a trusted one may use a share.
+        assert!(store.json_with("/srv/app/x.json", Some(&spy)).is_ok());
+        assert!(store.json_with(r"\\?\C:\work\x.json", Some(&spy)).is_ok(), "a verbatim drive path is not a share");
+        store.set_restricted(false);
+        assert!(store.json_with("//host/share/x.json", Some(&spy)).is_ok());
     }
 
     #[test]

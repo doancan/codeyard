@@ -429,6 +429,10 @@ impl Service {
     /// Schema for a source (URL or path); reloaded if the local file changed. `files`: local paths are read on the
     /// workspace's host (SSH), not on this machine.
     pub fn set_for(&self, source: &str, files: Option<&Arc<dyn FileSource>>) -> Result<Arc<SchemaSet>, String> {
+        // Before the key below stats the path: that alone would reach a network share.
+        if !source.contains("://") {
+            self.store.check_local(source)?;
+        }
         let key = match (source.contains("://"), files) {
             (true, _) => source.to_string(),
             (false, Some(f)) => format!("remote:{source}@{}", f.mtime(source).unwrap_or(0)),
