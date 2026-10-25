@@ -104,8 +104,7 @@ fn violations(source: &str) -> Vec<(usize, String)> {
 fn user_visible_text_goes_through_the_translation_system() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut found = Vec::new();
-    for entry in std::fs::read_dir(dir).unwrap() {
-        let path = entry.unwrap().path();
+    for path in crate::i18n_tests::rs_files(&dir) {
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
         // Test files and the translation infrastructure are out of scope. The command palette is scanned too: its labels go through `t()` at display time, but its notices do not.
         if !name.ends_with(".rs") || name == "tests.rs" || name.ends_with("_tests.rs") || name.starts_with("i18n") || name == "main.rs" {
