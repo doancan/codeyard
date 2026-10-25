@@ -85,8 +85,12 @@ mod settings_docs;
 mod settings_page;
 mod shortcuts_page;
 mod snippets;
+// --- structural ---
 #[cfg(test)]
 mod ssh_error_tests;
+mod structural;
+#[cfg(test)]
+mod structural_tests;
 mod sysopen;
 mod terminal;
 #[cfg(test)]
@@ -151,6 +155,8 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("ctrl-g", GoToLine, Some("!Terminal")),
         KeyBinding::new("secondary-j", TogglePanel, None),
         KeyBinding::new("secondary-shift-f", FindInFiles, None),
+        // --- structural ---
+        KeyBinding::new("secondary-alt-shift-f", search::StructuralSearch, None),
         KeyBinding::new("up", search::HistoryPrev, Some("SearchPanel")),
         KeyBinding::new("down", search::HistoryNext, Some("SearchPanel")),
         KeyBinding::new("f4", search::NextResult, None),
