@@ -15,7 +15,7 @@ use std::io::{self, Read, Write};
 use serde::{Deserialize, Serialize};
 
 /// Compared in the handshake; on mismatch the agent is reinstalled.
-pub const VERSION: u32 = 9;
+pub const VERSION: u32 = 10;
 
 /// Max size of one frame. Larger files are read in chunks.
 pub const MAX_FRAME: usize = 64 * 1024 * 1024;
@@ -140,6 +140,17 @@ pub enum Request {
         start: u64,
         count: u32,
     },
+    /// Folder comparison. `only: None` walks the root and streams a record per entry without hashing (`HashChunk`, then
+    /// `HashDone`); `only: Some(paths)` hashes exactly those files (relative to the root, never `..` or absolute) and
+    /// streams the same records with `hash` set. Symlinks are never followed. `ignore`: globs (gitignore syntax) to skip;
+    /// `gitignore`: also honour `.gitignore` files. `limit` caps the number of entries walked.
+    HashTree {
+        root: String,
+        ignore: Vec<String>,
+        gitignore: bool,
+        limit: u32,
+        only: Option<Vec<String>>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -160,6 +171,23 @@ pub struct SearchQuery {
     pub include: Vec<String>,
     pub exclude: Vec<String>,
     pub max_results: u32,
+}
+
+/// One entry of a `HashTree` stream.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HashRecord {
+    /// Relative to the root, '/' separated.
+    pub path: String,
+    pub kind: Kind,
+    pub size: u64,
+    /// Unix epoch milliseconds.
+    pub mtime_ms: i64,
+    /// `content_hash` of the file; `None` when it was not asked for or could not be read (see `error`).
+    pub hash: Option<u64>,
+    /// Target of a symlink, as stored in the link.
+    pub link: Option<String>,
+    /// Why this entry could not be read (permission denied...); the walk went on.
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -202,6 +230,12 @@ pub enum Response {
     SearchDone {
         files: u32,
         matches: u32,
+        truncated: bool,
+        cancelled: bool,
+    },
+    HashChunk(Vec<HashRecord>),
+    HashDone {
+        entries: u32,
         truncated: bool,
         cancelled: bool,
     },
@@ -341,6 +375,20 @@ pub fn content_hash(data: &[u8]) -> u64 {
     xxhash_rust::xxh3::xxh3_64(data)
 }
 
+/// `content_hash` of a stream, for files too big to hold in memory (same value as hashing the bytes at once).
+pub fn content_hash_reader(r: &mut impl Read) -> io::Result<u64> {
+    let mut hasher = xxhash_rust::xxh3::Xxh3::new();
+    let mut buf = vec![0u8; 256 * 1024];
+    loop {
+        match r.read(&mut buf) {
+            Ok(0) => return Ok(hasher.digest()),
+            Ok(n) => hasher.update(&buf[..n]),
+            Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        }
+    }
+}
+
 pub fn write_frame<T: Serialize>(w: &mut impl Write, frame: &Frame<T>) -> io::Result<()> {
     // `InvalidData`: rejected before any byte was written, so the connection is intact (oversized reply or unserializable
     // body). Real write errors use other kinds.
@@ -390,6 +438,34 @@ mod tests {
         assert_eq!((a.id, a.body), (7, req.body));
         assert_eq!(b.id, 8);
         assert!(read_frame::<Request>(&mut r).unwrap().is_none());
+    }
+
+    #[test]
+    fn hash_tree_messages_roundtrip() {
+        let req = Request::HashTree {
+            root: "~/src".into(),
+            ignore: vec![".git".into(), "target".into()],
+            gitignore: true,
+            limit: 50_000,
+            only: Some(vec!["a/b.rs".into()]),
+        };
+        let rec =
+            HashRecord { path: "ğ/x".into(), kind: Kind::Symlink, size: 3, mtime_ms: -5, hash: None, link: Some("../y".into()), error: Some("denied".into()) };
+        let mut buf = Vec::new();
+        write_frame(&mut buf, &Frame { id: 4, body: req.clone() }).unwrap();
+        write_frame(&mut buf, &Frame { id: 4, body: Response::HashChunk(vec![rec.clone()]) }).unwrap();
+        write_frame(&mut buf, &Frame { id: 4, body: Response::HashDone { entries: 1, truncated: true, cancelled: false } }).unwrap();
+        let mut r = buf.as_slice();
+        assert_eq!(read_frame::<Request>(&mut r).unwrap().unwrap().body, req);
+        assert_eq!(read_frame::<Response>(&mut r).unwrap().unwrap().body, Response::HashChunk(vec![rec]));
+        assert_eq!(read_frame::<Response>(&mut r).unwrap().unwrap().body, Response::HashDone { entries: 1, truncated: true, cancelled: false });
+    }
+
+    #[test]
+    fn streamed_hash_equals_one_shot_hash() {
+        let data: Vec<u8> = (0..700_000u32).map(|i| (i % 251) as u8).collect();
+        assert_eq!(content_hash_reader(&mut data.as_slice()).unwrap(), content_hash(&data));
+        assert_eq!(content_hash_reader(&mut [].as_slice()).unwrap(), content_hash(&[]));
     }
 
     #[test]
