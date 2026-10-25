@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Windows builds embed the Linux x64 and ARM64 SSH agents in the application. Source builds and packaging prepare the
+  agents automatically, and standalone checks verify that the EXE works without a separate agent folder.
+
+### Fixed
+
+- Find SSH configuration and VS Code settings on Windows without requiring the Unix `HOME` variable.
+- Preserve Windows drive and network-share paths in workspace files and file URLs, and open terminal links through
+  the system browser.
+- Move Windows files to the native Recycle Bin so Explorer can restore them.
+- Launch Windows development builds without a separate console window and embed the application icon in the EXE.
+
 ## [0.2.2] - 2026-10-26
 
 ### Changed

@@ -20,7 +20,7 @@ pub struct NewHost {
 pub fn config_path() -> Option<PathBuf> {
     match std::env::var_os("CODEYARD_SSH_CONFIG") {
         Some(p) => Some(PathBuf::from(p)),
-        None => std::env::var_os("HOME").map(|h| Path::new(&h).join(".ssh/config")),
+        None => dirs::home_dir().map(|h| h.join(".ssh").join("config")),
     }
 }
 

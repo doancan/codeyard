@@ -2,8 +2,8 @@
 //!
 //!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|remote|welcome|settings]
 
-// Windows release: don't open a console window behind the app on double-click (debug builds keep the console).
-#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+// Normal Windows launches are GUI applications in every profile. Test harnesses keep their console.
+#![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
 // Lints that fight the shape of this code on purpose: UI event plumbing passes (window, cx, ids…) and
 // returns tuples that are not worth a named type each. Everything else stays at clippy's default.
 #![allow(clippy::type_complexity, clippy::too_many_arguments)]
@@ -11,6 +11,7 @@
 #![cfg_attr(test, allow(clippy::single_range_in_vec_init))]
 
 mod access;
+mod bundled_agents;
 mod color;
 mod commands;
 mod conflict;
@@ -694,6 +695,15 @@ pub fn open_workbench_window(cx: &mut App) -> Option<gpui::WindowHandle<Workbenc
 }
 
 fn main() {
+    if std::env::args_os().len() == 2 && std::env::args_os().nth(1).is_some_and(|arg| arg == "--check-agent-bundle") {
+        match bundled_agents::check() {
+            Ok(()) => return,
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+    }
     // If ssh invoked this binary as SSH_ASKPASS: forward the question to the window, then exit.
     #[cfg(unix)]
     if let Some(code) = host::askpass::client_main() {

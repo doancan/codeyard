@@ -28,6 +28,8 @@ the same procedure by hand, for when the workflow cannot be used.
 5. Build the agents:
    `cargo zigbuild --profile release-agent -p agent --target x86_64-unknown-linux-musl` (and `aarch64-…`), plus
    `cargo build --profile release-agent -p agent` for macOS; copy them to `agents/codeyard-agent-<triple>`.
+   On Windows, `./scripts/build-windows.ps1` builds the two static Linux agents using Rust's musl targets and bundled
+   linker (no WSL or Docker needed), then embeds them in the application. Use `-Profile Release` for an optimized build.
 6. `AGENTS_DIR="$PWD/agents" scripts/bundle-macos.sh` builds the app, the bundle and the DMG.
 7. Collect `dist/`: `Codeyard-X.Y.Z-macos-arm64.dmg`, `codeyard-X.Y.Z-macos-arm64.tar.gz` (binary, `agents/` and `licenses/`).
 8. Release notes: the CHANGELOG section plus the install paragraph (the app is not notarized yet: right-click →
@@ -46,6 +48,12 @@ the same procedure by hand, for when the workflow cannot be used.
     the setup EXE into `dist/` before step 9, so they are in the signed `SHA256SUMS.txt`), or say in the
     release notes that this version has no Windows build.
 
+The Windows packaging script builds both Linux agents automatically unless `AGENTS_DIR` supplies a prebuilt bundle
+(release CI supplies the macOS agents too). It validates their ELF architecture and embeds the agents in the EXE:
+users do not need a separate `agents/` directory. Windows release builds fail if either Linux agent is missing.
+Before packaging, a smoke test copies only the EXE to an empty directory and runs `--check-agent-bundle` without
+starting the UI, reading user state or contacting a server. App updates therefore update the embedded agents together.
+
 ## Licence texts
 
 Each release artifact ships the files listed in `scripts/licenses.sh` (the project licences, `THIRD_PARTY_NOTICES.md`,
@@ -58,7 +66,8 @@ fails when a file is missing or the Windows script or installer lacks one. After
 
 `installer/windows/codeyard.iss` (Inno Setup) installs per user without admin rights, optionally adds PATH, a desktop
 shortcut and "Open with Codeyard". `scripts/bundle-windows.ps1` builds the setup executable when Inno Setup is
-installed. It has not been run on Windows yet.
+installed. The standalone EXE check and ZIP/setup generation have been run natively on Windows; interactive installation
+is a separate manual check.
 
 ## Signing and the update key
 

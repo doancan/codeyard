@@ -164,6 +164,7 @@ dependencies = [
  "alacritty_terminal",
  "buffer",
  "dirs 7.0.0",
+ "embed-resource",
  "futures",
  "gpui",
  "host",
@@ -187,6 +188,7 @@ dependencies = [
  "state",
  "syntax",
  "theme",
+ "windows 0.61.3",
 ]
 
 [[package]]
@@ -2843,6 +2845,7 @@ name = "host"
 version = "0.2.2"
 dependencies = [
  "agent",
+ "dirs 7.0.0",
  "libc",
  "proto",
  "sha2 0.11.1",

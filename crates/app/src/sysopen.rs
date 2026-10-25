@@ -12,11 +12,18 @@ use crate::workbench::Workbench;
 pub fn paths_from_urls(urls: &[String]) -> Vec<String> {
     urls.iter()
         .filter_map(|u| {
-            let u = u.strip_prefix("file://localhost/").map_or_else(|| u.clone(), |r| format!("file:///{r}"));
-            let path = crate::lsp::uri_to_path(&u)?;
+            let path = crate::lsp::uri_to_path(u)?;
             let trimmed = path.trim_end_matches('/');
-            let path = if trimmed.is_empty() { "/".to_string() } else { trimmed.to_string() };
-            (path.starts_with('/') && !path.contains('\0')).then_some(path)
+            let drive_root = trimmed.len() == 2 && trimmed.as_bytes()[0].is_ascii_alphabetic() && trimmed.ends_with(':') && path.ends_with('/');
+            let path = if trimmed.is_empty() {
+                "/".to_string()
+            } else if drive_root {
+                format!("{trimmed}/")
+            } else {
+                trimmed.to_string()
+            };
+            let drive_absolute = path.len() >= 3 && path.as_bytes()[0].is_ascii_alphabetic() && path.as_bytes()[1..3] == *b":/";
+            ((path.starts_with('/') || drive_absolute) && !path.contains('\0')).then_some(path)
         })
         .collect()
 }
@@ -26,7 +33,7 @@ pub fn paths_from_urls(urls: &[String]) -> Vec<String> {
 pub fn open_urls(urls: Vec<String>, cx: &mut App) {
     let windows = |cx: &App| -> Vec<WindowHandle<Workbench>> { cx.windows().into_iter().filter_map(|w| w.downcast::<Workbench>()).collect() };
     for path in paths_from_urls(&urls) {
-        let abs = std::fs::canonicalize(&path).map_or(path.clone(), |p| p.to_string_lossy().into_owned());
+        let abs = std::fs::canonicalize(&path).map_or(path.clone(), |p| crate::ui::local_path(&p));
         let is_folder = Path::new(&abs).is_dir();
         let all = windows(cx);
         let active = cx.active_window().and_then(|w| w.downcast::<Workbench>()).or_else(|| all.first().copied());
@@ -84,5 +91,12 @@ mod tests {
     fn other_schemes_and_junk_are_ignored() {
         assert!(p(&["https://example.com/a", "mailto:a@b.c", "", "file:relative", "file://%FF%FE", "file:///a%00b"]).is_empty());
         assert_eq!(p(&["https://x/", "file:///ok"]), ["/ok"], "valid entries survive next to invalid ones");
+    }
+
+    #[test]
+    fn windows_file_urls_keep_drive_roots_and_network_shares() {
+        assert_eq!(p(&["file:///C:/work/a%20b.rs", "file://LOCALHOST/D:/work/", "file:///C:/"]), ["C:/work/a b.rs", "D:/work", "C:/"]);
+        assert_eq!(p(&["file://server/share/dir/"]), ["//server/share/dir"]);
+        assert!(p(&["file://C:relative", "file:///C:relative", "file:///C:/a%00b"]).is_empty());
     }
 }
