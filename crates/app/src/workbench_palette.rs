@@ -263,6 +263,11 @@ impl Workbench {
             // --- compare ---
             Command::action("Compare: Folders…", CompareFolders),
             Command::action("File: New Scratch File…", NewScratchFile),
+            // --- data ---
+            Command::action("Data: Convert To…", DataConvert),
+            Command::action("Data: Query…", DataQuery),
+            Command::action("Data: Copy Path at Cursor", DataCopyPath),
+            Command::action("Data: Decode Selection…", DataDecode),
             Command::action("Terminal: Run Selected Text", RunSelectedText),
             Command::action("Go: Last Edit Location", GoToLastEdit),
             Command::action("Git: Clone Repository…", CloneRepository),
@@ -458,6 +463,10 @@ impl Workbench {
     pub(super) fn on_overlay_event(&mut self, event: &PickerEvent, window: &mut Window, cx: &mut Context<Self>) {
         let Some(ov) = &self.overlay else { return };
         if matches!(ov.kind, OverlayKind::RemoteFolder { .. }) && self.on_folder_event(event, window, cx) {
+            return;
+        }
+        // --- data ---
+        if self.on_data_overlay_event(event, window, cx) {
             return;
         }
         let Some(ov) = &self.overlay else { return };

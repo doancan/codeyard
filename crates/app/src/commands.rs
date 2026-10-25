@@ -360,6 +360,11 @@ registry! {
     "workbench.runSelectedText" => wb::RunSelectedText,
     "workbench.goToLastEdit" => wb::GoToLastEdit,
     "workbench.newScratchFile" => wb::NewScratchFile,
+    // --- data ---
+    "data.convert" => wb::DataConvert,
+    "data.query" => wb::DataQuery,
+    "data.copyPath" => wb::DataCopyPath,
+    "data.decodeSelection" => wb::DataDecode,
     "workbench.openSettingsPage" => wb::OpenSettingsPage,
     "git.cloneRepository" => wb::CloneRepository,
     "workbench.togglePanel" => wb::TogglePanel,

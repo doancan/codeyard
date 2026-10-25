@@ -71,6 +71,7 @@ into private state any other way.
 | Local state | SQLite (`rusqlite`, bundled), WAL | atomic and crash safe; see `crates/state/schema.sql` |
 | Allocator | `mimalloc` in the app, system allocator in the agent | lower fragmentation; small agent |
 | Schemas | `jsonschema` (no default features), `yaml-rust2` | validation and hover without Node; alias budget bounds YAML expansion |
+| Data tools | `serde_json` (key order kept), `toml`, `yaml-rust2` through the schema crate | convert and query JSON, YAML, TOML and .env in `datalens*.rs`; pure functions on text, a query language with no I/O |
 | Spelling | `spellbook` (pure Rust Hunspell) | English built in, other languages installable |
 
 No server, no account, no plugin store. Outbound requests: SchemaStore and schema downloads (cached 7 days, can be disabled),

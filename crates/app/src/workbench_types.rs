@@ -129,6 +129,11 @@ pub(super) enum OverlayKind {
         kind: AskKind,
         reply: AskReply,
     },
+    // --- data ---
+    /// "Data: Convert To…": the target of each row, and the text to convert.
+    DataConvert(Box<data_glue::ConvertJob>),
+    /// "Data: Decode Selection…": read-only lines.
+    DataDecode,
 }
 
 pub(super) enum InputPurpose {

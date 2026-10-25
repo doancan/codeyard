@@ -8,6 +8,13 @@ Settings live in `~/.config/codeyard/settings.jsonc` (comments and trailing comm
 unless it is listed under *File-only settings*. A wrong value never breaks the app: that key keeps its default and the
 status bar reports it.
 
+## `data`
+
+| Setting | Values | Default | What it does |
+| --- | --- | --- | --- |
+| `data.indent` | number 1–8 | `2` | Spaces per level in the JSON and YAML written by Data: Convert To… and Data: Query… |
+| `data.sortKeys` | `true` / `false` | `false` | Sort object keys alphabetically in the output of Data: Convert To… and Data: Query… (off: keep the file's order) |
+
 ## `diffEditor`
 
 | Setting | Values | Default | What it does |

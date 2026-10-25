@@ -180,6 +180,7 @@ dependencies = [
  "regex",
  "ring",
  "schema",
+ "serde",
  "serde_json",
  "sha2 0.11.1",
  "similar",
@@ -187,6 +188,7 @@ dependencies = [
  "state",
  "syntax",
  "theme",
+ "toml 1.1.8+spec-1.1.0",
 ]
 
 [[package]]

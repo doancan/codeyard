@@ -10,6 +10,8 @@ A file that is only partly transferred is removed, and so is a new folder. A fol
 A file you opened names a schema that is hosted on {}. Downloading it sends a request to that server (your IP address and the schema's address). Only allow it if you trust the file and the host.	
 A folder named “{}” is already there; a file cannot replace it. Rename or remove it first.	
 A merge commit is created unless it can fast-forward. Conflicts are resolved in Source Control.	
+A pattern is one expression or statement, not several.	
+A pattern that is only a variable would match everything.	
 A rebase is already in progress: use Git: Continue Rebase or Git: Abort Rebase	
 A request is still being sent; wait for its answer first.	
 A transfer is already running. Wait for it to finish or click it in the status bar to cancel.	
@@ -79,6 +81,7 @@ Bookmarks: Jump to Next
 Bookmarks: Jump to Previous	
 Bookmarks: List…	
 Bookmarks: Toggle	
+Both sides are the same folder.	
 Both, Incoming First	
 Box invisible and look-alike Unicode characters (zero-width spaces, bidi controls, Cyrillic letters inside Latin words)	
 Branch lanes, two lines per commit	
@@ -97,6 +100,7 @@ Cancelling…
 Cannot check out #{}: you have uncommitted changes that would be overwritten. Commit or stash them, then try again	
 Cannot open this link: {}	
 Change All Occurrences	
+Changed	
 Changed {0} file ({1} file operations skipped)|Changed {0} files ({1} file operations skipped)	
 Changed {} file|Changed {} files	
 Changes	
@@ -110,11 +114,15 @@ Checked out #{} as pr-{}
 Checked out {} (detached HEAD)	
 Checking for updates…	
 Checking out pull request #{}…	
+Checking whitespace…	
+Checking…	
 Checkout (Detached)	
 Checkout to…	
 Cherry-pick	
 Cherry-pick stopped and was undone: {}	
 Cherry-picked {}	
+Choose	
+Choose a folder on this computer…	
 Choose an action	
 Choose an answer (Esc: none)	
 Clear the search	
@@ -175,9 +183,15 @@ Committed {}
 Common ancestor	
 Commonly Used	
 Compare	
+Compare Folder with Selected	
+Compare Folders: pick the folder to compare with {}	
+Compare Folders: pick the left folder	
 Compare this saved copy with the editor	
 Compare with Selected	
 Compare with the saved version	
+Compare: Folders…	
+Compare: {0} ↔ {1}	
+Comparing contents… {0} of {1}	
 Conflict	
 Conflict {0} of {1}	
 Connect	
@@ -198,6 +212,7 @@ Convert indentation to spaces
 Convert indentation to tabs	
 Copied {}	
 Copied {} item ({}) to {}|Copied {} items ({}) to {}	
+Copied {} item.|Copied {} items.	
 Copied {}.	
 Copied “{}” ({}) to {}	
 Copy	
@@ -207,15 +222,21 @@ Copy Line Up
 Copy Message	
 Copy Path	
 Copy Relative Path	
+Copy Report	
 Copy Version	
 Copy branch name	
 Copy link	
 Copy the full hash	
+Copy to the left	
+Copy to the right	
+Copy “{0}” to {1}?	
 Copying files here has to wait: the connection dropped and is reconnecting.	
 Copying files here has to wait: the connection is still being set up.	
 Copying files here is not possible in this workspace.	
 Copying files here needs the connection to {}, which failed: use Reconnect first.	
 Copying files here works with a connected SSH host: connect first (⌃R).	
+Copying…	
+Could not be compared	
 Could not blame: {}	
 Could not change {}	
 Could not compare: {}	
@@ -250,9 +271,11 @@ Could not read the history: {}
 Could not read the saved copy: {}	
 Could not read the workspace file: {}	
 Could not read {0}: {1}	
+Could not read {}	
 Could not read {}: {}	
 Could not resolve “{}”: check the spelling and the network (the request ran on {}).	
 Could not run “{}”: {}	
+Could not save the report: {}	
 Could not save the theme: {}	
 Could not save your dictionary: {}	
 Could not save: {}	
@@ -314,11 +337,16 @@ Delay for afterDelay (ms)
 Delete	
 Delete Permanently	
 Delete branch {}?	
+Delete from the left	
+Delete from the right	
 Delete which branch?	
+Delete “{0}” from {1}?	
 Delete “{}” permanently?	
 Deleted	
 Deleted {}	
+Deleted “{0}” from {1}	
 Deleting {}…	
+Deleting…	
 Deny	
 Developer: Restart Language Servers	
 Diff view side by side (off: inline)	
@@ -335,6 +363,7 @@ Do you trust the authors of this folder?
 Do you want to save the changes you made to {}?	
 Docker, then open a folder inside it	
 Don't Save	
+Done	
 Download	
 Download Here	
 Download Page	
@@ -457,8 +486,10 @@ Empty folder
 Empty group: ⌘P opens a file here	
 Encoding for files that are not UTF-8	
 End files with a newline when saving	
+Enter a folder path on {}…	
 Enter the remote as: name url	
 Enter: path branch	
+Error	
 Evaluate an expression (↵)	
 Every setting, with comments	
 Everything resolved so far in this merge is discarded.	
@@ -470,6 +501,7 @@ Expand Selection
 Expand all results	
 Explorer	
 Explorer (⇧⌘E)	
+Export as Text…	
 F4 steps through the search results, ⇧F4 goes back.	
 Favorites	
 Favorites: Show Favorites…	
@@ -641,9 +673,13 @@ Highlight the matching bracket
 History of {}	
 Host name (from ~/.ssh/config) or user@host	
 Hover an option to preview the result.	
+Identical	
 Ignore Case	
 Ignore case unless the query has capital letters	
+Ignore line endings	
+Ignore whitespace	
 Ignore “{}” in this session	
+Ignored the language server's edit to {} file outside the open folders|Ignored the language server's edit to {} files outside the open folders	
 Import VS Code Settings and Shortcuts	
 Imported {0} settings and {1} shortcuts from VS Code ({2} settings and {3} shortcuts have no equivalent here)	
 In Privacy & Security, press + and add Codeyard, then turn it on.	
@@ -691,9 +727,12 @@ Language Badges
 Language mode for this file	
 Language of Uppercase / Lowercase / Title Case: auto (Turkish rules when the text has ı İ ş ğ), tr (i ↔ İ, ı ↔ I) or en	
 Language of the menus, command palette, Welcome screen, status bar, Source Control, Explorer, Settings page chrome, file operations and Git prompts (the user guide lists exactly what is translated; the rest stays English): auto (the system language) or a language code, en or tr. Your own settings only; a folder cannot change it	
+Language of the pattern (click for the next one)	
 Language servers are off in “{}” until you trust it: they can run the project's build scripts. Run “Workspace: Trust This Folder”.	
 Later	
 Learn	
+Left is writable	
+Left ↔ Right	
 Let the language server format while typing }, ; or Enter	
 Lightweight editing, on this machine or over SSH.	
 Line endings for this file (applied on save)	
@@ -752,6 +791,7 @@ Modified
 Monday	
 More Actions…	
 More…	
+Most files a structural search reads and parses	
 Move	
 Move Line Down	
 Move Line Up	
@@ -807,6 +847,7 @@ No debug adapter for type “{0}”. Supported: lldb (C, C++, Rust, Swift), go, 
 No debug configuration: add .vscode/launch.json, or open a Cargo / Go project or a Python file.	
 No debug session. F5 starts one.	
 No definition found	
+No differences.	
 No edits yet in this session.	
 No enclosing brackets	
 No favorites yet: right-click a file → Add to Favorites, or “Favorites: Toggle Active File”.	
@@ -855,6 +896,8 @@ None of these commits is yours.
 None of this repository's remotes is on github.com.	
 Not Now	
 Not breaking on exceptions.	
+Not compared	
+Not deleted: {}	
 Not in a git repository	
 Not paused	
 Not saved: {0} (U+{1}) cannot be written in {2}. Remove it, or save a copy as UTF-8.	
@@ -881,6 +924,10 @@ Once a day, Codeyard can look for a newer version. It downloads two small files 
 One line per commit: the most history in a narrow sidebar	
 One quiet color, outline glyphs	
 Only When I Ask	
+Only left	
+Only on the left	
+Only on the right	
+Only right	
 Only send it if you trust this file.	
 Only the connection is removed; the remote repository itself is untouched.	
 Only this host's entry is removed. The previous file is kept as config.codeyard-bak.	
@@ -937,6 +984,7 @@ Path (relative to the folder, or absolute)
 Path of the folder (~ is your home folder)	
 Path on this computer (~ is your home folder)	
 Paths can't end with / or contain . or .. parts	
+Pattern, e.g. foo($X, $$$REST)	
 Pause	
 Pause the program first (a breakpoint or ⏸): the variable has to be in scope.	
 Paused on exception: {}	
@@ -1003,6 +1051,7 @@ Quit codeyard
 Quit without saving	
 Quitting loses everything since the last save.	
 Quitting now can leave the installation unfinished. It takes a few seconds.	
+Reading folders… {0} and {1} entries	
 Rebase	
 Rebase aborted	
 Rebase finished	
@@ -1073,6 +1122,7 @@ Reopen Closed Editor
 Replace	
 Replace (↵)	
 Replace All	
+Replace Anyway	
 Replace all (⌥⌘↵)	
 Replace every match in these files (↵ in the field)	
 Replace in this file	
@@ -1081,6 +1131,8 @@ Replace {0} match in {1} files with “{2}”?|Replace {0} matches in {1} files 
 Replaced {0}; could not change {1}	
 Replaced {}	
 Replaced {} match|Replaced {} matches	
+Report copied	
+Report saved to {}	
 Repository URL (https://… or git@host:owner/repo)	
 Reset	
 Reset Hard to Here…	
@@ -1089,6 +1141,7 @@ Reset Soft to Here
 Reset Zoom	
 Reset to {0} ({1})	
 Resolved {} conflict|Resolved {} conflicts	
+Respect .gitignore	
 Response	
 Restart (⇧⌘F5)	
 Restart Codeyard to finish.	
@@ -1105,12 +1158,14 @@ Revert File
 Revert stopped and was undone: {}	
 Reverted {}	
 Reverting a change is not supported in this file (non-UTF-8 or CR-only line endings)	
+Right is writable	
 Right-click a commit in the Source Control graph to branch, tag, cherry-pick, revert or reset.	
 Right-click a folder and choose Find in Folder… to search only inside it.	
 Run task	
 Run the search again	
 Running…	
 SSH host	
+Same apart from whitespace	
 Saturday	
 Save	
 Save All	
@@ -1131,6 +1186,7 @@ Saved to ~/.ssh/config. Connecting uses your SSH keys and ssh-agent; a password 
 Saved {} (edit the colors in that file)	
 Saved · {}	
 Saving…	
+Scan Again	
 Schema cache cleared. Schemas are downloaded again when needed.	
 Schemas: Clear Download Cache	
 Search	
@@ -1144,9 +1200,12 @@ Search settings
 Search: Find TODO Comments	
 Search: Find in Files	
 Search: Open Results in Editor	
+Search: Structural Replace…	
+Search: Structural Search…	
 Searching…	
 Select All	
 Select All Occurrences	
+Select Folder for Compare	
 Select Language Mode	
 Select a branch to check out	
 Select a color theme	
@@ -1157,6 +1216,7 @@ Select all matches (⌥↵)
 Select for Compare	
 Select the active file in the explorer	
 Selected {} for compare. Right-click another file and choose Compare.	
+Selected {} for compare. Right-click another folder and choose Compare Folder with Selected.	
 Selection	
 Send	
 Send Request	
@@ -1184,6 +1244,7 @@ Show code lenses (reference counts, run/debug) above symbols
 Show file icons on tabs	
 Show fold arrows in the gutter	
 Show folders that only hold one folder as one row	
+Show identical	
 Show indent guides	
 Show line numbers in search results	
 Show lines matching (regular expression, case-insensitive), e.g. {}	
@@ -1204,6 +1265,7 @@ Showing the first 100,000 files of a very large folder
 Shrink Selection	
 Side by side	
 Skip This Version	
+Skip Those Files	
 Small colored badges with the language's letters	
 Snippets reloaded	
 Snippets: Insert Snippet…	
@@ -1246,6 +1308,8 @@ Still staging the previous change…
 Stop	
 Stop (⇧F5)	
 Stop a search after this many matches	
+Stopped.	
+Structural search: the pattern is code; $X matches one node, $$$X several	
 Suggest words from the file when there is no language server	
 Suggestions pop up while typing (off: only Ctrl+Space)	
 Sunday	
@@ -1283,6 +1347,7 @@ The connection dropped; trying to reconnect. Unsaved changes are kept.
 The connection is down, so files with unsaved changes cannot be saved. Use File: Save a Copy to This Computer… to keep them, or close them, then reconnect.	
 The connection to {} dropped while the data was being exchanged.	
 The connection to {} dropped. Reconnecting…	
+The connection to {} was lost during the scan, so the result is partial. Scan again once it is back.	
 The debug adapter did not accept a connection	
 The debug adapter did not start listening	
 The debug adapter exited before connecting	
@@ -1297,6 +1362,7 @@ The file is too large for an outline.
 The folder and everything in it will be deleted.	
 The folder could not be read on the server: {}	
 The new version couldn't be installed from here. You can download it from the release page instead.	
+The pattern does not parse: {0} (line {1}, column {2})	
 The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code.	
 The release notes are longer: read the rest at {}	
 The release notes are longer: read the rest on GitHub.	
@@ -1304,6 +1370,7 @@ The remote “{}” is not reachable as a git repository (it may be private or r
 The request failed.	
 The response could not be saved (curl write error).	
 The response is larger than {} and was not downloaded.	
+The result would not parse in {0} file: {1}|The result would not parse in {0} files: {1}	
 The search stopped at the result limit: only the files listed are changed. Open files can be undone; closed files are written to disk.	
 The server did not answer within 60 seconds.	
 The server wants credentials: run the command once in the terminal (or set up an SSH key).	
@@ -1326,9 +1393,11 @@ There are no local changes to stash
 There are no stashes.	
 There is no commit to undo	
 There is no request here. Write METHOD URL on a line, separate requests with ###.	
+There is nothing to copy.	
 There isn't enough free disk space for the download. Free some space and try again.	
 They were not found.	
 This can't be undone.	
+This computer	
 This copy isn't installed as an app, so download the new version yourself.	
 This debug adapter does not support data breakpoints.	
 This debug adapter has no exception breakpoints.	
@@ -1360,7 +1429,6 @@ Toggle Sidebar
 Toggle Terminal	
 Toggle a break-on-exception filter	
 Toggle inline view	
-Too many redirects (more than 10): the server keeps redirecting.	
 Transfer cancelled.	
 Transfer failed: {}	
 Trust Folder and Continue	
@@ -1498,6 +1566,7 @@ connected
 connecting	
 constant	
 constructor	
+content differs	
 copy your public key so no password is needed	
 could not list	
 could not load pull requests	
@@ -1510,8 +1579,11 @@ dark
 data breakpoint	
 decoded as {}	
 default	
+destination	
 detached HEAD	
 diff	
+different kinds	
+differs only in letter case	
 download failed	
 draft	
 e.g. 3000	
@@ -1552,11 +1624,19 @@ installed · {}
 instruction breakpoint	
 interface	
 invalid JSON: {}	
+it appeared after the scan	
+it changed after the scan	
+it could not be compared	
+it is a file on one side and a folder or link on the other	
+it is not a regular file or folder	
+its name differs from another entry only in letter case	
 just now	
 language server is not running	
 latest {} open	
+left	
 light	
 lines {0}–{1}	
+link target differs	
 listening on the server	
 local agent, protocol test	
 method	
@@ -1573,6 +1653,7 @@ not paused
 not set	
 now	
 of {}	
+only the first {} files were looked at (search.structural.maxFiles)	
 operator	
 package	
 path branch (new branch is created if it does not exist)	
@@ -1586,23 +1667,31 @@ read-only
 reads environment variables from this computer ({{$processEnv}})	
 recently used	
 reconnecting	
+redirects to {}; not followed, send a request to that address to continue	
 remote	
 request failed	
 review needed	
+right	
 send the request named “{}” first	
 sends {} to {}	
 setting	
+size differs	
+source	
 starting	
 step	
 string	
 struct	
 symbol	
+symbolic links are not copied	
+syntax error at “{}”	
 task	
 test failed: {}	
 test panicked: {}	
+the GitHub token contains characters that cannot be sent	
 the archive does not contain js-debug/src/dapDebugServer.js	
 the checksum does not match: the download is incomplete or was altered	
 the connection to the host is down; following resumes when it is back	
+the connection was lost	
 the debug adapter did not report that it is ready	
 the debug adapter is not running	
 the debug adapter stopped	
@@ -1612,6 +1701,8 @@ the environment variable {} is not set
 the file cannot be read right now ({})	
 the file is gone (deleted or moved); following continues if it comes back	
 the file is no longer readable (permission denied)	
+the folder cannot be read on the left	
+the folder cannot be read on the right	
 the header “{}” is not valid	
 the path is now a folder, not a file	
 the repository may be private: sign in with `gh auth login` or set GITHUB_TOKEN	
@@ -1656,6 +1747,7 @@ your words
 {0} commit{1} only exist on this branch and will be lost (the reflog keeps them for a while).	
 {0} could not be read ({1})	
 {0} errors, {1} warnings	
+{0} files and {1} folders go from {2} ({3}) to {4} ({5}). Files that exist there are replaced; anything that changed since the scan is left alone.	
 {0} isn't available ({1}). Or set “lsp.servers” in settings.	
 {0} isn't available on {1} ({2}). Or set “lsp.servers” in settings.	
 {0} isn't available on {1}. Or set “lsp.servers” in settings.	
@@ -1666,7 +1758,10 @@ your words
 {0} lines, showing from line {1}	
 {0} of {1} MB	
 {0} of {1}{2}	
+{0} on {1} is deleted for good, with everything in it. It is not moved to the Trash.	
+{0} only on the left, {1} only on the right, {2} changed, {3} identical, {4} errors	
 {0} result in {1} files|{0} results in {1} files	
+{0} was left alone: {1}|{0} were left alone, the first one {1}	
 {0}, {1} {2} {3}	
 {0}: each entry needs {1} and {2}	
 {0}: expected a color like {1}	
@@ -1700,13 +1795,20 @@ your words
 {} cursor|{} cursors	
 {} day ago|{} days ago	
 {} definition|{} definitions	
+{} entry is left out.|{} entries are left out.	
 {} exited with {}	
+{} file skipped, binary or too large|{} files skipped, binary or too large	
+{} file skipped, parse errors|{} files skipped, parse errors	
 {} forwarded	
+{} has more entries than compare.folders.maxFiles allows, so the result is partial.	
 {} has no commits yet.	
 {} hour ago|{} hours ago	
 {} implementation|{} implementations	
 {} incoming call|{} incoming calls	
+{} is a binary file: there is no text diff.	
 {} is already in the workspace.	
+{} is not a trusted folder, so nothing is deleted from it. Open it as a folder and trust it first.	
+{} is not a trusted folder, so nothing is written to it. Open it as a folder and trust it first.	
 {} is not installed	
 {} isn't available. Or set “lsp.servers” in settings.	
 {} item already exists. Replace it?|{} items already exist. Replace them?	
@@ -1714,6 +1816,7 @@ your words
 {} keeps crashing; restart the folder to try again.	
 {} minute ago|{} minutes ago	
 {} month ago|{} months ago	
+{} more entry that the comparison hides (ignored by .gitignore or the compare settings) goes too.|{} more entries that the comparison hides (ignored by .gitignore or the compare settings) go too.	
 {} no longer exists, so it was not reopened.	
 {} open	
 {} outgoing call|{} outgoing calls	
@@ -1771,6 +1874,7 @@ your words
 “{}” already exists. Replace it?	
 “{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	
 “{}” can't be opened	
+“{}” is missing here	
 “{}” is not a port number	
 “{}” is not a usable branch or remote name	
 “{}” is not a valid http(s) address	
