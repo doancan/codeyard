@@ -441,9 +441,13 @@ impl Session {
                 Ok(())
             }
             Request::ProcInput { proc: pid, data } => {
-                if let Some((_, p)) = self.procs.locked().get_mut(&pid) {
-                    let _ = p.write(&data);
+                // Input that can't be queued is lost for good, which would leave a language server working on a stale view of
+                // the document. End the process instead: the client sees ProcExit and restarts it with fresh state.
+                let mut procs = self.procs.locked();
+                if procs.get_mut(&pid).is_some_and(|(_, p)| p.write(&data).is_err()) {
+                    procs.remove(&pid);
                 }
+                drop(procs);
                 reply(Response::Done)
             }
             Request::ProcKill { proc: pid } => {
@@ -1273,6 +1277,30 @@ mod tests {
         let text = String::from_utf8_lossy(&output);
         assert!(text.contains("kod-42"), "{text}");
         assert_eq!(code, Some(3));
+    }
+
+    /// A server that stops reading must not silently lose later input: once the queue overflows the process is ended and the
+    /// client gets its `ProcExit`.
+    #[cfg(unix)]
+    #[test]
+    fn a_process_that_never_reads_its_input_is_ended_when_the_queue_overflows() {
+        let mut c = Client::new();
+        c.send(1, Request::ProcSpawn { program: "sleep".into(), args: vec!["60".into()], cwd: None });
+        let Response::ProcSpawned { proc } = c.recv().body else { panic!("spawn") };
+        let chunk = vec![b'x'; 64 * 1024];
+        for _ in 0..600 {
+            c.send(0, Request::ProcInput { proc, data: chunk.clone() });
+        }
+        loop {
+            match c.recv().body {
+                Response::ProcExit { proc: p, .. } => {
+                    assert_eq!(p, proc);
+                    break;
+                }
+                Response::ProcOutput { .. } => {}
+                other => panic!("{other:?}"),
+            }
+        }
     }
 
     #[test]
