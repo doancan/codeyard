@@ -271,18 +271,26 @@ pub fn explain_commit_error(err: &str) -> String {
     err.to_string()
 }
 
-/// The message goes through stdin (`-F -`): no quoting or line-ending trouble. `all`: also stage
-/// tracked changes (for "Commit All" when nothing is staged).
-/// `amend`: change the last commit; if the message is empty the old message is kept.
-pub fn commit(host: &dyn Host, root: &str, message: &str, all: bool, amend: bool) -> Result<String, String> {
+/// How a commit is made. `all`: also stage tracked changes (for "Commit All" when nothing is staged). `amend`: change the
+/// last commit; if the message is empty the old message is kept. `signoff`: add a `Signed-off-by` trailer.
+/// `no_verify`: skip the pre-commit and commit-msg hooks.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct CommitOptions {
+    pub all: bool,
+    pub amend: bool,
+    pub signoff: bool,
+    pub no_verify: bool,
+}
+
+/// The message goes through stdin (`-F -`): no quoting or line-ending trouble.
+pub fn commit(host: &dyn Host, root: &str, message: &str, opts: CommitOptions) -> Result<String, String> {
     let mut args = vec!["commit", "-q"];
-    let keep_message = amend && message.trim().is_empty();
+    let keep_message = opts.amend && message.trim().is_empty();
     args.extend(if keep_message { ["--no-edit"].as_slice() } else { ["-F", "-"].as_slice() });
-    if all {
-        args.push("-a");
-    }
-    if amend {
-        args.push("--amend");
+    for (on, flag) in [(opts.all, "-a"), (opts.amend, "--amend"), (opts.signoff, "--signoff"), (opts.no_verify, "--no-verify")] {
+        if on {
+            args.push(flag);
+        }
     }
     let stdin = (!keep_message).then(|| message.as_bytes().to_vec());
     let out = host.exec("git", &args, Some(root), stdin).map_err(|e| e.to_string())?;
@@ -393,5 +401,37 @@ mod tests {
         let _ = status_for(&host, &d, true);
         assert!(marker.exists(), "the fsmonitor hook is expected to run for a trusted folder");
         let _ = std::fs::remove_file(&marker);
+    }
+
+    #[test]
+    fn commit_flags_add_a_signoff_trailer_and_skip_hooks() {
+        let Some((dir, run)) = repo("commit-flags") else { return };
+        let host = host::local();
+        let root = dir.to_string_lossy().into_owned();
+        // Plain commit: no trailer.
+        std::fs::write(dir.join("a.txt"), "a\n").unwrap();
+        run(&["add", "-A"]).unwrap();
+        commit(&host, &root, "plain", CommitOptions::default()).unwrap();
+        assert!(!run(&["log", "-1", "--format=%B"]).unwrap().contains("Signed-off-by"));
+        // Signed off.
+        std::fs::write(dir.join("b.txt"), "b\n").unwrap();
+        run(&["add", "-A"]).unwrap();
+        commit(&host, &root, "signed", CommitOptions { signoff: true, ..Default::default() }).unwrap();
+        assert!(run(&["log", "-1", "--format=%B"]).unwrap().contains("Signed-off-by: Test <t@example.com>"));
+        // A pre-commit hook that refuses: the commit fails, and --no-verify gets past it.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let hook = dir.join(".git/hooks/pre-commit");
+            std::fs::create_dir_all(hook.parent().unwrap()).unwrap();
+            std::fs::write(&hook, "#!/bin/sh\necho refused by hook >&2\nexit 1\n").unwrap();
+            std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+            std::fs::write(dir.join("c.txt"), "c\n").unwrap();
+            run(&["add", "-A"]).unwrap();
+            assert!(commit(&host, &root, "hooked", CommitOptions::default()).unwrap_err().contains("refused by hook"));
+            commit(&host, &root, "skipped", CommitOptions { no_verify: true, ..Default::default() }).unwrap();
+            assert_eq!(run(&["log", "-1", "--format=%s"]).unwrap().trim(), "skipped");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
