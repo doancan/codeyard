@@ -223,7 +223,9 @@ Deliberate, with the reason:
   reached; `git log --follow` and `--name-only` run no drivers.
 - Remote `.http` requests and `$schema` downloads in a trusted folder ask once per new host and session (`http.confirmRequests`,
   default `remote`; `never` restores the old silence, `always` confirms every `.http` request). The host is the one the request
-  starts with. Redirects are not followed (no `curl -L`), so no unapproved host receives the request.
+  starts with. Redirects are not followed (no `curl -L`), so no unapproved host receives the request. Headers of an `.http` request
+  (an `Authorization` token, say) are curl arguments and so visible in `ps` to other users of the machine it runs on; on a shared
+  server keep secrets out of the request file or send from your own computer (`http.runOn`: `local`).
 - Windows passes its native check script but has not been verified interactively on a physical machine (SSH login, IME, mixed
   DPI, installer); macOS builds are ad-hoc signed (notarization script untested); no screen-reader testing (see
   `platforms.md`, `accessibility.md`).
