@@ -95,6 +95,20 @@ pub const CATALOG: &[Entry] = &[
     e("editor.matchBrackets", crate::i18n::tr("Highlight the matching bracket"), Kind::Bool),
     e("editor.folding", crate::i18n::tr("Show fold arrows in the gutter"), Kind::Bool),
     e("search.maxResults", crate::i18n::tr("Stop a search after this many matches"), Kind::Number { min: 1., max: 100_000. }),
+    // --- git-sync ---
+    e("git.autofetch", crate::i18n::tr("Fetch from the remote in the background while the window is in front"), Kind::Bool),
+    e("git.autofetchPeriod", crate::i18n::tr("Seconds between background fetches"), Kind::Number { min: 30., max: 86_400. }),
+    e("git.confirmSync", crate::i18n::tr("Ask before Sync pulls or pushes. Your own settings only; a folder cannot change it"), Kind::Bool),
+    e("git.rebaseWhenSync", crate::i18n::tr("Pull with rebase instead of a merge commit"), Kind::Bool),
+    e("git.pruneOnFetch", crate::i18n::tr("Fetch removes remote branches that were deleted on the server"), Kind::Bool),
+    e("git.pullTags", crate::i18n::tr("Pull also fetches all tags"), Kind::Bool),
+    e("git.fetchOnPull", crate::i18n::tr("Fetch every remote before pulling"), Kind::Bool),
+    e(
+        "git.postCommitCommand",
+        crate::i18n::tr("What runs after a commit: nothing, push or sync. Your own settings only; a folder cannot change it"),
+        Kind::Choice(&["none", "push", "sync"]),
+    ),
+    e("git.enableSmartCommit", crate::i18n::tr("Commit all tracked changes when nothing is staged"), Kind::Bool),
     // --- structural ---
     e("search.structural.maxFiles", crate::i18n::tr("Most files a structural search reads and parses"), Kind::Number { min: 1., max: 100_000. }),
     e("terminal.fontSize", crate::i18n::tr("Font size of the terminal"), Kind::Number { min: 6., max: 48. }),
@@ -268,6 +282,16 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "editor.matchBrackets" => json!(s.match_brackets),
         "editor.folding" => json!(s.folding),
         "search.maxResults" => json!(s.search_max_results),
+        // --- git-sync ---
+        "git.autofetch" => json!(s.git_autofetch),
+        "git.autofetchPeriod" => json!(s.git_autofetch_period),
+        "git.confirmSync" => json!(s.git_confirm_sync),
+        "git.rebaseWhenSync" => json!(s.git_rebase_when_sync),
+        "git.pruneOnFetch" => json!(s.git_prune_on_fetch),
+        "git.pullTags" => json!(s.git_pull_tags),
+        "git.fetchOnPull" => json!(s.git_fetch_on_pull),
+        "git.postCommitCommand" => json!(s.git_post_commit),
+        "git.enableSmartCommit" => json!(s.git_smart_commit),
         // --- structural ---
         "search.structural.maxFiles" => json!(s.search_structural_max_files),
         "terminal.fontSize" => json!(s.terminal_font_size),

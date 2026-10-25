@@ -2121,3 +2121,46 @@ Data: Convert To…	Veri: Şuna Dönüştür…
 Data: Query…	Veri: Sorgula…
 Data: Copy Path at Cursor	Veri: İmlecin Yolunu Kopyala
 Data: Decode Selection…	Veri: Seçimi Çöz…
+# --- git-sync ---
+Sync Changes {}	Değişiklikleri Eşitle {}
+Publish Branch	Dalı Yayımla
+Sync	Eşitle
+Sync changes?	Değişiklikler eşitlensin mi?
+This pulls and pushes commits from and to “{}”.	Bu işlem “{}” deposundan commit'leri Pull eder ve oraya Push eder.
+This pulls commits from “{}”.	Bu işlem “{}” deposundan commit'leri Pull eder.
+This pushes commits to “{}”.	Bu işlem commit'leri “{}” deposuna Push eder.
+A sync is already running.	Bir eşitleme zaten çalışıyor.
+Fetching in the background: try again in a moment.	Arka planda Fetch ediliyor: birazdan tekrar deneyin.
+Pull has conflicts: resolve them in Source Control (or Git: Abort Merge)	Pull çakışmalarla durdu: Kaynak Denetimi'nde çözün (ya da Git: Birleştirmeyi İptal Et)
+Publish failed: {}	Yayımlama başarısız: {}
+Commit or stash your changes first	Önce değişikliklerinizi commit edin ya da Stash'e alın
+Pull from…	Pull Et…
+Push to…	Push Et…
+Fetch (All Remotes)	Fetch (Tüm Uzak Depolar)
+Commit Signed Off	Commit (Signed-off-by)
+Commit (No Verify)	Commit (Hook'suz)
+Commit & Push	Commit ve Push
+Commit & Sync	Commit ve Eşitle
+{}: up to date. Click to fetch.	{}: güncel. Fetch için tıklayın.
+{0}: {1} to pull, {2} to push. Click to sync.	{0}: {1} Pull, {2} Push bekliyor. Eşitlemek için tıklayın.
+This branch is not published yet. Click to publish it.	Bu dal henüz yayımlanmadı. Yayımlamak için tıklayın.
+The last background fetch failed: {}	Son arka plan Fetch'i başarısız oldu: {}
+Nothing is staged: stage the changes to commit first (or turn on git.enableSmartCommit)	Stage'de bir şey yok: önce commit edilecek değişiklikleri Stage'e alın (ya da git.enableSmartCommit'i açın)
+Git: Pull (Rebase)	Git: Pull (Rebase ile)
+Pull (Rebase)	Pull (Rebase ile)
+Git: Pull from…	Git: Pull Et…
+Git: Push to…	Git: Push Et…
+Git: Fetch (All Remotes)	Git: Fetch (Tüm Uzak Depolar)
+Git: Commit Signed Off	Git: Commit (Signed-off-by)
+Git: Commit (No Verify)	Git: Commit (Hook'suz)
+Git: Commit & Push	Git: Commit ve Push
+Git: Commit & Sync	Git: Commit ve Eşitle
+Fetch from the remote in the background while the window is in front	Pencere öndeyken uzak depodan arka planda Fetch et
+Seconds between background fetches	Arka plan Fetch'leri arasındaki saniye
+Ask before Sync pulls or pushes. Your own settings only; a folder cannot change it	Eşitleme Pull ya da Push etmeden önce sor. Yalnızca kendi ayarlarınız; bir klasör değiştiremez
+Pull with rebase instead of a merge commit	Merge commit yerine rebase ile Pull et
+Fetch removes remote branches that were deleted on the server	Fetch, sunucuda silinen uzak dalları kaldırsın
+Pull also fetches all tags	Pull tüm etiketleri de getirsin
+Fetch every remote before pulling	Pull'dan önce tüm uzak depoları Fetch et
+What runs after a commit: nothing, push or sync. Your own settings only; a folder cannot change it	Commit'ten sonra ne çalışsın: hiçbir şey, push ya da eşitleme. Yalnızca kendi ayarlarınız; bir klasör değiştiremez
+Commit all tracked changes when nothing is staged	Stage'de bir şey yokken izlenen tüm değişiklikleri commit et
