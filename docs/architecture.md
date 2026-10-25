@@ -40,6 +40,8 @@ musl binary of about 1.5 MB.
    state. The `Workbench` struct stays under 80 lines.
 3. **Large enums** (`OverlayKind`, `InputPurpose`, `MenuCmd`) live in `workbench_types.rs`.
 
+Compare Folders is three files: `compare_logic.rs` (matching two `HashTree` scans, plans, report; no UI), `compare_folders.rs` (the tab) and `workbench_compare.rs` (picker, trust gate, copies and deletes checked against the scan).
+
 `scripts/arch-check.sh` enforces size limits and only ever lowers them: `workbench.rs` ≤ 2750 lines,
 `editor.rs` ≤ 1800, every other source file ≤ 2500 (test files ≤ 6000), `Workbench` struct ≤ 80 lines. When a
 limit is hit, split the file instead of raising the limit.

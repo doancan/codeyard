@@ -29,6 +29,9 @@ use crate::ui::{self, ActiveTheme, Palette, c, icon, layout, palette, text};
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 #[path = "a11y.rs"]
 pub mod a11y;
+// --- compare ---
+#[path = "workbench_compare.rs"]
+mod compare_glue;
 #[path = "workbench_connect.rs"]
 mod connect_glue;
 #[path = "workbench_debug.rs"]
@@ -294,6 +297,8 @@ actions!(
         OpenMarkdownPreview,
         CompareWithClipboard,
         CompareWithSaved,
+        // --- compare ---
+        CompareFolders,
         RunSelectedText,
         GoToLastEdit,
         NewScratchFile,
@@ -357,6 +362,8 @@ enum Page {
     Markdown(Entity<crate::markdown::MarkdownPreview>),
     Shortcuts(Entity<crate::shortcuts_page::ShortcutsPage>),
     Merge(Entity<crate::merge::MergeView>),
+    // --- compare ---
+    Compare(Entity<crate::compare_folders::CompareView>),
 }
 
 /// Floating picker on top: theme picker or palette (files / commands / line).
@@ -1058,6 +1065,8 @@ impl Workbench {
                 pending_extra_roots: Vec::new(),
                 file_clip: None,
                 compare_a: None,
+                // --- compare ---
+                compare_folder_a: None,
                 favorites: Vec::new(),
                 file_index: None,
             },

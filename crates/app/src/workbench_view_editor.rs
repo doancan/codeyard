@@ -345,6 +345,7 @@ impl Workbench {
                     Page::Markdown(v) => ("eye", v.read(cx).title(cx)),
                     Page::Shortcuts(_) => ("keyboard", crate::i18n::t("Keyboard Shortcuts").into()),
                     Page::Merge(v) => ("git-compare", v.read(cx).title(cx)),
+                    Page::Compare(v) => ("git-compare", v.read(cx).title()),
                 };
                 d.child(
                     div()

@@ -5,6 +5,7 @@
 
 pub mod bigfile;
 pub mod daemon;
+pub mod hashtree;
 pub mod proc;
 pub mod pty;
 pub mod search;
@@ -52,6 +53,7 @@ pub fn handle(req: Request) -> Response {
         Request::Delete { path } => delete(&expand(&path)).map(|_| Response::Done),
         // Streaming requests are handled inside `serve`; here only one-shot responses.
         Request::Search(_)
+        | Request::HashTree { .. }
         | Request::Cancel { .. }
         | Request::PtySpawn { .. }
         | Request::PtyInput { .. }
@@ -332,6 +334,25 @@ impl Session {
                             Err(e) => Response::Error(e),
                         },
                     );
+                });
+                Ok(())
+            }
+            Request::HashTree { root, ignore, gitignore, limit, only } => {
+                let flag = Arc::new(AtomicBool::new(false));
+                self.cancels.locked().insert(id, flag.clone());
+                let (out, cancels) = (self.out.clone(), self.cancels.clone());
+                std::thread::spawn(move || {
+                    let root = expand(&root);
+                    let query = hashtree::Query { root: &root, ignore: &ignore, gitignore, limit: limit as usize, only: only.as_deref() };
+                    let result = hashtree::run(&query, &flag, |records| {
+                        let _ = send(&out, id, Response::HashChunk(records));
+                    });
+                    cancels.locked().remove(&id);
+                    let done = match result {
+                        Ok(s) => Response::HashDone { entries: s.entries, truncated: s.truncated, cancelled: s.cancelled },
+                        Err(e) => Response::Error(e),
+                    };
+                    let _ = send(&out, id, done);
                 });
                 Ok(())
             }
