@@ -1307,7 +1307,6 @@ impl Workbench {
     }
 
     /// A scope or variable row and (if expanded) its children; depth is limited.
-    #[allow(clippy::too_many_arguments)]
     fn variable_row(
         &self,
         d: &DebugState,
