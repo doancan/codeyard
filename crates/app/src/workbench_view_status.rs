@@ -169,6 +169,18 @@ impl Workbench {
                         })),
                 )
             })
+            // --- data ---
+            .when_some(self.data_path_label(cx), |d, label| {
+                d.child(
+                    item()
+                        .id("sb-data-path")
+                        .cursor_pointer()
+                        .hover(|d| d.bg(c(p.surface_hover)))
+                        .child(label)
+                        .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Copy the path at the cursor").into())).into())
+                        .on_click(cx.listener(|this, _, window, cx| this.data_copy_path(&DataCopyPath, window, cx))),
+                )
+            })
             .when_some(editor_info, |d, (pos, indent, eol, dirty, saving, language, encoding)| {
                 d.when(saving, |d| d.child(item().child(crate::i18n::t("Saving…"))))
                     .when(dirty && !saving, |d| d.child(item().text_color(c(p.text)).child(crate::i18n::t("● Unsaved"))))

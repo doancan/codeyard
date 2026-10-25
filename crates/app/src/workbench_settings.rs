@@ -134,6 +134,13 @@ pub const CATALOG: &[Entry] = &[
     ),
     e("spelling.enabled", crate::i18n::tr("Underline misspelled words in prose files and in code comments"), Kind::Bool),
     e("spelling.checkComments", crate::i18n::tr("Check comments in code files too (prose files are always checked)"), Kind::Bool),
+    // --- data ---
+    e("data.indent", crate::i18n::tr("Spaces per level in the JSON and YAML written by Data: Convert To… and Data: Query…"), Kind::Number { min: 1., max: 8. }),
+    e(
+        "data.sortKeys",
+        crate::i18n::tr("Sort object keys alphabetically in the output of Data: Convert To… and Data: Query… (off: keep the file's order)"),
+        Kind::Bool,
+    ),
     e("json.validate.enable", crate::i18n::tr("Check JSON and YAML files against their schema (problems, hover, suggestions)"), Kind::Bool),
     e("json.schemaDownload.enable", crate::i18n::tr("Download schemas from SchemaStore and cache them (off: only local and cached schemas)"), Kind::Bool),
     e("explorer.confirmDragAndDrop", crate::i18n::tr("Ask before moving a file or folder by dragging it in the explorer"), Kind::Bool),
@@ -239,6 +246,9 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "update.check" => json!(s.update_check.as_str()),
         "spelling.enabled" => json!(s.spelling),
         "spelling.checkComments" => json!(s.spelling_comments),
+        // --- data ---
+        "data.indent" => json!(s.data_indent),
+        "data.sortKeys" => json!(s.data_sort_keys),
         "json.validate.enable" => json!(s.schema_validate),
         "json.schemaDownload.enable" => json!(s.schema_download),
         "workbench.tree.guides" => json!(s.tree_guides),

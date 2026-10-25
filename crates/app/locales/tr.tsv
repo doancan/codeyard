@@ -1901,3 +1901,110 @@ Keep Waiting	Beklemeye Devam Et
 “{}” is not a usable branch or remote name	“{}” kullanılabilir bir dal ya da uzak sunucu adı değil
 Codeyard already has Full Disk Access.	Codeyard'ın zaten Tam Disk Erişimi var.
 Software Update	Yazılım Güncelleme
+# --- data ---
+Comments are not kept.	Yorumlar korunmaz.
+Anchors and aliases were expanded.	Çapalar (&) ve takma adlar (*) açıldı.
+{} YAML documents became one list.	{} YAML belgesi tek bir listeye dönüştü.
+TOML dates were turned into text.	TOML tarihleri metne çevrildi.
+Numbers and booleans were written as text.	Sayılar ve mantıksal değerler metin olarak yazıldı.
+{0} (line {1}, column {2})	{0} (satır {1}, sütun {2})
+Duplicate key	Yinelenen anahtar
+Duplicate key “{}”	“{}” anahtarı yinelenmiş
+The number {} cannot be written in JSON	{} sayısı JSON'da yazılamaz
+Expected KEY=value	KEY=değer biçimi bekleniyordu
+“{}” is not a valid variable name	“{}” geçerli bir değişken adı değil
+Unexpected text after the closing quote	Kapanış tırnağından sonra beklenmeyen metin var
+The quoted value is not closed	Tırnaklı değer kapatılmamış
+TOML needs a table at the top level, but this document is a {}	TOML en üst düzeyde bir tablo ister, bu belge ise bir {}
+{}: TOML has no null; give it a value or remove it	{}: TOML'da null yoktur; bir değer verin ya da kaldırın
+{0}: {1} does not fit in a TOML integer (64 bits, signed)	{0}: {1}, TOML tamsayısına (64 bit, işaretli) sığmıyor
+{0}: {1} cannot be written in TOML	{0}: {1} TOML'da yazılamaz
+{0}: a TOML array holds one kind of value, but this one has {1} and {2}	{0}: TOML dizisi tek türde değer taşır, bu dizide {1} ve {2} var
+.env needs a flat set of keys and values, but this document is a {}	.env düz bir anahtar-değer kümesi ister, bu belge ise bir {}
+{}: .env has no null; give it a value or remove it	{}: .env'de null yoktur; bir değer verin ya da kaldırın
+{}: .env holds only text; nested values need the “joined with __” choice	{}: .env yalnızca metin tutar; iç içe değerler için “__ ile birleştirilir” seçeneğini kullanın
+{0}: “{1}” is not a name .env files can hold (letters, digits and _)	{0}: “{1}” bir .env adı olamaz (harf, rakam ve _ kullanılabilir)
+Paths are shown for JSON, YAML and TOML files	Yollar JSON, YAML ve TOML dosyaları için gösterilir
+Expected “{}”	“{}” bekleniyordu
+Unexpected “{}”	Beklenmeyen “{}”
+The query ends too early	Sorgu erken bitiyor
+The query is too long	Sorgu çok uzun
+The query is nested too deeply	Sorgu çok derin iç içe
+String interpolation is not supported	Metin içine ifade yerleştirme (\(…)) desteklenmiyor
+Invalid string	Geçersiz metin
+The string is not closed	Metin kapatılmamış
+“{}” is not a number	“{}” bir sayı değil
+Variables are not supported	Değişkenler desteklenmiyor
+Format strings are not supported	Biçim dizeleri (@…) desteklenmiyor
+“{}” is not supported	“{}” desteklenmiyor
+“{}” is not a function this query language has	“{}” bu sorgu dilinde tanımlı bir işlev değil
+“{}” is called with the wrong number of arguments	“{}” yanlış sayıda bağımsız değişkenle çağrıldı
+The query needs more work than allowed; narrow it down	Sorgu izin verilenden fazla iş gerektiriyor; daraltın
+Cannot iterate over {}	{} üzerinde dolaşılamaz
+{} cannot be negated	{} eksiye çevrilemez
+Object keys must be strings, not {}	Nesne anahtarları metin olmalı, {} olamaz
+{} has no keys	{} değerinin anahtarı yok
+Cannot check whether {0} has a key of type {1}	{0} değerinde {1} türünde anahtar sorgulanamaz
+limit needs a whole number	limit bir tamsayı ister
+flatten depth must not be negative	flatten derinliği negatif olamaz
+{0} (while parsing {1})	{0} ({1} ayrıştırılırken)
+{} cannot be parsed as JSON	{} JSON olarak ayrıştırılamaz
+Cannot parse {} as a number	{} sayı olarak okunamaz
+{} cannot be parsed as a number	{} sayı olarak okunamaz
+{0} cannot be used with {1}	{0}, {1} ile kullanılamaz
+{0} needs strings, got {1} and {2}	{0} metin ister; {1} ve {2} verildi
+join needs a string separator, got {}	join metin türünde ayırıcı ister, {} verildi
+Cannot join {}	{} birleştirilemez
+split input and separator must be strings	split girdisi ve ayırıcısı metin olmalı
+{} cannot be rounded	{} yuvarlanamaz
+{} is not an array	{} bir dizi değil
+Cannot use {} as an entry	{} bir girdi olarak kullanılamaz
+Cannot use {} as an object key	{} nesne anahtarı olarak kullanılamaz
+{} has no length	{} değerinin uzunluğu yok
+{0} and {1} cannot have their containment checked	{0} ve {1} için içerme denetimi yapılamaz
+Cannot index {0} with {1}	{0}, {1} ile indekslenemez
+Cannot index {0} with “{1}”	{0}, “{1}” ile indekslenemez
+Start and end of a slice must be numbers	Dilimin başı ve sonu sayı olmalı
+Cannot index {} with object	{} nesneyle indekslenemez
+{0} and {1} cannot be added	{0} ve {1} toplanamaz
+{0} and {1} cannot be subtracted	{0} ve {1} çıkarılamaz
+{0} and {1} cannot be multiplied	{0} ve {1} çarpılamaz
+{0} and {1} cannot be divided	{0} ve {1} bölünemez
+The repeated string would be too long	Tekrarlanan metin çok uzun olurdu
+{0} and {1} cannot be divided because the divisor is zero	{0} ve {1} bölünemez: bölen sıfır
+Select a JWT or a Unix timestamp first	Önce bir JWT ya da Unix zaman damgası seçin
+Signature not verified: the token is only decoded, not checked	İmza doğrulanmadı: belirteç yalnızca çözüldü, denetlenmedi
+Header	Başlık
+Payload	Yük
+{} is a date:	{} bir tarih:
+The token has no signature.	Belirteçte imza yok.
+Select at most 20 timestamps	En çok 20 zaman damgası seçin
+The selection is neither a JWT nor a Unix timestamp	Seçim ne bir JWT ne de bir Unix zaman damgası
+{} is too large to be a time in seconds or milliseconds	{} saniye ya da milisaniye olarak zaman olamayacak kadar büyük
+milliseconds	milisaniye
+seconds	saniye
+Local time is not available on this system	Yerel saat bu sistemde kullanılamıyor
+.env, nested keys joined with __	.env, iç içe anahtarlar __ ile birleştirilir
+Replace the text with {}	Metni {} ile değiştir
+{} in a new tab	{} yeni sekmede
+Convert to…	Dönüştür…
+Converted to {}	{} biçimine dönüştürüldü
+This file is {0} MB; Data: Query handles files up to {1} MB.	Bu dosya {0} MB; Veri: Sorgula en çok {1} MB'a kadar dosyalarla çalışır.
+Query, e.g. .items[] | select(.id == 3)	Sorgu, örn. .items[] | select(.id == 3)
+The file is not open any more.	Dosya artık açık değil.
+The file could not be read.	Dosya okunamadı.
+Reading the file…	Dosya okunuyor…
+Type a query. Esc closes the bar.	Bir sorgu yazın. Esc çubuğu kapatır.
+{} result|{} results	{} sonuç
+{} (cut at 5 MB)	{} (5 MB'ta kesildi)
+Column {0}: {1}	Sütun {0}: {1}
+Query	Sorgu
+Copied {}	{} kopyalandı
+Decoded here only: nothing is sent or logged	Yalnızca burada çözüldü: hiçbir şey gönderilmez ya da günlüğe yazılmaz
+Copy the path at the cursor	İmlecin altındaki yolu kopyala
+Spaces per level in the JSON and YAML written by Data: Convert To… and Data: Query…	Veri: Şuna Dönüştür… ve Veri: Sorgula… ile yazılan JSON ve YAML'da her düzey için boşluk sayısı
+Sort object keys alphabetically in the output of Data: Convert To… and Data: Query… (off: keep the file's order)	Veri: Şuna Dönüştür… ve Veri: Sorgula… çıktısında nesne anahtarlarını alfabetik sırala (kapalı: dosyadaki sırayı koru)
+Data: Convert To…	Veri: Şuna Dönüştür…
+Data: Query…	Veri: Sorgula…
+Data: Copy Path at Cursor	Veri: İmlecin Yolunu Kopyala
+Data: Decode Selection…	Veri: Seçimi Çöz…
