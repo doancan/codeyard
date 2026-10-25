@@ -187,6 +187,8 @@ pub fn ago(iso: &str, now: i64) -> String {
 
 pub trait Runner {
     fn run(&self, program: &str, args: &[String]) -> Result<String, String>;
+    /// Like `run`, with `input` on the program's stdin (for secrets that must not show up in the process list).
+    fn run_with_input(&self, program: &str, args: &[String], input: &str) -> Result<String, String>;
 }
 
 pub struct SystemRunner;
@@ -197,6 +199,10 @@ const RUN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 impl Runner for SystemRunner {
     fn run(&self, program: &str, args: &[String]) -> Result<String, String> {
         run_with_timeout(program, args, RUN_TIMEOUT)
+    }
+
+    fn run_with_input(&self, program: &str, args: &[String], input: &str) -> Result<String, String> {
+        run_with_input(program, args, Some(input), RUN_TIMEOUT)
     }
 }
 
@@ -212,13 +218,18 @@ fn drain<R: std::io::Read + Send + 'static>(mut pipe: Option<R>) -> std::thread:
 
 /// Runs `program` non-interactively: no input, `gh`/`git` don't ask questions, the process is killed if the time is exceeded.
 pub(crate) fn run_with_timeout(program: &str, args: &[String], limit: std::time::Duration) -> Result<String, String> {
+    run_with_input(program, args, None, limit)
+}
+
+/// `run_with_timeout` with optional stdin contents.
+fn run_with_input(program: &str, args: &[String], input: Option<&str>, limit: std::time::Duration) -> Result<String, String> {
     use std::process::Stdio;
     let mut child = std::process::Command::new(program)
         .args(args)
         .env("GH_PROMPT_DISABLED", "1")
         .env("GH_NO_UPDATE_NOTIFIER", "1")
         .env("GIT_TERMINAL_PROMPT", "0")
-        .stdin(Stdio::null())
+        .stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -229,6 +240,12 @@ pub(crate) fn run_with_timeout(program: &str, args: &[String], limit: std::time:
                 format!("{program}: {e}")
             }
         })?;
+    // Written from its own thread as well, so a program that answers before it has read everything cannot stall us; the pipe closes with the thread.
+    if let (Some(text), Some(mut pipe)) = (input.map(str::to_owned), child.stdin.take()) {
+        std::thread::spawn(move || {
+            let _ = std::io::Write::write_all(&mut pipe, text.as_bytes());
+        });
+    }
     // Read the output in separate threads: if the pipe fills, the process must not block while writing and burn the timeout for nothing.
     let out = drain(child.stdout.take());
     let err = drain(child.stderr.take());
@@ -321,12 +338,20 @@ pub fn list_pulls(r: &dyn Runner, repo: &Repo, token: Option<&str>) -> Result<(V
     }
     let mut args: Vec<String> =
         ["-fsSL", "--max-time", "20", "-H", "Accept: application/vnd.github+json", "-H", "User-Agent: codeyard"].iter().map(|s| s.to_string()).collect();
-    if let Some(t) = token {
-        args.push("-H".into());
-        args.push(format!("Authorization: Bearer {t}"));
-    }
+    // The token goes in through curl's config on stdin: as an argument it would be readable by every user in `ps`.
+    let config = match token {
+        Some(t) => {
+            args.extend(["--config".into(), "-".into()]);
+            Some(bearer_config(t)?)
+        }
+        None => None,
+    };
     args.push(format!("https://api.github.com/repos/{}/pulls?state=open&per_page=50&sort=updated&direction=desc", repo.slug()));
-    match r.run("curl", &args).and_then(|t| parse_api(&t)) {
+    let reply = match &config {
+        Some(c) => r.run_with_input("curl", &args, c),
+        None => r.run("curl", &args),
+    };
+    match reply.and_then(|t| parse_api(&t)) {
         Ok(p) => Ok((p, Source::Api { authenticated: token.is_some() })),
         Err(e) => {
             let hint = if e.contains("401") || e.contains("Bad credentials") {
@@ -341,6 +366,15 @@ pub fn list_pulls(r: &dyn Runner, repo: &Repo, token: Option<&str>) -> Result<(V
             Err(format!("{}{hint}", cli_error.map_or(e.clone(), |c| format!("{c}; {e}"))))
         }
     }
+}
+
+/// curl config line that sets the `Authorization` header. Inside the quotes `\` and `"` need escaping; a token with line breaks or
+/// other control characters is refused rather than letting it add config lines (headers) of its own.
+fn bearer_config(token: &str) -> Result<String, String> {
+    if token.chars().any(char::is_control) {
+        return Err(crate::i18n::t("the GitHub token contains characters that cannot be sent").to_string());
+    }
+    Ok(format!("header = \"Authorization: Bearer {}\"\n", token.replace('\\', "\\\\").replace('"', "\\\"")))
 }
 
 /// Second part of a row in the list: "name · base ← head · 2d · ✓ 5 · approved".
@@ -459,8 +493,14 @@ mod tests {
         gh: Result<String, String>,
         api: Result<String, String>,
         seen: std::sync::Mutex<Vec<String>>,
+        stdin: std::sync::Mutex<Vec<String>>,
     }
     impl Runner for Fake {
+        fn run_with_input(&self, program: &str, args: &[String], input: &str) -> Result<String, String> {
+            self.stdin.lock().unwrap().push(input.to_string());
+            self.run(program, args)
+        }
+
         fn run(&self, program: &str, args: &[String]) -> Result<String, String> {
             self.seen.lock().unwrap().push(format!("{program} {}", args.join(" ")));
             match (program, args.first().map(String::as_str)) {
@@ -478,7 +518,13 @@ mod tests {
     }
 
     fn fake(gh_auth: bool, gh: Result<&str, &str>, api: Result<&str, &str>) -> Fake {
-        Fake { gh_auth, gh: gh.map(String::from).map_err(String::from), api: api.map(String::from).map_err(String::from), seen: Default::default() }
+        Fake {
+            gh_auth,
+            gh: gh.map(String::from).map_err(String::from),
+            api: api.map(String::from).map_err(String::from),
+            seen: Default::default(),
+            stdin: Default::default(),
+        }
     }
 
     #[test]
@@ -491,7 +537,15 @@ mod tests {
         let f = fake(false, Ok(gh_ok), Ok(api_ok));
         let (p, src) = list_pulls(&f, &r, Some("tok")).unwrap();
         assert_eq!((p[0].number, src), (2, Source::Api { authenticated: true }));
-        assert!(f.seen.lock().unwrap().iter().any(|c| c.contains("Authorization: Bearer tok") && c.contains("repos/o/r/pulls")));
+        // The token is never an argument (those show up in `ps`); it travels on stdin as curl config.
+        let seen = f.seen.lock().unwrap();
+        assert!(seen.iter().any(|c| c.contains("--config -") && c.contains("repos/o/r/pulls")));
+        assert!(!seen.iter().any(|c| c.contains("Bearer") || c.contains("tok ") || c.ends_with(" tok")), "{seen:?}");
+        assert_eq!(*f.stdin.lock().unwrap(), ["header = \"Authorization: Bearer tok\"\n"]);
+        drop(seen);
+        let e = list_pulls(&fake(false, Ok(gh_ok), Ok(api_ok)), &r, Some("bad\nheader = \"X: y\"")).unwrap_err();
+        assert!(e.contains("cannot be sent"), "{e}");
+        assert_eq!(bearer_config("a\"b\\c").unwrap(), "header = \"Authorization: Bearer a\\\"b\\\\c\"\n");
         // gh fails (no access): the API is tried next.
         let (p, _) = list_pulls(&fake(true, Err("no access"), Ok(api_ok)), &r, None).unwrap();
         assert_eq!(p[0].number, 2);
@@ -500,6 +554,15 @@ mod tests {
         assert!(e.contains("private") && e.contains("GITHUB_TOKEN"), "{e}");
         let e = list_pulls(&fake(false, Err(""), Ok(r#"{"message": "API rate limit exceeded"}"#)), &r, None).unwrap_err();
         assert!(e.contains("rate limit"), "{e}");
+    }
+
+    /// Real curl is not needed: any program that echoes its stdin shows the input arrives and the argument list stays clean.
+    #[test]
+    fn input_reaches_the_program_through_stdin() {
+        let args = vec!["-c".to_string(), "cat".to_string()];
+        assert_eq!(run_with_input("sh", &args, Some("secret"), std::time::Duration::from_secs(5)).unwrap(), "secret");
+        let e = run_with_input("sleep", &["30".into()], Some("x"), std::time::Duration::from_millis(300)).unwrap_err();
+        assert!(e.contains("did not answer"), "the timeout still applies: {e}");
     }
 
     #[test]

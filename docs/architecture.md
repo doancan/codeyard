@@ -192,7 +192,7 @@ An untrusted folder (anything not opened before the trust gate existed and not t
 | tasks, tests, debugger | ask first (“Do you trust the authors of this folder?”) | run |
 | project `terminal.shell`, `lsp.servers`, `json.schemas`, `yaml.schemas` | ignored (the status bar names them) | applied |
 | language servers | **not started**; one notice per folder says how to turn them on; trusting starts them at once | start on opening a file |
-| `$schema` URLs and schema `$ref`s | downloaded only from SchemaStore (cached copies still work) | any `http(s)` address |
+| `$schema` URLs and schema `$ref`s | downloaded only from SchemaStore (cached copies still work); a network-share path (`//host/share`, `file://host/…`) is never opened, since Windows would log in to that host | any `http(s)` address |
 | `git status` (every 4 s) | `core.fsmonitor` turned off | as in a terminal |
 | `git show` / `blame` | `--no-textconv` always (raw bytes are also what hunk staging needs) | same |
 
@@ -223,7 +223,9 @@ Deliberate, with the reason:
   reached; `git log --follow` and `--name-only` run no drivers.
 - Remote `.http` requests and `$schema` downloads in a trusted folder ask once per new host and session (`http.confirmRequests`,
   default `remote`; `never` restores the old silence, `always` confirms every `.http` request). The host is the one the request
-  starts with: redirects that `curl` follows (up to 10) are not asked about again.
+  starts with. Redirects are not followed (no `curl -L`), so no unapproved host receives the request. Headers of an `.http` request
+  (an `Authorization` token, say) are curl arguments and so visible in `ps` to other users of the machine it runs on; on a shared
+  server keep secrets out of the request file or send from your own computer (`http.runOn`: `local`).
 - Windows passes its native check script but has not been verified interactively on a physical machine (SSH login, IME, mixed
   DPI, installer); macOS builds are ad-hoc signed (notarization script untested); no screen-reader testing (see
   `platforms.md`, `accessibility.md`).

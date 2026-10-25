@@ -833,7 +833,9 @@ impl Workbench {
                     this.tabs.pending_reveal = Some((path.clone(), *line, *column, *len));
                     this.open_file(path.clone(), window, cx);
                 }
-                SearchEvent::OpenInEditor(text) => this.create_scratch_with("search-results.txt".into(), text, window, cx),
+                SearchEvent::OpenInEditor(text) => {
+                    this.create_scratch_with("search-results.txt".into(), text, window, cx);
+                }
                 SearchEvent::ReplaceAll { files, query, replacement, preserve_case, matches, truncated } => {
                     this.confirm_replace_all(files.clone(), query.clone(), replacement.clone(), *preserve_case, *matches, *truncated, window, cx)
                 }
@@ -868,6 +870,7 @@ impl Workbench {
             }),
             // A download in progress is cancelled and its partial file removed before the process ends.
             cx.on_app_quit(|this, cx| {
+                this.discard_response_on_quit();
                 let wait = this.cancel_update_for_quit().map(|exited| Workbench::wait_for_update_thread(exited, cx));
                 async move {
                     if let Some(wait) = wait {
@@ -2096,6 +2099,7 @@ impl Workbench {
         // If also open in the other group, only this view closes; the backup stays.
         if !self.also_in_other(&ed) {
             let path = ed.read(cx).path.clone();
+            self.discard_response_file(&path);
             self.drop_backup(&path, cx);
             let (line, col) = ed.read(cx).cursor_position();
             self.nav.closed.retain(|c| c.0 != path);

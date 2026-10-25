@@ -367,7 +367,9 @@ pub const MARKER: &str = "<<codeyard-http>>";
 pub const MAX_RESPONSE_BYTES: u64 = 20 * 1024 * 1024;
 
 pub fn curl_args(p: &Prepared) -> Vec<String> {
-    let mut a: Vec<String> = ["-sS", "-i", "-L", "--max-time", "60", "--max-redirs", "10", "--compressed"].iter().map(|s| s.to_string()).collect();
+    // No `-L`: a redirect would re-send the method, body and custom headers to a host nobody approved (loopback, link-local metadata).
+    // The 3xx is shown with its Location instead and the user sends the next request deliberately.
+    let mut a: Vec<String> = ["-sS", "-i", "--max-time", "60", "--compressed"].iter().map(|s| s.to_string()).collect();
     a.push("--max-filesize".into());
     a.push(MAX_RESPONSE_BYTES.to_string());
     if p.method == "HEAD" {
@@ -463,7 +465,7 @@ fn find(hay: &[u8], needle: &[u8], from: usize) -> Option<usize> {
     hay.get(from..)?.windows(needle.len()).position(|w| w == needle).map(|i| i + from)
 }
 
-/// Parse `curl -i … -w` output: skips the intermediate header blocks of redirects and `100 Continue`, takes the last one.
+/// Parse `curl -i … -w` output: skips intermediate header blocks (`100 Continue`), takes the last one.
 pub fn parse_output(stdout: &[u8]) -> Result<Response, String> {
     let marker_at = stdout.windows(MARKER.len()).rposition(|w| w == MARKER.as_bytes()).ok_or("curl returned no response")?;
     let meta = String::from_utf8_lossy(&stdout[marker_at + MARKER.len()..]).trim().to_string();
@@ -483,7 +485,7 @@ pub fn parse_output(stdout: &[u8]) -> Result<Response, String> {
         };
         headers_block = &data[..end];
         data = &data[(end + sep).min(data.len())..];
-        // If the next block is also headers, this was an intermediate block (redirect, 100 Continue).
+        // If the next block is also headers, this was an intermediate block (100 Continue).
     }
     if code == 0 || headers_block.is_empty() {
         return Err(crate::i18n::t("curl returned no response headers").into());
@@ -516,7 +518,6 @@ pub fn explain_curl(code: Option<i32>, stderr: &str, place: &str, url: &str) -> 
         Some(35 | 51 | 58 | 59 | 60 | 77 | 83 | 90) => {
             crate::i18n::tf("The TLS/SSL handshake with {} failed (certificate or protocol problem): {}", &[&host, &detail])
         }
-        Some(47) => crate::i18n::t("Too many redirects (more than 10): the server keeps redirecting.").to_string(),
         Some(52) => crate::i18n::tf("{} accepted the connection but sent no reply.", &[&host]),
         Some(55 | 56) => crate::i18n::tf("The connection to {} dropped while the data was being exchanged.", &[&host]),
         Some(63) => crate::i18n::tf("The response is larger than {} and was not downloaded.", &[&human_size(MAX_RESPONSE_BYTES)]),
@@ -551,6 +552,11 @@ pub fn sensitive_parts(req: &Request) -> Vec<String> {
         }
     }
     out
+}
+
+/// The `Location` of a redirect answer; such a response is not followed automatically (see `curl_args`).
+pub fn redirect_target(r: &Response) -> Option<&str> {
+    (matches!(r.status, 301 | 302 | 303 | 307 | 308)).then(|| r.header("location")).flatten().filter(|l| !l.is_empty())
 }
 
 pub fn status_line(r: &Response) -> String {
@@ -709,6 +715,46 @@ mod tests {
         assert!(prepare(&missing, &c, &read).unwrap_err().contains("no file"));
     }
 
+    #[test]
+    fn redirects_are_not_followed_and_their_target_is_reported() {
+        let p = Prepared { method: "POST".into(), url: "http://a.test/".into(), headers: vec![("X-Key".into(), "k".into())], body: Some(b"x".to_vec()) };
+        let args = curl_args(&p);
+        assert!(!args.iter().any(|a| a == "-L" || a == "--location" || a.starts_with("--max-redirs")), "{args:?}");
+        let r = parse_output(&out("HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:9/admin\r\n\r\n", "", "307 0.1 0")).unwrap();
+        assert_eq!(redirect_target(&r), Some("http://127.0.0.1:9/admin"));
+        assert_eq!(redirect_target(&resp(None, b"")), None);
+    }
+
+    /// Real curl against two local listeners: the first answers 307 to the second, which must never see a connection.
+    #[test]
+    fn a_307_to_another_host_is_shown_not_followed() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        use std::process::{Command, Stdio};
+        if Command::new("curl").arg("--version").output().is_err() {
+            return;
+        }
+        let (first, second) = (TcpListener::bind("127.0.0.1:0").unwrap(), TcpListener::bind("127.0.0.1:0").unwrap());
+        second.set_nonblocking(true).unwrap();
+        let target = format!("http://127.0.0.1:{}/admin", second.local_addr().unwrap().port());
+        let reply = format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: {target}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        let url = format!("http://127.0.0.1:{}/", first.local_addr().unwrap().port());
+        let server = std::thread::spawn(move || {
+            let (mut s, _) = first.accept().unwrap();
+            let mut buf = [0u8; 4096];
+            let _ = s.read(&mut buf);
+            s.write_all(reply.as_bytes()).unwrap();
+        });
+        let p = Prepared { method: "POST".into(), url, headers: vec![("X-Key".into(), "k".into())], body: Some(b"secret".to_vec()) };
+        let mut child = Command::new("curl").args(curl_args(&p)).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().unwrap();
+        child.stdin.take().unwrap().write_all(b"secret").unwrap();
+        let out = child.wait_with_output().unwrap();
+        server.join().unwrap();
+        let r = parse_output(&out.stdout).unwrap();
+        assert_eq!((r.status, redirect_target(&r)), (307, Some(target.as_str())));
+        assert!(second.accept().is_err(), "the redirect target received a connection");
+    }
+
     fn out(headers: &str, body: &str, meta: &str) -> Vec<u8> {
         format!("{headers}{body}\n{MARKER}{meta}").into_bytes()
     }
@@ -783,7 +829,6 @@ mod tests {
         assert!(explain_curl(Some(28), "", "srv", "http://a/").contains("60 seconds"));
         assert!(explain_curl(Some(60), "curl: (60) SSL certificate problem: self-signed certificate", "srv", "https://a/").contains("self-signed"));
         assert!(explain_curl(Some(63), "", "srv", "http://a/").contains("20.0 MB"));
-        assert!(explain_curl(Some(47), "", "srv", "http://a/").contains("redirect"));
         assert!(explain_curl(Some(52), "", "srv", "http://a/").contains("no reply"));
         assert!(explain_curl(Some(99), "curl: (99) odd\n", "srv", "http://a/").contains("odd (curl exit 99)"));
         assert_eq!(explain_curl(None, "", "srv", "http://a/"), "The request failed.");

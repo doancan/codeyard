@@ -11,6 +11,48 @@ static COUNTER: AtomicU64 = AtomicU64::new(0);
 /// (dotfile managers link `settings.jsonc`) the link is kept and the file it points to is updated; an existing file's permissions
 /// are kept. On error the original file stays as it was.
 pub fn write_atomic(path: &Path, data: impl AsRef<[u8]>) -> std::io::Result<()> {
+    write_atomic_with(path, data.as_ref(), 0o666)
+}
+
+/// `write_atomic` for files other users have no business reading (crash reports, hand-over files): a new file is owner-only
+/// instead of following the umask. Windows has no such bits; the profile folder's own ACL applies there.
+pub fn write_private(path: &Path, data: impl AsRef<[u8]>) -> std::io::Result<()> {
+    write_atomic_with(path, data.as_ref(), 0o600)
+}
+
+/// New file for writing (fails if it exists), owner-only on unix.
+pub fn create_private(path: &Path) -> std::io::Result<std::fs::File> {
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    opts.open(path)
+}
+
+/// `create_dir_all` for a folder of private files: what is created is owner-only on unix, and a folder that already existed
+/// with looser permissions (an earlier version used the umask) is tightened.
+pub fn create_private_dir(path: &Path) -> std::io::Result<()> {
+    let mut b = std::fs::DirBuilder::new();
+    b.recursive(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+        b.mode(0o700);
+        b.create(path)?;
+        let mode = std::fs::metadata(path)?.permissions().mode();
+        if mode & 0o077 != 0 {
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?;
+        }
+        Ok(())
+    }
+    #[cfg(not(unix))]
+    b.create(path)
+}
+
+fn write_atomic_with(path: &Path, data: &[u8], new_mode: u32) -> std::io::Result<()> {
     let target: PathBuf = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let dir = target.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let name = target.file_name().map(|n| n.to_string_lossy().chars().take(60).collect::<String>()).unwrap_or_default();
@@ -24,11 +66,13 @@ pub fn write_atomic(path: &Path, data: impl AsRef<[u8]>) -> std::io::Result<()> 
         {
             use std::os::unix::fs::OpenOptionsExt;
             // While writing, an existing file's contents (possibly private) must not be readable by others: owner-only at first, the original permissions only after
-            // the data is written. A new file gets 0666 & ~umask like `std::fs::write`.
-            opts.mode(if existing.is_some() { 0o600 } else { 0o666 });
+            // the data is written. A new file gets `new_mode` & ~umask (0666 like `std::fs::write`, or owner-only).
+            opts.mode(if existing.is_some() { 0o600 } else { new_mode });
         }
+        #[cfg(not(unix))]
+        let _ = new_mode;
         let mut f = opts.open(&tmp)?;
-        f.write_all(data.as_ref())?;
+        f.write_all(data)?;
         if let Some(m) = &existing {
             f.set_permissions(m.permissions())?;
         }
@@ -76,6 +120,32 @@ mod tests {
         assert_eq!(std::fs::read_dir(&d).unwrap().flatten().count(), 2, "temp file cleaned up after the failure");
         // A missing folder is an error, not a panic.
         assert!(write_atomic(&d.join("no/such/dir/file"), "x").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn private_files_and_folders_are_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        let d = dir("private");
+        let sub = d.join("a/b");
+        create_private_dir(&sub).unwrap();
+        assert_eq!((mode(&d.join("a")), mode(&sub)), (0o700, 0o700));
+        // A folder that exists with the umask's permissions is tightened.
+        let old = d.join("old");
+        std::fs::create_dir(&old).unwrap();
+        std::fs::set_permissions(&old, std::fs::Permissions::from_mode(0o755)).unwrap();
+        create_private_dir(&old).unwrap();
+        assert_eq!(mode(&old), 0o700);
+        let (a, b) = (d.join("a.txt"), d.join("b.txt"));
+        write_private(&a, "x").unwrap();
+        create_private(&b).unwrap().write_all(b"x").unwrap();
+        assert_eq!((mode(&a), mode(&b)), (0o600, 0o600));
+        assert!(create_private(&b).is_err(), "never replaces a file");
+        // An existing file keeps the permissions it has, as with write_atomic.
+        std::fs::set_permissions(&a, std::fs::Permissions::from_mode(0o640)).unwrap();
+        write_private(&a, "y").unwrap();
+        assert_eq!(mode(&a), 0o640);
     }
 
     #[cfg(unix)]
