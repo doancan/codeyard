@@ -36,17 +36,28 @@ pub enum TerminalEvent {
 const MAX_BACKLOG: usize = 32 * 1024 * 1024;
 
 /// Pending-output counter between the bridge thread and the UI: a chunk over the limit is dropped (see `admit`).
-#[derive(Default)]
-struct OutputBacklog {
+pub(crate) struct OutputBacklog {
+    limit: usize,
     pending: std::sync::atomic::AtomicUsize,
     dropped: std::sync::atomic::AtomicBool,
 }
 
+impl Default for OutputBacklog {
+    fn default() -> Self {
+        Self::with_limit(MAX_BACKLOG)
+    }
+}
+
 impl OutputBacklog {
+    /// A backlog that admits at most `limit` bytes not yet consumed.
+    pub(crate) fn with_limit(limit: usize) -> Self {
+        Self { limit, pending: Default::default(), dropped: Default::default() }
+    }
+
     /// Accept the new `len` bytes of output (`true`) or drop it (`false`, which raises the "dropped" flag).
-    fn admit(&self, len: usize) -> bool {
+    pub(crate) fn admit(&self, len: usize) -> bool {
         use std::sync::atomic::Ordering::Relaxed;
-        if self.pending.load(Relaxed).saturating_add(len) > MAX_BACKLOG {
+        if self.pending.load(Relaxed).saturating_add(len) > self.limit {
             self.dropped.store(true, Relaxed);
             return false;
         }
@@ -55,12 +66,12 @@ impl OutputBacklog {
     }
 
     /// The UI parsed a chunk.
-    fn consumed(&self, len: usize) {
+    pub(crate) fn consumed(&self, len: usize) {
         self.pending.fetch_sub(len, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// `true` once if output was dropped (so the user can be told).
-    fn take_dropped(&self) -> bool {
+    pub(crate) fn take_dropped(&self) -> bool {
         self.dropped.swap(false, std::sync::atomic::Ordering::Relaxed)
     }
 }
