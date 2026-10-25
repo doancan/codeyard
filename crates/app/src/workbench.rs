@@ -70,6 +70,8 @@ mod ports_glue;
 pub mod projects;
 #[path = "workbench_pulls.rs"]
 mod pulls_glue;
+#[path = "workbench_recover.rs"]
+mod recover_glue;
 #[path = "workbench_render.rs"]
 mod render_glue;
 #[path = "workbench_schema.rs"]
@@ -2596,6 +2598,7 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
                 this.refresh_git(200, cx);
                 this.record_history(ed, cx);
             }
+            EditorEvent::Overwrote(text) => return this.keep_overwritten(ed, text, cx),
             EditorEvent::OpenLocation { path, line, col } => {
                 return this.open_location(path.clone(), *line, *col, window, cx);
             }
