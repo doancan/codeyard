@@ -1901,3 +1901,90 @@ Keep Waiting	Beklemeye Devam Et
 “{}” is not a usable branch or remote name	“{}” kullanılabilir bir dal ya da uzak sunucu adı değil
 Codeyard already has Full Disk Access.	Codeyard'ın zaten Tam Disk Erişimi var.
 Software Update	Yazılım Güncelleme
+
+# --- compare ---
+Both sides are the same folder.	İki taraf da aynı klasör.
+Changed	Değişti
+Checking whitespace…	Boşluklar denetleniyor…
+Checking…	Denetleniyor…
+Choose	Seç
+Choose a folder on this computer…	Bu bilgisayarda bir klasör seçin…
+Compare Folder with Selected	Klasörü Seçiliyle Karşılaştır
+Compare Folders: pick the folder to compare with {}	Klasörleri Karşılaştır: {} ile karşılaştırılacak klasörü seçin
+Compare Folders: pick the left folder	Klasörleri Karşılaştır: sol klasörü seçin
+Compare: Folders…	Karşılaştır: Klasörler…
+Compare: {0} ↔ {1}	Karşılaştır: {0} ↔ {1}
+Comparing contents… {0} of {1}	İçerikler karşılaştırılıyor… {0} / {1}
+Copied {} item.|Copied {} items.	{} öğe kopyalandı.
+Copy Report	Raporu Kopyala
+Copy to the left	Sola kopyala
+Copy to the right	Sağa kopyala
+Copy “{0}” to {1}?	“{0}” öğesi {1} konumuna kopyalansın mı?
+Copying…	Kopyalanıyor…
+Could not be compared	Karşılaştırılamayanlar
+Could not read {}	{} okunamadı
+Could not save the report: {}	Rapor kaydedilemedi: {}
+Delete from the left	Soldan sil
+Delete from the right	Sağdan sil
+Delete “{0}” from {1}?	“{0}”, {1} üzerinden silinsin mi?
+Deleted “{0}” from {1}	“{0}”, {1} üzerinden silindi
+Deleting…	Siliniyor…
+Done	Bitti
+Enter a folder path on {}…	{} üzerindeki klasörün yolunu girin…
+Error	Hata
+Export as Text…	Metin Olarak Dışa Aktar…
+Identical	Aynı
+Ignore line endings	Satır sonlarını yok say
+Ignore whitespace	Boşlukları yok say
+Left is writable	Sol taraf değiştirilebilir
+Left ↔ Right	Sol ↔ Sağ
+No differences.	Fark yok.
+Not compared	Karşılaştırılmadı
+Not deleted: {}	Silinmedi: {}
+Only left	Yalnız solda
+Only on the left	Yalnızca solda
+Only on the right	Yalnızca sağda
+Only right	Yalnız sağda
+Reading folders… {0} and {1} entries	Klasörler okunuyor… {0} ve {1} öğe
+Report copied	Rapor kopyalandı
+Report saved to {}	Rapor {} konumuna kaydedildi
+Respect .gitignore	.gitignore'a uy
+Right is writable	Sağ taraf değiştirilebilir
+Same apart from whitespace	Boşluk dışında aynı
+Scan Again	Yeniden Tara
+Select Folder for Compare	Karşılaştırmak İçin Klasör Seç
+Selected {} for compare. Right-click another folder and choose Compare Folder with Selected.	Karşılaştırmak için {} seçildi. Başka bir klasöre sağ tıklayıp Klasörü Seçiliyle Karşılaştır'ı seçin.
+Show identical	Aynıları göster
+Stopped.	Durduruldu.
+The connection to {} was lost during the scan, so the result is partial. Scan again once it is back.	{} bağlantısı tarama sırasında koptu, bu yüzden sonuç eksik. Bağlantı geri gelince yeniden tarayın.
+There is nothing to copy.	Kopyalanacak bir şey yok.
+This computer	Bu bilgisayar
+content differs	içerik farklı
+destination	hedef
+different kinds	türler farklı
+differs only in letter case	yalnızca harf büyüklüğü farklı
+it appeared after the scan	taramadan sonra ortaya çıktı
+it changed after the scan	taramadan sonra değişti
+it could not be compared	karşılaştırılamadı
+it is a file on one side and a folder or link on the other	bir tarafta dosya, ötekinde klasör ya da bağlantı
+it is not a regular file or folder	normal bir dosya ya da klasör değil
+its name differs from another entry only in letter case	adı başka bir öğeden yalnızca harf büyüklüğüyle ayrılıyor
+left	sol
+link target differs	bağlantı hedefi farklı
+right	sağ
+size differs	boyut farklı
+source	kaynak
+symbolic links are not copied	sembolik bağlantılar kopyalanmaz
+the connection was lost	bağlantı koptu
+the folder cannot be read on the left	klasör solda okunamıyor
+the folder cannot be read on the right	klasör sağda okunamıyor
+{0} files and {1} folders go from {2} ({3}) to {4} ({5}). Files that exist there are replaced; anything that changed since the scan is left alone.	{0} dosya ve {1} klasör, {2} ({3}) konumundan {4} ({5}) konumuna gider. Orada olan dosyaların yerine yazılır; taramadan sonra değişen hiçbir şeye dokunulmaz.
+{0} on {1} is deleted for good, with everything in it. It is not moved to the Trash.	{1} üzerindeki {0}, içindekilerle birlikte kalıcı olarak silinir. Çöp Kutusu'na taşınmaz.
+{0} only on the left, {1} only on the right, {2} changed, {3} identical, {4} errors	{0} yalnızca solda, {1} yalnızca sağda, {2} değişmiş, {3} aynı, {4} hata
+{0} was left alone: {1}|{0} were left alone, the first one {1}	{0} öğeye dokunulmadı; ilki {1}
+{} entry is left out.|{} entries are left out.	{} öğe dışarıda bırakıldı.
+{} has more entries than compare.folders.maxFiles allows, so the result is partial.	{} üzerinde compare.folders.maxFiles sınırından fazla öğe var, bu yüzden sonuç eksik.
+{} is a binary file: there is no text diff.	{} ikili bir dosya: metin farkı yok.
+{} is not a trusted folder, so nothing is deleted from it. Open it as a folder and trust it first.	{} güvenilir bir klasör değil, bu yüzden bundan hiçbir şey silinmez. Önce klasör olarak açıp güvenin.
+{} is not a trusted folder, so nothing is written to it. Open it as a folder and trust it first.	{} güvenilir bir klasör değil, bu yüzden ona hiçbir şey yazılmaz. Önce klasör olarak açıp güvenin.
+{} more entry that the comparison hides (ignored by .gitignore or the compare settings) goes too.|{} more entries that the comparison hides (ignored by .gitignore or the compare settings) go too.	karşılaştırmanın gizlediği {} öğe daha (.gitignore ya da karşılaştırma ayarlarınca yok sayılanlar) birlikte silinir.
