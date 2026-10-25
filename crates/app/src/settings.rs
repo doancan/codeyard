@@ -70,6 +70,8 @@ pub struct Settings {
     pub terminal_shell: Option<String>,
     pub terminal_font_size: f32,
     pub terminal_scrollback: usize,
+    /// Whether a program in the terminal may put text on the clipboard (OSC 52).
+    pub terminal_allow_clipboard_write: bool,
     pub restore_session: bool,
     /// Whether to start with the welcome screen or continue where you left off.
     pub startup: Startup,
@@ -253,6 +255,7 @@ impl Default for Settings {
             terminal_shell: None,
             terminal_font_size: theme::text::CODE.0,
             terminal_scrollback: 2000,
+            terminal_allow_clipboard_write: false,
             restore_session: true,
             startup: Startup::Welcome,
             hot_exit: true,
@@ -480,6 +483,9 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // "terminal.shell": "/bin/zsh",
   "terminal.fontSize": 13,
   "terminal.scrollback": 2000,
+  // Let programs in the terminal write to the clipboard (OSC 52). Off by default: a program you run, or a file you cat, could replace
+  // what you copied.
+  // "terminal.allowClipboardWrite": false,
 
   // What opens when you start the app without a folder: "welcome" (the start page; recent folders and SSH
   // hosts are listed, nothing reconnects by itself), "continue" (like a browser: the last folder or SSH
@@ -660,6 +666,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.number("terminal.scrollback", 0., 100_000.) {
         s.terminal_scrollback = v as usize;
+    }
+    if let Some(v) = r.bool("terminal.allowClipboardWrite") {
+        s.terminal_allow_clipboard_write = v;
     }
     if let Some(v) = r.bool("window.restoreSession") {
         s.restore_session = v;
@@ -1070,6 +1079,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "terminal.shell",
         "terminal.fontSize",
         "terminal.scrollback",
+        "terminal.allowClipboardWrite",
         "window.restoreSession",
         "window.startup",
         "lsp.enabled",

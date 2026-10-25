@@ -97,6 +97,7 @@ pub const CATALOG: &[Entry] = &[
     e("search.maxResults", crate::i18n::tr("Stop a search after this many matches"), Kind::Number { min: 1., max: 100_000. }),
     // --- structural ---
     e("search.structural.maxFiles", crate::i18n::tr("Most files a structural search reads and parses"), Kind::Number { min: 1., max: 100_000. }),
+    e("terminal.allowClipboardWrite", crate::i18n::tr("Let programs in the terminal write to the clipboard"), Kind::Bool),
     e("terminal.fontSize", crate::i18n::tr("Font size of the terminal"), Kind::Number { min: 6., max: 48. }),
     e("terminal.scrollback", crate::i18n::tr("Lines kept in terminal history"), Kind::Number { min: 0., max: 100_000. }),
     e("terminal.shell", crate::i18n::tr("Shell for new terminals (empty: login shell)"), Kind::Text),
@@ -270,6 +271,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "search.maxResults" => json!(s.search_max_results),
         // --- structural ---
         "search.structural.maxFiles" => json!(s.search_structural_max_files),
+        "terminal.allowClipboardWrite" => json!(s.terminal_allow_clipboard_write),
         "terminal.fontSize" => json!(s.terminal_font_size),
         "terminal.scrollback" => json!(s.terminal_scrollback),
         "terminal.shell" => json!(s.terminal_shell.clone().unwrap_or_default()),

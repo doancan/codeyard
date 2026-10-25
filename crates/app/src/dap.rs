@@ -141,6 +141,13 @@ fn substitute(args: &[String], port: u16) -> Vec<String> {
     args.iter().map(|a| a.replace("${port}", &port.to_string()).replace("${clientAddr}", &format!("127.0.0.1:{port}"))).collect()
 }
 
+/// Longest error text (characters) taken from an adapter: it ends up in a toast or the console.
+const MAX_MESSAGE_CHARS: usize = 2000;
+
+fn clip_message(text: &str) -> String {
+    crate::lsp::clip_text(text, MAX_MESSAGE_CHARS)
+}
+
 pub struct Session {
     writer: Arc<Writer>,
     /// Adapter process (to shut it down); absent on attached child sessions.
@@ -291,7 +298,10 @@ impl Session {
                         }
                     }
                 })
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| {
+                    host.proc_kill(id);
+                    e.to_string()
+                })?;
         }
         let session = match transport {
             Transport::Stdio => Session::build(Writer::Proc { host: host.clone(), id }, Some((host.clone(), id)), None, events),
@@ -335,7 +345,10 @@ impl Session {
                 };
                 let _ = stream.set_nonblocking(false);
                 let _ = stream.set_nodelay(true);
-                let reader = stream.try_clone().map_err(|e| e.to_string())?;
+                let reader = match stream.try_clone() {
+                    Ok(r) => r,
+                    Err(e) => return fail(&e.to_string()),
+                };
                 let s = Session::build(Writer::Tcp(Mutex::new(stream)), Some((host.clone(), id)), Some(SocketAddr::from(([127, 0, 0, 1], port))), events);
                 *s.forward.lock().unwrap() = forward;
                 *slot.lock().unwrap() = Arc::downgrade(&s);
@@ -666,7 +679,7 @@ impl Session {
         let r = self.request("dataBreakpointInfo", json!({ "variablesReference": reference, "name": name }), Duration::from_secs(10))?;
         match r["dataId"].as_str() {
             Some(id) => Ok((id.to_string(), r["description"].as_str().unwrap_or(name).to_string())),
-            None => Err(r["description"].as_str().unwrap_or(crate::i18n::t("this value cannot be watched")).to_string()),
+            None => Err(clip_message(r["description"].as_str().unwrap_or(crate::i18n::t("this value cannot be watched")))),
         }
     }
 
@@ -675,7 +688,7 @@ impl Session {
         let list: Vec<Value> = data_ids.iter().map(|id| json!({ "dataId": id, "accessType": "write" })).collect();
         let r = self.request("setDataBreakpoints", json!({ "breakpoints": list }), Duration::from_secs(10))?;
         if let Some(bad) = r["breakpoints"].as_array().and_then(|a| a.iter().find(|b| b["verified"].as_bool() == Some(false))) {
-            return Err(bad["message"].as_str().unwrap_or(crate::i18n::t("the debugger could not set the data breakpoint")).to_string());
+            return Err(clip_message(bad["message"].as_str().unwrap_or(crate::i18n::t("the debugger could not set the data breakpoint"))));
         }
         Ok(())
     }
@@ -746,7 +759,7 @@ impl Session {
                     let result = if msg["success"].as_bool().unwrap_or(false) {
                         Ok(msg.get("body").cloned().unwrap_or(Value::Null))
                     } else {
-                        Err(msg["message"].as_str().or(msg["body"]["error"]["format"].as_str()).unwrap_or(crate::i18n::t("request failed")).to_string())
+                        Err(clip_message(msg["message"].as_str().or(msg["body"]["error"]["format"].as_str()).unwrap_or(crate::i18n::t("request failed"))))
                     };
                     let _ = tx.send(result);
                 }

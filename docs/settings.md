@@ -155,6 +155,7 @@ status bar reports it.
 
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
+| `terminal.allowClipboardWrite` | `true` / `false` | `false` | Let programs in the terminal write to the clipboard |
 | `terminal.fontSize` | number 6–48 | `13.0` | Font size of the terminal |
 | `terminal.scrollback` | number 0–100000 | `2000` | Lines kept in terminal history |
 | `terminal.shell` | text | empty | Shell for new terminals (empty: login shell) |
