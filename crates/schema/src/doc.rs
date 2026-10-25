@@ -20,6 +20,8 @@ pub struct Parsed {
     pub spans: HashMap<String, Span>,
     /// Custom-tagged (`!Ref`, `!reference`...) nodes: their type can't be checked against the schema, and their subtree is ignored.
     pub opaque: HashSet<String>,
+    /// Start of every object key that repeats an earlier key of the same object; the later value is the one in `value`.
+    pub duplicates: Vec<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -175,7 +177,9 @@ impl JsonParser<'_> {
             }
             self.i += 1;
             let v = self.value(&child(pointer, &key), depth + 1, Some(key_range))?;
-            map.insert(key, v);
+            if map.insert(key, v).is_some() {
+                self.out.duplicates.push(key_start);
+            }
             self.skip();
             match self.s.get(self.i) {
                 Some(b',') => self.i += 1,
@@ -371,6 +375,7 @@ impl YamlBuilder<'_> {
                 doc.opaque.insert(pointer.clone());
             }
         }
+        let mut duplicate = None;
         match self.stack.last_mut() {
             None => {
                 if let Some((_, doc)) = &mut self.cur {
@@ -379,14 +384,17 @@ impl YamlBuilder<'_> {
             }
             Some(Frame { kind: FrameKind::Seq(items), .. }) => items.push(value),
             Some(Frame { kind: FrameKind::Map { map, pending_key, merges }, .. }) => {
-                if let Some((k, _)) = pending_key.take() {
+                if let Some((k, range)) = pending_key.take() {
                     if k == "<<" {
                         merges.push(value);
-                    } else {
-                        map.insert(k, value);
+                    } else if map.insert(k, value).is_some() {
+                        duplicate = Some(range.start);
                     }
                 }
             }
+        }
+        if let (Some(at), Some((_, doc))) = (duplicate, &mut self.cur) {
+            doc.duplicates.push(at);
         }
     }
 
@@ -515,6 +523,7 @@ impl YamlBuilder<'_> {
 
     /// Place the finished container value into the parent frame (or the root).
     fn attach(&mut self, value: Value) {
+        let mut duplicate = None;
         match self.stack.last_mut() {
             None => {
                 if let Some((_, doc)) = &mut self.cur {
@@ -523,14 +532,17 @@ impl YamlBuilder<'_> {
             }
             Some(Frame { kind: FrameKind::Seq(items), .. }) => items.push(value),
             Some(Frame { kind: FrameKind::Map { map, pending_key, merges }, .. }) => {
-                if let Some((k, _)) = pending_key.take() {
+                if let Some((k, range)) = pending_key.take() {
                     if k == "<<" {
                         merges.push(value);
-                    } else {
-                        map.insert(k, value);
+                    } else if map.insert(k, value).is_some() {
+                        duplicate = Some(range.start);
                     }
                 }
             }
+        }
+        if let (Some(at), Some((_, doc))) = (duplicate, &mut self.cur) {
+            doc.duplicates.push(at);
         }
     }
 }
@@ -658,6 +670,17 @@ mod tests {
         assert!(docs.last().unwrap().1.is_err());
         let deep_json = "[".repeat(100_000);
         assert!(parse_json(&deep_json).is_err());
+    }
+
+    #[test]
+    fn repeated_keys_are_recorded_where_they_start() {
+        let src = "{\"a\": 1, \"b\": {\"x\": 1, \"x\": 2}, \"a\": 3}";
+        let p = parse_json(src).unwrap();
+        let at: Vec<&str> = p.duplicates.iter().map(|i| &src[*i..*i + 3]).collect();
+        assert_eq!((at, &p.value["a"]), (vec!["\"x\"", "\"a\""], &json!(3)));
+        let y = "a: 1\nb:\n  c: 1\n  c: 2\na: 3\n";
+        let p = yaml(y);
+        assert_eq!(p.duplicates.iter().map(|i| &y[*i..*i + 1]).collect::<Vec<_>>(), ["c", "a"]);
     }
 
     #[test]
