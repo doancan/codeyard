@@ -59,34 +59,53 @@ pub(super) struct DebugState {
 }
 
 impl DebugState {
-    /// Output chunk (the adapter may split anywhere): full lines go to the console, the rest
-    /// waits for the next chunk.
-    fn push_output(&mut self, category: &str, text: &str) {
-        let mut buf = match self.partial.take() {
-            Some((c, p)) if c == category => p,
-            Some((c, p)) => {
-                self.console.push((c, p));
-                String::new()
-            }
-            None => String::new(),
-        };
-        buf.push_str(text);
-        let mut lines: Vec<&str> = buf.split('\n').collect();
-        let rest = lines.pop().unwrap_or_default().to_string();
-        for line in lines {
-            self.console.push((category.to_string(), line.trim_end_matches('\r').to_string()));
-        }
-        if !rest.is_empty() {
-            self.partial = Some((category.to_string(), rest));
-        }
-        let extra = self.console.len().saturating_sub(CONSOLE_LIMIT);
-        self.console.drain(..extra);
+    /// The one way a line reaches the console: a line is cut to `LINE_LIMIT` characters and the console keeps `CONSOLE_LIMIT` lines.
+    fn push_console(&mut self, category: &str, line: impl AsRef<str>) {
+        console_push(&mut self.console, category, line.as_ref());
+    }
+
+    /// Output chunk (the adapter may split anywhere): full lines go to the console, the rest waits for the next chunk.
+    fn append_output(&mut self, category: &str, text: &str) {
+        console_append(&mut self.console, &mut self.partial, category, text);
     }
 
     fn flush_partial(&mut self) {
-        if let Some(p) = self.partial.take() {
-            self.console.push(p);
+        if let Some((c, p)) = self.partial.take() {
+            self.push_console(&c, p);
         }
+    }
+}
+
+type ConsoleLines = Vec<(String, String)>;
+
+fn console_push(console: &mut ConsoleLines, category: &str, line: &str) {
+    console.push((category.to_string(), crate::lsp::clip_text(line, LINE_LIMIT)));
+    let extra = console.len().saturating_sub(CONSOLE_LIMIT);
+    console.drain(..extra);
+}
+
+/// A rest longer than `PARTIAL_LIMIT` bytes is moved to the console as it is, so a program that never ends its line cannot grow it.
+fn console_append(console: &mut ConsoleLines, partial: &mut Option<(String, String)>, category: &str, text: &str) {
+    let mut buf = match partial.take() {
+        Some((c, p)) if c == category => p,
+        Some((c, p)) => {
+            console_push(console, &c, &p);
+            String::new()
+        }
+        None => String::new(),
+    };
+    buf.push_str(text);
+    let mut lines: Vec<&str> = buf.split('\n').collect();
+    let mut rest = lines.pop().unwrap_or_default();
+    for line in lines {
+        console_push(console, category, line.trim_end_matches('\r'));
+    }
+    if rest.len() > PARTIAL_LIMIT {
+        console_push(console, category, rest);
+        rest = "";
+    }
+    if !rest.is_empty() {
+        *partial = Some((category.to_string(), rest.to_string()));
     }
 }
 
@@ -108,6 +127,11 @@ fn stop_reason(reason: &str) -> String {
 }
 
 const CONSOLE_LIMIT: usize = 5000;
+/// Longest console line (characters) and longest unfinished line (bytes) kept.
+const LINE_LIMIT: usize = 4000;
+const PARTIAL_LIMIT: usize = 64 * 1024;
+/// Debug output (bytes) that may wait for the UI before more is dropped.
+const OUTPUT_BACKLOG: usize = 8 * 1024 * 1024;
 /// Number of lines last drawn in the panel.
 const CONSOLE_SHOWN: usize = 300;
 
@@ -418,7 +442,7 @@ impl Workbench {
                             if !d.data_breakpoints.iter().any(|(i, _)| *i == id) {
                                 d.data_breakpoints.push((id, description.clone()));
                             }
-                            d.console.push(("console".into(), crate::i18n::tf("Data breakpoint set: the program stops when {} is written.", &[&description])));
+                            d.push_console("console", crate::i18n::tf("Data breakpoint set: the program stops when {} is written.", &[&description]));
                         }
                     }
                     Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Data breakpoint: {}", &[&e]).into())),
@@ -690,7 +714,7 @@ impl Workbench {
             scopes: Vec::new(),
             children: HashMap::new(),
             expanded: HashSet::new(),
-            console: vec![("console".into(), crate::i18n::tf("Starting “{}”…", &[&config.name]))],
+            console: vec![("console".into(), crate::lsp::clip_text(&crate::i18n::tf("Starting “{}”…", &[&config.name]), LINE_LIMIT))],
             partial: None,
             stopped_once: false,
             breakpoints_set: breakpoints.values().map(Vec::len).sum(),
@@ -703,10 +727,30 @@ impl Workbench {
         self.chrome.bottom = Bottom::Debug;
         self.chrome.panel_open = true;
         // Event pump: handle events in order for the life of the session.
+        let backlog = Arc::new(crate::terminal::OutputBacklog::with_limit(OUTPUT_BACKLOG));
         cx.spawn(async move |this, cx| {
-            let mut events = ui::bridge(rx);
+            // Output the UI has not read yet is capped: past 8 MB it is dropped (and the console says so); other events always pass.
+            let gate = backlog.clone();
+            let mut events = ui::bridge_with(rx, move |ev| match ev {
+                DapEvent::Output { text, .. } => gate.admit(text.len()),
+                _ => true,
+            });
             while let Some(ev) = events.next().await {
-                if this.update(cx, |this, cx| this.on_dap_event(sid, ev, cx)).is_err() {
+                let consumed = if let DapEvent::Output { text, .. } = &ev { text.len() } else { 0 };
+                backlog.consumed(consumed);
+                let told = backlog.take_dropped();
+                let alive = this.update(cx, |this, cx| {
+                    this.on_dap_event(sid, ev, cx);
+                    if told
+                        && sid == this.dbg.generation
+                        && let Some(d) = this.dbg.session.as_mut()
+                    {
+                        d.flush_partial();
+                        d.push_console("stderr", crate::i18n::t("debug output was dropped: the debugger could not keep up"));
+                        cx.notify();
+                    }
+                });
+                if alive.is_err() {
                     break;
                 }
             }
@@ -772,7 +816,7 @@ impl Workbench {
             self.set_task_problems(problems, cx);
             if let Some(d) = self.dbg.session.as_mut() {
                 for line in output.lines().rev().take(60).collect::<Vec<_>>().into_iter().rev() {
-                    d.console.push(("stderr".into(), line.to_string()));
+                    d.push_console("stderr", line);
                 }
             }
         }
@@ -791,7 +835,7 @@ impl Workbench {
             DapEvent::Initialized => {}
             DapEvent::Output { category, text } => {
                 if category != "telemetry" {
-                    d.push_output(&category, &text);
+                    d.append_output(&category, &text);
                 }
             }
             DapEvent::Stopped { thread_id, reason, text } => {
@@ -799,7 +843,7 @@ impl Workbench {
                 d.status = DebugStatus::Stopped(reason.clone());
                 d.thread = thread_id;
                 if let Some(t) = text.filter(|_| reason == "exception") {
-                    d.console.push(("stderr".into(), crate::i18n::tf("Paused on exception: {}", &[&t])));
+                    d.push_console("stderr", crate::i18n::tf("Paused on exception: {}", &[&t]));
                 }
                 self.refresh_stack(thread_id, cx);
             }
@@ -812,16 +856,16 @@ impl Workbench {
             }
             DapEvent::Exited(code) => {
                 d.flush_partial();
-                d.console.push(("console".into(), crate::i18n::tf("Process exited with code {}", &[&code])));
+                d.push_console("console", crate::i18n::tf("Process exited with code {}", &[&code]));
             }
             DapEvent::Terminated => {
                 // Breakpoints were set but the program exited without stopping: say so instead of staying silent.
                 if d.breakpoints_set > 0 && !d.stopped_once {
                     d.flush_partial();
-                    d.console.push((
-                        "stderr".into(),
-                        crate::i18n::t("The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code.").into(),
-                    ));
+                    d.push_console(
+                        "stderr",
+                        crate::i18n::t("The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code."),
+                    );
                 }
                 self.end_debug(crate::i18n::t("Debug session ended").into(), cx)
             }
@@ -954,9 +998,9 @@ impl Workbench {
         if expression.is_empty() {
             return;
         }
-        d.console.push(("input".into(), format!("> {expression}")));
+        d.push_console("input", format!("> {expression}"));
         let Some(session) = d.session.clone().filter(|_| !matches!(d.status, DebugStatus::Ended(_))) else {
-            d.console.push(("stderr".into(), crate::i18n::t("No active debug session.").into()));
+            d.push_console("stderr", crate::i18n::t("No active debug session."));
             cx.notify();
             return;
         };
@@ -969,8 +1013,8 @@ impl Workbench {
                     && let Some(d) = this.dbg.session.as_mut()
                 {
                     match result {
-                        Ok((text, _)) => d.console.extend(text.lines().map(|l| ("console".to_string(), l.to_string()))),
-                        Err(e) => d.console.push(("stderr".into(), e)),
+                        Ok((text, _)) => text.lines().for_each(|l| d.push_console("console", l)),
+                        Err(e) => d.push_console("stderr", e),
                     }
                     cx.notify();
                 }
@@ -1024,7 +1068,7 @@ impl Workbench {
             }
             d.flush_partial();
             if !matches!(d.status, DebugStatus::Ended(_)) {
-                d.console.push(("console".into(), message.clone()));
+                d.push_console("console", &message);
             }
             d.status = DebugStatus::Ended(message);
             d.frames.clear();
@@ -1500,5 +1544,23 @@ mod tests {
         assert!(inline_values(&src, 5, &[]).is_empty() && inline_values(&src, 99, &locals).is_empty());
         let long = inline_values(&src, 3, &[("sum".into(), "x".repeat(50))]);
         assert!(long[&3].ends_with('…') && long[&3].chars().count() < 45);
+    }
+
+    #[test]
+    fn console_lines_are_cut_and_capped_whatever_the_adapter_sends() {
+        let (mut console, mut partial) = (ConsoleLines::new(), None);
+        // 300 chunks of 64 KB without a newline: the unfinished line never grows past PARTIAL_LIMIT.
+        let chunk = "x".repeat(64 * 1024);
+        for _ in 0..300 {
+            console_append(&mut console, &mut partial, "stdout", &chunk);
+            assert!(partial.as_ref().is_none_or(|(_, p): &(String, String)| p.len() <= PARTIAL_LIMIT));
+        }
+        assert!(!console.is_empty() && console.iter().all(|(_, l)| l.chars().count() <= LINE_LIMIT + 1), "every line is cut");
+        // Many short lines: the console keeps CONSOLE_LIMIT.
+        console_append(&mut console, &mut partial, "stdout", &"a\n".repeat(CONSOLE_LIMIT * 2));
+        assert_eq!(console.len(), CONSOLE_LIMIT);
+        console_push(&mut console, "stderr", &"y".repeat(LINE_LIMIT * 3));
+        assert_eq!(console.len(), CONSOLE_LIMIT);
+        assert!(console.last().unwrap().1.chars().count() <= LINE_LIMIT + 1);
     }
 }
