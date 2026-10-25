@@ -508,6 +508,25 @@ pop / apply / drop a stash, and discard all changes. "Git: View File History" li
 commits of the open file (following renames); pick one to see what it changed. "Git: Blame
 Line" tells who last changed the line under the cursor, also when the file has unsaved edits.
 
+**Branches and tags.** The branch picker lists the most recently used branches first, with how far each is
+ahead/behind its upstream and its last commit; it also offers "Create new branch from…" and "Check out
+detached…". The palette adds Git: Delete Remote Branch, Set Upstream Branch, Create Branch From and
+Checkout (Detached). "Git: Create Tag…" takes the tag name and, after a space, an optional message (with a
+message the tag is annotated); Git: Delete Tag, Delete Remote Tag, Push Tag and Push Tags work on the default
+remote (`origin`, else the first one). Rename Remote, Edit Remote URL, Remove Worktree and Prune Worktrees
+complete Add Remote and Add Worktree.
+
+**Stash.** Besides stash and stash with untracked files there are "Stash Staged Changes" (only what is staged;
+needs git 2.35 or newer), "Stash with Name…" and "Show Stash…", which lists the files a stash changed and opens one
+as a diff (untracked files kept by a stash are not shown).
+
+**The open file.** "Open Changes" (editor menu, tab menu, palette) opens the diff Source Control would show;
+"Open File (HEAD)" opens the committed text in a scratch tab named "name (HEAD).ext"; "Compare with Branch…"
+(branches and tags) and "Compare with Commit…" (the commits that changed the file) compare it, unsaved edits
+included, with that revision. "Add to .gitignore" (a file or folder in the Explorer menu, or the palette for the
+open file) appends an entry anchored at the repository root, creates the file if needed, and never adds one twice;
+it does not untrack a file git already tracks.
+
 **Merge conflicts:** conflicted files are listed under "Merge Changes". In the editor the two
 sides are tinted and the `<<<<<<<` line has "Accept Current | Accept Incoming | Accept Both";
 the palette has accept all and next/previous conflict, and the status bar counts them.

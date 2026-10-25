@@ -315,6 +315,27 @@ impl Workbench {
             Command::action("Git: Pop Stash…", GitPopStash),
             Command::action("Git: Apply Stash…", GitApplyStash),
             Command::action("Git: Drop Stash…", GitDropStash),
+            // --- git-refs ---
+            Command::action("Git: Delete Tag…", GitDeleteTag),
+            Command::action("Git: Delete Remote Tag…", GitDeleteRemoteTag),
+            Command::action("Git: Push Tags", GitPushTags),
+            Command::action("Git: Push Tag…", GitPushTag),
+            Command::action("Git: Checkout (Detached)…", GitCheckoutDetached),
+            Command::action("Git: Create Branch From…", GitCreateBranchFrom),
+            Command::action("Git: Delete Remote Branch…", GitDeleteRemoteBranch),
+            Command::action("Git: Set Upstream Branch…", GitSetUpstream),
+            Command::action("Git: Stash Staged Changes", GitStashStaged),
+            Command::action("Git: Stash with Name…", GitStashNamed),
+            Command::action("Git: Show Stash…", GitShowStash),
+            Command::action("Git: Open Changes", GitOpenChanges),
+            Command::action("Git: Open File (HEAD)", GitOpenFileHead),
+            Command::action("Git: Compare with Branch…", GitCompareBranch),
+            Command::action("Git: Compare with Commit…", GitCompareCommit),
+            Command::action("Git: Add to .gitignore", GitAddToGitignore),
+            Command::action("Git: Rename Remote…", GitRenameRemote),
+            Command::action("Git: Edit Remote URL…", GitSetRemoteUrl),
+            Command::action("Git: Remove Worktree…", GitRemoveWorktree),
+            Command::action("Git: Prune Worktrees", GitPruneWorktrees),
             Command::action("Terminal: New", NewTerminal),
             Command::action("Terminal: Toggle", ToggleTerminal),
             Command::action("Terminal: Close", KillTerminal),
@@ -593,10 +614,16 @@ impl Workbench {
             (OverlayKind::Stashes { refs, op }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let (stash, op) = (refs[*index].clone(), *op);
                 self.close_overlay(window, cx);
+                // --- git-refs ---
+                if matches!(op, git_glue::StashOp::Show) {
+                    self.show_stash_files(stash, window, cx);
+                    return;
+                }
                 self.with_scm(cx, |s, cx| match op {
                     git_glue::StashOp::Pop => s.stash_apply(stash, true, cx),
                     git_glue::StashOp::Apply => s.stash_apply(stash, false, cx),
                     git_glue::StashOp::Drop => s.stash_drop(stash, cx),
+                    git_glue::StashOp::Show => {}
                 });
             }
             (OverlayKind::Tasks(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
