@@ -171,7 +171,7 @@ impl Workbench {
         .detach();
     }
 
-    fn show_response(&mut self, name: Option<String>, prepared: &http::Prepared, r: Response, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn show_response(&mut self, name: Option<String>, prepared: &http::Prepared, r: Response, window: &mut Window, cx: &mut Context<Self>) {
         let summary = format!(
             "{} {} → {} · {} ms · {}",
             prepared.method,
@@ -213,8 +213,9 @@ impl Workbench {
             }
         };
         self.lsp.http_last = Some(r);
-        self.create_scratch_with(name, &content, window, cx);
-        self.lsp.http_tab = self.active_editor().map(|e| e.read(cx).path.clone());
+        // The file just written, not the active editor: the tab opens asynchronously, so that would still be the `.http` file
+        // and the next request (or quitting) would delete the user's request file.
+        self.lsp.http_tab = self.create_scratch_with(name, &content, window, cx);
         self.notice = Some(Notice::Info(
             match note {
                 Some(n) => format!("{summary} · {n}"),
@@ -224,6 +225,21 @@ impl Workbench {
             .into(),
         ));
         cx.notify();
+    }
+
+    /// The response file holds whatever the server sent (tokens, personal data): it is removed when its tab closes and at quit,
+    /// not left behind until the next request.
+    pub(super) fn discard_response_file(&mut self, path: &str) {
+        if self.lsp.http_tab.as_deref() == Some(path) {
+            self.lsp.http_tab = None;
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    pub(super) fn discard_response_on_quit(&mut self) {
+        if let Some(path) = self.lsp.http_tab.take() {
+            let _ = std::fs::remove_file(path);
+        }
     }
 
     /// "HTTP: Show Last Response Headers"

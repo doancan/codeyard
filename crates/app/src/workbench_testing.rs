@@ -37,6 +37,21 @@ impl Workbench {
         self.apply_workspace_edit(edit, cx)
     }
 
+    /// Shows a response the way a finished request does.
+    pub fn show_response_for_test(&mut self, r: crate::http_client::Response, window: &mut Window, cx: &mut Context<Self>) {
+        let prepared = crate::http_client::Prepared { method: "GET".into(), url: "http://a.test/".into(), headers: Vec::new(), body: None };
+        self.show_response(None, &prepared, r, window, cx);
+    }
+
+    /// The file the response tab is backed by, once the tab is open.
+    pub fn response_tab_for_test(&self) -> Option<String> {
+        self.lsp.http_tab.clone()
+    }
+
+    pub fn discard_response_on_quit_for_test(&mut self) {
+        self.discard_response_on_quit();
+    }
+
     pub fn bottom_panel_open_for_test(&self) -> bool {
         self.chrome.panel_open
     }
