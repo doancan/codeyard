@@ -334,6 +334,9 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::go_to_line))
             .on_action(cx.listener(|this, _: &OpenAsHex, window, cx| this.open_as_hex(window, cx)))
             .on_action(cx.listener(Self::find_in_files))
+            // --- structural ---
+            .on_action(cx.listener(Self::structural_search))
+            .on_action(cx.listener(Self::structural_replace))
             .on_action(cx.listener(|this, _: &OpenSearchInEditor, _, cx| {
                 let search = this.search.clone();
                 search.update(cx, |s, cx| s.open_in_editor(cx));

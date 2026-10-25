@@ -59,6 +59,8 @@ screen buffers are part of the number. Files over 32 MB open in a chunked read-o
   survives dropped connections, and manages hosts, keys and file transfers from the app.
 - **The editor you expect.** Multiple cursors, folding, split views, minimap, snippets, Emmet, EditorConfig, more than 20 languages with
   tree-sitter highlighting, language servers (LSP), a debugger (DAP), tasks and problems, themes with enforced WCAG AA contrast.
+- **Search by structure.** Find and rewrite code by its syntax tree, not its text: patterns are code with `$X` and `$$$X`
+  placeholders (ast-grep style), for Rust, TypeScript, JavaScript, Python, Go and more, over local and SSH folders.
 - **Git inside.** Source control, branch graph, timeline and local history, blame, a three-way merge editor, GitHub pull requests.
 - **Everyday tools without extensions.** JSON/YAML schema validation, spell check (English built in, more on demand), colour picker,
   `.http` requests, log follow and filter, Markdown preview, hex view.
