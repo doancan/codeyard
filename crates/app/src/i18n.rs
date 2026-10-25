@@ -184,6 +184,7 @@ pub fn system_locales() -> Vec<String> {
     if cfg!(test) {
         return Vec::new();
     }
+    // Only the macOS and Windows branches below push to it; on other targets it stays empty.
     #[allow(unused_mut)]
     let mut out: Vec<String> = Vec::new();
     #[cfg(target_os = "macos")]

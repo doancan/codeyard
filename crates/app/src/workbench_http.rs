@@ -6,10 +6,6 @@
 use super::*;
 use crate::http_client::{self as http, Response, Stored};
 
-fn now_secs() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64)
-}
-
 /// Cheap random number for `{{$randomInt}}` only; not cryptographic.
 fn random_between(a: i64, b: i64) -> i64 {
     let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.subsec_nanos() as i64);

@@ -146,7 +146,8 @@ fn indent_of(text: &str, tab: usize) -> Option<usize> {
 /// Region foldable by indentation: the last of the lines indented deeper after `line`
 /// (blank lines in between included, trailing ones excluded). The closing line (`}`,
 /// at the same indent) stays visible. `None` if it can't be folded.
-#[allow(dead_code)]
+/// (Without server ranges; the editor calls `fold_end_with`. Tests use this as the reference for the single-pass version.)
+#[cfg(test)]
 pub fn fold_end(buffer: &Buffer, line: usize, tab: usize) -> Option<usize> {
     fold_end_with(buffer, line, tab, &[])
 }
@@ -175,7 +176,8 @@ pub fn fold_end_with(buffer: &Buffer, line: usize, tab: usize, lsp: &[(usize, us
 }
 
 /// Cheap check for the gutter arrow: is the next non-blank line indented deeper.
-#[allow(dead_code)]
+/// (Test-only counterpart of `is_foldable_with` without server ranges.)
+#[cfg(test)]
 pub fn is_foldable(buffer: &Buffer, line: usize, tab: usize) -> bool {
     is_foldable_with(buffer, line, tab, &[])
 }
@@ -208,7 +210,8 @@ fn line_indent(buffer: &Buffer, line: usize, tab: usize) -> Option<usize> {
 
 /// Fold ends of all headers in a single pass (with a stack): for each header the last
 /// non-blank line indented deeper than it. `headers` sorted.
-#[allow(dead_code)]
+/// (Test-only counterpart of `fold_ends_with` without server ranges.)
+#[cfg(test)]
 pub fn fold_ends(buffer: &Buffer, headers: &[usize], tab: usize) -> Vec<Option<usize>> {
     fold_ends_with(buffer, headers, tab, &[])
 }
@@ -254,7 +257,8 @@ fn fold_ends_indent(buffer: &Buffer, headers: &[usize], tab: usize) -> Vec<Optio
 }
 
 /// Hidden ranges from header lines: sorted, nested ones merged into the outer one.
-#[allow(dead_code)]
+/// (Test-only counterpart of `hidden_ranges_with` without server ranges.)
+#[cfg(test)]
 pub fn hidden_ranges(buffer: &Buffer, headers: &[usize], tab: usize) -> Vec<Range<usize>> {
     hidden_ranges_with(buffer, headers, tab, &[])
 }
