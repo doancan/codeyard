@@ -254,6 +254,20 @@ impl Client {
     }
 }
 
+/// The most the UI is shown of one server-supplied message, option title and option count. A server can send megabytes
+/// in a single `showMessage`; the status bar, the toast and the output panel all lay the text out in full.
+const MAX_MESSAGE_CHARS: usize = 2000;
+const MAX_ACTION_CHARS: usize = 200;
+const MAX_ACTIONS: usize = 20;
+
+/// Cuts `text` to `max` characters (never inside one) and marks the cut with an ellipsis.
+pub fn clip_text(text: &str, max: usize) -> String {
+    match text.char_indices().nth(max) {
+        Some((end, _)) => format!("{}…", &text[..end]),
+        None => text.to_string(),
+    }
+}
+
 fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host: &Arc<dyn Host>, proc: u32) {
     let method = msg["method"].as_str();
     if std::env::var_os("CODEYARD_LSP_TRACE").is_some() {
@@ -265,7 +279,7 @@ fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host
             let Some(id) = id.as_i64() else { return };
             if let Some(tx) = pending.lock().unwrap().remove(&id) {
                 let result = match msg.get("error") {
-                    Some(e) => Err(e["message"].as_str().unwrap_or("error").to_string()),
+                    Some(e) => Err(clip_text(e["message"].as_str().unwrap_or("error"), MAX_MESSAGE_CHARS)),
                     None => Ok(msg.get("result").cloned().unwrap_or(Value::Null)),
                 };
                 let _ = tx.send(result);
@@ -282,9 +296,11 @@ fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host
                 "workspace/workspaceFolders" => Value::Null,
                 "window/showMessageRequest" => {
                     let p = &msg["params"];
-                    let actions =
-                        p["actions"].as_array().map(|a| a.iter().filter_map(|x| x["title"].as_str().map(str::to_string)).collect()).unwrap_or_default();
-                    let message = p["message"].as_str().unwrap_or_default().to_string();
+                    let actions = p["actions"]
+                        .as_array()
+                        .map(|a| a.iter().filter_map(|x| x["title"].as_str().map(|t| clip_text(t, MAX_ACTION_CHARS))).take(MAX_ACTIONS).collect())
+                        .unwrap_or_default();
+                    let message = clip_text(p["message"].as_str().unwrap_or_default(), MAX_MESSAGE_CHARS);
                     let _ = events.send(ServerEvent::Question { id: id.clone(), message, actions });
                     return; // the UI answers once the user chooses
                 }
@@ -310,10 +326,10 @@ fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host
             let text = match v["kind"].as_str() {
                 Some("end") => None,
                 _ => {
-                    let title = v["title"].as_str().or(v["message"].as_str()).unwrap_or("working");
+                    let title = clip_text(v["title"].as_str().or(v["message"].as_str()).unwrap_or("working"), MAX_ACTION_CHARS);
                     Some(match v["percentage"].as_u64() {
                         Some(p) => format!("{title} {p}%"),
-                        None => title.to_string(),
+                        None => title,
                     })
                 }
             };
@@ -325,7 +341,7 @@ fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host
             let _ = events.send(ServerEvent::Log { level: p["type"].as_u64().unwrap_or(4) as u8, text: p["message"].as_str().unwrap_or_default().to_string() });
         }
         (None, Some("window/showMessage")) if msg["params"]["type"].as_u64().is_some_and(|t| t <= 2) => {
-            let _ = events.send(ServerEvent::Message(msg["params"]["message"].as_str().unwrap_or_default().to_string()));
+            let _ = events.send(ServerEvent::Message(clip_text(msg["params"]["message"].as_str().unwrap_or_default(), MAX_MESSAGE_CHARS)));
         }
         _ => {}
     }
@@ -567,6 +583,31 @@ mod tests {
         let err = Client::start_with(host.clone(), cfg, &dir, tx, Duration::from_millis(300)).err().expect("no answer is an error");
         assert!(err.contains("no answer"), "{err}");
         assert_eq!(host.kills.load(Ordering::SeqCst), 1, "the silent server must not be left running");
+    }
+
+    #[test]
+    fn server_messages_reach_the_ui_clipped() {
+        let host: Arc<dyn Host> = Arc::new(host::local());
+        let (tx, rx) = mpsc::channel();
+        let pending: Pending = Arc::default();
+        let big = "ğ".repeat(5 * 1024 * 1024 / 2);
+        route(json!({ "method": "window/showMessage", "params": { "type": 1, "message": big } }), &pending, &tx, &host, 0);
+        let Ok(ServerEvent::Message(m)) = rx.try_recv() else { panic!("no message") };
+        assert!(m.chars().count() <= MAX_MESSAGE_CHARS + 1 && m.ends_with('…'), "{} chars", m.chars().count());
+
+        let actions: Vec<Value> = (0..500).map(|_| json!({ "title": "x".repeat(10_000) })).collect();
+        route(json!({ "id": 3, "method": "window/showMessageRequest", "params": { "message": big, "actions": actions } }), &pending, &tx, &host, 0);
+        let Ok(ServerEvent::Question { message, actions, .. }) = rx.try_recv() else { panic!("no question") };
+        assert!(message.chars().count() <= MAX_MESSAGE_CHARS + 1);
+        assert_eq!(actions.len(), MAX_ACTIONS);
+        assert!(actions.iter().all(|a| a.chars().count() <= MAX_ACTION_CHARS + 1));
+
+        let (rtx, rrx) = mpsc::channel();
+        pending.lock().unwrap().insert(7, rtx);
+        route(json!({ "id": 7, "error": { "message": big } }), &pending, &tx, &host, 0);
+        assert!(rrx.try_recv().unwrap().unwrap_err().chars().count() <= MAX_MESSAGE_CHARS + 1);
+        assert_eq!(clip_text("kısa", 10), "kısa");
+        assert_eq!(clip_text("şğüiö", 3), "şğü…");
     }
 
     /// Real language server (if clangd is available): handshake, diagnostics, hover, definition.
