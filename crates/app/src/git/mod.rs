@@ -7,15 +7,21 @@ use host::Host;
 
 mod branch;
 mod diff;
+mod ignore;
 mod log;
+mod refs;
 mod stash;
 mod status;
+mod tag;
 
 pub use branch::*;
 pub use diff::*;
+pub use ignore::*;
 pub use log::*;
+pub use refs::*;
 pub use stash::*;
 pub use status::*;
+pub use tag::*;
 
 fn git(host: &dyn Host, cwd: &str, args: &[&str]) -> Result<host::ExecOutput, String> {
     let out = host.exec("git", args, Some(cwd), None).map_err(|e| e.to_string())?;
