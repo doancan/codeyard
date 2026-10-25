@@ -303,6 +303,15 @@ impl Workbench {
             Command::action("Git: Push", GitPush),
             Command::action("Git: Fetch", GitFetch),
             Command::action("Git: Sync", GitSync),
+            // --- git-sync ---
+            Command::action("Git: Pull (Rebase)", GitPullRebase),
+            Command::action("Git: Pull from…", GitPullFrom),
+            Command::action("Git: Push to…", GitPushTo),
+            Command::action("Git: Fetch (All Remotes)", GitFetchAll),
+            Command::action("Git: Commit Signed Off", GitCommitSignedOff),
+            Command::action("Git: Commit (No Verify)", GitCommitNoVerify),
+            Command::action("Git: Commit & Push", GitCommitAndPush),
+            Command::action("Git: Commit & Sync", GitCommitAndSync),
             Command::action("Developer: Restart Language Servers", RestartLanguageServers),
             Command::action("Git: View File History", GitFileHistory),
             Command::action("Git: Blame Line", GitBlameLine),
@@ -694,6 +703,12 @@ impl Workbench {
                 self.close_overlay(window, cx);
                 self.run_host_op(op, alias, window, cx);
             }
+            // --- git-sync ---
+            (OverlayKind::SyncTarget(ops), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let op = ops[*index].clone();
+                self.close_overlay(window, cx);
+                self.git_sync(vec![op], cx);
+            }
             (OverlayKind::BranchOp { root, op, names }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let (root, op, name) = (root.clone(), *op, names[*index].clone());
                 self.close_overlay(window, cx);
@@ -705,6 +720,7 @@ impl Workbench {
                 | OverlayKind::CodeActions { .. }
                 | OverlayKind::Branches { .. }
                 | OverlayKind::BranchOp { .. }
+                | OverlayKind::SyncTarget(_)
                 | OverlayKind::RemoteTargets(_)
                 | OverlayKind::HostOp { .. }
                 | OverlayKind::HostField { .. }

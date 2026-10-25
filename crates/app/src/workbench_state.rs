@@ -80,6 +80,8 @@ pub(super) struct GitState {
     /// it runs once more when done (so the running refresh isn't cancelled and the update isn't lost).
     pub(super) refreshing: bool,
     pub(super) refresh_again: bool,
+    /// Network operations: which one runs, and the background fetch's last error (see workbench_sync.rs).
+    pub(super) sync: sync_glue::SyncState,
     pub(super) error: Option<SharedString>,
     /// Root source control looks at: the active file's root (`None` for the first root).
     pub(super) scm_root: Option<String>,
