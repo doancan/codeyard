@@ -1,5 +1,5 @@
 //! Source control panel (S06): staged / unstaged changes,
-//! stage, unstage, discard change, commit. Commands go through `git.rs` on the agent.
+//! stage, unstage, discard change, commit. Commands go through `git/` on the agent.
 
 use std::sync::Arc;
 
