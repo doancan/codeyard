@@ -6,7 +6,9 @@ Short answers to the problems people actually hit. Messages are quoted as the ap
 
 Without Full Disk Access, macOS can block reads of Desktop, Documents and Downloads. At the first launch Codeyard opens a short
 dialog that takes you to **System Settings ▸ Privacy & Security ▸ Full Disk Access**; run *Help: Grant Full Disk Access…* to see
-it again. Unnotarized builds also need **right-click ▸ Open** on first launch, or `xattr -cr /Applications/Codeyard.app`.
+it again. macOS does not list an app there by itself: press **+**, pick Codeyard (*Show Codeyard in Finder* in the dialog helps) and turn
+it on. The builds are not signed with a developer certificate, so every release counts as a new app to macOS: after an update remove the
+old entry with **−**, add Codeyard again, and Codeyard asks once more per version while access is missing. Unnotarized builds also need **right-click ▸ Open** on first launch, or `xattr -cr /Applications/Codeyard.app`.
 
 ## SSH
 

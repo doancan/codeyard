@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-25
+
 ### Added
 
 - **Updates.** *Help: Check for Updates…* (also in the Help menu, and under the app menu on macOS) opens a dialog that checks, shows the
@@ -15,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   status bar, and a copy that cannot replace itself offers the download page with the reason. The new setting `update.check`
   (`ask`, `daily`, `manual`; your own settings only) decides whether Codeyard looks by itself: the default `ask` checks nothing and, once,
   asks whether to check daily. `daily` sends one request a day to github.com for the signed checksum list and nothing else.
+
+### Changed
+
+- The About dialog shows the version and platform only.
+- The Full Disk Access dialog explains that the app has to be added to the list by hand, can show Codeyard in Finder, and
+  asks again once after each update while access is missing (a release is a new app to macOS).
 
 ### Fixed
 
@@ -109,5 +117,6 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/doancan/codeyard/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/doancan/codeyard/releases/tag/v0.1.0

@@ -16,7 +16,6 @@ fn about_dialog_and_buttons_are_turkish(cx: &mut TestAppContext) {
         let (title, detail) = cx.pending_prompt().expect("about dialog");
         assert_eq!(title, "Codeyard");
         assert!(detail.contains(&format!("Sürüm {}", env!("CARGO_PKG_VERSION"))), "{detail}");
-        assert!(detail.contains("Electron yok, telemetri yok."), "{detail}");
         cx.simulate_prompt_answer("Kapat");
         cx.run_until_parked();
     }
@@ -24,7 +23,6 @@ fn about_dialog_and_buttons_are_turkish(cx: &mut TestAppContext) {
     cx.run_until_parked();
     let (_, detail) = cx.pending_prompt().expect("about dialog");
     assert!(detail.contains(&format!("Version {}", env!("CARGO_PKG_VERSION"))), "{detail}");
-    assert!(detail.contains("No Electron, no telemetry."), "{detail}");
     cx.simulate_prompt_answer("Close");
 }
 

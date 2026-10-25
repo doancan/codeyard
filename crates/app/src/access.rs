@@ -9,6 +9,11 @@ use std::path::{Path, PathBuf};
 /// The "Privacy & Security > Full Disk Access" page in System Settings.
 pub const FULL_DISK_ACCESS_URL: &str = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
 
+/// The `.app` folder the running binary lives in; `None` when run from a plain build directory.
+pub fn app_bundle() -> Option<PathBuf> {
+    std::env::current_exe().ok()?.ancestors().find(|p| p.extension().is_some_and(|e| e == "app")).map(Path::to_path_buf)
+}
+
 /// Locations found on most Macs that can't be read without Full Disk Access.
 fn probes(home: &Path) -> Vec<PathBuf> {
     vec![home.join("Library/Safari"), home.join("Library/Mail"), home.join("Library/Messages"), PathBuf::from("/Library/Application Support/com.apple.TCC")]

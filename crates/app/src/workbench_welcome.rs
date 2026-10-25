@@ -77,14 +77,7 @@ impl Workbench {
     /// "About Codeyard": version info is here, not on the welcome screen (gear menu, app menu, palette).
     pub(super) fn show_about(&mut self, _: &ShowAbout, window: &mut Window, cx: &mut Context<Self>) {
         let version = env!("CARGO_PKG_VERSION");
-        let detail = format!(
-            "{}\n{}\n{}\n\n{} · {}",
-            crate::i18n::tf("Version {}", &[&version]),
-            crate::i18n::t("A small, fast, native code editor for local folders and remote servers over SSH."),
-            crate::i18n::t("Rust and GPUI. No Electron, no telemetry."),
-            std::env::consts::OS,
-            std::env::consts::ARCH
-        );
+        let detail = format!("{}\n{} · {}", crate::i18n::tf("Version {}", &[&version]), std::env::consts::OS, std::env::consts::ARCH);
         let answer = window.prompt(gpui::PromptLevel::Info, "Codeyard", Some(&detail), &[crate::i18n::t("Close"), crate::i18n::t("Copy Version")], cx);
         cx.spawn_in(window, async move |_, cx| {
             if answer.await == Ok(1) {
@@ -103,33 +96,47 @@ impl Workbench {
     /// and open the Full Disk Access page directly with "Open System Settings".
     pub(super) fn ask_disk_access_once(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let home = dirs::home_dir();
-        let asked = self.persist.state.as_ref().and_then(|s| s.get("disk_access_asked")).is_some();
+        // An ad-hoc signed build gets a new identity with every release, so the grant is gone after an update: ask once per version.
+        let version = env!("CARGO_PKG_VERSION");
+        let asked = self.persist.state.as_ref().and_then(|s| s.get("disk_access_asked")).is_some_and(|v| v == version);
         if asked || std::env::var_os("CODEYARD_SKIP_DISK_PROMPT").is_some() || !home.as_deref().is_some_and(crate::access::should_ask) {
             return;
         }
         if let Some(s) = &self.persist.state {
-            let _ = s.set("disk_access_asked", "1");
+            let _ = s.set("disk_access_asked", version);
         }
         self.ask_disk_access(window, cx);
     }
 
     fn ask_disk_access(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // macOS never lists an app here by itself: it has to be added with "+" (or dragged in) by hand.
         let detail = format!(
-            "{}\n\n{}",
+            "{}\n\n{}\n\n{}",
             crate::i18n::t("Without Full Disk Access, Desktop, Documents or external drives may look empty."),
-            crate::i18n::t("Turn Codeyard on in Privacy & Security.")
+            crate::i18n::t("In Privacy & Security, press + and add Codeyard, then turn it on."),
+            crate::i18n::t("Already listed after an update? Remove it with − and add it again.")
         );
         let answer = window.prompt(
             gpui::PromptLevel::Info,
             crate::i18n::t("Allow file access"),
             Some(&detail),
-            &[crate::i18n::t("Open System Settings"), crate::i18n::t("Not Now")],
+            &[crate::i18n::t("Open System Settings"), crate::i18n::t("Show Codeyard in Finder"), crate::i18n::t("Not Now")],
             cx,
         );
         cx.spawn_in(window, async move |_, cx| {
-            if answer.await == Ok(0) {
-                cx.update(|_, cx| cx.open_url(crate::access::FULL_DISK_ACCESS_URL)).ok();
-            }
+            match answer.await {
+                Ok(0) => cx.update(|_, cx| cx.open_url(crate::access::FULL_DISK_ACCESS_URL)).ok(),
+                // Both windows side by side: the app can be dragged straight from Finder into the list.
+                Ok(1) => cx
+                    .update(|_, cx| {
+                        cx.open_url(crate::access::FULL_DISK_ACCESS_URL);
+                        if let Some(bundle) = crate::access::app_bundle() {
+                            cx.reveal_path(&bundle);
+                        }
+                    })
+                    .ok(),
+                _ => None,
+            };
         })
         .detach();
     }

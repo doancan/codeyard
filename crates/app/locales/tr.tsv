@@ -1738,12 +1738,12 @@ Staging changes needs a UTF-8 file (this one is stored in another encoding)	Değ
 Staging changes is not supported in files with old-Mac (CR only) line endings	Değişiklikleri stage'e almak, eski Mac (yalnızca CR) satır sonlarına sahip dosyalarda desteklenmiyor
 # ---- About dialog and macOS Full Disk Access prompt ----
 Version {}	Sürüm {}
-A small, fast, native code editor for local folders and remote servers over SSH.	Yerel klasörler ve SSH üzerinden uzak sunucular için küçük, hızlı, yerel bir kod düzenleyici.
-Rust and GPUI. No Electron, no telemetry.	Rust ve GPUI. Electron yok, telemetri yok.
 Copy Version	Sürümü Kopyala
 Allow file access	Dosya erişimine izin verin
 Without Full Disk Access, Desktop, Documents or external drives may look empty.	Tam Disk Erişimi olmadan Masaüstü, Belgeler ya da harici sürücüler boş görünebilir.
-Turn Codeyard on in Privacy & Security.	Gizlilik ve Güvenlik bölümünde Codeyard'ı açın.
+In Privacy & Security, press + and add Codeyard, then turn it on.	Gizlilik ve Güvenlik bölümünde + düğmesine basıp Codeyard'ı ekleyin ve açın.
+Already listed after an update? Remove it with − and add it again.	Güncellemeden sonra zaten listedeyse − ile kaldırıp yeniden ekleyin.
+Show Codeyard in Finder	Codeyard'ı Finder'da Göster
 Open System Settings	Sistem Ayarları'nı Aç
 # ---- settings.jsonc / keybindings.jsonc warnings (file names and JSON samples stay as they are) ----
 {} (previous settings kept)	{} (önceki ayarlar korundu)

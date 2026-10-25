@@ -12,7 +12,6 @@ A folder named “{}” is already there; a file cannot replace it. Rename or re
 A merge commit is created unless it can fast-forward. Conflicts are resolved in Source Control.	
 A rebase is already in progress: use Git: Continue Rebase or Git: Abort Rebase	
 A request is still being sent; wait for its answer first.	
-A small, fast, native code editor for local folders and remote servers over SSH.	
 A transfer is already running. Wait for it to finish or click it in the status bar to cancel.	
 Abort Merge	
 Abort Rebase	
@@ -53,6 +52,7 @@ Allow
 Allow file access	
 Already debugging: Shift+F5 stops the session.	
 Already formatted	
+Already listed after an update? Remove it with − and add it again.	
 Already minified	
 Always open *.{0} as {1}	
 Amended {}	
@@ -643,6 +643,7 @@ Ignore case unless the query has capital letters
 Ignore “{}” in this session	
 Import VS Code Settings and Shortcuts	
 Imported {0} settings and {1} shortcuts from VS Code ({2} settings and {3} shortcuts have no equivalent here)	
+In Privacy & Security, press + and add Codeyard, then turn it on.	
 In the file tree, type to jump to a name; ⇧→ opens everything inside a folder, ⇧← closes it.	
 Incoming	
 Indent of each folder level in the explorer (px)	
@@ -1106,7 +1107,6 @@ Right-click a folder and choose Find in Folder… to search only inside it.
 Run task	
 Run the search again	
 Running…	
-Rust and GPUI. No Electron, no telemetry.	
 SSH host	
 Saturday	
 Save	
@@ -1173,6 +1173,7 @@ Shape of the cursor
 Shell for new terminals (empty: login shell)	
 Show All	
 Show Changed Files…	
+Show Codeyard in Finder	
 Show a color swatch next to #rrggbb values	
 Show a tooltip when the mouse rests on a word	
 Show code lenses (reference counts, run/debug) above symbols	
@@ -1361,7 +1362,6 @@ Trusted “{}”
 Try Again	
 Try again	
 Tuesday	
-Turn Codeyard on in Privacy & Security.	
 Type > for commands	
 Type a commit message first	
 Type a line number between 1 and {}	
