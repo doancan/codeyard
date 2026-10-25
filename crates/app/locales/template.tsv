@@ -232,6 +232,7 @@ Could not forward port {}: {}
 Could not forward the debug port over SSH: {}	
 Could not install the {0} dictionary: {1}.	
 Could not install the {0} dictionary: {1}. Check your internet connection and try again.	
+Could not keep a copy of the version that was on disk: {}	
 Could not list branches: {}	
 Could not list files: {}	
 Could not list stashes: {}	
@@ -239,6 +240,7 @@ Could not list: {}
 Could not load: {}	
 Could not minify: {}	
 Could not open the debug session: {}	
+Could not open the state database: {}. Tabs, recent folders and backups will not be remembered this session.	
 Could not open {0}: {1}	
 Could not paste: {}	
 Could not reach {}: check the network connection and try again	
@@ -1123,6 +1125,7 @@ Save the file to finish, then stage it in Source Control.
 Save theme	
 Save user@host to ~/.ssh/config and connect	
 Saved a copy to {}	
+Saved as {}. You kept typing while it was saving, so the original tab stays open with your latest changes.	
 Saved project “{}” (⌃R to switch)	
 Saved to ~/.ssh/config. Connecting uses your SSH keys and ssh-agent; a password prompt appears in this window if needed.	
 Saved {} (edit the colors in that file)	
@@ -1304,10 +1307,12 @@ The response is larger than {} and was not downloaded.
 The search stopped at the result limit: only the files listed are changed. Open files can be undone; closed files are written to disk.	
 The server did not answer within 60 seconds.	
 The server wants credentials: run the command once in the terminal (or set up an SSH key).	
+The state database was damaged ({0}). It was moved to {1} and a new one was started; recent folders and open tabs were forgotten.	
 The update couldn't be installed	
 The update couldn't be verified	
 The update failed part-way and Codeyard couldn't put the previous version back. It may be at {0}. If Codeyard doesn't start, move it back to {1}.	
 The update failed. Click for details.	
+The version that was on disk has been kept in Local History.	
 The workspace file lists no folder that exists on this computer.	
 The workspace has no extra folders.	
 The {} dictionary is installed and on.	
