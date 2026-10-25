@@ -526,9 +526,20 @@ fn version_line() -> String {
     format!("codeyard {}", env!("CARGO_PKG_VERSION"))
 }
 
+/// Developer commands (`--do`) are for debug builds, or a release build started with `CODEYARD_DEV` set.
+fn developer_mode() -> bool {
+    cfg!(debug_assertions) || std::env::var_os("CODEYARD_DEV").is_some()
+}
+
 fn parse_args() -> Args {
+    parse_args_from(std::env::args().skip(1), developer_mode())
+}
+
+/// `--do` can press keys, click and run any palette command, "Workspace: Trust This Folder" and tasks among them: whoever builds the
+/// command line (a launcher, a `codeyard://`-style handler, a document's "open with") must not get that from a release build.
+fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
     let mut args = Args { path: None, connect: None, theme: None, terminal: false, search: None, panel: None, run: Vec::new(), after_update: false };
-    let mut it = std::env::args().skip(1);
+    let mut it = argv;
     while let Some(a) = it.next() {
         match a.as_str() {
             "--connect" => args.connect = it.next(),
@@ -537,7 +548,15 @@ fn parse_args() -> Args {
             update_restart::FLAG => args.after_update = true,
             "--search" => args.search = it.next(),
             "--panel" => args.panel = it.next(),
-            "--do" => args.run = it.next().map(|v| v.split(';').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()).unwrap_or_default(),
+            // The value is consumed either way, so it is not mistaken for a folder to open.
+            "--do" => {
+                let steps = it.next().map(|v| v.split(';').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()).unwrap_or_default();
+                if dev {
+                    args.run = steps;
+                } else {
+                    eprintln!("--do is ignored: it is for developer builds (set CODEYARD_DEV=1)");
+                }
+            }
             "-V" | "--version" => {
                 println!("{}", version_line());
                 std::process::exit(0);
@@ -552,6 +571,27 @@ fn parse_args() -> Args {
         }
     }
     args
+}
+
+#[cfg(test)]
+mod args_tests {
+    use super::parse_args_from;
+
+    fn parse(dev: bool, a: &[&str]) -> super::Args {
+        parse_args_from(a.iter().map(|s| s.to_string()), dev)
+    }
+
+    #[test]
+    fn scripted_commands_need_developer_mode() {
+        let line = ["/work", "--do", "Workspace: Trust This Folder;Tasks: Run Task", "--theme", "dark"];
+        let release = parse(false, &line);
+        assert!(release.run.is_empty(), "{:?}", release.run);
+        assert_eq!((release.path.as_deref(), release.theme.as_deref()), (Some("/work"), Some("dark")), "the rest of the line still works");
+        assert_eq!(parse(true, &line).run, ["Workspace: Trust This Folder", "Tasks: Run Task"]);
+        // Its value is not taken for a path, and a trailing --do is harmless.
+        assert_eq!(parse(false, &["--do", "key:enter"]).path, None);
+        assert!(parse(false, &["--do"]).run.is_empty());
+    }
 }
 
 /// ssh is asking (password, host key): ask in the frontmost window, wait for the answer.

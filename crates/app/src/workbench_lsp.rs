@@ -19,6 +19,39 @@ use std::time::Duration;
 /// At most this many `workspace/symbol` results are shown.
 const MAX_WORKSPACE_SYMBOLS: usize = 300;
 
+/// Is `path` inside one of the roots? `..` is resolved first, and for local paths symlinks too, so a link inside the folder that
+/// points elsewhere does not count as inside. A path that does not exist yet is checked through its nearest existing parent.
+fn inside_roots(path: &str, roots: &[String], resolve_links: bool) -> bool {
+    use std::path::{Component, Path, PathBuf};
+    let clean = |p: &str| -> PathBuf {
+        let mut out = PathBuf::new();
+        for c in Path::new(p).components() {
+            match c {
+                Component::ParentDir => {
+                    out.pop();
+                }
+                Component::CurDir => {}
+                c => out.push(c),
+            }
+        }
+        if !resolve_links {
+            return out;
+        }
+        let mut tail = Vec::new();
+        let mut base = out.clone();
+        while !base.exists() {
+            let Some(name) = base.file_name().map(|n| n.to_owned()) else { return out };
+            tail.push(name);
+            base.pop();
+        }
+        let mut real = base.canonicalize().unwrap_or(base);
+        real.extend(tail.iter().rev());
+        real
+    };
+    let target = clean(path);
+    roots.iter().any(|r| target.starts_with(clean(r)))
+}
+
 /// Answer to a language server's question. Whatever way the picker closes, the server gets a reply:
 /// dropping it without a selection sends `null` (dismissed).
 pub struct QuestionReply {
@@ -256,9 +289,9 @@ impl Workbench {
             }
             ServerEvent::ApplyEdit { id, edit } => {
                 // After a code action command the server asks for an edit.
-                self.apply_workspace_edit(&edit, cx);
+                let applied = self.apply_workspace_edit(&edit, cx);
                 if let Some(ServerSlot::Running(c)) = self.lsp.servers.get(key) {
-                    c.respond(id, serde_json::json!({ "applied": true }));
+                    c.respond(id, serde_json::json!({ "applied": applied }));
                 }
             }
             ServerEvent::Exited(code) => {
@@ -502,7 +535,9 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| match result {
-                Ok(v) if !v.is_null() => this.apply_workspace_edit(&v, cx),
+                Ok(v) if !v.is_null() => {
+                    this.apply_workspace_edit(&v, cx);
+                }
                 Ok(_) => this.notice = Some(Notice::Info(t("Nothing to rename here").into())),
                 Err(e) => this.notice = Some(Notice::Error(e.into())),
             })
@@ -512,9 +547,17 @@ impl Workbench {
     }
 
     /// Multi-file edit: open files go into the buffer (dirty), closed ones to disk
-    /// (like VS Code's `files.refactoring.autoSave` default).
-    pub(super) fn apply_workspace_edit(&mut self, edit: &Value, cx: &mut Context<Self>) {
+    /// (like VS Code's `files.refactoring.autoSave` default). Files outside the open folders are never touched: a language
+    /// server must not be able to write wherever the user's account can.
+    /// Returns whether the edit took effect, which is what `workspace/applyEdit` answers with.
+    pub(super) fn apply_workspace_edit(&mut self, edit: &Value, cx: &mut Context<Self>) -> bool {
         let (files, skipped) = lsp::parse_workspace_edit(edit);
+        let total = files.len();
+        let roots = self.all_roots(cx);
+        let open: Vec<String> = self.all_editors().iter().map(|e| e.read(cx).path.clone()).collect();
+        let resolve = !self.remote.host.is_remote();
+        let files: Vec<_> = files.into_iter().filter(|(p, _)| open.contains(p) || inside_roots(p, &roots, resolve)).collect();
+        let outside = total - files.len();
         let n = files.len();
         let mut closed = Vec::new();
         for (path, edits) in files {
@@ -566,8 +609,22 @@ impl Workbench {
         } else {
             tn("Changed {} file", "Changed {} files", n, &[])
         };
-        self.notice = Some(Notice::Info(msg.into()));
+        self.notice = Some(if outside > 0 {
+            Notice::Error(
+                tn(
+                    "Ignored the language server's edit to {} file outside the open folders",
+                    "Ignored the language server's edit to {} files outside the open folders",
+                    outside,
+                    &[],
+                )
+                .into(),
+            )
+        } else {
+            Notice::Info(msg.into())
+        });
         cx.notify();
+        // Refusing everything is a failure for the server; a partly applied edit still counts as applied.
+        n > 0 || outside == 0
     }
 
     /// Report files changed on disk to all language servers.
@@ -886,5 +943,38 @@ impl Workbench {
                 ed.update(cx, |e, cx| e.save_now(cx));
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::inside_roots;
+
+    #[test]
+    fn only_paths_under_a_root_are_inside() {
+        let roots = vec!["/p".to_string(), "/q/".to_string()];
+        assert!(inside_roots("/p/src/a.rs", &roots, false));
+        assert!(inside_roots("/q/x", &roots, false));
+        assert!(!inside_roots("/etc/hosts", &roots, false));
+        assert!(!inside_roots("/p/../etc/hosts", &roots, false), "dot-dot must not climb out");
+        assert!(!inside_roots("/pp/a.rs", &roots, false), "a sibling sharing the prefix is not inside");
+        assert!(!inside_roots("/etc/hosts", &[], false), "no folder open: nothing is inside");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_out_of_the_root_does_not_count() {
+        let base = std::env::temp_dir().join(format!("codeyard-inside-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let (root, elsewhere) = (base.join("root"), base.join("elsewhere"));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        std::os::unix::fs::symlink(&elsewhere, root.join("link")).unwrap();
+        let roots = vec![root.to_string_lossy().into_owned()];
+        let through_link = root.join("link/new.txt").to_string_lossy().into_owned();
+        assert!(!inside_roots(&through_link, &roots, true));
+        assert!(inside_roots(&through_link, &roots, false), "remote paths cannot be resolved here");
+        assert!(inside_roots(&root.join("fresh/new.txt").to_string_lossy(), &roots, true), "a not yet existing file is judged by its parent");
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

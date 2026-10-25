@@ -84,7 +84,7 @@ pub fn write(dir: &Path, h: &Handover, now: SystemTime) -> Result<(), HandoverEr
     let ms = now.duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
     let windows: Vec<Value> = h.windows.iter().map(|w| json!({ "host": w.host, "path": w.path })).collect();
     let doc = json!({ "schema": SCHEMA, "to": h.to, "written_ms": ms, "focused": h.focused, "windows": windows });
-    crate::fsutil::write_atomic(&file(dir), doc.to_string())?;
+    crate::fsutil::write_private(&file(dir), doc.to_string())?;
     Ok(())
 }
 
