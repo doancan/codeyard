@@ -27,7 +27,11 @@ schema = { version = "0.2.2", path = "../schema" }
 sha2 = "0.11.1"
 # Ed25519 verification of the update manifest; already in the tree through rustls, so no new code ships.
 ring = { version = "0.17.14", default-features = false }
-serde_json = "1.0.154"
+serde = { version = "1.0.229", default-features = false, features = ["std"] }
+# `preserve_order`: converting a file must not reshuffle its keys.
+serde_json = { version = "1.0.154", features = ["preserve_order"] }
+# Data lens: TOML read and write. Same release as the build script of the Windows resource compiler already pulls in.
+toml = { version = "1.1.8", default-features = false, features = ["std", "serde", "parse", "display", "preserve_order"] }
 spell = { version = "0.2.2", path = "../spell" }
 state = { version = "0.2.2", path = "../state" }
 syntax = { version = "0.2.2", path = "../syntax" }

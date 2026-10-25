@@ -165,6 +165,10 @@ pub struct Settings {
     pub spelling: bool,
     pub spelling_comments: bool,
     pub spell_languages: Vec<String>,
+    // --- data ---
+    /// Data lens: spaces per level in JSON and YAML output, and whether output keys are sorted.
+    pub data_indent: usize,
+    pub data_sort_keys: bool,
     /// Where `.http` requests run: "workspace" (on the server when you are on SSH) or "local".
     pub http_run_on: String,
     /// `never`, `remote` (first request to each non-local host per session) or `always`; see `schema::gate`.
@@ -301,6 +305,8 @@ impl Default for Settings {
             spelling: true,
             spelling_comments: true,
             spell_languages: vec!["en".into()],
+            data_indent: 2,
+            data_sort_keys: false,
             http_run_on: "workspace".into(),
             http_confirm: "remote".into(),
             ui_language: if cfg!(test) { "en" } else { "auto" }.into(),
@@ -424,6 +430,10 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   "search.showLineNumbers": true,
   // "auto", "alwaysCollapse", "alwaysExpand": results start folded or open.
   "search.collapseResults": "auto",
+
+  // Data: Convert To… and Data: Query…: spaces per level in JSON and YAML, and sorted keys (false keeps file order).
+  "data.indent": 2,
+  "data.sortKeys": false,
 
   // Commits drawn in the Source Control graph, and listed in the explorer's Timeline.
   "git.graph.limit": 300,
@@ -796,6 +806,13 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.bool("spelling.checkComments") {
         s.spelling_comments = v;
     }
+    // --- data ---
+    if let Some(v) = r.number("data.indent", 1., 8.) {
+        s.data_indent = v as usize;
+    }
+    if let Some(v) = r.bool("data.sortKeys") {
+        s.data_sort_keys = v;
+    }
     if let Some(v) = r.bool("json.validate.enable") {
         s.schema_validate = v;
     }
@@ -1024,6 +1041,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "spelling.enabled",
         "spelling.checkComments",
         "spelling.languages",
+        // --- data ---
+        "data.indent",
+        "data.sortKeys",
         "json.validate.enable",
         "json.schemaDownload.enable",
         "json.schemas",
