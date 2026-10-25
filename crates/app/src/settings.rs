@@ -62,6 +62,11 @@ pub struct Settings {
     // --- structural ---
     /// Most files a structural search reads and parses.
     pub search_structural_max_files: usize,
+    // --- compare ---
+    /// Globs the folder comparison skips on both sides.
+    pub compare_ignore: Vec<String>,
+    /// Entries per side before the folder comparison stops and says so.
+    pub compare_max_files: u32,
     pub terminal_shell: Option<String>,
     pub terminal_font_size: f32,
     pub terminal_scrollback: usize,
@@ -238,6 +243,9 @@ impl Default for Settings {
             search_max_results: 2000,
             // --- structural ---
             search_structural_max_files: 5000,
+            // --- compare ---
+            compare_ignore: vec![".git".into(), "node_modules".into(), "target".into()],
+            compare_max_files: 50_000,
             terminal_shell: None,
             terminal_font_size: theme::text::CODE.0,
             terminal_scrollback: 2000,
@@ -455,6 +463,10 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Most files a structural search reads and parses (the rest are left out and the results say so).
   "search.structural.maxFiles": 5000,
 
+  // Compare Folders: globs skipped on both sides, and how many entries per side before it stops.
+  // "compare.folders.ignore": [".git", "node_modules", "target"],
+  // "compare.folders.maxFiles": 50000,
+
   // "terminal.shell": "/bin/zsh",
   "terminal.fontSize": 13,
   "terminal.scrollback": 2000,
@@ -624,6 +636,13 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     // --- structural ---
     if let Some(v) = r.number("search.structural.maxFiles", 1., 100_000.) {
         s.search_structural_max_files = v as usize;
+    }
+    // --- compare ---
+    if let Some(v) = r.strings("compare.folders.ignore") {
+        s.compare_ignore = v;
+    }
+    if let Some(v) = r.number("compare.folders.maxFiles", 100., 5_000_000.) {
+        s.compare_max_files = v as u32;
     }
     s.terminal_shell = r.string("terminal.shell");
     if let Some(v) = r.number("terminal.fontSize", 6., 48.) {
@@ -1026,6 +1045,8 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "search.maxResults",
         // --- structural ---
         "search.structural.maxFiles",
+        "compare.folders.ignore",
+        "compare.folders.maxFiles",
         "terminal.shell",
         "terminal.fontSize",
         "terminal.scrollback",

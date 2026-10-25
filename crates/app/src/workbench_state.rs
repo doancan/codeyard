@@ -196,6 +196,9 @@ pub(super) struct RootsState {
     pub(super) file_clip: Option<(String, bool)>,
     /// File marked with "Select for Compare".
     pub(super) compare_a: Option<String>,
+    // --- compare ---
+    /// Folder marked with "Select Folder for Compare".
+    pub(super) compare_folder_a: Option<compare_glue::Spot>,
     /// Favorite files/folders of the open project (relative to the root).
     pub(super) favorites: Vec<String>,
     pub(super) file_index: Option<FileIndex>,

@@ -260,6 +260,8 @@ impl Workbench {
             Command::action("Markdown: Open Preview", OpenMarkdownPreview),
             Command::action("File: Compare Active File with Clipboard", CompareWithClipboard),
             Command::action("File: Compare Active File with Saved", CompareWithSaved),
+            // --- compare ---
+            Command::action("Compare: Folders…", CompareFolders),
             Command::action("File: New Scratch File…", NewScratchFile),
             Command::action("Terminal: Run Selected Text", RunSelectedText),
             Command::action("Go: Last Edit Location", GoToLastEdit),
@@ -709,6 +711,7 @@ impl Workbench {
                 | OverlayKind::Tasks(_)
                 | OverlayKind::DebugConfigs(_)
                 | OverlayKind::RemoveFolder(_)
+                | OverlayKind::CompareFolder { .. }
                 | OverlayKind::ExceptionFilters(_)
                 | OverlayKind::Stashes { .. }
                 | OverlayKind::Settings
@@ -724,6 +727,11 @@ impl Workbench {
             }
             (OverlayKind::Palette { .. } | OverlayKind::Input(_), PickerEvent::Dismiss) => {
                 self.close_overlay(window, cx);
+            }
+            // --- compare ---
+            (OverlayKind::CompareFolder { .. }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let index = *index;
+                self.on_compare_pick(index, window, cx);
             }
             (OverlayKind::Input(_), PickerEvent::Confirm(Pick::Input)) => {
                 let name = ov.picker.read(cx).query().trim().to_string();

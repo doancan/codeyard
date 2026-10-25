@@ -86,6 +86,33 @@ pub struct SearchStream {
     pub rx: mpsc::Receiver<Response>,
 }
 
+/// A running `HashTree`: records arrive in chunks, then one `Done` (or `Failed`). `next` returns `None` when the connection
+/// dropped before the end, so a caller keeps what it got and can say the result is partial.
+pub struct HashStream {
+    pub id: u32,
+    pub rx: mpsc::Receiver<Response>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum HashEvent {
+    Records(Vec<proto::HashRecord>),
+    Done { entries: u32, truncated: bool, cancelled: bool },
+    Failed(proto::Error),
+}
+
+impl HashStream {
+    pub fn next(&self) -> Option<HashEvent> {
+        loop {
+            return Some(match self.rx.recv().ok()? {
+                Response::HashChunk(records) => HashEvent::Records(records),
+                Response::HashDone { entries, truncated, cancelled } => HashEvent::Done { entries, truncated, cancelled },
+                Response::Error(e) => HashEvent::Failed(e),
+                _ => continue,
+            });
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum PtyEvent {
     Output(Vec<u8>),
@@ -136,6 +163,8 @@ pub trait Host: Send + Sync + 'static {
     fn is_remote(&self) -> bool;
     fn call(&self, req: Request) -> Result<Response>;
     fn search(&self, query: SearchQuery) -> Result<SearchStream>;
+    /// Folder comparison (see `Request::HashTree`). Stop it with `cancel(stream.id)`.
+    fn hash_tree(&self, root: &str, ignore: Vec<String>, gitignore: bool, limit: u32, only: Option<Vec<String>>) -> Result<HashStream>;
     fn cancel(&self, id: u32);
     fn pty_spawn(&self, cols: u16, rows: u16, cwd: Option<String>, shell: Option<String>) -> Result<Pty>;
     /// No reply expected (so a keystroke doesn't wait for a round trip).
@@ -250,7 +279,7 @@ fn unexpected(r: Response) -> HostError {
 /// The party waiting for a request's reply.
 enum Waiter {
     Once(mpsc::Sender<Response>),
-    /// Until `SearchDone` or `Error` arrives.
+    /// Until `SearchDone`, `HashDone` or `Error` arrives.
     Stream(mpsc::Sender<Response>),
     /// If the reply is `PtySpawned`, the event channel is registered on the reader thread, so
     /// later output frames can't be lost.
@@ -392,7 +421,7 @@ impl Shared {
                 let _ = tx.send(frame.body);
             }
             Some(Waiter::Stream(tx)) => {
-                let last = matches!(frame.body, Response::SearchDone { .. } | Response::Error(_));
+                let last = matches!(frame.body, Response::SearchDone { .. } | Response::HashDone { .. } | Response::Error(_));
                 // Receiver is gone (search abandoned): silently drop the rest of the stream.
                 if tx.send(frame.body).is_ok() && !last {
                     waiters.insert(frame.id, Waiter::Stream(tx));
@@ -828,6 +857,12 @@ impl Host for RemoteHost {
         Ok(SearchStream { id, rx })
     }
 
+    fn hash_tree(&self, root: &str, ignore: Vec<String>, gitignore: bool, limit: u32, only: Option<Vec<String>>) -> Result<HashStream> {
+        let (tx, rx) = mpsc::channel();
+        let id = self.start(Request::HashTree { root: root.into(), ignore, gitignore, limit, only }, Waiter::Stream(tx))?;
+        Ok(HashStream { id, rx })
+    }
+
     fn cancel(&self, id: u32) {
         self.notify(Request::Cancel { id });
     }
@@ -1110,6 +1145,33 @@ mod tests {
         }
         files.sort();
         assert_eq!(files, ["a.txt", "b.txt"]);
+    }
+
+    #[test]
+    fn hash_tree_streams_records_then_done_and_hashes_on_request() {
+        let dir = tmp("hashtree");
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::write(dir.join("sub/a.txt"), "iğne").unwrap();
+        let root = dir.to_string_lossy().into_owned();
+        let host = local();
+        let collect = |only: Option<Vec<String>>| {
+            let stream = host.hash_tree(&root, vec![], true, 100, only).unwrap();
+            let mut records = Vec::new();
+            loop {
+                match stream.next().expect("the stream must end with Done") {
+                    HashEvent::Records(r) => records.extend(r),
+                    HashEvent::Done { entries, .. } => return (records, entries),
+                    HashEvent::Failed(e) => panic!("{e}"),
+                }
+            }
+        };
+        let (listing, entries) = collect(None);
+        assert_eq!((listing.iter().map(|r| r.path.as_str()).collect::<Vec<_>>(), entries), (vec!["sub", "sub/a.txt"], 2));
+        assert!(listing.iter().all(|r| r.hash.is_none()));
+        let (hashed, _) = collect(Some(vec!["sub/a.txt".into()]));
+        assert_eq!(hashed[0].hash, Some(proto::content_hash("iğne".as_bytes())));
+        let stream = host.hash_tree("/definitely/not/here", vec![], true, 10, None).unwrap();
+        assert!(matches!(stream.next(), Some(HashEvent::Failed(proto::Error::NotFound(_)))));
     }
 
     #[cfg(unix)]

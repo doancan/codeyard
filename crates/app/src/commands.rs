@@ -355,6 +355,8 @@ registry! {
     "markdown.openPreview" => wb::OpenMarkdownPreview,
     "workbench.compareWithClipboard" => wb::CompareWithClipboard,
     "workbench.compareWithSaved" => wb::CompareWithSaved,
+    // --- compare ---
+    "workbench.compareFolders" => wb::CompareFolders,
     "workbench.runSelectedText" => wb::RunSelectedText,
     "workbench.goToLastEdit" => wb::GoToLastEdit,
     "workbench.newScratchFile" => wb::NewScratchFile,
