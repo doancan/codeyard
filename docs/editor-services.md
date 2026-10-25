@@ -97,7 +97,7 @@ colours log levels. `.log` files follow automatically. *Filter Log Lines* runs
 
 ## Other services
 
-- **LSP** (`lsp.rs`, `workbench_lsp.rs`, `editor_lsp.rs`): own JSON-RPC client; servers run on the workspace host through
+- **LSP** (`lsp/`, `workbench_lsp.rs`, `editor_lsp.rs`): own JSON-RPC client; servers run on the workspace host through
   `Host::proc_*`; diagnostics, completion, hover, rename, code actions, inlay hints, semantic tokens, call hierarchy.
 - **DAP** (`dap.rs`, `workbench_debug.rs`): debug adapters through the same process interface; launch configurations
   come from `launch.json` (see `debug_config.rs`).

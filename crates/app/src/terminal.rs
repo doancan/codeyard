@@ -95,7 +95,7 @@ impl EventListener for Listener {
 
 pub struct TerminalView {
     /// Folder it was started in (tests read it).
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg_attr(not(test), allow(dead_code, reason = "only tests read it"))]
     cwd: Option<String>,
     host: Arc<dyn Host>,
     pty: Option<u32>,

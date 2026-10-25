@@ -76,7 +76,7 @@ fn the_documented_themes_are_the_built_in_themes() {
     assert!(guide.contains(&format!("{pairs} pairs")), "the guide must say “{pairs} pairs” (the contrast pair count)");
 }
 
-/// The language-server table of the user guide lists exactly the default servers of `lsp.rs`, with the same commands.
+/// The language-server table of the user guide lists exactly the default servers of `lsp`, with the same commands.
 #[test]
 fn the_language_server_table_lists_the_default_servers() {
     let guide = read_doc("user-guide.md");
