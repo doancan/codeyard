@@ -5,7 +5,7 @@
 use gpui::{AppContext as _, Context, Focusable as _, PromptLevel, Window};
 
 use super::{InputPurpose, Notice, OverlayKind, Workbench};
-use crate::git::{self, SyncOp};
+use crate::git;
 use crate::picker::{PickItem, Picker, Source as PickSource};
 
 #[derive(Clone, Copy, Debug)]
@@ -397,12 +397,24 @@ impl Workbench {
         use super::*;
         let entries: Vec<(&str, Box<dyn gpui::Action>, bool)> = vec![
             // Pull, Push, Fetch and Stash are git terms and stay as they are in every language.
+            // --- git-sync ---
+            (crate::i18n::t("Sync"), Box::new(GitSync), false),
             ("Pull", Box::new(GitPull), false),
+            (crate::i18n::t("Pull (Rebase)"), Box::new(GitPullRebase), false),
+            (crate::i18n::t("Pull from…"), Box::new(GitPullFrom), false),
             ("Push", Box::new(GitPush), false),
+            (crate::i18n::t("Push to…"), Box::new(GitPushTo), false),
             ("Fetch", Box::new(GitFetch), false),
+            (crate::i18n::t("Fetch (All Remotes)"), Box::new(GitFetchAll), false),
+            (crate::i18n::t("Publish Branch"), Box::new(GitPublishBranch), false),
             (crate::i18n::t("Checkout to…"), Box::new(GitCheckout), true),
             (crate::i18n::t("Create Branch…"), Box::new(GitCreateBranch), false),
             (crate::i18n::t("Commit (Amend)"), Box::new(GitCommitAmend), true),
+            // --- git-sync ---
+            (crate::i18n::t("Commit Signed Off"), Box::new(GitCommitSignedOff), false),
+            (crate::i18n::t("Commit (No Verify)"), Box::new(GitCommitNoVerify), false),
+            (crate::i18n::t("Commit & Push"), Box::new(GitCommitAndPush), false),
+            (crate::i18n::t("Commit & Sync"), Box::new(GitCommitAndSync), false),
             (crate::i18n::t("Undo Last Commit"), Box::new(GitUndoLastCommit), false),
             ("Stash", Box::new(GitStash), true),
             (crate::i18n::t("Stash (Include Untracked)"), Box::new(GitStashIncludeUntracked), false),
@@ -538,60 +550,6 @@ impl Workbench {
                 this.notice = Some(match result {
                     Ok(()) => Notice::Info(crate::i18n::tf("Switched to {}", &[&branch]).into()),
                     Err(e) => Notice::Error(crate::i18n::tf("Could not switch to {0}: {1}", &[&branch, &first_line(&e)]).into()),
-                });
-                this.refresh_git(0, cx);
-                cx.notify();
-            })
-            .ok();
-        })
-        .detach();
-    }
-
-    /// Pull / push / fetch; several in sequence (sync: pull first, then push).
-    pub(super) fn git_sync(&mut self, ops: Vec<SyncOp>, cx: &mut Context<Self>) {
-        let Some(root) = self.repo_root(cx) else { return };
-        let working = match ops.as_slice() {
-            [SyncOp::Pull] => crate::i18n::t("Pulling…").to_string(),
-            [SyncOp::Push] => crate::i18n::t("Pushing…").to_string(),
-            [SyncOp::Fetch] => crate::i18n::t("Fetching…").to_string(),
-            [SyncOp::Pull, SyncOp::Push] => crate::i18n::t("Pulling, Pushing…").to_string(),
-            _ => crate::i18n::t("Syncing…").to_string(),
-        };
-        self.notice = Some(Notice::Info(working.into()));
-        cx.notify();
-        let host = self.remote.host.clone();
-        let task = cx.background_executor().spawn(async move {
-            for &op in &ops {
-                git::sync(host.as_ref(), &root, op).map_err(|e| (op, e))?;
-            }
-            Ok::<_, (SyncOp, String)>(ops)
-        });
-        cx.spawn(async move |this, cx| {
-            let result = task.await;
-            this.update(cx, |this, cx| {
-                this.notice = Some(match result {
-                    Ok(ops) => Notice::Info(
-                        match ops.as_slice() {
-                            [SyncOp::Pull] => crate::i18n::t("Pulled"),
-                            [SyncOp::Push] => crate::i18n::t("Pushed"),
-                            [SyncOp::Fetch] => crate::i18n::t("Fetched"),
-                            _ => crate::i18n::t("Synced"),
-                        }
-                        .into(),
-                    ),
-                    Err((op, e)) => {
-                        let hint = if e.contains("could not read Username") || e.contains("Permission denied") || e.contains("terminal prompts disabled") {
-                            format!(" {}", crate::i18n::t("The server wants credentials: run the command once in the terminal (or set up an SSH key)."))
-                        } else {
-                            String::new()
-                        };
-                        let failed = match op {
-                            SyncOp::Pull => crate::i18n::tf("Pull failed: {}", &[&first_line(&e)]),
-                            SyncOp::Push => crate::i18n::tf("Push failed: {}", &[&first_line(&e)]),
-                            SyncOp::Fetch => crate::i18n::tf("Fetch failed: {}", &[&first_line(&e)]),
-                        };
-                        Notice::Error(format!("{failed}{hint}").into())
-                    }
                 });
                 this.refresh_git(0, cx);
                 cx.notify();
@@ -746,7 +704,7 @@ impl Workbench {
     }
 
     /// Local confirm sheet; `then` runs if anything but "Cancel" is picked.
-    fn confirm(
+    pub(super) fn confirm(
         &mut self,
         window: &mut Window,
         title: &str,
@@ -784,11 +742,6 @@ impl Workbench {
             .ok();
         })
         .detach();
-    }
-
-    pub(super) fn git_publish_branch(&mut self, cx: &mut Context<Self>) {
-        let Some(root) = self.repo_root(cx) else { return };
-        self.git_task(crate::i18n::t("Publishing branch…"), cx, move |h| git::publish_branch(h, &root).map(|r| crate::i18n::tf("Published to {}", &[&r])));
     }
 
     pub(super) fn git_abort_merge(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -870,20 +823,8 @@ impl Workbench {
             );
         }
     }
-
-    /// The ↓↑ in the status bar: pull/push depending on behind/ahead, fetch if both are zero.
-    pub(super) fn git_sync_auto(&mut self, cx: &mut Context<Self>) {
-        let (ahead, behind) = self.git_status().map_or((0, 0), |s| (s.ahead, s.behind));
-        let ops = match (behind > 0, ahead > 0) {
-            (true, true) => vec![SyncOp::Pull, SyncOp::Push],
-            (true, false) => vec![SyncOp::Pull],
-            (false, true) => vec![SyncOp::Push],
-            (false, false) => vec![SyncOp::Fetch],
-        };
-        self.git_sync(ops, cx);
-    }
 }
 
-fn first_line(e: &str) -> &str {
+pub(super) fn first_line(e: &str) -> &str {
     e.lines().find(|l| !l.trim().is_empty()).unwrap_or(e).trim()
 }

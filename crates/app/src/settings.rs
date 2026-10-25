@@ -59,6 +59,22 @@ pub struct Settings {
     /// Names/globs hidden in the tree and skipped by search and quick open.
     pub files_exclude: Vec<String>,
     pub search_max_results: u32,
+    // --- git-sync ---
+    /// Fetch in the background while the window is in front (`git.autofetch`, every `git.autofetchPeriod` seconds).
+    pub git_autofetch: bool,
+    pub git_autofetch_period: u32,
+    /// Ask before a sync that pulls or pushes.
+    pub git_confirm_sync: bool,
+    /// Pull with `--rebase` instead of merging.
+    pub git_rebase_when_sync: bool,
+    pub git_prune_on_fetch: bool,
+    pub git_pull_tags: bool,
+    /// Fetch every remote before pulling.
+    pub git_fetch_on_pull: bool,
+    /// "none", "push" or "sync": what runs after a commit.
+    pub git_post_commit: String,
+    /// Commit all tracked changes when nothing is staged.
+    pub git_smart_commit: bool,
     // --- structural ---
     /// Most files a structural search reads and parses.
     pub search_structural_max_files: usize,
@@ -247,6 +263,16 @@ impl Default for Settings {
             auto_save: AutoSave::Off,
             files_exclude: vec![".git".into(), ".DS_Store".into()],
             search_max_results: 2000,
+            // --- git-sync ---
+            git_autofetch: false,
+            git_autofetch_period: 180,
+            git_confirm_sync: true,
+            git_rebase_when_sync: false,
+            git_prune_on_fetch: true,
+            git_pull_tags: true,
+            git_fetch_on_pull: false,
+            git_post_commit: "none".into(),
+            git_smart_commit: true,
             // --- structural ---
             search_structural_max_files: 5000,
             // --- compare ---
@@ -472,6 +498,22 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   "files.fallbackEncoding": "windows1254",
 
   "search.maxResults": 2000,
+  // --- git-sync ---
+  // Fetch in the background while the window is in front, every this many seconds (30 or more). Not in folders you have not trusted.
+  "git.autofetch": false,
+  "git.autofetchPeriod": 180,
+  // Ask before Sync pulls or pushes (your own settings only: a folder cannot turn the question off).
+  "git.confirmSync": true,
+  // Pull with rebase instead of a merge commit.
+  "git.rebaseWhenSync": false,
+  // Fetch drops remote branches that no longer exist, pull also fetches all tags, and fetchOnPull fetches every remote first.
+  "git.pruneOnFetch": true,
+  "git.pullTags": true,
+  "git.fetchOnPull": false,
+  // "none", "push" or "sync" after every commit (your own settings only).
+  "git.postCommitCommand": "none",
+  // Commit all tracked changes when nothing is staged (false: stage first).
+  "git.enableSmartCommit": true,
   // --- structural ---
   // Most files a structural search reads and parses (the rest are left out and the results say so).
   "search.structural.maxFiles": 5000,
@@ -561,7 +603,16 @@ pub const RESTRICTED_KEYS: &[&str] = &["terminal.shell", "lsp.servers", "json.sc
 
 /// Not read from the project file even in a trusted folder: the gate is global, so one
 /// repo touching it would open it for every folder.
-pub const USER_ONLY_KEYS: &[&str] = &["security.workspaceTrust.enabled", "http.confirmRequests", "ui.language", "update.check"];
+pub const USER_ONLY_KEYS: &[&str] = &[
+    "security.workspaceTrust.enabled",
+    "http.confirmRequests",
+    "ui.language",
+    "update.check",
+    // --- git-sync ---
+    // A repository must not turn the question before a sync off, or make every commit push by itself.
+    "git.confirmSync",
+    "git.postCommitCommand",
+];
 
 /// `trusted`: the folder is trusted. If not, `RESTRICTED_KEYS` in the project layer are ignored and a warning is recorded.
 pub fn parse_layers_trusted(user: &str, project: &[Layer], trusted: bool) -> Result<(Settings, Vec<String>), String> {
@@ -648,6 +699,34 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.number("search.maxResults", 1., 100_000.) {
         s.search_max_results = v as u32;
+    }
+    // --- git-sync ---
+    if let Some(v) = r.bool("git.autofetch") {
+        s.git_autofetch = v;
+    }
+    if let Some(v) = r.number("git.autofetchPeriod", 30., 86_400.) {
+        s.git_autofetch_period = v as u32;
+    }
+    if let Some(v) = r.bool("git.confirmSync") {
+        s.git_confirm_sync = v;
+    }
+    if let Some(v) = r.bool("git.rebaseWhenSync") {
+        s.git_rebase_when_sync = v;
+    }
+    if let Some(v) = r.bool("git.pruneOnFetch") {
+        s.git_prune_on_fetch = v;
+    }
+    if let Some(v) = r.bool("git.pullTags") {
+        s.git_pull_tags = v;
+    }
+    if let Some(v) = r.bool("git.fetchOnPull") {
+        s.git_fetch_on_pull = v;
+    }
+    if let Some(v) = r.choice("git.postCommitCommand", &["none", "push", "sync"]) {
+        s.git_post_commit = v;
+    }
+    if let Some(v) = r.bool("git.enableSmartCommit") {
+        s.git_smart_commit = v;
     }
     // --- structural ---
     if let Some(v) = r.number("search.structural.maxFiles", 1., 100_000.) {
@@ -1072,6 +1151,16 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "files.exclude",
         "files.hotExit",
         "search.maxResults",
+        // --- git-sync ---
+        "git.autofetch",
+        "git.autofetchPeriod",
+        "git.confirmSync",
+        "git.rebaseWhenSync",
+        "git.pruneOnFetch",
+        "git.pullTags",
+        "git.fetchOnPull",
+        "git.postCommitCommand",
+        "git.enableSmartCommit",
         // --- structural ---
         "search.structural.maxFiles",
         "compare.folders.ignore",

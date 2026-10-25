@@ -1,4 +1,4 @@
-//! Branches, checkout, worktrees, remotes, rebase, merge, publish and sync.
+//! Branches, checkout, worktrees, remotes, rebase and merge.
 
 use host::Host;
 
@@ -164,11 +164,13 @@ pub fn remotes(host: &dyn Host, root: &str) -> Result<Vec<(String, String)>, Str
     Ok(parse_remotes(&out))
 }
 
+/// A repository can hold a remote named `--upload-pack=<cmd>`; such names are left out, so nothing offers them and no command line gets one.
 pub fn parse_remotes(out: &str) -> Vec<(String, String)> {
     let mut v: Vec<(String, String)> = Vec::new();
     for line in out.lines() {
         let mut p = line.split_whitespace();
         if let (Some(n), Some(u)) = (p.next(), p.next())
+            && plain_name(n).is_ok()
             && !v.iter().any(|(x, _)| x == n)
         {
             v.push((n.to_string(), u.to_string()));
@@ -185,45 +187,10 @@ pub fn remove_remote(host: &dyn Host, root: &str, name: &str) -> Result<(), Stri
     git_ok(host, root, &["remote", "remove", "--", name]).map(|_| ())
 }
 
-/// Publish the current branch to the first remote (error if none) and set up tracking.
-pub fn publish_branch(host: &dyn Host, root: &str) -> Result<String, String> {
-    let remotes = remotes(host, root)?;
-    let remote = remotes
-        .iter()
-        .find(|(n, _)| n == "origin")
-        .or(remotes.first())
-        .map(|(n, _)| n.clone())
-        .ok_or(crate::i18n::t("This repository has no remote. Add one with Git: Add Remote…"))?;
-    plain_name(&remote)?;
-    git_ok(host, root, &["push", "-u", &remote, "HEAD"])?;
-    Ok(remote)
-}
-
-/// Network operations. If the server asks for a password no prompt is shown (GIT_TERMINAL_PROMPT=0); an error is returned.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SyncOp {
-    Pull,
-    Push,
-    Fetch,
-}
-
-pub fn sync(host: &dyn Host, root: &str, op: SyncOp) -> Result<(), String> {
-    match op {
-        SyncOp::Pull => git_ok(host, root, &["pull", "--no-rebase", "--no-edit"]).map(|_| ()),
-        SyncOp::Fetch => git_ok(host, root, &["fetch", "--prune"]).map(|_| ()),
-        SyncOp::Push => match git_ok(host, root, &["push"]) {
-            Ok(_) => Ok(()),
-            // Branch not yet published: push to origin, like "Publish Branch" in VS Code.
-            Err(e) if e.contains("has no upstream branch") => git_ok(host, root, &["push", "-u", "origin", "HEAD"]).map(|_| ()),
-            Err(e) => Err(e),
-        },
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::git::repo;
+    use crate::git::{publish_branch, repo};
 
     /// A hostile server can name a branch `--exec=<cmd>`; `git rebase <name>` would run it. Such names are neither offered nor passed on.
     #[cfg(unix)]

@@ -1,6 +1,6 @@
 //! Git: the system `git` runs through the agent, with the same code path
 //! locally and over SSH. Only commands and output parsing live here (independent of the UI): `status` is the
-//! working tree and commits, `branch` branches/remotes/rebase/merge, `log` history and blame, `diff` the line
+//! working tree and commits, `branch` branches/remotes/rebase/merge, `sync` pull/push/fetch/publish, `log` history and blame, `diff` the line
 //! diff and block staging, `stash` the stash. The runner below is shared; everything else is re-exported.
 
 use host::Host;
@@ -10,12 +10,14 @@ mod diff;
 mod log;
 mod stash;
 mod status;
+mod sync;
 
 pub use branch::*;
 pub use diff::*;
 pub use log::*;
 pub use stash::*;
 pub use status::*;
+pub use sync::*;
 
 fn git(host: &dyn Host, cwd: &str, args: &[&str]) -> Result<host::ExecOutput, String> {
     let out = host.exec("git", args, Some(cwd), None).map_err(|e| e.to_string())?;

@@ -513,10 +513,31 @@ sides are tinted and the `<<<<<<<` line has "Accept Current | Accept Incoming | 
 the palette has accept all and next/previous conflict, and the status bar counts them.
 Staging a file (marking it resolved) is refused while it still has conflict markers.
 
-Click the branch in the status bar to switch or create branches; the arrows next to it show
-how far you are ahead/behind and sync (pull, then push; fetch when nothing is pending). Git
-never asks for passwords in the app: if the server needs credentials, run the command once in
-the terminal or use an SSH key.
+Click the branch in the status bar to switch or create branches.
+
+**Sync Changes:** when the branch has an upstream and differs from it, a full-width button under
+Commit reads "Sync Changes ↓2 ↑1" (↓ commits to pull, ↑ commits to push); a branch with no upstream
+shows "Publish Branch" instead (when the repository has a remote). The sync item in the status bar
+does the same, shows a spinner while it runs, and its tooltip names the upstream and the counts.
+A sync pulls first, then pushes; with nothing pending it only fetches. Only one runs at a time.
+If the pull stops on conflicts they are resolved in Source Control (Abort Merge, or Continue /
+Abort Rebase when pulling with rebase); a dirty tree that the pull would overwrite says to commit
+or stash first. Git never asks for passwords in the app: if the server needs credentials, run the
+command once in the terminal or use an SSH key. A command that hangs is stopped after ten minutes.
+
+The "…" menu and the palette also have *Pull (Rebase)*, *Pull from…* (pick a remote branch),
+*Push to…* (pick a remote), *Fetch (All Remotes)* and *Publish Branch*, and the commit variants
+*Commit Signed Off* (`-s`), *Commit (No Verify)* (skips hooks), *Commit & Push* and *Commit & Sync*.
+
+These settings change the behaviour: `"git.confirmSync"` (default true: Sync asks before it pulls or
+pushes), `"git.rebaseWhenSync"` (pull with rebase), `"git.pruneOnFetch"` (default true), `"git.pullTags"`
+(default true), `"git.fetchOnPull"` (fetch every remote before pulling), `"git.postCommitCommand"`
+(`none`, `push` or `sync` after each commit), `"git.enableSmartCommit"` (default true: with nothing
+staged the commit button commits all tracked changes; off, it asks you to stage first) and
+`"git.autofetch"` with `"git.autofetchPeriod"` (off by default; fetches in the background every 180 s
+or more while the window is in front, never in a folder you have not trusted, and a failure only
+shows in the sync item's tooltip). `git.confirmSync` and `git.postCommitCommand` are read from your
+own settings only: a repository cannot turn the question off or make your commits push by themselves.
 
 ## Projects, favorites, bookmarks, tasks
 

@@ -91,6 +91,9 @@ pub(super) enum OverlayKind {
         op: git_glue::BranchOp,
         names: Vec<String>,
     },
+    // --- git-sync ---
+    /// "Pull from…" / "Push to…": the step to run for each row.
+    SyncTarget(Vec<crate::git::SyncOp>),
     /// "Connect to Dev Container / WSL": alias of the selected target (`docker:name`, `wsl:name`).
     RemoteTargets(Vec<String>),
     /// "Remove SSH Host…" / "Test Connection…": host aliases.
