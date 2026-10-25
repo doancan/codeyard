@@ -50,7 +50,7 @@ impl Workbench {
         // Two reasons to ask first, both answered by one prompt: the request does something a file from someone else should not do
         // silently (read the environment, upload files from elsewhere; once per file and session), or it goes to a host this
         // session has not contacted yet (`http.confirmRequests`).
-        let sensitive = if self.lsp.http_trusted.contains(&path) { Vec::new() } else { http::sensitive_parts(&request) };
+        let sensitive = if self.lsp.http_trusted.contains(&self.trust_key(&path)) { Vec::new() } else { http::sensitive_parts(&request) };
         let mut reasons = sensitive.clone();
         let (mode, gate) = {
             let mode = schema::gate::Confirm::parse(&cx.global::<Settings>().http_confirm).unwrap_or_default();
@@ -103,7 +103,7 @@ impl Workbench {
             if answer.await == Ok(0) {
                 this.update_in(cx, |this, window, cx| {
                     if !sensitive.is_empty() {
-                        this.lsp.http_trusted.insert(path.clone());
+                        this.lsp.http_trusted.insert(this.trust_key(&path));
                     }
                     if let Some(host) = &approve_host {
                         gate.approve(host);
