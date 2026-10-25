@@ -59,6 +59,9 @@ pub struct Settings {
     /// Names/globs hidden in the tree and skipped by search and quick open.
     pub files_exclude: Vec<String>,
     pub search_max_results: u32,
+    // --- structural ---
+    /// Most files a structural search reads and parses.
+    pub search_structural_max_files: usize,
     pub terminal_shell: Option<String>,
     pub terminal_font_size: f32,
     pub terminal_scrollback: usize,
@@ -233,6 +236,8 @@ impl Default for Settings {
             auto_save: AutoSave::Off,
             files_exclude: vec![".git".into(), ".DS_Store".into()],
             search_max_results: 2000,
+            // --- structural ---
+            search_structural_max_files: 5000,
             terminal_shell: None,
             terminal_font_size: theme::text::CODE.0,
             terminal_scrollback: 2000,
@@ -446,6 +451,9 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   "files.fallbackEncoding": "windows1254",
 
   "search.maxResults": 2000,
+  // --- structural ---
+  // Most files a structural search reads and parses (the rest are left out and the results say so).
+  "search.structural.maxFiles": 5000,
 
   // "terminal.shell": "/bin/zsh",
   "terminal.fontSize": 13,
@@ -612,6 +620,10 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.number("search.maxResults", 1., 100_000.) {
         s.search_max_results = v as u32;
+    }
+    // --- structural ---
+    if let Some(v) = r.number("search.structural.maxFiles", 1., 100_000.) {
+        s.search_structural_max_files = v as usize;
     }
     s.terminal_shell = r.string("terminal.shell");
     if let Some(v) = r.number("terminal.fontSize", 6., 48.) {
@@ -1012,6 +1024,8 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "files.exclude",
         "files.hotExit",
         "search.maxResults",
+        // --- structural ---
+        "search.structural.maxFiles",
         "terminal.shell",
         "terminal.fontSize",
         "terminal.scrollback",

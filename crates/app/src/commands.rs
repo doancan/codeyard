@@ -124,6 +124,9 @@ registry! {
     "workbench.toggleZenMode" => wb::ToggleZenMode,
     "workbench.toggleFullScreen" => wb::ToggleFullScreen,
     "search.findTodos" => wb::FindTodos,
+    // --- structural ---
+    "search.structuralSearch" => crate::search::StructuralSearch,
+    "search.structuralReplace" => crate::search::StructuralReplace,
     "workbench.quickOpen" => wb::QuickOpen,
     "workbench.commandPalette" => wb::CommandPalette,
     "workbench.goToLine" => wb::GoToLine,

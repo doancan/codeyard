@@ -43,6 +43,7 @@ is the complete list and always matches your key bindings; every setting is in [
 | Replace all | ⌥⌘↵ | Ctrl+Alt+Enter |
 | Find in selection / select all matches (find bar) | ⌥⌘L / ⌥↵ | Ctrl+Alt+L / Alt+Enter |
 | Find in files | ⇧⌘F | Ctrl+Shift+F |
+| Structural search (replace: from the palette) | ⌥⇧⌘F | Ctrl+Alt+Shift+F |
 | Split editor (same file in the other group) | ⌘\ | Ctrl+\ |
 | Move tab to the other group | ⌃⌘→ / ⌃⌘← | Ctrl+Ctrl+→ (rebind) |
 | Focus left / right group | ⌘1 / ⌘2 | Ctrl+1 / Ctrl+2 |
@@ -162,6 +163,48 @@ With the same file open in both groups, each group has its own cursors, scroll a
 
 **Find in files** (⇧⌘F) has a replace field: "Replace All" asks first, then changes open
 files in their editors (undoable) and closed files on disk.
+
+### Structural search and replace
+
+"Search: Structural Search…" (⌥⇧⌘F) and "Search: Structural Replace…" open the Search panel in structural mode; the `$X` button in
+the search box switches it on and off. The pattern is code in a language you pick (the chip next to the field; a click goes to
+the next one; it starts as the language of the active file, and a selection becomes the pattern). It is matched against the
+syntax tree, so spacing, line breaks and comments inside the code do not matter, and a match can span several lines.
+
+- `$X` matches one node: an identifier, a call, a whole block. A name used twice (`$X == $X`) must match the same text both times.
+- `$$$X` matches zero or more neighbouring nodes, for example all the arguments or all the statements of a block.
+- Names are upper case (`$X`, `$ARGS_2`). A name that starts with `_` (and `$_`, `$$$`) matches without remembering. `$x`, a lone
+  `$` and `$$` are ordinary text, so shell and PHP variables can be written as they are.
+- Everything else must be the same code. A `;` at the end may be left out. Comments are ignored unless the pattern has one.
+- A pattern is one expression or statement (or item, or type), not a sequence of them. In Python and Go a block is easiest written
+  on one line, or with ⇧↵ in the field. Rust macro arguments are plain tokens: use `$$$` for them.
+- If the pattern does not parse, the parser's position is shown under the field and nothing runs.
+
+Results list like any search (file, line, preview), with "replace in this file" and "dismiss" on each file. The replacement field
+takes `$X` and `$$$X` of the pattern; any other `$name` stays as typed. "Replace All" asks first, like Replace in Files: open files
+change in their editors (one undo step), closed files are written to disk and keep their line endings. Matches inside other matches
+(`f(f(1))`) are changed outermost first; search again for the inner ones. If a replacement would leave a file that no longer parses, the
+prompt names it and offers to skip it.
+
+How it works and what it leaves out:
+
+- The folder's text search first finds files that contain the longest word of the pattern; only those are read and parsed (`.gitignore`,
+  `files.exclude` and `search.exclude` apply, and so do the include and exclude fields). Unsaved editor text is used instead of the
+  file on disk. It works over SSH the same way: the server searches, this computer parses.
+- Files over 2 MB, binary files, and files with syntax errors are skipped; the second line of the status says how many.
+  `"search.structural.maxFiles"` (default 5000) caps how many files are parsed, and the status says when it did.
+- Nothing from the folder is run, so it also works in untrusted workspaces, and nothing is written before you confirm.
+- Languages: Rust, TypeScript, JavaScript, Python, Go, Java, C, C++, C#, Ruby, PHP, Kotlin, Swift, Lua and Shell. A TypeScript pattern
+  also searches `.tsx`, a JavaScript one `.jsx`.
+
+Six recipes (pattern → replacement):
+
+1. Rust, avoid building the default when it is not needed: `$R.unwrap_or($X.clone())` → `$R.unwrap_or_else(|| $X.clone())`.
+2. Python, compare with `None` the right way: `$X == None` → `$X is None`.
+3. TypeScript, move console logging to a logger: `console.log($$$ARGS)` → `logger.debug($$$ARGS)`; `$$$ARGS` carries any number of arguments.
+4. Go, switch the logging package: `fmt.Println($$$A)` → `log.Println($$$A)`.
+5. Rust, change a type everywhere it is written: `Box<Vec<$T>>` → `Box<[$T]>`.
+6. Rust, only look: `$X == $X` finds a value compared with itself, and `if $C { $$$B }` lists every `if`. Leave the replacement empty to search.
 
 **Encodings:** UTF-8 (with or without BOM), UTF-16 with a BOM, and single-byte files.
 A file that isn't valid UTF-8 is read as Windows-1254 (Turkish) by default; change it with

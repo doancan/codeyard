@@ -1910,3 +1910,22 @@ Saved as {}. You kept typing while it was saving, so the original tab stays open
 redirects to {}; not followed, send a request to that address to continue	{} adresine yönlendiriyor; izlenmedi, devam etmek için o adrese yeni bir istek gönderin
 Ignored the language server's edit to {} file outside the open folders|Ignored the language server's edit to {} files outside the open folders	Dil sunucusunun açık klasörlerin dışındaki {} dosyaya yönelik düzenlemesi yok sayıldı
 the GitHub token contains characters that cannot be sent	GitHub belirteci gönderilemeyen karakterler içeriyor
+
+# --- structural ---
+Search: Structural Search…	Arama: Yapısal Arama…
+Search: Structural Replace…	Arama: Yapısal Değiştirme…
+Pattern, e.g. foo($X, $$$REST)	Kalıp, örn. foo($X, $$$REST)
+Structural search: the pattern is code; $X matches one node, $$$X several	Yapısal arama: kalıp koddur; $X tek bir düğümle, $$$X birkaç düğümle eşleşir
+Language of the pattern (click for the next one)	Kalıbın dili (sonrakine geçmek için tıklayın)
+syntax error at “{}”	“{}” yerinde sözdizimi hatası
+“{}” is missing here	Burada “{}” eksik
+A pattern is one expression or statement, not several.	Kalıp tek bir ifade ya da deyimdir, birkaç tane olamaz.
+A pattern that is only a variable would match everything.	Yalnızca bir değişkenden oluşan kalıp her şeyle eşleşirdi.
+The pattern does not parse: {0} (line {1}, column {2})	Kalıp ayrıştırılamıyor: {0} (satır {1}, sütun {2})
+{} file skipped, parse errors|{} files skipped, parse errors	{} dosya atlandı, ayrıştırma hataları
+{} file skipped, binary or too large|{} files skipped, binary or too large	{} dosya atlandı, ikili ya da çok büyük
+only the first {} files were looked at (search.structural.maxFiles)	yalnızca ilk {} dosyaya bakıldı (search.structural.maxFiles)
+The result would not parse in {0} file: {1}|The result would not parse in {0} files: {1}	Sonuç {0} dosyada ayrıştırılamaz: {1}
+Skip Those Files	Bu Dosyaları Atla
+Replace Anyway	Yine de Değiştir
+Most files a structural search reads and parses	Yapısal aramanın okuyup ayrıştırdığı en çok dosya sayısı

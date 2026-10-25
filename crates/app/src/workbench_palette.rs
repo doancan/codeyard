@@ -38,6 +38,9 @@ impl Workbench {
             Command::action("File: Filter Log Lines…", FilterLog),
             Command::action("File: Open Active File as Hex", OpenAsHex),
             Command::action("Search: Find TODO Comments", FindTodos),
+            // --- structural ---
+            Command::action("Search: Structural Search…", crate::search::StructuralSearch),
+            Command::action("Search: Structural Replace…", crate::search::StructuralReplace),
             Command::action("View: Switch Editor…", SwitchEditor),
             Command::action("View: Toggle Zen Mode", ToggleZenMode),
             Command::action("View: Toggle Full Screen", ToggleFullScreen),
