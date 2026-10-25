@@ -2496,6 +2496,29 @@ fn language_servers_wait_for_trust(cx: &mut TestAppContext) {
     wait_for(cx, "server start attempted after trust", |cx| notice(&wb, cx).contains("isn't available"));
 }
 
+/// A language server can ask for edits anywhere; only files under the open folders are written, and it is told when nothing was.
+#[gpui::test]
+fn workspace_edits_outside_the_open_folders_are_dropped(cx: &mut TestAppContext) {
+    let dir = qa_dir("qa-edit-roots");
+    let outside = qa_dir("qa-edit-outside").join("hosts");
+    std::fs::write(&outside, "keep\n").unwrap();
+    std::fs::write(dir.join("a.txt"), "keep\n").unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    let edit_of = |path: &Path| {
+        let change = serde_json::json!([{ "range": { "start": { "line": 0, "character": 0 }, "end": { "line": 0, "character": 4 } }, "newText": "gone" }]);
+        serde_json::json!({ "changes": { crate::lsp::path_to_uri(&path.to_string_lossy()): change } })
+    };
+    let applied = wb.update(cx, |wb, cx| wb.apply_workspace_edit_for_test(&edit_of(&outside), cx));
+    cx.run_until_parked();
+    assert!(!applied, "everything was outside: the server hears applied:false");
+    assert_eq!(std::fs::read_to_string(&outside).unwrap(), "keep\n");
+    assert!(notice(&wb, cx).contains("outside the open folders"), "{}", notice(&wb, cx));
+    let applied = wb.update(cx, |wb, cx| wb.apply_workspace_edit_for_test(&edit_of(&dir.join("a.txt")), cx));
+    wait_for(cx, "edit written inside the folder", |_| std::fs::read_to_string(dir.join("a.txt")).is_ok_and(|t| t == "gone\n"));
+    assert!(applied);
+}
+
 /// Trust is per host: a folder trusted on this computer says nothing about the same path on a server.
 #[gpui::test]
 fn trusting_a_local_folder_does_not_trust_the_same_path_on_a_server(cx: &mut TestAppContext) {
