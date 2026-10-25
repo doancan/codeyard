@@ -74,6 +74,7 @@ mod pulls_glue;
 mod render_glue;
 #[path = "workbench_replace.rs"]
 mod replace_glue;
+// --- structural ---
 #[path = "workbench_schema.rs"]
 mod schema_glue;
 #[path = "workbench_session.rs"]
@@ -84,6 +85,8 @@ pub mod settings_ui;
 mod spell_glue;
 #[path = "workbench_state.rs"]
 mod state_glue;
+#[path = "workbench_structural.rs"]
+mod structural_glue;
 #[path = "workbench_tasks.rs"]
 pub mod tasks;
 #[path = "workbench_terminals.rs"]
@@ -839,6 +842,11 @@ impl Workbench {
                 SearchEvent::OpenInEditor(text) => this.create_scratch_with("search-results.txt".into(), text, window, cx),
                 SearchEvent::ReplaceAll { files, query, replacement, preserve_case, matches, truncated } => {
                     this.confirm_replace_all(files.clone(), query.clone(), replacement.clone(), *preserve_case, *matches, *truncated, window, cx)
+                }
+                // --- structural ---
+                SearchEvent::StructuralBuffers { generation, family } => this.structural_buffers(*generation, family, cx),
+                SearchEvent::StructuralReplace { files, family, pattern, replacement, matches } => {
+                    this.confirm_structural_replace(files.clone(), family, pattern.clone(), replacement.clone(), *matches, window, cx)
                 }
             }),
             cx.subscribe_in(&port_field, window, |this, field, ev: &crate::input::FieldEvent, _, cx| {

@@ -86,6 +86,11 @@ impl EditorView {
         n
     }
 
+    /// The text as it reads in the editor (`\n` line ends, no BOM). Structural search parses unsaved files from it.
+    pub fn buffer_text(&self) -> String {
+        self.buffer.rope().to_string()
+    }
+
     /// Lines (for the preview in the references list).
     pub fn text_lines(&self) -> Vec<String> {
         (0..self.buffer.len_lines()).map(|l| self.buffer.line(l)).collect()

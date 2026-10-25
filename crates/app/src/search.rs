@@ -15,6 +15,12 @@ use crate::input::{FieldEvent, TextField};
 use crate::ui::{self, c, icon, layout, palette, text};
 
 gpui::actions!(search, [HistoryPrev, HistoryNext, NextResult, PrevResult]);
+// --- structural ---
+gpui::actions!(search, [StructuralSearch, StructuralReplace]);
+
+#[path = "search_structural.rs"]
+mod structural_mode;
+pub(crate) use structural_mode::describe as describe_pattern_error;
 
 /// Number of remembered queries.
 const HISTORY_MAX: usize = 30;
@@ -40,6 +46,20 @@ pub enum SearchEvent {
         preserve_case: bool,
         matches: u32,
         truncated: bool,
+    },
+    // --- structural ---
+    /// A structural search wants the unsaved text of the open files of this language; answered with `run_structural`.
+    StructuralBuffers {
+        generation: u32,
+        family: &'static str,
+    },
+    /// Replace the structural matches in these files (workbench asks for confirmation).
+    StructuralReplace {
+        files: Vec<String>,
+        family: &'static str,
+        pattern: String,
+        replacement: String,
+        matches: u32,
     },
 }
 
@@ -90,6 +110,8 @@ pub struct SearchPanel {
     history_ix: Option<usize>,
     /// Last visited match: (file, match). F4 / ⇧F4 continue from here.
     current: Option<(usize, usize)>,
+    // --- structural ---
+    st: structural_mode::State,
     _subs: Vec<Subscription>,
 }
 
@@ -118,6 +140,13 @@ impl SearchPanel {
                 FieldEvent::Escape => this.clear_query(cx),
             }));
         }
+        // --- structural ---
+        let st = structural_mode::State::new(cx);
+        subs.push(cx.subscribe(&st.pattern, |this, _, ev: &FieldEvent, cx| match ev {
+            FieldEvent::Changed => this.schedule(cx),
+            FieldEvent::Submit => this.start(cx),
+            FieldEvent::Escape => this.clear_query(cx),
+        }));
         subs.push(cx.subscribe(&replace, |this, _, ev: &FieldEvent, cx| {
             if matches!(ev, FieldEvent::Submit) {
                 this.request_replace_all(cx);
@@ -146,6 +175,7 @@ impl SearchPanel {
             history: Vec::new(),
             history_ix: None,
             current: None,
+            st,
             _subs: subs,
         }
     }
@@ -238,7 +268,7 @@ impl SearchPanel {
 
     /// ↑ (`older`): previous query; ↓: next, empty at the end.
     fn step_history(&mut self, older: bool, cx: &mut Context<Self>) {
-        if self.history.is_empty() {
+        if self.history.is_empty() || self.st.on {
             return;
         }
         let next = match (self.history_ix, older) {
@@ -300,6 +330,9 @@ impl SearchPanel {
 
     /// Replace only the matches in this file (workbench asks for confirmation).
     fn replace_in_file(&mut self, fi: usize, cx: &mut Context<Self>) {
+        if self.st.on {
+            return self.request_structural_replace(Some(fi), cx);
+        }
         let (Some(query), Some(f)) = (self.query(cx), self.results.get(fi)) else { return };
         let replacement = self.replace.read(cx).text().to_string();
         cx.emit(SearchEvent::ReplaceAll {
@@ -356,10 +389,11 @@ impl SearchPanel {
     }
 
     fn clear_query(&mut self, cx: &mut Context<Self>) {
-        self.query.update(cx, |q, cx| q.set_text("", cx));
+        self.active_query().clone().update(cx, |q, cx| q.set_text("", cx));
     }
 
     fn stop(&mut self) {
+        self.cancel_structural();
         if let Some((ids, _task)) = self.running.take() {
             for id in ids {
                 self.host.cancel(id);
@@ -377,6 +411,9 @@ impl SearchPanel {
 
     /// Replace request: found files and query go to the workbench.
     pub fn request_replace_all(&mut self, cx: &mut Context<Self>) {
+        if self.st.on {
+            return self.request_structural_replace(None, cx);
+        }
         let Some(query) = self.query(cx) else { return };
         let (matches, truncated) = match self.status {
             Status::Done { matches, truncated, .. } => (matches, truncated),
@@ -437,6 +474,9 @@ impl SearchPanel {
 
     fn start(&mut self, cx: &mut Context<Self>) {
         use futures::{FutureExt as _, StreamExt as _};
+        if self.st.on {
+            return self.start_structural(cx);
+        }
         self.stop();
         self.results.clear();
         self.current = None;
@@ -567,7 +607,7 @@ impl SearchPanel {
 
     /// Results as plain text: file header, below it `line: text` (like VS Code's search editor).
     pub fn results_text(&self, cx: &App) -> String {
-        let (query, regex, case) = (self.query.read(cx).text().to_string(), self.regex, self.case_sensitive);
+        let (query, regex, case) = (self.active_query().read(cx).text().to_string(), self.regex && !self.st.on, self.case_sensitive);
         let root = self.root.clone().unwrap_or_default();
         let options = match (regex, case) {
             (true, true) => crate::i18n::t("Regex, Match Case"),
@@ -636,7 +676,7 @@ impl Render for SearchPanel {
             Status::Failed(e) => Some((e.to_string(), p.danger)),
         };
         let (q_focus, r_focus, i_focus, e_focus) = (
-            self.query.focus_handle(cx).is_focused(window),
+            self.active_query().focus_handle(cx).is_focused(window),
             self.replace.focus_handle(cx).is_focused(window),
             self.include.focus_handle(cx).is_focused(window),
             self.exclude.focus_handle(cx).is_focused(window),
@@ -666,9 +706,9 @@ impl Render for SearchPanel {
                     .items_center()
                     .gap(px(theme::SPACE[2]))
                     .child(crate::ui::search_icon(&p))
-                    .child(div().flex_1().min_w_0().child(self.query.clone()))
+                    .child(div().flex_1().min_w_0().child(self.active_query().clone()))
                     // Clear button while there's text (doesn't touch results; only empties the field).
-                    .when(!self.query.read(cx).text().is_empty(), |d| {
+                    .when(!self.active_query().read(cx).text().is_empty(), |d| {
                         d.child(
                             div()
                                 .id("s-clear-field")
@@ -688,14 +728,29 @@ impl Render for SearchPanel {
                                 })),
                         )
                     })
-                    .child(self.toggle("s-case", "Aa", self.case_sensitive, crate::i18n::t("Match case"), cx, |s| s.case_sensitive = !s.case_sensitive))
-                    .child(self.toggle("s-word", "ab", self.whole_word, crate::i18n::t("Whole word"), cx, |s| s.whole_word = !s.whole_word))
-                    .child(self.toggle("s-regex", ".*", self.regex, crate::i18n::t("Regular expression"), cx, |s| s.regex = !s.regex))
-                    .child(self.toggle("s-preserve", "AB", self.preserve_case, crate::i18n::t("Preserve case when replacing"), cx, |s| {
-                        s.preserve_case = !s.preserve_case
-                    }))
+                    // --- structural ---
+                    .when(self.st.on, |d| d.child(self.language_chip(cx)))
+                    .when(!self.st.on, |d| {
+                        d.child(self.toggle("s-case", "Aa", self.case_sensitive, crate::i18n::t("Match case"), cx, |s| s.case_sensitive = !s.case_sensitive))
+                            .child(self.toggle("s-word", "ab", self.whole_word, crate::i18n::t("Whole word"), cx, |s| s.whole_word = !s.whole_word))
+                            .child(self.toggle("s-regex", ".*", self.regex, crate::i18n::t("Regular expression"), cx, |s| s.regex = !s.regex))
+                            .child(self.toggle("s-preserve", "AB", self.preserve_case, crate::i18n::t("Preserve case when replacing"), cx, |s| {
+                                s.preserve_case = !s.preserve_case
+                            }))
+                    })
+                    .child(self.toggle(
+                        "s-structural",
+                        "$X",
+                        self.st.on,
+                        crate::i18n::t("Structural search: the pattern is code; $X matches one node, $$$X several"),
+                        cx,
+                        |s| s.st.on = !s.st.on,
+                    ))
                     .into_any_element(),
             ))
+            .when_some(self.st.error.clone().filter(|_| self.st.on), |d, e| {
+                d.child(div().id("s-pattern-error").text_size(px(text::XS.0)).text_color(c(p.danger)).child(e))
+            })
             .child(
                 div()
                     .flex()
@@ -788,6 +843,9 @@ impl Render for SearchPanel {
                             this.status = Status::Idle;
                         }))),
                 )
+            })
+            .when_some(self.structural_note(cx).filter(|_| self.st.on), |d, n| {
+                d.child(div().id("s-structural-note").text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(n))
             })
             .child(
                 div().flex_1().min_h_0().mx(px(-theme::SPACE[5])).child(
