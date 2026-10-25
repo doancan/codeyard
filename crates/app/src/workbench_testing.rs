@@ -33,6 +33,10 @@ impl Workbench {
         self.is_trusted_root(root, cx)
     }
 
+    pub fn apply_workspace_edit_for_test(&mut self, edit: &serde_json::Value, cx: &mut Context<Self>) -> bool {
+        self.apply_workspace_edit(edit, cx)
+    }
+
     pub fn bottom_panel_open_for_test(&self) -> bool {
         self.chrome.panel_open
     }
