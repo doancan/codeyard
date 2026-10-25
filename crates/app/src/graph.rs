@@ -352,8 +352,11 @@ pub fn run_op(host: &dyn Host, root: &str, hash: &str, op: &CommitOp) -> Result<
     let short = &hash[..hash.len().min(7)];
     match op {
         CommitOp::Checkout => git(&["checkout", "--detach", hash]).map(|_| crate::i18n::tf("Checked out {} (detached HEAD)", &[&short])),
-        CommitOp::Branch(name) => git(&["checkout", "-b", name, hash]).map(|_| crate::i18n::tf("Created branch {0} at {1}", &[&name, &short])),
-        CommitOp::Tag(name) => git(&["tag", name, hash]).map(|_| crate::i18n::tf("Tagged {0} as {1}", &[&short, &name])),
+        CommitOp::Branch(name) => crate::git::plain_name(name)
+            .and_then(|_| git(&["checkout", "-b", name, hash]).map(|_| crate::i18n::tf("Created branch {0} at {1}", &[&name, &short]))),
+        CommitOp::Tag(name) => {
+            crate::git::plain_name(name).and_then(|_| git(&["tag", name, hash]).map(|_| crate::i18n::tf("Tagged {0} as {1}", &[&short, &name])))
+        }
         CommitOp::CherryPick => {
             let mut args = vec!["cherry-pick"];
             args.extend(mainline_args(host, root, hash));

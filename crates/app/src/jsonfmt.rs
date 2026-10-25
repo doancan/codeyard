@@ -1,6 +1,8 @@
 //! JSON / JSONC formatting: re-indents while preserving key order and comments
 //! (no server needed). Works on the text; doesn't parse and rewrite.
 
+const MAX_DEPTH: usize = 512;
+
 /// Indent without breaking the structure. `indent`: one level's indentation ("  ", "\t"). Reports
 /// definite errors such as unbalanced brackets (`Err`); the content is unchanged.
 pub fn format(text: &str, indent: &str) -> Result<String, String> {
@@ -66,6 +68,10 @@ pub fn format(text: &str, indent: &str) -> Result<String, String> {
                     out.push(close);
                     i = k + 1;
                 } else {
+                    // The output grows with depth × lines: refuse what no real file has, before it eats the memory.
+                    if depth >= MAX_DEPTH {
+                        return Err(format!("nested deeper than {MAX_DEPTH} levels"));
+                    }
                     stack.push(c);
                     depth += 1;
                     newline(&mut out, depth);
@@ -177,6 +183,14 @@ pub fn minify(text: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn absurd_nesting_is_refused_not_expanded() {
+        let src = format!("{}{}", "[".repeat(20_000), "]".repeat(20_000));
+        assert!(format(&src, "  ").unwrap_err().contains("nested deeper"));
+        let fine = format!("{}1{}", "[".repeat(100), "]".repeat(100));
+        assert!(format(&fine, "  ").is_ok());
+    }
 
     #[test]
     fn formats_nested_values_and_keeps_key_order() {

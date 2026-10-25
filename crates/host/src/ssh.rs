@@ -362,8 +362,21 @@ fn ssh_command(alias: &str) -> Command {
     cmd.args(["-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2"]);
     #[cfg(unix)]
     cmd.args(["-o", "ControlMaster=auto", "-o", "ControlPersist=600"]);
-    cmd.arg(alias).arg("--");
+    // `--` first: a host name that starts with `-` is a host name, never an ssh option (`-oProxyCommand=…` runs a program).
+    cmd.arg("--").arg(alias);
     cmd
+}
+
+/// Refuses names that would be read as an option by ssh/docker, or that cannot be one line of a command.
+/// Every path to a target goes through here first; `--` in the command line is the second lock.
+fn check_target(alias: &str) -> Result<()> {
+    let name = match target_of(alias) {
+        Target::Ssh(n) | Target::Docker(n) | Target::Wsl(n) => n,
+    };
+    if name.is_empty() || name.starts_with('-') || name.contains(['\0', '\n', '\r']) {
+        return Err(HostError::Disconnected(format!("“{}” is not a valid host name", alias.escape_debug())));
+    }
+    Ok(())
 }
 
 pub(crate) fn sh_quote(s: &str) -> String {
@@ -375,6 +388,7 @@ const RUN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
 fn run(alias: &str, script: &str, stdin: Option<&[u8]>) -> Result<String> {
     use std::io::{Read, Write};
+    check_target(alias)?;
     let mut cmd = target_command(alias);
     // ssh passes the script to the server's login shell (fish, csh…); `sh -c` gives the same POSIX behaviour everywhere.
     // Container and WSL commands already start with `sh -c`.
@@ -533,9 +547,11 @@ pub fn forward_port(alias: &str, local: u16, remote: u16, cancel: bool) -> Resul
     if !matches!(target_of(alias), Target::Ssh(_)) {
         return Err(HostError::Op(proto::Error::Other("Port forwarding needs an SSH host: containers and WSL share the local network".into())));
     }
+    check_target(alias)?;
     let out = ssh_base(alias)
         .args(["-o", "BatchMode=yes", "-O", if cancel { "cancel" } else { "forward" }, "-L"])
         .arg(format!("{local}:localhost:{remote}"))
+        .arg("--")
         .arg(alias)
         .stdin(Stdio::null())
         .output()
@@ -560,9 +576,11 @@ pub fn forward_port_reverse(alias: &str, remote: u16, local: u16, cancel: bool) 
     if !matches!(target_of(alias), Target::Ssh(_)) {
         return Err(HostError::Op(proto::Error::Other("Port forwarding needs an SSH host: containers and WSL share the local network".into())));
     }
+    check_target(alias)?;
     let out = ssh_base(alias)
         .args(["-o", "BatchMode=yes", "-O", if cancel { "cancel" } else { "forward" }, "-R"])
         .arg(format!("{remote}:localhost:{local}"))
+        .arg("--")
         .arg(alias)
         .stdin(Stdio::null())
         .output()
@@ -583,7 +601,7 @@ pub fn close_master(alias: &str) {
     if !matches!(target_of(alias), Target::Ssh(_)) {
         return;
     }
-    let _ = ssh_base(alias).args(["-o", "BatchMode=yes", "-O", "exit"]).arg(alias).stdin(Stdio::null()).output();
+    let _ = ssh_base(alias).args(["-o", "BatchMode=yes", "-O", "exit", "--"]).arg(alias).stdin(Stdio::null()).output();
 }
 
 /// On exit: close every ControlMaster this process opened. `ControlPersist`
@@ -651,6 +669,22 @@ mod tests {
         assert!(!args.iter().any(|a| a == "ControlMaster=auto" || a == "ControlPersist=600"));
         assert!(forward_port("example", 3000, 3000, false).unwrap_err().to_string().contains("Windows OpenSSH"));
         assert!(forward_port_reverse("example", 3000, 3000, false).is_err());
+    }
+
+    #[test]
+    fn a_host_name_can_never_be_an_ssh_option() {
+        let args = |a: &str| ssh_command(a).get_args().map(|x| x.to_string_lossy().into_owned()).collect::<Vec<_>>();
+        let a = args("devbox");
+        assert_eq!(&a[a.len() - 2..], ["--", "devbox"], "`--` comes right before the host");
+        for bad in ["-oProxyCommand=touch /tmp/x", "-F/etc/passwd", "", "a\nb", "docker:-v", "wsl:--x", "x\0y"] {
+            let err = check_target(bad).unwrap_err().to_string();
+            assert!(err.contains("not a valid host name"), "{bad:?}: {err}");
+            assert!(run(bad, "true", None).is_err());
+        }
+        assert!(forward_port("-oProxyCommand=x", 1, 2, false).is_err());
+        for ok in ["devbox", "user@10.0.0.5", "docker:web", "wsl:Ubuntu", "my-host.example.com"] {
+            assert!(check_target(ok).is_ok(), "{ok}");
+        }
     }
 
     #[test]

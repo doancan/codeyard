@@ -486,11 +486,23 @@ pub fn branches(host: &dyn Host, root: &str) -> Result<(Vec<String>, Vec<String>
     Ok(parse_branches(&out))
 }
 
+/// A branch, tag or remote name that git would not take for an option. Git lets a repository hold a ref called
+/// `--exec=cmd` (a hostile server can name its default branch so), and `git rebase --exec` runs it: names that start
+/// with `-` never reach a command line.
+pub(crate) fn plain_name(name: &str) -> Result<&str, String> {
+    if name.is_empty() || name.starts_with('-') || name.contains(['\0', '\n', '\r']) {
+        return Err(crate::i18n::tf("“{}” is not a usable branch or remote name", &[&name.escape_debug()]));
+    }
+    Ok(name)
+}
+
 pub fn parse_branches(out: &str) -> (Vec<String>, Vec<String>) {
     let (mut local, mut remote) = (Vec::new(), Vec::new());
     for line in out.lines() {
         if let Some(b) = line.strip_prefix("refs/heads/") {
-            local.push(b.to_string());
+            if plain_name(b).is_ok() {
+                local.push(b.to_string());
+            }
         } else if let Some(b) = line.strip_prefix("refs/remotes/").filter(|b| !b.ends_with("/HEAD")) {
             remote.push(b.to_string());
         }
@@ -500,6 +512,7 @@ pub fn parse_branches(out: &str) -> (Vec<String>, Vec<String>) {
 
 /// Switch branch. For a remote branch ("origin/x") a tracking local branch is created; `create`: new branch.
 pub fn checkout(host: &dyn Host, root: &str, branch: &str, remote: bool, create: bool) -> Result<(), String> {
+    plain_name(branch)?;
     let args: Vec<&str> = match (remote, create) {
         (_, true) => vec!["checkout", "-q", "-b", branch],
         (true, false) => vec!["checkout", "-q", "--track", branch],
@@ -511,6 +524,7 @@ pub fn checkout(host: &dyn Host, root: &str, branch: &str, remote: bool, create:
 /// Rebase the current branch onto `onto` (non-interactive). `Ok(true)` on conflict: rebase in progress
 /// (resolve the conflicts, then `rebase_continue` or `rebase_abort`).
 pub fn rebase(host: &dyn Host, root: &str, onto: &str) -> Result<bool, String> {
+    plain_name(onto)?;
     if rebase_in_progress(host, root) {
         return Err(crate::i18n::t("A rebase is already in progress: use Git: Continue Rebase or Git: Abort Rebase").into());
     }
@@ -591,6 +605,7 @@ pub fn add_worktree(host: &dyn Host, root: &str, path: &str, branch: &str) -> Re
 /// Merge the branch into the current branch (`--no-edit`). On conflict `Ok(true)`: merge in progress,
 /// conflicts are resolved in Source Control. Any other failure is `Err`.
 pub fn merge(host: &dyn Host, root: &str, branch: &str) -> Result<bool, String> {
+    plain_name(branch)?;
     let out = git(host, root, &["merge", "--no-edit", branch])?;
     if out.ok() {
         return Ok(false);
@@ -662,6 +677,7 @@ pub fn publish_branch(host: &dyn Host, root: &str) -> Result<String, String> {
         .or(remotes.first())
         .map(|(n, _)| n.clone())
         .ok_or(crate::i18n::t("This repository has no remote. Add one with Git: Add Remote…"))?;
+    plain_name(&remote)?;
     git_ok(host, root, &["push", "-u", &remote, "HEAD"])?;
     Ok(remote)
 }
@@ -1184,6 +1200,29 @@ mod identity_tests {
         run(&["add", "-A"])?;
         run(&["commit", "-q", "-m", "base"])?;
         Some((dir, run))
+    }
+
+    /// A hostile server can name a branch `--exec=<cmd>`; `git rebase <name>` would run it. Such names are neither offered nor passed on.
+    #[cfg(unix)]
+    #[test]
+    fn a_branch_named_like_an_option_never_reaches_git_as_one() {
+        let Some((dir, run)) = repo("dashbranch") else { return };
+        let marker = std::env::temp_dir().join(format!("codeyard-dashbranch-marker-{}", std::process::id()));
+        let _ = std::fs::remove_file(&marker);
+        // Ref names cannot hold a space, so the shell gets `${IFS}`.
+        let evil = format!("--exec=touch${{IFS}}{}", marker.display());
+        run(&["update-ref", &format!("refs/heads/{evil}"), "HEAD"]).expect("git accepts the ref name");
+        run(&["checkout", "-q", "-b", "mine"]).unwrap();
+        let host = host::local();
+        let root = dir.to_str().unwrap();
+        let (local, _) = branches(&host, root).unwrap();
+        assert!(local.iter().any(|b| b == "mine"), "{local:?}");
+        assert!(!local.iter().any(|b| b.starts_with('-')), "{local:?}");
+        assert!(rebase(&host, root, &evil).is_err());
+        assert!(merge(&host, root, &evil).is_err());
+        assert!(checkout(&host, root, &evil, false, false).is_err());
+        assert!(!marker.exists(), "the command in the branch name ran");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// `diff.<driver>.textconv` from the repository's config runs a program and replaces file content in `show` and `blame`;

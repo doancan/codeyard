@@ -322,7 +322,12 @@ pub(crate) fn hover_inner(set: &SchemaSet, format: Format, text: &str, offset: u
 pub fn declared_schema(text: &str, format: Format) -> Option<String> {
     match format {
         Format::Json => {
-            let head = &text[..text.len().min(4096)];
+            // The cut may fall inside a multibyte character (any Turkish text will do): back up to a boundary.
+            let mut cut = text.len().min(4096);
+            while !text.is_char_boundary(cut) {
+                cut -= 1;
+            }
+            let head = &text[..cut];
             let at = head.find("\"$schema\"")? + 9;
             let rest = head[at..].trim_start().strip_prefix(':')?.trim_start().strip_prefix('"')?;
             Some(rest[..rest.find('"')?].to_string())
@@ -481,6 +486,15 @@ pub fn is_meta_schema(url: &str) -> bool {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_multibyte_character_across_the_scan_limit_does_not_panic() {
+        let text = format!("{{\"a\":\"{}ş\"}}", "x".repeat(4089));
+        assert!(!text.is_char_boundary(4096), "the cut would land inside ş");
+        assert_eq!(declared_schema(&text, Format::Json), None);
+        let declared = format!("{{\"$schema\":\"https://example.com/s.json\",\"a\":\"{}ş\"}}", "x".repeat(4050));
+        assert_eq!(declared_schema(&declared, Format::Json).as_deref(), Some("https://example.com/s.json"));
+    }
 
     fn store() -> Arc<Store> {
         Store::new(None, false)

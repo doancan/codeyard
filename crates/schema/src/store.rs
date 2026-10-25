@@ -17,6 +17,22 @@ const TTL: Duration = Duration::from_secs(7 * 24 * 3600);
 /// Upper bound for a single schema file (SchemaStore's largest are a few hundred KB).
 const MAX_BYTES: u64 = 8 * 1024 * 1024;
 
+/// A local schema is a regular file of a sane size: `"$schema": "/dev/zero"` in any file must not fill the memory,
+/// and a FIFO must not park the thread.
+fn read_local(path: &str) -> Result<String, String> {
+    use std::io::Read;
+    let meta = std::fs::metadata(path).map_err(|e| format!("{path}: {e}"))?;
+    if !meta.is_file() {
+        return Err(format!("{path}: not a regular file"));
+    }
+    let mut text = String::new();
+    std::fs::File::open(path).and_then(|f| f.take(MAX_BYTES + 1).read_to_string(&mut text)).map_err(|e| format!("{path}: {e}"))?;
+    if text.len() as u64 > MAX_BYTES {
+        return Err(format!("{path}: larger than {} MB", MAX_BYTES / 1024 / 1024));
+    }
+    Ok(text)
+}
+
 /// Local file reader: in an SSH workspace schema files live on the file's host, not on this machine.
 pub trait FileSource: Send + Sync {
     fn read(&self, path: &str) -> Result<String, String>;
@@ -111,10 +127,10 @@ impl Store {
     pub fn text(&self, url: &str) -> Result<String, String> {
         if url.starts_with("file://") {
             let path = crate::file_uri::to_path(url).ok_or_else(|| format!("Invalid file URI: {url}"))?;
-            return std::fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"));
+            return read_local(&path);
         }
         if !url.contains("://") {
-            return std::fs::read_to_string(url).map_err(|e| format!("{url}: {e}"));
+            return read_local(url);
         }
         let file = self.cache_file(url);
         let cached = file.as_deref().and_then(|f| std::fs::read_to_string(f).ok().map(|t| (t, fresh(f))));
@@ -341,6 +357,24 @@ fn matches_memo(p: &[u8], s: &[u8], dead: &mut std::collections::HashSet<(usize,
 mod tests {
     use super::*;
     use std::sync::atomic::AtomicUsize;
+
+    #[cfg(unix)]
+    #[test]
+    fn local_schemas_must_be_regular_files_of_sane_size() {
+        let store = Store::new(None, false);
+        for url in ["/dev/zero", "file:///dev/zero", "/dev/null/x"] {
+            assert!(store.text(url).is_err(), "{url}");
+        }
+        let dir = std::env::temp_dir().join(format!("codeyard-schema-big-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let big = dir.join("big.json");
+        std::fs::write(&big, vec![b' '; MAX_BYTES as usize + 1]).unwrap();
+        assert!(store.text(big.to_str().unwrap()).unwrap_err().contains("larger than"));
+        let ok = dir.join("ok.json");
+        std::fs::write(&ok, "{}").unwrap();
+        assert_eq!(store.text(ok.to_str().unwrap()).unwrap(), "{}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn untrusted_folders_may_only_download_from_schemastore() {

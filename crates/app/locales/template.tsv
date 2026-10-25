@@ -1765,6 +1765,7 @@ your words
 “{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	
 “{}” can't be opened	
 “{}” is not a port number	
+“{}” is not a usable branch or remote name	
 “{}” is not a valid http(s) address	
 “{}” is not in the SSH config (or shares a Host line with other names: edit the file).	
 “{}” is not in the dictionary. Quick Fix shows suggestions.	

@@ -219,6 +219,45 @@ pub fn upload(shell: Shell, local: &Path, remote_dir: &str, cancel: &AtomicBool,
     }
 }
 
+/// Moves `stage/name` to `dest` after checking that the extracted stream held that one folder and nothing else.
+/// An existing folder is merged into (files of the same name are replaced, other files stay).
+fn commit_staged(stage: &Path, name: &str, dest: &Path) -> Result<()> {
+    let mut entries = std::fs::read_dir(stage).map_err(|e| fail(format!("{}: {e}", stage.display())))?;
+    let only = entries.next().and_then(|e| e.ok()).filter(|e| e.file_name() == name);
+    if only.is_none() || entries.next().is_some() {
+        return Err(fail("the server sent files outside the folder you asked for; nothing was written"));
+    }
+    let staged = stage.join(name);
+    if !std::fs::symlink_metadata(&staged).is_ok_and(|m| m.is_dir()) {
+        return Err(fail("the server sent something other than the folder you asked for; nothing was written"));
+    }
+    merge_dir(&staged, dest).map_err(|e| fail(format!("{}: {e}", dest.display())))
+}
+
+fn merge_dir(from: &Path, to: &Path) -> std::io::Result<()> {
+    if !std::fs::symlink_metadata(to).is_ok_and(|m| m.is_dir()) {
+        return std::fs::rename(from, to);
+    }
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let (src, dst) = (entry.path(), to.join(entry.file_name()));
+        let src_is_dir = std::fs::symlink_metadata(&src)?.is_dir();
+        match std::fs::symlink_metadata(&dst) {
+            Ok(m) if m.is_dir() && src_is_dir => merge_dir(&src, &dst)?,
+            Ok(m) => {
+                if m.is_dir() {
+                    std::fs::remove_dir_all(&dst)?;
+                } else {
+                    std::fs::remove_file(&dst)?;
+                }
+                std::fs::rename(&src, &dst)?;
+            }
+            Err(_) => std::fs::rename(&src, &dst)?,
+        }
+    }
+    Ok(())
+}
+
 /// Download a server file/folder into local `local_dir` (same name); returns the local path.
 /// Written as `.part` first and renamed when done, so a partial file never has the real name.
 pub fn download(shell: Shell, remote: &str, is_dir: bool, local_dir: &Path, cancel: &AtomicBool, mut step: impl FnMut(u64)) -> Result<PathBuf> {
@@ -235,49 +274,46 @@ pub fn download(shell: Shell, remote: &str, is_dir: bool, local_dir: &Path, canc
         (false, Ok(m)) if m.is_dir() => return Err(fail(format!("a folder named “{name}” is in the way in {}", local_dir.display()))),
         _ => {}
     }
-    // A folder we create is removed on cancel/error; one we merge into is left alone (user files).
-    let existed = dest.exists();
     if is_dir {
         let script = format!("tar -C {} -cf - {}", sh_quote(if parent.is_empty() { "/" } else { parent }), sh_quote(&format!("./{name}")));
+        // The server decides what is in the stream: extract into a scratch folder first and only move `name` out of it,
+        // so an entry like `./.zshrc` next to it can never land in the folder the user picked.
+        let stage = local_dir.join(format!(".{name}.codeyard-dl"));
+        let _ = std::fs::remove_dir_all(&stage);
+        std::fs::create_dir(&stage).map_err(|e| fail(format!("{}: {e}", stage.display())))?;
         let mut remote_p = spawn(shell(&script), Stdio::null(), Stdio::piped())?;
         let mut tar = spawn(
             {
                 let mut c = Command::new("tar");
-                c.arg("-C").arg(local_dir).arg("-xf").arg("-").arg("--no-same-owner");
+                c.arg("-C").arg(&stage).arg("-xf").arg("-").arg("--no-same-owner");
                 c
             },
             Stdio::piped(),
             Stdio::null(),
         )
-        .map_err(|_| fail("tar is not available on this computer (needed to download folders)"))?;
+        .map_err(|_| {
+            let _ = std::fs::remove_dir_all(&stage);
+            fail("tar is not available on this computer (needed to download folders)")
+        })?;
         let (mut from, mut to) = (piped(remote_p.stdout.take())?, piped(tar.stdin.take())?);
         let done = pump(&mut from, &mut to, cancel, &mut step);
         drop(to);
         match done {
             Ok(true) => {
-                let result = finish(remote_p, "download").and_then(|()| finish(tar, "tar"));
-                if let Err(e) = result {
-                    if !existed {
-                        let _ = std::fs::remove_dir_all(&dest);
-                    }
-                    return Err(e);
-                }
-                Ok(dest)
+                let result = finish(remote_p, "download").and_then(|()| finish(tar, "tar")).and_then(|()| commit_staged(&stage, name, &dest));
+                let _ = std::fs::remove_dir_all(&stage);
+                result.map(|()| dest)
             }
             Ok(false) => {
                 kill(&mut remote_p);
                 kill(&mut tar);
-                if !existed {
-                    let _ = std::fs::remove_dir_all(&dest);
-                }
+                let _ = std::fs::remove_dir_all(&stage);
                 Err(fail("cancelled"))
             }
             Err(e) => {
                 kill(&mut tar);
                 let why = finish(remote_p, "download").err().map(|e| e.to_string()).unwrap_or_else(|| io_reason(&e));
-                if !existed {
-                    let _ = std::fs::remove_dir_all(&dest);
-                }
+                let _ = std::fs::remove_dir_all(&stage);
                 Err(fail(why))
             }
         }
@@ -481,6 +517,55 @@ mod tests {
             c.arg("-c").arg(body);
             c
         }
+    }
+
+    /// A server may send any tar it likes: whatever sits next to the folder that was asked for must not reach the target folder.
+    #[test]
+    #[cfg_attr(windows, ignore = "uses a local POSIX shell to emulate the remote server")]
+    fn a_hostile_tar_cannot_write_beside_the_downloaded_folder() {
+        let d = dir("hostile");
+        let evil = d.join("evil");
+        std::fs::create_dir_all(evil.join("project")).unwrap();
+        std::fs::write(evil.join("project/a.txt"), "ok").unwrap();
+        std::fs::write(evil.join(".zshrc"), "touch pwned").unwrap();
+        let tarball = d.join("stream.tar");
+        let made = Command::new("tar").arg("-C").arg(&evil).arg("-cf").arg(&tarball).arg("./project").arg("./.zshrc").status().unwrap();
+        assert!(made.success());
+        let cat = tarball.clone();
+        let hostile = move |_: &str| {
+            let mut c = Command::new("cat");
+            c.arg(&cat);
+            c
+        };
+        let out = d.join("out");
+        let cancel = AtomicBool::new(false);
+        let err = download(&hostile, "/srv/project", true, &out, &cancel, |_| {}).unwrap_err().to_string();
+        assert!(err.contains("outside the folder"), "{err}");
+        assert!(!out.join(".zshrc").exists());
+        assert!(!out.join("project").exists(), "nothing of a refused stream is kept");
+        assert_eq!(std::fs::read_dir(&out).unwrap().count(), 0, "the scratch folder is gone too");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// An existing folder is still merged into, as before the stream went through a scratch folder.
+    #[test]
+    #[cfg_attr(windows, ignore = "uses a local POSIX shell to emulate the remote server")]
+    fn downloading_into_an_existing_folder_merges() {
+        let d = dir("merge");
+        let src = d.join("srv/project");
+        std::fs::create_dir_all(src.join("sub")).unwrap();
+        std::fs::write(src.join("new.txt"), "new").unwrap();
+        std::fs::write(src.join("sub/both.txt"), "from server").unwrap();
+        let out = d.join("out");
+        std::fs::create_dir_all(out.join("project/sub")).unwrap();
+        std::fs::write(out.join("project/mine.txt"), "mine").unwrap();
+        std::fs::write(out.join("project/sub/both.txt"), "old").unwrap();
+        let cancel = AtomicBool::new(false);
+        let got = download(&local_shell, src.to_str().unwrap(), true, &out, &cancel, |_| {}).unwrap();
+        assert_eq!(std::fs::read_to_string(got.join("mine.txt")).unwrap(), "mine");
+        assert_eq!(std::fs::read_to_string(got.join("new.txt")).unwrap(), "new");
+        assert_eq!(std::fs::read_to_string(got.join("sub/both.txt")).unwrap(), "from server");
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

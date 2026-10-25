@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-25
+
+### Security
+
+- **Git branch names.** A repository can hold a branch called `--exec=<command>` (a server can name its default branch so), and
+  *Rebase onto…* passed the name to `git rebase` as an option, which ran the command. Branch, tag and remote names that start with
+  `-` are now refused before any git command, and not offered in the pickers. *Merge* and *Checkout* had the same flaw.
+- **Folder download.** A server could send more than the folder you asked for, and extraction wrote it next to that folder in the
+  directory you picked (`.zshrc`, `.git/hooks`…). The stream is now extracted into a scratch folder, anything but the requested
+  folder is refused, and only then is it moved into place.
+- **SSH host names.** A host name starting with `-` (a pasted name, a shared `projects.jsonc`, a `Host` line) was read by ssh as an option,
+  and `-oProxyCommand=…` runs a program. Such names are refused, and `--` now comes before the host on every ssh command line.
+- **Local `$schema` paths.** `"$schema": "/dev/zero"` in any JSON or YAML file made Codeyard read without end until memory ran out.
+  A local schema must now be a regular file of at most 8 MB.
+
+### Fixed
+
+- Opening a JSON file crashed the app when a non-ASCII character (any `ş`, `ğ`, `ü`…) sat across byte 4096 of the file; with
+  *Restore Session* it crashed again on every start.
+- *Format Document* on deeply nested JSON (tens of thousands of `[`) built gigabytes of output; nesting beyond 512 levels is refused.
+
 ## [0.2.0] - 2026-10-25
 
 ### Added
@@ -117,6 +138,7 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/doancan/codeyard/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/doancan/codeyard/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/doancan/codeyard/releases/tag/v0.1.0
