@@ -31,6 +31,9 @@ use crate::ui::{self, ActiveTheme, Palette, c, icon, layout, palette, text};
 pub mod a11y;
 #[path = "workbench_connect.rs"]
 mod connect_glue;
+// --- data ---
+#[path = "workbench_data.rs"]
+mod data_glue;
 #[path = "workbench_debug.rs"]
 mod debug;
 #[path = "workbench_editors.rs"]
@@ -316,6 +319,11 @@ actions!(
         SendRequest,
         ShowResponseHeaders,
         FilterLog,
+        // --- data ---
+        DataConvert,
+        DataQuery,
+        DataCopyPath,
+        DataDecode,
     ]
 );
 
@@ -579,6 +587,9 @@ pub struct Workbench {
     update: state_glue::UpdateUi,
     /// Editor groups: tabs, separate tab views (diff, large file, page) and startup state.
     tabs: state_glue::TabsState,
+    // --- data ---
+    /// Data lens: the query bar and the status bar path (see workbench_data.rs).
+    data: data_glue::DataState,
     focus_handle: FocusHandle,
     _subs: Vec<Subscription>,
 }
@@ -1067,6 +1078,7 @@ impl Workbench {
                 tab_scroll: gpui::ScrollHandle::new(),
             },
             update: state_glue::UpdateUi::new(dev, cx),
+            data: Default::default(),
             focus_handle: cx.focus_handle(),
             _subs: subs,
         };

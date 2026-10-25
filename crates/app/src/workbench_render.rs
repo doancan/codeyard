@@ -327,6 +327,11 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::run_selected_text))
             .on_action(cx.listener(Self::go_to_last_edit))
             .on_action(cx.listener(Self::new_scratch_file))
+            // --- data ---
+            .on_action(cx.listener(Self::data_convert))
+            .on_action(cx.listener(Self::data_query))
+            .on_action(cx.listener(Self::data_copy_path))
+            .on_action(cx.listener(Self::data_decode))
             .on_action(cx.listener(Self::clone_repository))
             .on_action(cx.listener(Self::open_settings_page))
             .on_action(cx.listener(Self::quick_open))

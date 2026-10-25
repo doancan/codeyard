@@ -309,9 +309,14 @@ impl Workbench {
 
     /// Scratch file with the given content (e.g. search results).
     pub(super) fn create_scratch_with(&mut self, name: String, content: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.create_scratch_path(name, content, window, cx);
+    }
+
+    /// Like `create_scratch_with`, and says where the file went (a taken name gets a number).
+    pub(super) fn create_scratch_path(&mut self, name: String, content: &str, window: &mut Window, cx: &mut Context<Self>) -> Option<String> {
         let name = ui::file_name(name.trim()).to_string();
         if name.is_empty() {
-            return;
+            return None;
         }
         let dir = self.cfg.dir.clone().or_else(crate::settings::config_dir).unwrap_or_else(std::env::temp_dir).join("scratches");
         let result = std::fs::create_dir_all(&dir).map(|_| {
@@ -328,11 +333,14 @@ impl Workbench {
         match result.and_then(|p| std::fs::write(&p, content).map(|_| p)) {
             Ok(path) => {
                 let host = self.remote.local_host.clone();
-                self.open_file_on(host, path.to_string_lossy().into_owned(), window, cx);
+                let path = path.to_string_lossy().into_owned();
+                self.open_file_on(host, path.clone(), window, cx);
+                Some(path)
             }
             Err(e) => {
                 self.notice = Some(Notice::Error(crate::i18n::tf("Could not create the scratch file: {}", &[&e]).into()));
                 cx.notify();
+                None
             }
         }
     }

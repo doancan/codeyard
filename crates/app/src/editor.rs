@@ -180,6 +180,10 @@ actions!(
 mod color_glue;
 #[path = "editor_complete.rs"]
 mod complete_glue;
+// --- data ---
+#[path = "editor_data.rs"]
+mod data_glue;
+pub use data_glue::DataSource;
 #[path = "editor_display.rs"]
 mod display_glue;
 #[path = "editor_edit.rs"]

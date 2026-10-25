@@ -44,7 +44,7 @@ const COMMON: &[&str] = &[
 /// The category of a setting (from the key prefix).
 pub fn category_of(key: &str) -> &'static str {
     match key.split('.').next().unwrap_or("") {
-        "editor" => "Editor",
+        "editor" | "data" => "Editor",
         "workbench" | "theme" => "Workbench",
         "files" => "Files",
         "explorer" => "Explorer",

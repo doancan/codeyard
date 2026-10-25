@@ -16,6 +16,14 @@ mod commands;
 mod conflict;
 mod crash;
 mod dap;
+// --- data ---
+mod datalens;
+mod datalens_decode;
+mod datalens_query;
+#[cfg(test)]
+mod datalens_tests;
+#[cfg(test)]
+mod datalens_ui_tests;
 mod debug_config;
 mod diff;
 mod display;
