@@ -29,6 +29,10 @@ impl Workbench {
         self.reconnect_lost(window, cx);
     }
 
+    pub fn is_trusted_root_for_test(&self, root: &str, cx: &App) -> bool {
+        self.is_trusted_root(root, cx)
+    }
+
     pub fn bottom_panel_open_for_test(&self) -> bool {
         self.chrome.panel_open
     }

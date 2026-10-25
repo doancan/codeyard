@@ -2496,6 +2496,23 @@ fn language_servers_wait_for_trust(cx: &mut TestAppContext) {
     wait_for(cx, "server start attempted after trust", |cx| notice(&wb, cx).contains("isn't available"));
 }
 
+/// Trust is per host: a folder trusted on this computer says nothing about the same path on a server.
+#[gpui::test]
+fn trusting_a_local_folder_does_not_trust_the_same_path_on_a_server(cx: &mut TestAppContext) {
+    let dir = qa_dir("qa-trust-per-host");
+    let root = dir.to_string_lossy().into_owned();
+    let (wb, cx) = setup_trusting(cx, "qa-trust-per-host");
+    open(&wb, &dir, cx);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Workspace: Trust This Folder", window, cx));
+    assert!(wb.read_with(cx, |wb, cx| wb.is_trusted_root_for_test(&root, cx)));
+    let (req_r, req_w) = std::io::pipe().unwrap();
+    let (resp_r, resp_w) = std::io::pipe().unwrap();
+    std::thread::spawn(move || agent::serve(req_r, resp_w));
+    let remote: std::sync::Arc<dyn host::Host> = std::sync::Arc::new(host::RemoteHost::from_streams(Box::new(resp_r), Box::new(req_w), "ssh://other").unwrap());
+    wb.update_in(cx, |wb, window, cx| wb.attach_host(remote, "other".into(), window, cx));
+    assert!(!wb.read_with(cx, |wb, cx| wb.is_trusted_root_for_test(&root, cx)), "same path, different host");
+}
+
 /// A repository must not be able to pick the program the editor runs just by being opened:
 /// `terminal.shell`, `lsp.servers` and the trust switch itself come from the user, or from a
 /// folder the user trusted. Harmless keys (tab size) still apply. "Trust This Folder" lifts it.
