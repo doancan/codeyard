@@ -1904,3 +1904,5 @@ Software Update	Yazılım Güncelleme
 # --- reliability-data ---
 The version that was on disk has been kept in Local History.	Diskteki sürüm yerel geçmişe kaydedildi.
 Could not keep a copy of the version that was on disk: {}	Diskteki sürümün kopyası saklanamadı: {}
+Could not open the state database: {}. Tabs, recent folders and backups will not be remembered this session.	Durum veritabanı açılamadı: {}. Sekmeler, son klasörler ve yedekler bu oturumda hatırlanmayacak.
+The state database was damaged ({0}). It was moved to {1} and a new one was started; recent folders and open tabs were forgotten.	Durum veritabanı bozulmuştu ({0}). {1} konumuna taşındı ve yenisi başlatıldı; son klasörler ve açık sekmeler unutuldu.
