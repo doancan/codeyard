@@ -67,6 +67,12 @@ pub(super) enum OverlayKind {
         dir: String,
         names: Vec<String>,
     },
+    // --- compare ---
+    /// "Compare: Folders…": the folders to choose from, and the left one once it is chosen.
+    CompareFolder {
+        first: Option<compare_glue::Spot>,
+        choices: Vec<compare_glue::CompareChoice>,
+    },
     SettingChoice {
         key: &'static str,
         options: &'static [&'static str],
@@ -169,6 +175,11 @@ pub(super) enum InputPurpose {
     },
     /// Scratch file name.
     Scratch,
+    // --- compare ---
+    /// A typed folder path for "Compare: Folders…"; `first` is the left folder once chosen.
+    CompareFolder {
+        first: Option<compare_glue::Spot>,
+    },
     /// Debugger: condition / log message / hit count of the breakpoint on the line.
     EditBreakpoint {
         path: String,
@@ -237,6 +248,9 @@ pub(super) enum MenuCmd {
     OpenTerminal,
     SelectForCompare,
     CompareWithSelected,
+    // --- compare ---
+    SelectFolderForCompare,
+    CompareFolderWithSelected,
     OpenSide,
     ExpandAllInside,
     CollapseAllInside,

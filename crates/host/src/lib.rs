@@ -89,7 +89,7 @@ pub struct SearchStream {
 /// dropped before the end, so a caller keeps what it got and can say the result is partial.
 pub struct HashStream {
     pub id: u32,
-    rx: mpsc::Receiver<Response>,
+    pub rx: mpsc::Receiver<Response>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

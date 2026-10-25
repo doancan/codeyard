@@ -36,6 +36,16 @@ impl Workbench {
             commands.push(MenuCmd::CollapseAllInside);
             items.push(MenuItem::new(crate::i18n::t("Find in Folder…")));
             commands.push(MenuCmd::FindInFolder);
+            // --- compare ---
+            match &self.roots.compare_folder_a {
+                Some(a) if a.path != target.path => {
+                    items.push(MenuItem::new(crate::i18n::t("Compare Folder with Selected")).separator());
+                    commands.push(MenuCmd::CompareFolderWithSelected);
+                    items.push(MenuItem::new(crate::i18n::t("Select Folder for Compare")));
+                }
+                _ => items.push(MenuItem::new(crate::i18n::t("Select Folder for Compare")).separator()),
+            }
+            commands.push(MenuCmd::SelectFolderForCompare);
         }
         if !target.is_dir {
             items.push(MenuItem::new(crate::i18n::t("Open to the Side")).separator());
@@ -301,6 +311,9 @@ impl Workbench {
                     self.compare_paths(a, target.path, window, cx);
                 }
             }
+            // --- compare ---
+            MenuCmd::SelectFolderForCompare => self.select_folder_for_compare(target.path, cx),
+            MenuCmd::CompareFolderWithSelected => self.compare_folder_with_selected(target.path, window, cx),
             MenuCmd::Follow => self.follow_path(target.path, window, cx),
             MenuCmd::OpenSide => {
                 self.open_file(target.path, window, cx);

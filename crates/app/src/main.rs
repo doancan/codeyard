@@ -13,6 +13,9 @@
 mod access;
 mod color;
 mod commands;
+// --- compare ---
+mod compare_folders;
+mod compare_logic;
 mod conflict;
 mod crash;
 mod dap;
