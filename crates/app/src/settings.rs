@@ -59,6 +59,11 @@ pub struct Settings {
     /// Names/globs hidden in the tree and skipped by search and quick open.
     pub files_exclude: Vec<String>,
     pub search_max_results: u32,
+    // --- compare ---
+    /// Globs the folder comparison skips on both sides.
+    pub compare_ignore: Vec<String>,
+    /// Entries per side before the folder comparison stops and says so.
+    pub compare_max_files: u32,
     pub terminal_shell: Option<String>,
     pub terminal_font_size: f32,
     pub terminal_scrollback: usize,
@@ -233,6 +238,9 @@ impl Default for Settings {
             auto_save: AutoSave::Off,
             files_exclude: vec![".git".into(), ".DS_Store".into()],
             search_max_results: 2000,
+            // --- compare ---
+            compare_ignore: vec![".git".into(), "node_modules".into(), "target".into()],
+            compare_max_files: 50_000,
             terminal_shell: None,
             terminal_font_size: theme::text::CODE.0,
             terminal_scrollback: 2000,
@@ -447,6 +455,10 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
 
   "search.maxResults": 2000,
 
+  // Compare Folders: globs skipped on both sides, and how many entries per side before it stops.
+  // "compare.folders.ignore": [".git", "node_modules", "target"],
+  // "compare.folders.maxFiles": 50000,
+
   // "terminal.shell": "/bin/zsh",
   "terminal.fontSize": 13,
   "terminal.scrollback": 2000,
@@ -612,6 +624,13 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.number("search.maxResults", 1., 100_000.) {
         s.search_max_results = v as u32;
+    }
+    // --- compare ---
+    if let Some(v) = r.strings("compare.folders.ignore") {
+        s.compare_ignore = v;
+    }
+    if let Some(v) = r.number("compare.folders.maxFiles", 100., 5_000_000.) {
+        s.compare_max_files = v as u32;
     }
     s.terminal_shell = r.string("terminal.shell");
     if let Some(v) = r.number("terminal.fontSize", 6., 48.) {
@@ -1012,6 +1031,8 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "files.exclude",
         "files.hotExit",
         "search.maxResults",
+        "compare.folders.ignore",
+        "compare.folders.maxFiles",
         "terminal.shell",
         "terminal.fontSize",
         "terminal.scrollback",

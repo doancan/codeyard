@@ -188,6 +188,8 @@ impl Workbench {
                 }
             },
             InputPurpose::Scratch => self.create_scratch(name, window, cx),
+            // --- compare ---
+            InputPurpose::CompareFolder { first } => self.finish_compare_input(first, name, window, cx),
             InputPurpose::SaveTheme => self.save_theme_as(name, window, cx),
             InputPurpose::CloneUrl => self.ask_clone_target(name, window, cx),
             InputPurpose::ConnectHost => {

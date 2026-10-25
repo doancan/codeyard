@@ -60,6 +60,7 @@ impl Render for Workbench {
                 Page::Markdown(view) => view.into_any_element(),
                 Page::Shortcuts(view) => view.into_any_element(),
                 Page::Merge(view) => view.into_any_element(),
+                Page::Compare(view) => view.into_any_element(),
             },
             (_, None) if self.tabs.diff_active && self.tabs.diff.is_some() => self.tabs.diff.clone().unwrap().into_any_element(),
             (_, None) if self.tabs.large_active && self.tabs.large.is_some() => self.tabs.large.clone().unwrap().into_any_element(),
@@ -324,6 +325,8 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::open_markdown_preview))
             .on_action(cx.listener(Self::compare_with_clipboard))
             .on_action(cx.listener(Self::compare_with_saved))
+            // --- compare ---
+            .on_action(cx.listener(Self::compare_folders))
             .on_action(cx.listener(Self::run_selected_text))
             .on_action(cx.listener(Self::go_to_last_edit))
             .on_action(cx.listener(Self::new_scratch_file))
