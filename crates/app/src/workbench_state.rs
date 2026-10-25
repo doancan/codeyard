@@ -260,6 +260,12 @@ pub(super) struct UpdateUi {
     pub(super) arm: Option<gpui::Task<()>>,
     /// The startup timers (the question, then the daily check).
     pub(super) schedule: Option<gpui::Task<()>>,
+    /// macOS: the dialog lives in a window of its own (like the update windows of other Mac apps) instead of a card over the editor.
+    /// Off in tests, which drive the card, and on other systems.
+    pub(super) native: bool,
+    /// That window while it is open, and whether it is being opened (the open is deferred out of `render`).
+    pub(super) window: Option<gpui::WindowHandle<update_window_glue::UpdateWindow>>,
+    pub(super) opening: bool,
 }
 
 impl UpdateUi {
@@ -284,6 +290,9 @@ impl UpdateUi {
             armed: false,
             arm: None,
             schedule: None,
+            native: cfg!(all(target_os = "macos", not(test))),
+            window: None,
+            opening: false,
         }
     }
 }

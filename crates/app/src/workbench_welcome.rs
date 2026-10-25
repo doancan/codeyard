@@ -89,23 +89,24 @@ impl Workbench {
 
     /// Palette: show the full disk access dialog on demand.
     pub(super) fn show_disk_access(&mut self, _: &ShowDiskAccess, window: &mut Window, cx: &mut Context<Self>) {
+        if dirs::home_dir().and_then(|h| crate::access::full_disk_access(&h)) == Some(true) {
+            self.notice = Some(Notice::Info(crate::i18n::t("Codeyard already has Full Disk Access.").into()));
+            cx.notify();
+            return;
+        }
         self.ask_disk_access(window, cx);
     }
 
-    /// On first launch (macOS only, when permission is definitely missing, once): say why it's needed,
-    /// and open the Full Disk Access page directly with "Open System Settings".
-    pub(super) fn ask_disk_access_once(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let home = dirs::home_dir();
-        // An ad-hoc signed build gets a new identity with every release, so the grant is gone after an update: ask once per version.
+    /// macOS, once per version (a build signed without a developer certificate is a new app to the system with every release):
+    /// touch the protected folders so the system asks in its own dialogs and lists Codeyard, like any Mac app does at its first start.
+    pub(super) fn request_file_access_once(&mut self, cx: &mut Context<Self>) {
         let version = env!("CARGO_PKG_VERSION");
-        let asked = self.persist.state.as_ref().and_then(|s| s.get("disk_access_asked")).is_some_and(|v| v == version);
-        if asked || std::env::var_os("CODEYARD_SKIP_DISK_PROMPT").is_some() || !home.as_deref().is_some_and(crate::access::should_ask) {
-            return;
-        }
+        let done = self.persist.state.as_ref().and_then(|s| s.get("file_access_requested")).is_some_and(|v| v == version);
+        let Some(home) = dirs::home_dir().filter(|_| !done && std::env::var_os("CODEYARD_SKIP_DISK_PROMPT").is_none()) else { return };
         if let Some(s) = &self.persist.state {
-            let _ = s.set("disk_access_asked", version);
+            let _ = s.set("file_access_requested", version);
         }
-        self.ask_disk_access(window, cx);
+        cx.background_executor().spawn(async move { crate::access::request(&home) }).detach();
     }
 
     fn ask_disk_access(&mut self, window: &mut Window, cx: &mut Context<Self>) {

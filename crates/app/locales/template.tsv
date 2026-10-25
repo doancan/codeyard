@@ -136,6 +136,7 @@ Close details
 Close to the Right	
 Close without saving	
 Closing the window loses everything since the last save.	
+Codeyard already has Full Disk Access.	
 Codeyard can't replace itself in {}: your account can't write there. Download the new version and drag it in yourself.	
 Codeyard can't update itself on this system. Download the new version yourself.	
 Codeyard could not start the new version: {}. The update is installed; open Codeyard again to use it.	
@@ -1203,6 +1204,7 @@ Skip This Version
 Small colored badges with the language's letters	
 Snippets reloaded	
 Snippets: Insert Snippet…	
+Software Update	
 Solid blue folders like Finder, outline files with a language dot like GitHub	
 Solid folders colored and marked by purpose, solid files colored by language	
 Source Control	

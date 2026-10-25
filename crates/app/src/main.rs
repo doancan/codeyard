@@ -192,6 +192,7 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("backspace", picker::PickBackspace, Some("Picker")),
         // The update dialog: Esc closes it, Tab walks its buttons, Enter and Space press the focused one (Enter: the primary one).
         KeyBinding::new("escape", UpdateDismiss, Some("UpdateDialog")),
+        KeyBinding::new("cmd-w", UpdateDismiss, Some("UpdateDialog")),
         KeyBinding::new("tab", UpdateFocusNext, Some("UpdateDialog")),
         KeyBinding::new("shift-tab", UpdateFocusPrev, Some("UpdateDialog")),
         KeyBinding::new("enter", UpdateConfirm, Some("UpdateDialog")),

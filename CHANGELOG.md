@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-26
+
+### Changed
+
+- **Update window (macOS).** The update dialog is its own small window, like the system's software updates: app icon, title, release notes
+  and one row of buttons (*Skip This Version*, *Remind Me Later*, *Install Update*). Progress, restart and errors show in the same window,
+  Esc and the red button mean *Later*, and the colours follow the theme (the brand's mint green on dark backgrounds). Windows and Linux
+  keep the dialog inside the window.
+- **File access prompts.** The start-up dialog about Full Disk Access is gone. The first start of each version touches Desktop,
+  Documents and Downloads, so macOS asks in its own dialogs and lists Codeyard under Files & Folders, and Codeyard tries once to get itself
+  listed under Full Disk Access too. *Help: Grant Full Disk Access…* stays, and says so when the access is already there.
+- A window with a folder open (local or over SSH) keeps the editor area quiet instead of showing the welcome page, as VS Code does; an empty window still opens on it.
+
+### Fixed
+
+- Edits whose new text contains line breaks (`\r\n`, or a stray `\r` in the file) could leave a cursor past the end of the text, and
+  the next arrow key, *Toggle Comment* or *Delete Lines* panicked.
+- *Replace in Files* and workspace edits (rename) rewrote the line endings of closed files that mix `\n` and `\r\n`; untouched lines
+  now keep their endings.
+- *Run Test at Cursor* and task variables such as `${file}` put names into the shell command unquoted, so a folder or file name with
+  `$(…)` or `;` ran as a command.
+- Pinning a folder whose name contains a line break pinned somebody else's folder as well.
+
 ## [0.2.1] - 2026-10-25
 
 ### Security
@@ -138,7 +161,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/doancan/codeyard/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/doancan/codeyard/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/doancan/codeyard/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/doancan/codeyard/releases/tag/v0.1.0

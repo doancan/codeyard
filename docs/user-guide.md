@@ -375,7 +375,8 @@ set it) takes:
 That command works whatever the setting says, and shows its errors. Debug builds and windows started with `--do` or `--panel` never
 ask and never check by themselves.
 
-**The dialog.** *Checking*, then either "Codeyard is up to date" or the new version with its release notes. *Install and Restart*
+**The dialog.** On macOS it is a window of its own, titled *Software Update*, with the app's icon, like the update windows of other Mac
+apps (other systems draw it as a card over the editor). Closing it with the red button, ⌘W or Esc does what *Later* does. *Checking*, then either "Codeyard is up to date" or the new version with its release notes. *Install and Restart*
 downloads the installer (progress in megabytes), checks it, replaces the app and offers *Restart Now* (*What comes back* below). *Later* closes the dialog and keeps the item
 in the status bar. *Skip This Version* hides that version from the notice and the item for good; a manual check still offers it and a
 newer version is not skipped. *Release Page* opens the release on GitHub. Esc or *Hide* during a download closes the dialog and the

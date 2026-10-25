@@ -1054,7 +1054,8 @@ impl Buffer {
             let start = range.start.min(end).max(prev_end);
             let end = end.max(start);
             prev_end = end;
-            let text = text.replace("\r\n", "\n").replace('\r', "\n");
+            // Typing and most pastes have no `\r`: keep the string instead of copying it twice.
+            let text = if text.contains('\r') { unify_breaks(&text) } else { text };
             parts.push(Part { at: start, removed: self.rope.slice(start..end).to_string(), inserted: text });
             owners.push(i);
         }
@@ -1089,7 +1090,9 @@ impl Buffer {
             Place::End if owners.len() == self.sels.len() => after,
             Place::End => vec![*after.last().unwrap()],
         };
-        self.sels = sels_after;
+        // A placement counted on the text as written (`\r\n` is two chars there, one here) must not leave a cursor past the end.
+        let end = self.len_chars();
+        self.sels = sels_after.into_iter().map(|s| Sel { cursor: s.cursor.min(end), anchor: s.anchor.map(|a| a.min(end)), goal: s.goal }).collect();
         self.primary = primary_before.min(self.sels.len() - 1);
         self.normalize();
         let edit = Edit {
@@ -1938,7 +1941,9 @@ fn char_to_byte(s: &str, chars: usize) -> usize {
     s.char_indices().nth(chars).map_or(s.len(), |(b, _)| b)
 }
 
+mod edit_bytes;
 mod lines;
+use edit_bytes::unify_breaks;
 mod textutil;
 use textutil::{has_mixed_endings, is_combining_mark};
 #[cfg(test)]

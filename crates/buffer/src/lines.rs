@@ -10,11 +10,13 @@ impl Buffer {
         move |p: usize| {
             let mut out = p as isize;
             for (r, t) in parts {
-                let ins = t.chars().count() as isize;
+                // Counted the way `edit_parts` inserts it: a `\r\n` in the text becomes one character.
+                let len = if t.contains('\r') { unify_breaks(t).chars().count() } else { t.chars().count() };
+                let ins = len as isize;
                 if p >= r.end {
                     out += ins - r.len() as isize;
                 } else if p > r.start {
-                    out += (r.start as isize + (p - r.start).min(t.chars().count()) as isize) - p as isize;
+                    out += (r.start as isize + (p - r.start).min(len) as isize) - p as isize;
                     break;
                 }
             }

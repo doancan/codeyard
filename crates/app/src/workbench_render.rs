@@ -35,6 +35,7 @@ impl Render for Workbench {
         self.sync_slots(cx);
         self.sync_timeline(cx);
         self.sync_outline(cx);
+        self.sync_update_window(window, cx);
         if let Some(ws) = self.persist.pending_restore.take() {
             self.restore_tabs(ws, window, cx);
         }

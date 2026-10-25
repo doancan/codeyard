@@ -517,6 +517,21 @@ impl Workbench {
         self.update_action(action, window, cx);
     }
 
+    /// Show the dialog in a window of its own, as on macOS (windows made by tests draw the card over the editor otherwise).
+    pub fn use_update_window_for_test(&mut self) {
+        self.update.native = true;
+    }
+
+    /// The dialog's own window, while it is open.
+    pub fn update_window_for_test(&self, cx: &App) -> Option<gpui::AnyWindowHandle> {
+        self.update.window.filter(|w| update_glue::window_is_open(*w, cx)).map(Into::into)
+    }
+
+    /// Esc, as the dialog's own window sends it.
+    pub fn update_escape_for_test(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.update_cmd(update_glue::UpdateCmd::Dismiss, window, cx);
+    }
+
     /// The status bar item: (label, tooltip).
     pub fn update_status_for_test(&self) -> Option<(String, String)> {
         self.update_status_item().map(|i| (i.label.to_string(), i.tip.to_string()))

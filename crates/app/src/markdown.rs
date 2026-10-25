@@ -457,29 +457,41 @@ fn text_view(id: impl Into<gpui::ElementId>, spans: &[Span], p: &Palette, base: 
 /// A parsed document as elements, for places that show Markdown outside the preview tab (the update dialog's release notes).
 /// Links open through the same safe-scheme check as in the preview.
 pub(crate) fn document_view(blocks: &[Block], id: &str, p: &Palette) -> Vec<gpui::AnyElement> {
-    blocks.iter().enumerate().map(|(i, b)| block_view(b, &format!("{id}{i}"), p, 0)).collect()
+    blocks.iter().enumerate().map(|(i, b)| block_view(b, &format!("{id}{i}"), p, 0, false)).collect()
 }
 
-fn block_view(b: &Block, id: &str, p: &Palette, depth: usize) -> gpui::AnyElement {
+/// The same, set small and tight: headings only a little larger than the text, no rules under them, list items one line apart.
+/// For a document that is read in a small window (the release notes).
+pub(crate) fn compact_document_view(blocks: &[Block], id: &str, p: &Palette) -> Vec<gpui::AnyElement> {
+    blocks.iter().enumerate().map(|(i, b)| block_view(b, &format!("{id}{i}"), p, 0, true)).collect()
+}
+
+fn block_view(b: &Block, id: &str, p: &Palette, depth: usize, compact: bool) -> gpui::AnyElement {
     match b {
         Block::Heading(level, spans) => {
-            let size = match level {
-                1 => 28.,
-                2 => 22.,
-                3 => 18.,
-                4 => 16.,
-                _ => 14.,
+            let size = match (compact, level) {
+                (true, _) => 13.,
+                (false, 1) => 28.,
+                (false, 2) => 22.,
+                (false, 3) => 18.,
+                (false, 4) => 16.,
+                (false, _) => 14.,
             };
             div()
-                .pt(px(if *level <= 2 { 12. } else { 6. }))
-                .pb(px(4.))
+                .pt(px(match (compact, *level <= 2) {
+                    (true, _) => 6.,
+                    (false, true) => 12.,
+                    (false, false) => 6.,
+                }))
+                .pb(px(if compact { 2. } else { 4. }))
                 .text_size(px(size))
-                .when(*level <= 2, |d| d.border_b_1().border_color(c(p.border)))
+                .when(*level <= 2 && !compact, |d| d.border_b_1().border_color(c(p.border)))
                 .child(text_view(SharedString::from(format!("{id}h")), spans, p, Some(FontWeight::BOLD)))
                 .into_any_element()
         }
         Block::Paragraph(spans) => {
-            div().text_size(px(text::BASE.0)).line_height(px(22.)).child(text_view(SharedString::from(format!("{id}p")), spans, p, None)).into_any_element()
+            let (size, line) = if compact { (text::SM.0, 18.) } else { (text::BASE.0, 22.) };
+            div().text_size(px(size)).line_height(px(line)).child(text_view(SharedString::from(format!("{id}p")), spans, p, None)).into_any_element()
         }
         Block::Code { text: t, lang } => div()
             .w_full()
@@ -511,12 +523,12 @@ fn block_view(b: &Block, id: &str, p: &Palette, depth: usize) -> gpui::AnyElemen
             .border_l_2()
             .border_color(c(p.border_input))
             .text_color(c(p.text_muted))
-            .children(inner.iter().enumerate().map(|(i, b)| block_view(b, &format!("{id}q{i}"), p, depth)))
+            .children(inner.iter().enumerate().map(|(i, b)| block_view(b, &format!("{id}q{i}"), p, depth, compact)))
             .into_any_element(),
         Block::List { start, items } => div()
             .flex()
             .flex_col()
-            .gap(px(theme::SPACE[2]))
+            .gap(px(if compact { 0. } else { theme::SPACE[2] }))
             .children(items.iter().enumerate().map(|(i, (task, inner))| {
                 let marker = match (task, start) {
                     (Some(true), _) => "☑".to_string(),
@@ -524,15 +536,19 @@ fn block_view(b: &Block, id: &str, p: &Palette, depth: usize) -> gpui::AnyElemen
                     (None, Some(n)) => format!("{}.", n + i as u64),
                     (None, None) => if depth.is_multiple_of(2) { "•" } else { "◦" }.to_string(),
                 };
-                div().flex().gap(px(theme::SPACE[4])).child(div().flex_none().w(px(22.)).text_color(c(p.text_muted)).child(marker)).child(
-                    div()
-                        .flex_1()
-                        .min_w_0()
-                        .flex()
-                        .flex_col()
-                        .gap(px(theme::SPACE[2]))
-                        .children(inner.iter().enumerate().map(|(k, b)| block_view(b, &format!("{id}l{i}-{k}"), p, depth + 1))),
-                )
+                div()
+                    .flex()
+                    .gap(px(theme::SPACE[4]))
+                    .child(div().flex_none().w(px(if compact { 14. } else { 22. })).text_color(c(p.text_muted)).child(marker))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .flex()
+                            .flex_col()
+                            .gap(px(if compact { 0. } else { theme::SPACE[2] }))
+                            .children(inner.iter().enumerate().map(|(k, b)| block_view(b, &format!("{id}l{i}-{k}"), p, depth + 1, compact))),
+                    )
             }))
             .into_any_element(),
         Block::Rule => div().my(px(theme::SPACE[4])).h(px(1.)).w_full().bg(c(p.border)).into_any_element(),
@@ -629,7 +645,7 @@ impl Render for MarkdownPreview {
                     .px(px(theme::SPACE[9]))
                     .py(px(theme::SPACE[8]))
                     .child(div().text_size(px(text::XXS.0)).text_color(c(p.line_number)).child(crate::i18n::tf("Preview of {}", &[&name])))
-                    .children(self.blocks.iter().enumerate().map(|(i, b)| block_view(b, &format!("md{i}"), &p, 0)))
+                    .children(self.blocks.iter().enumerate().map(|(i, b)| block_view(b, &format!("md{i}"), &p, 0, false)))
                     .when(self.blocks.is_empty(), |d| d.child(div().text_color(c(p.text_muted)).child(crate::i18n::t("The file is empty.")))),
             )
     }

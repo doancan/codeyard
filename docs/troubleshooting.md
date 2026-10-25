@@ -4,11 +4,11 @@ Short answers to the problems people actually hit. Messages are quoted as the ap
 
 ## The app does not open or bounces in the Dock (macOS)
 
-Without Full Disk Access, macOS can block reads of Desktop, Documents and Downloads. At the first launch Codeyard opens a short
-dialog that takes you to **System Settings ▸ Privacy & Security ▸ Full Disk Access**; run *Help: Grant Full Disk Access…* to see
-it again. macOS does not list an app there by itself: press **+**, pick Codeyard (*Show Codeyard in Finder* in the dialog helps) and turn
-it on. The builds are not signed with a developer certificate, so every release counts as a new app to macOS: after an update remove the
-old entry with **−**, add Codeyard again, and Codeyard asks once more per version while access is missing. Unnotarized builds also need **right-click ▸ Open** on first launch, or `xattr -cr /Applications/Codeyard.app`.
+macOS guards Desktop, Documents, Downloads and external drives. At the first start of each version Codeyard touches them, and the system
+asks in its own dialogs; answer **Allow**. Full Disk Access is optional (it also covers `~/Library` and every drive): Codeyard tries to show up in
+**System Settings ▸ Privacy & Security ▸ Full Disk Access** by itself, switched off; if it is not there, press **+** and add it, or run *Help: Grant Full Disk Access…*
+to open the page. The builds are not signed with a developer certificate, so every release counts as a new app to macOS and the
+answers are asked again after an update; if an old entry stays listed but does not work, remove it with **−** and let Codeyard add itself again. Unnotarized builds also need **right-click ▸ Open** on first launch, or `xattr -cr /Applications/Codeyard.app`.
 
 ## SSH
 

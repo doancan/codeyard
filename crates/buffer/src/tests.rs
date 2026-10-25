@@ -789,3 +789,72 @@ fn column_selection_uses_visual_columns_with_tabs() {
     b.select_columns((0, 0), (9, 500), 4);
     assert!(b.cursor_count() >= 3);
 }
+
+/// Inserted text brings its own line breaks (`\r\n` from an LSP edit, stray `\r` in a file): they are stored as `\n`, and no cursor
+/// may be left behind the end of the text because it was placed by the length the caller wrote.
+#[test]
+fn cursors_stay_inside_the_text_after_edits_with_crlf() {
+    let mut b = Buffer::from_str("a\nb");
+    b.set_cursor(3, false);
+    b.apply_edits(vec![(0..1, "x\r\ny".to_string())]);
+    assert_eq!(b.text_range(0..b.len_chars()), "x\ny\nb");
+    assert!(b.cursor() <= b.len_chars(), "cursor {} past len {}", b.cursor(), b.len_chars());
+    // Everything that looks up the cursor's line works.
+    b.move_left(false);
+    b.move_vertical(-1, false);
+    b.join_lines();
+    b.toggle_comment("//");
+    b.indent_lines("  ");
+    b.newline();
+    b.backspace();
+}
+
+#[test]
+fn line_commands_on_stray_carriage_returns_do_not_leave_cursors_past_the_end() {
+    for text in ["b\r\r\na\r\r\nc", "b\rx\na\ry\n"] {
+        for op in 0..3 {
+            let mut b = Buffer::from_str(text);
+            select_all_text(&mut b);
+            match op {
+                0 => b.reverse_lines(),
+                1 => b.sort_lines(false),
+                _ => b.join_lines(),
+            }
+            assert!(b.cursor() <= b.len_chars(), "{text:?} op {op}: cursor {} past len {}", b.cursor(), b.len_chars());
+            b.move_vertical(-1, false);
+            b.move_left(false);
+            b.toggle_comment("//");
+        }
+    }
+}
+
+#[test]
+fn mapped_cursors_count_a_crlf_in_the_new_text_once() {
+    let mut b = Buffer::from_str("ab\ncd");
+    b.set_cursor(4, false);
+    b.apply_edits(vec![(0..0, "1\r\n2\r\n".to_string())]);
+    // "1\n2\nab\ncd": the cursor kept its place relative to the old text ("c|d").
+    assert_eq!(b.text_range(0..b.len_chars()), "1\n2\nab\ncd");
+    assert_eq!(b.cursor(), 8);
+}
+
+/// Editing a closed file must not rewrite the lines nobody touched, whatever mix of endings they have.
+#[test]
+fn editing_bytes_keeps_the_endings_of_untouched_lines() {
+    let edit = |bytes: &[u8], from: usize, to: usize, new: &str| {
+        Buffer::edit_bytes(bytes, |_| vec![(from..to, new.to_string())]).unwrap().map(|b| String::from_utf8(b).unwrap())
+    };
+    // Mixed: the first line ends with LF, the others with CRLF. `x` -> `y` touches only the first.
+    assert_eq!(edit(b"x = 1\nfoo\r\nbar\r\n", 0, 1, "y").unwrap(), "y = 1\nfoo\r\nbar\r\n");
+    // An edit after CRLF lines is placed by the buffer's count (a CRLF is one char): `bar` is chars 10..13 there.
+    assert_eq!(edit(b"x = 1\nfoo\r\nbar\r\n", 10, 13, "baz").unwrap(), "x = 1\nfoo\r\nbaz\r\n");
+    // New text brings `\n`: it takes the file's own ending (CRLF here, the first break decides), the rest stays.
+    assert_eq!(edit(b"a\r\nb\nc\r\n", 0, 1, "x\ny").unwrap(), "x\r\ny\r\nb\nc\r\n");
+    // BOM and multibyte characters before the edit.
+    assert_eq!(edit("\u{feff}ş\r\nğ\nü".as_bytes(), 4, 5, "u").unwrap(), "\u{feff}ş\r\nğ\nu");
+    // Not mixed: through the buffer, as before, CRLF intact.
+    assert_eq!(edit(b"a\r\nb\r\n", 0, 1, "z").unwrap(), "z\r\nb\r\n");
+    // No edits, no bytes.
+    assert!(Buffer::edit_bytes(b"a\nb\r\n", |_| Vec::new()).unwrap().is_none());
+    assert!(Buffer::edit_bytes(&[0xff, 0xfe], |_| Vec::new()).is_err());
+}

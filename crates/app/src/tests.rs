@@ -2493,6 +2493,32 @@ fn replace_in_files_open_and_closed(cx: &mut TestAppContext) {
     assert_eq!(ed.read_with(cx, |e, _| e.text()), (1..=10).map(|i| format!("// satır {i}\n")).collect::<String>(), "single undo step");
 }
 
+/// A closed file with mixed line endings keeps the endings of the lines the replacement did not touch.
+#[gpui::test]
+fn replace_in_closed_files_keeps_mixed_line_endings(cx: &mut TestAppContext) {
+    let dir = std::fs::canonicalize(project("replace-eol")).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    let mixed = dir.join("mixed.txt");
+    std::fs::write(&mixed, "x = 1\nfoo\r\nbar\r\n").unwrap();
+    let q = proto::SearchQuery {
+        root: dir.to_string_lossy().into_owned(),
+        pattern: "x".into(),
+        regex: false,
+        case_sensitive: true,
+        whole_word: true,
+        include: vec![],
+        exclude: vec![],
+        max_results: 2000,
+    };
+    wb.update(cx, |wb, cx| wb.replace_in_files(vec![mixed.to_string_lossy().into_owned()], q, "y".into(), cx));
+    wait_for(cx, "diskteki dosya", |cx| {
+        cx.run_until_parked();
+        std::fs::read(&mixed).unwrap().starts_with(b"y = 1")
+    });
+    assert_eq!(std::fs::read(&mixed).unwrap(), b"y = 1\nfoo\r\nbar\r\n");
+}
+
 #[gpui::test]
 fn import_vscode_settings_and_shortcuts(cx: &mut TestAppContext) {
     let cfg = config_dir("vsimport");

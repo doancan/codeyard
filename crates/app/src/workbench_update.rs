@@ -153,6 +153,21 @@ pub(super) enum UpdateAction {
     Close,
 }
 
+/// What the dialog's own elements ask of the workbench. The card is drawn over the editor or in a window of its own; either way
+/// it only sends these (see `workbench_view_update.rs`), and the workbench answers in the window the editor lives in.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum UpdateCmd {
+    Action(UpdateAction),
+    /// Esc.
+    Dismiss,
+    /// Enter or Space with this button focused (`None`: focus is elsewhere in the dialog, so the primary button answers).
+    Confirm(Option<usize>),
+    /// A key pressed while the notes have the focus; the answer says whether they scrolled.
+    NotesKey(String),
+    /// ⌘Q while the dialog's own window has the keyboard.
+    Quit,
+}
+
 /// What ends the application.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum QuitMode {
@@ -431,6 +446,11 @@ fn notes_scroll_target(key: &str, offset: f32, page: f32, max: f32) -> Option<f3
     Some(target.clamp(-max.max(0.), 0.))
 }
 
+/// Whether a window handle still names an open window.
+pub(super) fn window_is_open<T: 'static>(handle: gpui::WindowHandle<T>, cx: &App) -> bool {
+    cx.windows().iter().any(|w| w.window_id() == handle.window_id())
+}
+
 fn progress_fraction(p: &Progress) -> Option<f32> {
     p.total.filter(|t| *t > 0).map(|t| (p.done as f64 / t as f64).clamp(0., 1.) as f32)
 }
@@ -623,6 +643,21 @@ impl Workbench {
         }
     }
 
+    /// Runs what a dialog element asked for. `window` is the one with the editor in it. `true`: the key was used.
+    pub(super) fn update_cmd(&mut self, cmd: UpdateCmd, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        match cmd {
+            UpdateCmd::Action(action) => self.update_action(action, window, cx),
+            UpdateCmd::Dismiss => self.dismiss_update_dialog(window, cx),
+            UpdateCmd::Confirm(focused) => self.confirm_update_button(focused, window, cx),
+            UpdateCmd::NotesKey(key) => return self.scroll_notes(&key, cx),
+            UpdateCmd::Quit => {
+                window.activate_window();
+                self.quit(&super::Quit, window, cx);
+            }
+        }
+        true
+    }
+
     /// Esc.
     pub(super) fn dismiss_update_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(model) = self.dialog_model(cx) {
@@ -631,12 +666,12 @@ impl Workbench {
     }
 
     /// Enter and Space: the focused button, or the primary one when focus is elsewhere in the dialog.
-    pub(super) fn confirm_update_dialog(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn confirm_update_button(&mut self, focused: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
         if self.update.dialog == Dialog::Ask && !self.update.armed {
             return;
         }
         let Some(model) = self.dialog_model(cx) else { return };
-        let focused = self.update.focus.iter().position(|h| h.is_focused(window)).filter(|i| *i < model.buttons.len());
+        let focused = focused.filter(|i| *i < model.buttons.len());
         let chosen = focused.map(|i| &model.buttons[i]).or_else(|| model.buttons.iter().find(|b| b.primary));
         if let Some(b) = chosen {
             self.update_action(b.action, window, cx);
@@ -676,11 +711,17 @@ impl Workbench {
     }
 
     /// Focus goes to the primary button, so Enter does what the dialog recommends.
-    pub(super) fn focus_update_primary(&mut self, window: &mut Window, cx: &App) {
+    pub(super) fn focus_update_primary(&mut self, window: &mut Window, cx: &mut App) {
         let Some(model) = self.dialog_model(cx) else { return };
         let ix = model.buttons.iter().position(|b| b.primary).unwrap_or(0);
-        if let Some(handle) = self.update.focus.get(ix) {
-            window.focus(handle);
+        let Some(handle) = self.update.focus.get(ix).cloned() else { return };
+        match self.update.window.filter(|w| window_is_open(*w, cx)) {
+            // The buttons are in the dialog's window. This may run while a click in that window is still being handled (the
+            // window is busy then), so the focus moves right after.
+            Some(own) => cx.defer(move |cx| {
+                own.update(cx, |_, window, _| window.focus(&handle)).ok();
+            }),
+            None => window.focus(&handle),
         }
     }
 

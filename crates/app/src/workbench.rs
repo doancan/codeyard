@@ -97,6 +97,8 @@ mod theme_glue;
 mod transfer;
 #[path = "workbench_update.rs"]
 mod update_glue;
+#[path = "workbench_update_window.rs"]
+mod update_window_glue;
 #[path = "workbench_view_editor.rs"]
 mod view_editor_glue;
 #[path = "workbench_view_explorer.rs"]
@@ -784,9 +786,9 @@ impl Workbench {
         });
         let mut wb = Self::with_state(state, settings::config_dir(), window, cx);
         wb.persist.data_dir = state_path().and_then(|p| p.parent().map(|d| d.to_path_buf()));
-        // macOS: on first launch without permission, send the user to Full Disk Access (don't ask in tests).
+        // macOS: let the system ask for the protected folders at the first start of a version (not in tests).
         if cfg!(all(target_os = "macos", not(test))) {
-            cx.defer_in(window, |this, window, cx| this.ask_disk_access_once(window, cx));
+            cx.defer_in(window, |this, _, cx| this.request_file_access_once(cx));
         }
         wb
     }
@@ -2324,12 +2326,15 @@ impl Workbench {
             for path in closed {
                 let r = (|| -> Result<usize, String> {
                     let (data, hash) = host.read(&path).map_err(|e| e.to_string())?;
-                    let mut b = buffer::Buffer::from_bytes(&data).map_err(|_| "not UTF-8".to_string())?;
-                    let edits = f(&b);
-                    let n = edits.len();
-                    if n > 0 {
-                        b.apply_edits(edits);
-                        host.write(&path, b.to_bytes(), Some(hash)).map_err(|e| e.to_string())?;
+                    let mut n = 0;
+                    let edited = buffer::Buffer::edit_bytes(&data, |b| {
+                        let edits = f(b);
+                        n = edits.len();
+                        edits
+                    })
+                    .map_err(|_| "not UTF-8".to_string())?;
+                    if let Some(bytes) = edited {
+                        host.write(&path, bytes, Some(hash)).map_err(|e| e.to_string())?;
                     }
                     Ok(n)
                 })();

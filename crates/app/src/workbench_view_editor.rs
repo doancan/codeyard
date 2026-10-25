@@ -530,15 +530,16 @@ impl Workbench {
     }
 
     pub(super) fn empty_state(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
-        if cx.global::<Settings>().shows_welcome() && self.tabs.opening.is_none() {
+        let has_root = self.roots.primary.read(cx).root().is_some();
+        let idle = self.tabs.opening.is_none();
+        // Like VS Code: the welcome page greets an empty window; once a folder is open (local or over SSH) the editor area stays quiet.
+        if idle && !has_root && cx.global::<Settings>().shows_welcome() {
             return self.welcome_view(p, cx);
         }
-        if !cx.global::<Settings>().shows_welcome() && self.tabs.opening.is_none() {
-            // Empty window: just a faint logo.
+        if idle {
             let (_, _, mark) = super::welcome_glue::brand_colors(p);
             return center(p).child(icon("codeyard-mark", 96., mark).text_color(ui::ca(mark, 0.18))).into_any_element();
         }
-        let has_root = self.roots.primary.read(cx).root().is_some();
         if has_root {
             let opening = self.tabs.opening.is_some();
             return center(p)

@@ -108,6 +108,58 @@ pub fn parse_task_file(text: &str, source: &'static str) -> Vec<Task> {
 /// `${relativeFile}`, `${env:AD}`. With no active file, `${file…}` and unknown variables stay
 /// as written (the shell won't expand them either, and the user sees it).
 pub fn expand_variables(command: &str, root: &str, file: Option<&str>) -> String {
+    expand(command, root, file, false)
+}
+
+/// The same for a command line that a shell will read: a value is quoted for the place it lands in (bare, inside `'…'` or
+/// inside `"…"`), so a file called `a;rm -rf ~;.txt` is still one argument. Values that need no quoting are left alone.
+pub fn expand_variables_for_shell(command: &str, root: &str, file: Option<&str>) -> String {
+    expand(command, root, file, true)
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Quote {
+    Bare,
+    Single,
+    Double,
+}
+
+/// Where the next character of `text` would be, as a POSIX shell reads it.
+fn quote_at_end(text: &str) -> Quote {
+    let (mut state, mut escaped) = (Quote::Bare, false);
+    for c in text.chars() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match (state, c) {
+            (Quote::Single, '\'') => state = Quote::Bare,
+            (Quote::Single, _) => {}
+            (_, '\\') => escaped = true,
+            (Quote::Bare, '\'') => state = Quote::Single,
+            (Quote::Bare, '"') => state = Quote::Double,
+            (Quote::Double, '"') => state = Quote::Bare,
+            _ => {}
+        }
+    }
+    state
+}
+
+fn for_shell(value: &str, at: Quote) -> String {
+    match at {
+        Quote::Bare => shell_quote(value),
+        Quote::Single => value.replace('\'', "'\\''"),
+        Quote::Double => value.chars().fold(String::with_capacity(value.len()), |mut s, c| {
+            if matches!(c, '\\' | '"' | '$' | '`') {
+                s.push('\\');
+            }
+            s.push(c);
+            s
+        }),
+    }
+}
+
+fn expand(command: &str, root: &str, file: Option<&str>, shell: bool) -> String {
     let root = root.trim_end_matches('/');
     let name = |p: &str| p.rsplit('/').next().unwrap_or(p).to_string();
     let mut out = String::with_capacity(command.len());
@@ -132,6 +184,11 @@ pub fn expand_variables(command: &str, root: &str, file: Option<&str>) -> String
             v => v.strip_prefix("env:").map(|n| std::env::var(n).unwrap_or_default()),
         };
         match value {
+            Some(v) if shell => {
+                let at = quote_at_end(&out);
+                // An empty value bare would vanish as an argument: `''` keeps it one.
+                out.push_str(&if v.is_empty() && at == Quote::Bare { "''".to_string() } else { for_shell(&v, at) });
+            }
             Some(v) => out.push_str(&v),
             None => out.push_str(&rest[start..=start + end]),
         }
@@ -324,7 +381,7 @@ impl Workbench {
         self.new_terminal_in(Some(root.clone()), window, cx);
         if let Some(t) = self.terminals.get(self.active_terminal).cloned() {
             let file = self.active_editor().map(|e| e.read(cx).path.clone());
-            let (label, command) = (task.label.clone(), expand_variables(&task.command, &root, file.as_deref()));
+            let (label, command) = (task.label.clone(), expand_variables_for_shell(&task.command, &root, file.as_deref()));
             t.update(cx, |t, cx| {
                 t.set_fixed_title(label);
                 t.send(&format!("{command}\n"));
@@ -472,6 +529,22 @@ mod tests {
         assert_eq!(npm.iter().map(|t| t.command.as_str()).collect::<Vec<_>>(), vec!["pnpm run dev", "pnpm run test"]);
         let make = make_tasks("CC := gcc\n.PHONY: all\nall: build\nbuild: main.o\n\tcc -o x\n%.o: %.c\nclean:\n");
         assert_eq!(make.iter().map(|t| t.label.as_str()).collect::<Vec<_>>(), vec!["make: all", "make: build", "make: clean"]);
+    }
+
+    /// A file name is data: in a shell command it stays one argument in every quoting context.
+    #[test]
+    fn variables_are_quoted_for_the_place_they_land_in() {
+        let f = Some("/p/src/a;rm -rf ~;.txt");
+        assert_eq!(expand_variables_for_shell("cat ${file}", "/p", f), "cat '/p/src/a;rm -rf ~;.txt'");
+        assert_eq!(expand_variables_for_shell("cat '${file}'", "/p", f), "cat '/p/src/a;rm -rf ~;.txt'");
+        assert_eq!(expand_variables_for_shell(r#"cat "${fileBasename}""#, "/p", Some("/p/$(id)`x`\"q\".txt")), r#"cat "\$(id)\`x\`\"q\".txt""#);
+        assert_eq!(expand_variables_for_shell("cat ${file}", "/p", Some("/p/it's.txt")), r"cat '/p/it'\''s.txt'");
+        assert_eq!(expand_variables_for_shell("cat '${file}'", "/p", Some("/p/it's.txt")), r"cat '/p/it'\''s.txt'");
+        // Plain names are left alone, so existing tasks read the same.
+        assert_eq!(expand_variables_for_shell("make -C ${workspaceFolder}/sub", "/p/", None), "make -C /p/sub");
+        assert_eq!(expand_variables_for_shell("echo ${fileExtname}x", "/p", Some("/p/a")), "echo ''x", "an empty value is still one argument");
+        // The generic expansion (debug configurations, JSON) stays raw.
+        assert_eq!(expand_variables("${file}", "/p", f), "/p/src/a;rm -rf ~;.txt");
     }
 
     #[test]

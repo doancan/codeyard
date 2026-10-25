@@ -274,6 +274,10 @@ impl State {
     /// IMMEDIATE transaction: so two windows don't overwrite each other's pins; a read failure (SQLITE_BUSY, corrupt file) must not
     /// be treated as an empty list and wipe all pins, it is returned as an error.
     pub fn set_workspace_pinned(&self, host: Option<&str>, path: &str, pinned: bool) -> Result<(), Error> {
+        // The list is one `host<TAB>path` per line: a name with a break in it would read back as two other pins (or none).
+        if pinned && (path.contains(['\n', '\r']) || host.is_some_and(|h| h.contains(['\n', '\r', '\t']))) {
+            return Err(Error::InvalidParameterName("a folder name with a line break cannot be pinned".into()));
+        }
         let tx = rusqlite::Transaction::new_unchecked(&self.db, rusqlite::TransactionBehavior::Immediate)?;
         let text: String = tx.query_row("select value from kv where key = ?1", [PINNED_KEY], |r| r.get(0)).optional()?.unwrap_or_default();
         let mut list = parse_pinned(&text);
@@ -677,6 +681,18 @@ mod tests {
         s.forget_workspace(None, "/a").unwrap();
         assert!(s.pinned_workspaces().is_empty());
         assert!(s.recent_workspaces(10).unwrap().iter().all(|r| r.path != "/a"));
+    }
+
+    #[test]
+    fn a_folder_name_with_a_line_break_is_not_pinned_as_somebody_else() {
+        let s = State::in_memory().unwrap();
+        s.set_workspace_pinned(None, "/keep", true).unwrap();
+        // Written as is this would read back as pins `("" , "/a")` and `("b", "c")`.
+        assert!(s.set_workspace_pinned(None, "/a\nb\tc", true).is_err());
+        assert!(s.set_workspace_pinned(Some("h\nx"), "/p", true).is_err());
+        assert_eq!(s.pinned_workspaces(), vec![(None, "/keep".to_string())]);
+        // Unpinning such a name is harmless and must not fail.
+        s.set_workspace_pinned(None, "/a\nb", false).unwrap();
     }
 
     #[test]

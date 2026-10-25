@@ -18,6 +18,13 @@ fn quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', "'\\''"))
 }
 
+/// A shell word: left as it is when nothing in it means anything to a shell, quoted otherwise. Folder and file names come from the
+/// repository, and `crates/$(cmd)/src/a.rs` is a legal path.
+fn word(s: &str) -> String {
+    let plain = !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '/' | ':' | '-' | '+' | ',' | '@' | '='));
+    if plain && !s.starts_with('-') { s.to_string() } else { quote(s) }
+}
+
 fn indent(line: &str) -> usize {
     line.len() - line.trim_start().len()
 }
@@ -54,12 +61,12 @@ fn rust(rel: &str, lines: &[&str], cursor: usize, whole_file: bool) -> Option<Te
     };
     let mut base = String::from("cargo test");
     if let Some(p) = pkg {
-        base.push_str(&format!(" -p {p}"));
+        base.push_str(&format!(" -p {}", word(p)));
     }
     let stem = inner.last()?.trim_end_matches(".rs");
     let integration = inner.first() == Some(&"tests") && inner.len() == 2;
     if integration {
-        base.push_str(&format!(" --test {stem}"));
+        base.push_str(&format!(" --test {}", word(stem)));
     }
     // The file's module path: src/foo/bar.rs → foo::bar; lib.rs / main.rs / mod.rs yield their own folder.
     let module: Vec<&str> = if integration || inner.first() != Some(&"src") {
@@ -72,7 +79,7 @@ fn rust(rel: &str, lines: &[&str], cursor: usize, whole_file: bool) -> Option<Te
         m
     };
     if whole_file {
-        let command = if module.is_empty() { base } else { format!("{base} {}::", module.join("::")) };
+        let command = if module.is_empty() { base } else { format!("{base} {}", word(&format!("{}::", module.join("::")))) };
         return Some(TestRun { label: format!("test: {rel}"), command });
     }
     // The nearest #[test] function at (or above) the cursor.
@@ -102,14 +109,14 @@ fn rust(rel: &str, lines: &[&str], cursor: usize, whole_file: bool) -> Option<Te
         }
         path.extend(mods);
         path.push(c[1].to_string());
-        return Some(TestRun { label: format!("test: {}", &c[1]), command: format!("{base} {} -- --exact", path.join("::")) });
+        return Some(TestRun { label: format!("test: {}", &c[1]), command: format!("{base} {} -- --exact", word(&path.join("::"))) });
     }
     None
 }
 
 fn go(rel: &str, lines: &[&str], cursor: usize, whole_file: bool) -> Option<TestRun> {
     let dir = rel.rsplit_once('/').map_or(".", |(d, _)| d);
-    let pkg = if dir == "." { "./.".to_string() } else { format!("./{dir}") };
+    let pkg = if dir == "." { "./.".to_string() } else { word(&format!("./{dir}")) };
     let all: Vec<String> = lines.iter().filter_map(|l| GO_TEST.captures(l).map(|c| c[1].to_string())).collect();
     if whole_file {
         if all.is_empty() {
@@ -187,6 +194,19 @@ mod tests {
         assert_eq!(plan("src/lib.rs", RUST, 11, false, None), None, "not_a_test is not a test");
         assert_eq!(plan("crates/app/src/find.rs", RUST, 0, true, None).unwrap().command, "cargo test -p app find::");
         assert_eq!(plan("src/main.rs", RUST, 0, true, None).unwrap().command, "cargo test");
+    }
+
+    /// Paths come from the repository: whatever a folder is called, it stays one word of the command.
+    #[test]
+    fn hostile_path_segments_are_quoted() {
+        let r = plan("crates/$(touch x)/src/a.rs", "#[test]\nfn t() {}\n", 1, false, None).unwrap();
+        assert_eq!(r.command, "cargo test -p '$(touch x)' a::t -- --exact");
+        let r = plan("crates/app/src/$(id)/`x`.rs", "#[test]\nfn t() {}\n", 1, true, None).unwrap();
+        assert_eq!(r.command, "cargo test -p app '$(id)::`x`::'");
+        let r = plan("tests/a;b.rs", "#[test]\nfn t() {}\n", 1, false, None).unwrap();
+        assert_eq!(r.command, "cargo test --test 'a;b' t -- --exact");
+        let r = plan("pkg/$(id)/a_test.go", "func TestA(t *testing.T) {}\n", 0, false, None).unwrap();
+        assert_eq!(r.command, "go test './pkg/$(id)' -run '^TestA$'");
     }
 
     #[test]

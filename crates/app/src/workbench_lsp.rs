@@ -531,11 +531,14 @@ impl Workbench {
                 for (path, edits) in closed {
                     let result = (|| -> Result<(), String> {
                         let (data, hash) = host.read(&path).map_err(|e| e.to_string())?;
-                        let mut b = buffer::Buffer::from_bytes(&data).map_err(|_| t("not UTF-8").to_string())?;
-                        let parts =
-                            edits.iter().map(|(((l0, c0), (l1, c1)), t)| (b.from_lsp_position(*l0, *c0)..b.from_lsp_position(*l1, *c1), t.clone())).collect();
-                        b.apply_edits(parts);
-                        host.write(&path, b.to_bytes(), Some(hash)).map(|_| ()).map_err(|e| e.to_string())
+                        let edited = buffer::Buffer::edit_bytes(&data, |b| {
+                            edits.iter().map(|(((l0, c0), (l1, c1)), t)| (b.from_lsp_position(*l0, *c0)..b.from_lsp_position(*l1, *c1), t.clone())).collect()
+                        })
+                        .map_err(|_| t("not UTF-8").to_string())?;
+                        match edited {
+                            Some(bytes) => host.write(&path, bytes, Some(hash)).map(|_| ()).map_err(|e| e.to_string()),
+                            None => Ok(()),
+                        }
                     })();
                     if let Err(e) = result {
                         errors.push(format!("{}: {e}", ui::file_name(&path)));

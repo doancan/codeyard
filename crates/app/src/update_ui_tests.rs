@@ -1715,3 +1715,97 @@ fn a_folder_that_is_gone_is_said_so_and_the_other_windows_still_open(cx: &mut Te
     let root = made[0].read_with(cx, |wb, cx| wb.root_for_test(cx)).unwrap().unwrap();
     assert_eq!(plain(&root), plain(&ok));
 }
+
+// --- The dialog in a window of its own (macOS) ---
+
+fn windows_of(cx: &mut VisualTestContext) -> usize {
+    cx.update(|_, cx| cx.windows().len())
+}
+
+fn update_window(wb: &Entity<Workbench>, cx: &mut VisualTestContext) -> Option<gpui::AnyWindowHandle> {
+    wb.read_with(cx, |wb, cx| wb.update_window_for_test(cx))
+}
+
+/// Lets the render that opens the window (and the window's own first frame) happen.
+fn settle(cx: &mut VisualTestContext) {
+    for _ in 0..3 {
+        cx.run_until_parked();
+        cx.update(|window, _| window.refresh());
+    }
+    cx.run_until_parked();
+}
+
+#[gpui::test]
+fn the_dialog_opens_in_a_window_of_its_own_once_and_closes_with_the_dialog(cx: &mut TestAppContext) {
+    let (wb, cx, fake) = rig(cx);
+    wb.update(cx, |wb, _| wb.use_update_window_for_test());
+    assert_eq!(windows_of(cx), 1);
+    fake.check_returns(Ok(None));
+    manual_check(&wb, cx);
+    settle(cx);
+    assert_eq!(windows_of(cx), 2, "the editor window and the dialog's");
+    let first = update_window(&wb, cx).expect("the dialog's window");
+    // Every state change draws the editor again: still the one window.
+    wait_state(&wb, cx, "up-to-date");
+    settle(cx);
+    assert_eq!(windows_of(cx), 2);
+    assert!(update_window(&wb, cx) == Some(first), "the same window");
+    press(&wb, cx, "Close");
+    settle(cx);
+    assert_eq!((windows_of(cx), update_window(&wb, cx).is_none()), (1, true), "closing the dialog closes its window");
+}
+
+#[gpui::test]
+fn the_overlay_stays_where_there_is_no_window_for_the_dialog(cx: &mut TestAppContext) {
+    let (wb, cx, fake) = rig(cx);
+    fake.check_returns(Ok(None));
+    manual_check(&wb, cx);
+    wait_state(&wb, cx, "up-to-date");
+    settle(cx);
+    assert_eq!((windows_of(cx), update_window(&wb, cx).is_none()), (1, true));
+    assert!(dialog(&wb, cx).is_some());
+}
+
+#[gpui::test]
+fn esc_in_the_dialogs_window_does_what_esc_does_in_the_card(cx: &mut TestAppContext) {
+    let (wb, cx, fake) = rig(cx);
+    wb.update(cx, |wb, _| wb.use_update_window_for_test());
+    offered(&wb, cx, &fake, "0.2.0");
+    settle(cx);
+    assert!(update_window(&wb, cx).is_some());
+    wb.update_in(cx, |wb, window, cx| wb.update_escape_for_test(window, cx));
+    settle(cx);
+    assert!(dialog(&wb, cx).is_none(), "Esc is Later");
+    assert!(update_window(&wb, cx).is_none());
+    assert_eq!(state(&wb, cx), "available 0.2.0", "the offer stays in the status bar");
+}
+
+#[gpui::test]
+fn the_keyboard_starts_on_the_primary_button_of_the_dialogs_window(cx: &mut TestAppContext) {
+    let (wb, cx, fake) = rig(cx);
+    wb.update(cx, |wb, _| wb.use_update_window_for_test());
+    offered(&wb, cx, &fake, "0.2.0");
+    settle(cx);
+    let own = update_window(&wb, cx).expect("the dialog's window");
+    let focused = cx.update(|_, cx| own.update(cx, |_, window, cx| wb.read(cx).focused_update_button_for_test(window, cx)).unwrap());
+    assert_eq!(focused.as_deref(), Some("Install and Restart"));
+}
+
+#[gpui::test]
+fn the_dialogs_window_does_not_outlive_its_editor_window(cx: &mut TestAppContext) {
+    let (wb, cx, fake) = rig(cx);
+    wb.update(cx, |wb, _| wb.use_update_window_for_test());
+    offered(&wb, cx, &fake, "0.2.0");
+    settle(cx);
+    assert_eq!(windows_of(cx), 2);
+    // Closes the editor window the way the platform does: from outside, while nothing is being drawn.
+    cx.update(|window, app| {
+        let host = window.window_handle();
+        app.defer(move |app| {
+            app.update_window(host, |_, window, _| window.remove_window()).ok();
+        });
+    });
+    cx.run_until_parked();
+    let left = wb.read_with(cx, |_, app| app.windows().len());
+    assert_eq!(left, 0, "the dialog's window is gone with the workbench it belongs to");
+}

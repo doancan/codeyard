@@ -12,7 +12,9 @@ GPUI 0.2.2 has no accessibility tree of its own. Codeyard adds one on macOS with
 - While the update dialog (or the first-run question about update checks) is open: a modal `Dialog` with its title and text,
   a `ProgressIndicator` (0 to 100 while a download has a known size, without a value otherwise) and one `Button` per choice in
   tab order; the focused button is the tree's focus. The status bar names the update item. Everything in it is also reachable by
-  keyboard (Tab, Shift+Tab, Enter, Space, Esc).
+  keyboard (Tab, Shift+Tab, Enter, Space, Esc). On macOS the dialog is a window of its own ("Software Update"); the accessibility
+  tree above belongs to the editor window and still lists the dialog, but the separate window itself has no adapter yet, so a screen
+  reader reaches its title and nothing more. Until it has one, the status bar item and *Help: Check for Updates…* are the way in.
 - Actions: `Focus` (editor, explorer, row, dialog button), `Click` on a row (select and open) or a dialog button,
   `SetTextSelection` on the editor.
 - Accessibility of the interface that does not need a tree: two high-contrast themes, a contrast test for every
