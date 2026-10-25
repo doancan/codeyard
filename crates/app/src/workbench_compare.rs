@@ -74,7 +74,12 @@ impl Workbench {
         match choices.swap_remove(index) {
             CompareChoice::Folder(spot) => self.compare_continue(first, spot, window, cx),
             CompareChoice::PickLocal => {
-                let rx = cx.prompt_for_paths(PathPromptOptions { files: false, directories: true, multiple: false, prompt: Some(crate::i18n::t("Choose").to_string().into()) });
+                let rx = cx.prompt_for_paths(PathPromptOptions {
+                    files: false,
+                    directories: true,
+                    multiple: false,
+                    prompt: Some(crate::i18n::t("Choose").to_string().into()),
+                });
                 cx.spawn_in(window, async move |this, cx| {
                     if let Ok(Ok(Some(paths))) = rx.await
                         && let Some(path) = paths.into_iter().next()
@@ -131,7 +136,8 @@ impl Workbench {
     pub(super) fn open_folder_compare(&mut self, left: Spot, right: Spot, window: &mut Window, cx: &mut Context<Self>) {
         let (l, r) = (self.compare_end(&left), self.compare_end(&right));
         let view = cx.new(|cx| CompareView::new(l, r, cx));
-        self.tabs._page_sub = Some(cx.subscribe_in(&view, window, |this, view, ev: &CompareEvent, window, cx| this.on_compare_event(view.clone(), ev, window, cx)));
+        self.tabs._page_sub =
+            Some(cx.subscribe_in(&view, window, |this, view, ev: &CompareEvent, window, cx| this.on_compare_event(view.clone(), ev, window, cx)));
         window.focus(&view.focus_handle(cx));
         self.tabs.page = Some(Page::Compare(view));
         self.tabs.page_active = true;
@@ -178,7 +184,8 @@ impl Workbench {
                         let s = String::from_utf8_lossy(d);
                         if eol { s.replace("\r\n", "\n") } else { s.into_owned() }
                     };
-                    let diff = cx.new(|cx| crate::diff::DiffView::new(path.clone(), false, &text(&a), &text(&b), cx).with_label(crate::i18n::t("Left ↔ Right")));
+                    let diff =
+                        cx.new(|cx| crate::diff::DiffView::new(path.clone(), false, &text(&a), &text(&b), cx).with_label(crate::i18n::t("Left ↔ Right")));
                     window.focus(&diff.focus_handle(cx));
                     this.tabs.diff = Some(diff);
                     this.tabs.diff_active = true;
@@ -224,7 +231,9 @@ impl Workbench {
         };
         if !self.compare_end_trusted(&to, cx) {
             self.notify_compare(
-                Notice::Error(crate::i18n::tf("{} is not a trusted folder, so nothing is written to it. Open it as a folder and trust it first.", &[&to.path]).into()),
+                Notice::Error(
+                    crate::i18n::tf("{} is not a trusted folder, so nothing is written to it. Open it as a folder and trust it first.", &[&to.path]).into(),
+                ),
                 cx,
             );
             return;
@@ -274,7 +283,9 @@ impl Workbench {
         let Some(plan) = plan.filter(|_| writable) else { return };
         if !self.compare_end_trusted(&end, cx) {
             self.notify_compare(
-                Notice::Error(crate::i18n::tf("{} is not a trusted folder, so nothing is deleted from it. Open it as a folder and trust it first.", &[&end.path]).into()),
+                Notice::Error(
+                    crate::i18n::tf("{} is not a trusted folder, so nothing is deleted from it. Open it as a folder and trust it first.", &[&end.path]).into(),
+                ),
                 cx,
             );
             return;
@@ -297,7 +308,8 @@ impl Workbench {
             let answer = this
                 .update_in(cx, |_, window, cx| {
                     let title = crate::i18n::tf("Delete “{0}” from {1}?", &[&ui::file_name(&path), &end.label]);
-                    let mut detail = crate::i18n::tf("{0} on {1} is deleted for good, with everything in it. It is not moved to the Trash.", &[&full, &end.label]);
+                    let mut detail =
+                        crate::i18n::tf("{0} on {1} is deleted for good, with everything in it. It is not moved to the Trash.", &[&full, &end.label]);
                     if hidden > 0 {
                         detail.push(' ');
                         detail.push_str(&crate::i18n::tn(
@@ -339,6 +351,11 @@ impl Workbench {
     }
 
     #[cfg(test)]
+    pub fn delete_request_for_test(&mut self, view: &Entity<CompareView>, path: &str, side: Side, window: &mut Window, cx: &mut Context<Self>) {
+        self.compare_delete(view.clone(), path.to_string(), side, window, cx);
+    }
+
+    #[cfg(test)]
     pub fn compare_view_for_test(&self) -> Option<Entity<CompareView>> {
         match &self.tabs.page {
             Some(Page::Compare(v)) => Some(v.clone()),
@@ -367,7 +384,12 @@ impl CopyOutcome {
         if !self.refused.is_empty() {
             let (path, why) = &self.refused[0];
             text.push(' ');
-            text.push_str(&crate::i18n::tn("{0} was left alone: {1}", "{0} were left alone, the first one {1}", self.refused.len(), &[&format!("{path}: {why}")]));
+            text.push_str(&crate::i18n::tn(
+                "{0} was left alone: {1}",
+                "{0} were left alone, the first one {1}",
+                self.refused.len(),
+                &[&format!("{path}: {why}")],
+            ));
         }
         if self.cancelled {
             text.push(' ');
@@ -480,7 +502,9 @@ fn copy_file(from: &End, to: &End, alias: Option<&str>, job: &CopyJob, cancel: &
         // Created empty first: `create_file` never overwrites, and the write below then only succeeds on that empty file.
         Expect::Absent => {
             to.host.create_file(&dst).map_err(|e| match e {
-                HostError::Op(proto::Error::AlreadyExists(_)) => format!("{} ({})", crate::i18n::t("destination"), crate::i18n::t("it appeared after the scan")),
+                HostError::Op(proto::Error::AlreadyExists(_)) => {
+                    format!("{} ({})", crate::i18n::t("destination"), crate::i18n::t("it appeared after the scan"))
+                }
                 other => op_err(other),
             })?;
             to.host.write(&dst, data, Some(proto::content_hash(&[]))).map(|_| ()).map_err(|e| {
@@ -574,7 +598,13 @@ mod tests {
     }
 
     fn end(path: &Path) -> End {
-        End { host: std::sync::Arc::new(host::local()), path: path.to_string_lossy().into_owned(), label: "This computer".into(), machine: "local".into(), local: true }
+        End {
+            host: std::sync::Arc::new(host::local()),
+            path: path.to_string_lossy().into_owned(),
+            label: "This computer".into(),
+            machine: "local".into(),
+            local: true,
+        }
     }
 
     /// Classify two real folders through the agent, the way the view does (listing, then hashes of equal-sized files).
@@ -613,12 +643,12 @@ mod tests {
         let plan2 = logic::plan_copy(&rows, "edit.txt", Direction::LeftToRight);
         let jobs: Vec<CopyJob> = plan.jobs.into_iter().chain(plan2.jobs).collect();
         let out = copy_jobs(&end(&l), &end(&r), None, &jobs, &AtomicBool::new(false));
-        assert_eq!((out.copied, out.refused.len(), out.cancelled), (4, 0, false), "{out:?}");
+        assert_eq!((out.copied, out.refused.len(), out.cancelled), (5, 0, false), "{out:?}");
         assert_eq!(std::fs::read_to_string(r.join("d/new.txt")).unwrap(), "yeni");
         assert_eq!(std::fs::read_to_string(r.join("d/sub/deep.txt")).unwrap(), "derin");
         assert_eq!(std::fs::read_to_string(r.join("edit.txt")).unwrap(), "sol");
-        assert!(rows_of(&l, &r).iter().filter(|r| r.path != "d" && !r.is_dir()).all(|r| r.status == logic::Status::Identical || r.status == logic::Status::OnlyLeft || r.status == logic::Status::OnlyRight));
-        assert!(logic::counts(&rows_of(&l, &r)).changed == 0, "nothing differs in content any more");
+        let after = logic::counts(&rows_of(&l, &r));
+        assert_eq!((after.only_left, after.changed), (0, 0), "nothing differs any more");
     }
 
     #[test]

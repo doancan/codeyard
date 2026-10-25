@@ -316,8 +316,8 @@ impl CompareView {
                 }
             }
             this.update(cx, |this, cx| {
-                for side in 0..2 {
-                    this.dropped[side] |= !ended[side] && this.failed[side].is_none();
+                for (side, ended) in ended.into_iter().enumerate() {
+                    this.dropped[side] |= !ended && this.failed[side].is_none();
                 }
                 this.running = None;
                 this.hashing = None;
@@ -361,18 +361,14 @@ impl CompareView {
         if !(self.ignore_ws || self.ignore_eol) {
             return;
         }
-        let todo: Vec<String> = self
-            .rows
-            .iter()
-            .filter(|r| r.diffable() && !self.refine.contains_key(&r.path))
-            .take(REFINE_MAX)
-            .map(|r| r.path.clone())
-            .collect();
+        let todo: Vec<String> =
+            self.rows.iter().filter(|r| r.diffable() && !self.refine.contains_key(&r.path)).take(REFINE_MAX).map(|r| r.path.clone()).collect();
         if todo.is_empty() {
             return;
         }
         let hosts = [self.ends[0].host.clone(), self.ends[1].host.clone()];
-        let paths: Vec<(String, [String; 2])> = todo.into_iter().map(|rel| (rel.clone(), [self.full_path(Side::Left, &rel), self.full_path(Side::Right, &rel)])).collect();
+        let paths: Vec<(String, [String; 2])> =
+            todo.into_iter().map(|rel| (rel.clone(), [self.full_path(Side::Left, &rel), self.full_path(Side::Right, &rel)])).collect();
         let (ws, eol) = (self.ignore_ws, self.ignore_eol);
         let work = cx.background_executor().spawn(async move {
             paths
@@ -493,6 +489,11 @@ impl CompareView {
     }
 
     #[cfg(test)]
+    pub fn open_for_test(&mut self, path: &str, cx: &mut Context<Self>) {
+        cx.emit(CompareEvent::OpenDiff(path.to_string()));
+    }
+
+    #[cfg(test)]
     pub fn request_for_test(&mut self, path: &str, dir: Direction, cx: &mut Context<Self>) {
         cx.emit(CompareEvent::Copy(path.to_string(), dir));
     }
@@ -583,7 +584,10 @@ impl Render for CompareView {
             if let Some(e) = &self.failed[side] {
                 notes.push((crate::i18n::tf("Could not read {0}: {1}", &[&self.ends[side].label_with_path(), e]), p.danger));
             } else if self.dropped[side] {
-                notes.push((crate::i18n::tf("The connection to {} was lost during the scan, so the result is partial. Scan again once it is back.", &[name]), p.warning));
+                notes.push((
+                    crate::i18n::tf("The connection to {} was lost during the scan, so the result is partial. Scan again once it is back.", &[name]),
+                    p.warning,
+                ));
             }
             if self.truncated[side] {
                 notes.push((crate::i18n::tf("{} has more entries than compare.folders.maxFiles allows, so the result is partial.", &[name]), p.warning));
@@ -629,10 +633,9 @@ impl Render for CompareView {
                             .items_center()
                             .gap(px(theme::SPACE[4]))
                             .child(icon("git-compare", 14., p.info))
-                            .child(div().min_w_0().overflow_hidden().whitespace_nowrap().child(self.ends[0].label_with_path()))
+                            .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(self.ends[0].label_with_path()))
                             .child(div().text_color(c(p.text_muted)).child("↔"))
-                            .child(div().min_w_0().overflow_hidden().whitespace_nowrap().child(self.ends[1].label_with_path()))
-                            .child(div().flex_1())
+                            .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(self.ends[1].label_with_path()))
                             .child(if stoppable {
                                 action("compare-stop", crate::i18n::tr("Stop"), cx, |this, cx| {
                                     this.stop();
@@ -651,13 +654,34 @@ impl Render for CompareView {
                             .flex_wrap()
                             .items_center()
                             .gap(px(theme::SPACE[3]))
-                            .child(chip("compare-identical", crate::i18n::tr("Show identical"), self.show_identical, cx, |v| v.show_identical = !v.show_identical, false))
+                            .child(chip(
+                                "compare-identical",
+                                crate::i18n::tr("Show identical"),
+                                self.show_identical,
+                                cx,
+                                |v| v.show_identical = !v.show_identical,
+                                false,
+                            ))
                             .child(chip("compare-ws", crate::i18n::tr("Ignore whitespace"), self.ignore_ws, cx, |v| v.ignore_ws = !v.ignore_ws, false))
                             .child(chip("compare-eol", crate::i18n::tr("Ignore line endings"), self.ignore_eol, cx, |v| v.ignore_eol = !v.ignore_eol, false))
                             .child(chip("compare-gitignore", crate::i18n::tr("Respect .gitignore"), self.gitignore, cx, |v| v.gitignore = !v.gitignore, true))
                             .child(div().w(px(theme::SPACE[4])))
-                            .child(chip("compare-left-writable", crate::i18n::tr("Left is writable"), writable[0], cx, |v| v.writable[0] = !v.writable[0], false))
-                            .child(chip("compare-right-writable", crate::i18n::tr("Right is writable"), writable[1], cx, |v| v.writable[1] = !v.writable[1], false)),
+                            .child(chip(
+                                "compare-left-writable",
+                                crate::i18n::tr("Left is writable"),
+                                writable[0],
+                                cx,
+                                |v| v.writable[0] = !v.writable[0],
+                                false,
+                            ))
+                            .child(chip(
+                                "compare-right-writable",
+                                crate::i18n::tr("Right is writable"),
+                                writable[1],
+                                cx,
+                                |v| v.writable[1] = !v.writable[1],
+                                false,
+                            )),
                     )
                     .child(
                         div()
@@ -704,7 +728,8 @@ impl Render for CompareView {
                                         Side::Left => row.left.is_some(),
                                         Side::Right => row.right.is_some(),
                                     };
-                                    let differs = matches!(row.status, Status::OnlyLeft | Status::OnlyRight | Status::Changed(_)) || (row.is_dir() && row.status == Status::Nested);
+                                    let differs = matches!(row.status, Status::OnlyLeft | Status::OnlyRight | Status::Changed(_))
+                                        || (row.is_dir() && row.status == Status::Nested);
                                     let (copy_right, copy_left) = (differs && can(Side::Left) && !busy, differs && can(Side::Right) && !busy);
                                     let (del_left, del_right) = (writable[0] && can(Side::Left) && !busy, writable[1] && can(Side::Right) && !busy);
                                     let path = row.path.clone();
@@ -769,18 +794,73 @@ impl Render for CompareView {
                                                         )
                                                     }),
                                             )
-                                            .child(div().w(px(150.)).flex_none().overflow_hidden().whitespace_nowrap().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(side_text(row, Side::Left)))
-                                            .child(div().w(px(190.)).flex_none().overflow_hidden().whitespace_nowrap().text_size(px(text::XS.0)).text_color(c(legible(&p, color))).child(status_text(row, scanning)))
-                                            .child(div().w(px(150.)).flex_none().overflow_hidden().whitespace_nowrap().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(side_text(row, Side::Right)))
+                                            .child(
+                                                div()
+                                                    .w(px(150.))
+                                                    .flex_none()
+                                                    .overflow_hidden()
+                                                    .whitespace_nowrap()
+                                                    .text_size(px(text::XS.0))
+                                                    .text_color(c(p.text_muted))
+                                                    .child(side_text(row, Side::Left)),
+                                            )
+                                            .child(
+                                                div()
+                                                    .w(px(190.))
+                                                    .flex_none()
+                                                    .overflow_hidden()
+                                                    .whitespace_nowrap()
+                                                    .text_size(px(text::XS.0))
+                                                    .text_color(c(legible(&p, color)))
+                                                    .child(status_text(row, scanning)),
+                                            )
+                                            .child(
+                                                div()
+                                                    .w(px(150.))
+                                                    .flex_none()
+                                                    .overflow_hidden()
+                                                    .whitespace_nowrap()
+                                                    .text_size(px(text::XS.0))
+                                                    .text_color(c(p.text_muted))
+                                                    .child(side_text(row, Side::Right)),
+                                            )
                                             .child(
                                                 div()
                                                     .w(px(96.))
                                                     .flex_none()
                                                     .flex()
-                                                    .child(small(format!("cr-{ix}"), "→", crate::i18n::tr("Copy to the right"), copy_right, cx, RowAction::Copy(Direction::LeftToRight)))
-                                                    .child(small(format!("cl-{ix}"), "←", crate::i18n::tr("Copy to the left"), copy_left, cx, RowAction::Copy(Direction::RightToLeft)))
-                                                    .child(small(format!("dl-{ix}"), "✕", crate::i18n::tr("Delete from the left"), del_left, cx, RowAction::Delete(Side::Left)))
-                                                    .child(small(format!("dr-{ix}"), "✕", crate::i18n::tr("Delete from the right"), del_right, cx, RowAction::Delete(Side::Right))),
+                                                    .child(small(
+                                                        format!("cr-{ix}"),
+                                                        "→",
+                                                        crate::i18n::tr("Copy to the right"),
+                                                        copy_right,
+                                                        cx,
+                                                        RowAction::Copy(Direction::LeftToRight),
+                                                    ))
+                                                    .child(small(
+                                                        format!("cl-{ix}"),
+                                                        "←",
+                                                        crate::i18n::tr("Copy to the left"),
+                                                        copy_left,
+                                                        cx,
+                                                        RowAction::Copy(Direction::RightToLeft),
+                                                    ))
+                                                    .child(small(
+                                                        format!("dl-{ix}"),
+                                                        "✕",
+                                                        crate::i18n::tr("Delete from the left"),
+                                                        del_left,
+                                                        cx,
+                                                        RowAction::Delete(Side::Left),
+                                                    ))
+                                                    .child(small(
+                                                        format!("dr-{ix}"),
+                                                        "✕",
+                                                        crate::i18n::tr("Delete from the right"),
+                                                        del_right,
+                                                        cx,
+                                                        RowAction::Delete(Side::Right),
+                                                    )),
                                             ),
                                     )
                                 })

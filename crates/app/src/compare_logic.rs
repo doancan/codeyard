@@ -167,16 +167,7 @@ pub fn classify(left: &Tree, right: &Tree, done: [bool; 2], refine: &HashMap<Str
             (None, Some(r)) => (r.kind, Status::OnlyRight, r.error.as_ref().map(|e| format!("{}: {e}", crate::i18n::t("right")))),
             (None, None) => continue,
         };
-        rows.push(Row {
-            depth: path.matches('/').count(),
-            path: path.clone(),
-            kind,
-            status,
-            left: l.map(info),
-            right: r.map(info),
-            error,
-            case_clash: false,
-        });
+        rows.push(Row { depth: path.matches('/').count(), path: path.clone(), kind, status, left: l.map(info), right: r.map(info), error, case_clash: false });
     }
 
     // Folders present on both sides are "nested" when anything below them differs.
@@ -186,7 +177,8 @@ pub fn classify(left: &Tree, right: &Tree, done: [bool; 2], refine: &HashMap<Str
             dirty.insert(&row.path[..i]);
         }
     }
-    let nested: Vec<usize> = (0..rows.len()).filter(|&i| rows[i].is_dir() && rows[i].status == Status::Identical && dirty.contains(rows[i].path.as_str())).collect();
+    let nested: Vec<usize> =
+        (0..rows.len()).filter(|&i| rows[i].is_dir() && rows[i].status == Status::Identical && dirty.contains(rows[i].path.as_str())).collect();
     for i in nested {
         rows[i].status = Status::Nested;
     }
@@ -317,7 +309,10 @@ pub enum Expect {
     Absent,
     Hash(u64),
     /// The size was different, so the file was never hashed: size and time stand in.
-    Stat { size: u64, mtime_ms: i64 },
+    Stat {
+        size: u64,
+        mtime_ms: i64,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -438,7 +433,10 @@ pub fn utc_text(ms: i64) -> String {
 
 /// The line under the toolbar and at the top of the report.
 pub fn summary(c: &Counts) -> String {
-    crate::i18n::tf("{0} only on the left, {1} only on the right, {2} changed, {3} identical, {4} errors", &[&c.only_left, &c.only_right, &c.changed, &c.identical, &c.errors])
+    crate::i18n::tf(
+        "{0} only on the left, {1} only on the right, {2} changed, {3} identical, {4} errors",
+        &[&c.only_left, &c.only_right, &c.changed, &c.identical, &c.errors],
+    )
 }
 
 /// Plain text for "Copy Report" and "Export as text": counts, then every difference grouped by kind.
@@ -569,10 +567,7 @@ mod tests {
 
     #[test]
     fn counts_files_not_folders() {
-        let rows = rows(
-            vec![rec("d", Kind::Dir, 0, None), file("d/a", 1, 1), file("l", 1, 1)],
-            vec![file("r", 1, 1), file("l", 1, 1)],
-        );
+        let rows = rows(vec![rec("d", Kind::Dir, 0, None), file("d/a", 1, 1), file("l", 1, 1)], vec![file("r", 1, 1), file("l", 1, 1)]);
         assert_eq!(counts(&rows), Counts { only_left: 1, only_right: 1, changed: 0, identical: 1, errors: 0, pending: 0 });
     }
 
@@ -588,7 +583,8 @@ mod tests {
     #[test]
     fn an_unreadable_folder_is_an_error_and_what_it_hides_is_not_reported_as_missing() {
         let bad = HashRecord { error: Some("permission denied".into()), ..rec("locked", Kind::Dir, 0, None) };
-        let rows = rows(vec![bad, rec("ok", Kind::Dir, 0, None)], vec![rec("locked", Kind::Dir, 0, None), file("locked/inner", 1, 1), rec("ok", Kind::Dir, 0, None)]);
+        let rows =
+            rows(vec![bad, rec("ok", Kind::Dir, 0, None)], vec![rec("locked", Kind::Dir, 0, None), file("locked/inner", 1, 1), rec("ok", Kind::Dir, 0, None)]);
         assert_eq!(status_of(&rows, "locked"), Status::Error);
         assert_eq!(rows.iter().find(|r| r.path == "locked").unwrap().error.as_deref(), Some("left: permission denied"));
         assert_eq!(status_of(&rows, "locked/inner"), Status::Error, "not 'only on the right'");
