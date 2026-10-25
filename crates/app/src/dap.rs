@@ -52,7 +52,8 @@ pub struct Breakpoint {
 }
 
 impl Breakpoint {
-    #[allow(dead_code)]
+    /// A plain breakpoint on a line (the editor builds them from its own marks, so only tests need this).
+    #[cfg(test)]
     pub fn at(line: u32) -> Self {
         Breakpoint { line, ..Default::default() }
     }
@@ -625,18 +626,6 @@ impl Session {
                 .send(DapEvent::Output { category: "stderr".into(), text: format!("{}\n", crate::i18n::tf("Could not start the debug session: {}", &[&e])) });
             let _ = self.events.send(DapEvent::Terminated);
         }
-    }
-
-    /// Replace all breakpoints of a file; returns whether each line was verified.
-    #[allow(dead_code)]
-    pub fn set_breakpoints(&self, path: &str, bps: &[Breakpoint]) -> Result<Vec<bool>, String> {
-        self.remember(path, bps);
-        let mut reqs = self.breakpoint_requests(path, bps);
-        for extra in reqs.drain(1..) {
-            let _ = self.request_async("setBreakpoints", extra);
-        }
-        let r = self.request("setBreakpoints", reqs.remove(0), Duration::from_secs(15))?;
-        Ok(r["breakpoints"].as_array().map(|a| a.iter().map(|b| b["verified"].as_bool().unwrap_or(false)).collect()).unwrap_or_default())
     }
 
     /// Send without awaiting a response: the request reaches the adapter before commands that follow it,

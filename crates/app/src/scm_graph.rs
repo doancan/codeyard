@@ -363,7 +363,6 @@ fn row_shell(ix: usize, k: &GraphCommit, h: f32, is_sel: bool, p: &Palette, cx: 
 }
 
 /// Graph view: lane (or avatar if filtered) + two-line text.
-#[allow(clippy::too_many_arguments)]
 fn graph_row(g: &GraphData, ix: usize, flat: bool, is_sel: bool, show_author: bool, show_hash: bool, p: &Palette, cx: &mut Context<ScmPanel>) -> AnyElement {
     let (commit, row) = (&g.commits[ix], &g.rows[ix]);
     let head = commit.refs.iter().any(|r| r.kind == RefKind::Head);

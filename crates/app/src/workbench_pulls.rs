@@ -17,10 +17,6 @@ fn token() -> Option<String> {
     ["GITHUB_TOKEN", "GH_TOKEN"].iter().find_map(|k| std::env::var(k).ok()).filter(|t| !t.trim().is_empty())
 }
 
-fn now_secs() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64)
-}
-
 impl Workbench {
     pub(super) fn show_pull_requests(&mut self, _: &ShowPullRequests, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.repo_root(cx) else { return };
