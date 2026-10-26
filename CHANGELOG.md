@@ -9,14 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A command center in the macOS title bar:** back / forward and a search box with the folder (and SSH host) name in the middle;
+  click it to go to a file. The sidebar button on the right is gone: the activity bar already shows and hides the sidebar.
+- **Source Control graph actions:** fetch, pull and push buttons (with the commit counts) in the GRAPH header, and a **…** menu
+  for the view, scope, *Only My Commits*, *Hide Merge Commits*, search and the branch / tag / sync actions.
+- **Terminal line editing on macOS:** ⌘← / ⌘→ go to the start / end of the line, ⌥← / ⌥→ move by word, ⌘⌫ / ⌘⌦ delete to
+  the start / end and ⌥⌦ deletes the next word. Full-screen programs such as vim still get the plain keys.
+- **Find in the terminal** (⌘F, Ctrl+Shift+F): literal, smart-case search through the output and scrollback with a result
+  count, every match tinted and the current one selected.
+- Terminal: select all (⌘A), page scrolling (⇧PageUp / ⇧PageDown), jump to top / bottom (⌘Home / ⌘End) and a right-click menu.
 - GitHub release signing and Apple notarization for macOS DMG and portable binaries, with credentials stored only in
   Actions Secrets and a temporary runner keychain. Signed dry runs are available without publishing.
 
 ### Changed
 
+- **The graph is one line per commit,** and each row is only as wide as the branches beside it: history starts at the left edge
+  and side branches step to the right. Views and filters moved from the button row into the **…** menu; active
+  filters show as chips that remove themselves on click. The short hash is off by default (`"git.graph.showHash"`).
+- The status bar is taller (26 px) with one icon size and even spacing.
 - Build release agents separately so macOS and Windows app builds run in parallel; cache compiled Rust dependencies.
 - Upgrade release and benchmark checkout/artifact/cache actions to Node.js 24 releases, pinned by commit.
 - Add a Linux-to-Windows MSVC benchmark with shared FXC shaders and native Windows standalone verification.
+
+### Fixed
+
+- **Local branches with a slash** (`feature/x`) were drawn and sorted as remote branches in the graph, and a remote branch was
+  shown next to its local twin.
+- The graph did not update when a ref moved without HEAD moving: checking out a new branch on the same commit, a fetch, a push,
+  a new tag or a branch created in the terminal.
+- On Linux and Windows, Ctrl+K in the terminal cleared it instead of reaching the shell (kill to end of line); clear is
+  Ctrl+Shift+K there now.
+- An empty Changes group no longer shows a "0" badge.
 
 ## [0.3.2] - 2026-10-26
 

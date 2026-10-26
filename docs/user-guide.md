@@ -63,6 +63,7 @@ is the complete list and always matches your key bindings; every setting is in [
 | Back to one cursor | Esc | Esc |
 | Terminal / new terminal | ⌃\` / ⌃⇧\` | Ctrl+\` / Ctrl+Shift+\` |
 | Terminal copy / paste | ⌘C / ⌘V | Ctrl+Shift+C / Ctrl+Shift+V (Ctrl+C stays SIGINT) |
+| Terminal find / clear / select all | ⌘F / ⌘K / ⌘A | Ctrl+Shift+F / Ctrl+Shift+K / Ctrl+Shift+A |
 | Toggle bottom panel (opens a terminal if none) | ⌘J | Ctrl+J |
 | Rename / delete (file tree) | F2 / ⌘⌫ | F2 / Ctrl+Backspace |
 | Toggle line comment | ⌘/ | Ctrl+/ |
@@ -145,7 +146,14 @@ In the terminal, ⌘-click (Ctrl+click) a URL or a location such as `src/main.rs
 `app.ts(3,7)` or a Node stack line to open it (relative paths are taken from the project
 folder); holding ⌘ underlines what can be opened. Drag to select, double-click for a word, triple-click for a line, Shift+click
 to extend; ⌘C copies. On keyboard layouts without a reachable \` key (Turkish Q, German),
-use ⌘J or bind `terminal.toggle` yourself (below). Find with several cursors: copy gives one
+use ⌘J or bind `terminal.toggle` yourself (below).
+
+Terminal line editing works as in Terminal.app: ⌘← / ⌘→ jump to the start / end of the line, ⌥← / ⌥→ move by word,
+⌘⌫ deletes to the start of the line, ⌘⌦ to its end and ⌥⌦ the next word (these are the shell's own keys, Ctrl+A, Ctrl+E,
+Esc b…, so they work in bash, zsh and fish; full-screen programs such as vim get the plain keys). ⌘F finds in the output and
+the scrollback: every match is tinted, ↵ steps to the previous one, ⌘G / ⇧⌘G to the next / previous (F3 / Shift+F3 on Linux and
+Windows) and Esc closes. ⇧PageUp / ⇧PageDown scroll a page, ⌘Home / ⌘End (Ctrl+Shift+Home / End) jump to the top or bottom.
+Right-click for copy, paste, select all, find and clear; the Terminal menu has them too. Find with several cursors: copy gives one
 line per cursor, and pasting the same number of lines puts one on each cursor.
 On a Turkish Q layout ⌘/ is ⇧⌘7; if that is awkward, bind `editor.toggleComment` to
 another key.
@@ -224,6 +232,9 @@ suggested (nearby words first); `"editor.wordBasedSuggestions": false` turns thi
 
 ## Welcome, Settings page and customization
 
+**Title bar (macOS).** The middle of the title bar holds back / forward and a search box with the folder name
+(and the SSH host): click it to go to a file (⌘P). The sidebar is shown and hidden from the activity bar (or ⌘B).
+
 **What opens at start** is a setting, `"window.startup"` (Settings ▸ Window):
 
 - `"welcome"` (default): the **Welcome** screen. Start actions (new file, open folder, clone a
@@ -277,14 +288,19 @@ Make it yours:
 ## Source control, Timeline and more
 
 **Graph.** Source Control shows the history of all branches as colored lanes (at most seven
-columns, so the left edge stays tight), two lines per commit: message with branch/tag chips,
-author · time and the short hash. Click a commit for its message, files and `+/−` counts below
+columns), one line per commit: message, author and the most important branch/tag chip
+(`"git.graph.showHash"` adds the short hash). Every row is only as wide as the branches running
+next to it, so history reads from the left edge and side branches step to the right. Hover a commit
+for its author, date, all labels and hash. Click a commit for its message, files and `+/−` counts below
 the graph (click a file for its diff; double-click for the file list). Right-click for copy hash,
 create branch or tag here, checkout (detached), cherry-pick, revert and reset (hard reset asks;
 a cherry-pick or revert that conflicts is undone, never left half done; for a merge commit the first parent is the mainline).
-There is no interactive rebase (squash, reorder, edit): use a terminal for that. The header switches
-between all branches and the current branch, searches commits (message, author, hash, branch)
-and reloads. Stashes are listed with apply, pop and drop. `"git.graph.limit"`,
+There is no interactive rebase (squash, reorder, edit): use a terminal for that. The header searches
+commits (message, author, hash, branch), fetches, pulls and pushes (with the counts of commits to pull
+and to push) and reloads; its **…** menu picks the view (Graph, List with times, Days), the scope (all
+branches or the current one), *Only My Commits* and *Hide Merge Commits*, and offers sync, pull
+(rebase), push tags, checkout, new branch and new tag. Active filters show as chips under the header;
+click one to turn it off. Stashes are listed with apply, pop and drop. `"git.graph.limit"`,
 `"git.graph.allBranches"` and `"git.timeline.limit"` tune it; the Changes groups fold too.
 
 **Explorer sections.** OPEN EDITORS, the folder tree, **OUTLINE** (functions, types and
