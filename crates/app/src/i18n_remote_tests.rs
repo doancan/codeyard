@@ -54,7 +54,7 @@ fn ports_and_debugger_texts() {
         "Bağlantı noktası 3000, localhost:3001 adresine yönlendirildi (3000 burada meşguldü)"
     );
     assert_eq!(t("No debug session. F5 starts one."), "Hata ayıklama oturumu yok. F5 bir oturum başlatır.");
-    assert_eq!(tf("{}: paused ({})", &[&"Debug Rust: x", &"kesme noktası"]), "Debug Rust: x: duraklatıldı (kesme noktası)");
+    assert_eq!(tf("paused on {}", &[&"kesme noktası"]), "kesme noktası nedeniyle duraklatıldı");
     let detected = crate::debug_config::detect(Some("[package]\nname = \"demo\"\n"), true, Some("/p/a.py"), "/p");
     let names: Vec<&str> = detected.iter().map(|c| c.name.as_str()).collect();
     assert_eq!(names, ["Rust Hata Ayıklama: demo", "Go Paketi Hata Ayıklama", "Python Hata Ayıklama: a.py"]);

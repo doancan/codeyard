@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Remote Explorer view** in the activity bar: SSH hosts with their recent folders and connection status, running
+  containers (and WSL distributions on Windows), and the forwarded ports of the current connection. Connect or open a
+  folder in this window or a new one, forget a folder, and edit, test, set up key login for or remove a host from the
+  row. *View: Remote Explorer* opens it.
+- **Ports table:** the PORTS panel lists Port, Label, Forwarded Address, Running Process and Origin, with buttons to open,
+  copy and stop, and a menu to set a label, change the local port, choose HTTP, HTTPS or TCP, or retry. `3000:8080` in the
+  field forwards server port 3000 to local port 8080.
+- Forwarded ports are saved per project and forwarded again when the project is opened over SSH, with their label,
+  protocol and chosen local port.
+- `ports.localBind` (`loopback` or `all`; only from your own settings) and `ports.rules` (label, protocol and `notify`,
+  `silent`, `openBrowser` or `ignore` per port or range).
+- The ssh config's `Include` lines are followed when listing hosts.
+- **Run and Debug view** in the activity bar: a configuration selector with a start button, and folding, resizable
+  sections Variables, Watch, Call Stack (threads as a tree, one row per session when several run) and Breakpoints.
+  While a session runs, a toolbar floats over the editors; the bottom panel keeps the Debug Console.
+- **Breakpoints** are saved per project and come back after a restart. They can be disabled one by one or all together,
+  and deactivated without being lost; the adapter's answer marks each one, and the gutter shows a disabled breakpoint as
+  a muted ring and one the debugger could not bind as a red ring. Function breakpoints are new.
+- Variables: *Set Value*, *Copy Value*, *Copy as Expression* and *Add to Watch*; values with many elements load 100 at a
+  time. Call Stack loads 20 frames at a time and offers *Restart Frame* and *Copy Call Stack*. The Debug Console keeps a
+  history (↑ / ↓) and completes with Tab.
+- **Run Without Debugging** (⌃F5), **Run to Cursor**, launch **compounds** (with `stopAll`), `${input:…}` questions
+  (`promptString`, `pickString`), `postDebugTask`, **Add Configuration…** templates, programs that ask to run in a
+  terminal (`"console": "integratedTerminal"`), several sessions at once, and a **Run** menu. F6 pauses.
+- **Terminal shell integration** for zsh, bash and fish: a dot beside each command (green succeeded, red failed),
+  jumping between commands (⌘↑ / ⌘↓), *Copy Last Command Output*, and splits that open where the shell is.
+  `terminal.shellIntegration` turns it off. Links that programs mark (OSC 8) open their real target.
+- **Terminal profiles** (`terminal.profiles.macos` / `.linux` / `.windows`, `terminal.defaultProfile`) with *New Terminal with
+  Profile…* (also listing the machine's shells) and *Select Default Profile…*; terminals can be renamed and coloured, and
+  *Kill All Terminals* closes them all.
+- **Testing view** in the activity bar: the tests of the open folder (Rust, Go, Python and JavaScript), found in the
+  background and grouped by file. Run a test, a file, all tests or the failed ones with the project's own runner, or stop
+  the run; output streams into a *Test Results* terminal, and each test shows its outcome, time and first failure line,
+  which opens where it failed. Rust, Go and Python tests can be debugged from their row or with *Test: Debug Test at
+  Cursor*. A filter and a failed-only toggle narrow the tree; the activity icon counts failures.
+
+### Changed
+
+- **Platform-standard code font size:** the editor and terminal default to 12 px on macOS and 14 px on Windows and Linux
+  (was 13 px everywhere). A size written in your settings file is kept. The settings template now leaves the font keys
+  commented out, so a settings file shared between computers does not pin one platform's size.
+- The status bar is 22 px high.
+- Closing a terminal asks first while a program runs in it, and names the program (`terminal.confirmOnClose`).
+- `terminal.scrollback` is capped at 50,000 lines, and a change applies to open terminals.
+- Every text size in the interface comes from the type scale (new *badge* and *display* steps replace the remaining fixed
+  sizes); a test keeps new code on the scale.
+
+### Fixed
+
+- The terminal ignored `terminal.fontSize` and zoom: it now uses the setting, with rows sized to match.
+- **Pasting into the terminal is safer:** bracketed-paste markers hidden in pasted text can no longer end the paste early
+  and run what follows; other control characters are removed when the shell does not use bracketed paste
+  (`terminal.sanitizePaste`), and a paste of several lines asks first (`terminal.warnMultilinePaste`).
+- A split terminal opened in the folder the first terminal started in, not where its shell was.
+- Stopping a process the editor started (a test run, a debug adapter) now also stops the programs it started.
+- **Port forwarding is more reliable:** a double click no longer forwards a port twice; forwards restored after a
+  reconnect report failures on their row (with *Retry*) instead of looking active; switching or losing the connection
+  cancels forwards instead of leaking their local ports; after a drop, forwards come back on the same local port.
+- A forward to a port held by another program on this computer's IPv4 loopback looked active while connections went to
+  that program; busy ports are now detected on both loopback addresses.
+- Forwards connect to the exact address a server port listens on (`127.0.0.1`, `::1` or another address), so a service
+  bound to one of them is reached; the Ports panel names the program listening on each port, and a failed scan keeps
+  the last list.
+
 ## [0.4.1] - 2026-10-26
 
 ### Changed

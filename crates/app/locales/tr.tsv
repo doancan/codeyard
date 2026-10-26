@@ -267,6 +267,11 @@ Debug: Add Watch Expression…	Hata Ayıklama: İzleme İfadesi Ekle…
 Debug: Remove All Watch Expressions	Hata Ayıklama: Tüm İzleme İfadelerini Kaldır
 Debug: Install JavaScript Debugger	Hata Ayıklama: JavaScript Hata Ayıklayıcısını Kur
 Debug: Remove All Breakpoints	Hata Ayıklama: Tüm Kesme Noktalarını Kaldır
+Debug: Enable/Disable Breakpoint	Hata Ayıklama: Kesme Noktasını Etkinleştir/Devre Dışı Bırak
+Debug: Enable All Breakpoints	Hata Ayıklama: Tüm Kesme Noktalarını Etkinleştir
+Debug: Disable All Breakpoints	Hata Ayıklama: Tüm Kesme Noktalarını Devre Dışı Bırak
+Debug: Deactivate/Activate Breakpoints	Hata Ayıklama: Kesme Noktalarını Etkisizleştir/Etkinleştir
+Debug: Add Function Breakpoint…	Hata Ayıklama: İşlev Kesme Noktası Ekle…
 Debug: Show Debug Panel	Hata Ayıklama: Hata Ayıklama Panelini Göster
 Test: Run Test at Cursor	Test: İmlecin Altındaki Testi Çalıştır
 Test: Run Tests in File	Test: Dosyadaki Testleri Çalıştır
@@ -992,7 +997,6 @@ No tests found for this file type.	Bu dosya türü için test bulunamadı.
 No test at the cursor: put it inside a test function.	İmlecin altında test yok: imleci bir test işlevinin içine getirin.
 Could not create {0}: {1}	{0} oluşturulamadı: {1}
 Output	Çıktı
-Debug	Hata Ayıklama
 Hide Panel (⌘J)	Paneli Gizle (⌘J)
 New Terminal (⌃⇧`)	Yeni Terminal (⌃⇧`)
 Move Panel to Bottom	Paneli Alta Taşı
@@ -1488,10 +1492,35 @@ Could not forward port {}: {}	Bağlantı noktası {0} yönlendirilemedi: {1}
 Port forwarding works while connected to an SSH host.	Bağlantı noktası yönlendirme, bir SSH sunucusuna bağlıyken çalışır.
 Open in Browser	Tarayıcıda Aç
 Stop	Durdur
-listening on the server	sunucuda dinliyor
 Nothing is listening on the server yet.	Sunucuda henüz dinleyen bir şey yok.
 Forward a port:	Bağlantı noktası yönlendir:
 Forward Port	Yönlendir
+Could not list the server's ports: {}	Sunucudaki bağlantı noktaları listelenemedi: {0}
+Local port {} is busy	Yerel bağlantı noktası {0} meşgul
+The local port is busy	Yerel bağlantı noktası meşgul
+Ports below 1024 need extra privileges on this computer	1024'ün altındaki bağlantı noktaları bu bilgisayarda ek yetki gerektirir
+The SSH connection is gone: reconnect to forward again	SSH bağlantısı koptu: yeniden yönlendirmek için tekrar bağlanın
+forwarding…	yönlendiriliyor…
+waiting for the connection	bağlantı bekleniyor
+Retry	Yeniden Dene
+{} ports are forwarded	{0} bağlantı noktası yönlendirildi
+Auto Forwarded	Otomatik Yönlendirildi
+User Forwarded	Kullanıcı Yönlendirdi
+Change	Değiştir
+Change Local Port…	Yerel Bağlantı Noktasını Değiştir…
+Copy Address	Adresi Kopyala
+Protocol: HTTP	Protokol: HTTP
+Protocol: HTTPS	Protokol: HTTPS
+Protocol: TCP	Protokol: TCP
+Set Label…	Etiket Ver…
+Stop Forwarding	Yönlendirmeyi Durdur
+label, e.g. web (empty: none)	etiket, örn. web (boş: yok)
+local port, e.g. 8080	yerel bağlantı noktası, örn. 8080
+“{}” is not a free local port	“{0}” boş bir yerel bağlantı noktası değil
+ports.rules.{}: expected a port or a range such as 3000-3010	ports.rules.{0}: bir bağlantı noktası ya da 3000-3010 gibi bir aralık bekleniyordu
+ports.rules.{}: expected an object with label, onForward or protocol	ports.rules.{0}: label, onForward ya da protocol içeren bir nesne bekleniyordu
+ports.rules.{}.{}: unexpected value	ports.rules.{0}.{1}: beklenmeyen değer
+Where forwarded ports listen: this computer only, or every network interface	Yönlendirilen bağlantı noktalarının dinlediği yer: yalnızca bu bilgisayar ya da tüm ağ arayüzleri
 e.g. 3000	örn. 3000
 # ---- Debugger: panel, start, breakpoints, watches, exceptions, messages ----
 Could not run “{}”: {}	“{0}” çalıştırılamadı: {1}
@@ -1506,6 +1535,10 @@ The download finished but js-debug was not found in it.	İndirme bitti ancak iç
 Could not download js-debug: {}	js-debug indirilemedi: {}
 Start a debug session first (F5): the adapter says which exceptions it can break on.	Önce bir hata ayıklama oturumu başlatın (F5): bağdaştırıcı hangi istisnalarda durabileceğini bildirir.
 This debug adapter has no exception breakpoints.	Bu hata ayıklama bağdaştırıcısında istisna kesme noktası yok.
+Breakpoints are active.	Kesme noktaları etkin.
+Breakpoints are deactivated: the program runs past them.	Kesme noktaları etkisiz: program üzerlerinden geçer.
+There is no breakpoint on this line (F9 adds one).	Bu satırda kesme noktası yok (F9 ekler).
+function name, e.g. main or app::run	işlev adı, örn. main ya da app::run
 Toggle a break-on-exception filter	İstisnada durma süzgecini aç/kapat
 Not breaking on exceptions.	İstisnalarda durulmuyor.
 Breaking on: {}	Şu istisnalarda duruluyor: {}
@@ -1533,19 +1566,14 @@ The debug adapter stopped	Hata ayıklama bağdaştırıcısı durdu
 No active debug session.	Etkin hata ayıklama oturumu yok.
 Debug session stopped	Hata ayıklama oturumu durduruldu
 No debug session. F5 starts one.	Hata ayıklama oturumu yok. F5 bir oturum başlatır.
-Pause	Duraklat
 Continue (F5)	Devam Et (F5)
 Step Over (F10)	Üzerinden Geç (F10)
 Step Into (F11)	İçine Gir (F11)
 Step Out (⇧F11)	Dışına Çık (⇧F11)
 Restart (⇧⌘F5)	Yeniden Başlat (⇧⌘F5)
 Stop (⇧F5)	Durdur (⇧F5)
-{}: starting…	{}: başlıyor…
-{}: running	{}: çalışıyor
-{}: paused ({})	{0}: duraklatıldı ({1})
 Running…	Çalışıyor…
 Not paused	Duraklatılmadı
-not paused	duraklatılmadı
 breaks when written:	yazıldığında durur:
 Call Stack	Çağrı Yığını
 Variables	Değişkenler
@@ -2265,3 +2293,179 @@ Fetch from all remotes	Tüm uzak depolardan Fetch yap
 Hide Merge Commits	Merge Commit'lerini Gizle
 Only My Commits	Yalnızca Benim Commit'lerim
 Search Commits	Commit'lerde Ara
+# ---- Remote Explorer ----
+Remote Explorer	Uzak Gezgin
+View: Remote Explorer	Görünüm: Uzak Gezgin
+SSH Hosts	SSH Sunucuları
+Containers	Kapsayıcılar
+WSL Targets	WSL Hedefleri
+Add SSH Host…	SSH Sunucusu Ekle…
+Open SSH Config File	SSH Yapılandırma Dosyasını Aç
+Connect in Current Window	Geçerli Pencerede Bağlan
+Connect in New Window	Yeni Pencerede Bağlan
+Open in New Window	Yeni Pencerede Aç
+Disconnect	Bağlantıyı Kes
+Edit Host…	Sunucuyu Düzenle…
+Test Connection	Bağlantıyı Test Et
+Set Up Key Login…	Anahtarla Girişi Ayarla…
+Remove Host…	Sunucuyu Kaldır…
+Connected	Bağlı
+Connected before	Daha önce bağlanıldı
+Connecting…	Bağlanıyor…
+Not connected yet	Henüz bağlanılmadı
+No recent folders	Son klasör yok
+No hosts in ~/.ssh/config. Add one with +.	~/.ssh/config içinde sunucu yok. + ile ekleyin.
+Forwarded Ports	Yönlendirilen Bağlantı Noktaları
+# ---- Run and Debug view ----
+Run and Debug	Çalıştır ve Hata Ayıkla
+Run and Debug (⌃⇧D)	Çalıştır ve Hata Ayıkla (⌃⇧D)
+View: Run and Debug	Görünüm: Çalıştır ve Hata Ayıkla
+Start Debugging (F5)	Hata Ayıklamayı Başlat (F5)
+Pause (F6)	Duraklat (F6)
+Open Launch Configuration	Başlatma Yapılandırmasını Aç
+Select a configuration	Bir yapılandırma seçin
+No Configurations	Yapılandırma Yok
+To customize Run and Debug, create a launch configuration.	Çalıştır ve Hata Ayıkla'yı özelleştirmek için bir başlatma yapılandırması oluşturun.
+Create a launch configuration	Başlatma yapılandırması oluştur
+Without one, F5 finds a configuration from the project (Cargo, Go, or the open Python or JavaScript file).	Yapılandırma yoksa F5 projeden bir tane bulur (Cargo, Go ya da açık Python veya JavaScript dosyası).
+Add Expression…	İfade Ekle…
+Remove Expression	İfadeyi Kaldır
+No expressions: + adds one.	İfade yok: + ile eklenir.
+No debug session.	Hata ayıklama oturumu yok.
+No breakpoints: F9 or a click in the gutter adds one.	Kesme noktası yok: F9 ya da satır numarası boşluğuna tıklamak ekler.
+Activate Breakpoints	Kesme Noktalarını Etkinleştir
+Deactivate Breakpoints	Kesme Noktalarını Etkisizleştir
+Remove All Breakpoints	Tüm Kesme Noktalarını Kaldır
+Remove Breakpoint	Kesme Noktasını Kaldır
+Enable Breakpoint	Kesme Noktasını Etkinleştir
+Disable Breakpoint	Kesme Noktasını Devre Dışı Bırak
+Edit Condition…	Koşulu Düzenle…
+Add Function Breakpoint…	İşlev Kesme Noktası Ekle…
+The debugger could not bind this breakpoint.	Hata ayıklayıcı bu kesme noktasını koda bağlayamadı.
+Starting…	Başlatılıyor…
+running	çalışıyor
+ended	bitti
+paused on {}	{0} nedeniyle duraklatıldı
+Breakpoints	Kesme Noktaları
+Add to Watch	İzlemeye Ekle
+Copy Call Stack	Çağrı Yığınını Kopyala
+Copy Value	Değeri Kopyala
+Copy as Expression	İfade Olarak Kopyala
+Could not set {}: {}	{0} ayarlanamadı: {1}
+Load More Stack Frames	Daha Fazla Yığın Çerçevesi Yükle
+Restart Frame	Çerçeveyi Yeniden Başlat
+Set Value…	Değer Ata…
+This debug adapter cannot change values.	Bu hata ayıklama bağdaştırıcısı değerleri değiştiremez.
+This frame cannot be restarted.	Bu çerçeve yeniden başlatılamaz.
+new value	yeni değer
+… {} more	… {0} tane daha
+# ---- Run menu and launching ----
+Run	Çalıştır
+Start Debugging	Hata Ayıklamayı Başlat
+Run Without Debugging	Hata Ayıklamadan Çalıştır
+Stop Debugging	Hata Ayıklamayı Durdur
+Restart Debugging	Hata Ayıklamayı Yeniden Başlat
+Continue	Devam Et
+Pause	Duraklat
+Step Over	Üzerinden Adımla
+Step Into	İçine Adımla
+Step Out	Dışına Adımla
+Run to Cursor	İmlece Kadar Çalıştır
+Toggle Breakpoint	Kesme Noktasını Aç/Kapat
+Enable All Breakpoints	Tüm Kesme Noktalarını Etkinleştir
+Disable All Breakpoints	Tüm Kesme Noktalarını Devre Dışı Bırak
+Add Configuration…	Yapılandırma Ekle…
+Debug: Run Without Debugging	Hata Ayıklama: Hata Ayıklamadan Çalıştır
+Debug: Run to Cursor	Hata Ayıklama: İmlece Kadar Çalıştır
+Debug: Add Configuration…	Hata Ayıklama: Yapılandırma Ekle…
+Debug: Open Launch Configuration	Hata Ayıklama: Başlatma Yapılandırmasını Aç
+Debug: Stop All	Hata Ayıklama: Tümünü Durdur
+Add a debug configuration	Bir hata ayıklama yapılandırması ekleyin
+Native program (C, C++, Rust, Swift)	Yerel program (C, C++, Rust, Swift)
+Attach to a native process	Yerel bir sürece bağlan
+Go package	Go paketi
+Python: current file	Python: geçerli dosya
+Python: attach to a debug server	Python: bir hata ayıklama sunucusuna bağlan
+Node.js program	Node.js programı
+Another debug adapter	Başka bir hata ayıklama bağdaştırıcısı
+OK	Tamam
+Could not add the configuration: {}	Yapılandırma eklenemedi: {0}
+the launch file is not an object	başlatma dosyası bir nesne değil
+the launch file is not valid JSON: {}	başlatma dosyası geçerli JSON değil: {0}
+Compound “{}” has no configurations	“{0}” bileşiğinde yapılandırma yok
+Unknown configuration “{}” in compound “{}”	“{1}” bileşiğinde bilinmeyen yapılandırma “{0}”
+“{}” asks for inputs, which a compound cannot ask for: start it on its own.	“{0}” girdi istiyor, bileşik bunları soramaz: onu tek başına başlatın.
+Unknown input “{0}” in “{1}”	“{1}” içinde bilinmeyen girdi “{0}”
+The input “{0}” is of type “{1}”, which would run a command; use promptString or pickString.	“{0}” girdisi “{1}” türünde, bu bir komut çalıştırır; promptString ya da pickString kullanın.
+The program is running: pause it first, or set a breakpoint.	Program çalışıyor: önce duraklatın ya da bir kesme noktası koyun.
+Running the program in a terminal is not supported on Windows yet: use {} in the configuration.	Programı terminalde çalıştırmak Windows'ta henüz desteklenmiyor: yapılandırmada {0} kullanın.
+# ---- Terminal hardening ----
+Ask before pasting several lines into the terminal	Terminale birden çok satır yapıştırmadan önce sor
+Paste {} line into the terminal?|Paste {} lines into the terminal?	{} satır terminale yapıştırılsın mı?
+Remove control characters from pasted text	Yapıştırılan metinden denetim karakterlerini kaldır
+The shell may run each line as soon as it arrives.	Kabuk her satırı gelir gelmez çalıştırabilir.
+Ask before closing a terminal	Terminali kapatmadan önce sor
+Change Color…	Rengi Değiştir…
+Close the terminal?	Terminal kapatılsın mı?
+Closing a terminal ends the programs running in it.	Terminali kapatmak içinde çalışan programları sonlandırır.
+Default terminal profile	Varsayılan terminal profili
+Kill All Terminals	Tüm Terminalleri Sonlandır
+New Terminal with Profile…	Profille Yeni Terminal…
+No profiles or shells were found on this machine.	Bu makinede profil ya da kabuk bulunamadı.
+No terminal profiles yet: add them under terminal.profiles in settings.jsonc.	Henüz terminal profili yok: settings.jsonc içinde terminal.profiles altına ekleyin.
+Open a terminal with…	Terminali şununla aç…
+Profile new terminals use	Yeni terminallerin kullandığı profil
+Rename	Yeniden Adlandır
+Rename Terminal…	Terminali Yeniden Adlandır…
+Terminal colour	Terminal rengi
+a program	bir program
+args must be a list of texts	args bir metin listesi olmalı
+color “{}” is not one of accent, success, warning, danger, info, muted	“{0}” rengi accent, success, warning, danger, info, muted değerlerinden biri değil
+env must be an object of texts	env metinlerden oluşan bir nesne olmalı
+env.{} is not used: a name of letters, digits and _ with a text value	env.{0} kullanılmıyor: harf, rakam ve _ içeren bir ad ve metin değeri gerekir
+expected an object with path, args, env or color	path, args, env ya da color içeren bir nesne bekleniyordu
+needs a path to a program	bir programın yolu gerekli
+terminal name	terminal adı
+{} terminals have programs running. Close them anyway?	{0} terminalde çalışan program var. Yine de kapatılsın mı?
+“{}” is still running in this terminal. Close it anyway?	“{0}” bu terminalde hâlâ çalışıyor. Yine de kapatılsın mı?
+Terminal: New Terminal with Profile…	Terminal: Profille Yeni Terminal…
+Terminal: Select Default Profile…	Terminal: Varsayılan Profili Seç…
+Terminal: Rename…	Terminal: Yeniden Adlandır…
+Terminal: Change Color…	Terminal: Rengi Değiştir…
+Terminal: Kill All Terminals	Terminal: Tüm Terminalleri Sonlandır
+Copy Last Command Output	Son Komutun Çıktısını Kopyala
+Mark prompts, commands and the folder in zsh, bash and fish	zsh, bash ve fish'te istemleri, komutları ve klasörü işaretle
+Terminal: Go to Previous Command	Terminal: Önceki Komuta Git
+Terminal: Go to Next Command	Terminal: Sonraki Komuta Git
+Terminal: Copy Last Command Output	Terminal: Son Komutun Çıktısını Kopyala
+Testing	Test
+View: Testing	Görünüm: Test
+Test: Run All Tests	Test: Tüm Testleri Çalıştır
+Test: Run Failed Tests	Test: Başarısız Testleri Yeniden Çalıştır
+Test: Refresh Tests	Test: Testleri Yenile
+Test: Stop Running Tests	Test: Çalışan Testleri Durdur
+Test: Debug Test at Cursor	Test: İmlecin Altındaki Testte Hata Ayıkla
+Building the tests…	Testler derleniyor…
+Collapse All	Tümünü Daralt
+Could not look for tests: {}	Testler aranamadı: {}
+Could not start the test runner: {}	Test çalıştırıcısı başlatılamadı: {}
+Debug Test	Testte Hata Ayıkla
+Debug Test: {}	Testte Hata Ayıkla: {}
+Filter (e.g. text, path)	Filtrele (ör. metin, yol)
+JavaScript tests can be run here, not debugged: add a launch configuration for the runner.	JavaScript testleri burada çalıştırılabilir ama hata ayıklanamaz: çalıştırıcı için bir başlatma yapılandırması ekleyin.
+Looking for tests…	Testler aranıyor…
+No tests found. Tests are read from Rust, Go, Python and JavaScript test files.	Test bulunamadı. Testler Rust, Go, Python ve JavaScript test dosyalarından okunur.
+No tests to run.	Çalıştırılacak test yok.
+Open a folder to find its tests.	Testlerini bulmak için bir klasör açın.
+Refresh Tests	Testleri Yenile
+Run All Tests	Tüm Testleri Çalıştır
+Run Failed Tests	Başarısız Testleri Yeniden Çalıştır
+Run Test	Testi Çalıştır
+Run Tests in File	Dosyadaki Testleri Çalıştır
+Show Only Failed Tests	Yalnızca Başarısız Testleri Göster
+Test Results	Test Sonuçları
+Tests: {0} passed, {1} failed	Testler: {0} geçti, {1} başarısız
+The tests did not build: run the test to see the errors.	Testler derlenemedi: hataları görmek için testi çalıştırın.
+{0}/{1} passed	{0}/{1} geçti
+{} failed	{} başarısız
+{} skipped	{} atlandı

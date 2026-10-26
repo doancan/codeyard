@@ -138,6 +138,12 @@ impl Workbench {
             InputPurpose::RenameSymbol { client, path, pos } => self.rename_symbol_to(client, path, pos, name, cx),
             InputPurpose::EditBreakpoint { path, line } => self.finish_edit_breakpoint(path, line, name, cx),
             InputPurpose::AddWatch => self.finish_add_watch(name, cx),
+            InputPurpose::FunctionBreakpoint => self.finish_function_breakpoint(name, cx),
+            InputPurpose::LaunchInput => self.answer_launch_input(name, window, cx),
+            InputPurpose::RenameTerminal => self.finish_rename_terminal(name, cx),
+            InputPurpose::SetVariable { parent, name: var } => self.finish_set_variable(parent, var, name, cx),
+            InputPurpose::PortLabel { remote } => self.finish_port_label(remote, name, cx),
+            InputPurpose::PortLocal { remote } => self.finish_port_local(remote, name, cx),
             InputPurpose::DataBreakpoint => self.finish_data_breakpoint(name, cx),
             InputPurpose::NewFile { base } => {
                 let target = if name.starts_with('/') { name.clone() } else { ui::join(&base, &name) };

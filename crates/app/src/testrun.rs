@@ -12,6 +12,44 @@ use std::sync::LazyLock;
 pub struct TestRun {
     pub label: String,
     pub command: String,
+    /// The test as its runner names it in its output (`module::tests::name`, `TestName`, `path.py::Class::test`, the
+    /// JavaScript test's title), or the file for a whole-file run.
+    pub id: String,
+}
+
+/// A test found in a file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Case {
+    /// 0-based line of its definition.
+    pub line: usize,
+    pub name: String,
+    pub run: TestRun,
+}
+
+/// Every test the planners would find in a file (`package_json` for JavaScript runners).
+pub fn cases(rel: &str, text: &str, package_json: Option<&str>) -> Vec<Case> {
+    let ext = rel.rsplit_once('.').map(|(_, e)| e).unwrap_or_default();
+    let starts: &Regex = match ext {
+        "rs" => &RUST_FN,
+        "go" => &GO_TEST,
+        "js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" => &JS_CASE,
+        "py" => &PY_DEF,
+        _ => return Vec::new(),
+    };
+    let mut out: Vec<Case> = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        // A `describe` block is a group, not a test.
+        if !starts.is_match(line) || JS_CASE.captures(line).is_some_and(|c| &c[1] == "describe") {
+            continue;
+        }
+        if let Some(run) = plan(rel, text, i, false, package_json)
+            && !out.iter().any(|c| c.run.id == run.id)
+        {
+            let name = run.label.trim_start_matches("test: ").to_string();
+            out.push(Case { line: i, name, run });
+        }
+    }
+    out
 }
 
 fn quote(s: &str) -> String {
@@ -80,7 +118,7 @@ fn rust(rel: &str, lines: &[&str], cursor: usize, whole_file: bool) -> Option<Te
     };
     if whole_file {
         let command = if module.is_empty() { base } else { format!("{base} {}", word(&format!("{}::", module.join("::")))) };
-        return Some(TestRun { label: format!("test: {rel}"), command });
+        return Some(TestRun { label: format!("test: {rel}"), command, id: rel.to_string() });
     }
     // The nearest #[test] function at (or above) the cursor.
     for i in (0..=cursor).rev() {
@@ -109,7 +147,8 @@ fn rust(rel: &str, lines: &[&str], cursor: usize, whole_file: bool) -> Option<Te
         }
         path.extend(mods);
         path.push(c[1].to_string());
-        return Some(TestRun { label: format!("test: {}", &c[1]), command: format!("{base} {} -- --exact", word(&path.join("::"))) });
+        let id = path.join("::");
+        return Some(TestRun { label: format!("test: {}", &c[1]), command: format!("{base} {} -- --exact", word(&id)), id });
     }
     None
 }
@@ -122,26 +161,35 @@ fn go(rel: &str, lines: &[&str], cursor: usize, whole_file: bool) -> Option<Test
         if all.is_empty() {
             return None;
         }
-        return Some(TestRun { label: format!("test: {rel}"), command: format!("go test {pkg} -run {}", quote(&format!("^({})$", all.join("|")))) });
+        return Some(TestRun {
+            label: format!("test: {rel}"),
+            command: format!("go test {pkg} -run {}", quote(&format!("^({})$", all.join("|")))),
+            id: rel.to_string(),
+        });
     }
     let name = (0..=cursor).rev().find_map(|i| GO_TEST.captures(lines[i]).map(|c| c[1].to_string()))?;
-    Some(TestRun { label: format!("test: {name}"), command: format!("go test {pkg} -run {}", quote(&format!("^{name}$"))) })
+    Some(TestRun { label: format!("test: {name}"), command: format!("go test {pkg} -run {}", quote(&format!("^{name}$"))), id: name })
+}
+
+/// The project's JavaScript test runner, from the root package.json.
+pub fn js_runner(package_json: Option<&str>) -> Option<&'static str> {
+    let pkg: serde_json::Value = package_json.and_then(|p| serde_json::from_str(p).ok()).unwrap_or_default();
+    let has = |n: &str| ["dependencies", "devDependencies"].iter().any(|k| pkg[*k].get(n).is_some());
+    if has("vitest") {
+        Some("npx vitest run")
+    } else if has("jest") || has("ts-jest") {
+        Some("npx jest")
+    } else if pkg["scripts"]["test"].is_string() {
+        Some("npm test --")
+    } else {
+        None
+    }
 }
 
 fn js(rel: &str, lines: &[&str], cursor: usize, whole_file: bool, package_json: Option<&str>) -> Option<TestRun> {
-    let pkg: serde_json::Value = package_json.and_then(|p| serde_json::from_str(p).ok()).unwrap_or_default();
-    let has = |n: &str| ["dependencies", "devDependencies"].iter().any(|k| pkg[*k].get(n).is_some());
-    let runner = if has("vitest") {
-        "npx vitest run"
-    } else if has("jest") || has("ts-jest") {
-        "npx jest"
-    } else if pkg["scripts"]["test"].is_string() {
-        "npm test --"
-    } else {
-        return None;
-    };
+    let runner = js_runner(package_json)?;
     if whole_file {
-        return Some(TestRun { label: format!("test: {rel}"), command: format!("{runner} {}", quote(rel)) });
+        return Some(TestRun { label: format!("test: {rel}"), command: format!("{runner} {}", quote(rel)), id: rel.to_string() });
     }
     // Nearest it/test; if none, the nearest describe.
     let case = |kinds: &[&str]| {
@@ -151,12 +199,12 @@ fn js(rel: &str, lines: &[&str], cursor: usize, whole_file: bool, package_json: 
         })
     };
     let name = case(&["it", "test"]).or_else(|| case(&["describe"]))?;
-    Some(TestRun { label: format!("test: {name}"), command: format!("{runner} {} -t {}", quote(rel), quote(&name)) })
+    Some(TestRun { label: format!("test: {name}"), command: format!("{runner} {} -t {}", quote(rel), quote(&name)), id: name })
 }
 
 fn python(rel: &str, lines: &[&str], cursor: usize, whole_file: bool) -> Option<TestRun> {
     if whole_file {
-        return Some(TestRun { label: format!("test: {rel}"), command: format!("python3 -m pytest {}", quote(rel)) });
+        return Some(TestRun { label: format!("test: {rel}"), command: format!("python3 -m pytest {}", quote(rel)), id: rel.to_string() });
     }
     let (i, def) = (0..=cursor).rev().find_map(|i| PY_DEF.captures(lines[i]).map(|c| (i, (c[1].len(), c[2].to_string()))))?;
     // If inside a class (indent > 0), the nearest less-indented `class Test…` above.
@@ -167,7 +215,7 @@ fn python(rel: &str, lines: &[&str], cursor: usize, whole_file: bool) -> Option<
         id.push_str(&format!("::{class}"));
     }
     id.push_str(&format!("::{}", def.1));
-    Some(TestRun { label: format!("test: {}", def.1), command: format!("python3 -m pytest {}", quote(&id)) })
+    Some(TestRun { label: format!("test: {}", def.1), command: format!("python3 -m pytest {}", quote(&id)), id })
 }
 
 #[cfg(test)]
@@ -237,6 +285,18 @@ mod tests {
         assert_eq!(plan("t/test_u.py", src, 8, false, None).unwrap().command, "python3 -m pytest 't/test_u.py::TestUser::test_name'");
         assert_eq!(plan("t/test_u.py", src, 1, false, None).unwrap().command, "python3 -m pytest 't/test_u.py::test_top'");
         assert_eq!(plan("t/test_u.py", src, 0, true, None).unwrap().command, "python3 -m pytest 't/test_u.py'");
+    }
+
+    #[test]
+    fn every_test_of_a_file_is_listed_with_its_runner_id() {
+        let ids = |rel: &str, src: &str, pj: Option<&str>| cases(rel, src, pj).into_iter().map(|c| (c.line, c.run.id)).collect::<Vec<_>>();
+        assert_eq!(ids("crates/app/src/problems.rs", RUST, None), vec![(7, "problems::tests::adds_up".into()), (14, "problems::tests::async_one".into())]);
+        let go = "package x\n\nfunc TestA(t *testing.T) {}\nfunc helper() {}\nfunc TestB(t *testing.T) {}\n";
+        assert_eq!(ids("pkg/a_test.go", go, None), vec![(2, "TestA".into()), (4, "TestB".into())]);
+        let py = "def test_top():\n    pass\n\nclass TestUser:\n    def helper(self):\n        pass\n\n    def test_name(self):\n        assert True\n";
+        assert_eq!(ids("t/test_u.py", py, None), vec![(0, "t/test_u.py::test_top".into()), (7, "t/test_u.py::TestUser::test_name".into())]);
+        let js = "describe('math', () => {\n  it('adds', () => {});\n  test('subtracts', () => {});\n});\n";
+        assert_eq!(ids("m.test.ts", js, Some(r#"{ "devDependencies": { "jest": "1" } }"#)), vec![(1, "adds".into()), (2, "subtracts".into())]);
     }
 
     #[test]

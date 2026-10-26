@@ -120,6 +120,30 @@ fn connect_upload_use_and_forward_over_real_ssh() {
         std::thread::sleep(std::time::Duration::from_millis(300));
         assert!(std::net::TcpStream::connect(("127.0.0.1", local)).is_err(), "port is closed after cancel");
 
+        // Forwards with a kept spec: an exact IPv4 target, a busy preferred port, a strict request and cancel by spec.
+        use host::forward::{FailKind, LocalBind, OpenRequest, RemoteTarget};
+        let busy = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let busy_port = busy.local_addr().unwrap().port();
+        let req = |strict| OpenRequest {
+            alias: "codeyard-e2e".into(),
+            remote: remote_port,
+            target: RemoteTarget::V4(std::net::Ipv4Addr::LOCALHOST),
+            wanted_local: Some(busy_port),
+            strict,
+            bind: LocalBind::Loopback,
+        };
+        let err = host::forward::open(&req(true)).expect_err("a strict busy port fails");
+        assert_eq!(err.kind, FailKind::AddrInUse, "{err:?}");
+        let opened = host::forward::open(&req(false)).expect("falls back to another port");
+        assert_ne!(opened.local, busy_port);
+        let mut got = String::new();
+        std::net::TcpStream::connect(("127.0.0.1", opened.local)).unwrap().read_to_string(&mut got).unwrap();
+        assert_eq!(got, "merhaba-port");
+        host::forward::cancel("codeyard-e2e", &opened.spec).expect("cancel with the kept spec");
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        assert!(std::net::TcpStream::connect(("127.0.0.1", opened.local)).is_err(), "closed after cancel by spec");
+        assert!(host::forward::check_master("codeyard-e2e"));
+
         // Second connection: the agent is already uploaded (hash matches), no upload.
         drop(host);
         let mut steps = Vec::new();

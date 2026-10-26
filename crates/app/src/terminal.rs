@@ -34,22 +34,47 @@ actions!(
         TermScrollPageUp,
         TermScrollPageDown,
         TermScrollToTop,
-        TermScrollToBottom
+        TermScrollToBottom,
+        TermPrevCommand,
+        TermNextCommand,
+        TermCopyLastOutput
     ]
 );
 
 #[path = "terminal_find.rs"]
 mod find;
+#[path = "terminal_marks.rs"]
+mod marks;
 
 pub enum TerminalEvent {
     TitleChanged,
     Exited,
     /// A key was pressed after the shell exited.
     CloseRequested,
+    /// A paste of several lines waits for the user's yes (`paste_confirmed` sends it).
+    ConfirmPaste {
+        data: Vec<u8>,
+        lines: usize,
+    },
     /// ⌘-click: URL or file location.
     OpenLink(crate::links::Link),
     /// Right click (window coordinates): copy, paste, select all, find, clear.
     ContextMenu(Point<Pixels>),
+}
+
+/// Most scrollback lines (`terminal.scrollback`): 50,000 lines of 200 columns already take about 200 MB, times up to
+/// eight terminals.
+pub const SCROLLBACK_MAX: usize = 50_000;
+
+/// What a new terminal runs.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Launch {
+    /// Program (`None`: the user's shell).
+    pub shell: Option<String>,
+    /// Arguments (`None`: a login shell).
+    pub args: Option<Vec<String>>,
+    pub env: Vec<(String, String)>,
+    pub color: Option<String>,
 }
 
 /// Upper bound (bytes) on terminal output not yet parsed.
@@ -156,6 +181,15 @@ pub struct TerminalView {
     hover_link: Option<(usize, std::ops::Range<usize>)>,
     /// The find bar, while it is open.
     find: Option<find::FindState>,
+    /// Font size and line height from `terminal.fontSize` (set on every render, so zoom and setting changes apply at once).
+    metrics: (f32, f32),
+    /// Scrollback lines in effect.
+    scrollback: usize,
+    /// Mark colour in the terminal list (a theme role from `terminal_profiles::COLORS`).
+    pub color: Option<String>,
+    /// Shell integration: sequences in the output and the commands they mark.
+    osc: crate::terminal_osc::Scanner,
+    marks: marks::Marks,
     focus_handle: FocusHandle,
 }
 
@@ -179,34 +213,21 @@ impl TerminalView {
     }
 
     pub fn new(host: Arc<dyn Host>, cwd: Option<String>, shell: Option<String>, cx: &mut Context<Self>) -> Self {
-        let size = TermSize { cols: 100, rows: 24 };
-        let events = Listener::default();
-        // Scrollback from settings (default 2,000; 10,000 × 200 columns can reach ~45 MB).
-        let scrollback = cx.global::<crate::settings::Settings>().terminal_scrollback;
-        let config = Config { scrolling_history: scrollback, ..Config::default() };
-        let term = Term::new(config, &size, events.clone());
-        let view = TerminalView {
-            title: "terminal".into(),
-            cwd: cwd.clone(),
-            host: host.clone(),
-            pty: None,
-            pending_input: Vec::new(),
-            title_locked: false,
-            term,
-            parser: Processor::new(),
-            events,
-            exit: None,
-            error: None,
-            size,
-            grid: (Point::default(), px(8.)),
-            selecting: false,
-            find: None,
-            hover_link: None,
-            focus_handle: cx.focus_handle(),
-        };
+        Self::new_with(host, cwd, Launch { shell, ..Launch::default() }, cx)
+    }
 
-        let (cols, rows) = (size.cols as u16, size.rows as u16);
-        let spawn = cx.background_executor().spawn(async move { host.pty_spawn(cols, rows, cwd, shell) });
+    /// A terminal running `launch` (a profile or a picked shell).
+    pub fn new_with(host: Arc<dyn Host>, cwd: Option<String>, launch: Launch, cx: &mut Context<Self>) -> Self {
+        let Launch { shell, args, env, color } = launch;
+        let view = Self::blank(host.clone(), cwd.clone(), color, cx);
+        let (cols, rows) = (view.size.cols as u16, view.size.rows as u16);
+        let integration = cx.global::<crate::settings::Settings>().terminal_shell_integration;
+        let spawn = cx.background_executor().spawn(async move {
+            match (&args, env.is_empty(), integration) {
+                (None, true, false) => host.pty_spawn(cols, rows, cwd, shell),
+                _ => host.pty_spawn_ex(host::PtySpec { cols, rows, cwd, shell, args, env, integration }),
+            }
+        });
         cx.spawn(async move |this, cx| {
             let pty = match spawn.await {
                 Ok(p) => p,
@@ -285,8 +306,77 @@ impl TerminalView {
         view
     }
 
+    /// A terminal that only shows output given to it (test runs): no shell, keys go nowhere.
+    pub fn output_only(host: Arc<dyn Host>, title: String, cx: &mut Context<Self>) -> Self {
+        let mut view = Self::blank(host, None, Some("info".into()), cx);
+        view.title = title.into();
+        view.title_locked = true;
+        view
+    }
+
+    /// Output for an output-only terminal (line breaks become what a terminal expects).
+    pub fn append(&mut self, data: &[u8], cx: &mut Context<Self>) {
+        let mut out = Vec::with_capacity(data.len() + data.len() / 16);
+        for &b in data {
+            if b == b'\n' {
+                out.push(b'\r');
+            }
+            out.push(b);
+        }
+        self.feed(&out);
+        cx.notify();
+    }
+
+    /// Clears an output-only terminal for a new run.
+    pub fn reset_output(&mut self, cx: &mut Context<Self>) {
+        self.feed(b"\x1b[3J\x1b[H\x1b[2J");
+        cx.notify();
+    }
+
+    /// The view without a shell yet.
+    fn blank(host: Arc<dyn Host>, cwd: Option<String>, color: Option<String>, cx: &mut Context<Self>) -> Self {
+        let size = TermSize { cols: 100, rows: 24 };
+        let events = Listener::default();
+        // Scrollback from settings (default 2,000; 10,000 × 200 columns can reach ~45 MB).
+        let scrollback = cx.global::<crate::settings::Settings>().terminal_scrollback.min(SCROLLBACK_MAX);
+        let config = Config { scrolling_history: scrollback, ..Config::default() };
+        let term = Term::new(config, &size, events.clone());
+        TerminalView {
+            title: "terminal".into(),
+            cwd,
+            host,
+            pty: None,
+            pending_input: Vec::new(),
+            title_locked: false,
+            term,
+            parser: Processor::new(),
+            events,
+            exit: None,
+            error: None,
+            size,
+            grid: (Point::default(), px(8.)),
+            selecting: false,
+            find: None,
+            hover_link: None,
+            metrics: metrics(cx.global::<crate::settings::Settings>().terminal_font_size),
+            scrollback,
+            color,
+            osc: Default::default(),
+            marks: Default::default(),
+            focus_handle: cx.focus_handle(),
+        }
+    }
+
     fn feed(&mut self, data: &[u8]) {
-        self.parser.advance(&mut self.term, data);
+        // Each shell-integration sequence is noted where it ends, with the cursor where the parser left it.
+        let mut at = 0;
+        for (end, ev) in self.osc.scan(data) {
+            self.parser.advance(&mut self.term, &data[at..end]);
+            at = end;
+            self.on_osc(ev);
+        }
+        self.parser.advance(&mut self.term, &data[at..]);
+        self.update_mark_shift();
         // New output can push lines into the history, so a remembered match would point at the wrong cells.
         self.forget_find_match();
     }
@@ -324,6 +414,11 @@ impl TerminalView {
             cx.emit(TerminalEvent::Exited);
             cx.notify();
         }
+    }
+
+    /// Host and terminal id, to ask what runs in it (`None` until the shell has started).
+    pub fn pty_handle(&self) -> Option<(Arc<dyn Host>, u32)> {
+        self.pty.map(|id| (self.host.clone(), id))
     }
 
     pub fn has_exited(&self) -> bool {
@@ -427,10 +522,15 @@ impl TerminalView {
         cx.notify();
     }
 
+    /// Height of one terminal row.
+    fn line_h(&self) -> Pixels {
+        px(self.metrics.1)
+    }
+
     /// Window position → grid cell + which half of the cell.
     fn grid_point(&self, pos: Point<Pixels>) -> (GridPoint, Side) {
         let (origin, cell_w) = self.grid;
-        let line_h = px(text::CODE.1);
+        let line_h = self.line_h();
         let x = ((pos.x - origin.x) / cell_w).max(0.);
         let row = ((pos.y - origin.y) / line_h).floor().clamp(0., (self.size.rows - 1) as f32) as i32;
         let col = (x.floor() as usize).min(self.size.cols - 1);
@@ -447,7 +547,7 @@ impl TerminalView {
             return None;
         }
         let (origin, cell_w) = self.grid;
-        let line_h = px(text::CODE.1);
+        let line_h = self.line_h();
         let col = (((pos.x - origin.x) / cell_w).max(0.).floor() as usize).min(self.size.cols.saturating_sub(1)) + 1;
         let row = ((pos.y - origin.y) / line_h).max(0.).floor().min((self.size.rows - 1) as f32) as usize + 1;
         let mut b = button;
@@ -474,10 +574,17 @@ impl TerminalView {
         let (at, _) = self.grid_point(pos);
         // `iter_from` skips the starting cell; read the row directly.
         let row = &self.term.grid()[at.line];
+        let screen_row = (at.line.0 + self.term.grid().display_offset() as i32).max(0) as usize;
+        // A link the program marked (OSC 8): its target, over the cells that carry it. Only web addresses open.
+        if let Some(h) = row[at.column].hyperlink().filter(|h| h.uri().starts_with("https://") || h.uri().starts_with("http://")) {
+            let same = |c: usize| row[Column(c)].hyperlink().is_some_and(|x| x == h);
+            let start = (0..=at.column.0).rev().take_while(|&c| same(c)).last().unwrap_or(at.column.0);
+            let end = (at.column.0..self.size.cols).take_while(|&c| same(c)).last().unwrap_or(at.column.0) + 1;
+            return Some((screen_row, start..end, crate::links::Link::Url(h.uri().to_string())));
+        }
         let cells: Vec<char> =
             (0..self.size.cols).map(|c| &row[Column(c)]).map(|cell| if cell.flags.contains(Flags::WIDE_CHAR_SPACER) { '\0' } else { cell.c }).collect();
         let (cols, link) = crate::links::link_at(&cells, at.column.0)?;
-        let screen_row = (at.line.0 + self.term.grid().display_offset() as i32).max(0) as usize;
         Some((screen_row, cols, link))
     }
 
@@ -558,11 +665,11 @@ impl TerminalView {
     #[cfg(test)]
     pub fn cell_center(&self, row: usize, col: usize) -> Point<Pixels> {
         let (origin, cell_w) = self.grid;
-        point(origin.x + cell_w * (col as f32 + 0.5), origin.y + px(text::CODE.1) * (row as f32 + 0.5))
+        point(origin.x + cell_w * (col as f32 + 0.5), origin.y + self.line_h() * (row as f32 + 0.5))
     }
 
     fn on_scroll(&mut self, ev: &ScrollWheelEvent, _: &mut Window, cx: &mut Context<Self>) {
-        let line_h = px(text::CODE.1);
+        let line_h = self.line_h();
         let dy = ev.delta.pixel_delta(line_h).y;
         let lines = (dy / line_h).round() as i32;
         if lines == 0 {
@@ -596,10 +703,21 @@ impl TerminalView {
 
     fn paste(&mut self, _: &TermPaste, _: &mut Window, cx: &mut Context<Self>) {
         let Some(text) = cx.read_from_clipboard().and_then(|i| i.text()) else { return };
-        let text = text.replace("\r\n", "\r").replace('\n', "\r");
-        let data = if self.term.mode().contains(TermMode::BRACKETED_PASTE) { format!("\x1b[200~{text}\x1b[201~") } else { text };
+        let bracketed = self.term.mode().contains(TermMode::BRACKETED_PASTE);
+        let settings = cx.global::<crate::settings::Settings>();
+        let (policy, warn) = (settings.terminal_sanitize_paste, settings.terminal_warn_multiline);
+        let p = crate::terminal_paste::prepare(&text, bracketed, policy);
+        if crate::terminal_paste::needs_confirm(&p, bracketed, warn) {
+            cx.emit(TerminalEvent::ConfirmPaste { data: p.data, lines: p.lines });
+            return;
+        }
+        self.paste_confirmed(p.data);
+    }
+
+    /// Send a prepared paste.
+    pub fn paste_confirmed(&mut self, data: Vec<u8>) {
         self.term.scroll_display(Scroll::Bottom);
-        self.write(data.into_bytes());
+        self.write(data);
     }
 
     fn copy(&mut self, _: &TermCopy, _: &mut Window, cx: &mut Context<Self>) {
@@ -878,7 +996,17 @@ struct Frame {
     cursor: Option<(usize, usize, CursorShape)>,
     /// Link to underline: (row, start column, end).
     link: Option<(usize, usize, usize)>,
+    /// Command marks on screen: (row, how it ended).
+    marks: Vec<(usize, marks::MarkState)>,
     cell_w: Pixels,
+    line_h: Pixels,
+}
+
+/// Font size and row height for a terminal font size: the row keeps the design scale's size-to-line ratio
+/// (whole pixels, so rows don't drift apart while painting).
+pub(crate) fn metrics(font_size: f32) -> (f32, f32) {
+    let size = font_size.clamp(6., 48.);
+    (size, (size * text::CODE.1 / text::CODE.0).round())
 }
 
 struct TerminalElement {
@@ -926,7 +1054,7 @@ impl Element for TerminalElement {
         let font_size = style.font_size.to_pixels(window.rem_size());
         let probe = TextRun { len: 1, font: style.font(), color: c(self.palette.text).into(), background_color: None, underline: None, strikethrough: None };
         let cell_w = window.text_system().shape_line("0".into(), font_size, &[probe], None).width;
-        let line_h = px(text::CODE.1);
+        let line_h = self.view.read(cx).line_h();
         let cols = ((bounds.size.width - px(16.)) / cell_w).floor().max(2.) as usize;
         let rows = (bounds.size.height / line_h).floor().max(1.) as usize;
         let origin = point(bounds.left() + px(8.), bounds.top());
@@ -950,7 +1078,9 @@ impl Element for TerminalElement {
             backgrounds: Vec::new(),
             cursor: None,
             link: view.hover_link.clone().map(|(r, c)| (r, c.start, c.end)),
+            marks: view.visible_marks(rows),
             cell_w,
+            line_h,
         };
         for cell in content.display_iter {
             let row = (cell.point.line.0 + offset) as usize;
@@ -1019,7 +1149,7 @@ impl Element for TerminalElement {
     ) {
         let Some(frame) = frame.take() else { return };
         let p = self.palette;
-        let line_h = px(text::CODE.1);
+        let line_h = frame.line_h;
         let origin = point(bounds.left() + px(8.), bounds.top());
         let cell = |row: usize, col: usize| point(origin.x + frame.cell_w * col as f32, origin.y + line_h * row as f32);
         for (row, a, b, color) in &frame.backgrounds {
@@ -1048,6 +1178,17 @@ impl Element for TerminalElement {
                 let _ = shaped.paint(cell(row, run.col), line_h, window, cx);
             }
         }
+        // Command marks in the left margin: green when it succeeded, red when it failed, grey while it runs.
+        for (row, state) in &frame.marks {
+            let color = match state {
+                marks::MarkState::Succeeded => p.success,
+                marks::MarkState::Failed => p.danger,
+                marks::MarkState::Running => p.text_muted,
+            };
+            let d = px(5.);
+            let at = point(bounds.left() + px(1.5), origin.y + line_h * *row as f32 + (line_h - d) / 2.);
+            window.paint_quad(fill(Bounds::new(at, size(d, d)), c(color)).corner_radii(d / 2.));
+        }
         if let Some((row, a, b)) = frame.link {
             let at = cell(row, a);
             window.paint_quad(fill(Bounds::new(point(at.x, at.y + line_h - px(2.)), size(frame.cell_w * (b - a) as f32, px(1.))), c(p.accent)));
@@ -1069,6 +1210,13 @@ impl Element for TerminalElement {
 impl Render for TerminalView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = *palette(cx);
+        self.metrics = metrics(cx.global::<crate::settings::Settings>().terminal_font_size);
+        // A changed `terminal.scrollback` applies to open terminals too.
+        let scrollback = cx.global::<crate::settings::Settings>().terminal_scrollback.min(SCROLLBACK_MAX);
+        if scrollback != self.scrollback {
+            self.scrollback = scrollback;
+            self.term.set_options(Config { scrolling_history: scrollback, ..Config::default() });
+        }
         let focused = self.focus_handle.is_focused(window);
         let find_focused = self.find_has_focus(window, cx);
         let find_bar = self.find_bar(&p, find_focused, cx);
@@ -1091,6 +1239,21 @@ impl Render for TerminalView {
             .on_action(cx.listener(Self::scroll_page_down))
             .on_action(cx.listener(Self::scroll_to_top))
             .on_action(cx.listener(Self::scroll_to_bottom))
+            .on_action(cx.listener(|this, _: &TermPrevCommand, _, cx| {
+                if this.jump_to_command(true) {
+                    cx.notify();
+                }
+            }))
+            .on_action(cx.listener(|this, _: &TermNextCommand, _, cx| {
+                if this.jump_to_command(false) {
+                    cx.notify();
+                }
+            }))
+            .on_action(cx.listener(|this, _: &TermCopyLastOutput, _, cx| {
+                if let Some(text) = this.last_output() {
+                    cx.write_to_clipboard(ClipboardItem::new_string(text));
+                }
+            }))
             .on_key_down(cx.listener(Self::on_key_down))
             .on_scroll_wheel(cx.listener(Self::on_scroll))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
@@ -1113,8 +1276,8 @@ impl Render for TerminalView {
             .size_full()
             .bg(c(p.bg))
             .font_family(MONO_FONT)
-            .text_size(px(text::CODE.0))
-            .line_height(px(text::CODE.1))
+            .text_size(px(self.metrics.0))
+            .line_height(px(self.metrics.1))
             .text_color(c(p.text))
             .child(TerminalElement { view: cx.entity(), palette: p, focused })
             .children(find_bar)
@@ -1138,6 +1301,17 @@ impl Render for TerminalView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_terminal_font_size_setting_sets_the_cell_size() {
+        let (_, base) = metrics(text::CODE.0);
+        assert_eq!(base, text::CODE.1, "the default size keeps the design line height");
+        let (size, line) = metrics(20.);
+        assert_eq!(size, 20.);
+        assert!(line > base && line.fract() == 0., "a bigger font gets taller, whole-pixel rows: {line}");
+        assert_eq!(metrics(2.).0, 6., "absurd sizes are clamped");
+        assert_eq!(metrics(500.).0, 48.);
+    }
 
     #[test]
     fn a_terminal_that_cannot_keep_up_drops_output_instead_of_growing_without_bound() {

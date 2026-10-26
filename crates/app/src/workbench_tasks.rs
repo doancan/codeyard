@@ -198,7 +198,7 @@ fn expand(command: &str, root: &str, file: Option<&str>, shell: bool) -> String 
     out
 }
 
-fn shell_quote(s: &str) -> String {
+pub(crate) fn shell_quote(s: &str) -> String {
     if s.chars().all(|c| c.is_alphanumeric() || "-_./=:@%+,".contains(c)) { s.to_string() } else { format!("'{}'", s.replace('\'', "'\\''")) }
 }
 

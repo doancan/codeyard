@@ -1,134 +1,135 @@
 //! Workbench's port forwarding: while connected over SSH, scans the ports listening on the server
 //! every few seconds; ports opened after connecting are forwarded
 //! automatically (ones open from the start are only listed). The PORTS bottom panel.
+//!
+//! The forwards themselves live in [`ForwardSet`]; this file runs the ssh work it asks for, in order, on a background
+//! thread and feeds the results back.
 
+use std::collections::BTreeSet;
 use std::time::Duration;
 
-use gpui::{AnyElement, Context, MouseButton, SharedString, div, prelude::*, px};
+use gpui::{App, Context, SharedString, Window};
+use host::forward::{LocalBind, RemoteTarget};
 
-use super::{Conn, LOCAL_AGENT_ALIAS, Notice, Workbench, center};
-use crate::ports;
-use crate::ui::{self, Palette, c, icon, layout, text};
+use super::{Conn, InputPurpose, LOCAL_AGENT_ALIAS, Notice, Workbench};
+use crate::port_forwards::{Effect, ForwardRequest, ForwardSet, ForwardState, OnForward, Origin, Protocol, failure_text, rule_for};
+use crate::ports::{self, ListeningPort, ScanMethod};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Forward {
-    pub remote: u16,
-    pub local: u16,
-}
+#[path = "workbench_ports_view.rs"]
+mod view;
+pub use view::{PortMenuCmd, PortRow, RowState, port_rows};
 
-/// Port forwarding state in the Workbench: established forwards, ports listening on the server,
-/// ports from the first scan (not forwarded automatically), the scan task and the manual entry field.
+#[cfg(test)]
+pub use crate::port_forwards::Forward;
+
+/// Port forwarding state in the Workbench: the forwards, the ports listening on the server, the ports from the first
+/// scan (not forwarded automatically), ports stopped on purpose, the scan and the manual entry field.
 pub struct PortsState {
-    pub forwards: Vec<Forward>,
-    pub seen: Vec<u16>,
-    pub baseline: Option<Vec<u16>>,
-    /// Local ports we opened for forwarding (ignored in scans).
-    pub local: Vec<u16>,
+    pub set: ForwardSet,
+    pub listening: Vec<ListeningPort>,
+    pub baseline: Option<BTreeSet<u16>>,
+    /// Stopped by the user: not forwarded automatically again on this connection.
+    pub ignored: BTreeSet<u16>,
+    /// Ports whose rule says to open the browser, waiting for their forward (opened once per connection).
+    pub open_when_ready: BTreeSet<u16>,
+    pub method: Option<ScanMethod>,
+    /// Why the last scan failed (the list shown is the one before).
+    pub scan_error: Option<SharedString>,
     pub task: Option<gpui::Task<()>>,
     pub field: gpui::Entity<crate::input::TextField>,
 }
 
 impl PortsState {
     pub fn new(field: gpui::Entity<crate::input::TextField>) -> Self {
-        Self { forwards: Vec::new(), seen: Vec::new(), baseline: None, local: Vec::new(), task: None, field }
+        Self {
+            set: ForwardSet::default(),
+            listening: Vec::new(),
+            baseline: None,
+            ignored: BTreeSet::new(),
+            open_when_ready: BTreeSet::new(),
+            method: None,
+            scan_error: None,
+            task: None,
+            field,
+        }
     }
 }
 
-/// Scan interval (while connected).
+/// Scan interval while connected; after failed scans it backs off up to `SCAN_MAX`.
 const SCAN_EVERY: Duration = Duration::from_secs(4);
+const SCAN_MAX: Duration = Duration::from_secs(30);
 
 impl Workbench {
     /// The connection port forwarding can use (ssh alias).
-    fn ssh_alias(&self) -> Option<String> {
+    pub(super) fn ssh_alias(&self) -> Option<String> {
         match &self.remote.conn {
-            Conn::Connected { alias } if alias != LOCAL_AGENT_ALIAS => Some(alias.clone()),
+            // Containers and WSL have no ssh connection to forward ports over.
+            Conn::Connected { alias } if alias != LOCAL_AGENT_ALIAS && matches!(host::ssh::target_of(alias), host::ssh::Target::Ssh(_)) => Some(alias.clone()),
             _ => None,
         }
     }
 
-    /// On connect (or reconnect) start the scan; set up the earlier forwards.
-    pub(super) fn start_ports(&mut self, cx: &mut Context<Self>) {
-        let Some(alias) = self.ssh_alias() else {
-            self.stop_ports();
+    /// Runs the ssh work of `effects` in order on one background thread, then feeds the open results back.
+    /// `quiet`: no success notice (forwards restored after a reconnect).
+    pub(super) fn run_port_effects(&mut self, effects: Vec<Effect>, quiet: bool, cx: &mut Context<Self>) {
+        if effects.is_empty() {
             return;
-        };
-        // Reconnect: ControlMaster may have been renewed, set up the forwards again.
-        for f in self.ports.forwards.clone() {
-            let a = alias.clone();
-            cx.background_executor().spawn(async move { host::ssh::forward_port(&a, f.local, f.remote, false) }).detach();
         }
-        self.ports.task = Some(cx.spawn(async move |this, cx| {
-            loop {
-                let host = match this.update(cx, |this, _| this.remote.host.clone()) {
-                    Ok(h) => h,
-                    Err(_) => return,
-                };
-                let found = cx.background_executor().spawn(async move { ports::detect(host.as_ref()) }).await;
-                if this.update(cx, |this, cx| this.on_ports(found, cx)).is_err() {
-                    return;
-                }
-                cx.background_executor().timer(SCAN_EVERY).await;
-            }
-        }));
-    }
-
-    pub(super) fn stop_ports(&mut self) {
-        self.ports.task = None;
-        self.ports.seen.clear();
-        self.ports.baseline = None;
-    }
-
-    fn on_ports(&mut self, found: Vec<u16>, cx: &mut Context<Self>) {
-        let auto = cx.global::<crate::settings::Settings>().ports_auto_forward;
-        match &self.ports.baseline {
-            // First scan: ports already open (database, ssh) are the baseline and never auto-forwarded.
-            None => self.ports.baseline = Some(found.clone()),
-            Some(base) => {
-                let new: Vec<u16> = found
-                    .iter()
-                    .copied()
-                    .filter(|p| !base.contains(p) && !self.ports.seen.contains(p) && ports::worth_forwarding(*p))
-                    .filter(|p| !self.ports.forwards.iter().any(|f| f.remote == *p))
-                    // Our own local forward ports: if the server is this machine they'd look like
-                    // "new ports" and get forwarded again in a chain.
-                    .filter(|p| !self.ports.local.contains(p))
-                    .collect();
-                if auto {
-                    for p in new {
-                        self.forward_port(p, cx);
+        let work = cx.background_executor().spawn(async move {
+            effects
+                .into_iter()
+                .filter_map(|e| match e {
+                    Effect::Cancel { alias, spec } => {
+                        let _ = host::forward::cancel(&alias, &spec); // already gone is fine
+                        None
                     }
-                }
-            }
-        }
-        if found != self.ports.seen {
-            self.ports.seen = found;
-            cx.notify();
-        }
-    }
-
-    pub(super) fn forward_port(&mut self, remote: u16, cx: &mut Context<Self>) {
-        let Some(alias) = self.ssh_alias() else { return };
-        if self.ports.forwards.iter().any(|f| f.remote == remote) {
-            return;
-        }
-        let local = host::ssh::free_local_port(remote);
-        self.ports.local.push(local);
-        let task = cx.background_executor().spawn(async move { host::ssh::forward_port(&alias, local, remote, false) });
+                    Effect::Open { id, seq, req } => Some((id, seq, req.alias.clone(), host::forward::open(&req))),
+                })
+                .collect::<Vec<_>>()
+        });
         cx.spawn(async move |this, cx| {
-            let result = task.await;
+            let results = work.await;
             this.update(cx, |this, cx| {
-                match result {
-                    Ok(()) => {
-                        this.ports.forwards.push(Forward { remote, local });
-                        let msg = if local == remote {
-                            crate::i18n::tf("Port {} is forwarded: localhost:{}", &[&remote, &local])
-                        } else {
-                            crate::i18n::tf("Port {} is forwarded to localhost:{} ({} was busy here)", &[&remote, &local, &remote])
-                        };
-                        this.notice = Some(Notice::Info(msg.into()));
+                let mut more = Vec::new();
+                let mut opened = Vec::new();
+                for (id, seq, alias, result) in results {
+                    if let Ok(o) = &result {
+                        more.extend(this.ports.set.orphan_cancel(id, &alias, o));
                     }
-                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Could not forward port {}: {}", &[&remote, &e]).into())),
+                    let failed = result.as_ref().err().cloned();
+                    more.extend(this.ports.set.on_result(id, seq, result));
+                    let Some(f) = this.ports.set.get(id) else { continue };
+                    match (&f.state, failed) {
+                        (ForwardState::Active, _) => {
+                            let local = f.local.unwrap_or(f.remote);
+                            if this.ports.open_when_ready.remove(&f.remote)
+                                && let Some(url) = f.protocol.url(local)
+                            {
+                                cx.open_url(&url);
+                            }
+                            opened.push((f.remote, local));
+                        }
+                        (ForwardState::Failed(_), Some(e)) => {
+                            let why = failure_text(&e, f.wanted_local);
+                            this.notice = Some(Notice::Error(crate::i18n::tf("Could not forward port {}: {}", &[&f.remote, &why]).into()));
+                        }
+                        _ => {}
+                    }
                 }
+                if !quiet {
+                    match opened.as_slice() {
+                        [] => {}
+                        [(remote, local)] if remote == local => {
+                            this.notice = Some(Notice::Info(crate::i18n::tf("Port {} is forwarded: localhost:{}", &[remote, local]).into()))
+                        }
+                        [(remote, local)] => {
+                            this.notice =
+                                Some(Notice::Info(crate::i18n::tf("Port {} is forwarded to localhost:{} ({} was busy here)", &[remote, local, remote]).into()))
+                        }
+                        many => this.notice = Some(Notice::Info(crate::i18n::tf("{} ports are forwarded", &[&many.len()]).into())),
+                    }
+                }
+                this.run_port_effects(more, true, cx);
                 cx.notify();
             })
             .ok();
@@ -136,26 +137,192 @@ impl Workbench {
         .detach();
     }
 
-    pub fn stop_forward(&mut self, remote: u16, cx: &mut Context<Self>) {
-        let Some(i) = self.ports.forwards.iter().position(|f| f.remote == remote) else { return };
-        let f = self.ports.forwards.remove(i);
-        // A port closed on purpose must stay closed.
-        if let Some(base) = &mut self.ports.baseline {
-            base.push(remote);
+    /// A connection was attached: forwards of another connection go, this connection's waiting ones come back; the
+    /// scan starts.
+    pub(super) fn attach_ports(&mut self, alias: &str, cx: &mut Context<Self>) {
+        let effects = self.ports.set.on_attach(alias);
+        self.run_port_effects(effects, true, cx);
+        self.ports.ignored.clear();
+        self.ports.open_when_ready.clear();
+        self.start_ports(cx);
+    }
+
+    /// The connection dropped (it may come back): forwards wait, the scan stops.
+    pub(super) fn ports_interrupted(&mut self) {
+        self.ports.set.on_disconnected();
+        self.ports.task = None;
+    }
+
+    /// The connection is back: waiting forwards open again and the scan restarts.
+    pub(super) fn ports_reconnected(&mut self, cx: &mut Context<Self>) {
+        let effects = self.ports.set.on_reconnected();
+        self.run_port_effects(effects, true, cx);
+        self.start_ports(cx);
+    }
+
+    /// Leaving the connection while it may stay open for other windows (disconnect, closing the window): cancel this
+    /// window's forwards on a background thread, so closing never waits for ssh. Quitting closes the connections anyway.
+    pub(super) fn cancel_all_forwards(&mut self) {
+        let effects = self.ports.set.take_all_cancels();
+        if effects.is_empty() {
+            return;
         }
-        if let Some(alias) = self.ssh_alias() {
-            cx.background_executor().spawn(async move { host::ssh::forward_port(&alias, f.local, f.remote, true) }).detach();
+        std::thread::spawn(move || {
+            for e in effects {
+                if let Effect::Cancel { alias, spec } = e {
+                    let _ = host::forward::cancel(&alias, &spec);
+                }
+            }
+        });
+    }
+
+    /// Start the scan (after connecting or reconnecting).
+    pub(super) fn start_ports(&mut self, cx: &mut Context<Self>) {
+        if self.ssh_alias().is_none() {
+            self.stop_ports();
+            return;
         }
+        self.ports.method = None; // the server may differ: probe again
+        self.ports.task = Some(cx.spawn(async move |this, cx| {
+            let mut wait = SCAN_EVERY;
+            loop {
+                let Ok((host, mut method)) = this.update(cx, |this, _| (this.remote.host.clone(), this.ports.method)) else { return };
+                let (found, method) = cx
+                    .background_executor()
+                    .spawn(async move {
+                        let found = ports::detect(host.as_ref(), &mut method);
+                        (found, method)
+                    })
+                    .await;
+                wait = if found.is_ok() { SCAN_EVERY } else { (wait * 2).min(SCAN_MAX) };
+                if this
+                    .update(cx, |this, cx| {
+                        this.ports.method = method;
+                        this.on_ports(found, cx)
+                    })
+                    .is_err()
+                {
+                    return;
+                }
+                cx.background_executor().timer(wait).await;
+            }
+        }));
+    }
+
+    pub(super) fn stop_ports(&mut self) {
+        self.ports.task = None;
+        self.ports.listening.clear();
+        self.ports.baseline = None;
+        self.ports.scan_error = None;
+    }
+
+    fn on_ports(&mut self, found: Result<Vec<ListeningPort>, String>, cx: &mut Context<Self>) {
+        let found = match found {
+            Ok(found) => {
+                self.ports.scan_error = None;
+                found
+            }
+            Err(e) => {
+                // Keep the last list: a failed scan is not "nothing is listening".
+                self.ports.scan_error = Some(crate::i18n::tf("Could not list the server's ports: {}", &[&e]).into());
+                cx.notify();
+                return;
+            }
+        };
+        let numbers: BTreeSet<u16> = found.iter().map(|p| p.port).collect();
+        let auto = cx.global::<crate::settings::Settings>().ports_auto_forward;
+        match &self.ports.baseline {
+            // First scan: ports already open (database, ssh) are the baseline and never auto-forwarded.
+            None => self.ports.baseline = Some(numbers.clone()),
+            Some(base) if auto => {
+                let alias = self.ssh_alias().unwrap_or_default();
+                // Our own local forward ports: if the server is this machine they'd look like new ports and get
+                // forwarded again in a chain.
+                let ours = self.ports.set.used_locals();
+                let new: Vec<&ListeningPort> = found
+                    .iter()
+                    .filter(|p| !base.contains(&p.port) && !self.ports.ignored.contains(&p.port) && ports::worth_forwarding(p.port))
+                    .filter(|p| !self.ports.listening.iter().any(|seen| seen.port == p.port))
+                    .filter(|p| self.ports.set.by_remote(&alias, p.port).is_none() && !ours.contains(&p.port))
+                    .collect();
+                let rules = cx.global::<crate::settings::Settings>().ports_rules.clone();
+                let (mut loud, mut quiet) = (Vec::new(), Vec::new());
+                for p in new {
+                    let attrs = rule_for(&rules, p.port);
+                    if attrs.on_forward == OnForward::Ignore {
+                        continue;
+                    }
+                    let mut r = ForwardRequest::user(&alias, p.port, ports::forward_target(&p.binds), self.port_bind(cx));
+                    (r.origin, r.label, r.protocol) = (Origin::Auto, attrs.label, attrs.protocol);
+                    let effects = self.ports.set.request(r).1;
+                    match attrs.on_forward {
+                        OnForward::Silent => quiet.extend(effects),
+                        OnForward::OpenBrowser => {
+                            self.ports.open_when_ready.insert(p.port);
+                            quiet.extend(effects);
+                        }
+                        _ => loud.extend(effects),
+                    }
+                }
+                self.run_port_effects(loud, false, cx);
+                self.run_port_effects(quiet, true, cx);
+            }
+            Some(_) => {}
+        }
+        if found != self.ports.listening {
+            self.ports.listening = found;
+            cx.notify();
+        }
+    }
+
+    /// Local addresses new forwards listen on (`ports.localBind`).
+    pub(super) fn port_bind(&self, cx: &App) -> LocalBind {
+        cx.global::<crate::settings::Settings>().ports_local_bind
+    }
+
+    /// Forwards a server port (typed, clicked or detected); asking again for a forwarded port does nothing.
+    pub fn forward_port(&mut self, remote: u16, cx: &mut Context<Self>) {
+        self.forward_port_to(remote, None, cx);
+    }
+
+    /// Forwards a server port to exactly `local` (`None`: the same number when free, else another).
+    fn forward_port_to(&mut self, remote: u16, local: Option<u16>, cx: &mut Context<Self>) {
+        let Some(alias) = self.ssh_alias() else { return };
+        self.ports.ignored.remove(&remote);
+        let target = self.ports.listening.iter().find(|p| p.port == remote).map_or(RemoteTarget::Localhost, |p| ports::forward_target(&p.binds));
+        let attrs = rule_for(&cx.global::<crate::settings::Settings>().ports_rules, remote);
+        let mut r = ForwardRequest::user(&alias, remote, target, self.port_bind(cx));
+        (r.label, r.protocol, r.wanted_local, r.strict) = (attrs.label, attrs.protocol, local, local.is_some());
+        let (_, effects) = self.ports.set.request(r);
+        self.run_port_effects(effects, false, cx);
+        self.save_forward(remote);
         cx.notify();
     }
 
-    /// On exit: drop the forwards (ControlMaster lives 10 min; don't leave ports dangling).
-    pub(super) fn cancel_all_forwards(&mut self) {
-        if let Some(alias) = self.ssh_alias() {
-            for f in self.ports.forwards.drain(..) {
-                let _ = host::ssh::forward_port(&alias, f.local, f.remote, true);
-            }
+    /// Stops forwarding a server port; it is not forwarded automatically again on this connection.
+    pub fn stop_forward(&mut self, remote: u16, cx: &mut Context<Self>) {
+        let alias = self.ssh_alias().unwrap_or_default();
+        let Some(id) = self.ports.set.by_remote(&alias, remote).map(|f| f.id) else { return };
+        let effects = self.ports.set.stop(id);
+        self.ports.ignored.insert(remote);
+        if let (Some(s), Some(ws)) = (self.persist.state.as_ref(), self.persist.workspace_id) {
+            let _ = s.delete_port_forward(ws, remote);
         }
+        self.run_port_effects(effects, true, cx);
+        cx.notify();
+    }
+
+    fn retry_forward(&mut self, remote: u16, cx: &mut Context<Self>) {
+        let alias = self.ssh_alias().unwrap_or_default();
+        let Some(id) = self.ports.set.by_remote(&alias, remote).map(|f| f.id) else { return };
+        let effects = self.ports.set.retry(id);
+        self.run_port_effects(effects, false, cx);
+        cx.notify();
+    }
+
+    /// Number of active forwards (status bar, panel tab).
+    pub(super) fn active_forwards(&self) -> usize {
+        self.ports.set.iter().filter(|f| f.is_active()).count()
     }
 
     /// Whether the first scan is done (baseline known; ports opened afterwards are forwarded).
@@ -166,74 +333,152 @@ impl Workbench {
 
     #[cfg(test)]
     pub fn forwards(&self) -> Vec<Forward> {
-        self.ports.forwards.clone()
+        self.ports.set.active()
     }
 
-    pub(super) fn ports_view(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
-        if self.ssh_alias().is_none() {
-            return center(p).text_color(c(p.text_muted)).child(crate::i18n::t("Port forwarding works while connected to an SSH host.")).into_any_element();
+    #[cfg(test)]
+    pub fn forward_label_for_test(&self, remote: u16) -> Option<String> {
+        self.ports.set.get(self.forward_id(remote)?)?.label.clone()
+    }
+
+    #[cfg(test)]
+    pub fn set_forward_label_for_test(&mut self, remote: u16, label: &str, cx: &mut Context<Self>) {
+        self.finish_port_label(remote, label.into(), cx);
+    }
+
+    fn forward_id(&self, remote: u16) -> Option<crate::port_forwards::ForwardId> {
+        self.ports.set.by_remote(&self.ssh_alias()?, remote).map(|f| f.id)
+    }
+
+    /// Writes a forward the user touched to the project's saved forwards (it comes back when the project opens again).
+    fn save_forward(&self, remote: u16) {
+        let (Some(state), Some(ws), Some(id)) = (self.persist.state.as_ref(), self.persist.workspace_id, self.forward_id(remote)) else { return };
+        let Some(f) = self.ports.set.get(id) else { return };
+        let saved = state::SavedForward { remote, local: f.wanted_local.filter(|_| f.strict), label: f.label.clone(), protocol: f.protocol.as_str().into() };
+        let _ = state.save_port_forward(ws, &saved);
+    }
+
+    /// The project opened over SSH: forward the ports saved for it (quietly; failures show on their rows).
+    pub(super) fn restore_forwards(&mut self, cx: &mut Context<Self>) {
+        let (Some(alias), Some(ws)) = (self.ssh_alias(), self.persist.workspace_id) else { return };
+        let Some(saved) = self.persist.state.as_ref().map(|s| s.port_forwards(ws)) else { return };
+        let bind = self.port_bind(cx);
+        let mut effects = Vec::new();
+        for f in saved {
+            if self.ports.set.by_remote(&alias, f.remote).is_some() {
+                continue;
+            }
+            let target = self.ports.listening.iter().find(|p| p.port == f.remote).map_or(RemoteTarget::Localhost, |p| ports::forward_target(&p.binds));
+            let mut r = ForwardRequest::user(&alias, f.remote, target, bind);
+            (r.wanted_local, r.strict, r.label) = (f.local, f.local.is_some(), f.label);
+            r.protocol = Protocol::parse(&f.protocol).unwrap_or_default();
+            effects.extend(self.ports.set.request(r).1);
         }
-        let button = |id: SharedString, label: &'static str, primary: bool| {
-            div()
-                .id(id)
-                .h(px(22.))
-                .px(px(theme::SPACE[3]))
-                .flex()
-                .items_center()
-                .rounded(px(theme::radius::SM))
-                .cursor_pointer()
-                .when(primary, |d| d.bg(c(p.accent)).text_color(c(p.on_accent)))
-                .when(!primary, |d| d.bg(c(p.surface_hover)).text_color(c(p.text)))
-                .hover(|d| d.opacity(0.9))
-                .child(crate::i18n::t(label))
+        self.run_port_effects(effects, true, cx);
+    }
+
+    /// The "Forward a port" field: `3000`, `localhost:3000`, or `3000:8080` for server port 3000 on local port 8080.
+    pub(super) fn submit_port_field(&mut self, text: &str, cx: &mut Context<Self>) -> bool {
+        match parse_forward_input(text) {
+            Ok((remote, local)) => {
+                self.forward_port_to(remote, local, cx);
+                true
+            }
+            Err(()) => {
+                self.notice = Some(Notice::Error(crate::i18n::tf("“{}” is not a port number", &[&text.trim()]).into()));
+                cx.notify();
+                false
+            }
+        }
+    }
+
+    pub(super) fn run_port_menu(&mut self, cmd: PortMenuCmd, remote: u16, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(id) = self.forward_id(remote) else {
+            if cmd == PortMenuCmd::Forward {
+                self.forward_port(remote, cx);
+            }
+            return;
         };
-        let row = || div().h(px(layout::ROW_H + 6.)).flex().items_center().gap(px(theme::SPACE[4])).px(px(theme::SPACE[6]));
-        let mut rows: Vec<AnyElement> = Vec::new();
-        for f in &self.ports.forwards {
-            let (remote, local) = (f.remote, f.local);
-            rows.push(
-                row()
-                    .child(icon("plug", 14., p.success))
-                    .child(div().w(px(64.)).font_family(ui::MONO_FONT).child(remote.to_string()))
-                    .child(div().text_color(c(p.text_muted)).child("→"))
-                    .child(div().flex_1().font_family(ui::MONO_FONT).text_color(c(p.accent)).child(format!("localhost:{local}"))) // i18n-keep: host name and port, not prose
-                    .child(button(format!("port-open-{remote}").into(), crate::i18n::tr("Open in Browser"), true).on_click(cx.listener(move |_, _, _, cx| {
-                        cx.open_url(&format!("http://localhost:{local}"));
-                    })))
-                    .child(button(format!("port-stop-{remote}").into(), crate::i18n::tr("Stop"), false).on_click(cx.listener(move |this, _, _, cx| {
-                        this.stop_forward(remote, cx);
-                    })))
-                    .into_any_element(),
-            );
+        let Some(f) = self.ports.set.get(id).cloned() else { return };
+        let address = f.local.map(|l| format!("localhost:{l}"));
+        match cmd {
+            PortMenuCmd::OpenBrowser => {
+                if let Some(url) = f.local.and_then(|l| f.protocol.url(l)) {
+                    cx.open_url(&url);
+                }
+            }
+            PortMenuCmd::CopyAddress => {
+                if let Some(a) = address {
+                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(a));
+                }
+            }
+            PortMenuCmd::SetLabel => self.show_input(
+                InputPurpose::PortLabel { remote },
+                crate::i18n::t("Set"),
+                crate::i18n::t("label, e.g. web (empty: none)"),
+                f.label.as_deref().unwrap_or(""),
+                window,
+                cx,
+            ),
+            PortMenuCmd::ChangeLocal => {
+                let current = f.local.map(|l| l.to_string()).unwrap_or_default();
+                self.show_input(InputPurpose::PortLocal { remote }, crate::i18n::t("Change"), crate::i18n::t("local port, e.g. 8080"), &current, window, cx)
+            }
+            PortMenuCmd::Protocol(p) => {
+                self.ports.set.set_protocol(id, p);
+                self.save_forward(remote);
+            }
+            PortMenuCmd::Retry => self.retry_forward(remote, cx),
+            PortMenuCmd::Stop => self.stop_forward(remote, cx),
+            PortMenuCmd::Forward => {}
         }
-        let listening: Vec<u16> = self.ports.seen.iter().copied().filter(|p| !self.ports.forwards.iter().any(|f| f.remote == *p)).collect();
-        for port in listening {
-            rows.push(
-                row()
-                    .child(icon("server", 14., p.text_muted))
-                    .child(div().w(px(64.)).font_family(ui::MONO_FONT).child(port.to_string()))
-                    .child(div().flex_1().text_color(c(p.text_muted)).child(crate::i18n::t("listening on the server")))
-                    .child(button(format!("port-fwd-{port}").into(), crate::i18n::tr("Forward Port"), false).on_click(cx.listener(move |this, _, _, cx| {
-                        this.forward_port(port, cx);
-                    })))
-                    .into_any_element(),
-            );
+        cx.notify();
+    }
+
+    pub(super) fn finish_port_label(&mut self, remote: u16, label: String, cx: &mut Context<Self>) {
+        if let Some(id) = self.forward_id(remote) {
+            self.ports.set.set_label(id, &label);
+            self.save_forward(remote);
+            cx.notify();
         }
-        if rows.is_empty() {
-            rows.push(row().text_color(c(p.text_muted)).child(crate::i18n::t("Nothing is listening on the server yet.")).into_any_element());
+    }
+
+    pub(super) fn finish_port_local(&mut self, remote: u16, text: String, cx: &mut Context<Self>) {
+        let Some(id) = self.forward_id(remote) else { return };
+        match text.trim().parse::<u16>() {
+            Ok(local) if local > 0 && !self.ports.set.iter().any(|f| f.id != id && f.local == Some(local)) => {
+                let effects = self.ports.set.change_local(id, local);
+                self.run_port_effects(effects, false, cx);
+                self.save_forward(remote);
+            }
+            _ => self.notice = Some(Notice::Error(crate::i18n::tf("“{}” is not a free local port", &[&text.trim()]).into())),
         }
-        div()
-            .id("ports")
-            .size_full()
-            .overflow_y_scroll()
-            .text_size(px(text::SM.0))
-            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(
-                row()
-                    .child(div().text_color(c(p.text_muted)).child(crate::i18n::t("Forward a port:")))
-                    .child(ui::input_box("ports-field-box", p, p.bg, false).w(px(120.)).child(self.ports.field.clone())),
-            )
-            .children(rows)
-            .into_any_element()
+        cx.notify();
+    }
+}
+
+/// `3000`, `localhost:3000`, `127.0.0.1:3000` → (3000, None); `3000:8080` → server port 3000 on local port 8080.
+pub fn parse_forward_input(text: &str) -> Result<(u16, Option<u16>), ()> {
+    let t = text.trim();
+    let t = ["localhost:", "127.0.0.1:"].iter().find_map(|p| t.strip_prefix(p)).unwrap_or(t);
+    let port = |s: &str| s.trim().parse::<u16>().ok().filter(|p| *p > 0).ok_or(());
+    match t.split_once(':') {
+        Some((remote, local)) => Ok((port(remote)?, Some(port(local)?))),
+        None => Ok((port(t)?, None)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_forward_field_reads_a_port_or_a_pair() {
+        assert_eq!(parse_forward_input(" 3000 "), Ok((3000, None)));
+        assert_eq!(parse_forward_input("localhost:5173"), Ok((5173, None)));
+        assert_eq!(parse_forward_input("3000:8080"), Ok((3000, Some(8080))));
+        for bad in ["", "0", "70000", "web", "3000:", ":80", "1:2:3", "localhost:"] {
+            assert!(parse_forward_input(bad).is_err(), "{bad:?}");
+        }
     }
 }
