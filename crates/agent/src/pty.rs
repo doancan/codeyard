@@ -34,8 +34,10 @@ pub struct Status {
 }
 
 /// Longest program name or folder reported.
+#[cfg(unix)]
 const MAX_STATUS_TEXT: usize = 1024;
 
+#[cfg(unix)]
 fn clip(s: String) -> String {
     s.chars().filter(|c| !c.is_control()).take(MAX_STATUS_TEXT).collect()
 }
