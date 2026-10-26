@@ -2470,3 +2470,4 @@ The tests did not build: run the test to see the errors.	Testler derlenemedi: ha
 {} failed	{} başarısız
 {} skipped	{} atlandı
 Git is paused in this folder: its repository settings run programs ({}). Trust the folder to use Git here.	Git bu klasörde duraklatıldı: deposunun ayarları program çalıştırıyor ({}). Git'i burada kullanmak için klasöre güvenin.
+{} is a symbolic link; write the path it points to, so the upload can be confirmed	{} bir sembolik bağlantı; yüklemenin onaylanabilmesi için gösterdiği yolu yazın

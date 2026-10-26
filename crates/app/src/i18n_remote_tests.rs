@@ -77,7 +77,7 @@ fn http_explanations_and_confirmations() {
     assert_eq!(http::explain_curl(Some(99), "boom", "x", "http://a/"), "boom (curl çıkış kodu 99)");
     assert_eq!(http::explain_curl(None, "", "x", "http://a/"), "İstek başarısız oldu.");
     let req = http::parse("POST http://a/x\n\n< /etc/passwd\n").requests[0].clone();
-    let parts = http::sensitive_parts(&req);
+    let parts = http::sensitive_parts(&req, &[]);
     assert!(parts.iter().any(|p| p.contains("/etc/passwd dosyasını yüklüyor")), "{parts:?}");
     let ctx_vars: Vec<(String, String)> = Vec::new();
     let responses = std::collections::HashMap::new();
