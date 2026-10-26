@@ -2439,7 +2439,7 @@ impl Workbench {
     // --- Remote connection ---
 
     /// Update recents in the Dock menu (no effect outside macOS).
-    pub(crate) fn sync_dock_menu(&self, cx: &App) {
+    pub(crate) fn sync_dock_menu(&self, cx: &mut App) {
         crate::menus::remember_recent(&self.persist.recent);
         #[cfg(target_os = "macos")]
         crate::menus::set_dock_menu(cx, &self.persist.recent);
