@@ -153,3 +153,70 @@ fn the_run_and_debug_view_shows_the_paused_program(cx: &mut TestAppContext) {
     wait_secs(cx, 10, "ended", |cx| snap(cx).is_some_and(|s| s.0 == "ended"));
     assert!(!wb.read_with(cx, |wb, _| wb.toolbar_shown_for_test()));
 }
+
+/// The adapter's extras: a 250-element value paged by 100, a 45-frame stack paged by 20, Set Value, completions and
+/// Restart Frame.
+#[gpui::test]
+fn values_pages_stack_pages_set_value_completion_and_restart_frame(cx: &mut TestAppContext) {
+    if !have_python() {
+        return;
+    }
+    let home = project("dbg-depth-home");
+    let (dir, _) = fake_project("dbg-depth");
+    let launch =
+        std::fs::read_to_string(dir.join(".codeyard/launch.jsonc")).unwrap().replace("\"request\": \"launch\",", "\"request\": \"launch\", \"extras\": true,");
+    std::fs::write(dir.join(".codeyard/launch.jsonc"), launch).unwrap();
+    let (wb, cx) = setup_persistent(cx, &home);
+    open(&wb, &dir, cx);
+    let (_, ed) = open_main(&wb, &dir, cx);
+    ed.update(cx, |e, cx| e.toggle_breakpoint_at(4, cx));
+    run(&wb, cx, "Debug: Start Debugging");
+    let snap = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.debug_snapshot());
+    wait_secs(cx, 10, "paused", |cx| snap(cx).is_some_and(|s| s.0 == "stopped:breakpoint" && !s.1.is_empty()));
+    let rows = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.run_debug_rows_for_test());
+
+    // The stack: the first 20 frames, then "Load More".
+    let frames = |cx: &mut VisualTestContext| rows(cx).1.into_iter().filter(|r| r.starts_with("frame:") || r == "more").collect::<Vec<_>>();
+    assert_eq!(frames(cx).len(), 21, "{:?}", frames(cx));
+    assert_eq!(frames(cx).last().map(String::as_str), Some("more"));
+    wb.update(cx, |wb, cx| wb.load_more_frames(cx));
+    wait_secs(cx, 10, "40 frames", |cx| frames(cx).len() == 41);
+    wb.update(cx, |wb, cx| wb.load_more_frames(cx));
+    wait_secs(cx, 10, "all 45, no more", |cx| frames(cx).len() == 45 && frames(cx).last().is_some_and(|r| r != "more"));
+
+    // A big value: its named field and the first 100 elements, then "… 150 more".
+    wb.update(cx, |wb, cx| wb.toggle_variable_for_test("big", cx));
+    wait_secs(cx, 10, "first page", |cx| rows(cx).0.iter().any(|r| r.contains("… 150 more")));
+    let vars = rows(cx).0;
+    assert!(vars.contains(&"    length: 250".to_string()) && vars.contains(&"    [99]: 9801".to_string()) && !vars.iter().any(|r| r.contains("[100]")));
+    let big = wb.read_with(cx, |wb, _| wb.reference_for_test("big")).unwrap();
+    wb.update(cx, |wb, cx| wb.load_more_variables(big, cx));
+    wait_secs(cx, 10, "second page", |cx| rows(cx).0.iter().any(|r| r.contains("… 50 more")));
+
+    // Set Value goes to the adapter and the row shows the new value.
+    wb.update(cx, |wb, cx| wb.set_variable_for_test("x", "7", cx));
+    wait_secs(cx, 10, "the new value", |cx| rows(cx).0.contains(&"  x: 7".to_string()));
+
+    // Tab in the console: one completion fills in; several are listed.
+    wb.update(cx, |wb, cx| wb.set_console_input_for_test("1 + poi", cx));
+    wb.update(cx, |wb, cx| wb.console_complete(cx));
+    wait_secs(cx, 10, "completed", |cx| wb.read_with(cx, |wb, cx| wb.console_input_for_test(cx)) == "1 + point");
+    wb.update(cx, |wb, cx| wb.set_console_input_for_test("p", cx));
+    wb.update(cx, |wb, cx| wb.console_complete(cx));
+    wait_secs(cx, 10, "listed", |cx| snap(cx).is_some_and(|s| s.3.iter().any(|l| l == "point  print")));
+
+    // History: ↑ brings back earlier inputs.
+    wb.update(cx, |wb, cx| wb.evaluate_for_test("1 + 1", cx));
+    wb.update(cx, |wb, cx| wb.evaluate_for_test("2 + 2", cx));
+    wb.update(cx, |wb, cx| wb.console_history(true, cx));
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.console_input_for_test(cx)), "2 + 2");
+    wb.update(cx, |wb, cx| wb.console_history(true, cx));
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.console_input_for_test(cx)), "1 + 1");
+    wb.update(cx, |wb, cx| wb.console_history(false, cx));
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.console_input_for_test(cx)), "2 + 2");
+
+    // Restart Frame: the adapter reports a stop for it.
+    wb.update(cx, |wb, cx| wb.restart_frame(0, cx));
+    wait_secs(cx, 10, "restarted", |cx| snap(cx).is_some_and(|s| s.0 == "stopped:restart"));
+    run(&wb, cx, "Debug: Stop");
+}

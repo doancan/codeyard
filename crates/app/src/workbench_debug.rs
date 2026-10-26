@@ -58,6 +58,10 @@ pub(super) struct DebugState {
     pub threads: Vec<(i64, String)>,
     /// Data breakpoints (bound to the session): (dataId, description).
     pub data_breakpoints: Vec<(String, String)>,
+    /// Depth of the selected thread's stack when the adapter says (more frames load on demand).
+    pub total_frames: Option<usize>,
+    /// Values whose elements load a page at a time: reference → (elements loaded, elements in all).
+    pub pages: HashMap<i64, (usize, usize)>,
 }
 
 /// Most sessions kept; the oldest ended one goes first.
@@ -167,12 +171,29 @@ fn stop_reason(reason: &str) -> String {
 
 gpui::actions!(
     workbench,
-    [ShowRunAndDebug, ToggleBreakpointEnabled, EnableAllBreakpoints, DisableAllBreakpoints, ToggleBreakpointsActive, AddFunctionBreakpoint]
+    [
+        ShowRunAndDebug,
+        ToggleBreakpointEnabled,
+        EnableAllBreakpoints,
+        DisableAllBreakpoints,
+        ToggleBreakpointsActive,
+        AddFunctionBreakpoint,
+        ConsoleHistoryPrev,
+        ConsoleHistoryNext,
+        ConsoleComplete
+    ]
 );
 
 #[path = "workbench_debug_view.rs"]
 mod view;
 pub use view::DebugMenuCmd;
+
+/// Stack frames requested at a time.
+const STACK_PAGE: usize = 20;
+/// Array elements loaded at a time.
+pub(super) const VAR_PAGE: usize = 100;
+/// Console inputs remembered per project.
+const HISTORY_LIMIT: usize = 200;
 
 const CONSOLE_LIMIT: usize = 5000;
 /// Longest console line (characters) and longest unfinished line (bytes) kept.
@@ -312,6 +333,7 @@ impl Workbench {
     /// A folder was opened: its watches, exception filters and breakpoints come back.
     pub(super) fn load_debug_state(&mut self, cx: &mut Context<Self>) {
         self.load_watches();
+        self.load_console_history();
         self.load_exception_filters();
         let old = self.dbg.bps.remove_all();
         self.dbg.bps = crate::debug_model::BreakpointStore::default();
@@ -957,6 +979,8 @@ impl Workbench {
             watch_values: Vec::new(),
             threads: Vec::new(),
             data_breakpoints: Vec::new(),
+            total_frames: None,
+            pages: HashMap::new(),
         });
         self.chrome.bottom = Bottom::Debug;
         self.chrome.panel_open = true;
@@ -1106,6 +1130,9 @@ impl Workbench {
                     self.end_debug(sid, msg, cx);
                 }
             }
+            // Answers that arrive after the session ended must not mark breakpoints again.
+            DapEvent::BreakpointsSet { .. } | DapEvent::BreakpointChanged(_) | DapEvent::FunctionBreakpointsSet(_)
+                if matches!(d.status, DebugStatus::Ended(_)) => {}
             DapEvent::BreakpointsSet { path, sent, results } => {
                 self.dbg.bps.on_results(&path, &sent, &results);
                 self.breakpoints_changed_in_store(&path, false, cx);
@@ -1126,24 +1153,19 @@ impl Workbench {
         let Some(session) = self.dbg.by_id(sid).and_then(|d| d.session.clone()) else { return };
         let local = !self.remote.host.is_remote();
         let task = cx.background_executor().spawn(async move {
-            let mut frames = session.stack_trace(thread).unwrap_or_default();
-            // The compiler may report the logical path (`/tmp/x`) while the editor holds the canonical one (`/private/tmp/x`).
-            if local {
-                for f in &mut frames {
-                    if let Some(c) = f.path.as_deref().and_then(|p| std::fs::canonicalize(p).ok()) {
-                        f.path = Some(c.to_string_lossy().into_owned());
-                    }
-                }
-            }
+            let (mut frames, total) = session.stack_page(thread, 0, STACK_PAGE).unwrap_or_default();
+            normalize_frames(&mut frames, local);
             let top = frames.iter().position(|f| f.path.is_some()).unwrap_or(0);
             let (scopes, children) = frames.get(top).map(|f| load_scopes(&session, f.id)).unwrap_or_default();
-            (frames, top, scopes, children, session.threads())
+            (frames, total, top, scopes, children, session.threads())
         });
         cx.spawn(async move |this, cx| {
-            let (frames, top, scopes, children, threads) = task.await;
+            let (frames, total, top, scopes, children, threads) = task.await;
             with_window(&this, cx, move |this, window, cx| {
                 let Some(d) = this.dbg.by_id_mut(sid).filter(|d| matches!(d.status, DebugStatus::Stopped(_))) else { return };
                 d.location = frames.get(top).and_then(|f| f.path.clone().map(|p| (p, f.line.saturating_sub(1) as usize)));
+                d.total_frames = total;
+                d.pages.clear();
                 d.frames = frames;
                 d.frame = top;
                 d.threads = threads;
@@ -1156,6 +1178,70 @@ impl Workbench {
             });
         })
         .detach();
+    }
+
+    /// More frames of the selected thread can be loaded.
+    pub(super) fn more_frames(d: &DebugState) -> bool {
+        match d.total_frames {
+            Some(total) => d.frames.len() < total,
+            None => d.frames.len() >= STACK_PAGE && d.frames.len().is_multiple_of(STACK_PAGE),
+        }
+    }
+
+    /// "Load More Stack Frames": the next page of the selected thread's stack.
+    pub(crate) fn load_more_frames(&mut self, cx: &mut Context<Self>) {
+        let local = !self.remote.host.is_remote();
+        let Some(d) = self.dbg.cur() else { return };
+        let (sid, thread, start) = (d.id, d.thread, d.frames.len());
+        let Some(session) = d.session.clone() else { return };
+        let task = cx.background_executor().spawn(async move {
+            let (mut frames, total) = session.stack_page(thread, start, STACK_PAGE).unwrap_or_default();
+            normalize_frames(&mut frames, local);
+            (frames, total)
+        });
+        cx.spawn(async move |this, cx| {
+            let (frames, total) = task.await;
+            this.update(cx, |this, cx| {
+                if let Some(d) = this.dbg.by_id_mut(sid).filter(|d| d.thread == thread && d.frames.len() == start) {
+                    // An empty page means the end, whatever the adapter said about the depth.
+                    d.total_frames = if frames.is_empty() { Some(start) } else { total.or(d.total_frames) };
+                    d.frames.extend(frames);
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// "Restart Frame": run the frame again from its start (adapters that support it).
+    pub(crate) fn restart_frame(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(d) = self.dbg.cur_mut() else { return };
+        let (Some(frame), Some(session)) = (d.frames.get(index).cloned(), d.session.clone()) else { return };
+        if !(frame.can_restart && session.supports("supportsRestartFrame")) {
+            self.notice = Some(Notice::Info(crate::i18n::t("This frame cannot be restarted.").into()));
+            cx.notify();
+            return;
+        }
+        d.status = DebugStatus::Running;
+        d.location = None;
+        session.restart_frame(frame.id);
+        self.apply_debug_line_all(cx);
+        cx.notify();
+    }
+
+    /// The selected thread's stack as text (`name (file:line)` per line).
+    pub(super) fn copy_call_stack(&mut self, cx: &mut Context<Self>) {
+        let Some(d) = self.dbg.cur() else { return };
+        let text: Vec<String> = d
+            .frames
+            .iter()
+            .map(|f| match &f.path {
+                Some(p) => format!("{} ({}:{})", f.name, p, f.line),
+                None => f.name.clone(),
+            })
+            .collect();
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.join("\n")));
     }
 
     fn show_debug_location(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -1206,7 +1292,8 @@ impl Workbench {
         cx.notify();
     }
 
-    /// Toggle a variable or scope row; children are requested on first expansion.
+    /// Toggle a variable or scope row; children are requested on first expansion. A value with many elements gets its
+    /// named children and the first page of elements.
     pub(super) fn toggle_variable(&mut self, reference: i64, cx: &mut Context<Self>) {
         let sid = self.dbg.cur_id();
         let Some(d) = self.dbg.cur_mut() else { return };
@@ -1220,11 +1307,23 @@ impl Workbench {
             return;
         }
         let Some(session) = d.session.clone() else { return };
-        let task = cx.background_executor().spawn(async move { session.variables(reference).unwrap_or_default() });
+        let indexed = d.children.values().flatten().find(|v| v.reference == reference).map_or(0, |v| v.indexed);
+        let task = cx.background_executor().spawn(async move {
+            if indexed > VAR_PAGE {
+                let mut vars = session.named_variables(reference).unwrap_or_default();
+                vars.extend(session.indexed_variables(reference, 0, VAR_PAGE).unwrap_or_default());
+                vars
+            } else {
+                session.variables(reference).unwrap_or_default()
+            }
+        });
         cx.spawn(async move |this, cx| {
             let vars = task.await;
             this.update(cx, |this, cx| {
                 if let Some(d) = this.dbg.by_id_mut(sid) {
+                    if indexed > VAR_PAGE {
+                        d.pages.insert(reference, (VAR_PAGE, indexed));
+                    }
                     d.children.insert(reference, vars);
                     cx.notify();
                 }
@@ -1235,6 +1334,152 @@ impl Workbench {
         cx.notify();
     }
 
+    /// The next page of a paged value's elements.
+    pub(crate) fn load_more_variables(&mut self, reference: i64, cx: &mut Context<Self>) {
+        let sid = self.dbg.cur_id();
+        let Some(d) = self.dbg.cur() else { return };
+        let (Some(&(loaded, total)), Some(session)) = (d.pages.get(&reference), d.session.clone()) else { return };
+        let count = VAR_PAGE.min(total.saturating_sub(loaded));
+        let task = cx.background_executor().spawn(async move { session.indexed_variables(reference, loaded, count).unwrap_or_default() });
+        cx.spawn(async move |this, cx| {
+            let vars = task.await;
+            this.update(cx, |this, cx| {
+                if let Some(d) = this.dbg.by_id_mut(sid)
+                    && d.pages.get(&reference).is_some_and(|p| p.0 == loaded)
+                {
+                    // Nothing came back: stop offering more.
+                    let got = if vars.is_empty() { total - loaded } else { vars.len() };
+                    d.pages.insert(reference, (loaded + got, total));
+                    d.children.entry(reference).or_default().extend(vars);
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// "Set Value": change a variable (by `setVariable`, else by assigning to its expression).
+    pub(super) fn start_set_variable(&mut self, parent: i64, name: String, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(v) = self.dbg.cur().and_then(|d| d.children.get(&parent)?.iter().find(|v| v.name == name).cloned()) else { return };
+        self.show_input(super::InputPurpose::SetVariable { parent, name }, crate::i18n::t("Set"), crate::i18n::t("new value"), &v.value, window, cx);
+    }
+
+    pub(super) fn finish_set_variable(&mut self, parent: i64, name: String, value: String, cx: &mut Context<Self>) {
+        let sid = self.dbg.cur_id();
+        let Some(d) = self.dbg.cur().filter(|d| matches!(d.status, DebugStatus::Stopped(_))) else { return };
+        let Some(session) = d.session.clone() else { return };
+        let frame = d.frames.get(d.frame).map(|f| f.id);
+        let expr = d.children.get(&parent).and_then(|c| c.iter().find(|v| v.name == name)).and_then(|v| v.evaluate_name.clone());
+        let n = name.clone();
+        let task = cx.background_executor().spawn(async move {
+            if session.supports("supportsSetVariable") {
+                session.set_variable(parent, &n, &value)
+            } else if let (true, Some(e)) = (session.supports("supportsSetExpression"), expr) {
+                session.set_expression(frame, &e, &value)
+            } else {
+                Err(crate::i18n::t("This debug adapter cannot change values.").to_string())
+            }
+        });
+        cx.spawn(async move |this, cx| {
+            let result = task.await;
+            this.update(cx, |this, cx| {
+                match result {
+                    Ok(shown) => {
+                        if let Some(v) = this.dbg.by_id_mut(sid).and_then(|d| d.children.get_mut(&parent)?.iter_mut().find(|v| v.name == name)) {
+                            v.value = shown;
+                        }
+                        this.refresh_watches(cx);
+                    }
+                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Could not set {}: {}", &[&name, &e]).into())),
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// Expression of a variable (its evaluate name, else its name).
+    pub(super) fn variable_expression(&self, parent: i64, name: &str) -> Option<(String, String)> {
+        let v = self.dbg.cur()?.children.get(&parent)?.iter().find(|v| v.name == name)?;
+        Some((v.evaluate_name.clone().unwrap_or_else(|| v.name.clone()), v.value.clone()))
+    }
+
+    // --- Console history and completion ---
+
+    fn remember_input(&mut self, text: &str) {
+        self.dbg.history.retain(|h| h != text);
+        self.dbg.history.push(text.to_string());
+        let extra = self.dbg.history.len().saturating_sub(HISTORY_LIMIT);
+        self.dbg.history.drain(..extra);
+        self.dbg.history_pos = None;
+        if let (Some(ws), Some(s)) = (self.persist.workspace_id, &self.persist.state) {
+            let _ = s.set(&format!("dbg.history:{ws}"), &self.dbg.history.join("\n"));
+        }
+    }
+
+    pub(super) fn load_console_history(&mut self) {
+        self.dbg.history = match (self.persist.workspace_id, &self.persist.state) {
+            (Some(ws), Some(s)) => {
+                s.get(&format!("dbg.history:{ws}")).map(|t| t.lines().filter(|l| !l.is_empty()).map(str::to_string).collect()).unwrap_or_default()
+            }
+            _ => Vec::new(),
+        };
+        self.dbg.history_pos = None;
+    }
+
+    /// ↑ / ↓ in the console input: older / newer inputs.
+    pub(crate) fn console_history(&mut self, older: bool, cx: &mut Context<Self>) {
+        let n = self.dbg.history.len();
+        if n == 0 {
+            return;
+        }
+        let pos = match (self.dbg.history_pos, older) {
+            (None, true) => Some(n - 1),
+            (None, false) => None,
+            (Some(i), true) => Some(i.saturating_sub(1)),
+            (Some(i), false) => (i + 1 < n).then_some(i + 1),
+        };
+        self.dbg.history_pos = pos;
+        let text = pos.map(|i| self.dbg.history[i].clone()).unwrap_or_default();
+        if let Some(input) = self.dbg.cur().map(|d| d.input.clone()) {
+            input.update(cx, |f, cx| f.set_text(&text, cx));
+        }
+    }
+
+    /// Tab in the console input: the adapter's completions; one is filled in, several are listed in the console.
+    pub(crate) fn console_complete(&mut self, cx: &mut Context<Self>) {
+        let sid = self.dbg.cur_id();
+        let Some(d) = self.dbg.cur() else { return };
+        let Some(session) = d.session.clone().filter(|s| s.supports("supportsCompletionsRequest")) else { return };
+        let frame = matches!(d.status, DebugStatus::Stopped(_)).then(|| d.frames.get(d.frame).map(|f| f.id)).flatten();
+        let input = d.input.clone();
+        let text = input.read(cx).text().to_string();
+        let column = text.chars().count() + 1;
+        let t2 = text.clone();
+        let task = cx.background_executor().spawn(async move { session.completions(frame, &t2, column).unwrap_or_default() });
+        cx.spawn(async move |this, cx| {
+            let found = task.await;
+            this.update(cx, |this, cx| {
+                // The word being typed is replaced by the completion.
+                let start = text.rfind(|c: char| !(c.is_alphanumeric() || c == '_')).map_or(0, |i| i + 1);
+                match found.as_slice() {
+                    [] => {}
+                    [one] => input.update(cx, |f, cx| f.set_text(&format!("{}{one}", &text[..start]), cx)),
+                    many => {
+                        if let Some(d) = this.dbg.by_id_mut(sid) {
+                            d.push_console("console", many.iter().take(40).cloned().collect::<Vec<_>>().join("  "));
+                        }
+                    }
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
     fn debug_evaluate(&mut self, expression: String, cx: &mut Context<Self>) {
         let expression = expression.trim().to_string();
         let sid = self.dbg.cur_id();
@@ -1243,6 +1488,8 @@ impl Workbench {
             return;
         }
         d.push_console("input", format!("> {expression}"));
+        self.remember_input(&expression);
+        let Some(d) = self.dbg.cur_mut() else { return };
         let Some(session) = d.session.clone().filter(|_| !matches!(d.status, DebugStatus::Ended(_))) else {
             d.push_console("stderr", crate::i18n::t("No active debug session."));
             cx.notify();
@@ -1441,7 +1688,7 @@ impl Workbench {
     }
 
     /// The bottom panel's Debug Console: the focused session's output and an expression field.
-    pub(super) fn debug_view(&self, p: &Palette, _: &mut Context<Self>) -> AnyElement {
+    pub(super) fn debug_view(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
         let Some(d) = self.dbg.cur() else {
             return div()
                 .px(px(theme::SPACE[6]))
@@ -1479,6 +1726,10 @@ impl Workbench {
                     .flex()
                     .items_center()
                     .gap(px(theme::SPACE[2]))
+                    .key_context("DebugRepl")
+                    .on_action(cx.listener(|this, _: &ConsoleHistoryPrev, _, cx| this.console_history(true, cx)))
+                    .on_action(cx.listener(|this, _: &ConsoleHistoryNext, _, cx| this.console_history(false, cx)))
+                    .on_action(cx.listener(|this, _: &ConsoleComplete, _, cx| this.console_complete(cx)))
                     .child(icon("chevron-right", 12., p.accent))
                     .child(d.input.clone()),
             )
@@ -1519,6 +1770,36 @@ impl Workbench {
                 )
             })
             .collect()
+    }
+
+    #[cfg(test)]
+    pub fn reference_for_test(&self, name: &str) -> Option<i64> {
+        self.dbg.cur()?.children.values().flatten().find(|v| v.name == name).map(|v| v.reference)
+    }
+
+    #[cfg(test)]
+    pub fn set_variable_for_test(&mut self, name: &str, value: &str, cx: &mut Context<Self>) {
+        let parent = self.dbg.cur().and_then(|d| d.children.iter().find(|(_, vs)| vs.iter().any(|v| v.name == name)).map(|(r, _)| *r));
+        if let Some(parent) = parent {
+            self.finish_set_variable(parent, name.into(), value.into(), cx);
+        }
+    }
+
+    #[cfg(test)]
+    pub fn set_console_input_for_test(&mut self, text: &str, cx: &mut Context<Self>) {
+        if let Some(input) = self.dbg.cur().map(|d| d.input.clone()) {
+            input.update(cx, |f, cx| f.set_text(text, cx));
+        }
+    }
+
+    #[cfg(test)]
+    pub fn console_input_for_test(&self, cx: &gpui::App) -> String {
+        self.dbg.cur().map(|d| d.input.read(cx).text().to_string()).unwrap_or_default()
+    }
+
+    #[cfg(test)]
+    pub fn evaluate_for_test(&mut self, text: &str, cx: &mut Context<Self>) {
+        self.debug_evaluate(text.into(), cx);
     }
 
     #[cfg(test)]
@@ -1632,6 +1913,17 @@ pub(super) fn inline_values(lines: &[String], stop: usize, locals: &[(String, St
 }
 
 /// Scopes of a frame and the first scope's variables (in the background).
+/// The compiler may report the logical path (`/tmp/x`) while the editor holds the canonical one (`/private/tmp/x`).
+fn normalize_frames(frames: &mut [Frame], local: bool) {
+    if local {
+        for f in frames {
+            if let Some(c) = f.path.as_deref().and_then(|p| std::fs::canonicalize(p).ok()) {
+                f.path = Some(c.to_string_lossy().into_owned());
+            }
+        }
+    }
+}
+
 fn load_scopes(session: &dap::Session, frame_id: i64) -> (Vec<Scope>, HashMap<i64, Vec<Variable>>) {
     let scopes = session.scopes(frame_id).unwrap_or_default();
     let mut children = HashMap::new();

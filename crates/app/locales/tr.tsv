@@ -2347,3 +2347,15 @@ running	çalışıyor
 ended	bitti
 paused on {}	{0} nedeniyle duraklatıldı
 Breakpoints	Kesme Noktaları
+Add to Watch	İzlemeye Ekle
+Copy Call Stack	Çağrı Yığınını Kopyala
+Copy Value	Değeri Kopyala
+Copy as Expression	İfade Olarak Kopyala
+Could not set {}: {}	{0} ayarlanamadı: {1}
+Load More Stack Frames	Daha Fazla Yığın Çerçevesi Yükle
+Restart Frame	Çerçeveyi Yeniden Başlat
+Set Value…	Değer Ata…
+This debug adapter cannot change values.	Bu hata ayıklama bağdaştırıcısı değerleri değiştiremez.
+This frame cannot be restarted.	Bu çerçeve yeniden başlatılamaz.
+new value	yeni değer
+… {} more	… {0} tane daha

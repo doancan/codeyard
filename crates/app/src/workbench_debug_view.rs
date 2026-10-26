@@ -28,6 +28,14 @@ pub enum DebugMenuCmd {
     EditBreakpoint,
     ToggleBreakpoint,
     RemoveBreakpoint,
+    /// Variable rows carry "parent reference\tname".
+    SetValue,
+    CopyValue,
+    CopyExpression,
+    AddToWatch,
+    /// Frame rows carry the frame index.
+    RestartFrame,
+    CopyCallStack,
 }
 
 /// Sections in order: (id, title, default height when not the first open one).
@@ -50,6 +58,10 @@ pub(super) struct VarRow {
     pub open: bool,
     /// Index in the watch list (Watch rows).
     pub watch: Option<usize>,
+    /// Scope or object this variable belongs to (0 for scopes and watches).
+    pub parent: i64,
+    /// A "… n more" row: the paged value to load more of.
+    pub more: Option<i64>,
 }
 
 /// Scopes and their open children, depth first (depth capped like the old panel).
@@ -60,8 +72,22 @@ pub(super) fn variable_rows(d: &DebugState) -> Vec<VarRow> {
         }
         for v in d.children.get(&reference).into_iter().flatten() {
             let open = v.reference > 0 && d.expanded.contains(&v.reference);
-            out.push(VarRow { depth, name: v.name.clone(), value: v.value.clone(), ty: v.ty.clone(), reference: v.reference, open, watch: None });
+            out.push(VarRow {
+                depth,
+                name: v.name.clone(),
+                value: v.value.clone(),
+                ty: v.ty.clone(),
+                reference: v.reference,
+                open,
+                watch: None,
+                parent: reference,
+                more: None,
+            });
             walk(d, out, v.reference, depth + 1);
+        }
+        if let Some(&(loaded, total)) = d.pages.get(&reference).filter(|(l, t)| l < t) {
+            let name = crate::i18n::tf("… {} more", &[&(total - loaded)]);
+            out.push(VarRow { depth, name, value: String::new(), ty: None, reference: 0, open: false, watch: None, parent: reference, more: Some(reference) });
         }
     }
     let mut out = Vec::new();
@@ -77,6 +103,8 @@ pub(super) fn variable_rows(d: &DebugState) -> Vec<VarRow> {
             reference: s.reference,
             open: d.expanded.contains(&s.reference),
             watch: None,
+            parent: 0,
+            more: None,
         });
         walk(d, &mut out, s.reference, 1);
     }
@@ -105,6 +133,7 @@ pub(super) enum StackRow {
         current: bool,
         source: bool,
     },
+    LoadMore,
     Note(String),
 }
 
@@ -142,13 +171,18 @@ pub(super) fn stack_rows(sessions: &[DebugState], current: Option<u64>) -> Vec<S
 }
 
 fn frame_rows(d: &DebugState) -> impl Iterator<Item = StackRow> + '_ {
-    d.frames.iter().enumerate().map(|(i, f)| StackRow::Frame {
-        index: i,
-        name: f.name.clone(),
-        place: f.path.as_deref().map(|p| format!("{}:{}", ui::file_name(p), f.line)).unwrap_or_default(),
-        current: i == d.frame,
-        source: f.path.is_some(),
-    })
+    let more = Workbench::more_frames(d).then_some(StackRow::LoadMore);
+    d.frames
+        .iter()
+        .enumerate()
+        .map(|(i, f)| StackRow::Frame {
+            index: i,
+            name: f.name.clone(),
+            place: f.path.as_deref().map(|p| format!("{}:{}", ui::file_name(p), f.line)).unwrap_or_default(),
+            current: i == d.frame,
+            source: f.path.is_some(),
+        })
+        .chain(more)
 }
 
 /// Short status of a session.
@@ -218,8 +252,45 @@ impl Workbench {
                 self.dbg.bps.remove(&path, line);
                 self.breakpoints_changed_in_store(&path, true, cx);
             }
+            (DebugMenuCmd::RestartFrame, _) => self.restart_frame(target.path.parse().unwrap_or(0), cx),
+            (DebugMenuCmd::CopyCallStack, _) => self.copy_call_stack(cx),
+            (DebugMenuCmd::SetValue | DebugMenuCmd::CopyValue | DebugMenuCmd::CopyExpression | DebugMenuCmd::AddToWatch, _) => {
+                let Some((parent, name)) = target.path.split_once('\t').and_then(|(p, n)| Some((p.parse::<i64>().ok()?, n.to_string()))) else { return };
+                let Some((expr, value)) = self.variable_expression(parent, &name) else { return };
+                match cmd {
+                    DebugMenuCmd::SetValue => self.start_set_variable(parent, name, window, cx),
+                    DebugMenuCmd::CopyValue => cx.write_to_clipboard(gpui::ClipboardItem::new_string(value)),
+                    DebugMenuCmd::CopyExpression => cx.write_to_clipboard(gpui::ClipboardItem::new_string(expr)),
+                    _ => self.finish_add_watch(expr, cx),
+                }
+            }
             _ => {}
         }
+    }
+
+    fn open_variable_menu(&mut self, parent: i64, name: String, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+        let stopped = self.dbg.cur().is_some_and(|d| matches!(d.status, DebugStatus::Stopped(_)));
+        let can_set = self.dbg.cur().and_then(|d| d.session.as_ref()).is_some_and(|s| s.supports("supportsSetVariable") || s.supports("supportsSetExpression"));
+        let items = vec![
+            MenuItem::new(crate::i18n::t("Set Value…")).enabled(stopped && can_set),
+            MenuItem::new(crate::i18n::t("Copy Value")).separator(),
+            MenuItem::new(crate::i18n::t("Copy as Expression")),
+            MenuItem::new(crate::i18n::t("Add to Watch")).separator(),
+        ];
+        let commands = [DebugMenuCmd::SetValue, DebugMenuCmd::CopyValue, DebugMenuCmd::CopyExpression, DebugMenuCmd::AddToWatch].map(MenuCmd::Debug).to_vec();
+        let target = MenuTarget { path: format!("{parent}\t{name}"), is_dir: false, tab: None };
+        self.show_menu(items, commands, Vec::new(), target, position, window, cx);
+    }
+
+    fn open_frame_menu(&mut self, index: usize, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+        let can_restart = self
+            .dbg
+            .cur()
+            .is_some_and(|d| d.frames.get(index).is_some_and(|f| f.can_restart) && d.session.as_ref().is_some_and(|s| s.supports("supportsRestartFrame")));
+        let items = vec![MenuItem::new(crate::i18n::t("Restart Frame")).enabled(can_restart), MenuItem::new(crate::i18n::t("Copy Call Stack")).separator()];
+        let commands = [DebugMenuCmd::RestartFrame, DebugMenuCmd::CopyCallStack].map(MenuCmd::Debug).to_vec();
+        let target = MenuTarget { path: index.to_string(), is_dir: false, tab: None };
+        self.show_menu(items, commands, Vec::new(), target, position, window, cx);
     }
 
     fn open_config_menu(&mut self, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
@@ -457,6 +528,8 @@ impl Workbench {
                 reference: 0,
                 open: false,
                 watch: Some(i),
+                parent: 0,
+                more: None,
             })
             .collect();
         self.var_list("dbg-watch-rows", rows, p, cx)
@@ -474,6 +547,25 @@ impl Workbench {
                         let reference = r.reference;
                         let watch = r.watch;
                         let group = SharedString::from(format!("{id}-{ix}"));
+                        if let Some(paged) = r.more {
+                            return Some(
+                                div()
+                                    .id((id, ix))
+                                    .h(px(layout::ROW_H))
+                                    .w_full()
+                                    .flex()
+                                    .items_center()
+                                    .pl(px(theme::SPACE[5] + 12. + theme::SPACE[2] + layout::TREE_INDENT * r.depth as f32))
+                                    .text_color(c(p.accent))
+                                    .cursor_pointer()
+                                    .hover(|d| d.bg(c(p.surface_hover)))
+                                    .child(r.name.clone())
+                                    .on_click(cx.listener(move |this, _, _, cx| this.load_more_variables(paged, cx)))
+                                    .into_any_element(),
+                            );
+                        }
+                        // Variables (not scopes or watches) have a menu.
+                        let menu = (r.parent != 0).then(|| (r.parent, r.name.clone()));
                         Some(
                             div()
                                 .id((id, ix))
@@ -517,6 +609,15 @@ impl Workbench {
                                     ))
                                 })
                                 .when(reference > 0, |d| d.cursor_pointer().on_click(cx.listener(move |this, _, _, cx| this.toggle_variable(reference, cx))))
+                                .when_some(menu, |d, (parent, name)| {
+                                    d.on_mouse_down(
+                                        MouseButton::Right,
+                                        cx.listener(move |this, ev: &gpui::MouseDownEvent, w, cx| {
+                                            cx.stop_propagation();
+                                            this.open_variable_menu(parent, name.clone(), ev.position, w, cx);
+                                        }),
+                                    )
+                                })
                                 .into_any_element(),
                         )
                     })
@@ -582,7 +683,20 @@ impl Workbench {
                                     .child(div().flex_1())
                                     .child(div().flex_none().text_color(c(p.text_muted)).text_size(px(text::XS.0)).child(place.clone()))
                                     .on_click(cx.listener(move |this, _, _, cx| this.select_frame(index, cx)))
+                                    .on_mouse_down(
+                                        MouseButton::Right,
+                                        cx.listener(move |this, ev: &gpui::MouseDownEvent, w, cx| {
+                                            cx.stop_propagation();
+                                            this.open_frame_menu(index, ev.position, w, cx);
+                                        }),
+                                    )
                             }
+                            StackRow::LoadMore => base
+                                .pl(px(theme::SPACE[5] + layout::TREE_INDENT * 2.))
+                                .cursor_pointer()
+                                .text_color(c(p.accent))
+                                .child(crate::i18n::t("Load More Stack Frames"))
+                                .on_click(cx.listener(|this, _, _, cx| this.load_more_frames(cx))),
                             StackRow::Note(t) => base.pl(px(theme::SPACE[6])).text_color(c(p.text_muted)).child(t.clone()),
                         };
                         Some(el.into_any_element())
@@ -758,6 +872,7 @@ impl Workbench {
                 StackRow::Session { name, status, .. } => format!("session:{name} ({status})"),
                 StackRow::Thread { name, current, .. } => format!("thread:{name}{}", if current { "*" } else { "" }),
                 StackRow::Frame { name, current, .. } => format!("frame:{name}{}", if current { "*" } else { "" }),
+                StackRow::LoadMore => "more".into(),
                 StackRow::Note(t) => format!("note:{t}"),
             })
             .collect();

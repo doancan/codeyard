@@ -420,7 +420,10 @@ struct Overlay {
     _sub: Subscription,
 }
 
-pub use debug::{AddFunctionBreakpoint, DisableAllBreakpoints, EnableAllBreakpoints, ShowRunAndDebug, ToggleBreakpointEnabled, ToggleBreakpointsActive};
+pub use debug::{
+    AddFunctionBreakpoint, ConsoleComplete, ConsoleHistoryNext, ConsoleHistoryPrev, DisableAllBreakpoints, EnableAllBreakpoints, ShowRunAndDebug,
+    ToggleBreakpointEnabled, ToggleBreakpointsActive,
+};
 pub use host::askpass::{AskKind, AskRequest};
 pub use remote_glue::ShowRemoteExplorer;
 pub type AskReply = std::sync::mpsc::Sender<Option<String>>;

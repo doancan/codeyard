@@ -119,7 +119,7 @@ impl Breakpoint {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Frame {
     pub id: i64,
     pub name: String,
@@ -127,6 +127,8 @@ pub struct Frame {
     /// 1-based.
     pub line: u32,
     pub column: u32,
+    /// The adapter can restart the program from this frame.
+    pub can_restart: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -135,13 +137,17 @@ pub struct Scope {
     pub reference: i64,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Variable {
     pub name: String,
     pub value: String,
     pub ty: Option<String>,
     /// > 0: has children (requested with `variables`).
     pub reference: i64,
+    /// Expression that evaluates to this value (for watches and copying).
+    pub evaluate_name: Option<String>,
+    /// Number of indexed children (array elements), when the adapter says: those are loaded a page at a time.
+    pub indexed: usize,
 }
 
 type Pending = Arc<Mutex<HashMap<i64, mpsc::Sender<Result<Value, String>>>>>;
@@ -604,7 +610,8 @@ impl Session {
             json!({
                 "clientID": "codeyard", "clientName": "Codeyard", "adapterID": adapter_id,
                 "linesStartAt1": true, "columnsStartAt1": true, "pathFormat": "path",
-                "supportsVariableType": true, "supportsRunInTerminalRequest": false, "supportsStartDebuggingRequest": true,
+                "supportsVariableType": true, "supportsVariablePaging": true, "supportsRunInTerminalRequest": false,
+                "supportsStartDebuggingRequest": true,
             }),
             Duration::from_secs(30),
         )?;
@@ -809,8 +816,49 @@ impl Session {
         self.capabilities.lock().unwrap()["supportsDataBreakpoints"].as_bool().unwrap_or(false)
     }
 
+    #[cfg(test)]
     pub fn stack_trace(&self, thread_id: i64) -> Result<Vec<Frame>, String> {
-        Ok(parse_frames(&self.request("stackTrace", json!({ "threadId": thread_id, "startFrame": 0, "levels": 50 }), Duration::from_secs(15))?))
+        Ok(self.stack_page(thread_id, 0, 50)?.0)
+    }
+
+    /// A page of a thread's stack and the total depth when the adapter knows it.
+    pub fn stack_page(&self, thread_id: i64, start: usize, levels: usize) -> Result<(Vec<Frame>, Option<usize>), String> {
+        let r = self.request("stackTrace", json!({ "threadId": thread_id, "startFrame": start, "levels": levels }), Duration::from_secs(15))?;
+        Ok((parse_frames(&r), r["totalFrames"].as_u64().map(|n| n as usize)))
+    }
+
+    /// Restart the program from a frame (`restartFrame`; the adapter then reports a stop).
+    pub fn restart_frame(&self, frame_id: i64) {
+        let _ = self.request_async("restartFrame", json!({ "frameId": frame_id }));
+    }
+
+    /// Change a variable in a scope or object; returns the value as the adapter shows it now.
+    pub fn set_variable(&self, container: i64, name: &str, value: &str) -> Result<String, String> {
+        let r = self.request("setVariable", json!({ "variablesReference": container, "name": name, "value": value }), Duration::from_secs(15))?;
+        Ok(r["value"].as_str().unwrap_or(value).to_string())
+    }
+
+    /// Assign to an expression in a frame (adapters without `setVariable`).
+    pub fn set_expression(&self, frame_id: Option<i64>, expression: &str, value: &str) -> Result<String, String> {
+        let mut args = json!({ "expression": expression, "value": value });
+        if let Some(f) = frame_id {
+            args["frameId"] = json!(f);
+        }
+        let r = self.request("setExpression", args, Duration::from_secs(15))?;
+        Ok(r["value"].as_str().unwrap_or(value).to_string())
+    }
+
+    /// Completions for the console input (`column` is the 1-based cursor column).
+    pub fn completions(&self, frame_id: Option<i64>, text: &str, column: usize) -> Result<Vec<String>, String> {
+        let mut args = json!({ "text": text, "column": column });
+        if let Some(f) = frame_id {
+            args["frameId"] = json!(f);
+        }
+        let r = self.request("completions", args, Duration::from_secs(5))?;
+        Ok(r["targets"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|t| t["text"].as_str().or(t["label"].as_str()).map(str::to_string)).collect())
+            .unwrap_or_default())
     }
 
     pub fn scopes(&self, frame_id: i64) -> Result<Vec<Scope>, String> {
@@ -819,6 +867,17 @@ impl Session {
 
     pub fn variables(&self, reference: i64) -> Result<Vec<Variable>, String> {
         Ok(parse_variables(&self.request("variables", json!({ "variablesReference": reference }), Duration::from_secs(15))?))
+    }
+
+    /// Only the named children (`filter: named`), for values whose elements are paged.
+    pub fn named_variables(&self, reference: i64) -> Result<Vec<Variable>, String> {
+        Ok(parse_variables(&self.request("variables", json!({ "variablesReference": reference, "filter": "named" }), Duration::from_secs(15))?))
+    }
+
+    /// A page of indexed children (array elements `start..start + count`).
+    pub fn indexed_variables(&self, reference: i64, start: usize, count: usize) -> Result<Vec<Variable>, String> {
+        let args = json!({ "variablesReference": reference, "filter": "indexed", "start": start, "count": count });
+        Ok(parse_variables(&self.request("variables", args, Duration::from_secs(15))?))
     }
 
     /// Evaluate an expression (`context`: "repl", "watch", "hover"): (result, child reference).
@@ -943,6 +1002,7 @@ pub fn parse_frames(body: &Value) -> Vec<Frame> {
                         .map(str::to_string),
                     line: f["line"].as_u64().unwrap_or(0) as u32,
                     column: f["column"].as_u64().unwrap_or(1) as u32,
+                    can_restart: f["canRestart"].as_bool().unwrap_or(false),
                 })
                 .collect()
         })
@@ -968,6 +1028,8 @@ pub fn parse_variables(body: &Value) -> Vec<Variable> {
                     value: v["value"].as_str().unwrap_or_default().to_string(),
                     ty: v["type"].as_str().map(str::to_string),
                     reference: v["variablesReference"].as_i64().unwrap_or(0),
+                    evaluate_name: v["evaluateName"].as_str().map(str::to_string),
+                    indexed: v["indexedVariables"].as_u64().unwrap_or(0) as usize,
                 })
                 .collect()
         })
@@ -995,7 +1057,7 @@ pub(crate) mod tests {
             { "name": "x", "value": "42", "type": "int", "variablesReference": 0 },
             { "name": "p", "value": "{...}", "variablesReference": 9 },
         ] }));
-        assert_eq!(vars[0], Variable { name: "x".into(), value: "42".into(), ty: Some("int".into()), reference: 0 });
+        assert_eq!(vars[0], Variable { name: "x".into(), value: "42".into(), ty: Some("int".into()), reference: 0, ..Default::default() });
         assert_eq!((vars[1].reference, vars[1].ty.clone()), (9, None));
         assert!(parse_frames(&json!({})).is_empty() && parse_variables(&Value::Null).is_empty());
     }
@@ -1035,6 +1097,9 @@ def event(name, body=None):
     send({'type': 'event', 'event': name, 'body': body or {}})
 bps = {}
 logs = {}
+values = {}
+def extras():
+    return bool(launch and launch['arguments'].get('extras'))
 launch = None
 cur = 3
 def stop(reason):
@@ -1045,7 +1110,8 @@ while True:
     log.write(cmd + ' ' + json.dumps(m.get('arguments', {}), sort_keys=True) + '\n'); log.flush()
     a = m.get('arguments', {})
     if cmd == 'initialize':
-        ok(m, {'supportsConfigurationDoneRequest': True, 'supportsDataBreakpoints': True, 'supportsFunctionBreakpoints': True, 'exceptionBreakpointFilters': [{'filter': 'raised', 'label': 'Raised Exceptions'}, {'filter': 'uncaught', 'label': 'Uncaught Exceptions', 'default': True}]})
+        ok(m, {'supportsConfigurationDoneRequest': True, 'supportsDataBreakpoints': True, 'supportsFunctionBreakpoints': True,
+               'supportsSetVariable': True, 'supportsCompletionsRequest': True, 'supportsRestartFrame': True, 'exceptionBreakpointFilters': [{'filter': 'raised', 'label': 'Raised Exceptions'}, {'filter': 'uncaught', 'label': 'Uncaught Exceptions', 'default': True}]})
         event('initialized')
     elif cmd in ('launch', 'attach'):
         launch = m
@@ -1080,6 +1146,13 @@ while True:
         ok(m, {'breakpoints': [{'verified': True} for _ in a.get('breakpoints', [])]})
     elif cmd == 'threads':
         ok(m, {'threads': [{'id': 1, 'name': 'main'}, {'id': 2, 'name': 'worker'}]})
+    elif cmd == 'stackTrace' and extras():
+        # A deep stack, paged: 45 frames in all.
+        src = launch['arguments'].get('source')
+        start, levels = a.get('startFrame', 0), a.get('levels', 20)
+        frames = [{'id': 200 + i, 'name': 'main' if i == 0 else 'frame%d' % i, 'source': {'path': src} if i == 0 else {}, 'line': cur if i == 0 else 0, 'column': 1, 'canRestart': i == 0}
+                  for i in range(start, min(45, start + levels))]
+        ok(m, {'stackFrames': frames, 'totalFrames': 45})
     elif cmd == 'stackTrace':
         src = launch['arguments'].get('source') if launch else None
         ok(m, {'stackFrames': [
@@ -1087,10 +1160,20 @@ while True:
             {'id': 101, 'name': 'caller', 'line': 0, 'column': 0}]})
     elif cmd == 'scopes':
         ok(m, {'scopes': [{'name': 'Locals', 'variablesReference': 10}]})
+    elif cmd == 'variables' and a['variablesReference'] == 12:
+        # 250 elements, asked for a page at a time, plus one named field.
+        if a.get('filter') == 'named':
+            ok(m, {'variables': [{'name': 'length', 'value': '250', 'variablesReference': 0}]})
+        else:
+            start, count = a.get('start', 0), a.get('count', 250)
+            ok(m, {'variables': [{'name': '[%d]' % i, 'value': str(i * i), 'variablesReference': 0} for i in range(start, min(250, start + count))]})
     elif cmd == 'variables':
         if a['variablesReference'] == 10:
-            ok(m, {'variables': [{'name': 'x', 'value': str(cur * 10), 'type': 'int', 'variablesReference': 0},
-                                 {'name': 'point', 'value': '{x, y}', 'type': 'Point', 'variablesReference': 11}]})
+            vs = [{'name': 'x', 'value': values.get('x', str(cur * 10)), 'type': 'int', 'variablesReference': 0, 'evaluateName': 'x'},
+                  {'name': 'point', 'value': '{x, y}', 'type': 'Point', 'variablesReference': 11}]
+            if extras():
+                vs.append({'name': 'big', 'value': 'array(250)', 'variablesReference': 12, 'indexedVariables': 250, 'evaluateName': 'big'})
+            ok(m, {'variables': vs})
         else:
             ok(m, {'variables': [{'name': 'x', 'value': '1', 'variablesReference': 0}, {'name': 'y', 'value': '2', 'variablesReference': 0}]})
     elif cmd in ('next', 'stepIn', 'stepOut'):
@@ -1110,6 +1193,16 @@ while True:
         else:
             event('exited', {'exitCode': 0})
             event('terminated')
+    elif cmd == 'setVariable':
+        values[a['name']] = a['value']
+        ok(m, {'value': a['value']})
+    elif cmd == 'completions':
+        word = a['text'][:a['column'] - 1].split(' ')[-1]
+        ok(m, {'targets': [{'label': t} for t in ['point', 'print', 'x'] if t.startswith(word)]})
+    elif cmd == 'restartFrame':
+        ok(m)
+        cur = 3
+        stop('restart')
     elif cmd == 'evaluate':
         ok(m, {'result': 'eval:' + a['expression'], 'variablesReference': 0})
     elif cmd == 'disconnect':
