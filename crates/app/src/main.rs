@@ -37,6 +37,7 @@ mod display;
 mod docs_tests;
 mod editor;
 mod editor_decor;
+mod editor_overlay;
 #[cfg(test)]
 mod editor_title_tests;
 mod editorconfig;

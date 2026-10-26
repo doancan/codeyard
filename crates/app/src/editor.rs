@@ -7,8 +7,7 @@ use buffer::{Buffer, LineEnding};
 use gpui::{
     App, Bounds, ClipboardItem, Context, CursorStyle, Element, ElementId, ElementInputHandler, Entity, EntityInputHandler, EventEmitter, FocusHandle,
     Focusable, GlobalElementId, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, ScrollStrategy, ShapedLine, SharedString,
-    Style, TextRun, UTF16Selection, UnderlineStyle, UniformListScrollHandle, Window, actions, canvas, div, fill, point, prelude::*, px, relative, size,
-    uniform_list,
+    Style, TextRun, UTF16Selection, UniformListScrollHandle, Window, actions, canvas, div, fill, point, prelude::*, px, relative, size, uniform_list,
 };
 use host::{Host, HostError};
 use syntax::{Role, Syntax};
@@ -1609,23 +1608,6 @@ pub fn button(
 #[cfg(test)]
 pub(crate) fn title_case(s: &str) -> String {
     crate::textcase::title(s, crate::textcase::CaseLocale::Invariant)
-}
-
-/// Split the segments at the given byte position (if the position falls inside a segment).
-fn split_runs(runs: Vec<TextRun>, at: usize) -> Vec<TextRun> {
-    let mut out = Vec::with_capacity(runs.len() + 1);
-    let mut pos = 0;
-    for r in runs {
-        let end = pos + r.len;
-        if at > pos && at < end {
-            out.push(TextRun { len: at - pos, ..r.clone() });
-            out.push(TextRun { len: end - at, ..r });
-        } else {
-            out.push(r);
-        }
-        pos = end;
-    }
-    out
 }
 
 impl EntityInputHandler for EditorView {
