@@ -23,6 +23,10 @@ pub(super) struct DebugUi {
     /// Debug console inputs (per project) and the one ↑ / ↓ shows.
     pub(super) history: Vec<String>,
     pub(super) history_pos: Option<usize>,
+    /// Group of the sessions a compound is starting (id, stop all together), set while they start.
+    pub(super) starting_group: Option<(u64, bool)>,
+    /// A configuration waiting for the answers to its `${input:…}` questions.
+    pub(super) pending_launch: Option<debug::PendingLaunch>,
 }
 
 /// Last task, plus the problems parsed from its terminal and output (see workbench_tasks.rs).

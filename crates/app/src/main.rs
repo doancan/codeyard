@@ -304,6 +304,7 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-shift-f5", RestartDebugging, None),
         KeyBinding::new("f10", DebugStepOver, None),
         KeyBinding::new("f6", DebugPause, None),
+        KeyBinding::new("ctrl-f5", workbench::RunWithoutDebugging, None),
         KeyBinding::new("up", workbench::ConsoleHistoryPrev, Some("DebugRepl")),
         KeyBinding::new("down", workbench::ConsoleHistoryNext, Some("DebugRepl")),
         KeyBinding::new("tab", workbench::ConsoleComplete, Some("DebugRepl")),

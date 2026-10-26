@@ -187,7 +187,6 @@ impl BreakpointStore {
     }
 
     /// The temporary "Run to Cursor" breakpoint (`None` clears it). Returns the file whose sent list changes.
-    #[cfg_attr(not(test), expect(dead_code, reason = "Run to Cursor comes next"))]
     pub fn set_temp(&mut self, at: Option<(String, usize)>) -> Option<String> {
         let old = std::mem::replace(&mut self.temp, at);
         self.temp.as_ref().or(old.as_ref()).map(|(p, _)| p.clone())

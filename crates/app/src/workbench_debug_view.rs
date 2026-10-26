@@ -9,7 +9,7 @@ use super::{DebugState, DebugStatus};
 use crate::debug_model::{BpRow, Verified};
 
 /// The launch file the view creates when there is none.
-const LAUNCH_FILE: &str = ".codeyard/launch.jsonc";
+pub(super) const LAUNCH_FILE: &str = ".codeyard/launch.jsonc";
 const LAUNCH_TEMPLATE: &str = r#"{
   // Debug configurations: Run and Debug (F5) starts the selected one. Each needs a "name" and a "type"
   // (lldb, go, python, node or custom with "debugAdapter"); "request" is "launch" or "attach".

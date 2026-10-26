@@ -56,6 +56,29 @@ pub enum DapEvent {
     },
     /// The adapter announced new capabilities (merged into `Session::capabilities`).
     Capabilities,
+    /// The adapter asks to run the program in a terminal (`runInTerminal`; already answered).
+    RunInTerminal(TerminalRequest),
+}
+
+/// What `runInTerminal` asks for.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct TerminalRequest {
+    pub title: Option<String>,
+    pub cwd: String,
+    pub args: Vec<String>,
+    /// `None` value: remove the variable.
+    pub env: Vec<(String, Option<String>)>,
+}
+
+impl TerminalRequest {
+    fn parse(a: &Value) -> Option<Self> {
+        let args: Vec<String> = a["args"].as_array()?.iter().filter_map(|x| x.as_str().map(str::to_string)).collect();
+        if args.is_empty() {
+            return None;
+        }
+        let env = a["env"].as_object().map(|o| o.iter().map(|(k, v)| (k.clone(), v.as_str().map(str::to_string))).collect()).unwrap_or_default();
+        Some(TerminalRequest { title: a["title"].as_str().map(str::to_string), cwd: a["cwd"].as_str().unwrap_or_default().to_string(), args, env })
+    }
 }
 
 pub use crate::debug_model::BpResult;
@@ -605,12 +628,15 @@ impl Session {
         *self.breakpoints.lock().unwrap() = breakpoints.clone();
         *self.functions.lock().unwrap() = functions.to_vec();
         self.attached.store(request == "attach", Ordering::Relaxed);
+        // Only a configuration that asks for a terminal gets one: some adapters change how they start the program
+        // as soon as the client says it can.
+        let terminal = matches!(launch_args["console"].as_str(), Some("integratedTerminal" | "externalTerminal"));
         let init = self.raw_request(
             "initialize",
             json!({
                 "clientID": "codeyard", "clientName": "Codeyard", "adapterID": adapter_id,
                 "linesStartAt1": true, "columnsStartAt1": true, "pathFormat": "path",
-                "supportsVariableType": true, "supportsVariablePaging": true, "supportsRunInTerminalRequest": false,
+                "supportsVariableType": true, "supportsVariablePaging": true, "supportsRunInTerminalRequest": terminal,
                 "supportsStartDebuggingRequest": true,
             }),
             Duration::from_secs(30),
@@ -961,15 +987,19 @@ impl Session {
                 };
                 let _ = self.events.send(ev);
             }
-            // Request from the adapter: `startDebugging` is supported; the others (runInTerminal…) don't go unanswered.
+            // Request from the adapter: `startDebugging` and `runInTerminal` are supported; others don't go unanswered.
             Some("request") => {
                 let command = msg["command"].as_str().unwrap_or_default();
-                let ok = command == "startDebugging" && self.addr.is_some();
+                let terminal = (command == "runInTerminal").then(|| TerminalRequest::parse(&msg["arguments"])).flatten();
+                let ok = (command == "startDebugging" && self.addr.is_some()) || terminal.is_some();
+                if let Some(t) = terminal {
+                    let _ = self.events.send(DapEvent::RunInTerminal(t));
+                }
                 self.writer.send(&json!({
                     "seq": 0, "type": "response", "request_seq": msg["seq"], "success": ok, "command": command,
                     "message": if ok { Value::Null } else { json!("not supported") },
                 }));
-                if ok {
+                if ok && command == "startDebugging" {
                     let (request, configuration) =
                         (msg["arguments"]["request"].as_str().unwrap_or("launch").to_string(), msg["arguments"]["configuration"].clone());
                     if let Some(me) = self.me.upgrade() {
@@ -1106,6 +1136,8 @@ def stop(reason):
     event('stopped', {'reason': reason, 'threadId': 1, 'allThreadsStopped': True})
 while True:
     m = read()
+    if m.get('type') == 'response':
+        continue
     cmd = m.get('command')
     log.write(cmd + ' ' + json.dumps(m.get('arguments', {}), sort_keys=True) + '\n'); log.flush()
     a = m.get('arguments', {})
@@ -1131,7 +1163,15 @@ while True:
         ok(m, {'breakpoints': [{'verified': b['name'] != 'missing'} for b in a.get('breakpoints', [])]})
     elif cmd == 'configurationDone':
         ok(m)
-        if launch:
+        if launch and launch['arguments'].get('console') == 'integratedTerminal':
+            send({'type': 'request', 'command': 'runInTerminal', 'arguments': {'kind': 'integrated', 'title': 'Fake program', 'cwd': launch['arguments'].get('cwd', '/'),
+                  'args': ['sh', '-c', 'echo ran-in-terminal > ' + launch['arguments']['marker']], 'env': {'FAKE_ENV': 'yes'}}})
+        if launch and launch['arguments'].get('noDebug'):
+            ok(launch)
+            event('output', {'category': 'stdout', 'output': 'ran without debugging\n'})
+            event('exited', {'exitCode': 0})
+            event('terminated')
+        elif launch:
             ok(launch)
             event('output', {'category': 'stdout', 'output': 'hello from the program\n'})
             src = launch['arguments'].get('source')

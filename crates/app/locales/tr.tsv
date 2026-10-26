@@ -2359,3 +2359,43 @@ This debug adapter cannot change values.	Bu hata ayıklama bağdaştırıcısı 
 This frame cannot be restarted.	Bu çerçeve yeniden başlatılamaz.
 new value	yeni değer
 … {} more	… {0} tane daha
+# ---- Run menu and launching ----
+Run	Çalıştır
+Start Debugging	Hata Ayıklamayı Başlat
+Run Without Debugging	Hata Ayıklamadan Çalıştır
+Stop Debugging	Hata Ayıklamayı Durdur
+Restart Debugging	Hata Ayıklamayı Yeniden Başlat
+Continue	Devam Et
+Pause	Duraklat
+Step Over	Üzerinden Adımla
+Step Into	İçine Adımla
+Step Out	Dışına Adımla
+Run to Cursor	İmlece Kadar Çalıştır
+Toggle Breakpoint	Kesme Noktasını Aç/Kapat
+Enable All Breakpoints	Tüm Kesme Noktalarını Etkinleştir
+Disable All Breakpoints	Tüm Kesme Noktalarını Devre Dışı Bırak
+Add Configuration…	Yapılandırma Ekle…
+Debug: Run Without Debugging	Hata Ayıklama: Hata Ayıklamadan Çalıştır
+Debug: Run to Cursor	Hata Ayıklama: İmlece Kadar Çalıştır
+Debug: Add Configuration…	Hata Ayıklama: Yapılandırma Ekle…
+Debug: Open Launch Configuration	Hata Ayıklama: Başlatma Yapılandırmasını Aç
+Debug: Stop All	Hata Ayıklama: Tümünü Durdur
+Add a debug configuration	Bir hata ayıklama yapılandırması ekleyin
+Native program (C, C++, Rust, Swift)	Yerel program (C, C++, Rust, Swift)
+Attach to a native process	Yerel bir sürece bağlan
+Go package	Go paketi
+Python: current file	Python: geçerli dosya
+Python: attach to a debug server	Python: bir hata ayıklama sunucusuna bağlan
+Node.js program	Node.js programı
+Another debug adapter	Başka bir hata ayıklama bağdaştırıcısı
+OK	Tamam
+Could not add the configuration: {}	Yapılandırma eklenemedi: {0}
+the launch file is not an object	başlatma dosyası bir nesne değil
+the launch file is not valid JSON: {}	başlatma dosyası geçerli JSON değil: {0}
+Compound “{}” has no configurations	“{0}” bileşiğinde yapılandırma yok
+Unknown configuration “{}” in compound “{}”	“{1}” bileşiğinde bilinmeyen yapılandırma “{0}”
+“{}” asks for inputs, which a compound cannot ask for: start it on its own.	“{0}” girdi istiyor, bileşik bunları soramaz: onu tek başına başlatın.
+Unknown input “{0}” in “{1}”	“{1}” içinde bilinmeyen girdi “{0}”
+The input “{0}” is of type “{1}”, which would run a command; use promptString or pickString.	“{0}” girdisi “{1}” türünde, bu bir komut çalıştırır; promptString ya da pickString kullanın.
+The program is running: pause it first, or set a breakpoint.	Program çalışıyor: önce duraklatın ya da bir kesme noktası koyun.
+Running the program in a terminal is not supported on Windows yet: use {} in the configuration.	Programı terminalde çalıştırmak Windows'ta henüz desteklenmiyor: yapılandırmada {0} kullanın.

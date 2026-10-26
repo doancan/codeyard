@@ -62,6 +62,8 @@ pub(super) struct DebugState {
     pub total_frames: Option<usize>,
     /// Values whose elements load a page at a time: reference → (elements loaded, elements in all).
     pub pages: HashMap<i64, (usize, usize)>,
+    /// Sessions started together by a compound share a group; with `stop_all`, stopping one stops them all.
+    pub group: Option<(u64, bool)>,
 }
 
 /// Most sessions kept; the oldest ended one goes first.
@@ -180,12 +182,20 @@ gpui::actions!(
         AddFunctionBreakpoint,
         ConsoleHistoryPrev,
         ConsoleHistoryNext,
-        ConsoleComplete
+        ConsoleComplete,
+        RunWithoutDebugging,
+        RunToCursor,
+        AddDebugConfiguration,
+        OpenLaunchConfiguration,
+        StopAllDebugging
     ]
 );
 
+#[path = "workbench_debug_launch.rs"]
+mod launch;
 #[path = "workbench_debug_view.rs"]
 mod view;
+pub use launch::PendingLaunch;
 pub use view::DebugMenuCmd;
 
 /// Stack frames requested at a time.
@@ -210,12 +220,7 @@ type StartError = (String, String);
 /// In the background: pre-build + adapter process.
 fn launch_session(host: Arc<dyn host::Host>, config: &LaunchConfig, root: &str, tx: mpsc::Sender<DapEvent>) -> Result<Arc<dap::Session>, StartError> {
     if let Some(cmd) = &config.pre_launch {
-        // On local Windows the shell is `cmd`; everywhere else (including SSH servers) it is `sh`.
-        let (shell, flag) = if cfg!(windows) && !host.is_remote() { ("cmd", "/C") } else { ("sh", "-c") };
-        let out = host.exec(shell, &[flag, cmd], Some(root), None).map_err(|e| (crate::i18n::tf("Could not run “{}”: {}", &[&cmd, &e]), String::new()))?;
-        if !out.ok() {
-            return Err((crate::i18n::tf("Build failed: {}", &[&cmd]), format!("{}{}", out.stdout_str(), out.stderr_str())));
-        }
+        run_pre_launch(&host, cmd, root)?;
     }
     let adapter = config.adapter.clone().map_err(|e| (e, String::new()))?;
     if let Some((host_name, port)) = &adapter.connect {
@@ -228,6 +233,17 @@ fn launch_session(host: Arc<dyn host::Host>, config: &LaunchConfig, root: &str, 
     let adapter_cwd = if adapter.id == "lldb-dap" { neutral } else { root.to_string() };
     dap::Session::start(host, &adapter.command, adapter.args, Some(adapter_cwd), tx)
         .map_err(|e| (crate::i18n::tf("Could not start the debug adapter: {}", &[&e]), String::new()))
+}
+
+/// A pre-launch command (build) in the folder; an error carries its output.
+fn run_pre_launch(host: &Arc<dyn host::Host>, cmd: &str, root: &str) -> Result<(), StartError> {
+    // On local Windows the shell is `cmd`; everywhere else (including SSH servers) it is `sh`.
+    let (shell, flag) = if cfg!(windows) && !host.is_remote() { ("cmd", "/C") } else { ("sh", "-c") };
+    let out = host.exec(shell, &[flag, cmd], Some(root), None).map_err(|e| (crate::i18n::tf("Could not run “{}”: {}", &[&cmd, &e]), String::new()))?;
+    if !out.ok() {
+        return Err((crate::i18n::tf("Build failed: {}", &[&cmd]), format!("{}{}", out.stdout_str(), out.stderr_str())));
+    }
+    Ok(())
 }
 
 /// Run window-bound work from an async context (e.g. opening a file).
@@ -831,7 +847,7 @@ impl Workbench {
             return;
         };
         cx.spawn(async move |this, cx| {
-            let configs = read.await;
+            let (configs, _) = read.await;
             with_window(&this, cx, move |this, window, cx| this.choose_debug_config(configs, window, cx));
         })
         .detach();
@@ -839,7 +855,7 @@ impl Workbench {
 
     /// Configurations of the open folder, read in the background: `.codeyard/launch.jsonc` and `.vscode/launch.json`,
     /// then (with `detected`) the ones found from the project (Cargo, Go, the open Python or JavaScript file).
-    pub(super) fn read_launch_configs(&self, detected: bool, cx: &mut Context<Self>) -> Option<gpui::Task<Vec<LaunchConfig>>> {
+    pub(super) fn read_launch_configs(&self, detected: bool, cx: &mut Context<Self>) -> Option<gpui::Task<(Vec<LaunchConfig>, Vec<debug_config::Compound>)>> {
         let (root, host) = (self.active_root(cx)?, self.remote.host.clone());
         let file = self.active_editor().map(|e| e.read(cx).path.clone());
         Some(cx.background_executor().spawn(async move {
@@ -850,10 +866,11 @@ impl Workbench {
                     tasks.extend(super::tasks::parse_task_file(&t, source));
                 }
             }
-            let mut configs = Vec::new();
+            let (mut configs, mut compounds) = (Vec::new(), Vec::new());
             for path in [".codeyard/launch.jsonc", ".vscode/launch.json"] {
                 if let Some(t) = read(path) {
                     configs.extend(debug_config::parse_launch_json(&t, &root, file.as_deref(), &tasks));
+                    compounds.extend(debug_config::parse_compounds(&t, &root, file.as_deref(), &tasks));
                 }
             }
             if detected {
@@ -861,7 +878,7 @@ impl Workbench {
                 let go = host.stat(&ui::join(&root, "go.mod")).is_ok();
                 configs.extend(debug_config::detect(cargo.as_deref(), go, file.as_deref(), &root));
             }
-            configs
+            (configs, compounds)
         }))
     }
 
@@ -872,7 +889,8 @@ impl Workbench {
             return;
         };
         cx.spawn(async move |this, cx| {
-            let names: Vec<String> = read.await.into_iter().map(|c| c.name).collect();
+            let (configs, compounds) = read.await;
+            let names: Vec<String> = configs.into_iter().map(|c| c.name).chain(compounds.into_iter().map(|c| c.name)).collect();
             this.update(cx, |this, cx| {
                 if this.dbg.last.as_ref().is_none_or(|l| !names.contains(l)) {
                     this.dbg.last = names.first().cloned().or(this.dbg.last.take());
@@ -890,19 +908,14 @@ impl Workbench {
         let Some(name) = self.dbg.last.clone().filter(|n| self.dbg.catalog.contains(n)) else {
             return self.start_debugging(&super::StartDebugging, window, cx);
         };
-        let Some(read) = self.read_launch_configs(false, cx) else { return };
-        cx.spawn(async move |this, cx| {
-            let configs: Vec<LaunchConfig> = read.await.into_iter().filter(|c| c.name == name).take(1).collect();
-            with_window(&this, cx, move |this, window, cx| this.choose_debug_config(configs, window, cx));
-        })
-        .detach();
+        self.start_named(name, false, window, cx);
     }
 
-    fn choose_debug_config(&mut self, configs: Vec<LaunchConfig>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn choose_debug_config(&mut self, configs: Vec<LaunchConfig>, window: &mut Window, cx: &mut Context<Self>) {
         self.require_trust(window, cx, move |this, window, cx| this.choose_debug_config_trusted(configs, window, cx));
     }
 
-    fn choose_debug_config_trusted(&mut self, mut configs: Vec<LaunchConfig>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn choose_debug_config_trusted(&mut self, mut configs: Vec<LaunchConfig>, window: &mut Window, cx: &mut Context<Self>) {
         match configs.len() {
             0 => {
                 self.notice = Some(Notice::Info(
@@ -910,7 +923,7 @@ impl Workbench {
                 ));
                 cx.notify();
             }
-            1 => self.start_debug(configs.remove(0), cx),
+            1 => self.launch_with_inputs(configs.remove(0), window, cx),
             _ => {
                 // The last used configuration comes first.
                 if let Some(last) = &self.dbg.last
@@ -956,8 +969,8 @@ impl Workbench {
         for ed in self.all_editors() {
             self.sync_breakpoints_from(&ed, cx);
         }
-        let breakpoints = self.dbg.bps.wire_all();
-        let functions = self.dbg.bps.wire_functions();
+        // Run Without Debugging: the program runs as usual, nothing stops it.
+        let (breakpoints, functions) = if config.no_debug { Default::default() } else { (self.dbg.bps.wire_all(), self.dbg.bps.wire_functions()) };
         self.dbg.focused = Some(sid);
         self.dbg.sessions.push(DebugState {
             id: sid,
@@ -981,6 +994,7 @@ impl Workbench {
             data_breakpoints: Vec::new(),
             total_frames: None,
             pages: HashMap::new(),
+            group: self.dbg.starting_group,
         });
         self.chrome.bottom = Bottom::Debug;
         self.chrome.panel_open = true;
@@ -1040,7 +1054,12 @@ impl Workbench {
                 return;
             }
             let adapter_id = config.adapter.as_ref().map(|a| a.id.clone()).unwrap_or_default();
-            let (request, args) = (config.request.clone(), config.args.clone());
+            let (request, mut args) = (config.request.clone(), config.args.clone());
+            if config.no_debug
+                && let Some(o) = args.as_object_mut()
+            {
+                o.insert("noDebug".into(), serde_json::json!(true));
+            }
             let s2 = session.clone();
             let result = cx.background_executor().spawn(async move { s2.begin(&adapter_id, &request, args, &breakpoints, &functions) }).await;
             this.update(cx, |this, cx| match result {
@@ -1097,6 +1116,9 @@ impl Workbench {
                 }
                 // The session that stopped is the one the controls and the editors follow.
                 self.dbg.focused = Some(sid);
+                if let Some(path) = self.dbg.bps.set_temp(None) {
+                    self.after_run_to_cursor(path);
+                }
                 self.refresh_stack(sid, thread_id, cx);
             }
             DapEvent::Continued => {
@@ -1144,6 +1166,7 @@ impl Workbench {
             }
             DapEvent::FunctionBreakpointsSet(results) => self.dbg.bps.on_function_results(&results),
             DapEvent::Thread { .. } | DapEvent::Capabilities => {}
+            DapEvent::RunInTerminal(request) => self.run_in_terminal(sid, request, cx),
         }
         cx.notify();
     }
@@ -1538,8 +1561,16 @@ impl Workbench {
     }
 
     pub(super) fn stop_debugging(&mut self, _: &super::StopDebugging, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(sid) = self.dbg.cur().filter(|d| !matches!(d.status, DebugStatus::Ended(_))).map(|d| d.id) {
-            self.end_debug(sid, crate::i18n::t("Debug session stopped").into(), cx);
+        let Some(d) = self.dbg.cur().filter(|d| !matches!(d.status, DebugStatus::Ended(_))) else { return };
+        // A compound with `stopAll`: its other sessions stop too.
+        let ids: Vec<u64> = match d.group {
+            Some((g, true)) => self.dbg.sessions.iter().filter(|s| s.group.is_some_and(|(x, _)| x == g)).map(|s| s.id).collect(),
+            _ => vec![d.id],
+        };
+        for sid in ids {
+            if self.dbg.by_id(sid).is_some_and(|d| !matches!(d.status, DebugStatus::Ended(_))) {
+                self.end_debug(sid, crate::i18n::t("Debug session stopped").into(), cx);
+            }
         }
     }
 
@@ -1551,6 +1582,7 @@ impl Workbench {
 
     /// End a session (adapter and program exit); console and message stay.
     fn end_debug(&mut self, sid: u64, message: String, cx: &mut Context<Self>) {
+        let post = self.dbg.by_id(sid).filter(|d| !matches!(d.status, DebugStatus::Ended(_))).and_then(|d| d.config.post_debug.clone());
         if let Some(d) = self.dbg.by_id_mut(sid) {
             if let Some(s) = d.session.take() {
                 cx.background_executor().spawn(async move { s.stop() }).detach();
@@ -1573,6 +1605,12 @@ impl Workbench {
         }
         if self.dbg.live().next().is_none() {
             self.forget_breakpoint_states(cx);
+        }
+        if let Some(path) = self.dbg.bps.set_temp(None) {
+            self.after_run_to_cursor(path);
+        }
+        if let Some((label, command)) = post {
+            self.run_post_debug_task(label, command, cx);
         }
         self.apply_debug_line_all(cx);
         cx.notify();
@@ -1800,6 +1838,17 @@ impl Workbench {
     #[cfg(test)]
     pub fn evaluate_for_test(&mut self, text: &str, cx: &mut Context<Self>) {
         self.debug_evaluate(text.into(), cx);
+    }
+
+    #[cfg(test)]
+    pub fn start_named_for_test(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.start_named(name.into(), false, window, cx);
+    }
+
+    #[cfg(test)]
+    pub fn answer_launch_input_for_test(&mut self, value: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.close_overlay(window, cx);
+        self.answer_launch_input(value.into(), window, cx);
     }
 
     #[cfg(test)]

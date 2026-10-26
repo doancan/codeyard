@@ -44,6 +44,10 @@ pub(super) enum OverlayKind {
     ExceptionFilters(Vec<(String, String)>),
     /// F5: multiple debug configurations.
     DebugConfigs(Vec<crate::debug_config::LaunchConfig>),
+    /// A `pickString` input of a starting configuration: its options.
+    LaunchInput(Vec<String>),
+    /// "Debug: Add Configuration…": the snippets offered.
+    LaunchTemplates(Vec<serde_json::Value>),
     Stashes {
         refs: Vec<String>,
         op: git_glue::StashOp,
@@ -197,6 +201,8 @@ pub(super) enum InputPurpose {
     AddWatch,
     /// Debugger: function name to break in.
     FunctionBreakpoint,
+    /// Debugger: the answer to a `promptString` input of a starting configuration.
+    LaunchInput,
     /// Debugger: new value of a variable of the scope or object `parent`.
     SetVariable {
         parent: i64,
