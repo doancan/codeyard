@@ -1,14 +1,13 @@
 # Releasing
 
-The `release.yml` workflow builds and publishes a release when a `vX.Y.Z` tag is pushed. Its jobs, and what waits for what:
+The `release.yml` workflow builds and publishes a release when a `vX.Y.Z` tag is pushed. It builds the agents separately and then runs the platform builds in parallel:
 
 1. `verify` checks that the tag, the Cargo version and the changelog agree, then runs `arch-check`, `docs-check`, `licenses.sh`,
    the signing self-test and a probe of the `UPDATE_SIGNING_KEY` secret (see [Signing](#signing-and-the-update-key)).
-2. `agents-linux` and `agent-macos` build the SSH agents. They start at once, next to `verify`. The Linux agents are static musl
-   binaries linked with `rust-lld` (no zig), so the whole job is a minute or two.
-3. `macos` and `windows` run side by side once `verify` and both agent jobs are done. `macos` builds the app, the DMG and the tar.gz,
-   `windows` builds the ZIP and the setup EXE, with the agents embedded. Both upload their files and the release notes as artifacts.
-4. `publish` merges the checksums, adds `RELEASE_NOTES.md`, verifies every file against them, signs `SHA256SUMS.txt`, checks the
+2. `agents-linux` and `agent-macos` build the SSH agents independently. `macos` and `windows` wait for these and `verify`, then start in parallel.
+3. `macos` builds the app, DMG and tar.gz and uploads them with the release notes as artifacts.
+4. `windows` builds the ZIP and the setup EXE from those agents and uploads them as an artifact.
+5. `publish` merges the checksums, adds `RELEASE_NOTES.md`, verifies every file against them, signs `SHA256SUMS.txt`, checks the
    signature and creates the release in one step.
 
 **Build caches.** Every build job restores a `rust-cache` of the dependencies, so a release compiles only Codeyard's own crates (a few
@@ -23,6 +22,56 @@ as artifacts and creates no release (it signs too, so the signing path is exerci
 Nothing is published before all of them succeed, so a failed Windows build leaves no half release: fix it and push the tag
 again (delete the tag first with `git push origin :refs/tags/vX.Y.Z`; no release exists yet to remove). The steps below are
 the same procedure by hand, for when the workflow cannot be used.
+
+Release jobs cache Rust dependencies. Changes to Cargo.lock, vendor files or the release workflow on main also run a dry run
+so tag builds can restore the default branch cache. App and agent jobs use separate cache keys.
+
+## Windows cross-compilation benchmark
+
+`.github/workflows/benchmark-windows.yml` compares native `windows-2022` with Linux `cargo-xwin` using the same commit,
+release profile, x64 MSVC target, embedded Linux agents and FXC-generated shader bytes. Each job starts without a target
+cache, measures a cold build, removes only the app package, and measures a build with compiled dependencies retained.
+Linux uses LLVM 19 MSVC driver aliases and cargo-xwin 0.23.1; its x64 SDK cache is saved before compilation, even if a later
+build fails. Only SDK files are restored: compiled Rust targets are never restored for this benchmark. The optional
+`host=linux` workflow input reruns only the Linux arm when investigating cross toolchains. `host=prepare` checks shader/agent
+preparation and upload/download roundtrips without compiling either app. Release and benchmark checkout/artifact/cache actions
+use commit-pinned Node.js 24 versions, so their jobs do not rely on the retired Node.js 20 runtime.
+SDK/tool installation and dependency downloads are separate steps, outside the compiler timer; include them when comparing
+whole job latency. Runner CPU counts and Rust versions are recorded in `benchmark.json`. These are runner comparisons,
+not a controlled comparison on identical hardware. Both executables undergo native Windows standalone checks.
+
+The Linux path needs `GPUI_PRECOMPILED_SHADERS` pointing to `shaders_bytes.rs` generated from this checkout's vendored
+GPUI HLSL by FXC. The benchmark generates it with the vendored build helper on Windows. GPUI's Windows manifest and the
+app icon are still compiled into the cross-built EXE. This benchmark does not publish artifacts as a release or replace
+the production Windows ZIP/installer job; installer packaging and interactive UI validation remain separate.
+
+### Measured on 2026-10-26
+
+Both hosted runners had 4 CPUs and Rust 1.99.1. The measured commits differ only in benchmark/workflow setup; the
+Cargo manifests/lockfile, crates and vendor source trees have the same SHA-256, and both embedded agents and shader bytes
+were verified identical. Raw results and hashes: [windows-msvc-2026-10-26.json](benchmarks/windows-msvc-2026-10-26.json).
+
+| Compilation | Native Windows 2022 | Linux → Windows MSVC | Linux time reduction |
+| --- | ---: | ---: | ---: |
+| Cold Rust target directory | 674.359 s (11:14) | 375.218 s (6:15) | 44.4% |
+| Dependencies retained, app rebuilt | 297.110 s (4:57) | 149.485 s (2:29) | 49.7% |
+
+The [native Windows job](https://github.com/doancan/codeyard/actions/runs/40294887424/job/121478806732) passed; that overall
+run failed in its initial Linux arm, so only its successful native job supplies the Windows measurements. The final
+[Linux run](https://github.com/doancan/codeyard/actions/runs/40301532106) passed both builds and validated the cross-built
+EXE on real Windows (GUI subsystem, application icon, embedded agents). Interactive rendering was not tested.
+
+These compiler times exclude downloads and tool installation. The first SDK download took 12:04; the successful Linux
+run restored the SDK cache and installed tools in 28 seconds. Its build job, including both compilations, took 9:48 plus
+18 seconds for native Windows verification; the native Windows build job took 17:28 including its standalone check.
+Neither compiler benchmark includes ZIP/installer packaging. These single samples compare hosted runners, not identical
+hardware, and do not guarantee a fixed speedup on other runs.
+
+The production release continues to package on Windows while macOS and Windows run in parallel. A full
+[Node.js 24 release dry run](https://github.com/doancan/codeyard/actions/runs/40299040677) passed in 9:44 with dependency
+caches, including DMG, Windows ZIP/setup, merged checksums and throw-away-key signature verification. No release was
+published. The [preparation check](https://github.com/doancan/codeyard/actions/runs/40299036873) passed with zero Node.js 20
+warnings in `shaders` and `agents`; all release jobs also had zero such warnings.
 
 ## Steps
 

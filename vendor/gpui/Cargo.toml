@@ -631,7 +631,7 @@ version = "0.2"
 [target.'cfg(target_os = "windows")'.dependencies.windows-registry]
 version = "0.5"
 
-[target.'cfg(target_os = "windows")'.build-dependencies.embed-resource]
+[build-dependencies.embed-resource]
 version = "3.0"
 
 [lints.clippy]

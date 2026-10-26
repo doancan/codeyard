@@ -23,4 +23,6 @@ need Cargo.toml '^gpui = \{ path = "vendor/gpui" \}' "[patch.crates-io] gpui"
 need Cargo.toml '^xattr = \{ path = "vendor/xattr" \}' "[patch.crates-io] xattr"
 want=$(sed -n 's/^version = "\(.*\)"/\1/p' vendor/gpui/Cargo.toml | head -1)
 need vendor/gpui/PATCHES.md "^# gpui $want," "PATCHES.md title names gpui $want"
+need vendor/gpui/build.rs 'GPUI_PRECOMPILED_SHADERS' "precompiled Windows shaders for cross builds"
+need vendor/gpui/Cargo.toml '^\[build-dependencies\.embed-resource\]$' "resource compiler available on cross hosts"
 exit $fail
