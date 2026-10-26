@@ -33,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Run Without Debugging** (⌃F5), **Run to Cursor**, launch **compounds** (with `stopAll`), `${input:…}` questions
   (`promptString`, `pickString`), `postDebugTask`, **Add Configuration…** templates, programs that ask to run in a
   terminal (`"console": "integratedTerminal"`), several sessions at once, and a **Run** menu. F6 pauses.
+- **Terminal shell integration** for zsh, bash and fish: a dot beside each command (green succeeded, red failed),
+  jumping between commands (⌘↑ / ⌘↓), *Copy Last Command Output*, and splits that open where the shell is.
+  `terminal.shellIntegration` turns it off. Links that programs mark (OSC 8) open their real target.
+- **Terminal profiles** (`terminal.profiles.macos` / `.linux` / `.windows`, `terminal.defaultProfile`) with *New Terminal with
+  Profile…* (also listing the machine's shells) and *Select Default Profile…*; terminals can be renamed and coloured, and
+  *Kill All Terminals* closes them all.
 
 ### Changed
 
@@ -40,12 +46,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (was 13 px everywhere). A size written in your settings file is kept. The settings template now leaves the font keys
   commented out, so a settings file shared between computers does not pin one platform's size.
 - The status bar is 22 px high.
+- Closing a terminal asks first while a program runs in it, and names the program (`terminal.confirmOnClose`).
+- `terminal.scrollback` is capped at 50,000 lines, and a change applies to open terminals.
 - Every text size in the interface comes from the type scale (new *badge* and *display* steps replace the remaining fixed
   sizes); a test keeps new code on the scale.
 
 ### Fixed
 
 - The terminal ignored `terminal.fontSize` and zoom: it now uses the setting, with rows sized to match.
+- **Pasting into the terminal is safer:** bracketed-paste markers hidden in pasted text can no longer end the paste early
+  and run what follows; other control characters are removed when the shell does not use bracketed paste
+  (`terminal.sanitizePaste`), and a paste of several lines asks first (`terminal.warnMultilinePaste`).
+- A split terminal opened in the folder the first terminal started in, not where its shell was.
 - **Port forwarding is more reliable:** a double click no longer forwards a port twice; forwards restored after a
   reconnect report failures on their row (with *Retry*) instead of looking active; switching or losing the connection
   cancels forwards instead of leaking their local ports; after a drop, forwards come back on the same local port.
