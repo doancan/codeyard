@@ -63,7 +63,8 @@ impl Workbench {
     /// The connection port forwarding can use (ssh alias).
     pub(super) fn ssh_alias(&self) -> Option<String> {
         match &self.remote.conn {
-            Conn::Connected { alias } if alias != LOCAL_AGENT_ALIAS => Some(alias.clone()),
+            // Containers and WSL have no ssh connection to forward ports over.
+            Conn::Connected { alias } if alias != LOCAL_AGENT_ALIAS && matches!(host::ssh::target_of(alias), host::ssh::Target::Ssh(_)) => Some(alias.clone()),
             _ => None,
         }
     }
