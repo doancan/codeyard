@@ -96,7 +96,10 @@ jobs:
           mkdir -p "$tools"
           ln -s "$(command -v clang-19)" "$tools/clang-cl"
           ln -s "$(command -v lld-19)" "$tools/lld-link"
-          ln -s "$(command -v llvm-rc-19)" "$tools/llvm-rc"
+          # embed-resource preprocesses RC files into OUT_DIR. LLVM needs explicit
+          # search roots for the manifest/icon paths inside those generated files.
+          printf '%s\n' '#!/usr/bin/env bash' 'exec llvm-rc-19 /I "$GITHUB_WORKSPACE/vendor/gpui" /I "$GITHUB_WORKSPACE/crates/app" "$@"' > "$tools/llvm-rc"
+          chmod +x "$tools/llvm-rc"
           ln -s "$(command -v llvm-lib-19)" "$tools/llvm-lib"
           echo "$tools" >> "$GITHUB_PATH"
           echo /usr/lib/llvm-19/bin >> "$GITHUB_PATH"
