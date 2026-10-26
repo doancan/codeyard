@@ -1108,7 +1108,6 @@ Both, Incoming First	İkisi de, Önce Gelen
 Result	Sonuç
 (the lines are removed)	(satırlar kaldırılır)
 Hover an option to preview the result.	Sonucu önizlemek için bir seçeneğin üzerine gelin.
-[image: {}]	[görsel: {}]
 Preview {}	Önizleme: {}
 Preview of {}	Önizleme: {}
 The file is empty.	Dosya boş.
@@ -2265,3 +2264,10 @@ Fetch from all remotes	Tüm uzak depolardan Fetch yap
 Hide Merge Commits	Merge Commit'lerini Gizle
 Only My Commits	Yalnızca Benim Commit'lerim
 Search Commits	Commit'lerde Ara
+Read	Oku
+Code	Kod
+Copy code	Kodu kopyala
+Loading image…	Görsel yükleniyor…
+Image unavailable	Görsel kullanılamıyor
+Image exceeds 20 MB.	Görsel 20 MB sınırını aşıyor.
+External image: open the link to view it.	Harici görsel: görüntülemek için bağlantıyı açın.

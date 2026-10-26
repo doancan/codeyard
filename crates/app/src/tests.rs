@@ -652,12 +652,87 @@ fn markdown_preview_follows_the_editor(cx: &mut TestAppContext) {
     assert_eq!(blocks(cx).len(), 2);
     assert!(matches!(&blocks(cx)[0], crate::markdown::Block::Heading(1, _)));
 
-    // Return to the editor and type: the preview sees the new block.
-    wb.update_in(cx, |wb, window, cx| wb.focus_active_editor(window, cx));
+    // Escape restores the source editor, keeping the preview available.
+    cx.simulate_keystrokes("escape");
+    assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), Some(("markdown", false)));
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Markdown: Open Preview", window, cx));
+    assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), Some(("markdown", true)));
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Markdown: Open Preview", window, cx));
+    assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), Some(("markdown", false)));
+
+    // Type in the restored editor: the preview sees the new block.
     cx.simulate_keystrokes("cmd-down");
     cx.simulate_input("- madde bir\n- madde iki\n");
     assert_eq!(blocks(cx).len(), 3);
     assert!(matches!(&blocks(cx)[2], crate::markdown::Block::List { items, .. } if items.len() == 2));
+}
+
+/// The preview must overflow its viewport and respond to real wheel input.
+#[gpui::test]
+fn markdown_preview_scrolls_long_documents(cx: &mut TestAppContext) {
+    let dir = project("md-scroll");
+    let document = (0..100).map(|i| format!("## Section {i}\n\nParagraph {i}: some readable content.\n\n")).collect::<String>();
+    std::fs::write(dir.join("long.md"), document).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir.join("long.md"), cx);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Markdown: Open Preview", window, cx));
+    cx.run_until_parked();
+    let scroll = wb.read_with(cx, |wb, cx| wb.markdown_scroll_for_test(cx)).unwrap();
+    assert!(scroll.max_offset().height > gpui::px(1000.), "document has scrollable height: {:?}", scroll.max_offset());
+    let at = scroll.bounds().center();
+    cx.simulate_event(gpui::ScrollWheelEvent {
+        position: at,
+        delta: gpui::ScrollDelta::Pixels(gpui::point(gpui::px(0.), gpui::px(-300.))),
+        modifiers: Modifiers::none(),
+        touch_phase: gpui::TouchPhase::Moved,
+    });
+    cx.run_until_parked();
+    assert!(scroll.offset().y < gpui::px(-100.), "wheel moves the document: {:?}", scroll.offset());
+}
+
+/// List text retains the document width when placed inside the scrolling column.
+#[gpui::test]
+fn markdown_list_items_keep_their_width(cx: &mut TestAppContext) {
+    let dir = project("md-list-layout");
+    let item = "**No extensions.** There is no extension API and no store. Features that people usually install an extension for are built in. ".repeat(4);
+    std::fs::write(dir.join("list.md"), format!("# Title\n\nIntroduction.\n\n- {item}\n- Second item.\n\nAfter the list.\n")).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir.join("list.md"), cx);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Markdown: Open Preview", window, cx));
+    cx.run_until_parked();
+    let first = cx.debug_bounds("md2-item-0").unwrap();
+    let row = cx.debug_bounds("md2-row-0").unwrap();
+    let second = cx.debug_bounds("md2-row-1").unwrap();
+    assert!(first.size.width > gpui::px(300.), "list text must use document width: {first:?}");
+    assert!(first.size.height > gpui::px(44.), "long list text wraps to multiple readable lines: {first:?}");
+    assert!(row.bottom() <= second.top(), "list rows must not overlap: {row:?}, {second:?}");
+}
+
+/// Guard actual shaped text, not just its parent bounds: narrow glyph wrapping can overflow a wide parent.
+#[gpui::test]
+fn markdown_readme_lists_shape_at_readable_width(cx: &mut TestAppContext) {
+    let dir = project("md-readme-layout");
+    std::fs::write(dir.join("README.md"), include_str!("../../../README.md")).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir.join("README.md"), cx);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Markdown: Open Preview", window, cx));
+    cx.run_until_parked();
+    let check = || {
+        let layouts = crate::markdown::text_layouts_for_test();
+        let list = layouts.iter().find(|layout| layout.text().starts_with("No extensions.")).expect("README list paragraph rendered");
+        assert!(list.wrapped_text().lines().all(|line| line.chars().count() > 1), "list must not wrap character by character: {:?}", list.wrapped_text());
+        assert!(list.wrapped_text().lines().count() < 12, "list should wrap to a few lines: {:?}", list.wrapped_text());
+    };
+    check();
+    let scroll = wb.read_with(cx, |wb, cx| wb.markdown_scroll_for_test(cx)).unwrap();
+    cx.simulate_event(gpui::ScrollWheelEvent {
+        position: scroll.bounds().center(),
+        delta: gpui::ScrollDelta::Pixels(gpui::point(gpui::px(0.), gpui::px(-400.))),
+        modifiers: Modifiers::none(),
+        touch_phase: gpui::TouchPhase::Moved,
+    });
+    cx.run_until_parked();
+    check();
 }
 
 /// OUTLINE: the active file's symbols; updates as you type (with a short delay).
