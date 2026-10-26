@@ -21,6 +21,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ports.localBind` (`loopback` or `all`; only from your own settings) and `ports.rules` (label, protocol and `notify`,
   `silent`, `openBrowser` or `ignore` per port or range).
 - The ssh config's `Include` lines are followed when listing hosts.
+- **Run and Debug view** in the activity bar: a configuration selector with a start button, and folding, resizable
+  sections Variables, Watch, Call Stack (threads as a tree, one row per session when several run) and Breakpoints.
+  While a session runs, a toolbar floats over the editors; the bottom panel keeps the Debug Console.
+- **Breakpoints** are saved per project and come back after a restart. They can be disabled one by one or all together,
+  and deactivated without being lost; the adapter's answer marks each one, and the gutter shows a disabled breakpoint as
+  a muted ring and one the debugger could not bind as a red ring. Function breakpoints are new.
+- Variables: *Set Value*, *Copy Value*, *Copy as Expression* and *Add to Watch*; values with many elements load 100 at a
+  time. Call Stack loads 20 frames at a time and offers *Restart Frame* and *Copy Call Stack*. The Debug Console keeps a
+  history (↑ / ↓) and completes with Tab.
+- **Run Without Debugging** (⌃F5), **Run to Cursor**, launch **compounds** (with `stopAll`), `${input:…}` questions
+  (`promptString`, `pickString`), `postDebugTask`, **Add Configuration…** templates, programs that ask to run in a
+  terminal (`"console": "integratedTerminal"`), several sessions at once, and a **Run** menu. F6 pauses.
 
 ### Changed
 
