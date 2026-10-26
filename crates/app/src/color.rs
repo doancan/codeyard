@@ -189,16 +189,33 @@ fn parse_func(name: &str, inner: &str) -> Option<(Color, Notation)> {
     }
 }
 
+/// Longest `rgb(…)` / `hsl(…)` that is read as a colour, in bytes.
+const MAX_FUNCTION: usize = 120;
+
 /// Color literals in the text (byte range, color, written form). `named`: CSS names count too.
 pub fn find_colors(text: &str, named: bool) -> Vec<Found> {
     let b = text.as_bytes();
     let mut out = Vec::new();
     let mut i = 0;
+    // Whether the word (the text since the last whitespace) before `scanned` holds `://`: moved forward only, so asking at every `#`
+    // costs one pass over the line, not one pass per `#`.
+    let (mut scanned, mut url_word) = (0, false);
     while i < b.len() {
         let c = b[i];
         let boundary_before = i == 0 || !(b[i - 1].is_ascii_alphanumeric() || b[i - 1] == b'_' || b[i - 1] == b'-');
         // `https://site/page#fff`: the URL fragment isn't a color.
-        let in_url = c == b'#' && text[..i].rsplit(char::is_whitespace).next().is_some_and(|tok| tok.contains("://"));
+        let in_url = c == b'#' && {
+            for (at, ch) in text[scanned..i].char_indices() {
+                let end = scanned + at + ch.len_utf8();
+                if ch.is_whitespace() {
+                    url_word = false;
+                } else if b[..end].ends_with(b"://") {
+                    url_word = true;
+                }
+            }
+            scanned = i;
+            url_word
+        };
         if c == b'#' && !in_url && (i == 0 || !b[i - 1].is_ascii_alphanumeric()) {
             let n = b[i + 1..].iter().take_while(|c| c.is_ascii_hexdigit()).count();
             let after_ok = b.get(i + 1 + n).is_none_or(|c| !c.is_ascii_alphanumeric() && *c != b'_');
@@ -215,9 +232,11 @@ pub fn find_colors(text: &str, named: bool) -> Vec<Found> {
             let name_len = b[i..].iter().take_while(|c| c.is_ascii_alphabetic()).count();
             let lowered = text[i..i + name_len].to_ascii_lowercase();
             let name = lowered.as_str();
+            // A colour function is short; looking for its `)` to the end of the line made `rgb(rgb(rgb(…` quadratic.
+            let close = b[i + name_len..].iter().take(MAX_FUNCTION).position(|&c| c == b')');
             if matches!(name, "rgb" | "rgba" | "hsl" | "hsla")
                 && b.get(i + name_len) == Some(&b'(')
-                && let Some(close) = text[i + name_len..].find(')')
+                && let Some(close) = close
             {
                 let inner = &text[i + name_len + 1..i + name_len + close];
                 if let Some((color, notation)) = parse_func(name, inner) {
@@ -540,5 +559,28 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// A minified file is one line of hundreds of kilobytes. The colour scan runs on every line that is drawn, so its cost must grow with
+    /// the line, not with the square of it (these three took minutes at 300 000 characters).
+    #[test]
+    fn scanning_a_huge_line_for_colours_is_linear() {
+        let cases = [
+            ("hashes", "#".repeat(60_000)),
+            ("hex colours with no space between them", "-#fff".repeat(20_000)),
+            ("unclosed rgb calls", "rgb(".repeat(30_000)),
+            ("unclosed hsl calls after a url", format!("https://x/{}", "hsl(1,".repeat(20_000))),
+        ];
+        for (name, text) in cases {
+            let started = std::time::Instant::now();
+            let found = find_colors(&text, true);
+            assert!(started.elapsed() < std::time::Duration::from_secs(1), "{name}: {} bytes took {:?}", text.len(), started.elapsed());
+            if name.starts_with("hex colours") {
+                assert_eq!(found.len(), 20_000, "every `-#fff` holds a colour");
+            }
+        }
+        // The meaning of the cheap checks did not change.
+        assert_eq!(find_colors("a https://x.y/p#fff b #fff", false).len(), 1, "a URL fragment is not a colour, the next word is");
+        assert_eq!(find_colors("color: rgb(1, 2, 3);", false).len(), 1);
     }
 }

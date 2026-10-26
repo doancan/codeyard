@@ -37,6 +37,7 @@ mod display;
 mod docs_tests;
 mod editor;
 mod editor_decor;
+mod editor_overlay;
 #[cfg(test)]
 mod editor_title_tests;
 mod editorconfig;
@@ -49,6 +50,8 @@ mod features_tests;
 mod find;
 mod folder_settings;
 mod fsutil;
+#[cfg(test)]
+mod fuzz_parsers_tests;
 mod fuzzy;
 mod git;
 #[cfg(test)]

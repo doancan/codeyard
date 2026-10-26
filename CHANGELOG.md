@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-26
+
+### Added
+
+- **Codeyard One**, a dark theme drawn from the colours of the icon: graphite surfaces, a mint accent, keywords and focus ring
+  (`"theme": "codeyard-one"`). Every text pair passes WCAG AA.
+
+### Fixed
+
+- **A very long line no longer freezes the window.** Every coloured bracket, diagnostic or IME range split the runs of its line again, so a
+  minified file (one line of hundreds of kilobytes) took minutes to lay out. It is linear now.
+- **A deeply nested YAML file no longer ends the app.** A few kilobytes of `- - - -` overflowed the stack of the YAML parser that also checks
+  every YAML file open in the editor, and of the Data tools.
+- **Scanning a long line for colours** (`#fff`, `rgb(…)`) took time with the square of the line; it is linear now.
+- `editorconfig`: the glob length limit now also holds when the function is called directly.
+
+### Changed
+
+- **Releases build in about half the time.** Dependencies come from a build cache, the SSH agents are built in their own jobs (the Linux
+  ones without zig) and the macOS and Windows builds run side by side. The third-party actions of the release workflow are pinned to commit SHAs.
+
 ## [0.3.1] - 2026-10-26
 
 ### Added
@@ -252,7 +273,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/doancan/codeyard/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/doancan/codeyard/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/doancan/codeyard/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/doancan/codeyard/compare/v0.2.1...v0.2.2

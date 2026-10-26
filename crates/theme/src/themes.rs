@@ -497,7 +497,7 @@ mod tests {
     /// adapted from upstream palettes and rely on the guard. A new theme file must be listed in one of the two, so the choice is made on purpose.
     #[test]
     fn authored_themes_pass_wcag_aa_before_the_guard_touches_them() {
-        const PASS_AS_WRITTEN: &[&str] = &["codeyard-dark", "codeyard-light", "high-contrast-dark", "high-contrast-light", "quarry"];
+        const PASS_AS_WRITTEN: &[&str] = &["codeyard-dark", "codeyard-light", "codeyard-one", "high-contrast-dark", "high-contrast-light", "quarry"];
         const REPAIRED_AT_LOAD: &[&str] =
             &["dracula", "ember", "fjord", "github-light", "graphite", "nord", "one-dark", "paper", "solarized-dark", "solarized-light", "studio-dark"];
         for (id, _) in BUILTIN_JSON {

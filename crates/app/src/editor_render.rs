@@ -913,45 +913,23 @@ impl Element for LineElement {
             })
             .filter(|r| r.len > 0)
             .collect();
-        // IME composition: underline the relevant range.
-        if let Some(m) = &self.marked {
-            runs = split_runs(split_runs(runs, m.start), m.end);
-            let mut at = 0;
-            for r in &mut runs {
-                if at >= m.start && at + r.len <= m.end {
-                    r.underline = Some(UnderlineStyle { color: Some(r.color), thickness: px(1.), wavy: false });
-                }
-                at += r.len;
-            }
-        }
-        // Diagnostics: wavy underline (error red, warning yellow, info blue).
-        for (r, sev) in &self.diags {
-            let color = match sev {
-                1 => p.danger,
-                2 => p.warning,
-                // Spelling: a muted blue-gray so it is distinguishable from diagnostics.
-                9 => ui::mix(p.info, p.text_muted, 0.5),
-                _ => p.info,
-            };
-            runs = split_runs(split_runs(runs, r.start), r.end);
-            let mut at = 0;
-            for run in &mut runs {
-                if at >= r.start && at + run.len <= r.end && (run.underline.is_none() || *sev == 1) {
-                    run.underline = Some(UnderlineStyle { color: Some(c(color).into()), thickness: px(1.), wavy: true });
-                }
-                at += run.len;
-            }
-        }
-        for &(b, color) in &self.brackets {
-            runs = split_runs(split_runs(runs, b), b + 1);
-            let mut at = 0;
-            for run in &mut runs {
-                if at == b {
-                    run.color = c(color).into();
-                }
-                at += run.len;
-            }
-        }
+        // IME composition underline, diagnostic squiggles (error red, warning yellow, info blue) and bracket colours.
+        let diags: Vec<(Range<usize>, gpui::Hsla, bool)> = self
+            .diags
+            .iter()
+            .map(|(r, sev)| {
+                let color = match sev {
+                    1 => p.danger,
+                    2 => p.warning,
+                    // Spelling: a muted blue-gray so it is distinguishable from diagnostics.
+                    9 => ui::mix(p.info, p.text_muted, 0.5),
+                    _ => p.info,
+                };
+                (r.clone(), c(color).into(), *sev == 1)
+            })
+            .collect();
+        let brackets: Vec<(usize, gpui::Hsla)> = self.brackets.iter().map(|&(b, color)| (b, c(color).into())).collect();
+        runs = crate::editor_overlay::overlay_runs(runs, self.marked.as_ref(), &diags, &brackets);
         let font_size = style.font_size.to_pixels(window.rem_size());
         let space = TextRun { len: 1, font: style.font(), color: c(p.text).into(), background_color: None, underline: None, strikethrough: None };
         let col_w = window.text_system().shape_line(" ".into(), font_size, &[space], None).width;
