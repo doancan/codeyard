@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-26
+
+### Changed
+
+- The title bar is 35 pt high so the window buttons sit in its middle; the command center is a slimmer box drawn on the
+  title bar with a faint outline and the folder name on its left, centred together with back / forward.
+
+### Fixed
+
+- A port-forwarding test failed when another program opened a port on the machine during the run.
+
 ## [0.4.0] - 2026-10-26
 
 ### Added
@@ -310,7 +321,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/doancan/codeyard/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/doancan/codeyard/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/doancan/codeyard/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/doancan/codeyard/compare/v0.3.0...v0.3.1
