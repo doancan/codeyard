@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Measure a cold and dependency-cached app build; keep machine-readable results."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -14,6 +15,9 @@ args = parser.parse_args()
 target = 'x86_64-pc-windows-msvc'
 command = ['cargo', *(['xwin'] if args.cross else []), 'build', '--locked', '--release', '-p', 'app', '--target', target]
 results = {'host': platform.platform(), 'cpus': os.cpu_count(), 'command': command, 'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(), 'rustc': subprocess.check_output(['rustc', '-Vv'], text=True), 'seconds': {}}
+results['source_tree'] = hashlib.sha256(subprocess.check_output(['git', 'ls-tree', 'HEAD', 'Cargo.toml', 'Cargo.lock', 'crates', 'vendor'])).hexdigest()
+if args.cross:
+    results['clang'] = subprocess.check_output(['clang-cl', '--version'], text=True)
 for phase in ['cold', 'dependencies-cached']:
     if phase != 'cold':
         subprocess.run(['cargo', 'clean', '--release', '-p', 'app', '--target', target], check=True)
