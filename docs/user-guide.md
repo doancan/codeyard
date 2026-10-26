@@ -959,6 +959,8 @@ A terminal's tab menu can rename it, give it a colour or kill it. *Terminal: Kil
 - Pasted text cannot end bracketed paste early. Control characters are removed when the shell does not use bracketed
   paste (`terminal.sanitizePaste`).
 - A paste of several lines asks before it runs (`terminal.warnMultilinePaste`).
+- Programs may write to the clipboard only with `terminal.allowClipboardWrite`. This setting and the two paste settings
+  above are read only from your own settings, never from a project's.
 - Links that programs mark (OSC 8) show and open their real target.
 - The history is capped at 50,000 lines (`terminal.scrollback`).
 
