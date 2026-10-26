@@ -82,8 +82,10 @@ pub struct PtySpec {
     pub rows: u16,
     pub cwd: Option<String>,
     pub shell: Option<String>,
-    pub args: Vec<String>,
+    /// `None`: a login shell.
+    pub args: Option<Vec<String>>,
     pub env: Vec<(String, String)>,
+    pub integration: bool,
 }
 
 /// What runs in a terminal (`Host::pty_status`).
@@ -923,8 +925,8 @@ impl Host for RemoteHost {
     fn pty_spawn_ex(&self, spec: PtySpec) -> Result<Pty> {
         let (tx, rx) = mpsc::channel();
         let (ev_tx, ev_rx) = mpsc::channel();
-        let PtySpec { cols, rows, cwd, shell, args, env } = spec;
-        self.start(Request::PtySpawnEx { cols, rows, cwd, shell, args, env }, Waiter::PtySpawn(tx, ev_tx))?;
+        let PtySpec { cols, rows, cwd, shell, args, env, integration } = spec;
+        self.start(Request::PtySpawnEx { cols, rows, cwd, shell, args, env, integration }, Waiter::PtySpawn(tx, ev_tx))?;
         match rx.recv().map_err(|_| self.disconnected())? {
             Response::PtySpawned { pty } => Ok(Pty { id: pty, events: ev_rx }),
             other => Err(unexpected(other)),

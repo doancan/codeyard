@@ -120,6 +120,7 @@ mod structural;
 mod structural_tests;
 mod sysopen;
 mod terminal;
+mod terminal_osc;
 mod terminal_paste;
 mod terminal_profiles;
 #[cfg(test)]
@@ -427,6 +428,8 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("cmd-g", terminal::TermFindNext, Some("Terminal")),
         KeyBinding::new("cmd-shift-g", terminal::TermFindPrevious, Some("Terminal")),
         KeyBinding::new("cmd-home", terminal::TermScrollToTop, Some("Terminal")),
+        KeyBinding::new("cmd-up", terminal::TermPrevCommand, Some("Terminal")),
+        KeyBinding::new("cmd-down", terminal::TermNextCommand, Some("Terminal")),
         KeyBinding::new("cmd-end", terminal::TermScrollToBottom, Some("Terminal")),
         KeyBinding::new("cmd-g", FindNext, ed),
         KeyBinding::new("cmd-g", FindNext, Some("FindBar")),
@@ -477,6 +480,8 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("f3", terminal::TermFindNext, Some("Terminal")),
         KeyBinding::new("shift-f3", terminal::TermFindPrevious, Some("Terminal")),
         KeyBinding::new("ctrl-shift-home", terminal::TermScrollToTop, Some("Terminal")),
+        KeyBinding::new("ctrl-shift-up", terminal::TermPrevCommand, Some("Terminal")),
+        KeyBinding::new("ctrl-shift-down", terminal::TermNextCommand, Some("Terminal")),
         KeyBinding::new("ctrl-shift-end", terminal::TermScrollToBottom, Some("Terminal")),
         KeyBinding::new("ctrl-left", MoveWordLeft, ed),
         KeyBinding::new("ctrl-right", MoveWordRight, ed),

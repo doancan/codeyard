@@ -9,6 +9,7 @@ pub mod hashtree;
 pub mod proc;
 pub mod pty;
 pub mod search;
+mod shell_integration;
 pub mod watch;
 
 use std::collections::HashMap;
@@ -396,8 +397,10 @@ impl Session {
                 }
                 reply(Response::Done)
             }
-            Request::PtySpawn { cols, rows, cwd, shell } => self.spawn_pty(id, pty::Spawn { cols, rows, cwd, shell, args: None, env: Vec::new() }),
-            Request::PtySpawnEx { cols, rows, cwd, shell, args, env } => self.spawn_pty(id, pty::Spawn { cols, rows, cwd, shell, args: Some(args), env }),
+            Request::PtySpawn { cols, rows, cwd, shell } => self.spawn_pty(id, pty::Spawn { cols, rows, cwd, shell, ..Default::default() }),
+            Request::PtySpawnEx { cols, rows, cwd, shell, args, env, integration } => {
+                self.spawn_pty(id, pty::Spawn { cols, rows, cwd, shell, args, env, integration })
+            }
             Request::PtyStatus { pty: pid } => {
                 let status = self.ptys.locked().get(&pid).map(pty::Pty::status).unwrap_or_default();
                 reply(Response::PtyStatus { busy: status.busy, name: status.name, cwd: status.cwd })

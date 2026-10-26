@@ -34,12 +34,17 @@ actions!(
         TermScrollPageUp,
         TermScrollPageDown,
         TermScrollToTop,
-        TermScrollToBottom
+        TermScrollToBottom,
+        TermPrevCommand,
+        TermNextCommand,
+        TermCopyLastOutput
     ]
 );
 
 #[path = "terminal_find.rs"]
 mod find;
+#[path = "terminal_marks.rs"]
+mod marks;
 
 pub enum TerminalEvent {
     TitleChanged,
@@ -182,6 +187,9 @@ pub struct TerminalView {
     scrollback: usize,
     /// Mark colour in the terminal list (a theme role from `terminal_profiles::COLORS`).
     pub color: Option<String>,
+    /// Shell integration: sequences in the output and the commands they mark.
+    osc: crate::terminal_osc::Scanner,
+    marks: marks::Marks,
     focus_handle: FocusHandle,
 }
 
@@ -237,14 +245,17 @@ impl TerminalView {
             metrics: metrics(cx.global::<crate::settings::Settings>().terminal_font_size),
             scrollback,
             color,
+            osc: Default::default(),
+            marks: Default::default(),
             focus_handle: cx.focus_handle(),
         };
 
         let (cols, rows) = (size.cols as u16, size.rows as u16);
+        let integration = cx.global::<crate::settings::Settings>().terminal_shell_integration;
         let spawn = cx.background_executor().spawn(async move {
-            match (args, env.is_empty()) {
-                (None, true) => host.pty_spawn(cols, rows, cwd, shell),
-                (args, _) => host.pty_spawn_ex(host::PtySpec { cols, rows, cwd, shell, args: args.unwrap_or_else(|| vec!["-l".into()]), env }),
+            match (&args, env.is_empty(), integration) {
+                (None, true, false) => host.pty_spawn(cols, rows, cwd, shell),
+                _ => host.pty_spawn_ex(host::PtySpec { cols, rows, cwd, shell, args, env, integration }),
             }
         });
         cx.spawn(async move |this, cx| {
@@ -326,7 +337,15 @@ impl TerminalView {
     }
 
     fn feed(&mut self, data: &[u8]) {
-        self.parser.advance(&mut self.term, data);
+        // Each shell-integration sequence is noted where it ends, with the cursor where the parser left it.
+        let mut at = 0;
+        for (end, ev) in self.osc.scan(data) {
+            self.parser.advance(&mut self.term, &data[at..end]);
+            at = end;
+            self.on_osc(ev);
+        }
+        self.parser.advance(&mut self.term, &data[at..]);
+        self.update_mark_shift();
         // New output can push lines into the history, so a remembered match would point at the wrong cells.
         self.forget_find_match();
     }
@@ -524,10 +543,17 @@ impl TerminalView {
         let (at, _) = self.grid_point(pos);
         // `iter_from` skips the starting cell; read the row directly.
         let row = &self.term.grid()[at.line];
+        let screen_row = (at.line.0 + self.term.grid().display_offset() as i32).max(0) as usize;
+        // A link the program marked (OSC 8): its target, over the cells that carry it. Only web addresses open.
+        if let Some(h) = row[at.column].hyperlink().filter(|h| h.uri().starts_with("https://") || h.uri().starts_with("http://")) {
+            let same = |c: usize| row[Column(c)].hyperlink().is_some_and(|x| x == h);
+            let start = (0..=at.column.0).rev().take_while(|&c| same(c)).last().unwrap_or(at.column.0);
+            let end = (at.column.0..self.size.cols).take_while(|&c| same(c)).last().unwrap_or(at.column.0) + 1;
+            return Some((screen_row, start..end, crate::links::Link::Url(h.uri().to_string())));
+        }
         let cells: Vec<char> =
             (0..self.size.cols).map(|c| &row[Column(c)]).map(|cell| if cell.flags.contains(Flags::WIDE_CHAR_SPACER) { '\0' } else { cell.c }).collect();
         let (cols, link) = crate::links::link_at(&cells, at.column.0)?;
-        let screen_row = (at.line.0 + self.term.grid().display_offset() as i32).max(0) as usize;
         Some((screen_row, cols, link))
     }
 
@@ -939,6 +965,8 @@ struct Frame {
     cursor: Option<(usize, usize, CursorShape)>,
     /// Link to underline: (row, start column, end).
     link: Option<(usize, usize, usize)>,
+    /// Command marks on screen: (row, how it ended).
+    marks: Vec<(usize, marks::MarkState)>,
     cell_w: Pixels,
     line_h: Pixels,
 }
@@ -1019,6 +1047,7 @@ impl Element for TerminalElement {
             backgrounds: Vec::new(),
             cursor: None,
             link: view.hover_link.clone().map(|(r, c)| (r, c.start, c.end)),
+            marks: view.visible_marks(rows),
             cell_w,
             line_h,
         };
@@ -1118,6 +1147,17 @@ impl Element for TerminalElement {
                 let _ = shaped.paint(cell(row, run.col), line_h, window, cx);
             }
         }
+        // Command marks in the left margin: green when it succeeded, red when it failed, grey while it runs.
+        for (row, state) in &frame.marks {
+            let color = match state {
+                marks::MarkState::Succeeded => p.success,
+                marks::MarkState::Failed => p.danger,
+                marks::MarkState::Running => p.text_muted,
+            };
+            let d = px(5.);
+            let at = point(bounds.left() + px(1.5), origin.y + line_h * *row as f32 + (line_h - d) / 2.);
+            window.paint_quad(fill(Bounds::new(at, size(d, d)), c(color)).corner_radii(d / 2.));
+        }
         if let Some((row, a, b)) = frame.link {
             let at = cell(row, a);
             window.paint_quad(fill(Bounds::new(point(at.x, at.y + line_h - px(2.)), size(frame.cell_w * (b - a) as f32, px(1.))), c(p.accent)));
@@ -1168,6 +1208,21 @@ impl Render for TerminalView {
             .on_action(cx.listener(Self::scroll_page_down))
             .on_action(cx.listener(Self::scroll_to_top))
             .on_action(cx.listener(Self::scroll_to_bottom))
+            .on_action(cx.listener(|this, _: &TermPrevCommand, _, cx| {
+                if this.jump_to_command(true) {
+                    cx.notify();
+                }
+            }))
+            .on_action(cx.listener(|this, _: &TermNextCommand, _, cx| {
+                if this.jump_to_command(false) {
+                    cx.notify();
+                }
+            }))
+            .on_action(cx.listener(|this, _: &TermCopyLastOutput, _, cx| {
+                if let Some(text) = this.last_output() {
+                    cx.write_to_clipboard(ClipboardItem::new_string(text));
+                }
+            }))
             .on_key_down(cx.listener(Self::on_key_down))
             .on_scroll_wheel(cx.listener(Self::on_scroll))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))

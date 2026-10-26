@@ -285,6 +285,7 @@ Copy
 Copy Address	
 Copy Call Stack	
 Copy Commit Hash	
+Copy Last Command Output	
 Copy Line Down	
 Copy Line Up	
 Copy Message	
@@ -917,6 +918,7 @@ Manage: About, Settings, Color Theme…
 Mar	
 Mark all as resolved (stage)	
 Mark as resolved (stage)	
+Mark prompts, commands and the folder in zsh, bash and fish	
 Markdown preview	
 Markdown: Open Preview	
 Match Case	
@@ -1606,6 +1608,9 @@ Terminal colour
 Terminal: Change Color…	
 Terminal: Clear	
 Terminal: Close	
+Terminal: Copy Last Command Output	
+Terminal: Go to Next Command	
+Terminal: Go to Previous Command	
 Terminal: Kill All Terminals	
 Terminal: New	
 Terminal: New Terminal with Profile…	

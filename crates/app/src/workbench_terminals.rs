@@ -124,8 +124,10 @@ impl Workbench {
     pub(super) fn split_terminal(&mut self, _: &SplitTerminal, window: &mut Window, cx: &mut Context<Self>) {
         let prev = self.terminals.get(self.active_terminal).cloned();
         let start = prev.as_ref().and_then(|t| t.read(cx).start_dir()).or_else(|| self.roots.primary.read(cx).root().map(str::to_string));
-        let handle = prev.as_ref().and_then(|t| t.read(cx).pty_handle());
-        let ask = cx.background_executor().spawn(async move { handle.and_then(|(host, id)| host.pty_status(id).cwd) });
+        // The folder the shell last reported (shell integration), else the one its process is in.
+        let said = prev.as_ref().and_then(|t| t.read(cx).live_cwd());
+        let handle = prev.as_ref().and_then(|t| t.read(cx).pty_handle()).filter(|_| said.is_none());
+        let ask = cx.background_executor().spawn(async move { said.or_else(|| handle.and_then(|(host, id)| host.pty_status(id).cwd)) });
         cx.spawn_in(window, async move |this, cx| {
             let cwd = ask.await.or(start);
             this.update_in(cx, |this, window, cx| {
@@ -410,6 +412,7 @@ impl Workbench {
             (crate::i18n::t("Paste"), Box::new(TermPaste), false),
             (crate::i18n::t("Select All"), Box::new(TermSelectAll), false),
             (crate::i18n::t("Find"), Box::new(TermFind), true),
+            (crate::i18n::t("Copy Last Command Output"), Box::new(crate::terminal::TermCopyLastOutput), false),
             (crate::i18n::t("Clear Terminal"), Box::new(ClearTerminal), true),
             (crate::i18n::t("New Terminal"), Box::new(NewTerminal), true),
             (crate::i18n::t("Rename…"), Box::new(RenameTerminal), false),

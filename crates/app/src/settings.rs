@@ -88,6 +88,8 @@ pub struct Settings {
     pub terminal_scrollback: usize,
     /// Whether a program in the terminal may put text on the clipboard (OSC 52).
     pub terminal_allow_clipboard_write: bool,
+    /// zsh, bash and fish mark prompts, commands and their folder (`terminal.shellIntegration`).
+    pub terminal_shell_integration: bool,
     /// Closing a terminal asks first: "running" (a program is in the foreground), "always" or "never".
     pub terminal_confirm_close: String,
     /// Terminal profiles per operating system of the machine (`terminal.profiles.macos` / `.linux` / `.windows`).
@@ -296,6 +298,7 @@ impl Default for Settings {
             terminal_font_size: theme::text::CODE.0,
             terminal_scrollback: 2000,
             terminal_allow_clipboard_write: false,
+            terminal_shell_integration: true,
             terminal_confirm_close: "running".into(),
             terminal_profiles: Default::default(),
             terminal_default_profile: None,
@@ -800,6 +803,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.bool("terminal.allowClipboardWrite") {
         s.terminal_allow_clipboard_write = v;
     }
+    if let Some(v) = r.bool("terminal.shellIntegration") {
+        s.terminal_shell_integration = v;
+    }
     if let Some(v) = r.choice("terminal.confirmOnClose", &["running", "always", "never"]) {
         s.terminal_confirm_close = v;
     }
@@ -1260,6 +1266,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "terminal.sanitizePaste",
         "terminal.warnMultilinePaste",
         "terminal.confirmOnClose",
+        "terminal.shellIntegration",
         "terminal.defaultProfile",
         "terminal.profiles.macos",
         "terminal.profiles.linux",
