@@ -1,0 +1,122 @@
+{
+  "date": "2026-10-26",
+  "method": {
+    "coverage_requested": false,
+    "unchanged_app_source_and_cargo_profiles": true,
+    "same_physical_hardware": false,
+    "repetitions": 1,
+    "note": "Before had no Rust CI cache. After restored dependency caches and split both platform check families. Intermediate cache-seeding run still serialized Windows checks. Linux strict promotion and retirement of the completed benchmark workflow followed the successful measurement; no native test commands changed in that cleanup."
+  },
+  "runs": {
+    "before": {
+      "url": "https://github.com/doancan/codeyard/actions/runs/40315596123",
+      "commit": "0e3ec12d5db2f542faee93dfba77adf9989eb2f4",
+      "app_source_tree_sha256": "2138fceff59debc8abf127192dfbfe9ac44ed997f30b6de3d06e4762a865ed8f",
+      "conclusion": "success",
+      "queue_before_first_job_seconds": 746,
+      "active_span_seconds": 1634,
+      "total_workflow_seconds": 2381,
+      "jobs": {
+        "licenses": {
+          "seconds": 24,
+          "conclusion": "success"
+        },
+        "linux": {
+          "seconds": 117,
+          "conclusion": "success"
+        },
+        "deny": {
+          "seconds": 36,
+          "conclusion": "success"
+        },
+        "audit": {
+          "seconds": 185,
+          "conclusion": "success"
+        },
+        "linux-app (experimental, non-blocking)": {
+          "seconds": 760,
+          "conclusion": "success"
+        },
+        "windows": {
+          "seconds": 1634,
+          "conclusion": "success"
+        },
+        "macos": {
+          "seconds": 737,
+          "conclusion": "success"
+        }
+      }
+    },
+    "after": {
+      "url": "https://github.com/doancan/codeyard/actions/runs/40322097282",
+      "commit": "03492a2109708b797b0cc422e375cd304bdd9ea7",
+      "app_source_tree_sha256": "2138fceff59debc8abf127192dfbfe9ac44ed997f30b6de3d06e4762a865ed8f",
+      "conclusion": "success",
+      "queue_before_first_job_seconds": 4,
+      "active_span_seconds": 814,
+      "total_workflow_seconds": 818,
+      "jobs": {
+        "audit": {
+          "seconds": 21,
+          "conclusion": "success"
+        },
+        "deny": {
+          "seconds": 44,
+          "conclusion": "success"
+        },
+        "macos-tests": {
+          "seconds": 809,
+          "conclusion": "success"
+        },
+        "linux-app (experimental, non-blocking)": {
+          "seconds": 498,
+          "conclusion": "success"
+        },
+        "macos-budgets": {
+          "seconds": 556,
+          "conclusion": "success"
+        },
+        "licenses": {
+          "seconds": 24,
+          "conclusion": "success"
+        },
+        "linux": {
+          "seconds": 98,
+          "conclusion": "success"
+        },
+        "windows-tests": {
+          "seconds": 591,
+          "conclusion": "success"
+        },
+        "windows-standalone": {
+          "seconds": 488,
+          "conclusion": "success"
+        },
+        "windows": {
+          "seconds": 4,
+          "conclusion": "success"
+        },
+        "macos": {
+          "seconds": 3,
+          "conclusion": "success"
+        }
+      },
+      "macos_family_seconds": 814,
+      "windows_family_seconds": 597,
+      "confirmed_dependency_cache_hits": [
+        "macos-tests",
+        "macos-budgets",
+        "linux-app",
+        "windows-tests",
+        "windows-standalone"
+      ]
+    }
+  },
+  "cache_seeding_run_url": "https://github.com/doancan/codeyard/actions/runs/40318390579",
+  "linux_promotion_evidence": [
+    "https://github.com/doancan/codeyard/actions/runs/40313965271",
+    "https://github.com/doancan/codeyard/actions/runs/40315596123",
+    "https://github.com/doancan/codeyard/actions/runs/40318390579",
+    "https://github.com/doancan/codeyard/actions/runs/40322097282"
+  ]
+}

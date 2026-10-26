@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Retire the completed Windows cross-build benchmark workflow/helper, preserving measurement records. Promote full
+  Linux workspace/GPUI CI tests from experimental status after four consecutive successful runs.
+
+
 - Cache CI dependencies; run macOS tests/budgets and Windows tests/standalone EXE checks in parallel, keeping the
   `macos` and `windows` checks dependent on both halves. Install audit/coverage tools from binaries, make manual coverage
   explicit and use Node.js 24 CI actions.
