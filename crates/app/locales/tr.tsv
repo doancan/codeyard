@@ -2404,3 +2404,32 @@ Ask before pasting several lines into the terminal	Terminale birden çok satır 
 Paste {} line into the terminal?|Paste {} lines into the terminal?	{} satır terminale yapıştırılsın mı?
 Remove control characters from pasted text	Yapıştırılan metinden denetim karakterlerini kaldır
 The shell may run each line as soon as it arrives.	Kabuk her satırı gelir gelmez çalıştırabilir.
+Ask before closing a terminal	Terminali kapatmadan önce sor
+Change Color…	Rengi Değiştir…
+Close the terminal?	Terminal kapatılsın mı?
+Closing a terminal ends the programs running in it.	Terminali kapatmak içinde çalışan programları sonlandırır.
+Default terminal profile	Varsayılan terminal profili
+Kill All Terminals	Tüm Terminalleri Sonlandır
+New Terminal with Profile…	Profille Yeni Terminal…
+No profiles or shells were found on this machine.	Bu makinede profil ya da kabuk bulunamadı.
+No terminal profiles yet: add them under terminal.profiles in settings.jsonc.	Henüz terminal profili yok: settings.jsonc içinde terminal.profiles altına ekleyin.
+Open a terminal with…	Terminali şununla aç…
+Profile new terminals use	Yeni terminallerin kullandığı profil
+Rename	Yeniden Adlandır
+Rename Terminal…	Terminali Yeniden Adlandır…
+Terminal colour	Terminal rengi
+a program	bir program
+args must be a list of texts	args bir metin listesi olmalı
+color “{}” is not one of accent, success, warning, danger, info, muted	“{0}” rengi accent, success, warning, danger, info, muted değerlerinden biri değil
+env must be an object of texts	env metinlerden oluşan bir nesne olmalı
+env.{} is not used: a name of letters, digits and _ with a text value	env.{0} kullanılmıyor: harf, rakam ve _ içeren bir ad ve metin değeri gerekir
+expected an object with path, args, env or color	path, args, env ya da color içeren bir nesne bekleniyordu
+needs a path to a program	bir programın yolu gerekli
+terminal name	terminal adı
+{} terminals have programs running. Close them anyway?	{0} terminalde çalışan program var. Yine de kapatılsın mı?
+“{}” is still running in this terminal. Close it anyway?	“{0}” bu terminalde hâlâ çalışıyor. Yine de kapatılsın mı?
+Terminal: New Terminal with Profile…	Terminal: Profille Yeni Terminal…
+Terminal: Select Default Profile…	Terminal: Varsayılan Profili Seç…
+Terminal: Rename…	Terminal: Yeniden Adlandır…
+Terminal: Change Color…	Terminal: Rengi Değiştir…
+Terminal: Kill All Terminals	Terminal: Tüm Terminalleri Sonlandır

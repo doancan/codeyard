@@ -31,6 +31,14 @@ pub const FILE_ONLY: &[(&str, &str, &str, &str)] = &[
     ),
     ("files.associations", "object of glob → language", "`{}`", "Force a language mode for matching files, e.g. `{ \"*.tpl\": \"html\" }`."),
     (
+        "terminal.profiles.macos",
+        "object of name → profile",
+        "`{}`",
+        "Profiles for terminals on macOS: `{ \"zsh\": { \"path\": \"/bin/zsh\", \"args\": [\"-l\"], \"env\": { … }, \"color\": \"info\" } }`; `args` replace the login flag, `color` is accent, success, warning, danger, info or muted. Needs a trusted folder in a project file.",
+    ),
+    ("terminal.profiles.linux", "object of name → profile", "`{}`", "Profiles for terminals on Linux (also SSH hosts), like `terminal.profiles.macos`."),
+    ("terminal.profiles.windows", "object of name → profile", "`{}`", "Profiles for terminals on Windows, like `terminal.profiles.macos`."),
+    (
         "ports.rules",
         "object of port or range → rule",
         "`{}`",

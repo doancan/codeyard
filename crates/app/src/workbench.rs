@@ -426,6 +426,7 @@ pub use debug::{
 };
 pub use host::askpass::{AskKind, AskRequest};
 pub use remote_glue::ShowRemoteExplorer;
+pub use terminals_glue::{ChangeTerminalColor, KillAllTerminals, NewTerminalWithProfile, RenameTerminal, SelectDefaultTerminalProfile};
 pub type AskReply = std::sync::mpsc::Sender<Option<String>>;
 
 /// Options in the status bar pickers.
@@ -1417,49 +1418,8 @@ impl Workbench {
                     Bottom::Debug => d.child(self.debug_view(p, cx)),
                     Bottom::Ports => d.child(self.ports_view(p, cx)),
                     Bottom::Terminal => {
-                        // Multiple terminals: list on the right (like VS Code), name and close.
-                        let list = (self.terminals.len() > 1).then(|| {
-                            div().id("terminal-list").w(px(180.)).flex_none().h_full().border_l_1().border_color(c(p.border)).overflow_y_scroll().children(
-                                self.terminals.iter().enumerate().map(|(i, t)| {
-                                    let active = i == self.active_terminal;
-                                    let t = t.read(cx);
-                                    let label = if t.has_exited() { crate::i18n::tf("{} (exited)", &[&t.title]) } else { t.title.to_string() };
-                                    let group: SharedString = format!("term-row-{i}").into();
-                                    div()
-                                        .id(("term-tab", i))
-                                        .group(group.clone())
-                                        .w_full()
-                                        .h(px(layout::ROW_H))
-                                        .flex()
-                                        .items_center()
-                                        .gap(px(theme::SPACE[2]))
-                                        .px(px(theme::SPACE[4]))
-                                        .cursor_pointer()
-                                        .text_size(px(text::XS.0))
-                                        .when(active, |d| d.bg(c(p.surface_active)))
-                                        .hover(|d| d.bg(c(p.surface_hover)))
-                                        .text_color(c(if active { p.text } else { p.text_muted }))
-                                        .child(icon("terminal", 14., if active { p.text } else { p.text_muted }))
-                                        .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(label))
-                                        .child(
-                                            div()
-                                                .id(("term-close", i))
-                                                .opacity(0.)
-                                                .group_hover(group, |s| s.opacity(1.))
-                                                .child(icon("x", 12., p.text_muted))
-                                                .on_click(cx.listener(move |this, _, window, cx| {
-                                                    cx.stop_propagation();
-                                                    this.close_terminal(i, window, cx);
-                                                })),
-                                        )
-                                        .on_click(cx.listener(move |this, _, window, cx| {
-                                            this.active_terminal = i;
-                                            this.chrome.bottom = Bottom::Terminal;
-                                            this.focus_terminal(window, cx);
-                                        }))
-                                }),
-                            )
-                        });
+                        // Several terminals: their list on the right.
+                        let list = self.terminal_list(p, cx);
                         let active = self.terminals.get(self.active_terminal).cloned();
                         let other = self.term_split.clone().filter(|o| Some(o) != active.as_ref() && self.terminals.contains(o));
                         d.child(

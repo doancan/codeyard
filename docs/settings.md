@@ -166,6 +166,8 @@ status bar reports it.
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
 | `terminal.allowClipboardWrite` | `true` / `false` | `false` | Let programs in the terminal write to the clipboard |
+| `terminal.confirmOnClose` | `running`, `always`, `never` | `running` | Ask before closing a terminal |
+| `terminal.defaultProfile` | text | empty | Profile new terminals use |
 | `terminal.fontSize` | number 6–48 | `12` on macOS, `14` on Windows and Linux | Font size of the terminal |
 | `terminal.sanitizePaste` | `auto`, `always`, `off` | `auto` | Remove control characters from pasted text |
 | `terminal.scrollback` | number 0–50000 | `2000` | Lines kept in terminal history |
@@ -219,6 +221,9 @@ status bar reports it.
 | `workbench.startupEditor` | string | `welcome` | VS Code compatible alias of `window.startup`. |
 | `editor.codeActionsOnSave` | object | `{}` | Code actions to run on save before formatting, e.g. `{ "source.organizeImports": "explicit" }`; each gives up after 2 s. |
 | `files.associations` | object of glob → language | `{}` | Force a language mode for matching files, e.g. `{ "*.tpl": "html" }`. |
+| `terminal.profiles.macos` | object of name → profile | `{}` | Profiles for terminals on macOS: `{ "zsh": { "path": "/bin/zsh", "args": ["-l"], "env": { … }, "color": "info" } }`; `args` replace the login flag, `color` is accent, success, warning, danger, info or muted. Needs a trusted folder in a project file. |
+| `terminal.profiles.linux` | object of name → profile | `{}` | Profiles for terminals on Linux (also SSH hosts), like `terminal.profiles.macos`. |
+| `terminal.profiles.windows` | object of name → profile | `{}` | Profiles for terminals on Windows, like `terminal.profiles.macos`. |
 | `ports.rules` | object of port or range → rule | `{}` | Label, protocol (`http`, `https`, `tcp`) and detection behaviour (`notify`, `silent`, `openBrowser`, `ignore`) per forwarded port, e.g. `{ "3000": { "label": "web", "onForward": "openBrowser" } }`; a single port beats a range. |
 | `json.schemas` | list of `{ fileMatch, url }` | `[]` | Associate JSON files with a schema (URL or path relative to the workspace). Ignored in untrusted folders. |
 | `yaml.schemas` | object of schema → globs | `{}` | Associate YAML files with a schema. Ignored in untrusted folders. |

@@ -2467,12 +2467,15 @@ fn terminal_split_shows_two_and_caps_the_count(cx: &mut TestAppContext) {
     let (wb, cx) = setup(cx);
     let first = terminal(&wb, &dir, cx);
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Split", window, cx));
+    // The split asks the shell for its folder first.
+    wait_for(cx, "the split", |cx| wb.read_with(cx, |wb, _| wb.terminal_count()) == 2);
     let second = wb.read_with(cx, |wb, _| wb.active_terminal()).unwrap();
     assert_ne!(first, second, "after a split the new terminal is active");
     assert_eq!(wb.read_with(cx, |wb, _| wb.terminal_count()), 2);
     assert_eq!(wb.read_with(cx, |wb, _| wb.split_partner()), Some(first.clone()));
     // Closing the split terminal removes the split.
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Close", window, cx));
+    wait_for(cx, "closed", |cx| wb.read_with(cx, |wb, _| wb.terminal_count()) == 1);
     assert_eq!(wb.read_with(cx, |wb, _| wb.split_partner()), None);
     // At most eight terminals.
     for _ in 0..10 {

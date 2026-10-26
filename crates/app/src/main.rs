@@ -121,6 +121,7 @@ mod structural_tests;
 mod sysopen;
 mod terminal;
 mod terminal_paste;
+mod terminal_profiles;
 #[cfg(test)]
 mod test_git;
 #[cfg(test)]

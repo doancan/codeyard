@@ -355,8 +355,11 @@ pub(crate) fn menus(recent: &[state::RecentWorkspace]) -> Vec<Menu> {
             name: tr("Terminal").into(),
             items: vec![
                 I::action(tr("New Terminal"), wb::NewTerminal),
+                I::action(tr("New Terminal with Profile…"), wb::NewTerminalWithProfile),
                 I::action(tr("Toggle Terminal"), wb::ToggleTerminal),
+                I::action(tr("Rename Terminal…"), wb::RenameTerminal),
                 I::action(tr("Kill Terminal"), wb::KillTerminal),
+                I::action(tr("Kill All Terminals"), wb::KillAllTerminals),
                 sep(),
                 I::action(tr("Find"), crate::terminal::TermFind),
                 I::action(tr("Select All"), crate::terminal::TermSelectAll),

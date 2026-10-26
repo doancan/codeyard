@@ -61,6 +61,17 @@ pub enum TerminalEvent {
 /// eight terminals.
 pub const SCROLLBACK_MAX: usize = 50_000;
 
+/// What a new terminal runs.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Launch {
+    /// Program (`None`: the user's shell).
+    pub shell: Option<String>,
+    /// Arguments (`None`: a login shell).
+    pub args: Option<Vec<String>>,
+    pub env: Vec<(String, String)>,
+    pub color: Option<String>,
+}
+
 /// Upper bound (bytes) on terminal output not yet parsed.
 const MAX_BACKLOG: usize = 32 * 1024 * 1024;
 
@@ -169,6 +180,8 @@ pub struct TerminalView {
     metrics: (f32, f32),
     /// Scrollback lines in effect.
     scrollback: usize,
+    /// Mark colour in the terminal list (a theme role from `terminal_profiles::COLORS`).
+    pub color: Option<String>,
     focus_handle: FocusHandle,
 }
 
@@ -192,6 +205,12 @@ impl TerminalView {
     }
 
     pub fn new(host: Arc<dyn Host>, cwd: Option<String>, shell: Option<String>, cx: &mut Context<Self>) -> Self {
+        Self::new_with(host, cwd, Launch { shell, ..Launch::default() }, cx)
+    }
+
+    /// A terminal running `launch` (a profile or a picked shell).
+    pub fn new_with(host: Arc<dyn Host>, cwd: Option<String>, launch: Launch, cx: &mut Context<Self>) -> Self {
+        let Launch { shell, args, env, color } = launch;
         let size = TermSize { cols: 100, rows: 24 };
         let events = Listener::default();
         // Scrollback from settings (default 2,000; 10,000 × 200 columns can reach ~45 MB).
@@ -217,11 +236,17 @@ impl TerminalView {
             hover_link: None,
             metrics: metrics(cx.global::<crate::settings::Settings>().terminal_font_size),
             scrollback,
+            color,
             focus_handle: cx.focus_handle(),
         };
 
         let (cols, rows) = (size.cols as u16, size.rows as u16);
-        let spawn = cx.background_executor().spawn(async move { host.pty_spawn(cols, rows, cwd, shell) });
+        let spawn = cx.background_executor().spawn(async move {
+            match (args, env.is_empty()) {
+                (None, true) => host.pty_spawn(cols, rows, cwd, shell),
+                (args, _) => host.pty_spawn_ex(host::PtySpec { cols, rows, cwd, shell, args: args.unwrap_or_else(|| vec!["-l".into()]), env }),
+            }
+        });
         cx.spawn(async move |this, cx| {
             let pty = match spawn.await {
                 Ok(p) => p,
@@ -339,6 +364,11 @@ impl TerminalView {
             cx.emit(TerminalEvent::Exited);
             cx.notify();
         }
+    }
+
+    /// Host and terminal id, to ask what runs in it (`None` until the shell has started).
+    pub fn pty_handle(&self) -> Option<(Arc<dyn Host>, u32)> {
+        self.pty.map(|id| (self.host.clone(), id))
     }
 
     pub fn has_exited(&self) -> bool {

@@ -88,6 +88,12 @@ pub struct Settings {
     pub terminal_scrollback: usize,
     /// Whether a program in the terminal may put text on the clipboard (OSC 52).
     pub terminal_allow_clipboard_write: bool,
+    /// Closing a terminal asks first: "running" (a program is in the foreground), "always" or "never".
+    pub terminal_confirm_close: String,
+    /// Terminal profiles per operating system of the machine (`terminal.profiles.macos` / `.linux` / `.windows`).
+    pub terminal_profiles: std::collections::BTreeMap<String, Vec<crate::terminal_profiles::Profile>>,
+    /// Profile new terminals use (`terminal.defaultProfile`).
+    pub terminal_default_profile: Option<String>,
     /// What pasting into the terminal removes (`terminal.sanitizePaste`).
     pub terminal_sanitize_paste: crate::terminal_paste::Sanitize,
     /// When a paste of several lines asks first (`terminal.warnMultilinePaste`).
@@ -290,6 +296,9 @@ impl Default for Settings {
             terminal_font_size: theme::text::CODE.0,
             terminal_scrollback: 2000,
             terminal_allow_clipboard_write: false,
+            terminal_confirm_close: "running".into(),
+            terminal_profiles: Default::default(),
+            terminal_default_profile: None,
             terminal_sanitize_paste: Default::default(),
             terminal_warn_multiline: Default::default(),
             restore_session: true,
@@ -545,6 +554,11 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Pasting: "auto" removes control characters unless the shell reads the paste as text (bracketed paste), "always" or
   // "off"; bracketed-paste markers inside pasted text are always removed. A paste of several lines asks first
   // ("unbracketed": when the shell would run each line at once, "always" or "never").
+  // Closing a terminal asks first: "running" (a program other than the shell is in the foreground), "always", "never".
+  // "terminal.confirmOnClose": "running",
+  // Profiles for new terminals, per operating system of the machine they run on; "args" replace the login flag.
+  // "terminal.profiles.macos": { "zsh": { "path": "/bin/zsh" }, "bash": { "path": "/bin/bash", "args": ["-l"], "env": { "LANG": "en_US.UTF-8" }, "color": "info" } },
+  // "terminal.defaultProfile": "zsh",
   // "terminal.sanitizePaste": "auto",
   // "terminal.warnMultilinePaste": "unbracketed",
 
@@ -625,7 +639,16 @@ pub fn parse_layers(user: &str, project: &[Layer]) -> Result<(Settings, Vec<Stri
 
 /// A project's settings file could choose a program by itself: these keys come only from user
 /// settings or a trusted folder.
-pub const RESTRICTED_KEYS: &[&str] = &["terminal.shell", "lsp.servers", "json.schemas", "yaml.schemas"];
+pub const RESTRICTED_KEYS: &[&str] = &[
+    "terminal.shell",
+    "terminal.defaultProfile",
+    "terminal.profiles.macos",
+    "terminal.profiles.linux",
+    "terminal.profiles.windows",
+    "lsp.servers",
+    "json.schemas",
+    "yaml.schemas",
+];
 
 /// Not read from the project file even in a trusted folder: the gate is global, so one
 /// repo touching it would open it for every folder.
@@ -776,6 +799,24 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.bool("terminal.allowClipboardWrite") {
         s.terminal_allow_clipboard_write = v;
+    }
+    if let Some(v) = r.choice("terminal.confirmOnClose", &["running", "always", "never"]) {
+        s.terminal_confirm_close = v;
+    }
+    s.terminal_default_profile = r.string("terminal.defaultProfile").filter(|p| !p.trim().is_empty());
+    for os in ["macos", "linux", "windows"] {
+        let key = format!("terminal.profiles.{os}");
+        match obj.get(&key) {
+            None | Some(Value::Null) => {}
+            Some(Value::Object(m)) => {
+                let mut w = Vec::new();
+                s.terminal_profiles.insert(os.to_string(), crate::terminal_profiles::parse_profiles(&key, m, &mut w));
+                for w in w {
+                    r.warn(w);
+                }
+            }
+            Some(_) => r.warn(crate::i18n::tf("{0}: expected an object {1}", &[&key, &"{ \"zsh\": { \"path\": \"/bin/zsh\" } }"])),
+        }
     }
     if let Some(v) = r.choice("terminal.sanitizePaste", &["auto", "always", "off"]) {
         s.terminal_sanitize_paste = crate::terminal_paste::Sanitize::parse(&v).unwrap_or_default();
@@ -1218,6 +1259,11 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "terminal.scrollback",
         "terminal.sanitizePaste",
         "terminal.warnMultilinePaste",
+        "terminal.confirmOnClose",
+        "terminal.defaultProfile",
+        "terminal.profiles.macos",
+        "terminal.profiles.linux",
+        "terminal.profiles.windows",
         "terminal.allowClipboardWrite",
         "window.restoreSession",
         "window.startup",
