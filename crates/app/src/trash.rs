@@ -3,12 +3,27 @@
 //! macOS: `~/.Trash`. Linux and other Unixes: the XDG trash (`files/` + `info/*.trashinfo`),
 //! so that the file manager's "restore" command works. If a file on a different disk
 //! cannot be moved, an error is returned; the UI asks separately about permanent deletion.
+//! Windows uses the Shell's Recycle Bin, including Explorer restore/undo information.
 
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(not(windows))]
+use std::path::PathBuf;
 
-/// Moves it and returns the new path in the trash.
-pub fn move_to_trash(path: &Path) -> io::Result<PathBuf> {
+#[cfg(windows)]
+mod windows;
+
+/// Move to the platform's recoverable trash. Errors leave permanent deletion to the UI's separate confirmation.
+pub fn move_to_trash(path: &Path) -> io::Result<()> {
+    path.file_name().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, crate::i18n::t("no file name")))?;
+    #[cfg(windows)]
+    return windows::recycle(path);
+    #[cfg(not(windows))]
+    move_to_directory_trash(path).map(|_| ())
+}
+
+#[cfg(not(windows))]
+fn move_to_directory_trash(path: &Path) -> io::Result<PathBuf> {
     let dir = trash_dir()?;
     let files = if cfg!(target_os = "macos") { dir.clone() } else { dir.join("files") };
     std::fs::create_dir_all(&files)?;
@@ -35,15 +50,15 @@ pub fn move_to_trash(path: &Path) -> io::Result<PathBuf> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(windows)))]
 fn trash_dir() -> io::Result<PathBuf> {
     // Tests do not touch the user's real trash.
     Ok(std::env::temp_dir().join(format!("codeyard-test-trash-{}", std::process::id())))
 }
 
-#[cfg(not(test))]
+#[cfg(all(not(test), not(windows)))]
 fn trash_dir() -> io::Result<PathBuf> {
-    let home = std::env::var_os("HOME").map(PathBuf::from).ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, crate::i18n::t("HOME is not set")))?;
+    let home = dirs::home_dir().ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, crate::i18n::t("HOME is not set")))?;
     if cfg!(target_os = "macos") {
         return Ok(home.join(".Trash"));
     }
@@ -52,6 +67,7 @@ fn trash_dir() -> io::Result<PathBuf> {
 }
 
 /// If something with the same name is already in the trash, "name 2.ext", "name 3.ext"…
+#[cfg(not(windows))]
 fn unique(dir: &Path, name: &str) -> PathBuf {
     let first = dir.join(name);
     if std::fs::symlink_metadata(&first).is_err() {
@@ -65,7 +81,7 @@ fn unique(dir: &Path, name: &str) -> PathBuf {
 }
 
 /// `.trashinfo` path: percent-encoded as in RFC 3986 (slashes remain).
-#[cfg(any(not(target_os = "macos"), test))]
+#[cfg(all(not(windows), any(not(target_os = "macos"), test)))]
 fn encode_path(path: &Path) -> String {
     let mut out = String::new();
     for b in path.to_string_lossy().bytes() {
@@ -80,7 +96,7 @@ fn encode_path(path: &Path) -> String {
 
 /// UTC "YYYY-MM-DDThh:mm:ss" without local-time information (the spec asks for local time; file
 /// managers only use it for sorting).
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(not(windows), not(target_os = "macos")))]
 fn deletion_date() -> String {
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()) as i64;
     let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
@@ -97,7 +113,7 @@ fn deletion_date() -> String {
     format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}", rem / 3600, rem % 3600 / 60, rem % 60)
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(windows)))]
 mod tests {
     use super::*;
 
@@ -107,16 +123,16 @@ mod tests {
         std::fs::create_dir_all(&src).unwrap();
         let a = src.join("not.txt");
         std::fs::write(&a, "1").unwrap();
-        let first = move_to_trash(&a).unwrap();
+        let first = move_to_directory_trash(&a).unwrap();
         assert!(!a.exists());
         assert_eq!(std::fs::read_to_string(&first).unwrap(), "1");
         std::fs::write(&a, "2").unwrap();
-        let second = move_to_trash(&a).unwrap();
+        let second = move_to_directory_trash(&a).unwrap();
         assert_eq!(second.file_name().unwrap(), "not 2.txt");
         // A folder is moved too.
         let d = src.join("klasör");
         std::fs::create_dir_all(d.join("iç")).unwrap();
-        assert!(move_to_trash(&d).unwrap().join("iç").is_dir());
+        assert!(move_to_directory_trash(&d).unwrap().join("iç").is_dir());
         assert_eq!(encode_path(Path::new("/a b/ç.txt")), "/a%20b/%C3%A7.txt");
         // A file that cannot be moved (does not exist): an error, no trace is left in the trash.
         let listing = || std::fs::read_dir(trash_dir().unwrap().join(if cfg!(target_os = "macos") { "" } else { "info" })).map(|d| d.count()).unwrap_or(0);

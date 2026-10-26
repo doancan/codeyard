@@ -3,9 +3,8 @@
 # Needs Rust (msvc) and Visual Studio Build Tools with the Windows SDK (fxc.exe for GPUI's shaders).
 # With Inno Setup 6 installed it also builds Codeyard-<version>-windows-x64-setup.exe
 # (installer\windows\codeyard.iss).
-# $env:AGENTS_DIR: its contents go into the zip as agents\ (SSH agents).
+# $env:AGENTS_DIR: optional prebuilt SSH agents. Otherwise built from source and embedded in the EXE.
 # Licence texts go into the zip as licenses\ (same list as scripts/licenses.sh; that script checks both agree).
-# Not yet run on a Windows machine.
 # The .exe is unsigned, so SmartScreen warns; a release needs a code-signing certificate.
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
@@ -24,16 +23,21 @@ $licenses = [ordered]@{
   'crates\syntax\LICENSES' = 'syntax-LICENSES'
 }
 foreach ($src in $licenses.Keys) { if (-not (Test-Path $src)) { throw "missing licence file: $src" } }
-cargo build --release -p app
-if ($LASTEXITCODE -ne 0) { throw 'cargo build failed' }
-$version = ((cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages | Where-Object name -eq 'app').version
+& "$PSScriptRoot/build-windows.ps1" -Profile Release
+$cargo = (Get-Command cargo -ErrorAction SilentlyContinue).Source
+if (-not $cargo) { $cargo = Join-Path $env:USERPROFILE '.cargo/bin/cargo.exe' }
+$version = ((& $cargo metadata --locked --no-deps --format-version 1 | ConvertFrom-Json).packages | Where-Object name -eq 'app').version
 if ($LASTEXITCODE -ne 0 -or -not $version) { throw 'cargo metadata failed' }
+if ($version -notmatch '^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$') { throw "Invalid package version: $version" }
 $name = "Codeyard-$version-windows-x64"
-$out = 'target\windows'
-Remove-Item -Recurse -Force "$out\$name" -ErrorAction SilentlyContinue
+$out = [System.IO.Path]::GetFullPath((Join-Path $PWD 'target/windows'))
+$packageDir = [System.IO.Path]::GetFullPath((Join-Path $out $name))
+if (-not $packageDir.StartsWith($out + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Refusing to replace a package outside $out"
+}
+if (Test-Path -LiteralPath $packageDir) { Remove-Item -LiteralPath $packageDir -Recurse -Force }
 New-Item -ItemType Directory -Force "$out\$name" | Out-Null
 Copy-Item target\release\codeyard.exe "$out\$name\Codeyard.exe"
-if ($env:AGENTS_DIR) { Copy-Item -Recurse $env:AGENTS_DIR "$out\$name\agents" }
 New-Item -ItemType Directory -Force "$out\$name\licenses" | Out-Null
 foreach ($src in $licenses.Keys) { Copy-Item -Recurse $src "$out\$name\licenses\$($licenses[$src])" }
 Remove-Item "$out\$name.zip" -ErrorAction SilentlyContinue
@@ -46,7 +50,6 @@ $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
 if (-not $iscc) { $iscc = @("$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe", "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1 }
 if ($iscc) {
   $isccArgs = @("/DAppVersion=$version", 'installer\windows\codeyard.iss')
-  if ($env:AGENTS_DIR) { $isccArgs = @("/DAgentsDir=$((Resolve-Path $env:AGENTS_DIR).Path)") + $isccArgs }
   & $iscc @isccArgs
   if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compilation failed' }
   $setup = "$out\Codeyard-$version-windows-x64-setup.exe"

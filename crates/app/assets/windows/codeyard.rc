@@ -1,0 +1,2 @@
+// GPUI loads the application icon from resource ID 1; Explorer uses this icon as well.
+1 ICON "assets/windows/codeyard.ico"

@@ -533,7 +533,7 @@ fn files_from_the_system_open_as_tabs_without_changing_the_project(cx: &mut Test
     // `open_urls` looks for real `Workbench` windows (the test helper `setup` wraps the view in a root view).
     let win = cx.add_window(|window, cx| crate::workbench::Workbench::with_state(state::State::in_memory().ok(), None, window, cx));
     let wb = win.root(cx).unwrap();
-    let canon = |p: &std::path::Path| std::fs::canonicalize(p).unwrap().to_string_lossy().into_owned();
+    let canon = |p: &std::path::Path| crate::ui::local_path(&std::fs::canonicalize(p).unwrap());
     let url = |p: &std::path::Path| crate::lsp::path_to_uri(&canon(p));
     let root = |cx: &mut TestAppContext| wb.read_with(cx, |wb, cx| wb.local_folder(cx));
     let tabs = |cx: &mut TestAppContext| wb.read_with(cx, |wb, cx| wb.open_paths(cx));
@@ -558,6 +558,27 @@ fn files_from_the_system_open_as_tabs_without_changing_the_project(cx: &mut Test
 }
 
 // --- Format on save ---
+
+#[gpui::test]
+fn terminal_web_links_use_the_system_browser(cx: &mut TestAppContext) {
+    let (wb, cx) = setup(cx);
+    let url = "https://example.com/şablon?a=one&b=two";
+    wb.update_in(cx, |wb, window, cx| wb.open_link(crate::links::Link::Url(url.into()), window, cx));
+    assert_eq!(cx.opened_url().as_deref(), Some(url));
+}
+
+#[cfg(windows)]
+#[gpui::test]
+fn windows_terminal_links_open_absolute_files_without_a_project(cx: &mut TestAppContext) {
+    let dir = fresh("windows-terminal-link");
+    let file = dir.join("şablon.txt");
+    std::fs::write(&file, "outside a project").unwrap();
+    let (wb, cx) = setup(cx);
+    wb.update_in(cx, |wb, window, cx| {
+        wb.open_link(crate::links::Link::File { path: file.to_string_lossy().into_owned(), line: Some(1), col: None }, window, cx)
+    });
+    wait_ticking(cx, "absolute terminal link", |cx| wb.read_with(cx, |wb, cx| wb.open_paths(cx).iter().any(|p| p.ends_with("şablon.txt"))));
+}
 
 /// Server edits computed for an older text (the user kept typing while the formatter ran) are dropped instead of
 /// landing on the wrong characters.
