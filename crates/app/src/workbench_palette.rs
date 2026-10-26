@@ -288,6 +288,11 @@ impl Workbench {
             Command::action("View: Focus Right Editor Group", FocusRightGroup),
             Command::action("View: Source Control", ShowScm),
             Command::action("View: Run and Debug", ShowRunAndDebug),
+            Command::action("Terminal: New Terminal with Profile…", NewTerminalWithProfile),
+            Command::action("Terminal: Select Default Profile…", SelectDefaultTerminalProfile),
+            Command::action("Terminal: Rename…", RenameTerminal),
+            Command::action("Terminal: Change Color…", ChangeTerminalColor),
+            Command::action("Terminal: Kill All Terminals", KillAllTerminals),
             Command::action("Debug: Run Without Debugging", RunWithoutDebugging),
             Command::action("Debug: Run to Cursor", RunToCursor),
             Command::action("Debug: Add Configuration…", AddDebugConfiguration),
@@ -672,6 +677,22 @@ impl Workbench {
                 self.close_overlay(window, cx);
                 self.answer_launch_input(value, window, cx);
             }
+            (OverlayKind::TerminalLaunch(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let launch = list[*index].clone();
+                self.close_overlay(window, cx);
+                let cwd = self.active_root(cx);
+                self.new_terminal_launch(cwd, launch, window, cx);
+            }
+            (OverlayKind::TerminalDefaultProfile(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let name = list[*index].clone();
+                self.close_overlay(window, cx);
+                self.write_setting("terminal.defaultProfile", serde_json::json!(name), window, cx);
+            }
+            (OverlayKind::TerminalColor, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let color = crate::terminal_profiles::COLORS[*index];
+                self.close_overlay(window, cx);
+                self.set_terminal_color(color, cx);
+            }
             (OverlayKind::LaunchTemplates(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let snippet = list[*index].clone();
                 self.close_overlay(window, cx);
@@ -786,6 +807,9 @@ impl Workbench {
                 | OverlayKind::DebugConfigs(_)
                 | OverlayKind::LaunchInput(_)
                 | OverlayKind::LaunchTemplates(_)
+                | OverlayKind::TerminalLaunch(_)
+                | OverlayKind::TerminalDefaultProfile(_)
+                | OverlayKind::TerminalColor
                 | OverlayKind::RemoveFolder(_)
                 | OverlayKind::CompareFolder { .. }
                 | OverlayKind::ExceptionFilters(_)

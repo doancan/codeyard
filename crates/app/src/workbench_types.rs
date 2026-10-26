@@ -48,6 +48,12 @@ pub(super) enum OverlayKind {
     LaunchInput(Vec<String>),
     /// "Debug: Add Configuration…": the snippets offered.
     LaunchTemplates(Vec<serde_json::Value>),
+    /// "Terminal: New Terminal with Profile…": what each row opens.
+    TerminalLaunch(Vec<crate::terminal::Launch>),
+    /// "Terminal: Select Default Profile…": profile names.
+    TerminalDefaultProfile(Vec<String>),
+    /// "Terminal: Change Color…".
+    TerminalColor,
     Stashes {
         refs: Vec<String>,
         op: git_glue::StashOp,
@@ -203,6 +209,8 @@ pub(super) enum InputPurpose {
     FunctionBreakpoint,
     /// Debugger: the answer to a `promptString` input of a starting configuration.
     LaunchInput,
+    /// New name of the active terminal.
+    RenameTerminal,
     /// Debugger: new value of a variable of the scope or object `parent`.
     SetVariable {
         parent: i64,

@@ -59,6 +59,8 @@ pub fn handle(req: Request) -> Response {
         | Request::PtyInput { .. }
         | Request::PtyResize { .. }
         | Request::PtyKill { .. }
+        | Request::PtySpawnEx { .. }
+        | Request::PtyStatus { .. }
         | Request::Watch { .. }
         | Request::Bye
         | Request::Ping
@@ -69,6 +71,7 @@ pub fn handle(req: Request) -> Response {
         | Request::LineIndex { .. }
         | Request::ReadLines { .. } => Err(Error::Unsupported("streaming request outside a session".into())),
         Request::ListFiles { root, limit } => list_files(&expand(&root), limit as usize).map(|(paths, truncated)| Response::Files { paths, truncated }),
+        Request::ListShells => Ok(Response::Shells(pty::shells())),
     };
     result.unwrap_or_else(Response::Error)
 }
@@ -312,6 +315,37 @@ pub fn serve(input: impl Read, output: impl Write + Send + 'static) -> io::Resul
 }
 
 impl Session {
+    /// Opens a terminal and streams its output until the shell exits.
+    fn spawn_pty(&self, id: u32, spec: pty::Spawn) -> io::Result<()> {
+        let reply = |body: Response| if id == 0 { Ok(()) } else { send(&self.out, id, body) };
+        let spec = pty::Spawn { cwd: spec.cwd.map(|c| expand(&c).to_string_lossy().into_owned()), ..spec };
+        match pty::spawn_with(spec) {
+            Err(e) => reply(Response::Error(Error::Other(format!("terminal: {e}")))),
+            Ok((p, mut reader)) => {
+                let pid = self.next_pty.fetch_add(1, Ordering::Relaxed);
+                self.ptys.locked().insert(pid, p);
+                // Response first, then output: so output doesn't arrive before the client has registered the terminal.
+                reply(Response::PtySpawned { pty: pid })?;
+                let (out, ptys) = (self.out.clone(), self.ptys.clone());
+                std::thread::spawn(move || {
+                    let mut buf = vec![0u8; 16 * 1024];
+                    // Keep reading even if the connection drops: output goes to the buffer, the shell keeps running.
+                    loop {
+                        match reader.read(&mut buf) {
+                            Ok(0) | Err(_) => break, // shell exited (EIO) or closed
+                            Ok(n) => {
+                                let _ = send(&out, 0, Response::PtyOutput { pty: pid, data: buf[..n].to_vec() });
+                            }
+                        }
+                    }
+                    let code = ptys.locked().remove(&pid).and_then(|mut p| p.wait());
+                    let _ = send(&out, 0, Response::PtyExit { pty: pid, code });
+                });
+                Ok(())
+            }
+        }
+    }
+
     fn dispatch(&self, id: u32, body: Request) -> io::Result<()> {
         // id 0: the client is not waiting for a response.
         let reply = |body: Response| if id == 0 { Ok(()) } else { send(&self.out, id, body) };
@@ -362,33 +396,11 @@ impl Session {
                 }
                 reply(Response::Done)
             }
-            Request::PtySpawn { cols, rows, cwd, shell } => {
-                let cwd = cwd.map(|c| expand(&c).to_string_lossy().into_owned());
-                match pty::spawn(cols, rows, cwd.as_deref(), shell.as_deref()) {
-                    Err(e) => reply(Response::Error(Error::Other(format!("terminal: {e}")))),
-                    Ok((p, mut reader)) => {
-                        let pid = self.next_pty.fetch_add(1, Ordering::Relaxed);
-                        self.ptys.locked().insert(pid, p);
-                        // Response first, then output: so output doesn't arrive before the client has registered the terminal.
-                        reply(Response::PtySpawned { pty: pid })?;
-                        let (out, ptys) = (self.out.clone(), self.ptys.clone());
-                        std::thread::spawn(move || {
-                            let mut buf = vec![0u8; 16 * 1024];
-                            // Keep reading even if the connection drops: output goes to the buffer, the shell keeps running.
-                            loop {
-                                match reader.read(&mut buf) {
-                                    Ok(0) | Err(_) => break, // shell exited (EIO) or closed
-                                    Ok(n) => {
-                                        let _ = send(&out, 0, Response::PtyOutput { pty: pid, data: buf[..n].to_vec() });
-                                    }
-                                }
-                            }
-                            let code = ptys.locked().remove(&pid).and_then(|mut p| p.wait());
-                            let _ = send(&out, 0, Response::PtyExit { pty: pid, code });
-                        });
-                        Ok(())
-                    }
-                }
+            Request::PtySpawn { cols, rows, cwd, shell } => self.spawn_pty(id, pty::Spawn { cols, rows, cwd, shell, args: None, env: Vec::new() }),
+            Request::PtySpawnEx { cols, rows, cwd, shell, args, env } => self.spawn_pty(id, pty::Spawn { cols, rows, cwd, shell, args: Some(args), env }),
+            Request::PtyStatus { pty: pid } => {
+                let status = self.ptys.locked().get(&pid).map(pty::Pty::status).unwrap_or_default();
+                reply(Response::PtyStatus { busy: status.busy, name: status.name, cwd: status.cwd })
             }
             Request::PtyInput { pty: pid, data } => {
                 if let Some(p) = self.ptys.locked().get_mut(&pid) {

@@ -75,6 +75,26 @@ impl std::fmt::Display for HostError {
 
 impl std::error::Error for HostError {}
 
+/// A terminal to open with a chosen program.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PtySpec {
+    pub cols: u16,
+    pub rows: u16,
+    pub cwd: Option<String>,
+    pub shell: Option<String>,
+    pub args: Vec<String>,
+    pub env: Vec<(String, String)>,
+}
+
+/// What runs in a terminal (`Host::pty_status`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PtyStatus {
+    /// A program other than the shell holds the terminal (`None`: unknown).
+    pub busy: Option<bool>,
+    pub name: Option<String>,
+    pub cwd: Option<String>,
+}
+
 pub type Result<T> = std::result::Result<T, HostError>;
 
 pub struct FileList {
@@ -169,6 +189,27 @@ pub trait Host: Send + Sync + 'static {
     fn hash_tree(&self, root: &str, ignore: Vec<String>, gitignore: bool, limit: u32, only: Option<Vec<String>>) -> Result<HashStream>;
     fn cancel(&self, id: u32);
     fn pty_spawn(&self, cols: u16, rows: u16, cwd: Option<String>, shell: Option<String>) -> Result<Pty>;
+
+    /// A terminal running `shell` with `args` (instead of a login shell) and extra environment variables.
+    fn pty_spawn_ex(&self, spec: PtySpec) -> Result<Pty> {
+        self.pty_spawn(spec.cols, spec.rows, spec.cwd, spec.shell)
+    }
+
+    /// Whether a program holds the terminal's foreground, and the shell's folder.
+    fn pty_status(&self, pty: u32) -> PtyStatus {
+        match self.call(Request::PtyStatus { pty }) {
+            Ok(Response::PtyStatus { busy, name, cwd }) => PtyStatus { busy, name, cwd },
+            _ => PtyStatus::default(),
+        }
+    }
+
+    /// The shells the machine offers.
+    fn list_shells(&self) -> Vec<String> {
+        match self.call(Request::ListShells) {
+            Ok(Response::Shells(list)) => list,
+            _ => Vec::new(),
+        }
+    }
     /// No reply expected (so a keystroke doesn't wait for a round trip).
     fn pty_input(&self, pty: u32, data: Vec<u8>);
     fn pty_resize(&self, pty: u32, cols: u16, rows: u16);
@@ -873,6 +914,17 @@ impl Host for RemoteHost {
         let (tx, rx) = mpsc::channel();
         let (ev_tx, ev_rx) = mpsc::channel();
         self.start(Request::PtySpawn { cols, rows, cwd, shell }, Waiter::PtySpawn(tx, ev_tx))?;
+        match rx.recv().map_err(|_| self.disconnected())? {
+            Response::PtySpawned { pty } => Ok(Pty { id: pty, events: ev_rx }),
+            other => Err(unexpected(other)),
+        }
+    }
+
+    fn pty_spawn_ex(&self, spec: PtySpec) -> Result<Pty> {
+        let (tx, rx) = mpsc::channel();
+        let (ev_tx, ev_rx) = mpsc::channel();
+        let PtySpec { cols, rows, cwd, shell, args, env } = spec;
+        self.start(Request::PtySpawnEx { cols, rows, cwd, shell, args, env }, Waiter::PtySpawn(tx, ev_tx))?;
         match rx.recv().map_err(|_| self.disconnected())? {
             Response::PtySpawned { pty } => Ok(Pty { id: pty, events: ev_rx }),
             other => Err(unexpected(other)),

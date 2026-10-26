@@ -83,6 +83,7 @@ Apply Stash…
 Apr	
 Ask before .http requests and schema downloads leave this computer: never, remote (the first request to each new host per session) or always. Your own settings only; a folder cannot change it	
 Ask before Sync pulls or pushes. Your own settings only; a folder cannot change it	
+Ask before closing a terminal	
 Ask before moving a file or folder by dragging it in the explorer	
 Ask before moving a file to the Trash	
 Ask before pasting several lines into the terminal	
@@ -132,6 +133,7 @@ Cannot use {} as an entry
 Cannot use {} as an object key	
 Change	
 Change All Occurrences	
+Change Color…	
 Change Local Port…	
 Change the URL of which remote?	
 Change this in Settings (update.check). Check for Updates… always works.	
@@ -181,8 +183,10 @@ Close Others
 Close Saved	
 Close a terminal first: at most {} can be open.	
 Close details	
+Close the terminal?	
 Close to the Right	
 Close without saving	
+Closing a terminal ends the programs running in it.	
 Closing the window loses everything since the last save.	
 Codeyard already has Full Disk Access.	
 Codeyard can't replace itself in {}: your account can't write there. Download the new version and drag it in yourself.	
@@ -422,6 +426,7 @@ Debug: Stop All
 Debug: Toggle Breakpoint	
 Dec	
 Decoded here only: nothing is sent or logged	
+Default terminal profile	
 Delay for afterDelay (ms)	
 Delete	
 Delete Permanently	
@@ -871,6 +876,7 @@ Key login is set up for “{}”. The next connection needs no password.
 Key login was already set up for “{}” (created {}). The next connection needs no password.	
 Key login was already set up for “{}”. The next connection needs no password.	
 Keyboard Shortcuts	
+Kill All Terminals	
 Kill Terminal	
 Language Badges	
 Language mode for this file	
@@ -972,6 +978,7 @@ New File… (⌘N)
 New Folder…	
 New Terminal	
 New Terminal (⌃⇧`)	
+New Terminal with Profile…	
 New URL of {}	
 New Window	
 New branch name	
@@ -1035,6 +1042,7 @@ No output yet. Language server logs appear here.
 No problems in this file	
 No problems.	
 No problems. Language servers start when you open a file.	
+No profiles or shells were found on this machine.	
 No quick fixes here	
 No recent folders	
 No references found	
@@ -1050,6 +1058,7 @@ No symbols found.
 No symbols in this file	
 No symbols matching “{}”	
 No tasks found. “Tasks: Configure Tasks” creates .codeyard/tasks.jsonc.	
+No terminal profiles yet: add them under terminal.profiles in settings.jsonc.	
 No test at the cursor: put it inside a test function.	
 No tests found for this file type.	
 No type definition found	
@@ -1132,6 +1141,7 @@ Open a folder on {}
 Open a folder to debug it.	
 Open a folder to search in it.	
 Open a project, connect to a host, or switch workspace	
+Open a terminal with…	
 Open as Hex	
 Open files can be undone with ⌘Z; closed files are written to disk.	
 Open in Browser	
@@ -1205,6 +1215,7 @@ Problems (⇧⌘M)
 Process ended. Press any key to close.	
 Process exited with code {}	
 Process exited with code {}. Press any key to close.	
+Profile new terminals use	
 Progress	
 Project name	
 Projects: Add Folder to Projects…	
@@ -1323,7 +1334,9 @@ Removed worktree {}
 Removed {} from “{}”.	
 Removed “{}” from ~/.ssh/config	
 Removing {}…	
+Rename	
 Rename Symbol	
+Rename Terminal…	
 Rename branch	
 Rename remote	
 Rename the matching HTML/XML tag while you edit one	
@@ -1589,10 +1602,16 @@ Tasks: Rerun Last Task
 Tasks: Run Build Task	
 Tasks: Run Task…	
 Terminal	
+Terminal colour	
+Terminal: Change Color…	
 Terminal: Clear	
 Terminal: Close	
+Terminal: Kill All Terminals	
 Terminal: New	
+Terminal: New Terminal with Profile…	
+Terminal: Rename…	
 Terminal: Run Selected Text	
+Terminal: Select Default Profile…	
 Terminal: Split	
 Terminal: Toggle	
 Test Connection	
@@ -1860,9 +1879,11 @@ Zoom: {}
 [image: {}]	
 `{}` did not answer within {} seconds; check the network connection and try again	
 `{}` is not installed or not on PATH	
+a program	
 a theme must be a JSON object	
 about {0} MB · {1}	
 approved	
+args must be a list of texts	
 auto	
 bad array index	
 binary	
@@ -1876,6 +1897,7 @@ cannot read “{}” of the response
 changes requested	
 class	
 click to open · Esc to close	
+color “{}” is not one of accent, success, warning, danger, info, muted	
 condition  ·  log: message with {expr}  ·  hit: 5  ·  empty: plain breakpoint	
 connected	
 connecting	
@@ -1911,9 +1933,12 @@ entry
 entry {0} needs {1} and {2}	
 enum	
 enum member	
+env must be an object of texts	
+env.{} is not used: a name of letters, digits and _ with a text value	
 event	
 exception	
 expected a list [ … ]	
+expected an object with path, args, env or color	
 expected an object { … } (previous settings kept)	
 expression to watch (e.g. total * 2, items.len())	
 failed	
@@ -1967,6 +1992,7 @@ milliseconds
 module	
 name url (e.g. origin https://host/repo.git)	
 namespace	
+needs a path to a program	
 new value	
 no configuration directory	
 no file name	
@@ -2017,6 +2043,7 @@ symbolic links are not copied
 syntax error at “{}”	
 tag	
 task	
+terminal name	
 test failed: {}	
 test panicked: {}	
 the GitHub token contains characters that cannot be sent	
@@ -2197,6 +2224,7 @@ your words
 {} subtype|{} subtypes	
 {} supertype|{} supertypes	
 {} tab with unsaved changes stayed open.|{} tabs with unsaved changes stayed open.	
+{} terminals have programs running. Close them anyway?	
 {} type definition|{} type definitions	
 {} week ago|{} weeks ago	
 {} year ago|{} years ago	
@@ -2260,6 +2288,7 @@ your words
 “{}” is not in the SSH config (or shares a Host line with other names: edit the file).	
 “{}” is not in the dictionary. Quick Fix shows suggestions.	
 “{}” is not supported	
+“{}” is still running in this terminal. Close it anyway?	
 “{}” was not found in ~/.ssh/config	
 “{}”: {} = {}	
 … {} more	

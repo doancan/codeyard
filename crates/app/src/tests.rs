@@ -2248,6 +2248,60 @@ fn a_multi_line_paste_asks_first_and_hidden_markers_are_removed(cx: &mut TestApp
     wait_for(cx, "both lines ran", |cx| term.read_with(cx, |t, _| t.screen_text().lines().filter(|l| *l == "second-line").count() == 1));
 }
 
+/// Closing a terminal asks only while a program runs in it; a split opens where the shell is now; a profile's
+/// arguments and environment reach the shell.
+#[cfg(unix)]
+#[gpui::test]
+fn terminals_ask_before_killing_a_program_split_where_the_shell_is_and_follow_profiles(cx: &mut TestAppContext) {
+    let dir = single_file_dir("term-profiles");
+    let elsewhere = std::fs::canonicalize(std::env::temp_dir()).unwrap().to_string_lossy().into_owned();
+    let mut settings = crate::settings::Settings::default();
+    let profile = crate::terminal_profiles::Profile {
+        name: "plain".into(),
+        path: "/bin/sh".into(),
+        args: Some(Vec::new()),
+        env: vec![("CODEYARD_PROFILE_T".into(), "from-profile".into())],
+        color: Some("info".into()),
+    };
+    settings.terminal_profiles.insert(crate::terminal_profiles::os_key(std::env::consts::OS).into(), vec![profile]);
+    settings.terminal_default_profile = Some("plain".into());
+    let (wb, cx) = crate::qa_integration_tests::setup_with(cx, settings);
+    open(&wb, &dir, cx);
+    cx.simulate_keystrokes("ctrl-`");
+    let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
+    let screen = |cx: &mut VisualTestContext, t: &gpui::Entity<crate::terminal::TerminalView>| t.read_with(cx, |t, _| t.screen_text());
+    cx.simulate_input("echo \"$CODEYARD_PROFILE_T\"\n");
+    wait_for(cx, "the profile's environment", |cx| screen(cx, &term).lines().any(|l| l == "from-profile"));
+    assert_eq!(term.read_with(cx, |t, _| t.color.clone()).as_deref(), Some("info"));
+
+    // The shell moves; the split follows it.
+    cx.simulate_input(&format!("cd {elsewhere}\n"));
+    cx.run_until_parked();
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Split", window, cx));
+    wait_for(cx, "the split", |cx| wb.read_with(cx, |wb, _| wb.terminal_count()) == 2);
+    let second = wb.read_with(cx, |wb, _| wb.active_terminal()).unwrap();
+    assert_eq!(second.read_with(cx, |t, _| t.cwd_for_test()).as_deref(), Some(elsewhere.as_str()));
+
+    // An idle shell closes without a question; one running `sleep` asks and stays open on Cancel.
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Close", window, cx));
+    wait_for(cx, "closed without asking", |cx| wb.read_with(cx, |wb, _| wb.terminal_count()) == 1);
+    assert!(!cx.has_pending_prompt());
+    wb.update_in(cx, |wb, window, cx| wb.focus_terminal(window, cx));
+    cx.simulate_input("sleep 30\n");
+    cx.run_until_parked();
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Close", window, cx));
+    wait_for(cx, "the question", |cx| cx.has_pending_prompt());
+    cx.simulate_prompt_answer("Cancel");
+    cx.run_until_parked();
+    assert_eq!(wb.read_with(cx, |wb, _| wb.terminal_count()), 1, "still open");
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Kill All Terminals", window, cx));
+    wait_for(cx, "the question", |cx| cx.has_pending_prompt());
+    cx.simulate_prompt_answer("Close");
+    wait_for(cx, "all closed", |cx| wb.read_with(cx, |wb, _| wb.terminal_count()) == 0);
+}
+
 /// Explorer: single-subfolder chains as one row, sort setting, hierarchy line, type-to-search.
 #[gpui::test]
 fn explorer_compacts_chains_sorts_and_types_ahead(cx: &mut TestAppContext) {
