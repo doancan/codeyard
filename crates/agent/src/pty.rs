@@ -21,6 +21,8 @@ pub struct Spawn {
     pub args: Option<Vec<String>>,
     /// Added to the environment.
     pub env: Vec<(String, String)>,
+    /// Set up shell integration (see `shell_integration`).
+    pub integration: bool,
 }
 
 /// What is running in a terminal.
@@ -102,7 +104,7 @@ mod windows {
     }
 
     pub fn spawn_with(spec: Spawn) -> io::Result<(Pty, Box<dyn io::Read + Send>)> {
-        let Spawn { cols, rows, cwd, shell, args, env } = spec;
+        let Spawn { cols, rows, cwd, shell, args, env, .. } = spec;
         let pair = native_pty_system().openpty(size(cols, rows)).map_err(io::Error::other)?;
         let shell = shell.filter(|s| !s.is_empty()).map(std::ffi::OsString::from).or_else(|| std::env::var_os("COMSPEC")).unwrap_or_else(|| "cmd.exe".into());
         let mut cmd = CommandBuilder::new(shell);
@@ -172,7 +174,7 @@ mod imp {
 
     /// Start the shell; the returned `File` is for reading output (a copy of the master).
     pub fn spawn_with(spec: Spawn) -> io::Result<(Pty, File)> {
-        let Spawn { cols, rows, cwd, shell, args, env } = spec;
+        let Spawn { cols, rows, cwd, shell, args, mut env, integration } = spec;
         let (cwd, shell) = (cwd.as_deref(), shell.as_deref());
         let (mut master, mut slave) = (0, 0);
         let mut ws = winsize(cols, rows);
@@ -192,6 +194,11 @@ mod imp {
         }
 
         let shell = shell.map(str::to_string).or_else(|| std::env::var("SHELL").ok()).unwrap_or_else(|| "/bin/sh".into());
+        // A login shell with integration: the shell's own way to load the hook scripts.
+        let args = match (args, integration) {
+            (None, true) => crate::shell_integration::setup(&shell, &mut env),
+            (args, _) => args,
+        };
         let mut cmd = Command::new(&shell);
         match args {
             Some(args) => cmd.args(args),
@@ -253,7 +260,7 @@ pub use imp::{resize, spawn_with};
 /// A login shell (the agent's own tests and the old request).
 #[cfg(test)]
 pub fn spawn(cols: u16, rows: u16, cwd: Option<&str>, shell: Option<&str>) -> io::Result<(Pty, impl io::Read)> {
-    spawn_with(Spawn { cols, rows, cwd: cwd.map(str::to_string), shell: shell.map(str::to_string), args: None, env: Vec::new() })
+    spawn_with(Spawn { cols, rows, cwd: cwd.map(str::to_string), shell: shell.map(str::to_string), ..Spawn::default() })
 }
 
 impl Pty {
@@ -388,6 +395,7 @@ mod tests {
             shell: Some("/bin/sh".into()),
             args: Some(Vec::new()),
             env: vec![("CODEYARD_T".into(), "1".into())],
+            integration: false,
         };
         let (mut p, mut reader) = spawn_with(spec).unwrap();
         std::thread::spawn(move || {

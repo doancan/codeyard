@@ -95,6 +95,7 @@ is the complete list and always matches your key bindings; every setting is in [
 | Toggle breakpoint (or click the gutter) | F9 | F9 |
 | Step over / into / out | F10, F11, ⇧F11 | F10, Ctrl+F11, Shift+F11 |
 | Pause the program | F6 | F6 |
+| Terminal: previous / next command (shell integration) | ⌘↑ / ⌘↓ | Ctrl+Shift+↑ / ↓ |
 | Run and Debug view | ⌃⇧D | Alt+Shift+D |
 | Toggle bookmark / next / previous | ⌥⌘K / ⌥⌘L / ⌥⌘J | Ctrl+Alt+K / L / J |
 | Cut / copy / paste in the file tree | ⌘X / ⌘C / ⌘V | Ctrl+X / Ctrl+C / Ctrl+V |

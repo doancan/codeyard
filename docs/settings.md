@@ -172,6 +172,7 @@ status bar reports it.
 | `terminal.sanitizePaste` | `auto`, `always`, `off` | `auto` | Remove control characters from pasted text |
 | `terminal.scrollback` | number 0–50000 | `2000` | Lines kept in terminal history |
 | `terminal.shell` | text | empty | Shell for new terminals (empty: login shell) |
+| `terminal.shellIntegration` | `true` / `false` | `true` | Mark prompts, commands and the folder in zsh, bash and fish |
 | `terminal.warnMultilinePaste` | `unbracketed`, `always`, `never` | `unbracketed` | Ask before pasting several lines into the terminal |
 
 ## `ui`

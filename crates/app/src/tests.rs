@@ -2302,6 +2302,67 @@ fn terminals_ask_before_killing_a_program_split_where_the_shell_is_and_follow_pr
     wait_for(cx, "all closed", |cx| wb.read_with(cx, |wb, _| wb.terminal_count()) == 0);
 }
 
+/// Shell integration sequences mark commands: their count, the last output and how they ended.
+#[gpui::test]
+fn command_marks_follow_the_shell_integration_sequences(cx: &mut TestAppContext) {
+    let dir = single_file_dir("marks");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    wb.update(cx, |wb, _| wb.set_shell("/bin/cat"));
+    cx.simulate_keystrokes("ctrl-`");
+    let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
+    let feed = |cx: &mut VisualTestContext, s: &str| term.update(cx, |t, _| t.feed_for_test(s.as_bytes()));
+    feed(cx, "\x1b]7;file://box/srv/app\x07\x1b]133;A\x07$ ls\r\n\x1b]133;C\x07a.txt\r\nb.txt\r\n\x1b]133;D;0\x07");
+    feed(cx, "\x1b]133;A\x07$ false\r\n\x1b]133;C\x07");
+    assert_eq!(term.read_with(cx, |t, _| t.command_count_for_test()), 2);
+    assert_eq!(term.read_with(cx, |t, _| t.last_output_for_test()).as_deref(), Some("a.txt\nb.txt"), "the finished command's output");
+    feed(cx, "\x1b]133;D;1\x07\x1b]133;A\x07$ ");
+    assert_eq!(term.read_with(cx, |t, _| t.last_output_for_test()).as_deref(), Some(""), "the last command printed nothing");
+    assert_eq!(term.read_with(cx, |t, _| t.live_cwd()).as_deref(), Some("/srv/app"));
+    // A prompt without a command (an empty line) is not counted.
+    feed(cx, "\r\n\x1b]133;A\x07$ ");
+    assert_eq!(term.read_with(cx, |t, _| t.command_count_for_test()), 2);
+}
+
+/// A real zsh with the integration scripts: its commands and exit codes are marked, and it reports its folder.
+#[cfg(unix)]
+#[gpui::test]
+fn zsh_reports_commands_and_its_folder_with_shell_integration(cx: &mut TestAppContext) {
+    if !std::path::Path::new("/bin/zsh").exists() {
+        return;
+    }
+    let dir = single_file_dir("zsh-int");
+    let user = dir.join("zdot");
+    std::fs::create_dir_all(&user).unwrap();
+    let mut settings = crate::settings::Settings::default();
+    let profile = crate::terminal_profiles::Profile {
+        name: "zsh".into(),
+        path: "/bin/zsh".into(),
+        args: None,
+        env: vec![("CODEYARD_USER_ZDOTDIR".into(), user.to_string_lossy().into_owned())],
+        color: None,
+    };
+    settings.terminal_profiles.insert(crate::terminal_profiles::os_key(std::env::consts::OS).into(), vec![profile]);
+    settings.terminal_default_profile = Some("zsh".into());
+    let (wb, cx) = crate::qa_integration_tests::setup_with(cx, settings);
+    open(&wb, &dir, cx);
+    cx.simulate_keystrokes("ctrl-`");
+    let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
+    let elsewhere = std::fs::canonicalize(std::env::temp_dir()).unwrap().to_string_lossy().into_owned();
+    cx.simulate_input(&format!("cd {elsewhere}; echo marked-output\n"));
+    wait_for(cx, "the first command", |cx| {
+        term.read_with(cx, |t, _| t.command_count_for_test()) >= 1 && t_out(&term, cx).is_some_and(|o| o.contains("marked-output"))
+    });
+    assert_eq!(term.read_with(cx, |t, _| t.live_cwd()).as_deref(), Some(elsewhere.as_str()), "OSC 7 from the prompt hook");
+    cx.simulate_input("false\n");
+    wait_for(cx, "the second command", |cx| term.read_with(cx, |t, _| t.command_count_for_test()) >= 2 && t_out(&term, cx).is_some_and(|o| o.is_empty()));
+}
+
+#[cfg(unix)]
+fn t_out(term: &gpui::Entity<crate::terminal::TerminalView>, cx: &mut VisualTestContext) -> Option<String> {
+    term.read_with(cx, |t, _| t.last_output_for_test())
+}
+
 /// Explorer: single-subfolder chains as one row, sort setting, hierarchy line, type-to-search.
 #[gpui::test]
 fn explorer_compacts_chains_sorts_and_types_ahead(cx: &mut TestAppContext) {
