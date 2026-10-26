@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - The terminal ignored `terminal.fontSize` and zoom: it now uses the setting, with rows sized to match.
+- **Port forwarding is more reliable:** a double click no longer forwards a port twice; forwards restored after a
+  reconnect report failures on their row (with *Retry*) instead of looking active; switching or losing the connection
+  cancels forwards instead of leaking their local ports; after a drop, forwards come back on the same local port.
+- A forward to a port held by another program on this computer's IPv4 loopback looked active while connections went to
+  that program; busy ports are now detected on both loopback addresses.
+- Forwards connect to the exact address a server port listens on (`127.0.0.1`, `::1` or another address), so a service
+  bound to one of them is reached; the Ports panel names the program listening on each port, and a failed scan keeps
+  the last list.
 
 ## [0.4.1] - 2026-10-26
 
