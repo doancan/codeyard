@@ -94,8 +94,19 @@ pub(crate) fn dock_items(recent: &[state::RecentWorkspace]) -> Vec<MenuItem> {
 /// On right-clicking the Dock icon: shortcuts and recently opened projects. Rebuilt when the recent list (or the interface language)
 /// changes.
 #[cfg(target_os = "macos")]
-pub fn set_dock_menu(cx: &App, recent: &[state::RecentWorkspace]) {
+pub fn set_dock_menu(cx: &mut App, recent: &[state::RecentWorkspace]) {
     *DOCK_RECENT.lock().unwrap_or_else(|e| e.into_inner()) = recent.iter().take(10).cloned().collect();
+    // `setMainMenu:` makes AppKit validate every item at once, and GPUI answers by updating the active window. Callers are
+    // usually inside an update of that very window (a setting that changes the language), so it would lease the `Workbench`
+    // twice and abort the process: the rebuild waits for the end of the current effect cycle.
+    let recent = recent.to_vec();
+    cx.defer(move |cx| rebuild(cx, &recent));
+}
+
+#[cfg(target_os = "macos")]
+fn rebuild(cx: &mut App, recent: &[state::RecentWorkspace]) {
+    #[cfg(test)]
+    tests::validate_like_appkit(cx);
     cx.set_dock_menu(dock_items(recent));
     // File ▸ Open Recent in the menu bar is refreshed with the same list.
     cx.set_menus(menus(recent));
@@ -332,4 +343,40 @@ pub(crate) fn menus(recent: &[state::RecentWorkspace]) -> Vec<Menu> {
             ],
         },
     ]
+}
+
+#[cfg(all(test, target_os = "macos"))]
+pub(crate) mod tests {
+    use std::cell::Cell;
+
+    use gpui::{App, TestAppContext};
+
+    use crate::qa_workbench_tests::setup;
+    use crate::workbench as wb;
+
+    thread_local! {
+        static REBUILDS: Cell<usize> = const { Cell::new(0) };
+    }
+
+    /// The test platform's `set_menus` does nothing, so this stands in for what AppKit does inside `setMainMenu:`: it validates the
+    /// items at once, and GPUI answers by asking the active window (`App::is_action_available`).
+    pub(super) fn validate_like_appkit(cx: &mut App) {
+        REBUILDS.with(|r| r.set(r.get() + 1));
+        cx.is_action_available(&wb::Quit);
+    }
+
+    /// Rebuilding the menus inside an update of the window (a click on "Check Daily" that changes the language) used to lease the
+    /// `Workbench` twice and abort the process.
+    #[gpui::test]
+    fn the_menu_bar_is_rebuilt_after_the_update_that_asked_for_it(cx: &mut TestAppContext) {
+        let (wb, cx) = setup(cx);
+        cx.run_until_parked();
+        REBUILDS.with(|r| r.set(0));
+        wb.update(cx, |wb, cx| {
+            wb.sync_dock_menu(cx);
+            assert_eq!(REBUILDS.with(Cell::get), 0, "the menus were rebuilt while the workbench was still being updated");
+        });
+        cx.run_until_parked();
+        assert_eq!(REBUILDS.with(Cell::get), 1, "rebuilt once, after the update had finished");
+    }
 }
