@@ -362,3 +362,23 @@ fn checking_out_a_pull_request_never_runs_a_command_named_by_the_repository(cx: 
     wait_ticking(cx, "the refusal", |cx| notice(&wb, cx).contains("not a usable"));
     assert!(!marker.exists(), "the command in the remote's name ran");
 }
+
+/// Right click on a changed file in Source Control: Copy Path, Copy Relative Path and Add to .gitignore, the last one writing the file's path.
+#[gpui::test]
+fn a_changed_file_has_a_context_menu_in_source_control(cx: &mut TestAppContext) {
+    let f = Fixture::new("scm-row-menu");
+    std::fs::write(f.dir.join("scratch.log"), "noise\n").unwrap();
+    let (wb, cx) = opened(cx, &f, quiet());
+    refresh(&wb, cx);
+    wait_ticking(cx, "the change shows up", |cx| status(&wb, cx).is_some_and(|s| s.changes.iter().any(|c| c.path == "scratch.log")));
+    let scm = wb.read_with(cx, |wb, _| wb.scm_panel());
+    let at = gpui::point(gpui::px(60.), gpui::px(60.));
+    scm.update(cx, |_, cx| cx.emit(crate::scm::ScmEvent::FileMenu("scratch.log".into(), at)));
+    cx.run_until_parked();
+    let labels = wb.read_with(cx, |wb, cx| wb.menu_labels(cx)).expect("the menu opened");
+    assert_eq!(labels, ["Copy Path", "Copy Relative Path", "Add to .gitignore"]);
+    wb.update_in(cx, |wb, _, cx| wb.select_menu_for_test("Add to .gitignore", cx));
+    cx.run_until_parked();
+    let ignore = std::fs::read_to_string(f.dir.join(".gitignore")).unwrap_or_default();
+    assert!(ignore.lines().any(|l| l == "/scratch.log"), "{ignore:?}");
+}
