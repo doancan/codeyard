@@ -436,6 +436,7 @@ fn the_new_surfaces_have_turkish_entries() {
         ("source control", "Commit All ({})", "Tümünü Commit Et ({})"),
         ("source control", "All Branches", "Tüm Dallar"),
         ("source control", "Hide Merge Commits", "Merge Commit'lerini Gizle"),
+        ("terminal", "Previous Match", "Önceki Eşleşme"),
         ("source control", "No commits yet.", "Henüz commit yok."),
         ("source control", "Pop Latest Stash", "Son Stash'i Pop Et"),
         ("source control", "Reset Hard to Here…", "Buraya Hard Reset…"),

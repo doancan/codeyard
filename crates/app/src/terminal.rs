@@ -21,7 +21,25 @@ use host::{Host, PtyEvent};
 
 use crate::ui::{MONO_FONT, Palette, c, palette, text};
 
-actions!(terminal, [TermPaste, TermCopy, TermClear]);
+actions!(
+    terminal,
+    [
+        TermPaste,
+        TermCopy,
+        TermClear,
+        TermSelectAll,
+        TermFind,
+        TermFindNext,
+        TermFindPrevious,
+        TermScrollPageUp,
+        TermScrollPageDown,
+        TermScrollToTop,
+        TermScrollToBottom
+    ]
+);
+
+#[path = "terminal_find.rs"]
+mod find;
 
 pub enum TerminalEvent {
     TitleChanged,
@@ -30,6 +48,8 @@ pub enum TerminalEvent {
     CloseRequested,
     /// ⌘-click: URL or file location.
     OpenLink(crate::links::Link),
+    /// Right click (window coordinates): copy, paste, select all, find, clear.
+    ContextMenu(Point<Pixels>),
 }
 
 /// Upper bound (bytes) on terminal output not yet parsed.
@@ -134,6 +154,8 @@ pub struct TerminalView {
     selecting: bool,
     /// Link hovered while ⌘ is held: (screen row, columns).
     hover_link: Option<(usize, std::ops::Range<usize>)>,
+    /// The find bar, while it is open.
+    find: Option<find::FindState>,
     focus_handle: FocusHandle,
 }
 
@@ -178,6 +200,7 @@ impl TerminalView {
             size,
             grid: (Point::default(), px(8.)),
             selecting: false,
+            find: None,
             hover_link: None,
             focus_handle: cx.focus_handle(),
         };
@@ -264,6 +287,8 @@ impl TerminalView {
 
     fn feed(&mut self, data: &[u8]) {
         self.parser.advance(&mut self.term, data);
+        // New output can push lines into the history, so a remembered match would point at the wrong cells.
+        self.forget_find_match();
     }
 
     fn drain_events(&mut self, cx: &mut Context<Self>) {
@@ -382,7 +407,11 @@ impl TerminalView {
         rows.iter().map(|r| r.trim_end()).collect::<Vec<_>>().join("\n")
     }
 
-    fn on_key_down(&mut self, ev: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
+    fn on_key_down(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        // Typing in the find bar: those keys bubble up here but are not for the shell.
+        if self.find_has_focus(window, cx) {
+            return;
+        }
         if self.exit.is_some() || self.error.is_some() {
             if !ev.keystroke.modifiers.platform {
                 cx.stop_propagation();
@@ -583,6 +612,32 @@ impl TerminalView {
         self.clear_all(cx);
     }
 
+    /// Select the screen and the whole scrollback (then ⌘C copies everything).
+    fn select_all(&mut self, _: &TermSelectAll, _: &mut Window, cx: &mut Context<Self>) {
+        let top = GridPoint::new(self.term.topmost_line(), Column(0));
+        let bottom = GridPoint::new(self.term.bottommost_line(), self.term.last_column());
+        let mut selection = Selection::new(SelectionType::Simple, top, Side::Left);
+        selection.update(bottom, Side::Right);
+        self.term.selection = Some(selection);
+        cx.notify();
+    }
+
+    fn scroll_page_up(&mut self, _: &TermScrollPageUp, _: &mut Window, cx: &mut Context<Self>) {
+        self.scroll_by(Scroll::PageUp, cx);
+    }
+
+    fn scroll_page_down(&mut self, _: &TermScrollPageDown, _: &mut Window, cx: &mut Context<Self>) {
+        self.scroll_by(Scroll::PageDown, cx);
+    }
+
+    fn scroll_to_top(&mut self, _: &TermScrollToTop, _: &mut Window, cx: &mut Context<Self>) {
+        self.scroll_by(Scroll::Top, cx);
+    }
+
+    fn scroll_to_bottom(&mut self, _: &TermScrollToBottom, _: &mut Window, cx: &mut Context<Self>) {
+        self.scroll_by(Scroll::Bottom, cx);
+    }
+
     /// Clear scrollback and ask the shell to redraw the screen (Ctrl+L).
     pub fn clear_all(&mut self, cx: &mut Context<Self>) {
         self.term.grid_mut().clear_history();
@@ -591,9 +646,35 @@ impl TerminalView {
     }
 }
 
-/// Key → terminal bytes (xterm sequences). ⌘ keys are left to the app.
+/// macOS line editing, as in Terminal.app: ⌘← / ⌘→ go to the start / end of the line, ⌥← / ⌥→ move by word,
+/// ⌘⌫ deletes to the start of the line, ⌘⌦ to its end, ⌥⌦ deletes the next word. They are the readline / zle keys
+/// (Ctrl+A, Ctrl+E, Esc b, Esc f, Ctrl+U, Ctrl+K, Esc d), so they work in bash, zsh, fish and most REPLs. Full-screen programs
+/// (vim, less) get the plain xterm keys instead: Ctrl+A there would mean something else.
+pub fn macos_line_editing(k: &gpui::Keystroke, mode: TermMode) -> Option<&'static [u8]> {
+    let m = &k.modifiers;
+    if mode.contains(TermMode::ALT_SCREEN) || m.shift || m.control {
+        return None;
+    }
+    Some(match (k.key.as_str(), m.platform, m.alt) {
+        ("left", true, false) => b"\x01",
+        ("right", true, false) => b"\x05",
+        ("backspace", true, false) => b"\x15",
+        ("delete", true, false) => b"\x0b",
+        ("left", false, true) => b"\x1bb",
+        ("right", false, true) => b"\x1bf",
+        ("delete", false, true) => b"\x1bd",
+        _ => return None,
+    })
+}
+
+/// Key → terminal bytes (xterm sequences). ⌘ keys are left to the app, except the macOS line editing keys.
 pub fn key_to_bytes(k: &gpui::Keystroke, mode: TermMode) -> Option<Vec<u8>> {
     let m = &k.modifiers;
+    if cfg!(target_os = "macos")
+        && let Some(bytes) = macos_line_editing(k, mode)
+    {
+        return Some(bytes.to_vec());
+    }
     if m.platform {
         return None;
     }
@@ -860,6 +941,10 @@ impl Element for TerminalElement {
         let colors = content.colors;
         let offset = content.display_offset as i32;
         let selection = content.selection;
+        // Find bar open: every match on screen gets a tint (the current one is the selection).
+        let found = view.find.as_ref().and_then(|f| f.regex()).map(|mut regex| find::visible_matches(&view.term, &mut regex, offset, rows)).unwrap_or_default();
+        let current = view.find.as_ref().and_then(|f| f.current());
+        let (found_bg, current_bg) = (mix(p.bg, p.warning, 0.22), mix(p.bg, p.warning, 0.45));
         let mut frame = Frame {
             rows: (0..rows).map(|_| Vec::new()).collect(),
             backgrounds: Vec::new(),
@@ -883,8 +968,12 @@ impl Element for TerminalElement {
             if cell.flags.contains(Flags::HIDDEN) {
                 fg = bg;
             }
-            if selection.is_some_and(|s| s.contains(cell.point)) {
+            if current.as_ref().is_some_and(|m| m.contains(&cell.point)) {
+                bg = current_bg;
+            } else if selection.is_some_and(|s| s.contains(cell.point)) {
                 bg = p.selection;
+            } else if found.iter().any(|m| m.contains(&cell.point)) {
+                bg = found_bg;
             }
             if bg != p.bg {
                 let end = if cell.flags.contains(Flags::WIDE_CHAR) { col + 2 } else { col + 1 };
@@ -981,6 +1070,8 @@ impl Render for TerminalView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = *palette(cx);
         let focused = self.focus_handle.is_focused(window);
+        let find_focused = self.find_has_focus(window, cx);
+        let find_bar = self.find_bar(&p, find_focused, cx);
         let exit_line = self.exit.map(|code| match code {
             Some(c) => crate::i18n::tf("Process exited with code {}. Press any key to close.", &[&c]),
             None => crate::i18n::t("Process ended. Press any key to close.").to_string(),
@@ -992,9 +1083,28 @@ impl Render for TerminalView {
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(Self::clear))
+            .on_action(cx.listener(Self::select_all))
+            .on_action(cx.listener(Self::find))
+            .on_action(cx.listener(Self::find_next))
+            .on_action(cx.listener(Self::find_previous))
+            .on_action(cx.listener(Self::scroll_page_up))
+            .on_action(cx.listener(Self::scroll_page_down))
+            .on_action(cx.listener(Self::scroll_to_top))
+            .on_action(cx.listener(Self::scroll_to_bottom))
             .on_key_down(cx.listener(Self::on_key_down))
             .on_scroll_wheel(cx.listener(Self::on_scroll))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(|this, ev: &MouseDownEvent, window, cx| {
+                    // A program that reads the mouse (htop, vim with mouse=a) keeps the right button; Shift still opens the menu.
+                    if this.term.mode().intersects(TermMode::MOUSE_MODE) && !ev.modifiers.shift {
+                        return;
+                    }
+                    window.focus(&this.focus_handle);
+                    cx.emit(TerminalEvent::ContextMenu(ev.position));
+                }),
+            )
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .when(self.hover_link.is_some(), |d| d.cursor(gpui::CursorStyle::PointingHand))
             .on_mouse_up(MouseButton::Left, cx.listener(|this, ev, _, _| this.on_mouse_up(ev)))
@@ -1007,6 +1117,7 @@ impl Render for TerminalView {
             .line_height(px(text::CODE.1))
             .text_color(c(p.text))
             .child(TerminalElement { view: cx.entity(), palette: p, focused })
+            .children(find_bar)
             .when_some(self.error.clone().or(exit_line.map(Into::into)), |d, msg| {
                 d.child(
                     div()
@@ -1115,6 +1226,29 @@ mod tests {
 
     fn bytes(k: &str, mode: TermMode) -> Option<Vec<u8>> {
         key_to_bytes(&Keystroke::parse(k).unwrap(), mode)
+    }
+
+    fn mac(k: &str, mode: TermMode) -> Option<&'static [u8]> {
+        macos_line_editing(&Keystroke::parse(k).unwrap(), mode)
+    }
+
+    #[test]
+    fn macos_line_editing_keys_are_readline_keys() {
+        let m = TermMode::empty();
+        assert_eq!(mac("cmd-left", m), Some(&b"\x01"[..]), "start of line");
+        assert_eq!(mac("cmd-right", m), Some(&b"\x05"[..]), "end of line");
+        assert_eq!(mac("alt-left", m), Some(&b"\x1bb"[..]), "word left");
+        assert_eq!(mac("alt-right", m), Some(&b"\x1bf"[..]), "word right");
+        assert_eq!(mac("cmd-backspace", m), Some(&b"\x15"[..]), "delete to line start");
+        assert_eq!(mac("cmd-delete", m), Some(&b"\x0b"[..]), "delete to line end");
+        assert_eq!(mac("alt-delete", m), Some(&b"\x1bd"[..]), "delete word right");
+        // Selections and other combinations keep their xterm meaning; ⌘C / ⌘V stay with the app.
+        for k in ["shift-cmd-left", "alt-shift-left", "ctrl-left", "cmd-c", "cmd-up"] {
+            assert_eq!(mac(k, m), None, "{k}");
+        }
+        // vim, less: plain xterm keys (Ctrl+A would increment a number in vim).
+        assert_eq!(mac("cmd-left", TermMode::ALT_SCREEN), None);
+        assert_eq!(mac("alt-left", TermMode::ALT_SCREEN), None);
     }
 
     #[test]
