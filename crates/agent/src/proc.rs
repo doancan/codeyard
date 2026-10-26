@@ -17,11 +17,7 @@ pub fn command(program: &str, args: &[String], cwd: Option<&str>) -> std::io::Re
     let mut cmd = if program.contains('/') {
         Command::new(program)
     } else {
-        let shell = std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/sh".into());
-        let mut c = Command::new(shell);
-        // $0 = program, $@ = arguments: avoids quoting.
-        c.args(["-lc", "exec \"$0\" \"$@\"", program]);
-        c
+        login_command(&std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/sh".into()), program)
     };
     #[cfg(windows)]
     let mut cmd = {
@@ -252,6 +248,22 @@ fn collect(
     }
 }
 
+/// `program` found through the user's login shell, so it sees the `PATH` their shell setup builds. The program and its
+/// arguments are passed as arguments, never inside the script, so nothing needs quoting. fish has no `$0` / `$@`
+/// (`$argv` instead); a shell that is neither gets `/bin/sh`, which still reads the login profile.
+#[cfg(unix)]
+fn login_command(shell: &str, program: &str) -> Command {
+    let name = std::path::Path::new(shell).file_name().map(|n| n.to_string_lossy().trim_start_matches('-').to_string()).unwrap_or_default();
+    let (shell, script) = match name.as_str() {
+        "fish" => (shell, "exec $argv"),
+        "sh" | "bash" | "zsh" | "dash" | "ksh" | "mksh" | "ash" | "yash" | "posh" => (shell, "exec \"$0\" \"$@\""),
+        _ => ("/bin/sh", "exec \"$0\" \"$@\""),
+    };
+    let mut c = Command::new(shell);
+    c.args(["-lc", script, program]);
+    c
+}
+
 /// Long-lived process: written to via stdin, read via stdout (stderr is discarded). On Unix it leads its own process
 /// group, so stopping it also stops what it started (a test runner's test binaries, an adapter's debuggee).
 pub struct Proc {
@@ -335,6 +347,23 @@ fn exit_code(status: std::process::ExitStatus) -> Option<i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Programs found through the login shell get their arguments unchanged whatever that shell is (fish has no `$@`; a
+    /// csh-style shell falls back to `/bin/sh`).
+    #[cfg(unix)]
+    #[test]
+    fn programs_start_through_any_login_shell() {
+        let mut shells: Vec<String> = ["/bin/sh", "/bin/bash", "/bin/zsh", "/bin/dash", "/bin/tcsh", "/bin/csh"]
+            .into_iter()
+            .filter(|s| std::path::Path::new(s).exists())
+            .map(str::to_string)
+            .collect();
+        shells.extend(std::env::var("CODEYARD_FISH").ok());
+        for shell in shells {
+            let out = login_command(&shell, "printf").args(["<%s>", "a b", "it's", "$HOME"]).env("HOME", std::env::temp_dir()).output().unwrap();
+            assert_eq!(String::from_utf8_lossy(&out.stdout), "<a b><it's><$HOME>", "{shell}: {}", String::from_utf8_lossy(&out.stderr));
+        }
+    }
 
     #[cfg(unix)]
     #[test]
