@@ -1846,6 +1846,60 @@ fn qa_terminal_mouse_reporting_reaches_program(cx: &mut TestAppContext) {
     assert!(got, "click was not reported to the program (mouse mode 1000 on)");
 }
 
+/// macOS line editing in the shell: ⌘← / ⌘→ jump to the ends of the line, ⌥← moves back a word, ⌘⌫ clears the line.
+#[cfg(target_os = "macos")]
+#[gpui::test]
+fn qa_terminal_macos_line_editing_keys(cx: &mut TestAppContext) {
+    let dir = qa_dir("qa-termlineedit");
+    let (wb, cx) = setup(cx);
+    let term = terminal(&wb, &dir, cx);
+    cx.simulate_input("echo world-end");
+    cx.simulate_keystrokes("cmd-left");
+    cx.simulate_input("echo hello-$((1+1)); ");
+    cx.simulate_keystrokes("cmd-right alt-left");
+    cx.simulate_input("X");
+    cx.simulate_keystrokes("enter");
+    wait_for(cx, "edited line ran", |cx| {
+        term.read_with(cx, |t, _| {
+            let text = t.screen_text();
+            text.lines().any(|l| l == "hello-2") && text.lines().any(|l| l == "world-Xend")
+        })
+    });
+    cx.simulate_input("echo wrong-$((1+4))");
+    cx.simulate_keystrokes("cmd-backspace");
+    type_line(cx, "echo right-$((3+4))");
+    wait_for(cx, "cleared line", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l == "right-7")));
+    assert!(!term.read_with(cx, |t, _| t.screen_text()).lines().any(|l| l == "wrong-5"), "⌘⌫ left the old text on the line");
+}
+
+/// Find in the terminal: matches in the output are counted and selected, typing in the bar does not reach the shell,
+/// Escape closes it and the shell has the keys again.
+#[gpui::test]
+fn qa_terminal_find_counts_selects_and_closes(cx: &mut TestAppContext) {
+    let dir = qa_dir("qa-termfind");
+    let (wb, cx) = setup(cx);
+    let term = terminal(&wb, &dir, cx);
+    type_line(cx, "for i in 1 2 3; do echo row-$i-needle; done");
+    wait_for(cx, "rows", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l == "row-3-needle")));
+    let (total, selected) = term.update_in(cx, |t, window, cx| t.find_for_test("needle", window, cx));
+    // The command line holds the word too.
+    assert_eq!(total, 4);
+    assert_eq!(selected.as_deref(), Some("needle"));
+    // Walking up and down stays on matches and wraps around.
+    for down in [false, false, false, false, true, true] {
+        assert_eq!(term.update(cx, |t, cx| t.find_step_for_test(down, cx)).as_deref(), Some("needle"));
+    }
+    // A query that is not in the output.
+    let (none, _) = term.update_in(cx, |t, window, cx| t.find_for_test("haystack", window, cx));
+    assert_eq!(none, 0);
+    // The bar has focus: typed text stays there.
+    cx.simulate_input("zz");
+    cx.simulate_keystrokes("escape");
+    type_line(cx, "echo back-$((2+3))");
+    wait_for(cx, "shell has the keys again", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l == "back-5")));
+    assert!(!term.read_with(cx, |t, _| t.screen_text()).contains("zz"), "keys typed in the find bar reached the shell");
+}
+
 // --- Remote SSH (local throwaway sshd only) ------------------------------
 
 /// Over SSH: git status comes from the server, staging works, the terminal runs

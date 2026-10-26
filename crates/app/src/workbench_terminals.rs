@@ -61,6 +61,12 @@ impl Workbench {
             }
             TerminalEvent::TitleChanged | TerminalEvent::Exited => cx.notify(),
             TerminalEvent::OpenLink(link) => this.open_link(link.clone(), window, cx),
+            TerminalEvent::ContextMenu(position) => {
+                if let Some(ix) = this.terminals.iter().position(|t| t.downgrade() == weak) {
+                    this.active_terminal = ix;
+                }
+                this.open_terminal_menu(*position, window, cx);
+            }
         }));
         self.terminals.push(term);
         self.active_terminal = self.terminals.len() - 1;
@@ -138,6 +144,21 @@ impl Workbench {
     #[cfg(test)]
     pub fn split_partner(&self) -> Option<Entity<TerminalView>> {
         self.term_split.clone()
+    }
+
+    /// Right click in a terminal: the terminal has focus, so the clipboard and find actions go to it.
+    fn open_terminal_menu(&mut self, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+        use crate::terminal::{TermCopy, TermFind, TermPaste, TermSelectAll};
+        let entries: Vec<(&str, Box<dyn gpui::Action>, bool)> = vec![
+            (crate::i18n::t("Copy"), Box::new(TermCopy), false),
+            (crate::i18n::t("Paste"), Box::new(TermPaste), false),
+            (crate::i18n::t("Select All"), Box::new(TermSelectAll), false),
+            (crate::i18n::t("Find"), Box::new(TermFind), true),
+            (crate::i18n::t("Clear Terminal"), Box::new(ClearTerminal), true),
+            (crate::i18n::t("New Terminal"), Box::new(NewTerminal), true),
+            (crate::i18n::t("Kill Terminal"), Box::new(KillTerminal), false),
+        ];
+        self.show_action_menu(entries, position, window, cx);
     }
 
     pub fn active_terminal(&self) -> Option<Entity<TerminalView>> {

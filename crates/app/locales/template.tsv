@@ -147,6 +147,7 @@ Choose
 Choose a folder on this computer…	
 Choose an action	
 Choose an answer (Esc: none)	
+Clear Terminal	
 Clear the search	
 Clear the search field	
 Click to remove this filter	
@@ -923,6 +924,7 @@ New branch name
 New name	
 New name of the remote	
 Next	
+Next Match	
 Next Problem	
 Next match (↵)	
 Next result (F4)	
@@ -1125,6 +1127,7 @@ Preserve case (⌥P)
 Preserve case when replacing	
 Preview of {}	
 Preview {}	
+Previous Match	
 Previous Problem	
 Previous match (⇧↵)	
 Previous result (⇧F4)	
@@ -1324,6 +1327,8 @@ Saving…
 Scan Again	
 Schema cache cleared. Schemas are downloaded again when needed.	
 Schemas: Clear Download Cache	
+Scroll to Bottom	
+Scroll to Top	
 Search	
 Search (⇧⌘F)	
 Search Commits	
@@ -2064,6 +2069,7 @@ your words
 {} · VS Code import	
 {} · user	
 {} ↔ Clipboard	
+{}+ results	
 {}: .env has no null; give it a value or remove it	
 {}: .env holds only text; nested values need the “joined with __” choice	
 {}: TOML has no null; give it a value or remove it	

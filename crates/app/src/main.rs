@@ -210,7 +210,6 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("ctrl-`", ToggleTerminal, None),
         KeyBinding::new("ctrl-shift-`", NewTerminal, None),
         // Terminal
-        KeyBinding::new("secondary-k", terminal::TermClear, Some("Terminal")),
         // QuickPick
         KeyBinding::new("up", picker::PickPrev, Some("Picker")),
         KeyBinding::new("down", picker::PickNext, Some("Picker")),
@@ -254,6 +253,8 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-shift-enter", InsertLineAbove, ed),
         KeyBinding::new("secondary-]", IndentLine, ed),
         KeyBinding::new("secondary-[", OutdentLine, ed),
+        KeyBinding::new("shift-pageup", terminal::TermScrollPageUp, Some("Terminal")),
+        KeyBinding::new("shift-pagedown", terminal::TermScrollPageDown, Some("Terminal")),
         KeyBinding::new("shift-pageup", SelectPageUp, ed),
         KeyBinding::new("shift-pagedown", SelectPageDown, ed),
         KeyBinding::new("secondary-shift-\\", JumpToBracket, ed),
@@ -405,6 +406,13 @@ fn bind_keys(cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("cmd-v", terminal::TermPaste, Some("Terminal")),
         KeyBinding::new("cmd-c", terminal::TermCopy, Some("Terminal")),
+        KeyBinding::new("cmd-k", terminal::TermClear, Some("Terminal")),
+        KeyBinding::new("cmd-a", terminal::TermSelectAll, Some("Terminal")),
+        KeyBinding::new("cmd-f", terminal::TermFind, Some("Terminal")),
+        KeyBinding::new("cmd-g", terminal::TermFindNext, Some("Terminal")),
+        KeyBinding::new("cmd-shift-g", terminal::TermFindPrevious, Some("Terminal")),
+        KeyBinding::new("cmd-home", terminal::TermScrollToTop, Some("Terminal")),
+        KeyBinding::new("cmd-end", terminal::TermScrollToBottom, Some("Terminal")),
         KeyBinding::new("cmd-g", FindNext, ed),
         KeyBinding::new("cmd-g", FindNext, Some("FindBar")),
         KeyBinding::new("cmd-shift-g", find::FindPrev, ed),
@@ -447,6 +455,14 @@ fn bind_keys(cx: &mut App) {
         // are Ctrl+Shift+C / Ctrl+Shift+V as in Linux and Windows terminals.
         KeyBinding::new("ctrl-shift-c", terminal::TermCopy, Some("Terminal")),
         KeyBinding::new("ctrl-shift-v", terminal::TermPaste, Some("Terminal")),
+        // Ctrl+K, Ctrl+A and Ctrl+F belong to the shell (kill line, line start, forward); the terminal's own commands take Shift.
+        KeyBinding::new("ctrl-shift-k", terminal::TermClear, Some("Terminal")),
+        KeyBinding::new("ctrl-shift-a", terminal::TermSelectAll, Some("Terminal")),
+        KeyBinding::new("ctrl-shift-f", terminal::TermFind, Some("Terminal")),
+        KeyBinding::new("f3", terminal::TermFindNext, Some("Terminal")),
+        KeyBinding::new("shift-f3", terminal::TermFindPrevious, Some("Terminal")),
+        KeyBinding::new("ctrl-shift-home", terminal::TermScrollToTop, Some("Terminal")),
+        KeyBinding::new("ctrl-shift-end", terminal::TermScrollToBottom, Some("Terminal")),
         KeyBinding::new("ctrl-left", MoveWordLeft, ed),
         KeyBinding::new("ctrl-right", MoveWordRight, ed),
         KeyBinding::new("ctrl-shift-left", SelectWordLeft, ed),

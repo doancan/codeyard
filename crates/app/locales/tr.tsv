@@ -2252,6 +2252,12 @@ Pruned {} stale worktree entry|Pruned {} stale worktree entries	{} eski çalış
 Renamed remote {0} to {1}	{0} uzak deposu {1} olarak yeniden adlandırıldı
 Search {}	{} içinde ara
 Search files by name	Dosyaları ada göre ara
+Previous Match	Önceki Eşleşme
+Next Match	Sonraki Eşleşme
+{}+ results	{}+ sonuç
+Clear Terminal	Terminali Temizle
+Scroll to Top	En Üste Kaydır
+Scroll to Bottom	En Alta Kaydır
 All Branches	Tüm Dallar
 Click to remove this filter	Bu filtreyi kaldırmak için tıklayın
 Current branch	Geçerli dal
