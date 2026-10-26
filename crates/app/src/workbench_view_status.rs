@@ -123,8 +123,8 @@ impl Workbench {
                     .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Problems (⇧⌘M)").into())).into())
                     .on_click(cx.listener(|this, _, w, cx| this.show_problems(&ShowProblems, w, cx)))
             })
-            .when(!self.ports.forwards.is_empty(), |d| {
-                let n = self.ports.forwards.len();
+            .when(self.active_forwards() > 0, |d| {
+                let n = self.active_forwards();
                 d.child(
                     item()
                         .id("ports-indicator")
