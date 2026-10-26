@@ -16,6 +16,11 @@ on:
     branches: [main]
     paths: [Cargo.lock, ".github/workflows/release.yml", "vendor/**"]
   workflow_dispatch:
+    inputs:
+      notarize:
+        description: Sign and notarize with Apple credentials (main/develop only; publishes nothing)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -39,6 +44,7 @@ jobs:
       - run: scripts/docs-check.sh
       - run: scripts/licenses.sh
       - run: scripts/verify-release.sh --self-test
+      - run: python3 scripts/test-macos-notarization.py
       # An unsigned release would make every installed app refuse to update, so a missing or wrong key fails here,
       # minutes in, not after the builds. The check signs a dummy file and verifies it with scripts/update-public-key.pem.
       # Tags only: a dry run never sees the key.
@@ -56,6 +62,27 @@ jobs:
           echo "probe" > "$probe/SHA256SUMS.txt"
           scripts/sign-release.sh "$probe" || { echo "::error title=UPDATE_SIGNING_KEY does not match scripts/update-public-key.pem::See docs/releasing.md (key rotation)."; exit 1; }
           rm -rf "$probe"
+
+      - name: Check Apple signing configuration
+        if: github.ref_type == 'tag' || inputs.notarize == true
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set +x
+          if [ "$GITHUB_REF_TYPE" != tag ] && [ "$GITHUB_REF_NAME" != main ] && [ "$GITHUB_REF_NAME" != develop ]; then
+            echo "::error::Signed dry runs are restricted to main/develop."
+            exit 1
+          fi
+          for name in MACOS_CERTIFICATE_P12 MACOS_CERTIFICATE_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing GitHub Actions secret: $name. See docs/releasing.md (Apple signing)."
+              exit 1
+            fi
+          done
 
   # Build SSH agents separately so platform app builds start in parallel. Keep cargo-zigbuild
   # for Linux agents: its artifact size matches the release-agent budget checked in CI.
@@ -115,6 +142,8 @@ jobs:
     needs: [verify, agents-linux, agent-macos]
     runs-on: macos-latest
     timeout-minutes: 90
+    env:
+      NOTARIZE_RELEASE: ${{ github.ref_type == 'tag' || inputs.notarize == true }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
 
@@ -148,6 +177,16 @@ jobs:
           merge-multiple: true
           path: agents
 
+      - name: Import Apple identity into a temporary keychain
+        if: env.NOTARIZE_RELEASE == 'true'
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: scripts/macos-signing-keychain.sh setup
+
       - name: Build app, bundle and DMG
         run: AGENTS_DIR="$PWD/agents" scripts/bundle-macos.sh
 
@@ -161,6 +200,18 @@ jobs:
           cp target/release/codeyard "$NAME/"
           cp -R agents "$NAME/agents"
           scripts/licenses.sh copy "$NAME/licenses"
+          if [ "$NOTARIZE_RELEASE" = true ]; then
+            codesign --force --timestamp --options runtime --identifier com.codeyard.cli --sign "$SIGN_IDENTITY" "$NAME/codeyard"
+            for agent in "$NAME"/agents/codeyard-agent-*-apple-darwin; do
+              if [ -f "$agent" ]; then
+                codesign --force --timestamp --options runtime --sign "$SIGN_IDENTITY" "$agent"
+                codesign --verify --strict "$agent"
+              fi
+            done
+            codesign --verify --strict "$NAME/codeyard"
+            scripts/notarize-macos.sh "dist/Codeyard-$VERSION-macos-arm64.dmg" "$NAME" target/release/Codeyard.app
+          fi
+          # Notarization/stapling must finish before packaging and checksum generation.
           tar -czf "dist/$NAME.tar.gz" "$NAME"
           # Name the files: a bare `*` would also list SHA256SUMS.txt itself, created empty by the redirect.
           (cd dist && shasum -a 256 *.dmg *.tar.gz > SHA256SUMS.txt)
@@ -171,12 +222,22 @@ jobs:
             on { print }
           ' CHANGELOG.md > notes.md
           grep -q '[^[:space:]]' notes.md || { echo "CHANGELOG.md [$VERSION] section has no text: the release notes would be empty"; exit 1; }
-          cat >> notes.md <<'NOTES'
+          if [ "$NOTARIZE_RELEASE" = true ]; then
+            cat >> notes.md <<'NOTES'
 
           ### Install
-          Open the DMG and drag **Codeyard** to Applications. This build is not notarized yet:
-          on first launch right-click the app, choose **Open**, then **Open** again
-          (or run `xattr -cr /Applications/Codeyard.app`).
+          Open the DMG and drag **Codeyard** to Applications. The macOS build is signed with Developer ID and notarized by Apple.
+          The DMG includes its notarization ticket. Standalone binaries in the tar.gz use Apple's online ticket lookup.
+          NOTES
+          else
+            cat >> notes.md <<'NOTES'
+
+          ### Install (unsigned dry run)
+          Open the DMG and drag **Codeyard** to Applications. This test build is not notarized:
+          on first launch approve it in System Settings > Privacy & Security.
+          NOTES
+          fi
+          cat >> notes.md <<'NOTES'
 
           Windows: extract the Windows ZIP or run the Windows setup EXE.
           Windows builds are unsigned and may show a SmartScreen warning.
@@ -194,6 +255,10 @@ jobs:
           name: release-notes
           path: notes.md
           if-no-files-found: error
+
+      - name: Remove temporary Apple credentials
+        if: always() && env.NOTARIZE_RELEASE == 'true'
+        run: scripts/macos-signing-keychain.sh cleanup
 
   windows:
     needs: [verify, agents-linux, agent-macos]

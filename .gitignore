@@ -8,3 +8,17 @@ notes.md
 *.profraw
 *.profdata
 lcov.info
+
+# Apple signing credentials belong in GitHub Actions Secrets, never source control.
+*.p12
+*.pfx
+*.p8
+*.keychain
+*.keychain-db
+*.key
+*.pem
+!scripts/update-public-key.pem
+*.cer
+*.crt
+*.mobileprovision
+*.provisionprofile

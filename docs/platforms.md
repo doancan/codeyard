@@ -14,8 +14,10 @@
   folder next to a bare binary), icon, `Info.plist` (linted with `plutil`; document types for text, source code and
   folders; developer-tools category). The macOS Mach-O agent is signed explicitly (inside out) with the hardened runtime.
 - **Signing and notarization.** Builds are ad-hoc signed (opens after right-click ▸ Open). `scripts/notarize-macos.sh`
-  signs with a Developer ID, submits to `notarytool`, staples the DMG and runs `spctl`; it has **not** been run (there is no
-  Apple Developer account yet). No entitlements are needed: the app is not sandboxed and loads no third-party libraries.
+  notarizes already signed DMG and portable binaries, staples the DMG and runs `spctl`. GitHub tag releases now require
+  this path; Apple credentials must be configured in Actions Secrets (see `releasing.md`). The first live notarization
+  run is pending; ordinary dry runs remain ad-hoc signed. No entitlements are currently configured: the app is not
+  sandboxed and loads no third-party libraries.
 - **Finder integration**: *Open With*, Dock-icon drops and `open -a Codeyard file` work (verified with the real bundle).
 - **Apple silicon only.** Intel Macs are not a target: there is no universal build and no Intel CI. `LSMinimumSystemVersion` and
   `MACOSX_DEPLOYMENT_TARGET` are 11.0 (the first macOS release for Apple silicon).
