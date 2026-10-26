@@ -13,7 +13,7 @@ check() { # file limit
 # Known large files: limits sit just above today's size; lower them as files get split.
 check crates/app/src/workbench.rs 2750
 check crates/app/src/editor.rs 1800
-check crates/buffer/src/lib.rs 1950
+check crates/buffer/src/lib.rs 1800
 # Every other source file (vendor and generated code excluded). New files that are not yet `git add`ed count too.
 files=$(git ls-files --cached --others --exclude-standard 'crates/*.rs') || { echo "arch-check: git ls-files failed (not a git checkout?)" >&2; exit 2; }
 files=$(printf '%s\n' "$files" | grep -v -e '/grammars/' -e '/testdata/' || true)
