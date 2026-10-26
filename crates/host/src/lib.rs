@@ -5,6 +5,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
 pub mod askpass;
+pub mod forward;
 mod outbox;
 pub mod ssh;
 pub mod ssh_config;
