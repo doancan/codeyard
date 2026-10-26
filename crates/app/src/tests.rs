@@ -2172,6 +2172,49 @@ fn ssh_ports_are_forwarded_automatically(cx: &mut TestAppContext) {
     assert!(!wb.read_with(cx, |wb, _| wb.forwards()).iter().any(|f| f.remote == remote), "a stopped port doesn't come back on its own");
 }
 
+/// A port the user forwarded in a project, with its label, is forwarded again when the project opens after a restart.
+#[cfg(unix)]
+#[gpui::test]
+fn a_forwarded_port_comes_back_with_its_project(cx: &mut TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("ports-saved") else { return };
+    let home = crate::qa_workbench_tests::project("ports-saved-home");
+    let dir = crate::qa_workbench_tests::project("ports-saved-repo");
+    let (wb, cx) = crate::qa_workbench_tests::setup_persistent(cx, &home);
+    let tick = |cx: &mut VisualTestContext| cx.executor().advance_clock(std::time::Duration::from_secs(5));
+    wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    wait_for(cx, "connected", |cx| {
+        tick(cx);
+        wb.read_with(cx, |wb, _| wb.ports_ready())
+    });
+    open(&wb, &dir, cx);
+    let app = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let remote = app.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for mut s in app.incoming().flatten() {
+            use std::io::Write;
+            let _ = s.write_all(b"saved");
+        }
+    });
+    wb.update(cx, |wb, cx| wb.forward_port(remote, cx));
+    wait_for(cx, "forwarded", |cx| {
+        cx.run_until_parked();
+        wb.read_with(cx, |wb, _| wb.forwards().iter().any(|f| f.remote == remote))
+    });
+    wb.update(cx, |wb, cx| wb.set_forward_label_for_test(remote, "api", cx));
+
+    let wb = crate::qa_workbench_tests::restart_with(wb, cx, &home, crate::settings::Startup::Continue);
+    wait_for(cx, "forwarded again after the restart", |cx| {
+        tick(cx);
+        wb.read_with(cx, |wb, _| wb.forwards().iter().any(|f| f.remote == remote))
+    });
+    assert_eq!(wb.read_with(cx, |wb, _| wb.forward_label_for_test(remote)).as_deref(), Some("api"));
+    let local = wb.read_with(cx, |wb, _| wb.forwards()).into_iter().find(|f| f.remote == remote).unwrap().local;
+    let mut got = String::new();
+    use std::io::Read;
+    std::net::TcpStream::connect(("127.0.0.1", local)).unwrap().read_to_string(&mut got).unwrap();
+    assert_eq!(got, "saved");
+}
+
 /// Explorer: single-subfolder chains as one row, sort setting, hierarchy line, type-to-search.
 #[gpui::test]
 fn explorer_compacts_chains_sorts_and_types_ahead(cx: &mut TestAppContext) {

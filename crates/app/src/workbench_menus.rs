@@ -310,6 +310,7 @@ impl Workbench {
             // sent in show_menu (the action list is there).
             MenuCmd::Dispatch(_) | MenuCmd::AppSubmenu(_) => {}
             MenuCmd::Graph(option) => self.scm.update(cx, |scm, cx| scm.apply_graph_option(option, window, cx)),
+            MenuCmd::Port(c) => self.run_port_menu(c, target.path.parse().unwrap_or(0), window, cx),
             // Without touching the copy clipboard: "name copy.ext" in the same folder.
             MenuCmd::Duplicate => {
                 let previous = self.roots.file_clip.replace((target.path.clone(), false));
