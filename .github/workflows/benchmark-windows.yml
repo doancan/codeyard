@@ -90,7 +90,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang-19 lld-19 llvm-19 ninja-build
+          sudo apt-get install -y --no-install-recommends clang-19 lld-19 llvm-19 ninja-build
           pip install cargo-xwin==0.23.1
           tools="$RUNNER_TEMP/llvm-msvc"
           mkdir -p "$tools"
@@ -101,9 +101,23 @@ jobs:
           printf '%s\n' '#!/usr/bin/env bash' 'exec llvm-rc-19 /I "$GITHUB_WORKSPACE/vendor/gpui" /I "$GITHUB_WORKSPACE/crates/app" "$@"' > "$tools/llvm-rc"
           chmod +x "$tools/llvm-rc"
           ln -s "$(command -v llvm-lib-19)" "$tools/llvm-lib"
-          echo "$tools" >> "$GITHUB_PATH"
           echo /usr/lib/llvm-19/bin >> "$GITHUB_PATH"
+          echo "$tools" >> "$GITHUB_PATH"
           "$tools/clang-cl" --version
+      - name: Check manifest and icon compilation before benchmarking
+        if: runner.os == 'Linux'
+        run: |
+          export PATH="$RUNNER_TEMP/llvm-msvc:/usr/lib/llvm-19/bin:$PATH"
+          test "$(command -v llvm-rc)" = "$RUNNER_TEMP/llvm-msvc/llvm-rc"
+          scratch="$(mktemp -d)"
+          trap 'rm -rf "$scratch"' EXIT
+          cp vendor/gpui/resources/windows/gpui.rc "$scratch/gpui.rc"
+          cp crates/app/assets/windows/codeyard.rc "$scratch/codeyard.rc"
+          cd "$scratch"
+          llvm-rc /fo gpui.res gpui.rc
+          llvm-rc /fo codeyard.res codeyard.rc
+          test -s gpui.res
+          test -s codeyard.res
       - name: Prefetch Windows SDK (outside build timer)
         if: runner.os == 'Linux'
         timeout-minutes: 20
@@ -121,6 +135,8 @@ jobs:
           export AGENTS_DIR="$GITHUB_WORKSPACE/agents"
           export GPUI_PRECOMPILED_SHADERS="$GITHUB_WORKSPACE/shaders/shaders_bytes.rs"
           if [ "$RUNNER_OS" = Linux ]; then
+            export PATH="$RUNNER_TEMP/llvm-msvc:/usr/lib/llvm-19/bin:$PATH"
+            test "$(command -v llvm-rc)" = "$RUNNER_TEMP/llvm-msvc/llvm-rc"
             python3 scripts/benchmark-windows.py --cross
           else
             python scripts/benchmark-windows.py
