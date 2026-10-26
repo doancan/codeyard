@@ -1263,9 +1263,7 @@ while True:
         )
         .unwrap();
         #[cfg(unix)]
-        use std::os::unix::fs::PermissionsExt;
-        #[cfg(unix)]
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        crate::test_files::make_executable(&script);
         script
     }
 

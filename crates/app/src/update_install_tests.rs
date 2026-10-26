@@ -92,13 +92,12 @@ fn update_relaunch_passes_pid_and_path_as_arguments_not_script_text() {
 #[cfg(unix)]
 #[test]
 fn update_relaunch_waits_for_the_process_to_exit_then_opens_the_app() {
-    use std::os::unix::fs::PermissionsExt;
     let (dir, _g) = scratch("relaunch");
     let marker = dir.join("opened");
     let opener = dir.join("fake-open");
     // printf, not echo: dash's echo would swallow the leading `-n` as its own option.
     write(&opener, &format!("#!/bin/sh\nprintf '%s\\n' \"$*\" > '{}'\n", marker.display()));
-    std::fs::set_permissions(&opener, std::fs::Permissions::from_mode(0o755)).unwrap();
+    crate::test_files::make_executable(&opener);
 
     let mut target = Command::new("sleep").arg("0.6").spawn().unwrap();
     let mut helper = relaunch_with(target.id(), Path::new("/Apps/New Codeyard.app"), &opener, &["--after-update"]).spawn().unwrap();
@@ -336,7 +335,6 @@ mod macos {
 
     /// `<dir>/<name>` as a minimal bundle; ad-hoc signed when `sign`.
     fn fake_app(dir: &Path, name: &str, id: &str, version: &str, sign: bool) -> PathBuf {
-        use std::os::unix::fs::PermissionsExt;
         let app = dir.join(name);
         write(
             &app.join("Contents/Info.plist"),
@@ -349,7 +347,7 @@ mod macos {
         );
         let exe = app.join("Contents/MacOS/fake");
         write(&exe, "#!/bin/sh\nexit 0\n");
-        std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        crate::test_files::make_executable(&exe);
         if sign {
             sh("codesign", &[&"--force", &"-s", &"-", &app]);
         }
