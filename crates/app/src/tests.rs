@@ -369,6 +369,14 @@ fn terminal_runs_commands_and_closes(cx: &mut TestAppContext) {
     cx.simulate_click(at[2], Modifiers::none());
     assert_eq!(term.read_with(cx, |t, _| t.selected_text()), None);
 
+    // `terminal.fontSize` (also what zoom writes) changes the rows on the next frame.
+    let row_h = |cx: &mut VisualTestContext| term.read_with(cx, |t, _| t.cell_center(1, 0).y - t.cell_center(0, 0).y);
+    let before = row_h(cx);
+    cx.update(|_, cx| gpui::BorrowAppContext::update_global::<crate::settings::Settings, _>(cx, |s, _| s.terminal_font_size += 8.));
+    term.update(cx, |_, cx| cx.notify());
+    cx.run_until_parked();
+    assert!(row_h(cx) > before, "taller rows after a bigger font: {:?} -> {:?}", before, row_h(cx));
+
     // The shell starts in the opened folder.
     cx.simulate_keystrokes("p w d enter");
     let name = dir.file_name().unwrap().to_string_lossy().into_owned();
