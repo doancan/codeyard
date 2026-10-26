@@ -174,13 +174,12 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn show_and_blame_ignore_textconv_drivers() {
-        use std::os::unix::fs::PermissionsExt;
         let Some((dir, run)) = repo("textconv") else { return };
         let marker = dir.join("..").join(format!("codeyard-textconv-marker-{}", std::process::id()));
         let _ = std::fs::remove_file(&marker);
         let conv = dir.join("conv.sh");
         std::fs::write(&conv, format!("#!/bin/sh\ntouch '{}'\necho CONVERTED\n", marker.display())).unwrap();
-        std::fs::set_permissions(&conv, std::fs::Permissions::from_mode(0o755)).unwrap();
+        crate::test_files::make_executable(&conv);
         std::fs::write(dir.join(".gitattributes"), "*.txt diff=evil\n").unwrap();
         if run(&["config", "diff.evil.textconv", &conv.to_string_lossy()]).is_none() {
             return;

@@ -124,6 +124,8 @@ mod terminal;
 mod terminal_osc;
 mod terminal_paste;
 mod terminal_profiles;
+#[cfg(all(test, unix))]
+mod test_files;
 #[cfg(test)]
 mod test_git;
 #[cfg(test)]

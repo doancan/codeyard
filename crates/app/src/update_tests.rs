@@ -619,11 +619,10 @@ fn update_the_signature_limit_is_named_in_bytes_not_megabytes() {
 /// A `curl` that says `stderr`, exits with `code` and writes its arguments to `<dir>/args`.
 #[cfg(unix)]
 fn fake_curl(dir: &Path, code: i32, stderr: &str) -> PathBuf {
-    use std::os::unix::fs::PermissionsExt;
     let path = dir.join(format!("fake-curl-{code}"));
     let script = format!("#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}/args'\nprintf '%s' '{stderr}' >&2\nexit {code}\n", dir.display());
     std::fs::write(&path, script).unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    crate::test_files::make_executable(&path);
     path
 }
 

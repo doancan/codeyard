@@ -468,13 +468,12 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn status_in_an_untrusted_folder_does_not_run_the_repository_fsmonitor_command() {
-        use std::os::unix::fs::PermissionsExt;
         let Some((dir, run)) = repo("fsmonitor-hook") else { return };
         let marker = dir.join("..").join(format!("codeyard-fsmon-marker-{}", std::process::id()));
         let _ = std::fs::remove_file(&marker);
         let hook = dir.join("hook.sh");
         std::fs::write(&hook, format!("#!/bin/sh\ntouch '{}'\nprintf '\\0'\n", marker.display())).unwrap();
-        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+        crate::test_files::make_executable(&hook);
         let hook_path = hook.to_string_lossy().into_owned();
         if run(&["config", "core.fsmonitor", &hook_path]).is_none() {
             return;
@@ -508,11 +507,10 @@ mod tests {
         // A pre-commit hook that refuses: the commit fails, and --no-verify gets past it.
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
             let hook = dir.join(".git/hooks/pre-commit");
             std::fs::create_dir_all(hook.parent().unwrap()).unwrap();
             std::fs::write(&hook, "#!/bin/sh\necho refused by hook >&2\nexit 1\n").unwrap();
-            std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+            crate::test_files::make_executable(&hook);
             std::fs::write(dir.join("c.txt"), "c\n").unwrap();
             run(&["add", "-A"]).unwrap();
             assert!(commit(&host, &root, "hooked", CommitOptions::default()).unwrap_err().contains("refused by hook"));
