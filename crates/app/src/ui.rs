@@ -276,6 +276,11 @@ const ICONS: &[(&str, &[u8])] = icons![
     // --- run and debug ---
     "bug-play",
     "circle-slash-2",
+    // --- testing ---
+    "flask-conical",
+    "circle-check",
+    "circle-dashed",
+    "list-filter",
 ];
 
 /// Embedded icon names (tests: is every name used in source embedded, does every embedded file exist).

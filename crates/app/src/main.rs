@@ -127,6 +127,7 @@ mod terminal_profiles;
 mod test_git;
 #[cfg(test)]
 mod test_sshd;
+mod testexp;
 mod testrun;
 #[cfg(test)]
 mod tests;

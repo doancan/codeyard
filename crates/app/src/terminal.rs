@@ -219,38 +219,8 @@ impl TerminalView {
     /// A terminal running `launch` (a profile or a picked shell).
     pub fn new_with(host: Arc<dyn Host>, cwd: Option<String>, launch: Launch, cx: &mut Context<Self>) -> Self {
         let Launch { shell, args, env, color } = launch;
-        let size = TermSize { cols: 100, rows: 24 };
-        let events = Listener::default();
-        // Scrollback from settings (default 2,000; 10,000 × 200 columns can reach ~45 MB).
-        let scrollback = cx.global::<crate::settings::Settings>().terminal_scrollback.min(SCROLLBACK_MAX);
-        let config = Config { scrolling_history: scrollback, ..Config::default() };
-        let term = Term::new(config, &size, events.clone());
-        let view = TerminalView {
-            title: "terminal".into(),
-            cwd: cwd.clone(),
-            host: host.clone(),
-            pty: None,
-            pending_input: Vec::new(),
-            title_locked: false,
-            term,
-            parser: Processor::new(),
-            events,
-            exit: None,
-            error: None,
-            size,
-            grid: (Point::default(), px(8.)),
-            selecting: false,
-            find: None,
-            hover_link: None,
-            metrics: metrics(cx.global::<crate::settings::Settings>().terminal_font_size),
-            scrollback,
-            color,
-            osc: Default::default(),
-            marks: Default::default(),
-            focus_handle: cx.focus_handle(),
-        };
-
-        let (cols, rows) = (size.cols as u16, size.rows as u16);
+        let view = Self::blank(host.clone(), cwd.clone(), color, cx);
+        let (cols, rows) = (view.size.cols as u16, view.size.rows as u16);
         let integration = cx.global::<crate::settings::Settings>().terminal_shell_integration;
         let spawn = cx.background_executor().spawn(async move {
             match (&args, env.is_empty(), integration) {
@@ -334,6 +304,67 @@ impl TerminalView {
         })
         .detach();
         view
+    }
+
+    /// A terminal that only shows output given to it (test runs): no shell, keys go nowhere.
+    pub fn output_only(host: Arc<dyn Host>, title: String, cx: &mut Context<Self>) -> Self {
+        let mut view = Self::blank(host, None, Some("info".into()), cx);
+        view.title = title.into();
+        view.title_locked = true;
+        view
+    }
+
+    /// Output for an output-only terminal (line breaks become what a terminal expects).
+    pub fn append(&mut self, data: &[u8], cx: &mut Context<Self>) {
+        let mut out = Vec::with_capacity(data.len() + data.len() / 16);
+        for &b in data {
+            if b == b'\n' {
+                out.push(b'\r');
+            }
+            out.push(b);
+        }
+        self.feed(&out);
+        cx.notify();
+    }
+
+    /// Clears an output-only terminal for a new run.
+    pub fn reset_output(&mut self, cx: &mut Context<Self>) {
+        self.feed(b"\x1b[3J\x1b[H\x1b[2J");
+        cx.notify();
+    }
+
+    /// The view without a shell yet.
+    fn blank(host: Arc<dyn Host>, cwd: Option<String>, color: Option<String>, cx: &mut Context<Self>) -> Self {
+        let size = TermSize { cols: 100, rows: 24 };
+        let events = Listener::default();
+        // Scrollback from settings (default 2,000; 10,000 × 200 columns can reach ~45 MB).
+        let scrollback = cx.global::<crate::settings::Settings>().terminal_scrollback.min(SCROLLBACK_MAX);
+        let config = Config { scrolling_history: scrollback, ..Config::default() };
+        let term = Term::new(config, &size, events.clone());
+        TerminalView {
+            title: "terminal".into(),
+            cwd,
+            host,
+            pty: None,
+            pending_input: Vec::new(),
+            title_locked: false,
+            term,
+            parser: Processor::new(),
+            events,
+            exit: None,
+            error: None,
+            size,
+            grid: (Point::default(), px(8.)),
+            selecting: false,
+            find: None,
+            hover_link: None,
+            metrics: metrics(cx.global::<crate::settings::Settings>().terminal_font_size),
+            scrollback,
+            color,
+            osc: Default::default(),
+            marks: Default::default(),
+            focus_handle: cx.focus_handle(),
+        }
     }
 
     fn feed(&mut self, data: &[u8]) {

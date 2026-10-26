@@ -220,6 +220,7 @@ impl Workbench {
             Panel::Search => "search",
             Panel::Scm => "scm",
             Panel::Debug => "debug",
+            Panel::Testing => "testing",
             Panel::Remote => "remote",
         })
     }

@@ -188,6 +188,7 @@ impl Workbench {
             "scm" | "git" => self.show_scm(&ShowScm, window, cx),
             "search" => self.find_in_files(&FindInFiles, window, cx),
             "debug" => self.show_run_debug(&ShowRunAndDebug, window, cx),
+            "testing" | "tests" => self.show_testing(&ShowTesting, window, cx),
             "remote" => self.show_remote_explorer(&remote_glue::ShowRemoteExplorer, window, cx),
             "welcome" => self.show_welcome(&ShowWelcome, window, cx),
             "shortcuts" => self.show_shortcuts_page(&ShowShortcutsPage, window, cx),

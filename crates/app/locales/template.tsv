@@ -112,6 +112,7 @@ Breakpoints are active.
 Breakpoints are deactivated: the program runs past them.	
 Bring a folder's tabs and unsaved changes back when you open it	
 Build failed: {}	
+Building the tests…	
 Call Stack	
 Can't copy a folder into itself.	
 Can't open {0}: {1}	
@@ -201,6 +202,7 @@ Codeyard {} is available
 Codeyard {} is available.	
 Codeyard {} is available. Click for details.	
 Codeyard {} is installed. Click for details.	
+Collapse All	
 Collapse All Inside	
 Collapse Folders	
 Collapse all results	
@@ -333,6 +335,7 @@ Could not list stashes: {}
 Could not list the server's ports: {}	
 Could not list: {}	
 Could not load: {}	
+Could not look for tests: {}	
 Could not minify: {}	
 Could not open the debug session: {}	
 Could not open the state database: {}. Tabs, recent folders and backups will not be remembered this session.	
@@ -359,6 +362,7 @@ Could not start a shell: {}
 Could not start debugging: {}	
 Could not start the debug adapter: {}	
 Could not start the debug session: {}	
+Could not start the test runner: {}	
 Could not switch to {0}: {1}	
 Could not tell whether it is merged ({}): git will refuse if commits would be lost.	
 Could not write {0}: {1}	
@@ -395,6 +399,8 @@ Debug Go package
 Debug Node: {}	
 Debug Python: {}	
 Debug Rust: {}	
+Debug Test	
+Debug Test: {}	
 Debug session ended	
 Debug session stopped	
 Debug: Add Configuration…	
@@ -671,6 +677,7 @@ Files with the same name are overwritten; other files in the folder are kept.
 Files: Collapse Folders in Explorer	
 Files: Open Folder…	
 Filter	
+Filter (e.g. text, path)	
 Filtering needs sh, tail, grep and cut on the host (on Windows: Git Bash or WSL). {}	
 Filtering {0} for “{1}”…	
 Find	
@@ -866,6 +873,7 @@ JSON: Minify Document
 Jan	
 JavaScript debugger installed: F5 now works for Node.	
 JavaScript debugging needs Microsoft's js-debug adapter: run “Debug: Install JavaScript Debugger” (a one-time download, MIT licensed), or install VS Code (its copy is used).	
+JavaScript tests can be run here, not debugged: add a launch configuration for the runner.	
 Jul	
 Jun	
 Keep	
@@ -910,6 +918,7 @@ Local history
 Local port {} is busy	
 Local time is not available on this system	
 Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it	
+Looking for tests…	
 Lost the connection to {}: {}. Your open files stay here and unsaved changes are kept, but they cannot be saved until you reconnect (File: Save a Copy to This Computer… keeps one locally).	
 Lost the connection to {}: {}. Your open files stay here.	
 Manage SSH hosts	
@@ -1063,6 +1072,8 @@ No tasks found. “Tasks: Configure Tasks” creates .codeyard/tasks.jsonc.
 No terminal profiles yet: add them under terminal.profiles in settings.jsonc.	
 No test at the cursor: put it inside a test function.	
 No tests found for this file type.	
+No tests found. Tests are read from Rust, Go, Python and JavaScript test files.	
+No tests to run.	
 No type definition found	
 No unsaved changes: the file matches what is on disk.	
 Node.js program	
@@ -1141,6 +1152,7 @@ Open a folder first; folders are added to it.
 Open a folder in a Linux distribution	
 Open a folder on {}	
 Open a folder to debug it.	
+Open a folder to find its tests.	
 Open a folder to search in it.	
 Open a project, connect to a host, or switch workspace	
 Open a terminal with…	
@@ -1289,6 +1301,7 @@ Reconnecting to {}… (attempt {})
 Redo	
 Refresh	
 Refresh Explorer	
+Refresh Tests	
 Regex, Ignore Case	
 Regex, Match Case	
 Regular expression	
@@ -1398,6 +1411,10 @@ Right is writable
 Right-click a commit in the Source Control graph to branch, tag, cherry-pick, revert or reset.	
 Right-click a folder and choose Find in Folder… to search only inside it.	
 Run	
+Run All Tests	
+Run Failed Tests	
+Run Test	
+Run Tests in File	
 Run Without Debugging	
 Run and Debug	
 Run and Debug (⌃⇧D)	
@@ -1495,6 +1512,7 @@ Shell for new terminals (empty: login shell)
 Show All	
 Show Changed Files…	
 Show Codeyard in Finder	
+Show Only Failed Tests	
 Show Stash…	
 Show a color swatch next to #rrggbb values	
 Show a tooltip when the mouse rests on a word	
@@ -1620,11 +1638,19 @@ Terminal: Select Default Profile…
 Terminal: Split	
 Terminal: Toggle	
 Test Connection	
+Test Results	
 Test a connection	
 Test the connection to which SSH host?	
+Test: Debug Test at Cursor	
+Test: Refresh Tests	
+Test: Run All Tests	
+Test: Run Failed Tests	
 Test: Run Test at Cursor	
 Test: Run Tests in File	
+Test: Stop Running Tests	
+Testing	
 Testing {}…	
+Tests: {0} passed, {1} failed	
 That does not look like a repository address.	
 The JavaScript debugger is already installed.	
 The SSH connection is gone: reconnect to forward again	
@@ -1685,6 +1711,7 @@ The shell may run each line as soon as it arrives.
 The state database was damaged ({0}). It was moved to {1} and a new one was started; recent folders and open tabs were forgotten.	
 The string is not closed	
 The tag disappears from the remote repository for everyone. Your local copy is kept.	
+The tests did not build: run the test to see the errors.	
 The token has no signature.	
 The update couldn't be installed	
 The update couldn't be verified	
@@ -1832,6 +1859,7 @@ View: Run and Debug
 View: Source Control	
 View: Split Editor	
 View: Switch Editor…	
+View: Testing	
 View: Toggle Full Screen	
 View: Toggle Maximized Panel	
 View: Toggle Minimap	
@@ -2142,6 +2170,7 @@ your words
 {0} result in {1} files|{0} results in {1} files	
 {0} was left alone: {1}|{0} were left alone, the first one {1}	
 {0}, {1} {2} {3}	
+{0}/{1} passed	
 {0}: a TOML array holds one kind of value, but this one has {1} and {2}	
 {0}: each entry needs {1} and {2}	
 {0}: expected a color like {1}	
@@ -2187,6 +2216,7 @@ your words
 {} definition|{} definitions	
 {} entry is left out.|{} entries are left out.	
 {} exited with {}	
+{} failed	
 {} file skipped, binary or too large|{} files skipped, binary or too large	
 {} file skipped, parse errors|{} files skipped, parse errors	
 {} forwarded	
@@ -2224,6 +2254,7 @@ your words
 {} reference|{} references	
 {} result in 1 file|{} results in 1 file	
 {} result|{} results	
+{} skipped	
 {} space|{} spaces	
 {} still has merge conflict markers. Resolve them (Accept Current / Incoming / Both) and save first.	
 {} subtype|{} subtypes	
