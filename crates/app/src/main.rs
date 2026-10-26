@@ -50,6 +50,8 @@ mod features_tests;
 mod find;
 mod folder_settings;
 mod fsutil;
+#[cfg(test)]
+mod fuzz_parsers_tests;
 mod fuzzy;
 mod git;
 #[cfg(test)]
