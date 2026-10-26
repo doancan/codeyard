@@ -39,6 +39,56 @@ pub enum DapEvent {
     Exited(i32),
     /// The adapter process died.
     AdapterExited(Option<i32>),
+    /// Answer to `setBreakpoints` for `path`: the 1-based lines in the order sent and the result for each.
+    BreakpointsSet {
+        path: String,
+        sent: Vec<u32>,
+        results: Vec<BpResult>,
+    },
+    /// Answer to `setFunctionBreakpoints` (same order as the enabled function breakpoints sent).
+    FunctionBreakpointsSet(Vec<BpResult>),
+    /// The adapter changed a breakpoint by itself (verified later, moved, removed).
+    BreakpointChanged(BpResult),
+    /// A thread started or exited.
+    Thread {
+        thread_id: i64,
+        started: bool,
+    },
+    /// The adapter announced new capabilities (merged into `Session::capabilities`).
+    Capabilities,
+}
+
+pub use crate::debug_model::BpResult;
+
+/// A breakpoint on a function name.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FunctionBreakpoint {
+    pub name: String,
+    pub condition: Option<String>,
+}
+
+impl FunctionBreakpoint {
+    fn to_json(&self) -> Value {
+        let mut b = json!({ "name": self.name });
+        if let Some(c) = self.condition.as_ref().filter(|c| !c.trim().is_empty()) {
+            b["condition"] = json!(c);
+        }
+        b
+    }
+}
+
+/// Results of a `setBreakpoints` / `setFunctionBreakpoints` answer.
+pub fn parse_bp_results(body: &Value) -> Vec<BpResult> {
+    body["breakpoints"].as_array().map(|a| a.iter().map(parse_bp_result).collect()).unwrap_or_default()
+}
+
+fn parse_bp_result(b: &Value) -> BpResult {
+    BpResult {
+        id: b["id"].as_i64(),
+        verified: b["verified"].as_bool().unwrap_or(false),
+        message: b["message"].as_str().map(clip_message),
+        line: b["line"].as_u64().map(|l| l as u32),
+    }
 }
 
 /// A breakpoint: line (1-based) and an optional condition / log message / hit count.
@@ -165,6 +215,7 @@ pub struct Session {
     child: Mutex<Option<Arc<Session>>>,
     adapter_id: Mutex<String>,
     breakpoints: Mutex<BTreeMap<String, Vec<Breakpoint>>>,
+    functions: Mutex<Vec<FunctionBreakpoint>>,
     /// Project root: lldb compares source paths without resolving symlinks (the build uses `/tmp/x`,
     /// the editor knows `/private/tmp/x`); the root-relative path is sent too and matches by that suffix.
     root: Mutex<Option<String>>,
@@ -217,6 +268,7 @@ impl Session {
             child: Mutex::new(None),
             adapter_id: Mutex::new(String::new()),
             breakpoints: Mutex::new(BTreeMap::new()),
+            functions: Mutex::new(Vec::new()),
             root: Mutex::new(None),
             exception_pref: Mutex::new(None),
             attached: AtomicBool::new(false),
@@ -418,6 +470,7 @@ impl Session {
             child: Mutex::new(None),
             adapter_id: Mutex::new(String::new()),
             breakpoints: Mutex::new(BTreeMap::new()),
+            functions: Mutex::new(Vec::new()),
             root: Mutex::new(None),
             exception_pref: Mutex::new(None),
             attached: AtomicBool::new(false),
@@ -534,9 +587,17 @@ impl Session {
 
     /// Handshake and start: `launch_args` go straight to the adapter (`program`, `args`, `cwd`…).
     /// Breakpoints (absolute path → 1-based lines) are sent before `launch`.
-    pub fn begin(&self, adapter_id: &str, request: &str, launch_args: Value, breakpoints: &BTreeMap<String, Vec<Breakpoint>>) -> Result<(), String> {
+    pub fn begin(
+        &self,
+        adapter_id: &str,
+        request: &str,
+        launch_args: Value,
+        breakpoints: &BTreeMap<String, Vec<Breakpoint>>,
+        functions: &[FunctionBreakpoint],
+    ) -> Result<(), String> {
         *self.adapter_id.lock().unwrap() = adapter_id.to_string();
         *self.breakpoints.lock().unwrap() = breakpoints.clone();
+        *self.functions.lock().unwrap() = functions.to_vec();
         self.attached.store(request == "attach", Ordering::Relaxed);
         let init = self.raw_request(
             "initialize",
@@ -552,9 +613,18 @@ impl Session {
         let launched = self.raw_async(request, launch_args);
         self.wait_initialized(Duration::from_secs(60))?;
         for (path, list) in breakpoints {
-            for args in self.breakpoint_requests(path, list) {
-                self.raw_request("setBreakpoints", args, Duration::from_secs(15))?;
+            for (i, args) in self.breakpoint_requests(path, list).into_iter().enumerate() {
+                let answer = self.raw_request("setBreakpoints", args, Duration::from_secs(15))?;
+                // The first request carries the editor's path; a second one (lldb's relative path) is not reported.
+                if i == 0 {
+                    let sent = list.iter().map(|b| b.line).collect();
+                    let _ = self.events.send(DapEvent::BreakpointsSet { path: path.clone(), sent, results: parse_bp_results(&answer) });
+                }
             }
+        }
+        if !functions.is_empty() && self.supports("supportsFunctionBreakpoints") {
+            let answer = self.raw_request("setFunctionBreakpoints", Self::function_args(functions), Duration::from_secs(15))?;
+            let _ = self.events.send(DapEvent::FunctionBreakpointsSet(parse_bp_results(&answer)));
         }
         // Exception breakpoints: the preference (else the adapter's default), intersected with what the adapter offers.
         let available = self.exception_filters();
@@ -632,8 +702,8 @@ impl Session {
             }
         };
         *self.child.lock().unwrap() = Some(child.clone());
-        let (id, bps) = (self.adapter_id.lock().unwrap().clone(), self.breakpoints.lock().unwrap().clone());
-        if let Err(e) = child.begin(&id, &request, configuration, &bps) {
+        let (id, bps, functions) = (self.adapter_id.lock().unwrap().clone(), self.breakpoints.lock().unwrap().clone(), self.functions.lock().unwrap().clone());
+        if let Err(e) = child.begin(&id, &request, configuration, &bps, &functions) {
             let _ = self
                 .events
                 .send(DapEvent::Output { category: "stderr".into(), text: format!("{}\n", crate::i18n::tf("Could not start the debug session: {}", &[&e])) });
@@ -643,10 +713,46 @@ impl Session {
 
     /// Send without awaiting a response: the request reaches the adapter before commands that follow it,
     /// like `continue` (sending from a background thread doesn't guarantee the order).
+    /// The answer to the first request is reported as `BreakpointsSet` from a short-lived thread.
     pub fn set_breakpoints_async(&self, path: &str, bps: &[Breakpoint]) {
         self.remember(path, bps);
-        for args in self.breakpoint_requests(path, bps) {
-            let _ = self.request_async("setBreakpoints", args);
+        let mut answers = self.breakpoint_requests(path, bps).into_iter().map(|args| self.request_async("setBreakpoints", args)).collect::<Vec<_>>();
+        if answers.is_empty() {
+            return;
+        }
+        let first = answers.swap_remove(0);
+        let (events, path, sent) = (self.events.clone(), path.to_string(), bps.iter().map(|b| b.line).collect::<Vec<_>>());
+        let _ = std::thread::Builder::new().name("dap-bp".into()).spawn(move || {
+            if let Ok(Ok(answer)) = first.recv_timeout(Duration::from_secs(15)) {
+                let _ = events.send(DapEvent::BreakpointsSet { path, sent, results: parse_bp_results(&answer) });
+            }
+        });
+    }
+
+    /// Replace the function breakpoints while running (answer reported as `FunctionBreakpointsSet`).
+    pub fn set_function_breakpoints_async(&self, functions: &[FunctionBreakpoint]) {
+        *self.functions.lock().unwrap() = functions.to_vec();
+        if !self.supports("supportsFunctionBreakpoints") {
+            return;
+        }
+        let answer = self.request_async("setFunctionBreakpoints", Self::function_args(functions));
+        let events = self.events.clone();
+        let _ = std::thread::Builder::new().name("dap-fbp".into()).spawn(move || {
+            if let Ok(Ok(a)) = answer.recv_timeout(Duration::from_secs(15)) {
+                let _ = events.send(DapEvent::FunctionBreakpointsSet(parse_bp_results(&a)));
+            }
+        });
+    }
+
+    fn function_args(functions: &[FunctionBreakpoint]) -> Value {
+        json!({ "breakpoints": functions.iter().map(FunctionBreakpoint::to_json).collect::<Vec<_>>() })
+    }
+
+    /// A capability flag of the adapter (of the child session when there is one).
+    pub fn supports(&self, flag: &str) -> bool {
+        match self.child() {
+            Some(c) => c.supports(flag),
+            None => self.capabilities.lock().unwrap()[flag].as_bool().unwrap_or(false),
         }
     }
 
@@ -784,6 +890,14 @@ impl Session {
                     },
                     Some("terminated") => DapEvent::Terminated,
                     Some("exited") => DapEvent::Exited(b["exitCode"].as_i64().unwrap_or(0) as i32),
+                    Some("breakpoint") => DapEvent::BreakpointChanged(parse_bp_result(&b["breakpoint"])),
+                    Some("thread") => DapEvent::Thread { thread_id: b["threadId"].as_i64().unwrap_or(0), started: b["reason"].as_str() == Some("started") },
+                    Some("capabilities") => {
+                        if let (Some(new), Value::Object(caps)) = (b["capabilities"].as_object(), &mut *self.capabilities.lock().unwrap()) {
+                            caps.extend(new.clone());
+                        }
+                        DapEvent::Capabilities
+                    }
                     _ => return,
                 };
                 let _ = self.events.send(ev);
@@ -931,7 +1045,7 @@ while True:
     log.write(cmd + ' ' + json.dumps(m.get('arguments', {}), sort_keys=True) + '\n'); log.flush()
     a = m.get('arguments', {})
     if cmd == 'initialize':
-        ok(m, {'supportsConfigurationDoneRequest': True, 'supportsDataBreakpoints': True, 'exceptionBreakpointFilters': [{'filter': 'raised', 'label': 'Raised Exceptions'}, {'filter': 'uncaught', 'label': 'Uncaught Exceptions', 'default': True}]})
+        ok(m, {'supportsConfigurationDoneRequest': True, 'supportsDataBreakpoints': True, 'supportsFunctionBreakpoints': True, 'exceptionBreakpointFilters': [{'filter': 'raised', 'label': 'Raised Exceptions'}, {'filter': 'uncaught', 'label': 'Uncaught Exceptions', 'default': True}]})
         event('initialized')
     elif cmd in ('launch', 'attach'):
         launch = m
@@ -945,7 +1059,10 @@ while True:
         for b in entries:
             if 'logMessage' in b:
                 logs.setdefault(a['source']['path'], {})[b['line']] = b['logMessage']
-        ok(m, {'breakpoints': [{'verified': True, 'line': l} for l in a.get('lines', [])]})
+        # Lines past 10 have no code: not verified, with a reason.
+        ok(m, {'breakpoints': [{'id': l, 'verified': l <= 10, 'line': l, 'message': None if l <= 10 else 'no code on this line'} for l in a.get('lines', [])]})
+    elif cmd == 'setFunctionBreakpoints':
+        ok(m, {'breakpoints': [{'verified': b['name'] != 'missing'} for b in a.get('breakpoints', [])]})
     elif cmd == 'configurationDone':
         ok(m)
         if launch:
@@ -1038,7 +1155,7 @@ while True:
         let src = "/p/main.c".to_string();
         let mut bps = BTreeMap::new();
         bps.insert(src.clone(), vec![Breakpoint::at(5), Breakpoint::at(9)]);
-        session.begin("fake", "launch", json!({ "program": "/p/a.out", "source": src }), &bps).unwrap();
+        session.begin("fake", "launch", json!({ "program": "/p/a.out", "source": src }), &bps, &[]).unwrap();
 
         // Output event and first stop: line 5.
         wait_event(&rx, |e| matches!(e, DapEvent::Output { text, .. } if text.contains("hello")));
@@ -1083,7 +1200,7 @@ while True:
         let (tx, _rx) = mpsc::channel();
         let host: Arc<dyn Host> = Arc::new(host::local());
         let session = Session::start(host, script.to_str().unwrap(), vec![dir.join("log.txt").to_string_lossy().into_owned()], None, tx).unwrap();
-        let err = session.begin("fake", "launch", json!({ "program": "/nope", "fail": true }), &BTreeMap::new()).unwrap_err();
+        let err = session.begin("fake", "launch", json!({ "program": "/nope", "fail": true }), &BTreeMap::new(), &[]).unwrap_err();
         assert!(err.contains("cannot run /nope"), "{err}");
         session.stop();
     }
@@ -1096,7 +1213,7 @@ while True:
         if let Ok(session) = r {
             // The process may start and die right away: `begin` must fail without waiting for a timeout.
             let started = std::time::Instant::now();
-            assert!(session.begin("x", "launch", json!({}), &BTreeMap::new()).is_err());
+            assert!(session.begin("x", "launch", json!({}), &BTreeMap::new(), &[]).is_err());
             assert!(started.elapsed() < Duration::from_secs(20));
         }
     }

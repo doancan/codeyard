@@ -267,6 +267,11 @@ Debug: Add Watch Expression…	Hata Ayıklama: İzleme İfadesi Ekle…
 Debug: Remove All Watch Expressions	Hata Ayıklama: Tüm İzleme İfadelerini Kaldır
 Debug: Install JavaScript Debugger	Hata Ayıklama: JavaScript Hata Ayıklayıcısını Kur
 Debug: Remove All Breakpoints	Hata Ayıklama: Tüm Kesme Noktalarını Kaldır
+Debug: Enable/Disable Breakpoint	Hata Ayıklama: Kesme Noktasını Etkinleştir/Devre Dışı Bırak
+Debug: Enable All Breakpoints	Hata Ayıklama: Tüm Kesme Noktalarını Etkinleştir
+Debug: Disable All Breakpoints	Hata Ayıklama: Tüm Kesme Noktalarını Devre Dışı Bırak
+Debug: Deactivate/Activate Breakpoints	Hata Ayıklama: Kesme Noktalarını Etkisizleştir/Etkinleştir
+Debug: Add Function Breakpoint…	Hata Ayıklama: İşlev Kesme Noktası Ekle…
 Debug: Show Debug Panel	Hata Ayıklama: Hata Ayıklama Panelini Göster
 Test: Run Test at Cursor	Test: İmlecin Altındaki Testi Çalıştır
 Test: Run Tests in File	Test: Dosyadaki Testleri Çalıştır
@@ -1531,6 +1536,10 @@ The download finished but js-debug was not found in it.	İndirme bitti ancak iç
 Could not download js-debug: {}	js-debug indirilemedi: {}
 Start a debug session first (F5): the adapter says which exceptions it can break on.	Önce bir hata ayıklama oturumu başlatın (F5): bağdaştırıcı hangi istisnalarda durabileceğini bildirir.
 This debug adapter has no exception breakpoints.	Bu hata ayıklama bağdaştırıcısında istisna kesme noktası yok.
+Breakpoints are active.	Kesme noktaları etkin.
+Breakpoints are deactivated: the program runs past them.	Kesme noktaları etkisiz: program üzerlerinden geçer.
+There is no breakpoint on this line (F9 adds one).	Bu satırda kesme noktası yok (F9 ekler).
+function name, e.g. main or app::run	işlev adı, örn. main ya da app::run
 Toggle a break-on-exception filter	İstisnada durma süzgecini aç/kapat
 Not breaking on exceptions.	İstisnalarda durulmuyor.
 Breaking on: {}	Şu istisnalarda duruluyor: {}

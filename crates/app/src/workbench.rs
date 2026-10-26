@@ -420,6 +420,7 @@ struct Overlay {
     _sub: Subscription,
 }
 
+pub use debug::{AddFunctionBreakpoint, DisableAllBreakpoints, EnableAllBreakpoints, ToggleBreakpointEnabled, ToggleBreakpointsActive};
 pub use host::askpass::{AskKind, AskRequest};
 pub use remote_glue::ShowRemoteExplorer;
 pub type AskReply = std::sync::mpsc::Sender<Option<String>>;
@@ -997,14 +998,7 @@ impl Workbench {
             term_split: None,
             active_terminal: 0,
             shell: None,
-            dbg: state_glue::DebugUi {
-                session: None,
-                generation: 0,
-                watch_exprs: Vec::new(),
-                exception_filters: None,
-                bp_cache: Default::default(),
-                last: None,
-            },
+            dbg: Default::default(),
             jobs: state_glue::TaskState { last: None, terminal: None, root: None, problems: Vec::new(), scan_pending: false },
             lsp: state_glue::LspState {
                 restricted_notified: Default::default(),
@@ -1605,8 +1599,7 @@ impl Workbench {
         self.persist.pending_restore = self.persist.workspace_id;
         self.restore_tree(cx);
         self.restore_extra_roots(cx);
-        self.load_watches();
-        self.load_exception_filters();
+        self.load_debug_state(cx);
         self.load_favorites();
         self.restore_forwards(cx);
         self.load_project_settings(cx);
@@ -2638,10 +2631,8 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
             EditorEvent::OpenMergeEditor => return this.open_merge_editor(&OpenMergeEditor, window, cx),
             EditorEvent::SendRequest(line) => return this.send_request_at(Some(*line), window, cx),
             EditorEvent::Changed => {
-                // Breakpoints shift with edits: keep the cache (used on close) current.
-                if !this.dbg.bp_cache.is_empty() || !ed.read(cx).breakpoint_lines().is_empty() {
-                    this.collect_breakpoints(cx);
-                }
+                // Breakpoints shift with edits: keep the store (used on close and saved) current.
+                this.sync_breakpoints_from(ed, cx);
                 this.note_edit(ed, cx);
                 this.schedule_schema(ed, Duration::from_millis(600), cx);
             }

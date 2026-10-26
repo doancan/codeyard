@@ -34,6 +34,7 @@ impl EditorView {
         v
     }
 
+    #[cfg(test)]
     pub fn breakpoint_lines(&self) -> Vec<usize> {
         self.breakpoints().into_iter().map(|(l, _)| l).collect()
     }
@@ -46,11 +47,6 @@ impl EditorView {
         cx.notify();
     }
 
-    pub fn set_breakpoint_lines(&mut self, lines: &[usize], cx: &mut Context<Self>) {
-        let list: Vec<(usize, BpMeta)> = lines.iter().map(|&l| (l, BpMeta::default())).collect();
-        self.set_breakpoints(&list, cx);
-    }
-
     /// Toggle a breakpoint on a line (F9 and gutter click).
     pub fn toggle_breakpoint_at(&mut self, line: usize, cx: &mut Context<Self>) {
         let mut list = self.breakpoints();
@@ -59,18 +55,6 @@ impl EditorView {
                 list.remove(i);
             }
             None => list.push((line, BpMeta::default())),
-        }
-        self.set_breakpoints(&list, cx);
-        cx.emit(EditorEvent::BreakpointsChanged);
-    }
-
-    /// Change the condition / log message / hit count of the breakpoint on a line
-    /// (creates it if missing; empty meta makes a plain breakpoint).
-    pub fn set_breakpoint_meta(&mut self, line: usize, meta: BpMeta, cx: &mut Context<Self>) {
-        let mut list = self.breakpoints();
-        match list.iter_mut().find(|(l, _)| *l == line) {
-            Some((_, m)) => *m = meta,
-            None => list.push((line, meta)),
         }
         self.set_breakpoints(&list, cx);
         cx.emit(EditorEvent::BreakpointsChanged);

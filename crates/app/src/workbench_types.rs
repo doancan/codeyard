@@ -195,6 +195,8 @@ pub(super) enum InputPurpose {
     },
     /// Debugger: expression to watch.
     AddWatch,
+    /// Debugger: function name to break in.
+    FunctionBreakpoint,
     /// Debugger: variable to break on when its value changes.
     DataBreakpoint,
     /// Save the active colors (including customizations) as a user theme.
