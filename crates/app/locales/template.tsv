@@ -300,7 +300,6 @@ Could not load: {}
 Could not minify: {}	
 Could not open the debug session: {}	
 Could not open the state database: {}. Tabs, recent folders and backups will not be remembered this session.	
-Could not open {0}: {1}	
 Could not paste: {}	
 Could not reach {}: check the network connection and try again	
 Could not read the commit: {}	
