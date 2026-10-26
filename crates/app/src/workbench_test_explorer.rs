@@ -199,11 +199,12 @@ impl Workbench {
             cx.notify();
             return;
         }
-        self.require_trust(window, cx, move |this, window, cx| this.run_test_jobs_trusted(jobs, window, cx));
+        // Trust is asked for the folder the tests run in, whichever file is active.
+        let Some(root) = self.jobs.tests.root.clone().or_else(|| self.root(cx)) else { return };
+        self.require_trust_for(Some(root.clone()), window, cx, move |this, window, cx| this.run_test_jobs_trusted(jobs, root, window, cx));
     }
 
-    fn run_test_jobs_trusted(&mut self, jobs: Vec<Job>, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(root) = self.jobs.tests.root.clone().or_else(|| self.root(cx)) else { return };
+    fn run_test_jobs_trusted(&mut self, jobs: Vec<Job>, root: String, window: &mut Window, cx: &mut Context<Self>) {
         self.stop_tests(cx);
         let out = self.test_output(window, cx);
         let host = self.remote.host.clone();
@@ -350,7 +351,13 @@ impl Workbench {
         self.debug_test(file, test, root, window, cx);
     }
 
+    /// Starts a test under the debugger. Building a Rust test runs the project's build scripts, so trust is asked for
+    /// the test's folder before anything runs.
     fn debug_test(&mut self, file: TestFile, test: TestItem, root: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.require_trust_for(Some(root.clone()), window, cx, move |this, window, cx| this.debug_test_trusted(file, test, root, window, cx));
+    }
+
+    fn debug_test_trusted(&mut self, file: TestFile, test: TestItem, root: String, window: &mut Window, cx: &mut Context<Self>) {
         match file.kind {
             Kind::Js => {
                 self.notice =
@@ -375,7 +382,7 @@ impl Workbench {
                         }
                         this.notice = None;
                         let configs = testexp::debug_configs(&file, &test, &root, &bins);
-                        this.choose_debug_config(configs, window, cx);
+                        this.choose_debug_config_trusted(configs, window, cx);
                     })
                     .ok();
                 })
@@ -383,7 +390,7 @@ impl Workbench {
             }
             _ => {
                 let configs = testexp::debug_configs(&file, &test, &root, &[]);
-                self.choose_debug_config(configs, window, cx);
+                self.choose_debug_config_trusted(configs, window, cx);
             }
         }
     }
