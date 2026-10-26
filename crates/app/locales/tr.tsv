@@ -2469,3 +2469,4 @@ The tests did not build: run the test to see the errors.	Testler derlenemedi: ha
 {0}/{1} passed	{0}/{1} geçti
 {} failed	{} başarısız
 {} skipped	{} atlandı
+Git is paused in this folder: its repository settings run programs ({}). Trust the folder to use Git here.	Git bu klasörde duraklatıldı: deposunun ayarları program çalıştırıyor ({}). Git'i burada kullanmak için klasöre güvenin.

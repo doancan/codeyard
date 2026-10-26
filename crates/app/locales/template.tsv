@@ -713,6 +713,7 @@ Friday
 Git could not sign in to {}. Set up credentials (credential helper, SSH key or `gh auth login`) and try again	
 Git doesn't know who you are on this host. Run these in the terminal: {0} and {1}	
 Git identity is not set on this host: commits will be refused. Set user.name and user.email (git config --global …).	
+Git is paused in this folder: its repository settings run programs ({}). Trust the folder to use Git here.	
 Git: Abort Merge	
 Git: Abort Rebase	
 Git: Add Remote…	
