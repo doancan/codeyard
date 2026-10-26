@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Right click on a changed file in Source Control opens a menu: *Copy Path*, *Copy Relative Path* and *Add to .gitignore*.
+
 ## [0.3.0] - 2026-10-26
 
 ### Added
