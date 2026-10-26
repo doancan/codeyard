@@ -497,7 +497,7 @@ impl Workbench {
                     window.titlebar_double_click();
                 }
             })
-            // Room for the traffic lights, mirrored on the right so the command center stays in the middle of the window.
+            // Room for the traffic lights, mirrored on the right so the navigation group stays in the middle of the window.
             .child(div().w(px(80.)).flex_none())
             .child(
                 div()
@@ -523,19 +523,19 @@ impl Workbench {
                         div()
                             .id("command-center")
                             .ml(px(theme::SPACE[2]))
+                            // Sits a point below the middle, level with the traffic lights' optical centre.
+                            .mt(px(2.))
                             .w(gpui::relative(0.38))
                             .max_w(px(600.))
                             .min_w(px(160.))
-                            .h(px(22.))
-                            .px(px(theme::SPACE[4]))
+                            .h(px(24.))
+                            .px(px(12.))
                             .flex()
                             .items_center()
-                            .justify_center()
-                            .gap(px(theme::SPACE[3]))
                             .rounded(px(6.))
                             .border_1()
-                            .border_color(c(ui::mix(p.surface, p.border, 0.9)))
-                            .bg(c(ui::mix(p.surface, p.bg, 0.6)))
+                            // Drawn on the title bar itself: only a faint outline marks the box until it is hovered.
+                            .border_color(c(ui::mix(p.surface, p.text, 0.08)))
                             .text_size(px(text::XS.0))
                             .text_color(c(p.text_muted))
                             .cursor_pointer()
@@ -545,11 +545,8 @@ impl Workbench {
                                 cx.stop_propagation();
                                 this.quick_open(&QuickOpen, w, cx);
                             }))
-                            .child(icon("search", 13., p.text_muted))
                             .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label)),
-                    )
-                    // Balances the back / forward buttons so the box itself is centered.
-                    .child(div().w(px(50.)).flex_none()),
+                    ),
             )
             .child(div().w(px(80.)).flex_none())
     }
