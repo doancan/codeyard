@@ -9,8 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Cache CI dependencies and run macOS tests and memory/size budgets in parallel while keeping the `macos` check dependent
-  on both. Install audit/coverage tools from binaries; make manual coverage explicit and use Node.js 24 CI actions.
+- Cache CI dependencies; run macOS tests/budgets and Windows tests/standalone EXE checks in parallel, keeping the
+  `macos` and `windows` checks dependent on both halves. Install audit/coverage tools from binaries, make manual coverage
+  explicit and use Node.js 24 CI actions.
 
 ## [0.4.0] - 2026-10-26
 

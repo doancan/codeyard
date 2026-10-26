@@ -91,8 +91,12 @@ PR jobs restore the default branch cache without saving a separate copy. Coverag
 
 The `macos-tests` and `macos-budgets` jobs run concurrently. The existing `macos` check waits for both and explicitly
 fails for failure, cancellation or skipping of either job, so existing rules requiring `macos` still require the tests
-and real memory/size measurement. Budget values, release profiles and test coverage are unchanged. Windows continues
-to run the native checks, agent build tests and standalone GUI/icon/embedded-agent verification.
+and real memory/size measurement. Budget values, release profiles and test coverage are unchanged.
+
+Windows native tests (`windows-tests`) and the actual release EXE (`windows-standalone`) also run in parallel. The existing
+`windows` check requires both. The standalone job reuses the production `app-windows` cache and invokes
+`build-windows.ps1 -Profile Release`, including GUI/icon/embedded-agent verification. Only CI calls
+`check-windows.ps1 -SkipStandalone`; the default local command still runs every check.
 
 `cargo-audit` and optional `cargo-llvm-cov` are installed from prebuilt tools rather than compiled on each runner.
 RustSec advisories are still fetched and checked on every audit run. Metal's compiler is downloaded only if missing;
