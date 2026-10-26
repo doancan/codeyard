@@ -220,7 +220,8 @@ impl ScmPanel {
         cx.notify();
     }
 
-    pub(super) fn graph_section(&self, query_focused: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    /// `fill`: nothing else needs the room, so the graph grows to the bottom of the panel instead of its fixed height.
+    pub(super) fn graph_section(&self, query_focused: bool, fill: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let p = *palette(cx);
         let open = self.sections.is_open("graph", true);
         let query = self.query.read(cx).text().to_string();
@@ -374,6 +375,7 @@ impl ScmPanel {
             .flex()
             .flex_col()
             .flex_shrink()
+            .when(fill, |d| d.flex_1())
             .min_h(px(super::layout::ROW_H + 4.))
             .child(self.top_sash("graph", &p, cx))
             .child(header)
@@ -387,7 +389,7 @@ impl ScmPanel {
                     ),
                 )
             })
-            .when_some(body, |d, body| d.child(div().h(px(height)).flex_shrink().min_h(px(60.)).child(body)))
+            .when_some(body, |d, body| d.child(div().when(fill, |d| d.flex_1()).when(!fill, |d| d.h(px(height))).flex_shrink().min_h(px(60.)).child(body)))
     }
 }
 

@@ -710,6 +710,8 @@ impl Render for ScmPanel {
             (Some(b), a, d) => format!("{b}  {}", git::counts_label(a, d)),
             (None, ..) => crate::i18n::t("detached HEAD").into(),
         };
+        let graph_fills =
+            staged.is_empty() && merge.is_empty() && unstaged.is_empty() && self.sections.is_open("graph", true) && !self.sections.has_height("graph");
         let field_box = ui::input_box("scm-message-box", &p, p.bg, self.message.focus_handle(cx).is_focused(window)).child(self.message.clone());
         div()
             .key_context("ScmPanel")
@@ -823,8 +825,9 @@ impl Render for ScmPanel {
             .child(
                 div()
                     .id("scm-list")
-                    .flex_1()
-                    .min_h(px(72.))
+                    // Nothing to commit: the list takes only its line and the graph gets the room (until its height is set by hand).
+                    .when(!graph_fills, |d| d.flex_1())
+                    .min_h(px(if graph_fills { 0. } else { 72. }))
                     .overflow_y_scroll()
                     .when(!merge.is_empty(), |d| {
                         let rows: Vec<_> = if self.sections.is_open("scm-merge", true) { merge.iter().enumerate().map(|(i, ch)| self.row(1000 + i, ch, false, cx).into_any_element()).collect() } else { Vec::new() };
@@ -841,7 +844,7 @@ impl Render for ScmPanel {
                     }),
             )
             .children(self.stash_section(cx))
-            .child(self.graph_section(self.query.focus_handle(cx).is_focused(window), cx))
+            .child(self.graph_section(self.query.focus_handle(cx).is_focused(window), graph_fills, cx))
             .children(self.detail_section(cx))
     }
 }
