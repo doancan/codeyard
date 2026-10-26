@@ -420,7 +420,7 @@ struct Overlay {
     _sub: Subscription,
 }
 
-pub use debug::{AddFunctionBreakpoint, DisableAllBreakpoints, EnableAllBreakpoints, ToggleBreakpointEnabled, ToggleBreakpointsActive};
+pub use debug::{AddFunctionBreakpoint, DisableAllBreakpoints, EnableAllBreakpoints, ShowRunAndDebug, ToggleBreakpointEnabled, ToggleBreakpointsActive};
 pub use host::askpass::{AskKind, AskRequest};
 pub use remote_glue::ShowRemoteExplorer;
 pub type AskReply = std::sync::mpsc::Sender<Option<String>>;
@@ -556,6 +556,7 @@ enum Panel {
     Explorer,
     Search,
     Scm,
+    Debug,
     Remote,
 }
 
@@ -1349,12 +1350,14 @@ impl Workbench {
                         }),
                     ))
                     .when(self.dbg.has_sessions(), |d| {
-                        d.child(panel_tab("debug-tab", crate::i18n::upper(crate::i18n::t("Debug")), self.chrome.bottom == Bottom::Debug, 0, p).on_click(
-                            cx.listener(|this, _, _, cx| {
-                                this.chrome.bottom = Bottom::Debug;
-                                cx.notify();
-                            }),
-                        ))
+                        d.child(
+                            panel_tab("debug-tab", crate::i18n::upper(crate::i18n::t("Debug Console")), self.chrome.bottom == Bottom::Debug, 0, p).on_click(
+                                cx.listener(|this, _, _, cx| {
+                                    this.chrome.bottom = Bottom::Debug;
+                                    cx.notify();
+                                }),
+                            ),
+                        )
                     })
                     .child(
                         panel_tab("ports-tab", crate::i18n::upper(crate::i18n::t("Ports")), self.chrome.bottom == Bottom::Ports, self.active_forwards(), p)

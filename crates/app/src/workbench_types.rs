@@ -317,4 +317,6 @@ pub(super) enum MenuCmd {
     Port(ports_glue::PortMenuCmd),
     /// A host row of the Remote Explorer (`MenuTarget::path` = the alias).
     Remote(remote_glue::RemoteMenuCmd),
+    /// The Run and Debug view: configuration selector, breakpoint rows (`MenuTarget::path` = "path\tline").
+    Debug(debug::DebugMenuCmd),
 }

@@ -997,7 +997,6 @@ No tests found for this file type.	Bu dosya türü için test bulunamadı.
 No test at the cursor: put it inside a test function.	İmlecin altında test yok: imleci bir test işlevinin içine getirin.
 Could not create {0}: {1}	{0} oluşturulamadı: {1}
 Output	Çıktı
-Debug	Hata Ayıklama
 Hide Panel (⌘J)	Paneli Gizle (⌘J)
 New Terminal (⌃⇧`)	Yeni Terminal (⌃⇧`)
 Move Panel to Bottom	Paneli Alta Taşı
@@ -1567,19 +1566,14 @@ The debug adapter stopped	Hata ayıklama bağdaştırıcısı durdu
 No active debug session.	Etkin hata ayıklama oturumu yok.
 Debug session stopped	Hata ayıklama oturumu durduruldu
 No debug session. F5 starts one.	Hata ayıklama oturumu yok. F5 bir oturum başlatır.
-Pause	Duraklat
 Continue (F5)	Devam Et (F5)
 Step Over (F10)	Üzerinden Geç (F10)
 Step Into (F11)	İçine Gir (F11)
 Step Out (⇧F11)	Dışına Çık (⇧F11)
 Restart (⇧⌘F5)	Yeniden Başlat (⇧⌘F5)
 Stop (⇧F5)	Durdur (⇧F5)
-{}: starting…	{}: başlıyor…
-{}: running	{}: çalışıyor
-{}: paused ({})	{0}: duraklatıldı ({1})
 Running…	Çalışıyor…
 Not paused	Duraklatılmadı
-not paused	duraklatılmadı
 breaks when written:	yazıldığında durur:
 Call Stack	Çağrı Yığını
 Variables	Değişkenler
@@ -2322,3 +2316,34 @@ Not connected yet	Henüz bağlanılmadı
 No recent folders	Son klasör yok
 No hosts in ~/.ssh/config. Add one with +.	~/.ssh/config içinde sunucu yok. + ile ekleyin.
 Forwarded Ports	Yönlendirilen Bağlantı Noktaları
+# ---- Run and Debug view ----
+Run and Debug	Çalıştır ve Hata Ayıkla
+Run and Debug (⌃⇧D)	Çalıştır ve Hata Ayıkla (⌃⇧D)
+View: Run and Debug	Görünüm: Çalıştır ve Hata Ayıkla
+Start Debugging (F5)	Hata Ayıklamayı Başlat (F5)
+Pause (F6)	Duraklat (F6)
+Open Launch Configuration	Başlatma Yapılandırmasını Aç
+Select a configuration	Bir yapılandırma seçin
+No Configurations	Yapılandırma Yok
+To customize Run and Debug, create a launch configuration.	Çalıştır ve Hata Ayıkla'yı özelleştirmek için bir başlatma yapılandırması oluşturun.
+Create a launch configuration	Başlatma yapılandırması oluştur
+Without one, F5 finds a configuration from the project (Cargo, Go, or the open Python or JavaScript file).	Yapılandırma yoksa F5 projeden bir tane bulur (Cargo, Go ya da açık Python veya JavaScript dosyası).
+Add Expression…	İfade Ekle…
+Remove Expression	İfadeyi Kaldır
+No expressions: + adds one.	İfade yok: + ile eklenir.
+No debug session.	Hata ayıklama oturumu yok.
+No breakpoints: F9 or a click in the gutter adds one.	Kesme noktası yok: F9 ya da satır numarası boşluğuna tıklamak ekler.
+Activate Breakpoints	Kesme Noktalarını Etkinleştir
+Deactivate Breakpoints	Kesme Noktalarını Etkisizleştir
+Remove All Breakpoints	Tüm Kesme Noktalarını Kaldır
+Remove Breakpoint	Kesme Noktasını Kaldır
+Enable Breakpoint	Kesme Noktasını Etkinleştir
+Disable Breakpoint	Kesme Noktasını Devre Dışı Bırak
+Edit Condition…	Koşulu Düzenle…
+Add Function Breakpoint…	İşlev Kesme Noktası Ekle…
+The debugger could not bind this breakpoint.	Hata ayıklayıcı bu kesme noktasını koda bağlayamadı.
+Starting…	Başlatılıyor…
+running	çalışıyor
+ended	bitti
+paused on {}	{0} nedeniyle duraklatıldı
+Breakpoints	Kesme Noktaları

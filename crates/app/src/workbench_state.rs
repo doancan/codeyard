@@ -18,6 +18,8 @@ pub(super) struct DebugUi {
     pub(super) exception_filters: Option<Vec<String>>,
     pub(super) bps: crate::debug_model::BreakpointStore,
     pub(super) last: Option<String>,
+    /// Names of the launch file's configurations (the Run and Debug view's selector).
+    pub(super) catalog: Vec<String>,
 }
 
 /// Last task, plus the problems parsed from its terminal and output (see workbench_tasks.rs).

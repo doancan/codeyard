@@ -35,9 +35,12 @@ Accept Current
 Accept Current Change	
 Accept Incoming	
 Accept Incoming Change	
+Activate Breakpoints	
 Add	
 Add Cursor Above	
 Add Cursor Below	
+Add Expression…	
+Add Function Breakpoint…	
 Add Next Occurrence	
 Add SSH Host…	
 Add SSH host…	
@@ -97,6 +100,7 @@ Both, Incoming First
 Box invisible and look-alike Unicode characters (zero-width spaces, bidi controls, Cyrillic letters inside Latin words)	
 Branch {}	
 Breaking on: {}	
+Breakpoints	
 Breakpoints are active.	
 Breakpoints are deactivated: the program runs past them.	
 Bring a folder's tabs and unsaved changes back when you open it	
@@ -347,6 +351,7 @@ Create Branch Here…
 Create Branch…	
 Create Tag Here…	
 Create Tag…	
+Create a launch configuration	
 Create branch	
 Create file	
 Create folder	
@@ -366,7 +371,7 @@ Data: Copy Path at Cursor
 Data: Decode Selection…	
 Data: Query…	
 Days	
-Debug	
+Deactivate Breakpoints	
 Debug Console	
 Debug Go package	
 Debug Node: {}	
@@ -425,6 +430,7 @@ Deleting…
 Deny	
 Developer: Restart Language Servers	
 Diff view side by side (off: inline)	
+Disable Breakpoint	
 Discard	
 Discard All Changes	
 Discard all changes	
@@ -466,6 +472,7 @@ Duplicate
 Duplicate key	
 Duplicate key “{}”	
 Edit	
+Edit Condition…	
 Edit Host…	
 Edit a host	
 Edit which SSH host?	
@@ -563,6 +570,7 @@ Editor: Unfold All
 Editor: Unfold Recursively	
 Empty folder	
 Empty group: ⌘P opens a file here	
+Enable Breakpoint	
 Encoding for files that are not UTF-8	
 End files with a newline when saving	
 Enter a folder path on {}…	
@@ -951,6 +959,7 @@ Next Match
 Next Problem	
 Next match (↵)	
 Next result (F4)	
+No Configurations	
 No SSH hosts yet. Use Remote: Add SSH Host…	
 No VS Code settings found on this machine	
 No WSL distributions found.	
@@ -958,6 +967,7 @@ No active debug session.
 No block comment syntax for this file type	
 No bookmarks in this file (⌥⌘K adds one)	
 No bookmarks yet: ⌥⌘K toggles one on the cursor's line.	
+No breakpoints: F9 or a click in the gutter adds one.	
 No change here to revert	
 No change here to stage	
 No changes	
@@ -971,11 +981,13 @@ No commits to show.
 No commits yet.	
 No debug adapter for type “{0}”. Supported: lldb (C, C++, Rust, Swift), go, python; or add {1} to the configuration.	
 No debug configuration: add .vscode/launch.json, or open a Cargo / Go project or a Python file.	
+No debug session.	
 No debug session. F5 starts one.	
 No definition found	
 No differences.	
 No edits yet in this session.	
 No enclosing brackets	
+No expressions: + adds one.	
 No favorites yet: right-click a file → Add to Favorites, or “Favorites: Toggle Active File”.	
 No file “{}” in this project	
 No files in this folder	
@@ -1070,6 +1082,7 @@ Open Editors ({})
 Open File (HEAD)	
 Open Folder	
 Open Folder…	
+Open Launch Configuration	
 Open Merge Editor	
 Open Recent	
 Open SSH Config File	
@@ -1122,7 +1135,7 @@ Path on this computer (~ is your home folder)
 Paths are shown for JSON, YAML and TOML files	
 Paths can't end with / or contain . or .. parts	
 Pattern, e.g. foo($X, $$$REST)	
-Pause	
+Pause (F6)	
 Pause the program first (a breakpoint or ⏸): the variable has to be in scope.	
 Paused on exception: {}	
 Payload	
@@ -1257,6 +1270,9 @@ Remote: Set Up Key Login…
 Remote: Test SSH Connection…	
 Remote: Upload Files to This Folder…	
 Remove	
+Remove All Breakpoints	
+Remove Breakpoint	
+Remove Expression	
 Remove Host…	
 Remove a host	
 Remove folder from workspace	
@@ -1334,6 +1350,8 @@ Reverting a change is not supported in this file (non-UTF-8 or CR-only line endi
 Right is writable	
 Right-click a commit in the Source Control graph to branch, tag, cherry-pick, revert or reset.	
 Right-click a folder and choose Find in Folder… to search only inside it.	
+Run and Debug	
+Run and Debug (⌃⇧D)	
 Run task	
 Run the search again	
 Running…	
@@ -1390,6 +1408,7 @@ Select Language Mode
 Select a JWT or a Unix timestamp first	
 Select a branch to check out	
 Select a color theme	
+Select a configuration	
 Select a debug configuration	
 Select a file icon theme	
 Select a word and press ⌘D to add the next match as another cursor.	
@@ -1480,6 +1499,7 @@ Staging changes is not supported in files with old-Mac (CR only) line endings
 Staging changes needs a UTF-8 file	
 Staging changes needs a UTF-8 file (this one is stored in another encoding)	
 Start	
+Start Debugging (F5)	
 Start a debug session first (F5): the adapter says which exceptions it can break on.	
 Start and end of a slice must be numbers	
 Start language servers	
@@ -1487,6 +1507,7 @@ Start search results folded or open
 Start the new branch from…	
 Starting the download…	
 Starting “{}”…	
+Starting…	
 Stash (Include Untracked)	
 Stash Staged Changes	
 Stash with Name…	
@@ -1559,6 +1580,7 @@ The debug adapter exited before connecting
 The debug adapter exited before it started listening	
 The debug adapter stopped	
 The debug adapter stopped (exit code {})	
+The debugger could not bind this breakpoint.	
 The download finished but js-debug was not found in it.	
 The element can't be renamed.	
 The file changed on disk while you were editing. Nothing was saved.	
@@ -1650,6 +1672,7 @@ This repository has no remote. Add one with Git: Add Remote…
 This window is installing an update. You can close it in a few seconds.	
 Thursday	
 Timeline	
+To customize Run and Debug, create a launch configuration.	
 Toggle Bookmark	
 Toggle Line Comment	
 Toggle Panel	
@@ -1731,6 +1754,7 @@ View: Problems
 View: Remote Explorer	
 View: Reopen Closed Editor	
 View: Reset Zoom	
+View: Run and Debug	
 View: Source Control	
 View: Split Editor	
 View: Switch Editor…	
@@ -1762,6 +1786,7 @@ Width of the line cursor (px)
 Window	
 Windows on a server reconnect, which can ask for a password.	
 Without Full Disk Access, Desktop, Documents or external drives may look empty.	
+Without one, F5 finds a configuration from the project (Cargo, Go, or the open Python or JavaScript file).	
 Word Wrap	
 Workbench	
 Workspace: Trust This Folder	
@@ -1831,6 +1856,7 @@ e.g. 3000
 edit the file by hand	
 empty body	
 empty variable	
+ended	
 entry	
 entry {0} needs {1} and {2}	
 enum	
@@ -1897,7 +1923,6 @@ no item {} in the response
 no “{}” in the response	
 not UTF-8	
 not available	
-not paused	
 not set	
 now	
 of {}	
@@ -1906,6 +1931,7 @@ operator
 package	
 path branch (new branch is created if it does not exist)	
 pause	
+paused on {}	
 pinned	
 port, user, key file, jump host	
 ports.rules.{}.{}: unexpected value	
@@ -1923,6 +1949,7 @@ remote
 request failed	
 review needed	
 right	
+running	
 seconds	
 send the request named “{}” first	
 sends {} to {}	
@@ -2140,12 +2167,9 @@ your words
 {}: invalid color {}	
 {}: no answer from the debug adapter	
 {}: no open pull requests.	
-{}: paused ({})	
 {}: reachable ({}), but this app has no agent for {}	
 {}: reachable in {} ms · {} · ready	
 {}: reachable, but {} is not a supported server	
-{}: running	
-{}: starting…	
 {}: the color must be a string	
 {}: the program did not start	
 {}: unknown value {} ({})	

@@ -165,7 +165,14 @@ fn stop_reason(reason: &str) -> String {
     known.iter().find(|k| **k == reason).map_or_else(|| reason.to_string(), |k| t(k).to_string())
 }
 
-gpui::actions!(workbench, [ToggleBreakpointEnabled, EnableAllBreakpoints, DisableAllBreakpoints, ToggleBreakpointsActive, AddFunctionBreakpoint]);
+gpui::actions!(
+    workbench,
+    [ShowRunAndDebug, ToggleBreakpointEnabled, EnableAllBreakpoints, DisableAllBreakpoints, ToggleBreakpointsActive, AddFunctionBreakpoint]
+);
+
+#[path = "workbench_debug_view.rs"]
+mod view;
+pub use view::DebugMenuCmd;
 
 const CONSOLE_LIMIT: usize = 5000;
 /// Longest console line (characters) and longest unfinished line (bytes) kept.
@@ -395,7 +402,6 @@ impl Workbench {
         }
     }
 
-    #[expect(dead_code, reason = "used by the Run and Debug view")]
     pub(super) fn remove_function_breakpoint(&mut self, index: usize, cx: &mut Context<Self>) {
         if index < self.dbg.bps.functions.len() {
             self.dbg.bps.functions.remove(index);
@@ -405,7 +411,6 @@ impl Workbench {
         }
     }
 
-    #[expect(dead_code, reason = "used by the Run and Debug view")]
     pub(super) fn set_function_breakpoint_enabled(&mut self, index: usize, on: bool, cx: &mut Context<Self>) {
         if let Some(f) = self.dbg.bps.functions.get_mut(index) {
             f.disabled = !on;
@@ -798,36 +803,74 @@ impl Workbench {
             }
             _ => {}
         }
-        let (Some(root), host) = (self.active_root(cx), self.remote.host.clone()) else {
+        let Some(read) = self.read_launch_configs(true, cx) else {
             self.notice = Some(Notice::Info(crate::i18n::t("Open a folder to debug it.").into()));
             cx.notify();
             return;
         };
+        cx.spawn(async move |this, cx| {
+            let configs = read.await;
+            with_window(&this, cx, move |this, window, cx| this.choose_debug_config(configs, window, cx));
+        })
+        .detach();
+    }
+
+    /// Configurations of the open folder, read in the background: `.codeyard/launch.jsonc` and `.vscode/launch.json`,
+    /// then (with `detected`) the ones found from the project (Cargo, Go, the open Python or JavaScript file).
+    pub(super) fn read_launch_configs(&self, detected: bool, cx: &mut Context<Self>) -> Option<gpui::Task<Vec<LaunchConfig>>> {
+        let (root, host) = (self.active_root(cx)?, self.remote.host.clone());
         let file = self.active_editor().map(|e| e.read(cx).path.clone());
-        let read = cx.background_executor().spawn({
-            let (root, file) = (root.clone(), file.clone());
-            async move {
-                let read = |rel: &str| host.read(&ui::join(&root, rel)).ok().map(|(d, _)| String::from_utf8_lossy(&d).into_owned());
-                let mut tasks = Vec::new();
-                for (path, source) in [(".vscode/tasks.json", ".vscode/tasks.json"), (".codeyard/tasks.jsonc", "tasks.jsonc")] {
-                    if let Some(t) = read(path) {
-                        tasks.extend(super::tasks::parse_task_file(&t, source));
-                    }
+        Some(cx.background_executor().spawn(async move {
+            let read = |rel: &str| host.read(&ui::join(&root, rel)).ok().map(|(d, _)| String::from_utf8_lossy(&d).into_owned());
+            let mut tasks = Vec::new();
+            for (path, source) in [(".vscode/tasks.json", ".vscode/tasks.json"), (".codeyard/tasks.jsonc", "tasks.jsonc")] {
+                if let Some(t) = read(path) {
+                    tasks.extend(super::tasks::parse_task_file(&t, source));
                 }
-                let mut configs = Vec::new();
-                for path in [".codeyard/launch.jsonc", ".vscode/launch.json"] {
-                    if let Some(t) = read(path) {
-                        configs.extend(debug_config::parse_launch_json(&t, &root, file.as_deref(), &tasks));
-                    }
+            }
+            let mut configs = Vec::new();
+            for path in [".codeyard/launch.jsonc", ".vscode/launch.json"] {
+                if let Some(t) = read(path) {
+                    configs.extend(debug_config::parse_launch_json(&t, &root, file.as_deref(), &tasks));
                 }
+            }
+            if detected {
                 let cargo = read("Cargo.toml");
                 let go = host.stat(&ui::join(&root, "go.mod")).is_ok();
                 configs.extend(debug_config::detect(cargo.as_deref(), go, file.as_deref(), &root));
-                configs
             }
-        });
+            configs
+        }))
+    }
+
+    /// The configurations of the launch files, for the Run and Debug view's selector.
+    pub(super) fn load_launch_catalog(&mut self, cx: &mut Context<Self>) {
+        let Some(read) = self.read_launch_configs(false, cx) else {
+            self.dbg.catalog.clear();
+            return;
+        };
         cx.spawn(async move |this, cx| {
-            let configs = read.await;
+            let names: Vec<String> = read.await.into_iter().map(|c| c.name).collect();
+            this.update(cx, |this, cx| {
+                if this.dbg.last.as_ref().is_none_or(|l| !names.contains(l)) {
+                    this.dbg.last = names.first().cloned().or(this.dbg.last.take());
+                }
+                this.dbg.catalog = names;
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// The view's ▶: start the selected configuration, or (with none) look for one like F5 does.
+    pub(super) fn start_selected(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(name) = self.dbg.last.clone().filter(|n| self.dbg.catalog.contains(n)) else {
+            return self.start_debugging(&super::StartDebugging, window, cx);
+        };
+        let Some(read) = self.read_launch_configs(false, cx) else { return };
+        cx.spawn(async move |this, cx| {
+            let configs: Vec<LaunchConfig> = read.await.into_iter().filter(|c| c.name == name).take(1).collect();
             with_window(&this, cx, move |this, window, cx| this.choose_debug_config(configs, window, cx));
         })
         .detach();
@@ -1121,6 +1164,16 @@ impl Workbench {
         self.apply_debug_line_all(cx);
     }
 
+    /// The controls, the editors and the toolbar follow this session.
+    pub(super) fn focus_debug_session(&mut self, id: u64, cx: &mut Context<Self>) {
+        if self.dbg.by_id(id).is_some() {
+            self.dbg.focused = Some(id);
+            self.apply_debug_line_all(cx);
+            self.refresh_watches(cx);
+            cx.notify();
+        }
+    }
+
     /// Look at another thread's stack (the program stays stopped).
     pub(super) fn select_thread(&mut self, id: i64, cx: &mut Context<Self>) {
         if let Some(d) = self.dbg.cur_mut().filter(|d| matches!(d.status, DebugStatus::Stopped(_))) {
@@ -1319,30 +1372,27 @@ impl Workbench {
 
     // --- UI ---
 
-    pub(super) fn debug_view(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
-        let Some(d) = self.dbg.cur() else {
-            return div()
-                .px(px(theme::SPACE[6]))
-                .py(px(theme::SPACE[3]))
-                .text_color(c(p.text_muted))
-                .child(crate::i18n::t("No debug session. F5 starts one."))
-                .into_any_element();
-        };
+    /// The floating toolbar over the editors while a session is live: continue or pause, step over, into and out,
+    /// restart and stop. It follows the focused session.
+    pub(super) fn debug_toolbar(&self, p: &Palette, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let d = self.dbg.cur().filter(|d| !matches!(d.status, DebugStatus::Ended(_)))?;
         let stopped = matches!(d.status, DebugStatus::Stopped(_));
         let running = d.status == DebugStatus::Running;
-        let live = !matches!(d.status, DebugStatus::Ended(_));
         let dim = |on: bool| if on { 1.0 } else { 0.35 };
-        let toolbar = div()
-            .h(px(28.))
-            .flex_none()
+        let bar = div()
+            .id("debug-toolbar")
             .flex()
             .items_center()
             .gap(px(theme::SPACE[1]))
-            .px(px(theme::SPACE[3]))
-            .border_b_1()
+            .p(px(theme::SPACE[1]))
+            .rounded(px(theme::radius::MD))
+            .border_1()
             .border_color(c(p.border))
+            .bg(c(p.surface_raised))
+            .shadow_md()
+            .child(icon("bug-play", layout::ICON - 2., p.text_muted))
             .child(div().opacity(dim(stopped || running)).child(if running {
-                ui::icon_button("dbg-pause", "pause", crate::i18n::t("Pause"), p).on_click(cx.listener(|this, _, _, cx| this.debug_control("pause", cx)))
+                ui::icon_button("dbg-pause", "pause", crate::i18n::t("Pause (F6)"), p).on_click(cx.listener(|this, _, _, cx| this.debug_control("pause", cx)))
             } else {
                 ui::icon_button("dbg-continue", "play", crate::i18n::t("Continue (F5)"), p)
                     .on_click(cx.listener(|this, _, _, cx| this.debug_control("continue", cx)))
@@ -1370,155 +1420,36 @@ impl Workbench {
                     .on_click(cx.listener(|this, _, w, cx| this.restart_debugging(&super::RestartDebugging, w, cx))),
             )
             .child(
-                div().opacity(dim(live)).child(
-                    ui::icon_button("dbg-stop", "square", crate::i18n::t("Stop (⇧F5)"), p)
-                        .on_click(cx.listener(|this, _, w, cx| this.stop_debugging(&super::StopDebugging, w, cx))),
-                ),
+                ui::icon_button("dbg-stop", "square", crate::i18n::t("Stop (⇧F5)"), p)
+                    .on_click(cx.listener(|this, _, w, cx| this.stop_debugging(&super::StopDebugging, w, cx))),
             )
-            .child(div().w(px(theme::SPACE[3])))
-            .child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(match &d.status {
-                DebugStatus::Starting => crate::i18n::tf("{}: starting…", &[&d.config.name]),
-                DebugStatus::Running => crate::i18n::tf("{}: running", &[&d.config.name]),
-                DebugStatus::Stopped(r) => crate::i18n::tf("{}: paused ({})", &[&d.config.name, &stop_reason(r)]),
-                DebugStatus::Ended(m) => m.clone(),
-            }));
-
-        let header = |label: &'static str| {
-            let label = crate::i18n::upper(crate::i18n::t(label));
+            // Which session the buttons act on, when there are several.
+            .when(self.dbg.sessions.len() > 1, |b| {
+                b.child(div().px(px(theme::SPACE[2])).text_size(px(text::XS.0)).text_color(c(p.text_muted)).whitespace_nowrap().child(d.config.name.clone()))
+            });
+        Some(
             div()
-                .h(px(layout::ROW_H))
-                .flex_none()
+                .absolute()
+                .top(px(layout::TABBAR_H + theme::SPACE[2]))
+                .left_0()
+                .right_0()
                 .flex()
-                .items_center()
-                .px(px(theme::SPACE[4]))
-                .text_size(px(text::XXS.0))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .justify_center()
+                .child(bar.on_mouse_down(gpui::MouseButton::Left, |_, _, cx| cx.stop_propagation()))
+                .into_any_element(),
+        )
+    }
+
+    /// The bottom panel's Debug Console: the focused session's output and an expression field.
+    pub(super) fn debug_view(&self, p: &Palette, _: &mut Context<Self>) -> AnyElement {
+        let Some(d) = self.dbg.cur() else {
+            return div()
+                .px(px(theme::SPACE[6]))
+                .py(px(theme::SPACE[3]))
                 .text_color(c(p.text_muted))
-                .child(label)
+                .child(crate::i18n::t("No debug session. F5 starts one."))
+                .into_any_element();
         };
-        let column = |id: &'static str| div().id(id).h_full().min_w_0().flex_1().flex().flex_col().border_r_1().border_color(c(p.border));
-
-        // Call stack (with a thread list on top if there are several threads).
-        let thread_rows: Vec<AnyElement> = if stopped && d.threads.len() > 1 {
-            d.threads
-                .iter()
-                .map(|(id, name)| {
-                    let id = *id;
-                    let selected = id == d.thread;
-                    div()
-                        .id(("thread", id as usize))
-                        .h(px(layout::ROW_H))
-                        .flex()
-                        .items_center()
-                        .gap(px(theme::SPACE[2]))
-                        .px(px(theme::SPACE[4]))
-                        .cursor_pointer()
-                        .text_size(px(text::XS.0))
-                        .when(selected, |d| d.bg(c(p.surface_active)))
-                        .hover(|d| d.bg(c(p.surface_hover)))
-                        .child(icon("list", 12., p.text_muted))
-                        .child(name.to_string())
-                        .child(div().text_color(c(p.text_muted)).child(format!("#{id}")))
-                        .on_click(cx.listener(move |this, _, _, cx| this.select_thread(id, cx)))
-                        .into_any_element()
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
-        let stack: Vec<AnyElement> = if stopped {
-            d.frames
-                .iter()
-                .enumerate()
-                .map(|(i, f)| {
-                    let selected = i == d.frame;
-                    let place = f.path.as_deref().map(|p| format!("{}:{}", ui::file_name(p), f.line)).unwrap_or_default();
-                    div()
-                        .id(("frame", i))
-                        .h(px(layout::ROW_H))
-                        .flex()
-                        .items_center()
-                        .gap(px(theme::SPACE[2]))
-                        .px(px(theme::SPACE[4]))
-                        .cursor_pointer()
-                        .whitespace_nowrap()
-                        .overflow_hidden()
-                        .text_size(px(text::XS.0))
-                        .when(selected, |d| d.bg(c(p.surface_active)))
-                        .hover(|d| d.bg(c(p.surface_hover)))
-                        .when(f.path.is_none(), |d| d.text_color(c(p.text_muted)))
-                        .child(f.name.clone())
-                        .child(div().text_color(c(p.text_muted)).child(place))
-                        .on_click(cx.listener(move |this, _, _, cx| this.select_frame(i, cx)))
-                        .into_any_element()
-                })
-                .collect()
-        } else {
-            vec![
-                div()
-                    .px(px(theme::SPACE[4]))
-                    .text_size(px(text::XS.0))
-                    .text_color(c(p.text_muted))
-                    .child(if running { crate::i18n::t("Running…") } else { crate::i18n::t("Not paused") })
-                    .into_any_element(),
-            ]
-        };
-
-        // Variables (watch expressions on top).
-        let mut vars: Vec<AnyElement> = Vec::new();
-        for (i, expr) in self.dbg.watch_exprs.iter().enumerate() {
-            let value = d.watch_values.get(i).cloned().unwrap_or_else(|| if stopped { "…".into() } else { crate::i18n::t("not paused").into() });
-            vars.push(
-                div()
-                    .id(("watch", i))
-                    .h(px(layout::ROW_H))
-                    .flex()
-                    .items_center()
-                    .gap(px(theme::SPACE[2]))
-                    .px(px(theme::SPACE[4]))
-                    .whitespace_nowrap()
-                    .overflow_hidden()
-                    .text_size(px(text::XS.0))
-                    .child(icon("eye", 12., p.accent))
-                    .child(div().text_color(c(p.syntax_function)).child(expr.clone()))
-                    .child(div().text_color(c(p.text_muted)).child("="))
-                    .child(div().flex_1().min_w_0().overflow_hidden().font_family(ui::MONO_FONT).child(value))
-                    .child(
-                        div()
-                            .id(("watch-x", i))
-                            .flex_none()
-                            .cursor_pointer()
-                            .child(icon("x", 12., p.text_muted))
-                            .on_click(cx.listener(move |this, _, _, cx| this.remove_watch(i, cx))),
-                    )
-                    .into_any_element(),
-            );
-        }
-        for (i, (_, description)) in d.data_breakpoints.iter().enumerate() {
-            vars.push(
-                div()
-                    .id(("data-bp", i))
-                    .h(px(layout::ROW_H))
-                    .flex()
-                    .items_center()
-                    .gap(px(theme::SPACE[2]))
-                    .px(px(theme::SPACE[4]))
-                    .whitespace_nowrap()
-                    .overflow_hidden()
-                    .text_size(px(text::XS.0))
-                    .child(div().size(px(8.)).flex_none().rounded_full().bg(c(p.danger)))
-                    .child(div().text_color(c(p.text_muted)).child(crate::i18n::t("breaks when written:")))
-                    .child(div().min_w_0().overflow_hidden().child(description.clone()))
-                    .into_any_element(),
-            );
-        }
-        if stopped {
-            for s in &d.scopes {
-                self.variable_row(d, p, cx, &mut vars, s.reference, &s.name, "", None, 0);
-            }
-        }
-
-        // Console: last lines; expression input at the bottom.
         let skip = d.console.len().saturating_sub(CONSOLE_SHOWN);
         let lines: Vec<AnyElement> = d.console[skip..]
             .iter()
@@ -1533,91 +1464,25 @@ impl Workbench {
                 div().px(px(theme::SPACE[4])).font_family(ui::MONO_FONT).text_size(px(text::XS.0)).text_color(c(color)).child(line.clone()).into_any_element()
             })
             .collect();
-
         div()
             .size_full()
             .flex()
             .flex_col()
-            .child(toolbar)
+            .child(div().id("dbg-console-rows").flex_1().min_h_0().overflow_y_scroll().children(lines))
             .child(
                 div()
-                    .flex_1()
-                    .min_h_0()
+                    .h(px(26.))
+                    .flex_none()
+                    .px(px(theme::SPACE[4]))
+                    .border_t_1()
+                    .border_color(c(p.border))
                     .flex()
-                    .child(
-                        column("dbg-stack")
-                            .max_w(px(260.))
-                            .child(header(crate::i18n::tr("Call Stack")))
-                            .child(div().id("dbg-stack-rows").flex_1().min_h_0().overflow_y_scroll().children(thread_rows).children(stack)),
-                    )
-                    .child(
-                        column("dbg-vars")
-                            .child(header(crate::i18n::tr("Variables")))
-                            .child(div().id("dbg-var-rows").flex_1().min_h_0().overflow_y_scroll().children(vars)),
-                    )
-                    .child(
-                        column("dbg-console")
-                            .border_r_0()
-                            .child(header(crate::i18n::tr("Debug Console")))
-                            .child(div().id("dbg-console-rows").flex_1().min_h_0().overflow_y_scroll().children(lines))
-                            .child(
-                                div()
-                                    .h(px(26.))
-                                    .flex_none()
-                                    .px(px(theme::SPACE[4]))
-                                    .border_t_1()
-                                    .border_color(c(p.border))
-                                    .flex()
-                                    .items_center()
-                                    .child(d.input.clone()),
-                            ),
-                    ),
+                    .items_center()
+                    .gap(px(theme::SPACE[2]))
+                    .child(icon("chevron-right", 12., p.accent))
+                    .child(d.input.clone()),
             )
             .into_any_element()
-    }
-
-    /// A scope or variable row and (if expanded) its children; depth is limited.
-    fn variable_row(
-        &self,
-        d: &DebugState,
-        p: &Palette,
-        cx: &mut Context<Self>,
-        out: &mut Vec<AnyElement>,
-        reference: i64,
-        name: &str,
-        value: &str,
-        ty: Option<&str>,
-        depth: usize,
-    ) {
-        let open = d.expanded.contains(&reference);
-        let expandable = reference > 0;
-        let name = name.to_string();
-        out.push(
-            div()
-                .id(("var", out.len()))
-                .h(px(layout::ROW_H))
-                .flex()
-                .items_center()
-                .gap(px(theme::SPACE[2]))
-                .pl(px(theme::SPACE[4] + 12. * depth as f32))
-                .pr(px(theme::SPACE[4]))
-                .whitespace_nowrap()
-                .overflow_hidden()
-                .text_size(px(text::XS.0))
-                .when(expandable, |d| d.cursor_pointer().hover(|s| s.bg(c(p.surface_hover))))
-                .child(div().w(px(12.)).flex_none().when(expandable, |d| d.child(icon(if open { "chevron-down" } else { "chevron-right" }, 12., p.text_muted))))
-                .child(div().text_color(c(p.syntax_function)).child(name))
-                .when(!value.is_empty(), |d| d.child(div().text_color(c(p.text_muted)).child("=")))
-                .child(div().min_w_0().overflow_hidden().font_family(ui::MONO_FONT).child(value.to_string()))
-                .when_some(ty.map(str::to_string), |d, t| d.child(div().flex_none().text_color(c(p.text_muted)).child(t)))
-                .when(expandable, |d| d.on_click(cx.listener(move |this, _, _, cx| this.toggle_variable(reference, cx))))
-                .into_any_element(),
-        );
-        if open && depth < 8 {
-            for v in d.children.get(&reference).into_iter().flatten() {
-                self.variable_row(d, p, cx, out, v.reference, &v.name, &v.value, v.ty.as_deref(), depth + 1);
-            }
-        }
     }
 
     /// Summary of state for tests: (state, frame names, stopped line, console).
@@ -1654,6 +1519,25 @@ impl Workbench {
                 )
             })
             .collect()
+    }
+
+    #[cfg(test)]
+    pub fn debug_catalog_for_test(&self) -> Vec<String> {
+        self.dbg.catalog.clone()
+    }
+
+    #[cfg(test)]
+    pub fn start_selected_for_test(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.start_selected(window, cx);
+    }
+
+    /// Open or close the first visible variable with this name.
+    #[cfg(test)]
+    pub fn toggle_variable_for_test(&mut self, name: &str, cx: &mut Context<Self>) {
+        let reference = self.dbg.cur().and_then(|d| d.children.values().flatten().find(|v| v.name == name).map(|v| v.reference));
+        if let Some(r) = reference {
+            self.toggle_variable(r, cx);
+        }
     }
 
     #[cfg(test)]

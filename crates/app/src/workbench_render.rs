@@ -77,6 +77,7 @@ impl Render for Workbench {
                 .child(div().flex_1().min_h_0().child(self.search.clone()))
                 .into_any_element(),
             Panel::Scm => self.scm.clone().into_any_element(),
+            Panel::Debug => self.run_debug_view(&p, cx),
             Panel::Remote => self.remote_view(&p, cx),
         });
 
@@ -94,6 +95,7 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::find_todos))
             .on_action(cx.listener(Self::show_remote))
             .on_action(cx.listener(Self::show_remote_explorer))
+            .on_action(cx.listener(Self::show_run_debug))
             .on_action(cx.listener(Self::toggle_breakpoint_enabled))
             .on_action(cx.listener(Self::enable_all_breakpoints))
             .on_action(cx.listener(Self::disable_all_breakpoints))
@@ -497,7 +499,17 @@ impl Render for Workbench {
                             .when(!self.chrome.panel_right, |d| d.flex_col())
                             // A maximized panel takes the editor's place.
                             .when(!(self.chrome.panel_open && self.chrome.panel_max), |d| {
-                                d.child(div().flex_1().min_w_0().min_h_0().flex().flex_col().child(self.editor_area(main, &p, cx)))
+                                d.child(
+                                    div()
+                                        .relative()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .min_h_0()
+                                        .flex()
+                                        .flex_col()
+                                        .child(self.editor_area(main, &p, cx))
+                                        .children(self.debug_toolbar(&p, cx)),
+                                )
                             })
                             .when(self.chrome.panel_open, |d| d.child(self.panel(&p, cx))),
                     ),

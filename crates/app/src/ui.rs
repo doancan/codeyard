@@ -273,6 +273,9 @@ const ICONS: &[(&str, &[u8])] = icons![
     "container",
     "key-round",
     "pencil",
+    // --- run and debug ---
+    "bug-play",
+    "circle-slash-2",
 ];
 
 /// Embedded icon names (tests: is every name used in source embedded, does every embedded file exist).

@@ -287,6 +287,7 @@ impl Workbench {
             Command::action("View: Focus Left Editor Group", FocusLeftGroup),
             Command::action("View: Focus Right Editor Group", FocusRightGroup),
             Command::action("View: Source Control", ShowScm),
+            Command::action("View: Run and Debug", ShowRunAndDebug),
             Command::action("View: Remote Explorer", ShowRemoteExplorer),
             Command::action("Git: Checkout to…", GitCheckout),
             Command::action("Git: Create Branch…", GitCreateBranch),
