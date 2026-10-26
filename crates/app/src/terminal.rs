@@ -156,6 +156,8 @@ pub struct TerminalView {
     hover_link: Option<(usize, std::ops::Range<usize>)>,
     /// The find bar, while it is open.
     find: Option<find::FindState>,
+    /// Font size and line height from `terminal.fontSize` (set on every render, so zoom and setting changes apply at once).
+    metrics: (f32, f32),
     focus_handle: FocusHandle,
 }
 
@@ -202,6 +204,7 @@ impl TerminalView {
             selecting: false,
             find: None,
             hover_link: None,
+            metrics: metrics(cx.global::<crate::settings::Settings>().terminal_font_size),
             focus_handle: cx.focus_handle(),
         };
 
@@ -427,10 +430,15 @@ impl TerminalView {
         cx.notify();
     }
 
+    /// Height of one terminal row.
+    fn line_h(&self) -> Pixels {
+        px(self.metrics.1)
+    }
+
     /// Window position → grid cell + which half of the cell.
     fn grid_point(&self, pos: Point<Pixels>) -> (GridPoint, Side) {
         let (origin, cell_w) = self.grid;
-        let line_h = px(text::CODE.1);
+        let line_h = self.line_h();
         let x = ((pos.x - origin.x) / cell_w).max(0.);
         let row = ((pos.y - origin.y) / line_h).floor().clamp(0., (self.size.rows - 1) as f32) as i32;
         let col = (x.floor() as usize).min(self.size.cols - 1);
@@ -447,7 +455,7 @@ impl TerminalView {
             return None;
         }
         let (origin, cell_w) = self.grid;
-        let line_h = px(text::CODE.1);
+        let line_h = self.line_h();
         let col = (((pos.x - origin.x) / cell_w).max(0.).floor() as usize).min(self.size.cols.saturating_sub(1)) + 1;
         let row = ((pos.y - origin.y) / line_h).max(0.).floor().min((self.size.rows - 1) as f32) as usize + 1;
         let mut b = button;
@@ -558,11 +566,11 @@ impl TerminalView {
     #[cfg(test)]
     pub fn cell_center(&self, row: usize, col: usize) -> Point<Pixels> {
         let (origin, cell_w) = self.grid;
-        point(origin.x + cell_w * (col as f32 + 0.5), origin.y + px(text::CODE.1) * (row as f32 + 0.5))
+        point(origin.x + cell_w * (col as f32 + 0.5), origin.y + self.line_h() * (row as f32 + 0.5))
     }
 
     fn on_scroll(&mut self, ev: &ScrollWheelEvent, _: &mut Window, cx: &mut Context<Self>) {
-        let line_h = px(text::CODE.1);
+        let line_h = self.line_h();
         let dy = ev.delta.pixel_delta(line_h).y;
         let lines = (dy / line_h).round() as i32;
         if lines == 0 {
@@ -879,6 +887,14 @@ struct Frame {
     /// Link to underline: (row, start column, end).
     link: Option<(usize, usize, usize)>,
     cell_w: Pixels,
+    line_h: Pixels,
+}
+
+/// Font size and row height for a terminal font size: the row keeps the design scale's size-to-line ratio
+/// (whole pixels, so rows don't drift apart while painting).
+pub(crate) fn metrics(font_size: f32) -> (f32, f32) {
+    let size = font_size.clamp(6., 48.);
+    (size, (size * text::CODE.1 / text::CODE.0).round())
 }
 
 struct TerminalElement {
@@ -926,7 +942,7 @@ impl Element for TerminalElement {
         let font_size = style.font_size.to_pixels(window.rem_size());
         let probe = TextRun { len: 1, font: style.font(), color: c(self.palette.text).into(), background_color: None, underline: None, strikethrough: None };
         let cell_w = window.text_system().shape_line("0".into(), font_size, &[probe], None).width;
-        let line_h = px(text::CODE.1);
+        let line_h = self.view.read(cx).line_h();
         let cols = ((bounds.size.width - px(16.)) / cell_w).floor().max(2.) as usize;
         let rows = (bounds.size.height / line_h).floor().max(1.) as usize;
         let origin = point(bounds.left() + px(8.), bounds.top());
@@ -951,6 +967,7 @@ impl Element for TerminalElement {
             cursor: None,
             link: view.hover_link.clone().map(|(r, c)| (r, c.start, c.end)),
             cell_w,
+            line_h,
         };
         for cell in content.display_iter {
             let row = (cell.point.line.0 + offset) as usize;
@@ -1019,7 +1036,7 @@ impl Element for TerminalElement {
     ) {
         let Some(frame) = frame.take() else { return };
         let p = self.palette;
-        let line_h = px(text::CODE.1);
+        let line_h = frame.line_h;
         let origin = point(bounds.left() + px(8.), bounds.top());
         let cell = |row: usize, col: usize| point(origin.x + frame.cell_w * col as f32, origin.y + line_h * row as f32);
         for (row, a, b, color) in &frame.backgrounds {
@@ -1069,6 +1086,7 @@ impl Element for TerminalElement {
 impl Render for TerminalView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = *palette(cx);
+        self.metrics = metrics(cx.global::<crate::settings::Settings>().terminal_font_size);
         let focused = self.focus_handle.is_focused(window);
         let find_focused = self.find_has_focus(window, cx);
         let find_bar = self.find_bar(&p, find_focused, cx);
@@ -1113,8 +1131,8 @@ impl Render for TerminalView {
             .size_full()
             .bg(c(p.bg))
             .font_family(MONO_FONT)
-            .text_size(px(text::CODE.0))
-            .line_height(px(text::CODE.1))
+            .text_size(px(self.metrics.0))
+            .line_height(px(self.metrics.1))
             .text_color(c(p.text))
             .child(TerminalElement { view: cx.entity(), palette: p, focused })
             .children(find_bar)
@@ -1138,6 +1156,17 @@ impl Render for TerminalView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_terminal_font_size_setting_sets_the_cell_size() {
+        let (_, base) = metrics(text::CODE.0);
+        assert_eq!(base, text::CODE.1, "the default size keeps the design line height");
+        let (size, line) = metrics(20.);
+        assert_eq!(size, 20.);
+        assert!(line > base && line.fract() == 0., "a bigger font gets taller, whole-pixel rows: {line}");
+        assert_eq!(metrics(2.).0, 6., "absurd sizes are clamped");
+        assert_eq!(metrics(500.).0, 48.);
+    }
 
     #[test]
     fn a_terminal_that_cannot_keep_up_drops_output_instead_of_growing_without_bound() {
