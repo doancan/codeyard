@@ -13,7 +13,6 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_REMOTE_DIR` | Where the agent is installed on the server (default `~/.cache/codeyard`). |
 | `CODEYARD_NO_A11Y` | Set to disable the macOS accessibility tree. |
 | `CODEYARD_NO_DOCK_ICON` | Do not set the Dock icon at run time (bare binaries only). |
-| `CODEYARD_SKIP_DISK_PROMPT` | Do not let the system ask for Desktop, Documents and Downloads at start (macOS). |
 | `CODEYARD_DAP_TRACE` | Print the debug adapter protocol traffic to stderr. |
 | `CODEYARD_LSP_TRACE` | Print language server messages to stderr. |
 | `CODEYARD_JS_DEBUG` | Folder of an existing Microsoft js-debug installation. |

@@ -843,12 +843,7 @@ pub(crate) fn crumb_paths(root: Option<&str>, path: &str) -> Vec<(String, String
 
 impl Workbench {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let wb = Self::new_at(state_path(), settings::config_dir(), window, cx);
-        // macOS: let the system ask for the protected folders at the first start of a version (not in tests).
-        if cfg!(all(target_os = "macos", not(test))) {
-            cx.defer_in(window, |this, _, cx| this.request_file_access_once(cx));
-        }
-        wb
+        Self::new_at(state_path(), settings::config_dir(), window, cx)
     }
 
     fn root(&self, cx: &App) -> Option<String> {

@@ -20,9 +20,9 @@
 - **Apple silicon only.** Intel Macs are not a target: there is no universal build and no Intel CI. `LSMinimumSystemVersion` and
   `MACOSX_DEPLOYMENT_TARGET` are 11.0 (the first macOS release for Apple silicon).
 
-- The first start of each version touches Desktop, Documents and Downloads, so macOS asks in its own dialogs and lists Codeyard under
-  Privacy & Security; the bundle carries usage descriptions for them, for removable and for network volumes. Codeyard also tries the
-  permission database once, which makes the system add it (switched off) to Full Disk Access. *Help: Grant Full Disk Access…* opens that page.
+- Codeyard asks for no file access at start, like VS Code. macOS asks, in its own dialog, the first time a folder on Desktop, Documents,
+  Downloads, iCloud Drive, a removable or a network volume is opened; the bundle carries the usage descriptions for them. Full Disk Access
+  is optional and cannot be requested by an app: *Help: Grant Full Disk Access…* opens the page and shows the app in Finder to drag in.
 - Metal toolchain (Xcode) is needed to build GPUI.
 - The Dock icon is set at run time, also for a bare binary.
 
