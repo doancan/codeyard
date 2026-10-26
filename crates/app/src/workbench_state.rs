@@ -20,6 +20,9 @@ pub(super) struct DebugUi {
     pub(super) last: Option<String>,
     /// Names of the launch file's configurations (the Run and Debug view's selector).
     pub(super) catalog: Vec<String>,
+    /// Debug console inputs (per project) and the one ↑ / ↓ shows.
+    pub(super) history: Vec<String>,
+    pub(super) history_pos: Option<usize>,
 }
 
 /// Last task, plus the problems parsed from its terminal and output (see workbench_tasks.rs).

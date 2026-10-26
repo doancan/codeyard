@@ -48,6 +48,7 @@ Add a host
 Add remote	
 Add to .gitignore	
 Add to Favorites	
+Add to Watch	
 Add worktree	
 Add “{}” to the dictionary	
 Added	
@@ -271,6 +272,7 @@ Copied {}.
 Copied “{}” ({}) to {}	
 Copy	
 Copy Address	
+Copy Call Stack	
 Copy Commit Hash	
 Copy Line Down	
 Copy Line Up	
@@ -278,7 +280,9 @@ Copy Message
 Copy Path	
 Copy Relative Path	
 Copy Report	
+Copy Value	
 Copy Version	
+Copy as Expression	
 Copy branch name	
 Copy link	
 Copy the full hash	
@@ -337,6 +341,7 @@ Could not save the theme: {}
 Could not save your dictionary: {}	
 Could not save: {}	
 Could not set up key login for {}: {}	
+Could not set {}: {}	
 Could not start a shell: {}	
 Could not start debugging: {}	
 Could not start the debug adapter: {}	
@@ -874,6 +879,7 @@ Link copied.
 List	
 Ln {}, Col {}	
 Ln {}, Col {} ({} selected)	
+Load More Stack Frames	
 Loading pull requests…	
 Loading…	
 Local	
@@ -1333,6 +1339,7 @@ Respect .gitignore
 Response	
 Restart (⇧⌘F5)	
 Restart Codeyard to finish.	
+Restart Frame	
 Restart Now	
 Restart to update	
 Restart without saving	
@@ -1431,6 +1438,7 @@ Set Label…
 Set URL	
 Set Up	
 Set Up Key Login…	
+Set Value…	
 Set up key login	
 Set up key login (no password) for which SSH host?	
 Set up key login for “{}”?	
@@ -1645,6 +1653,7 @@ This branch is not published yet. Click to publish it.
 This can't be undone.	
 This computer	
 This copy isn't installed as an app, so download the new version yourself.	
+This debug adapter cannot change values.	
 This debug adapter does not support data breakpoints.	
 This debug adapter has no exception breakpoints.	
 This file has merge conflicts: resolve them first (Source Control marks it resolved when staged)	
@@ -1657,6 +1666,7 @@ This file is {0} MB; Data: Query handles files up to {1} MB.
 This file mixes line endings; saving writes all of them as {}, like its first line. Change it in the status bar.	
 This file was deleted on disk. Saving will create it again.	
 This folder is not a git repository.	
+This frame cannot be restarted.	
 This is a development build and can't update itself. Download the new version yourself.	
 This is the portable version, which can't update itself. Download the new version and replace it yourself.	
 This language server does not support incoming calls	
@@ -1917,6 +1927,7 @@ milliseconds
 module	
 name url (e.g. origin https://host/repo.git)	
 namespace	
+new value	
 no configuration directory	
 no file name	
 no item {} in the response	
@@ -2208,6 +2219,7 @@ your words
 “{}” is not supported	
 “{}” was not found in ~/.ssh/config	
 “{}”: {} = {}	
+… {} more	
 … {} more line|… {} more lines	
 … {} running	
 ↓ {} new line|↓ {} new lines	

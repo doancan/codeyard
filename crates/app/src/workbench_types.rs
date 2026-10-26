@@ -197,6 +197,11 @@ pub(super) enum InputPurpose {
     AddWatch,
     /// Debugger: function name to break in.
     FunctionBreakpoint,
+    /// Debugger: new value of a variable of the scope or object `parent`.
+    SetVariable {
+        parent: i64,
+        name: String,
+    },
     /// Debugger: variable to break on when its value changes.
     DataBreakpoint,
     /// Save the active colors (including customizations) as a user theme.
