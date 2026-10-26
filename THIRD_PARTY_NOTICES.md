@@ -65,7 +65,7 @@ confirmed only through the `license` field of its `package.json`.
 Nord needs a caveat. The Nord repository's licence file was not read; only the `license` field of its
 `package.json` says MIT.
 
-The Quarry theme (`quarry.json`) is an original palette written for this project and is not derived from any other theme.
+The Quarry theme (`quarry.json`) and the Codeyard One theme (`codeyard-one.json`, drawn from the colours of the Codeyard icon: graphite and mint) are original palettes written for this project and are not derived from any other theme.
 
 ## Spell-check dictionary
 

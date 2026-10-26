@@ -1,13 +1,21 @@
 # Releasing
 
-The `release.yml` workflow builds and publishes a release when a `vX.Y.Z` tag is pushed. It runs four jobs:
+The `release.yml` workflow builds and publishes a release when a `vX.Y.Z` tag is pushed. Its jobs, and what waits for what:
 
 1. `verify` checks that the tag, the Cargo version and the changelog agree, then runs `arch-check`, `docs-check`, `licenses.sh`,
    the signing self-test and a probe of the `UPDATE_SIGNING_KEY` secret (see [Signing](#signing-and-the-update-key)).
-2. `macos` builds the SSH agents, the app, the DMG and the tar.gz, and uploads them with the release notes as artifacts.
-3. `windows` builds the ZIP and the setup EXE from those agents and uploads them as an artifact.
+2. `agents-linux` and `agent-macos` build the SSH agents. They start at once, next to `verify`. The Linux agents are static musl
+   binaries linked with `rust-lld` (no zig), so the whole job is a minute or two.
+3. `macos` and `windows` run side by side once `verify` and both agent jobs are done. `macos` builds the app, the DMG and the tar.gz,
+   `windows` builds the ZIP and the setup EXE, with the agents embedded. Both upload their files and the release notes as artifacts.
 4. `publish` merges the checksums, adds `RELEASE_NOTES.md`, verifies every file against them, signs `SHA256SUMS.txt`, checks the
    signature and creates the release in one step.
+
+**Build caches.** Every build job restores a `rust-cache` of the dependencies, so a release compiles only Codeyard's own crates (a few
+minutes) instead of GPUI and everything under it (about 10). A tag can read the caches of `main` but its own run is the first to see
+a changed `Cargo.lock`, so the workflow also runs as a dry run on every push to `main` that changes `Cargo.lock`, `vendor/` or the
+workflow itself, and saves the caches there. After such a change, wait for that run to finish before you tag; if you tag sooner the
+release is just as correct, only slower.
 
 You can run the whole workflow without a tag (Actions, release, Run workflow): it builds and checks everything, keeps the files
 as artifacts and creates no release (it signs too, so the signing path is exercised). Do that before the first tag of a new platform or a changed script.
@@ -25,8 +33,9 @@ the same procedure by hand, for when the workflow cannot be used.
    the `''`).
 3. Add a `## [x.y.z] - date` section to `CHANGELOG.md` (move the "Unreleased" entries into it).
 4. Commit, tag `vX.Y.Z` (annotated), push `main` and the tag.
-5. Build the agents:
-   `cargo zigbuild --profile release-agent -p agent --target x86_64-unknown-linux-musl` (and `aarch64-…`), plus
+5. Build the agents: `rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl`, then for each of the two targets
+   `CARGO_TARGET_<TRIPLE>_LINKER="$(dirname "$(rustc --print target-libdir)")/bin/rust-lld" cargo build --locked --profile release-agent -p agent --target <triple>`
+   (the variable name is the triple in capitals with `_` for `-`; no zig needed), plus
    `cargo build --profile release-agent -p agent` for macOS; copy them to `agents/codeyard-agent-<triple>`.
    On Windows, `./scripts/build-windows.ps1` builds the two static Linux agents using Rust's musl targets and bundled
    linker (no WSL or Docker needed), then embeds them in the application. Use `-Profile Release` for an optimized build.
