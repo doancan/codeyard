@@ -46,11 +46,20 @@ pub enum TerminalEvent {
     Exited,
     /// A key was pressed after the shell exited.
     CloseRequested,
+    /// A paste of several lines waits for the user's yes (`paste_confirmed` sends it).
+    ConfirmPaste {
+        data: Vec<u8>,
+        lines: usize,
+    },
     /// ⌘-click: URL or file location.
     OpenLink(crate::links::Link),
     /// Right click (window coordinates): copy, paste, select all, find, clear.
     ContextMenu(Point<Pixels>),
 }
+
+/// Most scrollback lines (`terminal.scrollback`): 50,000 lines of 200 columns already take about 200 MB, times up to
+/// eight terminals.
+pub const SCROLLBACK_MAX: usize = 50_000;
 
 /// Upper bound (bytes) on terminal output not yet parsed.
 const MAX_BACKLOG: usize = 32 * 1024 * 1024;
@@ -158,6 +167,8 @@ pub struct TerminalView {
     find: Option<find::FindState>,
     /// Font size and line height from `terminal.fontSize` (set on every render, so zoom and setting changes apply at once).
     metrics: (f32, f32),
+    /// Scrollback lines in effect.
+    scrollback: usize,
     focus_handle: FocusHandle,
 }
 
@@ -184,7 +195,7 @@ impl TerminalView {
         let size = TermSize { cols: 100, rows: 24 };
         let events = Listener::default();
         // Scrollback from settings (default 2,000; 10,000 × 200 columns can reach ~45 MB).
-        let scrollback = cx.global::<crate::settings::Settings>().terminal_scrollback;
+        let scrollback = cx.global::<crate::settings::Settings>().terminal_scrollback.min(SCROLLBACK_MAX);
         let config = Config { scrolling_history: scrollback, ..Config::default() };
         let term = Term::new(config, &size, events.clone());
         let view = TerminalView {
@@ -205,6 +216,7 @@ impl TerminalView {
             find: None,
             hover_link: None,
             metrics: metrics(cx.global::<crate::settings::Settings>().terminal_font_size),
+            scrollback,
             focus_handle: cx.focus_handle(),
         };
 
@@ -604,10 +616,21 @@ impl TerminalView {
 
     fn paste(&mut self, _: &TermPaste, _: &mut Window, cx: &mut Context<Self>) {
         let Some(text) = cx.read_from_clipboard().and_then(|i| i.text()) else { return };
-        let text = text.replace("\r\n", "\r").replace('\n', "\r");
-        let data = if self.term.mode().contains(TermMode::BRACKETED_PASTE) { format!("\x1b[200~{text}\x1b[201~") } else { text };
+        let bracketed = self.term.mode().contains(TermMode::BRACKETED_PASTE);
+        let settings = cx.global::<crate::settings::Settings>();
+        let (policy, warn) = (settings.terminal_sanitize_paste, settings.terminal_warn_multiline);
+        let p = crate::terminal_paste::prepare(&text, bracketed, policy);
+        if crate::terminal_paste::needs_confirm(&p, bracketed, warn) {
+            cx.emit(TerminalEvent::ConfirmPaste { data: p.data, lines: p.lines });
+            return;
+        }
+        self.paste_confirmed(p.data);
+    }
+
+    /// Send a prepared paste.
+    pub fn paste_confirmed(&mut self, data: Vec<u8>) {
         self.term.scroll_display(Scroll::Bottom);
-        self.write(data.into_bytes());
+        self.write(data);
     }
 
     fn copy(&mut self, _: &TermCopy, _: &mut Window, cx: &mut Context<Self>) {
@@ -1087,6 +1110,12 @@ impl Render for TerminalView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = *palette(cx);
         self.metrics = metrics(cx.global::<crate::settings::Settings>().terminal_font_size);
+        // A changed `terminal.scrollback` applies to open terminals too.
+        let scrollback = cx.global::<crate::settings::Settings>().terminal_scrollback.min(SCROLLBACK_MAX);
+        if scrollback != self.scrollback {
+            self.scrollback = scrollback;
+            self.term.set_options(Config { scrolling_history: scrollback, ..Config::default() });
+        }
         let focused = self.focus_handle.is_focused(window);
         let find_focused = self.find_has_focus(window, cx);
         let find_bar = self.find_bar(&p, find_focused, cx);

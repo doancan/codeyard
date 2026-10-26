@@ -120,6 +120,7 @@ mod structural;
 mod structural_tests;
 mod sysopen;
 mod terminal;
+mod terminal_paste;
 #[cfg(test)]
 mod test_git;
 #[cfg(test)]
