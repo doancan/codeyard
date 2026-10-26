@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Platform-standard code font size:** the editor and terminal default to 12 px on macOS and 14 px on Windows and Linux
+  (was 13 px everywhere). A size written in your settings file is kept. The settings template now leaves the font keys
+  commented out, so a settings file shared between computers does not pin one platform's size.
+- The status bar is 22 px high.
+- Every text size in the interface comes from the type scale (new *badge* and *display* steps replace the remaining fixed
+  sizes); a test keeps new code on the scale.
+
+### Fixed
+
+- The terminal ignored `terminal.fontSize` and zoom: it now uses the setting, with rows sized to match.
+
 ## [0.4.1] - 2026-10-26
 
 ### Changed
