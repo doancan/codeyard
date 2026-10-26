@@ -1,8 +1,15 @@
 name: benchmark-windows
 on:
   workflow_dispatch:
+    inputs:
+      host:
+        description: Hosts to benchmark
+        type: choice
+        options: [both, linux]
+        default: both
   push:
     branches: [perf/linux-windows-build]
+    paths: ["crates/**", "vendor/**", Cargo.toml, Cargo.lock]
 permissions:
   contents: read
 jobs:
@@ -54,7 +61,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-2022]
+        os: ${{ fromJSON(inputs.host == 'linux' && '["ubuntu-latest"]' || '["ubuntu-latest","windows-2022"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
@@ -84,8 +91,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang-19 lld-19 llvm-19 ninja-build
           pip install cargo-xwin==0.23.1
+          tools="$RUNNER_TEMP/llvm-msvc"
+          mkdir -p "$tools"
+          ln -s "$(command -v clang-19)" "$tools/clang-cl"
+          ln -s "$(command -v lld-19)" "$tools/lld-link"
+          ln -s "$(command -v llvm-rc-19)" "$tools/llvm-rc"
+          ln -s "$(command -v llvm-lib-19)" "$tools/llvm-lib"
+          echo "$tools" >> "$GITHUB_PATH"
           echo /usr/lib/llvm-19/bin >> "$GITHUB_PATH"
-          /usr/lib/llvm-19/bin/clang-cl --version
+          "$tools/clang-cl" --version
       - name: Prefetch Windows SDK (outside build timer)
         if: runner.os == 'Linux'
         timeout-minutes: 20
