@@ -55,6 +55,16 @@ fn window_height(wb: &Workbench, model: &DialogModel) -> f32 {
     2. * WINDOW_INSET + column + WINDOW_GAP + FOOTER_H
 }
 
+/// The platform asks whether the dialog's window may close. The host window's root is the workbench: `update` hands it over, so it
+/// is not updated a second time from inside (that panics, and a panic in a platform callback aborts the process).
+pub(super) fn dialog_may_close(host: WindowHandle<Workbench>, app: &mut App) -> bool {
+    host.update(app, |wb, hw, cx| {
+        wb.dismiss_update_dialog(hw, cx);
+        wb.dialog_model(cx).is_none()
+    })
+    .unwrap_or(true)
+}
+
 pub(super) struct UpdateWindow {
     wb: WeakEntity<Workbench>,
     host: WindowHandle<Workbench>,
@@ -82,17 +92,7 @@ impl UpdateWindow {
             }
         });
         // The red button answers like Esc does: closing is not a way around a download or an install in progress.
-        let asked = weak.clone();
-        window.on_window_should_close(cx, move |_, app| {
-            let Some(wb) = asked.upgrade() else { return true };
-            host.update(app, |_, hw, app| {
-                wb.update(app, |wb, cx| {
-                    wb.dismiss_update_dialog(hw, cx);
-                    wb.dialog_model(cx).is_none()
-                })
-            })
-            .unwrap_or(true)
-        });
+        window.on_window_should_close(cx, move |_, app| dialog_may_close(host, app));
         UpdateWindow { wb: weak, host, focused: false, height, closing: false, keys: Rc::new(Cell::new(false)), _observe: [gone, changed, host_closed] }
     }
 
@@ -130,11 +130,8 @@ impl Render for UpdateWindow {
             cx.defer_in(window, move |_, window, _| window.resize(size(px(WIDTH), px(height))));
         }
         let host = self.host;
-        let weak = self.wb.clone();
-        let send: Dispatch = Rc::new(move |cmd, _, app| {
-            let Some(wb) = weak.upgrade() else { return false };
-            host.update(app, |_, hw, app| wb.update(app, |wb, cx| wb.update_cmd(cmd, hw, cx))).unwrap_or(false)
-        });
+        // Same as above: the workbench is what `update` hands over, so it is not updated a second time.
+        let send: Dispatch = Rc::new(move |cmd, _, app| host.update(app, |wb, hw, cx| wb.update_cmd(cmd, hw, cx)).unwrap_or(false));
         window_card(wb.read(cx), &model, &p, &send, &self.keys)
     }
 }
