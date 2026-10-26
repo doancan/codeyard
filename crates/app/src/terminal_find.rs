@@ -216,6 +216,12 @@ impl TerminalView {
         (self.find.as_ref().map_or(0, |f| f.total), self.term.selection_to_string())
     }
 
+    /// (find bar has focus, match count).
+    #[cfg(test)]
+    pub fn find_state_for_test(&self, window: &Window, cx: &gpui::App) -> (bool, usize) {
+        (self.find_has_focus(window, cx), self.find.as_ref().map_or(0, |f| f.total))
+    }
+
     #[cfg(test)]
     pub fn find_step_for_test(&mut self, down: bool, cx: &mut Context<Self>) -> Option<String> {
         self.find_step(if down { Direction::Right } else { Direction::Left }, cx);
