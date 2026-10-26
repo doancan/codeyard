@@ -355,7 +355,8 @@ fn terminal_runs_commands_and_closes(cx: &mut TestAppContext) {
     // Mouse selection: drag across an output line, then double-click a word; ⌘C copies to the clipboard.
     let row = term.read_with(cx, |t, _| t.screen_text().lines().position(|l| l == "ğüş-42")).expect("output line");
     let at: Vec<_> = term.read_with(cx, |t, _| (0..5).map(|col| t.cell_center(row, col)).collect());
-    let (from, to) = (at[0], at[4]);
+    // Just inside the outer halves: a press exactly on a cell's centre is on neither side, and float noise picks one.
+    let (from, to) = (gpui::point(at[0].x - gpui::px(1.), at[0].y), gpui::point(at[4].x + gpui::px(1.), at[4].y));
     cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
     cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
     cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::none());
