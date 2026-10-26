@@ -122,7 +122,7 @@ pub fn parse(text: &str) -> File {
             if file.sections.len() >= MAX_SECTIONS {
                 break;
             }
-            let re = (inner.len() <= MAX_GLOB).then(|| glob_regex(inner)).flatten();
+            let re = glob_regex(inner);
             file.sections.push(Section { re, props: Vec::new() });
         } else if let Some((k, v)) = line.split_once('=') {
             let (k, v) = (k.trim().to_ascii_lowercase(), v.trim().to_string());
@@ -142,6 +142,9 @@ const MAX_GLOB_REGEX: usize = 8 * 1024;
 /// Convert an EditorConfig glob to a regular expression. A pattern without `/` matches the file name
 /// at any depth; those containing one match relative to the `.editorconfig` folder.
 pub fn glob_regex(glob: &str) -> Option<regex::Regex> {
+    if glob.len() > MAX_GLOB {
+        return None;
+    }
     let chars: Vec<char> = glob.chars().collect();
     let anchored = chars.contains(&'/');
     let mut out = String::from("^");
@@ -304,6 +307,22 @@ mod tests {
     fn glob_expansion_is_bounded() {
         let many = (0..110).map(|_| "{0..2000}").collect::<Vec<_>>().join("");
         assert!(glob_regex(&many).is_none(), "a pattern whose regex would be megabytes is refused");
+        assert!(glob_regex(&"a".repeat(MAX_GLOB + 1)).is_none(), "the limit is the function's own, not only the parser's");
+        let started = std::time::Instant::now();
+        for g in [
+            "{a,".repeat(MAX_GLOB / 3),
+            "{".repeat(MAX_GLOB),
+            "[".repeat(MAX_GLOB),
+            "{a,b}".repeat(MAX_GLOB / 5),
+            "{1..9}".repeat(MAX_GLOB / 6),
+            "*".repeat(MAX_GLOB),
+            "**/".repeat(MAX_GLOB / 3),
+            "{{{{a,b},c},d},e}".repeat(60),
+            "\\".repeat(MAX_GLOB / 2),
+        ] {
+            let _ = glob_regex(&g);
+        }
+        assert!(started.elapsed() < std::time::Duration::from_secs(5), "worst-case globs took {:?}", started.elapsed());
         assert!(glob_regex("*.{js,ts}").is_some());
         assert!(glob_regex("{0..99}.txt").is_some());
     }
