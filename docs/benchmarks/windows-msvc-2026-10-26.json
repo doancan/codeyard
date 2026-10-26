@@ -1,0 +1,78 @@
+{
+  "date": "2026-10-26",
+  "target": "x86_64-pc-windows-msvc",
+  "verified_source_tree_sha256": "4b4160c8bb1085d0091ed5c7d32dbef3890cd20f2f100a39c8dd3a167aaaddb9",
+  "identical_input_sha256": {
+    "codeyard-agent-x86_64-unknown-linux-musl": "468539faa2d592b2b5c6b1b7af0105c2291ed4c5446d5c4810ddafaa901d7951",
+    "codeyard-agent-aarch64-unknown-linux-musl": "a779e0a18363a51cb1e1c83cd1544ded04b7a8b7dedba9921d7fdab55be8c534",
+    "shaders_bytes.rs": "c86ef7f1e2a30858b4499d5174946e64b3c27271968dba836a9874a47ed3392b"
+  },
+  "windows": {
+    "host": "Windows-2022Server-10.0.20348-SP0",
+    "cpus": 4,
+    "command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--release",
+      "-p",
+      "app",
+      "--target",
+      "x86_64-pc-windows-msvc"
+    ],
+    "commit": "4de097251bb40d7fdfe2cff7ec2417f3d244faa3",
+    "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: x86_64-pc-windows-msvc\nrelease: 1.99.1\nLLVM version: 23.1.1\n",
+    "seconds": {
+      "cold": 674.359,
+      "dependencies-cached": 297.11
+    },
+    "success": true
+  },
+  "linux": {
+    "host": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "cpus": 4,
+    "command": [
+      "cargo",
+      "xwin",
+      "build",
+      "--locked",
+      "--release",
+      "-p",
+      "app",
+      "--target",
+      "x86_64-pc-windows-msvc"
+    ],
+    "commit": "3dd4b71df9332bf47fbaa760378ebb5b62dfeb26",
+    "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\ncommit-date: 2026-10-13\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.1\nLLVM version: 23.1.1\n",
+    "seconds": {
+      "cold": 375.218,
+      "dependencies-cached": 149.485
+    },
+    "source_tree": "4b4160c8bb1085d0091ed5c7d32dbef3890cd20f2f100a39c8dd3a167aaaddb9",
+    "clang": "Ubuntu clang version 19.1.1 (1ubuntu1~24.04.2)\nTarget: x86_64-pc-windows-msvc\nThread model: posix\nInstalledDir: /usr/lib/llvm-19/bin\n",
+    "success": true
+  },
+  "windows_job_url": "https://github.com/doancan/codeyard/actions/runs/40294887424/job/121478806732",
+  "linux_run_url": "https://github.com/doancan/codeyard/actions/runs/40301532106",
+  "validation": {
+    "both_standalone_checks_passed": true,
+    "interactive_ui_tested": false
+  },
+  "context": {
+    "sdk_cached_for_successful_linux_run": true,
+    "initial_sdk_download_seconds": 724,
+    "linux_tools_install_seconds": 28,
+    "windows_job_seconds": 1048,
+    "linux_job_seconds": 588,
+    "cross_validation_job_seconds": 18,
+    "installer_packaging_in_benchmark": false,
+    "same_physical_hardware": false
+  },
+  "release_dry_run": {
+    "url": "https://github.com/doancan/codeyard/actions/runs/40299040677",
+    "duration_seconds": 584,
+    "success": true,
+    "published": false,
+    "node20_warning_count": 0
+  }
+}

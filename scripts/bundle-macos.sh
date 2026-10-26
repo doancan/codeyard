@@ -101,10 +101,12 @@ plutil -lint "$APP/Contents/Info.plist" >/dev/null
 # Sign inside out: the bundled Mach-O agents first (`--deep` does not look into Resources/, and
 # notarization rejects an unsigned Mach-O), then the app. Linux ELF agents count as data.
 # --options runtime is required for notarization and harmless for an ad-hoc signature.
+sign_args=(--force --options runtime --sign "${SIGN_IDENTITY:--}")
+if [ -n "${SIGN_IDENTITY:-}" ]; then sign_args+=(--timestamp); fi
 for agent in "$APP"/Contents/Resources/agents/codeyard-agent-*-apple-darwin; do
-  [ -f "$agent" ] && codesign --force --options runtime --sign "${SIGN_IDENTITY:--}" "$agent"
+  [ -f "$agent" ] && codesign "${sign_args[@]}" "$agent"
 done
-codesign --force --deep --options runtime --sign "${SIGN_IDENTITY:--}" "$APP"
+codesign "${sign_args[@]}" "$APP"
 codesign --verify --deep --strict "$APP"
 
 # DMG: the app plus an Applications link for drag-and-drop install.
@@ -116,6 +118,6 @@ ln -s /Applications "$STAGE/Applications"
 scripts/licenses.sh copy "$STAGE/Licenses"
 rm -f "$DMG"
 hdiutil create -quiet -volname Codeyard -srcfolder "$STAGE" -ov -format UDZO "$DMG"
-[ -n "${SIGN_IDENTITY:-}" ] && codesign --sign "$SIGN_IDENTITY" "$DMG"
+[ -n "${SIGN_IDENTITY:-}" ] && codesign --timestamp --sign "$SIGN_IDENTITY" "$DMG"
 echo "$APP"
 echo "$DMG"
