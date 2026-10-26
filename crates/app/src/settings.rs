@@ -374,7 +374,7 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
 // Comments and trailing commas are fine.
 {
   // "auto" follows the system (Codeyard Dark / Codeyard Light), or a theme id:
-  // codeyard-dark, codeyard-light, studio-dark, midnight, graphite, ember, fjord, daylight, paper,
+  // codeyard-dark, codeyard-light, codeyard-one, studio-dark, midnight, graphite, ember, fjord, daylight, paper,
   // quarry, dracula, one-dark, nord, solarized-dark, solarized-light,
   // github-light, high-contrast-dark, high-contrast-light, user:<file name>
   "theme": "auto",

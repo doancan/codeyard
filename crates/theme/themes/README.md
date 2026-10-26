@@ -19,7 +19,7 @@ exact copy of the upstream theme.
 
 ## Codeyard's own themes
 
-`codeyard-dark.json`, `codeyard-light.json`, `high-contrast-dark.json`, `high-contrast-light.json`, `studio-dark.json`,
+`codeyard-dark.json`, `codeyard-light.json`, `codeyard-one.json` (the graphite tile and mint letter of the app icon), `high-contrast-dark.json`, `high-contrast-light.json`, `studio-dark.json`,
 `ember.json`, `fjord.json`, `graphite.json`, `paper.json`, `quarry.json`. The first two follow `crates/theme/design/tokens*.json`.
 The others were written for this project. No upstream palette is claimed for them. `quarry.json` is an original palette, designed from scratch and not derived from any existing theme.
 
