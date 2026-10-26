@@ -2290,3 +2290,26 @@ Fetch from all remotes	Tüm uzak depolardan Fetch yap
 Hide Merge Commits	Merge Commit'lerini Gizle
 Only My Commits	Yalnızca Benim Commit'lerim
 Search Commits	Commit'lerde Ara
+# ---- Remote Explorer ----
+Remote Explorer	Uzak Gezgin
+View: Remote Explorer	Görünüm: Uzak Gezgin
+SSH Hosts	SSH Sunucuları
+Containers	Kapsayıcılar
+WSL Targets	WSL Hedefleri
+Add SSH Host…	SSH Sunucusu Ekle…
+Open SSH Config File	SSH Yapılandırma Dosyasını Aç
+Connect in Current Window	Geçerli Pencerede Bağlan
+Connect in New Window	Yeni Pencerede Bağlan
+Open in New Window	Yeni Pencerede Aç
+Disconnect	Bağlantıyı Kes
+Edit Host…	Sunucuyu Düzenle…
+Test Connection	Bağlantıyı Test Et
+Set Up Key Login…	Anahtarla Girişi Ayarla…
+Remove Host…	Sunucuyu Kaldır…
+Connected	Bağlı
+Connected before	Daha önce bağlanıldı
+Connecting…	Bağlanıyor…
+Not connected yet	Henüz bağlanılmadı
+No recent folders	Son klasör yok
+No hosts in ~/.ssh/config. Add one with +.	~/.ssh/config içinde sunucu yok. + ile ekleyin.
+Forwarded Ports	Yönlendirilen Bağlantı Noktaları

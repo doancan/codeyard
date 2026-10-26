@@ -268,6 +268,11 @@ const ICONS: &[(&str, &[u8])] = icons![
     "cloud-download",
     "arrow-left",
     "arrow-right",
+    // --- remote ---
+    "screen-share",
+    "container",
+    "key-round",
+    "pencil",
 ];
 
 /// Embedded icon names (tests: is every name used in source embedded, does every embedded file exist).

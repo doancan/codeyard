@@ -275,7 +275,7 @@ fn connecting_by_name_from_the_switcher_reports_a_failure_with_its_reason(cx: &m
     let labels = wb.read_with(cx, |w, cx| w.overlay_labels(cx)).unwrap_or_default();
     assert!(labels.iter().any(|l| l == "Connect to SSH host…") && labels.iter().any(|l| l == "Open Folder…"), "{labels:?}");
     assert!(labels.iter().any(|l| l == crate::test_sshd::ALIAS), "the hosts of ~/.ssh/config are in the same list: {labels:?}");
-    assert_eq!(wb.read_with(cx, |w, _| w.panel_for_test()), Some("explorer"), "no separate remote panel opened");
+    assert_eq!(wb.read_with(cx, |w, _| w.panel_for_test()), Some("explorer"), "the switcher is an overlay: the sidebar view stays");
     cx.simulate_input("Connect to SSH");
     cx.simulate_keystrokes("enter");
     cx.run_until_parked();
@@ -333,4 +333,42 @@ fn an_unreachable_ssh_recent_asks_to_be_removed(cx: &mut TestAppContext) {
     cx.simulate_prompt_answer("Remove from Recent");
     cx.run_until_parked();
     assert!(wb.read_with(cx, |w, _| w.recent_for_test()).iter().all(|(h, _, _)| h.as_deref() != Some("no-such-host.invalid")));
+}
+
+/// The Remote Explorer while connected: the host is marked connected and open, its folder is the current one, and the
+/// forwarded ports section lists a forward; another window's connection does not change it.
+#[gpui::test]
+fn the_remote_explorer_shows_the_live_connection_its_folder_and_ports(cx: &mut TestAppContext) {
+    use std::io::Write;
+    let Some(_sshd) = crate::test_sshd::start("remote-view") else { return };
+    let dir = project("remote-view-repo");
+    let (wb, cx) = ssh_workbench(cx, &dir);
+    wb.update_in(cx, |w, window, cx| w.show_panel_named("remote", window, cx));
+    assert_eq!(wb.read_with(cx, |w, _| w.panel_for_test()), Some("remote"));
+    let rows = wb.read_with(cx, |w, cx| w.remote_rows_for_test(cx));
+    let host = format!("host:{}:connected", crate::test_sshd::ALIAS);
+    let at = rows.iter().position(|r| *r == host).unwrap_or_else(|| panic!("{rows:?}"));
+    let root = wb.read_with(cx, |w, cx| w.root_for_test(cx)).unwrap();
+    assert_eq!(rows[at + 1], format!("folder:{root}:current"), "{rows:?}");
+
+    let app = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let remote = app.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for mut s in app.incoming().flatten() {
+            let _ = s.write_all(b"x");
+        }
+    });
+    wb.update(cx, |w, cx| w.forward_port(remote, cx));
+    wait_secs(cx, 30, "the forward", |cx| {
+        tick(cx);
+        wb.read_with(cx, |w, _| w.forwards().iter().any(|f| f.remote == remote))
+    });
+    let rows = wb.read_with(cx, |w, cx| w.remote_rows_for_test(cx));
+    assert!(rows.contains(&"ports".to_string()) && rows.contains(&format!("port:{remote}")), "{rows:?}");
+
+    // Collapsing the host hides its folders; the other groups stay closed until opened.
+    wb.update(cx, |w, cx| w.toggle_remote_for_test(&format!("host:{}", crate::test_sshd::ALIAS), cx));
+    let rows = wb.read_with(cx, |w, cx| w.remote_rows_for_test(cx));
+    assert!(!rows.iter().any(|r| r.starts_with("folder:")), "{rows:?}");
+    assert!(rows.contains(&"group:containers:closed".to_string()), "{rows:?}");
 }

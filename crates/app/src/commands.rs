@@ -141,6 +141,7 @@ registry! {
     "remote.connectWsl" => wb::RemoteWsl,
     "workbench.showRemote" => wb::ShowRemote,
     "workbench.showSourceControl" => wb::ShowScm,
+    "workbench.showRemoteExplorer" => wb::ShowRemoteExplorer,
     "workbench.showProblems" => wb::ShowProblems,
     "workbench.action.output.toggleOutput" => wb::ShowOutput,
     "workbench.output.action.clearOutput" => wb::ClearOutput,

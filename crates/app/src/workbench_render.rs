@@ -77,6 +77,7 @@ impl Render for Workbench {
                 .child(div().flex_1().min_h_0().child(self.search.clone()))
                 .into_any_element(),
             Panel::Scm => self.scm.clone().into_any_element(),
+            Panel::Remote => self.remote_view(&p, cx),
         });
 
         div()
@@ -92,6 +93,7 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::toggle_full_screen))
             .on_action(cx.listener(Self::find_todos))
             .on_action(cx.listener(Self::show_remote))
+            .on_action(cx.listener(Self::show_remote_explorer))
             .on_action(cx.listener(Self::show_scm))
             .on_action(cx.listener(Self::show_problems))
             .on_action(cx.listener(Self::show_ports))

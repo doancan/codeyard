@@ -183,6 +183,8 @@ pub(super) struct RemoteState {
     pub(super) asks: std::collections::VecDeque<(AskRequest, AskReply)>,
     /// Ongoing file transfer (upload, download, copy); one at a time.
     pub(super) transfer: Option<Arc<super::transfer::TransferRun>>,
+    /// The Remote Explorer view.
+    pub(super) view: super::remote_glue::RemoteView,
 }
 
 /// Explorer roots, clipboard and favorites.

@@ -313,4 +313,6 @@ pub(super) enum MenuCmd {
     AppSubmenu(usize),
     /// A row of the PORTS table (`MenuTarget::path` = the server port).
     Port(ports_glue::PortMenuCmd),
+    /// A host row of the Remote Explorer (`MenuTarget::path` = the alias).
+    Remote(remote_glue::RemoteMenuCmd),
 }

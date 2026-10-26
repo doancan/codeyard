@@ -204,39 +204,16 @@ impl Workbench {
         self.projects_path().and_then(|p| std::fs::read_to_string(p).ok()).map(|t| parse_projects(&t)).unwrap_or_default()
     }
 
-    /// Workspace switcher: ⌃R, the status bar connection indicator, the welcome screen and the menus all open it
-    /// (the separate "Remote Hosts" side panel is gone: one place for the job).
+    /// Workspace switcher: ⌃R, the status bar connection indicator, the welcome screen and the menus open it; the Remote
+    /// Explorer view shows the same hosts and folders as a tree.
     pub(super) fn show_project_switcher(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.overlay.is_some() {
             self.close_overlay(window, cx);
         }
         // The server list is refreshed on every open (the config file may have changed).
         self.remote.ssh_hosts = host::ssh::list_hosts();
-        let mut hosts: Vec<(String, Option<String>)> = self
-            .remote
-            .ssh_hosts
-            .iter()
-            .filter(|h| h.alias != "github.com" && h.alias != "gitlab.com")
-            .map(|h| {
-                let detail = match (&h.user, &h.hostname) {
-                    (Some(u), Some(hn)) => Some(format!("{u}@{hn}")),
-                    (None, Some(hn)) => Some(hn.clone()),
-                    _ => None,
-                };
-                (h.alias.clone(), detail)
-            })
-            .collect();
-        if self.dev {
-            hosts.push((super::LOCAL_AGENT_ALIAS.into(), Some(t("local agent, protocol test").into())));
-        }
-        let conn = match &self.remote.conn {
-            super::Conn::Local => ConnSummary::Local,
-            super::Conn::Connecting { alias, .. } => ConnSummary::Connecting(alias.clone()),
-            super::Conn::Connected { alias } if self.remote.host.is_remote() => ConnSummary::Connected(alias.clone()),
-            super::Conn::Connected { .. } => ConnSummary::Local,
-            super::Conn::Reconnecting { alias, .. } => ConnSummary::Reconnecting(alias.clone()),
-            super::Conn::Failed { alias, message } => ConnSummary::Failed(alias.clone(), message.to_string()),
-        };
+        let hosts = self.ssh_host_rows();
+        let conn = self.conn_summary();
         let saved = self.saved_projects();
         let current = self.root(cx);
         let rows = build_switcher(&SwitcherInput {
