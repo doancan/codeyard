@@ -56,7 +56,18 @@ fn kind_text(k: &Kind) -> String {
     }
 }
 
+/// Settings whose default depends on the platform: (key, macOS value, Windows and Linux value). The reference lists both,
+/// so it reads the same whichever platform generates it.
+pub(crate) const PLATFORM_DEFAULTS: &[(&str, f32, f32)] = &[
+    ("editor.fontSize", theme::text::CODE_MACOS.0, theme::text::CODE_OTHER.0),
+    ("editor.lineHeight", theme::text::CODE_MACOS.1, theme::text::CODE_OTHER.1),
+    ("terminal.fontSize", theme::text::CODE_MACOS.0, theme::text::CODE_OTHER.0),
+];
+
 fn default_text(key: &str) -> String {
+    if let Some((_, mac, other)) = PLATFORM_DEFAULTS.iter().find(|(k, ..)| *k == key) {
+        return format!("`{mac}` on macOS, `{other}` on Windows and Linux");
+    }
     // Tests run with the trust check off and the language forced to `en`; the shipped defaults are on and `auto`.
     let s = Settings { workspace_trust: true, ui_language: "auto".into(), ..Settings::default() };
     match current(&s, key) {
@@ -120,6 +131,16 @@ mod tests {
         }
         let have = std::fs::read_to_string(&path).unwrap_or_default();
         assert!(have == want, "docs/settings.md is out of date: run `UPDATE_DOCS=1 cargo test -p app docs_reference`");
+    }
+
+    /// The platform table agrees with the real defaults on this platform, so the reference cannot drift from them.
+    #[test]
+    fn docs_reference_platform_defaults_match_this_platform() {
+        let s = Settings::default();
+        for (key, mac, other) in PLATFORM_DEFAULTS {
+            let here = if cfg!(target_os = "macos") { mac } else { other };
+            assert_eq!(current(&s, key), serde_json::json!(here), "{key}");
+        }
     }
 
     /// Every key the settings parser reads is documented, either in the catalog or in `FILE_ONLY`.

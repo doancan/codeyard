@@ -37,7 +37,7 @@ status bar reports it.
 | `editor.folding` | `true` / `false` | `true` | Show fold arrows in the gutter |
 | `editor.fontFamily` | text | empty | Editor font (empty: built-in monospace) |
 | `editor.fontLigatures` | `true` / `false` | `false` | Draw programming ligatures (=>, !=, …) in the editor font |
-| `editor.fontSize` | number 6–48 | `13.0` | Font size of the editor |
+| `editor.fontSize` | number 6–48 | `12` on macOS, `14` on Windows and Linux | Font size of the editor |
 | `editor.formatOnPaste` | `true` / `false` | `false` | Format pasted text with the language server |
 | `editor.formatOnSave` | `true` / `false` | `false` | Format with the language server when saving |
 | `editor.formatOnType` | `true` / `false` | `false` | Let the language server format while typing }, ; or Enter |
@@ -45,7 +45,7 @@ status bar reports it.
 | `editor.indentGuides` | `true` / `false` | `true` | Show indent guides |
 | `editor.inlayHints.enabled` | `true` / `false` | `true` | Show type and parameter name hints from the language server |
 | `editor.insertSpaces` | `true` / `false` | `true` | Indent with spaces instead of tabs |
-| `editor.lineHeight` | number 10–80 | `20.0` | Line height in pixels |
+| `editor.lineHeight` | number 10–80 | `18` on macOS, `20` on Windows and Linux | Line height in pixels |
 | `editor.lineNumbers` | `on`, `off`, `relative` | `on` | Line numbers in the gutter |
 | `editor.linkedEditing` | `true` / `false` | `true` | Rename the matching HTML/XML tag while you edit one |
 | `editor.matchBrackets` | `true` / `false` | `true` | Highlight the matching bracket |
@@ -165,7 +165,7 @@ status bar reports it.
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
 | `terminal.allowClipboardWrite` | `true` / `false` | `false` | Let programs in the terminal write to the clipboard |
-| `terminal.fontSize` | number 6–48 | `13.0` | Font size of the terminal |
+| `terminal.fontSize` | number 6–48 | `12` on macOS, `14` on Windows and Linux | Font size of the terminal |
 | `terminal.scrollback` | number 0–100000 | `2000` | Lines kept in terminal history |
 | `terminal.shell` | text | empty | Shell for new terminals (empty: login shell) |
 
