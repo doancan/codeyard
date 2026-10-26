@@ -6,10 +6,12 @@ use super::*;
 /// Debug session and its settings (see workbench_debug.rs).
 #[derive(Default)]
 pub(super) struct DebugUi {
-    /// Debug session (its console stays after it ends), sequence number (events of an old session are dropped),
-    /// breakpoints (including closed files; see debug_model.rs) and the last used configuration.
-    pub(super) session: Option<debug::DebugState>,
-    pub(super) generation: u64,
+    /// Debug sessions (an ended one keeps its console until it is replaced), the one the controls act on, the next
+    /// session id (events and answers of a session that is gone are dropped), breakpoints (including closed files; see
+    /// debug_model.rs) and the last used configuration.
+    pub(super) sessions: Vec<debug::DebugState>,
+    pub(super) focused: Option<u64>,
+    pub(super) next_id: u64,
     /// Watch expressions (kept across sessions and per project).
     pub(super) watch_exprs: Vec<String>,
     /// Selected exception filters (`None`: none selected yet, use the adapter's defaults).
