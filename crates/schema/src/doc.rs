@@ -225,7 +225,20 @@ pub fn parse_yaml(text: &str) -> Vec<(usize, Result<Parsed, SyntaxError>)> {
     let byte = |marker_index: usize| if chars.is_empty() { marker_index.min(text.len()) } else { chars.get(marker_index).copied().unwrap_or(text.len()) };
     let mut b = YamlBuilder { text, byte: &byte, docs: Vec::new(), cur: None, stack: Vec::new(), anchors: HashMap::new(), budget: ALIAS_BUDGET, fatal: None };
     let mut parser = Parser::new_from_str(text);
-    let loaded = parser.load(&mut b, true);
+    // `Parser::load` recurses once per level of nesting (and nothing the receiver does stops it), so a few kilobytes of `- - - -`
+    // overflow the stack. Pulling the events one by one needs no stack, and stops as soon as the builder gives up.
+    let loaded = loop {
+        match parser.next_token() {
+            Ok((event, mark)) => {
+                let end = event == yaml_rust2::parser::Event::StreamEnd;
+                yaml_rust2::parser::MarkedEventReceiver::on_event(&mut b, event, mark);
+                if end || b.fatal.is_some() {
+                    break Ok(());
+                }
+            }
+            Err(e) => break Err(e),
+        }
+    };
     if let Some(e) = b.fatal.take() {
         return vec![(e.offset, Err(e))];
     }
@@ -670,6 +683,25 @@ mod tests {
         assert!(docs.last().unwrap().1.is_err());
         let deep_json = "[".repeat(100_000);
         assert!(parse_json(&deep_json).is_err());
+    }
+
+    /// yaml-rust2's own `load` recurses once per level of nesting whatever the receiver does, so a small file of nested openers
+    /// overflowed the stack (and killed the process) long before the depth limit of the builder was looked at. The events are now
+    /// pulled one by one. The stack here is the small one of a worker thread, and the files are tens of kilobytes.
+    #[test]
+    fn deeply_nested_yaml_of_every_shape_is_an_error_not_a_stack_overflow() {
+        let shapes: Vec<(&str, String)> = vec![
+            ("inline block sequences", "- ".repeat(100_000)),
+            ("inline block mappings", "a: ".repeat(100_000)),
+            ("indented block sequences", (0..3_000).map(|i| format!("{}-\n", " ".repeat(i))).collect()),
+            ("flow sequences", "[".repeat(100_000)),
+            ("flow mappings", "{a: ".repeat(100_000)),
+            ("complex keys", "? ".repeat(100_000)),
+        ];
+        for (name, text) in shapes {
+            let outcome = std::thread::Builder::new().stack_size(2 << 20).spawn(move || parse_yaml(&text).last().map(|d| d.1.is_err())).unwrap().join();
+            assert_eq!(outcome.unwrap_or(None), Some(true), "{name}: a nesting error, not a crash");
+        }
     }
 
     #[test]
