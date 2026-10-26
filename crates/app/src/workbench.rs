@@ -1348,7 +1348,7 @@ impl Workbench {
                             cx.notify();
                         }),
                     ))
-                    .when(self.dbg.session.is_some(), |d| {
+                    .when(self.dbg.has_sessions(), |d| {
                         d.child(panel_tab("debug-tab", crate::i18n::upper(crate::i18n::t("Debug")), self.chrome.bottom == Bottom::Debug, 0, p).on_click(
                             cx.listener(|this, _, _, cx| {
                                 this.chrome.bottom = Bottom::Debug;

@@ -28,6 +28,8 @@ pub(super) enum DebugStatus {
 }
 
 pub(super) struct DebugState {
+    /// Session id: answers and events carry it, so those of a session that is gone are dropped.
+    pub id: u64,
     pub config: LaunchConfig,
     pub session: Option<Arc<dap::Session>>,
     pub status: DebugStatus,
@@ -56,6 +58,43 @@ pub(super) struct DebugState {
     pub threads: Vec<(i64, String)>,
     /// Data breakpoints (bound to the session): (dataId, description).
     pub data_breakpoints: Vec<(String, String)>,
+}
+
+/// Most sessions kept; the oldest ended one goes first.
+const MAX_SESSIONS: usize = 8;
+
+impl super::state_glue::DebugUi {
+    /// The session the controls, the toolbar and the editors follow: the focused one, else the newest.
+    pub(super) fn cur(&self) -> Option<&DebugState> {
+        self.focused.and_then(|id| self.by_id(id)).or(self.sessions.last())
+    }
+
+    pub(super) fn cur_mut(&mut self) -> Option<&mut DebugState> {
+        let id = self.cur()?.id;
+        self.by_id_mut(id)
+    }
+
+    /// Id of the current session (0: none, which no session has).
+    pub(super) fn cur_id(&self) -> u64 {
+        self.cur().map_or(0, |d| d.id)
+    }
+
+    pub(super) fn by_id(&self, id: u64) -> Option<&DebugState> {
+        self.sessions.iter().find(|d| d.id == id)
+    }
+
+    pub(super) fn by_id_mut(&mut self, id: u64) -> Option<&mut DebugState> {
+        self.sessions.iter_mut().find(|d| d.id == id)
+    }
+
+    pub(super) fn has_sessions(&self) -> bool {
+        !self.sessions.is_empty()
+    }
+
+    /// Sessions that can take requests (started, not ended).
+    pub(super) fn live(&self) -> impl Iterator<Item = Arc<dap::Session>> + '_ {
+        self.sessions.iter().filter(|d| !matches!(d.status, DebugStatus::Ended(_) | DebugStatus::Starting)).filter_map(|d| d.session.clone())
+    }
 }
 
 impl DebugState {
@@ -200,16 +239,12 @@ impl Workbench {
         cx.notify();
     }
 
-    /// The running session, if it can take requests.
-    fn live_session(&self) -> Option<Arc<dap::Session>> {
-        self.dbg.session.as_ref().filter(|d| !matches!(d.status, DebugStatus::Ended(_) | DebugStatus::Starting)).and_then(|d| d.session.clone())
-    }
-
-    /// Report a file's breakpoints to the running session.
+    /// Report a file's breakpoints to every running session.
     fn push_breakpoints(&self, path: &str) {
         // Main thread, no waiting for the reply: a later `continue` can't overtake this request.
-        if let Some(session) = self.live_session() {
-            session.set_breakpoints_async(path, &self.dbg.bps.wire(path));
+        let wire = self.dbg.bps.wire(path);
+        for session in self.dbg.live() {
+            session.set_breakpoints_async(path, &wire);
         }
     }
 
@@ -380,8 +415,9 @@ impl Workbench {
     }
 
     fn push_function_breakpoints(&self) {
-        if let Some(session) = self.live_session() {
-            session.set_function_breakpoints_async(&self.dbg.bps.wire_functions());
+        let wire = self.dbg.bps.wire_functions();
+        for session in self.dbg.live() {
+            session.set_function_breakpoints_async(&wire);
         }
     }
 
@@ -464,7 +500,7 @@ impl Workbench {
 
     /// "Debug: Break on Exceptions…": filters offered by the adapter (while a session is open), toggled on selection.
     pub(super) fn break_on_exceptions(&mut self, _: &super::BreakOnExceptions, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(session) = self.dbg.session.as_ref().and_then(|d| d.session.clone()) else {
+        let Some(session) = self.dbg.cur().and_then(|d| d.session.clone()) else {
             self.notice = Some(Notice::Info(crate::i18n::t("Start a debug session first (F5): the adapter says which exceptions it can break on.").into()));
             cx.notify();
             return;
@@ -500,7 +536,7 @@ impl Workbench {
     }
 
     pub(super) fn toggle_exception_filter(&mut self, id: String, cx: &mut Context<Self>) {
-        let Some(session) = self.dbg.session.as_ref().and_then(|d| d.session.clone()) else { return };
+        let Some(session) = self.dbg.cur().and_then(|d| d.session.clone()) else { return };
         let available = session.exception_filters();
         let mut selected = self.selected_exception_filters(&available);
         match selected.iter().position(|f| *f == id) {
@@ -536,7 +572,7 @@ impl Workbench {
 
     /// "Debug: Break When Value Changes…": variable name; the program stops when the value is written (hardware watchpoint).
     pub(super) fn add_data_breakpoint(&mut self, _: &super::AddDataBreakpoint, window: &mut Window, cx: &mut Context<Self>) {
-        let ready = self.dbg.session.as_ref().is_some_and(|d| matches!(d.status, DebugStatus::Stopped(_)));
+        let ready = self.dbg.cur().is_some_and(|d| matches!(d.status, DebugStatus::Stopped(_)));
         if !ready {
             self.notice = Some(Notice::Info(crate::i18n::t("Pause the program first (a breakpoint or ⏸): the variable has to be in scope.").into()));
             cx.notify();
@@ -554,8 +590,8 @@ impl Workbench {
 
     pub(super) fn finish_data_breakpoint(&mut self, name: String, cx: &mut Context<Self>) {
         let name = name.trim().to_string();
-        let sid = self.dbg.generation;
-        let Some(d) = self.dbg.session.as_mut().filter(|d| matches!(d.status, DebugStatus::Stopped(_))) else { return };
+        let sid = self.dbg.cur_id();
+        let Some(d) = self.dbg.cur_mut().filter(|d| matches!(d.status, DebugStatus::Stopped(_))) else { return };
         let Some(session) = d.session.clone() else { return };
         if name.is_empty() {
             return;
@@ -587,12 +623,9 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
-                if this.dbg.generation != sid {
-                    return;
-                }
                 match result {
                     Ok((id, description)) => {
-                        if let Some(d) = this.dbg.session.as_mut() {
+                        if let Some(d) = this.dbg.by_id_mut(sid) {
                             if !d.data_breakpoints.iter().any(|(i, _)| *i == id) {
                                 d.data_breakpoints.push((id, description.clone()));
                             }
@@ -609,7 +642,7 @@ impl Workbench {
     }
 
     pub(super) fn remove_data_breakpoints(&mut self, _: &super::RemoveDataBreakpoints, _: &mut Window, cx: &mut Context<Self>) {
-        let Some(d) = self.dbg.session.as_mut() else { return };
+        let Some(d) = self.dbg.cur_mut() else { return };
         if d.data_breakpoints.is_empty() {
             return;
         }
@@ -649,7 +682,7 @@ impl Workbench {
     pub(super) fn remove_watch(&mut self, i: usize, cx: &mut Context<Self>) {
         if i < self.dbg.watch_exprs.len() {
             self.dbg.watch_exprs.remove(i);
-            if let Some(d) = self.dbg.session.as_mut()
+            if let Some(d) = self.dbg.cur_mut()
                 && i < d.watch_values.len()
             {
                 d.watch_values.remove(i);
@@ -661,7 +694,7 @@ impl Workbench {
 
     pub(super) fn remove_all_watches(&mut self, _: &super::RemoveAllWatches, _: &mut Window, cx: &mut Context<Self>) {
         self.dbg.watch_exprs.clear();
-        if let Some(d) = self.dbg.session.as_mut() {
+        if let Some(d) = self.dbg.cur_mut() {
             d.watch_values.clear();
         }
         self.persist_watches();
@@ -685,9 +718,9 @@ impl Workbench {
 
     /// Evaluate each watch expression in the stopped frame (in the background); results arrive in the panel in order.
     pub(super) fn refresh_watches(&mut self, cx: &mut Context<Self>) {
-        let sid = self.dbg.generation;
+        let sid = self.dbg.cur_id();
         let exprs = self.dbg.watch_exprs.clone();
-        let Some(d) = self.dbg.session.as_mut() else { return };
+        let Some(d) = self.dbg.cur_mut() else { return };
         if exprs.is_empty() {
             d.watch_values.clear();
             return;
@@ -703,9 +736,8 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let values = task.await;
             this.update(cx, |this, cx| {
-                if this.dbg.generation == sid
-                    && values.len() == this.dbg.watch_exprs.len()
-                    && let Some(d) = this.dbg.session.as_mut()
+                if values.len() == this.dbg.watch_exprs.len()
+                    && let Some(d) = this.dbg.by_id_mut(sid)
                 {
                     d.watch_values = values;
                     cx.notify();
@@ -720,7 +752,7 @@ impl Workbench {
         for path in self.dbg.bps.remove_all() {
             self.breakpoints_changed_in_store(&path, true, cx);
         }
-        if let Some(session) = self.live_session() {
+        for session in self.dbg.live() {
             session.set_function_breakpoints_async(&[]);
         }
         self.save_breakpoint_settings();
@@ -728,17 +760,16 @@ impl Workbench {
     }
 
     fn apply_debug_line_all(&mut self, cx: &mut Context<Self>) {
-        let location = self.dbg.session.as_ref().and_then(|d| d.location.clone());
+        let location = self.dbg.cur().and_then(|d| d.location.clone());
         // Locals of the stopped frame: variables of the first (Locals) scope.
         let locals: Vec<(String, String)> = self
             .dbg
-            .session
-            .as_ref()
+            .cur()
             .and_then(|d| d.scopes.first().and_then(|s| d.children.get(&s.reference)))
             .map(|v| v.iter().map(|v| (v.name.clone(), v.value.clone())).collect())
             .unwrap_or_default();
         // Value on hover if stopped: session and selected frame.
-        let eval = self.dbg.session.as_ref().and_then(|d| match (&d.status, &d.session) {
+        let eval = self.dbg.cur().and_then(|d| match (&d.status, &d.session) {
             (DebugStatus::Stopped(_), Some(s)) => d.frames.get(d.frame).map(|f| (s.clone(), f.id)),
             _ => None,
         });
@@ -758,7 +789,7 @@ impl Workbench {
 
     /// F5: continue if stopped; if not running, find the configuration and launch.
     pub(super) fn start_debugging(&mut self, _: &super::StartDebugging, _: &mut Window, cx: &mut Context<Self>) {
-        match self.dbg.session.as_ref().map(|d| d.status.clone()) {
+        match self.dbg.cur().map(|d| d.status.clone()) {
             Some(DebugStatus::Stopped(_)) => return self.debug_control("continue", cx),
             Some(DebugStatus::Starting | DebugStatus::Running) => {
                 self.notice = Some(Notice::Info(crate::i18n::t("Already debugging: Shift+F5 stops the session.").into()));
@@ -843,10 +874,11 @@ impl Workbench {
 
     pub(super) fn start_debug(&mut self, config: LaunchConfig, cx: &mut Context<Self>) {
         let Some(root) = self.active_root(cx) else { return };
-        self.stop_debug_quietly(cx);
+        // Starting a configuration again replaces its session (restart); other sessions keep running.
+        self.retire_sessions(&config.name, cx);
         self.dbg.last = Some(config.name.clone());
-        self.dbg.generation += 1;
-        let sid = self.dbg.generation;
+        self.dbg.next_id += 1;
+        let sid = self.dbg.next_id;
         let (tx, rx) = mpsc::channel();
         let input = cx.new(|cx| TextField::new(crate::i18n::tr("Evaluate an expression (↵)"), cx));
         self._subs.push(cx.subscribe(&input, |this, input, ev: &FieldEvent, cx| {
@@ -861,7 +893,9 @@ impl Workbench {
         }
         let breakpoints = self.dbg.bps.wire_all();
         let functions = self.dbg.bps.wire_functions();
-        self.dbg.session = Some(DebugState {
+        self.dbg.focused = Some(sid);
+        self.dbg.sessions.push(DebugState {
+            id: sid,
             config: config.clone(),
             session: None,
             status: DebugStatus::Starting,
@@ -898,10 +932,7 @@ impl Workbench {
                 let told = backlog.take_dropped();
                 let alive = this.update(cx, |this, cx| {
                     this.on_dap_event(sid, ev, cx);
-                    if told
-                        && sid == this.dbg.generation
-                        && let Some(d) = this.dbg.session.as_mut()
-                    {
+                    if told && let Some(d) = this.dbg.by_id_mut(sid) {
                         d.flush_partial();
                         d.push_console("stderr", crate::i18n::t("debug output was dropped: the debugger could not keep up"));
                         cx.notify();
@@ -926,8 +957,8 @@ impl Workbench {
             };
             let attached = this
                 .update(cx, |this, _| {
-                    let current = this.dbg.generation == sid;
-                    if let (true, Some(d)) = (current, this.dbg.session.as_mut()) {
+                    let current = this.dbg.by_id(sid).is_some();
+                    if let Some(d) = this.dbg.by_id_mut(sid) {
                         d.session = Some(session.clone());
                     }
                     if current {
@@ -947,12 +978,10 @@ impl Workbench {
             let result = cx.background_executor().spawn(async move { s2.begin(&adapter_id, &request, args, &breakpoints, &functions) }).await;
             this.update(cx, |this, cx| match result {
                 Ok(()) => {
-                    if this.dbg.generation == sid {
-                        if let Some(d) = this.dbg.session.as_mut().filter(|d| d.status == DebugStatus::Starting) {
-                            d.status = DebugStatus::Running;
-                        }
-                        cx.notify();
+                    if let Some(d) = this.dbg.by_id_mut(sid).filter(|d| d.status == DebugStatus::Starting) {
+                        d.status = DebugStatus::Running;
                     }
+                    cx.notify();
                 }
                 Err(e) => this.on_debug_failed(sid, crate::i18n::tf("Could not start debugging: {}", &[&e]), String::new(), cx),
             })
@@ -964,30 +993,27 @@ impl Workbench {
 
     /// Launch failed: message in a Notice, pre-build output in the console and in Problems.
     fn on_debug_failed(&mut self, sid: u64, message: String, output: String, cx: &mut Context<Self>) {
-        if sid != self.dbg.generation {
+        if self.dbg.by_id(sid).is_none() {
             return;
         }
         if !output.is_empty() {
             let root = self.active_root(cx).unwrap_or_default();
             let problems = crate::problems::parse_output(&output, &root);
             self.set_task_problems(problems, cx);
-            if let Some(d) = self.dbg.session.as_mut() {
+            if let Some(d) = self.dbg.by_id_mut(sid) {
                 for line in output.lines().rev().take(60).collect::<Vec<_>>().into_iter().rev() {
                     d.push_console("stderr", line);
                 }
             }
         }
         self.notice = Some(Notice::Error(message.clone().into()));
-        self.end_debug(message, cx);
+        self.end_debug(sid, message, cx);
     }
 
     // --- Events ---
 
     fn on_dap_event(&mut self, sid: u64, ev: DapEvent, cx: &mut Context<Self>) {
-        if sid != self.dbg.generation {
-            return;
-        }
-        let Some(d) = self.dbg.session.as_mut() else { return };
+        let Some(d) = self.dbg.by_id_mut(sid) else { return };
         match ev {
             DapEvent::Initialized => {}
             DapEvent::Output { category, text } => {
@@ -1002,7 +1028,9 @@ impl Workbench {
                 if let Some(t) = text.filter(|_| reason == "exception") {
                     d.push_console("stderr", crate::i18n::tf("Paused on exception: {}", &[&t]));
                 }
-                self.refresh_stack(thread_id, cx);
+                // The session that stopped is the one the controls and the editors follow.
+                self.dbg.focused = Some(sid);
+                self.refresh_stack(sid, thread_id, cx);
             }
             DapEvent::Continued => {
                 if !matches!(d.status, DebugStatus::Ended(_)) {
@@ -1024,7 +1052,7 @@ impl Workbench {
                         crate::i18n::t("The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code."),
                     );
                 }
-                self.end_debug(crate::i18n::t("Debug session ended").into(), cx)
+                self.end_debug(sid, crate::i18n::t("Debug session ended").into(), cx)
             }
             DapEvent::AdapterExited(code) => {
                 if !matches!(d.status, DebugStatus::Ended(_)) {
@@ -1032,7 +1060,7 @@ impl Workbench {
                         Some(c) => crate::i18n::tf("The debug adapter stopped (exit code {})", &[&c]),
                         None => crate::i18n::t("The debug adapter stopped").to_string(),
                     };
-                    self.end_debug(msg, cx);
+                    self.end_debug(sid, msg, cx);
                 }
             }
             DapEvent::BreakpointsSet { path, sent, results } => {
@@ -1051,9 +1079,8 @@ impl Workbench {
     }
 
     /// When stopped: call stack, scopes of the first frame with a source, and variables of the first scope.
-    fn refresh_stack(&mut self, thread: i64, cx: &mut Context<Self>) {
-        let sid = self.dbg.generation;
-        let Some(session) = self.dbg.session.as_ref().and_then(|d| d.session.clone()) else { return };
+    fn refresh_stack(&mut self, sid: u64, thread: i64, cx: &mut Context<Self>) {
+        let Some(session) = self.dbg.by_id(sid).and_then(|d| d.session.clone()) else { return };
         let local = !self.remote.host.is_remote();
         let task = cx.background_executor().spawn(async move {
             let mut frames = session.stack_trace(thread).unwrap_or_default();
@@ -1072,10 +1099,7 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let (frames, top, scopes, children, threads) = task.await;
             with_window(&this, cx, move |this, window, cx| {
-                if this.dbg.generation != sid {
-                    return;
-                }
-                let Some(d) = this.dbg.session.as_mut().filter(|d| matches!(d.status, DebugStatus::Stopped(_))) else { return };
+                let Some(d) = this.dbg.by_id_mut(sid).filter(|d| matches!(d.status, DebugStatus::Stopped(_))) else { return };
                 d.location = frames.get(top).and_then(|f| f.path.clone().map(|p| (p, f.line.saturating_sub(1) as usize)));
                 d.frames = frames;
                 d.frame = top;
@@ -1092,22 +1116,23 @@ impl Workbench {
     }
 
     fn show_debug_location(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some((path, line)) = self.dbg.session.as_ref().and_then(|d| d.location.clone()) else { return };
+        let Some((path, line)) = self.dbg.cur().and_then(|d| d.location.clone()) else { return };
         self.open_location(path, line as u32, 0, window, cx);
         self.apply_debug_line_all(cx);
     }
 
     /// Look at another thread's stack (the program stays stopped).
     pub(super) fn select_thread(&mut self, id: i64, cx: &mut Context<Self>) {
-        if let Some(d) = self.dbg.session.as_mut().filter(|d| matches!(d.status, DebugStatus::Stopped(_))) {
+        if let Some(d) = self.dbg.cur_mut().filter(|d| matches!(d.status, DebugStatus::Stopped(_))) {
             d.thread = id;
-            self.refresh_stack(id, cx);
+            let sid = d.id;
+            self.refresh_stack(sid, id, cx);
         }
     }
 
     pub(super) fn select_frame(&mut self, i: usize, cx: &mut Context<Self>) {
-        let sid = self.dbg.generation;
-        let Some(d) = self.dbg.session.as_mut() else { return };
+        let sid = self.dbg.cur_id();
+        let Some(d) = self.dbg.cur_mut() else { return };
         let (Some(frame), Some(session)) = (d.frames.get(i).cloned(), d.session.clone()) else { return };
         d.frame = i;
         d.location = frame.path.clone().map(|p| (p, frame.line.saturating_sub(1) as usize));
@@ -1115,7 +1140,7 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let (scopes, children) = task.await;
             with_window(&this, cx, move |this, window, cx| {
-                let Some(d) = this.dbg.session.as_mut().filter(|_| this.dbg.generation == sid) else { return };
+                let Some(d) = this.dbg.by_id_mut(sid) else { return };
                 d.expanded = scopes.first().map(|s| s.reference).into_iter().collect();
                 d.scopes = scopes;
                 d.children = children;
@@ -1130,8 +1155,8 @@ impl Workbench {
 
     /// Toggle a variable or scope row; children are requested on first expansion.
     pub(super) fn toggle_variable(&mut self, reference: i64, cx: &mut Context<Self>) {
-        let sid = self.dbg.generation;
-        let Some(d) = self.dbg.session.as_mut() else { return };
+        let sid = self.dbg.cur_id();
+        let Some(d) = self.dbg.cur_mut() else { return };
         if !d.expanded.insert(reference) {
             d.expanded.remove(&reference);
             cx.notify();
@@ -1146,9 +1171,7 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let vars = task.await;
             this.update(cx, |this, cx| {
-                if this.dbg.generation == sid
-                    && let Some(d) = this.dbg.session.as_mut()
-                {
+                if let Some(d) = this.dbg.by_id_mut(sid) {
                     d.children.insert(reference, vars);
                     cx.notify();
                 }
@@ -1161,8 +1184,8 @@ impl Workbench {
 
     fn debug_evaluate(&mut self, expression: String, cx: &mut Context<Self>) {
         let expression = expression.trim().to_string();
-        let sid = self.dbg.generation;
-        let Some(d) = self.dbg.session.as_mut() else { return };
+        let sid = self.dbg.cur_id();
+        let Some(d) = self.dbg.cur_mut() else { return };
         if expression.is_empty() {
             return;
         }
@@ -1177,9 +1200,7 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
-                if this.dbg.generation == sid
-                    && let Some(d) = this.dbg.session.as_mut()
-                {
+                if let Some(d) = this.dbg.by_id_mut(sid) {
                     match result {
                         Ok((text, _)) => text.lines().for_each(|l| d.push_console("console", l)),
                         Err(e) => d.push_console("stderr", e),
@@ -1197,7 +1218,7 @@ impl Workbench {
 
     /// `continue`, `next`, `stepIn`, `stepOut` (while stopped) and `pause` (while running).
     pub(super) fn debug_control(&mut self, command: &'static str, cx: &mut Context<Self>) {
-        let Some(d) = self.dbg.session.as_mut() else { return };
+        let Some(d) = self.dbg.cur_mut() else { return };
         let Some(session) = d.session.clone() else { return };
         let allowed = match command {
             "pause" => d.status == DebugStatus::Running,
@@ -1217,20 +1238,20 @@ impl Workbench {
     }
 
     pub(super) fn stop_debugging(&mut self, _: &super::StopDebugging, _: &mut Window, cx: &mut Context<Self>) {
-        if self.dbg.session.as_ref().is_some_and(|d| !matches!(d.status, DebugStatus::Ended(_))) {
-            self.end_debug(crate::i18n::t("Debug session stopped").into(), cx);
+        if let Some(sid) = self.dbg.cur().filter(|d| !matches!(d.status, DebugStatus::Ended(_))).map(|d| d.id) {
+            self.end_debug(sid, crate::i18n::t("Debug session stopped").into(), cx);
         }
     }
 
     pub(super) fn restart_debugging(&mut self, _: &super::RestartDebugging, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(config) = self.dbg.session.as_ref().map(|d| d.config.clone()) {
+        if let Some(config) = self.dbg.cur().map(|d| d.config.clone()) {
             self.start_debug(config, cx);
         }
     }
 
-    /// End the session (adapter and program exit); console and message stay.
-    fn end_debug(&mut self, message: String, cx: &mut Context<Self>) {
-        if let Some(d) = self.dbg.session.as_mut() {
+    /// End a session (adapter and program exit); console and message stay.
+    fn end_debug(&mut self, sid: u64, message: String, cx: &mut Context<Self>) {
+        if let Some(d) = self.dbg.by_id_mut(sid) {
             if let Some(s) = d.session.take() {
                 cx.background_executor().spawn(async move { s.stop() }).detach();
             }
@@ -1244,7 +1265,15 @@ impl Workbench {
             d.children.clear();
             d.location = None;
         }
-        self.forget_breakpoint_states(cx);
+        // Another session that is still running becomes the current one.
+        if self.dbg.focused == Some(sid)
+            && let Some(other) = self.dbg.sessions.iter().rev().find(|d| d.id != sid && !matches!(d.status, DebugStatus::Ended(_)))
+        {
+            self.dbg.focused = Some(other.id);
+        }
+        if self.dbg.live().next().is_none() {
+            self.forget_breakpoint_states(cx);
+        }
         self.apply_debug_line_all(cx);
         cx.notify();
     }
@@ -1257,22 +1286,41 @@ impl Workbench {
         }
     }
 
-    /// New session or folder change: close the old one silently.
+    /// Folder change: close every session silently.
     pub(super) fn stop_debug_quietly(&mut self, cx: &mut Context<Self>) {
-        self.dbg.generation += 1;
-        if let Some(d) = self.dbg.session.take()
-            && let Some(s) = d.session
-        {
-            cx.background_executor().spawn(async move { s.stop() }).detach();
+        for d in std::mem::take(&mut self.dbg.sessions) {
+            if let Some(s) = d.session {
+                cx.background_executor().spawn(async move { s.stop() }).detach();
+            }
         }
+        self.dbg.focused = None;
         self.forget_breakpoint_states(cx);
         self.apply_debug_line_all(cx);
+    }
+
+    /// Before a configuration starts: its earlier session (running or ended) goes, and so do the oldest ended sessions
+    /// beyond the limit.
+    fn retire_sessions(&mut self, name: &str, cx: &mut Context<Self>) {
+        let (gone, kept): (Vec<DebugState>, Vec<DebugState>) = std::mem::take(&mut self.dbg.sessions).into_iter().partition(|d| d.config.name == name);
+        self.dbg.sessions = kept;
+        while self.dbg.sessions.len() >= MAX_SESSIONS {
+            let i = self.dbg.sessions.iter().position(|d| matches!(d.status, DebugStatus::Ended(_))).unwrap_or(0);
+            let d = self.dbg.sessions.remove(i);
+            if let Some(s) = d.session {
+                cx.background_executor().spawn(async move { s.stop() }).detach();
+            }
+        }
+        for d in gone {
+            if let Some(s) = d.session {
+                cx.background_executor().spawn(async move { s.stop() }).detach();
+            }
+        }
     }
 
     // --- UI ---
 
     pub(super) fn debug_view(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
-        let Some(d) = &self.dbg.session else {
+        let Some(d) = self.dbg.cur() else {
             return div()
                 .px(px(theme::SPACE[6]))
                 .py(px(theme::SPACE[3]))
@@ -1575,7 +1623,7 @@ impl Workbench {
     /// Summary of state for tests: (state, frame names, stopped line, console).
     #[cfg(test)]
     pub fn debug_snapshot(&self) -> Option<(String, Vec<String>, Option<(String, usize)>, Vec<String>)> {
-        self.dbg.session.as_ref().map(|d| {
+        self.dbg.cur().map(|d| {
             let status = match &d.status {
                 DebugStatus::Starting => "starting".to_string(),
                 DebugStatus::Running => "running".to_string(),
@@ -1635,7 +1683,7 @@ impl Workbench {
 
     #[cfg(test)]
     pub fn data_breakpoints_for_test(&self) -> Vec<String> {
-        self.dbg.session.as_ref().map(|d| d.data_breakpoints.iter().map(|(_, desc)| desc.clone()).collect()).unwrap_or_default()
+        self.dbg.cur().map(|d| d.data_breakpoints.iter().map(|(_, desc)| desc.clone()).collect()).unwrap_or_default()
     }
 
     #[cfg(test)]
@@ -1645,7 +1693,7 @@ impl Workbench {
 
     #[cfg(test)]
     pub fn debug_threads_for_test(&self) -> Vec<(i64, String)> {
-        self.dbg.session.as_ref().map(|d| d.threads.clone()).unwrap_or_default()
+        self.dbg.cur().map(|d| d.threads.clone()).unwrap_or_default()
     }
 
     #[cfg(test)]
@@ -1655,14 +1703,14 @@ impl Workbench {
 
     #[cfg(test)]
     pub fn debug_watch_values(&self) -> Vec<(String, String)> {
-        let values = self.dbg.session.as_ref().map(|d| d.watch_values.clone()).unwrap_or_default();
+        let values = self.dbg.cur().map(|d| d.watch_values.clone()).unwrap_or_default();
         self.dbg.watch_exprs.iter().cloned().zip(values).collect()
     }
 
     /// For tests: visible variables (name, value), from the expanded scopes.
     #[cfg(test)]
     pub fn debug_variables(&self) -> Vec<(String, String)> {
-        let Some(d) = &self.dbg.session else { return Vec::new() };
+        let Some(d) = self.dbg.cur() else { return Vec::new() };
         d.scopes
             .iter()
             .filter(|s| d.expanded.contains(&s.reference))
