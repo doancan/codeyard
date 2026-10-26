@@ -370,3 +370,167 @@ fn finding_the_tests_of_a_huge_test_file_is_linear() {
         assert!(started.elapsed() < BUDGET / 5, "{rel}: {:?} for {n} tests", started.elapsed());
     }
 }
+
+/// A random JSON value built from the keys and shapes language servers and debug adapters use, with wrong types, huge and
+/// negative numbers, deep nesting and odd strings in every place.
+fn server_value(rng: &mut Rng, depth: usize) -> serde_json::Value {
+    use serde_json::{Value, json};
+    const KEYS: &[&str] = &[
+        "range",
+        "start",
+        "end",
+        "line",
+        "character",
+        "uri",
+        "targetUri",
+        "targetRange",
+        "items",
+        "label",
+        "textEdit",
+        "newText",
+        "insertText",
+        "contents",
+        "value",
+        "kind",
+        "children",
+        "data",
+        "changes",
+        "documentChanges",
+        "edits",
+        "textDocument",
+        "location",
+        "name",
+        "detail",
+        "position",
+        "paddingLeft",
+        "resultId",
+        "tooltip",
+        "command",
+        "arguments",
+        "signatures",
+        "activeSignature",
+        "activeParameter",
+        "parameters",
+        "documentation",
+        "isIncomplete",
+        "stackFrames",
+        "scopes",
+        "variables",
+        "breakpoints",
+        "verified",
+        "id",
+        "source",
+        "path",
+        "column",
+        "variablesReference",
+        "presentationHint",
+        "totalFrames",
+        "diagnostics",
+        "severity",
+        "message",
+        "startLine",
+        "endLine",
+        "target",
+        "placeholder",
+        "defaultBehavior",
+        "from",
+        "to",
+    ];
+    let pick = |rng: &mut Rng| KEYS[(rng.next() as usize) % KEYS.len()];
+    match if depth > 6 { rng.next() % 6 } else { rng.next() % 9 } {
+        0 => Value::Null,
+        1 => json!(rng.next().is_multiple_of(2)),
+        2 => json!([0i64, -1, 1, i64::MAX, i64::MIN, u32::MAX as i64, 65_536][(rng.next() % 7) as usize]),
+        3 => json!([0.5f64, -0.0, 1e300, f64::MAX][(rng.next() % 4) as usize]),
+        4 => json!(["", "file:///a.rs", "file://", "%ZZ", "a\u{0}b", "😀\u{202e}", "x".repeat(10_000).as_str(), "../../etc/passwd"][(rng.next() % 8) as usize]),
+        5 => json!(pick(rng)),
+        6 => Value::Array((0..(rng.next() % 6)).map(|_| server_value(rng, depth + 1)).collect()),
+        _ => Value::Object((0..(1 + rng.next() % 6)).map(|_| (pick(rng).to_string(), server_value(rng, depth + 1))).collect()),
+    }
+}
+
+/// Every reply a language server or debug adapter can send goes through these readers: none may panic on any shape.
+#[test]
+fn language_server_and_debugger_replies_survive_any_shape() {
+    let mut rng = Rng(99);
+    let legend: Vec<String> = ["keyword", "type", "variable"].iter().map(|s| s.to_string()).collect();
+    for _ in 0..4_000 {
+        let v = server_value(&mut rng, 0);
+        let outcome = std::panic::catch_unwind(|| {
+            use crate::lsp::*;
+            let _ = parse_range(&v);
+            let _ = parse_diagnostics(&v);
+            let _ = parse_completions(&v);
+            let _ = hover_text(&v);
+            let _ = parse_locations(&v);
+            let _ = parse_workspace_edit(&v);
+            let _ = parse_symbols(&v);
+            let _ = parse_workspace_symbols(&v);
+            let _ = parse_code_actions(&v);
+            let _ = parse_inlay_hints(&v);
+            let _ = parse_folding_ranges(&v);
+            let _ = parse_document_links(&v);
+            let _ = parse_prepare_rename(&v);
+            let _ = remap_edit_uris(&v, "file:///a", "file:///b");
+            let _ = parse_hierarchy(&v, None);
+            let _ = parse_hierarchy(&v, Some("from"));
+            let _ = parse_code_lenses(&v);
+            let _ = decode_semantic_tokens(&v, &legend);
+            let _ = parse_signature(&v);
+            let _ = crate::dap::parse_bp_results(&v);
+            let _ = crate::dap::parse_frames(&v);
+            let _ = crate::dap::parse_scopes(&v);
+            let _ = crate::dap::parse_variables(&v);
+            let _ = crate::debug_config::parse_inputs(&v);
+        });
+        assert!(outcome.is_ok(), "a reader panicked on {}", serde_json::to_string(&v).unwrap_or_default().chars().take(400).collect::<String>());
+    }
+}
+
+/// A server that writes endless text without a message header (a log to stdout) must not make every new chunk rescan all
+/// that came before: the framing stays linear in what arrives.
+#[test]
+fn server_output_without_headers_is_read_in_linear_time() {
+    let mut decoder = crate::lsp::Decoder::default();
+    let chunk = "log line from a server that prints to stdout\n".repeat(100);
+    let started = Instant::now();
+    for _ in 0..2_000 {
+        assert!(decoder.push(chunk.as_bytes()).is_empty());
+    }
+    // And a real message after it is still found.
+    let msg = crate::lsp::encode(&serde_json::json!({"jsonrpc": "2.0", "id": 1, "result": null}));
+    let mut decoder = crate::lsp::Decoder::default();
+    let mut got = Vec::new();
+    for b in msg.chunks(3) {
+        got.extend(decoder.push(b));
+    }
+    assert_eq!(got.len(), 1);
+    assert!(started.elapsed() < BUDGET, "{:?} for 9 MB without headers", started.elapsed());
+}
+
+/// Messages with log lines between them, cut into chunks of every size, come out whole, in order and once each.
+#[test]
+fn server_messages_survive_any_chunking() {
+    let mut rng = Rng(5);
+    for _ in 0..300 {
+        let mut stream = Vec::new();
+        let n = 1 + rng.next() % 8;
+        for i in 0..n {
+            if rng.next().is_multiple_of(2) {
+                stream.extend_from_slice(b"a server log line\n");
+            }
+            let body = serde_json::json!({ "id": i, "text": "\r\n\r\n".repeat((rng.next() % 3) as usize) + "ğ😀" });
+            stream.extend(crate::lsp::encode(&body));
+        }
+        let mut decoder = crate::lsp::Decoder::default();
+        let mut got = Vec::new();
+        let mut at = 0;
+        while at < stream.len() {
+            let end = (at + 1 + (rng.next() as usize) % 40).min(stream.len());
+            got.extend(decoder.push(&stream[at..end]));
+            at = end;
+        }
+        let ids: Vec<u64> = got.iter().filter_map(|v| v["id"].as_u64()).collect();
+        assert_eq!(ids, (0..n).collect::<Vec<_>>());
+    }
+}
