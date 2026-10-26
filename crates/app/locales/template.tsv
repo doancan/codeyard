@@ -2233,6 +2233,7 @@ your words
 {} incoming call|{} incoming calls	
 {} is a binary file: there is no text diff.	
 {} is a date:	
+{} is a symbolic link; write the path it points to, so the upload can be confirmed	
 {} is already in .gitignore	
 {} is already in the workspace.	
 {} is not a trusted folder, so nothing is deleted from it. Open it as a folder and trust it first.	
