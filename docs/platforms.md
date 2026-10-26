@@ -20,9 +20,9 @@
 - **Apple silicon only.** Intel Macs are not a target: there is no universal build and no Intel CI. `LSMinimumSystemVersion` and
   `MACOSX_DEPLOYMENT_TARGET` are 11.0 (the first macOS release for Apple silicon).
 
-- The first start of each version touches Desktop, Documents and Downloads, so macOS asks in its own dialogs and lists Codeyard under
-  Privacy & Security; the bundle carries usage descriptions for them, for removable and for network volumes. Codeyard also tries the
-  permission database once, which makes the system add it (switched off) to Full Disk Access. *Help: Grant Full Disk Access…* opens that page.
+- Codeyard asks for no file access at start, like VS Code. macOS asks, in its own dialog, the first time a folder on Desktop, Documents,
+  Downloads, iCloud Drive, a removable or a network volume is opened; the bundle carries the usage descriptions for them. Full Disk Access
+  is optional and cannot be requested by an app: *Help: Grant Full Disk Access…* opens the page and shows the app in Finder to drag in.
 - Metal toolchain (Xcode) is needed to build GPUI.
 - The Dock icon is set at run time, also for a bare binary.
 
@@ -45,6 +45,9 @@ Windows x64 is built and released as a ZIP and a setup EXE (unsigned, so SmartSc
   launchers and hide console windows; the application menu bar replaces the macOS global menu.
 - `scripts/check-windows.ps1` runs the library tests, selected UI, path and keyboard regressions and the release build.
   GPUI needs `fxc.exe` from the Windows SDK.
+- `./scripts/build-windows.ps1` builds a standalone EXE with Linux x64 and ARM64 SSH agents embedded; use
+  `-Profile Release` for an optimized build. No separate `agents/` folder is needed. The packaging check moves only
+  the EXE to an empty directory and verifies both embedded agents. Release CI also embeds its supplied macOS agents.
 - Native OpenSSH has no ControlMaster sockets: SSH needs a key or ssh-agent and an existing known-host entry (the password and
   host-key prompt bridge is Unix-only), and in-app port forwarding is unavailable; use `ssh -L` / `ssh -R` in a terminal.
 - Not verified: real SSH authentication, mixed-DPI displays, physical keyboard and IME behaviour.

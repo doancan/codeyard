@@ -843,12 +843,7 @@ pub(crate) fn crumb_paths(root: Option<&str>, path: &str) -> Vec<(String, String
 
 impl Workbench {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let wb = Self::new_at(state_path(), settings::config_dir(), window, cx);
-        // macOS: let the system ask for the protected folders at the first start of a version (not in tests).
-        if cfg!(all(target_os = "macos", not(test))) {
-            cx.defer_in(window, |this, _, cx| this.request_file_access_once(cx));
-        }
-        wb
+        Self::new_at(state_path(), settings::config_dir(), window, cx)
     }
 
     fn root(&self, cx: &App) -> Option<String> {
@@ -930,6 +925,7 @@ impl Workbench {
                 crate::scm::ScmEvent::OpenCommit(commit) => this.show_commit_files(commit.clone(), window, cx),
                 crate::scm::ScmEvent::OpenCommitFile(commit, file) => this.open_commit_file(commit.clone(), file.clone(), window, cx),
                 crate::scm::ScmEvent::CommitMenu(commit, position) => this.open_commit_menu(commit.clone(), *position, window, cx),
+                crate::scm::ScmEvent::FileMenu(path, position) => this.open_scm_file_menu(path, *position, window, cx),
                 crate::scm::ScmEvent::SectionsChanged(text) => {
                     if let Some(s) = &this.persist.state {
                         let _ = s.set("scm_sections", text);
@@ -1106,7 +1102,7 @@ impl Workbench {
                 conn: Conn::Local,
                 pending_path: None,
                 ssh_hosts: host::ssh::list_hosts(),
-                bundle: Arc::new(AgentBundle::discover()),
+                bundle: Arc::new(crate::bundled_agents::discover()),
                 asks: Default::default(),
                 transfer: None,
             },
@@ -2439,7 +2435,7 @@ impl Workbench {
     // --- Remote connection ---
 
     /// Update recents in the Dock menu (no effect outside macOS).
-    pub(crate) fn sync_dock_menu(&self, cx: &App) {
+    pub(crate) fn sync_dock_menu(&self, cx: &mut App) {
         crate::menus::remember_recent(&self.persist.recent);
         #[cfg(target_os = "macos")]
         crate::menus::set_dock_menu(cx, &self.persist.recent);

@@ -545,6 +545,11 @@ impl Workbench {
         self.update.native = true;
     }
 
+    /// The platform's question "may the dialog's window close?", asked from outside any update like the real one.
+    pub fn dialog_may_close_for_test(host: gpui::WindowHandle<Workbench>, cx: &mut App) -> bool {
+        update_window_glue::dialog_may_close(host, cx)
+    }
+
     /// The dialog's own window, while it is open.
     pub fn update_window_for_test(&self, cx: &App) -> Option<gpui::AnyWindowHandle> {
         self.update.window.filter(|w| update_glue::window_is_open(*w, cx)).map(Into::into)

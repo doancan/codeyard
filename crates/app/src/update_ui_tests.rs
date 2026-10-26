@@ -680,6 +680,7 @@ fn the_question_names_what_is_sent_and_has_two_buttons(cx: &mut TestAppContext) 
     );
     assert!(!d.text.contains("all that is sent") && !d.text.contains("no tracking"), "no promise that is not true: {}", d.text);
     assert!(d.text.contains("update.check"), "it says where to change it: {}", d.text);
+    assert!(d.text.chars().count() < 260, "the question is two short sentences, not a page: {}", d.text);
     assert_eq!((d.buttons, d.primary.as_deref()), (vec!["Only When I Ask".to_string(), "Check Daily".to_string()], Some("Check Daily")));
 }
 
@@ -1808,4 +1809,43 @@ fn the_dialogs_window_does_not_outlive_its_editor_window(cx: &mut TestAppContext
     cx.run_until_parked();
     let left = wb.read_with(cx, |_, app| app.windows().len());
     assert_eq!(left, 0, "the dialog's window is gone with the workbench it belongs to");
+}
+
+#[gpui::test]
+fn a_key_pressed_in_the_dialogs_window_reaches_the_editor_window(cx: &mut TestAppContext) {
+    let dir = settings_dir("update-window-enter", COMMENTED);
+    let (wb, cx) = setup_with_config(cx, &dir);
+    let fake = Fake::new();
+    wb.update(cx, |wb, _| {
+        wb.set_update_backend_for_test(fake.clone());
+        wb.use_update_window_for_test();
+    });
+    fake.check_returns(Ok(None));
+    assert!(wb.update_in(cx, |wb, window, cx| wb.ask_update_policy_for_test(true, window, cx)));
+    settle(cx);
+    cx.executor().advance_clock(Duration::from_secs(1));
+    settle(cx);
+    let own = update_window(&wb, cx).expect("the question is in a window of its own");
+    // The real path of a click or a key in that window: the platform delivers it from outside any update, the dialog's window asks
+    // the editor's window to run it, and that window's workbench must not be leased twice.
+    cx.cx.simulate_keystrokes(own, "enter");
+    settle(cx);
+    let text = std::fs::read_to_string(dir.join("settings.jsonc")).unwrap();
+    assert!(text.contains("\"update.check\": \"daily\""), "Enter is the primary button, Check Daily: {text}");
+    assert!(dialog(&wb, cx).is_none());
+}
+
+#[gpui::test]
+fn the_red_button_of_the_dialogs_window_answers_like_esc(cx: &mut TestAppContext) {
+    let (wb, cx, fake) = rig(cx);
+    wb.update(cx, |wb, _| wb.use_update_window_for_test());
+    offered(&wb, cx, &fake, "0.2.0");
+    settle(cx);
+    // The platform asks "may this window close?" from outside any update; the answer comes from the editor window's workbench.
+    assert!(update_window(&wb, cx).is_some());
+    let host = cx.update(|window, _| window.window_handle().downcast::<Workbench>()).expect("the editor window");
+    assert!(cx.cx.update(|app| Workbench::dialog_may_close_for_test(host, app)), "Esc is Later: the dialog is gone, so the window may go");
+    settle(cx);
+    assert!(dialog(&wb, cx).is_none());
+    assert_eq!(state(&wb, cx), "available 0.2.0", "the offer stays in the status bar");
 }

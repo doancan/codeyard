@@ -1,7 +1,9 @@
 //! macOS file access (TCC): whether we have Full Disk Access, and if not, where to send the user.
 //!
-//! Full Disk Access has no dialog of its own: `request` makes the system list the app, `full_disk_access` tells whether the
-//! switch is on, and the settings page opens from `FULL_DISK_ACCESS_URL`.
+//! Nothing here runs by itself. Like any editor, Codeyard asks for nothing at start: the first read of Desktop, Documents,
+//! Downloads, iCloud Drive or an external drive (opening a folder there) makes the system ask, in its own dialog, with the
+//! usage descriptions from `Info.plist`. Full Disk Access has no dialog of its own: `full_disk_access` tells whether the switch
+//! is on, and the settings page opens from `FULL_DISK_ACCESS_URL` (*Help: Grant Full Disk Access…*).
 
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -12,27 +14,6 @@ pub const FULL_DISK_ACCESS_URL: &str = "x-apple.systempreferences:com.apple.pref
 /// The `.app` folder the running binary lives in; `None` when run from a plain build directory.
 pub fn app_bundle() -> Option<PathBuf> {
     std::env::current_exe().ok()?.ancestors().find(|p| p.extension().is_some_and(|e| e == "app")).map(Path::to_path_buf)
-}
-
-/// The folders macOS guards one by one. The first read of each one makes the system ask, in its own dialog, and lists the
-/// app under "Files & Folders"; after the answer the call goes on (or fails with `PermissionDenied`).
-fn guarded_folders(home: &Path) -> Vec<PathBuf> {
-    ["Desktop", "Documents", "Downloads"].iter().map(|d| home.join(d)).collect()
-}
-
-/// The user database of the permission system. It cannot be read without Full Disk Access, and the refused `open` is what
-/// makes macOS put the app in that list (switched off) without anyone going to add it by hand.
-fn tcc_database(home: &Path) -> PathBuf {
-    home.join("Library/Application Support/com.apple.TCC/TCC.db")
-}
-
-/// What a Mac app does at its first start: touch what it will need, so the system asks now and lists the app in
-/// Privacy & Security. Blocks while a system dialog is open: call it off the main thread.
-pub fn request(home: &Path) {
-    for dir in guarded_folders(home) {
-        let _ = std::fs::read_dir(dir);
-    }
-    let _ = std::fs::File::open(tcc_database(home));
 }
 
 /// Locations found on most Macs that can't be read without Full Disk Access.
@@ -61,13 +42,6 @@ fn verdict(results: impl Iterator<Item = std::io::Result<()>>) -> Option<bool> {
 mod tests {
     use super::*;
     use std::io::{Error, ErrorKind::*};
-
-    #[test]
-    fn the_requests_name_the_guarded_folders_and_the_permission_database() {
-        let home = Path::new("/Users/x");
-        assert_eq!(guarded_folders(home), ["/Users/x/Desktop", "/Users/x/Documents", "/Users/x/Downloads"].map(PathBuf::from));
-        assert!(tcc_database(home).ends_with("com.apple.TCC/TCC.db"));
-    }
 
     #[test]
     fn denied_means_no_access() {
