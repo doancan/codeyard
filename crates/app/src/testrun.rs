@@ -26,7 +26,8 @@ pub struct Case {
     pub run: TestRun,
 }
 
-/// Every test the planners would find in a file (`package_json` for JavaScript runners).
+/// Every test the planners would find in a file (`package_json` for JavaScript runners). The file is read once: a file with
+/// thousands of tests costs about as much as one with a few.
 pub fn cases(rel: &str, text: &str, package_json: Option<&str>) -> Vec<Case> {
     let ext = rel.rsplit_once('.').map(|(_, e)| e).unwrap_or_default();
     let starts: &Regex = match ext {
@@ -36,17 +37,77 @@ pub fn cases(rel: &str, text: &str, package_json: Option<&str>) -> Vec<Case> {
         "py" => &PY_DEF,
         _ => return Vec::new(),
     };
+    let src = Source::new(rel, text, package_json);
+    let mut seen = std::collections::HashSet::new();
     let mut out: Vec<Case> = Vec::new();
-    for (i, line) in text.lines().enumerate() {
+    for (i, line) in src.lines.iter().enumerate() {
         // A `describe` block is a group, not a test.
         if !starts.is_match(line) || JS_CASE.captures(line).is_some_and(|c| &c[1] == "describe") {
             continue;
         }
-        if let Some(run) = plan(rel, text, i, false, package_json)
-            && !out.iter().any(|c| c.run.id == run.id)
+        if let Some(run) = src.plan(i, false)
+            && seen.insert(run.id.clone())
         {
             let name = run.label.trim_start_matches("test: ").to_string();
             out.push(Case { line: i, name, run });
+        }
+    }
+    out
+}
+
+/// A file split into lines once, with what every planner looks up around a line.
+struct Source<'a> {
+    rel: &'a str,
+    lines: Vec<&'a str>,
+    /// Per line, the `mod x {` (Rust) or `class Test…` (Python) lines that enclose it, outermost first (worked out when first
+    /// needed, so a plan for one test at the cursor does not pay for the whole table).
+    blocks: std::cell::OnceCell<Vec<Vec<usize>>>,
+    /// The JavaScript runner, from package.json.
+    runner: Option<&'static str>,
+}
+
+impl<'a> Source<'a> {
+    fn new(rel: &'a str, text: &'a str, package_json: Option<&str>) -> Self {
+        let lines: Vec<&str> = text.lines().collect();
+        Source { rel, lines, blocks: std::cell::OnceCell::new(), runner: js_runner(package_json) }
+    }
+
+    /// The blocks that enclose line `i`.
+    fn blocks(&self, i: usize) -> &[usize] {
+        let table = self.blocks.get_or_init(|| match self.rel.rsplit_once('.').map(|(_, e)| e) {
+            Some("rs") => enclosing(&self.lines, &RUST_MOD),
+            Some("py") => enclosing(&self.lines, &PY_CLASS),
+            _ => Vec::new(),
+        });
+        table.get(i).map_or(&[], Vec::as_slice)
+    }
+
+    fn plan(&self, cursor: usize, whole_file: bool) -> Option<TestRun> {
+        let cursor = cursor.min(self.lines.len().saturating_sub(1));
+        let rel = self.rel;
+        match rel.rsplit_once('.').map(|(_, e)| e)? {
+            "rs" => rust(self, cursor, whole_file),
+            "go" if rel.ends_with("_test.go") => go(rel, &self.lines, cursor, whole_file),
+            "js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" => js(rel, &self.lines, cursor, whole_file, self.runner),
+            "py" => python(self, cursor, whole_file),
+            _ => None,
+        }
+    }
+}
+
+/// For each line, the lines matching `block` that enclose it, outermost first: walking up from the line, the nearest block
+/// less indented than the line, then the nearest less indented than that block, and so on. Found in one pass with a stack
+/// (a block line drops the ones at its indentation or deeper, which can no longer be the nearest for anything below).
+fn enclosing(lines: &[&str], block: &Regex) -> Vec<Vec<usize>> {
+    let mut stack: Vec<(usize, usize)> = Vec::new();
+    let mut out = Vec::with_capacity(lines.len());
+    for (i, line) in lines.iter().enumerate() {
+        let want = indent(line);
+        out.push(stack.iter().filter(|(_, ind)| *ind < want).map(|(j, _)| *j).collect());
+        if block.is_match(line) {
+            let ind = indent(line);
+            stack.retain(|(_, d)| *d < ind);
+            stack.push((i, ind));
         }
     }
     out
@@ -71,19 +132,11 @@ static PY_CLASS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(\s*)class\s+(
 /// `rel`: root-relative path, `text`: file contents, `cursor`: 0-based line.
 /// `whole_file`: all tests in the file. `package_json`: the root package.json (for JS).
 pub fn plan(rel: &str, text: &str, cursor: usize, whole_file: bool, package_json: Option<&str>) -> Option<TestRun> {
-    let lines: Vec<&str> = text.lines().collect();
-    let cursor = cursor.min(lines.len().saturating_sub(1));
-    let ext = rel.rsplit_once('.').map(|(_, e)| e)?;
-    match ext {
-        "rs" => rust(rel, &lines, cursor, whole_file),
-        "go" if rel.ends_with("_test.go") => go(rel, &lines, cursor, whole_file),
-        "js" | "jsx" | "ts" | "tsx" | "mjs" | "cjs" => js(rel, &lines, cursor, whole_file, package_json),
-        "py" => python(rel, &lines, cursor, whole_file),
-        _ => None,
-    }
+    Source::new(rel, text, package_json).plan(cursor, whole_file)
 }
 
-fn rust(rel: &str, lines: &[&str], cursor: usize, whole_file: bool) -> Option<TestRun> {
+fn rust(src: &Source, cursor: usize, whole_file: bool) -> Option<TestRun> {
+    let (rel, lines) = (src.rel, &src.lines);
     // `crates/app/src/x.rs` → `-p app`; `tests/x.rs` → `--test x`.
     let parts: Vec<&str> = rel.split('/').collect();
     let (pkg, inner) = match parts.as_slice() {
@@ -125,20 +178,9 @@ fn rust(rel: &str, lines: &[&str], cursor: usize, whole_file: bool) -> Option<Te
             // Cursor is in a non-test function: running a test above it would be wrong.
             return None;
         }
-        // Collect enclosing `mod x {` blocks, outermost first.
+        // Enclosing `mod x {` blocks, outermost first.
         let mut path: Vec<String> = module.iter().map(|s| s.to_string()).collect();
-        let (mut at, mut want) = (i, indent(lines[i]));
-        let mut mods: Vec<String> = Vec::new();
-        while at > 0 && want > 0 {
-            at -= 1;
-            if let Some(m) = RUST_MOD.captures(lines[at])
-                && indent(lines[at]) < want
-            {
-                mods.insert(0, m[1].to_string());
-                want = indent(lines[at]);
-            }
-        }
-        path.extend(mods);
+        path.extend(src.blocks(i).iter().filter_map(|&j| RUST_MOD.captures(lines[j]).map(|m| m[1].to_string())));
         path.push(c[1].to_string());
         let id = path.join("::");
         return Some(TestRun { label: format!("test: {}", &c[1]), command: format!("{base} {} -- --exact", word(&id)), id });
@@ -149,8 +191,8 @@ fn rust(rel: &str, lines: &[&str], cursor: usize, whole_file: bool) -> Option<Te
 fn go(rel: &str, lines: &[&str], cursor: usize, whole_file: bool) -> Option<TestRun> {
     let dir = rel.rsplit_once('/').map_or(".", |(d, _)| d);
     let pkg = if dir == "." { "./.".to_string() } else { word(&format!("./{dir}")) };
-    let all: Vec<String> = lines.iter().filter_map(|l| GO_TEST.captures(l).map(|c| c[1].to_string())).collect();
     if whole_file {
+        let all: Vec<String> = lines.iter().filter_map(|l| GO_TEST.captures(l).map(|c| c[1].to_string())).collect();
         if all.is_empty() {
             return None;
         }
@@ -179,8 +221,8 @@ pub fn js_runner(package_json: Option<&str>) -> Option<&'static str> {
     }
 }
 
-fn js(rel: &str, lines: &[&str], cursor: usize, whole_file: bool, package_json: Option<&str>) -> Option<TestRun> {
-    let runner = js_runner(package_json)?;
+fn js(rel: &str, lines: &[&str], cursor: usize, whole_file: bool, runner: Option<&str>) -> Option<TestRun> {
+    let runner = runner?;
     if whole_file {
         return Some(TestRun { label: format!("test: {rel}"), command: format!("{runner} {}", quote(rel)), id: rel.to_string() });
     }
@@ -195,7 +237,8 @@ fn js(rel: &str, lines: &[&str], cursor: usize, whole_file: bool, package_json: 
     Some(TestRun { label: format!("test: {name}"), command: format!("{runner} {} -t {}", quote(rel), quote(&name)), id: name })
 }
 
-fn python(rel: &str, lines: &[&str], cursor: usize, whole_file: bool) -> Option<TestRun> {
+fn python(src: &Source, cursor: usize, whole_file: bool) -> Option<TestRun> {
+    let (rel, lines) = (src.rel, &src.lines);
     if whole_file {
         return Some(TestRun { label: format!("test: {rel}"), command: format!("python3 -m pytest {}", quote(rel)), id: rel.to_string() });
     }
@@ -203,7 +246,7 @@ fn python(rel: &str, lines: &[&str], cursor: usize, whole_file: bool) -> Option<
     // If inside a class (indent > 0), the nearest less-indented `class Test…` above.
     let mut id = rel.to_string();
     if def.0 > 0
-        && let Some(class) = (0..i).rev().find_map(|j| PY_CLASS.captures(lines[j]).filter(|c| c[1].len() < def.0).map(|c| c[2].to_string()))
+        && let Some(class) = src.blocks(i).last().and_then(|&j| PY_CLASS.captures(lines[j]).map(|c| c[2].to_string()))
     {
         id.push_str(&format!("::{class}"));
     }
@@ -214,6 +257,46 @@ fn python(rel: &str, lines: &[&str], cursor: usize, whole_file: bool) -> Option<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The one-pass block lookup gives what walking up from each line gave, on random nesting of every shape.
+    #[test]
+    fn enclosing_blocks_match_walking_up_from_each_line() {
+        fn walk_up(lines: &[&str], block: &Regex, i: usize) -> Vec<usize> {
+            let (mut at, mut want, mut out) = (i, indent(lines[i]), Vec::new());
+            while at > 0 && want > 0 {
+                at -= 1;
+                if block.is_match(lines[at]) && indent(lines[at]) < want {
+                    out.insert(0, at);
+                    want = indent(lines[at]);
+                }
+            }
+            out
+        }
+        let mut seed = 7u64;
+        let mut next = move || {
+            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (seed >> 33) as usize
+        };
+        for _ in 0..300 {
+            let lines: Vec<String> = (0..(5 + next() % 60))
+                .map(|_| {
+                    let pad = " ".repeat(next() % 5 * 2);
+                    match next() % 5 {
+                        0 => format!("{pad}mod m{} {{", next() % 9),
+                        1 => format!("{pad}class TestC{}:", next() % 9),
+                        2 => String::new(),
+                        _ => format!("{pad}fn f() {{}}"),
+                    }
+                })
+                .collect();
+            let lines: Vec<&str> = lines.iter().map(String::as_str).collect();
+            for block in [&*RUST_MOD, &*PY_CLASS] {
+                for (i, fast) in enclosing(&lines, block).into_iter().enumerate() {
+                    assert_eq!(fast, walk_up(&lines, block, i), "line {i} of {lines:#?}");
+                }
+            }
+        }
+    }
 
     const RUST: &str = "pub fn helper() {}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn adds_up() {\n        assert_eq!(1 + 1, 2);\n    }\n\n    fn not_a_test() {}\n\n    #[tokio::test]\n    async fn async_one() {}\n}\n";
 
