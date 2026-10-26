@@ -81,6 +81,24 @@ Secrets. The signed dry run and six mocked notarization/credential-cleanup tests
 `scripts/memcheck.sh` starts the release app in a scripted window, lets it settle and measures `footprint`; see
 `architecture.md` for the budgets.
 
+## CI build scheduling and caches
+
+CI uses separate Rust dependency caches for macOS tests, Windows checks, Linux library tests, the experimental Linux
+app and coverage. macOS memory/size checks use the production release dependency cache (`app-macos`) and the same
+macOS deployment target as the release bundle. Workspace crates are rebuilt normally; Cargo invalidates changed
+dependencies, manifests, features, compiler versions and flags. Cache writes happen on main and explicit manual runs;
+PR jobs restore the default branch cache without saving a separate copy. Coverage artifacts use a separate key.
+
+The `macos-tests` and `macos-budgets` jobs run concurrently. The existing `macos` check waits for both and explicitly
+fails for failure, cancellation or skipping of either job, so existing rules requiring `macos` still require the tests
+and real memory/size measurement. Budget values, release profiles and test coverage are unchanged. Windows continues
+to run the native checks, agent build tests and standalone GUI/icon/embedded-agent verification.
+
+`cargo-audit` and optional `cargo-llvm-cov` are installed from prebuilt tools rather than compiled on each runner.
+RustSec advisories are still fetched and checked on every audit run. Metal's compiler is downloaded only if missing;
+CI still fails before compilation if it cannot be invoked. GitHub checkout/artifact/cache actions run on Node.js 24.
+A normal manual CI run does not start coverage; select the `coverage` input to request the instrumented report.
+
 ## Coverage
 
 `scripts/coverage.sh` (cargo-llvm-cov; `cargo install cargo-llvm-cov --locked`, `rustup component add llvm-tools`) runs the
@@ -89,7 +107,8 @@ table. `vendor/`, test files (`tests.rs`, `*_tests.rs`, `tests/`, `test_*.rs`), 
 excluded, so the figures describe production code only. `COVERAGE_CLEAN=1` deletes `target/llvm-cov-target` afterwards (it is
 several GB). The build runs with `CARGO_PROFILE_DEV_DEBUG=0`, and the instrumented test run is slower than a plain one
 (`app` tests: 75 s measured here, but 190 s in the first attempt on a loaded machine). CI has an optional manually started
-`coverage` job (workflow_dispatch) that uploads `coverage/` as an artifact; coverage is a measurement, not a gate.
+`coverage` job (workflow_dispatch with the `coverage` checkbox enabled) that uploads `coverage/` as an artifact;
+coverage is a measurement, not a gate.
 
 Measured on 2026-10-25 (Apple silicon, macOS, line/function/region coverage of covered over instrumented):
 
