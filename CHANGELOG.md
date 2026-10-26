@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and side branches step to the right. Views and filters moved from the button row into the **…** menu; active
   filters show as chips that remove themselves on click. The short hash is off by default (`"git.graph.showHash"`).
 - The status bar is taller (26 px) with one icon size and even spacing.
+- With nothing to commit, the graph starts right under the Changes group and fills the panel (until its height is dragged by hand).
 - Build release agents separately so macOS and Windows app builds run in parallel; cache compiled Rust dependencies.
 - Upgrade release and benchmark checkout/artifact/cache actions to Node.js 24 releases, pinned by commit.
 - Add a Linux-to-Windows MSVC benchmark with shared FXC shaders and native Windows standalone verification.
