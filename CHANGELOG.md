@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Build release agents separately so macOS and Windows app builds run in parallel; cache compiled Rust dependencies.
+- Add a Linux-to-Windows MSVC benchmark with shared FXC shaders and native Windows standalone verification.
+
 ## [0.3.1] - 2026-10-26
 
 ### Added
