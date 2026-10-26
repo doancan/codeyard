@@ -22,6 +22,8 @@ pub enum ScmEvent {
     OpenDiff { path: String, staged: bool },
     /// The "…" in the header: more git operations (window coordinates).
     MoreActions(gpui::Point<gpui::Pixels>),
+    /// The "…" in the GRAPH header: view, filters and history actions (window coordinates).
+    GraphMenu(gpui::Point<gpui::Pixels>),
     /// The file list (picker) for a commit in the graph was requested.
     OpenCommit(GraphCommit),
     /// Open one of a commit's files as a diff: (commit, file).
@@ -61,7 +63,6 @@ impl GraphKey {
 pub struct GraphData {
     commits: Vec<GraphCommit>,
     rows: Vec<GraphRow>,
-    cols: usize,
 }
 
 pub struct ScmPanel {
@@ -105,6 +106,7 @@ pub struct ScmPanel {
 
 #[path = "scm_graph.rs"]
 mod graph_ui;
+pub use graph_ui::GraphOption;
 
 impl EventEmitter<ScmEvent> for ScmPanel {}
 
@@ -200,8 +202,7 @@ impl ScmPanel {
                     Ok(commits) => {
                         let mut rows = graph::layout(&commits);
                         graph::cap_lanes(&mut rows, graph::MAX_COLS);
-                        let cols = rows.iter().map(|r| r.width).max().unwrap_or(1);
-                        this.graph = Some(Arc::new(GraphData { commits, rows, cols }));
+                        this.graph = Some(Arc::new(GraphData { commits, rows }));
                         this.graph_error = None;
                     }
                     Err(e) => this.graph_error = Some(e.lines().next().unwrap_or("git log failed").to_string().into()),
@@ -231,7 +232,7 @@ impl ScmPanel {
 
     #[cfg(test)]
     pub fn graph_cols(&self) -> usize {
-        self.graph.as_ref().map_or(0, |g| g.cols)
+        self.graph.as_ref().map_or(0, |g| g.rows.iter().map(|r| r.width).max().unwrap_or(1))
     }
 
     #[cfg(test)]
@@ -624,7 +625,9 @@ impl ScmPanel {
                     this.stage(paths.clone(), cx);
                 }
             })))
-            .child(div().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).text_color(c(p.text)).child(n.to_string()))
+            .when(n > 0, |d| {
+                d.child(div().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).text_color(c(p.text)).child(n.to_string()))
+            })
     }
 }
 

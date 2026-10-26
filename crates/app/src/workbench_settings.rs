@@ -162,7 +162,7 @@ pub const CATALOG: &[Entry] = &[
     e("json.schemaDownload.enable", crate::i18n::tr("Download schemas from SchemaStore and cache them (off: only local and cached schemas)"), Kind::Bool),
     e("explorer.confirmDragAndDrop", crate::i18n::tr("Ask before moving a file or folder by dragging it in the explorer"), Kind::Bool),
     e("workbench.tree.guides", crate::i18n::tr("Draw the folder hierarchy lines in the explorer"), Kind::Bool),
-    e("git.graph.showAuthor", crate::i18n::tr("Show the author (avatar and name) on Source Control graph rows"), Kind::Bool),
+    e("git.graph.showAuthor", crate::i18n::tr("Show the author name on Source Control graph rows"), Kind::Bool),
     e(
         "git.graph.view",
         crate::i18n::tr("Source Control graph view: graph (branch lanes), compact (one line per commit) or dates (grouped by day)"),

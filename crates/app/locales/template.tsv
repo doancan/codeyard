@@ -55,6 +55,7 @@ Added “{}” for this session only: there is no settings folder to keep your d
 Added “{}” to your dictionary.	
 Adding remote…	
 Adding worktree…	
+All Branches	
 All conflicts are resolved	
 Allow	
 Allow file access	
@@ -92,7 +93,6 @@ Bookmarks: Toggle
 Both sides are the same folder.	
 Both, Incoming First	
 Box invisible and look-alike Unicode characters (zero-width spaces, bidi controls, Cyrillic letters inside Latin words)	
-Branch lanes, two lines per commit	
 Branch {}	
 Breaking on: {}	
 Bring a folder's tabs and unsaved changes back when you open it	
@@ -149,6 +149,7 @@ Choose an action
 Choose an answer (Esc: none)	
 Clear the search	
 Clear the search field	
+Click to remove this filter	
 Click: details · Double-click: open · Right-click: actions	
 Clone	
 Clone Git Repository…	
@@ -207,7 +208,6 @@ Commit {}
 Commits after it leave this branch and every uncommitted change is lost. This can't be undone.	
 Commits as {0} <{1}>	
 Commits drawn in the Source Control graph	
-Commits grouped by day	
 Commits listed in the explorer's Timeline	
 Committed {}	
 Common ancestor	
@@ -340,6 +340,7 @@ Create tag
 Created branch {0} at {1}	
 Creating {}…	
 Current	
+Current branch	
 Cursor animation	
 Customize	
 Cut	
@@ -568,6 +569,7 @@ Feb
 Fetch (All Remotes)	
 Fetch every remote before pulling	
 Fetch failed: {}	
+Fetch from all remotes	
 Fetch from the remote in the background while the window is in front	
 Fetch removes remote branches that were deleted on the server	
 Fetched	
@@ -756,10 +758,10 @@ Help: Keyboard Shortcuts Reference
 Help: Welcome	
 Hex dump (read-only copy)	
 Hide	
+Hide Merge Commits	
 Hide Others	
 Hide Panel (⌘J)	
 Hide codeyard	
-Hide merge commits	
 Highlight other uses of the word under the cursor	
 Highlight the line with the cursor	
 Highlight the matching bracket	
@@ -1023,8 +1025,8 @@ Object keys must be strings, not {}
 Oct	
 On this computer	
 Once a day, Codeyard downloads two small files from github.com to look for a newer version. GitHub sees your IP address, nothing about your files.	
-One line per commit: the most history in a narrow sidebar	
 One quiet color, outline glyphs	
+Only My Commits	
 Only When I Ask	
 Only left	
 Only on the left	
@@ -1034,7 +1036,6 @@ Only send it if you trust this file.
 Only the connection is removed; the remote repository itself is untouched.	
 Only the local tag is removed. A copy on a remote stays until you delete it there (Git: Delete Remote Tag…).	
 Only this host's entry is removed. The previous file is kept as config.codeyard-bak.	
-Only your own commits (by your git name or e-mail)	
 Open	
 Open Changes	
 Open Editors ({})	
@@ -1325,6 +1326,7 @@ Schema cache cleared. Schemas are downloaded again when needed.
 Schemas: Clear Download Cache	
 Search	
 Search (⇧⌘F)	
+Search Commits	
 Search commands or keys (e.g. “comment”, “⌘D”)	
 Search commands to bind a key	
 Search commits	
@@ -1393,7 +1395,7 @@ Show lines matching (regular expression, case-insensitive), e.g. {}
 Show spaces and tabs as marks	
 Show the Open Editors list in the explorer	
 Show the activity bar	
-Show the author (avatar and name) on Source Control graph rows	
+Show the author name on Source Control graph rows	
 Show the editor tab bar	
 Show the file path above the editor	
 Show the minimap	
@@ -1401,8 +1403,6 @@ Show the short commit hash on Source Control graph rows
 Show the status bar	
 Show type and parameter name hints from the language server	
 Show who last changed the cursor line (and when) at the end of the line	
-Showing all branches (click: current branch only)	
-Showing the current branch (click: all branches)	
 Showing the first 100,000 files of a very large folder	
 Shrink Selection	
 Side by side	

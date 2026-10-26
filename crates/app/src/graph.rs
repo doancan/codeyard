@@ -542,10 +542,10 @@ mod tests {
 /// View of the GRAPH section.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum GraphView {
-    /// Two-line graph with lanes (default).
+    /// One line per commit with branch lanes (default).
     #[default]
     Graph,
-    /// Single-line dense list without lanes: the most commits in a narrow sidebar.
+    /// One line per commit without lanes, with the commit time.
     Compact,
     /// List grouped by day ("Saturday, 24 Oct 2026").
     Dates,
@@ -574,9 +574,9 @@ impl GraphView {
         Self::ALL.into_iter().find(|v| v.id() == id)
     }
 
-    /// Row height (px): the graph uses two lines, the others one.
+    /// Row height (px): every view uses one line per commit, so switching views keeps the same density.
     pub fn row_height(self) -> f32 {
-        if self == GraphView::Graph { ROW_H } else { 30. }
+        ROW_H
     }
 }
 
@@ -675,15 +675,16 @@ use crate::ui::{self, Palette};
 pub const LANE_W: f32 = 11.;
 const PAD: f32 = 7.;
 const LINE_W: f32 = 1.8;
-/// Height of a graph row: two lines (subject, author · time).
-pub const ROW_H: f32 = 46.;
+/// Height of a graph row: one line, like a tree row.
+pub const ROW_H: f32 = 22.;
 
 /// Lane colors: from the theme colors, in a shuffled order so neighbors are distinguishable.
 pub fn lane_color(p: &Palette, n: usize) -> u32 {
     [p.info, p.success, p.warning, p.syntax_keyword, p.danger, p.syntax_function, p.accent, p.syntax_type][n % COLORS]
 }
 
-/// Width of the graph (px): `cols` lanes.
+/// Width of the graph (px): `cols` lanes. Each row is only as wide as its own lanes, so text sits right after the
+/// graph and moves right only where branches run side by side.
 pub fn width_px(cols: usize) -> f32 {
     PAD * 2. + cols.saturating_sub(1) as f32 * LANE_W
 }
@@ -692,13 +693,9 @@ fn x_of(left: Pixels, col: usize) -> Pixels {
     left + px(PAD + col as f32 * LANE_W)
 }
 
-/// Lane drawing for a row; `head`: the checked-out commit (ringed node), `merge`: merge.
-pub fn lane_element(row: GraphRow, cols: usize, head: bool, merge: bool, p: Palette) -> impl IntoElement {
-    lane_element_h(row, cols, head, merge, p, ROW_H)
-}
-
-pub fn lane_element_h(row: GraphRow, cols: usize, head: bool, merge: bool, p: Palette, height: f32) -> impl IntoElement {
-    let w = width_px(cols);
+/// Lane drawing for a row, as wide as the row's own lanes; `head`: the checked-out commit (ringed node), `merge`: merge.
+pub fn lane_element(row: GraphRow, head: bool, merge: bool, p: Palette) -> impl IntoElement {
+    let w = width_px(row.width.max(row.col + 1));
     canvas(
         |_, _, _| {},
         move |bounds: Bounds<Pixels>, _, window, _| {
@@ -752,18 +749,18 @@ pub fn lane_element_h(row: GraphRow, cols: usize, head: bool, merge: bool, p: Pa
                 window.paint_quad(fill(b, ui::c(color)).corner_radii(px(r)));
             };
             if head {
-                dot(window, 6., p.text);
-                dot(window, 4.4, color);
+                dot(window, 5.5, p.text);
+                dot(window, 3.8, color);
             } else if merge {
-                dot(window, 5., color);
-                dot(window, 2.4, p.surface);
+                dot(window, 4.5, color);
+                dot(window, 2.2, p.surface);
             } else {
-                dot(window, 4.4, color);
+                dot(window, 4., color);
             }
         },
     )
     .w(px(w))
-    .h(px(height))
+    .h(px(ROW_H))
     .flex_none()
 }
 
@@ -1025,6 +1022,9 @@ mod view_tests {
         }
         assert_eq!(GraphView::from_id("nope"), None);
         assert_eq!(GraphView::default(), GraphView::Graph);
-        assert!(GraphView::Compact.row_height() < GraphView::Graph.row_height());
+        // One line per commit in every view: a 13 px subject (20 px line) fits.
+        for v in GraphView::ALL {
+            assert!(v.row_height() >= 20., "{v:?}");
+        }
     }
 }

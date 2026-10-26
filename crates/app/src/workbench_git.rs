@@ -463,6 +463,62 @@ impl Workbench {
         self.show_action_menu(entries, position, window, cx);
     }
 
+    /// The GRAPH section's "…" menu: how history is shown (checked), which commits are listed, then the history actions.
+    pub(super) fn open_graph_menu(&mut self, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+        use super::*;
+        use crate::graph::GraphView;
+        use crate::menu::MenuItem;
+        use crate::scm::GraphOption;
+        let state = self.scm.read(cx).graph_menu_state(cx);
+        let key = |a: &dyn gpui::Action| Command { label: String::new(), run: Run::Action(a.boxed_clone()) }.shortcut(cx);
+        let mut items = Vec::new();
+        let mut commands = Vec::new();
+        let mut actions: Vec<Box<dyn gpui::Action>> = Vec::new();
+        for view in GraphView::ALL {
+            items.push(MenuItem::new(view.label()).checked(state.view == view));
+            commands.push(MenuCmd::Graph(GraphOption::View(view)));
+        }
+        let toggles = [
+            (crate::i18n::t("All Branches"), state.all_branches, GraphOption::AllBranches, true),
+            (crate::i18n::t("Only My Commits"), state.only_mine, GraphOption::OnlyMine, state.has_identity),
+            (crate::i18n::t("Hide Merge Commits"), state.hide_merges, GraphOption::HideMerges, true),
+        ];
+        for (i, (label, on, option, enabled)) in toggles.into_iter().enumerate() {
+            let item = MenuItem::new(label).checked(on).enabled(enabled);
+            items.push(if i == 0 { item.separator() } else { item });
+            commands.push(MenuCmd::Graph(option));
+        }
+        items.push(MenuItem::new(crate::i18n::t("Search Commits")).checked(state.search_open).separator());
+        commands.push(MenuCmd::Graph(GraphOption::Search));
+        // Pull, Push, Fetch and Sync are git terms and stay as they are in every language.
+        let mut remote: Vec<(&str, Box<dyn gpui::Action>)> = Vec::new();
+        if state.has_remote {
+            remote.extend([
+                (crate::i18n::t("Sync"), Box::new(GitSync) as Box<dyn gpui::Action>),
+                ("Pull", Box::new(GitPull)),
+                (crate::i18n::t("Pull (Rebase)"), Box::new(GitPullRebase)),
+                ("Push", Box::new(GitPush)),
+                (crate::i18n::t("Fetch (All Remotes)"), Box::new(GitFetchAll)),
+                (crate::i18n::t("Push Tags"), Box::new(GitPushTags)),
+            ]);
+        }
+        remote.extend([
+            (crate::i18n::t("Checkout to…"), Box::new(GitCheckout) as Box<dyn gpui::Action>),
+            (crate::i18n::t("Create Branch…"), Box::new(GitCreateBranch)),
+            (crate::i18n::t("Create Tag…"), Box::new(GitCreateTag)),
+        ]);
+        for (i, (label, action)) in remote.into_iter().enumerate() {
+            let item = MenuItem::new(label).shortcut(key(action.as_ref()));
+            items.push(if i == 0 { item.separator() } else { item });
+            commands.push(MenuCmd::Dispatch(actions.len()));
+            actions.push(action);
+        }
+        items.push(MenuItem::new(crate::i18n::t("Reload history")).separator());
+        commands.push(MenuCmd::Graph(GraphOption::Reload));
+        let target = MenuTarget { path: String::new(), is_dir: false, tab: None };
+        self.show_menu(items, commands, actions, target, position, window, cx);
+    }
+
     /// Right-click on a commit in the graph: copy, files, open branch/tag, cherry-pick, revert, reset.
     /// Right click on a changed file in Source Control: the actions that do not depend on the tree being open.
     pub(super) fn open_scm_file_menu(&mut self, rel: &str, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
