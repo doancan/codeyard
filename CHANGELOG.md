@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Remote Explorer view** in the activity bar: SSH hosts with their recent folders and connection status, running
+  containers (and WSL distributions on Windows), and the forwarded ports of the current connection. Connect or open a
+  folder in this window or a new one, forget a folder, and edit, test, set up key login for or remove a host from the
+  row. *View: Remote Explorer* opens it.
+- **Ports table:** the PORTS panel lists Port, Label, Forwarded Address, Running Process and Origin, with buttons to open,
+  copy and stop, and a menu to set a label, change the local port, choose HTTP, HTTPS or TCP, or retry. `3000:8080` in the
+  field forwards server port 3000 to local port 8080.
+- Forwarded ports are saved per project and forwarded again when the project is opened over SSH, with their label,
+  protocol and chosen local port.
+- `ports.localBind` (`loopback` or `all`; only from your own settings) and `ports.rules` (label, protocol and `notify`,
+  `silent`, `openBrowser` or `ignore` per port or range).
+- The ssh config's `Include` lines are followed when listing hosts.
+
 ### Changed
 
 - **Platform-standard code font size:** the editor and terminal default to 12 px on macOS and 14 px on Windows and Linux
