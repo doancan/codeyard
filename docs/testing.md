@@ -83,7 +83,7 @@ Secrets. The signed dry run and six mocked notarization/credential-cleanup tests
 
 ## CI build scheduling and caches
 
-CI uses separate Rust dependency caches for macOS tests, Windows checks, Linux library tests, the experimental Linux
+CI uses separate Rust dependency caches for macOS tests, Windows checks, Linux library tests, the Linux
 app and coverage. macOS memory/size checks use the production release dependency cache (`app-macos`) and the same
 macOS deployment target as the release bundle. Workspace crates are rebuilt normally; Cargo invalidates changed
 dependencies, manifests, features, compiler versions and flags. Cache writes happen on main and explicit manual runs;
@@ -102,6 +102,36 @@ Windows native tests (`windows-tests`) and the actual release EXE (`windows-stan
 RustSec advisories are still fetched and checked on every audit run. Metal's compiler is downloaded only if missing;
 CI still fails before compilation if it cannot be invoked. GitHub checkout/artifact/cache actions run on Node.js 24.
 A normal manual CI run does not start coverage; select the `coverage` input to request the instrumented report.
+The Linux app job was promoted from experimental status after four consecutive successful full workspace test runs;
+its errors now fail CI. The completed one-off Linux-to-Windows benchmark workflow is retired; its archived data remains
+in `docs/benchmarks/windows-msvc-2026-10-26.json`.
+
+### CI timings on 2026-10-26
+
+The [previous main run](https://github.com/doancan/codeyard/actions/runs/40315596123) and the
+[optimized manual run](https://github.com/doancan/codeyard/actions/runs/40322097282) used identical app/vendor source
+and Cargo profiles. Both passed every executed check. The optimized run restored dependency caches; an earlier
+[cache-seeding run](https://github.com/doancan/codeyard/actions/runs/40318390579) still had sequential Windows checks.
+
+| Measurement | Previous CI | Optimized CI, cache hits |
+| --- | ---: | ---: |
+| Active workflow span, excluding initial queue | 27:14 | 13:34 |
+| Windows test + standalone check family | 27:14 | 9:57 |
+| macOS test + budget check family | 12:17 | 13:34 |
+| Linux app workspace test job | 12:40 | 8:18 |
+| RustSec audit job | 3:05 | 0:21 |
+
+The active span was 50.2% shorter. The previous run also waited 12:26 before its first job, due to the existing
+main-branch concurrency policy; that wait is excluded from the claimed improvement. The optimized run took 13:38
+including startup. macOS did not get faster in these samples and became the final critical path. These are single
+samples on different hosted machines; timings vary with runner hardware, load and cache availability. Native tests,
+release optimization settings, budget thresholds and standalone checks were retained. Optional coverage was not run.
+
+Raw run/job durations, source-tree hashes, cache-hit evidence and limits are in
+[ci-2026-10-26.json](benchmarks/ci-2026-10-26.json). The final Linux policy was tightened after four actual workspace
+test successes, not merely four green job summaries. The successful commands also cover that stricter policy; only
+failure handling and the old label changed afterwards. New CI-specific keys must be populated by the first main run
+before subsequent PRs can restore those main-branch caches.
 
 ## Coverage
 
