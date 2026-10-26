@@ -2257,3 +2257,5 @@ Updating {}…	{} güncelleniyor…
 “{}” is not a usable remote URL	“{}” kullanılabilir bir uzak depo adresi değil
 Pruned {} stale worktree entry|Pruned {} stale worktree entries	{} eski çalışma ağacı kaydı temizlendi
 Renamed remote {0} to {1}	{0} uzak deposu {1} olarak yeniden adlandırıldı
+Search {}	{} içinde ara
+Search files by name	Dosyaları ada göre ara

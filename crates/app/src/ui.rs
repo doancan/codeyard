@@ -265,6 +265,9 @@ const ICONS: &[(&str, &[u8])] = icons![
     "ellipsis",
     // --- git-sync ---
     "cloud-upload",
+    "cloud-download",
+    "arrow-left",
+    "arrow-right",
 ];
 
 /// Embedded icon names (tests: is every name used in source embedded, does every embedded file exist).
