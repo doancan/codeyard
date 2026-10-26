@@ -127,6 +127,50 @@ shortcut and "Open with Codeyard". `scripts/bundle-windows.ps1` builds the setup
 installed. The standalone EXE check and ZIP/setup generation have been run natively on Windows; interactive installation
 is a separate manual check.
 
+## Apple signing on GitHub Actions
+
+Tag releases require Developer ID signing and Apple notarization in the macOS job. A normal manual/main-branch dry run
+stays ad-hoc signed and receives no Apple credentials. To test the real Apple path without publishing, run `release` on
+`main` or `develop` with the **notarize** input enabled. A missing secret fails verification before the platform app builds.
+The first real Apple-signed run is still pending credential configuration; the scripts have been checked with mocked
+Apple tools, not a live notarization submission.
+
+Configure these under **GitHub repository Settings → Secrets and variables → Actions → New repository secret**:
+
+| Secret | Value |
+| --- | --- |
+| `MACOS_CERTIFICATE_P12` | Base64-encoded `.p12` containing only the Developer ID Application certificate and its private key |
+| `MACOS_CERTIFICATE_PASSWORD` | Password protecting that `.p12` |
+| `APPLE_ID` | Apple account email used for notarization |
+| `APPLE_APP_SPECIFIC_PASSWORD` | An app-specific password for that account; not the account login password |
+| `APPLE_TEAM_ID` | Team identifier matching the Developer ID Application certificate |
+
+Export only the selected **Developer ID Application** identity from Keychain Access, including its private key, to a
+password-protected `.p12` **outside the repository**. Use GitHub's Secrets UI, or stream the base64 value directly:
+
+```sh
+base64 -i /secure/path/DeveloperID.p12 | tr -d '\n' | gh secret set MACOS_CERTIFICATE_P12 --repo doancan/codeyard
+```
+
+Enter the remaining values using the Secrets UI or `gh secret set NAME --repo doancan/codeyard` interactively. Do not put
+secret values in shell command arguments/history, chat, source files or workflow YAML. Do not export a whole keychain.
+The local signing identity is not automatically exported or uploaded by these scripts.
+
+`macos-signing-keychain.sh` imports the identity into a temporary keychain under `RUNNER_TEMP` with a random password,
+checks that exactly one Developer ID Application identity matches the Team ID, and stores notarization credentials in
+that keychain. The `.p12` is removed even if setup fails. The workflow's `always()` cleanup restores the keychain search
+list and deletes the temporary keychain. Credentials are not written under the checkout, included in the cargo cache,
+or uploaded as artifacts. Only the identity fingerprint and temporary keychain path are exported to subsequent steps.
+Credential-file extensions are ignored by Git; the existing update **public** key remains tracked.
+
+The build signs nested macOS agents before the app, with hardened runtime and secure timestamps, and signs the DMG.
+The portable raw binary and its macOS agents are signed separately. `notarize-macos.sh` submits the DMG and a temporary
+ZIP of the exact portable directory; it requires `Accepted` for both, including when a rejected submission exits zero.
+It saves submission IDs/logs under ignored `target/notary-logs` for diagnosis, staples and validates the DMG, and checks
+the DMG and app with Gatekeeper. Raw executable tickets cannot be stapled and require Apple's online ticket lookup.
+Only after success does the workflow create the portable tar.gz and calculate checksums. The separate Ed25519 update
+signature is added by `publish` afterwards. A failed signing/notarization step prevents publication of every platform.
+
 ## Signing and the update key
 
 Every release carries two extra assets next to the downloads:

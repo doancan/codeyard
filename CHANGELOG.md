@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- GitHub release signing and Apple notarization for macOS DMG and portable binaries, with credentials stored only in
+  Actions Secrets and a temporary runner keychain. Signed dry runs are available without publishing.
+
 ### Changed
 
 - Build release agents separately so macOS and Windows app builds run in parallel; cache compiled Rust dependencies.
