@@ -8,6 +8,13 @@ Settings live in `~/.config/codeyard/settings.jsonc` (comments and trailing comm
 unless it is listed under *File-only settings*. A wrong value never breaks the app: that key keeps its default and the
 status bar reports it.
 
+## `data`
+
+| Setting | Values | Default | What it does |
+| --- | --- | --- | --- |
+| `data.indent` | number 1–8 | `2` | Spaces per level in the JSON and YAML written by Data: Convert To… and Data: Query… |
+| `data.sortKeys` | `true` / `false` | `false` | Sort object keys alphabetically in the output of Data: Convert To… and Data: Query… (off: keep the file's order) |
+
 ## `diffEditor`
 
 | Setting | Values | Default | What it does |
@@ -87,12 +94,21 @@ status bar reports it.
 
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
+| `git.autofetch` | `true` / `false` | `false` | Fetch from the remote in the background while the window is in front |
+| `git.autofetchPeriod` | number 30–86400 | `180` | Seconds between background fetches |
+| `git.confirmSync` | `true` / `false` | `true` | Ask before Sync pulls or pushes. Your own settings only; a folder cannot change it |
+| `git.enableSmartCommit` | `true` / `false` | `true` | Commit all tracked changes when nothing is staged |
+| `git.fetchOnPull` | `true` / `false` | `false` | Fetch every remote before pulling |
 | `git.graph.allBranches` | `true` / `false` | `true` | Graph starts with every branch |
 | `git.graph.limit` | number 20–5000 | `300` | Commits drawn in the Source Control graph |
 | `git.graph.showAuthor` | `true` / `false` | `true` | Show the author (avatar and name) on Source Control graph rows |
 | `git.graph.showHash` | `true` / `false` | `true` | Show the short commit hash on Source Control graph rows |
 | `git.graph.view` | `graph`, `compact`, `dates` | `graph` | Source Control graph view: graph (branch lanes), compact (one line per commit) or dates (grouped by day) |
 | `git.inlineBlame` | `true` / `false` | `true` | Show who last changed the cursor line (and when) at the end of the line |
+| `git.postCommitCommand` | `none`, `push`, `sync` | `none` | What runs after a commit: nothing, push or sync. Your own settings only; a folder cannot change it |
+| `git.pruneOnFetch` | `true` / `false` | `true` | Fetch removes remote branches that were deleted on the server |
+| `git.pullTags` | `true` / `false` | `true` | Pull also fetches all tags |
+| `git.rebaseWhenSync` | `true` / `false` | `false` | Pull with rebase instead of a merge commit |
 | `git.timeline.limit` | number 5–1000 | `100` | Commits listed in the explorer's Timeline |
 
 ## `http`
@@ -129,6 +145,7 @@ status bar reports it.
 | `search.maxResults` | number 1–100000 | `2000` | Stop a search after this many matches |
 | `search.showLineNumbers` | `true` / `false` | `true` | Show line numbers in search results |
 | `search.smartCase` | `true` / `false` | `false` | Ignore case unless the query has capital letters |
+| `search.structural.maxFiles` | number 1–100000 | `5000` | Most files a structural search reads and parses |
 
 ## `security`
 
@@ -147,6 +164,7 @@ status bar reports it.
 
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
+| `terminal.allowClipboardWrite` | `true` / `false` | `false` | Let programs in the terminal write to the clipboard |
 | `terminal.fontSize` | number 6–48 | `13.0` | Font size of the terminal |
 | `terminal.scrollback` | number 0–100000 | `2000` | Lines kept in terminal history |
 | `terminal.shell` | text | empty | Shell for new terminals (empty: login shell) |
@@ -193,6 +211,8 @@ status bar reports it.
 | `editor.rulers` | list of columns | `[]` | Draw vertical rulers at these columns, e.g. `[80, 120]`. |
 | `files.exclude` | list of globs | `[]` | Hide matching paths from the explorer and from file lists, e.g. `["**/node_modules"]`. |
 | `search.exclude` | list of globs | `[]` | Skip matching paths in Find in Files. |
+| `compare.folders.ignore` | list of globs | `[".git", "node_modules", "target"]` | Names and paths *Compare: Folders…* leaves out on both sides (gitignore syntax). |
+| `compare.folders.maxFiles` | number 100–5000000 | `50000` | Entries per side *Compare: Folders…* reads before it stops and reports that the result is partial. |
 | `workbench.startupEditor` | string | `welcome` | VS Code compatible alias of `window.startup`. |
 | `editor.codeActionsOnSave` | object | `{}` | Code actions to run on save before formatting, e.g. `{ "source.organizeImports": "explicit" }`; each gives up after 2 s. |
 | `files.associations` | object of glob → language | `{}` | Force a language mode for matching files, e.g. `{ "*.tpl": "html" }`. |

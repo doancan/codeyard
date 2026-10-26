@@ -59,9 +59,13 @@ screen buffers are part of the number. Files over 32 MB open in a chunked read-o
   survives dropped connections, and manages hosts, keys and file transfers from the app.
 - **The editor you expect.** Multiple cursors, folding, split views, minimap, snippets, Emmet, EditorConfig, more than 20 languages with
   tree-sitter highlighting, language servers (LSP), a debugger (DAP), tasks and problems, themes with enforced WCAG AA contrast.
-- **Git inside.** Source control, branch graph, timeline and local history, blame, a three-way merge editor, GitHub pull requests.
+- **Search by structure.** Find and rewrite code by its syntax tree, not its text: patterns are code with `$X` and `$$$X`
+  placeholders (ast-grep style), for Rust, TypeScript, JavaScript, Python, Go and more, over local and SSH folders.
+- **Git inside.** Source control with a one-click Sync button, branch graph, timeline and local history, blame, a three-way merge editor, GitHub pull requests.
 - **Everyday tools without extensions.** JSON/YAML schema validation, spell check (English built in, more on demand), colour picker,
   `.http` requests, log follow and filter, Markdown preview, hex view.
+- **Data tools.** Convert between JSON, YAML, TOML and `.env`, query a file with a jq-style language as you type, copy the path
+  under the cursor, decode a JWT or a Unix timestamp. All local; see [Data tools](docs/user-guide.md#data-tools).
 - **Turkish interface.** The whole interface is translated to Turkish; the system language is followed by default
   (see [Interface language](docs/user-guide.md#interface-language)).
 

@@ -7,6 +7,8 @@ use std::sync::{Mutex, OnceLock};
 use ropey::Rope;
 use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, StreamingIterator, TextProvider, Tree};
 
+pub mod structural;
+
 /// Temadaki syntax rolleri.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Role {

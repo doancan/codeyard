@@ -60,6 +60,7 @@ impl Render for Workbench {
                 Page::Markdown(view) => view.into_any_element(),
                 Page::Shortcuts(view) => view.into_any_element(),
                 Page::Merge(view) => view.into_any_element(),
+                Page::Compare(view) => view.into_any_element(),
             },
             (_, None) if self.tabs.diff_active && self.tabs.diff.is_some() => self.tabs.diff.clone().unwrap().into_any_element(),
             (_, None) if self.tabs.large_active && self.tabs.large.is_some() => self.tabs.large.clone().unwrap().into_any_element(),
@@ -207,7 +208,16 @@ impl Render for Workbench {
             .on_action(cx.listener(|this, _: &GitPull, _, cx| this.git_sync(vec![crate::git::SyncOp::Pull], cx)))
             .on_action(cx.listener(|this, _: &GitPush, _, cx| this.git_sync(vec![crate::git::SyncOp::Push], cx)))
             .on_action(cx.listener(|this, _: &GitFetch, _, cx| this.git_sync(vec![crate::git::SyncOp::Fetch], cx)))
-            .on_action(cx.listener(|this, _: &GitSync, _, cx| this.git_sync_auto(cx)))
+            .on_action(cx.listener(|this, _: &GitSync, window, cx| this.git_sync_auto(window, cx)))
+            // --- git-sync ---
+            .on_action(cx.listener(|this, _: &GitPullRebase, _, cx| this.git_sync(vec![crate::git::SyncOp::PullRebase], cx)))
+            .on_action(cx.listener(|this, _: &GitFetchAll, _, cx| this.git_sync(vec![crate::git::SyncOp::FetchAll], cx)))
+            .on_action(cx.listener(|this, _: &GitPullFrom, window, cx| this.show_sync_target_picker(true, window, cx)))
+            .on_action(cx.listener(|this, _: &GitPushTo, window, cx| this.show_sync_target_picker(false, window, cx)))
+            .on_action(cx.listener(|this, _: &GitCommitSignedOff, _, cx| this.with_scm(cx, |s, cx| s.commit_signed_off(cx))))
+            .on_action(cx.listener(|this, _: &GitCommitNoVerify, _, cx| this.with_scm(cx, |s, cx| s.commit_no_verify(cx))))
+            .on_action(cx.listener(|this, _: &GitCommitAndPush, _, cx| this.with_scm(cx, |s, cx| s.commit_and(crate::git::PostCommit::Push, cx))))
+            .on_action(cx.listener(|this, _: &GitCommitAndSync, _, cx| this.with_scm(cx, |s, cx| s.commit_and(crate::git::PostCommit::Sync, cx))))
             .on_action(cx.listener(|this, _: &GitFileHistory, window, cx| this.show_file_history(window, cx)))
             .on_action(cx.listener(|this, _: &GitBlameLine, _, cx| this.blame_line(cx)))
             .on_action(cx.listener(|this, _: &ShowSettings, window, cx| this.show_settings_picker(window, cx)))
@@ -225,6 +235,29 @@ impl Render for Workbench {
             .on_action(cx.listener(|this, _: &GitPopStash, window, cx| this.show_stash_picker(git_glue::StashOp::Pop, window, cx)))
             .on_action(cx.listener(|this, _: &GitApplyStash, window, cx| this.show_stash_picker(git_glue::StashOp::Apply, window, cx)))
             .on_action(cx.listener(|this, _: &GitDropStash, window, cx| this.show_stash_picker(git_glue::StashOp::Drop, window, cx)))
+            // --- git-refs ---
+            .on_action(cx.listener(|this, _: &GitDeleteTag, window, cx| this.show_branch_op_picker(git_glue::BranchOp::DeleteTag, window, cx)))
+            .on_action(cx.listener(|this, _: &GitDeleteRemoteTag, window, cx| this.show_branch_op_picker(git_glue::BranchOp::DeleteRemoteTag, window, cx)))
+            .on_action(cx.listener(|this, _: &GitPushTags, window, cx| this.git_push_tags(window, cx)))
+            .on_action(cx.listener(|this, _: &GitPushTag, window, cx| this.show_branch_op_picker(git_glue::BranchOp::PushTag, window, cx)))
+            .on_action(cx.listener(|this, _: &GitCheckoutDetached, window, cx| this.show_branch_op_picker(git_glue::BranchOp::CheckoutDetached, window, cx)))
+            .on_action(cx.listener(|this, _: &GitCreateBranchFrom, window, cx| this.show_branch_op_picker(git_glue::BranchOp::CreateFrom, window, cx)))
+            .on_action(
+                cx.listener(|this, _: &GitDeleteRemoteBranch, window, cx| this.show_branch_op_picker(git_glue::BranchOp::DeleteRemoteBranch, window, cx)),
+            )
+            .on_action(cx.listener(|this, _: &GitSetUpstream, window, cx| this.show_branch_op_picker(git_glue::BranchOp::SetUpstream, window, cx)))
+            .on_action(cx.listener(|this, _: &GitRenameRemote, window, cx| this.show_branch_op_picker(git_glue::BranchOp::RenameRemote, window, cx)))
+            .on_action(cx.listener(|this, _: &GitSetRemoteUrl, window, cx| this.show_branch_op_picker(git_glue::BranchOp::SetRemoteUrl, window, cx)))
+            .on_action(cx.listener(|this, _: &GitRemoveWorktree, window, cx| this.show_branch_op_picker(git_glue::BranchOp::RemoveWorktree, window, cx)))
+            .on_action(cx.listener(|this, _: &GitPruneWorktrees, _, cx| this.git_prune_worktrees(cx)))
+            .on_action(cx.listener(|this, _: &GitStashStaged, _, cx| this.git_stash_with(crate::git::StashOptions { staged: true, ..Default::default() }, cx)))
+            .on_action(cx.listener(|this, _: &GitStashNamed, window, cx| this.git_stash_named(window, cx)))
+            .on_action(cx.listener(|this, _: &GitShowStash, window, cx| this.show_stash_picker(git_glue::StashOp::Show, window, cx)))
+            .on_action(cx.listener(|this, _: &GitOpenChanges, window, cx| this.git_open_active(false, window, cx)))
+            .on_action(cx.listener(|this, _: &GitOpenFileHead, window, cx| this.git_open_active(true, window, cx)))
+            .on_action(cx.listener(|this, _: &GitCompareBranch, window, cx| this.show_branch_op_picker(git_glue::BranchOp::CompareBranch, window, cx)))
+            .on_action(cx.listener(|this, _: &GitCompareCommit, window, cx| this.show_compare_commit_picker(window, cx)))
+            .on_action(cx.listener(|this, _: &GitAddToGitignore, _, cx| this.git_ignore_active(cx)))
             .on_action(cx.listener(|this, _: &GitDiscardAll, window, cx| {
                 if this.repo_root(cx).is_some() {
                     this.chrome.panel = Some(Panel::Scm);
@@ -324,9 +357,16 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::open_markdown_preview))
             .on_action(cx.listener(Self::compare_with_clipboard))
             .on_action(cx.listener(Self::compare_with_saved))
+            // --- compare ---
+            .on_action(cx.listener(Self::compare_folders))
             .on_action(cx.listener(Self::run_selected_text))
             .on_action(cx.listener(Self::go_to_last_edit))
             .on_action(cx.listener(Self::new_scratch_file))
+            // --- data ---
+            .on_action(cx.listener(Self::data_convert))
+            .on_action(cx.listener(Self::data_query))
+            .on_action(cx.listener(Self::data_copy_path))
+            .on_action(cx.listener(Self::data_decode))
             .on_action(cx.listener(Self::clone_repository))
             .on_action(cx.listener(Self::open_settings_page))
             .on_action(cx.listener(Self::quick_open))
@@ -334,6 +374,9 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::go_to_line))
             .on_action(cx.listener(|this, _: &OpenAsHex, window, cx| this.open_as_hex(window, cx)))
             .on_action(cx.listener(Self::find_in_files))
+            // --- structural ---
+            .on_action(cx.listener(Self::structural_search))
+            .on_action(cx.listener(Self::structural_replace))
             .on_action(cx.listener(|this, _: &OpenSearchInEditor, _, cx| {
                 let search = this.search.clone();
                 search.update(cx, |s, cx| s.open_in_editor(cx));

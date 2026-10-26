@@ -628,8 +628,6 @@ Name of the new branch (starts at this commit)	Yeni dalın adı (bu commit'ten b
 Rename branch	Dalı yeniden adlandır
 New branch name	Yeni dal adı
 Create tag	Etiket oluştur
-Name of the tag	Etiketin adı
-Name of the tag (at HEAD)	Etiketin adı (HEAD'de)
 Add worktree	Çalışma ağacı ekle
 path branch (new branch is created if it does not exist)	yol dal (dal yoksa yeni dal oluşturulur)
 Add remote	Uzak depo ekle
@@ -1641,7 +1639,6 @@ Could not resolve “{}”: check the spelling and the network (the request ran 
 Could not connect to {}: nothing is listening there, or a firewall blocks it (the request ran on {}).	{0} sunucusuna bağlanılamadı: orada dinleyen yok ya da bir güvenlik duvarı engelliyor (istek {1} üzerinde çalıştı).
 The server did not answer within 60 seconds.	Sunucu 60 saniye içinde yanıt vermedi.
 The TLS/SSL handshake with {} failed (certificate or protocol problem): {}	{0} ile TLS/SSL el sıkışması başarısız oldu (sertifika ya da protokol sorunu): {1}
-Too many redirects (more than 10): the server keeps redirecting.	Çok fazla yönlendirme (10'dan fazla): sunucu sürekli yönlendiriyor.
 {} accepted the connection but sent no reply.	{} bağlantıyı kabul etti ancak yanıt göndermedi.
 The connection to {} dropped while the data was being exchanged.	{} ile bağlantı, veri alışverişi sürerken koptu.
 The response is larger than {} and was not downloaded.	Yanıt {} boyutundan büyük; indirilmedi.
@@ -1901,3 +1898,363 @@ Keep Waiting	Beklemeye Devam Et
 “{}” is not a usable branch or remote name	“{}” kullanılabilir bir dal ya da uzak sunucu adı değil
 Codeyard already has Full Disk Access.	Codeyard'ın zaten Tam Disk Erişimi var.
 Software Update	Yazılım Güncelleme
+# --- reliability-data ---
+The version that was on disk has been kept in Local History.	Diskteki sürüm yerel geçmişe kaydedildi.
+Could not keep a copy of the version that was on disk: {}	Diskteki sürümün kopyası saklanamadı: {}
+Could not open the state database: {}. Tabs, recent folders and backups will not be remembered this session.	Durum veritabanı açılamadı: {}. Sekmeler, son klasörler ve yedekler bu oturumda hatırlanmayacak.
+The state database was damaged ({0}). It was moved to {1} and a new one was started; recent folders and open tabs were forgotten.	Durum veritabanı bozulmuştu ({0}). {1} konumuna taşındı ve yenisi başlatıldı; son klasörler ve açık sekmeler unutuldu.
+Saved as {}. You kept typing while it was saving, so the original tab stays open with your latest changes.	{} olarak kaydedildi. Kaydederken yazmaya devam ettiğiniz için özgün sekme son değişikliklerinizle açık kaldı.
+# --- security-batch ---
+redirects to {}; not followed, send a request to that address to continue	{} adresine yönlendiriyor; izlenmedi, devam etmek için o adrese yeni bir istek gönderin
+Ignored the language server's edit to {} file outside the open folders|Ignored the language server's edit to {} files outside the open folders	Dil sunucusunun açık klasörlerin dışındaki {} dosyaya yönelik düzenlemesi yok sayıldı
+the GitHub token contains characters that cannot be sent	GitHub belirteci gönderilemeyen karakterler içeriyor
+
+# --- structural ---
+Search: Structural Search…	Arama: Yapısal Arama…
+Search: Structural Replace…	Arama: Yapısal Değiştirme…
+Pattern, e.g. foo($X, $$$REST)	Kalıp, örn. foo($X, $$$REST)
+Structural search: the pattern is code; $X matches one node, $$$X several	Yapısal arama: kalıp koddur; $X tek bir düğümle, $$$X birkaç düğümle eşleşir
+Language of the pattern (click for the next one)	Kalıbın dili (sonrakine geçmek için tıklayın)
+syntax error at “{}”	“{}” yerinde sözdizimi hatası
+“{}” is missing here	Burada “{}” eksik
+A pattern is one expression or statement, not several.	Kalıp tek bir ifade ya da deyimdir, birkaç tane olamaz.
+A pattern that is only a variable would match everything.	Yalnızca bir değişkenden oluşan kalıp her şeyle eşleşirdi.
+The pattern does not parse: {0} (line {1}, column {2})	Kalıp ayrıştırılamıyor: {0} (satır {1}, sütun {2})
+{} file skipped, parse errors|{} files skipped, parse errors	{} dosya atlandı, ayrıştırma hataları
+{} file skipped, binary or too large|{} files skipped, binary or too large	{} dosya atlandı, ikili ya da çok büyük
+only the first {} files were looked at (search.structural.maxFiles)	yalnızca ilk {} dosyaya bakıldı (search.structural.maxFiles)
+The result would not parse in {0} file: {1}|The result would not parse in {0} files: {1}	Sonuç {0} dosyada ayrıştırılamaz: {1}
+Skip Those Files	Bu Dosyaları Atla
+Replace Anyway	Yine de Değiştir
+Most files a structural search reads and parses	Yapısal aramanın okuyup ayrıştırdığı en çok dosya sayısı
+
+# --- compare ---
+Both sides are the same folder.	İki taraf da aynı klasör.
+Changed	Değişti
+Checking whitespace…	Boşluklar denetleniyor…
+Checking…	Denetleniyor…
+Choose	Seç
+Choose a folder on this computer…	Bu bilgisayarda bir klasör seçin…
+Compare Folder with Selected	Klasörü Seçiliyle Karşılaştır
+Compare Folders: pick the folder to compare with {}	Klasörleri Karşılaştır: {} ile karşılaştırılacak klasörü seçin
+Compare Folders: pick the left folder	Klasörleri Karşılaştır: sol klasörü seçin
+Compare: Folders…	Karşılaştır: Klasörler…
+Compare: {0} ↔ {1}	Karşılaştır: {0} ↔ {1}
+Comparing contents… {0} of {1}	İçerikler karşılaştırılıyor… {0} / {1}
+Copied {} item.|Copied {} items.	{} öğe kopyalandı.
+Copy Report	Raporu Kopyala
+Copy to the left	Sola kopyala
+Copy to the right	Sağa kopyala
+Copy “{0}” to {1}?	“{0}” öğesi {1} konumuna kopyalansın mı?
+Copying…	Kopyalanıyor…
+Could not be compared	Karşılaştırılamayanlar
+Could not read {}	{} okunamadı
+Could not save the report: {}	Rapor kaydedilemedi: {}
+Delete from the left	Soldan sil
+Delete from the right	Sağdan sil
+Delete “{0}” from {1}?	“{0}”, {1} üzerinden silinsin mi?
+Deleted “{0}” from {1}	“{0}”, {1} üzerinden silindi
+Deleting…	Siliniyor…
+Done	Bitti
+Enter a folder path on {}…	{} üzerindeki klasörün yolunu girin…
+Error	Hata
+Export as Text…	Metin Olarak Dışa Aktar…
+Identical	Aynı
+Ignore line endings	Satır sonlarını yok say
+Ignore whitespace	Boşlukları yok say
+Left is writable	Sol taraf değiştirilebilir
+Left ↔ Right	Sol ↔ Sağ
+No differences.	Fark yok.
+Not compared	Karşılaştırılmadı
+Not deleted: {}	Silinmedi: {}
+Only left	Yalnız solda
+Only on the left	Yalnızca solda
+Only on the right	Yalnızca sağda
+Only right	Yalnız sağda
+Reading folders… {0} and {1} entries	Klasörler okunuyor… {0} ve {1} öğe
+Report copied	Rapor kopyalandı
+Report saved to {}	Rapor {} konumuna kaydedildi
+Respect .gitignore	.gitignore'a uy
+Right is writable	Sağ taraf değiştirilebilir
+Same apart from whitespace	Boşluk dışında aynı
+Scan Again	Yeniden Tara
+Select Folder for Compare	Karşılaştırmak İçin Klasör Seç
+Selected {} for compare. Right-click another folder and choose Compare Folder with Selected.	Karşılaştırmak için {} seçildi. Başka bir klasöre sağ tıklayıp Klasörü Seçiliyle Karşılaştır'ı seçin.
+Show identical	Aynıları göster
+Stopped.	Durduruldu.
+The connection to {} was lost during the scan, so the result is partial. Scan again once it is back.	{} bağlantısı tarama sırasında koptu, bu yüzden sonuç eksik. Bağlantı geri gelince yeniden tarayın.
+There is nothing to copy.	Kopyalanacak bir şey yok.
+This computer	Bu bilgisayar
+content differs	içerik farklı
+destination	hedef
+different kinds	türler farklı
+differs only in letter case	yalnızca harf büyüklüğü farklı
+it appeared after the scan	taramadan sonra ortaya çıktı
+it changed after the scan	taramadan sonra değişti
+it could not be compared	karşılaştırılamadı
+it is a file on one side and a folder or link on the other	bir tarafta dosya, ötekinde klasör ya da bağlantı
+it is not a regular file or folder	normal bir dosya ya da klasör değil
+its name differs from another entry only in letter case	adı başka bir öğeden yalnızca harf büyüklüğüyle ayrılıyor
+left	sol
+link target differs	bağlantı hedefi farklı
+right	sağ
+size differs	boyut farklı
+source	kaynak
+symbolic links are not copied	sembolik bağlantılar kopyalanmaz
+the connection was lost	bağlantı koptu
+the folder cannot be read on the left	klasör solda okunamıyor
+the folder cannot be read on the right	klasör sağda okunamıyor
+{0} files and {1} folders go from {2} ({3}) to {4} ({5}). Files that exist there are replaced; anything that changed since the scan is left alone.	{0} dosya ve {1} klasör, {2} ({3}) konumundan {4} ({5}) konumuna gider. Orada olan dosyaların yerine yazılır; taramadan sonra değişen hiçbir şeye dokunulmaz.
+{0} on {1} is deleted for good, with everything in it. It is not moved to the Trash.	{1} üzerindeki {0}, içindekilerle birlikte kalıcı olarak silinir. Çöp Kutusu'na taşınmaz.
+{0} only on the left, {1} only on the right, {2} changed, {3} identical, {4} errors	{0} yalnızca solda, {1} yalnızca sağda, {2} değişmiş, {3} aynı, {4} hata
+{0} was left alone: {1}|{0} were left alone, the first one {1}	{0} öğeye dokunulmadı; ilki {1}
+{} entry is left out.|{} entries are left out.	{} öğe dışarıda bırakıldı.
+{} has more entries than compare.folders.maxFiles allows, so the result is partial.	{} üzerinde compare.folders.maxFiles sınırından fazla öğe var, bu yüzden sonuç eksik.
+{} is a binary file: there is no text diff.	{} ikili bir dosya: metin farkı yok.
+{} is not a trusted folder, so nothing is deleted from it. Open it as a folder and trust it first.	{} güvenilir bir klasör değil, bu yüzden bundan hiçbir şey silinmez. Önce klasör olarak açıp güvenin.
+{} is not a trusted folder, so nothing is written to it. Open it as a folder and trust it first.	{} güvenilir bir klasör değil, bu yüzden ona hiçbir şey yazılmaz. Önce klasör olarak açıp güvenin.
+{} more entry that the comparison hides (ignored by .gitignore or the compare settings) goes too.|{} more entries that the comparison hides (ignored by .gitignore or the compare settings) go too.	karşılaştırmanın gizlediği {} öğe daha (.gitignore ya da karşılaştırma ayarlarınca yok sayılanlar) birlikte silinir.
+# --- data ---
+Comments are not kept.	Yorumlar korunmaz.
+Anchors and aliases were expanded.	Çapalar (&) ve takma adlar (*) açıldı.
+{} YAML documents became one list.	{} YAML belgesi tek bir listeye dönüştü.
+TOML dates were turned into text.	TOML tarihleri metne çevrildi.
+Numbers and booleans were written as text.	Sayılar ve mantıksal değerler metin olarak yazıldı.
+{0} (line {1}, column {2})	{0} (satır {1}, sütun {2})
+Duplicate key	Yinelenen anahtar
+Duplicate key “{}”	“{}” anahtarı yinelenmiş
+The number {} cannot be written in JSON	{} sayısı JSON'da yazılamaz
+Expected KEY=value	KEY=değer biçimi bekleniyordu
+“{}” is not a valid variable name	“{}” geçerli bir değişken adı değil
+Unexpected text after the closing quote	Kapanış tırnağından sonra beklenmeyen metin var
+The quoted value is not closed	Tırnaklı değer kapatılmamış
+TOML needs a table at the top level, but this document is a {}	TOML en üst düzeyde bir tablo ister, bu belge ise bir {}
+{}: TOML has no null; give it a value or remove it	{}: TOML'da null yoktur; bir değer verin ya da kaldırın
+{0}: {1} does not fit in a TOML integer (64 bits, signed)	{0}: {1}, TOML tamsayısına (64 bit, işaretli) sığmıyor
+{0}: {1} cannot be written in TOML	{0}: {1} TOML'da yazılamaz
+{0}: a TOML array holds one kind of value, but this one has {1} and {2}	{0}: TOML dizisi tek türde değer taşır, bu dizide {1} ve {2} var
+.env needs a flat set of keys and values, but this document is a {}	.env düz bir anahtar-değer kümesi ister, bu belge ise bir {}
+{}: .env has no null; give it a value or remove it	{}: .env'de null yoktur; bir değer verin ya da kaldırın
+{}: .env holds only text; nested values need the “joined with __” choice	{}: .env yalnızca metin tutar; iç içe değerler için “__ ile birleştirilir” seçeneğini kullanın
+{0}: “{1}” is not a name .env files can hold (letters, digits and _)	{0}: “{1}” bir .env adı olamaz (harf, rakam ve _ kullanılabilir)
+Paths are shown for JSON, YAML and TOML files	Yollar JSON, YAML ve TOML dosyaları için gösterilir
+Expected “{}”	“{}” bekleniyordu
+Unexpected “{}”	Beklenmeyen “{}”
+The query ends too early	Sorgu erken bitiyor
+The query is too long	Sorgu çok uzun
+The query is nested too deeply	Sorgu çok derin iç içe
+String interpolation is not supported	Metin içine ifade yerleştirme (\(…)) desteklenmiyor
+Invalid string	Geçersiz metin
+The string is not closed	Metin kapatılmamış
+“{}” is not a number	“{}” bir sayı değil
+Variables are not supported	Değişkenler desteklenmiyor
+Format strings are not supported	Biçim dizeleri (@…) desteklenmiyor
+“{}” is not supported	“{}” desteklenmiyor
+“{}” is not a function this query language has	“{}” bu sorgu dilinde tanımlı bir işlev değil
+“{}” is called with the wrong number of arguments	“{}” yanlış sayıda bağımsız değişkenle çağrıldı
+The query needs more work than allowed; narrow it down	Sorgu izin verilenden fazla iş gerektiriyor; daraltın
+Cannot iterate over {}	{} üzerinde dolaşılamaz
+{} cannot be negated	{} eksiye çevrilemez
+Object keys must be strings, not {}	Nesne anahtarları metin olmalı, {} olamaz
+{} has no keys	{} değerinin anahtarı yok
+Cannot check whether {0} has a key of type {1}	{0} değerinde {1} türünde anahtar sorgulanamaz
+limit needs a whole number	limit bir tamsayı ister
+flatten depth must not be negative	flatten derinliği negatif olamaz
+{0} (while parsing {1})	{0} ({1} ayrıştırılırken)
+{} cannot be parsed as JSON	{} JSON olarak ayrıştırılamaz
+Cannot parse {} as a number	{} sayı olarak okunamaz
+{} cannot be parsed as a number	{} sayı olarak okunamaz
+{0} cannot be used with {1}	{0}, {1} ile kullanılamaz
+{0} needs strings, got {1} and {2}	{0} metin ister; {1} ve {2} verildi
+join needs a string separator, got {}	join metin türünde ayırıcı ister, {} verildi
+Cannot join {}	{} birleştirilemez
+split input and separator must be strings	split girdisi ve ayırıcısı metin olmalı
+{} cannot be rounded	{} yuvarlanamaz
+{} is not an array	{} bir dizi değil
+Cannot use {} as an entry	{} bir girdi olarak kullanılamaz
+Cannot use {} as an object key	{} nesne anahtarı olarak kullanılamaz
+{} has no length	{} değerinin uzunluğu yok
+{0} and {1} cannot have their containment checked	{0} ve {1} için içerme denetimi yapılamaz
+Cannot index {0} with {1}	{0}, {1} ile indekslenemez
+Cannot index {0} with “{1}”	{0}, “{1}” ile indekslenemez
+Start and end of a slice must be numbers	Dilimin başı ve sonu sayı olmalı
+Cannot index {} with object	{} nesneyle indekslenemez
+{0} and {1} cannot be added	{0} ve {1} toplanamaz
+{0} and {1} cannot be subtracted	{0} ve {1} çıkarılamaz
+{0} and {1} cannot be multiplied	{0} ve {1} çarpılamaz
+{0} and {1} cannot be divided	{0} ve {1} bölünemez
+The repeated string would be too long	Tekrarlanan metin çok uzun olurdu
+{0} and {1} cannot be divided because the divisor is zero	{0} ve {1} bölünemez: bölen sıfır
+Select a JWT or a Unix timestamp first	Önce bir JWT ya da Unix zaman damgası seçin
+Signature not verified: the token is only decoded, not checked	İmza doğrulanmadı: belirteç yalnızca çözüldü, denetlenmedi
+Header	Başlık
+Payload	Yük
+{} is a date:	{} bir tarih:
+The token has no signature.	Belirteçte imza yok.
+Select at most 20 timestamps	En çok 20 zaman damgası seçin
+The selection is neither a JWT nor a Unix timestamp	Seçim ne bir JWT ne de bir Unix zaman damgası
+{} is too large to be a time in seconds or milliseconds	{} saniye ya da milisaniye olarak zaman olamayacak kadar büyük
+milliseconds	milisaniye
+seconds	saniye
+Local time is not available on this system	Yerel saat bu sistemde kullanılamıyor
+.env, nested keys joined with __	.env, iç içe anahtarlar __ ile birleştirilir
+Replace the text with {}	Metni {} ile değiştir
+{} in a new tab	{} yeni sekmede
+Convert to…	Dönüştür…
+Converted to {}	{} biçimine dönüştürüldü
+This file is {0} MB; Data: Query handles files up to {1} MB.	Bu dosya {0} MB; Veri: Sorgula en çok {1} MB'a kadar dosyalarla çalışır.
+Query, e.g. .items[].name	Sorgu, örn. .items[].name
+The file is not open any more.	Dosya artık açık değil.
+The file could not be read.	Dosya okunamadı.
+Reading the file…	Dosya okunuyor…
+Type a query. Esc closes the bar.	Bir sorgu yazın. Esc çubuğu kapatır.
+{} (cut at 5 MB)	{} (5 MB'ta kesildi)
+Column {0}: {1}	Sütun {0}: {1}
+Query	Sorgu
+Decoded here only: nothing is sent or logged	Yalnızca burada çözüldü: hiçbir şey gönderilmez ya da günlüğe yazılmaz
+Copy the path at the cursor	İmlecin altındaki yolu kopyala
+Spaces per level in the JSON and YAML written by Data: Convert To… and Data: Query…	Veri: Şuna Dönüştür… ve Veri: Sorgula… ile yazılan JSON ve YAML'da her düzey için boşluk sayısı
+Sort object keys alphabetically in the output of Data: Convert To… and Data: Query… (off: keep the file's order)	Veri: Şuna Dönüştür… ve Veri: Sorgula… çıktısında nesne anahtarlarını alfabetik sırala (kapalı: dosyadaki sırayı koru)
+Data: Convert To…	Veri: Şuna Dönüştür…
+Data: Query…	Veri: Sorgula…
+Data: Copy Path at Cursor	Veri: İmlecin Yolunu Kopyala
+Data: Decode Selection…	Veri: Seçimi Çöz…
+debug output was dropped: the debugger could not keep up	Hata ayıklama çıktısı atıldı: hata ayıklayıcı yetişemedi
+Let programs in the terminal write to the clipboard	Terminaldeki programların panoya yazmasına izin ver
+# --- git-sync ---
+Sync Changes {}	Değişiklikleri Eşitle {}
+Publish Branch	Dalı Yayımla
+Sync	Eşitle
+Sync changes?	Değişiklikler eşitlensin mi?
+This pulls and pushes commits from and to “{}”.	Bu işlem “{}” deposundan commit'leri Pull eder ve oraya Push eder.
+This pulls commits from “{}”.	Bu işlem “{}” deposundan commit'leri Pull eder.
+This pushes commits to “{}”.	Bu işlem commit'leri “{}” deposuna Push eder.
+A sync is already running.	Bir eşitleme zaten çalışıyor.
+Fetching in the background: try again in a moment.	Arka planda Fetch ediliyor: birazdan tekrar deneyin.
+Pull has conflicts: resolve them in Source Control (or Git: Abort Merge)	Pull çakışmalarla durdu: Kaynak Denetimi'nde çözün (ya da Git: Birleştirmeyi İptal Et)
+Publish failed: {}	Yayımlama başarısız: {}
+Commit or stash your changes first	Önce değişikliklerinizi commit edin ya da Stash'e alın
+Pull from…	Pull Et…
+Push to…	Push Et…
+Fetch (All Remotes)	Fetch (Tüm Uzak Depolar)
+Commit Signed Off	Commit (Signed-off-by)
+Commit (No Verify)	Commit (Hook'suz)
+Commit & Push	Commit ve Push
+Commit & Sync	Commit ve Eşitle
+{}: up to date. Click to fetch.	{}: güncel. Fetch için tıklayın.
+{0}: {1} to pull, {2} to push. Click to sync.	{0}: {1} Pull, {2} Push bekliyor. Eşitlemek için tıklayın.
+This branch is not published yet. Click to publish it.	Bu dal henüz yayımlanmadı. Yayımlamak için tıklayın.
+The last background fetch failed: {}	Son arka plan Fetch'i başarısız oldu: {}
+Nothing is staged: stage the changes to commit first (or turn on git.enableSmartCommit)	Stage'de bir şey yok: önce commit edilecek değişiklikleri Stage'e alın (ya da git.enableSmartCommit'i açın)
+Git: Pull (Rebase)	Git: Pull (Rebase ile)
+Pull (Rebase)	Pull (Rebase ile)
+Git: Pull from…	Git: Pull Et…
+Git: Push to…	Git: Push Et…
+Git: Fetch (All Remotes)	Git: Fetch (Tüm Uzak Depolar)
+Git: Commit Signed Off	Git: Commit (Signed-off-by)
+Git: Commit (No Verify)	Git: Commit (Hook'suz)
+Git: Commit & Push	Git: Commit ve Push
+Git: Commit & Sync	Git: Commit ve Eşitle
+Fetch from the remote in the background while the window is in front	Pencere öndeyken uzak depodan arka planda Fetch et
+Seconds between background fetches	Arka plan Fetch'leri arasındaki saniye
+Ask before Sync pulls or pushes. Your own settings only; a folder cannot change it	Eşitleme Pull ya da Push etmeden önce sor. Yalnızca kendi ayarlarınız; bir klasör değiştiremez
+Pull with rebase instead of a merge commit	Merge commit yerine rebase ile Pull et
+Fetch removes remote branches that were deleted on the server	Fetch, sunucuda silinen uzak dalları kaldırsın
+Pull also fetches all tags	Pull tüm etiketleri de getirsin
+Fetch every remote before pulling	Pull'dan önce tüm uzak depoları Fetch et
+What runs after a commit: nothing, push or sync. Your own settings only; a folder cannot change it	Commit'ten sonra ne çalışsın: hiçbir şey, push ya da eşitleme. Yalnızca kendi ayarlarınız; bir klasör değiştiremez
+Commit all tracked changes when nothing is staged	Stage'de bir şey yokken izlenen tüm değişiklikleri commit et
+# --- git-refs ---
+Git: Delete Tag…	Git: Etiketi Sil…
+Git: Delete Remote Tag…	Git: Uzak Etiketi Sil…
+Git: Push Tags	Git: Etiketleri Gönder
+Git: Push Tag…	Git: Etiketi Gönder…
+Git: Checkout (Detached)…	Git: Ayrık Olarak Geç…
+Git: Create Branch From…	Git: Şundan Dal Oluştur…
+Git: Delete Remote Branch…	Git: Uzak Dalı Sil…
+Git: Set Upstream Branch…	Git: Takip Edilen Dalı Ayarla…
+Git: Stash Staged Changes	Git: Hazırlanan Değişiklikleri Stash'e Al
+Git: Stash with Name…	Git: Adlı Stash…
+Git: Show Stash…	Git: Stash'i Göster…
+Git: Open Changes	Git: Değişiklikleri Aç
+Git: Open File (HEAD)	Git: Dosyayı Aç (HEAD)
+Git: Compare with Branch…	Git: Dalla Karşılaştır…
+Git: Compare with Commit…	Git: Commit ile Karşılaştır…
+Git: Add to .gitignore	Git: .gitignore'a Ekle
+Git: Rename Remote…	Git: Uzak Depoyu Yeniden Adlandır…
+Git: Edit Remote URL…	Git: Uzak Depo Adresini Düzenle…
+Git: Remove Worktree…	Git: Çalışma Ağacını Kaldır…
+Git: Prune Worktrees	Git: Çalışma Ağaçlarını Temizle
+Stash Staged Changes	Hazırlanan Değişiklikleri Stash'e Al
+Stash with Name…	Adlı Stash…
+Show Stash…	Stash'i Göster…
+Create Tag…	Etiket Oluştur…
+Delete Tag…	Etiketi Sil…
+Push Tags	Etiketleri Gönder
+Add to .gitignore	.gitignore'a Ekle
+Open Changes	Değişiklikleri Aç
+Open File (HEAD)	Dosyayı Aç (HEAD)
+Compare with Branch…	Dalla Karşılaştır…
+Compare with Commit…	Commit ile Karşılaştır…
++ Create new branch from…	+ Şundan yeni dal oluştur…
+Check out detached…	Ayrık olarak geç…
+Pick a stash to show	Gösterilecek stash'i seçin
+upstream gone	uzak dal silinmiş
+Tag name, then an optional message for an annotated tag (at HEAD)	Etiket adı, ardından açıklamalı etiket için isteğe bağlı bir mesaj (HEAD'de)
+Tag name, then an optional message for an annotated tag	Etiket adı, ardından açıklamalı etiket için isteğe bağlı bir mesaj
+Change the URL of which remote?	Hangi uzak deponun adresi değişsin?
+Check out which branch, tag or commit (detached)?	Hangi dal, etiket veya commit ayrık olarak açılsın?
+Compare the file with which branch or tag?	Dosya hangi dal veya etiketle karşılaştırılsın?
+Compare the file with which commit?	Dosya hangi commit ile karşılaştırılsın?
+Delete which branch on the remote?	Uzak depoda hangi dal silinsin?
+Delete which tag on the remote?	Uzak depoda hangi etiket silinsin?
+Delete which tag?	Hangi etiket silinsin?
+Its folder is deleted. Git refuses when the worktree has uncommitted changes; the branch stays.	Klasörü silinir. Çalışma ağacında kaydedilmemiş değişiklik varsa Git reddeder; dal kalır.
+Name of the stash (shown in the stash list)	Stash'in adı (stash listesinde görünür)
+New name of the remote	Uzak deponun yeni adı
+Only the local tag is removed. A copy on a remote stays until you delete it there (Git: Delete Remote Tag…).	Yalnızca yerel etiket silinir. Uzak depodaki kopya, orada da silene kadar durur (Git: Uzak Etiketi Sil…).
+Pruning worktrees…	Çalışma ağaçları temizleniyor…
+Push which tag?	Hangi etiket gönderilsin?
+Pushing tags…	Etiketler gönderiliyor…
+Remove which worktree?	Hangi çalışma ağacı kaldırılsın?
+Rename remote	Uzak depoyu yeniden adlandır
+Rename which remote?	Hangi uzak depo yeniden adlandırılsın?
+Set URL	Adresi ayarla
+Start the new branch from…	Yeni dal şuradan başlasın…
+Stashing…	Stash'e alınıyor…
+The branch is removed from the remote repository for everyone. Local branches are not touched.	Dal uzak depodan herkes için kaldırılır. Yerel dallara dokunulmaz.
+The tag disappears from the remote repository for everyone. Your local copy is kept.	Etiket uzak depodan herkes için kalkar. Yerel kopyanız korunur.
+There are no staged changes to stash	Stash'e alınacak hazırlanmış değişiklik yok
+There is nothing to ignore here	Burada yoksayılacak bir şey yok
+Track which remote branch?	Hangi uzak dalı takip etsin?
+Updating .gitignore…	.gitignore güncelleniyor…
+tag	etiket
+Added {} to .gitignore	{} .gitignore'a eklendi
+Checking out {}…	{} açılıyor…
+Compare {} with a commit	{} dosyasını bir commit ile karşılaştır
+Could not read the stash: {}	Stash okunamadı: {}
+Creating {}…	{} oluşturuluyor…
+Delete branch {} on the remote?	{} dalı uzak depoda silinsin mi?
+Delete tag {} on the remote?	{} etiketi uzak depoda silinsin mi?
+Delete tag {}?	{} etiketi silinsin mi?
+Deleted tag {0} on {1}	{0} etiketi {1} üzerinde silindi
+Deleted tag {}	{} etiketi silindi
+Name of the new branch (starts at {})	Yeni dalın adı ({} noktasından başlar)
+New URL of {}	{} için yeni adres
+Pushed tag {0} to {1}	{0} etiketi {1} deposuna gönderildi
+Pushed tags to {}	Etiketler {} deposuna gönderildi
+Pushing {}…	{} gönderiliyor…
+Remove worktree {}?	{} çalışma ağacı kaldırılsın mı?
+Removed worktree {}	{} çalışma ağacı kaldırıldı
+Setting upstream of {}…	{} için takip edilen dal ayarlanıyor…
+Updated the URL of {}	{} adresi güncellendi
+Updating {}…	{} güncelleniyor…
+{0} now tracks {1}	{0} artık {1} dalını takip ediyor
+{} has no changes.	{} dosyasında değişiklik yok.
+{} holds no changes to tracked files.	{} izlenen dosyalarda değişiklik içermiyor.
+{} is already in .gitignore	{} zaten .gitignore içinde
+{} is not in HEAD yet.	{} henüz HEAD'de yok.
+“{}” is not a branch of a known remote	“{}” bilinen bir uzak deponun dalı değil
+“{}” is not a usable remote URL	“{}” kullanılabilir bir uzak depo adresi değil
+Pruned {} stale worktree entry|Pruned {} stale worktree entries	{} eski çalışma ağacı kaydı temizlendi
+Renamed remote {0} to {1}	{0} uzak deposu {1} olarak yeniden adlandırıldı

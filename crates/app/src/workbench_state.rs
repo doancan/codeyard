@@ -65,7 +65,7 @@ pub(super) struct LspState {
     pub(super) http_tab: Option<String>,
     /// A request is being sent (overlapping sends are prevented) and files whose sensitive send was approved (for the session).
     pub(super) http_busy: bool,
-    pub(super) http_trusted: std::collections::HashSet<String>,
+    pub(super) http_trusted: std::collections::HashSet<String>, // `trust_key` of the file: same path, other host, asks again
     /// Hosts for which a schema-download approval question is open right now (so one host is asked about once).
     pub(super) schema_asking: std::collections::HashSet<String>,
 }
@@ -80,6 +80,8 @@ pub(super) struct GitState {
     /// it runs once more when done (so the running refresh isn't cancelled and the update isn't lost).
     pub(super) refreshing: bool,
     pub(super) refresh_again: bool,
+    /// Network operations: which one runs, and the background fetch's last error (see workbench_sync.rs).
+    pub(super) sync: sync_glue::SyncState,
     pub(super) error: Option<SharedString>,
     /// Root source control looks at: the active file's root (`None` for the first root).
     pub(super) scm_root: Option<String>,
@@ -140,7 +142,8 @@ pub(super) struct ConfigState {
     /// Project settings: (file name, text, unknown-key warning). Applied on top of the
     /// user settings; when `config_dirty` is set the settings are re-read.
     pub(super) project: Vec<(String, String, bool)>,
-    /// Folders trusted this session (persistent record: state `trust:` keys; only here if there is no state).
+    /// Folders trusted this session, as `trust_key`s so the same path on another host is not covered (persistent record: state
+    /// `trust:` keys; only here if there is no state).
     pub(super) trusted: std::collections::HashSet<String>,
     pub(super) dirty: bool,
     /// Own settings of extra folders (root -> settings): applied to that folder's files.
@@ -195,6 +198,9 @@ pub(super) struct RootsState {
     pub(super) file_clip: Option<(String, bool)>,
     /// File marked with "Select for Compare".
     pub(super) compare_a: Option<String>,
+    // --- compare ---
+    /// Folder marked with "Select Folder for Compare".
+    pub(super) compare_folder_a: Option<compare_glue::Spot>,
     /// Favorite files/folders of the open project (relative to the root).
     pub(super) favorites: Vec<String>,
     pub(super) file_index: Option<FileIndex>,

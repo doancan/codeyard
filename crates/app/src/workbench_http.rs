@@ -6,10 +6,6 @@
 use super::*;
 use crate::http_client::{self as http, Response, Stored};
 
-fn now_secs() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64)
-}
-
 /// Cheap random number for `{{$randomInt}}` only; not cryptographic.
 fn random_between(a: i64, b: i64) -> i64 {
     let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.subsec_nanos() as i64);
@@ -50,7 +46,7 @@ impl Workbench {
         // Two reasons to ask first, both answered by one prompt: the request does something a file from someone else should not do
         // silently (read the environment, upload files from elsewhere; once per file and session), or it goes to a host this
         // session has not contacted yet (`http.confirmRequests`).
-        let sensitive = if self.lsp.http_trusted.contains(&path) { Vec::new() } else { http::sensitive_parts(&request) };
+        let sensitive = if self.lsp.http_trusted.contains(&self.trust_key(&path)) { Vec::new() } else { http::sensitive_parts(&request) };
         let mut reasons = sensitive.clone();
         let (mode, gate) = {
             let mode = schema::gate::Confirm::parse(&cx.global::<Settings>().http_confirm).unwrap_or_default();
@@ -103,7 +99,7 @@ impl Workbench {
             if answer.await == Ok(0) {
                 this.update_in(cx, |this, window, cx| {
                     if !sensitive.is_empty() {
-                        this.lsp.http_trusted.insert(path.clone());
+                        this.lsp.http_trusted.insert(this.trust_key(&path));
                     }
                     if let Some(host) = &approve_host {
                         gate.approve(host);
@@ -171,7 +167,7 @@ impl Workbench {
         .detach();
     }
 
-    fn show_response(&mut self, name: Option<String>, prepared: &http::Prepared, r: Response, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn show_response(&mut self, name: Option<String>, prepared: &http::Prepared, r: Response, window: &mut Window, cx: &mut Context<Self>) {
         let summary = format!(
             "{} {} → {} · {} ms · {}",
             prepared.method,
@@ -193,6 +189,10 @@ impl Workbench {
         let r_empty = r.body.is_empty();
         let decoded = r.decoded();
         let mut note = decoded.as_ref().and_then(|(_, n)| n.clone());
+        if let Some(to) = http::redirect_target(&r) {
+            // Not followed: the next hop was never approved, so the user decides whether to send there.
+            note = Some(crate::i18n::tf("redirects to {}; not followed, send a request to that address to continue", &[&to]));
+        }
         let (name, content) = match decoded {
             Some((t, _)) if r.extension() == "json" => {
                 let pretty = crate::jsonfmt::format(&t, "  ").unwrap_or(t);
@@ -209,8 +209,9 @@ impl Workbench {
             }
         };
         self.lsp.http_last = Some(r);
-        self.create_scratch_with(name, &content, window, cx);
-        self.lsp.http_tab = self.active_editor().map(|e| e.read(cx).path.clone());
+        // The file just written, not the active editor: the tab opens asynchronously, so that would still be the `.http` file
+        // and the next request (or quitting) would delete the user's request file.
+        self.lsp.http_tab = self.create_scratch_with(name, &content, window, cx);
         self.notice = Some(Notice::Info(
             match note {
                 Some(n) => format!("{summary} · {n}"),
@@ -220,6 +221,21 @@ impl Workbench {
             .into(),
         ));
         cx.notify();
+    }
+
+    /// The response file holds whatever the server sent (tokens, personal data): it is removed when its tab closes and at quit,
+    /// not left behind until the next request.
+    pub(super) fn discard_response_file(&mut self, path: &str) {
+        if self.lsp.http_tab.as_deref() == Some(path) {
+            self.lsp.http_tab = None;
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    pub(super) fn discard_response_on_quit(&mut self) {
+        if let Some(path) = self.lsp.http_tab.take() {
+            let _ = std::fs::remove_file(path);
+        }
     }
 
     /// "HTTP: Show Last Response Headers"

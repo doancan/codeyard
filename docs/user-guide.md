@@ -19,9 +19,11 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Workspaces with several folders](#workspaces-with-several-folders)
 - [Language servers](#language-servers)
 - [JSON and YAML schemas](#json-and-yaml-schemas)
+- [Data tools](#data-tools)
 - [Colours](#colours)
 - [Spell check](#spell-check)
 - [Merge editor](#merge-editor)
+- [Compare folders](#compare-folders)
 - [GitHub pull requests](#github-pull-requests)
 - [HTTP files](#http-files)
 - [Port forwarding](#port-forwarding)
@@ -43,6 +45,7 @@ is the complete list and always matches your key bindings; every setting is in [
 | Replace all | ⌥⌘↵ | Ctrl+Alt+Enter |
 | Find in selection / select all matches (find bar) | ⌥⌘L / ⌥↵ | Ctrl+Alt+L / Alt+Enter |
 | Find in files | ⇧⌘F | Ctrl+Shift+F |
+| Structural search (replace: from the palette) | ⌥⇧⌘F | Ctrl+Alt+Shift+F |
 | Split editor (same file in the other group) | ⌘\ | Ctrl+\ |
 | Move tab to the other group | ⌃⌘→ / ⌃⌘← | Ctrl+Ctrl+→ (rebind) |
 | Focus left / right group | ⌘1 / ⌘2 | Ctrl+1 / Ctrl+2 |
@@ -162,6 +165,48 @@ With the same file open in both groups, each group has its own cursors, scroll a
 
 **Find in files** (⇧⌘F) has a replace field: "Replace All" asks first, then changes open
 files in their editors (undoable) and closed files on disk.
+
+### Structural search and replace
+
+"Search: Structural Search…" (⌥⇧⌘F) and "Search: Structural Replace…" open the Search panel in structural mode; the `$X` button in
+the search box switches it on and off. The pattern is code in a language you pick (the chip next to the field; a click goes to
+the next one; it starts as the language of the active file, and a selection becomes the pattern). It is matched against the
+syntax tree, so spacing, line breaks and comments inside the code do not matter, and a match can span several lines.
+
+- `$X` matches one node: an identifier, a call, a whole block. A name used twice (`$X == $X`) must match the same text both times.
+- `$$$X` matches zero or more neighbouring nodes, for example all the arguments or all the statements of a block.
+- Names are upper case (`$X`, `$ARGS_2`). A name that starts with `_` (and `$_`, `$$$`) matches without remembering. `$x`, a lone
+  `$` and `$$` are ordinary text, so shell and PHP variables can be written as they are.
+- Everything else must be the same code. A `;` at the end may be left out. Comments are ignored unless the pattern has one.
+- A pattern is one expression or statement (or item, or type), not a sequence of them. In Python and Go a block is easiest written
+  on one line, or with ⇧↵ in the field. Rust macro arguments are plain tokens: use `$$$` for them.
+- If the pattern does not parse, the parser's position is shown under the field and nothing runs.
+
+Results list like any search (file, line, preview), with "replace in this file" and "dismiss" on each file. The replacement field
+takes `$X` and `$$$X` of the pattern; any other `$name` stays as typed. "Replace All" asks first, like Replace in Files: open files
+change in their editors (one undo step), closed files are written to disk and keep their line endings. Matches inside other matches
+(`f(f(1))`) are changed outermost first; search again for the inner ones. If a replacement would leave a file that no longer parses, the
+prompt names it and offers to skip it.
+
+How it works and what it leaves out:
+
+- The folder's text search first finds files that contain the longest word of the pattern; only those are read and parsed (`.gitignore`,
+  `files.exclude` and `search.exclude` apply, and so do the include and exclude fields). Unsaved editor text is used instead of the
+  file on disk. It works over SSH the same way: the server searches, this computer parses.
+- Files over 2 MB, binary files, and files with syntax errors are skipped; the second line of the status says how many.
+  `"search.structural.maxFiles"` (default 5000) caps how many files are parsed, and the status says when it did.
+- Nothing from the folder is run, so it also works in untrusted workspaces, and nothing is written before you confirm.
+- Languages: Rust, TypeScript, JavaScript, Python, Go, Java, C, C++, C#, Ruby, PHP, Kotlin, Swift, Lua and Shell. A TypeScript pattern
+  also searches `.tsx`, a JavaScript one `.jsx`.
+
+Six recipes (pattern → replacement):
+
+1. Rust, avoid building the default when it is not needed: `$R.unwrap_or($X.clone())` → `$R.unwrap_or_else(|| $X.clone())`.
+2. Python, compare with `None` the right way: `$X == None` → `$X is None`.
+3. TypeScript, move console logging to a logger: `console.log($$$ARGS)` → `logger.debug($$$ARGS)`; `$$$ARGS` carries any number of arguments.
+4. Go, switch the logging package: `fmt.Println($$$A)` → `log.Println($$$A)`.
+5. Rust, change a type everywhere it is written: `Box<Vec<$T>>` → `Box<[$T]>`.
+6. Rust, only look: `$X == $X` finds a value compared with itself, and `if $C { $$$B }` lists every `if`. Leave the replacement empty to search.
 
 **Encodings:** UTF-8 (with or without BOM), UTF-16 with a BOM, and single-byte files.
 A file that isn't valid UTF-8 is read as Windows-1254 (Turkish) by default; change it with
@@ -463,15 +508,55 @@ pop / apply / drop a stash, and discard all changes. "Git: View File History" li
 commits of the open file (following renames); pick one to see what it changed. "Git: Blame
 Line" tells who last changed the line under the cursor, also when the file has unsaved edits.
 
+**Branches and tags.** The branch picker lists the most recently used branches first, with how far each is
+ahead/behind its upstream and its last commit; it also offers "Create new branch from…" and "Check out
+detached…". The palette adds Git: Delete Remote Branch, Set Upstream Branch, Create Branch From and
+Checkout (Detached). "Git: Create Tag…" takes the tag name and, after a space, an optional message (with a
+message the tag is annotated); Git: Delete Tag, Delete Remote Tag, Push Tag and Push Tags work on the default
+remote (`origin`, else the first one). Rename Remote, Edit Remote URL, Remove Worktree and Prune Worktrees
+complete Add Remote and Add Worktree.
+
+**Stash.** Besides stash and stash with untracked files there are "Stash Staged Changes" (only what is staged;
+needs git 2.35 or newer), "Stash with Name…" and "Show Stash…", which lists the files a stash changed and opens one
+as a diff (untracked files kept by a stash are not shown).
+
+**The open file.** "Open Changes" (editor menu, tab menu, palette) opens the diff Source Control would show;
+"Open File (HEAD)" opens the committed text in a scratch tab named "name (HEAD).ext"; "Compare with Branch…"
+(branches and tags) and "Compare with Commit…" (the commits that changed the file) compare it, unsaved edits
+included, with that revision. "Add to .gitignore" (a file or folder in the Explorer menu, or the palette for the
+open file) appends an entry anchored at the repository root, creates the file if needed, and never adds one twice;
+it does not untrack a file git already tracks.
+
 **Merge conflicts:** conflicted files are listed under "Merge Changes". In the editor the two
 sides are tinted and the `<<<<<<<` line has "Accept Current | Accept Incoming | Accept Both";
 the palette has accept all and next/previous conflict, and the status bar counts them.
 Staging a file (marking it resolved) is refused while it still has conflict markers.
 
-Click the branch in the status bar to switch or create branches; the arrows next to it show
-how far you are ahead/behind and sync (pull, then push; fetch when nothing is pending). Git
-never asks for passwords in the app: if the server needs credentials, run the command once in
-the terminal or use an SSH key.
+Click the branch in the status bar to switch or create branches.
+
+**Sync Changes:** when the branch has an upstream and differs from it, a full-width button under
+Commit reads "Sync Changes ↓2 ↑1" (↓ commits to pull, ↑ commits to push); a branch with no upstream
+shows "Publish Branch" instead (when the repository has a remote). The sync item in the status bar
+does the same, shows a spinner while it runs, and its tooltip names the upstream and the counts.
+A sync pulls first, then pushes; with nothing pending it only fetches. Only one runs at a time.
+If the pull stops on conflicts they are resolved in Source Control (Abort Merge, or Continue /
+Abort Rebase when pulling with rebase); a dirty tree that the pull would overwrite says to commit
+or stash first. Git never asks for passwords in the app: if the server needs credentials, run the
+command once in the terminal or use an SSH key. A command that hangs is stopped after ten minutes.
+
+The "…" menu and the palette also have *Pull (Rebase)*, *Pull from…* (pick a remote branch),
+*Push to…* (pick a remote), *Fetch (All Remotes)* and *Publish Branch*, and the commit variants
+*Commit Signed Off* (`-s`), *Commit (No Verify)* (skips hooks), *Commit & Push* and *Commit & Sync*.
+
+These settings change the behaviour: `"git.confirmSync"` (default true: Sync asks before it pulls or
+pushes), `"git.rebaseWhenSync"` (pull with rebase), `"git.pruneOnFetch"` (default true), `"git.pullTags"`
+(default true), `"git.fetchOnPull"` (fetch every remote before pulling), `"git.postCommitCommand"`
+(`none`, `push` or `sync` after each commit), `"git.enableSmartCommit"` (default true: with nothing
+staged the commit button commits all tracked changes; off, it asks you to stage first) and
+`"git.autofetch"` with `"git.autofetchPeriod"` (off by default; fetches in the background every 180 s
+or more while the window is in front, never in a folder you have not trusted, and a failure only
+shows in the sync item's tooltip). `git.confirmSync` and `git.postCommitCommand` are read from your
+own settings only: a repository cannot turn the question off or make your commits push by themselves.
 
 ## Projects, favorites, bookmarks, tasks
 
@@ -623,6 +708,38 @@ catalogue; turn `json.schemaDownload.enable` off to stop all of them. A `$schema
 asks first, once per host and session (`"http.confirmRequests"`, see [HTTP files](#http-files); declining is remembered until you
 restart, and the file keeps a note that the schema was not loaded). Custom YAML tags (`!Ref`, `!reference`) are skipped.
 
+## Data tools
+
+Command palette entries (no default keys; bind `data.convert`, `data.query`, `data.copyPath` or `data.decodeSelection` in
+`keybindings.jsonc` if you want them). Everything happens on your computer: nothing is sent anywhere, nothing in a document is
+executed, and decoded tokens are not logged.
+
+- **Data: Convert To…** converts the selection, or the whole file when nothing is selected, to JSON, YAML, TOML or `.env`, into a
+  new scratch tab or in place (*Replace the text with…*). Key order is kept (TOML writes plain values before tables, as it must),
+  integers beyond 2^53 stay exact, multi-document YAML becomes a list. The format of the source comes from the file name, or is
+  guessed for a selection. What a format cannot hold is never guessed: TOML has no null and wants arrays of one kind, so
+  converting `null` or `[1, "a"]` to TOML fails and names the path (`.servers[1].port`); `.env` holds flat text, so nested values
+  fail unless you pick *.env, nested keys joined with __*. A repeated key stops the conversion at its line. Comments (and YAML
+  anchors, expanded on the way) are lost and the status bar says so (*Comments are not kept.*); JSON with comments is read too.
+- **Data: Query…** opens a bar above the editor. Type a [jq](https://jqlang.org/manual/) filter and the result appears in a
+  `query.json` tab about 100 ms after you stop typing, computed off the interface thread. Esc closes the bar; Enter closes it and
+  moves to the results. A syntax error shows its column in the bar. It works on JSON, YAML, TOML and `.env` files up to 20 MB;
+  results longer than 5 MB are cut and the bar says so.
+  Supported: paths (`.a.b[0]`, `.["a b"]`, `.[]`, `.[2:4]`, `..`, `?`), `|`, `,`, `//`, `==` `!=` `<` `<=` `>` `>=`, `and` `or` `not`,
+  `+ - * / %`, `[...]`, `{a, b: .c}`, `if … then … elif … else … end`, and `length`, `keys`, `values`, `map`, `select`, `has`,
+  `contains`, `add`, `any`, `all`, `first`, `last`, `limit`, `sort`, `sort_by`, `group_by`, `unique`, `unique_by`, `reverse`, `min`,
+  `max`, `flatten`, `to_entries`, `from_entries`, `with_entries`, `map_values`, `tostring`, `tonumber`, `tojson`, `fromjson`,
+  `ascii_downcase`, `ascii_upcase`, `startswith`, `endswith`, `ltrimstr`, `rtrimstr`, `join`, `split`, `floor`, `type`, `empty`. There are no
+  variables, regular expressions, assignments or functions that read files, the environment or the clock.
+- **Data: Copy Path at Cursor** copies the path of the value or key under the cursor in a JSON, YAML or TOML file, for example
+  `.servers[2].host` (keys that are not plain words are written `."my key"`). The same path is shown in the status bar for
+  files up to 512 KB; click it to copy.
+- **Data: Decode Selection…** shows a selected JWT (header and payload; the signature is **not** verified, and the list says so) or
+  Unix timestamps in seconds or milliseconds as UTC and local time. Local time needs macOS or Linux; on Windows only UTC is shown.
+
+Settings: `data.indent` (spaces per level in JSON and YAML output, default 2) and `data.sortKeys` (default off), see
+[Settings](settings.md).
+
 ## Colours
 
 `#rgb`, `#rrggbb(aa)`, `rgb()`, `hsl()` (comma and space syntax, alpha) and, in CSS-like files, colour names get a swatch under
@@ -650,6 +767,43 @@ Current and Incoming side by side (plus the common ancestor when the file has `d
 Each resolution is an undoable edit of the file itself (⌘Z works from the page); when none are left, *Save File* writes it.
 Closing the file's tab closes the page; with very many conflicts the first 40 are shown and the header still counts all of them.
 
+## Compare folders
+
+**Compare: Folders…** (command palette) asks for the left folder, then the right one. A side is a folder on this computer or on the
+host the window is connected to: the window's folder comes first, *Choose a folder on this computer…* opens the system dialog, and
+over SSH *Enter a folder path on …* takes a typed path. Two different SSH hosts cannot be compared yet (a window has one connection).
+In the Explorer, right-click a folder and choose *Select Folder for Compare*, then right-click another one and choose
+*Compare Folder with Selected*.
+
+The comparison opens as a tab. Each side's agent walks its folder, skipping the globs in `compare.folders.ignore` (`.git`,
+`node_modules` and `target` by default) and, with *Respect .gitignore* on, what `.gitignore` ignores. The list shows what is
+**only on the left**, **only on the right** and **changed** (size, content, a file against a folder or link, a different link
+target); identical entries are hidden until you turn on *Show identical*. Folders that exist on one side only start folded.
+Names appear while the folders are still being read, and the line above the list says when the second pass (reading the hashes of
+files that have the same size on both sides) is running. **Stop** cancels. Only hashes cross the network, never file contents; the
+modification time is shown but never decides whether two files match.
+
+- A click on a changed text file opens the diff, labelled *Left ↔ Right*. Binary files and files over 2 MB are compared by size and
+  hash only and get no diff.
+- *Ignore whitespace* and *Ignore line endings* read the changed text files (up to 2000) and file the ones that then match under
+  *Same apart from whitespace*. Without them a file whose only difference is CRLF against LF counts as changed.
+- Symbolic links are compared by their target and never followed. A folder or file that cannot be read shows its error on its row and
+  the scan goes on. Names that differ only in letter case (`Readme` and `readme`) are flagged and are never copied, because they
+  would overwrite each other on a case-insensitive disk. If both sides are the same folder the tab says so.
+- **→** and **←** on a row copy that file, or everything below that folder that is missing or different, to the other side after a
+  confirmation. A file is written only if the destination still looks the way the scan saw it (same hash, or same size and time when
+  it was never hashed; a name that did not exist must still not exist), otherwise it is left alone and named in the message. Links
+  are not copied, new files do not get the source's executable bit, and files over 32 MB go through a temporary copy.
+- **✕** deletes from one side, but only after you tick *Left is writable* or *Right is writable*. The confirmation names the host,
+  the delete is permanent, the folder is listed again first and refused if anything in it changed, and entries the comparison hides
+  (ignored ones) are counted because they are deleted too.
+- Nothing is written to a folder that is not trusted (see *Workspace Trust* in [architecture.md](architecture.md)); open and trust it
+  as a folder first.
+- *Copy Report* puts the counts and every difference on the clipboard, *Export as Text…* saves them. Results are kept in memory
+  only. If the connection drops during a scan the tab keeps what it has, says that the result is partial and offers *Scan Again*.
+
+`compare.folders.maxFiles` (50000) is the number of entries read per side before the scan stops and says so. Times are shown in UTC.
+
 ## GitHub pull requests
 
 **GitHub: Pull Requests…** lists the open pull requests of the `origin` (or first GitHub) remote with author, branches, age, check
@@ -668,8 +822,9 @@ before sending. **Where it goes is asked too:** `"http.confirmRequests"` is `"re
 request to each host that is not on this computer (`localhost`, `127.x.x.x`, `::1`) in a session; the host is read from the address
 after variables are filled in, so `{{base}}` cannot hide it, and an address whose host cannot be read reliably (a backslash in front of
 `@`) always asks. Choose `"never"` for the old behaviour (no question) or `"always"` to confirm every request; only your own settings file can
-set it (a folder's `.codeyard/settings.jsonc` is ignored for this key). Redirects are followed
-by `curl` (up to 10) and are not asked about again. Connection problems are explained with the machine the request ran on (`http.runOn`: `workspace` or `local`);
+set it (a folder's `.codeyard/settings.jsonc` is ignored for this key). Redirects are
+not followed: a 3xx answer is shown with its `Location` in the status bar, because the next address was never approved and would
+receive the method, body and headers again; send a new request to it if you want to go there. Connection problems are explained with the machine the request ran on (`http.runOn`: `workspace` or `local`);
 responses over 20 MB are refused, and binary bodies open as a hex dump.
 
 ```http

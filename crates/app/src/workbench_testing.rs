@@ -29,6 +29,29 @@ impl Workbench {
         self.reconnect_lost(window, cx);
     }
 
+    pub fn is_trusted_root_for_test(&self, root: &str, cx: &App) -> bool {
+        self.is_trusted_root(root, cx)
+    }
+
+    pub fn apply_workspace_edit_for_test(&mut self, edit: &serde_json::Value, cx: &mut Context<Self>) -> bool {
+        self.apply_workspace_edit(edit, cx)
+    }
+
+    /// Shows a response the way a finished request does.
+    pub fn show_response_for_test(&mut self, r: crate::http_client::Response, window: &mut Window, cx: &mut Context<Self>) {
+        let prepared = crate::http_client::Prepared { method: "GET".into(), url: "http://a.test/".into(), headers: Vec::new(), body: None };
+        self.show_response(None, &prepared, r, window, cx);
+    }
+
+    /// The file the response tab is backed by, once the tab is open.
+    pub fn response_tab_for_test(&self) -> Option<String> {
+        self.lsp.http_tab.clone()
+    }
+
+    pub fn discard_response_on_quit_for_test(&mut self) {
+        self.discard_response_on_quit();
+    }
+
     pub fn bottom_panel_open_for_test(&self) -> bool {
         self.chrome.panel_open
     }
@@ -602,6 +625,15 @@ impl Workbench {
 
     pub fn set_state_value_for_test(&self, key: &str, value: &str) {
         self.persist.state.as_ref().expect("a state database").set(key, value).expect("state write");
+    }
+
+    /// Save As without the prompt: the write is only spawned, so a test can type before it completes.
+    pub fn save_as_for_test(&mut self, from: String, name: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.save_as_to(from, name, window, cx);
+    }
+
+    pub fn has_state_for_test(&self) -> bool {
+        self.persist.state.is_some()
     }
 
     pub fn notice_for_test(&self) -> Option<(bool, String)> {

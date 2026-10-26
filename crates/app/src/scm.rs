@@ -1,5 +1,5 @@
 //! Source control panel (S06): staged / unstaged changes,
-//! stage, unstage, discard change, commit. Commands go through `git.rs` on the agent.
+//! stage, unstage, discard change, commit. Commands go through `git/` on the agent.
 
 use std::sync::Arc;
 
@@ -29,6 +29,13 @@ pub enum ScmEvent {
     CommitMenu(GraphCommit, gpui::Point<gpui::Pixels>),
     /// Section layout changed (persisted).
     SectionsChanged(String),
+    // --- git-sync ---
+    /// The Sync Changes button: pull and/or push, asking first when `git.confirmSync` is on.
+    Sync,
+    /// The Publish Branch button: the branch has no upstream yet.
+    Publish,
+    /// A commit went through and `git.postCommitCommand` (or "Commit & Push/Sync") asks for this next.
+    PostCommit(git::PostCommit),
 }
 
 /// Graph: commits and the lane layout for each.
@@ -69,6 +76,11 @@ pub struct ScmPanel {
     stashes: Vec<(String, String)>,
     /// Identity that will author commits (name, email); `None` if not read yet.
     identity: Option<(Option<String>, Option<String>)>,
+    // --- git-sync ---
+    /// A sync is running (the workbench owns the guard; the button only shows it).
+    syncing: bool,
+    /// The repository has a remote: without one there is nothing to publish to, so no Publish Branch button.
+    has_remote: bool,
     _subs: Vec<Subscription>,
 }
 
@@ -119,6 +131,8 @@ impl ScmPanel {
             detail_task: None,
             stashes: Vec::new(),
             identity: None,
+            syncing: false,
+            has_remote: false,
             _subs: subs,
         }
     }
@@ -153,12 +167,14 @@ impl ScmPanel {
         let limit = cx.global::<crate::settings::Settings>().graph_limit;
         let task = cx.background_executor().spawn(async move {
             let log = graph::log(host.as_ref(), &root, limit, scope);
-            (log, git::identity(host.as_ref(), &root), git::stash_list(host.as_ref(), &root).unwrap_or_default())
+            let has_remote = git::remotes(host.as_ref(), &root).is_ok_and(|r| !r.is_empty());
+            (log, git::identity(host.as_ref(), &root), git::stash_list(host.as_ref(), &root).unwrap_or_default(), has_remote)
         });
         cx.spawn(async move |this, cx| {
-            let (result, identity, stashes) = task.await;
+            let (result, identity, stashes, has_remote) = task.await;
             this.update(cx, |this, cx| {
                 this.identity = Some(identity);
+                this.has_remote = has_remote;
                 this.stashes = stashes;
                 this.graph_loading = false;
                 match result {
@@ -343,7 +359,10 @@ impl ScmPanel {
     pub fn commit_amend(&mut self, cx: &mut Context<Self>) {
         let message = self.message.read(cx).text().trim().to_string();
         self.run_then(
-            move |h, root| git::commit(h, root, &message, false, true).map(|summary| crate::i18n::tf("Amended {}", &[&summary])),
+            move |h, root| {
+                git::commit(h, root, &message, git::CommitOptions { amend: true, ..Default::default() })
+                    .map(|summary| crate::i18n::tf("Amended {}", &[&summary]))
+            },
             |this, cx| this.message.update(cx, |m, cx| m.set_text("", cx)),
             cx,
         );
@@ -387,8 +406,26 @@ impl ScmPanel {
         self.run(move |h, root| git::stash_drop(h, root, &stash).map(|_| crate::i18n::tf("Dropped {}", &[&stash])), cx);
     }
 
-    /// If nothing is staged, commit all tracked changes ("Commit All").
+    /// If nothing is staged, commit all tracked changes ("Commit All"), unless `git.enableSmartCommit` is off.
     pub fn commit(&mut self, cx: &mut Context<Self>) {
+        self.commit_with(git::CommitOptions::default(), None, cx);
+    }
+
+    pub fn commit_signed_off(&mut self, cx: &mut Context<Self>) {
+        self.commit_with(git::CommitOptions { signoff: true, ..Default::default() }, None, cx);
+    }
+
+    /// Skips the pre-commit and commit-msg hooks.
+    pub fn commit_no_verify(&mut self, cx: &mut Context<Self>) {
+        self.commit_with(git::CommitOptions { no_verify: true, ..Default::default() }, None, cx);
+    }
+
+    /// "Commit & Push" / "Commit & Sync": what follows the commit is asked for explicitly, so no confirmation.
+    pub fn commit_and(&mut self, then: git::PostCommit, cx: &mut Context<Self>) {
+        self.commit_with(git::CommitOptions::default(), Some(then), cx);
+    }
+
+    fn commit_with(&mut self, flags: git::CommitOptions, then: Option<git::PostCommit>, cx: &mut Context<Self>) {
         let message = self.message.read(cx).text().trim().to_string();
         let Some(st) = &self.status else { return };
         if message.is_empty() {
@@ -396,18 +433,39 @@ impl ScmPanel {
             cx.notify();
             return;
         }
-        let all = st.staged().next().is_none();
-        if all && !st.unstaged().any(|c| c.unstaged != Some(Mark::Untracked)) {
+        let nothing_staged = st.staged().next().is_none();
+        if nothing_staged && !st.unstaged().any(|c| c.unstaged != Some(Mark::Untracked)) {
             self.result = Some((crate::i18n::t("Nothing to commit").to_string().into(), true));
             cx.notify();
             return;
         }
+        if nothing_staged && !cx.global::<crate::settings::Settings>().git_smart_commit {
+            self.result =
+                Some((crate::i18n::t("Nothing is staged: stage the changes to commit first (or turn on git.enableSmartCommit)").to_string().into(), true));
+            cx.notify();
+            return;
+        }
+        let then = then.or_else(|| git::PostCommit::from_setting(&cx.global::<crate::settings::Settings>().git_post_commit));
+        let opts = git::CommitOptions { all: nothing_staged, ..flags };
         // The message is cleared only when the commit succeeds (if a hook rejects, the user fixes it and retries).
         self.run_then(
-            move |h, root| git::commit(h, root, &message, all, false).map(|summary| crate::i18n::tf("Committed {}", &[&summary])),
-            |this, cx| this.message.update(cx, |m, cx| m.set_text("", cx)),
+            move |h, root| git::commit(h, root, &message, opts).map(|summary| crate::i18n::tf("Committed {}", &[&summary])),
+            move |this, cx| {
+                this.message.update(cx, |m, cx| m.set_text("", cx));
+                if let Some(then) = then {
+                    cx.emit(ScmEvent::PostCommit(then));
+                }
+            },
             cx,
         );
+    }
+
+    /// The workbench runs the syncs; the button shows whether one is running.
+    pub fn set_syncing(&mut self, syncing: bool, cx: &mut Context<Self>) {
+        if self.syncing != syncing {
+            self.syncing = syncing;
+            cx.notify();
+        }
     }
 
     fn row(&self, ix: usize, change: &Change, staged: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> {
@@ -578,7 +636,11 @@ impl Render for ScmPanel {
                         icon("refresh-cw", 14., p.text_muted).into_any_element()
                     })
                     .tooltip(|_, cx| cx.new(|_| crate::workbench::Tooltip(crate::i18n::t("Refresh").into())).into())
-                    .on_click(cx.listener(|_, _, _, cx| cx.emit(ScmEvent::Refresh))),
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        // A remote added since the graph was read shows up here (HEAD did not move, so nothing else reloads it).
+                        this.load_graph(cx);
+                        cx.emit(ScmEvent::Refresh);
+                    })),
             )
             .child(
                 div()
@@ -613,13 +675,15 @@ impl Render for ScmPanel {
         // Conflicts get their own section (VS Code: "Merge Changes"); staging means "resolved".
         let (merge, unstaged): (Vec<Change>, Vec<Change>) = st.unstaged().cloned().partition(|c| c.unstaged == Some(Mark::Conflict));
         let changed = st.unstaged().filter(|c| c.unstaged != Some(Mark::Untracked)).count();
-        let (commit_label, can_commit) = commit_button(staged.len(), changed);
+        let smart = cx.global::<crate::settings::Settings>().git_smart_commit;
+        let (commit_label, can_commit) = if smart || !staged.is_empty() { commit_button(staged.len(), changed) } else { commit_button(0, 0) };
+        let sync_button = self.sync_button(&st, &p, cx);
         let commit_label: SharedString = commit_label.into();
         // Latest commit in the repo: so the panel visibly shows it really read the repo.
         let last = self.graph.as_ref().and_then(|g| g.commits.iter().find(|c| c.refs.iter().any(|r| r.kind == RefKind::Head)).cloned());
         let branch = match (&st.branch, st.ahead, st.behind) {
             (Some(b), 0, 0) => b.clone(),
-            (Some(b), a, d) => format!("{b}  ↑{a} ↓{d}"),
+            (Some(b), a, d) => format!("{b}  {}", git::counts_label(a, d)),
             (None, ..) => crate::i18n::t("detached HEAD").into(),
         };
         let field_box = ui::input_box("scm-message-box", &p, p.bg, self.message.focus_handle(cx).is_focused(window)).child(self.message.clone());
@@ -727,6 +791,7 @@ impl Render for ScmPanel {
                             .child(commit_label)
                             .on_click(cx.listener(|this, _, _, cx| this.commit(cx))),
                     )
+                    .children(sync_button)
                     .when_some(self.result.clone(), |d, (msg, err)| {
                         d.child(div().text_size(px(text::XS.0)).text_color(c(if err { p.danger } else { p.text_muted })).child(msg))
                     }),
@@ -812,6 +877,51 @@ pub fn commit_matches(c: &GraphCommit, query: &str) -> bool {
 }
 
 impl ScmPanel {
+    /// "Sync Changes ↓N ↑M" when the branch has an upstream and differs from it, "Publish Branch" when it has none
+    /// (and there is a remote to publish to and a commit to publish).
+    fn sync_action(&self, st: &Status) -> Option<(SharedString, &'static str, fn() -> ScmEvent)> {
+        match (&st.upstream, st.branch.is_some()) {
+            (Some(_), _) if st.ahead > 0 || st.behind > 0 => {
+                Some((crate::i18n::tf("Sync Changes {}", &[&git::counts_label(st.ahead, st.behind)]).into(), "refresh-cw", || ScmEvent::Sync))
+            }
+            (None, true) if self.has_remote && st.head.is_some() => Some((crate::i18n::t("Publish Branch").into(), "cloud-upload", || ScmEvent::Publish)),
+            _ => None,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn has_remote_for_test(&self) -> bool {
+        self.has_remote
+    }
+
+    #[cfg(test)]
+    pub fn sync_label_for_test(&self) -> Option<String> {
+        self.status.as_ref().and_then(|st| self.sync_action(st)).map(|(label, ..)| label.to_string())
+    }
+
+    fn sync_button(&self, st: &Status, p: &ui::Palette, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
+        let (label, glyph, event) = self.sync_action(st)?;
+        let p = *p;
+        Some(
+            div()
+                .id("scm-sync")
+                .h(px(26.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .gap(px(theme::SPACE[2]))
+                .rounded(px(theme::radius::SM))
+                .bg(c(p.surface_active))
+                .text_color(c(p.text))
+                .cursor_pointer()
+                .when(self.syncing, |d| d.opacity(0.6))
+                .hover(|d| d.bg(c(p.surface_hover)))
+                .child(if self.syncing { ui::spinner("scm-sync-busy", 14., p.text).into_any_element() } else { icon(glyph, 14., p.text).into_any_element() })
+                .child(label)
+                .on_click(cx.listener(move |_, _, _, cx| cx.emit(event()))),
+        )
+    }
+
     fn emit_sections(&self, cx: &mut Context<Self>) {
         cx.emit(ScmEvent::SectionsChanged(self.sections.encode()));
     }

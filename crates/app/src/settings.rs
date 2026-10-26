@@ -59,9 +59,35 @@ pub struct Settings {
     /// Names/globs hidden in the tree and skipped by search and quick open.
     pub files_exclude: Vec<String>,
     pub search_max_results: u32,
+    // --- git-sync ---
+    /// Fetch in the background while the window is in front (`git.autofetch`, every `git.autofetchPeriod` seconds).
+    pub git_autofetch: bool,
+    pub git_autofetch_period: u32,
+    /// Ask before a sync that pulls or pushes.
+    pub git_confirm_sync: bool,
+    /// Pull with `--rebase` instead of merging.
+    pub git_rebase_when_sync: bool,
+    pub git_prune_on_fetch: bool,
+    pub git_pull_tags: bool,
+    /// Fetch every remote before pulling.
+    pub git_fetch_on_pull: bool,
+    /// "none", "push" or "sync": what runs after a commit.
+    pub git_post_commit: String,
+    /// Commit all tracked changes when nothing is staged.
+    pub git_smart_commit: bool,
+    // --- structural ---
+    /// Most files a structural search reads and parses.
+    pub search_structural_max_files: usize,
+    // --- compare ---
+    /// Globs the folder comparison skips on both sides.
+    pub compare_ignore: Vec<String>,
+    /// Entries per side before the folder comparison stops and says so.
+    pub compare_max_files: u32,
     pub terminal_shell: Option<String>,
     pub terminal_font_size: f32,
     pub terminal_scrollback: usize,
+    /// Whether a program in the terminal may put text on the clipboard (OSC 52).
+    pub terminal_allow_clipboard_write: bool,
     pub restore_session: bool,
     /// Whether to start with the welcome screen or continue where you left off.
     pub startup: Startup,
@@ -157,6 +183,10 @@ pub struct Settings {
     pub spelling: bool,
     pub spelling_comments: bool,
     pub spell_languages: Vec<String>,
+    // --- data ---
+    /// Data lens: spaces per level in JSON and YAML output, and whether output keys are sorted.
+    pub data_indent: usize,
+    pub data_sort_keys: bool,
     /// Where `.http` requests run: "workspace" (on the server when you are on SSH) or "local".
     pub http_run_on: String,
     /// `never`, `remote` (first request to each non-local host per session) or `always`; see `schema::gate`.
@@ -233,9 +263,25 @@ impl Default for Settings {
             auto_save: AutoSave::Off,
             files_exclude: vec![".git".into(), ".DS_Store".into()],
             search_max_results: 2000,
+            // --- git-sync ---
+            git_autofetch: false,
+            git_autofetch_period: 180,
+            git_confirm_sync: true,
+            git_rebase_when_sync: false,
+            git_prune_on_fetch: true,
+            git_pull_tags: true,
+            git_fetch_on_pull: false,
+            git_post_commit: "none".into(),
+            git_smart_commit: true,
+            // --- structural ---
+            search_structural_max_files: 5000,
+            // --- compare ---
+            compare_ignore: vec![".git".into(), "node_modules".into(), "target".into()],
+            compare_max_files: 50_000,
             terminal_shell: None,
             terminal_font_size: theme::text::CODE.0,
             terminal_scrollback: 2000,
+            terminal_allow_clipboard_write: false,
             restore_session: true,
             startup: Startup::Welcome,
             hot_exit: true,
@@ -288,6 +334,8 @@ impl Default for Settings {
             spelling: true,
             spelling_comments: true,
             spell_languages: vec!["en".into()],
+            data_indent: 2,
+            data_sort_keys: false,
             http_run_on: "workspace".into(),
             http_confirm: "remote".into(),
             ui_language: if cfg!(test) { "en" } else { "auto" }.into(),
@@ -412,6 +460,10 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // "auto", "alwaysCollapse", "alwaysExpand": results start folded or open.
   "search.collapseResults": "auto",
 
+  // Data: Convert To… and Data: Query…: spaces per level in JSON and YAML, and sorted keys (false keeps file order).
+  "data.indent": 2,
+  "data.sortKeys": false,
+
   // Commits drawn in the Source Control graph, and listed in the explorer's Timeline.
   "git.graph.limit": 300,
   "git.timeline.limit": 100,
@@ -446,10 +498,36 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   "files.fallbackEncoding": "windows1254",
 
   "search.maxResults": 2000,
+  // --- git-sync ---
+  // Fetch in the background while the window is in front, every this many seconds (30 or more). Not in folders you have not trusted.
+  "git.autofetch": false,
+  "git.autofetchPeriod": 180,
+  // Ask before Sync pulls or pushes (your own settings only: a folder cannot turn the question off).
+  "git.confirmSync": true,
+  // Pull with rebase instead of a merge commit.
+  "git.rebaseWhenSync": false,
+  // Fetch drops remote branches that no longer exist, pull also fetches all tags, and fetchOnPull fetches every remote first.
+  "git.pruneOnFetch": true,
+  "git.pullTags": true,
+  "git.fetchOnPull": false,
+  // "none", "push" or "sync" after every commit (your own settings only).
+  "git.postCommitCommand": "none",
+  // Commit all tracked changes when nothing is staged (false: stage first).
+  "git.enableSmartCommit": true,
+  // --- structural ---
+  // Most files a structural search reads and parses (the rest are left out and the results say so).
+  "search.structural.maxFiles": 5000,
+
+  // Compare Folders: globs skipped on both sides, and how many entries per side before it stops.
+  // "compare.folders.ignore": [".git", "node_modules", "target"],
+  // "compare.folders.maxFiles": 50000,
 
   // "terminal.shell": "/bin/zsh",
   "terminal.fontSize": 13,
   "terminal.scrollback": 2000,
+  // Let programs in the terminal write to the clipboard (OSC 52). Off by default: a program you run, or a file you cat, could replace
+  // what you copied.
+  // "terminal.allowClipboardWrite": false,
 
   // What opens when you start the app without a folder: "welcome" (the start page; recent folders and SSH
   // hosts are listed, nothing reconnects by itself), "continue" (like a browser: the last folder or SSH
@@ -525,7 +603,16 @@ pub const RESTRICTED_KEYS: &[&str] = &["terminal.shell", "lsp.servers", "json.sc
 
 /// Not read from the project file even in a trusted folder: the gate is global, so one
 /// repo touching it would open it for every folder.
-pub const USER_ONLY_KEYS: &[&str] = &["security.workspaceTrust.enabled", "http.confirmRequests", "ui.language", "update.check"];
+pub const USER_ONLY_KEYS: &[&str] = &[
+    "security.workspaceTrust.enabled",
+    "http.confirmRequests",
+    "ui.language",
+    "update.check",
+    // --- git-sync ---
+    // A repository must not turn the question before a sync off, or make every commit push by itself.
+    "git.confirmSync",
+    "git.postCommitCommand",
+];
 
 /// `trusted`: the folder is trusted. If not, `RESTRICTED_KEYS` in the project layer are ignored and a warning is recorded.
 pub fn parse_layers_trusted(user: &str, project: &[Layer], trusted: bool) -> Result<(Settings, Vec<String>), String> {
@@ -613,12 +700,54 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.number("search.maxResults", 1., 100_000.) {
         s.search_max_results = v as u32;
     }
+    // --- git-sync ---
+    if let Some(v) = r.bool("git.autofetch") {
+        s.git_autofetch = v;
+    }
+    if let Some(v) = r.number("git.autofetchPeriod", 30., 86_400.) {
+        s.git_autofetch_period = v as u32;
+    }
+    if let Some(v) = r.bool("git.confirmSync") {
+        s.git_confirm_sync = v;
+    }
+    if let Some(v) = r.bool("git.rebaseWhenSync") {
+        s.git_rebase_when_sync = v;
+    }
+    if let Some(v) = r.bool("git.pruneOnFetch") {
+        s.git_prune_on_fetch = v;
+    }
+    if let Some(v) = r.bool("git.pullTags") {
+        s.git_pull_tags = v;
+    }
+    if let Some(v) = r.bool("git.fetchOnPull") {
+        s.git_fetch_on_pull = v;
+    }
+    if let Some(v) = r.choice("git.postCommitCommand", &["none", "push", "sync"]) {
+        s.git_post_commit = v;
+    }
+    if let Some(v) = r.bool("git.enableSmartCommit") {
+        s.git_smart_commit = v;
+    }
+    // --- structural ---
+    if let Some(v) = r.number("search.structural.maxFiles", 1., 100_000.) {
+        s.search_structural_max_files = v as usize;
+    }
+    // --- compare ---
+    if let Some(v) = r.strings("compare.folders.ignore") {
+        s.compare_ignore = v;
+    }
+    if let Some(v) = r.number("compare.folders.maxFiles", 100., 5_000_000.) {
+        s.compare_max_files = v as u32;
+    }
     s.terminal_shell = r.string("terminal.shell");
     if let Some(v) = r.number("terminal.fontSize", 6., 48.) {
         s.terminal_font_size = v as f32;
     }
     if let Some(v) = r.number("terminal.scrollback", 0., 100_000.) {
         s.terminal_scrollback = v as usize;
+    }
+    if let Some(v) = r.bool("terminal.allowClipboardWrite") {
+        s.terminal_allow_clipboard_write = v;
     }
     if let Some(v) = r.bool("window.restoreSession") {
         s.restore_session = v;
@@ -764,6 +893,13 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.bool("spelling.checkComments") {
         s.spelling_comments = v;
+    }
+    // --- data ---
+    if let Some(v) = r.number("data.indent", 1., 8.) {
+        s.data_indent = v as usize;
+    }
+    if let Some(v) = r.bool("data.sortKeys") {
+        s.data_sort_keys = v;
     }
     if let Some(v) = r.bool("json.validate.enable") {
         s.schema_validate = v;
@@ -993,6 +1129,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "spelling.enabled",
         "spelling.checkComments",
         "spelling.languages",
+        // --- data ---
+        "data.indent",
+        "data.sortKeys",
         "json.validate.enable",
         "json.schemaDownload.enable",
         "json.schemas",
@@ -1012,9 +1151,24 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "files.exclude",
         "files.hotExit",
         "search.maxResults",
+        // --- git-sync ---
+        "git.autofetch",
+        "git.autofetchPeriod",
+        "git.confirmSync",
+        "git.rebaseWhenSync",
+        "git.pruneOnFetch",
+        "git.pullTags",
+        "git.fetchOnPull",
+        "git.postCommitCommand",
+        "git.enableSmartCommit",
+        // --- structural ---
+        "search.structural.maxFiles",
+        "compare.folders.ignore",
+        "compare.folders.maxFiles",
         "terminal.shell",
         "terminal.fontSize",
         "terminal.scrollback",
+        "terminal.allowClipboardWrite",
         "window.restoreSession",
         "window.startup",
         "lsp.enabled",

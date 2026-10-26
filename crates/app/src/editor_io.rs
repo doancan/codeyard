@@ -2,6 +2,9 @@
 
 use super::*;
 
+/// How long after the conflict banner appears a save still counts as an accident.
+const CONFLICT_GRACE: std::time::Duration = std::time::Duration::from_millis(500);
+
 impl EditorView {
     pub(super) fn save(&mut self, _: &Save, _: &mut Window, cx: &mut Context<Self>) {
         self.save_now(cx);
@@ -11,6 +14,10 @@ impl EditorView {
     /// kind, syncing the document in between), then `editor.formatOnSave` runs. Each step is
     /// skipped if it does not answer within 2 s: the file is saved in every case.
     pub fn save_now(&mut self, cx: &mut Context<Self>) {
+        // The watcher can raise the banner an instant before a habitual Cmd+S lands; only a press after the user had time to read it overwrites.
+        if self.conflict && self.conflict_at.is_some_and(|at| at.elapsed() < CONFLICT_GRACE) {
+            return;
+        }
         // Cmd+S again while the conflict banner is open: overwrite on purpose.
         let force = self.conflict;
         let (kinds, format_on_save) = {
@@ -84,6 +91,11 @@ impl EditorView {
             self.after_edit(cx);
         }
         n
+    }
+
+    /// The text as it reads in the editor (`\n` line ends, no BOM). Structural search parses unsaved files from it.
+    pub fn buffer_text(&self) -> String {
+        self.buffer.rope().to_string()
     }
 
     /// Lines (for the preview in the references list).
@@ -199,9 +211,22 @@ impl EditorView {
         self.buffer.set_cursor(0, false);
         self.sync_syntax();
         if base_hash != self.disk_hash {
-            self.conflict = true;
+            self.flag_conflict();
         }
         cx.notify();
+    }
+
+    fn flag_conflict(&mut self) {
+        if !self.conflict {
+            self.conflict_at = Some(std::time::Instant::now());
+        }
+        self.conflict = true;
+    }
+
+    /// Tests: let the grace period after a conflict pass without sleeping.
+    #[cfg(test)]
+    pub fn expire_conflict_grace(&mut self) {
+        self.conflict_at = None;
     }
 
     pub fn mark_deleted_on_disk(&mut self) {
@@ -234,7 +259,7 @@ impl EditorView {
                     return; // same content (our own save, or only the timestamp changed)
                 }
                 if this.is_dirty() {
-                    this.conflict = true; // let the user decide
+                    this.flag_conflict(); // let the user decide
                 } else {
                     this.replace_buffer(loaded);
                     this.resync_lsp();
@@ -340,15 +365,28 @@ impl EditorView {
         let version = self.buffer.version();
         let line_ending = self.buffer.line_ending();
         let expect = (!force).then_some(self.disk_hash);
+        let (known, fallback) = (self.disk_hash, cx.global::<Settings>().fallback_encoding);
         let host = self.host.clone();
         let path = self.path.clone();
-        let task = cx.background_executor().spawn(async move { host.write(&path, data, expect) });
+        let task = cx.background_executor().spawn(async move {
+            // A forced write destroys whatever is on disk now, which the buffer never saw: read it in the same step so nothing can slip in between.
+            let replaced = force
+                .then(|| host.read(&path).ok())
+                .flatten()
+                .filter(|(_, hash)| *hash != known)
+                .and_then(|(bytes, _)| crate::encoding::decode(&bytes, fallback))
+                .map(|(text, _)| text);
+            (host.write(&path, data, expect), replaced)
+        });
         cx.spawn(async move |this, cx| {
-            let result = task.await;
+            let (result, replaced) = task.await;
             this.update(cx, |this, cx| {
                 this.saving = false;
                 match result {
                     Ok(hash) => {
+                        if let Some(text) = replaced {
+                            cx.emit(EditorEvent::Overwrote(text));
+                        }
                         this.disk_hash = hash;
                         this.saved_version = version;
                         this.saved_line_ending = line_ending;
@@ -359,7 +397,7 @@ impl EditorView {
                         }
                         cx.emit(EditorEvent::Saved);
                     }
-                    Err(HostError::Op(proto::Error::Conflict { .. })) => this.conflict = true,
+                    Err(HostError::Op(proto::Error::Conflict { .. })) => this.flag_conflict(),
                     Err(e) => this.error = Some(crate::i18n::tf("Could not save: {}", &[&e]).into()),
                 }
                 cx.emit(EditorEvent::Changed);

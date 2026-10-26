@@ -40,6 +40,8 @@ musl binary of about 1.5 MB.
    state. The `Workbench` struct stays under 80 lines.
 3. **Large enums** (`OverlayKind`, `InputPurpose`, `MenuCmd`) live in `workbench_types.rs`.
 
+Compare Folders is three files: `compare_logic.rs` (matching two `HashTree` scans, plans, report; no UI), `compare_folders.rs` (the tab) and `workbench_compare.rs` (picker, trust gate, copies and deletes checked against the scan).
+
 `scripts/arch-check.sh` enforces size limits and only ever lowers them: `workbench.rs` ≤ 2750 lines,
 `editor.rs` ≤ 1800, every other source file ≤ 2500 (test files ≤ 6000), `Workbench` struct ≤ 80 lines. When a
 limit is hit, split the file instead of raising the limit.
@@ -57,6 +59,7 @@ into private state any other way.
 | Syntax | `tree-sitter` with highlight queries | incremental, only the visible range is coloured; only the front tab keeps a tree |
 | Fuzzy matching | `nucleo-matcher` | quick open and palettes |
 | Search | `ignore` + `regex` in the agent | respects `.gitignore`, streams results, cancellable; the same matcher serves find-in-file (Turkish i/ı/İ/I folding) |
+| Structural search | `tree-sitter` in the app; the agent's text search picks the files | App-side on purpose: the agent has no tree-sitter and stays a 1.5 MB binary, and no protocol request is added. The agent finds files that contain the pattern's longest token, the app reads only those and parses them one at a time |
 | Terminal | `alacritty_terminal`; the agent opens the pty | mature VT emulation, same path locally and over SSH |
 | SSH | the system `ssh` with ControlMaster | `~/.ssh/config`, ProxyJump, agents, 2FA and certificates come for free |
 | Protocol | length-prefixed `postcard` frames | small and fast; file contents travel as raw bytes |
@@ -68,6 +71,7 @@ into private state any other way.
 | Local state | SQLite (`rusqlite`, bundled), WAL | atomic and crash safe; see `crates/state/schema.sql` |
 | Allocator | `mimalloc` in the app, system allocator in the agent | lower fragmentation; small agent |
 | Schemas | `jsonschema` (no default features), `yaml-rust2` | validation and hover without Node; alias budget bounds YAML expansion |
+| Data tools | `serde_json` (key order kept), `toml`, `yaml-rust2` through the schema crate | convert and query JSON, YAML, TOML and .env in `datalens*.rs`; pure functions on text, a query language with no I/O |
 | Spelling | `spellbook` (pure Rust Hunspell) | English built in, other languages installable |
 
 No server, no account, no plugin store. Outbound requests: SchemaStore and schema downloads (cached 7 days, can be disabled),
@@ -192,7 +196,7 @@ An untrusted folder (anything not opened before the trust gate existed and not t
 | tasks, tests, debugger | ask first (“Do you trust the authors of this folder?”) | run |
 | project `terminal.shell`, `lsp.servers`, `json.schemas`, `yaml.schemas` | ignored (the status bar names them) | applied |
 | language servers | **not started**; one notice per folder says how to turn them on; trusting starts them at once | start on opening a file |
-| `$schema` URLs and schema `$ref`s | downloaded only from SchemaStore (cached copies still work) | any `http(s)` address |
+| `$schema` URLs and schema `$ref`s | downloaded only from SchemaStore (cached copies still work); a network-share path (`//host/share`, `file://host/…`) is never opened, since Windows would log in to that host | any `http(s)` address |
 | `git status` (every 4 s) | `core.fsmonitor` turned off | as in a terminal |
 | `git show` / `blame` | `--no-textconv` always (raw bytes are also what hunk staging needs) | same |
 
@@ -223,7 +227,9 @@ Deliberate, with the reason:
   reached; `git log --follow` and `--name-only` run no drivers.
 - Remote `.http` requests and `$schema` downloads in a trusted folder ask once per new host and session (`http.confirmRequests`,
   default `remote`; `never` restores the old silence, `always` confirms every `.http` request). The host is the one the request
-  starts with: redirects that `curl` follows (up to 10) are not asked about again.
+  starts with. Redirects are not followed (no `curl -L`), so no unapproved host receives the request. Headers of an `.http` request
+  (an `Authorization` token, say) are curl arguments and so visible in `ps` to other users of the machine it runs on; on a shared
+  server keep secrets out of the request file or send from your own computer (`http.runOn`: `local`).
 - Windows passes its native check script but has not been verified interactively on a physical machine (SSH login, IME, mixed
   DPI, installer); macOS builds are ad-hoc signed (notarization script untested); no screen-reader testing (see
   `platforms.md`, `accessibility.md`).

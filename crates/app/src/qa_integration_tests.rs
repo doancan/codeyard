@@ -2496,6 +2496,80 @@ fn language_servers_wait_for_trust(cx: &mut TestAppContext) {
     wait_for(cx, "server start attempted after trust", |cx| notice(&wb, cx).contains("isn't available"));
 }
 
+/// A language server can ask for edits anywhere; only files under the open folders are written, and it is told when nothing was.
+#[gpui::test]
+fn workspace_edits_outside_the_open_folders_are_dropped(cx: &mut TestAppContext) {
+    let dir = qa_dir("qa-edit-roots");
+    let outside = qa_dir("qa-edit-outside").join("hosts");
+    std::fs::write(&outside, "keep\n").unwrap();
+    std::fs::write(dir.join("a.txt"), "keep\n").unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    let edit_of = |path: &Path| {
+        let change = serde_json::json!([{ "range": { "start": { "line": 0, "character": 0 }, "end": { "line": 0, "character": 4 } }, "newText": "gone" }]);
+        serde_json::json!({ "changes": { crate::lsp::path_to_uri(&path.to_string_lossy()): change } })
+    };
+    let applied = wb.update(cx, |wb, cx| wb.apply_workspace_edit_for_test(&edit_of(&outside), cx));
+    cx.run_until_parked();
+    assert!(!applied, "everything was outside: the server hears applied:false");
+    assert_eq!(std::fs::read_to_string(&outside).unwrap(), "keep\n");
+    assert!(notice(&wb, cx).contains("outside the open folders"), "{}", notice(&wb, cx));
+    let applied = wb.update(cx, |wb, cx| wb.apply_workspace_edit_for_test(&edit_of(&dir.join("a.txt")), cx));
+    wait_for(cx, "edit written inside the folder", |_| std::fs::read_to_string(dir.join("a.txt")).is_ok_and(|t| t == "gone\n"));
+    assert!(applied);
+}
+
+/// A response is whatever the server sent, tokens included: the file behind its tab is owner-only and goes away with the tab or the app.
+#[cfg(unix)]
+#[gpui::test]
+fn the_response_file_is_private_and_removed_at_quit(cx: &mut TestAppContext) {
+    use std::os::unix::fs::PermissionsExt;
+    let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+    let (wb, cx) = setup_trusting(cx, "qa-response-private");
+    let r = crate::http_client::Response {
+        status: 200,
+        reason: "OK".into(),
+        headers: vec![("Content-Type".into(), "application/json".into())],
+        body: br#"{"token":"abc"}"#.to_vec(),
+        millis: 1,
+        size: 15,
+    };
+    let f = qa_dir("qa-response-private-src").join("a.http");
+    std::fs::write(&f, "GET http://a/\n").unwrap();
+    open(&wb, &f, cx);
+    wb.update_in(cx, |wb, window, cx| wb.show_response_for_test(r.clone(), window, cx));
+    let path = wb.read_with(cx, |wb, _| wb.response_tab_for_test()).expect("response file");
+    let path = Path::new(&path);
+    assert!(path.ends_with("response.json"), "{path:?}");
+    wait_for(cx, "response tab", |cx| wb.read_with(cx, |wb, cx| wb.active_editor_entity().is_some_and(|e| e.read(cx).path == path.to_string_lossy())));
+    assert_eq!(mode(path) & 0o077, 0, "file readable by others: {:o}", mode(path));
+    assert_eq!(mode(path.parent().unwrap()) & 0o077, 0, "folder readable by others");
+    // The next response replaces it; the request file was never the response tab.
+    open(&wb, &f, cx);
+    wb.update_in(cx, |wb, window, cx| wb.show_response_for_test(r, window, cx));
+    cx.run_until_parked();
+    assert!(f.exists(), "sending again must not delete the .http file");
+    wb.update(cx, |wb, _| wb.discard_response_on_quit_for_test());
+    assert!(!path.exists() && f.exists());
+}
+
+/// Trust is per host: a folder trusted on this computer says nothing about the same path on a server.
+#[gpui::test]
+fn trusting_a_local_folder_does_not_trust_the_same_path_on_a_server(cx: &mut TestAppContext) {
+    let dir = qa_dir("qa-trust-per-host");
+    let root = dir.to_string_lossy().into_owned();
+    let (wb, cx) = setup_trusting(cx, "qa-trust-per-host");
+    open(&wb, &dir, cx);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Workspace: Trust This Folder", window, cx));
+    assert!(wb.read_with(cx, |wb, cx| wb.is_trusted_root_for_test(&root, cx)));
+    let (req_r, req_w) = std::io::pipe().unwrap();
+    let (resp_r, resp_w) = std::io::pipe().unwrap();
+    std::thread::spawn(move || agent::serve(req_r, resp_w));
+    let remote: std::sync::Arc<dyn host::Host> = std::sync::Arc::new(host::RemoteHost::from_streams(Box::new(resp_r), Box::new(req_w), "ssh://other").unwrap());
+    wb.update_in(cx, |wb, window, cx| wb.attach_host(remote, "other".into(), window, cx));
+    assert!(!wb.read_with(cx, |wb, cx| wb.is_trusted_root_for_test(&root, cx)), "same path, different host");
+}
+
 /// A repository must not be able to pick the program the editor runs just by being opened:
 /// `terminal.shell`, `lsp.servers` and the trust switch itself come from the user, or from a
 /// folder the user trusted. Harmless keys (tab size) still apply. "Trust This Folder" lifts it.

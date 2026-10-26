@@ -89,7 +89,9 @@ shows.
 
 The public key is in the repo and the app: `scripts/update-public-key.pem`, raw 32 bytes in hex
 `47bc1afc0c2c70a4a72ffd0b5ba535397bd9ca83551dfc30a12d64d7cf96d67c`. The private key is a PKCS#8 PEM in the repository secret
-`UPDATE_SIGNING_KEY`. Only the last step of `publish` (and the probe in `verify`) gets it, through that step's `env`;
+`UPDATE_SIGNING_KEY`. Only the signing step of `publish` (and the probe in `verify`) gets it, through that step's `env`, and only in a
+run for a tag: a manual dry run signs with a key made on the spot and verifies against its public half, because files signed with the
+real key are accepted by every installed app, whichever branch built them;
 `scripts/sign-release.sh` writes it to a mode 0600 temp file for one `openssl` call and deletes it on exit. Never print it, commit
 it or put it in an artifact.
 

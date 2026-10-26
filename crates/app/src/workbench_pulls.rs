@@ -17,10 +17,6 @@ fn token() -> Option<String> {
     ["GITHUB_TOKEN", "GH_TOKEN"].iter().find_map(|k| std::env::var(k).ok()).filter(|t| !t.trim().is_empty())
 }
 
-fn now_secs() -> i64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64)
-}
-
 impl Workbench {
     pub(super) fn show_pull_requests(&mut self, _: &ShowPullRequests, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.repo_root(cx) else { return };
@@ -113,11 +109,28 @@ impl Workbench {
                 let n = pull.number;
                 self.git_task(&crate::i18n::tf("Checking out pull request #{}…", &[&n]), cx, move |h| {
                     // `-B`: if the branch exists it is reset to the PR's current tip (in case the PR was updated); git refuses if a dirty tree conflicts.
-                    git::git_ok(h, &root, &["fetch", "--quiet", &remote, &format!("pull/{n}/head")]).map_err(|e| github::explain_checkout(&e, n, &remote))?;
+                    git::fetch_pull(h, &root, &remote, n).map_err(|e| github::explain_checkout(&e, n, &remote))?;
                     git::git_ok(h, &root, &["checkout", "-q", "-B", &format!("pr-{n}"), "FETCH_HEAD"]).map_err(|e| github::explain_checkout(&e, n, &remote))?;
                     Ok(crate::i18n::tf("Checked out #{} as pr-{}", &[&n, &n]))
                 });
             }
         }
+    }
+
+    #[cfg(test)]
+    pub fn checkout_pull_for_test(&mut self, remote: String, number: u64, cx: &mut Context<Self>) {
+        let pull = Pull {
+            number,
+            title: String::new(),
+            author: String::new(),
+            head: "topic".into(),
+            base: "main".into(),
+            draft: false,
+            updated: String::new(),
+            url: String::new(),
+            review: None,
+            checks: None,
+        };
+        self.run_pull_action(remote, pull, PullAction::Checkout, cx);
     }
 }
