@@ -239,6 +239,21 @@ jobs:
 
   # The same checks run locally with scripts/check-windows.ps1.
   windows:
+    needs: [windows-tests, windows-standalone]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require native tests and standalone release checks
+        env:
+          TESTS_RESULT: ${{ needs.windows-tests.result }}
+          STANDALONE_RESULT: ${{ needs.windows-standalone.result }}
+        run: |
+          echo "Windows tests: $TESTS_RESULT; standalone release: $STANDALONE_RESULT"
+          test "$TESTS_RESULT" = success
+          test "$STANDALONE_RESULT" = success
+
+  windows-tests:
     runs-on: windows-2022
     timeout-minutes: 60
     steps:
@@ -252,4 +267,20 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       - name: Windows native checks
         shell: pwsh
-        run: ./scripts/check-windows.ps1
+        run: ./scripts/check-windows.ps1 -SkipStandalone
+
+  windows-standalone:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
+        with:
+          shared-key: app-windows
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+      - name: Build and validate the standalone release EXE
+        shell: pwsh
+        run: ./scripts/build-windows.ps1 -Profile Release
