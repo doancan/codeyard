@@ -90,8 +90,9 @@ warnings in `shaders` and `agents`; all release jobs also had zero such warnings
    linker (no WSL or Docker needed), then embeds them in the application. Use `-Profile Release` for an optimized build.
 6. `AGENTS_DIR="$PWD/agents" scripts/bundle-macos.sh` builds the app, the bundle and the DMG.
 7. Collect `dist/`: `Codeyard-X.Y.Z-macos-arm64.dmg`, `codeyard-X.Y.Z-macos-arm64.tar.gz` (binary, `agents/` and `licenses/`).
-8. Release notes: the CHANGELOG section plus the install paragraph (the app is not notarized yet: right-click →
-   Open, or `xattr -cr /Applications/Codeyard.app`). Save them as `dist/RELEASE_NOTES.md`: the same file is the release body
+8. Release notes: the CHANGELOG section plus installation instructions that match the artifact. Use the GitHub workflow
+   for Developer ID signing and notarization; an ad-hoc local build still requires user approval in Privacy & Security.
+   Save the notes as `dist/RELEASE_NOTES.md`: the same file is the release body
    and the signed notes the app shows.
 9. Checksums and signature: `(cd dist && sha256sum * > ../SHA256SUMS.txt && mv ../SHA256SUMS.txt .)` (every asset except
    `SHA256SUMS.txt` and its `.sig`; add the Windows files first if you have them), then
@@ -132,8 +133,11 @@ is a separate manual check.
 Tag releases require Developer ID signing and Apple notarization in the macOS job. A normal manual/main-branch dry run
 stays ad-hoc signed and receives no Apple credentials. To test the real Apple path without publishing, run `release` on
 `main` or `develop` with the **notarize** input enabled. A missing secret fails verification before the platform app builds.
-The first real Apple-signed run is still pending credential configuration; the scripts have been checked with mocked
-Apple tools, not a live notarization submission.
+The first [live signed dry run](https://github.com/doancan/codeyard/actions/runs/40308479338) passed on 2026-10-26
+in 10:14. Apple returned `Accepted` for the DMG and portable ZIP; both Gatekeeper assessments reported
+`source=Notarized Developer ID`. Temporary keychain cleanup, Windows packaging, checksums and the throw-away update
+signature also passed. No GitHub release was published. The five Apple secrets are configured in GitHub Actions;
+no certificate/private key was added to Git. Six mocked regression tests also run in CI and release verification.
 
 Configure these under **GitHub repository Settings → Secrets and variables → Actions → New repository secret**:
 
