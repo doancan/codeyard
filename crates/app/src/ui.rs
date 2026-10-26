@@ -313,10 +313,14 @@ impl AssetSource for Assets {
 pub fn join(dir: &str, name: &str) -> String {
     // An absolute name stays as is: files in the workspace's extra folders are kept
     // with absolute paths in persisted records (tabs, bookmarks).
-    if name.starts_with('/') || windows_path(name) {
+    if is_absolute_path(name) {
         return name.to_string();
     }
     if dir.ends_with('/') { format!("{dir}{name}") } else { format!("{dir}/{name}") }
+}
+
+pub fn is_absolute_path(path: &str) -> bool {
+    path.starts_with('/') || windows_path(path)
 }
 
 pub fn file_name(path: &str) -> &str {

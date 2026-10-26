@@ -9,11 +9,10 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_STATE_DIR` | Folder for the local state database, crash reports and backups (default: `~/Library/Application Support/codeyard` on macOS, `~/.local/state/codeyard` elsewhere). |
 | `CODEYARD_CONFIG_DIR` | Folder for `settings.jsonc`, `keybindings.jsonc`, `themes/`, `snippets/`, `projects.jsonc` (default `~/.config/codeyard`). |
 | `CODEYARD_SSH_CONFIG` | Use this file instead of `~/.ssh/config` for host lists and connections. |
-| `CODEYARD_AGENT_DIR` | Where the app looks for the bundled `codeyard-agent-<triple>` binaries (default: `agents/` next to the executable). |
+| `CODEYARD_AGENT_DIR` | Optional developer override for `codeyard-agent-<triple>` binaries. Windows uses embedded agents by default; Unix packages use `agents/` next to the executable (or the macOS bundle's Resources directory). |
 | `CODEYARD_REMOTE_DIR` | Where the agent is installed on the server (default `~/.cache/codeyard`). |
 | `CODEYARD_NO_A11Y` | Set to disable the macOS accessibility tree. |
 | `CODEYARD_NO_DOCK_ICON` | Do not set the Dock icon at run time (bare binaries only). |
-| `CODEYARD_SKIP_DISK_PROMPT` | Do not let the system ask for Desktop, Documents and Downloads at start (macOS). |
 | `CODEYARD_DAP_TRACE` | Print the debug adapter protocol traffic to stderr. |
 | `CODEYARD_LSP_TRACE` | Print language server messages to stderr. |
 | `CODEYARD_JS_DEBUG` | Folder of an existing Microsoft js-debug installation. |

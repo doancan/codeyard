@@ -1332,7 +1332,6 @@ Select a color theme	Bir renk teması seçin
 Select a file icon theme	Bir dosya simgesi teması seçin
 Open as Hex	Hex Olarak Aç
 Restarting language servers…	Dil sunucuları yeniden başlatılıyor…
-Could not open {0}: {1}	{0} açılamadı: {1}
 No file “{}” in this project	Bu projede “{}” dosyası yok
 Language Badges	Dil Rozetleri
 Colorful Folders	Renkli Klasörler
@@ -1823,8 +1822,8 @@ Help: Check for Updates…	Yardım: Güncellemeleri Denetle…
 Check for Updates…	Güncellemeleri Denetle…
 Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it	Yeni Codeyard sürümlerine bak: ask (henüz karar verilmedi; hiçbir şey denetlenmez), daily (günde bir kez github.com'dan iki küçük dosya indirir: son sürümün sağlama toplamı listesi ve imzası; GitHub IP adresinizi ve isteğin curl'den geldiğini görür, dosyalarınızla ilgili hiçbir şey gönderilmez) ya da manual (yalnızca Güncellemeleri Denetle'yi seçtiğinizde). Yalnızca kendi ayarlarınızda geçerlidir; bir klasör bunu değiştiremez
 Check for updates automatically?	Güncellemeler otomatik denetlensin mi?
-Once a day, Codeyard can look for a newer version. It downloads two small files from github.com: the checksum list of the latest release and its signature. GitHub sees your IP address and that the request comes from curl; no account, no cookies, nothing about your files.	Codeyard günde bir kez daha yeni bir sürüm olup olmadığına bakabilir. github.com'dan iki küçük dosya indirir: son sürümün sağlama toplamı listesi ve imzası. GitHub IP adresinizi ve isteğin curl'den geldiğini görür; hesap, çerez ya da dosyalarınıza dair hiçbir bilgi yoktur.
-You can change this at any time in Settings (update.check). Check for Updates… always works, whatever you choose.	Bunu istediğiniz zaman Ayarlar'dan (update.check) değiştirebilirsiniz. Ne seçerseniz seçin, Güncellemeleri Denetle… her zaman çalışır.
+Once a day, Codeyard downloads two small files from github.com to look for a newer version. GitHub sees your IP address, nothing about your files.	Günde bir kez Codeyard, yeni sürüm var mı diye github.com'dan iki küçük dosya indirir. GitHub IP adresinizi görür, dosyalarınız hakkında hiçbir şey görmez.
+Change this in Settings (update.check). Check for Updates… always works.	Bunu Ayarlar'dan (update.check) değiştirebilirsiniz. Güncellemeleri Denetle… her zaman çalışır.
 Check Daily	Her Gün Denetle
 Only When I Ask	Yalnızca Ben İstediğimde
 Checking for updates…	Güncellemeler denetleniyor…

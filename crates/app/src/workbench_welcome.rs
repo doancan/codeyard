@@ -97,18 +97,6 @@ impl Workbench {
         self.ask_disk_access(window, cx);
     }
 
-    /// macOS, once per version (a build signed without a developer certificate is a new app to the system with every release):
-    /// touch the protected folders so the system asks in its own dialogs and lists Codeyard, like any Mac app does at its first start.
-    pub(super) fn request_file_access_once(&mut self, cx: &mut Context<Self>) {
-        let version = env!("CARGO_PKG_VERSION");
-        let done = self.persist.state.as_ref().and_then(|s| s.get("file_access_requested")).is_some_and(|v| v == version);
-        let Some(home) = dirs::home_dir().filter(|_| !done && std::env::var_os("CODEYARD_SKIP_DISK_PROMPT").is_none()) else { return };
-        if let Some(s) = &self.persist.state {
-            let _ = s.set("file_access_requested", version);
-        }
-        cx.background_executor().spawn(async move { crate::access::request(&home) }).detach();
-    }
-
     fn ask_disk_access(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // macOS never lists an app here by itself: it has to be added with "+" (or dragged in) by hand.
         let detail = format!(

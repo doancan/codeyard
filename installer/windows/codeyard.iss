@@ -1,15 +1,12 @@
 ; Codeyard Windows installer (Inno Setup 6).
 ;   iscc /DAppVersion=0.1.0 installer\windows\codeyard.iss
 ; Input: target\release\codeyard.exe, the licence texts (installed to {app}\licenses, same list as
-; scripts\licenses.sh) and the AGENTS_DIR contents (optional).
+; scripts\licenses.sh). SSH agents are embedded in Codeyard.exe by scripts/build-windows.ps1.
 ; Output: target\windows\Codeyard-<version>-windows-x64-setup.exe
-; Normally run by scripts\bundle-windows.ps1. Not yet run on a Windows machine.
+; Normally run by scripts\bundle-windows.ps1.
 
 #ifndef AppVersion
   #define AppVersion "0.0.0"
-#endif
-#ifndef AgentsDir
-  #define AgentsDir ""
 #endif
 
 [Setup]
@@ -56,9 +53,6 @@ Source: "..\..\vendor\xattr\LICENSE-MIT"; DestDir: "{app}\licenses"; DestName: "
 Source: "..\..\vendor\xattr\LICENSE-APACHE"; DestDir: "{app}\licenses"; DestName: "xattr-LICENSE-APACHE"; Flags: ignoreversion
 Source: "..\..\crates\spell\dicts\en\license"; DestDir: "{app}\licenses"; DestName: "spell-dict-en-license"; Flags: ignoreversion
 Source: "..\..\crates\syntax\LICENSES\*"; DestDir: "{app}\licenses\syntax-LICENSES"; Flags: ignoreversion
-#if AgentsDir != ""
-Source: "{#AgentsDir}\*"; DestDir: "{app}\agents"; Flags: ignoreversion recursesubdirs createallsubdirs
-#endif
 
 [Icons]
 Name: "{group}\Codeyard"; Filename: "{app}\Codeyard.exe"; IconFilename: "{app}\codeyard.ico"
