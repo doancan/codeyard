@@ -215,7 +215,9 @@ pub fn find_theme_in(roots: &[PathBuf], name: &str) -> Option<Value> {
 /// Theme file + its `include` chain: this file's colors go on top of the base's.
 fn load_theme(path: &std::path::Path, depth: usize) -> Option<Value> {
     let text = std::fs::read_to_string(path).ok()?;
-    let mut v: Value = serde_json::from_str(&theme::themes::strip_jsonc(&text)).ok()?;
+    // A theme is an object; anything else (a theme file can come from any extension) is not one, and would panic below
+    // where fields are written.
+    let mut v: Value = serde_json::from_str(&theme::themes::strip_jsonc(&text)).ok().filter(Value::is_object)?;
     if let (Some(inc), true) = (v["include"].as_str().map(str::to_string), depth < 4)
         && let Some(base) = path.parent().and_then(|d| load_theme(&d.join(&inc), depth + 1))
     {
@@ -454,6 +456,21 @@ pub fn merge_keybindings(ours: &str, entries: &[Value]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A theme file from an extension can hold anything: a top level that is not an object is no theme, and including one
+    /// does not panic either.
+    #[test]
+    fn theme_files_that_are_not_objects_are_skipped() {
+        let dir = std::env::temp_dir().join(format!("codeyard-theme-shapes-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for (name, text) in [("array.json", "[1, 2]"), ("string.json", "\"dark\""), ("number.json", "7")] {
+            std::fs::write(dir.join(name), text).unwrap();
+            assert_eq!(load_theme(&dir.join(name), 0), None, "{name}");
+        }
+        std::fs::write(dir.join("child.json"), r##"{ "include": "./array.json", "colors": { "editor.background": "#000000" } }"##).unwrap();
+        assert!(load_theme(&dir.join("child.json"), 0).is_some_and(|t| t["colors"]["editor.background"] == "#000000"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn windows_import_finds_roaming_settings_and_installed_themes_without_home() {
