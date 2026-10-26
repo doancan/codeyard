@@ -1592,6 +1592,32 @@ fn git_status_marks_tree_and_gutter(cx: &mut TestAppContext) {
     });
 }
 
+/// The graph's labels follow refs that move without HEAD moving: a new branch checked out on the same commit (with a slash
+/// in its name, which must stay a local branch) and a new tag.
+#[gpui::test]
+fn source_control_graph_follows_refs_that_do_not_move_head(cx: &mut TestAppContext) {
+    use crate::graph::RefKind;
+    let Some(dir) = git_repo("scmgraphrefs") else { return };
+    let dir = std::fs::canonicalize(dir).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    cx.simulate_keystrokes("ctrl-shift-g");
+    let scm = wb.read_with(cx, |wb, _| wb.scm_panel());
+    let refs = |cx: &mut VisualTestContext| {
+        scm.read_with(cx, |s, _| s.graph_commit(0).map(|c| c.refs.into_iter().map(|r| (r.name, r.kind)).collect::<Vec<_>>()).unwrap_or_default())
+    };
+    wait_ticking(cx, "graph", |cx| refs(cx).contains(&("main".into(), RefKind::Head)));
+    git_in(&dir, &["checkout", "-q", "-b", "feature/x"]);
+    wait_ticking(cx, "HEAD label moved to the new branch", |cx| refs(cx).contains(&("feature/x".into(), RefKind::Head)));
+    assert!(refs(cx).contains(&("main".into(), RefKind::Local)), "main is a local branch now: {:?}", refs(cx));
+    git_in(&dir, &["branch", "fix/y"]);
+    git_in(&dir, &["tag", "v9"]);
+    wait_ticking(cx, "new branch and tag", |cx| {
+        let r = refs(cx);
+        r.contains(&("fix/y".into(), RefKind::Local)) && r.contains(&("v9".into(), RefKind::Tag))
+    });
+}
+
 /// Source control graph: branches, merge, tag; clicking a commit shows its files.
 #[gpui::test]
 fn source_control_graph_shows_branches_and_opens_commit_files(cx: &mut TestAppContext) {
