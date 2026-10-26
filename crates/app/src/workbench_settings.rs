@@ -122,6 +122,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     e("window.restoreSession", crate::i18n::tr("Bring a folder's tabs and unsaved changes back when you open it"), Kind::Bool),
     e("ports.autoForward", crate::i18n::tr("Forward ports opened on SSH hosts"), Kind::Bool),
+    e("ports.localBind", crate::i18n::tr("Where forwarded ports listen: this computer only, or every network interface"), Kind::Choice(&["loopback", "all"])),
     e("lsp.enabled", crate::i18n::tr("Start language servers"), Kind::Bool),
     e(
         "http.runOn",
@@ -302,6 +303,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "window.restoreSession" => json!(s.restore_session),
         "window.startup" => json!(s.startup.id()),
         "ports.autoForward" => json!(s.ports_auto_forward),
+        "ports.localBind" => json!(if s.ports_local_bind == host::forward::LocalBind::All { "all" } else { "loopback" }),
         "lsp.enabled" => json!(s.lsp_enabled),
         _ => Value::Null,
     }

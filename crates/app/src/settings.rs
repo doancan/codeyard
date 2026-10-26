@@ -137,6 +137,10 @@ pub struct Settings {
     pub auto_close_brackets: bool,
     /// Whether ports opened later over SSH are forwarded automatically.
     pub ports_auto_forward: bool,
+    /// Local addresses forwarded ports listen on (`ports.localBind`: this computer only, or every interface).
+    pub ports_local_bind: host::forward::LocalBind,
+    /// Per-port label, protocol and detection behaviour (`ports.rules`).
+    pub ports_rules: Vec<crate::port_forwards::PortRule>,
     /// Whether language servers are enabled.
     pub lsp_enabled: bool,
     /// Language id → command and arguments (`None`: disabled for that language). Overrides the defaults.
@@ -309,6 +313,8 @@ impl Default for Settings {
             word_based_suggestions: true,
             enable_trash: true,
             ports_auto_forward: true,
+            ports_local_bind: host::forward::LocalBind::Loopback,
+            ports_rules: Vec::new(),
             lsp_enabled: true,
             lsp_servers: Vec::new(),
             fallback_encoding: crate::encoding::Encoding::Windows1254,
@@ -531,6 +537,13 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // what you copied.
   // "terminal.allowClipboardWrite": false,
 
+  // Ports forwarded from SSH hosts listen on this computer only ("loopback") or on every network interface ("all",
+  // reachable from other computers).
+  // "ports.localBind": "loopback",
+  // Per port or range: a label, the protocol ("http", "https" or "tcp") and what happens when the port is detected
+  // ("notify", "silent", "openBrowser" or "ignore").
+  // "ports.rules": { "3000": { "label": "web", "onForward": "openBrowser" }, "9000-9100": { "onForward": "ignore" } },
+
   // What opens when you start the app without a folder: "welcome" (the start page; recent folders and SSH
   // hosts are listed, nothing reconnects by itself), "continue" (like a browser: the last folder or SSH
   // host and its tabs come back) or "blank" (an empty window).
@@ -614,6 +627,8 @@ pub const USER_ONLY_KEYS: &[&str] = &[
     // A repository must not turn the question before a sync off, or make every commit push by itself.
     "git.confirmSync",
     "git.postCommitCommand",
+    // A repository must not make forwarded ports reachable from the network.
+    "ports.localBind",
 ];
 
 /// `trusted`: the folder is trusted. If not, `RESTRICTED_KEYS` in the project layer are ignored and a warning is recorded.
@@ -1024,6 +1039,20 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.bool("ports.autoForward") {
         s.ports_auto_forward = v;
     }
+    if let Some(v) = r.choice("ports.localBind", &["loopback", "all"]) {
+        s.ports_local_bind = if v == "all" { host::forward::LocalBind::All } else { host::forward::LocalBind::Loopback };
+    }
+    match obj.get("ports.rules") {
+        None | Some(Value::Null) => {}
+        Some(Value::Object(m)) => {
+            let mut w = Vec::new();
+            s.ports_rules = crate::port_forwards::parse_rules(m, &mut w);
+            for w in w {
+                r.warn(w);
+            }
+        }
+        Some(_) => r.warn(crate::i18n::tf("{0}: expected an object {1}", &[&"ports.rules", &"{ \"3000\": { \"label\": \"web\" } }"])),
+    }
     if let Some(v) = r.bool("lsp.enabled") {
         s.lsp_enabled = v;
     }
@@ -1176,6 +1205,8 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "lsp.enabled",
         "lsp.servers",
         "ports.autoForward",
+        "ports.localBind",
+        "ports.rules",
         "editor.autoClosingBrackets",
         "editor.formatOnSave",
         "editor.formatOnPaste",
@@ -1776,6 +1807,7 @@ mod hardening {
                 "theme",
                 "workbench.colorCustomizations",
                 "files.associations",
+                "ports.rules",
                 "lsp.servers",
                 "json.schemas",
                 "yaml.schemas",

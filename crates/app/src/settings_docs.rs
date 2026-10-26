@@ -31,6 +31,12 @@ pub const FILE_ONLY: &[(&str, &str, &str, &str)] = &[
     ),
     ("files.associations", "object of glob → language", "`{}`", "Force a language mode for matching files, e.g. `{ \"*.tpl\": \"html\" }`."),
     (
+        "ports.rules",
+        "object of port or range → rule",
+        "`{}`",
+        "Label, protocol (`http`, `https`, `tcp`) and detection behaviour (`notify`, `silent`, `openBrowser`, `ignore`) per forwarded port, e.g. `{ \"3000\": { \"label\": \"web\", \"onForward\": \"openBrowser\" } }`; a single port beats a range.",
+    ),
+    (
         "json.schemas",
         "list of `{ fileMatch, url }`",
         "`[]`",

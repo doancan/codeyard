@@ -26,7 +26,6 @@ pub enum Origin {
 
 /// What the forwarded port speaks: decides the address "Open in Browser" uses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[cfg_attr(not(test), expect(dead_code, reason = "HTTPS and TCP are chosen in the ports table, which comes next"))]
 pub enum Protocol {
     #[default]
     Http,
@@ -41,6 +40,15 @@ impl Protocol {
             Protocol::Http => "http",
             Protocol::Https => "https",
             Protocol::Tcp => "tcp",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "http" => Some(Protocol::Http),
+            "https" => Some(Protocol::Https),
+            "tcp" => Some(Protocol::Tcp),
+            _ => None,
         }
     }
 
@@ -140,6 +148,98 @@ pub struct Forward {
 
 /// Longest label kept.
 pub const MAX_LABEL: usize = 64;
+
+/// What happens when a port is detected on the server (`ports.rules` → `onForward`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum OnForward {
+    /// Forward it and say so.
+    #[default]
+    Notify,
+    /// Forward it quietly.
+    Silent,
+    /// Forward it and open it in the browser (once per connection).
+    OpenBrowser,
+    /// Do not forward it automatically.
+    Ignore,
+}
+
+impl OnForward {
+    fn parse(s: &str) -> Option<Self> {
+        match s {
+            "notify" => Some(OnForward::Notify),
+            "silent" => Some(OnForward::Silent),
+            "openBrowser" => Some(OnForward::OpenBrowser),
+            "ignore" => Some(OnForward::Ignore),
+            _ => None,
+        }
+    }
+}
+
+/// One `ports.rules` entry: a port or a range and what to use for it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PortRule {
+    pub from: u16,
+    pub to: u16,
+    pub label: Option<String>,
+    pub on_forward: Option<OnForward>,
+    pub protocol: Option<Protocol>,
+}
+
+/// The rule values that apply to one port.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PortAttrs {
+    pub label: Option<String>,
+    pub on_forward: OnForward,
+    pub protocol: Protocol,
+}
+
+/// Values for `port`: the narrowest matching rule wins (a single port beats a range), the first one on a tie.
+pub fn rule_for(rules: &[PortRule], port: u16) -> PortAttrs {
+    let best = rules.iter().filter(|r| (r.from..=r.to).contains(&port)).min_by_key(|r| r.to - r.from);
+    best.map_or_else(PortAttrs::default, |r| PortAttrs {
+        label: r.label.clone(),
+        on_forward: r.on_forward.unwrap_or_default(),
+        protocol: r.protocol.unwrap_or_default(),
+    })
+}
+
+/// `ports.rules` from the settings file: `{ "3000": { "label": "web", "onForward": "openBrowser", "protocol": "http" },
+/// "9000-9100": { "onForward": "ignore" } }`. A bad entry is skipped with a warning; the others still apply.
+pub fn parse_rules(map: &serde_json::Map<String, serde_json::Value>, warn: &mut Vec<String>) -> Vec<PortRule> {
+    let port = |s: &str| s.trim().parse::<u16>().ok().filter(|p| *p > 0);
+    let mut out = Vec::new();
+    for (key, value) in map {
+        let range = match key.split_once('-') {
+            Some((a, b)) => port(a).zip(port(b)).filter(|(a, b)| a <= b),
+            None => port(key).map(|p| (p, p)),
+        };
+        let Some((from, to)) = range else {
+            warn.push(crate::i18n::tf("ports.rules.{}: expected a port or a range such as 3000-3010", &[key]));
+            continue;
+        };
+        let Some(obj) = value.as_object() else {
+            warn.push(crate::i18n::tf("ports.rules.{}: expected an object with label, onForward or protocol", &[key]));
+            continue;
+        };
+        let mut rule = PortRule { from, to, label: None, on_forward: None, protocol: None };
+        for (field, v) in obj {
+            let ok = match (field.as_str(), v.as_str()) {
+                ("label", Some(l)) => {
+                    rule.label = clean_label(l);
+                    true
+                }
+                ("onForward", Some(o)) => OnForward::parse(o).map(|o| rule.on_forward = Some(o)).is_some(),
+                ("protocol", Some(p)) => Protocol::parse(p).map(|p| rule.protocol = Some(p)).is_some(),
+                _ => false,
+            };
+            if !ok {
+                warn.push(crate::i18n::tf("ports.rules.{}.{}: unexpected value", &[key, field]));
+            }
+        }
+        out.push(rule);
+    }
+    out
+}
 
 /// A label as stored: one printable line, capped; empty means none.
 pub fn clean_label(raw: &str) -> Option<String> {
@@ -278,8 +378,22 @@ impl ForwardSet {
         }
     }
 
+    #[expect(dead_code, reason = "used by the ports table")]
+    pub fn set_label(&mut self, id: ForwardId, label: &str) {
+        if let Some(f) = self.get_mut(id) {
+            f.label = clean_label(label);
+        }
+    }
+
+    #[expect(dead_code, reason = "used by the ports table")]
+    pub fn set_protocol(&mut self, id: ForwardId, protocol: Protocol) {
+        if let Some(f) = self.get_mut(id) {
+            f.protocol = protocol;
+        }
+    }
+
     /// Moves a forward to the local port the user chose: the old one is cancelled, the new one must be exactly `port`.
-    #[cfg_attr(not(test), expect(dead_code, reason = "the ports table changes local ports, which comes next"))]
+    #[cfg_attr(not(test), expect(dead_code, reason = "used by the ports table"))]
     pub fn change_local(&mut self, id: ForwardId, port: u16) -> Vec<Effect> {
         let Some(f) = self.get_mut(id) else { return Vec::new() };
         let mut out = Vec::new();
@@ -532,6 +646,25 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn port_rules_parse_with_warnings_and_the_narrowest_wins() {
+        let json: serde_json::Value = serde_json::from_str(
+            r#"{ "3000": { "label": "web", "onForward": "openBrowser" }, "3000-3999": { "protocol": "https", "label": "range" },
+                 "9000-9100": { "onForward": "ignore" }, "abc": {}, "10-5": {}, "0": {}, "70000": {}, "4000": 3,
+                 "4001": { "onForward": "sometimes", "protocol": "gopher", "label": 5, "extra": true } }"#,
+        )
+        .unwrap();
+        let mut warn = Vec::new();
+        let rules = parse_rules(json.as_object().unwrap(), &mut warn);
+        assert_eq!(rules.len(), 4, "{rules:?}");
+        assert_eq!(warn.len(), 9, "every bad key or value is reported: {warn:?}");
+        let web = rule_for(&rules, 3000);
+        assert_eq!((web.label.as_deref(), web.on_forward, web.protocol), (Some("web"), OnForward::OpenBrowser, Protocol::Http), "a single port beats a range");
+        assert_eq!(rule_for(&rules, 3500).protocol, Protocol::Https);
+        assert_eq!(rule_for(&rules, 9050).on_forward, OnForward::Ignore);
+        assert_eq!(rule_for(&rules, 80), PortAttrs::default());
     }
 
     #[test]

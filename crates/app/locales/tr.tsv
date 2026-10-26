@@ -1502,6 +1502,10 @@ waiting for the connection	bağlantı bekleniyor
 Retry	Yeniden Dene
 {} is listening on the server	{0} sunucuda dinliyor
 {} ports are forwarded	{0} bağlantı noktası yönlendirildi
+ports.rules.{}: expected a port or a range such as 3000-3010	ports.rules.{0}: bir bağlantı noktası ya da 3000-3010 gibi bir aralık bekleniyordu
+ports.rules.{}: expected an object with label, onForward or protocol	ports.rules.{0}: label, onForward ya da protocol içeren bir nesne bekleniyordu
+ports.rules.{}.{}: unexpected value	ports.rules.{0}.{1}: beklenmeyen değer
+Where forwarded ports listen: this computer only, or every network interface	Yönlendirilen bağlantı noktalarının dinlediği yer: yalnızca bu bilgisayar ya da tüm ağ arayüzleri
 e.g. 3000	örn. 3000
 # ---- Debugger: panel, start, breakpoints, watches, exceptions, messages ----
 Could not run “{}”: {}	“{0}” çalıştırılamadı: {1}
