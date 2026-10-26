@@ -1,14 +1,13 @@
 # Releasing
 
-The `release.yml` workflow builds and publishes a release when a `vX.Y.Z` tag is pushed. Its jobs, and what waits for what:
+The `release.yml` workflow builds and publishes a release when a `vX.Y.Z` tag is pushed. It builds the agents separately and then runs the platform builds in parallel:
 
 1. `verify` checks that the tag, the Cargo version and the changelog agree, then runs `arch-check`, `docs-check`, `licenses.sh`,
    the signing self-test and a probe of the `UPDATE_SIGNING_KEY` secret (see [Signing](#signing-and-the-update-key)).
-2. `agents-linux` and `agent-macos` build the SSH agents. They start at once, next to `verify`. The Linux agents are static musl
-   binaries linked with `rust-lld` (no zig), so the whole job is a minute or two.
-3. `macos` and `windows` run side by side once `verify` and both agent jobs are done. `macos` builds the app, the DMG and the tar.gz,
-   `windows` builds the ZIP and the setup EXE, with the agents embedded. Both upload their files and the release notes as artifacts.
-4. `publish` merges the checksums, adds `RELEASE_NOTES.md`, verifies every file against them, signs `SHA256SUMS.txt`, checks the
+2. `agents-linux` and `agent-macos` build the SSH agents independently. `macos` and `windows` wait for these and `verify`, then start in parallel.
+3. `macos` builds the app, DMG and tar.gz and uploads them with the release notes as artifacts.
+4. `windows` builds the ZIP and the setup EXE from those agents and uploads them as an artifact.
+5. `publish` merges the checksums, adds `RELEASE_NOTES.md`, verifies every file against them, signs `SHA256SUMS.txt`, checks the
    signature and creates the release in one step.
 
 **Build caches.** Every build job restores a `rust-cache` of the dependencies, so a release compiles only Codeyard's own crates (a few
@@ -23,6 +22,56 @@ as artifacts and creates no release (it signs too, so the signing path is exerci
 Nothing is published before all of them succeed, so a failed Windows build leaves no half release: fix it and push the tag
 again (delete the tag first with `git push origin :refs/tags/vX.Y.Z`; no release exists yet to remove). The steps below are
 the same procedure by hand, for when the workflow cannot be used.
+
+Release jobs cache Rust dependencies. Changes to Cargo.lock, vendor files or the release workflow on main also run a dry run
+so tag builds can restore the default branch cache. App and agent jobs use separate cache keys.
+
+## Windows cross-compilation benchmark
+
+`.github/workflows/benchmark-windows.yml` compares native `windows-2022` with Linux `cargo-xwin` using the same commit,
+release profile, x64 MSVC target, embedded Linux agents and FXC-generated shader bytes. Each job starts without a target
+cache, measures a cold build, removes only the app package, and measures a build with compiled dependencies retained.
+Linux uses LLVM 19 MSVC driver aliases and cargo-xwin 0.23.1; its x64 SDK cache is saved before compilation, even if a later
+build fails. Only SDK files are restored: compiled Rust targets are never restored for this benchmark. The optional
+`host=linux` workflow input reruns only the Linux arm when investigating cross toolchains. `host=prepare` checks shader/agent
+preparation and upload/download roundtrips without compiling either app. Release and benchmark checkout/artifact/cache actions
+use commit-pinned Node.js 24 versions, so their jobs do not rely on the retired Node.js 20 runtime.
+SDK/tool installation and dependency downloads are separate steps, outside the compiler timer; include them when comparing
+whole job latency. Runner CPU counts and Rust versions are recorded in `benchmark.json`. These are runner comparisons,
+not a controlled comparison on identical hardware. Both executables undergo native Windows standalone checks.
+
+The Linux path needs `GPUI_PRECOMPILED_SHADERS` pointing to `shaders_bytes.rs` generated from this checkout's vendored
+GPUI HLSL by FXC. The benchmark generates it with the vendored build helper on Windows. GPUI's Windows manifest and the
+app icon are still compiled into the cross-built EXE. This benchmark does not publish artifacts as a release or replace
+the production Windows ZIP/installer job; installer packaging and interactive UI validation remain separate.
+
+### Measured on 2026-10-26
+
+Both hosted runners had 4 CPUs and Rust 1.99.1. The measured commits differ only in benchmark/workflow setup; the
+Cargo manifests/lockfile, crates and vendor source trees have the same SHA-256, and both embedded agents and shader bytes
+were verified identical. Raw results and hashes: [windows-msvc-2026-10-26.json](benchmarks/windows-msvc-2026-10-26.json).
+
+| Compilation | Native Windows 2022 | Linux → Windows MSVC | Linux time reduction |
+| --- | ---: | ---: | ---: |
+| Cold Rust target directory | 674.359 s (11:14) | 375.218 s (6:15) | 44.4% |
+| Dependencies retained, app rebuilt | 297.110 s (4:57) | 149.485 s (2:29) | 49.7% |
+
+The [native Windows job](https://github.com/doancan/codeyard/actions/runs/40294887424/job/121478806732) passed; that overall
+run failed in its initial Linux arm, so only its successful native job supplies the Windows measurements. The final
+[Linux run](https://github.com/doancan/codeyard/actions/runs/40301532106) passed both builds and validated the cross-built
+EXE on real Windows (GUI subsystem, application icon, embedded agents). Interactive rendering was not tested.
+
+These compiler times exclude downloads and tool installation. The first SDK download took 12:04; the successful Linux
+run restored the SDK cache and installed tools in 28 seconds. Its build job, including both compilations, took 9:48 plus
+18 seconds for native Windows verification; the native Windows build job took 17:28 including its standalone check.
+Neither compiler benchmark includes ZIP/installer packaging. These single samples compare hosted runners, not identical
+hardware, and do not guarantee a fixed speedup on other runs.
+
+The production release continues to package on Windows while macOS and Windows run in parallel. A full
+[Node.js 24 release dry run](https://github.com/doancan/codeyard/actions/runs/40299040677) passed in 9:44 with dependency
+caches, including DMG, Windows ZIP/setup, merged checksums and throw-away-key signature verification. No release was
+published. The [preparation check](https://github.com/doancan/codeyard/actions/runs/40299036873) passed with zero Node.js 20
+warnings in `shaders` and `agents`; all release jobs also had zero such warnings.
 
 ## Steps
 
@@ -41,8 +90,9 @@ the same procedure by hand, for when the workflow cannot be used.
    linker (no WSL or Docker needed), then embeds them in the application. Use `-Profile Release` for an optimized build.
 6. `AGENTS_DIR="$PWD/agents" scripts/bundle-macos.sh` builds the app, the bundle and the DMG.
 7. Collect `dist/`: `Codeyard-X.Y.Z-macos-arm64.dmg`, `codeyard-X.Y.Z-macos-arm64.tar.gz` (binary, `agents/` and `licenses/`).
-8. Release notes: the CHANGELOG section plus the install paragraph (the app is not notarized yet: right-click →
-   Open, or `xattr -cr /Applications/Codeyard.app`). Save them as `dist/RELEASE_NOTES.md`: the same file is the release body
+8. Release notes: the CHANGELOG section plus installation instructions that match the artifact. Use the GitHub workflow
+   for Developer ID signing and notarization; an ad-hoc local build still requires user approval in Privacy & Security.
+   Save the notes as `dist/RELEASE_NOTES.md`: the same file is the release body
    and the signed notes the app shows.
 9. Checksums and signature: `(cd dist && sha256sum * > ../SHA256SUMS.txt && mv ../SHA256SUMS.txt .)` (every asset except
    `SHA256SUMS.txt` and its `.sig`; add the Windows files first if you have them), then
@@ -77,6 +127,53 @@ fails when a file is missing or the Windows script or installer lacks one. After
 shortcut and "Open with Codeyard". `scripts/bundle-windows.ps1` builds the setup executable when Inno Setup is
 installed. The standalone EXE check and ZIP/setup generation have been run natively on Windows; interactive installation
 is a separate manual check.
+
+## Apple signing on GitHub Actions
+
+Tag releases require Developer ID signing and Apple notarization in the macOS job. A normal manual/main-branch dry run
+stays ad-hoc signed and receives no Apple credentials. To test the real Apple path without publishing, run `release` on
+`main` or `develop` with the **notarize** input enabled. A missing secret fails verification before the platform app builds.
+The first [live signed dry run](https://github.com/doancan/codeyard/actions/runs/40308479338) passed on 2026-10-26
+in 10:14. Apple returned `Accepted` for the DMG and portable ZIP; both Gatekeeper assessments reported
+`source=Notarized Developer ID`. Temporary keychain cleanup, Windows packaging, checksums and the throw-away update
+signature also passed. No GitHub release was published. The five Apple secrets are configured in GitHub Actions;
+no certificate/private key was added to Git. Six mocked regression tests also run in CI and release verification.
+
+Configure these under **GitHub repository Settings → Secrets and variables → Actions → New repository secret**:
+
+| Secret | Value |
+| --- | --- |
+| `MACOS_CERTIFICATE_P12` | Base64-encoded `.p12` containing only the Developer ID Application certificate and its private key |
+| `MACOS_CERTIFICATE_PASSWORD` | Password protecting that `.p12` |
+| `APPLE_ID` | Apple account email used for notarization |
+| `APPLE_APP_SPECIFIC_PASSWORD` | An app-specific password for that account; not the account login password |
+| `APPLE_TEAM_ID` | Team identifier matching the Developer ID Application certificate |
+
+Export only the selected **Developer ID Application** identity from Keychain Access, including its private key, to a
+password-protected `.p12` **outside the repository**. Use GitHub's Secrets UI, or stream the base64 value directly:
+
+```sh
+base64 -i /secure/path/DeveloperID.p12 | tr -d '\n' | gh secret set MACOS_CERTIFICATE_P12 --repo doancan/codeyard
+```
+
+Enter the remaining values using the Secrets UI or `gh secret set NAME --repo doancan/codeyard` interactively. Do not put
+secret values in shell command arguments/history, chat, source files or workflow YAML. Do not export a whole keychain.
+The local signing identity is not automatically exported or uploaded by these scripts.
+
+`macos-signing-keychain.sh` imports the identity into a temporary keychain under `RUNNER_TEMP` with a random password,
+checks that exactly one Developer ID Application identity matches the Team ID, and stores notarization credentials in
+that keychain. The `.p12` is removed even if setup fails. The workflow's `always()` cleanup restores the keychain search
+list and deletes the temporary keychain. Credentials are not written under the checkout, included in the cargo cache,
+or uploaded as artifacts. Only the identity fingerprint and temporary keychain path are exported to subsequent steps.
+Credential-file extensions are ignored by Git; the existing update **public** key remains tracked.
+
+The build signs nested macOS agents before the app, with hardened runtime and secure timestamps, and signs the DMG.
+The portable raw binary and its macOS agents are signed separately. `notarize-macos.sh` submits the DMG and a temporary
+ZIP of the exact portable directory; it requires `Accepted` for both, including when a rejected submission exits zero.
+It saves submission IDs/logs under ignored `target/notary-logs` for diagnosis, staples and validates the DMG, and checks
+the DMG and app with Gatekeeper. Raw executable tickets cannot be stapled and require Apple's online ticket lookup.
+Only after success does the workflow create the portable tar.gz and calculate checksums. The separate Ed25519 update
+signature is added by `publish` afterwards. A failed signing/notarization step prevents publication of every platform.
 
 ## Signing and the update key
 

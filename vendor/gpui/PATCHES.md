@@ -5,6 +5,7 @@ It is used through `[patch.crates-io]` in the root `Cargo.toml`. The patches bel
 
 | file | change | why |
 | --- | --- | --- |
+| build.rs, Cargo.toml | Windows build helper also runs on cross hosts; optional `GPUI_PRECOMPILED_SHADERS` supplies same-source FXC output | benchmark Linux → Windows MSVC while retaining manifest embedding |
 | Cargo.toml | `[lints.rust] warnings = "allow"` | keep upstream warnings out of the build output |
 | src/platform/mac/metal_renderer.rs | `set_maximum_drawable_count(3)` → `2` | saves ~16 MB of screen buffers per window on Retina.  Measured: budget table in docs/architecture.md (`scripts/memcheck.sh`). |
 | src/window.rs | `DispatchEventResult` `pub(crate)` → `pub` | `Window::dispatch_event` is already pub, but its return type could not be named. Needed to send mouse events to a real window from inside the app (`--do drag:…`) |
