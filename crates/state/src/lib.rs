@@ -60,8 +60,24 @@ const MIGRATIONS: &[(i64, &str)] = &[
            primary key (workspace_id, remote_port)
          );",
     ),
+    // Debugger breakpoints per project (path relative to the root), with their condition, hit count, log message and
+    // whether they are enabled.
+    (
+        7,
+        "create table if not exists breakpoints (
+           workspace_id  integer not null references workspaces(id) on delete cascade,
+           rel_path      text not null,
+           line          integer not null check (line >= 0),
+           enabled       integer not null default 1,
+           condition     text,
+           hit_condition text,
+           log_message   text,
+           created_at    integer not null,
+           primary key (workspace_id, rel_path, line)
+         );",
+    ),
 ];
-const SCHEMA_VERSION: i64 = 6;
+const SCHEMA_VERSION: i64 = 7;
 
 const DAY_MS: i64 = 86_400_000;
 const FILE_STATE_MAX_AGE_DAYS: i64 = 90;
@@ -121,6 +137,20 @@ pub struct SavedForward {
     /// `http`, `https` or `tcp`.
     pub protocol: String,
 }
+
+/// A saved debugger breakpoint (line 0-based).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SavedBreakpoint {
+    pub rel_path: String,
+    pub line: usize,
+    pub enabled: bool,
+    pub condition: Option<String>,
+    pub hit: Option<String>,
+    pub log: Option<String>,
+}
+
+/// Longest saved breakpoint condition, hit count or log message.
+const BREAKPOINT_TEXT_MAX: usize = 4000;
 
 /// What is known about an SSH host from earlier connections.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -537,6 +567,47 @@ impl State {
         tx.commit()
     }
 
+    /// Breakpoints of a project, by file and line.
+    pub fn breakpoints(&self, workspace: i64) -> Vec<SavedBreakpoint> {
+        let read = || -> Result<Vec<SavedBreakpoint>, Error> {
+            let mut stmt = self.db.prepare(
+                "select rel_path, line, enabled, condition, hit_condition, log_message from breakpoints where workspace_id = ?1 order by rel_path, line",
+            )?;
+            stmt.query_map([workspace], |r| {
+                Ok(SavedBreakpoint {
+                    rel_path: r.get(0)?,
+                    line: r.get::<_, i64>(1)?.max(0) as usize,
+                    enabled: r.get::<_, i64>(2)? != 0,
+                    condition: r.get(3)?,
+                    hit: r.get(4)?,
+                    log: r.get(5)?,
+                })
+            })?
+            .collect()
+        };
+        read().unwrap_or_default()
+    }
+
+    /// Replace one file's breakpoints (lines moved by edits are written in bulk).
+    pub fn save_file_breakpoints(&self, workspace: i64, rel_path: &str, list: &[SavedBreakpoint]) -> Result<(), Error> {
+        let clip = |t: &Option<String>| t.as_deref().map(|t| t.chars().take(BREAKPOINT_TEXT_MAX).collect::<String>());
+        let tx = self.db.unchecked_transaction()?;
+        tx.execute("delete from breakpoints where workspace_id = ?1 and rel_path = ?2", params![workspace, rel_path])?;
+        for b in list {
+            tx.execute(
+                "insert or ignore into breakpoints (workspace_id, rel_path, line, enabled, condition, hit_condition, log_message, created_at)
+                 values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![workspace, rel_path, b.line as i64, b.enabled as i64, clip(&b.condition), clip(&b.hit), clip(&b.log), now_ms()],
+            )?;
+        }
+        tx.commit()
+    }
+
+    pub fn clear_breakpoints(&self, workspace: i64) -> Result<(), Error> {
+        self.db.execute("delete from breakpoints where workspace_id = ?1", [workspace])?;
+        Ok(())
+    }
+
     pub fn delete_port_forward(&self, workspace: i64, remote: u16) -> Result<(), Error> {
         self.db.execute("delete from port_forwards where workspace_id = ?1 and remote_port = ?2", params![workspace, remote])?;
         Ok(())
@@ -691,6 +762,25 @@ mod tests {
         assert_eq!(s.port_forwards(ws).len(), PORT_FORWARDS_PER_WORKSPACE as usize, "capped per project");
         s.db.execute("delete from workspaces where id = ?1", [ws]).unwrap();
         assert!(s.port_forwards(ws).is_empty(), "removed with the project");
+    }
+
+    #[test]
+    fn breakpoints_are_replaced_per_file_and_go_with_the_project() {
+        let s = State::in_memory().unwrap();
+        let ws = s.record_workspace(None, "/p").unwrap();
+        let bp = |line, enabled| SavedBreakpoint { rel_path: "src/a.rs".into(), line, enabled, ..Default::default() };
+        s.save_file_breakpoints(ws, "src/a.rs", &[bp(3, true), bp(9, false), bp(3, false)]).unwrap();
+        s.save_file_breakpoints(ws, "b.rs", &[SavedBreakpoint { rel_path: "b.rs".into(), condition: Some("x".repeat(9000)), ..Default::default() }]).unwrap();
+        let all = s.breakpoints(ws);
+        assert_eq!(
+            all.iter().map(|b| (b.rel_path.as_str(), b.line, b.enabled)).collect::<Vec<_>>(),
+            vec![("b.rs", 0, false), ("src/a.rs", 3, true), ("src/a.rs", 9, false)]
+        );
+        assert_eq!(all[0].condition.as_ref().unwrap().len(), BREAKPOINT_TEXT_MAX, "long texts are capped");
+        s.save_file_breakpoints(ws, "src/a.rs", &[]).unwrap();
+        assert_eq!(s.breakpoints(ws).len(), 1);
+        s.clear_breakpoints(ws).unwrap();
+        assert!(s.breakpoints(ws).is_empty());
     }
 
     #[test]

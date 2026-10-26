@@ -22,6 +22,7 @@ mod compare_tests;
 mod conflict;
 mod crash;
 mod dap;
+mod debug_model;
 // --- data ---
 mod datalens;
 mod datalens_decode;
@@ -90,6 +91,8 @@ mod picker;
 mod port_forwards;
 mod ports;
 mod problems;
+#[cfg(test)]
+mod qa_debug_tests;
 #[cfg(test)]
 mod qa_editor_tests;
 #[cfg(test)]

@@ -4,16 +4,17 @@
 use super::*;
 
 /// Debug session and its settings (see workbench_debug.rs).
+#[derive(Default)]
 pub(super) struct DebugUi {
     /// Debug session (its console stays after it ends), sequence number (events of an old session are dropped),
-    /// breakpoints per file (1-based; including closed files) and the last used configuration.
+    /// breakpoints (including closed files; see debug_model.rs) and the last used configuration.
     pub(super) session: Option<debug::DebugState>,
     pub(super) generation: u64,
     /// Watch expressions (kept across sessions and per project).
     pub(super) watch_exprs: Vec<String>,
     /// Selected exception filters (`None`: none selected yet, use the adapter's defaults).
     pub(super) exception_filters: Option<Vec<String>>,
-    pub(super) bp_cache: std::collections::BTreeMap<String, Vec<crate::dap::Breakpoint>>,
+    pub(super) bps: crate::debug_model::BreakpointStore,
     pub(super) last: Option<String>,
 }
 

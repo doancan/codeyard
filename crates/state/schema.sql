@@ -104,3 +104,5 @@ create index history_recent on history (kind, used_at desc);
 -- Version 5: workspaces.hidden: "remove from recents" hides the row instead of deleting it (so backups and tabs don't go away via cascade).
 -- Version 6: port_forwards: ports the user forwarded per workspace (remote port, chosen local port, label, protocol),
 --   at most 200 per workspace; restored when the workspace opens again.
+-- Version 7: breakpoints: debugger breakpoints per workspace (relative path, 0-based line, enabled, condition,
+--   hit count, log message).

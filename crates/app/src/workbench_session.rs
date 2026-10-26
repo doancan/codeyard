@@ -195,6 +195,10 @@ impl Workbench {
                         }
                         e.pinned = pin;
                     });
+                    // Replacing the whole text moves line marks to its start; the saved breakpoints match the backed-up text.
+                    if blob.is_some() {
+                        this.apply_breakpoints_to(&ed, cx);
+                    }
                 }
                 this.restore_layout(&layout, focus_left, window, cx);
             })

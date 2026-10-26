@@ -97,6 +97,8 @@ Both, Incoming First
 Box invisible and look-alike Unicode characters (zero-width spaces, bidi controls, Cyrillic letters inside Latin words)	
 Branch {}	
 Breaking on: {}	
+Breakpoints are active.	
+Breakpoints are deactivated: the program runs past them.	
 Bring a folder's tabs and unsaved changes back when you open it	
 Build failed: {}	
 Call Stack	
@@ -372,11 +374,16 @@ Debug Python: {}
 Debug Rust: {}	
 Debug session ended	
 Debug session stopped	
+Debug: Add Function Breakpoint…	
 Debug: Add Watch Expression…	
 Debug: Break When Value Changes…	
 Debug: Break on Exceptions…	
 Debug: Continue	
+Debug: Deactivate/Activate Breakpoints	
+Debug: Disable All Breakpoints	
 Debug: Edit Breakpoint… (condition, log message, hit count)	
+Debug: Enable All Breakpoints	
+Debug: Enable/Disable Breakpoint	
 Debug: Install JavaScript Debugger	
 Debug: Pause	
 Debug: Remove All Breakpoints	
@@ -1605,6 +1612,7 @@ Themes live in {}: drop VS Code or native theme .json files there
 There are no local changes to stash	
 There are no staged changes to stash	
 There are no stashes.	
+There is no breakpoint on this line (F9 adds one).	
 There is no commit to undo	
 There is no request here. Write METHOD URL on a line, separate requests with ###.	
 There is nothing to copy.	
@@ -1844,6 +1852,7 @@ forwarding…
 from ~/.ssh/config (a backup is kept)	
 function	
 function breakpoint	
+function name, e.g. main or app::run	
 git blame gave no answer	
 git clone failed	
 git commit failed	

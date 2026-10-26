@@ -126,6 +126,8 @@ fn stop_reason(reason: &str) -> String {
     known.iter().find(|k| **k == reason).map_or_else(|| reason.to_string(), |k| t(k).to_string())
 }
 
+gpui::actions!(workbench, [ToggleBreakpointEnabled, EnableAllBreakpoints, DisableAllBreakpoints, ToggleBreakpointsActive, AddFunctionBreakpoint]);
+
 const CONSOLE_LIMIT: usize = 5000;
 /// Longest console line (characters) and longest unfinished line (bytes) kept.
 const LINE_LIMIT: usize = 4000;
@@ -174,75 +176,228 @@ fn with_window(this: &gpui::WeakEntity<Workbench>, cx: &mut gpui::AsyncApp, f: i
 impl Workbench {
     // --- Breakpoints ---
 
-    /// Cache the breakpoints of open editors (closed files stay in the cache);
-    /// absolute path → 1-based lines.
-    pub(super) fn collect_breakpoints(&mut self, cx: &mut Context<Self>) -> BTreeMap<String, Vec<dap::Breakpoint>> {
-        for ed in self.all_editors() {
+    /// Take an editor's breakpoints into the store (their lines move with edits); saved when they changed.
+    pub(super) fn sync_breakpoints_from(&mut self, ed: &Entity<crate::editor::EditorView>, cx: &mut Context<Self>) -> bool {
+        let (path, list) = {
             let e = ed.read(cx);
-            let list: Vec<dap::Breakpoint> = e
-                .breakpoints()
-                .into_iter()
-                .map(|(l, m)| dap::Breakpoint { line: l as u32 + 1, condition: m.condition, log_message: m.log, hit_condition: m.hit })
-                .collect();
-            if list.is_empty() {
-                self.dbg.bp_cache.remove(&e.path);
-            } else {
-                self.dbg.bp_cache.insert(e.path.clone(), list);
-            }
+            (e.path.clone(), e.breakpoints())
+        };
+        if list.is_empty() && self.dbg.bps.file(&path).is_empty() {
+            return false;
         }
-        self.dbg.bp_cache.clone()
+        let changed = self.dbg.bps.set_file(&path, list);
+        if changed {
+            self.save_breakpoints(&path, cx);
+        }
+        changed
     }
 
-    /// A breakpoint changed in an editor: update the cache and, if a session is open, send it to the adapter.
+    /// A breakpoint changed in an editor: update the store and, if a session is open, send the file's list.
     pub(super) fn on_breakpoints_changed(&mut self, ed: &Entity<crate::editor::EditorView>, cx: &mut Context<Self>) {
         let path = ed.read(cx).path.clone();
-        self.collect_breakpoints(cx);
+        self.sync_breakpoints_from(ed, cx);
         self.push_breakpoints(&path);
         cx.notify();
     }
 
+    /// The running session, if it can take requests.
+    fn live_session(&self) -> Option<Arc<dap::Session>> {
+        self.dbg.session.as_ref().filter(|d| !matches!(d.status, DebugStatus::Ended(_) | DebugStatus::Starting)).and_then(|d| d.session.clone())
+    }
+
     /// Report a file's breakpoints to the running session.
     fn push_breakpoints(&self, path: &str) {
-        let Some(session) =
-            self.dbg.session.as_ref().filter(|d| !matches!(d.status, DebugStatus::Ended(_) | DebugStatus::Starting)).and_then(|d| d.session.clone())
-        else {
-            return;
-        };
-        let lines = self.dbg.bp_cache.get(path).cloned().unwrap_or_default();
         // Main thread, no waiting for the reply: a later `continue` can't overtake this request.
-        session.set_breakpoints_async(path, &lines);
+        if let Some(session) = self.live_session() {
+            session.set_breakpoints_async(path, &self.dbg.bps.wire(path));
+        }
+    }
+
+    /// The store changed a file's breakpoints (list actions, adapter results): show them in its open editors, send them
+    /// and save them.
+    pub(super) fn breakpoints_changed_in_store(&mut self, path: &str, send: bool, cx: &mut Context<Self>) {
+        let list = self.dbg.bps.file(path).to_vec();
+        let editors: Vec<_> = self.all_editors().into_iter().filter(|e| e.read(cx).path == path).collect();
+        for ed in editors {
+            ed.update(cx, |e, cx| e.set_breakpoints(&list, cx));
+        }
+        if send {
+            self.push_breakpoints(path);
+            self.save_breakpoints(path, cx);
+        }
+        cx.notify();
     }
 
     /// Give a newly opened editor this file's breakpoints and the stopped line.
     pub(super) fn apply_breakpoints_to(&mut self, ed: &Entity<crate::editor::EditorView>, cx: &mut Context<Self>) {
         let path = ed.read(cx).path.clone();
-        if let Some(list) = self.dbg.bp_cache.get(&path) {
-            let list: Vec<(usize, crate::editor::BpMeta)> = list
-                .iter()
-                .map(|b| {
-                    (b.line as usize - 1, crate::editor::BpMeta { condition: b.condition.clone(), log: b.log_message.clone(), hit: b.hit_condition.clone() })
-                })
-                .collect();
+        let list = self.dbg.bps.file(&path).to_vec();
+        if !list.is_empty() {
             ed.update(cx, |e, cx| e.set_breakpoints(&list, cx));
         }
         self.apply_debug_line_all(cx);
     }
 
+    /// Writes one file's breakpoints to the project's saved state (files outside the folders are not kept).
+    fn save_breakpoints(&self, path: &str, cx: &gpui::App) {
+        let (Some(s), Some(ws)) = (&self.persist.state, self.persist.workspace_id) else { return };
+        let Some(rel) = self.rel(path, cx) else { return };
+        let list: Vec<state::SavedBreakpoint> = self
+            .dbg
+            .bps
+            .file(path)
+            .iter()
+            .map(|(line, m)| state::SavedBreakpoint {
+                rel_path: rel.clone(),
+                line: *line,
+                enabled: !m.disabled,
+                condition: m.condition.clone(),
+                hit: m.hit.clone(),
+                log: m.log.clone(),
+            })
+            .collect();
+        let _ = s.save_file_breakpoints(ws, &rel, &list);
+    }
+
+    /// Function breakpoints and the "active" switch live in the key-value store.
+    fn save_breakpoint_settings(&self) {
+        let (Some(s), Some(ws)) = (&self.persist.state, self.persist.workspace_id) else { return };
+        let names: Vec<&str> = self.dbg.bps.functions.iter().map(|f| f.name.as_str()).collect();
+        let _ = s.set(&format!("dbg.functions:{ws}"), &names.join("\n"));
+        let _ = s.set(&format!("dbg.inactive:{ws}"), if self.dbg.bps.active { "" } else { "1" });
+    }
+
+    /// A folder was opened: its watches, exception filters and breakpoints come back.
+    pub(super) fn load_debug_state(&mut self, cx: &mut Context<Self>) {
+        self.load_watches();
+        self.load_exception_filters();
+        let old = self.dbg.bps.remove_all();
+        self.dbg.bps = crate::debug_model::BreakpointStore::default();
+        if let (Some(s), Some(ws), Some(root)) = (&self.persist.state, self.persist.workspace_id, self.root(cx)) {
+            let mut files: BTreeMap<String, Vec<(usize, crate::editor::BpMeta)>> = BTreeMap::new();
+            for b in s.breakpoints(ws) {
+                let meta = crate::editor::BpMeta { condition: b.condition, log: b.log, hit: b.hit, disabled: !b.enabled, ..Default::default() };
+                files.entry(ui::join(&root, &b.rel_path)).or_default().push((b.line, meta));
+            }
+            for (path, list) in files {
+                self.dbg.bps.set_file(&path, list);
+            }
+            for name in s.get(&format!("dbg.functions:{ws}")).unwrap_or_default().lines() {
+                self.dbg.bps.add_function(name);
+            }
+            self.dbg.bps.active = s.get(&format!("dbg.inactive:{ws}")).is_none_or(|v| v.is_empty());
+        }
+        for path in old.into_iter().chain(self.dbg.bps.paths()) {
+            self.breakpoints_changed_in_store(&path, false, cx);
+        }
+    }
+
+    /// "Debug: Enable/Disable Breakpoint": the breakpoint on the cursor's line.
+    pub(super) fn toggle_breakpoint_enabled(&mut self, _: &ToggleBreakpointEnabled, _: &mut Window, cx: &mut Context<Self>) {
+        let Some(ed) = self.active_editor().cloned() else { return };
+        let (path, line) = {
+            let e = ed.read(cx);
+            (e.path.clone(), e.cursor_position().0 - 1)
+        };
+        self.sync_breakpoints_from(&ed, cx);
+        let Some(on) = self.dbg.bps.file(&path).iter().find(|(l, _)| *l == line).map(|(_, m)| m.disabled) else {
+            self.notice = Some(Notice::Info(crate::i18n::t("There is no breakpoint on this line (F9 adds one).").into()));
+            cx.notify();
+            return;
+        };
+        self.set_breakpoint_enabled(path, line, on, cx);
+    }
+
+    pub(super) fn set_breakpoint_enabled(&mut self, path: String, line: usize, on: bool, cx: &mut Context<Self>) {
+        self.dbg.bps.set_enabled(&path, line, on);
+        self.breakpoints_changed_in_store(&path, true, cx);
+    }
+
+    fn set_all_breakpoints_enabled(&mut self, on: bool, cx: &mut Context<Self>) {
+        for ed in self.all_editors() {
+            self.sync_breakpoints_from(&ed, cx);
+        }
+        self.dbg.bps.set_all_enabled(on);
+        for path in self.dbg.bps.paths() {
+            self.breakpoints_changed_in_store(&path, true, cx);
+        }
+        self.push_function_breakpoints();
+    }
+
+    pub(super) fn enable_all_breakpoints(&mut self, _: &EnableAllBreakpoints, _: &mut Window, cx: &mut Context<Self>) {
+        self.set_all_breakpoints_enabled(true, cx);
+    }
+
+    pub(super) fn disable_all_breakpoints(&mut self, _: &DisableAllBreakpoints, _: &mut Window, cx: &mut Context<Self>) {
+        self.set_all_breakpoints_enabled(false, cx);
+    }
+
+    /// "Debug: Deactivate/Activate Breakpoints": the list stays, but nothing is sent while deactivated.
+    pub(super) fn toggle_breakpoints_active(&mut self, _: &ToggleBreakpointsActive, _: &mut Window, cx: &mut Context<Self>) {
+        self.dbg.bps.active = !self.dbg.bps.active;
+        for path in self.dbg.bps.paths() {
+            self.push_breakpoints(&path);
+        }
+        self.push_function_breakpoints();
+        self.save_breakpoint_settings();
+        self.notice = Some(Notice::Info(if self.dbg.bps.active {
+            crate::i18n::t("Breakpoints are active.").into()
+        } else {
+            crate::i18n::t("Breakpoints are deactivated: the program runs past them.").into()
+        }));
+        cx.notify();
+    }
+
+    pub(super) fn add_function_breakpoint(&mut self, _: &AddFunctionBreakpoint, window: &mut Window, cx: &mut Context<Self>) {
+        self.show_input(super::InputPurpose::FunctionBreakpoint, crate::i18n::t("Add"), crate::i18n::t("function name, e.g. main or app::run"), "", window, cx);
+    }
+
+    pub(super) fn finish_function_breakpoint(&mut self, name: String, cx: &mut Context<Self>) {
+        if self.dbg.bps.add_function(&name) {
+            self.push_function_breakpoints();
+            self.save_breakpoint_settings();
+            cx.notify();
+        }
+    }
+
+    #[expect(dead_code, reason = "used by the Run and Debug view")]
+    pub(super) fn remove_function_breakpoint(&mut self, index: usize, cx: &mut Context<Self>) {
+        if index < self.dbg.bps.functions.len() {
+            self.dbg.bps.functions.remove(index);
+            self.push_function_breakpoints();
+            self.save_breakpoint_settings();
+            cx.notify();
+        }
+    }
+
+    #[expect(dead_code, reason = "used by the Run and Debug view")]
+    pub(super) fn set_function_breakpoint_enabled(&mut self, index: usize, on: bool, cx: &mut Context<Self>) {
+        if let Some(f) = self.dbg.bps.functions.get_mut(index) {
+            f.disabled = !on;
+            self.push_function_breakpoints();
+            cx.notify();
+        }
+    }
+
+    fn push_function_breakpoints(&self) {
+        if let Some(session) = self.live_session() {
+            session.set_function_breakpoints_async(&self.dbg.bps.wire_functions());
+        }
+    }
+
     /// "Debug: Edit Breakpoint…": condition, `log: message` or `hit: count` for the cursor's line.
     pub(super) fn edit_breakpoint(&mut self, _: &super::EditBreakpoint, window: &mut Window, cx: &mut Context<Self>) {
         let Some(ed) = self.active_editor().cloned() else { return };
-        let (path, line, current) = {
+        let (path, line) = {
             let e = ed.read(cx);
-            let line = e.cursor_position().0 - 1;
-            let m = e.breakpoints().into_iter().find(|(l, _)| *l == line).map(|(_, m)| m).unwrap_or_default();
-            (e.path.clone(), line, m)
+            (e.path.clone(), e.cursor_position().0 - 1)
         };
-        let initial = match (&current.log, &current.hit, &current.condition) {
-            (Some(l), ..) => format!("log: {l}"),
-            (None, Some(h), _) => format!("hit: {h}"),
-            (None, None, Some(c)) => c.clone(),
-            _ => String::new(),
-        };
+        self.start_edit_breakpoint(path, line, window, cx);
+    }
+
+    pub(super) fn start_edit_breakpoint(&mut self, path: String, line: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let current = self.dbg.bps.file(&path).iter().find(|(l, _)| *l == line).map(|(_, m)| m.clone()).unwrap_or_default();
+        let initial = crate::debug_model::breakpoint_meta_text(&current);
         self.show_input(
             super::InputPurpose::EditBreakpoint { path, line },
             crate::i18n::t("Set"),
@@ -254,10 +409,9 @@ impl Workbench {
     }
 
     pub(super) fn finish_edit_breakpoint(&mut self, path: String, line: usize, text: String, cx: &mut Context<Self>) {
-        let meta = parse_breakpoint_meta(&text);
-        if let Some(ed) = self.all_editors().into_iter().find(|e| e.read(cx).path == path) {
-            ed.update(cx, |e, cx| e.set_breakpoint_meta(line, meta, cx));
-        }
+        let meta = crate::debug_model::parse_breakpoint_meta(&text);
+        self.dbg.bps.set_meta(&path, line, meta);
+        self.breakpoints_changed_in_store(&path, true, cx);
     }
 
     /// "Debug: Install JavaScript Debugger": downloads Microsoft's js-debug adapter (MIT) into the settings folder.
@@ -563,14 +717,13 @@ impl Workbench {
     }
 
     pub(super) fn remove_all_breakpoints(&mut self, _: &super::RemoveAllBreakpoints, _: &mut Window, cx: &mut Context<Self>) {
-        let paths: Vec<String> = self.collect_breakpoints(cx).into_keys().collect();
-        self.dbg.bp_cache.clear();
-        for ed in self.all_editors() {
-            ed.update(cx, |e, cx| e.set_breakpoint_lines(&[], cx));
+        for path in self.dbg.bps.remove_all() {
+            self.breakpoints_changed_in_store(&path, true, cx);
         }
-        for p in paths {
-            self.push_breakpoints(&p);
+        if let Some(session) = self.live_session() {
+            session.set_function_breakpoints_async(&[]);
         }
+        self.save_breakpoint_settings();
         cx.notify();
     }
 
@@ -703,7 +856,11 @@ impl Workbench {
                 this.debug_evaluate(text, cx);
             }
         }));
-        let breakpoints = self.collect_breakpoints(cx);
+        for ed in self.all_editors() {
+            self.sync_breakpoints_from(&ed, cx);
+        }
+        let breakpoints = self.dbg.bps.wire_all();
+        let functions = self.dbg.bps.wire_functions();
         self.dbg.session = Some(DebugState {
             config: config.clone(),
             session: None,
@@ -717,7 +874,7 @@ impl Workbench {
             console: vec![("console".into(), crate::lsp::clip_text(&crate::i18n::tf("Starting “{}”…", &[&config.name]), LINE_LIMIT))],
             partial: None,
             stopped_once: false,
-            breakpoints_set: breakpoints.values().map(Vec::len).sum(),
+            breakpoints_set: breakpoints.values().map(Vec::len).sum::<usize>() + functions.len(),
             location: None,
             input,
             watch_values: Vec::new(),
@@ -787,7 +944,7 @@ impl Workbench {
             let adapter_id = config.adapter.as_ref().map(|a| a.id.clone()).unwrap_or_default();
             let (request, args) = (config.request.clone(), config.args.clone());
             let s2 = session.clone();
-            let result = cx.background_executor().spawn(async move { s2.begin(&adapter_id, &request, args, &breakpoints) }).await;
+            let result = cx.background_executor().spawn(async move { s2.begin(&adapter_id, &request, args, &breakpoints, &functions) }).await;
             this.update(cx, |this, cx| match result {
                 Ok(()) => {
                     if this.dbg.generation == sid {
@@ -878,6 +1035,17 @@ impl Workbench {
                     self.end_debug(msg, cx);
                 }
             }
+            DapEvent::BreakpointsSet { path, sent, results } => {
+                self.dbg.bps.on_results(&path, &sent, &results);
+                self.breakpoints_changed_in_store(&path, false, cx);
+            }
+            DapEvent::BreakpointChanged(r) => {
+                if let Some(path) = self.dbg.bps.on_changed(&r) {
+                    self.breakpoints_changed_in_store(&path, false, cx);
+                }
+            }
+            DapEvent::FunctionBreakpointsSet(results) => self.dbg.bps.on_function_results(&results),
+            DapEvent::Thread { .. } | DapEvent::Capabilities => {}
         }
         cx.notify();
     }
@@ -1076,8 +1244,17 @@ impl Workbench {
             d.children.clear();
             d.location = None;
         }
+        self.forget_breakpoint_states(cx);
         self.apply_debug_line_all(cx);
         cx.notify();
+    }
+
+    /// No session: breakpoints are neither verified nor rejected any more.
+    fn forget_breakpoint_states(&mut self, cx: &mut Context<Self>) {
+        self.dbg.bps.clear_verified();
+        for path in self.dbg.bps.paths() {
+            self.breakpoints_changed_in_store(&path, false, cx);
+        }
     }
 
     /// New session or folder change: close the old one silently.
@@ -1088,6 +1265,7 @@ impl Workbench {
         {
             cx.background_executor().spawn(async move { s.stop() }).detach();
         }
+        self.forget_breakpoint_states(cx);
         self.apply_debug_line_all(cx);
     }
 
@@ -1408,6 +1586,38 @@ impl Workbench {
         })
     }
 
+    /// Breakpoints of a file as the store has them: (0-based line, enabled, verified as "yes" / "no" / "?").
+    #[cfg(test)]
+    pub fn breakpoints_for_test(&self, path: &str) -> Vec<(usize, bool, &'static str)> {
+        use crate::debug_model::Verified;
+        self.dbg
+            .bps
+            .file(path)
+            .iter()
+            .map(|(l, m)| {
+                (
+                    *l,
+                    !m.disabled,
+                    match m.verified {
+                        Verified::Yes => "yes",
+                        Verified::No(_) => "no",
+                        Verified::Unknown => "?",
+                    },
+                )
+            })
+            .collect()
+    }
+
+    #[cfg(test)]
+    pub fn set_breakpoint_enabled_for_test(&mut self, path: &str, line: usize, on: bool, cx: &mut Context<Self>) {
+        self.set_breakpoint_enabled(path.to_string(), line, on, cx);
+    }
+
+    #[cfg(test)]
+    pub fn add_function_breakpoint_for_test(&mut self, name: &str, cx: &mut Context<Self>) {
+        self.finish_function_breakpoint(name.to_string(), cx);
+    }
+
     #[cfg(test)]
     pub fn toggle_exception_filter_for_test(&mut self, id: &str, cx: &mut Context<Self>) {
         self.toggle_exception_filter(id.to_string(), cx);
@@ -1461,20 +1671,6 @@ impl Workbench {
     }
 }
 
-/// "condition" · "log: message" · "hit: count" → meta (empty: plain breakpoint).
-pub(super) fn parse_breakpoint_meta(text: &str) -> crate::editor::BpMeta {
-    let t = text.trim();
-    let mut m = crate::editor::BpMeta::default();
-    if let Some(rest) = t.strip_prefix("log:") {
-        m.log = Some(rest.trim().to_string()).filter(|s| !s.is_empty());
-    } else if let Some(rest) = t.strip_prefix("hit:") {
-        m.hit = Some(rest.trim().to_string()).filter(|s| !s.is_empty());
-    } else if !t.is_empty() {
-        m.condition = Some(t.to_string());
-    }
-    m
-}
-
 /// Show the stopped frame's locals at the end of source lines (VS Code "inline values"):
 /// locals mentioned on each line from the function start to the stopped line (max 4), values cut to 30
 /// chars. Function start: first unindented line above the stopped line.
@@ -1516,16 +1712,6 @@ fn load_scopes(session: &dap::Session, frame_id: i64) -> (Vec<Scope>, HashMap<i6
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn breakpoint_meta_syntax() {
-        use crate::editor::BpMeta;
-        assert_eq!(parse_breakpoint_meta("  "), BpMeta::default());
-        assert_eq!(parse_breakpoint_meta("i == 3"), BpMeta { condition: Some("i == 3".into()), ..Default::default() });
-        assert_eq!(parse_breakpoint_meta("log: i is {i}"), BpMeta { log: Some("i is {i}".into()), ..Default::default() });
-        assert_eq!(parse_breakpoint_meta("hit: >= 5"), BpMeta { hit: Some(">= 5".into()), ..Default::default() });
-        assert_eq!(parse_breakpoint_meta("log:"), BpMeta::default(), "empty message is a plain breakpoint");
-    }
 
     #[test]
     fn inline_values_cover_the_function_up_to_the_stop_line() {

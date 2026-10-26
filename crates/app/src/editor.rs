@@ -583,14 +583,7 @@ const FIND_SCOPE_MARKS: usize = 90;
 /// Key of line bookmarks in buffer marks (tied to line starts, they shift).
 const BOOKMARK_MARKS: usize = 98;
 
-/// Extra settings of a breakpoint (VS Code's conditional / logpoint / hit count).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct BpMeta {
-    pub condition: Option<String>,
-    /// If set, the breakpoint doesn't stop but writes this message to the console (`{expression}` is expanded).
-    pub log: Option<String>,
-    pub hit: Option<String>,
-}
+pub use crate::debug_model::BpMeta;
 
 /// Debugger breakpoints (tied to line starts, they shift with edits).
 const BREAKPOINT_MARKS: usize = 96;
