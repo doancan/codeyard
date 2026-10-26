@@ -87,6 +87,7 @@ mod menus;
 mod merge;
 mod outline;
 mod picker;
+mod port_forwards;
 mod ports;
 mod problems;
 #[cfg(test)]

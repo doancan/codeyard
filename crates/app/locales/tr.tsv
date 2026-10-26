@@ -1492,6 +1492,16 @@ listening on the server	sunucuda dinliyor
 Nothing is listening on the server yet.	Sunucuda henüz dinleyen bir şey yok.
 Forward a port:	Bağlantı noktası yönlendir:
 Forward Port	Yönlendir
+Could not list the server's ports: {}	Sunucudaki bağlantı noktaları listelenemedi: {0}
+Local port {} is busy	Yerel bağlantı noktası {0} meşgul
+The local port is busy	Yerel bağlantı noktası meşgul
+Ports below 1024 need extra privileges on this computer	1024'ün altındaki bağlantı noktaları bu bilgisayarda ek yetki gerektirir
+The SSH connection is gone: reconnect to forward again	SSH bağlantısı koptu: yeniden yönlendirmek için tekrar bağlanın
+forwarding…	yönlendiriliyor…
+waiting for the connection	bağlantı bekleniyor
+Retry	Yeniden Dene
+{} is listening on the server	{0} sunucuda dinliyor
+{} ports are forwarded	{0} bağlantı noktası yönlendirildi
 e.g. 3000	örn. 3000
 # ---- Debugger: panel, start, breakpoints, watches, exceptions, messages ----
 Could not run “{}”: {}	“{0}” çalıştırılamadı: {1}

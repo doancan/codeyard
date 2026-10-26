@@ -296,6 +296,7 @@ Could not keep a copy of the version that was on disk: {}
 Could not list branches: {}	
 Could not list files: {}	
 Could not list stashes: {}	
+Could not list the server's ports: {}	
 Could not list: {}	
 Could not load: {}	
 Could not minify: {}	
@@ -848,6 +849,7 @@ Loading pull requests…
 Loading…	
 Local	
 Local history	
+Local port {} is busy	
 Local time is not available on this system	
 Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it	
 Lost the connection to {}: {}. Your open files stay here and unsaved changes are kept, but they cannot be saved until you reconnect (File: Save a Copy to This Computer… keeps one locally).	
@@ -1115,6 +1117,7 @@ Port forwarding works while connected to an SSH host.
 Port {} is forwarded to localhost:{} ({} was busy here)	
 Port {} is forwarded: localhost:{}	
 Ports	
+Ports below 1024 need extra privileges on this computer	
 Preferences: Configure User Snippets	
 Preferences: Import VS Code Settings and Shortcuts	
 Preferences: Keyboard Shortcuts	
@@ -1290,6 +1293,7 @@ Restarting language servers…
 Restarting loses everything since the last save.	
 Restore Panel Size	
 Result	
+Retry	
 Reveal in Finder	
 Revert	
 Revert File	
@@ -1500,6 +1504,7 @@ Test: Run Tests in File
 Testing {}…	
 That does not look like a repository address.	
 The JavaScript debugger is already installed.	
+The SSH connection is gone: reconnect to forward again	
 The TLS/SSL handshake with {} failed (certificate or protocol problem): {}	
 The Timeline section of the explorer lists the commits of the open file; click one to see its diff.	
 The address is malformed: {}	
@@ -1528,6 +1533,7 @@ The file is too large for an outline.
 The folder and everything in it will be deleted.	
 The folder could not be read on the server: {}	
 The last background fetch failed: {}	
+The local port is busy	
 The new version couldn't be installed from here. You can download it from the release page instead.	
 The number {} cannot be written in JSON	
 The pattern does not parse: {0} (line {1}, column {2})	
@@ -1801,6 +1807,7 @@ files.associations.{}: expected a language name or extension
 files.autoSave: unknown value {} (off, afterDelay, onFocusChange)	
 flatten depth must not be negative	
 folder	
+forwarding…	
 from ~/.ssh/config (a backup is kept)	
 function	
 function breakpoint	
@@ -1941,6 +1948,7 @@ variable name, e.g. total (the program stops when it is written)
 via the GitHub API	
 via the gh CLI	
 via the public GitHub API (set GITHUB_TOKEN or use gh for private repositories and check results)	
+waiting for the connection	
 whole file	
 workbench.colorCustomizations: unknown color role {0} (see crates/theme/design/tokens.json: {1})	
 your words	
@@ -2038,6 +2046,7 @@ your words
 {} is a date:	
 {} is already in .gitignore	
 {} is already in the workspace.	
+{} is listening on the server	
 {} is not a trusted folder, so nothing is deleted from it. Open it as a folder and trust it first.	
 {} is not a trusted folder, so nothing is written to it. Open it as a folder and trust it first.	
 {} is not an array	
@@ -2054,6 +2063,7 @@ your words
 {} no longer exists, so it was not reopened.	
 {} open	
 {} outgoing call|{} outgoing calls	
+{} ports are forwarded	
 {} reference|{} references	
 {} result in 1 file|{} results in 1 file	
 {} result|{} results	

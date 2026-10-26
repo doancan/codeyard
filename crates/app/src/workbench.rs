@@ -1367,7 +1367,7 @@ impl Workbench {
                         ))
                     })
                     .child(
-                        panel_tab("ports-tab", crate::i18n::upper(crate::i18n::t("Ports")), self.chrome.bottom == Bottom::Ports, self.ports.forwards.len(), p)
+                        panel_tab("ports-tab", crate::i18n::upper(crate::i18n::t("Ports")), self.chrome.bottom == Bottom::Ports, self.active_forwards(), p)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.chrome.bottom = Bottom::Ports;
                                 cx.notify();

@@ -163,6 +163,42 @@ fn a_dropped_bridge_reconnects_and_the_edit_can_be_saved(cx: &mut TestAppContext
     assert!(!ed.read_with(cx, |e, _| e.is_dirty()), "clean after a successful save");
 }
 
+/// A forwarded port survives a dropped bridge: it waits while reconnecting and comes back on the same local port
+/// (the old spec is cancelled first, so the surviving shared connection does not keep a second copy).
+#[gpui::test]
+fn a_forwarded_port_comes_back_on_the_same_local_port_after_a_reconnect(cx: &mut TestAppContext) {
+    use std::io::{Read, Write};
+    let Some(sshd) = crate::test_sshd::start("err-fwd") else { return };
+    let dir = project("err-fwd-repo");
+    let (wb, cx) = ssh_workbench(cx, &dir);
+    let app = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let remote = app.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for mut s in app.incoming().flatten() {
+            let _ = s.write_all(b"still-here");
+        }
+    });
+    wb.update(cx, |w, cx| w.forward_port(remote, cx));
+    let local =
+        |wb: &gpui::Entity<Workbench>, cx: &mut VisualTestContext| wb.read_with(cx, |w, _| w.forwards().iter().find(|f| f.remote == remote).map(|f| f.local));
+    wait_secs(cx, 30, "the forward", |cx| {
+        tick(cx);
+        local(&wb, cx).is_some()
+    });
+    let before = local(&wb, cx).unwrap();
+
+    drop_the_bridge_and_wait_for_the_reconnect(&wb, cx, &sshd);
+    wait_secs(cx, 30, "the forward to come back", |cx| {
+        tick(cx);
+        local(&wb, cx).is_some()
+    });
+    assert_eq!(local(&wb, cx), Some(before), "the same local port");
+    assert_eq!(wb.read_with(cx, |w, _| w.forwards().len()), 1, "no second forward");
+    let mut got = String::new();
+    std::net::TcpStream::connect(("127.0.0.1", before)).unwrap().read_to_string(&mut got).unwrap();
+    assert_eq!(got, "still-here");
+}
+
 /// Language server comes back after a reconnect (a restart attempt during the outage must not
 /// mark it permanently failed or raise a second error notification).
 #[gpui::test]
