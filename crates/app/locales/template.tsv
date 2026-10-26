@@ -1329,8 +1329,10 @@ Search commands or keys (e.g. “comment”, “⌘D”)
 Search commands to bind a key	
 Search commits	
 Search commits (message, author, hash)	
+Search files by name	
 Search files by name (> for commands, : for line, # for symbols)	
 Search settings	
+Search {}	
 Search: Find TODO Comments	
 Search: Find in Files	
 Search: Open Results in Editor	
