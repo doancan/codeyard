@@ -121,3 +121,35 @@ fn disabled_and_deactivated_breakpoints_are_not_sent_and_results_come_back(cx: &
     wait_secs(cx, 10, "ended", |cx| snap(cx).is_some_and(|s| s.0 == "ended"));
     assert!(wb.read_with(cx, |wb, _| wb.breakpoints_for_test(&main)).iter().all(|(.., v)| *v == "?"), "no session, no verdict");
 }
+
+#[gpui::test]
+fn the_run_and_debug_view_shows_the_paused_program(cx: &mut TestAppContext) {
+    if !have_python() {
+        return;
+    }
+    let home = project("dbg-view-home");
+    let (dir, _) = fake_project("dbg-view");
+    let (wb, cx) = setup_persistent(cx, &home);
+    open(&wb, &dir, cx);
+    wb.update_in(cx, |wb, window, cx| wb.show_panel_named("debug", window, cx));
+    assert_eq!(wb.read_with(cx, |wb, _| wb.panel_for_test()), Some("debug"));
+    wait_secs(cx, 10, "the configuration selector", |cx| wb.read_with(cx, |wb, _| wb.debug_catalog_for_test()) == vec!["Fake".to_string()]);
+    let (_, ed) = open_main(&wb, &dir, cx);
+    ed.update(cx, |e, cx| e.toggle_breakpoint_at(4, cx));
+    assert!(!wb.read_with(cx, |wb, _| wb.toolbar_shown_for_test()));
+
+    wb.update_in(cx, |wb, window, cx| wb.start_selected_for_test(window, cx));
+    let snap = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.debug_snapshot());
+    wait_secs(cx, 10, "paused", |cx| snap(cx).is_some_and(|s| s.0 == "stopped:breakpoint" && !s.1.is_empty()));
+    assert!(wb.read_with(cx, |wb, _| wb.toolbar_shown_for_test()), "the floating toolbar shows while the session lives");
+    let (vars, stack) = wb.read_with(cx, |wb, _| wb.run_debug_rows_for_test());
+    assert_eq!(vars, vec!["Locals: ", "  x: 50", "  point: {x, y}"]);
+    assert_eq!(stack, vec!["thread:main*", "frame:main*", "frame:caller", "thread:worker"], "two threads: a tree with the paused one open");
+    wb.update(cx, |wb, cx| wb.toggle_variable_for_test("point", cx));
+    wait_secs(cx, 10, "the child values", |cx| wb.read_with(cx, |wb, _| wb.run_debug_rows_for_test().0.len()) == 5);
+    assert_eq!(wb.read_with(cx, |wb, _| wb.run_debug_rows_for_test().0)[3], "    x: 1");
+
+    run(&wb, cx, "Debug: Stop");
+    wait_secs(cx, 10, "ended", |cx| snap(cx).is_some_and(|s| s.0 == "ended"));
+    assert!(!wb.read_with(cx, |wb, _| wb.toolbar_shown_for_test()));
+}

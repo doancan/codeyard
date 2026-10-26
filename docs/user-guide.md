@@ -94,6 +94,8 @@ is the complete list and always matches your key bindings; every setting is in [
 | Start / continue debugging, stop, restart | F5, ⇧F5, ⇧⌘F5 | F5, Shift+F5, Ctrl+Shift+F5 |
 | Toggle breakpoint (or click the gutter) | F9 | F9 |
 | Step over / into / out | F10, F11, ⇧F11 | F10, Ctrl+F11, Shift+F11 |
+| Pause the program | F6 | F6 |
+| Run and Debug view | ⌃⇧D | Alt+Shift+D |
 | Toggle bookmark / next / previous | ⌥⌘K / ⌥⌘L / ⌥⌘J | Ctrl+Alt+K / L / J |
 | Cut / copy / paste in the file tree | ⌘X / ⌘C / ⌘V | Ctrl+X / Ctrl+C / Ctrl+V |
 | Switch editor (open files, last used first) | ⌘E | Ctrl+E |

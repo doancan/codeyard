@@ -189,6 +189,8 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("f4", search::NextResult, None),
         KeyBinding::new("shift-f4", search::PrevResult, None),
         KeyBinding::new("ctrl-shift-g", ShowScm, None),
+        // Ctrl+Shift+D duplicates the selection in the editor on Windows and Linux.
+        KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-shift-d" } else { "alt-shift-d" }, ShowRunAndDebug, None),
         KeyBinding::new("secondary-\\", SplitEditor, None),
         KeyBinding::new("ctrl-secondary-right", MoveEditorToOtherGroup, None),
         KeyBinding::new("ctrl-secondary-left", MoveEditorToOtherGroup, None),
@@ -301,6 +303,7 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("shift-f5", StopDebugging, None),
         KeyBinding::new("secondary-shift-f5", RestartDebugging, None),
         KeyBinding::new("f10", DebugStepOver, None),
+        KeyBinding::new("f6", DebugPause, None),
         KeyBinding::new("shift-f11", DebugStepOut, None),
         KeyBinding::new("f9", ToggleBreakpoint, ed),
         KeyBinding::new("ctrl-tab", NextEditor, None),

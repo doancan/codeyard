@@ -142,6 +142,7 @@ registry! {
     "workbench.showRemote" => wb::ShowRemote,
     "workbench.showSourceControl" => wb::ShowScm,
     "workbench.showRemoteExplorer" => wb::ShowRemoteExplorer,
+    "workbench.showRunAndDebug" => wb::ShowRunAndDebug,
     "workbench.showProblems" => wb::ShowProblems,
     "workbench.action.output.toggleOutput" => wb::ShowOutput,
     "workbench.output.action.clearOutput" => wb::ClearOutput,

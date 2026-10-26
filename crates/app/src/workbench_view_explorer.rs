@@ -59,6 +59,9 @@ impl Workbench {
                     if this.chrome.panel == Some(Panel::Remote) {
                         this.refresh_remote_view(cx);
                     }
+                    if this.chrome.panel == Some(Panel::Debug) {
+                        this.load_launch_catalog(cx);
+                    }
                     cx.notify();
                 }))
         };
@@ -96,6 +99,7 @@ impl Workbench {
             .child(item("act-explorer", "files", crate::i18n::t("Explorer (⇧⌘E)"), Panel::Explorer, 0, cx))
             .child(item("act-search", "search", crate::i18n::t("Search (⇧⌘F)"), Panel::Search, 0, cx))
             .child(item("act-scm", "git-branch", crate::i18n::t("Source Control (⌃⇧G)"), Panel::Scm, changes, cx))
+            .child(item("act-debug", "bug-play", crate::i18n::t("Run and Debug (⌃⇧D)"), Panel::Debug, 0, cx))
             .child(item("act-remote", "screen-share", crate::i18n::t("Remote Explorer"), Panel::Remote, 0, cx))
             .child(div().flex_1())
             .child(

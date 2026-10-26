@@ -64,7 +64,6 @@ impl BpResult {
 
 /// One row of the Breakpoints list.
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(not(test), expect(dead_code, reason = "used by the Run and Debug view"))]
 pub enum BpRow {
     Line { path: String, line: usize, meta: BpMeta },
     Function { index: usize, bp: FunctionBp },
@@ -98,12 +97,11 @@ impl BreakpointStore {
         self.files.keys().cloned().collect()
     }
 
-    #[cfg_attr(not(test), expect(dead_code, reason = "used by the Run and Debug view"))]
     pub fn count(&self) -> usize {
         self.files.values().map(Vec::len).sum::<usize>() + self.functions.len()
     }
 
-    #[cfg_attr(not(test), expect(dead_code, reason = "used by the Run and Debug view"))]
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.count() == 0
     }
@@ -128,7 +126,7 @@ impl BreakpointStore {
         self.files.get_mut(path)?.iter_mut().find(|(l, _)| *l == line).map(|(_, m)| m)
     }
 
-    #[cfg_attr(not(test), expect(dead_code, reason = "used by the Run and Debug view"))]
+    #[cfg(test)]
     pub fn toggle_line(&mut self, path: &str, line: usize) {
         let mut list = self.file(path).to_vec();
         match list.iter().position(|(l, _)| *l == line) {
@@ -167,7 +165,6 @@ impl BreakpointStore {
         self.functions.iter_mut().for_each(|f| f.disabled = !on);
     }
 
-    #[expect(dead_code, reason = "used by the Run and Debug view")]
     pub fn remove(&mut self, path: &str, line: usize) {
         let list: Vec<_> = self.file(path).iter().filter(|(l, _)| *l != line).cloned().collect();
         self.set_file(path, list);
@@ -190,7 +187,7 @@ impl BreakpointStore {
     }
 
     /// The temporary "Run to Cursor" breakpoint (`None` clears it). Returns the file whose sent list changes.
-    #[cfg_attr(not(test), expect(dead_code, reason = "used by the Run and Debug view"))]
+    #[cfg_attr(not(test), expect(dead_code, reason = "Run to Cursor comes next"))]
     pub fn set_temp(&mut self, at: Option<(String, usize)>) -> Option<String> {
         let old = std::mem::replace(&mut self.temp, at);
         self.temp.as_ref().or(old.as_ref()).map(|(p, _)| p.clone())
@@ -268,7 +265,6 @@ impl BreakpointStore {
     }
 
     /// Rows of the Breakpoints list: functions first, then files by path and line.
-    #[cfg_attr(not(test), expect(dead_code, reason = "used by the Run and Debug view"))]
     pub fn rows(&self) -> Vec<BpRow> {
         let mut out: Vec<BpRow> = self.functions.iter().cloned().enumerate().map(|(index, bp)| BpRow::Function { index, bp }).collect();
         for (path, list) in &self.files {
