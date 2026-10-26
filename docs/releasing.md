@@ -1,12 +1,13 @@
 # Releasing
 
-The `release.yml` workflow builds and publishes a release when a `vX.Y.Z` tag is pushed. It runs four jobs:
+The `release.yml` workflow builds and publishes a release when a `vX.Y.Z` tag is pushed. It builds the agents separately and then runs the platform builds in parallel:
 
 1. `verify` checks that the tag, the Cargo version and the changelog agree, then runs `arch-check`, `docs-check`, `licenses.sh`,
    the signing self-test and a probe of the `UPDATE_SIGNING_KEY` secret (see [Signing](#signing-and-the-update-key)).
-2. `macos` builds the SSH agents, the app, the DMG and the tar.gz, and uploads them with the release notes as artifacts.
-3. `windows` builds the ZIP and the setup EXE from those agents and uploads them as an artifact.
-4. `publish` merges the checksums, adds `RELEASE_NOTES.md`, verifies every file against them, signs `SHA256SUMS.txt`, checks the
+2. `agents-linux` and `agent-macos` build the SSH agents independently. `macos` and `windows` wait for these and `verify`, then start in parallel.
+3. `macos` builds the app, DMG and tar.gz and uploads them with the release notes as artifacts.
+4. `windows` builds the ZIP and the setup EXE from those agents and uploads them as an artifact.
+5. `publish` merges the checksums, adds `RELEASE_NOTES.md`, verifies every file against them, signs `SHA256SUMS.txt`, checks the
    signature and creates the release in one step.
 
 You can run the whole workflow without a tag (Actions, release, Run workflow): it builds and checks everything, keeps the files
@@ -15,6 +16,23 @@ as artifacts and creates no release (it signs too, so the signing path is exerci
 Nothing is published before all of them succeed, so a failed Windows build leaves no half release: fix it and push the tag
 again (delete the tag first with `git push origin :refs/tags/vX.Y.Z`; no release exists yet to remove). The steps below are
 the same procedure by hand, for when the workflow cannot be used.
+
+Release jobs cache Rust dependencies. Changes to Cargo.lock, vendor files or the release workflow on main also run a dry run
+so tag builds can restore the default branch cache. App and agent jobs use separate cache keys.
+
+## Windows cross-compilation benchmark
+
+`.github/workflows/benchmark-windows.yml` compares native `windows-2022` with Linux `cargo-xwin` using the same commit,
+release profile, x64 MSVC target, embedded Linux agents and FXC-generated shader bytes. Each job starts without a target
+cache, measures a cold build, removes only the app package, and measures a build with compiled dependencies retained.
+SDK/tool installation and dependency downloads are separate steps, outside the compiler timer; include them when comparing
+whole job latency. Runner CPU counts and Rust versions are recorded in `benchmark.json`. These are runner comparisons,
+not a controlled comparison on identical hardware. Both executables undergo native Windows standalone checks.
+
+The Linux path needs `GPUI_PRECOMPILED_SHADERS` pointing to `shaders_bytes.rs` generated from this checkout's vendored
+GPUI HLSL by FXC. The benchmark generates it with the vendored build helper on Windows. GPUI's Windows manifest and the
+app icon are still compiled into the cross-built EXE. This benchmark does not publish artifacts as a release or replace
+the production Windows ZIP/installer job; installer packaging and interactive UI validation remain separate.
 
 ## Steps
 

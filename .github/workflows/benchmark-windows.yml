@@ -1,0 +1,116 @@
+name: benchmark-windows
+on:
+  workflow_dispatch:
+  push:
+    branches: [perf/linux-windows-build]
+permissions:
+  contents: read
+jobs:
+  agents:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl,aarch64-unknown-linux-musl
+      - name: Build identical agents for both hosts
+        run: |
+          mkdir agents
+          lld="$(dirname "$(rustc --print target-libdir)")/bin/rust-lld"
+          for t in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
+            var="CARGO_TARGET_$(echo "$t" | tr 'a-z-' 'A-Z_')_LINKER"
+            env "$var=$lld" cargo build --locked --profile release-agent -p agent --target "$t"
+            cp "target/$t/release-agent/codeyard-agent" "agents/codeyard-agent-$t"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-agents
+          path: agents/
+  shaders:
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Compile shaders with the vendored GPUI build helper
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force shaders | Out-Null
+          rustc --edition 2024 -O vendor/gpui/build.rs -o shaders/build-shaders.exe
+          if ($LASTEXITCODE -ne 0) { throw 'shader helper compilation failed' }
+          $env:CARGO_CFG_TARGET_OS = 'windows'
+          $env:CARGO_MANIFEST_DIR = (Resolve-Path vendor/gpui).Path
+          $env:OUT_DIR = (Resolve-Path shaders).Path
+          ./shaders/build-shaders.exe
+          if ($LASTEXITCODE -ne 0) { throw 'FXC shader compilation failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-shaders
+          path: shaders/shaders_bytes.rs
+          if-no-files-found: error
+  build:
+    needs: [agents, shaders]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: actions/download-artifact@v4
+        with:
+          name: benchmark-agents
+          path: agents
+      - uses: actions/download-artifact@v4
+        with:
+          name: benchmark-shaders
+          path: shaders
+      - name: Install Linux cross tools and prefetch SDK
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld llvm ninja-build
+          pip install cargo-xwin==0.23.1
+          cargo xwin cache xwin
+      - name: Prefetch Rust dependencies (outside build timer)
+        run: cargo fetch --locked --target x86_64-pc-windows-msvc
+      - name: Measure cold and dependency-cached compilation
+        shell: bash
+        run: |
+          export AGENTS_DIR="$GITHUB_WORKSPACE/agents"
+          export GPUI_PRECOMPILED_SHADERS="$GITHUB_WORKSPACE/shaders/shaders_bytes.rs"
+          if [ "$RUNNER_OS" = Linux ]; then
+            python3 scripts/benchmark-windows.py --cross
+          else
+            python scripts/benchmark-windows.py
+          fi
+      - name: Native standalone checks
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/test-standalone-agents.ps1 -Executable target/x86_64-pc-windows-msvc/release/codeyard.exe
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-${{ matrix.os }}
+          path: |
+            benchmark.json
+            target/x86_64-pc-windows-msvc/release/codeyard.exe
+          if-no-files-found: warn
+  validate-cross:
+    needs: build
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: benchmark-ubuntu-latest
+          path: cross
+      - name: Validate Linux-built EXE on real Windows
+        shell: pwsh
+        run: ./scripts/test-standalone-agents.ps1 -Executable cross/target/x86_64-pc-windows-msvc/release/codeyard.exe
