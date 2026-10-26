@@ -2141,8 +2141,12 @@ fn ssh_ports_are_forwarded_automatically(cx: &mut TestAppContext) {
         cx.run_until_parked();
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
-    assert_eq!(wb.read_with(cx, |wb, _| wb.forwards().len()), 1, "{:?}", wb.read_with(cx, |wb, _| wb.forwards()));
-    let local = wb.read_with(cx, |wb, _| wb.forwards().into_iter().find(|f| f.remote == remote).unwrap().local);
+    // Other programs and parallel tests open ports on this machine too, and those are rightly forwarded; only the loop matters:
+    // our port forwarded once, and its local end never forwarded back.
+    let forwards = wb.read_with(cx, |wb, _| wb.forwards());
+    let local = forwards.iter().find(|f| f.remote == remote).unwrap().local;
+    assert_eq!(forwards.iter().filter(|f| f.remote == remote).count(), 1, "{forwards:?}");
+    assert!(local == remote || !forwards.iter().any(|f| f.remote == local), "the local end was forwarded again: {forwards:?}");
     let mut got = String::new();
     use std::io::Read;
     std::net::TcpStream::connect(("127.0.0.1", local)).unwrap().read_to_string(&mut got).unwrap();
@@ -2156,7 +2160,7 @@ fn ssh_ports_are_forwarded_automatically(cx: &mut TestAppContext) {
     });
     tick(cx);
     cx.run_until_parked();
-    assert!(wb.read_with(cx, |wb, _| wb.forwards()).is_empty(), "a stopped port doesn't come back on its own");
+    assert!(!wb.read_with(cx, |wb, _| wb.forwards()).iter().any(|f| f.remote == remote), "a stopped port doesn't come back on its own");
 }
 
 /// Explorer: single-subfolder chains as one row, sort setting, hierarchy line, type-to-search.
