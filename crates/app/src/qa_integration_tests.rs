@@ -1881,6 +1881,11 @@ fn qa_terminal_find_counts_selects_and_closes(cx: &mut TestAppContext) {
     let term = terminal(&wb, &dir, cx);
     type_line(cx, "for i in 1 2 3; do echo row-$i-needle; done");
     wait_for(cx, "rows", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l == "row-3-needle")));
+    // The platform's own key opens the bar and typing searches (⌘F on macOS; Ctrl+F belongs to the shell elsewhere).
+    cx.simulate_keystrokes(if cfg!(target_os = "macos") { "cmd-f" } else { "ctrl-shift-f" });
+    cx.simulate_input("needle");
+    assert_eq!(term.update_in(cx, |t, window, cx| t.find_state_for_test(window, cx)), (true, 4), "find bar opened by its key");
+    cx.simulate_keystrokes("escape");
     let (total, selected) = term.update_in(cx, |t, window, cx| t.find_for_test("needle", window, cx));
     // The command line holds the word too.
     assert_eq!(total, 4);
