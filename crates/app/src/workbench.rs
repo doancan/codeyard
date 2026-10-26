@@ -421,8 +421,8 @@ struct Overlay {
 }
 
 pub use debug::{
-    AddFunctionBreakpoint, ConsoleComplete, ConsoleHistoryNext, ConsoleHistoryPrev, DisableAllBreakpoints, EnableAllBreakpoints, ShowRunAndDebug,
-    ToggleBreakpointEnabled, ToggleBreakpointsActive,
+    AddDebugConfiguration, AddFunctionBreakpoint, ConsoleComplete, ConsoleHistoryNext, ConsoleHistoryPrev, DisableAllBreakpoints, EnableAllBreakpoints,
+    OpenLaunchConfiguration, RunToCursor, RunWithoutDebugging, ShowRunAndDebug, StopAllDebugging, ToggleBreakpointEnabled, ToggleBreakpointsActive,
 };
 pub use host::askpass::{AskKind, AskRequest};
 pub use remote_glue::ShowRemoteExplorer;

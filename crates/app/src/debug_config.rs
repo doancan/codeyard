@@ -30,6 +30,233 @@ pub struct LaunchConfig {
     pub args: Value,
     /// Shell command to run before launch (`preLaunchTask` or automatic build).
     pub pre_launch: Option<String>,
+    /// Task to run after the session ends (`postDebugTask`): (label, command).
+    pub post_debug: Option<(String, String)>,
+    /// "Run Without Debugging": the program runs, breakpoints are not sent.
+    pub no_debug: bool,
+    /// The launch file's `inputs` this configuration uses (`${input:id}`), asked for when it starts.
+    pub inputs: Vec<InputDef>,
+}
+
+/// One of the launch file's `inputs`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct InputDef {
+    pub id: String,
+    pub kind: InputKind,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum InputKind {
+    /// Typed text.
+    Prompt { description: String, default: String },
+    /// One of a list.
+    Pick { description: String, options: Vec<String>, default: Option<String> },
+    /// `command` inputs would run a command from the file: refused.
+    Refused(String),
+}
+
+/// A `compounds` entry: several configurations started together.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Compound {
+    pub name: String,
+    pub configs: Vec<String>,
+    /// Stopping one session stops the others.
+    pub stop_all: bool,
+    pub pre_launch: Option<String>,
+}
+
+/// The `inputs` of a launch file.
+pub fn parse_inputs(v: &Value) -> Vec<InputDef> {
+    v["inputs"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|i| {
+                    let id = i["id"].as_str()?.to_string();
+                    let description = i["description"].as_str().unwrap_or(&id).to_string();
+                    let kind = match i["type"].as_str() {
+                        Some("promptString") => InputKind::Prompt { description, default: i["default"].as_str().unwrap_or_default().to_string() },
+                        Some("pickString") => InputKind::Pick {
+                            description,
+                            options: i["options"]
+                                .as_array()
+                                .map(|o| o.iter().filter_map(|x| x.as_str().or(x["value"].as_str()).map(str::to_string)).collect())
+                                .unwrap_or_default(),
+                            default: i["default"].as_str().map(str::to_string),
+                        },
+                        other => InputKind::Refused(other.unwrap_or("?").to_string()),
+                    };
+                    Some(InputDef { id, kind })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The `compounds` of a launch file.
+pub fn parse_compounds(text: &str, root: &str, file: Option<&str>, tasks: &[Task]) -> Vec<Compound> {
+    let Ok(v) = serde_json::from_str::<Value>(&theme::themes::strip_jsonc(text)) else { return Vec::new() };
+    v["compounds"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|c| {
+                    let configs: Vec<String> =
+                        c["configurations"].as_array()?.iter().filter_map(|x| x.as_str().or(x["name"].as_str()).map(str::to_string)).collect();
+                    Some(Compound {
+                        name: c["name"].as_str()?.to_string(),
+                        configs,
+                        stop_all: c["stopAll"].as_bool().unwrap_or(false),
+                        pre_launch: task_command(&c["preLaunchTask"], tasks, root, file).map(|(_, cmd)| cmd),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A task named by `preLaunchTask` / `postDebugTask`: (label, command with variables expanded).
+fn task_command(label: &Value, tasks: &[Task], root: &str, file: Option<&str>) -> Option<(String, String)> {
+    let label = label.as_str()?;
+    tasks.iter().find(|t| t.label == label).map(|t| (t.label.clone(), expand_variables(&t.command, root, file)))
+}
+
+/// Adds a configuration to a launch file's text: into `configurations` (created if missing), keeping comments and
+/// the rest of the file as they are. An empty or missing file becomes a new one.
+pub fn insert_configuration(text: &str, snippet: &Value) -> Result<String, String> {
+    let body = serde_json::to_string_pretty(snippet).map_err(|e| e.to_string())?;
+    let indent = |s: &str, n: usize| s.lines().map(|l| format!("{}{l}", " ".repeat(n))).collect::<Vec<_>>().join("\n");
+    if text.trim().is_empty() {
+        return Ok(format!("{{\n  \"version\": \"0.2.0\",\n  \"configurations\": [\n{}\n  ]\n}}\n", indent(&body, 4)));
+    }
+    // The file must be valid before it is edited.
+    let parsed: Value = serde_json::from_str(&theme::themes::strip_jsonc(text)).map_err(|e| crate::i18n::tf("the launch file is not valid JSON: {}", &[&e]))?;
+    let code = code_positions(text);
+    let find = |needle: &str, from: usize| code.iter().map(|&(i, _)| i).filter(|&i| i >= from).find(|&i| text[i..].starts_with(needle));
+    match (&parsed, parsed.get("configurations")) {
+        (Value::Object(_), Some(Value::Array(_))) => {
+            let key = find("\"configurations\"", 0).ok_or("configurations")?;
+            let open = find("[", key).ok_or("[")?;
+            let close = matching(text, &code, open).ok_or("]")?;
+            // Last code character before `]`: empty array, or an element that needs a comma (a trailing one is kept).
+            let last = code.iter().rev().find(|&&(i, c)| i > open && i < close && !c.is_whitespace()).map(|&(_, c)| c);
+            let sep = if matches!(last, None | Some(',')) { "" } else { "," };
+            let head = text[..close].trim_end();
+            let insert_at = head.len();
+            Ok(format!("{}{sep}\n{}\n  {}", &text[..insert_at], indent(&body, 4), &text[close..]))
+        }
+        (Value::Array(_), _) => {
+            let close = text.rfind(']').ok_or("]")?;
+            let last = code.iter().rev().find(|&&(i, c)| i < close && !c.is_whitespace()).map(|&(_, c)| c);
+            let sep = if matches!(last, Some('[' | ',')) { "" } else { "," };
+            Ok(format!("{}{sep}\n{}\n{}", text[..close].trim_end(), indent(&body, 2), &text[close..]))
+        }
+        (Value::Object(_), _) => {
+            let open = find("{", 0).ok_or("{")?;
+            Ok(format!("{}\n  \"configurations\": [\n{}\n  ],{}", &text[..=open], indent(&body, 4), &text[open + 1..]))
+        }
+        _ => Err(crate::i18n::t("the launch file is not an object").into()),
+    }
+}
+
+/// Byte positions of characters outside strings and comments, with the character.
+fn code_positions(text: &str) -> Vec<(usize, char)> {
+    let mut out = Vec::new();
+    let mut it = text.char_indices().peekable();
+    while let Some((i, c)) = it.next() {
+        match c {
+            '"' => {
+                out.push((i, c));
+                let mut escaped = false;
+                for (_, c) in it.by_ref() {
+                    match c {
+                        '\\' if !escaped => escaped = true,
+                        '"' if !escaped => break,
+                        _ => escaped = false,
+                    }
+                }
+            }
+            '/' if it.peek().is_some_and(|&(_, n)| n == '/') => {
+                for (_, c) in it.by_ref() {
+                    if c == '\n' {
+                        break;
+                    }
+                }
+            }
+            '/' if it.peek().is_some_and(|&(_, n)| n == '*') => {
+                it.next();
+                let mut star = false;
+                for (_, c) in it.by_ref() {
+                    if star && c == '/' {
+                        break;
+                    }
+                    star = c == '*';
+                }
+            }
+            _ => out.push((i, c)),
+        }
+    }
+    out
+}
+
+/// The `]` that closes the `[` at `open`.
+fn matching(_text: &str, code: &[(usize, char)], open: usize) -> Option<usize> {
+    let mut depth = 0i32;
+    for &(i, c) in code.iter().filter(|(i, _)| *i >= open) {
+        match c {
+            '[' | '{' => depth += 1,
+            ']' | '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// The `${input:id}` ids a configuration uses, in order of first use.
+pub fn input_ids(config: &LaunchConfig) -> Vec<String> {
+    let mut text = config.args.to_string();
+    if let Some(p) = &config.pre_launch {
+        text.push_str(p);
+    }
+    let mut out: Vec<String> = Vec::new();
+    let mut rest = text.as_str();
+    while let Some(i) = rest.find("${input:") {
+        rest = &rest[i + 8..];
+        let Some(end) = rest.find('}') else { break };
+        let id = rest[..end].to_string();
+        if !out.contains(&id) {
+            out.push(id);
+        }
+        rest = &rest[end..];
+    }
+    out
+}
+
+/// Replace `${input:id}` with the answers (in the arguments and the pre-launch command).
+pub fn substitute_inputs(config: &mut LaunchConfig, answers: &[(String, String)]) {
+    fn walk(v: &mut Value, answers: &[(String, String)]) {
+        match v {
+            Value::String(s) => {
+                for (id, value) in answers {
+                    *s = s.replace(&format!("${{input:{id}}}"), value);
+                }
+            }
+            Value::Array(a) => a.iter_mut().for_each(|x| walk(x, answers)),
+            Value::Object(o) => o.values_mut().for_each(|x| walk(x, answers)),
+            _ => {}
+        }
+    }
+    walk(&mut config.args, answers);
+    if let Some(p) = &mut config.pre_launch {
+        for (id, value) in answers {
+            *p = p.replace(&format!("${{input:{id}}}"), value);
+        }
+    }
 }
 
 /// If `lldb-dap` isn't on PATH, on macOS finds it via Xcode (`xcrun`): a shell, the adapter inherits stdin/stdout.
@@ -142,6 +369,7 @@ pub fn parse_launch_json(text: &str, root: &str, file: Option<&str>, tasks: &[Ta
         Value::Object(o) => o.get("configurations").and_then(Value::as_array).cloned().unwrap_or_default(),
         _ => Vec::new(),
     };
+    let all_inputs = parse_inputs(&v);
     items
         .iter()
         .filter_map(|c| {
@@ -173,7 +401,7 @@ pub fn parse_launch_json(text: &str, root: &str, file: Option<&str>, tasks: &[Ta
             let mut args = c.clone();
             let is_node = matches!(ty, "node" | "pwa-node" | "node-terminal");
             if let Some(o) = args.as_object_mut() {
-                for k in ["name", "type", "request", "preLaunchTask", "debugAdapter"] {
+                for k in ["name", "type", "request", "preLaunchTask", "postDebugTask", "debugAdapter"] {
                     o.remove(k);
                 }
                 // For debugpy connected directly, the address is the connection, not an `attach` argument.
@@ -192,7 +420,20 @@ pub fn parse_launch_json(text: &str, root: &str, file: Option<&str>, tasks: &[Ta
             let args = expand_value(&args, root, file);
             let pre_launch =
                 c["preLaunchTask"].as_str().and_then(|label| tasks.iter().find(|t| t.label == label)).map(|t| expand_variables(&t.command, root, file));
-            Some(LaunchConfig { name, adapter, request: c["request"].as_str().unwrap_or("launch").to_string(), args, pre_launch })
+            let post_debug = task_command(&c["postDebugTask"], tasks, root, file);
+            let mut config = LaunchConfig {
+                name,
+                adapter,
+                request: c["request"].as_str().unwrap_or("launch").to_string(),
+                args,
+                pre_launch,
+                post_debug,
+                no_debug: false,
+                inputs: Vec::new(),
+            };
+            let used = input_ids(&config);
+            config.inputs = all_inputs.iter().filter(|i| used.contains(&i.id)).cloned().collect();
+            Some(config)
         })
         .collect()
 }
@@ -217,6 +458,9 @@ pub fn detect(cargo_toml: Option<&str>, has_go_mod: bool, file: Option<&str>, ro
             request: "launch".into(),
             args: json!({ "program": format!("{}/target/debug/{name}", root.trim_end_matches('/')), "args": [], "cwd": root }),
             pre_launch: Some("cargo build".into()),
+            post_debug: None,
+            no_debug: false,
+            inputs: Vec::new(),
         });
     }
     if has_go_mod {
@@ -227,6 +471,9 @@ pub fn detect(cargo_toml: Option<&str>, has_go_mod: bool, file: Option<&str>, ro
             // outputMode remote: program output reaches the console as a DAP event (default: delve's stdout).
             args: json!({ "mode": "debug", "program": root, "cwd": root, "outputMode": "remote" }),
             pre_launch: None,
+            post_debug: None,
+            no_debug: false,
+            inputs: Vec::new(),
         });
     }
     if let Some(f) = file.filter(|f| [".js", ".mjs", ".cjs"].iter().any(|e| f.ends_with(e))) {
@@ -237,6 +484,9 @@ pub fn detect(cargo_toml: Option<&str>, has_go_mod: bool, file: Option<&str>, ro
             request: "launch".into(),
             args: json!({ "type": "pwa-node", "name": format!("Debug Node: {base}"), "program": f, "cwd": root, "console": "internalConsole" }),
             pre_launch: None,
+            post_debug: None,
+            no_debug: false,
+            inputs: Vec::new(),
         });
     }
     if let Some(f) = file.filter(|f| f.ends_with(".py")) {
@@ -247,6 +497,9 @@ pub fn detect(cargo_toml: Option<&str>, has_go_mod: bool, file: Option<&str>, ro
             request: "launch".into(),
             args: json!({ "program": f, "cwd": root, "console": "internalConsole" }),
             pre_launch: None,
+            post_debug: None,
+            no_debug: false,
+            inputs: Vec::new(),
         });
     }
     out
@@ -271,6 +524,68 @@ fn package_name(cargo: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn compounds_inputs_and_the_post_debug_task_are_read() {
+        let tasks = vec![
+            Task { label: "build".into(), command: "make".into(), source: "tasks.jsonc" },
+            Task { label: "clean".into(), command: "rm -rf ${workspaceFolder}/out".into(), source: "tasks.jsonc" },
+        ];
+        let text = r#"{
+          // comment
+          "configurations": [
+            { "name": "Server", "type": "lldb", "request": "launch", "program": "${input:binary}", "args": ["--port", "${input:port}"], "postDebugTask": "clean" },
+            { "name": "Client", "type": "lldb", "request": "launch", "program": "/bin/client" }
+          ],
+          "compounds": [ { "name": "Both", "configurations": ["Server", "Client"], "stopAll": true, "preLaunchTask": "build" }, { "configurations": [] } ],
+          "inputs": [
+            { "id": "port", "type": "pickString", "description": "Port", "options": ["8080", { "label": "alt", "value": "9090" }], "default": "9090" },
+            { "id": "binary", "type": "promptString", "description": "Binary", "default": "/bin/server" },
+            { "id": "danger", "type": "command", "command": "shell.run" }
+          ]
+        }"#;
+        let configs = parse_launch_json(text, "/p", None, &tasks);
+        assert_eq!(configs[0].post_debug, Some(("clean".into(), "rm -rf /p/out".into())));
+        assert!(configs[0].args.get("postDebugTask").is_none(), "not passed to the adapter");
+        assert_eq!(input_ids(&configs[0]), vec!["binary", "port"]);
+        assert_eq!(configs[0].inputs.len(), 2, "only the inputs it uses");
+        assert!(
+            matches!(&configs[0].inputs.iter().find(|i| i.id == "port").unwrap().kind, InputKind::Pick { options, default: Some(d), .. } if options == &["8080", "9090"] && d == "9090")
+        );
+        assert!(configs[1].inputs.is_empty() && configs[1].post_debug.is_none());
+        let mut c = configs[0].clone();
+        substitute_inputs(&mut c, &[("binary".into(), "/srv/app".into()), ("port".into(), "8080".into())]);
+        assert_eq!(c.args["program"], "/srv/app");
+        assert_eq!(c.args["args"], serde_json::json!(["--port", "8080"]));
+        assert!(input_ids(&c).is_empty());
+        let compounds = parse_compounds(text, "/p", None, &tasks);
+        assert_eq!(
+            compounds,
+            vec![Compound { name: "Both".into(), configs: vec!["Server".into(), "Client".into()], stop_all: true, pre_launch: Some("make".into()) }]
+        );
+        let v: Value = serde_json::from_str(r#"{ "inputs": [ { "id": "x", "type": "command" } ] }"#).unwrap();
+        assert!(matches!(&parse_inputs(&v)[0].kind, InputKind::Refused(k) if k == "command"), "command inputs are never run");
+    }
+
+    #[test]
+    fn a_configuration_is_added_without_touching_the_rest_of_the_file() {
+        let snippet = serde_json::json!({ "name": "New", "type": "go" });
+        let names = |text: &str| parse_launch_json(text, "/p", None, &[]).into_iter().map(|c| c.name).collect::<Vec<_>>();
+        // A file with comments and a trailing comma.
+        let text = "{\n  // keep me\n  \"configurations\": [\n    { \"name\": \"Old\", \"type\": \"go\" }, // and me\n  ],\n}\n";
+        let out = insert_configuration(text, &snippet).unwrap();
+        assert!(out.contains("// keep me") && out.contains("// and me"), "{out}");
+        assert_eq!(names(&out), vec!["Old", "New"]);
+        // No trailing comma, a `]` inside a string and a comment.
+        let text = r#"{ "configurations": [ { "name": "A ]", "type": "go" } /* ] */ ] }"#;
+        assert_eq!(names(&insert_configuration(text, &snippet).unwrap()), vec!["A ]", "New"]);
+        // Empty array, no key, an array file, an empty file.
+        assert_eq!(names(&insert_configuration(r#"{ "configurations": [] }"#, &snippet).unwrap()), vec!["New"]);
+        assert_eq!(names(&insert_configuration(r#"{ "version": "0.2.0" }"#, &snippet).unwrap()), vec!["New"]);
+        assert_eq!(names(&insert_configuration(r#"[ { "name": "A", "type": "go" } ]"#, &snippet).unwrap()), vec!["A", "New"]);
+        assert_eq!(names(&insert_configuration("  ", &snippet).unwrap()), vec!["New"]);
+        assert!(insert_configuration("{ not json", &snippet).is_err(), "a broken file is not edited");
+    }
+
     use super::*;
 
     fn sha256_of(path: &std::path::Path) -> String {

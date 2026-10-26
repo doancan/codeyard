@@ -288,6 +288,11 @@ impl Workbench {
             Command::action("View: Focus Right Editor Group", FocusRightGroup),
             Command::action("View: Source Control", ShowScm),
             Command::action("View: Run and Debug", ShowRunAndDebug),
+            Command::action("Debug: Run Without Debugging", RunWithoutDebugging),
+            Command::action("Debug: Run to Cursor", RunToCursor),
+            Command::action("Debug: Add Configuration…", AddDebugConfiguration),
+            Command::action("Debug: Open Launch Configuration", OpenLaunchConfiguration),
+            Command::action("Debug: Stop All", StopAllDebugging),
             Command::action("View: Remote Explorer", ShowRemoteExplorer),
             Command::action("Git: Checkout to…", GitCheckout),
             Command::action("Git: Create Branch…", GitCreateBranch),
@@ -660,7 +665,17 @@ impl Workbench {
             (OverlayKind::DebugConfigs(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let config = list[*index].clone();
                 self.close_overlay(window, cx);
-                self.start_debug(config, cx);
+                self.launch_with_inputs(config, window, cx);
+            }
+            (OverlayKind::LaunchInput(options), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let value = options[*index].clone();
+                self.close_overlay(window, cx);
+                self.answer_launch_input(value, window, cx);
+            }
+            (OverlayKind::LaunchTemplates(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let snippet = list[*index].clone();
+                self.close_overlay(window, cx);
+                self.insert_debug_configuration(snippet, window, cx);
             }
             (OverlayKind::Favorites(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let rel = list[*index].clone();
@@ -769,6 +784,8 @@ impl Workbench {
                 | OverlayKind::Favorites(_)
                 | OverlayKind::Tasks(_)
                 | OverlayKind::DebugConfigs(_)
+                | OverlayKind::LaunchInput(_)
+                | OverlayKind::LaunchTemplates(_)
                 | OverlayKind::RemoveFolder(_)
                 | OverlayKind::CompareFolder { .. }
                 | OverlayKind::ExceptionFilters(_)

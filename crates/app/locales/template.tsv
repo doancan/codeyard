@@ -37,6 +37,7 @@ Accept Incoming
 Accept Incoming Change	
 Activate Breakpoints	
 Add	
+Add Configuration…	
 Add Cursor Above	
 Add Cursor Below	
 Add Expression…	
@@ -44,6 +45,7 @@ Add Function Breakpoint…
 Add Next Occurrence	
 Add SSH Host…	
 Add SSH host…	
+Add a debug configuration	
 Add a host	
 Add remote	
 Add to .gitignore	
@@ -72,6 +74,7 @@ Always open *.{0} as {1}
 Amended {}	
 An existing file with the same name is never overwritten.	
 Anchors and aliases were expanded.	
+Another debug adapter	
 App: Quit	
 Applied {}	
 Apply (keep the stash)	
@@ -84,6 +87,7 @@ Ask before moving a file or folder by dragging it in the explorer
 Ask before moving a file to the Trash	
 Ask before running tasks, tests or the debugger of an untrusted folder	
 At most {} extra folders fit in one workspace.	
+Attach to a native process	
 Aug	
 Auto (follow system)	
 Auto Forwarded	
@@ -239,6 +243,7 @@ Compare {} with a commit
 Compare: Folders…	
 Compare: {0} ↔ {1}	
 Comparing contents… {0} of {1}	
+Compound “{}” has no configurations	
 Conflict	
 Conflict {0} of {1}	
 Connect	
@@ -259,6 +264,7 @@ Connecting to {}…
 Connecting…	
 Connection lost: {}	
 Containers	
+Continue	
 Continue (F5)	
 Continuing rebase…	
 Convert indentation to spaces	
@@ -296,6 +302,7 @@ Copying files here is not possible in this workspace.
 Copying files here needs the connection to {}, which failed: use Reconnect first.	
 Copying files here works with a connected SSH host: connect first (⌃R).	
 Copying…	
+Could not add the configuration: {}	
 Could not be compared	
 Could not blame: {}	
 Could not change {}	
@@ -384,6 +391,7 @@ Debug Python: {}
 Debug Rust: {}	
 Debug session ended	
 Debug session stopped	
+Debug: Add Configuration…	
 Debug: Add Function Breakpoint…	
 Debug: Add Watch Expression…	
 Debug: Break When Value Changes…	
@@ -395,17 +403,21 @@ Debug: Edit Breakpoint… (condition, log message, hit count)
 Debug: Enable All Breakpoints	
 Debug: Enable/Disable Breakpoint	
 Debug: Install JavaScript Debugger	
+Debug: Open Launch Configuration	
 Debug: Pause	
 Debug: Remove All Breakpoints	
 Debug: Remove All Watch Expressions	
 Debug: Remove Data Breakpoints	
 Debug: Restart	
+Debug: Run Without Debugging	
+Debug: Run to Cursor	
 Debug: Show Debug Panel	
 Debug: Start Debugging	
 Debug: Step Into	
 Debug: Step Out	
 Debug: Step Over	
 Debug: Stop	
+Debug: Stop All	
 Debug: Toggle Breakpoint	
 Dec	
 Decoded here only: nothing is sent or logged	
@@ -435,6 +447,7 @@ Deleting…
 Deny	
 Developer: Restart Language Servers	
 Diff view side by side (off: inline)	
+Disable All Breakpoints	
 Disable Breakpoint	
 Discard	
 Discard All Changes	
@@ -575,6 +588,7 @@ Editor: Unfold All
 Editor: Unfold Recursively	
 Empty folder	
 Empty group: ⌘P opens a file here	
+Enable All Breakpoints	
 Enable Breakpoint	
 Encoding for files that are not UTF-8	
 End files with a newline when saving	
@@ -751,6 +765,7 @@ GitHub's rate limit for anonymous requests: sign in with `gh auth login` or set 
 GitHub: Pull Requests…	
 Give the theme a name.	
 Go	
+Go package	
 Go to Definition	
 Go to File	
 Go to File…	
@@ -948,6 +963,7 @@ Name of the stash (shown in the stash list)
 Name with an extension: the extension picks the language (scratch.md, notes.json…)	
 Names can't contain / or be . or ..	
 Names only	
+Native program (C, C++, Rust, Swift)	
 New (untracked)	
 New File	
 New File…	
@@ -1037,6 +1053,7 @@ No test at the cursor: put it inside a test function.
 No tests found for this file type.	
 No type definition found	
 No unsaved changes: the file matches what is on disk.	
+Node.js program	
 None	
 None of these commits is yours.	
 None of this repository's remotes is on github.com.	
@@ -1067,6 +1084,7 @@ Nothing yet.
 Nothing yet: open a folder to see it here.	
 Nov	
 Numbers and booleans were written as text.	
+OK	
 Object keys must be strings, not {}	
 Oct	
 On this computer	
@@ -1141,6 +1159,7 @@ Path on this computer (~ is your home folder)
 Paths are shown for JSON, YAML and TOML files	
 Paths can't end with / or contain . or .. parts	
 Pattern, e.g. foo($X, $$$REST)	
+Pause	
 Pause (F6)	
 Pause the program first (a breakpoint or ⏸): the variable has to be in scope.	
 Paused on exception: {}	
@@ -1222,6 +1241,8 @@ Pushing {}…
 Pushing…	
 Put the cursor inside a merge conflict	
 Put the cursor on a symbol to rename it	
+Python: attach to a debug server	
+Python: current file	
 Query	
 Query, e.g. .items[].name	
 Query: {}	
@@ -1339,6 +1360,7 @@ Respect .gitignore
 Response	
 Restart (⇧⌘F5)	
 Restart Codeyard to finish.	
+Restart Debugging	
 Restart Frame	
 Restart Now	
 Restart to update	
@@ -1357,10 +1379,14 @@ Reverting a change is not supported in this file (non-UTF-8 or CR-only line endi
 Right is writable	
 Right-click a commit in the Source Control graph to branch, tag, cherry-pick, revert or reset.	
 Right-click a folder and choose Find in Folder… to search only inside it.	
+Run	
+Run Without Debugging	
 Run and Debug	
 Run and Debug (⌃⇧D)	
 Run task	
 Run the search again	
+Run to Cursor	
+Running the program in a terminal is not supported on Windows yet: use {} in the configuration.	
 Running…	
 SSH Hosts	
 SSH host	
@@ -1507,6 +1533,7 @@ Staging changes is not supported in files with old-Mac (CR only) line endings
 Staging changes needs a UTF-8 file	
 Staging changes needs a UTF-8 file (this one is stored in another encoding)	
 Start	
+Start Debugging	
 Start Debugging (F5)	
 Start a debug session first (F5): the adapter says which exceptions it can break on.	
 Start and end of a slice must be numbers	
@@ -1523,12 +1550,16 @@ Stashed changes
 Stashes	
 Stashing…	
 Status bar	
+Step Into	
 Step Into (F11)	
+Step Out	
 Step Out (⇧F11)	
+Step Over	
 Step Over (F10)	
 Still staging the previous change…	
 Stop	
 Stop (⇧F5)	
+Stop Debugging	
 Stop Forwarding	
 Stop a search after this many matches	
 Stopped.	
@@ -1598,12 +1629,14 @@ The file is not open any more.
 The file is too large for an outline.	
 The folder and everything in it will be deleted.	
 The folder could not be read on the server: {}	
+The input “{0}” is of type “{1}”, which would run a command; use promptString or pickString.	
 The last background fetch failed: {}	
 The local port is busy	
 The new version couldn't be installed from here. You can download it from the release page instead.	
 The number {} cannot be written in JSON	
 The pattern does not parse: {0} (line {1}, column {2})	
 The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code.	
+The program is running: pause it first, or set a breakpoint.	
 The query ends too early	
 The query is nested too deeply	
 The query is too long	
@@ -1684,6 +1717,7 @@ Thursday
 Timeline	
 To customize Run and Debug, create a launch configuration.	
 Toggle Bookmark	
+Toggle Breakpoint	
 Toggle Line Comment	
 Toggle Panel	
 Toggle Sidebar	
@@ -1715,6 +1749,8 @@ Unexpected text after the closing quote
 Unexpected “{}”	
 Unfold	
 Unfold All	
+Unknown configuration “{}” in compound “{}”	
+Unknown input “{0}” in “{1}”	
 Unknown theme '{0}'. Available: {1}	
 Unpin	
 Unsaved changes stay open in their tabs; saving recreates the file.	
@@ -1996,6 +2032,8 @@ the file is no longer readable (permission denied)
 the folder cannot be read on the left	
 the folder cannot be read on the right	
 the header “{}” is not valid	
+the launch file is not an object	
+the launch file is not valid JSON: {}	
 the path is now a folder, not a file	
 the repository may be private: sign in with `gh auth login` or set GITHUB_TOKEN	
 the response body is not JSON	
@@ -2201,6 +2239,7 @@ your words
 “localhost” means {0}: for a service on your own computer set http.runOn to {1}.	
 “{0}” is not a valid regular expression ({1}). Escape special characters with a backslash.	
 “{}” already exists. Replace it?	
+“{}” asks for inputs, which a compound cannot ask for: start it on its own.	
 “{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	
 “{}” can't be opened	
 “{}” is called with the wrong number of arguments	

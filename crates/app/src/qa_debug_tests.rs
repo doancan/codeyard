@@ -220,3 +220,118 @@ fn values_pages_stack_pages_set_value_completion_and_restart_frame(cx: &mut Test
     wait_secs(cx, 10, "restarted", |cx| snap(cx).is_some_and(|s| s.0 == "stopped:restart"));
     run(&wb, cx, "Debug: Stop");
 }
+
+/// Writes launch.jsonc with a configuration per (name, extra JSON fields), all running the scripted adapter.
+fn write_launch(dir: &Path, log: &Path, configs: &[(&str, &str)], rest: &str) {
+    let script = dir.join("fake-dap.py");
+    let configs: Vec<String> = configs
+        .iter()
+        .map(|(name, extra)| {
+            format!(
+                r#"{{ "name": "{name}", "type": "custom", "request": "launch", "program": "/bin/true", "source": "${{workspaceFolder}}/main.c",
+                   "debugAdapter": {{ "command": "{}", "args": ["{}"] }} {extra} }}"#,
+                script.display(),
+                log.display()
+            )
+        })
+        .collect();
+    std::fs::write(dir.join(".codeyard/launch.jsonc"), format!(r#"{{ "configurations": [ {} ] {rest} }}"#, configs.join(", "))).unwrap();
+}
+
+#[gpui::test]
+fn run_without_debugging_sends_no_breakpoints_and_the_post_debug_task_runs(cx: &mut TestAppContext) {
+    if !have_python() {
+        return;
+    }
+    let home = project("dbg-nodebug-home");
+    let (dir, log) = fake_project("dbg-nodebug");
+    let marker = dir.join("post-task-ran");
+    std::fs::write(dir.join(".codeyard/tasks.jsonc"), format!(r#"[ {{ "label": "after", "command": "touch {}" }} ]"#, marker.display())).unwrap();
+    write_launch(&dir, &log, &[("Fake", r#", "postDebugTask": "after""#)], "");
+    let (wb, cx) = setup_persistent(cx, &home);
+    wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    open(&wb, &dir, cx);
+    let (_, ed) = open_main(&wb, &dir, cx);
+    ed.update(cx, |e, cx| e.toggle_breakpoint_at(4, cx));
+    run(&wb, cx, "Debug: Run Without Debugging");
+    let snap = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.debug_snapshot());
+    wait_secs(cx, 10, "ran to the end", |cx| snap(cx).is_some_and(|s| s.0 == "ended"));
+    assert!(snap(cx).unwrap().3.iter().any(|l| l.contains("ran without debugging")));
+    let launch = log_lines(&log, "launch");
+    assert!(launch[0].contains("\"noDebug\": true"), "{launch:?}");
+    assert!(log_lines(&log, "setBreakpoints").is_empty(), "no breakpoints for a run without debugging");
+    wait_secs(cx, 10, "the post-debug task", |_| marker.exists());
+}
+
+#[gpui::test]
+fn run_to_cursor_stops_there_once(cx: &mut TestAppContext) {
+    if !have_python() {
+        return;
+    }
+    let home = project("dbg-cursor-home");
+    let (dir, log) = fake_project("dbg-cursor");
+    let (wb, cx) = setup_persistent(cx, &home);
+    open(&wb, &dir, cx);
+    let (main, ed) = open_main(&wb, &dir, cx);
+    ed.update(cx, |e, cx| e.toggle_breakpoint_at(2, cx));
+    run(&wb, cx, "Debug: Start Debugging");
+    let snap = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.debug_snapshot());
+    wait_secs(cx, 10, "paused on line 3", |cx| snap(cx).is_some_and(|s| s.0 == "stopped:breakpoint" && s.2 == Some((main.clone(), 2))));
+    ed.update(cx, |e, cx| e.set_cursor_line_col_for_test(7, 0, cx));
+    run(&wb, cx, "Debug: Run to Cursor");
+    wait_secs(cx, 10, "stopped at the cursor", |cx| snap(cx).is_some_and(|s| s.0 == "stopped:breakpoint" && s.2 == Some((main.clone(), 7))));
+    wait_secs(cx, 10, "the temporary breakpoint is taken back", |_| log_lines(&log, "setBreakpoints").last().is_some_and(|l| l.contains("\"lines\": [3]")));
+    assert_eq!(wb.read_with(cx, |wb, _| wb.breakpoints_for_test(&main)).len(), 1, "never listed");
+    run(&wb, cx, "Debug: Stop");
+}
+
+#[gpui::test]
+fn a_compound_starts_its_sessions_together_and_stop_all_stops_them(cx: &mut TestAppContext) {
+    if !have_python() {
+        return;
+    }
+    let home = project("dbg-compound-home");
+    let (dir, log) = fake_project("dbg-compound");
+    write_launch(&dir, &log, &[("One", ""), ("Two", "")], r#", "compounds": [ { "name": "Both", "configurations": ["One", "Two"], "stopAll": true } ]"#);
+    let (wb, cx) = setup_persistent(cx, &home);
+    open(&wb, &dir, cx);
+    wb.update_in(cx, |wb, window, cx| wb.show_panel_named("debug", window, cx));
+    wait_secs(cx, 10, "the catalog", |cx| wb.read_with(cx, |wb, _| wb.debug_catalog_for_test()) == vec!["One", "Two", "Both"]);
+    wb.update_in(cx, |wb, window, cx| wb.start_named_for_test("Both", window, cx));
+    let stack = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.run_debug_rows_for_test().1);
+    wait_secs(cx, 10, "two sessions", |cx| stack(cx).iter().filter(|r| r.starts_with("session:")).count() == 2);
+    wait_secs(cx, 10, "both paused", |cx| stack(cx).iter().filter(|r| r.contains("paused on")).count() == 2);
+    run(&wb, cx, "Debug: Stop");
+    wait_secs(cx, 10, "both ended", |cx| stack(cx).iter().filter(|r| r.contains("(ended)")).count() == 2);
+}
+
+#[gpui::test]
+fn inputs_are_asked_before_the_start_and_the_program_can_run_in_a_terminal(cx: &mut TestAppContext) {
+    if !have_python() {
+        return;
+    }
+    let home = project("dbg-inputs-home");
+    let (dir, log) = fake_project("dbg-inputs");
+    let marker = dir.join("terminal-ran");
+    write_launch(
+        &dir,
+        &log,
+        &[("Fake", &format!(r#", "args": ["${{input:level}}", "${{input:name}}"], "console": "integratedTerminal", "marker": "{}""#, marker.display()))],
+        r#", "inputs": [ { "id": "name", "type": "promptString", "description": "Your name" }, { "id": "level", "type": "pickString", "description": "Level", "options": ["low", "high"] } ]"#,
+    );
+    let (wb, cx) = setup_persistent(cx, &home);
+    wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    open(&wb, &dir, cx);
+    run(&wb, cx, "Debug: Start Debugging");
+    // First question (in order of use): pick a level; then type a name.
+    wait_secs(cx, 10, "the level question", |cx| wb.read_with(cx, |wb, cx| wb.overlay_labels(cx)).is_some_and(|l| l == ["low", "high"]));
+    wb.update_in(cx, |wb, window, cx| wb.answer_launch_input_for_test("high", window, cx));
+    wb.update_in(cx, |wb, window, cx| wb.answer_launch_input_for_test("Ada", window, cx));
+    let snap = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.debug_snapshot());
+    wait_secs(cx, 10, "started", |cx| snap(cx).is_some_and(|s| s.0.starts_with("stopped")));
+    let launch = log_lines(&log, "launch");
+    assert!(launch[0].contains("\"args\": [\"high\", \"Ada\"]"), "{launch:?}");
+    assert!(log_lines(&log, "initialize")[0].contains("\"supportsRunInTerminalRequest\": true"));
+    wait_secs(cx, 10, "the program ran in a terminal", |_| std::fs::read_to_string(&marker).is_ok_and(|t| t.trim() == "ran-in-terminal"));
+    run(&wb, cx, "Debug: Stop");
+}
