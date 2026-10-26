@@ -248,6 +248,14 @@ pub(super) enum InputPurpose {
     Setting {
         key: &'static str,
     },
+    /// Label of the forward of a server port.
+    PortLabel {
+        remote: u16,
+    },
+    /// Local port for the forward of a server port.
+    PortLocal {
+        remote: u16,
+    },
 }
 
 #[derive(Clone, Copy)]
@@ -303,4 +311,6 @@ pub(super) enum MenuCmd {
     /// Send the action in `MenuState::actions` to the focused item.
     Dispatch(usize),
     AppSubmenu(usize),
+    /// A row of the PORTS table (`MenuTarget::path` = the server port).
+    Port(ports_glue::PortMenuCmd),
 }

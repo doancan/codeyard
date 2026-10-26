@@ -378,14 +378,12 @@ impl ForwardSet {
         }
     }
 
-    #[expect(dead_code, reason = "used by the ports table")]
     pub fn set_label(&mut self, id: ForwardId, label: &str) {
         if let Some(f) = self.get_mut(id) {
             f.label = clean_label(label);
         }
     }
 
-    #[expect(dead_code, reason = "used by the ports table")]
     pub fn set_protocol(&mut self, id: ForwardId, protocol: Protocol) {
         if let Some(f) = self.get_mut(id) {
             f.protocol = protocol;
@@ -393,7 +391,6 @@ impl ForwardSet {
     }
 
     /// Moves a forward to the local port the user chose: the old one is cancelled, the new one must be exactly `port`.
-    #[cfg_attr(not(test), expect(dead_code, reason = "used by the ports table"))]
     pub fn change_local(&mut self, id: ForwardId, port: u16) -> Vec<Effect> {
         let Some(f) = self.get_mut(id) else { return Vec::new() };
         let mut out = Vec::new();

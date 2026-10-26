@@ -1488,7 +1488,6 @@ Could not forward port {}: {}	Bağlantı noktası {0} yönlendirilemedi: {1}
 Port forwarding works while connected to an SSH host.	Bağlantı noktası yönlendirme, bir SSH sunucusuna bağlıyken çalışır.
 Open in Browser	Tarayıcıda Aç
 Stop	Durdur
-listening on the server	sunucuda dinliyor
 Nothing is listening on the server yet.	Sunucuda henüz dinleyen bir şey yok.
 Forward a port:	Bağlantı noktası yönlendir:
 Forward Port	Yönlendir
@@ -1500,8 +1499,20 @@ The SSH connection is gone: reconnect to forward again	SSH bağlantısı koptu: 
 forwarding…	yönlendiriliyor…
 waiting for the connection	bağlantı bekleniyor
 Retry	Yeniden Dene
-{} is listening on the server	{0} sunucuda dinliyor
 {} ports are forwarded	{0} bağlantı noktası yönlendirildi
+Auto Forwarded	Otomatik Yönlendirildi
+User Forwarded	Kullanıcı Yönlendirdi
+Change	Değiştir
+Change Local Port…	Yerel Bağlantı Noktasını Değiştir…
+Copy Address	Adresi Kopyala
+Protocol: HTTP	Protokol: HTTP
+Protocol: HTTPS	Protokol: HTTPS
+Protocol: TCP	Protokol: TCP
+Set Label…	Etiket Ver…
+Stop Forwarding	Yönlendirmeyi Durdur
+label, e.g. web (empty: none)	etiket, örn. web (boş: yok)
+local port, e.g. 8080	yerel bağlantı noktası, örn. 8080
+“{}” is not a free local port	“{0}” boş bir yerel bağlantı noktası değil
 ports.rules.{}: expected a port or a range such as 3000-3010	ports.rules.{0}: bir bağlantı noktası ya da 3000-3010 gibi bir aralık bekleniyordu
 ports.rules.{}: expected an object with label, onForward or protocol	ports.rules.{0}: label, onForward ya da protocol içeren bir nesne bekleniyordu
 ports.rules.{}.{}: unexpected value	ports.rules.{0}.{1}: beklenmeyen değer

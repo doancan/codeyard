@@ -900,18 +900,9 @@ impl Workbench {
                 }
             }),
             cx.subscribe_in(&port_field, window, |this, field, ev: &crate::input::FieldEvent, _, cx| {
-                if matches!(ev, crate::input::FieldEvent::Submit) {
-                    let text = field.read(cx).text().trim().trim_start_matches("localhost:").to_string();
-                    match text.parse::<u16>() {
-                        Ok(port) if port > 0 => {
-                            field.update(cx, |f, cx| f.set_text("", cx));
-                            this.forward_port(port, cx);
-                        }
-                        _ => {
-                            this.notice = Some(Notice::Error(crate::i18n::tf("“{}” is not a port number", &[&text]).into()));
-                            cx.notify();
-                        }
-                    }
+                let text = field.read(cx).text().to_string();
+                if matches!(ev, crate::input::FieldEvent::Submit) && this.submit_port_field(&text, cx) {
+                    field.update(cx, |f, cx| f.set_text("", cx));
                 }
             }),
             cx.subscribe_in(&scm, window, |this, _, event: &crate::scm::ScmEvent, window, cx| match event {
@@ -1612,6 +1603,7 @@ impl Workbench {
         self.load_watches();
         self.load_exception_filters();
         self.load_favorites();
+        self.restore_forwards(cx);
         self.load_project_settings(cx);
         cx.notify();
     }

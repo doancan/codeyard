@@ -81,6 +81,7 @@ Ask before running tasks, tests or the debugger of an untrusted folder
 At most {} extra folders fit in one workspace.	
 Aug	
 Auto (follow system)	
+Auto Forwarded	
 Back	
 Back to the default (removes the value from settings.jsonc)	
 Back to this computer; files with unsaved changes must be saved or closed first	
@@ -116,7 +117,9 @@ Cannot open this link: {}
 Cannot parse {} as a number	
 Cannot use {} as an entry	
 Cannot use {} as an object key	
+Change	
 Change All Occurrences	
+Change Local Port…	
 Change the URL of which remote?	
 Change this in Settings (update.check). Check for Updates… always works.	
 Changed	
@@ -254,6 +257,7 @@ Copied {} item.|Copied {} items.
 Copied {}.	
 Copied “{}” ({}) to {}	
 Copy	
+Copy Address	
 Copy Commit Hash	
 Copy Line Down	
 Copy Line Up	
@@ -1145,6 +1149,9 @@ Projects: Add Folder to Projects…
 Projects: Edit Projects	
 Projects: Remove from Recent…	
 Projects: Switch Project… (Open Recent)	
+Protocol: HTTP	
+Protocol: HTTPS	
+Protocol: TCP	
 Pruned {} stale worktree entry|Pruned {} stale worktree entries	
 Pruning worktrees…	
 Publish Branch	
@@ -1376,6 +1383,7 @@ Sending {} {}…
 Sep	
 Services	
 Set	
+Set Label…	
 Set URL	
 Set Up	
 Set up key login	
@@ -1466,6 +1474,7 @@ Step Over (F10)
 Still staging the previous change…	
 Stop	
 Stop (⇧F5)	
+Stop Forwarding	
 Stop a search after this many matches	
 Stopped.	
 String interpolation is not supported	
@@ -1669,6 +1678,7 @@ Uploading has to wait: the connection is still being set up.
 Uploading is not possible in this workspace.	
 Uploading needs the connection to {}, which failed: use Reconnect first.	
 Uploading works with a connected SSH host: connect first (⌃R).	
+User Forwarded	
 VS Code settings.json could not be read	
 Variables	
 Variables are not supported	
@@ -1835,6 +1845,7 @@ it is not a regular file or folder
 its name differs from another entry only in letter case	
 join needs a string separator, got {}	
 just now	
+label, e.g. web (empty: none)	
 language server is not running	
 latest {} open	
 left	
@@ -1842,8 +1853,8 @@ light
 limit needs a whole number	
 lines {0}–{1}	
 link target differs	
-listening on the server	
 local agent, protocol test	
+local port, e.g. 8080	
 method	
 milliseconds	
 module	
@@ -2050,7 +2061,6 @@ your words
 {} is a date:	
 {} is already in .gitignore	
 {} is already in the workspace.	
-{} is listening on the server	
 {} is not a trusted folder, so nothing is deleted from it. Open it as a folder and trust it first.	
 {} is not a trusted folder, so nothing is written to it. Open it as a folder and trust it first.	
 {} is not an array	
@@ -2130,6 +2140,7 @@ your words
 “{}” is called with the wrong number of arguments	
 “{}” is missing here	
 “{}” is not a branch of a known remote	
+“{}” is not a free local port	
 “{}” is not a function this query language has	
 “{}” is not a number	
 “{}” is not a port number	
