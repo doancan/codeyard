@@ -11,6 +11,10 @@ name: release
 on:
   push:
     tags: ["v*"]
+    # A push to main that changes the dependencies or this file runs the whole thing as a dry run (no tag, no release): it fills the
+    # build caches that the next tag restores, so a release does not compile every dependency again.
+    branches: [main]
+    paths: [Cargo.lock, ".github/workflows/release.yml", "vendor/**"]
   workflow_dispatch:
 
 permissions:
@@ -53,8 +57,60 @@ jobs:
           scripts/sign-release.sh "$probe" || { echo "::error title=UPDATE_SIGNING_KEY does not match scripts/update-public-key.pem::See docs/releasing.md (key rotation)."; exit 1; }
           rm -rf "$probe"
 
+  # The SSH agents are small and static: Rust's musl targets bring their own libc and `rust-lld` links them, so no zig is needed and
+  # they build on their own while the app builds elsewhere. Both Linux agents come from one cheap Linux job, the macOS one from a
+  # macOS job, and the app builds (macOS and Windows) take all three.
+  agents-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl,aarch64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: agents-linux
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+      - name: Build the Linux agents
+        run: |
+          mkdir agents
+          lld="$(dirname "$(rustc --print target-libdir)")/bin/rust-lld"
+          for t in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
+            var="CARGO_TARGET_$(echo "$t" | tr 'a-z-' 'A-Z_')_LINKER"
+            env "$var=$lld" cargo build --locked --profile release-agent -p agent --target "$t"
+            cp "target/$t/release-agent/codeyard-agent" "agents/codeyard-agent-$t"
+          done
+          file agents/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agents-linux
+          path: agents/
+          if-no-files-found: error
+
+  agent-macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: agent-macos
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+      - name: Build the macOS agent
+        run: |
+          mkdir agents
+          cargo build --locked --profile release-agent -p agent
+          cp target/release-agent/codeyard-agent agents/codeyard-agent-aarch64-apple-darwin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agents-macos
+          path: agents/
+          if-no-files-found: error
+
   macos:
-    needs: verify
+    needs: [verify, agents-linux, agent-macos]
     runs-on: macos-latest
     timeout-minutes: 90
     steps:
@@ -69,12 +125,10 @@ jobs:
           fi
 
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
         with:
-          targets: x86_64-unknown-linux-musl,aarch64-unknown-linux-musl
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-zigbuild
-      - run: brew install zig
+          shared-key: app-macos
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       # A failed download is only a warning (older Xcodes ship `metal`); a missing compiler fails the release here,
       # with a clear message, not minutes later inside gpui's build.rs.
       - name: Metal toolchain (GPUI shaders)
@@ -83,25 +137,15 @@ jobs:
           xcrun -sdk macosx metal --version || { echo "::error::The Metal compiler is not available: GPUI cannot compile its shaders"; exit 1; }
 
       # SSH agents: copied to the server on first connect, so they ship inside the app.
-      - name: Build agents
-        run: |
-          mkdir agents
-          for t in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
-            cargo zigbuild --profile release-agent -p agent --target "$t"
-            cp "target/$t/release-agent/codeyard-agent" "agents/codeyard-agent-$t"
-          done
-          cargo build --profile release-agent -p agent
-          cp target/release-agent/codeyard-agent agents/codeyard-agent-aarch64-apple-darwin
+      - name: Download the SSH agents
+        uses: actions/download-artifact@v4
+        with:
+          pattern: agents-*
+          merge-multiple: true
+          path: agents
 
       - name: Build app, bundle and DMG
         run: AGENTS_DIR="$PWD/agents" scripts/bundle-macos.sh
-
-      - name: Share SSH agents with Windows build
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-agents
-          path: agents/
-          if-no-files-found: error
 
       - name: Collect release files
         run: |
@@ -148,7 +192,7 @@ jobs:
           if-no-files-found: error
 
   windows:
-    needs: macos
+    needs: [verify, agents-linux, agent-macos]
     runs-on: windows-2022
     timeout-minutes: 60
     defaults:
@@ -157,10 +201,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: app-windows
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       - name: Download SSH agents
         uses: actions/download-artifact@v4
         with:
-          name: release-agents
+          pattern: agents-*
+          merge-multiple: true
           path: agents
       - name: Build Windows ZIP and installer
         run: |
