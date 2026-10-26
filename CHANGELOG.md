@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Crash on macOS when answering the update dialog.** Every click or key in the *Software Update* window (*Check Daily*, *Only When I Ask*,
+  *Install and Restart*, *Later*, the red close button) asked the editor window to run it in a way that updated the workbench twice, and
+  the app aborted. The dialog's window now hands the answer over without re-entering the workbench. New tests drive the dialog through
+  its own window, which none did before.
+- **Menu bar and Dock menu rebuilt in the middle of a window update.** Changing the interface language (or the recent list) from inside
+  an update rebuilt the menus at once, and macOS validates every item during that, which could update the same window again. The rebuild now
+  waits for the end of the current update.
+
+### Changed
+
+- **No file-access dialogs at start on macOS.** Codeyard no longer touches Desktop, Documents and Downloads (and so iCloud Drive) on the first
+  start of each version; macOS asks when you open a folder there, as with other editors. `CODEYARD_SKIP_DISK_PROMPT` is gone.
+- **A shorter first-run question about update checks.** Two short sentences instead of two paragraphs; it still says that github.com is
+  contacted, that GitHub sees your IP address and nothing about your files, and where to change it.
+
 ## [0.3.0] - 2026-10-26
 
 ### Added
