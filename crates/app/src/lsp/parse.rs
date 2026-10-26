@@ -530,15 +530,18 @@ pub fn remap_edit_uris(edit: &Value, old: &str, new: &str) -> Value {
             uri.to_string()
         }
     };
+    // The edit comes from the server and can have any shape: only the parts that are what they should be are changed
+    // (indexing a non-object for writing would panic).
     let mut out = edit.clone();
-    if let Some(changes) = edit["changes"].as_object() {
-        let mapped: serde_json::Map<String, Value> = changes.iter().map(|(k, v)| (map(k), v.clone())).collect();
-        out["changes"] = Value::Object(mapped);
+    if let Some(changes) = out.get_mut("changes").and_then(Value::as_object_mut) {
+        *changes = std::mem::take(changes).into_iter().map(|(k, v)| (map(&k), v)).collect();
     }
-    if let Some(docs) = out["documentChanges"].as_array_mut() {
+    if let Some(docs) = out.get_mut("documentChanges").and_then(Value::as_array_mut) {
         for d in docs {
-            if let Some(u) = d["textDocument"]["uri"].as_str().map(map) {
-                d["textDocument"]["uri"] = Value::String(u);
+            if let Some(uri) = d.get_mut("textDocument").and_then(|t| t.get_mut("uri"))
+                && let Some(u) = uri.as_str().map(map)
+            {
+                *uri = Value::String(u);
             }
         }
     }
