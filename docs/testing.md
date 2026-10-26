@@ -121,6 +121,6 @@ Caveats, stated plainly:
 ## Driving the real window
 
 A hidden flag runs palette commands in a real window after start: `codeyard --do "Command Name;Other Command"`
-(`CODEYARD_DO_DELAY_MS` sets the delay, `shortcut:<Command>` goes through the shortcuts page). `--panel` and the
+(debug builds only, or a release build with `CODEYARD_DEV=1` set; `CODEYARD_DO_DELAY_MS` sets the delay, `shortcut:<Command>` goes through the shortcuts page). `--panel` and the
 screenshot helpers are used for visual checks; use throw-away `CODEYARD_STATE_DIR` / `CODEYARD_CONFIG_DIR`
 directories. `scripts/a11y-probe/` reads the live accessibility tree.

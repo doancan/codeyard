@@ -36,17 +36,28 @@ pub enum TerminalEvent {
 const MAX_BACKLOG: usize = 32 * 1024 * 1024;
 
 /// Pending-output counter between the bridge thread and the UI: a chunk over the limit is dropped (see `admit`).
-#[derive(Default)]
-struct OutputBacklog {
+pub(crate) struct OutputBacklog {
+    limit: usize,
     pending: std::sync::atomic::AtomicUsize,
     dropped: std::sync::atomic::AtomicBool,
 }
 
+impl Default for OutputBacklog {
+    fn default() -> Self {
+        Self::with_limit(MAX_BACKLOG)
+    }
+}
+
 impl OutputBacklog {
+    /// A backlog that admits at most `limit` bytes not yet consumed.
+    pub(crate) fn with_limit(limit: usize) -> Self {
+        Self { limit, pending: Default::default(), dropped: Default::default() }
+    }
+
     /// Accept the new `len` bytes of output (`true`) or drop it (`false`, which raises the "dropped" flag).
-    fn admit(&self, len: usize) -> bool {
+    pub(crate) fn admit(&self, len: usize) -> bool {
         use std::sync::atomic::Ordering::Relaxed;
-        if self.pending.load(Relaxed).saturating_add(len) > MAX_BACKLOG {
+        if self.pending.load(Relaxed).saturating_add(len) > self.limit {
             self.dropped.store(true, Relaxed);
             return false;
         }
@@ -55,13 +66,21 @@ impl OutputBacklog {
     }
 
     /// The UI parsed a chunk.
-    fn consumed(&self, len: usize) {
+    pub(crate) fn consumed(&self, len: usize) {
         self.pending.fetch_sub(len, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// `true` once if output was dropped (so the user can be told).
-    fn take_dropped(&self) -> bool {
+    pub(crate) fn take_dropped(&self) -> bool {
         self.dropped.swap(false, std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
+/// The text a terminal event wants on the clipboard, if `allowed`.
+fn clipboard_text(ev: TermEvent, allowed: bool) -> Option<String> {
+    match ev {
+        TermEvent::ClipboardStore(_, s) if allowed => Some(s),
+        _ => None,
     }
 }
 
@@ -95,7 +114,7 @@ impl EventListener for Listener {
 
 pub struct TerminalView {
     /// Folder it was started in (tests read it).
-    #[cfg_attr(not(test), allow(dead_code))]
+    #[cfg_attr(not(test), allow(dead_code, reason = "only tests read it"))]
     cwd: Option<String>,
     host: Arc<dyn Host>,
     pty: Option<u32>,
@@ -250,7 +269,7 @@ impl TerminalView {
     fn drain_events(&mut self, cx: &mut Context<Self>) {
         let events: Vec<TermEvent> = std::mem::take(&mut *self.events.0.borrow_mut());
         for ev in events {
-            match ev {
+            match ev.clone() {
                 // The terminal is answering a query (like the cursor position): write it back to the shell.
                 TermEvent::PtyWrite(s) => self.write(s.into_bytes()),
                 TermEvent::Title(_) | TermEvent::ResetTitle if self.title_locked => {}
@@ -262,7 +281,13 @@ impl TerminalView {
                     self.title = "terminal".into();
                     cx.emit(TerminalEvent::TitleChanged);
                 }
-                TermEvent::ClipboardStore(_, s) => cx.write_to_clipboard(ClipboardItem::new_string(s)),
+                // OSC 52: only when the setting allows it (a program could otherwise replace what the user copied).
+                TermEvent::ClipboardStore(..) => {
+                    let allowed = cx.global::<crate::settings::Settings>().terminal_allow_clipboard_write;
+                    if let Some(s) = clipboard_text(ev, allowed) {
+                        cx.write_to_clipboard(ClipboardItem::new_string(s))
+                    }
+                }
                 _ => {}
             }
         }
@@ -1056,6 +1081,20 @@ mod tests {
         assert_eq!(exit, Some(Some(0)), "the exit event is never dropped");
         assert!(held >= MAX_BACKLOG - chunk.len(), "output up to the cap is delivered ({held})");
         assert!(backlog.take_dropped(), "the user is told");
+    }
+
+    #[test]
+    fn osc_52_reaches_the_clipboard_only_when_the_setting_allows_it() {
+        let events = Listener::default();
+        let mut term = Term::new(Config::default(), &TermSize { cols: 80, rows: 24 }, events.clone());
+        let mut parser = Processor::<StdSyncHandler>::default();
+        parser.advance(&mut term, b"\x1b]52;c;Zm9v\x07");
+        let queued = std::mem::take(&mut *events.0.borrow_mut());
+        assert!(queued.iter().any(|e| matches!(e, TermEvent::ClipboardStore(..))), "the terminal reports the store request");
+        let texts = |allowed| queued.iter().cloned().filter_map(|e| clipboard_text(e, allowed)).collect::<Vec<_>>();
+        assert!(texts(false).is_empty(), "off by default: nothing is written");
+        assert_eq!(texts(true), ["foo"]);
+        assert!(!crate::settings::Settings::default().terminal_allow_clipboard_write);
     }
 
     #[test]

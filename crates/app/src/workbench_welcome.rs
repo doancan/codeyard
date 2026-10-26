@@ -260,6 +260,7 @@ impl Workbench {
                     Page::Markdown(_) => "markdown",
                     Page::Shortcuts(_) => "shortcuts",
                     Page::Merge(_) => "merge",
+                    Page::Compare(_) => "compare",
                 },
                 self.tabs.page_active,
             )

@@ -29,8 +29,14 @@ use crate::ui::{self, ActiveTheme, Palette, c, icon, layout, palette, text};
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 #[path = "a11y.rs"]
 pub mod a11y;
+// --- compare ---
+#[path = "workbench_compare.rs"]
+mod compare_glue;
 #[path = "workbench_connect.rs"]
 mod connect_glue;
+// --- data ---
+#[path = "workbench_data.rs"]
+mod data_glue;
 #[path = "workbench_debug.rs"]
 mod debug;
 #[path = "workbench_editors.rs"]
@@ -70,8 +76,16 @@ mod ports_glue;
 pub mod projects;
 #[path = "workbench_pulls.rs"]
 mod pulls_glue;
+// --- git-refs ---
+#[path = "workbench_recover.rs"]
+mod recover_glue;
+#[path = "workbench_refs.rs"]
+mod refs_glue;
 #[path = "workbench_render.rs"]
 mod render_glue;
+#[path = "workbench_replace.rs"]
+mod replace_glue;
+// --- structural ---
 #[path = "workbench_schema.rs"]
 mod schema_glue;
 #[path = "workbench_session.rs"]
@@ -80,8 +94,13 @@ mod session_glue;
 pub mod settings_ui;
 #[path = "workbench_spell.rs"]
 mod spell_glue;
+// --- git-sync ---
 #[path = "workbench_state.rs"]
 mod state_glue;
+#[path = "workbench_structural.rs"]
+mod structural_glue;
+#[path = "workbench_sync.rs"]
+mod sync_glue;
 #[path = "workbench_tasks.rs"]
 pub mod tasks;
 #[path = "workbench_terminals.rs"]
@@ -254,6 +273,15 @@ actions!(
         GitPush,
         GitFetch,
         GitSync,
+        // --- git-sync ---
+        GitPullRebase,
+        GitPullFrom,
+        GitPushTo,
+        GitFetchAll,
+        GitCommitSignedOff,
+        GitCommitNoVerify,
+        GitCommitAndPush,
+        GitCommitAndSync,
         FocusLeftGroup,
         FocusRightGroup,
         GitCommitAmend,
@@ -264,6 +292,27 @@ actions!(
         GitPopStash,
         GitApplyStash,
         GitDropStash,
+        // --- git-refs ---
+        GitDeleteTag,
+        GitDeleteRemoteTag,
+        GitPushTags,
+        GitPushTag,
+        GitCheckoutDetached,
+        GitCreateBranchFrom,
+        GitDeleteRemoteBranch,
+        GitSetUpstream,
+        GitStashStaged,
+        GitStashNamed,
+        GitShowStash,
+        GitOpenChanges,
+        GitOpenFileHead,
+        GitCompareBranch,
+        GitCompareCommit,
+        GitAddToGitignore,
+        GitRenameRemote,
+        GitSetRemoteUrl,
+        GitRemoveWorktree,
+        GitPruneWorktrees,
         GitDiscardAll,
         RestartLanguageServers,
         ShowSettings,
@@ -287,6 +336,8 @@ actions!(
         OpenMarkdownPreview,
         CompareWithClipboard,
         CompareWithSaved,
+        // --- compare ---
+        CompareFolders,
         RunSelectedText,
         GoToLastEdit,
         NewScratchFile,
@@ -316,6 +367,11 @@ actions!(
         SendRequest,
         ShowResponseHeaders,
         FilterLog,
+        // --- data ---
+        DataConvert,
+        DataQuery,
+        DataCopyPath,
+        DataDecode,
     ]
 );
 
@@ -350,6 +406,8 @@ enum Page {
     Markdown(Entity<crate::markdown::MarkdownPreview>),
     Shortcuts(Entity<crate::shortcuts_page::ShortcutsPage>),
     Merge(Entity<crate::merge::MergeView>),
+    // --- compare ---
+    Compare(Entity<crate::compare_folders::CompareView>),
 }
 
 /// Floating picker on top: theme picker or palette (files / commands / line).
@@ -468,6 +526,11 @@ fn parent_of(path: &str) -> String {
     }
 }
 
+/// Seconds since the Unix epoch (0 if the clock is before it); shared by the `.http` and pull request views.
+fn now_secs() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64)
+}
+
 /// File list of a folder (the palette shows this first on every open, then refreshes).
 struct FileIndex {
     root: String,
@@ -579,6 +642,9 @@ pub struct Workbench {
     update: state_glue::UpdateUi,
     /// Editor groups: tabs, separate tab views (diff, large file, page) and startup state.
     tabs: state_glue::TabsState,
+    // --- data ---
+    /// Data lens: the query bar and the status bar path (see workbench_data.rs).
+    data: data_glue::DataState,
     focus_handle: FocusHandle,
     _subs: Vec<Subscription>,
 }
@@ -777,15 +843,7 @@ pub(crate) fn crumb_paths(root: Option<&str>, path: &str) -> Vec<(String, String
 
 impl Workbench {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let state = state_path().and_then(|p| match State::open(&p) {
-            Ok(s) => Some(s),
-            Err(e) => {
-                eprintln!("could not open state database ({}): {e}", p.display());
-                None
-            }
-        });
-        let mut wb = Self::with_state(state, settings::config_dir(), window, cx);
-        wb.persist.data_dir = state_path().and_then(|p| p.parent().map(|d| d.to_path_buf()));
+        let wb = Self::new_at(state_path(), settings::config_dir(), window, cx);
         // macOS: let the system ask for the protected folders at the first start of a version (not in tests).
         if cfg!(all(target_os = "macos", not(test))) {
             cx.defer_in(window, |this, _, cx| this.request_file_access_once(cx));
@@ -834,9 +892,16 @@ impl Workbench {
                     this.tabs.pending_reveal = Some((path.clone(), *line, *column, *len));
                     this.open_file(path.clone(), window, cx);
                 }
-                SearchEvent::OpenInEditor(text) => this.create_scratch_with("search-results.txt".into(), text, window, cx),
+                SearchEvent::OpenInEditor(text) => {
+                    this.create_scratch_with("search-results.txt".into(), text, window, cx);
+                }
                 SearchEvent::ReplaceAll { files, query, replacement, preserve_case, matches, truncated } => {
                     this.confirm_replace_all(files.clone(), query.clone(), replacement.clone(), *preserve_case, *matches, *truncated, window, cx)
+                }
+                // --- structural ---
+                SearchEvent::StructuralBuffers { generation, family } => this.structural_buffers(*generation, family, cx),
+                SearchEvent::StructuralReplace { files, family, pattern, replacement, matches } => {
+                    this.confirm_structural_replace(files.clone(), family, pattern.clone(), replacement.clone(), *matches, window, cx)
                 }
             }),
             cx.subscribe_in(&port_field, window, |this, field, ev: &crate::input::FieldEvent, _, cx| {
@@ -858,6 +923,10 @@ impl Workbench {
                 crate::scm::ScmEvent::Refresh => this.refresh_git(0, cx),
                 crate::scm::ScmEvent::OpenDiff { path, staged } => this.open_diff(path.clone(), *staged, window, cx),
                 crate::scm::ScmEvent::MoreActions(position) => this.open_scm_menu(*position, window, cx),
+                // --- git-sync ---
+                crate::scm::ScmEvent::Sync => this.git_sync_auto(window, cx),
+                crate::scm::ScmEvent::Publish => this.git_publish_branch(cx),
+                crate::scm::ScmEvent::PostCommit(then) => this.git_post_commit(*then, cx),
                 crate::scm::ScmEvent::OpenCommit(commit) => this.show_commit_files(commit.clone(), window, cx),
                 crate::scm::ScmEvent::OpenCommitFile(commit, file) => this.open_commit_file(commit.clone(), file.clone(), window, cx),
                 crate::scm::ScmEvent::CommitMenu(commit, position) => this.open_commit_menu(commit.clone(), *position, window, cx),
@@ -869,6 +938,7 @@ impl Workbench {
             }),
             // A download in progress is cancelled and its partial file removed before the process ends.
             cx.on_app_quit(|this, cx| {
+                this.discard_response_on_quit();
                 let wait = this.cancel_update_for_quit().map(|exited| Workbench::wait_for_update_thread(exited, cx));
                 async move {
                     if let Some(wait) = wait {
@@ -977,6 +1047,7 @@ impl Workbench {
                 refresh: None,
                 refreshing: false,
                 refresh_again: false,
+                sync: Default::default(),
                 error: None,
                 scm_root: None,
                 marks_busy: Default::default(),
@@ -1046,6 +1117,8 @@ impl Workbench {
                 pending_extra_roots: Vec::new(),
                 file_clip: None,
                 compare_a: None,
+                // --- compare ---
+                compare_folder_a: None,
                 favorites: Vec::new(),
                 file_index: None,
             },
@@ -1067,6 +1140,7 @@ impl Workbench {
                 tab_scroll: gpui::ScrollHandle::new(),
             },
             update: state_glue::UpdateUi::new(dev, cx),
+            data: Default::default(),
             focus_handle: cx.focus_handle(),
             _subs: subs,
         };
@@ -1074,6 +1148,7 @@ impl Workbench {
         wb.reload_config(window, cx);
         wb.watch_config(window, cx);
         wb.poll_git(window, cx);
+        wb.poll_autofetch(window, cx);
         wb.listen_fs(cx);
         wb
     }
@@ -1496,10 +1571,10 @@ impl Workbench {
             return;
         }
         // With hot exit on, dirty files are backed up and come back when returning to the folder.
-        if !cx.global::<Settings>().hot_exit && self.refuse_if_dirty(cx) {
+        self.flush_backups(cx);
+        if (!cx.global::<Settings>().hot_exit || self.has_unbacked_dirty(cx)) && self.refuse_if_dirty(cx) {
             return;
         }
-        self.flush_backups(cx);
         self.persist_session(cx);
         self.shutdown_lsp(cx);
         self.roots.extra_roots.clear();
@@ -2097,6 +2172,7 @@ impl Workbench {
         // If also open in the other group, only this view closes; the backup stays.
         if !self.also_in_other(&ed) {
             let path = ed.read(cx).path.clone();
+            self.discard_response_file(&path);
             self.drop_backup(&path, cx);
             let (line, col) = ed.read(cx).cursor_position();
             self.nav.closed.retain(|c| c.0 != path);
@@ -2295,7 +2371,7 @@ impl Workbench {
             }
         };
         let regex = query.regex;
-        let edits_for = move |b: &buffer::Buffer| -> Vec<(std::ops::Range<usize>, String)> {
+        let edits_for: replace_glue::EditsFor = Arc::new(move |_path, b| {
             crate::find::find_all(b, &re)
                 .into_iter()
                 .map(|m| {
@@ -2306,66 +2382,8 @@ impl Workbench {
                     (m, t)
                 })
                 .collect()
-        };
-        let edits_for = Arc::new(edits_for);
-        let mut closed = Vec::new();
-        let mut changed = 0;
-        for path in files {
-            match self.all_editors().into_iter().find(|e| e.read(cx).path == path) {
-                Some(ed) => {
-                    let f = edits_for.clone();
-                    ed.update(cx, |e, cx| changed += e.apply_buffer_edits(|b| f(b), cx));
-                }
-                None => closed.push(path),
-            }
-        }
-        let host = self.remote.host.clone();
-        let f = edits_for.clone();
-        let task = cx.background_executor().spawn(async move {
-            let (mut done, mut errors, mut written) = (0, Vec::new(), Vec::new());
-            for path in closed {
-                let r = (|| -> Result<usize, String> {
-                    let (data, hash) = host.read(&path).map_err(|e| e.to_string())?;
-                    let mut n = 0;
-                    let edited = buffer::Buffer::edit_bytes(&data, |b| {
-                        let edits = f(b);
-                        n = edits.len();
-                        edits
-                    })
-                    .map_err(|_| "not UTF-8".to_string())?;
-                    if let Some(bytes) = edited {
-                        host.write(&path, bytes, Some(hash)).map_err(|e| e.to_string())?;
-                    }
-                    Ok(n)
-                })();
-                match r {
-                    Ok(n) if n > 0 => {
-                        done += n;
-                        written.push(path);
-                    }
-                    Ok(_) => {}
-                    Err(e) => errors.push(format!("{}: {e}", ui::file_name(&path))),
-                }
-            }
-            (done, errors, written)
         });
-        cx.spawn(async move |this, cx| {
-            let (done, errors, written) = task.await;
-            this.update(cx, |this, cx| {
-                let total = changed + done;
-                this.notice = Some(if errors.is_empty() {
-                    Notice::Info(crate::i18n::tn("Replaced {} match", "Replaced {} matches", total, &[]).into())
-                } else {
-                    Notice::Error(crate::i18n::tf("Replaced {0}; could not change {1}", &[&total, &errors.join(", ")]).into())
-                });
-                this.notify_files_changed(&written);
-                this.refresh_git(300, cx);
-                this.search.update(cx, |s, cx| s.rerun(cx));
-                cx.notify();
-            })
-            .ok();
-        })
-        .detach();
+        self.apply_file_edits(files, edits_for, cx)
     }
 
     /// Hot exit: back up and quit. Asks if it's off and a dirty file exists.
@@ -2596,6 +2614,7 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
                 this.refresh_git(200, cx);
                 this.record_history(ed, cx);
             }
+            EditorEvent::Overwrote(text) => return this.keep_overwritten(ed, text, cx),
             EditorEvent::OpenLocation { path, line, col } => {
                 return this.open_location(path.clone(), *line, *col, window, cx);
             }

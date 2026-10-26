@@ -263,6 +263,8 @@ const ICONS: &[(&str, &[u8])] = icons![
     "file-solid",
     "codeyard-mark",
     "ellipsis",
+    // --- git-sync ---
+    "cloud-upload",
 ];
 
 /// Embedded icon names (tests: is every name used in source embedded, does every embedded file exist).

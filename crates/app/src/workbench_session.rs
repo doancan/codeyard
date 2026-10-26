@@ -236,10 +236,22 @@ impl Workbench {
         if !hot_exit && self.any_dirty(cx) {
             return false;
         }
-        self.cancel_all_forwards();
         self.flush_backups(cx);
         self.persist_session(cx);
+        // Hot exit only covers what it could actually write down (files outside the folders, no database, a full disk): ask for the rest.
+        if self.has_unbacked_dirty(cx) {
+            return false;
+        }
+        self.cancel_all_forwards();
         true
+    }
+
+    /// A dirty buffer whose current text is not in a backup: closing or switching away would lose it.
+    pub(super) fn has_unbacked_dirty(&self, cx: &App) -> bool {
+        self.all_editors().iter().any(|ed| {
+            let e = ed.read(cx);
+            e.is_dirty() && self.persist.backed_up.get(&e.path) != Some(&e.version())
+        })
     }
 }
 

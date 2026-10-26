@@ -67,6 +67,12 @@ pub(super) enum OverlayKind {
         dir: String,
         names: Vec<String>,
     },
+    // --- compare ---
+    /// "Compare: Folders…": the folders to choose from, and the left one once it is chosen.
+    CompareFolder {
+        first: Option<compare_glue::Spot>,
+        choices: Vec<compare_glue::CompareChoice>,
+    },
     SettingChoice {
         key: &'static str,
         options: &'static [&'static str],
@@ -85,6 +91,9 @@ pub(super) enum OverlayKind {
         op: git_glue::BranchOp,
         names: Vec<String>,
     },
+    // --- git-sync ---
+    /// "Pull from…" / "Push to…": the step to run for each row.
+    SyncTarget(Vec<crate::git::SyncOp>),
     /// "Connect to Dev Container / WSL": alias of the selected target (`docker:name`, `wsl:name`).
     RemoteTargets(Vec<String>),
     /// "Remove SSH Host…" / "Test Connection…": host aliases.
@@ -123,6 +132,11 @@ pub(super) enum OverlayKind {
         kind: AskKind,
         reply: AskReply,
     },
+    // --- data ---
+    /// "Data: Convert To…": the target of each row, and the text to convert.
+    DataConvert(Box<data_glue::ConvertJob>),
+    /// "Data: Decode Selection…": read-only lines.
+    DataDecode,
 }
 
 pub(super) enum InputPurpose {
@@ -169,6 +183,11 @@ pub(super) enum InputPurpose {
     },
     /// Scratch file name.
     Scratch,
+    // --- compare ---
+    /// A typed folder path for "Compare: Folders…"; `first` is the left folder once chosen.
+    CompareFolder {
+        first: Option<compare_glue::Spot>,
+    },
     /// Debugger: condition / log message / hit count of the breakpoint on the line.
     EditBreakpoint {
         path: String,
@@ -205,6 +224,22 @@ pub(super) enum InputPurpose {
     CommitTag {
         hash: String,
     },
+    // --- git-refs ---
+    /// Name of a new branch that starts at `start`.
+    CreateBranchFrom {
+        root: String,
+        start: String,
+    },
+    RenameRemote {
+        root: String,
+        old: String,
+    },
+    SetRemoteUrl {
+        root: String,
+        name: String,
+    },
+    /// Description of a new stash.
+    StashNamed,
     /// Add the open folder to the saved projects under its name.
     SaveProject {
         path: String,
@@ -237,6 +272,9 @@ pub(super) enum MenuCmd {
     OpenTerminal,
     SelectForCompare,
     CompareWithSelected,
+    // --- compare ---
+    SelectFolderForCompare,
+    CompareFolderWithSelected,
     OpenSide,
     ExpandAllInside,
     CollapseAllInside,
@@ -256,6 +294,10 @@ pub(super) enum MenuCmd {
     CommitCherryPick,
     CommitRevert,
     CommitReset(crate::graph::ResetMode),
+    // --- git-refs ---
+    GitIgnore,
+    GitOpenChanges,
+    GitOpenHead,
     /// Send the action in `MenuState::actions` to the focused item.
     Dispatch(usize),
     AppSubmenu(usize),

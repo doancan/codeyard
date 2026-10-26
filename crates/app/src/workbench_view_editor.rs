@@ -27,6 +27,8 @@ impl Workbench {
                     .then(|| self.breadcrumbs(p, cx))
                     .flatten(),
             )
+            // --- data ---
+            .children(self.data_query_bar(p, cx))
             .child(div().flex_1().min_h_0().child(main));
         let Some(g) = &self.tabs.other else { return focused_pane.into_any_element() };
         let other_main = match g.active.and_then(|a| g.editors.get(a)) {
@@ -345,6 +347,7 @@ impl Workbench {
                     Page::Markdown(v) => ("eye", v.read(cx).title(cx)),
                     Page::Shortcuts(_) => ("keyboard", crate::i18n::t("Keyboard Shortcuts").into()),
                     Page::Merge(v) => ("git-compare", v.read(cx).title(cx)),
+                    Page::Compare(v) => ("git-compare", v.read(cx).title()),
                 };
                 d.child(
                     div()

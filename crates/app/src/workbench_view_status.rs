@@ -74,12 +74,9 @@ impl Workbench {
             )
             .when_some(branch, |d, b| {
                 let (ahead, behind) = self.git_status().map_or((0, 0), |s| (s.ahead, s.behind));
-                let sync = match (behind, ahead) {
-                    (0, 0) => String::new(),
-                    (b, 0) => format!("{b}↓"),
-                    (0, a) => format!("{a}↑"),
-                    (b, a) => format!("{b}↓ {a}↑"),
-                };
+                let sync = crate::git::counts_label(ahead, behind);
+                let unpublished = self.git_status().is_some_and(|s| s.branch.is_some() && s.upstream.is_none());
+                let tip = self.sync_tooltip();
                 d.child(
                     item()
                         .id("sb-branch")
@@ -94,9 +91,14 @@ impl Workbench {
                         .id("sb-sync")
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
-                        .child(icon("refresh-cw", 13., p.text_muted))
+                        .child(if self.vcs.sync.running == Some(sync_glue::Running::Sync) {
+                            ui::spinner("sb-sync-busy", 13., p.text_muted).into_any_element()
+                        } else {
+                            icon(if unpublished { "cloud-upload" } else { "refresh-cw" }, 13., p.text_muted).into_any_element()
+                        })
                         .when(!sync.is_empty(), |d| d.child(sync))
-                        .on_click(cx.listener(|this, _, _, cx| this.git_sync_auto(cx))),
+                        .tooltip(move |_, cx| cx.new(|_| Tooltip(tip.clone())).into())
+                        .on_click(cx.listener(|this, _, window, cx| this.git_sync_auto(window, cx))),
                 )
             })
             .child({
@@ -167,6 +169,18 @@ impl Workbench {
                                 ed.update(cx, |e, cx| e.jump_conflict(true, cx));
                             }
                         })),
+                )
+            })
+            // --- data ---
+            .when_some(self.data_path_label(cx), |d, label| {
+                d.child(
+                    item()
+                        .id("sb-data-path")
+                        .cursor_pointer()
+                        .hover(|d| d.bg(c(p.surface_hover)))
+                        .child(label)
+                        .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Copy the path at the cursor").into())).into())
+                        .on_click(cx.listener(|this, _, window, cx| this.data_copy_path(&DataCopyPath, window, cx))),
                 )
             })
             .when_some(editor_info, |d, (pos, indent, eol, dirty, saving, language, encoding)| {

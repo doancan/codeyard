@@ -9,7 +9,8 @@ const KEEP: usize = 10;
 
 /// Write the report as `dir/crash-<unix seconds>[-n].txt` and clean up old reports.
 pub(crate) fn write_report(dir: &Path, secs: u64, text: &str) -> std::io::Result<PathBuf> {
-    std::fs::create_dir_all(dir)?;
+    // Backtraces carry paths and sometimes message text: not for other users of the machine.
+    crate::fsutil::create_private_dir(dir)?;
     // A second crash within the same second must not overwrite the first.
     let mut path = dir.join(format!("crash-{secs}.txt"));
     let mut n = 1;
@@ -17,7 +18,7 @@ pub(crate) fn write_report(dir: &Path, secs: u64, text: &str) -> std::io::Result
         path = dir.join(format!("crash-{secs}-{n}.txt"));
         n += 1;
     }
-    std::fs::File::create_new(&path)?.write_all(text.as_bytes())?;
+    crate::fsutil::create_private(&path)?.write_all(text.as_bytes())?;
     prune(dir);
     Ok(path)
 }
@@ -80,6 +81,16 @@ mod tests {
         let d = std::env::temp_dir().join(format!("codeyard-crash-{name}-{}", std::process::id()));
         std::fs::remove_dir_all(&d).ok();
         d
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn reports_are_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tmp("private");
+        let path = write_report(&dir, 1, "x").unwrap();
+        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        assert_eq!((mode(&dir), mode(&path)), (0o700, 0o600));
     }
 
     #[test]

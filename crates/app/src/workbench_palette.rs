@@ -38,6 +38,9 @@ impl Workbench {
             Command::action("File: Filter Log Lines…", FilterLog),
             Command::action("File: Open Active File as Hex", OpenAsHex),
             Command::action("Search: Find TODO Comments", FindTodos),
+            // --- structural ---
+            Command::action("Search: Structural Search…", crate::search::StructuralSearch),
+            Command::action("Search: Structural Replace…", crate::search::StructuralReplace),
             Command::action("View: Switch Editor…", SwitchEditor),
             Command::action("View: Toggle Zen Mode", ToggleZenMode),
             Command::action("View: Toggle Full Screen", ToggleFullScreen),
@@ -257,7 +260,14 @@ impl Workbench {
             Command::action("Markdown: Open Preview", OpenMarkdownPreview),
             Command::action("File: Compare Active File with Clipboard", CompareWithClipboard),
             Command::action("File: Compare Active File with Saved", CompareWithSaved),
+            // --- compare ---
+            Command::action("Compare: Folders…", CompareFolders),
             Command::action("File: New Scratch File…", NewScratchFile),
+            // --- data ---
+            Command::action("Data: Convert To…", DataConvert),
+            Command::action("Data: Query…", DataQuery),
+            Command::action("Data: Copy Path at Cursor", DataCopyPath),
+            Command::action("Data: Decode Selection…", DataDecode),
             Command::action("Terminal: Run Selected Text", RunSelectedText),
             Command::action("Go: Last Edit Location", GoToLastEdit),
             Command::action("Git: Clone Repository…", CloneRepository),
@@ -293,6 +303,15 @@ impl Workbench {
             Command::action("Git: Push", GitPush),
             Command::action("Git: Fetch", GitFetch),
             Command::action("Git: Sync", GitSync),
+            // --- git-sync ---
+            Command::action("Git: Pull (Rebase)", GitPullRebase),
+            Command::action("Git: Pull from…", GitPullFrom),
+            Command::action("Git: Push to…", GitPushTo),
+            Command::action("Git: Fetch (All Remotes)", GitFetchAll),
+            Command::action("Git: Commit Signed Off", GitCommitSignedOff),
+            Command::action("Git: Commit (No Verify)", GitCommitNoVerify),
+            Command::action("Git: Commit & Push", GitCommitAndPush),
+            Command::action("Git: Commit & Sync", GitCommitAndSync),
             Command::action("Developer: Restart Language Servers", RestartLanguageServers),
             Command::action("Git: View File History", GitFileHistory),
             Command::action("Git: Blame Line", GitBlameLine),
@@ -305,6 +324,27 @@ impl Workbench {
             Command::action("Git: Pop Stash…", GitPopStash),
             Command::action("Git: Apply Stash…", GitApplyStash),
             Command::action("Git: Drop Stash…", GitDropStash),
+            // --- git-refs ---
+            Command::action("Git: Delete Tag…", GitDeleteTag),
+            Command::action("Git: Delete Remote Tag…", GitDeleteRemoteTag),
+            Command::action("Git: Push Tags", GitPushTags),
+            Command::action("Git: Push Tag…", GitPushTag),
+            Command::action("Git: Checkout (Detached)…", GitCheckoutDetached),
+            Command::action("Git: Create Branch From…", GitCreateBranchFrom),
+            Command::action("Git: Delete Remote Branch…", GitDeleteRemoteBranch),
+            Command::action("Git: Set Upstream Branch…", GitSetUpstream),
+            Command::action("Git: Stash Staged Changes", GitStashStaged),
+            Command::action("Git: Stash with Name…", GitStashNamed),
+            Command::action("Git: Show Stash…", GitShowStash),
+            Command::action("Git: Open Changes", GitOpenChanges),
+            Command::action("Git: Open File (HEAD)", GitOpenFileHead),
+            Command::action("Git: Compare with Branch…", GitCompareBranch),
+            Command::action("Git: Compare with Commit…", GitCompareCommit),
+            Command::action("Git: Add to .gitignore", GitAddToGitignore),
+            Command::action("Git: Rename Remote…", GitRenameRemote),
+            Command::action("Git: Edit Remote URL…", GitSetRemoteUrl),
+            Command::action("Git: Remove Worktree…", GitRemoveWorktree),
+            Command::action("Git: Prune Worktrees", GitPruneWorktrees),
             Command::action("Terminal: New", NewTerminal),
             Command::action("Terminal: Toggle", ToggleTerminal),
             Command::action("Terminal: Close", KillTerminal),
@@ -455,6 +495,10 @@ impl Workbench {
         if matches!(ov.kind, OverlayKind::RemoteFolder { .. }) && self.on_folder_event(event, window, cx) {
             return;
         }
+        // --- data ---
+        if self.on_data_overlay_event(event, window, cx) {
+            return;
+        }
         let Some(ov) = &self.overlay else { return };
         match (&ov.kind, event) {
             (OverlayKind::Theme { ids, .. }, PickerEvent::Preview(Pick::Item { index, .. })) => {
@@ -579,10 +623,16 @@ impl Workbench {
             (OverlayKind::Stashes { refs, op }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let (stash, op) = (refs[*index].clone(), *op);
                 self.close_overlay(window, cx);
+                // --- git-refs ---
+                if matches!(op, git_glue::StashOp::Show) {
+                    self.show_stash_files(stash, window, cx);
+                    return;
+                }
                 self.with_scm(cx, |s, cx| match op {
                     git_glue::StashOp::Pop => s.stash_apply(stash, true, cx),
                     git_glue::StashOp::Apply => s.stash_apply(stash, false, cx),
                     git_glue::StashOp::Drop => s.stash_drop(stash, cx),
+                    git_glue::StashOp::Show => {}
                 });
             }
             (OverlayKind::Tasks(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
@@ -680,6 +730,12 @@ impl Workbench {
                 self.close_overlay(window, cx);
                 self.run_host_op(op, alias, window, cx);
             }
+            // --- git-sync ---
+            (OverlayKind::SyncTarget(ops), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let op = ops[*index].clone();
+                self.close_overlay(window, cx);
+                self.git_sync(vec![op], cx);
+            }
             (OverlayKind::BranchOp { root, op, names }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let (root, op, name) = (root.clone(), *op, names[*index].clone());
                 self.close_overlay(window, cx);
@@ -691,6 +747,7 @@ impl Workbench {
                 | OverlayKind::CodeActions { .. }
                 | OverlayKind::Branches { .. }
                 | OverlayKind::BranchOp { .. }
+                | OverlayKind::SyncTarget(_)
                 | OverlayKind::RemoteTargets(_)
                 | OverlayKind::HostOp { .. }
                 | OverlayKind::HostField { .. }
@@ -706,6 +763,7 @@ impl Workbench {
                 | OverlayKind::Tasks(_)
                 | OverlayKind::DebugConfigs(_)
                 | OverlayKind::RemoveFolder(_)
+                | OverlayKind::CompareFolder { .. }
                 | OverlayKind::ExceptionFilters(_)
                 | OverlayKind::Stashes { .. }
                 | OverlayKind::Settings
@@ -721,6 +779,11 @@ impl Workbench {
             }
             (OverlayKind::Palette { .. } | OverlayKind::Input(_), PickerEvent::Dismiss) => {
                 self.close_overlay(window, cx);
+            }
+            // --- compare ---
+            (OverlayKind::CompareFolder { .. }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let index = *index;
+                self.on_compare_pick(index, window, cx);
             }
             (OverlayKind::Input(_), PickerEvent::Confirm(Pick::Input)) => {
                 let name = ov.picker.read(cx).query().trim().to_string();

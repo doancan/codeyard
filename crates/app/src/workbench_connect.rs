@@ -255,13 +255,13 @@ impl Workbench {
     /// Is the folder's author trusted? With the setting off, every folder is trusted.
     pub(super) fn is_trusted_root(&self, root: &str, cx: &App) -> bool {
         !cx.global::<Settings>().workspace_trust
-            || self.cfg.trusted.contains(root)
+            || self.cfg.trusted.contains(&self.trust_key(root))
             || self.persist.state.as_ref().is_some_and(|s| s.get(&self.trust_key(root)).is_some())
     }
 
     /// Trust the folder: stored permanently, project settings (terminal.shell, lsp.servers) are reapplied.
     pub(super) fn trust_root(&mut self, root: &str, window: &mut Window, cx: &mut Context<Self>) {
-        self.cfg.trusted.insert(root.to_string());
+        self.cfg.trusted.insert(self.trust_key(root));
         if let Some(s) = &self.persist.state {
             let _ = s.set(&self.trust_key(root), "1");
         }

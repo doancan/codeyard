@@ -221,9 +221,12 @@ pub fn changed_files(host: &dyn Host, root: &str, hash: &str) -> Result<Vec<(cha
     if !out.ok() {
         return Err(out.stderr_str());
     }
-    Ok(out
-        .stdout_str()
-        .lines()
+    Ok(parse_name_status(&out.stdout_str()))
+}
+
+/// `--name-status` lines: (status letter, path, old path on a rename).
+pub fn parse_name_status(out: &str) -> Vec<(char, String, Option<String>)> {
+    out.lines()
         .filter_map(|l| {
             let mut it = l.split('\t');
             let status = it.next()?.chars().next()?;
@@ -233,7 +236,7 @@ pub fn changed_files(host: &dyn Host, root: &str, hash: &str) -> Result<Vec<(cha
                 None => Some((status, a, None)),
             }
         })
-        .collect())
+        .collect()
 }
 
 /// A file change: status letter, path, old path (on rename), added/deleted lines.
@@ -324,6 +327,11 @@ pub enum CommitOp {
     /// Create a new branch and switch to it.
     Branch(String),
     Tag(String),
+    /// A tag with a message (an annotated tag object).
+    AnnotatedTag {
+        name: String,
+        message: String,
+    },
     CherryPick,
     Revert,
     Reset(ResetMode),
@@ -354,8 +362,9 @@ pub fn run_op(host: &dyn Host, root: &str, hash: &str, op: &CommitOp) -> Result<
         CommitOp::Checkout => git(&["checkout", "--detach", hash]).map(|_| crate::i18n::tf("Checked out {} (detached HEAD)", &[&short])),
         CommitOp::Branch(name) => crate::git::plain_name(name)
             .and_then(|_| git(&["checkout", "-b", name, hash]).map(|_| crate::i18n::tf("Created branch {0} at {1}", &[&name, &short]))),
-        CommitOp::Tag(name) => {
-            crate::git::plain_name(name).and_then(|_| git(&["tag", name, hash]).map(|_| crate::i18n::tf("Tagged {0} as {1}", &[&short, &name])))
+        CommitOp::Tag(name) => crate::git::create_tag(host, root, hash, name, None).map(|_| crate::i18n::tf("Tagged {0} as {1}", &[&short, &name])),
+        CommitOp::AnnotatedTag { name, message } => {
+            crate::git::create_tag(host, root, hash, name, Some(message)).map(|_| crate::i18n::tf("Tagged {0} as {1}", &[&short, &name]))
         }
         CommitOp::CherryPick => {
             let mut args = vec!["cherry-pick"];

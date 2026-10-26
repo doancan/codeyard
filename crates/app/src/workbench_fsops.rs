@@ -188,6 +188,8 @@ impl Workbench {
                 }
             },
             InputPurpose::Scratch => self.create_scratch(name, window, cx),
+            // --- compare ---
+            InputPurpose::CompareFolder { first } => self.finish_compare_input(first, name, window, cx),
             InputPurpose::SaveTheme => self.save_theme_as(name, window, cx),
             InputPurpose::CloneUrl => self.ask_clone_target(name, window, cx),
             InputPurpose::ConnectHost => {
@@ -201,7 +203,20 @@ impl Workbench {
             InputPurpose::FilterLog { path } => self.run_filter_log(path, name, window, cx),
             InputPurpose::CloneTarget { url } => self.run_clone(url, name, cx),
             InputPurpose::CommitBranch { hash } => self.scm.update(cx, |s, cx| s.commit_op(hash, crate::graph::CommitOp::Branch(name), window, cx)),
-            InputPurpose::CommitTag { hash } => self.scm.update(cx, |s, cx| s.commit_op(hash, crate::graph::CommitOp::Tag(name), window, cx)),
+            InputPurpose::CommitTag { hash } => {
+                // Tag names cannot hold a space, so whatever follows the first word is the message of an annotated tag.
+                let op = match name.trim().split_once(char::is_whitespace) {
+                    Some((tag, message)) if !message.trim().is_empty() => {
+                        crate::graph::CommitOp::AnnotatedTag { name: tag.to_string(), message: message.trim().to_string() }
+                    }
+                    _ => crate::graph::CommitOp::Tag(name.trim().to_string()),
+                };
+                self.scm.update(cx, |s, cx| s.commit_op(hash, op, window, cx))
+            }
+            // --- git-refs ---
+            InputPurpose::CreateBranchFrom { .. } | InputPurpose::RenameRemote { .. } | InputPurpose::SetRemoteUrl { .. } | InputPurpose::StashNamed => {
+                self.finish_ref_input(purpose, name, cx)
+            }
             InputPurpose::SaveProject { path } => self.save_project(path, name, cx),
             InputPurpose::Create { dir, is_dir } => {
                 let target = ui::join(&dir, &name);

@@ -2,6 +2,7 @@
 //! in the terminal, jump to last edit, scratch file.
 
 use gpui::{AppContext as _, Context, Focusable as _, Window};
+use std::io::Write as _;
 
 use super::{
     CompareWithClipboard, CompareWithSaved, ConfigureSnippets, GoToLastEdit, InsertSnippet, NewScratchFile, NewTerminal, Notice, OpenThemesFolder,
@@ -307,14 +308,15 @@ impl Workbench {
         .detach();
     }
 
-    /// Scratch file with the given content (e.g. search results).
-    pub(super) fn create_scratch_with(&mut self, name: String, content: &str, window: &mut Window, cx: &mut Context<Self>) {
+    /// Scratch file with the given content (e.g. search results). Returns the path it opens under; the tab itself appears once loaded.
+    pub(super) fn create_scratch_with(&mut self, name: String, content: &str, window: &mut Window, cx: &mut Context<Self>) -> Option<String> {
         let name = ui::file_name(name.trim()).to_string();
         if name.is_empty() {
-            return;
+            return None;
         }
         let dir = self.cfg.dir.clone().or_else(crate::settings::config_dir).unwrap_or_else(std::env::temp_dir).join("scratches");
-        let result = std::fs::create_dir_all(&dir).map(|_| {
+        // Scratches hold HTTP responses (tokens, personal data) as well as notes: owner-only.
+        let result = crate::fsutil::create_private_dir(&dir).map(|_| {
             // If the name exists: "scratch 2.md", "scratch 3.md"…
             let (stem, ext) = name.rsplit_once('.').map_or((name.as_str(), String::new()), |(s, e)| (s, format!(".{e}")));
             let mut path = dir.join(&name);
@@ -325,14 +327,17 @@ impl Workbench {
             }
             path
         });
-        match result.and_then(|p| std::fs::write(&p, content).map(|_| p)) {
+        match result.and_then(|p| crate::fsutil::create_private(&p)?.write_all(content.as_bytes()).map(|_| p)) {
             Ok(path) => {
                 let host = self.remote.local_host.clone();
-                self.open_file_on(host, path.to_string_lossy().into_owned(), window, cx);
+                let path = ui::local_path(&path);
+                self.open_file_on(host, path.clone(), window, cx);
+                Some(path)
             }
             Err(e) => {
                 self.notice = Some(Notice::Error(crate::i18n::tf("Could not create the scratch file: {}", &[&e]).into()));
                 cx.notify();
+                None
             }
         }
     }

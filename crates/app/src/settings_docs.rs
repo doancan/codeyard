@@ -10,6 +10,18 @@ pub const FILE_ONLY: &[(&str, &str, &str, &str)] = &[
     ("editor.rulers", "list of columns", "`[]`", "Draw vertical rulers at these columns, e.g. `[80, 120]`."),
     ("files.exclude", "list of globs", "`[]`", "Hide matching paths from the explorer and from file lists, e.g. `[\"**/node_modules\"]`."),
     ("search.exclude", "list of globs", "`[]`", "Skip matching paths in Find in Files."),
+    (
+        "compare.folders.ignore",
+        "list of globs",
+        "`[\".git\", \"node_modules\", \"target\"]`",
+        "Names and paths *Compare: Folders…* leaves out on both sides (gitignore syntax).",
+    ),
+    (
+        "compare.folders.maxFiles",
+        "number 100–5000000",
+        "`50000`",
+        "Entries per side *Compare: Folders…* reads before it stops and reports that the result is partial.",
+    ),
     ("workbench.startupEditor", "string", "`welcome`", "VS Code compatible alias of `window.startup`."),
     (
         "editor.codeActionsOnSave",

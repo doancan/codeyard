@@ -5,6 +5,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
 pub mod askpass;
+mod outbox;
 pub mod ssh;
 pub mod ssh_config;
 pub mod transfer;
@@ -85,6 +86,33 @@ pub struct SearchStream {
     pub rx: mpsc::Receiver<Response>,
 }
 
+/// A running `HashTree`: records arrive in chunks, then one `Done` (or `Failed`). `next` returns `None` when the connection
+/// dropped before the end, so a caller keeps what it got and can say the result is partial.
+pub struct HashStream {
+    pub id: u32,
+    pub rx: mpsc::Receiver<Response>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum HashEvent {
+    Records(Vec<proto::HashRecord>),
+    Done { entries: u32, truncated: bool, cancelled: bool },
+    Failed(proto::Error),
+}
+
+impl HashStream {
+    pub fn next(&self) -> Option<HashEvent> {
+        loop {
+            return Some(match self.rx.recv().ok()? {
+                Response::HashChunk(records) => HashEvent::Records(records),
+                Response::HashDone { entries, truncated, cancelled } => HashEvent::Done { entries, truncated, cancelled },
+                Response::Error(e) => HashEvent::Failed(e),
+                _ => continue,
+            });
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum PtyEvent {
     Output(Vec<u8>),
@@ -135,6 +163,8 @@ pub trait Host: Send + Sync + 'static {
     fn is_remote(&self) -> bool;
     fn call(&self, req: Request) -> Result<Response>;
     fn search(&self, query: SearchQuery) -> Result<SearchStream>;
+    /// Folder comparison (see `Request::HashTree`). Stop it with `cancel(stream.id)`.
+    fn hash_tree(&self, root: &str, ignore: Vec<String>, gitignore: bool, limit: u32, only: Option<Vec<String>>) -> Result<HashStream>;
     fn cancel(&self, id: u32);
     fn pty_spawn(&self, cols: u16, rows: u16, cwd: Option<String>, shell: Option<String>) -> Result<Pty>;
     /// No reply expected (so a keystroke doesn't wait for a round trip).
@@ -249,7 +279,7 @@ fn unexpected(r: Response) -> HostError {
 /// The party waiting for a request's reply.
 enum Waiter {
     Once(mpsc::Sender<Response>),
-    /// Until `SearchDone` or `Error` arrives.
+    /// Until `SearchDone`, `HashDone` or `Error` arrives.
     Stream(mpsc::Sender<Response>),
     /// If the reply is `PtySpawned`, the event channel is registered on the reader thread, so
     /// later output frames can't be lost.
@@ -305,7 +335,7 @@ struct Shared {
     procs: Mutex<HashMap<u32, mpsc::Sender<ProcEvent>>>,
     fs: Mutex<Option<mpsc::Sender<FsChanges>>>,
     broken: Mutex<Option<String>>,
-    writer: Mutex<Option<BufWriter<Box<dyn Write + Send>>>>,
+    writer: Mutex<Option<Arc<outbox::Writer>>>,
     child: Mutex<Option<Child>>,
     stderr: Mutex<Arc<Mutex<String>>>,
     status: Mutex<Vec<mpsc::Sender<ConnStatus>>>,
@@ -332,7 +362,8 @@ impl Shared {
         };
         let (tx, rx) = mpsc::channel();
         self.waiters.locked().insert(id, Waiter::Once(tx));
-        if self.send(id, &Request::Ping).is_err() {
+        // Queued, not awaited: a write stuck behind a dead link is what the missed reply below reports.
+        if self.post(id, &Request::Ping).is_err() {
             self.waiters.locked().remove(&id);
             return false;
         }
@@ -345,11 +376,11 @@ impl Shared {
 
     /// Drop an unresponsive connection: kill ssh, the reader sees EOF and reconnecting starts. ssh's own
     /// `ServerAlive` catches network loss; this catches a healthy network with a frozen agent.
-    fn drop_unresponsive(&self) {
-        if let Some(mut c) = self.child.locked().take() {
-            let _ = c.kill();
-            let _ = c.wait();
-        }
+    fn drop_unresponsive(&self) -> bool {
+        let Some(mut c) = self.child.locked().take() else { return false };
+        let _ = c.kill();
+        let _ = c.wait();
+        true
     }
 
     fn route(&self, frame: Frame<Response>) {
@@ -390,7 +421,7 @@ impl Shared {
                 let _ = tx.send(frame.body);
             }
             Some(Waiter::Stream(tx)) => {
-                let last = matches!(frame.body, Response::SearchDone { .. } | Response::Error(_));
+                let last = matches!(frame.body, Response::SearchDone { .. } | Response::HashDone { .. } | Response::Error(_));
                 // Receiver is gone (search abandoned): silently drop the rest of the stream.
                 if tx.send(frame.body).is_ok() && !last {
                     waiters.insert(frame.id, Waiter::Stream(tx));
@@ -415,7 +446,7 @@ impl Shared {
     /// Connection is permanently gone: wake all waiters and terminals.
     fn fail(&self, why: String) {
         self.broken.locked().get_or_insert(why);
-        *self.writer.locked() = None;
+        self.clear_writer();
         self.waiters.locked().clear();
         for (_, tx) in self.ptys.locked().drain() {
             let _ = tx.send(PtyEvent::Exit(None));
@@ -442,10 +473,45 @@ impl Shared {
         self.stderr.locked().locked().trim().to_string()
     }
 
+    fn writer(&self) -> std::io::Result<Arc<outbox::Writer>> {
+        self.writer.locked().clone().ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotConnected))
+    }
+
+    fn set_writer(&self, w: BufWriter<Box<dyn Write + Send>>) -> std::io::Result<()> {
+        let old = self.writer.locked().replace(Arc::new(outbox::Writer::start(w)?));
+        old.inspect(|o| o.close());
+        Ok(())
+    }
+
+    fn clear_writer(&self) {
+        if let Some(w) = self.writer.locked().take() {
+            w.close();
+        }
+    }
+
+    fn encode(id: u32, req: &Request) -> std::io::Result<Vec<u8>> {
+        let mut bytes = Vec::new();
+        proto::write_frame(&mut bytes, &Frame { id, body: req })?;
+        Ok(bytes)
+    }
+
+    /// Write a frame and wait until it is out. Only for callers that need the outcome and are not the UI thread.
     fn send(&self, id: u32, req: &Request) -> std::io::Result<()> {
-        let mut w = self.writer.locked();
-        let w = w.as_mut().ok_or_else(|| std::io::Error::from(std::io::ErrorKind::NotConnected))?;
-        proto::write_frame(w, &Frame { id, body: req })
+        self.writer()?.send(Self::encode(id, req)?)
+    }
+
+    /// Queue a frame and return; never waits for the socket.
+    fn post(&self, id: u32, req: &Request) -> std::io::Result<()> {
+        self.writer()?.post(Self::encode(id, req)?)
+    }
+
+    /// The peer stopped reading for good: give the connection up so reconnecting (or failing) takes over.
+    fn stalled(&self) {
+        self.broken.locked().get_or_insert_with(|| "the connection stopped accepting data".into());
+        self.clear_writer();
+        if !self.drop_unresponsive() {
+            self.fail("the connection stopped accepting data".into());
+        }
     }
 }
 
@@ -577,7 +643,7 @@ impl RemoteHost {
         let (info, reader, writer, child, stderr) = handshake(t, session.as_deref())?;
         let reconnects = connector.is_some();
         let shared = Arc::new(Shared { next_id: AtomicU32::new(2), ..Default::default() });
-        *shared.writer.locked() = Some(writer);
+        shared.set_writer(writer).map_err(|e| HostError::Disconnected(e.to_string()))?;
         *shared.child.locked() = child;
         *shared.stderr.locked() = stderr;
         let reader_shared = shared.clone();
@@ -632,9 +698,17 @@ impl RemoteHost {
         self.shared.send(id, &req).map_err(|_| self.disconnected())
     }
 
-    /// Send without waiting for a reply (id 0).
+    /// Send without waiting for a reply (id 0). Only queues, so it is safe on the UI thread; the writer thread does the
+    /// blocking. A peer that never drains its queue ends the connection rather than losing input.
     fn notify(&self, req: Request) {
-        let _ = self.send(0, req);
+        if self.shared.broken().is_some() {
+            return;
+        }
+        if let Err(e) = self.shared.post(0, &req)
+            && e.kind() == std::io::ErrorKind::WouldBlock
+        {
+            self.shared.stalled();
+        }
     }
 
     fn start(&self, req: Request, waiter: Waiter) -> Result<u32> {
@@ -682,7 +756,7 @@ fn reader_loop(shared: Arc<Shared>, mut reader: BufReader<Box<dyn Read + Send>>,
         };
         // Pending calls get "no connection" right away; terminals stay open.
         *shared.broken.locked() = Some(format!("reconnecting ({why})"));
-        *shared.writer.locked() = None;
+        shared.clear_writer();
         shared.waiters.locked().clear();
         if let Some(mut c) = shared.child.locked().take() {
             let _ = c.kill();
@@ -711,7 +785,14 @@ fn reader_loop(shared: Arc<Shared>, mut reader: BufReader<Box<dyn Read + Send>>,
                         shared.fail("closed".into());
                         return;
                     }
-                    *shared.writer.locked() = Some(w);
+                    if let Err(e) = shared.set_writer(w) {
+                        if let Some(c) = child.as_mut() {
+                            let _ = c.kill();
+                            let _ = c.wait();
+                        }
+                        error = e.to_string();
+                        continue;
+                    }
                     *shared.child.locked() = child;
                     *shared.stderr.locked() = stderr;
                     if !info.resumed {
@@ -723,7 +804,7 @@ fn reader_loop(shared: Arc<Shared>, mut reader: BufReader<Box<dyn Read + Send>>,
                     shared.end_procs();
                     *shared.broken.locked() = None;
                     if let Some(paths) = shared.last_watch.locked().clone() {
-                        let _ = shared.send(0, &Request::Watch { paths });
+                        let _ = shared.post(0, &Request::Watch { paths });
                     }
                     shared.emit(ConnStatus::Connected { resumed: info.resumed });
                     reader = r;
@@ -774,6 +855,12 @@ impl Host for RemoteHost {
         let (tx, rx) = mpsc::channel();
         let id = self.start(Request::Search(query), Waiter::Stream(tx))?;
         Ok(SearchStream { id, rx })
+    }
+
+    fn hash_tree(&self, root: &str, ignore: Vec<String>, gitignore: bool, limit: u32, only: Option<Vec<String>>) -> Result<HashStream> {
+        let (tx, rx) = mpsc::channel();
+        let id = self.start(Request::HashTree { root: root.into(), ignore, gitignore, limit, only }, Waiter::Stream(tx))?;
+        Ok(HashStream { id, rx })
     }
 
     fn cancel(&self, id: u32) {
@@ -853,8 +940,13 @@ impl Drop for RemoteHost {
         // Closing on purpose: tell the agent so the daemon closes shells and processes now instead of holding the session "detached" for 5 minutes.
         // (Best effort: ignored if the connection is already down.)
         self.shared.closing.store(true, Ordering::Relaxed); // first, so the reader doesn't try to reconnect when the agent closes
-        let _ = self.shared.send(0, &Request::Bye);
-        *self.shared.writer.locked() = None;
+        // Waited for (briefly), because the child is killed right below and would take an unsent Bye with it.
+        if let Ok(w) = self.shared.writer()
+            && let Ok(bytes) = Shared::encode(0, &Request::Bye)
+        {
+            let _ = w.send_within(bytes, std::time::Duration::from_secs(1));
+        }
+        self.shared.clear_writer();
         if let Some(mut child) = self.shared.child.locked().take() {
             let _ = child.kill();
             let _ = child.wait();
@@ -1053,6 +1145,33 @@ mod tests {
         }
         files.sort();
         assert_eq!(files, ["a.txt", "b.txt"]);
+    }
+
+    #[test]
+    fn hash_tree_streams_records_then_done_and_hashes_on_request() {
+        let dir = tmp("hashtree");
+        std::fs::create_dir_all(dir.join("sub")).unwrap();
+        std::fs::write(dir.join("sub/a.txt"), "iğne").unwrap();
+        let root = dir.to_string_lossy().into_owned();
+        let host = local();
+        let collect = |only: Option<Vec<String>>| {
+            let stream = host.hash_tree(&root, vec![], true, 100, only).unwrap();
+            let mut records = Vec::new();
+            loop {
+                match stream.next().expect("the stream must end with Done") {
+                    HashEvent::Records(r) => records.extend(r),
+                    HashEvent::Done { entries, .. } => return (records, entries),
+                    HashEvent::Failed(e) => panic!("{e}"),
+                }
+            }
+        };
+        let (listing, entries) = collect(None);
+        assert_eq!((listing.iter().map(|r| r.path.as_str()).collect::<Vec<_>>(), entries), (vec!["sub", "sub/a.txt"], 2));
+        assert!(listing.iter().all(|r| r.hash.is_none()));
+        let (hashed, _) = collect(Some(vec!["sub/a.txt".into()]));
+        assert_eq!(hashed[0].hash, Some(proto::content_hash("iğne".as_bytes())));
+        let stream = host.hash_tree("/definitely/not/here", vec![], true, 10, None).unwrap();
+        assert!(matches!(stream.next(), Some(HashEvent::Failed(proto::Error::NotFound(_)))));
     }
 
     #[cfg(unix)]
@@ -1332,5 +1451,187 @@ mod tests {
         }
         assert_eq!(stalled.len(), 64);
         assert!(stalled.iter().all(|(_, k)| *k == Removed), "the last report wins");
+    }
+
+    /// A writer that blocks in `write` until the gate opens, then forwards to `inner`; `fail` makes later writes error.
+    struct Gated {
+        inner: Box<dyn Write + Send>,
+        gate: Arc<(Mutex<bool>, std::sync::Condvar)>,
+        fail: Arc<std::sync::atomic::AtomicBool>,
+    }
+
+    impl Write for Gated {
+        fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+            let (open, cv) = &*self.gate;
+            let mut open = open.locked();
+            while !*open {
+                open = cv.wait(open).unwrap_or_else(std::sync::PoisonError::into_inner);
+            }
+            drop(open);
+            if self.fail.load(Ordering::Relaxed) {
+                return Err(std::io::ErrorKind::BrokenPipe.into());
+            }
+            self.inner.write(b)
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.inner.flush()
+        }
+    }
+
+    type Gate = Arc<(Mutex<bool>, std::sync::Condvar)>;
+
+    fn open_gate(gate: &Gate) {
+        *gate.0.locked() = true;
+        gate.1.notify_all();
+    }
+
+    /// A host over a real agent whose request pipe goes through a gate (open for the handshake, closed afterwards).
+    fn gated_agent() -> (RemoteHost, Gate, Arc<std::sync::atomic::AtomicBool>) {
+        let (req_r, req_w) = std::io::pipe().unwrap();
+        let (resp_r, resp_w) = std::io::pipe().unwrap();
+        std::thread::spawn(move || agent::serve(req_r, resp_w));
+        let gate: Gate = Arc::new((Mutex::new(true), std::sync::Condvar::new()));
+        let fail = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let w = Gated { inner: Box::new(req_w), gate: gate.clone(), fail: fail.clone() };
+        let host = RemoteHost::from_streams(Box::new(resp_r), Box::new(w), "gated").unwrap();
+        *gate.0.locked() = false;
+        (host, gate, fail)
+    }
+
+    /// The UI thread only queues: with a 30 MB write stuck in the pipe, notifications return at once, and everything goes out
+    /// in order once the peer reads again.
+    #[test]
+    fn notify_does_not_wait_for_a_stuck_write() {
+        let dir = tmp("notify-stuck");
+        let path = dir.join("big.bin").to_string_lossy().into_owned();
+        let (host, gate, _) = gated_agent();
+        let host = Arc::new(host);
+        let big = {
+            let host = host.clone();
+            std::thread::spawn(move || host.write(&path, vec![7u8; 30 * 1024 * 1024], None))
+        };
+        std::thread::sleep(std::time::Duration::from_millis(200));
+
+        let started = std::time::Instant::now();
+        host.pty_resize(1, 80, 24);
+        host.proc_input(1, b"didChange".to_vec());
+        host.cancel(99);
+        assert!(started.elapsed() < std::time::Duration::from_millis(50), "{:?}", started.elapsed());
+        // The heartbeat probe must not wait on the stuck write either.
+        let started = std::time::Instant::now();
+        assert!(!host.shared.ping(std::time::Duration::from_millis(100)));
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+
+        open_gate(&gate);
+        assert!(big.join().unwrap().is_ok());
+        assert!(host.stat(&dir.to_string_lossy()).is_ok(), "the connection works after the stall");
+    }
+
+    /// Frames reach the peer in the order they were queued, notifications and requests alike.
+    #[test]
+    fn queued_frames_keep_their_order() {
+        let (req_r, req_w) = std::io::pipe().unwrap();
+        let (resp_r, resp_w) = std::io::pipe().unwrap();
+        let (seen_tx, seen_rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut r = BufReader::new(req_r);
+            let mut w = resp_w;
+            while let Ok(Some(Frame { id, body })) = proto::read_frame::<Request>(&mut r) {
+                match body {
+                    Request::Hello { client_version, .. } => {
+                        let info = proto::HostInfo {
+                            version: client_version,
+                            os: "t".into(),
+                            arch: "t".into(),
+                            home: "/".into(),
+                            hostname: "t".into(),
+                            resumed: false,
+                        };
+                        let _ = proto::write_frame(&mut w, &Frame { id, body: Response::Hello(info) });
+                    }
+                    Request::PtyInput { data, .. } => {
+                        let _ = seen_tx.send(data);
+                    }
+                    Request::Stat { .. } => {
+                        let _ = seen_tx.send(b"stat".to_vec());
+                        let meta = proto::Meta { kind: proto::Kind::File, size: 0, mtime_ms: 0, readonly: false };
+                        let _ = proto::write_frame(&mut w, &Frame { id, body: Response::Stat(meta) });
+                    }
+                    _ => {}
+                }
+            }
+        });
+        let host = RemoteHost::from_streams(Box::new(resp_r), Box::new(req_w), "order").unwrap();
+        for i in 0..200u32 {
+            host.pty_input(1, i.to_le_bytes().to_vec());
+        }
+        host.stat("/x").unwrap();
+        for i in 200..210u32 {
+            host.pty_input(1, i.to_le_bytes().to_vec());
+        }
+        let wait = std::time::Duration::from_secs(5);
+        for i in 0..200u32 {
+            assert_eq!(seen_rx.recv_timeout(wait).unwrap(), i.to_le_bytes().to_vec());
+        }
+        assert_eq!(seen_rx.recv_timeout(wait).unwrap(), b"stat".to_vec());
+        for i in 200..210u32 {
+            assert_eq!(seen_rx.recv_timeout(wait).unwrap(), i.to_le_bytes().to_vec());
+        }
+    }
+
+    /// A write error reaches the caller that waited for it as `Disconnected`, and later calls fail the same way.
+    #[test]
+    fn a_write_error_surfaces_as_disconnected() {
+        let (host, gate, fail) = gated_agent();
+        fail.store(true, Ordering::Relaxed);
+        open_gate(&gate);
+        let err = host.stat("/").unwrap_err();
+        assert!(matches!(err, HostError::Disconnected(_)), "{err}");
+        assert!(matches!(host.stat("/"), Err(HostError::Disconnected(_))));
+        host.pty_input(1, b"x".to_vec()); // does not panic or block
+    }
+
+    /// Input is never dropped quietly: when the peer has not read for far longer than the queue holds, the connection is
+    /// given up on and callers see `Disconnected`.
+    #[test]
+    fn a_peer_that_never_reads_fails_the_host_instead_of_dropping_input() {
+        let (host, gate, fail) = gated_agent();
+        for _ in 0..40 {
+            host.proc_input(1, vec![0u8; 2 * 1024 * 1024]);
+        }
+        assert!(host.shared.broken().is_some());
+        assert!(matches!(host.stat("/"), Err(HostError::Disconnected(_))));
+        // Let the stuck writer thread go (and fail) instead of leaving it parked.
+        fail.store(true, Ordering::Relaxed);
+        open_gate(&gate);
+    }
+
+    /// Dropping the host ends the writer thread: the stream it owns is dropped with it.
+    #[test]
+    fn the_writer_thread_ends_with_the_host() {
+        struct Sink(Arc<std::sync::atomic::AtomicBool>);
+        impl Write for Sink {
+            fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+                Ok(b.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        impl Drop for Sink {
+            fn drop(&mut self) {
+                self.0.store(true, Ordering::Relaxed);
+            }
+        }
+        let released = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let w = outbox::Writer::start(BufWriter::new(Box::new(Sink(released.clone())))).unwrap();
+        w.send(vec![1, 2, 3]).unwrap();
+        assert!(!released.load(Ordering::Relaxed));
+        drop(w);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !released.load(Ordering::Relaxed) {
+            assert!(std::time::Instant::now() < deadline, "writer thread still alive");
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
     }
 }

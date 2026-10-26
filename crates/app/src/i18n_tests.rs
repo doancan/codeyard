@@ -47,12 +47,25 @@ fn recent(path: &str) -> state::RecentWorkspace {
     state::RecentWorkspace { host: None, path: path.into(), last_opened_at: 1 }
 }
 
+/// Every `.rs` file under `dir`, folders (like `lsp/`) included.
+pub(crate) fn rs_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            out.extend(rs_files(&path));
+        } else {
+            out.push(path);
+        }
+    }
+    out
+}
+
 /// English keys of the `t("…")`, `tf("…"`, `tr("…")` calls in the source (excluding tests and translation files).
 fn source_keys() -> BTreeSet<String> {
     let mut keys = BTreeSet::new();
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    for entry in std::fs::read_dir(dir).unwrap() {
-        let path = entry.unwrap().path();
+    for path in rs_files(&dir) {
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
         if !name.ends_with(".rs") || name == "tests.rs" || name.ends_with("_tests.rs") || name == "i18n.rs" {
             continue;
@@ -446,7 +459,7 @@ fn the_new_surfaces_have_turkish_entries() {
         ("git prompts", "Create branch", "Dal oluştur"),
         ("git prompts", "Name of the new branch (from the current one)", "Yeni dalın adı (geçerli daldan)"),
         ("git prompts", "Select a branch to check out", "Checkout edilecek dalı seçin"),
-        ("git prompts", "Name of the tag", "Etiketin adı"),
+        ("git prompts", "Tag name, then an optional message for an annotated tag", "Etiket adı, ardından açıklamalı etiket için isteğe bağlı bir mesaj"),
     ];
     for (surface, key, want) in samples {
         assert_eq!(lookup(TR, key), Some(*want), "{surface}: {key}");

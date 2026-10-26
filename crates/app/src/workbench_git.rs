@@ -5,7 +5,7 @@
 use gpui::{AppContext as _, Context, Focusable as _, PromptLevel, Window};
 
 use super::{InputPurpose, Notice, OverlayKind, Workbench};
-use crate::git::{self, SyncOp};
+use crate::git;
 use crate::picker::{PickItem, Picker, Source as PickSource};
 
 #[derive(Clone, Copy, Debug)]
@@ -13,6 +13,8 @@ pub enum StashOp {
     Pop,
     Apply,
     Drop,
+    /// Open what the stash holds as a diff.
+    Show,
 }
 
 /// "Merge / Delete / Rename Branch", "Remove Remote": act on the name picked from the list.
@@ -24,12 +26,27 @@ pub enum BranchOp {
     Delete,
     Rename,
     RemoveRemote,
+    // --- git-refs --- (listed and run in `workbench_refs.rs`)
+    DeleteTag,
+    DeleteRemoteTag,
+    PushTag,
+    CheckoutDetached,
+    CreateFrom,
+    DeleteRemoteBranch,
+    SetUpstream,
+    RenameRemote,
+    SetRemoteUrl,
+    RemoveWorktree,
+    CompareBranch,
+    CompareCommit,
 }
 
 /// Row in the branch picker.
 #[derive(Clone, Debug)]
 pub enum BranchChoice {
     Create,
+    CreateFrom,
+    Detached,
     Local(String),
     Remote(String),
 }
@@ -221,6 +238,7 @@ impl Workbench {
                         StashOp::Pop => crate::i18n::t("Pick a stash to pop"),
                         StashOp::Apply => crate::i18n::t("Pick a stash to apply"),
                         StashOp::Drop => crate::i18n::t("Pick a stash to drop"),
+                        StashOp::Show => crate::i18n::t("Pick a stash to show"),
                     };
                     let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], title, "", None, cx));
                     this.show_overlay(picker, OverlayKind::Stashes { refs, op }, window, cx);
@@ -236,7 +254,7 @@ impl Workbench {
     }
 
     /// The active file's repository and its path relative to the repository.
-    fn active_in_repo(&mut self, cx: &mut Context<Self>) -> Option<(String, String)> {
+    pub(super) fn active_in_repo(&mut self, cx: &mut Context<Self>) -> Option<(String, String)> {
         let root = self.repo_root(cx)?;
         let Some(path) = self.active_editor().map(|e| e.read(cx).path.clone()) else {
             self.notice = Some(Notice::Info(crate::i18n::t("Open a file first.").into()));
@@ -336,25 +354,7 @@ impl Workbench {
                     this.notice = Some(Notice::Info(crate::i18n::tf("{} changed no files (merge or empty commit).", &[&commit.short]).into()));
                     cx.notify();
                 }
-                Ok(files) => {
-                    let items = files
-                        .iter()
-                        .map(|(status, path, old)| PickItem {
-                            label: crate::ui::file_name(path).to_string().into(),
-                            detail: Some(
-                                match old {
-                                    Some(o) => format!("{status} · {o} → {path}"),
-                                    None => format!("{status} · {path}"),
-                                }
-                                .into(),
-                            ),
-                            keys: None,
-                        })
-                        .collect();
-                    let title = format!("{} {} — {}", commit.short, commit.subject, commit.author);
-                    let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], &title, "", None, cx));
-                    this.show_overlay(picker, OverlayKind::CommitFiles { root, commit, files }, window, cx);
-                }
+                Ok(files) => this.show_changed_files(root, commit, files, window, cx),
                 Err(e) => {
                     this.notice = Some(Notice::Error(crate::i18n::tf("Could not read the commit: {}", &[&first_line(&e)]).into()));
                     cx.notify();
@@ -363,6 +363,34 @@ impl Workbench {
             .ok();
         })
         .detach();
+    }
+
+    /// The picker of a commit's files (a stash is a commit too); the picked file opens as a diff.
+    pub(super) fn show_changed_files(
+        &mut self,
+        root: String,
+        commit: crate::graph::GraphCommit,
+        files: Vec<(char, String, Option<String>)>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let items = files
+            .iter()
+            .map(|(status, path, old)| PickItem {
+                label: crate::ui::file_name(path).to_string().into(),
+                detail: Some(
+                    match old {
+                        Some(o) => format!("{status} · {o} → {path}"),
+                        None => format!("{status} · {path}"),
+                    }
+                    .into(),
+                ),
+                keys: None,
+            })
+            .collect();
+        let title = format!("{} {} — {}", commit.short, commit.subject, commit.author);
+        let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], &title, "", None, cx));
+        self.show_overlay(picker, OverlayKind::CommitFiles { root, commit, files }, window, cx);
     }
 
     /// "Git: Blame Line": who last changed the line under the cursor.
@@ -397,19 +425,39 @@ impl Workbench {
         use super::*;
         let entries: Vec<(&str, Box<dyn gpui::Action>, bool)> = vec![
             // Pull, Push, Fetch and Stash are git terms and stay as they are in every language.
+            // --- git-sync ---
+            (crate::i18n::t("Sync"), Box::new(GitSync), false),
             ("Pull", Box::new(GitPull), false),
+            (crate::i18n::t("Pull (Rebase)"), Box::new(GitPullRebase), false),
+            (crate::i18n::t("Pull from…"), Box::new(GitPullFrom), false),
             ("Push", Box::new(GitPush), false),
+            (crate::i18n::t("Push to…"), Box::new(GitPushTo), false),
             ("Fetch", Box::new(GitFetch), false),
+            (crate::i18n::t("Fetch (All Remotes)"), Box::new(GitFetchAll), false),
+            (crate::i18n::t("Publish Branch"), Box::new(GitPublishBranch), false),
             (crate::i18n::t("Checkout to…"), Box::new(GitCheckout), true),
             (crate::i18n::t("Create Branch…"), Box::new(GitCreateBranch), false),
             (crate::i18n::t("Commit (Amend)"), Box::new(GitCommitAmend), true),
+            // --- git-sync ---
+            (crate::i18n::t("Commit Signed Off"), Box::new(GitCommitSignedOff), false),
+            (crate::i18n::t("Commit (No Verify)"), Box::new(GitCommitNoVerify), false),
+            (crate::i18n::t("Commit & Push"), Box::new(GitCommitAndPush), false),
+            (crate::i18n::t("Commit & Sync"), Box::new(GitCommitAndSync), false),
             (crate::i18n::t("Undo Last Commit"), Box::new(GitUndoLastCommit), false),
             ("Stash", Box::new(GitStash), true),
             (crate::i18n::t("Stash (Include Untracked)"), Box::new(GitStashIncludeUntracked), false),
+            // --- git-refs ---
+            (crate::i18n::t("Stash Staged Changes"), Box::new(GitStashStaged), false),
+            (crate::i18n::t("Stash with Name…"), Box::new(GitStashNamed), false),
+            (crate::i18n::t("Show Stash…"), Box::new(GitShowStash), false),
             (crate::i18n::t("Pop Latest Stash"), Box::new(GitPopLatestStash), false),
             (crate::i18n::t("Pop Stash…"), Box::new(GitPopStash), false),
             (crate::i18n::t("Apply Stash…"), Box::new(GitApplyStash), false),
             (crate::i18n::t("Drop Stash…"), Box::new(GitDropStash), false),
+            // --- git-refs ---
+            (crate::i18n::t("Create Tag…"), Box::new(GitCreateTag), true),
+            (crate::i18n::t("Delete Tag…"), Box::new(GitDeleteTag), false),
+            (crate::i18n::t("Push Tags"), Box::new(GitPushTags), false),
             (crate::i18n::t("Discard All Changes"), Box::new(GitDiscardAll), true),
         ];
         self.show_action_menu(entries, position, window, cx);
@@ -466,14 +514,13 @@ impl Workbench {
     /// Branch in the status bar or "Git: Checkout to…": list the branches.
     pub(super) fn show_branch_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.repo_root(cx) else { return };
-        let current = self.git_status().and_then(|s| s.branch.clone());
         let host = self.remote.host.clone();
         let r = root.clone();
-        let task = cx.background_executor().spawn(async move { git::branches(host.as_ref(), &r) });
+        let task = cx.background_executor().spawn(async move { git::branch_infos(host.as_ref(), &r) });
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
             this.update_in(cx, |this, window, cx| {
-                let (local, remote) = match result {
+                let infos = match result {
                     Ok(b) => b,
                     Err(e) => {
                         this.notice = Some(Notice::Error(crate::i18n::tf("Could not list branches: {}", &[&e]).into()));
@@ -481,18 +528,22 @@ impl Workbench {
                         return;
                     }
                 };
+                let (local, remote): (Vec<_>, Vec<_>) = infos.into_iter().partition(|b| !b.remote);
                 // Remote branches that have a local tracking branch are not listed again.
-                let remote: Vec<String> = remote.into_iter().filter(|r| !local.iter().any(|l| r.split_once('/').is_some_and(|(_, b)| b == l))).collect();
-                let mut choices = vec![BranchChoice::Create];
-                let mut items = vec![PickItem { label: crate::i18n::t("+ Create new branch…").into(), detail: None, keys: None }];
+                let remote: Vec<_> = remote.into_iter().filter(|r| !local.iter().any(|l| r.name.split_once('/').is_some_and(|(_, b)| b == l.name))).collect();
+                let mut choices = vec![BranchChoice::Create, BranchChoice::CreateFrom, BranchChoice::Detached];
+                let mut items = vec![
+                    PickItem { label: crate::i18n::t("+ Create new branch…").into(), detail: None, keys: None },
+                    PickItem { label: crate::i18n::t("+ Create new branch from…").into(), detail: None, keys: None },
+                    PickItem { label: crate::i18n::t("Check out detached…").into(), detail: None, keys: None },
+                ];
                 for b in local {
-                    let detail = (current.as_deref() == Some(b.as_str())).then(|| crate::i18n::t("current").into());
-                    items.push(PickItem { label: b.clone().into(), detail, keys: None });
-                    choices.push(BranchChoice::Local(b));
+                    items.push(PickItem { label: b.name.clone().into(), detail: Some(super::refs_glue::branch_detail(&b).into()), keys: None });
+                    choices.push(BranchChoice::Local(b.name));
                 }
                 for b in remote {
-                    items.push(PickItem { label: b.clone().into(), detail: Some(crate::i18n::t("remote").into()), keys: None });
-                    choices.push(BranchChoice::Remote(b));
+                    items.push(PickItem { label: b.name.clone().into(), detail: Some(super::refs_glue::branch_detail(&b).into()), keys: None });
+                    choices.push(BranchChoice::Remote(b.name));
                 }
                 let picker =
                     cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Select a branch to check out"), "", None, cx));
@@ -506,6 +557,8 @@ impl Workbench {
     pub(super) fn pick_branch(&mut self, root: String, choice: BranchChoice, window: &mut Window, cx: &mut Context<Self>) {
         match choice {
             BranchChoice::Create => self.start_create_branch(root, window, cx),
+            BranchChoice::CreateFrom => self.show_branch_op_picker(BranchOp::CreateFrom, window, cx),
+            BranchChoice::Detached => self.show_branch_op_picker(BranchOp::CheckoutDetached, window, cx),
             BranchChoice::Local(b) => self.git_checkout(root, b, false, false, cx),
             BranchChoice::Remote(b) => self.git_checkout(root, b, true, false, cx),
         }
@@ -547,60 +600,6 @@ impl Workbench {
         .detach();
     }
 
-    /// Pull / push / fetch; several in sequence (sync: pull first, then push).
-    pub(super) fn git_sync(&mut self, ops: Vec<SyncOp>, cx: &mut Context<Self>) {
-        let Some(root) = self.repo_root(cx) else { return };
-        let working = match ops.as_slice() {
-            [SyncOp::Pull] => crate::i18n::t("Pulling…").to_string(),
-            [SyncOp::Push] => crate::i18n::t("Pushing…").to_string(),
-            [SyncOp::Fetch] => crate::i18n::t("Fetching…").to_string(),
-            [SyncOp::Pull, SyncOp::Push] => crate::i18n::t("Pulling, Pushing…").to_string(),
-            _ => crate::i18n::t("Syncing…").to_string(),
-        };
-        self.notice = Some(Notice::Info(working.into()));
-        cx.notify();
-        let host = self.remote.host.clone();
-        let task = cx.background_executor().spawn(async move {
-            for &op in &ops {
-                git::sync(host.as_ref(), &root, op).map_err(|e| (op, e))?;
-            }
-            Ok::<_, (SyncOp, String)>(ops)
-        });
-        cx.spawn(async move |this, cx| {
-            let result = task.await;
-            this.update(cx, |this, cx| {
-                this.notice = Some(match result {
-                    Ok(ops) => Notice::Info(
-                        match ops.as_slice() {
-                            [SyncOp::Pull] => crate::i18n::t("Pulled"),
-                            [SyncOp::Push] => crate::i18n::t("Pushed"),
-                            [SyncOp::Fetch] => crate::i18n::t("Fetched"),
-                            _ => crate::i18n::t("Synced"),
-                        }
-                        .into(),
-                    ),
-                    Err((op, e)) => {
-                        let hint = if e.contains("could not read Username") || e.contains("Permission denied") || e.contains("terminal prompts disabled") {
-                            format!(" {}", crate::i18n::t("The server wants credentials: run the command once in the terminal (or set up an SSH key)."))
-                        } else {
-                            String::new()
-                        };
-                        let failed = match op {
-                            SyncOp::Pull => crate::i18n::tf("Pull failed: {}", &[&first_line(&e)]),
-                            SyncOp::Push => crate::i18n::tf("Push failed: {}", &[&first_line(&e)]),
-                            SyncOp::Fetch => crate::i18n::tf("Fetch failed: {}", &[&first_line(&e)]),
-                        };
-                        Notice::Error(format!("{failed}{hint}").into())
-                    }
-                });
-                this.refresh_git(0, cx);
-                cx.notify();
-            })
-            .ok();
-        })
-        .detach();
-    }
-
     /// Ask for a branch or remote name (list depends on `op`), then run the operation.
     pub(super) fn show_branch_op_picker(&mut self, op: BranchOp, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.repo_root(cx) else { return };
@@ -611,6 +610,8 @@ impl Workbench {
             match op {
                 BranchOp::RemoveRemote => git::remotes(host.as_ref(), &r).map(|v| v.into_iter().map(|(n, u)| (n, Some(u))).collect::<Vec<_>>()),
                 BranchOp::OpenWorktree => git::worktrees(host.as_ref(), &r),
+                // --- git-refs ---
+                op if op.is_ref_op() => super::refs_glue::list_for(op, host.as_ref(), &r),
                 _ => git::branches(host.as_ref(), &r).map(|(l, _)| l.into_iter().map(|n| (n, None)).collect()),
             }
         });
@@ -642,6 +643,8 @@ impl Workbench {
                     BranchOp::Delete => crate::i18n::t("Delete which branch?").into(),
                     BranchOp::Rename => crate::i18n::t("Rename which branch?").into(),
                     BranchOp::RemoveRemote => crate::i18n::t("Remove which remote?").into(),
+                    // --- git-refs ---
+                    op => super::refs_glue::title_for(op),
                 };
                 let items = entries.iter().map(|(n, d)| PickItem { label: n.clone().into(), detail: d.clone().map(Into::into), keys: None }).collect();
                 let names = entries.into_iter().map(|(n, _)| n).collect();
@@ -742,11 +745,13 @@ impl Workbench {
                     },
                 );
             }
+            // --- git-refs ---
+            op => self.run_ref_op(root, op, name, window, cx),
         }
     }
 
     /// Local confirm sheet; `then` runs if anything but "Cancel" is picked.
-    fn confirm(
+    pub(super) fn confirm(
         &mut self,
         window: &mut Window,
         title: &str,
@@ -767,6 +772,17 @@ impl Workbench {
 
     /// Git operation in the background; the result goes to a notification, state is refreshed.
     pub(super) fn git_task(&mut self, working: &str, cx: &mut Context<Self>, f: impl FnOnce(&dyn host::Host) -> Result<String, String> + Send + 'static) {
+        self.git_task_then(working, cx, f, |_, _| {});
+    }
+
+    /// `git_task`, then `after` runs with the outcome already shown (e.g. to reload the stash list).
+    pub(super) fn git_task_then(
+        &mut self,
+        working: &str,
+        cx: &mut Context<Self>,
+        f: impl FnOnce(&dyn host::Host) -> Result<String, String> + Send + 'static,
+        after: impl FnOnce(&mut Self, &mut Context<Self>) + 'static,
+    ) {
         self.notice = Some(Notice::Info(working.to_string().into()));
         cx.notify();
         let host = self.remote.host.clone();
@@ -779,16 +795,12 @@ impl Workbench {
                     Err(e) => this.notice = Some(Notice::Error(first_line(&e).to_string().into())),
                 }
                 this.refresh_git(0, cx);
+                after(this, cx);
                 cx.notify();
             })
             .ok();
         })
         .detach();
-    }
-
-    pub(super) fn git_publish_branch(&mut self, cx: &mut Context<Self>) {
-        let Some(root) = self.repo_root(cx) else { return };
-        self.git_task(crate::i18n::t("Publishing branch…"), cx, move |h| git::publish_branch(h, &root).map(|r| crate::i18n::tf("Published to {}", &[&r])));
     }
 
     pub(super) fn git_abort_merge(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -863,27 +875,15 @@ impl Workbench {
             self.show_input(
                 InputPurpose::CommitTag { hash: "HEAD".into() },
                 crate::i18n::t("Create tag"),
-                crate::i18n::t("Name of the tag (at HEAD)"),
+                crate::i18n::t("Tag name, then an optional message for an annotated tag (at HEAD)"),
                 "",
                 window,
                 cx,
             );
         }
     }
-
-    /// The ↓↑ in the status bar: pull/push depending on behind/ahead, fetch if both are zero.
-    pub(super) fn git_sync_auto(&mut self, cx: &mut Context<Self>) {
-        let (ahead, behind) = self.git_status().map_or((0, 0), |s| (s.ahead, s.behind));
-        let ops = match (behind > 0, ahead > 0) {
-            (true, true) => vec![SyncOp::Pull, SyncOp::Push],
-            (true, false) => vec![SyncOp::Pull],
-            (false, true) => vec![SyncOp::Push],
-            (false, false) => vec![SyncOp::Fetch],
-        };
-        self.git_sync(ops, cx);
-    }
 }
 
-fn first_line(e: &str) -> &str {
+pub(super) fn first_line(e: &str) -> &str {
     e.lines().find(|l| !l.trim().is_empty()).unwrap_or(e).trim()
 }

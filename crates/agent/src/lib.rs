@@ -5,6 +5,7 @@
 
 pub mod bigfile;
 pub mod daemon;
+pub mod hashtree;
 pub mod proc;
 pub mod pty;
 pub mod search;
@@ -52,6 +53,7 @@ pub fn handle(req: Request) -> Response {
         Request::Delete { path } => delete(&expand(&path)).map(|_| Response::Done),
         // Streaming requests are handled inside `serve`; here only one-shot responses.
         Request::Search(_)
+        | Request::HashTree { .. }
         | Request::Cancel { .. }
         | Request::PtySpawn { .. }
         | Request::PtyInput { .. }
@@ -335,6 +337,25 @@ impl Session {
                 });
                 Ok(())
             }
+            Request::HashTree { root, ignore, gitignore, limit, only } => {
+                let flag = Arc::new(AtomicBool::new(false));
+                self.cancels.locked().insert(id, flag.clone());
+                let (out, cancels) = (self.out.clone(), self.cancels.clone());
+                std::thread::spawn(move || {
+                    let root = expand(&root);
+                    let query = hashtree::Query { root: &root, ignore: &ignore, gitignore, limit: limit as usize, only: only.as_deref() };
+                    let result = hashtree::run(&query, &flag, |records| {
+                        let _ = send(&out, id, Response::HashChunk(records));
+                    });
+                    cancels.locked().remove(&id);
+                    let done = match result {
+                        Ok(s) => Response::HashDone { entries: s.entries, truncated: s.truncated, cancelled: s.cancelled },
+                        Err(e) => Response::Error(e),
+                    };
+                    let _ = send(&out, id, done);
+                });
+                Ok(())
+            }
             Request::Cancel { id: target } => {
                 if let Some(flag) = self.cancels.locked().get(&target) {
                     flag.store(true, Ordering::Relaxed);
@@ -441,9 +462,13 @@ impl Session {
                 Ok(())
             }
             Request::ProcInput { proc: pid, data } => {
-                if let Some((_, p)) = self.procs.locked().get_mut(&pid) {
-                    let _ = p.write(&data);
+                // Input that can't be queued is lost for good, which would leave a language server working on a stale view of
+                // the document. End the process instead: the client sees ProcExit and restarts it with fresh state.
+                let mut procs = self.procs.locked();
+                if procs.get_mut(&pid).is_some_and(|(_, p)| p.write(&data).is_err()) {
+                    procs.remove(&pid);
                 }
+                drop(procs);
                 reply(Response::Done)
             }
             Request::ProcKill { proc: pid } => {
@@ -588,6 +613,12 @@ fn stat(path: &Path) -> Result<Meta, Error> {
 }
 
 fn read(path: &Path) -> Result<Response, Error> {
+    let (data, hash) = read_capped(path)?;
+    Ok(Response::File { data, hash })
+}
+
+/// The contents of a regular file of at most `MAX_FILE` bytes, and their hash.
+fn read_capped(path: &Path) -> Result<(Vec<u8>, u64), Error> {
     let m = fs::metadata(path).map_err(|e| map_err(path, e))?;
     if m.is_dir() {
         return Err(Error::IsDirectory(path.display().to_string()));
@@ -607,7 +638,7 @@ fn read(path: &Path) -> Result<Response, Error> {
         return Err(Error::TooLarge { path: path.display().to_string(), size: data.len() as u64, limit: proto::MAX_FILE });
     }
     let hash = content_hash(&data);
-    Ok(Response::File { data, hash })
+    Ok((data, hash))
 }
 
 /// File list for quick open: ripgrep's rules (.gitignore, .ignore,
@@ -719,7 +750,8 @@ fn write(path: &Path, data: &[u8], expect_hash: Option<u64>) -> Result<u64, Erro
             return Err(Error::IsDirectory(path.display().to_string()));
         }
         if let Some(expected) = expect_hash {
-            let current = content_hash(&fs::read(&target).map_err(|e| map_err(path, e))?);
+            // Capped like `read`: the target may have grown since the editor loaded it, and the local agent shares the app's memory.
+            let (_, current) = read_capped(&target)?;
             if current != expected {
                 return Err(Error::Conflict { path: path.display().to_string(), current_hash: current });
             }
@@ -727,8 +759,13 @@ fn write(path: &Path, data: &[u8], expect_hash: Option<u64>) -> Result<u64, Erro
     }
 
     if existing.as_ref().is_some_and(must_write_in_place) {
-        let mut f = fs::OpenOptions::new().write(true).truncate(true).open(&target).map_err(|e| map_err(path, e))?;
-        f.write_all(data).and_then(|_| f.sync_all()).map_err(|e| map_err(path, e))?;
+        // Kept in memory so a failed write can put the original back; there is no room for a sibling copy in a directory we may not own.
+        let backup = match existing.as_ref().filter(|m| m.is_file()) {
+            Some(_) => Some(read_capped(&target)?.0),
+            None => None,
+        };
+        let mut f = fs::OpenOptions::new().write(true).open(&target).map_err(|e| map_err(path, e))?;
+        overwrite(&mut f, data, backup.as_deref(), |f, d| f.write_all(d)).map_err(|e| map_err(path, e))?;
         return Ok(content_hash(data));
     }
 
@@ -770,6 +807,21 @@ fn write(path: &Path, data: &[u8], expect_hash: Option<u64>) -> Result<u64, Erro
         return Err(map_err(path, e));
     }
     Ok(content_hash(data))
+}
+
+/// Replace the contents of `f` without truncating first, so running out of space or an I/O error part way leaves the original
+/// recoverable. On failure `backup` (the previous contents) is written back; if that fails too, both errors are reported.
+fn overwrite(f: &mut fs::File, data: &[u8], backup: Option<&[u8]>, put: impl FnOnce(&mut fs::File, &[u8]) -> io::Result<()>) -> io::Result<()> {
+    use io::Seek;
+    let result = put(f, data).and_then(|()| f.set_len(data.len() as u64)).and_then(|()| f.sync_all());
+    let Err(e) = result else { return Ok(()) };
+    if let Some(old) = backup {
+        let restored = f.rewind().and_then(|()| f.write_all(old)).and_then(|()| f.set_len(old.len() as u64)).and_then(|()| f.sync_all());
+        if let Err(r) = restored {
+            return Err(io::Error::new(e.kind(), format!("{e}; the original could not be restored: {r}")));
+        }
+    }
+    Err(e)
 }
 
 /// `.<name>.codeyard-<pid>-<counter>-<time>.tmp`: the counter prevents collisions within the same process, the timestamp across other processes and against an attacker guessing
@@ -1060,6 +1112,56 @@ mod tests {
         assert_eq!(fs::read_to_string(&b).unwrap(), "2", "the hard link must not break");
     }
 
+    /// A write that dies part way (disk full, I/O error) must not leave the file empty or half new: the original comes back,
+    /// through every hard link.
+    #[cfg(unix)]
+    #[test]
+    fn failed_in_place_write_restores_the_original() {
+        let d = tmpdir("inplace-fail");
+        let a = d.join("a");
+        let b = d.join("b");
+        let original = b"the original, longer than the replacement fragment".to_vec();
+        fs::write(&a, &original).unwrap();
+        fs::hard_link(&a, &b).unwrap();
+        let mut f = fs::OpenOptions::new().write(true).open(&a).unwrap();
+        let err = overwrite(&mut f, b"new contents that never finish", Some(&original), |f, d| {
+            f.write_all(&d[..10])?;
+            Err(io::Error::other("no space left on device"))
+        })
+        .unwrap_err();
+        assert!(err.to_string().contains("no space"), "{err}");
+        assert_eq!(fs::read(&a).unwrap(), original);
+        assert_eq!(fs::read(&b).unwrap(), original);
+    }
+
+    /// In place, a shorter file replaces a longer one completely (the length is cut after the write, not before).
+    #[cfg(unix)]
+    #[test]
+    fn in_place_write_shrinks_the_file() {
+        let d = tmpdir("inplace-shrink");
+        let a = d.join("a");
+        let b = d.join("b");
+        fs::write(&a, "a long first version").unwrap();
+        fs::hard_link(&a, &b).unwrap();
+        let r = handle(Request::Write { path: s(&a), data: b"short".to_vec(), expect_hash: None });
+        assert!(matches!(r, Response::Written { .. }), "{r:?}");
+        assert_eq!(fs::read(&b).unwrap(), b"short");
+    }
+
+    /// The conflict check hashes the file on disk, so it obeys the same size limit as `Read`: a target that grew past it
+    /// is refused instead of being read into memory.
+    #[test]
+    fn conflict_check_refuses_a_target_past_the_size_limit() {
+        let d = tmpdir("conflict-big");
+        let f = d.join("big.bin");
+        fs::write(&f, "small").unwrap();
+        let hash = content_hash(b"small");
+        fs::OpenOptions::new().write(true).open(&f).unwrap().set_len(proto::MAX_FILE + 1).unwrap();
+        let r = handle(Request::Write { path: s(&f), data: b"x".to_vec(), expect_hash: Some(hash) });
+        assert!(matches!(r, Response::Error(Error::TooLarge { size, .. }) if size == proto::MAX_FILE + 1), "{r:?}");
+        assert_eq!(fs::metadata(&f).unwrap().len(), proto::MAX_FILE + 1, "nothing was written");
+    }
+
     #[test]
     fn read_dir_and_errors() {
         let d = tmpdir("dir");
@@ -1196,6 +1298,30 @@ mod tests {
         let text = String::from_utf8_lossy(&output);
         assert!(text.contains("kod-42"), "{text}");
         assert_eq!(code, Some(3));
+    }
+
+    /// A server that stops reading must not silently lose later input: once the queue overflows the process is ended and the
+    /// client gets its `ProcExit`.
+    #[cfg(unix)]
+    #[test]
+    fn a_process_that_never_reads_its_input_is_ended_when_the_queue_overflows() {
+        let mut c = Client::new();
+        c.send(1, Request::ProcSpawn { program: "sleep".into(), args: vec!["60".into()], cwd: None });
+        let Response::ProcSpawned { proc } = c.recv().body else { panic!("spawn") };
+        let chunk = vec![b'x'; 64 * 1024];
+        for _ in 0..600 {
+            c.send(0, Request::ProcInput { proc, data: chunk.clone() });
+        }
+        loop {
+            match c.recv().body {
+                Response::ProcExit { proc: p, .. } => {
+                    assert_eq!(p, proc);
+                    break;
+                }
+                Response::ProcOutput { .. } => {}
+                other => panic!("{other:?}"),
+            }
+        }
     }
 
     #[test]
