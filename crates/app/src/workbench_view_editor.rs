@@ -625,7 +625,7 @@ impl Workbench {
                             .flex()
                             .flex_col()
                             .gap(px(theme::SPACE[2]))
-                            .child(div().text_size(px(28.)).font_weight(gpui::FontWeight::SEMIBOLD).child("codeyard")) // i18n-keep: product name
+                            .child(div().text_size(px(text::DISPLAY.0)).font_weight(gpui::FontWeight::SEMIBOLD).child("codeyard")) // i18n-keep: product name
                             .child(div().text_color(c(p.text_muted)).child(crate::i18n::t("Lightweight editing, on this machine or over SSH."))),
                     )
                     .child(

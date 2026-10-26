@@ -106,6 +106,8 @@ mod settings_docs;
 mod settings_page;
 mod shortcuts_page;
 mod snippets;
+#[cfg(test)]
+mod text_scale_tests;
 // --- structural ---
 #[cfg(test)]
 mod ssh_error_tests;
