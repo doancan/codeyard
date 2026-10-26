@@ -152,20 +152,36 @@ pub fn layout(commits: &[GraphCommit]) -> Vec<GraphRow> {
     rows
 }
 
-/// `%D` output: "HEAD -> main, origin/main, tag: v1.0".
+/// `%D` output. `git log` is asked for full names ("HEAD -> refs/heads/main, refs/remotes/origin/main, tag: refs/tags/v1.0"),
+/// because short names can't tell a local `feature/x` from the remote branch `origin/x`. Short names are still understood.
 pub fn parse_refs(decor: &str) -> Vec<RefLabel> {
     let mut out = Vec::new();
+    let short = |name: &str| -> (String, Option<RefKind>) {
+        if let Some(n) = name.strip_prefix("refs/heads/") {
+            (n.to_string(), Some(RefKind::Local))
+        } else if let Some(n) = name.strip_prefix("refs/remotes/") {
+            (n.to_string(), Some(RefKind::Remote))
+        } else if let Some(n) = name.strip_prefix("refs/tags/") {
+            (n.to_string(), Some(RefKind::Tag))
+        } else {
+            (name.to_string(), None)
+        }
+    };
     for part in decor.split(", ").map(str::trim).filter(|p| !p.is_empty()) {
         if let Some(rest) = part.strip_prefix("HEAD -> ") {
-            out.push(RefLabel { name: rest.to_string(), kind: RefKind::Head });
+            out.push(RefLabel { name: short(rest).0, kind: RefKind::Head });
         } else if part == "HEAD" {
             out.push(RefLabel { name: "HEAD".into(), kind: RefKind::Head });
         } else if let Some(t) = part.strip_prefix("tag: ") {
-            out.push(RefLabel { name: t.to_string(), kind: RefKind::Tag });
-        } else if part.contains('/') && !part.starts_with("refs/") {
-            out.push(RefLabel { name: part.to_string(), kind: RefKind::Remote });
+            out.push(RefLabel { name: short(t).0, kind: RefKind::Tag });
         } else {
-            out.push(RefLabel { name: part.to_string(), kind: RefKind::Local });
+            let (name, kind) = short(part);
+            // A remote's default branch pointer ("origin/HEAD") repeats the branch it points to.
+            if kind == Some(RefKind::Remote) && name.ends_with("/HEAD") {
+                continue;
+            }
+            let kind = kind.unwrap_or(if name.contains('/') && !name.starts_with("refs/") { RefKind::Remote } else { RefKind::Local });
+            out.push(RefLabel { name, kind });
         }
     }
     out
@@ -199,7 +215,7 @@ pub fn parse_graph_log(out: &str) -> Vec<GraphCommit> {
 /// History of all branches (newest first, children first). Empty list for an empty repository.
 pub fn log(host: &dyn Host, root: &str, limit: usize, scope: Scope) -> Result<Vec<GraphCommit>, String> {
     let n = format!("-n{limit}");
-    let mut args = vec!["log", "--date-order", "--decorate=short", "--date=format:%Y-%m-%d %H:%M", &n, FORMAT];
+    let mut args = vec!["log", "--date-order", "--decorate=full", "--date=format:%Y-%m-%d %H:%M", &n, FORMAT];
     if scope == Scope::All {
         args.insert(1, "--all");
     }
@@ -488,6 +504,24 @@ mod tests {
         assert_eq!(r[0].name, "main");
         assert_eq!(r[2].name, "v0.1.0");
         assert!(parse_refs("").is_empty());
+    }
+
+    #[test]
+    fn full_ref_names_keep_slashed_local_branches_local() {
+        let r = parse_refs(
+            "HEAD -> refs/heads/main, refs/remotes/origin/main, refs/remotes/origin/HEAD, tag: refs/tags/v1.0, refs/heads/feature/tags, refs/remotes/origin/feature/tags",
+        );
+        let got: Vec<(&str, RefKind)> = r.iter().map(|l| (l.name.as_str(), l.kind)).collect();
+        assert_eq!(
+            got,
+            [
+                ("main", RefKind::Head),
+                ("origin/main", RefKind::Remote),
+                ("v1.0", RefKind::Tag),
+                ("feature/tags", RefKind::Local),
+                ("origin/feature/tags", RefKind::Remote),
+            ]
+        );
     }
 
     #[test]
