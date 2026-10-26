@@ -2260,7 +2260,7 @@ fn terminals_ask_before_killing_a_program_split_where_the_shell_is_and_follow_pr
         name: "plain".into(),
         path: "/bin/sh".into(),
         args: Some(Vec::new()),
-        env: vec![("CODEYARD_PROFILE_T".into(), "from-profile".into())],
+        env: vec![("PROFILE_ENV_PROBE".into(), "from-profile".into())],
         color: Some("info".into()),
     };
     settings.terminal_profiles.insert(crate::terminal_profiles::os_key(std::env::consts::OS).into(), vec![profile]);
@@ -2270,7 +2270,7 @@ fn terminals_ask_before_killing_a_program_split_where_the_shell_is_and_follow_pr
     cx.simulate_keystrokes("ctrl-`");
     let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
     let screen = |cx: &mut VisualTestContext, t: &gpui::Entity<crate::terminal::TerminalView>| t.read_with(cx, |t, _| t.screen_text());
-    cx.simulate_input("echo \"$CODEYARD_PROFILE_T\"\n");
+    cx.simulate_input("echo \"$PROFILE_ENV_PROBE\"\n");
     wait_for(cx, "the profile's environment", |cx| screen(cx, &term).lines().any(|l| l == "from-profile"));
     assert_eq!(term.read_with(cx, |t, _| t.color.clone()).as_deref(), Some("info"));
 

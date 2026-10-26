@@ -29,6 +29,7 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_DO_DELAY_MS` | Delay before `--do "Command;Command"` runs its commands. |
 | `CODEYARD_DUMP_DOCK` | Print the Dock menu to stderr a few seconds after start; with a number, click that row. |
 | `CODEYARD_DAEMON_GRACE`, `CODEYARD_DAEMON_IDLE` | Seconds the server-side agent daemon waits for a lost client and before exiting with no sessions (defaults 300 and 600). |
+| `CODEYARD_SHELL_INTEGRATION`, `CODEYARD_USER_ZDOTDIR` | Internal: set in a terminal's shell when shell integration is on, and (for zsh) where the user's own startup files are, so the integration scripts read them first. A profile's `env` may set `CODEYARD_USER_ZDOTDIR`. |
 | `CODEYARD_ASKPASS_EXE`, `CODEYARD_ASKPASS_SOCK` | Internal: the executable `ssh` runs as `SSH_ASKPASS` and the socket it answers on. Tests point the first at a test binary. |
 | `CODEYARD_QA_DIR`, `CODEYARD_QA_TMP` | Base folders for test scratch files. |
 | `CODEYARD_QA_SEEDS`, `CODEYARD_QA_SEED_BASE` | Number of random sessions and the first seed of `qa_random_new_commands_many_seeds`. |
