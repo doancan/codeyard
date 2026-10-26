@@ -167,8 +167,10 @@ status bar reports it.
 | --- | --- | --- | --- |
 | `terminal.allowClipboardWrite` | `true` / `false` | `false` | Let programs in the terminal write to the clipboard |
 | `terminal.fontSize` | number 6–48 | `12` on macOS, `14` on Windows and Linux | Font size of the terminal |
-| `terminal.scrollback` | number 0–100000 | `2000` | Lines kept in terminal history |
+| `terminal.sanitizePaste` | `auto`, `always`, `off` | `auto` | Remove control characters from pasted text |
+| `terminal.scrollback` | number 0–50000 | `2000` | Lines kept in terminal history |
 | `terminal.shell` | text | empty | Shell for new terminals (empty: login shell) |
+| `terminal.warnMultilinePaste` | `unbracketed`, `always`, `never` | `unbracketed` | Ask before pasting several lines into the terminal |
 
 ## `ui`
 

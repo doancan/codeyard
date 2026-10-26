@@ -85,6 +85,7 @@ Ask before .http requests and schema downloads leave this computer: never, remot
 Ask before Sync pulls or pushes. Your own settings only; a folder cannot change it	
 Ask before moving a file or folder by dragging it in the explorer	
 Ask before moving a file to the Trash	
+Ask before pasting several lines into the terminal	
 Ask before running tasks, tests or the debugger of an untrusted folder	
 At most {} extra folders fit in one workspace.	
 Attach to a native process	
@@ -1153,6 +1154,7 @@ Overwrite
 Passphrase	
 Password	
 Paste	
+Paste {} line into the terminal?|Paste {} lines into the terminal?	
 Path (relative to the folder, or absolute)	
 Path of the folder (~ is your home folder)	
 Path on this computer (~ is your home folder)	
@@ -1302,6 +1304,7 @@ Remove Breakpoint
 Remove Expression	
 Remove Host…	
 Remove a host	
+Remove control characters from pasted text	
 Remove folder from workspace	
 Remove from Favorites	
 Remove from Recent	
@@ -1654,6 +1657,7 @@ The search stopped at the result limit: only the files listed are changed. Open 
 The selection is neither a JWT nor a Unix timestamp	
 The server did not answer within 60 seconds.	
 The server wants credentials: run the command once in the terminal (or set up an SSH key).	
+The shell may run each line as soon as it arrives.	
 The state database was damaged ({0}). It was moved to {1} and a new one was started; recent folders and open tabs were forgotten.	
 The string is not closed	
 The tag disappears from the remote repository for everyone. Your local copy is kept.	

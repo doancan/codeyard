@@ -88,6 +88,10 @@ pub struct Settings {
     pub terminal_scrollback: usize,
     /// Whether a program in the terminal may put text on the clipboard (OSC 52).
     pub terminal_allow_clipboard_write: bool,
+    /// What pasting into the terminal removes (`terminal.sanitizePaste`).
+    pub terminal_sanitize_paste: crate::terminal_paste::Sanitize,
+    /// When a paste of several lines asks first (`terminal.warnMultilinePaste`).
+    pub terminal_warn_multiline: crate::terminal_paste::WarnMultiline,
     pub restore_session: bool,
     /// Whether to start with the welcome screen or continue where you left off.
     pub startup: Startup,
@@ -286,6 +290,8 @@ impl Default for Settings {
             terminal_font_size: theme::text::CODE.0,
             terminal_scrollback: 2000,
             terminal_allow_clipboard_write: false,
+            terminal_sanitize_paste: Default::default(),
+            terminal_warn_multiline: Default::default(),
             restore_session: true,
             startup: Startup::Welcome,
             hot_exit: true,
@@ -536,6 +542,11 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Let programs in the terminal write to the clipboard (OSC 52). Off by default: a program you run, or a file you cat, could replace
   // what you copied.
   // "terminal.allowClipboardWrite": false,
+  // Pasting: "auto" removes control characters unless the shell reads the paste as text (bracketed paste), "always" or
+  // "off"; bracketed-paste markers inside pasted text are always removed. A paste of several lines asks first
+  // ("unbracketed": when the shell would run each line at once, "always" or "never").
+  // "terminal.sanitizePaste": "auto",
+  // "terminal.warnMultilinePaste": "unbracketed",
 
   // Ports forwarded from SSH hosts listen on this computer only ("loopback") or on every network interface ("all",
   // reachable from other computers).
@@ -760,11 +771,17 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.number("terminal.fontSize", 6., 48.) {
         s.terminal_font_size = v as f32;
     }
-    if let Some(v) = r.number("terminal.scrollback", 0., 100_000.) {
+    if let Some(v) = r.number("terminal.scrollback", 0., crate::terminal::SCROLLBACK_MAX as f64) {
         s.terminal_scrollback = v as usize;
     }
     if let Some(v) = r.bool("terminal.allowClipboardWrite") {
         s.terminal_allow_clipboard_write = v;
+    }
+    if let Some(v) = r.choice("terminal.sanitizePaste", &["auto", "always", "off"]) {
+        s.terminal_sanitize_paste = crate::terminal_paste::Sanitize::parse(&v).unwrap_or_default();
+    }
+    if let Some(v) = r.choice("terminal.warnMultilinePaste", &["unbracketed", "always", "never"]) {
+        s.terminal_warn_multiline = crate::terminal_paste::WarnMultiline::parse(&v).unwrap_or_default();
     }
     if let Some(v) = r.bool("window.restoreSession") {
         s.restore_session = v;
@@ -1199,6 +1216,8 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "terminal.shell",
         "terminal.fontSize",
         "terminal.scrollback",
+        "terminal.sanitizePaste",
+        "terminal.warnMultilinePaste",
         "terminal.allowClipboardWrite",
         "window.restoreSession",
         "window.startup",

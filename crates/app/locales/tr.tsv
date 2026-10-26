@@ -2399,3 +2399,8 @@ Unknown input “{0}” in “{1}”	“{1}” içinde bilinmeyen girdi “{0}�
 The input “{0}” is of type “{1}”, which would run a command; use promptString or pickString.	“{0}” girdisi “{1}” türünde, bu bir komut çalıştırır; promptString ya da pickString kullanın.
 The program is running: pause it first, or set a breakpoint.	Program çalışıyor: önce duraklatın ya da bir kesme noktası koyun.
 Running the program in a terminal is not supported on Windows yet: use {} in the configuration.	Programı terminalde çalıştırmak Windows'ta henüz desteklenmiyor: yapılandırmada {0} kullanın.
+# ---- Terminal hardening ----
+Ask before pasting several lines into the terminal	Terminale birden çok satır yapıştırmadan önce sor
+Paste {} line into the terminal?|Paste {} lines into the terminal?	{} satır terminale yapıştırılsın mı?
+Remove control characters from pasted text	Yapıştırılan metinden denetim karakterlerini kaldır
+The shell may run each line as soon as it arrives.	Kabuk her satırı gelir gelmez çalıştırabilir.

@@ -2215,6 +2215,39 @@ fn a_forwarded_port_comes_back_with_its_project(cx: &mut TestAppContext) {
     assert_eq!(got, "saved");
 }
 
+/// Pasting several lines into a shell without bracketed paste asks first; a marker hidden in the text never reaches the
+/// shell; the answer decides whether anything is sent.
+#[cfg(unix)]
+#[gpui::test]
+fn a_multi_line_paste_asks_first_and_hidden_markers_are_removed(cx: &mut TestAppContext) {
+    let dir = single_file_dir("paste");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    cx.simulate_keystrokes("ctrl-`");
+    let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
+    let paste = |cx: &mut VisualTestContext, text: &str| {
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.to_string()));
+        cx.simulate_keystrokes(if cfg!(target_os = "macos") { "cmd-v" } else { "ctrl-shift-v" });
+        cx.run_until_parked();
+    };
+    paste(cx, "echo one-\x1b[201~two\n");
+    wait_for(cx, "the single line ran", |cx| term.read_with(cx, |t, _| t.screen_text().contains("one-two")));
+    assert!(!cx.has_pending_prompt(), "one line does not ask");
+
+    paste(cx, "echo first-line\necho second-line\n");
+    assert!(cx.has_pending_prompt(), "several lines ask first");
+    cx.simulate_prompt_answer("Cancel");
+    cx.run_until_parked();
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    cx.run_until_parked();
+    assert!(!term.read_with(cx, |t, _| t.screen_text().contains("first-line")), "nothing was sent");
+
+    paste(cx, "echo first-line\necho second-line\n");
+    cx.simulate_prompt_answer("Paste");
+    wait_for(cx, "both lines ran", |cx| term.read_with(cx, |t, _| t.screen_text().lines().filter(|l| *l == "second-line").count() == 1));
+}
+
 /// Explorer: single-subfolder chains as one row, sort setting, hierarchy line, type-to-search.
 #[gpui::test]
 fn explorer_compacts_chains_sorts_and_types_ahead(cx: &mut TestAppContext) {

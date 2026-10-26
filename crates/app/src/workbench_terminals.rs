@@ -53,13 +53,19 @@ impl Workbench {
         let shell = self.shell.clone().or_else(|| cx.global::<Settings>().terminal_shell.clone());
         let term = cx.new(|cx| TerminalView::new(host, cwd, shell, cx));
         let weak = term.downgrade();
-        self._subs.push(cx.subscribe_in(&term, window, move |this, _, event: &TerminalEvent, window, cx| match event {
+        self._subs.push(cx.subscribe_in(&term, window, move |this, source, event: &TerminalEvent, window, cx| match event {
             TerminalEvent::CloseRequested => {
                 if let Some(ix) = this.terminals.iter().position(|t| t.downgrade() == weak) {
                     this.close_terminal(ix, window, cx);
                 }
             }
             TerminalEvent::TitleChanged | TerminalEvent::Exited => cx.notify(),
+            TerminalEvent::ConfirmPaste { data, lines } => {
+                let (term, data) = (source.clone(), data.clone());
+                let title = crate::i18n::tn("Paste {} line into the terminal?", "Paste {} lines into the terminal?", *lines, &[]);
+                let detail = crate::i18n::t("The shell may run each line as soon as it arrives.");
+                this.confirm(window, &title, detail, crate::i18n::t("Paste"), cx, move |_, cx| term.update(cx, |t, _| t.paste_confirmed(data)));
+            }
             TerminalEvent::OpenLink(link) => this.open_link(link.clone(), window, cx),
             TerminalEvent::ContextMenu(position) => {
                 if let Some(ix) = this.terminals.iter().position(|t| t.downgrade() == weak) {
