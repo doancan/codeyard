@@ -447,27 +447,42 @@ impl Workbench {
         )
     }
 
-    /// macOS: the native title is transparent, we draw it (so it follows the theme color).
+    /// macOS: the native title is transparent, we draw it (so it follows the theme color). Back /
+    /// forward, then the command center (the folder name; click to search files) in the middle.
     pub(super) fn title_bar(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
-        let root = self.title_text(cx);
+        let root = self.roots.primary.read(cx).root().map(|r| ui::file_name(r).to_string());
         let remote = match &self.remote.conn {
-            Conn::Connected { alias } | Conn::Reconnecting { alias, .. } => Some(format!("ssh://{alias}")),
+            Conn::Connected { alias } | Conn::Reconnecting { alias, .. } => Some(alias.to_string()),
             _ => None,
         };
-        let sidebar_open = self.chrome.panel.is_some();
-        let tool = |id: &'static str, name: &'static str, on: bool, p: &Palette| {
+        let label: SharedString = match (&root, &remote) {
+            (Some(r), Some(a)) => format!("{r} [SSH: {a}]").into(),
+            (Some(r), None) => r.clone().into(),
+            (None, Some(a)) => format!("[SSH: {a}]").into(),
+            (None, None) => crate::i18n::t("Search").into(),
+        };
+        let tip: SharedString = match &root {
+            Some(r) => crate::i18n::tf("Search {}", &[r]).into(),
+            None => crate::i18n::t("Search files by name").into(),
+        };
+        let shortcut = Command { label: String::new(), run: Run::Action(Box::new(QuickOpen)) }.shortcut(cx);
+        let tip: SharedString = match shortcut {
+            Some(k) => format!("{tip} ({k})").into(),
+            None => tip,
+        };
+        let nav = |id: &'static str, glyph: &'static str, enabled: bool, tip: &'static str| {
             div()
                 .id(id)
-                .size(px(26.))
+                .size(px(22.))
                 .flex()
                 .items_center()
                 .justify_center()
-                .rounded(px(theme::radius::SM))
-                .cursor_pointer()
-                .when(on, |d| d.bg(c(p.surface_active)))
-                .hover(|d| d.bg(c(p.surface_hover)))
-                .child(icon(name, layout::ICON, if on { p.text } else { p.text_muted }))
+                .rounded(px(theme::radius::MD))
+                .child(icon(glyph, layout::ICON, if enabled { p.text_muted } else { ui::mix(p.surface, p.text_muted, 0.45) }))
+                .when(enabled, |d| d.cursor_pointer().hover(|d| d.bg(c(p.surface_hover))))
+                .tooltip(move |_, cx| cx.new(|_| Tooltip(tip.into())).into())
         };
+        let (can_back, can_forward) = (!self.nav.back.is_empty(), !self.nav.forward.is_empty());
         div()
             .id("title-bar")
             .h(px(layout::TITLEBAR_H))
@@ -482,27 +497,61 @@ impl Workbench {
                     window.titlebar_double_click();
                 }
             })
-            // Room for the traffic lights.
+            // Room for the traffic lights, mirrored on the right so the command center stays in the middle of the window.
             .child(div().w(px(80.)).flex_none())
             .child(
                 div()
                     .flex_1()
+                    .min_w_0()
                     .flex()
                     .items_center()
                     .justify_center()
-                    .gap(px(theme::SPACE[3]))
-                    .text_size(px(text::XS.0))
-                    .text_color(c(p.text_muted))
-                    .child(root.unwrap_or_else(|| "codeyard".into()))
-                    .when_some(remote, |d, r| {
-                        d.child(div().px(px(theme::SPACE[3])).rounded(px(theme::radius::SM)).bg(c(p.accent)).text_color(c(p.on_accent)).child(r))
-                    }),
+                    .gap(px(theme::SPACE[1]))
+                    .child(nav("tb-back", "arrow-left", can_back, crate::i18n::t("Back")).when(can_back, |d| {
+                        d.on_click(cx.listener(|this, _, w, cx| {
+                            cx.stop_propagation();
+                            this.go_back(&GoBack, w, cx);
+                        }))
+                    }))
+                    .child(nav("tb-forward", "arrow-right", can_forward, crate::i18n::t("Forward")).when(can_forward, |d| {
+                        d.on_click(cx.listener(|this, _, w, cx| {
+                            cx.stop_propagation();
+                            this.go_forward(&GoForward, w, cx);
+                        }))
+                    }))
+                    .child(
+                        div()
+                            .id("command-center")
+                            .ml(px(theme::SPACE[2]))
+                            .w(gpui::relative(0.38))
+                            .max_w(px(600.))
+                            .min_w(px(160.))
+                            .h(px(22.))
+                            .px(px(theme::SPACE[4]))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .gap(px(theme::SPACE[3]))
+                            .rounded(px(6.))
+                            .border_1()
+                            .border_color(c(ui::mix(p.surface, p.border, 0.9)))
+                            .bg(c(ui::mix(p.surface, p.bg, 0.6)))
+                            .text_size(px(text::XS.0))
+                            .text_color(c(p.text_muted))
+                            .cursor_pointer()
+                            .hover(|d| d.bg(c(p.surface_hover)).border_color(c(p.border)).text_color(c(p.text)))
+                            .tooltip(move |_, cx| cx.new(|_| Tooltip(tip.clone())).into())
+                            .on_click(cx.listener(|this, _, w, cx| {
+                                cx.stop_propagation();
+                                this.quick_open(&QuickOpen, w, cx);
+                            }))
+                            .child(icon("search", 13., p.text_muted))
+                            .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label)),
+                    )
+                    // Balances the back / forward buttons so the box itself is centered.
+                    .child(div().w(px(50.)).flex_none()),
             )
-            .child(
-                div().w(px(80.)).flex_none().flex().justify_end().gap(px(theme::SPACE[1])).pr(px(theme::SPACE[4])).child(
-                    tool("tb-sidebar", "panel-left", sidebar_open, p).on_click(cx.listener(|this, _, w, cx| this.toggle_sidebar(&ToggleSidebar, w, cx))),
-                ),
-            )
+            .child(div().w(px(80.)).flex_none())
     }
 
     /// An action row on the welcome screen: icon, name, shortcut (from the keymap).

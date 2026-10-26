@@ -44,6 +44,11 @@ impl Sections {
         self.items.iter().find(|e| e.0 == id).and_then(|e| e.2).unwrap_or(default)
     }
 
+    /// The user has dragged this section to a height of their own.
+    pub fn has_height(&self, id: &str) -> bool {
+        self.items.iter().any(|e| e.0 == id && e.2.is_some())
+    }
+
     pub fn set_height(&mut self, id: &str, h: f32) {
         self.entry(id).2 = Some(h.clamp(MIN_H, MAX_H));
     }

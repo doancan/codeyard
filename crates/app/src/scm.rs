@@ -22,6 +22,8 @@ pub enum ScmEvent {
     OpenDiff { path: String, staged: bool },
     /// The "…" in the header: more git operations (window coordinates).
     MoreActions(gpui::Point<gpui::Pixels>),
+    /// The "…" in the GRAPH header: view, filters and history actions (window coordinates).
+    GraphMenu(gpui::Point<gpui::Pixels>),
     /// The file list (picker) for a commit in the graph was requested.
     OpenCommit(GraphCommit),
     /// Open one of a commit's files as a diff: (commit, file).
@@ -41,11 +43,26 @@ pub enum ScmEvent {
     PostCommit(git::PostCommit),
 }
 
+/// What the loaded graph depends on besides HEAD: the checked-out branch (a new branch on the same commit moves the HEAD
+/// label) and every other ref (a fetch, a push, a new tag move labels without moving HEAD).
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct GraphKey {
+    root: String,
+    head: Option<String>,
+    branch: Option<String>,
+    refs: u64,
+}
+
+impl GraphKey {
+    fn of(st: &Status) -> GraphKey {
+        GraphKey { root: st.root.clone(), head: st.head.clone(), branch: st.branch.clone(), refs: st.refs_stamp }
+    }
+}
+
 /// Graph: commits and the lane layout for each.
 pub struct GraphData {
     commits: Vec<GraphCommit>,
     rows: Vec<GraphRow>,
-    cols: usize,
 }
 
 pub struct ScmPanel {
@@ -58,8 +75,8 @@ pub struct ScmPanel {
     focus_handle: FocusHandle,
     graph: Option<Arc<GraphData>>,
     graph_loading: bool,
-    /// State the graph was loaded for: (repo, HEAD). Reloads when it changes.
-    graph_key: Option<(String, Option<String>)>,
+    /// State the graph was loaded for. Reloads when it changes.
+    graph_key: Option<GraphKey>,
     graph_error: Option<SharedString>,
     graph_scroll: UniformListScrollHandle,
     /// Open/closed state and heights of the sections (Changes, Stashes, Graph, Details).
@@ -89,6 +106,7 @@ pub struct ScmPanel {
 
 #[path = "scm_graph.rs"]
 mod graph_ui;
+pub use graph_ui::GraphOption;
 
 impl EventEmitter<ScmEvent> for ScmPanel {}
 
@@ -144,7 +162,7 @@ impl ScmPanel {
         self.host = host;
         self.status = status;
         // Commit, branch switch, pull: the graph refreshes when HEAD or the repo changes.
-        let key = self.status.as_ref().map(|s| (s.root.clone(), s.head.clone()));
+        let key = self.status.as_deref().map(GraphKey::of);
         if key != self.graph_key {
             self.graph_key = key;
             self.load_graph(cx);
@@ -184,14 +202,13 @@ impl ScmPanel {
                     Ok(commits) => {
                         let mut rows = graph::layout(&commits);
                         graph::cap_lanes(&mut rows, graph::MAX_COLS);
-                        let cols = rows.iter().map(|r| r.width).max().unwrap_or(1);
-                        this.graph = Some(Arc::new(GraphData { commits, rows, cols }));
+                        this.graph = Some(Arc::new(GraphData { commits, rows }));
                         this.graph_error = None;
                     }
                     Err(e) => this.graph_error = Some(e.lines().next().unwrap_or("git log failed").to_string().into()),
                 }
                 // If the state changed during loading (key was reset), load again.
-                let now = this.status.as_ref().map(|s| (s.root.clone(), s.head.clone()));
+                let now = this.status.as_deref().map(GraphKey::of);
                 if this.graph_key.is_none() && now.is_some() {
                     this.graph_key = now;
                     this.load_graph(cx);
@@ -215,7 +232,7 @@ impl ScmPanel {
 
     #[cfg(test)]
     pub fn graph_cols(&self) -> usize {
-        self.graph.as_ref().map_or(0, |g| g.cols)
+        self.graph.as_ref().map_or(0, |g| g.rows.iter().map(|r| r.width).max().unwrap_or(1))
     }
 
     #[cfg(test)]
@@ -608,7 +625,9 @@ impl ScmPanel {
                     this.stage(paths.clone(), cx);
                 }
             })))
-            .child(div().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).text_color(c(p.text)).child(n.to_string()))
+            .when(n > 0, |d| {
+                d.child(div().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).text_color(c(p.text)).child(n.to_string()))
+            })
     }
 }
 
@@ -691,6 +710,8 @@ impl Render for ScmPanel {
             (Some(b), a, d) => format!("{b}  {}", git::counts_label(a, d)),
             (None, ..) => crate::i18n::t("detached HEAD").into(),
         };
+        let graph_fills =
+            staged.is_empty() && merge.is_empty() && unstaged.is_empty() && self.sections.is_open("graph", true) && !self.sections.has_height("graph");
         let field_box = ui::input_box("scm-message-box", &p, p.bg, self.message.focus_handle(cx).is_focused(window)).child(self.message.clone());
         div()
             .key_context("ScmPanel")
@@ -804,8 +825,9 @@ impl Render for ScmPanel {
             .child(
                 div()
                     .id("scm-list")
-                    .flex_1()
-                    .min_h(px(72.))
+                    // Nothing to commit: the list takes only its line and the graph gets the room (until its height is set by hand).
+                    .when(!graph_fills, |d| d.flex_1())
+                    .min_h(px(if graph_fills { 0. } else { 72. }))
                     .overflow_y_scroll()
                     .when(!merge.is_empty(), |d| {
                         let rows: Vec<_> = if self.sections.is_open("scm-merge", true) { merge.iter().enumerate().map(|(i, ch)| self.row(1000 + i, ch, false, cx).into_any_element()).collect() } else { Vec::new() };
@@ -822,7 +844,7 @@ impl Render for ScmPanel {
                     }),
             )
             .children(self.stash_section(cx))
-            .child(self.graph_section(self.query.focus_handle(cx).is_focused(window), cx))
+            .child(self.graph_section(self.query.focus_handle(cx).is_focused(window), graph_fills, cx))
             .children(self.detail_section(cx))
     }
 }

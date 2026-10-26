@@ -330,6 +330,13 @@ pub(crate) fn menus(recent: &[state::RecentWorkspace]) -> Vec<Menu> {
                 I::action(tr("New Terminal"), wb::NewTerminal),
                 I::action(tr("Toggle Terminal"), wb::ToggleTerminal),
                 I::action(tr("Kill Terminal"), wb::KillTerminal),
+                sep(),
+                I::action(tr("Find"), crate::terminal::TermFind),
+                I::action(tr("Select All"), crate::terminal::TermSelectAll),
+                I::action(tr("Clear Terminal"), wb::ClearTerminal),
+                sep(),
+                I::action(tr("Scroll to Top"), crate::terminal::TermScrollToTop),
+                I::action(tr("Scroll to Bottom"), crate::terminal::TermScrollToBottom),
             ],
         },
         Menu {

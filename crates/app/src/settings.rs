@@ -342,7 +342,7 @@ impl Default for Settings {
             update_check: crate::update::Policy::Ask,
             tree_guides: true,
             graph_show_author: true,
-            graph_show_hash: true,
+            graph_show_hash: false,
             graph_view: "graph".into(),
             search_smart_case: false,
             search_line_numbers: true,
@@ -449,9 +449,9 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   "explorer.confirmDragAndDrop": true,
   // Vertical hierarchy lines under every folder arrow in the explorer.
   "workbench.tree.guides": true,
-  // Source Control graph rows: show the author (avatar and name) and the short hash.
+  // Source Control graph rows: show the author name and the short hash.
   "git.graph.showAuthor": true,
-  "git.graph.showHash": true,
+  "git.graph.showHash": false,
   // Source Control graph view: "graph" (lanes), "compact" (one line per commit) or "dates" (grouped by day).
   "git.graph.view": "graph",
   // A query without capital letters ignores case; one with capitals matches case.

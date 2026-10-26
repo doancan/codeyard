@@ -554,15 +554,8 @@ Days	Günler
 Search commits (message, author, hash)	Commit ara (ileti, yazar, özet)
 Search commits	Commit ara
 Reload history	Geçmişi yeniden yükle
-Showing all branches (click: current branch only)	Tüm dallar gösteriliyor (tıkla: yalnızca geçerli dal)
-Showing the current branch (click: all branches)	Geçerli dal gösteriliyor (tıkla: tüm dallar)
-Branch lanes, two lines per commit	Dal şeritleri, commit başına iki satır
-One line per commit: the most history in a narrow sidebar	Commit başına bir satır: dar kenar çubuğunda en çok geçmiş
-Commits grouped by day	Commit'ler güne göre gruplanır
 Mine	Benim
-Only your own commits (by your git name or e-mail)	Yalnızca kendi commit'leriniz (git adınıza ya da e-postanıza göre)
 No merges	Birleştirmesiz
-Hide merge commits	Birleştirme commit'lerini gizle
 No commits yet.	Henüz commit yok.
 No commit matches.	Eşleşen commit yok.
 None of these commits is yours.	Bu commit'lerin hiçbiri sizin değil.
@@ -1215,7 +1208,7 @@ Check JSON and YAML files against their schema (problems, hover, suggestions)	JS
 Download schemas from SchemaStore and cache them (off: only local and cached schemas)	Şemaları SchemaStore'dan indir ve önbelleğe al (kapalı: yalnızca yerel ve önbellekteki şemalar)
 Ask before moving a file or folder by dragging it in the explorer	Gezgin'de bir dosyayı ya da klasörü sürükleyerek taşımadan önce sor
 Draw the folder hierarchy lines in the explorer	Gezgin'de klasör hiyerarşisi çizgilerini çiz
-Show the author (avatar and name) on Source Control graph rows	Kaynak Denetimi grafiği satırlarında yazarı (avatar ve ad) göster
+Show the author name on Source Control graph rows	Kaynak Denetimi grafiği satırlarında yazar adını göster
 Source Control graph view: graph (branch lanes), compact (one line per commit) or dates (grouped by day)	Kaynak Denetimi grafik görünümü: graph (dal şeritleri), compact (commit başına bir satır) ya da dates (güne göre gruplu)
 Show the short commit hash on Source Control graph rows	Kaynak Denetimi grafiği satırlarında kısa commit özetini göster
 Apply .editorconfig files (indent, line endings, final newline…)	.editorconfig dosyalarını uygula (girinti, satır sonları, son satır sonu…)
@@ -2257,3 +2250,18 @@ Updating {}…	{} güncelleniyor…
 “{}” is not a usable remote URL	“{}” kullanılabilir bir uzak depo adresi değil
 Pruned {} stale worktree entry|Pruned {} stale worktree entries	{} eski çalışma ağacı kaydı temizlendi
 Renamed remote {0} to {1}	{0} uzak deposu {1} olarak yeniden adlandırıldı
+Search {}	{} içinde ara
+Search files by name	Dosyaları ada göre ara
+Previous Match	Önceki Eşleşme
+Next Match	Sonraki Eşleşme
+{}+ results	{}+ sonuç
+Clear Terminal	Terminali Temizle
+Scroll to Top	En Üste Kaydır
+Scroll to Bottom	En Alta Kaydır
+All Branches	Tüm Dallar
+Click to remove this filter	Bu filtreyi kaldırmak için tıklayın
+Current branch	Geçerli dal
+Fetch from all remotes	Tüm uzak depolardan Fetch yap
+Hide Merge Commits	Merge Commit'lerini Gizle
+Only My Commits	Yalnızca Benim Commit'lerim
+Search Commits	Commit'lerde Ara

@@ -140,11 +140,13 @@ pub struct MenuItem {
     /// Separator line before this item.
     pub separator: bool,
     pub submenu: bool,
+    /// A toggle or one-of-many choice: `Some(true)` draws a check in front of the label.
+    pub checked: Option<bool>,
 }
 
 impl MenuItem {
     pub fn new(label: &str) -> Self {
-        MenuItem { label: label.to_string().into(), shortcut: None, enabled: true, separator: false, submenu: false }
+        MenuItem { label: label.to_string().into(), shortcut: None, enabled: true, separator: false, submenu: false, checked: None }
     }
 
     pub fn shortcut(mut self, k: Option<String>) -> Self {
@@ -159,6 +161,11 @@ impl MenuItem {
 
     pub fn separator(mut self) -> Self {
         self.separator = true;
+        self
+    }
+
+    pub fn checked(mut self, on: bool) -> Self {
+        self.checked = Some(on);
         self
     }
 }
@@ -270,6 +277,8 @@ impl Render for ContextMenu {
         let p = *palette(cx);
         let m = self.flavor.metrics();
         let selected = self.selected;
+        // A menu with toggles keeps a check column in front of every label so the labels stay aligned.
+        let checks = self.items.iter().any(|i| i.checked.is_some());
         div()
             .id("context-menu")
             .key_context("ContextMenu")
@@ -330,7 +339,18 @@ impl Render for ContextMenu {
                                 }
                             }))
                         })
-                        .child(item.label.clone())
+                        .child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(6.))
+                                .when(checks, |d| {
+                                    d.child(
+                                        div().w(px(14.)).flex_none().when(item.checked == Some(true), |d| d.child(crate::ui::icon("check", 14., label_color))),
+                                    )
+                                })
+                                .child(item.label.clone()),
+                        )
                         .when_some(item.shortcut.clone(), |d, k| {
                             d.child(div().text_size(px(m.shortcut_font)).text_color(c(shortcut_color)).opacity(if item.enabled { 0.85 } else { 0.6 }).child(k))
                         })

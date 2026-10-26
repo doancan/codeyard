@@ -918,6 +918,7 @@ impl Workbench {
                 crate::scm::ScmEvent::Refresh => this.refresh_git(0, cx),
                 crate::scm::ScmEvent::OpenDiff { path, staged } => this.open_diff(path.clone(), *staged, window, cx),
                 crate::scm::ScmEvent::MoreActions(position) => this.open_scm_menu(*position, window, cx),
+                crate::scm::ScmEvent::GraphMenu(position) => this.open_graph_menu(*position, window, cx),
                 // --- git-sync ---
                 crate::scm::ScmEvent::Sync => this.git_sync_auto(window, cx),
                 crate::scm::ScmEvent::Publish => this.git_publish_branch(cx),
