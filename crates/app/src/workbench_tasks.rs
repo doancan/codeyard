@@ -245,6 +245,7 @@ impl Workbench {
             return;
         };
         let host = self.remote.host.clone();
+        let asked = root.clone();
         let task = cx.background_executor().spawn(async move {
             let read = |rel: &str| host.read(&ui::join(&root, rel)).ok().map(|(d, _)| String::from_utf8_lossy(&d).into_owned());
             let exists = |rel: &str| host.stat(&ui::join(&root, rel)).is_ok();
@@ -283,7 +284,14 @@ impl Workbench {
             let handle = this.update(cx, |this, _| this.window_handle).ok();
             if let Some(handle) = handle {
                 cx.update_window(handle, |_, window, cx| {
-                    this.update(cx, |this, cx| then(this, tasks, window, cx)).ok();
+                    this.update(cx, |this, cx| {
+                        // Tasks run in (and trust is asked for) the active file's folder: if that changed while they were read,
+                        // they belong to another folder and are dropped.
+                        if this.active_root(cx).as_deref() == Some(asked.as_str()) {
+                            then(this, tasks, window, cx);
+                        }
+                    })
+                    .ok();
                 })
                 .ok();
             }

@@ -846,9 +846,15 @@ impl Workbench {
             cx.notify();
             return;
         };
+        let asked = self.active_root(cx);
         cx.spawn(async move |this, cx| {
             let (configs, _) = read.await;
-            with_window(&this, cx, move |this, window, cx| this.choose_debug_config(configs, window, cx));
+            with_window(&this, cx, move |this, window, cx| {
+                // The configurations were read from (and trust is asked for) the active file's folder: drop them if it changed.
+                if this.active_root(cx) == asked {
+                    this.choose_debug_config(configs, window, cx);
+                }
+            });
         })
         .detach();
     }
