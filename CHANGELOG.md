@@ -39,6 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Terminal profiles** (`terminal.profiles.macos` / `.linux` / `.windows`, `terminal.defaultProfile`) with *New Terminal with
   Profile…* (also listing the machine's shells) and *Select Default Profile…*; terminals can be renamed and coloured, and
   *Kill All Terminals* closes them all.
+- **Testing view** in the activity bar: the tests of the open folder (Rust, Go, Python and JavaScript), found in the
+  background and grouped by file. Run a test, a file, all tests or the failed ones with the project's own runner, or stop
+  the run; output streams into a *Test Results* terminal, and each test shows its outcome, time and first failure line,
+  which opens where it failed. Rust, Go and Python tests can be debugged from their row or with *Test: Debug Test at
+  Cursor*. A filter and a failed-only toggle narrow the tree; the activity icon counts failures.
 
 ### Changed
 
@@ -58,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and run what follows; other control characters are removed when the shell does not use bracketed paste
   (`terminal.sanitizePaste`), and a paste of several lines asks first (`terminal.warnMultilinePaste`).
 - A split terminal opened in the folder the first terminal started in, not where its shell was.
+- Stopping a process the editor started (a test run, a debug adapter) now also stops the programs it started.
 - **Port forwarding is more reliable:** a double click no longer forwards a port twice; forwards restored after a
   reconnect report failures on their row (with *Retry*) instead of looking active; switching or losing the connection
   cancels forwards instead of leaking their local ports; after a drop, forwards come back on the same local port.
