@@ -623,7 +623,8 @@ fn converting_five_megabytes_is_fast() {
     let json = format!("{{\"items\": [{}]}}", rows.join(", "));
     assert!(json.len() > 5_000_000, "{}", json.len());
     // Debug builds are an order of magnitude slower than the 150 ms target; the target is checked with --release.
-    let limit = if cfg!(debug_assertions) { 3000 } else { 150 };
+    // The scale is CI's allowance for shared runners (CODEYARD_TEST_TIMEOUT_SCALE), the same one the ssh tests use.
+    let limit = if cfg!(debug_assertions) { 3000 } else { 150 } * u128::from(crate::test_sshd::timeout_scale());
     for to in [Format::Yaml, Format::Toml, Format::Json] {
         let start = std::time::Instant::now();
         let (out, _) = convert(&json, Format::Json, to).unwrap();
