@@ -47,13 +47,31 @@ const MIGRATIONS: &[(i64, &str)] = &[
     ),
     // "Remove from recents" hides the record instead of deleting it: unsaved-change backups, tabs and favorites must not go away.
     (5, "alter table workspaces add column hidden integer not null default 0;"),
+    // Ports the user forwarded in a project (restored when the project opens again) with their label and protocol.
+    (
+        6,
+        "create table if not exists port_forwards (
+           workspace_id integer not null references workspaces(id) on delete cascade,
+           remote_port  integer not null check (remote_port between 1 and 65535),
+           local_port   integer check (local_port is null or local_port between 1 and 65535),
+           label        text,
+           protocol     text not null default 'http' check (protocol in ('http', 'https', 'tcp')),
+           updated_at   integer not null,
+           primary key (workspace_id, remote_port)
+         );",
+    ),
 ];
-const SCHEMA_VERSION: i64 = 5;
+const SCHEMA_VERSION: i64 = 6;
 
 const DAY_MS: i64 = 86_400_000;
 const FILE_STATE_MAX_AGE_DAYS: i64 = 90;
 const FILE_STATE_PER_WORKSPACE: i64 = 500;
 const HISTORY_MAX_AGE_DAYS: i64 = 180;
+const PORT_FORWARD_MAX_AGE_DAYS: i64 = 180;
+/// Most saved forwards per project (the oldest go first).
+const PORT_FORWARDS_PER_WORKSPACE: i64 = 200;
+/// Longest saved forward label.
+const PORT_LABEL_MAX: usize = 64;
 
 /// A tab in the session.
 #[derive(Debug, Clone, PartialEq)]
@@ -92,6 +110,24 @@ pub struct Backup {
 
 /// Key under which pinned folders are stored (one `host<TAB>path` per line).
 const PINNED_KEY: &str = "pinned_recent";
+
+/// A port forward saved for a project.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavedForward {
+    pub remote: u16,
+    /// Local port chosen by the user (`None`: same number as the remote one when free).
+    pub local: Option<u16>,
+    pub label: Option<String>,
+    /// `http`, `https` or `tcp`.
+    pub protocol: String,
+}
+
+/// What is known about an SSH host from earlier connections.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HostRecord {
+    pub last_ok_at: Option<i64>,
+    pub last_error: Option<String>,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RecentWorkspace {
@@ -208,6 +244,7 @@ impl State {
             [FILE_STATE_PER_WORKSPACE],
         )?;
         tx.execute("delete from history where used_at < ?1", [now - HISTORY_MAX_AGE_DAYS * DAY_MS])?;
+        tx.execute("delete from port_forwards where updated_at < ?1", [now - PORT_FORWARD_MAX_AGE_DAYS * DAY_MS])?;
         tx.commit()
     }
 
@@ -448,6 +485,62 @@ impl State {
         self.db.execute("update hosts set last_error = ?2 where alias = ?1", params![alias, error])?;
         Ok(())
     }
+
+    /// Last successful connection and last error per host alias.
+    pub fn host_records(&self) -> std::collections::HashMap<String, HostRecord> {
+        let read = || -> Result<std::collections::HashMap<String, HostRecord>, Error> {
+            let mut stmt = self.db.prepare("select alias, last_ok_at, last_error from hosts")?;
+            stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, HostRecord { last_ok_at: r.get(1)?, last_error: r.get(2)? })))?.collect()
+        };
+        read().unwrap_or_default()
+    }
+
+    /// Forwards saved for a project, by remote port. Rows that do not fit the types are skipped.
+    pub fn port_forwards(&self, workspace: i64) -> Vec<SavedForward> {
+        let read = || -> Result<Vec<SavedForward>, Error> {
+            let mut stmt =
+                self.db.prepare("select remote_port, local_port, label, protocol from port_forwards where workspace_id = ?1 order by remote_port")?;
+            stmt.query_map([workspace], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, Option<i64>>(1)?, r.get::<_, Option<String>>(2)?, r.get::<_, String>(3)?)))?
+                .collect::<Result<Vec<_>, _>>()
+                .map(|rows| {
+                    rows.into_iter()
+                        .filter_map(|(remote, local, label, protocol)| {
+                            let local = match local {
+                                Some(l) => Some(u16::try_from(l).ok().filter(|p| *p > 0)?),
+                                None => None,
+                            };
+                            Some(SavedForward { remote: u16::try_from(remote).ok().filter(|p| *p > 0)?, local, label, protocol })
+                        })
+                        .collect()
+                })
+        };
+        read().unwrap_or_default()
+    }
+
+    /// Saves (or replaces) a project's forward for `f.remote`; the label is capped and the oldest rows beyond the
+    /// per-project limit are dropped.
+    pub fn save_port_forward(&self, workspace: i64, f: &SavedForward) -> Result<(), Error> {
+        let label: Option<String> = f.label.as_deref().map(|l| l.chars().filter(|c| !c.is_control()).take(PORT_LABEL_MAX).collect());
+        let tx = self.db.unchecked_transaction()?;
+        tx.execute(
+            "insert into port_forwards (workspace_id, remote_port, local_port, label, protocol, updated_at) values (?1, ?2, ?3, ?4, ?5, ?6)
+             on conflict (workspace_id, remote_port) do update set
+               local_port = excluded.local_port, label = excluded.label, protocol = excluded.protocol, updated_at = excluded.updated_at",
+            params![workspace, f.remote, f.local, label, f.protocol, now_ms()],
+        )?;
+        tx.execute(
+            "delete from port_forwards where workspace_id = ?1 and remote_port not in (
+               select remote_port from port_forwards where workspace_id = ?1 order by updated_at desc limit ?2
+             )",
+            params![workspace, PORT_FORWARDS_PER_WORKSPACE],
+        )?;
+        tx.commit()
+    }
+
+    pub fn delete_port_forward(&self, workspace: i64, remote: u16) -> Result<(), Error> {
+        self.db.execute("delete from port_forwards where workspace_id = ?1 and remote_port = ?2", params![workspace, remote])?;
+        Ok(())
+    }
 }
 
 /// A value satisfying the `hosts.agent_arch` check constraint (unknown: null).
@@ -573,6 +666,41 @@ mod tests {
         assert_eq!(r.len(), 2);
         assert_eq!((r[0].host.as_deref(), r[0].path.as_str()), (None, "/a"));
         assert_eq!(r[1].host.as_deref(), Some("node-dev"));
+    }
+
+    #[test]
+    fn port_forwards_are_saved_per_project_replaced_and_checked() {
+        let s = State::in_memory().unwrap();
+        let ws = s.record_workspace(Some("box"), "/srv/app").unwrap();
+        let other = s.record_workspace(None, "/tmp/x").unwrap();
+        let web = SavedForward { remote: 3000, local: None, label: Some("web\u{1b}[2J".into()), protocol: "http".into() };
+        s.save_port_forward(ws, &web).unwrap();
+        s.save_port_forward(ws, &SavedForward { remote: 5432, local: Some(15432), label: None, protocol: "tcp".into() }).unwrap();
+        s.save_port_forward(ws, &SavedForward { protocol: "https".into(), ..web.clone() }).unwrap();
+        let saved = s.port_forwards(ws);
+        assert_eq!(saved.len(), 2, "saving the same port replaces it");
+        assert_eq!((saved[0].label.as_deref(), saved[0].protocol.as_str()), (Some("web[2J"), "https"), "control characters are dropped");
+        assert_eq!(saved[1].local, Some(15432));
+        assert!(s.port_forwards(other).is_empty(), "per project");
+        assert!(s.save_port_forward(ws, &SavedForward { protocol: "gopher".into(), ..web.clone() }).is_err(), "the protocol is checked");
+        s.delete_port_forward(ws, 3000).unwrap();
+        assert_eq!(s.port_forwards(ws).len(), 1);
+        for p in 1..=(PORT_FORWARDS_PER_WORKSPACE as u16 + 20) {
+            s.save_port_forward(ws, &SavedForward { remote: 10_000 + p, local: None, label: None, protocol: "http".into() }).unwrap();
+        }
+        assert_eq!(s.port_forwards(ws).len(), PORT_FORWARDS_PER_WORKSPACE as usize, "capped per project");
+        s.db.execute("delete from workspaces where id = ?1", [ws]).unwrap();
+        assert!(s.port_forwards(ws).is_empty(), "removed with the project");
+    }
+
+    #[test]
+    fn host_records_report_the_last_success_and_error() {
+        let s = State::in_memory().unwrap();
+        s.record_host_ok("box", 10, "x86_64-linux").unwrap();
+        s.record_host_error("down", "Connection refused").unwrap();
+        let r = s.host_records();
+        assert!(r["box"].last_ok_at.is_some() && r["box"].last_error.is_none());
+        assert_eq!(r["down"].last_error.as_deref(), Some("Connection refused"));
     }
 
     #[test]
