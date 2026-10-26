@@ -305,6 +305,30 @@ fn a_compound_starts_its_sessions_together_and_stop_all_stops_them(cx: &mut Test
     wait_secs(cx, 10, "both ended", |cx| stack(cx).iter().filter(|r| r.contains("(ended)")).count() == 2);
 }
 
+/// An adapter (or whatever answered on its port) asking to run a program in a terminal that was never offered is refused.
+#[gpui::test]
+fn a_terminal_that_was_not_offered_is_refused(cx: &mut TestAppContext) {
+    if !have_python() {
+        return;
+    }
+    let home = project("dbg-sneak-home");
+    let (dir, log) = fake_project("dbg-sneak");
+    let marker = dir.join("terminal-ran");
+    write_launch(&dir, &log, &[("Fake", &format!(r#", "sneak": true, "marker": "{}""#, marker.display()))], "");
+    let (wb, cx) = setup_persistent(cx, &home);
+    wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    open(&wb, &dir, cx);
+    run(&wb, cx, "Debug: Start Debugging");
+    let snap = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.debug_snapshot());
+    // The adapter asks for the terminal before it stops, so by then the answer was given.
+    wait_secs(cx, 10, "started", |cx| snap(cx).is_some_and(|s| s.0.starts_with("stopped")));
+    assert!(log_lines(&log, "initialize")[0].contains("\"supportsRunInTerminalRequest\": false"));
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    cx.run_until_parked();
+    assert!(!marker.exists(), "a terminal request that was not offered must not run anything");
+    run(&wb, cx, "Debug: Stop");
+}
+
 #[gpui::test]
 fn inputs_are_asked_before_the_start_and_the_program_can_run_in_a_terminal(cx: &mut TestAppContext) {
     if !have_python() {
