@@ -15,7 +15,7 @@ use std::io::{self, Read, Write};
 use serde::{Deserialize, Serialize};
 
 /// Compared in the handshake; on mismatch the agent is reinstalled.
-pub const VERSION: u32 = 10;
+pub const VERSION: u32 = 11;
 
 /// Max size of one frame. Larger files are read in chunks.
 pub const MAX_FRAME: usize = 64 * 1024 * 1024;
@@ -151,6 +151,24 @@ pub enum Request {
         limit: u32,
         only: Option<Vec<String>>,
     },
+    /// Open a terminal with a chosen program: `args` replace the default login flag, `env` is added to the environment;
+    /// `integration` sets up shell integration (prompt and folder marks) for zsh, bash and fish started as login shells.
+    /// Answered with `PtySpawned` like `PtySpawn`.
+    PtySpawnEx {
+        cols: u16,
+        rows: u16,
+        cwd: Option<String>,
+        shell: Option<String>,
+        args: Option<Vec<String>>,
+        env: Vec<(String, String)>,
+        integration: bool,
+    },
+    /// Is a program running in the foreground of this terminal, and where is its shell? (`PtyStatus`)
+    PtyStatus {
+        pty: u32,
+    },
+    /// The shells this machine offers (`Shells`).
+    ListShells,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -278,6 +296,15 @@ pub enum Response {
         size: u64,
     },
     Lines(Vec<String>),
+    PtyStatus {
+        /// A program other than the shell holds the terminal (`None`: cannot tell here).
+        busy: Option<bool>,
+        /// Its name.
+        name: Option<String>,
+        /// The shell's working folder.
+        cwd: Option<String>,
+    },
+    Shells(Vec<String>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

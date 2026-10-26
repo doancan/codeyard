@@ -37,7 +37,7 @@ status bar reports it.
 | `editor.folding` | `true` / `false` | `true` | Show fold arrows in the gutter |
 | `editor.fontFamily` | text | empty | Editor font (empty: built-in monospace) |
 | `editor.fontLigatures` | `true` / `false` | `false` | Draw programming ligatures (=>, !=, …) in the editor font |
-| `editor.fontSize` | number 6–48 | `13.0` | Font size of the editor |
+| `editor.fontSize` | number 6–48 | `12` on macOS, `14` on Windows and Linux | Font size of the editor |
 | `editor.formatOnPaste` | `true` / `false` | `false` | Format pasted text with the language server |
 | `editor.formatOnSave` | `true` / `false` | `false` | Format with the language server when saving |
 | `editor.formatOnType` | `true` / `false` | `false` | Let the language server format while typing }, ; or Enter |
@@ -45,7 +45,7 @@ status bar reports it.
 | `editor.indentGuides` | `true` / `false` | `true` | Show indent guides |
 | `editor.inlayHints.enabled` | `true` / `false` | `true` | Show type and parameter name hints from the language server |
 | `editor.insertSpaces` | `true` / `false` | `true` | Indent with spaces instead of tabs |
-| `editor.lineHeight` | number 10–80 | `20.0` | Line height in pixels |
+| `editor.lineHeight` | number 10–80 | `18` on macOS, `20` on Windows and Linux | Line height in pixels |
 | `editor.lineNumbers` | `on`, `off`, `relative` | `on` | Line numbers in the gutter |
 | `editor.linkedEditing` | `true` / `false` | `true` | Rename the matching HTML/XML tag while you edit one |
 | `editor.matchBrackets` | `true` / `false` | `true` | Highlight the matching bracket |
@@ -136,6 +136,7 @@ status bar reports it.
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
 | `ports.autoForward` | `true` / `false` | `true` | Forward ports opened on SSH hosts |
+| `ports.localBind` | `loopback`, `all` | `loopback` | Where forwarded ports listen: this computer only, or every network interface |
 
 ## `search`
 
@@ -165,9 +166,14 @@ status bar reports it.
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
 | `terminal.allowClipboardWrite` | `true` / `false` | `false` | Let programs in the terminal write to the clipboard |
-| `terminal.fontSize` | number 6–48 | `13.0` | Font size of the terminal |
-| `terminal.scrollback` | number 0–100000 | `2000` | Lines kept in terminal history |
+| `terminal.confirmOnClose` | `running`, `always`, `never` | `running` | Ask before closing a terminal |
+| `terminal.defaultProfile` | text | empty | Profile new terminals use |
+| `terminal.fontSize` | number 6–48 | `12` on macOS, `14` on Windows and Linux | Font size of the terminal |
+| `terminal.sanitizePaste` | `auto`, `always`, `off` | `auto` | Remove control characters from pasted text |
+| `terminal.scrollback` | number 0–50000 | `2000` | Lines kept in terminal history |
 | `terminal.shell` | text | empty | Shell for new terminals (empty: login shell) |
+| `terminal.shellIntegration` | `true` / `false` | `true` | Mark prompts, commands and the folder in zsh, bash and fish |
+| `terminal.warnMultilinePaste` | `unbracketed`, `always`, `never` | `unbracketed` | Ask before pasting several lines into the terminal |
 
 ## `ui`
 
@@ -216,6 +222,10 @@ status bar reports it.
 | `workbench.startupEditor` | string | `welcome` | VS Code compatible alias of `window.startup`. |
 | `editor.codeActionsOnSave` | object | `{}` | Code actions to run on save before formatting, e.g. `{ "source.organizeImports": "explicit" }`; each gives up after 2 s. |
 | `files.associations` | object of glob → language | `{}` | Force a language mode for matching files, e.g. `{ "*.tpl": "html" }`. |
+| `terminal.profiles.macos` | object of name → profile | `{}` | Profiles for terminals on macOS: `{ "zsh": { "path": "/bin/zsh", "args": ["-l"], "env": { … }, "color": "info" } }`; `args` replace the login flag, `color` is accent, success, warning, danger, info or muted. Needs a trusted folder in a project file. |
+| `terminal.profiles.linux` | object of name → profile | `{}` | Profiles for terminals on Linux (also SSH hosts), like `terminal.profiles.macos`. |
+| `terminal.profiles.windows` | object of name → profile | `{}` | Profiles for terminals on Windows, like `terminal.profiles.macos`. |
+| `ports.rules` | object of port or range → rule | `{}` | Label, protocol (`http`, `https`, `tcp`) and detection behaviour (`notify`, `silent`, `openBrowser`, `ignore`) per forwarded port, e.g. `{ "3000": { "label": "web", "onForward": "openBrowser" } }`; a single port beats a range. |
 | `json.schemas` | list of `{ fileMatch, url }` | `[]` | Associate JSON files with a schema (URL or path relative to the workspace). Ignored in untrusted folders. |
 | `yaml.schemas` | object of schema → globs | `{}` | Associate YAML files with a schema. Ignored in untrusted folders. |
 | `lsp.servers` | object of language → `{ command, args }` or `null` | built-in servers | Replace or turn off (`null`) the language server of a language. Keys: `rust`, `c`, `go`, `python`, `typescript`, `java`, `csharp`, `php`, `ruby`, `kotlin`, `swift`, `lua`, `bash`, `html`, `css`; `json`, `yaml` and `toml` have no default and are opt-in. Ignored in untrusted folders. |

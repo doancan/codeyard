@@ -39,6 +39,79 @@ pub enum DapEvent {
     Exited(i32),
     /// The adapter process died.
     AdapterExited(Option<i32>),
+    /// Answer to `setBreakpoints` for `path`: the 1-based lines in the order sent and the result for each.
+    BreakpointsSet {
+        path: String,
+        sent: Vec<u32>,
+        results: Vec<BpResult>,
+    },
+    /// Answer to `setFunctionBreakpoints` (same order as the enabled function breakpoints sent).
+    FunctionBreakpointsSet(Vec<BpResult>),
+    /// The adapter changed a breakpoint by itself (verified later, moved, removed).
+    BreakpointChanged(BpResult),
+    /// A thread started or exited.
+    Thread {
+        thread_id: i64,
+        started: bool,
+    },
+    /// The adapter announced new capabilities (merged into `Session::capabilities`).
+    Capabilities,
+    /// The adapter asks to run the program in a terminal (`runInTerminal`; already answered).
+    RunInTerminal(TerminalRequest),
+}
+
+/// What `runInTerminal` asks for.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct TerminalRequest {
+    pub title: Option<String>,
+    pub cwd: String,
+    pub args: Vec<String>,
+    /// `None` value: remove the variable.
+    pub env: Vec<(String, Option<String>)>,
+}
+
+impl TerminalRequest {
+    fn parse(a: &Value) -> Option<Self> {
+        let args: Vec<String> = a["args"].as_array()?.iter().filter_map(|x| x.as_str().map(str::to_string)).collect();
+        if args.is_empty() {
+            return None;
+        }
+        let env = a["env"].as_object().map(|o| o.iter().map(|(k, v)| (k.clone(), v.as_str().map(str::to_string))).collect()).unwrap_or_default();
+        Some(TerminalRequest { title: a["title"].as_str().map(str::to_string), cwd: a["cwd"].as_str().unwrap_or_default().to_string(), args, env })
+    }
+}
+
+pub use crate::debug_model::BpResult;
+
+/// A breakpoint on a function name.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FunctionBreakpoint {
+    pub name: String,
+    pub condition: Option<String>,
+}
+
+impl FunctionBreakpoint {
+    fn to_json(&self) -> Value {
+        let mut b = json!({ "name": self.name });
+        if let Some(c) = self.condition.as_ref().filter(|c| !c.trim().is_empty()) {
+            b["condition"] = json!(c);
+        }
+        b
+    }
+}
+
+/// Results of a `setBreakpoints` / `setFunctionBreakpoints` answer.
+pub fn parse_bp_results(body: &Value) -> Vec<BpResult> {
+    body["breakpoints"].as_array().map(|a| a.iter().map(parse_bp_result).collect()).unwrap_or_default()
+}
+
+fn parse_bp_result(b: &Value) -> BpResult {
+    BpResult {
+        id: b["id"].as_i64(),
+        verified: b["verified"].as_bool().unwrap_or(false),
+        message: b["message"].as_str().map(clip_message),
+        line: b["line"].as_u64().map(|l| l as u32),
+    }
 }
 
 /// A breakpoint: line (1-based) and an optional condition / log message / hit count.
@@ -69,7 +142,7 @@ impl Breakpoint {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Frame {
     pub id: i64,
     pub name: String,
@@ -77,6 +150,8 @@ pub struct Frame {
     /// 1-based.
     pub line: u32,
     pub column: u32,
+    /// The adapter can restart the program from this frame.
+    pub can_restart: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -85,13 +160,17 @@ pub struct Scope {
     pub reference: i64,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Variable {
     pub name: String,
     pub value: String,
     pub ty: Option<String>,
     /// > 0: has children (requested with `variables`).
     pub reference: i64,
+    /// Expression that evaluates to this value (for watches and copying).
+    pub evaluate_name: Option<String>,
+    /// Number of indexed children (array elements), when the adapter says: those are loaded a page at a time.
+    pub indexed: usize,
 }
 
 type Pending = Arc<Mutex<HashMap<i64, mpsc::Sender<Result<Value, String>>>>>;
@@ -165,6 +244,7 @@ pub struct Session {
     child: Mutex<Option<Arc<Session>>>,
     adapter_id: Mutex<String>,
     breakpoints: Mutex<BTreeMap<String, Vec<Breakpoint>>>,
+    functions: Mutex<Vec<FunctionBreakpoint>>,
     /// Project root: lldb compares source paths without resolving symlinks (the build uses `/tmp/x`,
     /// the editor knows `/private/tmp/x`); the root-relative path is sent too and matches by that suffix.
     root: Mutex<Option<String>>,
@@ -217,6 +297,7 @@ impl Session {
             child: Mutex::new(None),
             adapter_id: Mutex::new(String::new()),
             breakpoints: Mutex::new(BTreeMap::new()),
+            functions: Mutex::new(Vec::new()),
             root: Mutex::new(None),
             exception_pref: Mutex::new(None),
             attached: AtomicBool::new(false),
@@ -418,6 +499,7 @@ impl Session {
             child: Mutex::new(None),
             adapter_id: Mutex::new(String::new()),
             breakpoints: Mutex::new(BTreeMap::new()),
+            functions: Mutex::new(Vec::new()),
             root: Mutex::new(None),
             exception_pref: Mutex::new(None),
             attached: AtomicBool::new(false),
@@ -534,16 +616,28 @@ impl Session {
 
     /// Handshake and start: `launch_args` go straight to the adapter (`program`, `args`, `cwd`…).
     /// Breakpoints (absolute path → 1-based lines) are sent before `launch`.
-    pub fn begin(&self, adapter_id: &str, request: &str, launch_args: Value, breakpoints: &BTreeMap<String, Vec<Breakpoint>>) -> Result<(), String> {
+    pub fn begin(
+        &self,
+        adapter_id: &str,
+        request: &str,
+        launch_args: Value,
+        breakpoints: &BTreeMap<String, Vec<Breakpoint>>,
+        functions: &[FunctionBreakpoint],
+    ) -> Result<(), String> {
         *self.adapter_id.lock().unwrap() = adapter_id.to_string();
         *self.breakpoints.lock().unwrap() = breakpoints.clone();
+        *self.functions.lock().unwrap() = functions.to_vec();
         self.attached.store(request == "attach", Ordering::Relaxed);
+        // Only a configuration that asks for a terminal gets one: some adapters change how they start the program
+        // as soon as the client says it can.
+        let terminal = matches!(launch_args["console"].as_str(), Some("integratedTerminal" | "externalTerminal"));
         let init = self.raw_request(
             "initialize",
             json!({
                 "clientID": "codeyard", "clientName": "Codeyard", "adapterID": adapter_id,
                 "linesStartAt1": true, "columnsStartAt1": true, "pathFormat": "path",
-                "supportsVariableType": true, "supportsRunInTerminalRequest": false, "supportsStartDebuggingRequest": true,
+                "supportsVariableType": true, "supportsVariablePaging": true, "supportsRunInTerminalRequest": terminal,
+                "supportsStartDebuggingRequest": true,
             }),
             Duration::from_secs(30),
         )?;
@@ -552,9 +646,18 @@ impl Session {
         let launched = self.raw_async(request, launch_args);
         self.wait_initialized(Duration::from_secs(60))?;
         for (path, list) in breakpoints {
-            for args in self.breakpoint_requests(path, list) {
-                self.raw_request("setBreakpoints", args, Duration::from_secs(15))?;
+            for (i, args) in self.breakpoint_requests(path, list).into_iter().enumerate() {
+                let answer = self.raw_request("setBreakpoints", args, Duration::from_secs(15))?;
+                // The first request carries the editor's path; a second one (lldb's relative path) is not reported.
+                if i == 0 {
+                    let sent = list.iter().map(|b| b.line).collect();
+                    let _ = self.events.send(DapEvent::BreakpointsSet { path: path.clone(), sent, results: parse_bp_results(&answer) });
+                }
             }
+        }
+        if !functions.is_empty() && self.supports("supportsFunctionBreakpoints") {
+            let answer = self.raw_request("setFunctionBreakpoints", Self::function_args(functions), Duration::from_secs(15))?;
+            let _ = self.events.send(DapEvent::FunctionBreakpointsSet(parse_bp_results(&answer)));
         }
         // Exception breakpoints: the preference (else the adapter's default), intersected with what the adapter offers.
         let available = self.exception_filters();
@@ -632,8 +735,8 @@ impl Session {
             }
         };
         *self.child.lock().unwrap() = Some(child.clone());
-        let (id, bps) = (self.adapter_id.lock().unwrap().clone(), self.breakpoints.lock().unwrap().clone());
-        if let Err(e) = child.begin(&id, &request, configuration, &bps) {
+        let (id, bps, functions) = (self.adapter_id.lock().unwrap().clone(), self.breakpoints.lock().unwrap().clone(), self.functions.lock().unwrap().clone());
+        if let Err(e) = child.begin(&id, &request, configuration, &bps, &functions) {
             let _ = self
                 .events
                 .send(DapEvent::Output { category: "stderr".into(), text: format!("{}\n", crate::i18n::tf("Could not start the debug session: {}", &[&e])) });
@@ -643,10 +746,46 @@ impl Session {
 
     /// Send without awaiting a response: the request reaches the adapter before commands that follow it,
     /// like `continue` (sending from a background thread doesn't guarantee the order).
+    /// The answer to the first request is reported as `BreakpointsSet` from a short-lived thread.
     pub fn set_breakpoints_async(&self, path: &str, bps: &[Breakpoint]) {
         self.remember(path, bps);
-        for args in self.breakpoint_requests(path, bps) {
-            let _ = self.request_async("setBreakpoints", args);
+        let mut answers = self.breakpoint_requests(path, bps).into_iter().map(|args| self.request_async("setBreakpoints", args)).collect::<Vec<_>>();
+        if answers.is_empty() {
+            return;
+        }
+        let first = answers.swap_remove(0);
+        let (events, path, sent) = (self.events.clone(), path.to_string(), bps.iter().map(|b| b.line).collect::<Vec<_>>());
+        let _ = std::thread::Builder::new().name("dap-bp".into()).spawn(move || {
+            if let Ok(Ok(answer)) = first.recv_timeout(Duration::from_secs(15)) {
+                let _ = events.send(DapEvent::BreakpointsSet { path, sent, results: parse_bp_results(&answer) });
+            }
+        });
+    }
+
+    /// Replace the function breakpoints while running (answer reported as `FunctionBreakpointsSet`).
+    pub fn set_function_breakpoints_async(&self, functions: &[FunctionBreakpoint]) {
+        *self.functions.lock().unwrap() = functions.to_vec();
+        if !self.supports("supportsFunctionBreakpoints") {
+            return;
+        }
+        let answer = self.request_async("setFunctionBreakpoints", Self::function_args(functions));
+        let events = self.events.clone();
+        let _ = std::thread::Builder::new().name("dap-fbp".into()).spawn(move || {
+            if let Ok(Ok(a)) = answer.recv_timeout(Duration::from_secs(15)) {
+                let _ = events.send(DapEvent::FunctionBreakpointsSet(parse_bp_results(&a)));
+            }
+        });
+    }
+
+    fn function_args(functions: &[FunctionBreakpoint]) -> Value {
+        json!({ "breakpoints": functions.iter().map(FunctionBreakpoint::to_json).collect::<Vec<_>>() })
+    }
+
+    /// A capability flag of the adapter (of the child session when there is one).
+    pub fn supports(&self, flag: &str) -> bool {
+        match self.child() {
+            Some(c) => c.supports(flag),
+            None => self.capabilities.lock().unwrap()[flag].as_bool().unwrap_or(false),
         }
     }
 
@@ -703,8 +842,49 @@ impl Session {
         self.capabilities.lock().unwrap()["supportsDataBreakpoints"].as_bool().unwrap_or(false)
     }
 
+    #[cfg(test)]
     pub fn stack_trace(&self, thread_id: i64) -> Result<Vec<Frame>, String> {
-        Ok(parse_frames(&self.request("stackTrace", json!({ "threadId": thread_id, "startFrame": 0, "levels": 50 }), Duration::from_secs(15))?))
+        Ok(self.stack_page(thread_id, 0, 50)?.0)
+    }
+
+    /// A page of a thread's stack and the total depth when the adapter knows it.
+    pub fn stack_page(&self, thread_id: i64, start: usize, levels: usize) -> Result<(Vec<Frame>, Option<usize>), String> {
+        let r = self.request("stackTrace", json!({ "threadId": thread_id, "startFrame": start, "levels": levels }), Duration::from_secs(15))?;
+        Ok((parse_frames(&r), r["totalFrames"].as_u64().map(|n| n as usize)))
+    }
+
+    /// Restart the program from a frame (`restartFrame`; the adapter then reports a stop).
+    pub fn restart_frame(&self, frame_id: i64) {
+        let _ = self.request_async("restartFrame", json!({ "frameId": frame_id }));
+    }
+
+    /// Change a variable in a scope or object; returns the value as the adapter shows it now.
+    pub fn set_variable(&self, container: i64, name: &str, value: &str) -> Result<String, String> {
+        let r = self.request("setVariable", json!({ "variablesReference": container, "name": name, "value": value }), Duration::from_secs(15))?;
+        Ok(r["value"].as_str().unwrap_or(value).to_string())
+    }
+
+    /// Assign to an expression in a frame (adapters without `setVariable`).
+    pub fn set_expression(&self, frame_id: Option<i64>, expression: &str, value: &str) -> Result<String, String> {
+        let mut args = json!({ "expression": expression, "value": value });
+        if let Some(f) = frame_id {
+            args["frameId"] = json!(f);
+        }
+        let r = self.request("setExpression", args, Duration::from_secs(15))?;
+        Ok(r["value"].as_str().unwrap_or(value).to_string())
+    }
+
+    /// Completions for the console input (`column` is the 1-based cursor column).
+    pub fn completions(&self, frame_id: Option<i64>, text: &str, column: usize) -> Result<Vec<String>, String> {
+        let mut args = json!({ "text": text, "column": column });
+        if let Some(f) = frame_id {
+            args["frameId"] = json!(f);
+        }
+        let r = self.request("completions", args, Duration::from_secs(5))?;
+        Ok(r["targets"]
+            .as_array()
+            .map(|a| a.iter().filter_map(|t| t["text"].as_str().or(t["label"].as_str()).map(str::to_string)).collect())
+            .unwrap_or_default())
     }
 
     pub fn scopes(&self, frame_id: i64) -> Result<Vec<Scope>, String> {
@@ -713,6 +893,17 @@ impl Session {
 
     pub fn variables(&self, reference: i64) -> Result<Vec<Variable>, String> {
         Ok(parse_variables(&self.request("variables", json!({ "variablesReference": reference }), Duration::from_secs(15))?))
+    }
+
+    /// Only the named children (`filter: named`), for values whose elements are paged.
+    pub fn named_variables(&self, reference: i64) -> Result<Vec<Variable>, String> {
+        Ok(parse_variables(&self.request("variables", json!({ "variablesReference": reference, "filter": "named" }), Duration::from_secs(15))?))
+    }
+
+    /// A page of indexed children (array elements `start..start + count`).
+    pub fn indexed_variables(&self, reference: i64, start: usize, count: usize) -> Result<Vec<Variable>, String> {
+        let args = json!({ "variablesReference": reference, "filter": "indexed", "start": start, "count": count });
+        Ok(parse_variables(&self.request("variables", args, Duration::from_secs(15))?))
     }
 
     /// Evaluate an expression (`context`: "repl", "watch", "hover"): (result, child reference).
@@ -784,19 +975,31 @@ impl Session {
                     },
                     Some("terminated") => DapEvent::Terminated,
                     Some("exited") => DapEvent::Exited(b["exitCode"].as_i64().unwrap_or(0) as i32),
+                    Some("breakpoint") => DapEvent::BreakpointChanged(parse_bp_result(&b["breakpoint"])),
+                    Some("thread") => DapEvent::Thread { thread_id: b["threadId"].as_i64().unwrap_or(0), started: b["reason"].as_str() == Some("started") },
+                    Some("capabilities") => {
+                        if let (Some(new), Value::Object(caps)) = (b["capabilities"].as_object(), &mut *self.capabilities.lock().unwrap()) {
+                            caps.extend(new.clone());
+                        }
+                        DapEvent::Capabilities
+                    }
                     _ => return,
                 };
                 let _ = self.events.send(ev);
             }
-            // Request from the adapter: `startDebugging` is supported; the others (runInTerminal…) don't go unanswered.
+            // Request from the adapter: `startDebugging` and `runInTerminal` are supported; others don't go unanswered.
             Some("request") => {
                 let command = msg["command"].as_str().unwrap_or_default();
-                let ok = command == "startDebugging" && self.addr.is_some();
+                let terminal = (command == "runInTerminal").then(|| TerminalRequest::parse(&msg["arguments"])).flatten();
+                let ok = (command == "startDebugging" && self.addr.is_some()) || terminal.is_some();
+                if let Some(t) = terminal {
+                    let _ = self.events.send(DapEvent::RunInTerminal(t));
+                }
                 self.writer.send(&json!({
                     "seq": 0, "type": "response", "request_seq": msg["seq"], "success": ok, "command": command,
                     "message": if ok { Value::Null } else { json!("not supported") },
                 }));
-                if ok {
+                if ok && command == "startDebugging" {
                     let (request, configuration) =
                         (msg["arguments"]["request"].as_str().unwrap_or("launch").to_string(), msg["arguments"]["configuration"].clone());
                     if let Some(me) = self.me.upgrade() {
@@ -829,6 +1032,7 @@ pub fn parse_frames(body: &Value) -> Vec<Frame> {
                         .map(str::to_string),
                     line: f["line"].as_u64().unwrap_or(0) as u32,
                     column: f["column"].as_u64().unwrap_or(1) as u32,
+                    can_restart: f["canRestart"].as_bool().unwrap_or(false),
                 })
                 .collect()
         })
@@ -854,6 +1058,8 @@ pub fn parse_variables(body: &Value) -> Vec<Variable> {
                     value: v["value"].as_str().unwrap_or_default().to_string(),
                     ty: v["type"].as_str().map(str::to_string),
                     reference: v["variablesReference"].as_i64().unwrap_or(0),
+                    evaluate_name: v["evaluateName"].as_str().map(str::to_string),
+                    indexed: v["indexedVariables"].as_u64().unwrap_or(0) as usize,
                 })
                 .collect()
         })
@@ -881,7 +1087,7 @@ pub(crate) mod tests {
             { "name": "x", "value": "42", "type": "int", "variablesReference": 0 },
             { "name": "p", "value": "{...}", "variablesReference": 9 },
         ] }));
-        assert_eq!(vars[0], Variable { name: "x".into(), value: "42".into(), ty: Some("int".into()), reference: 0 });
+        assert_eq!(vars[0], Variable { name: "x".into(), value: "42".into(), ty: Some("int".into()), reference: 0, ..Default::default() });
         assert_eq!((vars[1].reference, vars[1].ty.clone()), (9, None));
         assert!(parse_frames(&json!({})).is_empty() && parse_variables(&Value::Null).is_empty());
     }
@@ -921,17 +1127,23 @@ def event(name, body=None):
     send({'type': 'event', 'event': name, 'body': body or {}})
 bps = {}
 logs = {}
+values = {}
+def extras():
+    return bool(launch and launch['arguments'].get('extras'))
 launch = None
 cur = 3
 def stop(reason):
     event('stopped', {'reason': reason, 'threadId': 1, 'allThreadsStopped': True})
 while True:
     m = read()
+    if m.get('type') == 'response':
+        continue
     cmd = m.get('command')
     log.write(cmd + ' ' + json.dumps(m.get('arguments', {}), sort_keys=True) + '\n'); log.flush()
     a = m.get('arguments', {})
     if cmd == 'initialize':
-        ok(m, {'supportsConfigurationDoneRequest': True, 'supportsDataBreakpoints': True, 'exceptionBreakpointFilters': [{'filter': 'raised', 'label': 'Raised Exceptions'}, {'filter': 'uncaught', 'label': 'Uncaught Exceptions', 'default': True}]})
+        ok(m, {'supportsConfigurationDoneRequest': True, 'supportsDataBreakpoints': True, 'supportsFunctionBreakpoints': True,
+               'supportsSetVariable': True, 'supportsCompletionsRequest': True, 'supportsRestartFrame': True, 'exceptionBreakpointFilters': [{'filter': 'raised', 'label': 'Raised Exceptions'}, {'filter': 'uncaught', 'label': 'Uncaught Exceptions', 'default': True}]})
         event('initialized')
     elif cmd in ('launch', 'attach'):
         launch = m
@@ -945,10 +1157,21 @@ while True:
         for b in entries:
             if 'logMessage' in b:
                 logs.setdefault(a['source']['path'], {})[b['line']] = b['logMessage']
-        ok(m, {'breakpoints': [{'verified': True, 'line': l} for l in a.get('lines', [])]})
+        # Lines past 10 have no code: not verified, with a reason.
+        ok(m, {'breakpoints': [{'id': l, 'verified': l <= 10, 'line': l, 'message': None if l <= 10 else 'no code on this line'} for l in a.get('lines', [])]})
+    elif cmd == 'setFunctionBreakpoints':
+        ok(m, {'breakpoints': [{'verified': b['name'] != 'missing'} for b in a.get('breakpoints', [])]})
     elif cmd == 'configurationDone':
         ok(m)
-        if launch:
+        if launch and launch['arguments'].get('console') == 'integratedTerminal':
+            send({'type': 'request', 'command': 'runInTerminal', 'arguments': {'kind': 'integrated', 'title': 'Fake program', 'cwd': launch['arguments'].get('cwd', '/'),
+                  'args': ['sh', '-c', 'echo ran-in-terminal > ' + launch['arguments']['marker']], 'env': {'FAKE_ENV': 'yes'}}})
+        if launch and launch['arguments'].get('noDebug'):
+            ok(launch)
+            event('output', {'category': 'stdout', 'output': 'ran without debugging\n'})
+            event('exited', {'exitCode': 0})
+            event('terminated')
+        elif launch:
             ok(launch)
             event('output', {'category': 'stdout', 'output': 'hello from the program\n'})
             src = launch['arguments'].get('source')
@@ -963,6 +1186,13 @@ while True:
         ok(m, {'breakpoints': [{'verified': True} for _ in a.get('breakpoints', [])]})
     elif cmd == 'threads':
         ok(m, {'threads': [{'id': 1, 'name': 'main'}, {'id': 2, 'name': 'worker'}]})
+    elif cmd == 'stackTrace' and extras():
+        # A deep stack, paged: 45 frames in all.
+        src = launch['arguments'].get('source')
+        start, levels = a.get('startFrame', 0), a.get('levels', 20)
+        frames = [{'id': 200 + i, 'name': 'main' if i == 0 else 'frame%d' % i, 'source': {'path': src} if i == 0 else {}, 'line': cur if i == 0 else 0, 'column': 1, 'canRestart': i == 0}
+                  for i in range(start, min(45, start + levels))]
+        ok(m, {'stackFrames': frames, 'totalFrames': 45})
     elif cmd == 'stackTrace':
         src = launch['arguments'].get('source') if launch else None
         ok(m, {'stackFrames': [
@@ -970,10 +1200,20 @@ while True:
             {'id': 101, 'name': 'caller', 'line': 0, 'column': 0}]})
     elif cmd == 'scopes':
         ok(m, {'scopes': [{'name': 'Locals', 'variablesReference': 10}]})
+    elif cmd == 'variables' and a['variablesReference'] == 12:
+        # 250 elements, asked for a page at a time, plus one named field.
+        if a.get('filter') == 'named':
+            ok(m, {'variables': [{'name': 'length', 'value': '250', 'variablesReference': 0}]})
+        else:
+            start, count = a.get('start', 0), a.get('count', 250)
+            ok(m, {'variables': [{'name': '[%d]' % i, 'value': str(i * i), 'variablesReference': 0} for i in range(start, min(250, start + count))]})
     elif cmd == 'variables':
         if a['variablesReference'] == 10:
-            ok(m, {'variables': [{'name': 'x', 'value': str(cur * 10), 'type': 'int', 'variablesReference': 0},
-                                 {'name': 'point', 'value': '{x, y}', 'type': 'Point', 'variablesReference': 11}]})
+            vs = [{'name': 'x', 'value': values.get('x', str(cur * 10)), 'type': 'int', 'variablesReference': 0, 'evaluateName': 'x'},
+                  {'name': 'point', 'value': '{x, y}', 'type': 'Point', 'variablesReference': 11}]
+            if extras():
+                vs.append({'name': 'big', 'value': 'array(250)', 'variablesReference': 12, 'indexedVariables': 250, 'evaluateName': 'big'})
+            ok(m, {'variables': vs})
         else:
             ok(m, {'variables': [{'name': 'x', 'value': '1', 'variablesReference': 0}, {'name': 'y', 'value': '2', 'variablesReference': 0}]})
     elif cmd in ('next', 'stepIn', 'stepOut'):
@@ -993,6 +1233,16 @@ while True:
         else:
             event('exited', {'exitCode': 0})
             event('terminated')
+    elif cmd == 'setVariable':
+        values[a['name']] = a['value']
+        ok(m, {'value': a['value']})
+    elif cmd == 'completions':
+        word = a['text'][:a['column'] - 1].split(' ')[-1]
+        ok(m, {'targets': [{'label': t} for t in ['point', 'print', 'x'] if t.startswith(word)]})
+    elif cmd == 'restartFrame':
+        ok(m)
+        cur = 3
+        stop('restart')
     elif cmd == 'evaluate':
         ok(m, {'result': 'eval:' + a['expression'], 'variablesReference': 0})
     elif cmd == 'disconnect':
@@ -1038,7 +1288,7 @@ while True:
         let src = "/p/main.c".to_string();
         let mut bps = BTreeMap::new();
         bps.insert(src.clone(), vec![Breakpoint::at(5), Breakpoint::at(9)]);
-        session.begin("fake", "launch", json!({ "program": "/p/a.out", "source": src }), &bps).unwrap();
+        session.begin("fake", "launch", json!({ "program": "/p/a.out", "source": src }), &bps, &[]).unwrap();
 
         // Output event and first stop: line 5.
         wait_event(&rx, |e| matches!(e, DapEvent::Output { text, .. } if text.contains("hello")));
@@ -1083,7 +1333,7 @@ while True:
         let (tx, _rx) = mpsc::channel();
         let host: Arc<dyn Host> = Arc::new(host::local());
         let session = Session::start(host, script.to_str().unwrap(), vec![dir.join("log.txt").to_string_lossy().into_owned()], None, tx).unwrap();
-        let err = session.begin("fake", "launch", json!({ "program": "/nope", "fail": true }), &BTreeMap::new()).unwrap_err();
+        let err = session.begin("fake", "launch", json!({ "program": "/nope", "fail": true }), &BTreeMap::new(), &[]).unwrap_err();
         assert!(err.contains("cannot run /nope"), "{err}");
         session.stop();
     }
@@ -1096,7 +1346,7 @@ while True:
         if let Ok(session) = r {
             // The process may start and die right away: `begin` must fail without waiting for a timeout.
             let started = std::time::Instant::now();
-            assert!(session.begin("x", "launch", json!({}), &BTreeMap::new()).is_err());
+            assert!(session.begin("x", "launch", json!({}), &BTreeMap::new(), &[]).is_err());
             assert!(started.elapsed() < Duration::from_secs(20));
         }
     }

@@ -1,10 +1,11 @@
-//! Workbench: rendering: activity bar, explorer, timeline, outline, remote panel.
+//! Workbench: rendering: activity bar, explorer, timeline, outline.
 
 use super::*;
 
 impl Workbench {
     pub(super) fn activity_bar(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
         let changes = self.vcs.status.as_ref().map_or(0, |g| g.changes.len());
+        let failed_tests = self.failed_test_count();
         let item = |id: &'static str, name: &'static str, label: &'static str, panel: Panel, badge: usize, cx: &mut Context<Self>| {
             let selected = self.chrome.panel == Some(panel);
             div()
@@ -45,7 +46,7 @@ impl Workbench {
                             .rounded_full()
                             .bg(c(p.accent))
                             .text_color(c(p.on_accent))
-                            .text_size(px(9.))
+                            .text_size(px(text::BADGE.0))
                             .font_weight(gpui::FontWeight::BOLD)
                             .child(if badge > 99 { "99+".to_string() } else { badge.to_string() }),
                     )
@@ -55,6 +56,15 @@ impl Workbench {
                     this.chrome.panel = if this.chrome.panel == Some(panel) { None } else { Some(panel) };
                     if this.chrome.panel == Some(Panel::Explorer) {
                         window.focus(&this.roots.primary.focus_handle(cx));
+                    }
+                    if this.chrome.panel == Some(Panel::Remote) {
+                        this.refresh_remote_view(cx);
+                    }
+                    if this.chrome.panel == Some(Panel::Debug) {
+                        this.load_launch_catalog(cx);
+                    }
+                    if this.chrome.panel == Some(Panel::Testing) {
+                        this.testing_opened(window, cx);
                     }
                     cx.notify();
                 }))
@@ -93,6 +103,9 @@ impl Workbench {
             .child(item("act-explorer", "files", crate::i18n::t("Explorer (⇧⌘E)"), Panel::Explorer, 0, cx))
             .child(item("act-search", "search", crate::i18n::t("Search (⇧⌘F)"), Panel::Search, 0, cx))
             .child(item("act-scm", "git-branch", crate::i18n::t("Source Control (⌃⇧G)"), Panel::Scm, changes, cx))
+            .child(item("act-debug", "bug-play", crate::i18n::t("Run and Debug (⌃⇧D)"), Panel::Debug, 0, cx))
+            .child(item("act-testing", "flask-conical", crate::i18n::t("Testing"), Panel::Testing, failed_tests, cx))
+            .child(item("act-remote", "screen-share", crate::i18n::t("Remote Explorer"), Panel::Remote, 0, cx))
             .child(div().flex_1())
             .child(
                 // A single "manage" button: the menu opens to the right of the icon, bottom edge aligned with it (see `open_manage_menu`).

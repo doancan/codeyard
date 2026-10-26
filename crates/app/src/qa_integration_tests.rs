@@ -704,6 +704,57 @@ fn qa_run_test_at_cursor_reports_the_failing_assert(cx: &mut TestAppContext) {
     assert!(d[0].message.starts_with("test panicked:"), "{d:?}");
 }
 
+/// The Testing view on a real cargo project: the tests are found, "Run All Tests" runs them, and each test shows its
+/// outcome; the file with a failure opens and shows the failure's first line under the failed test.
+#[gpui::test]
+fn qa_testing_view_finds_runs_and_reports_tests(cx: &mut TestAppContext) {
+    if std::process::Command::new("cargo").arg("--version").output().is_err() {
+        return;
+    }
+    let dir = qa_dir("qa-testing");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \"2021\"\n").unwrap();
+    let src = "pub fn two() -> i32 { 2 }\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn passes() {\n        assert_eq!(two(), 2);\n    }\n\n    #[test]\n    fn fails() {\n        assert!(two() == 3, \"two is not three\");\n    }\n}\n";
+    std::fs::write(dir.join("src/lib.rs"), src).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    run(&wb, cx, "View: Testing");
+    wait_secs(cx, 30, "tests found", |cx| wb.read_with(cx, |wb, _| !wb.testing_rows_for_test().is_empty()));
+    assert_eq!(wb.read_with(cx, |wb, _| wb.testing_rows_for_test()), ["file:src/lib.rs:NotRun"], "files start closed");
+    run(&wb, cx, "Test: Run All Tests");
+    wait_secs(cx, 180, "the run ends", |cx| {
+        cx.executor().advance_clock(Duration::from_millis(300));
+        wb.read_with(cx, |wb, _| !wb.testing_busy_for_test())
+    });
+    assert_eq!(
+        wb.read_with(cx, |wb, _| wb.testing_rows_for_test()),
+        ["file:src/lib.rs:Failed", "test:passes:Passed", "test:fails:Failed", "message:two is not three"]
+    );
+}
+
+/// Stopping a run: the runner is killed at once and the tests go back to what they showed before.
+#[gpui::test]
+fn qa_testing_view_stop_ends_the_run(cx: &mut TestAppContext) {
+    if std::process::Command::new("cargo").arg("--version").output().is_err() {
+        return;
+    }
+    let dir = qa_dir("qa-testing-stop");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"slow\"\nversion = \"0.1.0\"\nedition = \"2021\"\n").unwrap();
+    let src = "#[cfg(test)]\nmod tests {\n    #[test]\n    fn waits() {\n        std::thread::sleep(std::time::Duration::from_secs(600));\n    }\n}\n";
+    std::fs::write(dir.join("src/lib.rs"), src).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    run(&wb, cx, "View: Testing");
+    wait_secs(cx, 30, "tests found", |cx| wb.read_with(cx, |wb, _| !wb.testing_rows_for_test().is_empty()));
+    run(&wb, cx, "Test: Run All Tests");
+    assert_eq!(wb.read_with(cx, |wb, _| wb.testing_rows_for_test()), ["file:src/lib.rs:Running"]);
+    wait_secs(cx, 60, "the runner started", |cx| wb.read_with(cx, |wb, _| wb.testing_process_for_test()));
+    run(&wb, cx, "Test: Stop Running Tests");
+    assert!(!wb.read_with(cx, |wb, _| wb.testing_busy_for_test()));
+    assert_eq!(wb.read_with(cx, |wb, _| wb.testing_rows_for_test()), ["file:src/lib.rs:NotRun"]);
+}
+
 /// Debugger end to end with a scripted adapter: breakpoint → F5 → stops on that line with the
 /// stack and variables → step → a breakpoint added while paused reaches the adapter → continue
 /// stops there → continue ends the session and clears the yellow line.
@@ -2467,12 +2518,15 @@ fn terminal_split_shows_two_and_caps_the_count(cx: &mut TestAppContext) {
     let (wb, cx) = setup(cx);
     let first = terminal(&wb, &dir, cx);
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Split", window, cx));
+    // The split asks the shell for its folder first.
+    wait_for(cx, "the split", |cx| wb.read_with(cx, |wb, _| wb.terminal_count()) == 2);
     let second = wb.read_with(cx, |wb, _| wb.active_terminal()).unwrap();
     assert_ne!(first, second, "after a split the new terminal is active");
     assert_eq!(wb.read_with(cx, |wb, _| wb.terminal_count()), 2);
     assert_eq!(wb.read_with(cx, |wb, _| wb.split_partner()), Some(first.clone()));
     // Closing the split terminal removes the split.
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Close", window, cx));
+    wait_for(cx, "closed", |cx| wb.read_with(cx, |wb, _| wb.terminal_count()) == 1);
     assert_eq!(wb.read_with(cx, |wb, _| wb.split_partner()), None);
     // At most eight terminals.
     for _ in 0..10 {
@@ -2494,8 +2548,10 @@ fn qa_docker_target_connects_lists_and_opens_files(cx: &mut TestAppContext) {
     let tick = |cx: &mut VisualTestContext| cx.executor().advance_clock(Duration::from_secs(1));
     wait_secs(cx, 30, "connected", |cx| {
         tick(cx);
-        wb.read_with(cx, |wb, _| wb.ports_ready())
+        wb.read_with(cx, |wb, _| wb.conn_for_test()) == "connected"
     });
+    // Forwarding is ssh only, so nothing scans the container's ports.
+    assert!(!wb.read_with(cx, |wb, _| wb.ports_ready()));
     open(&wb, &dir.join("hello.txt"), cx);
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).expect("remote file opened");
     assert_eq!(ed.read_with(cx, |e, _| e.text()), "kapsayıcıdan merhaba\n");
@@ -2548,6 +2604,33 @@ fn language_servers_wait_for_trust(cx: &mut TestAppContext) {
     // Trusting starts them (here the configured command does not exist, which proves a start was attempted).
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Workspace: Trust This Folder", window, cx));
     wait_for(cx, "server start attempted after trust", |cx| notice(&wb, cx).contains("isn't available"));
+}
+
+/// Running or debugging tests runs the project's code (a Rust test is built first, which runs its build script): in an
+/// untrusted folder both ask first, and cancelling runs nothing.
+#[gpui::test]
+fn tests_wait_for_trust_before_building_or_running(cx: &mut TestAppContext) {
+    let (wb, cx) = setup_trusting(cx, "qa-tests-trust");
+    let dir = qa_dir("qa-tests-trust-project");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"t\"\nversion = \"0.1.0\"\nedition = \"2021\"\n").unwrap();
+    std::fs::write(dir.join("src/lib.rs"), "#[cfg(test)]\nmod tests {\n    #[test]\n    fn one() {}\n}\n").unwrap();
+    open(&wb, &dir, cx);
+    run(&wb, cx, "View: Testing");
+    wait_secs(cx, 30, "tests found", |cx| wb.read_with(cx, |wb, _| !wb.testing_rows_for_test().is_empty()));
+    let lib = dir.join("src/lib.rs").to_string_lossy().into_owned();
+    wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(lib.clone(), window, cx));
+    cx.run_until_parked();
+    let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
+    ed.update_in(cx, |e, window, cx| e.go_to_line(4, window, cx));
+    for command in ["Test: Debug Test at Cursor", "Test: Run All Tests"] {
+        run(&wb, cx, command);
+        assert!(cx.has_pending_prompt(), "{command} must ask in an untrusted folder");
+        cx.simulate_prompt_answer("Cancel");
+        cx.run_until_parked();
+        assert!(!wb.read_with(cx, |wb, _| wb.testing_busy_for_test()), "{command}: nothing runs after Cancel");
+    }
+    assert!(!dir.join("target").exists(), "nothing was built");
 }
 
 /// A language server can ask for edits anywhere; only files under the open folders are written, and it is told when nothing was.

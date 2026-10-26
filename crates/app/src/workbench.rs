@@ -76,6 +76,8 @@ mod ports_glue;
 pub mod projects;
 #[path = "workbench_pulls.rs"]
 mod pulls_glue;
+#[path = "workbench_remote.rs"]
+mod remote_glue;
 // --- git-refs ---
 #[path = "workbench_recover.rs"]
 mod recover_glue;
@@ -108,6 +110,8 @@ mod terminals_glue;
 #[cfg(test)]
 #[path = "workbench_testing.rs"]
 mod testing_glue;
+#[path = "workbench_test_explorer.rs"]
+mod tests_glue;
 #[cfg(test)]
 pub(crate) use testing_glue::DialogView;
 #[path = "workbench_theme.rs"]
@@ -418,7 +422,14 @@ struct Overlay {
     _sub: Subscription,
 }
 
+pub use debug::{
+    AddDebugConfiguration, AddFunctionBreakpoint, ConsoleComplete, ConsoleHistoryNext, ConsoleHistoryPrev, DisableAllBreakpoints, EnableAllBreakpoints,
+    OpenLaunchConfiguration, RunToCursor, RunWithoutDebugging, ShowRunAndDebug, StopAllDebugging, ToggleBreakpointEnabled, ToggleBreakpointsActive,
+};
 pub use host::askpass::{AskKind, AskRequest};
+pub use remote_glue::ShowRemoteExplorer;
+pub use terminals_glue::{ChangeTerminalColor, KillAllTerminals, NewTerminalWithProfile, RenameTerminal, SelectDefaultTerminalProfile};
+pub use tests_glue::{DebugTestAtCursor, RefreshTests, RunAllTests, RunFailedTests, ShowTesting, StopTests};
 pub type AskReply = std::sync::mpsc::Sender<Option<String>>;
 
 /// Options in the status bar pickers.
@@ -552,6 +563,9 @@ enum Panel {
     Explorer,
     Search,
     Scm,
+    Debug,
+    Testing,
+    Remote,
 }
 
 enum Conn {
@@ -900,18 +914,9 @@ impl Workbench {
                 }
             }),
             cx.subscribe_in(&port_field, window, |this, field, ev: &crate::input::FieldEvent, _, cx| {
-                if matches!(ev, crate::input::FieldEvent::Submit) {
-                    let text = field.read(cx).text().trim().trim_start_matches("localhost:").to_string();
-                    match text.parse::<u16>() {
-                        Ok(port) if port > 0 => {
-                            field.update(cx, |f, cx| f.set_text("", cx));
-                            this.forward_port(port, cx);
-                        }
-                        _ => {
-                            this.notice = Some(Notice::Error(crate::i18n::tf("“{}” is not a port number", &[&text]).into()));
-                            cx.notify();
-                        }
-                    }
+                let text = field.read(cx).text().to_string();
+                if matches!(ev, crate::input::FieldEvent::Submit) && this.submit_port_field(&text, cx) {
+                    field.update(cx, |f, cx| f.set_text("", cx));
                 }
             }),
             cx.subscribe_in(&scm, window, |this, _, event: &crate::scm::ScmEvent, window, cx| match event {
@@ -1002,15 +1007,8 @@ impl Workbench {
             term_split: None,
             active_terminal: 0,
             shell: None,
-            dbg: state_glue::DebugUi {
-                session: None,
-                generation: 0,
-                watch_exprs: Vec::new(),
-                exception_filters: None,
-                bp_cache: Default::default(),
-                last: None,
-            },
-            jobs: state_glue::TaskState { last: None, terminal: None, root: None, problems: Vec::new(), scan_pending: false },
+            dbg: Default::default(),
+            jobs: state_glue::TaskState { last: None, terminal: None, root: None, problems: Vec::new(), scan_pending: false, tests: Default::default() },
             lsp: state_glue::LspState {
                 restricted_notified: Default::default(),
                 servers: Default::default(),
@@ -1106,6 +1104,7 @@ impl Workbench {
                 bundle: Arc::new(crate::bundled_agents::discover()),
                 asks: Default::default(),
                 transfer: None,
+                view: Default::default(),
             },
             roots: state_glue::RootsState {
                 primary: tree,
@@ -1358,16 +1357,18 @@ impl Workbench {
                             cx.notify();
                         }),
                     ))
-                    .when(self.dbg.session.is_some(), |d| {
-                        d.child(panel_tab("debug-tab", crate::i18n::upper(crate::i18n::t("Debug")), self.chrome.bottom == Bottom::Debug, 0, p).on_click(
-                            cx.listener(|this, _, _, cx| {
-                                this.chrome.bottom = Bottom::Debug;
-                                cx.notify();
-                            }),
-                        ))
+                    .when(self.dbg.has_sessions(), |d| {
+                        d.child(
+                            panel_tab("debug-tab", crate::i18n::upper(crate::i18n::t("Debug Console")), self.chrome.bottom == Bottom::Debug, 0, p).on_click(
+                                cx.listener(|this, _, _, cx| {
+                                    this.chrome.bottom = Bottom::Debug;
+                                    cx.notify();
+                                }),
+                            ),
+                        )
                     })
                     .child(
-                        panel_tab("ports-tab", crate::i18n::upper(crate::i18n::t("Ports")), self.chrome.bottom == Bottom::Ports, self.ports.forwards.len(), p)
+                        panel_tab("ports-tab", crate::i18n::upper(crate::i18n::t("Ports")), self.chrome.bottom == Bottom::Ports, self.active_forwards(), p)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.chrome.bottom = Bottom::Ports;
                                 cx.notify();
@@ -1421,49 +1422,8 @@ impl Workbench {
                     Bottom::Debug => d.child(self.debug_view(p, cx)),
                     Bottom::Ports => d.child(self.ports_view(p, cx)),
                     Bottom::Terminal => {
-                        // Multiple terminals: list on the right (like VS Code), name and close.
-                        let list = (self.terminals.len() > 1).then(|| {
-                            div().id("terminal-list").w(px(180.)).flex_none().h_full().border_l_1().border_color(c(p.border)).overflow_y_scroll().children(
-                                self.terminals.iter().enumerate().map(|(i, t)| {
-                                    let active = i == self.active_terminal;
-                                    let t = t.read(cx);
-                                    let label = if t.has_exited() { crate::i18n::tf("{} (exited)", &[&t.title]) } else { t.title.to_string() };
-                                    let group: SharedString = format!("term-row-{i}").into();
-                                    div()
-                                        .id(("term-tab", i))
-                                        .group(group.clone())
-                                        .w_full()
-                                        .h(px(layout::ROW_H))
-                                        .flex()
-                                        .items_center()
-                                        .gap(px(theme::SPACE[2]))
-                                        .px(px(theme::SPACE[4]))
-                                        .cursor_pointer()
-                                        .text_size(px(text::XS.0))
-                                        .when(active, |d| d.bg(c(p.surface_active)))
-                                        .hover(|d| d.bg(c(p.surface_hover)))
-                                        .text_color(c(if active { p.text } else { p.text_muted }))
-                                        .child(icon("terminal", 14., if active { p.text } else { p.text_muted }))
-                                        .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(label))
-                                        .child(
-                                            div()
-                                                .id(("term-close", i))
-                                                .opacity(0.)
-                                                .group_hover(group, |s| s.opacity(1.))
-                                                .child(icon("x", 12., p.text_muted))
-                                                .on_click(cx.listener(move |this, _, window, cx| {
-                                                    cx.stop_propagation();
-                                                    this.close_terminal(i, window, cx);
-                                                })),
-                                        )
-                                        .on_click(cx.listener(move |this, _, window, cx| {
-                                            this.active_terminal = i;
-                                            this.chrome.bottom = Bottom::Terminal;
-                                            this.focus_terminal(window, cx);
-                                        }))
-                                }),
-                            )
-                        });
+                        // Several terminals: their list on the right.
+                        let list = self.terminal_list(p, cx);
                         let active = self.terminals.get(self.active_terminal).cloned();
                         let other = self.term_split.clone().filter(|o| Some(o) != active.as_ref() && self.terminals.contains(o));
                         d.child(
@@ -1609,9 +1569,9 @@ impl Workbench {
         self.persist.pending_restore = self.persist.workspace_id;
         self.restore_tree(cx);
         self.restore_extra_roots(cx);
-        self.load_watches();
-        self.load_exception_filters();
+        self.load_debug_state(cx);
         self.load_favorites();
+        self.restore_forwards(cx);
         self.load_project_settings(cx);
         cx.notify();
     }
@@ -2641,10 +2601,8 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
             EditorEvent::OpenMergeEditor => return this.open_merge_editor(&OpenMergeEditor, window, cx),
             EditorEvent::SendRequest(line) => return this.send_request_at(Some(*line), window, cx),
             EditorEvent::Changed => {
-                // Breakpoints shift with edits: keep the cache (used on close) current.
-                if !this.dbg.bp_cache.is_empty() || !ed.read(cx).breakpoint_lines().is_empty() {
-                    this.collect_breakpoints(cx);
-                }
+                // Breakpoints shift with edits: keep the store (used on close and saved) current.
+                this.sync_breakpoints_from(ed, cx);
                 this.note_edit(ed, cx);
                 this.schedule_schema(ed, Duration::from_millis(600), cx);
             }

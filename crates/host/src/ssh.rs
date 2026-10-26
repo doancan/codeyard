@@ -13,52 +13,7 @@ use crate::{Connector, HostError, RemoteHost, Result, spawn_transport};
 
 pub const APP_DIR: &str = "codeyard";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SshHost {
-    pub alias: String,
-    pub hostname: Option<String>,
-    pub user: Option<String>,
-}
-
-/// Concrete Hosts in `~/.ssh/config` (no wildcard patterns).
-pub fn list_hosts() -> Vec<SshHost> {
-    // Same config as used for connecting (`CODEYARD_SSH_CONFIG` if set, else ~/.ssh/config).
-    let Some(path) = crate::ssh_config::config_path() else { return Vec::new() };
-    std::fs::read_to_string(path).map(|s| parse_config(&s)).unwrap_or_default()
-}
-
-/// Known limitation: `Include` and `Match` blocks are not followed.
-pub fn parse_config(text: &str) -> Vec<SshHost> {
-    let mut hosts: Vec<SshHost> = Vec::new();
-    let mut current: Vec<usize> = Vec::new();
-    for line in text.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let (key, value) = match line.split_once(|c: char| c.is_whitespace() || c == '=') {
-            Some((k, v)) => (k.to_ascii_lowercase(), v.trim_start_matches(|c: char| c.is_whitespace() || c == '=').trim()),
-            None => continue,
-        };
-        match key.as_str() {
-            "host" => {
-                current.clear();
-                for alias in value.split_whitespace() {
-                    if alias.contains(['*', '?', '!']) || hosts.iter().any(|h| h.alias == alias) {
-                        continue;
-                    }
-                    current.push(hosts.len());
-                    hosts.push(SshHost { alias: alias.into(), hostname: None, user: None });
-                }
-            }
-            "match" => current.clear(),
-            "hostname" => current.iter().for_each(|&i| hosts[i].hostname = Some(value.into())),
-            "user" => current.iter().for_each(|&i| hosts[i].user = Some(value.into())),
-            _ => {}
-        }
-    }
-    hosts
-}
+pub use crate::ssh_hosts::{SshHost, list_hosts, list_hosts_from, parse_config};
 
 /// This machine's target triple (picks the right binary from the agent bundle).
 pub fn local_triple() -> &'static str {
@@ -280,7 +235,7 @@ fn control_path_option(path: &Path) -> String {
 /// later calls take milliseconds.
 /// Common options: a separate ssh config (`CODEYARD_SSH_CONFIG`, for tests and
 /// non-standard setups) and the shared ControlMaster socket.
-fn ssh_base(alias: &str) -> Command {
+pub(crate) fn ssh_base(alias: &str) -> Command {
     let mut cmd = Command::new("ssh");
     #[cfg(windows)]
     {
@@ -406,7 +361,7 @@ fn ssh_command(alias: &str) -> Command {
 
 /// Refuses names that would be read as an option by ssh/docker, or that cannot be one line of a command.
 /// Every path to a target goes through here first; `--` in the command line is the second lock.
-fn check_target(alias: &str) -> Result<()> {
+pub(crate) fn check_target(alias: &str) -> Result<()> {
     let name = match target_of(alias) {
         Target::Ssh(n) | Target::Docker(n) | Target::Wsl(n) => n,
     };
@@ -578,60 +533,17 @@ if [ "$h" = {sha} ]; then mv "$t" {remote}; else rm -f "$t"; echo "agent hash mi
 }
 
 /// Forward a local port to a server port (or remove it with `cancel`). Reuses the open
-/// ControlMaster connection: no new authentication.
+/// ControlMaster connection: no new authentication. Port panels use [`crate::forward`], which keeps the exact spec.
 pub fn forward_port(alias: &str, local: u16, remote: u16, cancel: bool) -> Result<()> {
-    if cfg!(windows) {
-        return Err(HostError::Op(proto::Error::Other(
-            "In-app SSH port forwarding requires ControlMaster, which Windows OpenSSH does not support. Use ssh -L in a terminal.".into(),
-        )));
-    }
-    if !matches!(target_of(alias), Target::Ssh(_)) {
-        return Err(HostError::Op(proto::Error::Other("Port forwarding needs an SSH host: containers and WSL share the local network".into())));
-    }
-    check_target(alias)?;
-    let out = ssh_base(alias)
-        .args(["-o", "BatchMode=yes", "-O", if cancel { "cancel" } else { "forward" }, "-L"])
-        .arg(format!("{local}:localhost:{remote}"))
-        .arg("--")
-        .arg(alias)
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|e| HostError::Disconnected(format!("could not start ssh: {e}")))?;
-    if out.status.success() {
-        Ok(())
-    } else {
-        let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
-        Err(HostError::Op(proto::Error::Other(if err.is_empty() { format!("ssh exited with {}", out.status) } else { err })))
-    }
+    let spec = crate::forward::spec(crate::forward::LocalBind::Loopback, local, &crate::forward::RemoteTarget::Localhost, remote);
+    Ok(crate::forward::local_spec(alias, &spec, cancel)?)
 }
 
 /// Forward a server port to a local port (`ssh -R`): a program on the server connecting to `localhost:remote`
 /// reaches `local` here (or remove it with `cancel`).
 /// Debug adapters (delve) connect by dialing the client.
 pub fn forward_port_reverse(alias: &str, remote: u16, local: u16, cancel: bool) -> Result<()> {
-    if cfg!(windows) {
-        return Err(HostError::Op(proto::Error::Other(
-            "In-app reverse SSH forwarding requires ControlMaster, which Windows OpenSSH does not support. Use ssh -R in a terminal.".into(),
-        )));
-    }
-    if !matches!(target_of(alias), Target::Ssh(_)) {
-        return Err(HostError::Op(proto::Error::Other("Port forwarding needs an SSH host: containers and WSL share the local network".into())));
-    }
-    check_target(alias)?;
-    let out = ssh_base(alias)
-        .args(["-o", "BatchMode=yes", "-O", if cancel { "cancel" } else { "forward" }, "-R"])
-        .arg(format!("{remote}:localhost:{local}"))
-        .arg("--")
-        .arg(alias)
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|e| HostError::Disconnected(format!("could not start ssh: {e}")))?;
-    if out.status.success() {
-        Ok(())
-    } else {
-        let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
-        Err(HostError::Op(proto::Error::Other(if err.is_empty() { format!("ssh exited with {}", out.status) } else { err })))
-    }
+    Ok(crate::forward::remote_spec(alias, &format!("{remote}:localhost:{local}"), cancel)?)
 }
 
 /// Close the shared ControlMaster connection (ends its forwards too).
@@ -655,9 +567,13 @@ pub fn close_all_masters() {
 }
 
 /// Free port on this machine: the requested one if free, else one from the OS.
+/// Both loopback addresses are checked: a forward on "localhost" binds the free one and would hide a program on the other.
 pub fn free_local_port(wanted: u16) -> u16 {
-    let try_bind = |p: u16| std::net::TcpListener::bind(("127.0.0.1", p)).ok().and_then(|l| l.local_addr().ok()).map(|a| a.port());
-    try_bind(wanted).filter(|_| wanted >= 1024).or_else(|| try_bind(0)).unwrap_or(wanted)
+    use crate::forward::LocalBind;
+    if wanted >= 1024 && crate::forward::bindable(LocalBind::Loopback, wanted) {
+        return wanted;
+    }
+    std::iter::from_fn(crate::forward::os_port).take(8).find(|p| crate::forward::bindable(LocalBind::Loopback, *p)).unwrap_or(wanted)
 }
 
 /// Per-window session ID (finds the terminals on the server).

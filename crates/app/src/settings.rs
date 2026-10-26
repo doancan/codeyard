@@ -88,6 +88,18 @@ pub struct Settings {
     pub terminal_scrollback: usize,
     /// Whether a program in the terminal may put text on the clipboard (OSC 52).
     pub terminal_allow_clipboard_write: bool,
+    /// zsh, bash and fish mark prompts, commands and their folder (`terminal.shellIntegration`).
+    pub terminal_shell_integration: bool,
+    /// Closing a terminal asks first: "running" (a program is in the foreground), "always" or "never".
+    pub terminal_confirm_close: String,
+    /// Terminal profiles per operating system of the machine (`terminal.profiles.macos` / `.linux` / `.windows`).
+    pub terminal_profiles: std::collections::BTreeMap<String, Vec<crate::terminal_profiles::Profile>>,
+    /// Profile new terminals use (`terminal.defaultProfile`).
+    pub terminal_default_profile: Option<String>,
+    /// What pasting into the terminal removes (`terminal.sanitizePaste`).
+    pub terminal_sanitize_paste: crate::terminal_paste::Sanitize,
+    /// When a paste of several lines asks first (`terminal.warnMultilinePaste`).
+    pub terminal_warn_multiline: crate::terminal_paste::WarnMultiline,
     pub restore_session: bool,
     /// Whether to start with the welcome screen or continue where you left off.
     pub startup: Startup,
@@ -137,6 +149,10 @@ pub struct Settings {
     pub auto_close_brackets: bool,
     /// Whether ports opened later over SSH are forwarded automatically.
     pub ports_auto_forward: bool,
+    /// Local addresses forwarded ports listen on (`ports.localBind`: this computer only, or every interface).
+    pub ports_local_bind: host::forward::LocalBind,
+    /// Per-port label, protocol and detection behaviour (`ports.rules`).
+    pub ports_rules: Vec<crate::port_forwards::PortRule>,
     /// Whether language servers are enabled.
     pub lsp_enabled: bool,
     /// Language id → command and arguments (`None`: disabled for that language). Overrides the defaults.
@@ -282,6 +298,12 @@ impl Default for Settings {
             terminal_font_size: theme::text::CODE.0,
             terminal_scrollback: 2000,
             terminal_allow_clipboard_write: false,
+            terminal_shell_integration: true,
+            terminal_confirm_close: "running".into(),
+            terminal_profiles: Default::default(),
+            terminal_default_profile: None,
+            terminal_sanitize_paste: Default::default(),
+            terminal_warn_multiline: Default::default(),
             restore_session: true,
             startup: Startup::Welcome,
             hot_exit: true,
@@ -309,6 +331,8 @@ impl Default for Settings {
             word_based_suggestions: true,
             enable_trash: true,
             ports_auto_forward: true,
+            ports_local_bind: host::forward::LocalBind::Loopback,
+            ports_rules: Vec::new(),
             lsp_enabled: true,
             lsp_servers: Vec::new(),
             fallback_encoding: crate::encoding::Encoding::Windows1254,
@@ -380,8 +404,9 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   "theme": "auto",
 
   // "editor.fontFamily": "JetBrains Mono",
-  "editor.fontSize": 13,
-  "editor.lineHeight": 20,
+  // Default: 12 (line 18) on macOS, 14 (line 20) on Windows and Linux.
+  // "editor.fontSize": 12,
+  // "editor.lineHeight": 18,
   // Leave out to detect from each file.
   // "editor.tabSize": 4,
   // "editor.insertSpaces": true,
@@ -523,11 +548,29 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // "compare.folders.maxFiles": 50000,
 
   // "terminal.shell": "/bin/zsh",
-  "terminal.fontSize": 13,
+  // Default: 12 on macOS, 14 on Windows and Linux.
+  // "terminal.fontSize": 12,
   "terminal.scrollback": 2000,
   // Let programs in the terminal write to the clipboard (OSC 52). Off by default: a program you run, or a file you cat, could replace
   // what you copied.
   // "terminal.allowClipboardWrite": false,
+  // Pasting: "auto" removes control characters unless the shell reads the paste as text (bracketed paste), "always" or
+  // "off"; bracketed-paste markers inside pasted text are always removed. A paste of several lines asks first
+  // ("unbracketed": when the shell would run each line at once, "always" or "never").
+  // Closing a terminal asks first: "running" (a program other than the shell is in the foreground), "always", "never".
+  // "terminal.confirmOnClose": "running",
+  // Profiles for new terminals, per operating system of the machine they run on; "args" replace the login flag.
+  // "terminal.profiles.macos": { "zsh": { "path": "/bin/zsh" }, "bash": { "path": "/bin/bash", "args": ["-l"], "env": { "LANG": "en_US.UTF-8" }, "color": "info" } },
+  // "terminal.defaultProfile": "zsh",
+  // "terminal.sanitizePaste": "auto",
+  // "terminal.warnMultilinePaste": "unbracketed",
+
+  // Ports forwarded from SSH hosts listen on this computer only ("loopback") or on every network interface ("all",
+  // reachable from other computers).
+  // "ports.localBind": "loopback",
+  // Per port or range: a label, the protocol ("http", "https" or "tcp") and what happens when the port is detected
+  // ("notify", "silent", "openBrowser" or "ignore").
+  // "ports.rules": { "3000": { "label": "web", "onForward": "openBrowser" }, "9000-9100": { "onForward": "ignore" } },
 
   // What opens when you start the app without a folder: "welcome" (the start page; recent folders and SSH
   // hosts are listed, nothing reconnects by itself), "continue" (like a browser: the last folder or SSH
@@ -599,7 +642,16 @@ pub fn parse_layers(user: &str, project: &[Layer]) -> Result<(Settings, Vec<Stri
 
 /// A project's settings file could choose a program by itself: these keys come only from user
 /// settings or a trusted folder.
-pub const RESTRICTED_KEYS: &[&str] = &["terminal.shell", "lsp.servers", "json.schemas", "yaml.schemas"];
+pub const RESTRICTED_KEYS: &[&str] = &[
+    "terminal.shell",
+    "terminal.defaultProfile",
+    "terminal.profiles.macos",
+    "terminal.profiles.linux",
+    "terminal.profiles.windows",
+    "lsp.servers",
+    "json.schemas",
+    "yaml.schemas",
+];
 
 /// Not read from the project file even in a trusted folder: the gate is global, so one
 /// repo touching it would open it for every folder.
@@ -612,6 +664,8 @@ pub const USER_ONLY_KEYS: &[&str] = &[
     // A repository must not turn the question before a sync off, or make every commit push by itself.
     "git.confirmSync",
     "git.postCommitCommand",
+    // A repository must not make forwarded ports reachable from the network.
+    "ports.localBind",
 ];
 
 /// `trusted`: the folder is trusted. If not, `RESTRICTED_KEYS` in the project layer are ignored and a warning is recorded.
@@ -743,11 +797,38 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.number("terminal.fontSize", 6., 48.) {
         s.terminal_font_size = v as f32;
     }
-    if let Some(v) = r.number("terminal.scrollback", 0., 100_000.) {
+    if let Some(v) = r.number("terminal.scrollback", 0., crate::terminal::SCROLLBACK_MAX as f64) {
         s.terminal_scrollback = v as usize;
     }
     if let Some(v) = r.bool("terminal.allowClipboardWrite") {
         s.terminal_allow_clipboard_write = v;
+    }
+    if let Some(v) = r.bool("terminal.shellIntegration") {
+        s.terminal_shell_integration = v;
+    }
+    if let Some(v) = r.choice("terminal.confirmOnClose", &["running", "always", "never"]) {
+        s.terminal_confirm_close = v;
+    }
+    s.terminal_default_profile = r.string("terminal.defaultProfile").filter(|p| !p.trim().is_empty());
+    for os in ["macos", "linux", "windows"] {
+        let key = format!("terminal.profiles.{os}");
+        match obj.get(&key) {
+            None | Some(Value::Null) => {}
+            Some(Value::Object(m)) => {
+                let mut w = Vec::new();
+                s.terminal_profiles.insert(os.to_string(), crate::terminal_profiles::parse_profiles(&key, m, &mut w));
+                for w in w {
+                    r.warn(w);
+                }
+            }
+            Some(_) => r.warn(crate::i18n::tf("{0}: expected an object {1}", &[&key, &"{ \"zsh\": { \"path\": \"/bin/zsh\" } }"])),
+        }
+    }
+    if let Some(v) = r.choice("terminal.sanitizePaste", &["auto", "always", "off"]) {
+        s.terminal_sanitize_paste = crate::terminal_paste::Sanitize::parse(&v).unwrap_or_default();
+    }
+    if let Some(v) = r.choice("terminal.warnMultilinePaste", &["unbracketed", "always", "never"]) {
+        s.terminal_warn_multiline = crate::terminal_paste::WarnMultiline::parse(&v).unwrap_or_default();
     }
     if let Some(v) = r.bool("window.restoreSession") {
         s.restore_session = v;
@@ -1022,6 +1103,20 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.bool("ports.autoForward") {
         s.ports_auto_forward = v;
     }
+    if let Some(v) = r.choice("ports.localBind", &["loopback", "all"]) {
+        s.ports_local_bind = if v == "all" { host::forward::LocalBind::All } else { host::forward::LocalBind::Loopback };
+    }
+    match obj.get("ports.rules") {
+        None | Some(Value::Null) => {}
+        Some(Value::Object(m)) => {
+            let mut w = Vec::new();
+            s.ports_rules = crate::port_forwards::parse_rules(m, &mut w);
+            for w in w {
+                r.warn(w);
+            }
+        }
+        Some(_) => r.warn(crate::i18n::tf("{0}: expected an object {1}", &[&"ports.rules", &"{ \"3000\": { \"label\": \"web\" } }"])),
+    }
     if let Some(v) = r.bool("lsp.enabled") {
         s.lsp_enabled = v;
     }
@@ -1168,12 +1263,22 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "terminal.shell",
         "terminal.fontSize",
         "terminal.scrollback",
+        "terminal.sanitizePaste",
+        "terminal.warnMultilinePaste",
+        "terminal.confirmOnClose",
+        "terminal.shellIntegration",
+        "terminal.defaultProfile",
+        "terminal.profiles.macos",
+        "terminal.profiles.linux",
+        "terminal.profiles.windows",
         "terminal.allowClipboardWrite",
         "window.restoreSession",
         "window.startup",
         "lsp.enabled",
         "lsp.servers",
         "ports.autoForward",
+        "ports.localBind",
+        "ports.rules",
         "editor.autoClosingBrackets",
         "editor.formatOnSave",
         "editor.formatOnPaste",
@@ -1774,6 +1879,7 @@ mod hardening {
                 "theme",
                 "workbench.colorCustomizations",
                 "files.associations",
+                "ports.rules",
                 "lsp.servers",
                 "json.schemas",
                 "yaml.schemas",
