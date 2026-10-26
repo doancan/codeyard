@@ -57,6 +57,8 @@ jobs:
         os: [ubuntu-latest, windows-2022]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    env:
+      XWIN_ARCH: x86_64
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -70,13 +72,29 @@ jobs:
         with:
           name: benchmark-shaders
           path: shaders
-      - name: Install Linux cross tools and prefetch SDK
+      - uses: actions/cache/restore@v4
+        if: runner.os == 'Linux'
+        id: xwin
+        with:
+          path: ~/.cache/cargo-xwin
+          key: codeyard-xwin-0.23.1-x64-v1
+      - name: Install LLVM 19 and cargo-xwin
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang lld llvm ninja-build
+          sudo apt-get install -y clang-19 lld-19 llvm-19 ninja-build
           pip install cargo-xwin==0.23.1
-          cargo xwin cache xwin
+          echo /usr/lib/llvm-19/bin >> "$GITHUB_PATH"
+          /usr/lib/llvm-19/bin/clang-cl --version
+      - name: Prefetch Windows SDK (outside build timer)
+        if: runner.os == 'Linux'
+        timeout-minutes: 20
+        run: cargo xwin cache xwin
+      - uses: actions/cache/save@v4
+        if: runner.os == 'Linux' && steps.xwin.outputs.cache-hit != 'true'
+        with:
+          path: ~/.cache/cargo-xwin
+          key: codeyard-xwin-0.23.1-x64-v1
       - name: Prefetch Rust dependencies (outside build timer)
         run: cargo fetch --locked --target x86_64-pc-windows-msvc
       - name: Measure cold and dependency-cached compilation
