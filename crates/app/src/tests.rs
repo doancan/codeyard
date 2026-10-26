@@ -2245,7 +2245,9 @@ fn a_multi_line_paste_asks_first_and_hidden_markers_are_removed(cx: &mut TestApp
 
     paste(cx, "echo first-line\necho second-line\n");
     cx.simulate_prompt_answer("Paste");
-    wait_for(cx, "both lines ran", |cx| term.read_with(cx, |t, _| t.screen_text().lines().filter(|l| *l == "second-line").count() == 1));
+    // The output line may follow a prompt (dash echoes both typed lines before running them).
+    let ran = |l: &str| l.trim_end().ends_with("second-line") && !l.contains("echo");
+    wait_for(cx, "both lines ran", |cx| term.read_with(cx, |t, _| t.screen_text().lines().filter(|l| ran(l)).count() == 1));
 }
 
 /// Closing a terminal asks only while a program runs in it; a split opens where the shell is now; a profile's
