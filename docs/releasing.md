@@ -39,6 +39,34 @@ GPUI HLSL by FXC. The benchmark generates it with the vendored build helper on W
 app icon are still compiled into the cross-built EXE. This benchmark does not publish artifacts as a release or replace
 the production Windows ZIP/installer job; installer packaging and interactive UI validation remain separate.
 
+### Measured on 2026-10-26
+
+Both hosted runners had 4 CPUs and Rust 1.99.1. The measured commits differ only in benchmark/workflow setup; the
+Cargo manifests/lockfile, crates and vendor source trees have the same SHA-256, and both embedded agents and shader bytes
+were verified identical. Raw results and hashes: [windows-msvc-2026-10-26.json](benchmarks/windows-msvc-2026-10-26.json).
+
+| Compilation | Native Windows 2022 | Linux → Windows MSVC | Linux time reduction |
+| --- | ---: | ---: | ---: |
+| Cold Rust target directory | 674.359 s (11:14) | 375.218 s (6:15) | 44.4% |
+| Dependencies retained, app rebuilt | 297.110 s (4:57) | 149.485 s (2:29) | 49.7% |
+
+The [native Windows job](https://github.com/doancan/codeyard/actions/runs/40294887424/job/121478806732) passed; that overall
+run failed in its initial Linux arm, so only its successful native job supplies the Windows measurements. The final
+[Linux run](https://github.com/doancan/codeyard/actions/runs/40301532106) passed both builds and validated the cross-built
+EXE on real Windows (GUI subsystem, application icon, embedded agents). Interactive rendering was not tested.
+
+These compiler times exclude downloads and tool installation. The first SDK download took 12:04; the successful Linux
+run restored the SDK cache and installed tools in 28 seconds. Its build job, including both compilations, took 9:48 plus
+18 seconds for native Windows verification; the native Windows build job took 17:28 including its standalone check.
+Neither compiler benchmark includes ZIP/installer packaging. These single samples compare hosted runners, not identical
+hardware, and do not guarantee a fixed speedup on other runs.
+
+The production release continues to package on Windows while macOS and Windows run in parallel. A full
+[Node.js 24 release dry run](https://github.com/doancan/codeyard/actions/runs/40299040677) passed in 9:44 with dependency
+caches, including DMG, Windows ZIP/setup, merged checksums and throw-away-key signature verification. No release was
+published. The [preparation check](https://github.com/doancan/codeyard/actions/runs/40299036873) passed with zero Node.js 20
+warnings in `shaders` and `agents`; all release jobs also had zero such warnings.
+
 ## Steps
 
 1. Run all gates (`scripts/check.sh --strict --budgets`, see `testing.md`), including `scripts/docs-check.sh` (it fails if the changelog has no section for the new version).
