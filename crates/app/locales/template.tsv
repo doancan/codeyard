@@ -118,6 +118,7 @@ Cannot use {} as an entry
 Cannot use {} as an object key	
 Change All Occurrences	
 Change the URL of which remote?	
+Change this in Settings (update.check). Check for Updates… always works.	
 Changed	
 Changed {0} file ({1} file operations skipped)|Changed {0} files ({1} file operations skipped)	
 Changed {} file|Changed {} files	
@@ -1022,7 +1023,7 @@ Numbers and booleans were written as text.
 Object keys must be strings, not {}	
 Oct	
 On this computer	
-Once a day, Codeyard can look for a newer version. It downloads two small files from github.com: the checksum list of the latest release and its signature. GitHub sees your IP address and that the request comes from curl; no account, no cookies, nothing about your files.	
+Once a day, Codeyard downloads two small files from github.com to look for a newer version. GitHub sees your IP address, nothing about your files.	
 One line per commit: the most history in a narrow sidebar	
 One quiet color, outline glyphs	
 Only When I Ask	
@@ -1714,7 +1715,6 @@ Workspace: Trust This Folder
 Workspace: {} folder in the Explorer.|Workspace: {} folders in the Explorer.	
 Wrap long lines at the window edge	
 You are connected to “{}”. Disconnect first.	
-You can change this at any time in Settings (update.check). Check for Updates… always works, whatever you choose.	
 You can restore it from the Trash.	
 You have unsaved changes	
 You have {}	

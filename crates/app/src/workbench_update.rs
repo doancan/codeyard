@@ -468,8 +468,8 @@ impl Workbench {
                 title: t("Check for updates automatically?").into(),
                 subtitle: None,
                 body: Body::Paragraphs(vec![
-                    t("Once a day, Codeyard can look for a newer version. It downloads two small files from github.com: the checksum list of the latest release and its signature. GitHub sees your IP address and that the request comes from curl; no account, no cookies, nothing about your files.").into(),
-                    t("You can change this at any time in Settings (update.check). Check for Updates… always works, whatever you choose.").into(),
+                    t("Once a day, Codeyard downloads two small files from github.com to look for a newer version. GitHub sees your IP address, nothing about your files.").into(),
+                    t("Change this in Settings (update.check). Check for Updates… always works.").into(),
                 ]),
                 buttons: vec![button(A::OnlyWhenAsked, t("Only When I Ask"), false), button(A::CheckDaily, t("Check Daily"), true)],
                 escape: A::Close,
