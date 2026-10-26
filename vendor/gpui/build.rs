@@ -22,7 +22,6 @@ fn main() {
             macos::build();
         }
         Ok("windows") => {
-            #[cfg(target_os = "windows")]
             windows::build();
         }
         _ => (),
@@ -245,7 +244,6 @@ mod macos {
     }
 }
 
-#[cfg(target_os = "windows")]
 mod windows {
     use std::{
         fs,
@@ -257,7 +255,17 @@ mod windows {
     pub(super) fn build() {
         // Compile HLSL shaders
         #[cfg(not(debug_assertions))]
-        compile_shaders();
+        {
+            println!("cargo:rerun-if-env-changed=GPUI_PRECOMPILED_SHADERS");
+            if let Some(source) = std::env::var_os("GPUI_PRECOMPILED_SHADERS") {
+                let source = PathBuf::from(source);
+                println!("cargo:rerun-if-changed={}", source.display());
+                fs::copy(source, PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join("shaders_bytes.rs"))
+                    .expect("copy precompiled Windows shaders from the same GPUI source");
+            } else {
+                compile_shaders();
+            }
+        }
 
         // Embed the Windows manifest and resource file
         #[cfg(feature = "windows-manifest")]
