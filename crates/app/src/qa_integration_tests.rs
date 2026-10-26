@@ -704,6 +704,57 @@ fn qa_run_test_at_cursor_reports_the_failing_assert(cx: &mut TestAppContext) {
     assert!(d[0].message.starts_with("test panicked:"), "{d:?}");
 }
 
+/// The Testing view on a real cargo project: the tests are found, "Run All Tests" runs them, and each test shows its
+/// outcome; the file with a failure opens and shows the failure's first line under the failed test.
+#[gpui::test]
+fn qa_testing_view_finds_runs_and_reports_tests(cx: &mut TestAppContext) {
+    if std::process::Command::new("cargo").arg("--version").output().is_err() {
+        return;
+    }
+    let dir = qa_dir("qa-testing");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \"2021\"\n").unwrap();
+    let src = "pub fn two() -> i32 { 2 }\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn passes() {\n        assert_eq!(two(), 2);\n    }\n\n    #[test]\n    fn fails() {\n        assert!(two() == 3, \"two is not three\");\n    }\n}\n";
+    std::fs::write(dir.join("src/lib.rs"), src).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    run(&wb, cx, "View: Testing");
+    wait_secs(cx, 30, "tests found", |cx| wb.read_with(cx, |wb, _| !wb.testing_rows_for_test().is_empty()));
+    assert_eq!(wb.read_with(cx, |wb, _| wb.testing_rows_for_test()), ["file:src/lib.rs:NotRun"], "files start closed");
+    run(&wb, cx, "Test: Run All Tests");
+    wait_secs(cx, 180, "the run ends", |cx| {
+        cx.executor().advance_clock(Duration::from_millis(300));
+        wb.read_with(cx, |wb, _| !wb.testing_busy_for_test())
+    });
+    assert_eq!(
+        wb.read_with(cx, |wb, _| wb.testing_rows_for_test()),
+        ["file:src/lib.rs:Failed", "test:passes:Passed", "test:fails:Failed", "message:two is not three"]
+    );
+}
+
+/// Stopping a run: the runner is killed at once and the tests go back to what they showed before.
+#[gpui::test]
+fn qa_testing_view_stop_ends_the_run(cx: &mut TestAppContext) {
+    if std::process::Command::new("cargo").arg("--version").output().is_err() {
+        return;
+    }
+    let dir = qa_dir("qa-testing-stop");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"slow\"\nversion = \"0.1.0\"\nedition = \"2021\"\n").unwrap();
+    let src = "#[cfg(test)]\nmod tests {\n    #[test]\n    fn waits() {\n        std::thread::sleep(std::time::Duration::from_secs(600));\n    }\n}\n";
+    std::fs::write(dir.join("src/lib.rs"), src).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    run(&wb, cx, "View: Testing");
+    wait_secs(cx, 30, "tests found", |cx| wb.read_with(cx, |wb, _| !wb.testing_rows_for_test().is_empty()));
+    run(&wb, cx, "Test: Run All Tests");
+    assert_eq!(wb.read_with(cx, |wb, _| wb.testing_rows_for_test()), ["file:src/lib.rs:Running"]);
+    wait_secs(cx, 60, "the runner started", |cx| wb.read_with(cx, |wb, _| wb.testing_process_for_test()));
+    run(&wb, cx, "Test: Stop Running Tests");
+    assert!(!wb.read_with(cx, |wb, _| wb.testing_busy_for_test()));
+    assert_eq!(wb.read_with(cx, |wb, _| wb.testing_rows_for_test()), ["file:src/lib.rs:NotRun"]);
+}
+
 /// Debugger end to end with a scripted adapter: breakpoint → F5 → stops on that line with the
 /// stack and variables → step → a breakpoint added while paused reaches the adapter → continue
 /// stops there → continue ends the session and clears the yellow line.

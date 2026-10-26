@@ -78,6 +78,7 @@ impl Render for Workbench {
                 .into_any_element(),
             Panel::Scm => self.scm.clone().into_any_element(),
             Panel::Debug => self.run_debug_view(&p, cx),
+            Panel::Testing => self.testing_view(&p, cx),
             Panel::Remote => self.remote_view(&p, cx),
         });
 
@@ -96,6 +97,12 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::show_remote))
             .on_action(cx.listener(Self::show_remote_explorer))
             .on_action(cx.listener(Self::show_run_debug))
+            .on_action(cx.listener(Self::show_testing))
+            .on_action(cx.listener(|this, _: &RunAllTests, w, cx| this.run_all_tests(w, cx)))
+            .on_action(cx.listener(|this, _: &RunFailedTests, w, cx| this.run_failed_tests(w, cx)))
+            .on_action(cx.listener(|this, _: &RefreshTests, _, cx| this.refresh_tests(cx)))
+            .on_action(cx.listener(|this, _: &StopTests, _, cx| this.stop_tests(cx)))
+            .on_action(cx.listener(|this, _: &DebugTestAtCursor, w, cx| this.debug_test_at_cursor(w, cx)))
             .on_action(cx.listener(Self::kill_all_terminals))
             .on_action(cx.listener(Self::rename_terminal))
             .on_action(cx.listener(Self::change_terminal_color))

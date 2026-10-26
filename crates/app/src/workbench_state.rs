@@ -39,6 +39,8 @@ pub(super) struct TaskState {
     pub(super) root: Option<String>,
     pub(super) problems: Vec<(String, crate::lsp::Diagnostic)>,
     pub(super) scan_pending: bool,
+    /// The Testing view: tests found, their results and the running test command.
+    pub(super) tests: super::tests_glue::TestingState,
 }
 
 /// Language servers, diagnostics, progress and log (see workbench_lsp.rs).

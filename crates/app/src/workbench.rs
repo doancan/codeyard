@@ -110,6 +110,8 @@ mod terminals_glue;
 #[cfg(test)]
 #[path = "workbench_testing.rs"]
 mod testing_glue;
+#[path = "workbench_test_explorer.rs"]
+mod tests_glue;
 #[cfg(test)]
 pub(crate) use testing_glue::DialogView;
 #[path = "workbench_theme.rs"]
@@ -427,6 +429,7 @@ pub use debug::{
 pub use host::askpass::{AskKind, AskRequest};
 pub use remote_glue::ShowRemoteExplorer;
 pub use terminals_glue::{ChangeTerminalColor, KillAllTerminals, NewTerminalWithProfile, RenameTerminal, SelectDefaultTerminalProfile};
+pub use tests_glue::{DebugTestAtCursor, RefreshTests, RunAllTests, RunFailedTests, ShowTesting, StopTests};
 pub type AskReply = std::sync::mpsc::Sender<Option<String>>;
 
 /// Options in the status bar pickers.
@@ -561,6 +564,7 @@ enum Panel {
     Search,
     Scm,
     Debug,
+    Testing,
     Remote,
 }
 
@@ -1004,7 +1008,7 @@ impl Workbench {
             active_terminal: 0,
             shell: None,
             dbg: Default::default(),
-            jobs: state_glue::TaskState { last: None, terminal: None, root: None, problems: Vec::new(), scan_pending: false },
+            jobs: state_glue::TaskState { last: None, terminal: None, root: None, problems: Vec::new(), scan_pending: false, tests: Default::default() },
             lsp: state_glue::LspState {
                 restricted_notified: Default::default(),
                 servers: Default::default(),

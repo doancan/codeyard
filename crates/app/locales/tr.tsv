@@ -2438,3 +2438,34 @@ Mark prompts, commands and the folder in zsh, bash and fish	zsh, bash ve fish'te
 Terminal: Go to Previous Command	Terminal: Önceki Komuta Git
 Terminal: Go to Next Command	Terminal: Sonraki Komuta Git
 Terminal: Copy Last Command Output	Terminal: Son Komutun Çıktısını Kopyala
+Testing	Test
+View: Testing	Görünüm: Test
+Test: Run All Tests	Test: Tüm Testleri Çalıştır
+Test: Run Failed Tests	Test: Başarısız Testleri Yeniden Çalıştır
+Test: Refresh Tests	Test: Testleri Yenile
+Test: Stop Running Tests	Test: Çalışan Testleri Durdur
+Test: Debug Test at Cursor	Test: İmlecin Altındaki Testte Hata Ayıkla
+Building the tests…	Testler derleniyor…
+Collapse All	Tümünü Daralt
+Could not look for tests: {}	Testler aranamadı: {}
+Could not start the test runner: {}	Test çalıştırıcısı başlatılamadı: {}
+Debug Test	Testte Hata Ayıkla
+Debug Test: {}	Testte Hata Ayıkla: {}
+Filter (e.g. text, path)	Filtrele (ör. metin, yol)
+JavaScript tests can be run here, not debugged: add a launch configuration for the runner.	JavaScript testleri burada çalıştırılabilir ama hata ayıklanamaz: çalıştırıcı için bir başlatma yapılandırması ekleyin.
+Looking for tests…	Testler aranıyor…
+No tests found. Tests are read from Rust, Go, Python and JavaScript test files.	Test bulunamadı. Testler Rust, Go, Python ve JavaScript test dosyalarından okunur.
+No tests to run.	Çalıştırılacak test yok.
+Open a folder to find its tests.	Testlerini bulmak için bir klasör açın.
+Refresh Tests	Testleri Yenile
+Run All Tests	Tüm Testleri Çalıştır
+Run Failed Tests	Başarısız Testleri Yeniden Çalıştır
+Run Test	Testi Çalıştır
+Run Tests in File	Dosyadaki Testleri Çalıştır
+Show Only Failed Tests	Yalnızca Başarısız Testleri Göster
+Test Results	Test Sonuçları
+Tests: {0} passed, {1} failed	Testler: {0} geçti, {1} başarısız
+The tests did not build: run the test to see the errors.	Testler derlenemedi: hataları görmek için testi çalıştırın.
+{0}/{1} passed	{0}/{1} geçti
+{} failed	{} başarısız
+{} skipped	{} atlandı
