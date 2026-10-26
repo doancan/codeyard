@@ -39,6 +39,7 @@ Add
 Add Cursor Above	
 Add Cursor Below	
 Add Next Occurrence	
+Add SSH Host…	
 Add SSH host…	
 Add a host	
 Add remote	
@@ -234,6 +235,8 @@ Comparing contents… {0} of {1}
 Conflict	
 Conflict {0} of {1}	
 Connect	
+Connect in Current Window	
+Connect in New Window	
 Connect over SSH	
 Connect over SSH and the files, terminal and language servers all run on the server.	
 Connect to SSH Host…	
@@ -242,9 +245,13 @@ Connect to WSL…
 Connect to a running container…	
 Connect to which WSL distribution?	
 Connect to which running container?	
+Connected	
+Connected before	
 Connecting to {}	
 Connecting to {}…	
+Connecting…	
 Connection lost: {}	
+Containers	
 Continue (F5)	
 Continuing rebase…	
 Convert indentation to spaces	
@@ -418,6 +425,7 @@ Discard changes
 Discard changes in {} files?	
 Discard changes in {}?	
 Discard mine, load from disk	
+Disconnect	
 Disconnect from {}	
 Dismiss this file from the results	
 Do you trust the authors of this folder?	
@@ -451,6 +459,7 @@ Duplicate
 Duplicate key	
 Duplicate key “{}”	
 Edit	
+Edit Host…	
 Edit a host	
 Edit which SSH host?	
 Edit “{}”: which setting?	
@@ -651,6 +660,7 @@ Forward
 Forward Port	
 Forward a port:	
 Forward ports opened on SSH hosts	
+Forwarded Ports	
 Friday	
 Git could not sign in to {}. Set up credentials (credential helper, SSH key or `gh auth login`) and try again	
 Git doesn't know who you are on this host. Run these in the terminal: {0} and {1}	
@@ -964,6 +974,7 @@ No file “{}” in this project
 No files in this folder	
 No folder is open.	
 No git changes to revert	
+No hosts in ~/.ssh/config. Add one with +.	
 No implementations found	
 No incoming calls found	
 No language server for this file	
@@ -983,6 +994,7 @@ No problems in this file
 No problems.	
 No problems. Language servers start when you open a file.	
 No quick fixes here	
+No recent folders	
 No references found	
 No results	
 No results in {} file.|No results in {} files.	
@@ -1006,6 +1018,7 @@ None of this repository's remotes is on github.com.
 Not Now	
 Not breaking on exceptions.	
 Not compared	
+Not connected yet	
 Not deleted: {}	
 Not in a git repository	
 Not paused	
@@ -1052,6 +1065,7 @@ Open Folder
 Open Folder…	
 Open Merge Editor	
 Open Recent	
+Open SSH Config File	
 Open Settings (JSON)	
 Open System Settings	
 Open a .http or .rest file to send requests.	
@@ -1077,6 +1091,7 @@ Open as Hex
 Open files can be undone with ⌘Z; closed files are written to disk.	
 Open in Browser	
 Open in Integrated Terminal	
+Open in New Window	
 Open on GitHub	
 Open recent, or connect to a host… (⌃R)	
 Open settings.jsonc	
@@ -1219,6 +1234,7 @@ Regular expression (⌥R)
 Release Page	
 Reload history	
 Remote & Languages	
+Remote Explorer	
 Remote: Add SSH Host…	
 Remote: Connect to Dev Container…	
 Remote: Connect to Host or Switch Workspace…	
@@ -1234,6 +1250,7 @@ Remote: Set Up Key Login…
 Remote: Test SSH Connection…	
 Remote: Upload Files to This Folder…	
 Remove	
+Remove Host…	
 Remove a host	
 Remove folder from workspace	
 Remove from Favorites	
@@ -1313,6 +1330,7 @@ Right-click a folder and choose Find in Folder… to search only inside it.
 Run task	
 Run the search again	
 Running…	
+SSH Hosts	
 SSH host	
 Same apart from whitespace	
 Saturday	
@@ -1386,6 +1404,7 @@ Set
 Set Label…	
 Set URL	
 Set Up	
+Set Up Key Login…	
 Set up key login	
 Set up key login (no password) for which SSH host?	
 Set up key login for “{}”?	
@@ -1506,6 +1525,7 @@ Terminal: New
 Terminal: Run Selected Text	
 Terminal: Split	
 Terminal: Toggle	
+Test Connection	
 Test a connection	
 Test the connection to which SSH host?	
 Test: Run Test at Cursor	
@@ -1700,6 +1720,7 @@ View: Open Previous Editor
 View: Output	
 View: Ports (SSH port forwarding)	
 View: Problems	
+View: Remote Explorer	
 View: Reopen Closed Editor	
 View: Reset Zoom	
 View: Source Control	
@@ -1716,6 +1737,7 @@ View: Toggle Word Wrap
 View: Toggle Zen Mode	
 View: Zoom In	
 View: Zoom Out	
+WSL Targets	
 WSL distribution	
 Watch	
 Wednesday	

@@ -282,6 +282,7 @@ impl Workbench {
             Command::action("View: Focus Left Editor Group", FocusLeftGroup),
             Command::action("View: Focus Right Editor Group", FocusRightGroup),
             Command::action("View: Source Control", ShowScm),
+            Command::action("View: Remote Explorer", ShowRemoteExplorer),
             Command::action("Git: Checkout to…", GitCheckout),
             Command::action("Git: Create Branch…", GitCreateBranch),
             Command::action("Remote: Connect to Dev Container…", RemoteDocker),

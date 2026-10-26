@@ -76,6 +76,8 @@ mod ports_glue;
 pub mod projects;
 #[path = "workbench_pulls.rs"]
 mod pulls_glue;
+#[path = "workbench_remote.rs"]
+mod remote_glue;
 // --- git-refs ---
 #[path = "workbench_recover.rs"]
 mod recover_glue;
@@ -419,6 +421,7 @@ struct Overlay {
 }
 
 pub use host::askpass::{AskKind, AskRequest};
+pub use remote_glue::ShowRemoteExplorer;
 pub type AskReply = std::sync::mpsc::Sender<Option<String>>;
 
 /// Options in the status bar pickers.
@@ -552,6 +555,7 @@ enum Panel {
     Explorer,
     Search,
     Scm,
+    Remote,
 }
 
 enum Conn {
@@ -1097,6 +1101,7 @@ impl Workbench {
                 bundle: Arc::new(crate::bundled_agents::discover()),
                 asks: Default::default(),
                 transfer: None,
+                view: Default::default(),
             },
             roots: state_glue::RootsState {
                 primary: tree,

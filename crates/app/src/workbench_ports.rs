@@ -17,7 +17,7 @@ use crate::ports::{self, ListeningPort, ScanMethod};
 
 #[path = "workbench_ports_view.rs"]
 mod view;
-pub use view::PortMenuCmd;
+pub use view::{PortMenuCmd, PortRow, RowState, port_rows};
 
 #[cfg(test)]
 pub use crate::port_forwards::Forward;

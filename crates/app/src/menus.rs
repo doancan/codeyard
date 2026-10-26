@@ -283,6 +283,7 @@ pub(crate) fn menus(recent: &[state::RecentWorkspace]) -> Vec<Menu> {
                 I::action(tr("Explorer"), wb::ShowExplorer),
                 I::action(tr("Search"), wb::FindInFiles),
                 I::action(tr("Source Control"), wb::ShowScm),
+                I::action(tr("Remote Explorer"), wb::ShowRemoteExplorer),
                 I::action(tr("Switch Workspace or Connect to Host…"), wb::ShowRemote),
                 sep(),
                 I::action(tr("Problems"), wb::ShowProblems),

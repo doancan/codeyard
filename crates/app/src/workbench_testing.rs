@@ -219,6 +219,7 @@ impl Workbench {
             Panel::Explorer => "explorer",
             Panel::Search => "search",
             Panel::Scm => "scm",
+            Panel::Remote => "remote",
         })
     }
 

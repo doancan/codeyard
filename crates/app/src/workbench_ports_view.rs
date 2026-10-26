@@ -279,15 +279,15 @@ impl Workbench {
         } else {
             let p = *p;
             // Virtualized: a busy server can list hundreds of ports.
-            gpui::uniform_list(
+            let list = gpui::uniform_list(
                 "port-rows",
                 rows.len(),
                 cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
                     range.filter_map(|ix| Some(this.port_row(ix, rows.get(ix)?, &p, cx))).collect()
                 }),
             )
-            .flex_1()
-            .into_any_element()
+            .size_full();
+            div().flex_1().min_h_0().child(list).into_any_element()
         };
         div()
             .id("ports")
