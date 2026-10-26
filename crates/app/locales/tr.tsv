@@ -1332,7 +1332,6 @@ Select a color theme	Bir renk teması seçin
 Select a file icon theme	Bir dosya simgesi teması seçin
 Open as Hex	Hex Olarak Aç
 Restarting language servers…	Dil sunucuları yeniden başlatılıyor…
-Could not open {0}: {1}	{0} açılamadı: {1}
 No file “{}” in this project	Bu projede “{}” dosyası yok
 Language Badges	Dil Rozetleri
 Colorful Folders	Renkli Klasörler
