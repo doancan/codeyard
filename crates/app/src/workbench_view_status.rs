@@ -2,6 +2,11 @@
 
 use super::*;
 
+/// Status bar entries: icon size, gap between icon and label, and horizontal padding of the hover area.
+const SB_ICON: f32 = 14.;
+const SB_GAP: f32 = 5.;
+const SB_PAD: f32 = 8.;
+
 impl Workbench {
     pub(super) fn status_bar(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
         let (remote_label, remote_bg, remote_fg, remote_icon) = match &self.remote.conn {
@@ -19,7 +24,8 @@ impl Workbench {
             Conn::Reconnecting { alias, attempt } => (crate::i18n::tf("Reconnecting to {}… (attempt {})", &[alias, attempt]), None, p.warning, "loader"),
             Conn::Failed { alias, .. } => (crate::i18n::tf("{}: connection failed", &[alias]), Some(p.danger), p.on_accent, "circle-x"),
         };
-        let item = || div().flex().items_center().gap(px(theme::SPACE[2])).px(px(theme::SPACE[4])).h_full();
+        // One rhythm for every entry: same icon size, same icon-to-text gap, same side padding.
+        let item = || div().flex().items_center().gap(px(SB_GAP)).px(px(SB_PAD)).h_full();
         let conflicts = self.active_editor().map_or(0, |e| e.read(cx).conflict_count());
         let editor_info = self.active_editor().map(|e| {
             let e = e.read(cx);
@@ -55,9 +61,9 @@ impl Workbench {
                     .when_some(remote_bg, |d, bg| d.bg(c(bg)))
                     .text_color(c(remote_fg))
                     .child(if remote_icon == "loader" {
-                        ui::spinner("remote-status", 14., remote_fg).into_any_element()
+                        ui::spinner("remote-status", SB_ICON, remote_fg).into_any_element()
                     } else {
-                        icon(remote_icon, 14., remote_fg).into_any_element()
+                        icon(remote_icon, SB_ICON, remote_fg).into_any_element()
                     })
                     .child(remote_label)
                     .when_some(
@@ -82,7 +88,7 @@ impl Workbench {
                         .id("sb-branch")
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
-                        .child(icon("git-branch", 14., p.text_muted))
+                        .child(icon("git-branch", SB_ICON, p.text_muted))
                         .child(b)
                         .on_click(cx.listener(|this, _, window, cx| this.show_branch_picker(window, cx))),
                 )
@@ -92,9 +98,9 @@ impl Workbench {
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
                         .child(if self.vcs.sync.running == Some(sync_glue::Running::Sync) {
-                            ui::spinner("sb-sync-busy", 13., p.text_muted).into_any_element()
+                            ui::spinner("sb-sync-busy", SB_ICON, p.text_muted).into_any_element()
                         } else {
-                            icon(if unpublished { "cloud-upload" } else { "refresh-cw" }, 13., p.text_muted).into_any_element()
+                            icon(if unpublished { "cloud-upload" } else { "refresh-cw" }, SB_ICON, p.text_muted).into_any_element()
                         })
                         .when(!sync.is_empty(), |d| d.child(sync))
                         .tooltip(move |_, cx| cx.new(|_| Tooltip(tip.clone())).into())
@@ -104,14 +110,16 @@ impl Workbench {
             .child({
                 // Problems: error and warning counts (click: open the panel).
                 let (errors, warnings) = self.problem_counts();
+                let count = |glyph: &'static str, n: usize, color: u32| {
+                    div().flex().items_center().gap(px(SB_GAP)).child(icon(glyph, SB_ICON, if n > 0 { color } else { p.text_muted })).child(n.to_string())
+                };
                 item()
                     .id("problems-indicator")
+                    .gap(px(SB_PAD))
                     .cursor_pointer()
                     .hover(|d| d.bg(c(p.surface_hover)))
-                    .child(icon("circle-x", 14., if errors > 0 { p.danger } else { p.text_muted }))
-                    .child(errors.to_string())
-                    .child(icon("alert", 14., if warnings > 0 { p.warning } else { p.text_muted }))
-                    .child(warnings.to_string())
+                    .child(count("circle-x", errors, p.danger))
+                    .child(count("alert", warnings, p.warning))
                     .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Problems (⇧⌘M)").into())).into())
                     .on_click(cx.listener(|this, _, w, cx| this.show_problems(&ShowProblems, w, cx)))
             })
@@ -122,7 +130,7 @@ impl Workbench {
                         .id("ports-indicator")
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
-                        .child(icon("plug", 14., p.text_muted))
+                        .child(icon("plug", SB_ICON, p.text_muted))
                         .child(crate::i18n::tf("{} forwarded", &[&n]))
                         .on_click(cx.listener(|this, _, w, cx| this.show_ports(&ShowPorts, w, cx))),
                 )
@@ -134,13 +142,13 @@ impl Workbench {
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
                         .text_color(c(p.text))
-                        .child(ui::spinner("transfer-progress", 14., p.text_muted))
+                        .child(ui::spinner("transfer-progress", SB_ICON, p.text_muted))
                         .child(text)
                         .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("File transfer in progress. Click to cancel.").into())).into())
                         .on_click(cx.listener(|this, _, w, cx| this.ask_cancel_transfer(w, cx))),
                 )
             })
-            .when_some(self.lsp.progress.clone(), |d, t| d.child(item().child(ui::spinner("lsp-progress", 14., p.text_muted)).child(t)))
+            .when_some(self.lsp.progress.clone(), |d, t| d.child(item().child(ui::spinner("lsp-progress", SB_ICON, p.text_muted)).child(t)))
             .when_some(notice, |d, (m, color)| d.child(item().text_color(c(color)).child(m)))
             .child(div().flex_1())
             .child(
@@ -148,7 +156,7 @@ impl Workbench {
                     .id("sb-terminal")
                     .cursor_pointer()
                     .hover(|d| d.bg(c(p.surface_hover)))
-                    .child(icon("terminal", 14., if self.chrome.panel_open { p.text } else { p.text_muted }))
+                    .child(icon("terminal", SB_ICON, if self.chrome.panel_open { p.text } else { p.text_muted }))
                     .on_click(cx.listener(|this, _, w, cx| this.toggle_panel(&TogglePanel, w, cx))),
             )
             .when(conflicts > 0, |d| {
@@ -158,7 +166,7 @@ impl Workbench {
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
                         .text_color(c(p.warning))
-                        .child(icon("git-compare", 13., p.warning))
+                        .child(icon("git-compare", SB_ICON, p.warning))
                         .child(crate::i18n::tn("{} conflict", "{} conflicts", conflicts, &[]))
                         .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Go to the next merge conflict").into())).into())
                         .on_click(cx.listener(|this, _, window, cx| {
