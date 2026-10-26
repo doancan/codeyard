@@ -281,7 +281,19 @@ impl Workbench {
         cx: &mut Context<Self>,
         then: impl FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
     ) {
-        let Some(root) = self.active_root(cx).filter(|r| !self.is_trusted_root(r, cx)) else { return then(self, window, cx) };
+        let root = self.active_root(cx);
+        self.require_trust_for(root, window, cx, then);
+    }
+
+    /// `require_trust` for the folder the commands will run in, when that is not the active file's folder.
+    pub(super) fn require_trust_for(
+        &mut self,
+        root: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        then: impl FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
+    ) {
+        let Some(root) = root.filter(|r| !self.is_trusted_root(r, cx)) else { return then(self, window, cx) };
         let detail = crate::i18n::tf(
             "“{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.",
             &[&ui::file_name(&root)],
