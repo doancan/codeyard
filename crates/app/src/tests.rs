@@ -1618,6 +1618,40 @@ fn source_control_graph_follows_refs_that_do_not_move_head(cx: &mut TestAppConte
     });
 }
 
+/// The GRAPH "…" menu: view and filters are checked items that change the panel; the remote actions are only offered
+/// when the repository has a remote.
+#[gpui::test]
+fn source_control_graph_menu_toggles_view_and_filters(cx: &mut TestAppContext) {
+    let Some(dir) = git_repo("scmgraphmenu") else { return };
+    let dir = std::fs::canonicalize(dir).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    cx.simulate_keystrokes("ctrl-shift-g");
+    let scm = wb.read_with(cx, |wb, _| wb.scm_panel());
+    wait_ticking(cx, "graph", |cx| !scm.read_with(cx, |s, _| s.graph_subjects()).is_empty());
+    let open_menu = |cx: &mut VisualTestContext| {
+        scm.update(cx, |_, cx| cx.emit(crate::scm::ScmEvent::GraphMenu(gpui::point(gpui::px(10.), gpui::px(10.)))));
+        cx.run_until_parked();
+        wb.read_with(cx, |wb, cx| wb.menu_labels(cx)).expect("graph menu")
+    };
+    let labels = open_menu(cx);
+    for want in ["Graph", "List", "Days", "All Branches", "Hide Merge Commits", "Search Commits", "Create Branch…", "Reload history"] {
+        assert!(labels.iter().any(|l| l == want), "{want} missing in {labels:?}");
+    }
+    assert!(!labels.iter().any(|l| l == "Push"), "no remote, no Push: {labels:?}");
+    wb.update_in(cx, |wb, _, cx| wb.select_menu_for_test("Hide Merge Commits", cx));
+    cx.run_until_parked();
+    assert!(scm.read_with(cx, |s, cx| s.graph_menu_state(cx).hide_merges));
+    open_menu(cx);
+    wb.update_in(cx, |wb, _, cx| wb.select_menu_for_test("Days", cx));
+    cx.run_until_parked();
+    assert_eq!(scm.read_with(cx, |s, cx| s.graph_menu_state(cx).view), crate::graph::GraphView::Dates);
+    open_menu(cx);
+    wb.update_in(cx, |wb, _, cx| wb.select_menu_for_test("All Branches", cx));
+    cx.run_until_parked();
+    assert!(!scm.read_with(cx, |s, cx| s.graph_menu_state(cx).all_branches));
+}
+
 /// Source control graph: branches, merge, tag; clicking a commit shows its files.
 #[gpui::test]
 fn source_control_graph_shows_branches_and_opens_commit_files(cx: &mut TestAppContext) {

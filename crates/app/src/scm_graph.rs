@@ -118,29 +118,105 @@ impl Render for CommitCard {
     }
 }
 
-/// Pill button in the view / filter bar.
-fn pill(id: &'static str, label: &'static str, active: bool, tip: &'static str, p: &Palette) -> gpui::Stateful<gpui::Div> {
-    let bg = if active { ui::mix(p.surface, p.accent, 0.22) } else { p.surface };
-    let fg = if active { ui::ensure_contrast(p.accent, p.text, &[bg], 4.6) } else { p.text_muted };
+/// Active filter shown under the GRAPH header; clicking it turns the filter off.
+fn filter_chip(id: &'static str, label: &'static str, p: &Palette) -> gpui::Stateful<gpui::Div> {
+    let bg = ui::mix(p.surface, p.accent, 0.18);
+    let fg = ui::ensure_contrast(p.accent, p.text, &[bg], 4.6);
     div()
         .id(id)
-        .h(px(20.))
-        .px(px(theme::SPACE[3]))
+        .h(px(18.))
+        .pl(px(theme::SPACE[3]))
+        .pr(px(theme::SPACE[2]))
         .flex()
         .items_center()
-        .rounded(px(10.))
+        .gap(px(theme::SPACE[1]))
+        .rounded(px(9.))
         .bg(c(bg))
-        .text_size(px(10.))
+        .text_size(px(text::XXS.0))
         .text_color(c(fg))
         .cursor_pointer()
-        .when(!active, |d| d.hover(|s| s.bg(c(p.surface_hover)).text_color(c(p.text))))
-        .tooltip(move |_, cx| cx.new(|_| crate::workbench::Tooltip(tip.into())).into())
+        .hover(|s| s.bg(c(ui::mix(p.surface, p.accent, 0.28))))
+        .tooltip(|_, cx| cx.new(|_| crate::workbench::Tooltip(crate::i18n::t("Click to remove this filter").into())).into())
         .child(label)
+        .child(icon("x", 10., fg))
+}
+
+/// Header button with a counter next to the icon (commits to pull / to push).
+fn count_button(id: &'static str, glyph: &'static str, n: u32, tip: &'static str, p: &Palette) -> gpui::Stateful<gpui::Div> {
+    ui::icon_button(id, glyph, tip, p).when(n > 0, |d| {
+        d.w_auto().px(px(theme::SPACE[1])).gap(px(1.)).child(div().text_size(px(10.)).font_weight(gpui::FontWeight::NORMAL).child(n.to_string()))
+    })
+}
+
+/// Toggles of the GRAPH section's "…" menu (the workbench builds the menu, the panel applies the choice).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GraphOption {
+    View(GraphView),
+    AllBranches,
+    OnlyMine,
+    HideMerges,
+    Search,
+    Reload,
+}
+
+/// What the "…" menu needs to draw its checks.
+pub struct GraphMenuState {
+    pub view: GraphView,
+    pub all_branches: bool,
+    pub only_mine: bool,
+    pub hide_merges: bool,
+    pub search_open: bool,
+    /// "Only my commits" needs a git identity to compare against.
+    pub has_identity: bool,
+    pub has_remote: bool,
 }
 
 impl ScmPanel {
     pub(super) fn set_graph_view(&mut self, view: GraphView, cx: &mut Context<Self>) {
         self.graph_view = Some(view);
+        cx.notify();
+    }
+
+    fn current_graph_view(&self, cx: &gpui::App) -> GraphView {
+        self.graph_view.unwrap_or_else(|| GraphView::from_id(&cx.global::<crate::settings::Settings>().graph_view).unwrap_or_default())
+    }
+
+    pub fn graph_menu_state(&self, cx: &gpui::App) -> GraphMenuState {
+        GraphMenuState {
+            view: self.current_graph_view(cx),
+            all_branches: self.scope == graph::Scope::All,
+            only_mine: self.only_mine,
+            hide_merges: self.hide_merges,
+            search_open: self.search_open,
+            has_identity: self.identity.as_ref().is_some_and(|(n, e)| n.is_some() || e.is_some()),
+            has_remote: self.has_remote,
+        }
+    }
+
+    pub fn apply_graph_option(&mut self, option: GraphOption, window: &mut Window, cx: &mut Context<Self>) {
+        self.sections.set_open("graph", true);
+        match option {
+            GraphOption::View(v) => self.set_graph_view(v, cx),
+            GraphOption::AllBranches => {
+                let scope = if self.scope == graph::Scope::All { graph::Scope::Current } else { graph::Scope::All };
+                self.set_scope(scope, cx);
+            }
+            GraphOption::OnlyMine => self.only_mine = !self.only_mine,
+            GraphOption::HideMerges => self.hide_merges = !self.hide_merges,
+            GraphOption::Search => self.toggle_graph_search(window, cx),
+            GraphOption::Reload => self.load_graph(cx),
+        }
+        cx.notify();
+    }
+
+    fn toggle_graph_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.search_open = !self.search_open;
+        self.sections.set_open("graph", true);
+        if self.search_open {
+            window.focus(&self.query.focus_handle(cx));
+        } else {
+            self.query.update(cx, |q, cx| q.set_text("", cx));
+        }
         cx.notify();
     }
 
@@ -151,81 +227,82 @@ impl ScmPanel {
         let searching = !query.trim().is_empty();
         let count = self.graph.as_ref().map(|g| g.commits.len());
         let scope = self.scope;
-        let mode = self.graph_view.unwrap_or_else(|| GraphView::from_id(&cx.global::<crate::settings::Settings>().graph_view).unwrap_or_default());
+        let mode = self.current_graph_view(cx);
         let (only_mine, hide_merges) = (self.only_mine, self.hide_merges);
-        let has_identity = self.identity.as_ref().is_some_and(|(n, e)| n.is_some() || e.is_some());
+        let (ahead, behind) = self.status.as_ref().map_or((0, 0), |s| (s.ahead, s.behind));
+        let has_remote = self.has_remote;
+        let syncing = self.syncing;
+        let dispatch = |action: Box<dyn gpui::Action>| {
+            move |_: &gpui::ClickEvent, window: &mut Window, cx: &mut gpui::App| {
+                cx.stop_propagation();
+                window.dispatch_action(action.boxed_clone(), cx);
+            }
+        };
+        // The remote round-trip (fetch, pull, push) first, then refresh and the "…" menu.
         let header = sections::header("scm-graph-header", crate::i18n::t("Graph"), count, open, &p)
-            .when(self.graph_loading, |d| d.child(ui::spinner("scm-graph-busy", 12., p.text_muted)))
-            .child(
-                ui::icon_button(
-                    "scm-graph-scope",
-                    "git-branch",
-                    if scope == graph::Scope::All {
-                        crate::i18n::t("Showing all branches (click: current branch only)")
-                    } else {
-                        crate::i18n::t("Showing the current branch (click: all branches)")
-                    },
-                    &p,
-                )
-                .when(scope == graph::Scope::Current, |d| d.bg(c(p.surface_active)))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    cx.stop_propagation();
-                    this.set_scope(if scope == graph::Scope::All { graph::Scope::Current } else { graph::Scope::All }, cx);
-                })),
-            )
             .child(
                 ui::icon_button("scm-graph-search", "search", crate::i18n::t("Search commits"), &p)
                     .when(self.search_open, |d| d.bg(c(p.surface_active)))
                     .on_click(cx.listener(|this, _, window, cx| {
                         cx.stop_propagation();
-                        this.search_open = !this.search_open;
-                        this.sections.set_open("graph", true);
-                        if this.search_open {
-                            window.focus(&this.query.focus_handle(cx));
-                        } else {
-                            this.query.update(cx, |q, cx| q.set_text("", cx));
-                        }
-                        cx.notify();
+                        this.toggle_graph_search(window, cx);
                     })),
             )
-            .child(ui::icon_button("scm-graph-refresh", "refresh-cw", crate::i18n::t("Reload history"), &p).on_click(cx.listener(|this, _, _, cx| {
-                cx.stop_propagation();
-                this.load_graph(cx);
-            })))
+            .when(has_remote, |d| {
+                d.child(
+                    ui::icon_button("scm-graph-fetch", "cloud-download", crate::i18n::t("Fetch from all remotes"), &p)
+                        .on_click(dispatch(Box::new(crate::workbench::GitFetchAll))),
+                )
+                .child(count_button("scm-graph-pull", "arrow-down", behind, "Pull", &p).on_click(dispatch(Box::new(crate::workbench::GitPull))))
+                .child(count_button("scm-graph-push", "arrow-up", ahead, "Push", &p).on_click(dispatch(Box::new(crate::workbench::GitPush))))
+            })
+            // While history loads or a sync runs, the refresh button turns into the spinner (no extra icon squeezing the title).
+            .child(if self.graph_loading || syncing {
+                div().id("scm-graph-busy").size(px(22.)).flex_none().flex().items_center().justify_center().child(ui::spinner(
+                    "scm-graph-spin",
+                    14.,
+                    p.text_muted,
+                ))
+            } else {
+                ui::icon_button("scm-graph-refresh", "refresh-cw", crate::i18n::t("Reload history"), &p).on_click(cx.listener(|this, _, _, cx| {
+                    cx.stop_propagation();
+                    this.load_graph(cx);
+                }))
+            })
+            .child(ui::icon_button("scm-graph-more", "ellipsis", crate::i18n::t("More Actions…"), &p).on_click(cx.listener(
+                |_, ev: &gpui::ClickEvent, _, cx| {
+                    cx.stop_propagation();
+                    cx.emit(ScmEvent::GraphMenu(ev.position()));
+                },
+            )))
             .on_click(cx.listener(|this, _, _, cx| this.toggle_section("graph", cx)));
 
-        // View and filter bar: graph / compact / by day, then "mine" and "hide merges".
-        let toolbar = div()
+        // Filters that hide commits stay visible as chips, so an emptier graph never looks like lost history.
+        let filtered = scope == graph::Scope::Current || only_mine || hide_merges;
+        let filters = div()
             .flex()
             .items_center()
             .flex_wrap()
-            .gap(px(theme::SPACE[1]))
+            .gap(px(theme::SPACE[2]))
             .px(px(theme::SPACE[4]))
             .py(px(theme::SPACE[2]))
-            .children(GraphView::ALL.map(|v| {
-                let tip = match v {
-                    GraphView::Graph => crate::i18n::t("Branch lanes, two lines per commit"),
-                    GraphView::Compact => crate::i18n::t("One line per commit: the most history in a narrow sidebar"),
-                    GraphView::Dates => crate::i18n::t("Commits grouped by day"),
-                };
-                pill(v.id(), v.label(), mode == v, tip, &p).on_click(cx.listener(move |this, _, _, cx| this.set_graph_view(v, cx)))
-            }))
-            .child(div().w(px(1.)).h(px(12.)).mx(px(theme::SPACE[2])).bg(c(p.border)))
-            .when(has_identity, |d| {
-                d.child(
-                    pill("scm-graph-mine", crate::i18n::t("Mine"), only_mine, crate::i18n::t("Only your own commits (by your git name or e-mail)"), &p)
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.only_mine = !this.only_mine;
-                            cx.notify();
-                        })),
-                )
+            .when(scope == graph::Scope::Current, |d| {
+                d.child(filter_chip("scm-graph-f-current", crate::i18n::t("Current branch"), &p).on_click(cx.listener(|this, _, _, cx| {
+                    this.set_scope(graph::Scope::All, cx);
+                })))
             })
-            .child(pill("scm-graph-nomerges", crate::i18n::t("No merges"), hide_merges, crate::i18n::t("Hide merge commits"), &p).on_click(cx.listener(
-                |this, _, _, cx| {
-                    this.hide_merges = !this.hide_merges;
+            .when(only_mine, |d| {
+                d.child(filter_chip("scm-graph-f-mine", crate::i18n::t("Mine"), &p).on_click(cx.listener(|this, _, _, cx| {
+                    this.only_mine = false;
                     cx.notify();
-                },
-            )));
+                })))
+            })
+            .when(hide_merges, |d| {
+                d.child(filter_chip("scm-graph-f-merges", crate::i18n::t("No merges"), &p).on_click(cx.listener(|this, _, _, cx| {
+                    this.hide_merges = false;
+                    cx.notify();
+                })))
+            });
 
         let height = self.section_height("graph", 260.);
         let selected = self.selected.as_ref().map(|c| c.hash.clone());
@@ -300,7 +377,7 @@ impl ScmPanel {
             .min_h(px(super::layout::ROW_H + 4.))
             .child(self.top_sash("graph", &p, cx))
             .child(header)
-            .when(open, |d| d.child(toolbar))
+            .when(open && filtered, |d| d.child(filters))
             .when(open && self.search_open, |d| {
                 d.child(
                     div().px(px(theme::SPACE[4])).py(px(theme::SPACE[2])).child(
@@ -362,32 +439,79 @@ fn row_shell(ix: usize, k: &GraphCommit, h: f32, is_sel: bool, p: &Palette, cx: 
         )
 }
 
-/// Graph view: lane (or avatar if filtered) + two-line text.
+/// Graph view: one line per commit. The lanes take only the room this row's branches need, then the
+/// subject, the author (dimmed), the most important branch / tag and, if enabled, the short hash.
 fn graph_row(g: &GraphData, ix: usize, flat: bool, is_sel: bool, show_author: bool, show_hash: bool, p: &Palette, cx: &mut Context<ScmPanel>) -> AnyElement {
     let (commit, row) = (&g.commits[ix], &g.rows[ix]);
     let head = commit.refs.iter().any(|r| r.kind == RefKind::Head);
+    let merge = commit.parents.len() > 1;
     let refs = ordered_refs(commit);
     let more = refs.len().saturating_sub(1);
     row_shell(ix, commit, graph::ROW_H, is_sel, p, cx)
+        .pr(px(theme::SPACE[3]))
         .child(if flat {
-            div().w(px(graph::width_px(1))).flex_none().flex().justify_center().child(avatar(&commit.author, 14., p)).into_any_element()
-        } else {
-            graph::lane_element(row.clone(), g.cols, head, commit.parents.len() > 1, *p).into_any_element()
-        })
-        .child(ui::commit_lines(
-            commit.subject.clone().into(),
-            crate::git::short_ago(&commit.when).into(),
+            // Rows are skipped, so lines would break: a dot in the commit's lane color stands in for the graph.
+            let color = graph::lane_color(p, row.color);
             div()
+                .w(px(graph::width_px(1)))
+                .flex_none()
+                .flex()
+                .justify_center()
+                .child(div().size(px(8.)).rounded_full().when(merge, |d| d.border_2().border_color(c(color))).when(!merge, |d| d.bg(c(color))))
+                .into_any_element()
+        } else {
+            graph::lane_element(row.clone(), head, merge, *p).into_any_element()
+        })
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
                 .flex()
                 .items_center()
-                .gap(px(theme::SPACE[2]))
-                .children(refs.first().map(|r| ref_chip(r, p)))
-                .when(more > 0, |d| d.child(div().flex_none().child(format!("+{more}"))))
-                .when(show_author, |d| d.child(avatar(&commit.author, 14., p))),
-            if show_hash { commit.short.clone().into() } else { SharedString::default() },
-            head,
-            p,
-        ))
+                .gap(px(theme::SPACE[3]))
+                .overflow_hidden()
+                .pl(px(theme::SPACE[1]))
+                .child(
+                    div()
+                        .flex_shrink()
+                        .min_w_0()
+                        .overflow_hidden()
+                        .text_ellipsis()
+                        .text_size(px(text::SM.0))
+                        .text_color(c(if merge { p.text_muted } else { p.text }))
+                        .when(head, |d| d.font_weight(gpui::FontWeight::SEMIBOLD))
+                        .child(commit.subject.clone()),
+                )
+                .when(show_author, |d| {
+                    d.child(
+                        div()
+                            .min_w_0()
+                            // The author gives way long before the subject does.
+                            .map(|mut d| {
+                                d.style().flex_shrink = Some(12.);
+                                d
+                            })
+                            .overflow_hidden()
+                            .text_ellipsis()
+                            .text_size(px(text::XXS.0))
+                            .text_color(c(p.text_muted))
+                            .child(commit.author.clone()),
+                    )
+                }),
+        )
+        .children(refs.first().map(|r| div().flex_none().ml(px(theme::SPACE[2])).child(ref_chip(r, p))))
+        .when(more > 0, |d| d.child(div().flex_none().ml(px(theme::SPACE[1])).text_size(px(10.)).text_color(c(p.text_muted)).child(format!("+{more}"))))
+        .when(show_hash, |d| {
+            d.child(
+                div()
+                    .flex_none()
+                    .ml(px(theme::SPACE[3]))
+                    .font_family(ui::MONO_FONT)
+                    .text_size(px(text::XXS.0))
+                    .text_color(c(p.text_muted))
+                    .child(commit.short.clone()),
+            )
+        })
         .into_any_element()
 }
 

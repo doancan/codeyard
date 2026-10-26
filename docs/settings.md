@@ -101,8 +101,8 @@ status bar reports it.
 | `git.fetchOnPull` | `true` / `false` | `false` | Fetch every remote before pulling |
 | `git.graph.allBranches` | `true` / `false` | `true` | Graph starts with every branch |
 | `git.graph.limit` | number 20–5000 | `300` | Commits drawn in the Source Control graph |
-| `git.graph.showAuthor` | `true` / `false` | `true` | Show the author (avatar and name) on Source Control graph rows |
-| `git.graph.showHash` | `true` / `false` | `true` | Show the short commit hash on Source Control graph rows |
+| `git.graph.showAuthor` | `true` / `false` | `true` | Show the author name on Source Control graph rows |
+| `git.graph.showHash` | `true` / `false` | `false` | Show the short commit hash on Source Control graph rows |
 | `git.graph.view` | `graph`, `compact`, `dates` | `graph` | Source Control graph view: graph (branch lanes), compact (one line per commit) or dates (grouped by day) |
 | `git.inlineBlame` | `true` / `false` | `true` | Show who last changed the cursor line (and when) at the end of the line |
 | `git.postCommitCommand` | `none`, `push`, `sync` | `none` | What runs after a commit: nothing, push or sync. Your own settings only; a folder cannot change it |
