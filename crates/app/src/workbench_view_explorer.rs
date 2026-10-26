@@ -45,7 +45,7 @@ impl Workbench {
                             .rounded_full()
                             .bg(c(p.accent))
                             .text_color(c(p.on_accent))
-                            .text_size(px(9.))
+                            .text_size(px(text::BADGE.0))
                             .font_weight(gpui::FontWeight::BOLD)
                             .child(if badge > 99 { "99+".to_string() } else { badge.to_string() }),
                     )

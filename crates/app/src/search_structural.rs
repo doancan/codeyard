@@ -89,7 +89,7 @@ impl SearchPanel {
             .items_center()
             .rounded(px(theme::radius::SM))
             .bg(c(p.surface_hover))
-            .text_size(px(11.))
+            .text_size(px(text::XXS.0))
             .text_color(c(p.text))
             .cursor_pointer()
             .hover(|d| d.bg(c(p.surface_active)))

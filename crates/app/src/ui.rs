@@ -127,7 +127,7 @@ pub fn option_toggle(id: &'static str, label: &'static str, active: bool, tip: &
         .justify_center()
         .rounded(px(theme::radius::SM))
         .bg(c(bg))
-        .text_size(px(11.))
+        .text_size(px(text::XXS.0))
         .font_family(MONO_FONT)
         .font_weight(gpui::FontWeight::MEDIUM)
         .text_color(c(fg))
