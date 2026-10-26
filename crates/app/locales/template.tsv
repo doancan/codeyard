@@ -1715,6 +1715,7 @@ What opens at start: welcome (the start page), continue (where you left off, SSH
 What runs after a commit: nothing, push or sync. Your own settings only; a folder cannot change it	
 When the close button of a tab shows	
 Where .http requests are sent from: the workspace host (the server when connected over SSH) or this computer	
+Where forwarded ports listen: this computer only, or every network interface	
 Whole word	
 Whole word (⌥W)	
 Width of the line cursor (px)	
@@ -1865,6 +1866,9 @@ path branch (new branch is created if it does not exist)
 pause	
 pinned	
 port, user, key file, jump host	
+ports.rules.{}.{}: unexpected value	
+ports.rules.{}: expected a port or a range such as 3000-3010	
+ports.rules.{}: expected an object with label, onForward or protocol	
 preview	
 property	
 reachable? architecture? agent ready?	

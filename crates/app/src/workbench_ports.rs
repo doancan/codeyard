@@ -12,7 +12,7 @@ use gpui::{AnyElement, App, Context, MouseButton, SharedString, div, prelude::*,
 use host::forward::{LocalBind, RemoteTarget};
 
 use super::{Conn, LOCAL_AGENT_ALIAS, Notice, Workbench, center};
-use crate::port_forwards::{Effect, ForwardRequest, ForwardSet, ForwardState, Origin, failure_text};
+use crate::port_forwards::{Effect, ForwardRequest, ForwardSet, ForwardState, OnForward, Origin, failure_text, rule_for};
 use crate::ports::{self, ListeningPort, ScanMethod};
 use crate::ui::{self, Palette, c, icon, layout, text};
 
@@ -27,6 +27,8 @@ pub struct PortsState {
     pub baseline: Option<BTreeSet<u16>>,
     /// Stopped by the user: not forwarded automatically again on this connection.
     pub ignored: BTreeSet<u16>,
+    /// Ports whose rule says to open the browser, waiting for their forward (opened once per connection).
+    pub open_when_ready: BTreeSet<u16>,
     pub method: Option<ScanMethod>,
     /// Why the last scan failed (the list shown is the one before).
     pub scan_error: Option<SharedString>,
@@ -36,7 +38,17 @@ pub struct PortsState {
 
 impl PortsState {
     pub fn new(field: gpui::Entity<crate::input::TextField>) -> Self {
-        Self { set: ForwardSet::default(), listening: Vec::new(), baseline: None, ignored: BTreeSet::new(), method: None, scan_error: None, task: None, field }
+        Self {
+            set: ForwardSet::default(),
+            listening: Vec::new(),
+            baseline: None,
+            ignored: BTreeSet::new(),
+            open_when_ready: BTreeSet::new(),
+            method: None,
+            scan_error: None,
+            task: None,
+            field,
+        }
     }
 }
 
@@ -84,7 +96,15 @@ impl Workbench {
                     more.extend(this.ports.set.on_result(id, seq, result));
                     let Some(f) = this.ports.set.get(id) else { continue };
                     match (&f.state, failed) {
-                        (ForwardState::Active, _) => opened.push((f.remote, f.local.unwrap_or(f.remote))),
+                        (ForwardState::Active, _) => {
+                            let local = f.local.unwrap_or(f.remote);
+                            if this.ports.open_when_ready.remove(&f.remote)
+                                && let Some(url) = f.protocol.url(local)
+                            {
+                                cx.open_url(&url);
+                            }
+                            opened.push((f.remote, local));
+                        }
                         (ForwardState::Failed(_), Some(e)) => {
                             let why = failure_text(&e, f.wanted_local);
                             this.notice = Some(Notice::Error(crate::i18n::tf("Could not forward port {}: {}", &[&f.remote, &why]).into()));
@@ -119,6 +139,7 @@ impl Workbench {
         let effects = self.ports.set.on_attach(alias);
         self.run_port_effects(effects, true, cx);
         self.ports.ignored.clear();
+        self.ports.open_when_ready.clear();
         self.start_ports(cx);
     }
 
@@ -220,13 +241,27 @@ impl Workbench {
                     .filter(|p| !self.ports.listening.iter().any(|seen| seen.port == p.port))
                     .filter(|p| self.ports.set.by_remote(&alias, p.port).is_none() && !ours.contains(&p.port))
                     .collect();
-                let mut effects = Vec::new();
+                let rules = cx.global::<crate::settings::Settings>().ports_rules.clone();
+                let (mut loud, mut quiet) = (Vec::new(), Vec::new());
                 for p in new {
+                    let attrs = rule_for(&rules, p.port);
+                    if attrs.on_forward == OnForward::Ignore {
+                        continue;
+                    }
                     let mut r = ForwardRequest::user(&alias, p.port, ports::forward_target(&p.binds), self.port_bind(cx));
-                    r.origin = Origin::Auto;
-                    effects.extend(self.ports.set.request(r).1);
+                    (r.origin, r.label, r.protocol) = (Origin::Auto, attrs.label, attrs.protocol);
+                    let effects = self.ports.set.request(r).1;
+                    match attrs.on_forward {
+                        OnForward::Silent => quiet.extend(effects),
+                        OnForward::OpenBrowser => {
+                            self.ports.open_when_ready.insert(p.port);
+                            quiet.extend(effects);
+                        }
+                        _ => loud.extend(effects),
+                    }
                 }
-                self.run_port_effects(effects, false, cx);
+                self.run_port_effects(loud, false, cx);
+                self.run_port_effects(quiet, true, cx);
             }
             Some(_) => {}
         }
@@ -236,9 +271,9 @@ impl Workbench {
         }
     }
 
-    /// Local addresses new forwards listen on.
-    pub(super) fn port_bind(&self, _cx: &App) -> LocalBind {
-        LocalBind::Loopback
+    /// Local addresses new forwards listen on (`ports.localBind`).
+    pub(super) fn port_bind(&self, cx: &App) -> LocalBind {
+        cx.global::<crate::settings::Settings>().ports_local_bind
     }
 
     /// Forwards a server port (typed, clicked or detected); asking again for a forwarded port does nothing.
@@ -246,7 +281,10 @@ impl Workbench {
         let Some(alias) = self.ssh_alias() else { return };
         self.ports.ignored.remove(&remote);
         let target = self.ports.listening.iter().find(|p| p.port == remote).map_or(RemoteTarget::Localhost, |p| ports::forward_target(&p.binds));
-        let (_, effects) = self.ports.set.request(ForwardRequest::user(&alias, remote, target, self.port_bind(cx)));
+        let attrs = rule_for(&cx.global::<crate::settings::Settings>().ports_rules, remote);
+        let mut r = ForwardRequest::user(&alias, remote, target, self.port_bind(cx));
+        (r.label, r.protocol) = (attrs.label, attrs.protocol);
+        let (_, effects) = self.ports.set.request(r);
         self.run_port_effects(effects, false, cx);
         cx.notify();
     }

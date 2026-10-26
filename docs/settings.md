@@ -136,6 +136,7 @@ status bar reports it.
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
 | `ports.autoForward` | `true` / `false` | `true` | Forward ports opened on SSH hosts |
+| `ports.localBind` | `loopback`, `all` | `loopback` | Where forwarded ports listen: this computer only, or every network interface |
 
 ## `search`
 
@@ -216,6 +217,7 @@ status bar reports it.
 | `workbench.startupEditor` | string | `welcome` | VS Code compatible alias of `window.startup`. |
 | `editor.codeActionsOnSave` | object | `{}` | Code actions to run on save before formatting, e.g. `{ "source.organizeImports": "explicit" }`; each gives up after 2 s. |
 | `files.associations` | object of glob → language | `{}` | Force a language mode for matching files, e.g. `{ "*.tpl": "html" }`. |
+| `ports.rules` | object of port or range → rule | `{}` | Label, protocol (`http`, `https`, `tcp`) and detection behaviour (`notify`, `silent`, `openBrowser`, `ignore`) per forwarded port, e.g. `{ "3000": { "label": "web", "onForward": "openBrowser" } }`; a single port beats a range. |
 | `json.schemas` | list of `{ fileMatch, url }` | `[]` | Associate JSON files with a schema (URL or path relative to the workspace). Ignored in untrusted folders. |
 | `yaml.schemas` | object of schema → globs | `{}` | Associate YAML files with a schema. Ignored in untrusted folders. |
 | `lsp.servers` | object of language → `{ command, args }` or `null` | built-in servers | Replace or turn off (`null`) the language server of a language. Keys: `rust`, `c`, `go`, `python`, `typescript`, `java`, `csharp`, `php`, `ruby`, `kotlin`, `swift`, `lua`, `bash`, `html`, `css`; `json`, `yaml` and `toml` have no default and are opt-in. Ignored in untrusted folders. |
