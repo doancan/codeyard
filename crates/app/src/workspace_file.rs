@@ -6,7 +6,8 @@ use serde_json::Value;
 
 /// `folders[].path` or `folders[].uri` (file://) → absolute, normalized folder paths;
 /// relative paths are resolved against the file's folder, duplicates dropped, order kept.
-/// Folders that don't exist are filtered out with `exists` (`Path::is_dir` on the local disk).
+/// Folders that don't exist are filtered out with `exists` (`Path::is_dir` on the local disk). A network share (`//server/share`)
+/// is only taken when the workspace file itself is on that server: the file may come from a cloned repository.
 pub fn folders(text: &str, base_dir: &str, exists: impl Fn(&str) -> bool) -> Vec<String> {
     let Ok(v) = serde_json::from_str::<Value>(&theme::themes::strip_jsonc(text)) else { return Vec::new() };
     let mut out: Vec<String> = Vec::new();
@@ -26,6 +27,12 @@ pub fn folders(text: &str, base_dir: &str, exists: impl Fn(&str) -> bool) -> Vec
         let raw = if windows_base || windows_path(&raw) { raw.replace('\\', "/") } else { raw };
         let base = if windows_base { base_dir.replace('\\', "/") } else { base_dir.to_string() };
         let abs = normalize(&crate::ui::join(&base, &raw));
+        // Never look at a network share the user did not choose: Windows would connect and hand over their credentials.
+        if let Some(host) = unc_host(&abs)
+            && !unc_host(&normalize(&base)).is_some_and(|own| own.eq_ignore_ascii_case(host))
+        {
+            continue;
+        }
         if exists(&abs) && !out.contains(&abs) {
             out.push(abs);
         }
@@ -57,6 +64,11 @@ fn normalize(path: &str) -> String {
         }
     }
     format!("{prefix}{}", parts.join("/"))
+}
+
+/// The server of a normalized `//server/share/...` path.
+fn unc_host(path: &str) -> Option<&str> {
+    path.strip_prefix("//").map(|rest| rest.split('/').next().unwrap_or(""))
 }
 
 fn windows_path(path: &str) -> bool {
@@ -100,21 +112,42 @@ mod tests {
     }
 
     #[test]
-    fn windows_workspace_folders_resolve_drives_unc_and_backslashes() {
+    fn windows_workspace_folders_resolve_drives_and_backslashes() {
         let text = serde_json::json!({ "folders": [
             { "path": r"src\nested\.." }, { "path": r"..\web" },
             { "path": r"D:\tools\..\sdk" }, { "uri": "file:///E:/my%20app" },
-            { "path": r"\\server\share\dir\..\..\other" },
-            { "uri": "file://server/share/other" }, { "uri": "file://localhost/F:/work" },
+            { "uri": "file://localhost/F:/work" },
             { "path": "C:/../../" }, { "path": r"\\?\G:\long\dir" },
-            { "path": r"\\?\UNC\host\share\dir" },
             { "uri": "file:///bad%XX" }, { "uri": "file:///a%00b" }
         ] })
         .to_string();
-        assert_eq!(
-            folders(&text, r"C:\work\mono", |_| true),
-            ["C:/work/mono/src", "C:/work/web", "D:/sdk", "E:/my app", "//server/share/other", "F:/work", "C:/", "G:/long/dir", "//host/share/dir"]
-        );
-        assert_eq!(folders(r#"{"folders":[{"path":"../api"}]}"#, r"\\server\share\work", |_| true), ["//server/share/api"]);
+        assert_eq!(folders(&text, r"C:\work\mono", |_| true), ["C:/work/mono/src", "C:/work/web", "D:/sdk", "E:/my app", "F:/work", "C:/", "G:/long/dir"]);
+    }
+
+    /// Looking at `\\host\share` makes Windows connect and offer the user's NTLM credentials to that host, so a workspace file from a
+    /// cloned repository must not make us look at a server the user did not choose.
+    #[test]
+    fn a_workspace_file_does_not_probe_network_shares_of_other_hosts() {
+        let text = serde_json::json!({ "folders": [
+            { "path": r"\\evil\share\dir" }, { "uri": "file://evil/share/other" }, { "path": r"\\?\UNC\evil\share\dir" },
+            { "path": "//./pipe/x" }, { "path": "docs" }
+        ] })
+        .to_string();
+        let asked = std::cell::RefCell::new(Vec::new());
+        let found = folders(&text, r"C:\work", |p| {
+            asked.borrow_mut().push(p.to_string());
+            true
+        });
+        assert_eq!(found, ["C:/work/docs"]);
+        assert_eq!(asked.into_inner(), ["C:/work/docs"], "no network path was even tested for existence");
+    }
+
+    #[test]
+    fn a_workspace_file_on_a_share_may_name_folders_on_that_share() {
+        let text = serde_json::json!({ "folders": [
+            { "path": "../api" }, { "path": r"\\SERVER\other\x" }, { "uri": "file://server/share/uri" }, { "path": r"\\evil\share" }
+        ] })
+        .to_string();
+        assert_eq!(folders(&text, r"\\server\share\work", |_| true), ["//server/share/api", "//SERVER/other/x", "//server/share/uri"]);
     }
 }

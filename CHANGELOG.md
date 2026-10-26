@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   network-share paths in workspace files and file URLs, and open terminal links through the system browser; move files to the native
   Recycle Bin so Explorer can restore them; launch without a separate console window and embed the application icon in the EXE.
 
+- **Workspace files no longer probe network shares.** A `.code-workspace` file from a cloned repository could name `\\server\share` folders, and on Windows
+  looking at them connects to that server with the user's credentials. Such folders are now taken only when the workspace file is on that same server.
+
 ### Changed
 
 - **No file-access dialogs at start on macOS.** Codeyard no longer touches Desktop, Documents and Downloads (and so iCloud Drive) on the first
