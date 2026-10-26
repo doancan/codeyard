@@ -27,7 +27,9 @@ release profile, x64 MSVC target, embedded Linux agents and FXC-generated shader
 cache, measures a cold build, removes only the app package, and measures a build with compiled dependencies retained.
 Linux uses LLVM 19 MSVC driver aliases and cargo-xwin 0.23.1; its x64 SDK cache is saved before compilation, even if a later
 build fails. Only SDK files are restored: compiled Rust targets are never restored for this benchmark. The optional
-`host=linux` workflow input reruns only the Linux arm when investigating cross toolchains.
+`host=linux` workflow input reruns only the Linux arm when investigating cross toolchains. `host=prepare` checks shader/agent
+preparation and upload/download roundtrips without compiling either app. Release and benchmark checkout/artifact/cache actions
+use commit-pinned Node.js 24 versions, so their jobs do not rely on the retired Node.js 20 runtime.
 SDK/tool installation and dependency downloads are separate steps, outside the compiler timer; include them when comparing
 whole job latency. Runner CPU counts and Rust versions are recorded in `benchmark.json`. These are runner comparisons,
 not a controlled comparison on identical hardware. Both executables undergo native Windows standalone checks.
