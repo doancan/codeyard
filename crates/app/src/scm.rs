@@ -41,6 +41,22 @@ pub enum ScmEvent {
     PostCommit(git::PostCommit),
 }
 
+/// What the loaded graph depends on besides HEAD: the checked-out branch (a new branch on the same commit moves the HEAD
+/// label) and every other ref (a fetch, a push, a new tag move labels without moving HEAD).
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct GraphKey {
+    root: String,
+    head: Option<String>,
+    branch: Option<String>,
+    refs: u64,
+}
+
+impl GraphKey {
+    fn of(st: &Status) -> GraphKey {
+        GraphKey { root: st.root.clone(), head: st.head.clone(), branch: st.branch.clone(), refs: st.refs_stamp }
+    }
+}
+
 /// Graph: commits and the lane layout for each.
 pub struct GraphData {
     commits: Vec<GraphCommit>,
@@ -58,8 +74,8 @@ pub struct ScmPanel {
     focus_handle: FocusHandle,
     graph: Option<Arc<GraphData>>,
     graph_loading: bool,
-    /// State the graph was loaded for: (repo, HEAD). Reloads when it changes.
-    graph_key: Option<(String, Option<String>)>,
+    /// State the graph was loaded for. Reloads when it changes.
+    graph_key: Option<GraphKey>,
     graph_error: Option<SharedString>,
     graph_scroll: UniformListScrollHandle,
     /// Open/closed state and heights of the sections (Changes, Stashes, Graph, Details).
@@ -144,7 +160,7 @@ impl ScmPanel {
         self.host = host;
         self.status = status;
         // Commit, branch switch, pull: the graph refreshes when HEAD or the repo changes.
-        let key = self.status.as_ref().map(|s| (s.root.clone(), s.head.clone()));
+        let key = self.status.as_deref().map(GraphKey::of);
         if key != self.graph_key {
             self.graph_key = key;
             self.load_graph(cx);
@@ -191,7 +207,7 @@ impl ScmPanel {
                     Err(e) => this.graph_error = Some(e.lines().next().unwrap_or("git log failed").to_string().into()),
                 }
                 // If the state changed during loading (key was reset), load again.
-                let now = this.status.as_ref().map(|s| (s.root.clone(), s.head.clone()));
+                let now = this.status.as_deref().map(GraphKey::of);
                 if this.graph_key.is_none() && now.is_some() {
                     this.graph_key = now;
                     this.load_graph(cx);

@@ -91,6 +91,9 @@ pub struct Status {
     pub head: Option<String>,
     /// The real git directory: in worktrees and submodules `.git` is a file and the directory lives elsewhere.
     pub git_dir: Option<String>,
+    /// Fingerprint of every ref (branches, remote branches, tags, stash): changes when one is created, moved or deleted,
+    /// even if HEAD stays where it is (the graph's labels depend on it).
+    pub refs_stamp: u64,
 }
 
 impl Status {
@@ -209,8 +212,19 @@ pub fn status_for(host: &dyn Host, dir: &str, trusted: bool) -> Result<Option<St
     let out = git_ok(host, &root, &args)?;
     let mut st = parse_status(&root, out.as_bytes());
     st.git_dir = git_dir;
-    st.head = git(host, &root, &["rev-parse", "-q", "--verify", "HEAD"]).ok().filter(|o| o.ok()).map(|o| o.stdout_str().trim().to_string());
+    // One process for HEAD and all refs. Exit code 1 only means "no refs yet" (a repository without commits).
+    let refs = git(host, &root, &["show-ref", "--head"]).ok().filter(|o| o.ok() || o.code == Some(1)).map(|o| o.stdout_str()).unwrap_or_default();
+    (st.head, st.refs_stamp) = parse_show_ref(&refs);
     Ok(Some(st))
+}
+
+/// `git show-ref --head` output: HEAD's commit (the line ending in " HEAD") and a fingerprint of all lines.
+pub fn parse_show_ref(out: &str) -> (Option<String>, u64) {
+    use std::hash::{Hash as _, Hasher as _};
+    let head = out.lines().find_map(|l| l.strip_suffix(" HEAD")).map(|h| h.trim().to_string()).filter(|h| !h.is_empty());
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    out.hash(&mut hasher);
+    (head, hasher.finish())
 }
 
 /// Content at a revision: `rev` is "HEAD" or "" (index). `None` if the file is not there.
@@ -319,6 +333,21 @@ pub fn undo_last_commit(host: &dyn Host, root: &str) -> Result<String, String> {
 mod tests {
     use super::*;
     use crate::git::repo;
+
+    #[test]
+    fn show_ref_gives_head_and_a_fingerprint_that_follows_every_ref() {
+        let base = "1111 HEAD\n1111 refs/heads/main\n2222 refs/remotes/origin/main\n";
+        let (head, stamp) = parse_show_ref(base);
+        assert_eq!(head.as_deref(), Some("1111"));
+        // A new branch on the same commit, a moved remote branch, a tag: HEAD is the same, the fingerprint is not.
+        for changed in [format!("{base}1111 refs/heads/feature/x\n"), base.replace("2222", "3333"), format!("{base}1111 refs/tags/v1\n")] {
+            let (h, s) = parse_show_ref(&changed);
+            assert_eq!(h.as_deref(), Some("1111"));
+            assert_ne!(s, stamp, "{changed}");
+        }
+        // No commits yet: no HEAD.
+        assert_eq!(parse_show_ref("").0, None);
+    }
 
     #[test]
     fn parses_porcelain_status() {
