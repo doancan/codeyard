@@ -380,8 +380,9 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   "theme": "auto",
 
   // "editor.fontFamily": "JetBrains Mono",
-  "editor.fontSize": 13,
-  "editor.lineHeight": 20,
+  // Default: 12 (line 18) on macOS, 14 (line 20) on Windows and Linux.
+  // "editor.fontSize": 12,
+  // "editor.lineHeight": 18,
   // Leave out to detect from each file.
   // "editor.tabSize": 4,
   // "editor.insertSpaces": true,
@@ -523,7 +524,8 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // "compare.folders.maxFiles": 50000,
 
   // "terminal.shell": "/bin/zsh",
-  "terminal.fontSize": 13,
+  // Default: 12 on macOS, 14 on Windows and Linux.
+  // "terminal.fontSize": 12,
   "terminal.scrollback": 2000,
   // Let programs in the terminal write to the clipboard (OSC 52). Off by default: a program you run, or a file you cat, could replace
   // what you copied.
