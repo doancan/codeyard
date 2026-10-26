@@ -148,7 +148,7 @@ fn quote_at_end(text: &str) -> Quote {
 fn for_shell(value: &str, at: Quote) -> String {
     match at {
         Quote::Bare => shell_quote(value),
-        Quote::Single => value.replace('\'', "'\\''"),
+        Quote::Single => crate::shell_quote::in_single(value),
         Quote::Double => value.chars().fold(String::with_capacity(value.len()), |mut s, c| {
             if matches!(c, '\\' | '"' | '$' | '`') {
                 s.push('\\');
@@ -199,14 +199,17 @@ fn expand(command: &str, root: &str, file: Option<&str>, shell: bool) -> String 
 }
 
 pub(crate) fn shell_quote(s: &str) -> String {
-    if s.chars().all(|c| c.is_alphanumeric() || "-_./=:@%+,".contains(c)) { s.to_string() } else { format!("'{}'", s.replace('\'', "'\\''")) }
+    // A task's own arguments (`--fix`) stay bare; anything a shell could read differently is quoted.
+    if !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || "-_./=:@%+,".contains(c)) { s.to_string() } else { crate::shell_quote::quote(s) }
 }
 
 pub fn npm_tasks(package_json: &str, runner: &str) -> Vec<Task> {
     let Ok(v) = serde_json::from_str::<Value>(package_json) else { return Vec::new() };
     v["scripts"]
         .as_object()
-        .map(|o| o.keys().map(|k| Task { label: format!("{runner}: {k}"), command: format!("{runner} run {k}"), source: "package.json" }).collect())
+        .map(|o| {
+            o.keys().map(|k| Task { label: format!("{runner}: {k}"), command: format!("{runner} run {}", shell_quote(k)), source: "package.json" }).collect()
+        })
         .unwrap_or_default()
 }
 
@@ -538,8 +541,8 @@ mod tests {
         assert_eq!(expand_variables_for_shell("cat ${file}", "/p", f), "cat '/p/src/a;rm -rf ~;.txt'");
         assert_eq!(expand_variables_for_shell("cat '${file}'", "/p", f), "cat '/p/src/a;rm -rf ~;.txt'");
         assert_eq!(expand_variables_for_shell(r#"cat "${fileBasename}""#, "/p", Some("/p/$(id)`x`\"q\".txt")), r#"cat "\$(id)\`x\`\"q\".txt""#);
-        assert_eq!(expand_variables_for_shell("cat ${file}", "/p", Some("/p/it's.txt")), r"cat '/p/it'\''s.txt'");
-        assert_eq!(expand_variables_for_shell("cat '${file}'", "/p", Some("/p/it's.txt")), r"cat '/p/it'\''s.txt'");
+        assert_eq!(expand_variables_for_shell("cat ${file}", "/p", Some("/p/it's.txt")), r#"cat '/p/it'"'"'s.txt'"#);
+        assert_eq!(expand_variables_for_shell("cat '${file}'", "/p", Some("/p/it's.txt")), r#"cat '/p/it'"'"'s.txt'"#);
         // Plain names are left alone, so existing tasks read the same.
         assert_eq!(expand_variables_for_shell("make -C ${workspaceFolder}/sub", "/p/", None), "make -C /p/sub");
         assert_eq!(expand_variables_for_shell("echo ${fileExtname}x", "/p", Some("/p/a")), "echo ''x", "an empty value is still one argument");

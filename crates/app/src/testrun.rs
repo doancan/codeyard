@@ -52,16 +52,9 @@ pub fn cases(rel: &str, text: &str, package_json: Option<&str>) -> Vec<Case> {
     out
 }
 
-fn quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "'\\''"))
-}
-
-/// A shell word: left as it is when nothing in it means anything to a shell, quoted otherwise. Folder and file names come from the
-/// repository, and `crates/$(cmd)/src/a.rs` is a legal path.
-fn word(s: &str) -> String {
-    let plain = !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '/' | ':' | '-' | '+' | ',' | '@' | '='));
-    if plain && !s.starts_with('-') { s.to_string() } else { quote(s) }
-}
+// Test names, folder and file names come from the repository (`crates/$(cmd)/src/a.rs` is a legal path), and the command
+// is typed into the user's shell, which may be fish: see `shell_quote`.
+use crate::shell_quote::{quote, word};
 
 fn indent(line: &str) -> usize {
     line.len() - line.trim_start().len()
@@ -271,7 +264,7 @@ mod tests {
         let src = "describe('math', () => {\n  it(\"adds it's\", () => {\n    expect(1).toBe(1);\n  });\n  test.only(`subtracts`, () => {});\n});\n";
         let vitest = r#"{ "devDependencies": { "vitest": "^1" } }"#;
         let jest = r#"{ "devDependencies": { "jest": "^29" } }"#;
-        assert_eq!(plan("src/m.test.ts", src, 2, false, Some(vitest)).unwrap().command, r"npx vitest run 'src/m.test.ts' -t 'adds it'\''s'");
+        assert_eq!(plan("src/m.test.ts", src, 2, false, Some(vitest)).unwrap().command, r#"npx vitest run 'src/m.test.ts' -t 'adds it'"'"'s'"#);
         assert_eq!(plan("src/m.test.ts", src, 4, false, Some(jest)).unwrap().command, "npx jest 'src/m.test.ts' -t 'subtracts'");
         assert_eq!(plan("src/m.test.ts", src, 0, false, Some(jest)).unwrap().command, "npx jest 'src/m.test.ts' -t 'math'", "describe when there is no it");
         assert_eq!(plan("src/m.test.ts", src, 0, true, Some(r#"{ "scripts": { "test": "mocha" } }"#)).unwrap().command, "npm test -- 'src/m.test.ts'");
