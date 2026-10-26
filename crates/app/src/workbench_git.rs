@@ -464,6 +464,21 @@ impl Workbench {
     }
 
     /// Right-click on a commit in the graph: copy, files, open branch/tag, cherry-pick, revert, reset.
+    /// Right click on a changed file in Source Control: the actions that do not depend on the tree being open.
+    pub(super) fn open_scm_file_menu(&mut self, rel: &str, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+        use super::{MenuCmd, MenuTarget};
+        use crate::menu::MenuItem;
+        let Some(root) = self.vcs.scm_root.clone().or_else(|| self.root(cx)) else { return };
+        let rows: Vec<(MenuItem, MenuCmd)> = vec![
+            (MenuItem::new(crate::i18n::t("Copy Path")), MenuCmd::CopyPath),
+            (MenuItem::new(crate::i18n::t("Copy Relative Path")), MenuCmd::CopyRelativePath),
+            (MenuItem::new(crate::i18n::t("Add to .gitignore")).separator(), MenuCmd::GitIgnore),
+        ];
+        let (items, commands): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
+        let target = MenuTarget { path: crate::ui::join(&root, rel), is_dir: false, tab: None };
+        self.show_menu(items, commands, Vec::new(), target, position, window, cx);
+    }
+
     pub(super) fn open_commit_menu(
         &mut self,
         commit: crate::graph::GraphCommit,

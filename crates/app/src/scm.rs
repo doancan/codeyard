@@ -4,7 +4,8 @@
 use std::sync::Arc;
 
 use gpui::{
-    App, Context, Entity, EventEmitter, FocusHandle, Focusable, PromptLevel, SharedString, Subscription, UniformListScrollHandle, Window, div, prelude::*, px,
+    App, Context, Entity, EventEmitter, FocusHandle, Focusable, MouseButton, MouseDownEvent, PromptLevel, SharedString, Subscription, UniformListScrollHandle,
+    Window, div, prelude::*, px,
 };
 use host::Host;
 
@@ -29,6 +30,8 @@ pub enum ScmEvent {
     CommitMenu(GraphCommit, gpui::Point<gpui::Pixels>),
     /// Section layout changed (persisted).
     SectionsChanged(String),
+    /// Right click on a changed file: its menu (path relative to the repository, window coordinates).
+    FileMenu(String, gpui::Point<gpui::Pixels>),
     // --- git-sync ---
     /// The Sync Changes button: pull and/or push, asking first when `git.confirmSync` is on.
     Sync,
@@ -475,6 +478,7 @@ impl ScmPanel {
         let dir = change.path.rsplit_once('/').map(|(d, _)| d.to_string());
         let group: SharedString = format!("scm-row-{staged}-{ix}").into();
         let path = change.path.clone();
+        let menu_path = path.clone();
         let action = |id: String, glyph: &'static str, tip: &'static str| {
             div()
                 .id(SharedString::from(id))
@@ -541,6 +545,7 @@ impl ScmPanel {
                 move |_, cx| cx.new(|_| crate::workbench::Tooltip(tip.clone().into())).into()
             })
             .on_click(cx.listener(move |_, _, _, cx| cx.emit(ScmEvent::OpenDiff { path: path.clone(), staged })))
+            .on_mouse_down(MouseButton::Right, cx.listener(move |_, ev: &MouseDownEvent, _, cx| cx.emit(ScmEvent::FileMenu(menu_path.clone(), ev.position))))
     }
 
     fn group_header(&self, id: &'static str, title: &str, n: usize, staged: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> {
