@@ -133,16 +133,19 @@ impl Workbench {
                         this.roots.file_index = None;
                         // The old tab's unsaved changes live on in the new file, so close it: unless more was typed while the write was in
                         // flight, which only the old tab has.
-                        if ed.read(cx).version() != written_version {
+                        let kept_typing = ed.read(cx).version() != written_version;
+                        if !kept_typing && let Some(ix) = this.tabs.editors.iter().position(|e| *e == ed) {
+                            this.remove_editor(ix, window, cx);
+                        }
+                        this.open_file(target.clone(), window, cx);
+                        // After the open, which has its own things to say: this is the message that must stay on screen.
+                        if kept_typing {
                             let note = crate::i18n::tf(
                                 "Saved as {}. You kept typing while it was saving, so the original tab stays open with your latest changes.",
                                 &[&target],
                             );
                             this.notice = Some(Notice::Info(note.into()));
-                        } else if let Some(ix) = this.tabs.editors.iter().position(|e| *e == ed) {
-                            this.remove_editor(ix, window, cx);
                         }
-                        this.open_file(target, window, cx);
                     }
                     Err(e) => {
                         this.notice = Some(Notice::Error(e.into()));

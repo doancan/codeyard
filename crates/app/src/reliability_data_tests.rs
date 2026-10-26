@@ -181,7 +181,8 @@ fn save_as_keeps_the_old_tab_when_typing_continued_during_the_write(cx: &mut Tes
     assert!(wb.read_with(cx, |wb, cx| wb.open_paths(cx)).contains(&from), "the tab holding the late edit must stay");
     assert!(ed.read_with(cx, |e, _| e.text().starts_with("// during\n")));
     assert!(wb.read_with(cx, |wb, cx| wb.any_dirty(cx)));
-    assert!(wb.read_with(cx, |wb, _| wb.notice_for_test()).is_some_and(|(_, m)| m.contains("kept typing")));
+    let notice = wb.read_with(cx, |wb, _| wb.notice_for_test());
+    assert!(notice.as_ref().is_some_and(|(_, m)| m.contains("kept typing")), "{notice:?}");
 }
 
 #[gpui::test]
