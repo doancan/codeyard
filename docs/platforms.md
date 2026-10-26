@@ -4,7 +4,7 @@
 | --- | --- | --- | --- |
 | App | released, daily use, all gates run | builds; the whole app test suite passed once in a Debian arm64 container (469 of 469 tests), not re-run since | builds natively (MSVC) and is checked by `scripts/check-windows.ps1` (library tests, path, terminal and resize regressions); ConPTY terminal, menu bar; SSH needs a key or ssh-agent |
 | Agent (target of SSH) | `aarch64-apple-darwin` bundled | `x86_64` and `aarch64` musl bundled, ≤ 1600 KB | not a target |
-| Installer | `.app` + DMG (`scripts/bundle-macos.sh`), not notarized | none yet | portable ZIP and Inno Setup installer (`scripts/bundle-windows.ps1`), unsigned |
+| Installer | `.app` + DMG; Developer ID signing/notarization verified in release CI | none yet | portable ZIP and Inno Setup installer (`scripts/bundle-windows.ps1`), unsigned |
 | CI | `macos-latest` job runs the gates; all gates also run locally with `scripts/check.sh` | `linux` job (GPUI-free crates, musl agent size) is blocking; `linux-app` (whole workspace) is experimental and may fail | blocking `windows-2022` job running `scripts/check-windows.ps1` |
 
 ## macOS specifics
@@ -13,11 +13,12 @@
   (Linux ELF agents cannot be code-signed and are sealed as data; the app also still finds `MacOS/agents/` and an `agents/`
   folder next to a bare binary), icon, `Info.plist` (linted with `plutil`; document types for text, source code and
   folders; developer-tools category). The macOS Mach-O agent is signed explicitly (inside out) with the hardened runtime.
-- **Signing and notarization.** Builds are ad-hoc signed (opens after right-click ▸ Open). `scripts/notarize-macos.sh`
-  notarizes already signed DMG and portable binaries, staples the DMG and runs `spctl`. GitHub tag releases now require
-  this path; Apple credentials must be configured in Actions Secrets (see `releasing.md`). The first live notarization
-  run is pending; ordinary dry runs remain ad-hoc signed. No entitlements are currently configured: the app is not
-  sandboxed and loads no third-party libraries.
+- **Signing and notarization.** GitHub tag releases use Developer ID signing and Apple notarization, with credentials in
+  Actions Secrets. `scripts/notarize-macos.sh` notarizes the signed DMG and portable binaries, staples the DMG and runs
+  `spctl`. A live signed dry run passed on 2026-10-26: Apple accepted both submissions and Gatekeeper reported
+  `Notarized Developer ID` (see `releasing.md` for evidence). Ordinary dry runs remain ad-hoc signed; historical releases
+  predating this change are unnotarized. No entitlements are currently configured: the app is not sandboxed and loads
+  no third-party libraries.
 - **Finder integration**: *Open With*, Dock-icon drops and `open -a Codeyard file` work (verified with the real bundle).
 - **Apple silicon only.** Intel Macs are not a target: there is no universal build and no Intel CI. `LSMinimumSystemVersion` and
   `MACOSX_DEPLOYMENT_TARGET` are 11.0 (the first macOS release for Apple silicon).

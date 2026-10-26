@@ -85,8 +85,8 @@ All images are real screenshots of the app opening a throw-away demo project.
 ## Install
 
 **macOS (Apple silicon).** Download the DMG from [Releases](https://github.com/doancan/codeyard/releases), open it and drag
-**Codeyard** to Applications. Builds are not notarized yet: on first launch right-click the app, choose **Open**, then **Open** again
-(or run `xattr -cr /Applications/Codeyard.app`). A single runnable binary is also published as
+**Codeyard** to Applications. New tag releases use Developer ID signing and Apple notarization. Older releases published
+before this change require approval in System Settings → Privacy & Security on first launch. A single runnable binary is also published as
 `codeyard-<version>-macos-arm64.tar.gz`; keep its `agents/` folder next to it, SSH needs it.
 
 **Windows (x64).** Download the setup EXE or the portable ZIP from [Releases](https://github.com/doancan/codeyard/releases); keep the

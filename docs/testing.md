@@ -75,8 +75,8 @@ scripts/memcheck.sh        # rerun once if the first Rust-file row spikes (GPU t
 
 CI runs fmt, clippy, arch-check, docs-check, tests, `cargo deny` and the audit. `scripts/memcheck.sh` also runs on the macOS CI
 runner as a blocking step, but that runner has a 1x display and measures lower, so it only catches gross regressions; the
-authoritative numbers come from a Retina Mac. Notarization is done by the maintainer at release time (it needs a paid Apple
-Developer account).
+authoritative numbers come from a Retina Mac. GitHub tag releases sign and notarize using Apple credentials in Actions
+Secrets. The signed dry run and six mocked notarization/credential-cleanup tests are described in `releasing.md`.
 
 `scripts/memcheck.sh` starts the release app in a scripted window, lets it settle and measures `footprint`; see
 `architecture.md` for the budgets.
