@@ -25,6 +25,9 @@ so tag builds can restore the default branch cache. App and agent jobs use separ
 `.github/workflows/benchmark-windows.yml` compares native `windows-2022` with Linux `cargo-xwin` using the same commit,
 release profile, x64 MSVC target, embedded Linux agents and FXC-generated shader bytes. Each job starts without a target
 cache, measures a cold build, removes only the app package, and measures a build with compiled dependencies retained.
+Linux uses LLVM 19 MSVC driver aliases and cargo-xwin 0.23.1; its x64 SDK cache is saved before compilation, even if a later
+build fails. Only SDK files are restored: compiled Rust targets are never restored for this benchmark. The optional
+`host=linux` workflow input reruns only the Linux arm when investigating cross toolchains.
 SDK/tool installation and dependency downloads are separate steps, outside the compiler timer; include them when comparing
 whole job latency. Runner CPU counts and Rust versions are recorded in `benchmark.json`. These are runner comparisons,
 not a controlled comparison on identical hardware. Both executables undergo native Windows standalone checks.
