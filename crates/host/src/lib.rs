@@ -9,6 +9,7 @@ pub mod forward;
 mod outbox;
 pub mod ssh;
 pub mod ssh_config;
+pub mod ssh_hosts;
 pub mod transfer;
 
 use std::collections::HashMap;
