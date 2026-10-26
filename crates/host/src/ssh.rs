@@ -13,52 +13,7 @@ use crate::{Connector, HostError, RemoteHost, Result, spawn_transport};
 
 pub const APP_DIR: &str = "codeyard";
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SshHost {
-    pub alias: String,
-    pub hostname: Option<String>,
-    pub user: Option<String>,
-}
-
-/// Concrete Hosts in `~/.ssh/config` (no wildcard patterns).
-pub fn list_hosts() -> Vec<SshHost> {
-    // Same config as used for connecting (`CODEYARD_SSH_CONFIG` if set, else ~/.ssh/config).
-    let Some(path) = crate::ssh_config::config_path() else { return Vec::new() };
-    std::fs::read_to_string(path).map(|s| parse_config(&s)).unwrap_or_default()
-}
-
-/// Known limitation: `Include` and `Match` blocks are not followed.
-pub fn parse_config(text: &str) -> Vec<SshHost> {
-    let mut hosts: Vec<SshHost> = Vec::new();
-    let mut current: Vec<usize> = Vec::new();
-    for line in text.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let (key, value) = match line.split_once(|c: char| c.is_whitespace() || c == '=') {
-            Some((k, v)) => (k.to_ascii_lowercase(), v.trim_start_matches(|c: char| c.is_whitespace() || c == '=').trim()),
-            None => continue,
-        };
-        match key.as_str() {
-            "host" => {
-                current.clear();
-                for alias in value.split_whitespace() {
-                    if alias.contains(['*', '?', '!']) || hosts.iter().any(|h| h.alias == alias) {
-                        continue;
-                    }
-                    current.push(hosts.len());
-                    hosts.push(SshHost { alias: alias.into(), hostname: None, user: None });
-                }
-            }
-            "match" => current.clear(),
-            "hostname" => current.iter().for_each(|&i| hosts[i].hostname = Some(value.into())),
-            "user" => current.iter().for_each(|&i| hosts[i].user = Some(value.into())),
-            _ => {}
-        }
-    }
-    hosts
-}
+pub use crate::ssh_hosts::{SshHost, list_hosts, list_hosts_from, parse_config};
 
 /// This machine's target triple (picks the right binary from the agent bundle).
 pub fn local_triple() -> &'static str {
