@@ -13,13 +13,19 @@ pub fn folders(text: &str, base_dir: &str, exists: impl Fn(&str) -> bool) -> Vec
     for f in v["folders"].as_array().into_iter().flatten() {
         let raw = match (f["path"].as_str(), f["uri"].as_str()) {
             (Some(p), _) => p.to_string(),
-            (None, Some(u)) => match u.strip_prefix("file://") {
-                Some(p) => percent_decode(p),
+            (None, Some(u)) => match schema::file_uri::to_path(u) {
+                Some(p) => p,
                 None => continue, // like vscode-remote://: unsupported
             },
             _ => continue,
         };
-        let abs = normalize(&if raw.starts_with('/') { raw } else { format!("{}/{raw}", base_dir.trim_end_matches('/')) });
+        if raw.contains('\0') {
+            continue;
+        }
+        let windows_base = windows_path(base_dir);
+        let raw = if windows_base || windows_path(&raw) { raw.replace('\\', "/") } else { raw };
+        let base = if windows_base { base_dir.replace('\\', "/") } else { base_dir.to_string() };
+        let abs = normalize(&crate::ui::join(&base, &raw));
         if exists(&abs) && !out.contains(&abs) {
             out.push(abs);
         }
@@ -28,36 +34,33 @@ pub fn folders(text: &str, base_dir: &str, exists: impl Fn(&str) -> bool) -> Vec
 }
 
 fn normalize(path: &str) -> String {
+    let path = if let Some(rest) = path.strip_prefix("//?/UNC/") { format!("//{rest}") } else { path.strip_prefix("//?/").unwrap_or(path).to_string() };
+    let drive = path.len() >= 3 && path.as_bytes()[0].is_ascii_alphabetic() && path.as_bytes()[1..3] == *b":/";
+    let unc = path.starts_with("//");
+    let (prefix, rest, floor) = if drive {
+        (format!("{}/", &path[..2]), &path[3..], 0)
+    } else if unc {
+        ("//".to_string(), &path[2..], 2)
+    } else {
+        ("/".to_string(), path.as_str(), 0)
+    };
     let mut parts: Vec<&str> = Vec::new();
-    for p in path.split('/') {
+    for p in rest.split('/') {
         match p {
             "" | "." => {}
             ".." => {
-                parts.pop();
+                if parts.len() > floor {
+                    parts.pop();
+                }
             }
             p => parts.push(p),
         }
     }
-    format!("/{}", parts.join("/"))
+    format!("{prefix}{}", parts.join("/"))
 }
 
-fn percent_decode(s: &str) -> String {
-    let b = s.as_bytes();
-    let mut out = Vec::with_capacity(b.len());
-    let mut i = 0;
-    while i < b.len() {
-        if b[i] == b'%'
-            && i + 2 < b.len()
-            && let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16)
-        {
-            out.push(v);
-            i += 3;
-        } else {
-            out.push(b[i]);
-            i += 1;
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
+fn windows_path(path: &str) -> bool {
+    path.starts_with(['\\']) || path.starts_with("//") || path.len() >= 2 && path.as_bytes()[0].is_ascii_alphabetic() && path.as_bytes()[1] == b':'
 }
 
 pub fn is_workspace_file(path: &str) -> bool {
@@ -94,5 +97,24 @@ mod tests {
     fn recognises_workspace_files() {
         assert!(is_workspace_file("/a/b.code-workspace"));
         assert!(!is_workspace_file("/a/b.json"));
+    }
+
+    #[test]
+    fn windows_workspace_folders_resolve_drives_unc_and_backslashes() {
+        let text = serde_json::json!({ "folders": [
+            { "path": r"src\nested\.." }, { "path": r"..\web" },
+            { "path": r"D:\tools\..\sdk" }, { "uri": "file:///E:/my%20app" },
+            { "path": r"\\server\share\dir\..\..\other" },
+            { "uri": "file://server/share/other" }, { "uri": "file://localhost/F:/work" },
+            { "path": "C:/../../" }, { "path": r"\\?\G:\long\dir" },
+            { "path": r"\\?\UNC\host\share\dir" },
+            { "uri": "file:///bad%XX" }, { "uri": "file:///a%00b" }
+        ] })
+        .to_string();
+        assert_eq!(
+            folders(&text, r"C:\work\mono", |_| true),
+            ["C:/work/mono/src", "C:/work/web", "D:/sdk", "E:/my app", "//server/share/other", "F:/work", "C:/", "G:/long/dir", "//host/share/dir"]
+        );
+        assert_eq!(folders(r#"{"folders":[{"path":"../api"}]}"#, r"\\server\share\work", |_| true), ["//server/share/api"]);
     }
 }

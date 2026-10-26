@@ -45,6 +45,9 @@ Windows x64 is built and released as a ZIP and a setup EXE (unsigned, so SmartSc
   launchers and hide console windows; the application menu bar replaces the macOS global menu.
 - `scripts/check-windows.ps1` runs the library tests, selected UI, path and keyboard regressions and the release build.
   GPUI needs `fxc.exe` from the Windows SDK.
+- `./scripts/build-windows.ps1` builds a standalone EXE with Linux x64 and ARM64 SSH agents embedded; use
+  `-Profile Release` for an optimized build. No separate `agents/` folder is needed. The packaging check moves only
+  the EXE to an empty directory and verifies both embedded agents. Release CI also embeds its supplied macOS agents.
 - Native OpenSSH has no ControlMaster sockets: SSH needs a key or ssh-agent and an existing known-host entry (the password and
   host-key prompt bridge is Unix-only), and in-app port forwarding is unavailable; use `ssh -L` / `ssh -R` in a terminal.
 - Not verified: real SSH authentication, mixed-DPI displays, physical keyboard and IME behaviour.

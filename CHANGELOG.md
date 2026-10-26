@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Menu bar and Dock menu rebuilt in the middle of a window update.** Changing the interface language (or the recent list) from inside
   an update rebuilt the menus at once, and macOS validates every item during that, which could update the same window again. The rebuild now
   waits for the end of the current update.
+- **Windows** (pull request #1): find the SSH configuration and VS Code settings without the Unix `HOME` variable; keep Windows drive and
+  network-share paths in workspace files and file URLs, and open terminal links through the system browser; move files to the native
+  Recycle Bin so Explorer can restore them; launch without a separate console window and embed the application icon in the EXE.
 
 ### Changed
 
@@ -25,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   start of each version; macOS asks when you open a folder there, as with other editors. `CODEYARD_SKIP_DISK_PROMPT` is gone.
 - **A shorter first-run question about update checks.** Two short sentences instead of two paragraphs; it still says that github.com is
   contacted, that GitHub sees your IP address and nothing about your files, and where to change it.
+- **Windows builds embed the Linux x64 and ARM64 SSH agents** (pull request #1), so a copied EXE connects without an `agents` folder. Source
+  builds and packaging prepare the agents automatically, and standalone checks verify the EXE.
 
 ## [0.3.0] - 2026-10-26
 

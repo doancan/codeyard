@@ -518,15 +518,11 @@ impl Workbench {
         use crate::links::Link;
         match link {
             Link::Url(url) => {
-                let opener = if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
-                if let Err(e) = std::process::Command::new(opener).arg(&url).spawn() {
-                    self.notice = Some(Notice::Error(crate::i18n::tf("Could not open {0}: {1}", &[&url, &e]).into()));
-                    cx.notify();
-                }
+                cx.open_url(&url);
             }
             Link::File { path, line, col } => {
                 let candidates: Vec<String> =
-                    if path.starts_with('/') { vec![path.clone()] } else { self.root(cx).map(|r| ui::join(&r, &path)).into_iter().collect() };
+                    if ui::is_absolute_path(&path) { vec![path.clone()] } else { self.root(cx).map(|r| ui::join(&r, &path)).into_iter().collect() };
                 let host = self.remote.host.clone();
                 let task =
                     cx.background_executor().spawn(async move { candidates.into_iter().find(|c| host.stat(c).is_ok_and(|m| m.kind == proto::Kind::File)) });
