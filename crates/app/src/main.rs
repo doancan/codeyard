@@ -113,6 +113,7 @@ mod snippets;
 #[cfg(test)]
 mod text_scale_tests;
 // --- structural ---
+mod shell_quote;
 #[cfg(test)]
 mod ssh_error_tests;
 mod structural;
