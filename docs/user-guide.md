@@ -322,6 +322,14 @@ CONSTANT_CASE transforms, Base64 / URL / HTML encode and decode, more line sorts
 UUID, block comment toggle, recently used commands first in the palette,
 "Git: Clone Repository…".
 
+Markdown files (`.md`, `.markdown`) also have a **Read** button above the editor. In the
+reading view, **Code**, Escape, or the preview shortcut returns to the source without
+losing edits. Code blocks support syntax colors, horizontal scrolling and **Copy code**.
+Heading links scroll within the document; relative file links open in Codeyard. Relative
+images load from the document's own filesystem, including SSH hosts (up to 20 MB per
+image). External image URLs remain clickable links rather than loading automatically.
+MDX components are not executed.
+
 ## Settings and keyboard shortcuts
 
 `⇧⌘P` → "Preferences: Settings" lists the settings with their current values: pick one to

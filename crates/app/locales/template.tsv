@@ -168,6 +168,7 @@ Close details
 Close to the Right	
 Close without saving	
 Closing the window loses everything since the last save.	
+Code	
 Codeyard already has Full Disk Access.	
 Codeyard can't replace itself in {}: your account can't write there. Download the new version and drag it in yourself.	
 Codeyard can't update itself on this system. Download the new version yourself.	
@@ -263,6 +264,7 @@ Copy Relative Path
 Copy Report	
 Copy Version	
 Copy branch name	
+Copy code	
 Copy link	
 Copy the full hash	
 Copy the path at the cursor	
@@ -562,6 +564,7 @@ Expected “{}”
 Explorer	
 Explorer (⇧⌘E)	
 Export as Text…	
+External image: open the link to view it.	
 F4 steps through the search results, ⇧F4 goes back.	
 Favorites	
 Favorites: Show Favorites…	
@@ -776,6 +779,8 @@ Ignore line endings
 Ignore whitespace	
 Ignore “{}” in this session	
 Ignored the language server's edit to {} file outside the open folders|Ignored the language server's edit to {} files outside the open folders	
+Image exceeds 20 MB.	
+Image unavailable	
 Import VS Code Settings and Shortcuts	
 Imported {0} settings and {1} shortcuts from VS Code ({2} settings and {3} shortcuts have no equivalent here)	
 In Privacy & Security, press + and add Codeyard, then turn it on.	
@@ -844,6 +849,7 @@ Link copied.
 List	
 Ln {}, Col {}	
 Ln {}, Col {} ({} selected)	
+Loading image…	
 Loading pull requests…	
 Loading…	
 Local	
@@ -1181,6 +1187,7 @@ Quit codeyard
 Quit without saving	
 Quitting loses everything since the last save.	
 Quitting now can leave the installation unfinished. It takes a few seconds.	
+Read	
 Reading folders… {0} and {1} entries	
 Reading the file…	
 Rebase	
@@ -1735,7 +1742,6 @@ Zoom
 Zoom In	
 Zoom Out	
 Zoom: {}	
-[image: {}]	
 `{}` did not answer within {} seconds; check the network connection and try again	
 `{}` is not installed or not on PATH	
 a theme must be a JSON object	

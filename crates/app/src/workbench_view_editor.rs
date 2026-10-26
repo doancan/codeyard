@@ -176,6 +176,15 @@ impl Workbench {
                             .child(ed.name.clone())
                             .when_some(hint, |d, h| d.child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(h))),
                     )
+                    .when(
+                        active && ed.path.rsplit_once('.').is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown")),
+                        |d| {
+                            d.child(ui::icon_button("markdown-read", "eye", crate::i18n::t("Read"), p).on_click(cx.listener(|this, _, window, cx| {
+                                cx.stop_propagation();
+                                this.open_markdown_preview(&OpenMarkdownPreview, window, cx);
+                            })))
+                        },
+                    )
                     .tooltip(move |_, cx| cx.new(|_| Tooltip(rel.clone().into())).into())
                     .when(pinned && !dirty, |d| {
                         // Pinned: a pin instead of close (click: unpin).

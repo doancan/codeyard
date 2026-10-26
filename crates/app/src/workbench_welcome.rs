@@ -154,7 +154,22 @@ impl Workbench {
     }
 
     /// ⇧⌘V: live preview of the active Markdown file (updates as you type).
-    pub(super) fn open_markdown_preview(&mut self, _: &OpenMarkdownPreview, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_markdown_preview(&mut self, _: &OpenMarkdownPreview, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(Page::Markdown(view)) = self.tabs.page.clone() {
+            let source = view.read(cx).source();
+            if self.tabs.page_active {
+                self.show_markdown_source(source, window, cx);
+                return;
+            }
+            if self.active_editor() == Some(&source) {
+                self.tabs.page_active = true;
+                self.tabs.diff_active = false;
+                self.tabs.large_active = false;
+                window.focus(&view.focus_handle(cx));
+                cx.notify();
+                return;
+            }
+        }
         let Some(ed) = self.active_editor().cloned() else { return };
         let ext = ed.read(cx).path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
         if !matches!(ext.as_str(), "md" | "markdown" | "mdx") {
@@ -162,13 +177,26 @@ impl Workbench {
             cx.notify();
             return;
         }
+        let source = ed.clone();
         let view = cx.new(|cx| crate::markdown::MarkdownPreview::new(ed, cx));
+        self.tabs._page_sub = Some(cx.subscribe_in(&view, window, move |this, _, event: &crate::markdown::PreviewEvent, window, cx| match event {
+            crate::markdown::PreviewEvent::Code => this.show_markdown_source(source.clone(), window, cx),
+            crate::markdown::PreviewEvent::Open { host, path } => this.open_file_on(host.clone(), path.clone(), window, cx),
+        }));
+        window.focus(&view.focus_handle(cx));
         self.tabs.page = Some(Page::Markdown(view));
-        self.tabs._page_sub = None;
         self.tabs.page_active = true;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;
         cx.notify();
+    }
+
+    fn show_markdown_source(&mut self, source: gpui::Entity<crate::editor::EditorView>, window: &mut Window, cx: &mut Context<Self>) {
+        let index = self.tabs.editors.iter().position(|ed| *ed == source).unwrap_or_else(|| {
+            self.tabs.editors.push(source.clone());
+            self.tabs.editors.len() - 1
+        });
+        self.activate(index, window, cx);
     }
 
     /// "Merge Conflict: Open Merge Editor": conflicts in the open file card by card (Current | Incoming | Result).
@@ -253,6 +281,14 @@ impl Workbench {
                 self.tabs.page_active,
             )
         })
+    }
+
+    #[cfg(test)]
+    pub fn markdown_scroll_for_test(&self, cx: &gpui::App) -> Option<gpui::ScrollHandle> {
+        match &self.tabs.page {
+            Some(Page::Markdown(view)) => Some(view.read(cx).scroll_for_test()),
+            _ => None,
+        }
     }
 
     #[cfg(test)]

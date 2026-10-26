@@ -8,9 +8,18 @@ use gpui::{
 use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 use std::time::{Duration, Instant};
+use std::{collections::HashMap, rc::Rc, sync::Arc};
 
 use crate::editor::EditorView;
 use crate::ui::{self, Palette, c, palette, text};
+
+#[cfg(test)]
+thread_local! { static TEXT_LAYOUTS: std::cell::RefCell<Vec<gpui::TextLayout>> = const { std::cell::RefCell::new(Vec::new()) }; }
+
+#[cfg(test)]
+pub(crate) fn text_layouts_for_test() -> Vec<gpui::TextLayout> {
+    TEXT_LAYOUTS.with(|layouts| layouts.borrow().clone())
+}
 
 /// Inline formatting.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -20,6 +29,7 @@ pub struct Style {
     pub code: bool,
     pub strike: bool,
     pub link: Option<String>,
+    pub image: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -279,6 +289,8 @@ fn push_inline(spans: &mut Vec<Span>, style: &mut Style, links: &mut Vec<String>
         }
     };
     match ev {
+        Event::Text(t) | Event::Code(t) if spans.last().is_some_and(|s| s.style.image.is_some()) => spans.last_mut().unwrap().text.push_str(&t),
+        Event::End(TagEnd::Image) => spans.push(Span { text: String::new(), style: style.clone() }),
         Event::Text(t) => add(spans, &t, style),
         Event::Code(t) => add(spans, &t, &Style { code: true, ..style.clone() }),
         Event::SoftBreak => add(spans, " ", style),
@@ -299,7 +311,7 @@ fn push_inline(spans: &mut Vec<Span>, style: &mut Style, links: &mut Vec<String>
             style.link = links.last().cloned();
         }
         Event::Start(Tag::Image { dest_url, .. }) => {
-            add(spans, &format!("{} ", crate::i18n::tf("[image: {}]", &[&dest_url])), &Style { italic: true, ..Style::default() })
+            spans.push(Span { text: String::new(), style: Style { image: Some(dest_url.to_string()), ..style.clone() } });
         }
         _ => {}
     }
@@ -349,7 +361,33 @@ fn flatten(
     (text, hl, links)
 }
 
+#[derive(Clone)]
+pub enum PreviewEvent {
+    Code,
+    Open { host: Arc<dyn host::Host>, path: String },
+}
+
+impl gpui::EventEmitter<PreviewEvent> for MarkdownPreview {}
+
+#[derive(Default)]
+struct PreviewResources {
+    images: HashMap<String, Result<Arc<gpui::Image>, String>>,
+}
+
+type LinkHandler = Rc<dyn Fn(&str, &mut Window, &mut App)>;
+
+struct DocumentContext {
+    link: LinkHandler,
+    images: HashMap<String, Result<Arc<gpui::Image>, String>>,
+    anchors: HashMap<String, gpui::ScrollAnchor>,
+    code: HashMap<String, Vec<(std::ops::Range<usize>, syntax::Role)>>,
+}
+
 pub struct MarkdownPreview {
+    code: HashMap<String, Vec<(std::ops::Range<usize>, syntax::Role)>>,
+    resources: PreviewResources,
+    scroll: gpui::ScrollHandle,
+    anchors: HashMap<String, gpui::ScrollAnchor>,
     source: Entity<EditorView>,
     blocks: Vec<Block>,
     seen_version: u64,
@@ -377,6 +415,10 @@ impl MarkdownPreview {
     pub fn new(source: Entity<EditorView>, cx: &mut Context<Self>) -> Self {
         let sub = cx.observe(&source, |_, _, cx| cx.notify());
         let mut p = MarkdownPreview {
+            code: HashMap::new(),
+            resources: PreviewResources::default(),
+            scroll: gpui::ScrollHandle::new(),
+            anchors: HashMap::new(),
             source,
             blocks: Vec::new(),
             seen_version: u64::MAX,
@@ -388,6 +430,10 @@ impl MarkdownPreview {
         };
         p.refresh(cx);
         p
+    }
+
+    pub fn source(&self) -> Entity<EditorView> {
+        self.source.clone()
     }
 
     pub fn title(&self, cx: &App) -> String {
@@ -419,8 +465,57 @@ impl MarkdownPreview {
         self.seen_version = v;
         let started = Instant::now();
         self.blocks = parse(&self.source.read(cx).text_lines().join("\n"));
+        self.code.clear();
+        highlight_blocks(&self.blocks, "md", &mut self.code);
+        self.load_images(cx);
         self.last_cost = started.elapsed();
         self.last_parse = Some(Instant::now());
+    }
+
+    fn load_images(&mut self, cx: &mut Context<Self>) {
+        let source = self.source.read(cx);
+        let path = source.path.replace('\\', "/");
+        let host = source.host_arc();
+        let mut urls = Vec::new();
+        collect_images(&self.blocks, &mut urls);
+        self.resources.images.retain(|url, _| urls.contains(url));
+        for url in urls {
+            if self.resources.images.contains_key(&url) {
+                continue;
+            }
+            let Some(path) = relative_path(&path, &url) else {
+                self.resources.images.insert(url, Err(crate::i18n::t("External image: open the link to view it.").into()));
+                continue;
+            };
+            let Some(format) = crate::large::image_format(&path) else {
+                continue;
+            };
+            self.resources.images.insert(url.clone(), Err(crate::i18n::t("Loading image…").into()));
+            let host = host.clone();
+            let task = cx.background_executor().spawn(async move {
+                let meta = host.stat(&path).map_err(|e| e.to_string())?;
+                if meta.size > 20 * 1024 * 1024 {
+                    return Err(crate::i18n::t("Image exceeds 20 MB.").to_string());
+                }
+                host.read(&path).map(|(data, _)| Arc::new(gpui::Image::from_bytes(format, data))).map_err(|e| e.to_string())
+            });
+            cx.spawn(async move |this, cx| {
+                let result = task.await;
+                this.update(cx, |this, cx| {
+                    if this.resources.images.contains_key(&url) {
+                        this.resources.images.insert(url, result);
+                    }
+                    cx.notify();
+                })
+                .ok();
+            })
+            .detach();
+        }
+    }
+
+    #[cfg(test)]
+    pub fn scroll_for_test(&self) -> gpui::ScrollHandle {
+        self.scroll.clone()
     }
 
     #[cfg(test)]
@@ -437,18 +532,25 @@ pub(crate) fn is_safe_link(url: &str) -> bool {
 }
 
 /// Renders a paragraph (with clickable links).
-fn text_view(id: impl Into<gpui::ElementId>, spans: &[Span], p: &Palette, base: Option<FontWeight>) -> gpui::AnyElement {
+fn text_view(id: impl Into<gpui::ElementId>, spans: &[Span], p: &Palette, base: Option<FontWeight>, document: Option<&DocumentContext>) -> gpui::AnyElement {
     let (t, hl, links) = flatten(spans, p, base);
     let styled = StyledText::new(SharedString::from(t)).with_highlights(hl);
+    #[cfg(test)]
+    TEXT_LAYOUTS.with(|layouts| layouts.borrow_mut().push(styled.layout().clone()));
     if links.is_empty() {
         return styled.into_any_element();
     }
+    let handler = document.map(|d| d.link.clone());
     let ranges: Vec<_> = links.iter().map(|(r, _)| r.clone()).collect();
     let urls: Vec<String> = links.into_iter().map(|(_, u)| u).collect();
     InteractiveText::new(id, styled)
-        .on_click(ranges, move |ix, _, cx| {
-            if let Some(u) = urls.get(ix).filter(|u| is_safe_link(u)) {
-                cx.open_url(u);
+        .on_click(ranges, move |ix, window, cx| {
+            if let Some(u) = urls.get(ix) {
+                if let Some(handler) = &handler {
+                    handler(u, window, cx);
+                } else if is_safe_link(u) {
+                    cx.open_url(u);
+                }
             }
         })
         .into_any_element()
@@ -457,16 +559,16 @@ fn text_view(id: impl Into<gpui::ElementId>, spans: &[Span], p: &Palette, base: 
 /// A parsed document as elements, for places that show Markdown outside the preview tab (the update dialog's release notes).
 /// Links open through the same safe-scheme check as in the preview.
 pub(crate) fn document_view(blocks: &[Block], id: &str, p: &Palette) -> Vec<gpui::AnyElement> {
-    blocks.iter().enumerate().map(|(i, b)| block_view(b, &format!("{id}{i}"), p, 0, false)).collect()
+    blocks.iter().enumerate().map(|(i, b)| block_view(b, &format!("{id}{i}"), p, 0, false, None)).collect()
 }
 
 /// The same, set small and tight: headings only a little larger than the text, no rules under them, list items one line apart.
 /// For a document that is read in a small window (the release notes).
 pub(crate) fn compact_document_view(blocks: &[Block], id: &str, p: &Palette) -> Vec<gpui::AnyElement> {
-    blocks.iter().enumerate().map(|(i, b)| block_view(b, &format!("{id}{i}"), p, 0, true)).collect()
+    blocks.iter().enumerate().map(|(i, b)| block_view(b, &format!("{id}{i}"), p, 0, true, None)).collect()
 }
 
-fn block_view(b: &Block, id: &str, p: &Palette, depth: usize, compact: bool) -> gpui::AnyElement {
+fn block_view(b: &Block, id: &str, p: &Palette, depth: usize, compact: bool, document: Option<&DocumentContext>) -> gpui::AnyElement {
     match b {
         Block::Heading(level, spans) => {
             let size = match (compact, level) {
@@ -478,6 +580,8 @@ fn block_view(b: &Block, id: &str, p: &Palette, depth: usize, compact: bool) -> 
                 (false, _) => 14.,
             };
             div()
+                .id(SharedString::from(id.to_string()))
+                .anchor_scroll(document.and_then(|d| d.anchors.get(id)).cloned())
                 .pt(px(match (compact, *level <= 2) {
                     (true, _) => 6.,
                     (false, true) => 12.,
@@ -486,35 +590,123 @@ fn block_view(b: &Block, id: &str, p: &Palette, depth: usize, compact: bool) -> 
                 .pb(px(if compact { 2. } else { 4. }))
                 .text_size(px(size))
                 .when(*level <= 2 && !compact, |d| d.border_b_1().border_color(c(p.border)))
-                .child(text_view(SharedString::from(format!("{id}h")), spans, p, Some(FontWeight::BOLD)))
+                .child(text_view(SharedString::from(format!("{id}h")), spans, p, Some(FontWeight::BOLD), document))
                 .into_any_element()
         }
         Block::Paragraph(spans) => {
             let (size, line) = if compact { (text::SM.0, 18.) } else { (text::BASE.0, 22.) };
-            div().text_size(px(size)).line_height(px(line)).child(text_view(SharedString::from(format!("{id}p")), spans, p, None)).into_any_element()
+            let mut children = Vec::new();
+            let mut start = 0;
+            for (index, span) in spans.iter().enumerate() {
+                let Some(url) = &span.style.image else {
+                    continue;
+                };
+                if start < index {
+                    children.push(text_view(SharedString::from(format!("{id}p{index}")), &spans[start..index], p, None, document));
+                }
+                let image = document.and_then(|d| d.images.get(url));
+                children.push(match image {
+                    Some(Ok(image)) => div()
+                        .w_full()
+                        .child(
+                            gpui::img(gpui::ImageSource::Image(image.clone()))
+                                .with_fallback({
+                                    let alt = span.text.clone();
+                                    move || div().child(alt.clone()).into_any_element()
+                                })
+                                .max_w_full()
+                                .max_h(px(600.))
+                                .object_fit(gpui::ObjectFit::Contain),
+                        )
+                        .into_any_element(),
+                    _ => div()
+                        .id(SharedString::from(format!("{id}-image-{index}")))
+                        .when(is_safe_link(url), |d| {
+                            let url = url.clone();
+                            d.cursor_pointer().on_click(move |_, _, cx| cx.open_url(&url))
+                        })
+                        .text_color(c(p.text_muted))
+                        .child(format!(
+                            "{} — {}",
+                            if span.text.is_empty() { url } else { &span.text },
+                            image.and_then(|i| i.as_ref().err()).map(String::as_str).unwrap_or(crate::i18n::t("Image unavailable"))
+                        ))
+                        .into_any_element(),
+                });
+                start = index + 1;
+            }
+            if start < spans.len() {
+                children.push(text_view(SharedString::from(format!("{id}p")), &spans[start..], p, None, document));
+            }
+            div().w_full().min_w_0().text_size(px(size)).line_height(px(line)).children(children).into_any_element()
         }
-        Block::Code { text: t, lang } => div()
-            .w_full()
-            .flex()
-            .flex_col()
-            .rounded(px(theme::radius::SM))
-            .bg(c(p.surface))
-            .border_1()
-            .border_color(c(p.border))
-            .child(
-                div()
-                    .px(px(theme::SPACE[5]))
-                    .py(px(theme::SPACE[3]))
-                    .overflow_hidden()
-                    .font_family(ui::MONO_FONT)
-                    .text_size(px(text::SM.0))
-                    .line_height(px(text::SM.1))
-                    .children(t.split('\n').map(|l| div().whitespace_nowrap().child(if l.is_empty() { " ".to_string() } else { l.to_string() }))),
-            )
-            .when(!lang.is_empty(), |d| {
-                d.child(div().px(px(theme::SPACE[5])).pb(px(theme::SPACE[2])).text_size(px(text::XXS.0)).text_color(c(p.text_muted)).child(lang.clone()))
-            })
-            .into_any_element(),
+        Block::Code { text: t, lang } => {
+            let copy = t.clone();
+            let highlights = document
+                .and_then(|d| d.code.get(id))
+                .map(|spans| {
+                    spans
+                        .iter()
+                        .map(|(range, role)| {
+                            let color = match role {
+                                syntax::Role::Keyword => p.syntax_keyword,
+                                syntax::Role::String => p.syntax_string,
+                                syntax::Role::Number => p.syntax_number,
+                                syntax::Role::Function => p.syntax_function,
+                                syntax::Role::Type => p.syntax_type,
+                                syntax::Role::Comment => p.syntax_comment,
+                                syntax::Role::Tag => p.syntax_tag,
+                                syntax::Role::Punct => p.syntax_punct,
+                            };
+                            (range.clone(), HighlightStyle { color: Some(c(color).into()), ..Default::default() })
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            div()
+                .w_full()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .rounded(px(theme::radius::SM))
+                .bg(c(p.surface))
+                .border_1()
+                .border_color(c(p.border))
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .justify_between()
+                        .px(px(theme::SPACE[4]))
+                        .py(px(theme::SPACE[2]))
+                        .child(div().text_size(px(text::XXS.0)).text_color(c(p.text_muted)).child(lang.clone()))
+                        .child(
+                            div()
+                                .id(SharedString::from(format!("{id}-copy")))
+                                .cursor_pointer()
+                                .px(px(8.))
+                                .py(px(4.))
+                                .rounded(px(theme::radius::SM))
+                                .hover(|d| d.bg(c(p.surface_hover)))
+                                .text_size(px(text::XS.0))
+                                .child(crate::i18n::t("Copy code"))
+                                .on_click(move |_, _, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(copy.clone()))),
+                        ),
+                )
+                .child(
+                    div()
+                        .id(SharedString::from(format!("{id}-code")))
+                        .flex()
+                        .overflow_x_scroll()
+                        .px(px(theme::SPACE[5]))
+                        .py(px(theme::SPACE[3]))
+                        .font_family(ui::MONO_FONT)
+                        .text_size(px(text::SM.0))
+                        .line_height(px(text::SM.1))
+                        .child(div().min_w_full().flex_none().whitespace_nowrap().child(StyledText::new(t.clone()).with_highlights(highlights))),
+                )
+                .into_any_element()
+        }
         Block::Quote(inner) => div()
             .flex()
             .flex_col()
@@ -523,9 +715,11 @@ fn block_view(b: &Block, id: &str, p: &Palette, depth: usize, compact: bool) -> 
             .border_l_2()
             .border_color(c(p.border_input))
             .text_color(c(p.text_muted))
-            .children(inner.iter().enumerate().map(|(i, b)| block_view(b, &format!("{id}q{i}"), p, depth, compact)))
+            .children(inner.iter().enumerate().map(|(i, b)| block_view(b, &format!("{id}q{i}"), p, depth, compact, document)))
             .into_any_element(),
         Block::List { start, items } => div()
+            .w_full()
+            .min_w_0()
             .flex()
             .flex_col()
             .gap(px(if compact { 0. } else { theme::SPACE[2] }))
@@ -537,17 +731,21 @@ fn block_view(b: &Block, id: &str, p: &Palette, depth: usize, compact: bool) -> 
                     (None, None) => if depth.is_multiple_of(2) { "•" } else { "◦" }.to_string(),
                 };
                 div()
+                    .debug_selector(|| format!("{id}-row-{i}"))
+                    .w_full()
+                    .min_w_0()
                     .flex()
                     .gap(px(theme::SPACE[4]))
                     .child(div().flex_none().w(px(if compact { 14. } else { 22. })).text_color(c(p.text_muted)).child(marker))
                     .child(
                         div()
+                            .debug_selector(|| format!("{id}-item-{i}"))
                             .flex_1()
                             .min_w_0()
                             .flex()
                             .flex_col()
                             .gap(px(if compact { 0. } else { theme::SPACE[2] }))
-                            .children(inner.iter().enumerate().map(|(k, b)| block_view(b, &format!("{id}l{i}-{k}"), p, depth + 1, compact))),
+                            .children(inner.iter().enumerate().map(|(k, b)| block_view(b, &format!("{id}l{i}-{k}"), p, depth + 1, compact, document))),
                     )
             }))
             .into_any_element(),
@@ -564,7 +762,7 @@ fn block_view(b: &Block, id: &str, p: &Palette, depth: usize, compact: bool) -> 
                     .border_color(c(p.border))
                     .when(a == Alignment::Center, |d| d.flex().justify_center())
                     .when(a == Alignment::Right, |d| d.flex().justify_end())
-                    .child(text_view(SharedString::from(key), spans, p, header.then_some(FontWeight::BOLD)))
+                    .child(text_view(SharedString::from(key), spans, p, header.then_some(FontWeight::BOLD), document))
             };
             let row = |cells: &Vec<Vec<Span>>, header: bool, r: usize| {
                 div()
@@ -624,36 +822,259 @@ pub(crate) fn plain_text(blocks: &[Block]) -> String {
 impl Render for MarkdownPreview {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.refresh(cx);
+        #[cfg(test)]
+        TEXT_LAYOUTS.with(|layouts| layouts.borrow_mut().clear());
         let p = *palette(cx);
-        let name = self.source.read(cx).name.to_string();
+        let source = self.source.read(cx);
+        let name = source.name.to_string();
+        let path = source.path.replace('\\', "/");
+        let host = source.host_arc();
+        let entity = cx.entity();
+        let mut headings = Vec::new();
+        collect_headings(&self.blocks, "md", &mut headings);
+        self.anchors.clear();
+        let mut slugs = HashMap::new();
+        for (id, title) in headings {
+            let base = heading_slug(&title);
+            let count = slugs.entry(base.clone()).or_insert(0usize);
+            let slug = if *count == 0 { base } else { format!("{base}-{count}") };
+            *count += 1;
+            let anchor = self.anchors.entry(id.clone()).or_insert_with(|| gpui::ScrollAnchor::for_handle(self.scroll.clone())).clone();
+            self.anchors.insert(format!("#{slug}"), anchor);
+        }
+        let anchors = self.anchors.clone();
+        let document = DocumentContext {
+            link: Rc::new(move |url, window, cx| {
+                if is_safe_link(url) {
+                    cx.open_url(url);
+                } else if let Some(anchor) = decode_url_path(url).and_then(|key| anchors.get(&key)) {
+                    anchor.scroll_to(window, cx);
+                } else if let Some(target) = relative_path(&path, url) {
+                    entity.update(cx, |_, cx| cx.emit(PreviewEvent::Open { host: host.clone(), path: target }));
+                }
+            }),
+            code: self.code.clone(),
+            images: self.resources.images.clone(),
+            anchors: self.anchors.clone(),
+        };
         div()
             .id("markdown-preview")
             .key_context("MarkdownPreview")
             .track_focus(&self.focus_handle)
+            .on_key_down(cx.listener(|_, event: &gpui::KeyDownEvent, _, cx| {
+                if event.keystroke.key == "escape" {
+                    cx.emit(PreviewEvent::Code);
+                    cx.stop_propagation();
+                }
+            }))
             .size_full()
-            .overflow_y_scroll()
             .bg(c(p.bg))
             .flex()
-            .justify_center()
+            .flex_col()
             .child(
                 div()
-                    .w_full()
-                    .max_w(px(820.))
+                    .flex_none()
                     .flex()
-                    .flex_col()
-                    .gap(px(theme::SPACE[4]))
-                    .px(px(theme::SPACE[9]))
-                    .py(px(theme::SPACE[8]))
-                    .child(div().text_size(px(text::XXS.0)).text_color(c(p.line_number)).child(crate::i18n::tf("Preview of {}", &[&name])))
-                    .children(self.blocks.iter().enumerate().map(|(i, b)| block_view(b, &format!("md{i}"), &p, 0, false)))
-                    .when(self.blocks.is_empty(), |d| d.child(div().text_color(c(p.text_muted)).child(crate::i18n::t("The file is empty.")))),
+                    .items_center()
+                    .justify_between()
+                    .px(px(theme::SPACE[5]))
+                    .py(px(theme::SPACE[3]))
+                    .border_b_1()
+                    .border_color(c(p.border))
+                    .child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(crate::i18n::tf("Preview of {}", &[&name])))
+                    .child(crate::editor::button("markdown-code", crate::i18n::t("Code"), false, &p, {
+                        let entity = cx.entity();
+                        move |_, _, cx| entity.update(cx, |_, cx| cx.emit(PreviewEvent::Code))
+                    })),
             )
+            .child(
+                div().id("markdown-scroll").track_scroll(&self.scroll).flex_1().min_h_0().overflow_y_scroll().flex().flex_col().items_center().child(
+                    div()
+                        .flex_none()
+                        .w_full()
+                        .min_w_0()
+                        .max_w(px(820.))
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::SPACE[4]))
+                        .px(px(theme::SPACE[9]))
+                        .py(px(theme::SPACE[8]))
+                        .children(self.blocks.iter().enumerate().map(|(i, b)| block_view(b, &format!("md{i}"), &p, 0, false, Some(&document))))
+                        .when(self.blocks.is_empty(), |d| d.child(div().text_color(c(p.text_muted)).child(crate::i18n::t("The file is empty.")))),
+                ),
+            )
+    }
+}
+
+fn heading_slug(title: &str) -> String {
+    title
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_' || c.is_whitespace())
+        .map(|c| if c.is_whitespace() { '-' } else { c })
+        .collect()
+}
+
+/// Resolve on the document's Host, never through the system URL handler.
+pub(crate) fn relative_path(source: &str, target: &str) -> Option<String> {
+    let target = target.trim();
+    if target.is_empty() || target.starts_with(['#', '/', '\\']) || target.contains(':') || target.contains('\\') {
+        return None;
+    }
+    let target = decode_url_path(target.split(['#', '?']).next()?)?;
+    let target = target.as_str();
+    if target.contains([':', '\\', '\0']) || target.starts_with('/') {
+        return None;
+    }
+    if target.is_empty() {
+        return None;
+    }
+    let parent = source.rsplit_once('/').map(|(p, _)| p).unwrap_or(".");
+    let mut parts: Vec<&str> = parent.split('/').collect();
+    for part in target.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                if parts.last().is_some_and(|p| !p.is_empty() && *p != ".." && !p.ends_with(':')) {
+                    parts.pop();
+                } else if !source.starts_with('/') && !source.as_bytes().get(1).is_some_and(|b| *b == b':') {
+                    parts.push("..");
+                }
+            }
+            _ => parts.push(part),
+        }
+    }
+    Some(parts.join("/"))
+}
+
+fn decode_url_path(value: &str) -> Option<String> {
+    let mut bytes = Vec::with_capacity(value.len());
+    let mut input = value.bytes();
+    while let Some(byte) = input.next() {
+        if byte == b'%' {
+            let a = (input.next()? as char).to_digit(16)?;
+            let b = (input.next()? as char).to_digit(16)?;
+            bytes.push((a * 16 + b) as u8);
+        } else {
+            bytes.push(byte);
+        }
+    }
+    String::from_utf8(bytes).ok()
+}
+
+fn highlight_blocks(blocks: &[Block], prefix: &str, out: &mut HashMap<String, Vec<(std::ops::Range<usize>, syntax::Role)>>) {
+    for (i, block) in blocks.iter().enumerate() {
+        let id = format!("{prefix}{i}");
+        match block {
+            Block::Code { lang, text } if text.len() <= 100_000 => {
+                let ext = match lang.as_str() {
+                    "rust" => "rs",
+                    "javascript" => "js",
+                    "typescript" => "ts",
+                    "python" => "py",
+                    "shell" | "bash" => "sh",
+                    "c++" => "cpp",
+                    other => other,
+                };
+                if let Some(language) = syntax::language_for_path(&format!("code.{ext}")) {
+                    let rope = buffer::Rope::from_str(text);
+                    if let Some(syntax) = syntax::Syntax::new(language, &rope) {
+                        let spans = syntax.highlights(&rope, 0..text.len());
+                        let mut offset = 0;
+                        let highlights = syntax::line_runs(0, text.len(), &spans)
+                            .into_iter()
+                            .filter_map(|(len, role)| {
+                                let range = offset..offset + len;
+                                offset += len;
+                                role.map(|role| (range, role))
+                            })
+                            .collect();
+                        out.insert(id, highlights);
+                    }
+                }
+            }
+            Block::Quote(inner) => highlight_blocks(inner, &format!("{id}q"), out),
+            Block::List { items, .. } => {
+                for (j, (_, inner)) in items.iter().enumerate() {
+                    highlight_blocks(inner, &format!("{id}l{j}-"), out);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn collect_images(blocks: &[Block], urls: &mut Vec<String>) {
+    for block in blocks {
+        match block {
+            Block::Heading(_, spans) | Block::Paragraph(spans) => urls.extend(spans.iter().filter_map(|s| s.style.image.clone())),
+            Block::Quote(inner) => collect_images(inner, urls),
+            Block::List { items, .. } => {
+                for (_, inner) in items {
+                    collect_images(inner, urls);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn collect_headings(blocks: &[Block], prefix: &str, out: &mut Vec<(String, String)>) {
+    for (i, block) in blocks.iter().enumerate() {
+        let id = format!("{prefix}{i}");
+        match block {
+            Block::Heading(_, spans) => out.push((id, spans.iter().map(|s| s.text.as_str()).collect())),
+            Block::Quote(inner) => collect_headings(inner, &format!("{id}q"), out),
+            Block::List { items, .. } => {
+                for (j, (_, inner)) in items.iter().enumerate() {
+                    collect_headings(inner, &format!("{id}l{j}-"), out);
+                }
+            }
+            _ => {}
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn document_links_resolve_without_launching_protocol_handlers() {
+        assert_eq!(relative_path("/repo/docs/start.md", "../README.md#intro").as_deref(), Some("/repo/README.md"));
+        assert_eq!(relative_path("/repo/start.md", "images/a%20b.png").as_deref(), Some("/repo/images/a b.png"));
+        assert_eq!(relative_path("C:/repo/docs/start.md", "../README.md").as_deref(), Some("C:/repo/README.md"));
+        for target in ["#intro", "https://example.com", "javascript:alert(1)", "//example.com/a", "%2fetc/passwd", "a%00b", "a%3ab", "bad%zz"] {
+            assert!(relative_path("/repo/start.md", target).is_none(), "{target}");
+        }
+    }
+
+    #[test]
+    fn image_alt_text_is_separate_from_surrounding_text() {
+        let blocks = parse("Before ![a **small** cat](images/cat.png) after.");
+        let Block::Paragraph(spans) = &blocks[0] else { panic!() };
+        let image = spans.iter().find(|s| s.style.image.is_some()).unwrap();
+        assert_eq!(image.text, "a small cat");
+        assert_eq!(image.style.image.as_deref(), Some("images/cat.png"));
+        assert!(spans.iter().any(|s| s.style.image.is_none() && s.text.contains("after.")));
+    }
+
+    #[test]
+    fn syntax_ranges_are_ordered_non_overlapping_and_utf8_safe() {
+        let blocks = parse("```rust\nfn main() { let name = \"猫\"; }\n```");
+        let mut code = HashMap::new();
+        highlight_blocks(&blocks, "md", &mut code);
+        let spans = &code["md0"];
+        assert!(!spans.is_empty());
+        let Block::Code { text, .. } = &blocks[0] else { panic!() };
+        let mut end = 0;
+        for (range, _) in spans {
+            assert!(range.start >= end);
+            assert!(text.is_char_boundary(range.start) && text.is_char_boundary(range.end));
+            end = range.end;
+        }
+        assert_eq!(heading_slug("Hello, Dünya!"), "hello-dünya");
+    }
 
     #[test]
     fn slow_documents_are_not_reparsed_on_every_keystroke() {
