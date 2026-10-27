@@ -52,19 +52,21 @@ fields, set at triage:
 | Effort | `XS` ≤ 2 hours · `S` < 1 day · `M` 1–3 days · `L` ≤ 1 week · `XL` more, split it before starting |
 | Start date, Target date | Shown on the Roadmap view |
 
-Moving between stages:
+Every move is automatic: `.github/workflows/project.yml` runs `scripts/project-sync.py` on issue, pull request, review
+and CI events, and once an hour to catch what sends no event (relationships edited in the sidebar). Nothing is moved by
+hand; a status set by hand stays until an event gives a reason to move it.
 
 | Stage | Entered when |
 | --- | --- |
-| Backlog | The issue is added to the project, or reopened |
-| In Progress | `scripts/issue-start.sh N`: assigns you, creates and checks out the linked branch (the issue's *Development* section), sets Start date |
-| In Review | A pull request that says `Closes #N` is opened, or one asked for changes is ready again |
-| Test | The review approves; with no reviewer, move it by hand once the acceptance criteria and manual checks pass |
-| Done | The pull request is merged and closes the issue |
-| Blocked | By hand, when a *blocked by* issue is still open; back by hand when it closes |
+| Backlog | The issue is opened or reopened, unassigned, or its last blocker closes while nobody is assigned |
+| In Progress | Someone is assigned (`scripts/issue-start.sh N` assigns you and checks out the linked branch), a draft pull request that says `Closes #N` is opened, a review asks for changes, or CI fails on its pull request. Start date is set the first time |
+| In Review | The pull request is ready for review |
+| Test | The review approves, or CI passes on the ready pull request: what is left is the issue's manual checks |
+| Done | The issue is closed (merging a pull request that says `Closes #N` closes it) |
+| Blocked | A *blocked by* issue is open; it leaves Blocked by itself when the last one closes |
 
-The automatic moves are the project's built-in workflows (project settings → Workflows), not GitHub Actions: no token or
-workflow file is involved.
+Opening a pull request for an unassigned issue assigns it to the pull request's author. An epic follows its sub-issues:
+In Progress once one has started, Test when all are closed (its own verification list is left), Done when it is closed.
 
 ## Before you open a pull request
 
