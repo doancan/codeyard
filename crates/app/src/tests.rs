@@ -3353,6 +3353,26 @@ fn images_open_in_a_preview(cx: &mut TestAppContext) {
     assert_eq!(wb.read_with(cx, |wb, _| wb.open_state()).1, None, "no binary-file error");
 }
 
+/// A tiny PNG that announces 30,000 × 30,000 pixels (3.6 GB once decoded) is refused before it is decoded.
+#[gpui::test]
+fn an_image_too_large_to_decode_is_refused(cx: &mut TestAppContext) {
+    let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
+    png.extend(30_000u32.to_be_bytes());
+    png.extend(30_000u32.to_be_bytes());
+    png.extend([8, 6, 0, 0, 0, 0, 0, 0, 0]);
+    let dir = std::fs::canonicalize(project("huge-image")).unwrap();
+    std::fs::write(dir.join("bomb.png"), &png).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    let p = dir.join("bomb.png").to_string_lossy().into_owned();
+    wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(p, window, cx));
+    cx.run_until_parked();
+    let view = wb.read_with(cx, |wb, _| wb.large_view()).expect("preview opened");
+    assert!(view.read_with(cx, |v, _| !v.image_loaded()), "nothing was decoded");
+    let error = view.read_with(cx, |v, _| v.error_for_test());
+    assert!(error.as_deref().is_some_and(|e| e.contains("30000 × 30000")), "{error:?}");
+}
+
 #[gpui::test]
 fn change_line_endings_and_indentation(cx: &mut TestAppContext) {
     let file = tmp("eol", b"fn a() {\n    if x {\n        y();\n    }\n}\n");

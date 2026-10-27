@@ -1756,6 +1756,7 @@ This file mixes line endings; saving writes all of them as {}, like its first li
 This file was deleted on disk. Saving will create it again.	
 This folder is not a git repository.	
 This frame cannot be restarted.	
+This image is {0} × {1} pixels, too large to preview.	
 This is a development build and can't update itself. Download the new version yourself.	
 This is the portable version, which can't update itself. Download the new version and replace it yourself.	
 This language server does not support incoming calls	
