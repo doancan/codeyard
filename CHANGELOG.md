@@ -99,6 +99,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   *Copy Last Command Output* after a program cleared the history.
 - A language server's rename edit of an unexpected shape, or a theme file that is not an object, no longer crashes the
   app.
+- Opening an image that announces enormous dimensions (a small PNG or SVG can ask for gigabytes once decoded) no longer
+  exhausts memory: images over 50 megapixels are not decoded, and the preview says how large they are.
 - A language server or debug adapter printing endless output without message headers made the app spend a minute of
   CPU per 9 MB; that output is now read in linear time.
 - Finding the tests of a file with thousands of tests took tens of seconds; it takes milliseconds. Rescanning a long
