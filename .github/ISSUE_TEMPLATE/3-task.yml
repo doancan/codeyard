@@ -1,13 +1,12 @@
 name: Task
 description: Work with no user-visible behaviour of its own - test harness, refactor, tooling, release chores
-title: "[Task] "
 labels: ["type: task"]
 projects: ["doancan/2"]
 body:
   - type: markdown
     attributes:
       value: |
-        **Title:** `[Task] ` followed by an imperative summary, at most **72 characters** in total.
+        **Title:** an imperative summary, at most **72 characters**. No type prefix: the `type:` label says it.
         **Labels:** exactly three: `type:` (set by this form), one `area:` and one `env:` (set at triage). Priority, effort and dates are fields on the project board.
         **Relationships:** set the parent epic, sub-issues and *blocked by* in the sidebar, not in the text.
   - type: textarea
