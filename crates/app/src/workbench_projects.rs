@@ -519,13 +519,12 @@ mod tests {
         let l = labels(&rows);
         assert_eq!(&l[..4], ["★ Kod", "app", "notes", "devbox"], "{l:?}");
         assert!(l.contains(&"build".to_string()));
-        assert_eq!(
-            &l[l.len() - 6..],
-            ["Open Folder…", "Connect to SSH host…", "Add SSH host…", "Manage SSH hosts…", "Clone Git Repository…", "Connect to a running container…"]
-                .map(String::from)
-                .as_slice(),
-            "{l:?}"
-        );
+        let mut actions =
+            vec!["Open Folder…", "Connect to SSH host…", "Add SSH host…", "Manage SSH hosts…", "Clone Git Repository…", "Connect to a running container…"];
+        if cfg!(windows) {
+            actions.push("Connect to WSL…");
+        }
+        assert_eq!(&l[5..], actions.as_slice(), "{l:?}");
         // A saved project is not repeated in recents; a remote recent comes with its server; time is written short.
         assert_eq!(l.iter().filter(|x| x.contains("kod")).count(), 0, "{l:?}");
         let detail = |label: &str| rows.iter().find(|(i, _)| i.label == label).and_then(|(i, _)| i.detail.clone()).map(|d| d.to_string()).unwrap_or_default();
