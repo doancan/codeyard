@@ -1841,8 +1841,7 @@ Help: Check for Updates…	Yardım: Güncellemeleri Denetle…
 Check for Updates…	Güncellemeleri Denetle…
 Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it	Yeni Codeyard sürümlerine bak: ask (henüz karar verilmedi; hiçbir şey denetlenmez), daily (günde bir kez github.com'dan iki küçük dosya indirir: son sürümün sağlama toplamı listesi ve imzası; GitHub IP adresinizi ve isteğin curl'den geldiğini görür, dosyalarınızla ilgili hiçbir şey gönderilmez) ya da manual (yalnızca Güncellemeleri Denetle'yi seçtiğinizde). Yalnızca kendi ayarlarınızda geçerlidir; bir klasör bunu değiştiremez
 Check for updates automatically?	Güncellemeler otomatik denetlensin mi?
-Once a day, Codeyard downloads two small files from github.com to look for a newer version. GitHub sees your IP address, nothing about your files.	Günde bir kez Codeyard, yeni sürüm var mı diye github.com'dan iki küçük dosya indirir. GitHub IP adresinizi görür, dosyalarınız hakkında hiçbir şey görmez.
-Change this in Settings (update.check). Check for Updates… always works.	Bunu Ayarlar'dan (update.check) değiştirebilirsiniz. Güncellemeleri Denetle… her zaman çalışır.
+Codeyard can check for updates daily. You can change this in Settings.	Codeyard güncellemeleri her gün denetleyebilir. Bu tercihi Ayarlar’dan değiştirebilirsiniz.
 Check Daily	Her Gün Denetle
 Only When I Ask	Yalnızca Ben İstediğimde
 Checking for updates…	Güncellemeler denetleniyor…
@@ -2633,7 +2632,6 @@ Maximize window	Pencereyi büyüt
 Restore window	Pencereyi önceki boyutuna getir
 Close window	Pencereyi kapat
 Mouse wheel and trackpad scroll speed multiplier	Fare tekerleği ve izleme dörtgeni kaydırma hızı çarpanı
-Open File	Dosyayı Aç
 Toggle Panel (⌘J)	Paneli Aç/Kapat (⌘J)
 Closes when the pointer leaves · pin to keep open	Fare ayrılınca kapanır · açık tutmak için sabitleyin
 Codeyard memory	Codeyard belleği
@@ -2642,6 +2640,7 @@ Includes hidden and build files; symlinks are not followed.	Gizli dosyalar ve de
 Load average (1 / 5 / 15 min)	Yük ortalaması (1 / 5 / 15 dk)
 Logical processors	Mantıksal işlemciler
 Measuring…	Ölçülüyor…
+Open File	Dosyayı Aç
 Open a folder to measure its size.	Boyutunu ölçmek için bir klasör açın.
 Partial scan: a time, file or access limit was reached.	Kısmi tarama: süre, dosya veya erişim sınırına ulaşıldı.
 Pinned · click the pin to restore auto-close	Sabitlendi · otomatik kapatmak için iğneye tıklayın

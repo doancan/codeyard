@@ -669,19 +669,13 @@ fn settings_dir(name: &str, text: &str) -> PathBuf {
 const COMMENTED: &str = "// my settings\n{\n  // keep this comment\n  \"editor.fontSize\": 15,\n}\n";
 
 #[gpui::test]
-fn the_question_names_what_is_sent_and_has_two_buttons(cx: &mut TestAppContext) {
+fn the_question_explains_the_choice_briefly_and_has_two_buttons(cx: &mut TestAppContext) {
     let (wb, cx, _fake) = rig(cx);
     assert!(wb.update_in(cx, |wb, window, cx| wb.ask_update_policy_for_test(true, window, cx)));
     let d = dialog(&wb, cx).expect("the question is on screen");
     assert_eq!(d.title, "Check for updates automatically?");
-    assert!(
-        d.text.contains("github.com") && d.text.contains("two small files") && d.text.contains("IP address") && d.text.contains("nothing about your files"),
-        "{}",
-        d.text
-    );
-    assert!(!d.text.contains("all that is sent") && !d.text.contains("no tracking"), "no promise that is not true: {}", d.text);
-    assert!(d.text.contains("update.check"), "it says where to change it: {}", d.text);
-    assert!(d.text.chars().count() < 260, "the question is two short sentences, not a page: {}", d.text);
+    assert!(d.text.contains("daily") && d.text.contains("Settings"), "the choice and where to change it remain clear: {}", d.text);
+    assert!(d.text.chars().count() < 120, "keep the title and explanation concise: {}", d.text);
     assert_eq!((d.buttons, d.primary.as_deref()), (vec!["Only When I Ask".to_string(), "Check Daily".to_string()], Some("Check Daily")));
 }
 
