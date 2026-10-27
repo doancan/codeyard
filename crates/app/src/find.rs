@@ -197,6 +197,7 @@ impl FindBar {
         let content = if is_icon { icon(glyph, 14., p.text_muted).into_any_element() } else { div().child(glyph).into_any_element() };
         div()
             .id(id)
+            .debug_selector(move || id.to_string())
             .flex_none()
             .h(px(22.))
             .when(is_icon, |d| d.w(px(22.)))
@@ -219,10 +220,20 @@ impl Render for FindBar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = *palette(cx);
         let (q_focus, r_focus) = (self.query.focus_handle(cx).is_focused(window), self.replacement.focus_handle(cx).is_focused(window));
-        let field_box = |id: &'static str, focused: bool, child: gpui::AnyElement| crate::ui::input_box(id, &p, p.bg, focused).w(px(320.)).child(child);
+        let field_box = |id: &'static str, focused: bool, child: gpui::AnyElement| {
+            crate::ui::input_box(id, &p, p.bg, focused)
+                .debug_selector(move || id.to_string())
+                .w(px(320.))
+                .max_w(gpui::relative(1.))
+                .h_auto()
+                .min_h(px(28.))
+                .child(child)
+        };
         let status = self.status.clone();
         let show_replace = self.show_replace;
         div()
+            .id("find-bar")
+            .debug_selector(|| "find-bar".into())
             .key_context("FindBar")
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::toggle_case))
@@ -235,6 +246,8 @@ impl Render for FindBar {
             .on_action(cx.listener(Self::replace_all))
             .on_action(cx.listener(Self::switch_field))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .w(px(620.))
+            .max_w(gpui::relative(1.))
             .flex()
             .gap(px(theme::SPACE[2]))
             .p(px(theme::SPACE[2]))
@@ -247,6 +260,7 @@ impl Render for FindBar {
             .child(
                 div()
                     .id("find-expand")
+                    .flex_none()
                     .w(px(18.))
                     .flex()
                     .items_center()
@@ -263,11 +277,14 @@ impl Render for FindBar {
             .child(
                 div()
                     .flex()
+                    .flex_1()
+                    .min_w_0()
                     .flex_col()
                     .gap(px(theme::SPACE[2]))
                     .child(
                         div()
                             .flex()
+                            .flex_wrap()
                             .items_center()
                             .gap(px(theme::SPACE[2]))
                             .child(field_box(
@@ -277,10 +294,11 @@ impl Render for FindBar {
                                     .flex()
                                     .flex_1()
                                     .min_w_0()
+                                    .flex_wrap()
                                     .items_center()
                                     .gap(px(theme::SPACE[2]))
                                     .child(crate::ui::search_icon(&p))
-                                    .child(div().flex_1().min_w_0().child(self.query.clone()))
+                                    .child(div().flex_1().min_w(px(64.)).child(self.query.clone()))
                                     .child(self.toggle("f-case", "Aa", self.case_sensitive, crate::i18n::t("Match case (⌥C)"), cx, |s| {
                                         s.case_sensitive = !s.case_sensitive
                                     }))
@@ -292,6 +310,7 @@ impl Render for FindBar {
                             ))
                             .child(
                                 div()
+                                    .flex_none()
                                     .w(px(96.))
                                     .text_size(px(text::XS.0))
                                     .whitespace_nowrap()
@@ -310,6 +329,7 @@ impl Render for FindBar {
                         d.child(
                             div()
                                 .flex()
+                                .flex_wrap()
                                 .items_center()
                                 .gap(px(theme::SPACE[2]))
                                 .child(field_box(
@@ -317,6 +337,8 @@ impl Render for FindBar {
                                     r_focus,
                                     div()
                                         .flex()
+                                        .flex_1()
+                                        .min_w_0()
                                         .items_center()
                                         .child(div().flex_1().min_w_0().child(self.replacement.clone()))
                                         .child(self.toggle("f-preserve", "AB", self.preserve_case, crate::i18n::t("Preserve case (⌥P)"), cx, |s| {
@@ -442,6 +464,48 @@ pub fn preserve_case(matched: &str, replacement: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[gpui::test]
+    fn clicking_the_replacement_fields_empty_space_focuses_replacement(cx: &mut gpui::TestAppContext) {
+        crate::qa_workbench_tests::globals(cx);
+        let (bar, cx) = cx.add_window_view(|_, cx| FindBar::new(cx));
+        bar.update_in(cx, |bar, window, cx| {
+            bar.show_replace = true;
+            bar.set_query("production", cx);
+            bar.focus_query(window, cx);
+            cx.notify();
+        });
+        cx.run_until_parked();
+        let bounds = cx.debug_bounds("find-replace-box").unwrap();
+        let at = gpui::point(bounds.left() + bounds.size.width * 0.75, bounds.center().y);
+        cx.simulate_click(at, gpui::Modifiers::none());
+        cx.run_until_parked();
+        assert!(
+            bar.update_in(cx, |bar, window, cx| bar.replacement.focus_handle(cx).is_focused(window)),
+            "clicks inside the replacement field must not keep the search input focused"
+        );
+        cx.simulate_input("release");
+        assert_eq!(bar.read_with(cx, |bar, cx| bar.replacement(cx)), "release");
+        assert_eq!(bar.read_with(cx, |bar, cx| bar.query(cx)), "production");
+    }
+
+    #[gpui::test]
+    fn find_controls_fit_narrow_editor_widths(cx: &mut gpui::TestAppContext) {
+        crate::qa_workbench_tests::globals(cx);
+        let (bar, cx) = cx.add_window_view(|_, cx| FindBar::new(cx));
+        bar.update(cx, |bar, cx| {
+            bar.show_replace = true;
+            cx.notify();
+        });
+        for width in [480., 320., 240.] {
+            cx.simulate_resize(gpui::size(px(width), px(600.)));
+            cx.run_until_parked();
+            for id in ["find-query-box", "find-replace-box", "f-close", "f-replace-all"] {
+                let bounds = cx.debug_bounds(id).unwrap();
+                assert!(bounds.left() >= px(0.) && bounds.right() <= px(width), "{id} exceeds {width}px: {bounds:?}");
+            }
+        }
+    }
 
     #[test]
     fn preserve_case_follows_the_match() {
