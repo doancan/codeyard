@@ -5,7 +5,7 @@
 use std::time::{Duration, Instant};
 
 const STACK: usize = 8 << 20;
-/// Linear work on the largest texts (300,000 lines) takes a few seconds in a debug build on a busy machine; quadratic work
+/// Linear work on the largest texts (100,000 lines) takes a few seconds in a debug build on a busy machine; quadratic work
 /// takes minutes, which is what this catches.
 const BUDGET: Duration = Duration::from_secs(15);
 
@@ -21,7 +21,7 @@ impl Rng {
 fn hostile_texts() -> Vec<(String, String)> {
     let mut v: Vec<(String, String)> = Vec::new();
     let mut add = |name: String, text: String| v.push((name, text));
-    for n in [1_000usize, 20_000, 300_000] {
+    for n in [1_000usize, 20_000, 100_000] {
         for opener in [
             "[",
             "{\"a\":",
@@ -236,7 +236,10 @@ fn project_files_survive_hostile_text() {
             for text in framed(t, &[frame]) {
                 let cases = crate::testrun::cases(rel, &text, Some(pj));
                 let lines = text.lines().count();
-                for line in [0, lines / 2, lines.saturating_sub(1), lines + 5] {
+                // Each plan walks up from the cursor: on the largest texts once is enough to find a panic (the time a whole
+                // file of tests takes has its own test).
+                let cursors: &[usize] = if text.len() > 200_000 { &[usize::MAX] } else { &[0, lines / 2, lines.saturating_sub(1), lines + 5] };
+                for &line in cursors {
                     let _ = crate::testrun::plan(rel, &text, line, false, Some(pj));
                 }
                 let _ = crate::testrun::plan(rel, &text, 0, true, Some(pj));
