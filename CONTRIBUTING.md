@@ -22,6 +22,44 @@ Read [docs/architecture.md](docs/architecture.md) first (crates, the workbench t
 New workbench state goes into a group in `workbench_state.rs`; new behaviour goes into a `workbench_<topic>.rs` file;
 only `crates/app` may depend on GPUI.
 
+## Issues and labels
+
+Every issue is opened from a form in `.github/ISSUE_TEMPLATE/`: **Epic** (a goal made of several issues), **Feature** (a
+user-visible capability, written as a specification), **Task** (work with no user-visible behaviour of its own), **Bug** and
+**Translation**. Questions and open ideas go to Discussions.
+
+- **Title:** the form's prefix (`[Epic]`, `[Feature]`, `[Task]`, `[Bug]`) and a plain summary, at most 72 characters in total.
+  Features and tasks start with a verb ("Show …", "Pass …"); bugs say what goes wrong.
+- **Labels:** exactly two. The form sets `type:` (`epic`, `feature`, `task`, `bug`); triage adds one `area:` (`lsp`, `debug`,
+  `editor`, `git`, `remote`, `terminal`, `ui`, `i18n`, `docs`, `infra` for build, release and test harness).
+- **Relationships** live in the issue's sidebar, never in its text: a feature or task is a sub-issue of its epic, and
+  *blocked by* names the issues it waits for. An epic is closed when all its sub-issues are.
+- **Milestone:** the release the issue ships in (`v0.6.0`). Its due date is the epic's Target date.
+
+Every issue is on the [Codeyard project](https://github.com/users/doancan/projects/2). Priority, effort and dates are project
+fields, set at triage:
+
+| Field | Values |
+| --- | --- |
+| Status | `Backlog` → `In Progress` → `In Review` → `Test` → `Done`; `Blocked` from any open stage |
+| Priority | `P0` broken for everyone, drop other work · `P1` next up · `P2` planned · `P3` when there is time |
+| Effort | `XS` ≤ 2 hours · `S` < 1 day · `M` 1–3 days · `L` ≤ 1 week · `XL` more, split it before starting |
+| Start date, Target date | Shown on the Roadmap view |
+
+Moving between stages:
+
+| Stage | Entered when |
+| --- | --- |
+| Backlog | The issue is added to the project, or reopened |
+| In Progress | `scripts/issue-start.sh N`: assigns you, creates and checks out the linked branch (the issue's *Development* section), sets Start date |
+| In Review | A pull request that says `Closes #N` is opened, or one asked for changes is ready again |
+| Test | The review approves; with no reviewer, move it by hand once the acceptance criteria and manual checks pass |
+| Done | The pull request is merged and closes the issue |
+| Blocked | By hand, when a *blocked by* issue is still open; back by hand when it closes |
+
+The automatic moves are the project's built-in workflows (project settings → Workflows), not GitHub Actions: no token or
+workflow file is involved.
+
 ## Before you open a pull request
 
 Run one command:

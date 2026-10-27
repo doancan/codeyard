@@ -1,0 +1,69 @@
+name: Task
+description: Work with no user-visible behaviour of its own - test harness, refactor, tooling, release chores
+title: "[Task] "
+labels: ["type: task"]
+projects: ["doancan/2"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Title:** `[Task] ` followed by an imperative summary, at most **72 characters** in total.
+        **Labels:** exactly two: `type:` (set by this form) and one `area:` (set at triage). Priority, effort and dates are fields on the project board.
+        **Relationships:** set the parent epic, sub-issues and *blocked by* in the sidebar, not in the text.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What will exist or be different when this is done.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why it is needed and what it unblocks. Code references (`path:line`).
+    validations:
+      required: true
+  - type: textarea
+    id: deliverables
+    attributes:
+      label: Deliverables
+      description: Files, functions, scripts or documents this produces, each with a short description.
+    validations:
+      required: true
+  - type: textarea
+    id: io
+    attributes:
+      label: Inputs and outputs
+      description: For a tool or helper - what it takes and what it gives back. Write `None` if it does not apply.
+  - type: textarea
+    id: tests
+    attributes:
+      label: Test and verification
+      description: How we know it works and that nothing else broke.
+    validations:
+      required: true
+  - type: textarea
+    id: dod
+    attributes:
+      label: Definition of Done
+      value: |
+        - [ ] Deliverables exist and are used by at least one caller or test
+        - [ ] `scripts/check.sh` passes
+        - [ ] No behaviour change for users, or the change is moved to a feature issue
+        - [ ] Reviewed and merged into `main`
+    validations:
+      required: true
+  - type: dropdown
+    id: effort
+    attributes:
+      label: Effort
+      description: Copied to the Effort field on the project board at triage.
+      options:
+        - XS (up to two hours)
+        - S (under a day)
+        - M (one to three days)
+        - L (up to a week; consider splitting)
+        - XL (more than a week; split before work starts)
+    validations:
+      required: true
