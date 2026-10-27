@@ -704,7 +704,7 @@ Fetched
 Fetching in the background: try again in a moment.	
 Fetching…	
 File	
-File Glyphs	
+File Glyphs (Default)	
 File Icon Theme	
 File Icon Theme…	
 File and folder icons	
@@ -1047,7 +1047,7 @@ Merging {}…
 Message (↵ to commit)	
 Mine	
 Minified	
-Minimal (Default)	
+Minimal	
 Minimize	
 Minimize window	
 Modified	
@@ -1783,6 +1783,7 @@ Tasks: Run Build Task
 Tasks: Run Task…	
 Terminal	
 Terminal colour	
+Terminal row height, as a multiple of the font size	
 Terminal: Change Color…	
 Terminal: Clear	
 Terminal: Close	

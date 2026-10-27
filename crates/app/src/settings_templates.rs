@@ -58,8 +58,8 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Extra globs skipped by search (on top of files.exclude).
   // "search.exclude": ["**/dist", "*.min.js"],
 
-  // File and folder icons: "minimal", "codeyard", "glyphs", "badges", "colorful", "apple", "material", "none"
-  "workbench.iconTheme": "minimal",
+  // File and folder icons: "glyphs", "minimal", "codeyard", "badges", "colorful", "apple", "material", "none"
+  "workbench.iconTheme": "glyphs",
   "workbench.statusBar.visible": true,
   "workbench.activityBar.visible": true,
   // UI font for the whole window (the editor has its own "editor.fontFamily").
@@ -157,6 +157,8 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // "terminal.shell": "/bin/zsh",
   // Default: 12 on macOS, 14 on Windows and Linux.
   // "terminal.fontSize": 12,
+  // Row height as a multiple of the font size (1 to 2).
+  "terminal.lineHeight": 1.2,
   "terminal.scrollback": 2000,
   "terminal.scrollSensitivity": 2,
   // Let programs in the terminal write to the clipboard (OSC 52). Off by default: a program you run, or a file you cat, could replace

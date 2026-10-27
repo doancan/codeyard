@@ -40,6 +40,7 @@ const COMMON: &[&str] = &[
     "window.startup",
     "window.restoreSession",
     "terminal.fontSize",
+    "terminal.lineHeight",
 ];
 
 /// The category of a setting (from the key prefix).

@@ -87,6 +87,8 @@ pub struct Settings {
     pub compare_max_files: u32,
     pub terminal_shell: Option<String>,
     pub terminal_font_size: f32,
+    /// Row height as a multiple of the terminal's font size.
+    pub terminal_line_height: f32,
     pub terminal_scrollback: usize,
     pub terminal_scroll_sensitivity: f32,
     /// Whether a program in the terminal may put text on the clipboard (OSC 52).
@@ -300,6 +302,7 @@ impl Default for Settings {
             compare_max_files: 50_000,
             terminal_shell: None,
             terminal_font_size: theme::text::CODE.0,
+            terminal_line_height: crate::terminal::LINE_HEIGHT,
             terminal_scrollback: 2000,
             terminal_scroll_sensitivity: 2.,
             terminal_allow_clipboard_write: false,
@@ -608,6 +611,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     s.terminal_shell = r.string("terminal.shell");
     if let Some(v) = r.number("terminal.fontSize", 6., 48.) {
         s.terminal_font_size = v as f32;
+    }
+    if let Some(v) = r.number("terminal.lineHeight", 1., 2.) {
+        s.terminal_line_height = v as f32;
     }
     if let Some(v) = r.number("terminal.scrollback", 0., crate::terminal::SCROLLBACK_MAX as f64) {
         s.terminal_scrollback = v as usize;
@@ -1080,6 +1086,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "compare.folders.maxFiles",
         "terminal.shell",
         "terminal.fontSize",
+        "terminal.lineHeight",
         "terminal.scrollback",
         "terminal.scrollSensitivity",
         "terminal.sanitizePaste",

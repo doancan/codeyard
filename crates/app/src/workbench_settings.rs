@@ -70,7 +70,7 @@ pub const CATALOG: &[Entry] = &[
     e(
         "workbench.iconTheme",
         crate::i18n::tr("File and folder icons"),
-        Kind::Choice(&["minimal", "codeyard", "glyphs", "badges", "colorful", "apple", "material", "none"]),
+        Kind::Choice(&["glyphs", "minimal", "codeyard", "badges", "colorful", "apple", "material", "none"]),
     ),
     e("workbench.fontFamily", crate::i18n::tr("UI font of the whole window (empty: system font)"), Kind::Text),
     e("workbench.editor.showTabs", crate::i18n::tr("Show the editor tab bar"), Kind::Bool),
@@ -113,6 +113,7 @@ pub const CATALOG: &[Entry] = &[
     e("search.structural.maxFiles", crate::i18n::tr("Most files a structural search reads and parses"), Kind::Number { min: 1., max: 100_000. }),
     e("terminal.allowClipboardWrite", crate::i18n::tr("Let programs in the terminal write to the clipboard"), Kind::Bool),
     e("terminal.fontSize", crate::i18n::tr("Font size of the terminal"), Kind::Number { min: 6., max: 48. }),
+    e("terminal.lineHeight", crate::i18n::tr("Terminal row height, as a multiple of the font size"), Kind::Number { min: 1., max: 2. }),
     e("terminal.scrollback", crate::i18n::tr("Lines kept in terminal history"), Kind::Number { min: 0., max: 50_000. }),
     e("terminal.scrollSensitivity", crate::i18n::tr("Mouse wheel and trackpad scroll speed multiplier"), Kind::Number { min: 0.1, max: 10. }),
     e("terminal.shellIntegration", crate::i18n::tr("Mark prompts, commands and the folder in zsh, bash and fish"), Kind::Bool),
@@ -306,6 +307,8 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "search.structural.maxFiles" => json!(s.search_structural_max_files),
         "terminal.allowClipboardWrite" => json!(s.terminal_allow_clipboard_write),
         "terminal.fontSize" => json!(s.terminal_font_size),
+        // Through f64 an f32 1.2 would read 1.2000000476837158: two decimals are all the setting means.
+        "terminal.lineHeight" => json!((f64::from(s.terminal_line_height) * 100.).round() / 100.),
         "terminal.scrollback" => json!(s.terminal_scrollback),
         "terminal.scrollSensitivity" => json!(s.terminal_scroll_sensitivity),
         "terminal.sanitizePaste" => json!(s.terminal_sanitize_paste.as_str()),

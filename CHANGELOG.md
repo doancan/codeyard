@@ -9,16 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- File icon theme "File Glyphs" (`workbench.iconTheme: "glyphs"`): colored file glyphs and no folder icons. A file's glyph sits
-  in the column of a folder's arrow, so every name in a level lines up.
-- The macOS Dock menu lists the open windows at the top; choosing one brings that window to the front.
+- File icon theme "File Glyphs" (`workbench.iconTheme: "glyphs"`, now the default): colored file glyphs and no folder icons. A
+  file's glyph sits in the column of a folder's arrow, so every name in a level lines up.
+- The macOS Dock menu lists the open windows at the top, front one first, and follows as windows come forward, open, close or
+  change title; choosing one brings it to the front. Recent projects follow, newest first, without those already open.
+- `terminal.lineHeight` sets the terminal's row height as a multiple of the font size (1–2, default 1.2).
 
 ### Changed
 
 - Sync no longer asks before it pulls or pushes: `git.confirmSync` now defaults to `false` (turn it on in your own settings to
   get the question back). The status bar keeps the ↓/↑ counts visible at every width, marks a branch with uncommitted changes
   with `*` and says "Publish Branch" for an unpublished branch.
-- The terminal keeps 14 px of space at the sides and 8 px at the top and bottom instead of running into the panel's edges.
+- The terminal keeps 14 px of space at the sides and 8 px at the top and bottom instead of running into the panel's edges, and its
+  rows are 1.2 × the font size instead of the editor's looser 1.5 ×.
 - File tree rows are a little taller and roomier (24 px rows, wider side padding and icon gap).
 
 ### Fixed
