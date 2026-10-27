@@ -46,6 +46,13 @@ mod find;
 #[path = "terminal_marks.rs"]
 mod marks;
 
+#[path = "terminal_scroll.rs"]
+mod scroll;
+
+#[cfg(test)]
+#[path = "terminal_scroll_tests.rs"]
+mod scroll_tests;
+
 pub enum TerminalEvent {
     TitleChanged,
     Exited,
@@ -185,6 +192,7 @@ pub struct TerminalView {
     metrics: (f32, f32),
     /// Scrollback lines in effect.
     scrollback: usize,
+    wheel: scroll::WheelScroll,
     /// Mark colour in the terminal list (a theme role from `terminal_profiles::COLORS`).
     pub color: Option<String>,
     /// Shell integration: sequences in the output and the commands they mark.
@@ -360,6 +368,7 @@ impl TerminalView {
             hover_link: None,
             metrics: metrics(cx.global::<crate::settings::Settings>().terminal_font_size),
             scrollback,
+            wheel: Default::default(),
             color,
             osc: Default::default(),
             marks: Default::default(),
@@ -677,12 +686,13 @@ impl TerminalView {
 
     fn on_scroll(&mut self, ev: &ScrollWheelEvent, _: &mut Window, cx: &mut Context<Self>) {
         let line_h = self.line_h();
-        let dy = ev.delta.pixel_delta(line_h).y;
-        let lines = (dy / line_h).round() as i32;
+        let mode = *self.term.mode();
+        let sensitivity = cx.global::<crate::settings::Settings>().terminal_scroll_sensitivity;
+        let lines = self.wheel.lines(ev, line_h / px(1.), sensitivity, mode);
+        cx.stop_propagation();
         if lines == 0 {
             return;
         }
-        let mode = *self.term.mode();
         // The program wants the mouse: wheel buttons (64 up, 65 down).
         if mode.intersects(TermMode::MOUSE_MODE) {
             let button = if lines > 0 { 64 } else { 65 };

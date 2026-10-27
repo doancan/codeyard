@@ -1050,6 +1050,7 @@ Most files a structural search reads and parses
 Mount paths are shown as reported by the engine. Volume and bind-mount sizes are not included in container disk usage.	
 Mounted storage	
 Mounts: {}	
+Mouse wheel and trackpad scroll speed multiplier	
 Move	
 Move Line Down	
 Move Line Up	
