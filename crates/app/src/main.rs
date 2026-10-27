@@ -140,6 +140,8 @@ mod test_files;
 #[cfg(test)]
 mod test_git;
 #[cfg(test)]
+mod test_lsp;
+#[cfg(test)]
 mod test_sshd;
 mod testexp;
 mod testrun;
