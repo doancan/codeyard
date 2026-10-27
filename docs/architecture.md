@@ -42,8 +42,8 @@ musl binary of about 1.5 MB.
 
 Compare Folders is three files: `compare_logic.rs` (matching two `HashTree` scans, plans, report; no UI), `compare_folders.rs` (the tab) and `workbench_compare.rs` (picker, trust gate, copies and deletes checked against the scan).
 
-`scripts/arch-check.sh` enforces size limits and only ever lowers them: `workbench.rs` ≤ 2750 lines,
-`editor.rs` ≤ 1800, `buffer/src/lib.rs` ≤ 1800, every other source file ≤ 2500 (test files ≤ 6000), `Workbench` struct ≤ 80 lines. When a
+`scripts/arch-check.sh` enforces size limits and only ever lowers them: `workbench.rs` ≤ 2600 lines,
+`editor.rs` ≤ 1700, `buffer/src/lib.rs` ≤ 1800, every other source file ≤ 2500 (test files ≤ 6000), `Workbench` struct ≤ 80 lines. When a
 limit is hit, split the file instead of raising the limit.
 
 Test-only accessors (`*_for_test`) are in `workbench_testing.rs` and the editor's own files; tests never reach
