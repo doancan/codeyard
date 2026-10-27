@@ -51,6 +51,9 @@ scripts/licenses.sh
 python3 -I scripts/test-crate-licenses.py
 python3 -I scripts/crate-licenses.py --check
 
+step "project board rules"
+python3 -I scripts/test-project-sync.py
+
 step "cargo deny"
 optional cargo-deny "cargo install cargo-deny --locked" cargo deny check
 
