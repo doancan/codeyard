@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Panel and sidebar section resize handles gently fade their accent on hover and exit, while staying clear during a drag.
+
 - **Remote Explorer view** in the activity bar: SSH hosts with their recent folders and connection status, running
   containers (and WSL distributions on Windows), and the forwarded ports of the current connection. Connect or open a
   folder in this window or a new one, forget a folder, and edit, test, set up key login for or remove a host from the
@@ -87,6 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- SVG previews preserve their red/blue channels and translucent colors; long Markdown paragraphs wrap inside the document column.
+- Text links follow only left clicks, accept a press/release arriving in one frame, and discard cancelled presses.
 - Memory benchmarks measure normal editor scenes after choosing manual update checks and cover the first-run question
   separately, so the question's extra native-window buffers do not inflate every editor measurement. Existing budgets stay unchanged.
 - Generic editor/workbench test fixtures no longer start installed language servers; language-server integration tests opt in explicitly.

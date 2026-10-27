@@ -741,6 +741,85 @@ fn markdown_list_items_keep_their_width(cx: &mut TestAppContext) {
     assert!(row.bottom() <= second.top(), "list rows must not overlap: {row:?}, {second:?}");
 }
 
+/// A click can begin and end before another frame is painted; links still need to open the local file.
+#[gpui::test]
+fn markdown_links_open_local_files_with_one_fast_left_click(cx: &mut TestAppContext) {
+    let dir = project("md-link-click");
+    std::fs::write(dir.join("README.md"), "# Title\n\n[a local document](child.md)\n").unwrap();
+    std::fs::write(dir.join("child.md"), "# Linked document\n").unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir.join("README.md"), cx);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Markdown: Open Preview", window, cx));
+    cx.run_until_parked();
+    let layouts = crate::markdown::text_layouts_for_test();
+    let link = layouts.iter().find(|layout| layout.text() == "a local document").unwrap();
+    let at = link.position_for_index(2).unwrap() + gpui::point(gpui::px(1.), gpui::px(1.));
+    cx.simulate_mouse_down(at, MouseButton::Right, Modifiers::none());
+    cx.simulate_mouse_up(at, MouseButton::Right, Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.active_editor_entity().unwrap().read(cx).name.to_string()), "README.md", "right-click does not follow a link");
+    cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_up(gpui::point(gpui::px(0.), gpui::px(0.)), MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.active_editor_entity().unwrap().read(cx).name.to_string()), "README.md", "releasing outside cancels the click");
+    cx.simulate_mouse_up(at, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(
+        wb.read_with(cx, |wb, cx| wb.active_editor_entity().unwrap().read(cx).name.to_string()),
+        "README.md",
+        "a cancelled gesture cannot follow a link on a later release"
+    );
+    // One window update deliberately allows no intervening paint between press and release.
+    cx.update(|window, cx| {
+        window.dispatch_event(
+            gpui::PlatformInput::MouseDown(gpui::MouseDownEvent {
+                button: MouseButton::Left,
+                position: at,
+                modifiers: Modifiers::none(),
+                click_count: 1,
+                first_mouse: false,
+            }),
+            cx,
+        );
+        window.dispatch_event(
+            gpui::PlatformInput::MouseUp(gpui::MouseUpEvent { button: MouseButton::Left, position: at, modifiers: Modifiers::none(), click_count: 1 }),
+            cx,
+        );
+    });
+    cx.run_until_parked();
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.active_editor_entity().unwrap().read(cx).name.to_string()), "child.md");
+}
+
+/// Guard actual shaped text, not just its parent bounds: narrow glyph wrapping can overflow a wide parent.
+#[gpui::test]
+fn markdown_long_paragraphs_wrap_inside_the_document(cx: &mut TestAppContext) {
+    let dir = project("md-paragraph-layout");
+    let paragraph = "The document remains readable while scrolling. ".repeat(20);
+    let document =
+        format!("# Title\n\n[Jump to details](#details)\n\n{}\n\n## Details\n\nEnd.\n", (0..8).map(|_| paragraph.clone()).collect::<Vec<_>>().join("\n\n"));
+    std::fs::write(dir.join("README.md"), document).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir.join("README.md"), cx);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Markdown: Open Preview", window, cx));
+    cx.run_until_parked();
+    for width in [1280., 2560.] {
+        cx.simulate_resize(gpui::size(gpui::px(width), gpui::px(800.)));
+        cx.run_until_parked();
+        let document = cx.debug_bounds("markdown-document").unwrap();
+        let layouts = crate::markdown::text_layouts_for_test();
+        for text in layouts.iter().filter(|layout| layout.text().starts_with("The document remains")) {
+            assert!(text.bounds().right() <= document.right(), "paragraph must not overflow the document: {:?}, {document:?}", text.bounds());
+            let shaped = text.line_layout_for_index(0).unwrap();
+            assert!(
+                shaped.width() <= text.bounds().size.width + gpui::px(1.),
+                "glyph wrapping must fit the assigned width, also after resize: {:?} > {:?}",
+                shaped.width(),
+                text.bounds()
+            );
+        }
+    }
+}
+
 /// Guard actual shaped text, not just its parent bounds: narrow glyph wrapping can overflow a wide parent.
 #[gpui::test]
 fn markdown_readme_lists_shape_at_readable_width(cx: &mut TestAppContext) {

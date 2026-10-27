@@ -496,8 +496,7 @@ impl Render for Workbench {
                                     .right(px(-layout::SASH / 2.))
                                     .w(px(layout::SASH))
                                     .cursor(gpui::CursorStyle::ResizeLeftRight)
-                                    .when(resizing, |d| d.bg(c(p.accent)))
-                                    .hover(|d| d.bg(c(p.accent)))
+                                    .child(crate::ui_sash::highlight(p.accent, resizing))
                                     .on_mouse_down(
                                         MouseButton::Left,
                                         cx.listener(|this, _, _, cx| {

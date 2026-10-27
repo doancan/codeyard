@@ -314,7 +314,7 @@ impl Workbench {
         };
         // Bottom edge handle (dragging down grows) and top edge (dragging up grows).
         let sash = |id: &'static str, h: f32, sign: f32, cx: &mut Context<Self>| {
-            sections::sash(SharedString::from(format!("sash-{id}")), p).on_mouse_down(
+            sections::sash(SharedString::from(format!("sash-{id}")), p, self.sections.dragging_section(id)).on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, ev: &gpui::MouseDownEvent, _, cx| {
                     cx.stop_propagation();

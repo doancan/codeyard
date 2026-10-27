@@ -24,6 +24,9 @@ was retained. Both sides of the translation-table conflicts were preserved.
 | Maintainability | Topic files and state groups are enforced by `arch-check.sh`; theme tokens and settings catalogs are sources of truth. | Keep limits unchanged; centralize preview policy. |
 | Documentation | Contributing/platform/architecture documents still describe experimental Linux CI and unverified notarization, although CI and release evidence have advanced. | Align statements with current workflows and recorded evidence. |
 | Interface | Markdown has layout/scroll regressions and safe link handling; welcome colors have contrast tests. | Check real rendering with isolated state and run both language/theme regressions. |
+| Painted SVGs | Real-window inspection found red/blue channel reversal and darkened transparency in SVG image previews. | Convert premultiplied RGBA to straight BGRA in GPUI's image path; compare opaque and translucent pixels in a regression. |
+| Paragraph layout | A long paragraph measured 1,548 px inside an 820 px document and visibly overflowed. | Constrain paragraph children with a column layout; test the shaped text bounds. |
+| Text link gestures | A real link regression showed a right-click opening the linked file. | Accept only left clicks, register press/release in one frame and clear cancellation; cover right clicks, outside releases and a same-frame click. |
 
 ## Implementation and validation plan
 
@@ -76,10 +79,13 @@ and [accessibility](accessibility.md). Green automated checks do not establish t
 Both Linux agents were rebuilt with cargo-zigbuild using the release-agent profile; a stale x64
 artifact from a different build had initially exceeded its size limit.
 
-The isolated release bundle starts and its main thread remains in the native event loop. A manual
-visual pass is pending: the desktop automation tool returned `Computer Use permissions are not granted`.
-This is not counted as a passed visual or screen-reader check. Automated Markdown checks cover wrapping,
-real wheel events, live source updates, safe navigation and resource errors.
+After Computer Use access was enabled, the isolated release bundle was inspected in a real native
+window. Dark-theme SVG colors and paragraph/list/table layout were checked at normal and maximized
+window sizes; a single left click opened the relative document. These checks exposed the SVG channel
+and paragraph-width bugs above. Their fixes passed a full strict run: 1,519 tests, zero failures and
+three deliberate ignores. Regression tests also verify same-frame link clicks, right-click rejection
+and cancellation outside the link. This does not establish screen-reader results. Automated Markdown
+checks cover wheel events, live source updates and safe resource errors.
 
 [PR #15](https://github.com/doancan/codeyard/pull/15) carries the platform check results. Required gates are
 macOS tests and budgets, Windows native tests and standalone packaging, Linux libraries/agent and the Linux
