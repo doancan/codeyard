@@ -23,7 +23,8 @@ while IFS= read -r f; do
   case "$f" in
     crates/app/src/workbench.rs|crates/app/src/editor.rs|crates/buffer/src/lib.rs) continue ;; # checked above
     */tests.rs|*/qa_*_tests.rs) check "$f" 6000 ;;
-    *) check "$f" 2500 ;;
+    *_tests.rs|*/test_*.rs) check "$f" 2500 ;; # other tests and test helpers
+    *) check "$f" 1800 ;;
   esac
 done <<< "$files"
 # Length of the `Workbench` struct (one line per field plus doc lines).
