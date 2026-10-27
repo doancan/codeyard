@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A status-bar resource popover shows local CPU, memory, Codeyard memory, free disk space and local project size. It fades
+  open on click, closes when the pointer leaves, and can be pinned. Sampling stops when closed; project scans are bounded.
+- Changed-file context menus now offer Open Changes, Open File, Stage, Unstage and confirmed Discard according to the selected
+  staged/unstaged row. Conflict resolution keeps the existing marker checks.
+- Git discard confirmations put Cancel first and explicitly bind it as the cancel action in every language.
+- `terminal.scrollSensitivity` adjusts wheel/trackpad speed (default 2×); small trackpad movements accumulate instead of disappearing.
+
 - Panel and sidebar section resize handles gently fade their accent on hover and exit, while staying clear during a drag.
 - Container logs use a dedicated console with numbered rows, separate UTC timestamps, severity labels, error highlighting,
   literal search highlights, an error/warning filter, copy-visible output and line-wrap/follow controls. Scrolling upward
@@ -76,7 +83,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Platform-standard code font size:** the editor and terminal default to 12 px on macOS and 14 px on Windows and Linux
   (was 13 px everywhere). A size written in your settings file is kept. The settings template now leaves the font keys
   commented out, so a settings file shared between computers does not pin one platform's size.
-- The status bar is 22 px high.
+- The status bar is 28 px high.
+- Bottom-panel tabs use readable 13 px title-case labels, a subtle rounded selection background and hover fill instead of an underline.
+- The initial update-check prompt uses a short explanation of the daily option and where to change it.
 - Closing a terminal asks first while a program runs in it, and names the program (`terminal.confirmOnClose`).
 - `terminal.scrollback` is capped at 50,000 lines, and a change applies to open terminals.
 - Every text size in the interface comes from the type scale (new *badge* and *display* steps replace the remaining fixed
@@ -109,6 +118,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file changes while they load.
 
 ### Fixed
+
+- Outline and Timeline resize from the line above their headers, using their actual displayed height. The 28 px status
+  bar has larger icons and keeps resource controls visible when long branch names or messages meet a narrow window.
+- Long Git/context menus keep full-height rows and scroll the keyboard selection into view.
+- Busy status bars compact sync, conflict and save indicators and yield secondary editor details before controls overflow.
+  Long branch names keep their full tooltip, and problem-count tooltips retain the full error and warning totals.
+- Find/Replace uses the whole replacement field as an input target. Its controls wrap within narrow editor panes so
+  Close and Replace All remain reachable.
+- Inline Git blame and language-server line-end hints use measured text widths and yield to code in narrow editor groups.
+- Source Control file and commit hover cards stay hidden while a context menu is open, so they cannot cover its actions.
+- Settings edits find inline root keys, escaped keys and nested JSONC values without inserting a duplicate or changing
+  nested settings. Theme changes now apply to compact settings files too.
 
 - SVG previews preserve their red/blue channels and translucent colors; long Markdown paragraphs wrap inside the document column.
 - Text links follow only left clicks, accept a press/release arriving in one frame, and discard cancelled presses.
