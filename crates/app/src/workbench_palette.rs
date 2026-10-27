@@ -491,7 +491,7 @@ impl Workbench {
     /// Recently opened files first, then the rest in folder order.
     pub(super) fn mru_first(&self, root: &str, paths: &[String], cx: &App) -> (Vec<String>, usize) {
         let excludes = cx.global::<Settings>().files_exclude.clone();
-        let paths: Vec<String> = paths.iter().filter(|p| !settings::is_excluded(&excludes, p)).cloned().collect();
+        let paths: Vec<String> = paths.iter().filter(|p| !crate::globs::is_excluded(&excludes, p)).cloned().collect();
         let paths = &paths;
         let prefix = format!("{}/", root.trim_end_matches('/'));
         let recent: Vec<String> = self

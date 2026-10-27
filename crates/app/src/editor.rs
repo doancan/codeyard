@@ -342,9 +342,9 @@ pub fn syntax_path(path: &str) -> std::borrow::Cow<'_, str> {
     let name = path.rsplit('/').next().unwrap_or(path);
     for (glob, lang) in assoc.iter() {
         let hit = if glob.contains('/') {
-            crate::settings::is_excluded(std::slice::from_ref(glob), path.trim_start_matches('/'))
+            crate::globs::is_excluded(std::slice::from_ref(glob), path.trim_start_matches('/'))
         } else {
-            crate::settings::is_excluded(std::slice::from_ref(glob), name)
+            crate::globs::is_excluded(std::slice::from_ref(glob), name)
         };
         if hit {
             return format!("{path}.{}", language_ext(lang)).into();
