@@ -59,8 +59,8 @@ hand; a status set by hand stays until an event gives a reason to move it.
 | Stage | Entered when |
 | --- | --- |
 | Backlog | The issue is opened or reopened, unassigned, or its last blocker closes while nobody is assigned |
-| In Progress | Someone is assigned (`scripts/issue-start.sh N` assigns you and checks out the linked branch), a draft pull request that says `Closes #N` is opened, a review asks for changes, or CI fails on its pull request. Start date is set the first time |
-| In Review | The pull request is ready for review |
+| In Progress | Someone is assigned (`scripts/issue-start.sh N` assigns you and checks out the linked branch), a draft pull request that says `Closes #N` is opened, or a review asks for changes. Start date is set the first time |
+| In Review | The pull request is ready for review, or CI fails on it while it is in Test |
 | Test | The review approves, or CI passes on the ready pull request: what is left is the issue's manual checks |
 | Done | The issue is closed (merging a pull request that says `Closes #N` closes it) |
 | Blocked | A *blocked by* issue is open; it leaves Blocked by itself when the last one closes |
