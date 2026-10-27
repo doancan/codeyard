@@ -1007,6 +1007,9 @@ fn main() {
         cx.on_window_closed(|cx| {
             if cx.windows().is_empty() {
                 cx.quit();
+            } else {
+                #[cfg(target_os = "macos")]
+                crate::menus::refresh_dock_windows(cx);
             }
         })
         .detach();

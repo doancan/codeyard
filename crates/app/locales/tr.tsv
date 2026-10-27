@@ -1339,6 +1339,8 @@ One quiet color, outline glyphs	Tek ve sakin bir renk, çerçeve çizgili simgel
 Solid blue folders like Finder, outline files with a language dot like GitHub	Finder gibi dolgulu mavi klasörler, GitHub gibi dil noktalı çerçeve çizgili dosyalar
 Solid folders colored and marked by purpose, solid files colored by language	Amacına göre renklendirilmiş ve işaretlenmiş dolgulu klasörler, dile göre renklendirilmiş dolgulu dosyalar
 Names only	Yalnızca adlar
+File Glyphs	Dosya Simgeleri
+Colored file glyphs, folders with only their arrow; names line up	Renkli dosya simgeleri, klasörlerde yalnızca ok; adlar hizalı durur
 
 # ---- File operations leftovers ----
 too many copies	çok fazla kopya

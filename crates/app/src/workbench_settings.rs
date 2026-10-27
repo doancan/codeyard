@@ -70,7 +70,7 @@ pub const CATALOG: &[Entry] = &[
     e(
         "workbench.iconTheme",
         crate::i18n::tr("File and folder icons"),
-        Kind::Choice(&["minimal", "codeyard", "badges", "colorful", "apple", "material", "none"]),
+        Kind::Choice(&["minimal", "codeyard", "glyphs", "badges", "colorful", "apple", "material", "none"]),
     ),
     e("workbench.fontFamily", crate::i18n::tr("UI font of the whole window (empty: system font)"), Kind::Text),
     e("workbench.editor.showTabs", crate::i18n::tr("Show the editor tab bar"), Kind::Bool),

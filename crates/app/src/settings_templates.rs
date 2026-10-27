@@ -58,7 +58,7 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Extra globs skipped by search (on top of files.exclude).
   // "search.exclude": ["**/dist", "*.min.js"],
 
-  // File and folder icons: "minimal", "codeyard", "badges", "colorful", "apple", "material", "none"
+  // File and folder icons: "minimal", "codeyard", "glyphs", "badges", "colorful", "apple", "material", "none"
   "workbench.iconTheme": "minimal",
   "workbench.statusBar.visible": true,
   "workbench.activityBar.visible": true,
@@ -134,8 +134,8 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Fetch in the background while the window is in front, every this many seconds (30 or more). Not in folders you have not trusted.
   "git.autofetch": false,
   "git.autofetchPeriod": 180,
-  // Ask before Sync pulls or pushes (your own settings only: a folder cannot turn the question off).
-  "git.confirmSync": true,
+  // Ask before Sync pulls or pushes (your own settings only: a folder cannot change it).
+  "git.confirmSync": false,
   // Pull with rebase instead of a merge commit.
   "git.rebaseWhenSync": false,
   // Fetch drops remote branches that no longer exist, pull also fetches all tags, and fetchOnPull fetches every remote first.

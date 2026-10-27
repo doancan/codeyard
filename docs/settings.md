@@ -96,7 +96,7 @@ status bar reports it.
 | --- | --- | --- | --- |
 | `git.autofetch` | `true` / `false` | `false` | Fetch from the remote in the background while the window is in front |
 | `git.autofetchPeriod` | number 30–86400 | `180` | Seconds between background fetches |
-| `git.confirmSync` | `true` / `false` | `true` | Ask before Sync pulls or pushes. Your own settings only; a folder cannot change it |
+| `git.confirmSync` | `true` / `false` | `false` | Ask before Sync pulls or pushes. Your own settings only; a folder cannot change it |
 | `git.enableSmartCommit` | `true` / `false` | `true` | Commit all tracked changes when nothing is staged |
 | `git.fetchOnPull` | `true` / `false` | `false` | Fetch every remote before pulling |
 | `git.graph.allBranches` | `true` / `false` | `true` | Graph starts with every branch |
@@ -209,7 +209,7 @@ status bar reports it.
 | `workbench.breadcrumbs.enabled` | `true` / `false` | `true` | Show the file path above the editor |
 | `workbench.editor.showTabs` | `true` / `false` | `true` | Show the editor tab bar |
 | `workbench.fontFamily` | text | empty | UI font of the whole window (empty: system font) |
-| `workbench.iconTheme` | `minimal`, `codeyard`, `badges`, `colorful`, `apple`, `material`, `none` | `minimal` | File and folder icons |
+| `workbench.iconTheme` | `minimal`, `codeyard`, `glyphs`, `badges`, `colorful`, `apple`, `material`, `none` | `minimal` | File and folder icons |
 | `workbench.statusBar.visible` | `true` / `false` | `true` | Show the status bar |
 | `workbench.tabs.closeButton` | `hover`, `always`, `off` | `hover` | When the close button of a tab shows |
 | `workbench.tabs.showIcons` | `true` / `false` | `true` | Show file icons on tabs |

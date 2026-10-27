@@ -3170,7 +3170,8 @@ fn workspace_symbols_find_rust_functions(cx: &mut TestAppContext) {
     std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"ra_deneme\"\nversion = \"0.1.0\"\nedition = \"2021\"\n").unwrap();
     std::fs::write(dir.join("src/main.rs"), "mod yardim;\nfn main() { yardim::hesapla_toplam(1); }\n").unwrap();
     std::fs::write(dir.join("src/yardim.rs"), "pub struct Kutu;\n\npub fn hesapla_toplam(x: i32) -> i32 {\n    x + 1\n}\n").unwrap();
-    let (wb, cx) = setup(cx);
+    // `setup` turns language servers off for every other test; this one needs rust-analyzer running.
+    let (wb, cx) = setup_with_settings(cx, crate::settings::Settings::default());
     open(&wb, &dir, cx);
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(dir.join("src/main.rs").to_string_lossy().into_owned(), window, cx));
     cx.run_until_parked();
@@ -3498,9 +3499,8 @@ fn git_branches_push_pull_against_a_local_remote(cx: &mut TestAppContext) {
     run(cx, "Git: Fetch");
     wait_ticking(cx, "1 geride", |cx| status(cx).is_some_and(|s| s.behind == 1));
     run(cx, "Git: Sync");
-    // Sync asks before it pulls or pushes (git.confirmSync).
-    wait_ticking(cx, "the question", |cx| cx.has_pending_prompt());
-    cx.simulate_prompt_answer("Sync");
+    // Sync pulls at once: no question unless git.confirmSync is on.
+    assert!(!cx.has_pending_prompt());
     // The file watcher schedules a delayed refresh: advance the test clock.
     wait_ticking(cx, "pull", |cx| status(cx).is_some_and(|s| s.behind == 0) && notice(cx) == "Pulled");
     assert!(std::fs::read_to_string(dir.join("README.md")).unwrap().contains("uzaktan"));

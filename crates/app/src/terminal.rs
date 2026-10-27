@@ -1039,6 +1039,14 @@ impl IntoElement for TerminalElement {
     }
 }
 
+/// Space between the panel's edges and the text grid. The left one also holds the command marks.
+const PAD_X: f32 = 14.;
+const PAD_Y: f32 = 8.;
+
+fn grid_origin(bounds: Bounds<Pixels>) -> gpui::Point<Pixels> {
+    point(bounds.left() + px(PAD_X), bounds.top() + px(PAD_Y))
+}
+
 impl Element for TerminalElement {
     type RequestLayoutState = ();
     type PrepaintState = Option<Frame>;
@@ -1072,9 +1080,9 @@ impl Element for TerminalElement {
         let probe = TextRun { len: 1, font: style.font(), color: c(self.palette.text).into(), background_color: None, underline: None, strikethrough: None };
         let cell_w = window.text_system().shape_line("0".into(), font_size, &[probe], None).width;
         let line_h = self.view.read(cx).line_h();
-        let cols = ((bounds.size.width - px(16.)) / cell_w).floor().max(2.) as usize;
-        let rows = (bounds.size.height / line_h).floor().max(1.) as usize;
-        let origin = point(bounds.left() + px(8.), bounds.top());
+        let cols = ((bounds.size.width - px(PAD_X * 2.)) / cell_w).floor().max(2.) as usize;
+        let rows = ((bounds.size.height - px(PAD_Y * 2.)) / line_h).floor().max(1.) as usize;
+        let origin = grid_origin(bounds);
         self.view.update(cx, |v, _| {
             v.set_size(cols, rows);
             v.grid = (origin, cell_w);
@@ -1167,7 +1175,7 @@ impl Element for TerminalElement {
         let Some(frame) = frame.take() else { return };
         let p = self.palette;
         let line_h = frame.line_h;
-        let origin = point(bounds.left() + px(8.), bounds.top());
+        let origin = grid_origin(bounds);
         let cell = |row: usize, col: usize| point(origin.x + frame.cell_w * col as f32, origin.y + line_h * row as f32);
         for (row, a, b, color) in &frame.backgrounds {
             window.paint_quad(fill(Bounds::new(cell(*row, *a), size(frame.cell_w * (b - a) as f32, line_h)), c(*color)));
@@ -1203,7 +1211,7 @@ impl Element for TerminalElement {
                 marks::MarkState::Running => p.text_muted,
             };
             let d = px(5.);
-            let at = point(bounds.left() + px(1.5), origin.y + line_h * *row as f32 + (line_h - d) / 2.);
+            let at = point(bounds.left() + px((PAD_X - 5.) / 2.), origin.y + line_h * *row as f32 + (line_h - d) / 2.);
             window.paint_quad(fill(Bounds::new(at, size(d, d)), c(color)).corner_radii(d / 2.));
         }
         if let Some((row, a, b)) = frame.link {
