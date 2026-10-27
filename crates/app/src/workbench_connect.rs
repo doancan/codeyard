@@ -5,6 +5,10 @@ use super::*;
 impl Workbench {
     /// Running Docker containers or WSL distros: the selected one becomes the target connected through the agent.
     pub(super) fn show_remote_targets(&mut self, wsl: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if !wsl {
+            self.docker_contexts(docker_glue::Action::Attach, window, cx);
+            return;
+        }
         let task = cx.background_executor().spawn(async move {
             if wsl {
                 host::ssh::list_wsl()
@@ -39,6 +43,16 @@ impl Workbench {
     }
 
     pub fn connect(&mut self, alias: String, window: &mut Window, cx: &mut Context<Self>) {
+        if crate::docker::is_target(&alias) && !self.docker_available(cx) {
+            self.remote.pending_path = None;
+            self.persist.opening_recent = None;
+            return;
+        }
+        if crate::docker::is_target(&alias) && !self.container_target_ready(&alias, window, cx) {
+            self.remote.pending_path = None;
+            self.persist.opening_recent = None;
+            return;
+        }
         if matches!(self.remote.conn, Conn::Connecting { .. }) || self.refuse_if_dirty(cx) {
             return;
         }
@@ -73,23 +87,30 @@ impl Workbench {
         .detach();
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
-            this.update_in(cx, |this, window, cx| match result {
-                Ok(remote) => this.attach_host(Arc::new(remote), alias, window, cx),
-                Err(e) => {
-                    let message: SharedString = e.to_string().into();
-                    if let Some(s) = &this.persist.state {
-                        let _ = s.record_host_error(&alias, &message);
+            this.update_in(cx, |this, window, cx| {
+                if crate::docker::is_target(&alias)
+                    && (!cx.global::<Settings>().docker_enabled || !matches!(&this.remote.conn, Conn::Connecting { alias: current, .. } if current == &alias))
+                {
+                    return;
+                }
+                match result {
+                    Ok(remote) => this.attach_host(Arc::new(remote), alias, window, cx),
+                    Err(e) => {
+                        let message: SharedString = e.to_string().into();
+                        if let Some(s) = &this.persist.state {
+                            let _ = s.record_host_error(&alias, &message);
+                        }
+                        this.remote.pending_path = None;
+                        // Reason and "Reconnect" button are in the toast; the red indicator also stays in the status bar.
+                        let why = crate::i18n::tf("Could not connect to {}: {}", &[&alias, &message]);
+                        this.notice = Some(Notice::Error(why.clone().into()));
+                        // Connection started from a recent: if it can't be reached anymore, ask whether to remove it from the list.
+                        if let Some(r) = this.persist.opening_recent.take() {
+                            this.ask_forget_unreachable(r, why, window, cx);
+                        }
+                        this.remote.conn = Conn::Failed { alias, message };
+                        cx.notify();
                     }
-                    this.remote.pending_path = None;
-                    // Reason and "Reconnect" button are in the toast; the red indicator also stays in the status bar.
-                    let why = crate::i18n::tf("Could not connect to {}: {}", &[&alias, &message]);
-                    this.notice = Some(Notice::Error(why.clone().into()));
-                    // Connection started from a recent: if it can't be reached anymore, ask whether to remove it from the list.
-                    if let Some(r) = this.persist.opening_recent.take() {
-                        this.ask_forget_unreachable(r, why, window, cx);
-                    }
-                    this.remote.conn = Conn::Failed { alias, message };
-                    cx.notify();
                 }
             })
             .ok();
@@ -100,7 +121,21 @@ impl Workbench {
 
     /// Connection established: switch the host, open the remote home directory (or the pending folder).
     pub fn attach_host(&mut self, host: Arc<dyn Host>, alias: String, window: &mut Window, cx: &mut Context<Self>) {
+        if crate::docker::is_target(&alias) && !cx.global::<Settings>().docker_enabled {
+            self.remote.pending_path = None;
+            self.remote.conn = Conn::Local;
+            return;
+        }
         let info = host.info().clone();
+        if crate::docker::is_target(&alias)
+            && self.remote.docker.monitor.return_workspace.is_none()
+            && let Conn::Connected { alias: source } = &self.remote.conn
+            && matches!(host::ssh::target_of(source), host::ssh::Target::Ssh(_))
+            && self.remote.host.is_remote()
+        {
+            self.remote.docker.monitor.return_workspace =
+                Some(crate::container_monitor::ReturnWorkspace { host: self.remote.host.clone(), alias: source.clone(), root: self.root(cx) });
+        }
         self.close_all_terminals(cx);
         self.remote.host = host;
         self.listen_fs(cx);
@@ -131,6 +166,11 @@ impl Workbench {
         let ask_folder = chosen.is_none() && alias != LOCAL_AGENT_ALIAS;
         self.set_root(chosen.unwrap_or(info.home), cx);
         self.chrome.panel = Some(Panel::Explorer);
+        self.sync_container_monitor(cx);
+        if self.remote.docker.monitor.browser.terminal_target.as_ref() == Some(&alias) {
+            self.remote.docker.monitor.browser.terminal_target = None;
+            self.open_terminal(window, cx);
+        }
         window.focus(&self.roots.primary.focus_handle(cx));
         // No folder chosen (new connection): ask which folder to open, like VS Code;
         // Esc leaves it at the home directory.
@@ -210,6 +250,7 @@ impl Workbench {
         self.listen_fs(cx);
         self.status_task = None;
         self.remote.conn = Conn::Local;
+        self.remote.docker.monitor.clear();
         let h = self.remote.host.clone();
         self.search.update(cx, |s, cx| s.set_context(h, None, cx));
         self.tabs.editors.clear();

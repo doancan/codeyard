@@ -171,6 +171,7 @@ pub(super) struct PersistState {
 
 /// Connection: host machine, SSH details and pending questions (see workbench_folder.rs).
 pub(super) struct RemoteState {
+    pub(super) docker: crate::docker::State,
     pub(super) host: Arc<dyn Host>,
     /// For things that always open on this machine, such as settings files.
     pub(super) local_host: Arc<dyn Host>,

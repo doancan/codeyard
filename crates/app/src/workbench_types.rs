@@ -96,6 +96,24 @@ pub(super) enum OverlayKind {
     SyncTarget(Vec<crate::git::SyncOp>),
     /// "Connect to Dev Container / WSL": alias of the selected target (`docker:name`, `wsl:name`).
     RemoteTargets(Vec<String>),
+    ContainerEngines {
+        choices: Vec<crate::container_engine::Choice>,
+        action: docker_glue::Action,
+    },
+    DockerContexts {
+        contexts: Vec<crate::docker::DockerContext>,
+        action: docker_glue::Action,
+    },
+    DockerContainers {
+        context: crate::docker::DockerContext,
+        containers: Vec<crate::docker::Container>,
+        services: bool,
+    },
+    DockerPlan {
+        project: crate::docker::Project,
+        context: crate::docker::DockerContext,
+        rebuild: bool,
+    },
     /// "Remove SSH Host…" / "Test Connection…": host aliases.
     /// "GitHub: Pull Requests…": open requests and actions for the selected request.
     PullRequests {

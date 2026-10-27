@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::ssh::{sh_quote, target_command};
+use crate::ssh::{script_command, sh_quote};
 use crate::{HostError, Result};
 
 const CHUNK: usize = 256 * 1024;
@@ -27,9 +27,8 @@ pub type Shell<'a> = &'a dyn Fn(&str) -> Command;
 pub fn shell_for(alias: &str) -> impl Fn(&str) -> Command + use<> {
     let alias = alias.to_string();
     move |script| {
-        let mut c = target_command(&alias);
-        c.arg(script);
-        c
+        // Invalid targets must fail before any remote command is executed.
+        script_command(&alias, script).unwrap_or_else(|_| Command::new("invalid-codeyard-target"))
     }
 }
 

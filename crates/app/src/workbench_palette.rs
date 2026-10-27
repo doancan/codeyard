@@ -285,6 +285,11 @@ impl Workbench {
             Command::action("Git: Checkout to…", GitCheckout),
             Command::action("Git: Create Branch…", GitCreateBranch),
             Command::action("Remote: Connect to Dev Container…", RemoteDocker),
+            Command::action("Docker: Open Project in Dev Container…", DockerOpenProject),
+            Command::action("Docker: Rebuild Dev Container…", DockerRebuild),
+            Command::action("Docker: Show Containers and Services…", DockerServices),
+            Command::action("Docker: Cancel Operation", DockerCancel),
+            Command::action("View: Containers", ShowContainers),
             Command::action("Remote: Connect to WSL Distro…", RemoteWsl),
             Command::action("Git: Merge Branch…", GitMergeBranch),
             Command::action("Git: Rebase Branch…", GitRebaseBranch),
@@ -373,6 +378,9 @@ impl Workbench {
         }
         // Recently used commands go first (like VS Code); the rest keep their order.
         let mut commands = self.commands();
+        if !cx.global::<Settings>().docker_enabled {
+            commands.retain(|c| !docker_glue::is_command(&c.label));
+        }
         let rank = |label: &str| self.recent_commands.iter().position(|r| r == label).unwrap_or(usize::MAX);
         commands.sort_by_key(|c| rank(&c.label));
         // Labels are shown in the UI language; search also matches the English name, identifiers (recents, tests) stay English.
@@ -695,6 +703,28 @@ impl Workbench {
                 self.close_overlay(window, cx);
                 self.connect(alias, window, cx);
             }
+            (OverlayKind::DockerContexts { contexts, action }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let (context, action) = (contexts[*index].clone(), action.clone());
+                self.close_overlay(window, cx);
+                self.docker_context_picked(context, action, window, cx);
+            }
+            (OverlayKind::ContainerEngines { choices, action }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let (choice, action) = (choices[*index].clone(), action.clone());
+                self.close_overlay(window, cx);
+                self.container_engine_picked(choice, action, window, cx);
+            }
+            (OverlayKind::DockerContainers { context, containers, services }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let (context, container, services) = (context.clone(), containers[*index].clone(), *services);
+                self.close_overlay(window, cx);
+                self.docker_container_picked(context, container, services, window, cx);
+            }
+            (OverlayKind::DockerPlan { project, context, rebuild }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let (project, context, rebuild, index) = (project.clone(), context.clone(), *rebuild, *index);
+                self.close_overlay(window, cx);
+                if index == 0 {
+                    self.docker_build(project, context, rebuild, window, cx);
+                }
+            }
             (OverlayKind::SpellFix { editor, range, word, choices }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let (editor, range, word, choice) = (editor.clone(), range.clone(), word.clone(), choices[*index].clone());
                 self.close_overlay(window, cx);
@@ -749,6 +779,10 @@ impl Workbench {
                 | OverlayKind::BranchOp { .. }
                 | OverlayKind::SyncTarget(_)
                 | OverlayKind::RemoteTargets(_)
+                | OverlayKind::DockerContexts { .. }
+                | OverlayKind::ContainerEngines { .. }
+                | OverlayKind::DockerContainers { .. }
+                | OverlayKind::DockerPlan { .. }
                 | OverlayKind::HostOp { .. }
                 | OverlayKind::HostField { .. }
                 | OverlayKind::HostMenu(_)

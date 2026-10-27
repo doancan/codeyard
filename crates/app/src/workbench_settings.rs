@@ -183,6 +183,7 @@ pub const CATALOG: &[Entry] = &[
     e("emmet.triggerExpansionOnTab", crate::i18n::tr("Expand Emmet abbreviations (div.box>ul>li*3) with Tab"), Kind::Bool),
     e("diffEditor.renderSideBySide", crate::i18n::tr("Diff view side by side (off: inline)"), Kind::Bool),
     e("security.workspaceTrust.enabled", crate::i18n::tr("Ask before running tasks, tests or the debugger of an untrusted folder"), Kind::Bool),
+    e("modules.containers.enabled", crate::i18n::tr("Enable container environments (user settings only; disconnect containers before disabling)"), Kind::Bool),
 ];
 
 pub fn entry(key: &str) -> Option<&'static Entry> {
@@ -210,6 +211,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "editor.inlayHints.enabled" => json!(s.inlay_hints),
         "editor.linkedEditing" => json!(s.linked_editing),
         "security.workspaceTrust.enabled" => json!(s.workspace_trust),
+        "modules.containers.enabled" => json!(s.docker_enabled),
         "editor.codeLens" => json!(s.code_lens),
         "editor.unicodeHighlight.enabled" => json!(s.unicode_highlight),
         "editor.semanticHighlighting.enabled" => json!(s.semantic_highlighting),
@@ -404,6 +406,12 @@ impl Workbench {
 
     /// Write to the settings file (comments preserved) and apply immediately. `null`: back to default.
     pub(super) fn write_setting(&mut self, key: &str, value: Value, window: &mut Window, cx: &mut Context<Self>) {
+        if key == "modules.containers.enabled" && value != Value::Bool(true) && self.any_container_connected(cx) {
+            self.notice =
+                Some(Notice::Info(crate::i18n::t("Disconnect the container before disabling the container module. Your open files are kept.").into()));
+            cx.notify();
+            return;
+        }
         let Some((spath, _)) = self.config_paths() else { return };
         let result = settings::ensure_file(&spath, settings::TEMPLATE)
             .and_then(|_| std::fs::read_to_string(&spath))

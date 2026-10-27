@@ -316,10 +316,47 @@ static MASTERS: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
 pub enum Target<'a> {
     Ssh(&'a str),
     Docker(&'a str),
+    DockerContext { context: &'a str, container: &'a str, user: Option<&'a str> },
+    SshDocker { host: &'a str, context: &'a str, container: &'a str },
+    DevContainer { context: &'a str, workspace: &'a str, config: &'a str },
+    NativeContainer { engine: &'a str, container: &'a str },
+    DevContainerRuntime { engine: &'a str, workspace: &'a str, config: &'a str },
     Wsl(&'a str),
 }
 
 pub fn target_of(alias: &str) -> Target<'_> {
+    if let Some(value) = alias.strip_prefix("ssh-docker:") {
+        let parts: Vec<_> = value.split('/').collect();
+        if let [host, context, container] = parts.as_slice() {
+            return Target::SshDocker { host, context, container };
+        }
+    }
+    if let Some(value) = alias.strip_prefix("container-runtime:")
+        && let Some((engine, container)) = value.split_once('/')
+    {
+        return Target::NativeContainer { engine, container };
+    }
+    if let Some(value) = alias.strip_prefix("devcontainer-runtime:") {
+        let parts: Vec<_> = value.split('/').collect();
+        if let [engine, workspace, config] = parts.as_slice() {
+            return Target::DevContainerRuntime { engine, workspace, config };
+        }
+    }
+    if let Some(value) = alias.strip_prefix("devcontainer:") {
+        let parts: Vec<_> = value.split('/').collect();
+        if let [context, workspace, config] = parts.as_slice() {
+            return Target::DevContainer { context, workspace, config };
+        }
+    }
+    if let Some(value) = alias.strip_prefix("docker-context:") {
+        let mut parts = value.split('/');
+        if let (Some(context), Some(container)) = (parts.next(), parts.next()) {
+            let user = parts.next();
+            if !context.is_empty() && !container.is_empty() && user.is_none_or(|u| !u.is_empty()) && parts.next().is_none() {
+                return Target::DockerContext { context, container, user };
+            }
+        }
+    }
     match (alias.strip_prefix("docker:"), alias.strip_prefix("wsl:")) {
         (Some(c), _) if !c.is_empty() => Target::Docker(c),
         (_, Some(d)) if !d.is_empty() => Target::Wsl(d),
@@ -331,9 +368,49 @@ pub fn target_of(alias: &str) -> Target<'_> {
 pub(crate) fn target_command(alias: &str) -> Command {
     match target_of(alias) {
         Target::Ssh(a) => ssh_command(a),
+        Target::SshDocker { host, .. } => ssh_command(&decode_hex(host).unwrap_or_default()),
         Target::Docker(c) => {
             let mut cmd = Command::new("docker");
             cmd.args(["exec", "-i", c, "sh", "-c"]);
+            cmd
+        }
+        Target::DockerContext { context, container, user } => {
+            let mut args: Vec<String> = ["--context", context, "exec", "-i"].into_iter().map(str::to_string).collect();
+            if let Some(user) = user {
+                args.extend(["--user".into(), user.into()]);
+            }
+            args.extend([container, "sh", "-c"].into_iter().map(str::to_string));
+            crate::process_command("docker", &args, None).unwrap_or_else(|_| Command::new("docker"))
+        }
+        Target::DevContainer { context, workspace, config } => {
+            let root = decode_target_path(workspace).unwrap_or_default();
+            let config = decode_target_path(config).unwrap_or_default();
+            let args = ["exec", "--workspace-folder", &root, "--config", &config, "--", "sh", "-c"].map(str::to_string);
+            let mut cmd = crate::process_command("devcontainer", &args, None).unwrap_or_else(|_| Command::new("devcontainer"));
+            cmd.env("DOCKER_CONTEXT", context).env_remove("DOCKER_HOST");
+            cmd
+        }
+        Target::NativeContainer { engine, container } => {
+            let program = native_program(engine).unwrap_or("invalid-container-engine");
+            let args = ["exec", "-i", container, "sh", "-c"].map(str::to_string);
+            crate::process_command(program, &args, None).unwrap_or_else(|_| Command::new(program))
+        }
+        Target::DevContainerRuntime { engine, workspace, config } => {
+            let root = decode_target_path(workspace).unwrap_or_default();
+            let config = decode_target_path(config).unwrap_or_default();
+            let program = native_program(engine).unwrap_or("invalid-container-engine");
+            let resolved = crate::find_program(program);
+            let program = resolved.as_ref().and_then(|p| p.to_str()).unwrap_or(program);
+            let mut args: Vec<String> =
+                ["exec", "--docker-path", program, "--workspace-folder", &root, "--config", &config].into_iter().map(str::to_string).collect();
+            if engine == "podman"
+                && let Some(compose) = crate::find_program("podman-compose")
+            {
+                args.extend(["--docker-compose-path".into(), compose.to_string_lossy().into_owned()]);
+            }
+            args.extend(["--", "sh", "-c"].into_iter().map(str::to_string));
+            let mut cmd = crate::process_command("devcontainer", &args, None).unwrap_or_else(|_| Command::new("devcontainer"));
+            cmd.env_remove("DOCKER_CONTEXT").env_remove("DOCKER_HOST");
             cmd
         }
         Target::Wsl(d) => {
@@ -407,8 +484,65 @@ fn ssh_command(alias: &str) -> Command {
 /// Refuses names that would be read as an option by ssh/docker, or that cannot be one line of a command.
 /// Every path to a target goes through here first; `--` in the command line is the second lock.
 fn check_target(alias: &str) -> Result<()> {
+    if alias.starts_with("ssh-docker:") {
+        let Target::SshDocker { host, context, container } = target_of(alias) else {
+            return Err(HostError::Disconnected("invalid SSH container target".into()));
+        };
+        let host = decode_hex(host).ok_or_else(|| HostError::Disconnected("invalid SSH host encoding".into()))?;
+        if !matches!(target_of(&host), Target::Ssh(_)) {
+            return Err(HostError::Disconnected("SSH container requires an SSH host".into()));
+        }
+        check_target(&host)?;
+        return check_target(&format!("docker-context:{context}/{container}"));
+    }
+    if (alias.starts_with("container-runtime:") || alias.starts_with("devcontainer-runtime:")) && matches!(target_of(alias), Target::Ssh(_)) {
+        return Err(HostError::Disconnected("invalid container runtime target".into()));
+    }
+    match target_of(alias) {
+        Target::NativeContainer { engine, container } => {
+            if native_program(engine).is_none()
+                || container.is_empty()
+                || container.starts_with('-')
+                || !container.chars().all(|c| c.is_ascii_alphanumeric() || "_.-".contains(c))
+            {
+                return Err(HostError::Disconnected("invalid native container target".into()));
+            }
+            return Ok(());
+        }
+        Target::DevContainerRuntime { engine, workspace, config } => {
+            if !["wslc", "podman"].contains(&engine) || [workspace, config].into_iter().any(|p| decode_target_path(p).is_none()) {
+                return Err(HostError::Disconnected("invalid Dev Container runtime target".into()));
+            }
+            return Ok(());
+        }
+        _ => {}
+    }
+    if let Target::DevContainer { context, workspace, config } = target_of(alias) {
+        if context.is_empty()
+            || context.starts_with('-')
+            || !context.chars().all(|c| c.is_ascii_alphanumeric() || "_.-".contains(c))
+            || [workspace, config].into_iter().any(|p| decode_target_path(p).is_none())
+        {
+            return Err(HostError::Disconnected("invalid Dev Container target".into()));
+        }
+        return Ok(());
+    }
+    if let Target::DockerContext { context, container, user } = target_of(alias) {
+        if [Some(context), Some(container), user]
+            .into_iter()
+            .flatten()
+            .any(|s| s.is_empty() || s.starts_with('-') || !s.chars().all(|c| c.is_ascii_alphanumeric() || "_.:-".contains(c)))
+        {
+            return Err(HostError::Disconnected("invalid Docker context, container or user".into()));
+        }
+        return Ok(());
+    }
     let name = match target_of(alias) {
         Target::Ssh(n) | Target::Docker(n) | Target::Wsl(n) => n,
+        Target::DockerContext { .. } => unreachable!(),
+        Target::SshDocker { .. } => unreachable!(),
+        Target::DevContainer { .. } => unreachable!(),
+        Target::NativeContainer { .. } | Target::DevContainerRuntime { .. } => unreachable!(),
     };
     if name.is_empty() || name.starts_with('-') || name.contains(['\0', '\n', '\r']) {
         return Err(HostError::Disconnected(format!("“{}” is not a valid host name", alias.escape_debug())));
@@ -416,8 +550,68 @@ fn check_target(alias: &str) -> Result<()> {
     Ok(())
 }
 
+fn native_program(engine: &str) -> Option<&'static str> {
+    match engine {
+        "apple" => Some("container"),
+        "wslc" => Some("wslc.exe"),
+        "podman" => Some("podman"),
+        _ => None,
+    }
+}
+
+fn decode_hex(value: &str) -> Option<String> {
+    if value.is_empty() || value.len() > 65536 || !value.len().is_multiple_of(2) {
+        return None;
+    }
+    let bytes = value
+        .as_bytes()
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|p| Some((p[0] as char).to_digit(16)? as u8 * 16 + (p[1] as char).to_digit(16)? as u8))
+        .collect::<Option<Vec<_>>>()?;
+    let path = String::from_utf8(bytes).ok()?;
+    (!path.contains(['\0', '\n', '\r'])).then_some(path)
+}
+
+fn decode_target_path(value: &str) -> Option<String> {
+    let path = decode_hex(value)?;
+    (!path.contains(['\0', '\n', '\r']) && std::path::Path::new(&path).is_absolute()).then_some(path)
+}
+
 pub(crate) fn sh_quote(s: &str) -> String {
     format!("'{}'", s.replace('\'', r"'\''"))
+}
+
+/// Pin both the SSH host and the remote Docker context in a reconnectable identity.
+pub fn ssh_docker_target(host: &str, context: &str, container: &str) -> Result<String> {
+    let encoded: String = host.as_bytes().iter().map(|b| format!("{b:02x}")).collect();
+    let alias = format!("ssh-docker:{encoded}/{context}/{container}");
+    check_target(&alias)?;
+    Ok(alias)
+}
+
+pub fn ssh_docker_host(alias: &str) -> Option<String> {
+    match target_of(alias) {
+        Target::SshDocker { host, .. } => decode_hex(host),
+        _ => None,
+    }
+}
+
+/// Construct one quoted remote script, also used for container bootstrap and transfers.
+pub fn script_command(alias: &str, script: &str) -> Result<Command> {
+    check_target(alias)?;
+    let mut command = target_command(alias);
+    let script = match target_of(alias) {
+        Target::Ssh(_) => format!("sh -c {}", sh_quote(script)),
+        Target::SshDocker { context, container, .. } => {
+            let inner = format!("exec docker --context {} exec -i {} sh -c {}", sh_quote(context), sh_quote(container), sh_quote(script));
+            format!("sh -c {}", sh_quote(&inner))
+        }
+        _ => script.to_string(),
+    };
+    command.arg(script);
+    Ok(command)
 }
 
 /// Overall timeout for container/WSL commands (ssh has its own `ConnectTimeout`), agent upload included.
@@ -426,11 +620,8 @@ const RUN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 fn run(alias: &str, script: &str, stdin: Option<&[u8]>) -> Result<String> {
     use std::io::{Read, Write};
     check_target(alias)?;
-    let mut cmd = target_command(alias);
-    // ssh passes the script to the server's login shell (fish, csh…); `sh -c` gives the same POSIX behaviour everywhere.
-    // Container and WSL commands already start with `sh -c`.
-    let script = if matches!(target_of(alias), Target::Ssh(_)) { format!("sh -c {}", sh_quote(script)) } else { script.to_string() };
-    cmd.arg(script).stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() }).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut cmd = script_command(alias, script)?;
+    cmd.stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() }).stdout(Stdio::piped()).stderr(Stdio::piped());
     let program = cmd.get_program().to_string_lossy().into_owned();
     let mut child = cmd.spawn().map_err(|e| HostError::Disconnected(format!("could not start {program}: {e}")))?;
     // Upload on its own thread: if the target exits early (EPIPE), the real cause is read from stderr.
@@ -565,13 +756,17 @@ if [ "$h" = {sha} ]; then mv "$t" {remote}; else rm -f "$t"; echo "agent hash mi
     let socket = format!("{remote}.sock");
     let alias_owned = alias.to_string();
     let connector: Connector = Arc::new(move || {
-        let mut cmd = target_command(&alias_owned);
-        cmd.arg(format!("{} --attach {}", sh_quote(&remote), sh_quote(&socket)));
+        let cmd = script_command(&alias_owned, &format!("{} --attach {}", sh_quote(&remote), sh_quote(&socket)))?;
         spawn_transport(cmd)
     });
     let label = match target_of(alias) {
         Target::Ssh(a) => format!("ssh://{a}"),
         Target::Docker(c) => format!("docker://{c}"),
+        Target::DockerContext { context, container, .. } => format!("docker://{context}/{container}"),
+        Target::SshDocker { host, context, container } => format!("ssh+docker://{}/{context}/{container}", decode_hex(host).unwrap_or_default()),
+        Target::DevContainer { context, .. } => format!("devcontainer://{context}"),
+        Target::NativeContainer { engine, container } => format!("{engine}://{container}"),
+        Target::DevContainerRuntime { engine, .. } => format!("devcontainer://{engine}"),
         Target::Wsl(d) => format!("wsl://{d}"),
     };
     RemoteHost::connect(connector, new_session_id(alias), label)
@@ -924,6 +1119,31 @@ Match host foo\n  User nope\n";
     }
 
     #[test]
+    fn ssh_docker_targets_pin_remote_host_and_quote_the_complete_script() {
+        let alias = ssh_docker_target("dev@linux-host", "default", "web-1").unwrap();
+        assert_eq!(ssh_docker_host(&alias).as_deref(), Some("dev@linux-host"));
+        let script = "printf '%s\\n' \"a b; don't expand $HOME\"";
+        let command = script_command(&alias, script).unwrap();
+        assert!(command.get_program().to_string_lossy().ends_with("ssh"));
+        let args: Vec<_> = command.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        assert_eq!(args[args.len() - 2], "dev@linux-host");
+        assert_eq!(
+            args.last().unwrap(),
+            &format!("sh -c {}", sh_quote(&format!("exec docker --context 'default' exec -i 'web-1' sh -c {}", sh_quote(script))))
+        );
+        for (host, context, container) in [
+            ("-oProxyCommand=bad", "default", "web"),
+            ("prod\nother", "default", "web"),
+            ("docker:web", "default", "web"),
+            ("prod", "--help", "web"),
+            ("prod", "default", "x;id"),
+        ] {
+            assert!(ssh_docker_target(host, context, container).is_err());
+        }
+        assert!(script_command("ssh-docker:bad", "id").is_err());
+    }
+
+    #[test]
     fn targets_containers_and_wsl_lists() {
         assert_eq!(target_of("prod"), Target::Ssh("prod"));
         assert_eq!(target_of("docker:web-1"), Target::Docker("web-1"));
@@ -937,5 +1157,54 @@ Match host foo\n  User nope\n";
         assert_eq!(parse_wsl_list(&utf16), vec!["Ubuntu".to_string(), "Debian".to_string()]);
         assert_eq!(parse_wsl_list(b"Alpine\nArch\n"), vec!["Alpine".to_string(), "Arch".to_string()], "UTF-8 de kabul");
         assert!(forward_port("docker:x", 1, 2, false).is_err());
+    }
+
+    #[test]
+    fn docker_context_targets_keep_engine_and_user_in_every_command() {
+        let alias = "docker-context:remote/web/1000:1000";
+        check_target(alias).unwrap();
+        let cmd = target_command(alias);
+        let args: Vec<_> = cmd.get_args().map(|s| s.to_string_lossy().into_owned()).collect();
+        assert!(args.ends_with(&["--context", "remote", "exec", "-i", "--user", "1000:1000", "web", "sh", "-c"].map(str::to_string)));
+        assert!(check_target("docker-context:--help/web").is_err());
+        assert!(check_target("docker-context:default/--privileged").is_err());
+        assert!(forward_port(alias, 1, 2, false).is_err());
+    }
+
+    #[test]
+    fn native_container_targets_do_not_depend_on_docker() {
+        for engine in ["apple", "wslc", "podman"] {
+            let alias = format!("container-runtime:{engine}/web-1");
+            check_target(&alias).unwrap();
+            let command = target_command(&alias);
+            let args: Vec<_> = command.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+            assert!(args.ends_with(&["exec", "-i", "web-1", "sh", "-c"].map(str::to_string)));
+            assert!(!command.get_program().to_string_lossy().contains("docker"));
+            assert!(forward_port(&alias, 1234, 1234, false).is_err());
+        }
+        for invalid in [
+            "container-runtime:unknown/web",
+            "container-runtime:apple/--help",
+            "container-runtime:apple/a;b",
+            "container-runtime:apple",
+            "container-runtime:wslc/a/b",
+        ] {
+            assert!(check_target(invalid).is_err(), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn devcontainer_targets_use_reference_exec_for_remote_environment() {
+        let root = if cfg!(windows) { "C:/repo ö/test" } else { "/repo ö/test" };
+        let config = format!("{root}/.devcontainer/devcontainer.json");
+        let encode = |s: &str| s.as_bytes().iter().map(|b| format!("{b:02x}")).collect::<String>();
+        let alias = format!("devcontainer:default/{}/{}", encode(root), encode(&config));
+        check_target(&alias).unwrap();
+        let cmd = target_command(&alias);
+        let args: Vec<_> = cmd.get_args().map(|s| s.to_string_lossy().into_owned()).collect();
+        assert!(args.windows(2).any(|p| p == ["--workspace-folder", root]));
+        assert!(args.windows(2).any(|p| p == ["--config", &config]));
+        assert!(cmd.get_envs().any(|(k, v)| k == "DOCKER_CONTEXT" && v == Some(std::ffi::OsStr::new("default"))));
+        assert!(check_target("devcontainer:default/invalid/invalid").is_err());
     }
 }
