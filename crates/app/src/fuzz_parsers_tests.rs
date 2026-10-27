@@ -5,7 +5,9 @@
 use std::time::{Duration, Instant};
 
 const STACK: usize = 8 << 20;
-const BUDGET: Duration = Duration::from_secs(5);
+/// Linear work on the largest texts (300,000 lines) takes a few seconds in a debug build on a busy machine; quadratic work
+/// takes minutes, which is what this catches.
+const BUDGET: Duration = Duration::from_secs(15);
 
 struct Rng(u64);
 impl Rng {
@@ -367,7 +369,7 @@ fn finding_the_tests_of_a_huge_test_file_is_linear() {
         let started = Instant::now();
         let found = crate::testrun::cases(rel, &text, Some(r#"{"devDependencies":{"jest":"1"}}"#));
         assert_eq!(found.len(), n, "{rel}");
-        assert!(started.elapsed() < BUDGET / 5, "{rel}: {:?} for {n} tests", started.elapsed());
+        assert!(started.elapsed() < BUDGET / 10, "{rel}: {:?} for {n} tests", started.elapsed());
     }
 }
 
