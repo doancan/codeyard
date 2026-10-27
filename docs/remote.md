@@ -11,7 +11,9 @@ files, search, terminals, git and language servers goes through that one interfa
   binding) they go to `/tmp/cy-<uid>` (mode 0700). The app refuses that directory if it is a symlink or belongs to another user,
   and then connects without sharing. Control masters opened by the app are closed on exit.
 - Scripts the app runs on the server are wrapped in `sh -c`, so they do not depend on the user's login shell.
-  Programs (git, language servers) are found through the login shell so the user's `PATH` applies.
+  Programs (git, language servers) are found through the login shell so the user's `PATH` applies: `exec "$0" "$@"` in
+  POSIX shells, `exec $argv` in fish, and `/bin/sh` for any other shell; the program and its arguments are passed as
+  arguments, never inside the script.
 - Agent install: on first connect the app detects the architecture (`uname -sm`), copies the bundled static agent
   (`codeyard-agent-<triple>`) to `~/.cache/codeyard/agent-v<VERSION>-<sha12>` and verifies its SHA-256 before
   running it. The server never downloads anything, so offline servers work. The version in the path lets agents of
@@ -35,7 +37,7 @@ passphrase-protected key stands in for a password because a non-root `sshd` cann
 ## Agent and protocol
 
 `crates/proto` defines the messages; frames are length-prefixed `postcard`, requests carry an id, so many calls and
-streams are multiplexed. Current protocol version: **10**.
+streams are multiplexed. Current protocol version: **11**.
 
 | Group | Requests | Notes |
 | --- | --- | --- |
@@ -43,7 +45,7 @@ streams are multiplexed. Current protocol version: **10**.
 | files | `ReadDir`, `Stat`, `Read`, `Write`, `CreateFile`, `CreateDir`, `Rename`, `Delete`, `ListFiles` | `Write` carries the expected hash and answers `Conflict` when the disk changed; writes are temp file + fsync + rename, keeping mode, owner and symlink target; reads are streamed, whole-file limit `proto::MAX_FILE` (32 MB) |
 | search | `Search`, `Cancel` | `ignore` + `regex`, results streamed in chunks, cancellable |
 | watch | `Watch` | polls the given path set once a second; change events are pushed |
-| terminals | `PtySpawn`, `PtyInput`, `PtyResize`, `PtyKill` | output is a pushed event; the agent keeps 256 KB of scrollback per pty for resume |
+| terminals | `PtySpawn`, `PtySpawnEx`, `PtyInput`, `PtyResize`, `PtyKill`, `PtyStatus`, `ListShells` | output is a pushed event; the agent keeps 256 KB of scrollback per pty for resume. `PtySpawnEx` (version 11) takes a profile's shell, arguments and environment and turns on shell integration; `PtyStatus` names the foreground program and the shell's folder (asked before closing a busy terminal and for splits); `ListShells` reads `/etc/shells` for the profile picker |
 | processes | `Exec`, `ProcSpawn`, `ProcInput`, `ProcKill` | `Exec` runs a one-shot command with bounded output (git, curl for `.http`, helper scripts); `Proc*` runs long-lived processes (language servers, debug adapters) |
 | folders | `HashTree`, `Cancel` | Compare Folders: one pass walks a folder (`.gitignore` and extra globs, symlinks never followed) and streams size, mtime and link target; a second pass hashes only the files the client names. Version 10 added it, so agents from earlier releases are replaced on the next connect |
 | big files | `LineIndex`, `ReadLines` | the agent samples a byte offset every 4096 lines and extends the index incrementally; used by the large-file view and log follow |
@@ -54,7 +56,22 @@ SSH hosts would need a second connection per window and is left for a later vers
 Git and language servers are **not** agent features: the agent only runs processes, and parsing, diffing and
 JSON-RPC are in the app. That keeps the agent small and gives local and remote exactly one code path. Port
 forwarding does not go through the agent either: it adds `ssh -O forward` rules to the existing control master; the
-listening ports are found by `Exec`-ing a read of `/proc/net/tcp` or `lsof`.
+listening ports are found by `Exec`-ing `ss`, a read of `/proc/net/tcp*` or `lsof`.
+
+### Port forwarding
+
+- **Target address.** Each listening port is read with the address it is bound to. `127.0.0.1` and `::1` are forwarded to
+  exactly that address, a wildcard bind to `localhost`, and any other address to itself, so a service bound to only one
+  loopback address is reached.
+- **Local side.** Before a forward is added, the local port is tried on both `127.0.0.1` and `::1`: a port another program
+  holds on either one is reported busy instead of silently reaching that program. `ports.localBind` (user settings only)
+  decides between loopback and every interface.
+- **One owner of the state.** Forwards are kept by a small state machine (`port_forwards::ForwardSet`). Every change (a
+  click, a detection, a reconnect, a disconnect) returns the `ssh -O forward` / `-O cancel` effects to run, in order, on
+  a background thread. Opening the same port twice is impossible; a stale rule is cancelled before its port is reused; a
+  dropped connection cancels its rules; and forwards come back on the same local port after a reconnect.
+- **Persistence.** Forwards made by hand are saved per project (label, protocol, local port) in the state database and
+  added again when the project is opened over SSH.
 
 ## Robustness rules the agent keeps
 
@@ -80,6 +97,11 @@ listening ports are found by `Exec`-ing a read of `/proc/net/tcp` or `lsof`.
 - A killed pty child is reaped (no zombie shells); a failed handshake kills and waits for its ssh process, and the handshake
   has a 30 s deadline so a silent agent cannot stall reconnecting; a window closed during a reconnect never keeps the new
   connection.
+- Long-lived processes (`ProcSpawn`) lead their own process group on Unix; `ProcKill` and a dropped connection kill the
+  whole group while its leader runs, so a stopped test run or debug session leaves no test binary or debuggee behind.
+- Shell-integration scripts are written to `$XDG_CACHE_HOME/codeyard/shell-integration/<hash>` (or `~/.cache/…`), in 0700
+  folders with 0600 files. A folder that is a symlink or belongs to another user is refused, and a changed script is
+  rewritten before use.
 - tar operands are `./name` (download) or `.` inside a resolved `-C` directory (upload), so a folder called `-x…` is never read as an option.
 
 ## Surviving a dropped connection

@@ -121,7 +121,8 @@ pub fn parse_output(text: &str, root: &str) -> Vec<(String, Diagnostic)> {
         if consume(line, &mut st, &mut push) {
             continue;
         }
-        if let Some(rest) = strip_prompt(line)
+        if line.contains(':')
+            && let Some(rest) = strip_prompt(line)
             && consume(rest, &mut st, &mut push)
         {
             continue;
@@ -152,6 +153,11 @@ fn consume(line: &str, st: &mut State, push: &mut dyn FnMut(&str, Diagnostic)) -
     if let Some((file, l, c)) = st.panic_at.take() {
         push(&file, diagnostic(&l, Some(&c), 1, &crate::i18n::tf("test panicked: {}", &[&line.trim()])));
         return true;
+    }
+    // Every format below has a colon; most output lines have none, and skipping the ten patterns keeps a rescan of a long
+    // task terminal cheap.
+    if !line.contains(':') {
+        return false;
     }
     if let Some(c) = RUST_PANIC.captures(line) {
         st.panic_at = Some((c["file"].to_string(), c["line"].to_string(), c["col"].to_string()));

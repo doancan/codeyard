@@ -177,9 +177,19 @@ impl Workbench {
             Command::action("Debug: Remove All Watch Expressions", RemoveAllWatches),
             Command::action("Debug: Install JavaScript Debugger", InstallJsDebug),
             Command::action("Debug: Remove All Breakpoints", RemoveAllBreakpoints),
+            Command::action("Debug: Enable/Disable Breakpoint", ToggleBreakpointEnabled),
+            Command::action("Debug: Enable All Breakpoints", EnableAllBreakpoints),
+            Command::action("Debug: Disable All Breakpoints", DisableAllBreakpoints),
+            Command::action("Debug: Deactivate/Activate Breakpoints", ToggleBreakpointsActive),
+            Command::action("Debug: Add Function Breakpoint…", AddFunctionBreakpoint),
             Command::action("Debug: Show Debug Panel", ShowDebugPanel),
             Command::action("Test: Run Test at Cursor", RunTestAtCursor),
             Command::action("Test: Run Tests in File", RunFileTests),
+            Command::action("Test: Run All Tests", RunAllTests),
+            Command::action("Test: Run Failed Tests", RunFailedTests),
+            Command::action("Test: Refresh Tests", RefreshTests),
+            Command::action("Test: Stop Running Tests", StopTests),
+            Command::action("Test: Debug Test at Cursor", DebugTestAtCursor),
             Command::action("Tasks: Configure Tasks", ConfigureTasks),
             Command::action("Merge Conflict: Open Merge Editor", OpenMergeEditor),
             Command::action("GitHub: Pull Requests…", ShowPullRequests),
@@ -282,6 +292,22 @@ impl Workbench {
             Command::action("View: Focus Left Editor Group", FocusLeftGroup),
             Command::action("View: Focus Right Editor Group", FocusRightGroup),
             Command::action("View: Source Control", ShowScm),
+            Command::action("View: Run and Debug", ShowRunAndDebug),
+            Command::action("View: Testing", ShowTesting),
+            Command::action("Terminal: New Terminal with Profile…", NewTerminalWithProfile),
+            Command::action("Terminal: Select Default Profile…", SelectDefaultTerminalProfile),
+            Command::action("Terminal: Rename…", RenameTerminal),
+            Command::action("Terminal: Change Color…", ChangeTerminalColor),
+            Command::action("Terminal: Kill All Terminals", KillAllTerminals),
+            Command::action("Terminal: Go to Previous Command", crate::terminal::TermPrevCommand),
+            Command::action("Terminal: Go to Next Command", crate::terminal::TermNextCommand),
+            Command::action("Terminal: Copy Last Command Output", crate::terminal::TermCopyLastOutput),
+            Command::action("Debug: Run Without Debugging", RunWithoutDebugging),
+            Command::action("Debug: Run to Cursor", RunToCursor),
+            Command::action("Debug: Add Configuration…", AddDebugConfiguration),
+            Command::action("Debug: Open Launch Configuration", OpenLaunchConfiguration),
+            Command::action("Debug: Stop All", StopAllDebugging),
+            Command::action("View: Remote Explorer", ShowRemoteExplorer),
             Command::action("Git: Checkout to…", GitCheckout),
             Command::action("Git: Create Branch…", GitCreateBranch),
             Command::action("Remote: Connect to Dev Container…", RemoteDocker),
@@ -465,7 +491,7 @@ impl Workbench {
     /// Recently opened files first, then the rest in folder order.
     pub(super) fn mru_first(&self, root: &str, paths: &[String], cx: &App) -> (Vec<String>, usize) {
         let excludes = cx.global::<Settings>().files_exclude.clone();
-        let paths: Vec<String> = paths.iter().filter(|p| !settings::is_excluded(&excludes, p)).cloned().collect();
+        let paths: Vec<String> = paths.iter().filter(|p| !crate::globs::is_excluded(&excludes, p)).cloned().collect();
         let paths = &paths;
         let prefix = format!("{}/", root.trim_end_matches('/'));
         let recent: Vec<String> = self
@@ -653,7 +679,33 @@ impl Workbench {
             (OverlayKind::DebugConfigs(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let config = list[*index].clone();
                 self.close_overlay(window, cx);
-                self.start_debug(config, cx);
+                self.launch_with_inputs(config, window, cx);
+            }
+            (OverlayKind::LaunchInput(options), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let value = options[*index].clone();
+                self.close_overlay(window, cx);
+                self.answer_launch_input(value, window, cx);
+            }
+            (OverlayKind::TerminalLaunch(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let launch = list[*index].clone();
+                self.close_overlay(window, cx);
+                let cwd = self.active_root(cx);
+                self.new_terminal_launch(cwd, launch, window, cx);
+            }
+            (OverlayKind::TerminalDefaultProfile(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let name = list[*index].clone();
+                self.close_overlay(window, cx);
+                self.write_setting("terminal.defaultProfile", serde_json::json!(name), window, cx);
+            }
+            (OverlayKind::TerminalColor, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let color = crate::terminal_profiles::COLORS[*index];
+                self.close_overlay(window, cx);
+                self.set_terminal_color(color, cx);
+            }
+            (OverlayKind::LaunchTemplates(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let snippet = list[*index].clone();
+                self.close_overlay(window, cx);
+                self.insert_debug_configuration(snippet, window, cx);
             }
             (OverlayKind::Favorites(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let rel = list[*index].clone();
@@ -762,6 +814,11 @@ impl Workbench {
                 | OverlayKind::Favorites(_)
                 | OverlayKind::Tasks(_)
                 | OverlayKind::DebugConfigs(_)
+                | OverlayKind::LaunchInput(_)
+                | OverlayKind::LaunchTemplates(_)
+                | OverlayKind::TerminalLaunch(_)
+                | OverlayKind::TerminalDefaultProfile(_)
+                | OverlayKind::TerminalColor
                 | OverlayKind::RemoveFolder(_)
                 | OverlayKind::CompareFolder { .. }
                 | OverlayKind::ExceptionFilters(_)

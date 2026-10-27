@@ -227,7 +227,7 @@ fn wire(card: gpui::Stateful<gpui::Div>, wb: &Workbench, model: &DialogModel, se
 /// in a frame, and stop at `NOTES_BOX_MAX` (the window is as high as they need, up to that). Otherwise the card's larger layout.
 fn update_body(wb: &Workbench, model: &DialogModel, p: &Palette, send: &Dispatch, native: bool) -> AnyElement {
     let muted = |d: gpui::Div| {
-        d.text_size(px(if native { 11. } else { text::SM.0 })).line_height(px(if native { 14. } else { text::SM.1 })).text_color(c(p.text_muted))
+        d.text_size(px(if native { text::XXS.0 } else { text::SM.0 })).line_height(px(if native { 14. } else { text::SM.1 })) // scale-keep: native alert caption line.text_color(c(p.text_muted))
     };
     let (body_size, body_line) = if native { (13., 18.) } else { (text::SM.0, text::SM.1 + 2.) };
     match &model.body {
@@ -257,7 +257,7 @@ fn update_body(wb: &Workbench, model: &DialogModel, p: &Palette, send: &Dispatch
                             .p(px(theme::SPACE[5]))
                             .rounded(px(if native { 6. } else { theme::radius::MD }))
                             .bg(c(ui::mix(p.surface_raised, p.warning, 0.12)))
-                            .text_size(px(if native { 12. } else { text::SM.0 }))
+                            .text_size(px(if native { text::XS.0 } else { text::SM.0 }))
                             .child(div().pt(px(2.)).child(icon("info", 14., p.warning)))
                             .child(div().flex_1().min_w_0().child(n)),
                     )
@@ -321,7 +321,7 @@ fn update_body(wb: &Workbench, model: &DialogModel, p: &Palette, send: &Dispatch
                     .when(!native, |d| d.border_1().border_color(c(p.border)))
                     .bg(c(if native { p.surface } else { p.bg }))
                     .font_family(ui::MONO_FONT)
-                    .text_size(px(if native { 11. } else { text::XS.0 }))
+                    .text_size(px(if native { text::XXS.0 } else { text::XS.0 }))
                     .line_height(px(if native { 14. } else { 16. }))
                     .text_color(c(p.text_muted))
                     .child(detail.clone()),
@@ -369,7 +369,7 @@ pub(super) fn window_card(wb: &Workbench, model: &DialogModel, p: &Palette, send
             .p(px(WINDOW_INSET))
             .bg(c(p.bg))
             .font_family(ui::UI_FONT)
-            .text_size(px(13.))
+            .text_size(px(text::SM.0))
             .text_color(c(p.text)),
         wb,
         model,
@@ -442,7 +442,7 @@ fn update_button(ix: usize, b: &DialogButton, handle: Option<&FocusHandle>, p: &
                 .items_center()
                 .justify_center()
                 .rounded(px(6.))
-                .text_size(px(13.))
+                .text_size(px(text::SM.0))
                 .line_height(px(22.))
                 .text_color(c(fg))
                 .when(b.primary, |d| d.font_weight(gpui::FontWeight::MEDIUM))

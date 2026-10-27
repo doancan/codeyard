@@ -446,13 +446,17 @@ impl Render for EditorView {
                                                             .when(seg == 0, |d| {
                                                                 let bp = breakpoints.binary_search_by_key(&ix, |(l, _)| *l).ok().map(|i| &breakpoints[i].1);
                                                                 let on = bp.is_some();
-                                                                // Conditional: orange, logpoint: blue, with hit count: accent color, plain: red.
+                                                                // Conditional: orange, logpoint: blue, with hit count: accent color, plain: red. A disabled one
+                                                                // is a muted ring, one the debugger could not bind a red ring.
                                                                 let dot = match bp {
+                                                                    Some(m) if m.disabled => p.text_muted,
                                                                     Some(m) if m.log.is_some() => p.info,
                                                                     Some(m) if m.condition.is_some() => p.warning,
                                                                     Some(m) if m.hit.is_some() => p.accent,
                                                                     _ => p.danger,
                                                                 };
+                                                                let ring =
+                                                                    bp.is_some_and(|m| m.disabled || matches!(m.verified, crate::debug_model::Verified::No(_)));
                                                                 d.child(
                                                                     div()
                                                                         .id(("bp", row))
@@ -470,7 +474,8 @@ impl Render for EditorView {
                                                                                 .w(px(9.))
                                                                                 .h(px(9.))
                                                                                 .rounded_full()
-                                                                                .bg(c(dot))
+                                                                                .when(!ring, |d| d.bg(c(dot)))
+                                                                                .when(ring, |d| d.border_2().border_color(c(dot)))
                                                                                 .when(!on, |d| d.opacity(0.).group_hover("gutter", |s| s.opacity(0.28))),
                                                                         )
                                                                         .on_mouse_down(

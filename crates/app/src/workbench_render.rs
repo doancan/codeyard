@@ -77,6 +77,9 @@ impl Render for Workbench {
                 .child(div().flex_1().min_h_0().child(self.search.clone()))
                 .into_any_element(),
             Panel::Scm => self.scm.clone().into_any_element(),
+            Panel::Debug => self.run_debug_view(&p, cx),
+            Panel::Testing => self.testing_view(&p, cx),
+            Panel::Remote => self.remote_view(&p, cx),
         });
 
         div()
@@ -92,6 +95,29 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::toggle_full_screen))
             .on_action(cx.listener(Self::find_todos))
             .on_action(cx.listener(Self::show_remote))
+            .on_action(cx.listener(Self::show_remote_explorer))
+            .on_action(cx.listener(Self::show_run_debug))
+            .on_action(cx.listener(Self::show_testing))
+            .on_action(cx.listener(|this, _: &RunAllTests, w, cx| this.run_all_tests(w, cx)))
+            .on_action(cx.listener(|this, _: &RunFailedTests, w, cx| this.run_failed_tests(w, cx)))
+            .on_action(cx.listener(|this, _: &RefreshTests, _, cx| this.refresh_tests(cx)))
+            .on_action(cx.listener(|this, _: &StopTests, _, cx| this.stop_tests(cx)))
+            .on_action(cx.listener(|this, _: &DebugTestAtCursor, w, cx| this.debug_test_at_cursor(w, cx)))
+            .on_action(cx.listener(Self::kill_all_terminals))
+            .on_action(cx.listener(Self::rename_terminal))
+            .on_action(cx.listener(Self::change_terminal_color))
+            .on_action(cx.listener(Self::new_terminal_with_profile))
+            .on_action(cx.listener(Self::select_default_terminal_profile))
+            .on_action(cx.listener(Self::run_without_debugging))
+            .on_action(cx.listener(Self::run_to_cursor))
+            .on_action(cx.listener(Self::add_debug_configuration))
+            .on_action(cx.listener(Self::stop_all_debugging))
+            .on_action(cx.listener(|this, _: &OpenLaunchConfiguration, w, cx| this.open_launch_file(w, cx)))
+            .on_action(cx.listener(Self::toggle_breakpoint_enabled))
+            .on_action(cx.listener(Self::enable_all_breakpoints))
+            .on_action(cx.listener(Self::disable_all_breakpoints))
+            .on_action(cx.listener(Self::toggle_breakpoints_active))
+            .on_action(cx.listener(Self::add_function_breakpoint))
             .on_action(cx.listener(Self::show_scm))
             .on_action(cx.listener(Self::show_problems))
             .on_action(cx.listener(Self::show_ports))
@@ -490,7 +516,17 @@ impl Render for Workbench {
                             .when(!self.chrome.panel_right, |d| d.flex_col())
                             // A maximized panel takes the editor's place.
                             .when(!(self.chrome.panel_open && self.chrome.panel_max), |d| {
-                                d.child(div().flex_1().min_w_0().min_h_0().flex().flex_col().child(self.editor_area(main, &p, cx)))
+                                d.child(
+                                    div()
+                                        .relative()
+                                        .flex_1()
+                                        .min_w_0()
+                                        .min_h_0()
+                                        .flex()
+                                        .flex_col()
+                                        .child(self.editor_area(main, &p, cx))
+                                        .children(self.debug_toolbar(&p, cx)),
+                                )
                             })
                             .when(self.chrome.panel_open, |d| d.child(self.panel(&p, cx))),
                     ),

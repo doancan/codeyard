@@ -15,7 +15,7 @@ use std::io::{self, Read, Write};
 use serde::{Deserialize, Serialize};
 
 /// Compared in the handshake; on mismatch the agent is reinstalled.
-pub const VERSION: u32 = 10;
+pub const VERSION: u32 = 11;
 
 /// Max size of one frame. Larger files are read in chunks.
 pub const MAX_FRAME: usize = 64 * 1024 * 1024;
@@ -151,6 +151,24 @@ pub enum Request {
         limit: u32,
         only: Option<Vec<String>>,
     },
+    /// Open a terminal with a chosen program: `args` replace the default login flag, `env` is added to the environment;
+    /// `integration` sets up shell integration (prompt and folder marks) for zsh, bash and fish started as login shells.
+    /// Answered with `PtySpawned` like `PtySpawn`.
+    PtySpawnEx {
+        cols: u16,
+        rows: u16,
+        cwd: Option<String>,
+        shell: Option<String>,
+        args: Option<Vec<String>>,
+        env: Vec<(String, String)>,
+        integration: bool,
+    },
+    /// Is a program running in the foreground of this terminal, and where is its shell? (`PtyStatus`)
+    PtyStatus {
+        pty: u32,
+    },
+    /// The shells this machine offers (`Shells`).
+    ListShells,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -278,6 +296,15 @@ pub enum Response {
         size: u64,
     },
     Lines(Vec<String>),
+    PtyStatus {
+        /// A program other than the shell holds the terminal (`None`: cannot tell here).
+        busy: Option<bool>,
+        /// Its name.
+        name: Option<String>,
+        /// The shell's working folder.
+        cwd: Option<String>,
+    },
+    Shells(Vec<String>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -521,6 +548,61 @@ mod tests {
         let biggest = BIGGEST.with(|b| b.get());
         assert_eq!(err.kind(), io::ErrorKind::TimedOut);
         assert!(biggest < 1024 * 1024, "read_frame allocated {biggest} bytes for a frame that never arrived (MAX_FRAME is {MAX_FRAME})");
+    }
+
+    /// Valid frames of both directions with bytes flipped, cut short or stretched: decoding returns an error or a value,
+    /// never panics or allocates without bound (the agent decodes what the app sends, the app what a server's agent sends).
+    #[test]
+    fn mutated_frames_never_panic() {
+        let mut seed = 0x2545F4914F6CDD1Du64;
+        let mut next = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        let mut samples: Vec<Vec<u8>> = Vec::new();
+        let requests = [
+            Request::Write { path: "a/ğüş.rs".into(), data: vec![1, 2, 3], expect_hash: Some(9) },
+            Request::ListFiles { root: "/".into(), limit: 10 },
+            Request::Hello { client_version: VERSION, session: None },
+        ];
+        for body in requests {
+            let mut b = Vec::new();
+            write_frame(&mut b, &Frame { id: 1, body }).unwrap();
+            samples.push(b);
+        }
+        let responses =
+            [Response::Files { paths: vec!["a".into(), "b/c".into()], truncated: true }, Response::Error(Error::NotFound("x".into())), Response::Done];
+        for body in responses {
+            let mut b = Vec::new();
+            write_frame(&mut b, &Frame { id: 2, body }).unwrap();
+            samples.push(b);
+        }
+        for _ in 0..20_000 {
+            let mut b = samples[(next() % samples.len() as u64) as usize].clone();
+            for _ in 0..(1 + next() % 4) {
+                if b.len() <= 4 {
+                    break;
+                }
+                let at = 4 + (next() as usize) % (b.len() - 4);
+                match next() % 4 {
+                    0 => b[at] = next() as u8,
+                    1 => b.truncate(at),
+                    2 => b.splice(at..at, (0..(next() % 9)).map(|_| 0xff)).for_each(drop),
+                    _ => b[at] ^= 0x80,
+                }
+            }
+            // Keep the length header honest half of the time, so the body itself is decoded.
+            if next() % 2 == 0 && b.len() >= 4 {
+                let n = (b.len() - 4) as u32;
+                b[..4].copy_from_slice(&n.to_le_bytes());
+            }
+            BIGGEST.with(|c| c.set(0));
+            let _ = read_frame::<Request>(&mut b.as_slice());
+            let _ = read_frame::<Response>(&mut b.as_slice());
+            assert!(BIGGEST.with(|c| c.get()) < 16 * 1024 * 1024, "a mutated frame made the decoder allocate {} bytes", BIGGEST.with(|c| c.get()));
+        }
     }
 
     #[test]

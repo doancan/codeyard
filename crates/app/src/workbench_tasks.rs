@@ -148,7 +148,7 @@ fn quote_at_end(text: &str) -> Quote {
 fn for_shell(value: &str, at: Quote) -> String {
     match at {
         Quote::Bare => shell_quote(value),
-        Quote::Single => value.replace('\'', "'\\''"),
+        Quote::Single => crate::shell_quote::in_single(value),
         Quote::Double => value.chars().fold(String::with_capacity(value.len()), |mut s, c| {
             if matches!(c, '\\' | '"' | '$' | '`') {
                 s.push('\\');
@@ -198,15 +198,18 @@ fn expand(command: &str, root: &str, file: Option<&str>, shell: bool) -> String 
     out
 }
 
-fn shell_quote(s: &str) -> String {
-    if s.chars().all(|c| c.is_alphanumeric() || "-_./=:@%+,".contains(c)) { s.to_string() } else { format!("'{}'", s.replace('\'', "'\\''")) }
+pub(crate) fn shell_quote(s: &str) -> String {
+    // A task's own arguments (`--fix`) stay bare; anything a shell could read differently is quoted.
+    if !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || "-_./=:@%+,".contains(c)) { s.to_string() } else { crate::shell_quote::quote(s) }
 }
 
 pub fn npm_tasks(package_json: &str, runner: &str) -> Vec<Task> {
     let Ok(v) = serde_json::from_str::<Value>(package_json) else { return Vec::new() };
     v["scripts"]
         .as_object()
-        .map(|o| o.keys().map(|k| Task { label: format!("{runner}: {k}"), command: format!("{runner} run {k}"), source: "package.json" }).collect())
+        .map(|o| {
+            o.keys().map(|k| Task { label: format!("{runner}: {k}"), command: format!("{runner} run {}", shell_quote(k)), source: "package.json" }).collect()
+        })
         .unwrap_or_default()
 }
 
@@ -242,6 +245,7 @@ impl Workbench {
             return;
         };
         let host = self.remote.host.clone();
+        let asked = root.clone();
         let task = cx.background_executor().spawn(async move {
             let read = |rel: &str| host.read(&ui::join(&root, rel)).ok().map(|(d, _)| String::from_utf8_lossy(&d).into_owned());
             let exists = |rel: &str| host.stat(&ui::join(&root, rel)).is_ok();
@@ -280,7 +284,14 @@ impl Workbench {
             let handle = this.update(cx, |this, _| this.window_handle).ok();
             if let Some(handle) = handle {
                 cx.update_window(handle, |_, window, cx| {
-                    this.update(cx, |this, cx| then(this, tasks, window, cx)).ok();
+                    this.update(cx, |this, cx| {
+                        // Tasks run in (and trust is asked for) the active file's folder: if that changed while they were read,
+                        // they belong to another folder and are dropped.
+                        if this.active_root(cx).as_deref() == Some(asked.as_str()) {
+                            then(this, tasks, window, cx);
+                        }
+                    })
+                    .ok();
                 })
                 .ok();
             }
@@ -538,8 +549,8 @@ mod tests {
         assert_eq!(expand_variables_for_shell("cat ${file}", "/p", f), "cat '/p/src/a;rm -rf ~;.txt'");
         assert_eq!(expand_variables_for_shell("cat '${file}'", "/p", f), "cat '/p/src/a;rm -rf ~;.txt'");
         assert_eq!(expand_variables_for_shell(r#"cat "${fileBasename}""#, "/p", Some("/p/$(id)`x`\"q\".txt")), r#"cat "\$(id)\`x\`\"q\".txt""#);
-        assert_eq!(expand_variables_for_shell("cat ${file}", "/p", Some("/p/it's.txt")), r"cat '/p/it'\''s.txt'");
-        assert_eq!(expand_variables_for_shell("cat '${file}'", "/p", Some("/p/it's.txt")), r"cat '/p/it'\''s.txt'");
+        assert_eq!(expand_variables_for_shell("cat ${file}", "/p", Some("/p/it's.txt")), r#"cat '/p/it'"'"'s.txt'"#);
+        assert_eq!(expand_variables_for_shell("cat '${file}'", "/p", Some("/p/it's.txt")), r#"cat '/p/it'"'"'s.txt'"#);
         // Plain names are left alone, so existing tasks read the same.
         assert_eq!(expand_variables_for_shell("make -C ${workspaceFolder}/sub", "/p/", None), "make -C /p/sub");
         assert_eq!(expand_variables_for_shell("echo ${fileExtname}x", "/p", Some("/p/a")), "echo ''x", "an empty value is still one argument");

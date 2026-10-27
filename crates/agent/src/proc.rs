@@ -17,11 +17,7 @@ pub fn command(program: &str, args: &[String], cwd: Option<&str>) -> std::io::Re
     let mut cmd = if program.contains('/') {
         Command::new(program)
     } else {
-        let shell = std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/sh".into());
-        let mut c = Command::new(shell);
-        // $0 = program, $@ = arguments: avoids quoting.
-        c.args(["-lc", "exec \"$0\" \"$@\"", program]);
-        c
+        login_command(&std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/sh".into()), program)
     };
     #[cfg(windows)]
     let mut cmd = {
@@ -252,16 +248,37 @@ fn collect(
     }
 }
 
-/// Long-lived process: written to via stdin, read via stdout (stderr is discarded).
+/// `program` found through the user's login shell, so it sees the `PATH` their shell setup builds. The program and its
+/// arguments are passed as arguments, never inside the script, so nothing needs quoting. fish has no `$0` / `$@`
+/// (`$argv` instead); a shell that is neither gets `/bin/sh`, which still reads the login profile.
+#[cfg(unix)]
+fn login_command(shell: &str, program: &str) -> Command {
+    let name = std::path::Path::new(shell).file_name().map(|n| n.to_string_lossy().trim_start_matches('-').to_string()).unwrap_or_default();
+    let (shell, script) = match name.as_str() {
+        "fish" => (shell, "exec $argv"),
+        "sh" | "bash" | "zsh" | "dash" | "ksh" | "mksh" | "ash" | "yash" | "posh" => (shell, "exec \"$0\" \"$@\""),
+        _ => ("/bin/sh", "exec \"$0\" \"$@\""),
+    };
+    let mut c = Command::new(shell);
+    c.args(["-lc", script, program]);
+    c
+}
+
+/// Long-lived process: written to via stdin, read via stdout (stderr is discarded). On Unix it leads its own process
+/// group, so stopping it also stops what it started (a test runner's test binaries, an adapter's debuggee).
 pub struct Proc {
     child: Child,
+    waited: bool,
     /// Queue for the thread that writes to stdin: a stopped process's full pipe buffer must not block `write` (and with it the dispatch
     /// thread, `ProcKill`).
     input: Option<std::sync::mpsc::SyncSender<Vec<u8>>>,
 }
 
 pub fn spawn(program: &str, args: &[String], cwd: Option<&str>) -> io::Result<(Proc, impl Read + Send + 'static)> {
-    let mut child = command(program, args, cwd)?.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn()?;
+    let mut cmd = command(program, args, cwd)?;
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
+    let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn()?;
     let stdin = child.stdin.take();
     let stdout = piped(child.stdout.take())?;
     let (tx, rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(512);
@@ -274,7 +291,7 @@ pub fn spawn(program: &str, args: &[String], cwd: Option<&str>) -> io::Result<(P
         }
         // When the queue closes (`wait`/`drop`) `stdin` is dropped: the process sees EOF.
     });
-    Ok((Proc { child, input: Some(tx) }, stdout))
+    Ok((Proc { child, waited: false, input: Some(tx) }, stdout))
 }
 
 impl Proc {
@@ -292,6 +309,7 @@ impl Proc {
 
     pub fn wait(&mut self) -> Option<i32> {
         self.input = None;
+        self.waited = true;
         self.child.wait().ok().and_then(exit_code)
     }
 }
@@ -299,6 +317,15 @@ impl Proc {
 impl Drop for Proc {
     fn drop(&mut self) {
         self.input = None;
+        // The whole group, while its leader still runs (so the group id cannot belong to anyone else yet).
+        #[cfg(unix)]
+        if !self.waited
+            && matches!(self.child.try_wait(), Ok(None))
+            && let Ok(pid) = i32::try_from(self.child.id())
+        {
+            // SAFETY: kill has no memory-safety preconditions; a negative pid names the group this child leads.
+            unsafe { libc::kill(-pid, libc::SIGKILL) };
+        }
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
@@ -320,6 +347,42 @@ fn exit_code(status: std::process::ExitStatus) -> Option<i32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Programs found through the login shell get their arguments unchanged whatever that shell is (fish has no `$@`; a
+    /// csh-style shell falls back to `/bin/sh`).
+    #[cfg(unix)]
+    #[test]
+    fn programs_start_through_any_login_shell() {
+        let mut shells: Vec<String> = ["/bin/sh", "/bin/bash", "/bin/zsh", "/bin/dash", "/bin/tcsh", "/bin/csh"]
+            .into_iter()
+            .filter(|s| std::path::Path::new(s).exists())
+            .map(str::to_string)
+            .collect();
+        shells.extend(std::env::var("CODEYARD_FISH").ok());
+        for shell in shells {
+            let out = login_command(&shell, "printf").args(["<%s>", "a b", "it's", "$HOME"]).env("HOME", std::env::temp_dir()).output().unwrap();
+            assert_eq!(String::from_utf8_lossy(&out.stdout), "<a b><it's><$HOME>", "{shell}: {}", String::from_utf8_lossy(&out.stderr));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stopping_a_process_stops_what_it_started() {
+        let (p, mut out) = spawn("/bin/sh", &["-c".into(), "sleep 600 & echo $!; wait".into()], None).unwrap();
+        let mut line = Vec::new();
+        let mut b = [0u8; 1];
+        while out.read(&mut b).unwrap() == 1 && b[0] != b'\n' {
+            line.push(b[0]);
+        }
+        let child: i32 = String::from_utf8(line).unwrap().trim().parse().unwrap();
+        drop(p);
+        let started = Instant::now();
+        // SAFETY: signal 0 only checks that the process exists.
+        while unsafe { libc::kill(child, 0) } == 0 {
+            assert!(started.elapsed() < Duration::from_secs(10), "the grandchild {child} outlived its parent");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
 
     #[cfg(windows)]
     fn fixture(name: &str, stdin: Option<Vec<u8>>, timeout: Duration) -> io::Result<Output> {
