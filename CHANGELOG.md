@@ -56,6 +56,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Every text size in the interface comes from the type scale (new *badge* and *display* steps replace the remaining fixed
   sizes); a test keeps new code on the scale.
 
+### Security
+
+- **Git is paused in untrusted repositories whose own settings run programs.** Opening a folder ran `git status`, and
+  `git status` runs a repository's clean filter on every file it sees as changed, which is every file of a checkout
+  copied from an archive. In a folder you have not trusted, a repository whose `.git/config` names a program (a filter,
+  diff or merge driver, an ssh, askpass or credential command, a hooks folder) now gets no git at all until it is
+  trusted, and a notice names the settings.
+- Debugging a test from the Testing view built it (running its build script) before asking for trust, and running
+  tests asked about the active file's folder rather than the one they run in. Both now ask for the folder the command
+  runs in.
+- A debug adapter, or whatever answered on its port, could run a program in a terminal by asking (`runInTerminal`)
+  even when no terminal was offered; such a request is now refused.
+- A `.http` file could hide that a request sends environment variables by going through a file variable, and a body
+  file reached through a symbolic link in the folder was uploaded without a question. Both are now confirmed.
+- A project's settings can no longer turn on clipboard writes from the terminal or turn off the paste checks
+  (`terminal.allowClipboardWrite`, `terminal.sanitizePaste`, `terminal.warnMultilinePaste`).
+- Commands typed into fish could be broken out of by a test or file name containing a backslash and a quote; quoting
+  now reads the same in fish as in POSIX shells.
+- Tasks and launch configurations read for one folder are no longer run under another folder's trust when the active
+  file changes while they load.
+
 ### Fixed
 
 - The terminal ignored `terminal.fontSize` and zoom: it now uses the setting, with rows sized to match.
@@ -72,6 +93,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Forwards connect to the exact address a server port listens on (`127.0.0.1`, `::1` or another address), so a service
   bound to one of them is reached; the Ports panel names the program listening on each port, and a failed scan keeps
   the last list.
+- Programs named without a path (git, curl, language servers, debug adapters) failed to start for users whose login
+  shell is fish; they now start through fish, and through `/bin/sh` for other non-POSIX shells.
+- **Two terminal crashes**: scrolled back while a program with a scroll region (vim, less, tmux) printed new lines, and
+  *Copy Last Command Output* after a program cleared the history.
+- A language server's rename edit of an unexpected shape, or a theme file that is not an object, no longer crashes the
+  app.
+- A language server or debug adapter printing endless output without message headers made the app spend a minute of
+  CPU per 9 MB; that output is now read in linear time.
+- Finding the tests of a file with thousands of tests took tens of seconds; it takes milliseconds. Rescanning a long
+  task terminal for problems is about five times faster.
 
 ## [0.4.1] - 2026-10-26
 
