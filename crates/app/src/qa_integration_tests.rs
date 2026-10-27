@@ -2495,6 +2495,11 @@ fn qa_docker_target_connects_lists_and_opens_files(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-docker-files");
     std::fs::write(dir.join("hello.txt"), "kapsayıcıdan merhaba\n").unwrap();
     let (wb, cx) = setup(cx);
+    cx.update(|_, cx| {
+        let mut settings = cx.global::<crate::settings::Settings>().clone();
+        settings.docker_enabled = true;
+        cx.set_global(settings);
+    });
     wb.update_in(cx, |wb, window, cx| wb.connect("docker:fake-box".into(), window, cx));
     let tick = |cx: &mut VisualTestContext| cx.executor().advance_clock(Duration::from_secs(1));
     wait_secs(cx, 30, "connected", |cx| {

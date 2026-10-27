@@ -131,6 +131,12 @@ status bar reports it.
 | --- | --- | --- | --- |
 | `lsp.enabled` | `true` / `false` | `true` | Start language servers |
 
+## `modules`
+
+| Setting | Values | Default | What it does |
+| --- | --- | --- | --- |
+| `modules.containers.enabled` | `true` / `false` | `false` | Enable container environments (user settings only; disconnect containers before disabling) |
+
 ## `ports`
 
 | Setting | Values | Default | What it does |

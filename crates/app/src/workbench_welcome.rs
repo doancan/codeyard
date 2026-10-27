@@ -272,6 +272,7 @@ impl Workbench {
             (
                 match p {
                     Page::Welcome => "welcome",
+                    Page::Containers => "containers",
                     Page::Settings(_) => "settings",
                     Page::Markdown(_) => "markdown",
                     Page::Shortcuts(_) => "shortcuts",
@@ -387,7 +388,10 @@ impl Workbench {
                 .child(crate::i18n::upper(h))
         };
         // Pinned ones at the very top (all visible), then filled up with recents to 6 in total.
-        let ordered = super::projects::ordered_recent(&self.persist.recent, &self.persist.pinned);
+        let mut ordered = super::projects::ordered_recent(&self.persist.recent, &self.persist.pinned);
+        if !cx.global::<crate::settings::Settings>().docker_enabled {
+            ordered.retain(|(r, _)| !r.host.as_deref().is_some_and(crate::docker::is_target));
+        }
         let shown = ordered.iter().filter(|(_, pinned)| *pinned).count().max(6);
         let recent: Vec<_> = ordered.iter().take(shown).cloned().collect();
         let more_recent = ordered.len() > recent.len();
@@ -551,7 +555,7 @@ impl Workbench {
                                         .flex()
                                         .flex_col()
                                         .child(heading(crate::i18n::t("Recent")))
-                                        .when(self.persist.recent.is_empty(), |d| {
+                                        .when(ordered.is_empty(), |d| {
                                             d.child(
                                                 div()
                                                     .px(px(theme::SPACE[4]))

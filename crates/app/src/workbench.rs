@@ -34,6 +34,16 @@ pub mod a11y;
 mod compare_glue;
 #[path = "workbench_connect.rs"]
 mod connect_glue;
+#[path = "workbench_container_browser.rs"]
+mod container_browser_glue;
+#[path = "workbench_container_detail.rs"]
+mod container_detail_glue;
+#[path = "workbench_container_logs.rs"]
+mod container_logs_glue;
+#[path = "workbench_container_monitor.rs"]
+mod container_monitor_glue;
+#[path = "workbench_docker.rs"]
+mod docker_glue;
 // --- data ---
 #[path = "workbench_data.rs"]
 mod data_glue;
@@ -255,6 +265,11 @@ actions!(
         GitCheckout,
         GitCreateBranch,
         RemoteDocker,
+        DockerOpenProject,
+        DockerRebuild,
+        DockerServices,
+        DockerCancel,
+        ShowContainers,
         RemoteWsl,
         GitMergeBranch,
         GitRebaseBranch,
@@ -402,6 +417,7 @@ struct OutlineState {
 #[derive(Clone)]
 enum Page {
     Welcome,
+    Containers,
     Settings(Entity<crate::settings_page::SettingsPage>),
     Markdown(Entity<crate::markdown::MarkdownPreview>),
     Shortcuts(Entity<crate::shortcuts_page::ShortcutsPage>),
@@ -552,6 +568,7 @@ enum Panel {
     Explorer,
     Search,
     Scm,
+    Containers,
 }
 
 enum Conn {
@@ -1098,6 +1115,7 @@ impl Workbench {
                 opening_recent: None,
             },
             remote: state_glue::RemoteState {
+                docker: Default::default(),
                 local_host: host.clone(),
                 host,
                 conn: Conn::Local,

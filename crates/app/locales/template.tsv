@@ -8,6 +8,10 @@
 + Create new branch…	
 .env needs a flat set of keys and values, but this document is a {}	
 .env, nested keys joined with __	
+1 minute	
+15 minutes	
+5 minutes	
+A container operation is running. Use Docker: Cancel Operation before starting another.	
 A file named “{}” is already there; a folder cannot replace it. Rename or remove it first.	
 A file that is only partly transferred is removed, and so is a new folder. A folder you merge into keeps what was already copied.	
 A file you opened names a schema that is hosted on {}. Downloading it sends a request to that server (your IP address and the schema's address). Only allow it if you trust the file and the host.	
@@ -35,6 +39,7 @@ Accept Current
 Accept Current Change	
 Accept Incoming	
 Accept Incoming Change	
+Access	
 Add	
 Add Cursor Above	
 Add Cursor Below	
@@ -55,8 +60,10 @@ Added “{}” for this session only: there is no settings folder to keep your d
 Added “{}” to your dictionary.	
 Adding remote…	
 Adding worktree…	
+All	
 All Branches	
 All conflicts are resolved	
+All levels	
 Allow	
 Allow file access	
 Already debugging: Shift+F5 stops the session.	
@@ -68,6 +75,7 @@ Amended {}
 An existing file with the same name is never overwritten.	
 Anchors and aliases were expanded.	
 App: Quit	
+Apple Container supports connecting, starting containers and viewing logs. Dev Container project creation is not supported by this adapter yet; connect to an existing Apple container.	
 Applied {}	
 Apply (keep the stash)	
 Apply .editorconfig files (indent, line endings, final newline…)	
@@ -82,6 +90,7 @@ At most {} extra folders fit in one workspace.
 Aug	
 Auto (follow system)	
 Back	
+Back to SSH workspace and container details	
 Back to the default (removes the value from settings.jsonc)	
 Back to this computer; files with unsaved changes must be saved or closed first	
 Blame Line	
@@ -96,12 +105,16 @@ Box invisible and look-alike Unicode characters (zero-width spaces, bidi control
 Branch {}	
 Breaking on: {}	
 Bring a folder's tabs and unsaved changes back when you open it	
+Build and Open	
 Build failed: {}	
+CPU	
+CPU usage	
 Call Stack	
 Can't copy a folder into itself.	
 Can't open {0}: {1}	
 Can't read {0}: {1}	
 Cancel	
+Cancel Operation	
 Cancel Transfer	
 Cancel “{}”?	
 Cancelling…	
@@ -144,13 +157,18 @@ Cherry-pick
 Cherry-pick stopped and was undone: {}	
 Cherry-picked {}	
 Choose	
+Choose a Docker environment	
+Choose a container (stopped containers can be started)	
+Choose a container engine	
 Choose a folder on this computer…	
 Choose an action	
 Choose an answer (Esc: none)	
 Clear Terminal	
+Clear filters	
 Clear the search	
 Clear the search field	
 Click to remove this filter	
+Click to sort using current values. Order stays fixed during live updates.	
 Click: details · Double-click: open · Right-click: actions	
 Clone	
 Clone Git Repository…	
@@ -166,6 +184,7 @@ Close Saved
 Close a terminal first: at most {} can be open.	
 Close details	
 Close to the Right	
+Close window	
 Close without saving	
 Closing the window loses everything since the last save.	
 Code	
@@ -237,12 +256,26 @@ Connect over SSH and the files, terminal and language servers all run on the ser
 Connect to SSH Host…	
 Connect to SSH host…	
 Connect to WSL…	
+Connect to a Container…	
 Connect to a running container…	
+Connect to an SSH host to discover its containers automatically, or choose a local engine below.	
 Connect to which WSL distribution?	
 Connect to which running container?	
 Connecting to {}	
 Connecting to {}…	
 Connection lost: {}	
+Container Environments	
+Container ID	
+Container Resources	
+Container details are unavailable. Refresh details to try again.	
+Container identity	
+Container module is off. Enable modules.containers.enabled in Settings.	
+Container operation cancelled. Existing containers and volumes are kept.	
+Container operation running. See Output for progress; Docker: Cancel Operation stops it.	
+Container port / protocol	
+Container setup required	
+Containers	
+Containers and Service Logs…	
 Continue (F5)	
 Continuing rebase…	
 Convert indentation to spaces	
@@ -270,6 +303,7 @@ Copy the full hash
 Copy the path at the cursor	
 Copy to the left	
 Copy to the right	
+Copy visible logs	
 Copy “{0}” to {1}?	
 Copying files here has to wait: the connection dropped and is reconnecting.	
 Copying files here has to wait: the connection is still being set up.	
@@ -305,6 +339,8 @@ Could not open the debug session: {}
 Could not open the state database: {}. Tabs, recent folders and backups will not be remembered this session.	
 Could not paste: {}	
 Could not reach {}: check the network connection and try again	
+Could not read Docker environments: {}	
+Could not read containers: {}	
 Could not read the commit: {}	
 Could not read the file: {}	
 Could not read the history: {}	
@@ -314,6 +350,7 @@ Could not read the workspace file: {}
 Could not read {0}: {1}	
 Could not read {}	
 Could not read {}: {}	
+Could not refresh container data: {}. Check Docker access on the SSH host and retry.	
 Could not resolve “{}”: check the spelling and the network (the request ran on {}).	
 Could not run “{}”: {}	
 Could not save the report: {}	
@@ -333,6 +370,7 @@ Couldn't check for updates
 Couldn't download the update	
 Create Branch Here…	
 Create Branch…	
+Create Dev Container…	
 Create Tag Here…	
 Create Tag…	
 Create branch	
@@ -406,6 +444,10 @@ Deleted “{0}” from {1}
 Deleting {}…	
 Deleting…	
 Deny	
+Dev Container configuration: {}	
+Dev Container is ready. The current workspace or unsaved files changed, so it was not switched automatically. Connect through the Docker picker.	
+Dev Container result: {}	
+Dev Container setup failed: {}. Check Output and install the Dev Container CLI if it is missing.	
 Developer: Restart Language Servers	
 Diff view side by side (off: inline)	
 Discard	
@@ -416,10 +458,24 @@ Discard changes in {} files?
 Discard changes in {}?	
 Discard mine, load from disk	
 Disconnect from {}	
+Disconnect the container before disabling the container module. Your open files are kept.	
+Discovering containers…	
+Disk I/O total	
+Disk and network activity	
+Disk read / write rate	
+Disk size	
+Disk size includes the writable layer and virtual image size; volumes are excluded. Disk and network I/O are cumulative totals.	
 Dismiss this file from the results	
 Do you trust the authors of this folder?	
 Do you want to save the changes you made to {}?	
 Docker, then open a folder inside it	
+Docker: Cancel Operation	
+Docker: Open Project in Dev Container…	
+Docker: Rebuild Dev Container…	
+Docker: Show Containers and Services…	
+Docker: {}	
+Docker: {}. Check Output and verify that the selected engine is running.	
+Docker: {}. Check Output. Dev Container creation requires the separately installed Dev Container CLI.	
 Don't Save	
 Done	
 Download	
@@ -544,12 +600,14 @@ Editor: Unfold All
 Editor: Unfold Recursively	
 Empty folder	
 Empty group: ⌘P opens a file here	
+Enable container environments (user settings only; disconnect containers before disabling)	
 Encoding for files that are not UTF-8	
 End files with a newline when saving	
 Enter a folder path on {}…	
 Enter the remote as: name url	
 Enter: path branch	
 Error	
+Errors and warnings	
 Evaluate an expression (↵)	
 Every setting, with comments	
 Everything resolved so far in this merge is discarded.	
@@ -564,6 +622,7 @@ Expected “{}”
 Explorer	
 Explorer (⇧⌘E)	
 Export as Text…	
+Exposed only; not published on the server.	
 External image: open the link to view it.	
 F4 steps through the search results, ⇧F4 goes back.	
 Favorites	
@@ -637,6 +696,7 @@ Folders colored by purpose (src, tests, docs…) and colored file glyphs
 Follow	
 Follow (Tail)	
 Follow the end of the file as it grows (tail -f). Scrolling up pauses.	
+Following latest logs	
 Font size of the editor	
 Font size of the terminal	
 Format Document	
@@ -754,6 +814,7 @@ HTTP: Send Request
 HTTP: Show Last Response Headers	
 Hard reset to {}?	
 Header	
+Health	
 Help	
 Help: About Codeyard	
 Help: Check for Updates…	
@@ -769,6 +830,7 @@ Hide codeyard
 Highlight other uses of the word under the cursor	
 Highlight the line with the cursor	
 Highlight the matching bracket	
+History is collected while monitoring is active. CPU can exceed 100% across cores. Rates need two samples; counter resets show no rate.	
 History of {}	
 Host name (from ~/.ssh/config) or user@host	
 Hover an option to preview the result.	
@@ -779,8 +841,10 @@ Ignore line endings
 Ignore whitespace	
 Ignore “{}” in this session	
 Ignored the language server's edit to {} file outside the open folders|Ignored the language server's edit to {} files outside the open folders	
+Image	
 Image exceeds 20 MB.	
 Image unavailable	
+Image: {}	
 Import VS Code Settings and Shortcuts	
 Imported {0} settings and {1} shortcuts from VS Code ({2} settings and {3} shortcuts have no equivalent here)	
 In Privacy & Security, press + and add Codeyard, then turn it on.	
@@ -796,11 +860,14 @@ Indentation for this file
 Index ↔ Working Tree	
 Indexing files…	
 Indexing lines…	
+Info	
 Inline	
 Insert a snippet (or type its prefix in the editor and press Tab)	
 Insert the closing bracket or quote	
 Install and Restart	
+Install podman-compose to open a Compose project with Podman, then try again.	
 Install which dictionary? (English is built in)	
+Installed; choose this container engine	
 Installing Codeyard {}	
 Installing Codeyard {}. Click for details.	
 Installing — Codeyard will restart.	
@@ -815,6 +882,7 @@ Jan
 JavaScript debugger installed: F5 now works for Node.	
 JavaScript debugging needs Microsoft's js-debug adapter: run “Debug: Install JavaScript Debugger” (a one-time download, MIT licensed), or install VS Code (its copy is used).	
 Jul	
+Jump to latest and follow	
 Jun	
 Keep	
 Keep Going	
@@ -833,11 +901,13 @@ Language of the menus, command palette, Welcome screen, status bar, Source Contr
 Language of the pattern (click for the next one)	
 Language servers are off in “{}” until you trust it: they can run the project's build scripts. Run “Workspace: Trust This Folder”.	
 Later	
+Latest 300 lines; refreshed with resource snapshots.	
 Learn	
 Left is writable	
 Left ↔ Right	
 Let programs in the terminal write to the clipboard	
 Let the language server format while typing }, ; or Enter	
+Lifecycle: {}	
 Lightweight editing, on this machine or over SSH.	
 Line endings for this file (applied on save)	
 Line height in pixels	
@@ -847,14 +917,17 @@ Line {}: {} · {}, {} · {}
 Lines kept in terminal history	
 Link copied.	
 List	
+Live updates	
 Ln {}, Col {}	
 Ln {}, Col {} ({} selected)	
+Loading container details…	
 Loading image…	
 Loading pull requests…	
 Loading…	
 Local	
 Local history	
 Local time is not available on this system	
+Logs	
 Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it	
 Lost the connection to {}: {}. Your open files stay here and unsaved changes are kept, but they cannot be saved until you reconnect (File: Save a Copy to This Computer… keeps one locally).	
 Lost the connection to {}: {}. Your open files stay here.	
@@ -870,7 +943,10 @@ Match Case
 Match case	
 Match case (⌥C)	
 Maximize Panel	
+Maximize window	
 May	
+Memory	
+Memory usage (%)	
 Merge	
 Merge Changes	
 Merge Conflict: Accept All Current	
@@ -893,11 +969,16 @@ Mine
 Minified	
 Minimal (Default)	
 Minimize	
+Minimize window	
 Modified	
+Modules	
 Monday	
 More Actions…	
 More…	
 Most files a structural search reads and parses	
+Mount paths are shown as reported by the engine. Volume and bind-mount sizes are not included in container disk usage.	
+Mounted storage	
+Mounts: {}	
 Move	
 Move Line Down	
 Move Line Up	
@@ -907,6 +988,7 @@ Move deleted local files to the Trash
 Move to Trash	
 Move “{0}” into “{1}”?	
 Move “{}” to the Trash?	
+Name	
 Name of the new branch (from the current one)	
 Name of the new branch (starts at this commit)	
 Name of the new branch (starts at {})	
@@ -917,6 +999,8 @@ Name of the stash (shown in the stash list)
 Name with an extension: the extension picks the language (scratch.md, notes.json…)	
 Names can't contain / or be . or ..	
 Names only	
+Network I/O total	
+Network RX / TX rate	
 New (untracked)	
 New File	
 New File…	
@@ -934,6 +1018,8 @@ Next Match
 Next Problem	
 Next match (↵)	
 Next result (F4)	
+No Docker contexts found. Install Docker and start its engine.	
+No SSH host connected	
 No SSH hosts yet. Use Remote: Add SSH Host…	
 No VS Code settings found on this machine	
 No WSL distributions found.	
@@ -952,6 +1038,10 @@ No comment syntax for this file type
 No commit matches.	
 No commits to show.	
 No commits yet.	
+No containers found on this host.	
+No containers in this Docker environment.	
+No containers in this environment.	
+No containers match the current filters.	
 No debug adapter for type “{0}”. Supported: lldb (C, C++, Rust, Swift), go, python; or add {1} to the configuration.	
 No debug configuration: add .vscode/launch.json, or open a Cargo / Go project or a Python file.	
 No debug session. F5 starts one.	
@@ -970,18 +1060,22 @@ No language server for this file
 No language server is running. Open a file of the language first.	
 No line comment syntax for this file type	
 No lines match “{}”.	
+No log lines match the current filters.	
+No log output	
 No matches	
 No matching folders	
 No merge conflicts in this file	
 No merge conflicts in this file.	
 No merges	
 No misspelled word at the cursor.	
+No mounted storage	
 No outgoing calls found	
 No outline for this file type.	
 No output yet. Language server logs appear here.	
 No problems in this file	
 No problems.	
 No problems. Language servers start when you open a file.	
+No published ports	
 No quick fixes here	
 No references found	
 No results	
@@ -998,6 +1092,7 @@ No symbols matching “{}”
 No tasks found. “Tasks: Configure Tasks” creates .codeyard/tasks.jsonc.	
 No test at the cursor: put it inside a test function.	
 No tests found for this file type.	
+No timestamp	
 No type definition found	
 No unsaved changes: the file matches what is on disk.	
 None	
@@ -1008,6 +1103,7 @@ Not breaking on exceptions.
 Not compared	
 Not deleted: {}	
 Not in a git repository	
+Not installed; open setup instructions	
 Not paused	
 Not saved: {0} (U+{1}) cannot be written in {2}. Remove it, or save a copy as UTF-8.	
 Not saved: {0} cannot be written in {1}.	
@@ -1028,6 +1124,7 @@ Nothing was installed. What the update server sent didn't match the signed check
 Nothing yet.	
 Nothing yet: open a folder to see it here.	
 Nov	
+Now	
 Numbers and booleans were written as text.	
 Object keys must be strings, not {}	
 Oct	
@@ -1053,6 +1150,7 @@ Open Folder…
 Open Merge Editor	
 Open Recent	
 Open Settings (JSON)	
+Open Setup Instructions	
 Open System Settings	
 Open a .http or .rest file to send requests.	
 Open a Markdown file (.md) to preview it.	
@@ -1074,6 +1172,7 @@ Open a folder to debug it.
 Open a folder to search in it.	
 Open a project, connect to a host, or switch workspace	
 Open as Hex	
+Open files	
 Open files can be undone with ⌘Z; closed files are written to disk.	
 Open in Browser	
 Open in Integrated Terminal	
@@ -1081,6 +1180,8 @@ Open on GitHub
 Open recent, or connect to a host… (⌃R)	
 Open settings.jsonc	
 Open the active file with…	
+Open the source folder on this computer to create a Dev Container. Remote Docker contexts support attaching to existing containers.	
+Open this project with Docker: Open Project in Dev Container first.	
 Open to the Side	
 Open which worktree?	
 Open ~/.ssh/config	
@@ -1095,6 +1196,7 @@ Passphrase
 Password	
 Paste	
 Path (relative to the folder, or absolute)	
+Path in container	
 Path of the folder (~ is your home folder)	
 Path on this computer (~ is your home folder)	
 Paths are shown for JSON, YAML and TOML files	
@@ -1102,6 +1204,8 @@ Paths can't end with / or contain . or .. parts
 Pattern, e.g. foo($X, $$$REST)	
 Pause	
 Pause the program first (a breakpoint or ⏸): the variable has to be in scope.	
+Pause updates	
+Paused	
 Paused on exception: {}	
 Payload	
 Pick a file from the tree, or:	
@@ -1118,9 +1222,12 @@ Pop Latest Stash
 Pop Stash…	
 Popped {}	
 Port forwarding works while connected to an SSH host.	
+Port mappings	
 Port {} is forwarded to localhost:{} ({} was busy here)	
 Port {} is forwarded: localhost:{}	
 Ports	
+Ports and storage	
+Ports: {}	
 Preferences: Configure User Snippets	
 Preferences: Import VS Code Settings and Shortcuts	
 Preferences: Keyboard Shortcuts	
@@ -1142,7 +1249,9 @@ Problems (⇧⌘M)
 Process ended. Press any key to close.	
 Process exited with code {}	
 Process exited with code {}. Press any key to close.	
+Processes	
 Progress	
+Project lifecycle commands will run. Rebuild replaces the container; persistent volumes are kept.	
 Project name	
 Projects: Add Folder to Projects…	
 Projects: Edit Projects	
@@ -1152,6 +1261,7 @@ Pruned {} stale worktree entry|Pruned {} stale worktree entries
 Pruning worktrees…	
 Publish Branch	
 Publish failed: {}	
+Published addresses belong to the SSH server. Use port forwarding to access remote services locally.	
 Published to {}	
 Publishing branch…	
 Pull (Rebase)	
@@ -1188,6 +1298,8 @@ Quit without saving
 Quitting loses everything since the last save.	
 Quitting now can leave the installation unfinished. It takes a few seconds.	
 Read	
+Read and write	
+Read only	
 Reading folders… {0} and {1} entries	
 Reading the file…	
 Rebase	
@@ -1199,6 +1311,8 @@ Rebase {} onto {}?
 Rebase {} onto…	
 Rebased onto {}	
 Rebasing onto {}…	
+Rebuild Dev Container…	
+Rebuild and Open	
 Recent	
 Reconnect	
 Reconnect to {}	
@@ -1209,6 +1323,7 @@ Reconnecting to {}… (attempt {})
 Redo	
 Refresh	
 Refresh Explorer	
+Refresh details	
 Regex, Ignore Case	
 Regex, Match Case	
 Regular expression	
@@ -1216,6 +1331,7 @@ Regular expression (⌥R)
 Release Page	
 Reload history	
 Remote & Languages	
+Remote Docker environments currently support attaching to existing containers. Create Dev Containers with a local Docker engine.	
 Remote: Add SSH Host…	
 Remote: Connect to Dev Container…	
 Remote: Connect to Host or Switch Workspace…	
@@ -1286,6 +1402,7 @@ Reset Soft to Here
 Reset Zoom	
 Reset to {0} ({1})	
 Resolved {} conflict|Resolved {} conflicts	
+Resources	
 Respect .gitignore	
 Response	
 Restart (⇧⌘F5)	
@@ -1296,20 +1413,25 @@ Restart without saving
 Restarting language servers…	
 Restarting loses everything since the last save.	
 Restore Panel Size	
+Restore window	
 Result	
+Resume updates	
 Reveal in Finder	
 Revert	
 Revert File	
 Revert stopped and was undone: {}	
 Reverted {}	
 Reverting a change is not supported in this file (non-UTF-8 or CR-only line endings)	
+Review the Dev Container environment	
 Right is writable	
 Right-click a commit in the Source Control graph to branch, tag, cherry-pick, revert or reset.	
 Right-click a folder and choose Find in Folder… to search only inside it.	
 Run task	
 Run the search again	
+Running	
 Running…	
 SSH host	
+SSH {0}: {1}. Docker must be installed and accessible to the SSH user on the remote host.	
 Same apart from whitespace	
 Saturday	
 Save	
@@ -1343,8 +1465,10 @@ Search commands or keys (e.g. “comment”, “⌘D”)
 Search commands to bind a key	
 Search commits	
 Search commits (message, author, hash)	
+Search containers, images or projects…	
 Search files by name	
 Search files by name (> for commands, : for line, # for symbols)	
+Search log messages or timestamps…	
 Search settings	
 Search {}	
 Search: Find TODO Comments	
@@ -1361,6 +1485,7 @@ Select Language Mode
 Select a JWT or a Unix timestamp first	
 Select a branch to check out	
 Select a color theme	
+Select a container to inspect resource history, logs, ports and storage.	
 Select a debug configuration	
 Select a file icon theme	
 Select a word and press ⌘D to add the next match as another cursor.	
@@ -1377,6 +1502,7 @@ Send a request first.
 Send this request?	
 Sending {} {}…	
 Sep	
+Server binding	
 Services	
 Set	
 Set URL	
@@ -1393,6 +1519,7 @@ Shell for new terminals (empty: login shell)
 Show All	
 Show Changed Files…	
 Show Codeyard in Finder	
+Show Output	
 Show Stash…	
 Show a color swatch next to #rrggbb values	
 Show a tooltip when the mouse rests on a word	
@@ -1416,6 +1543,7 @@ Show the status bar
 Show type and parameter name hints from the language server	
 Show who last changed the cursor line (and when) at the end of the line	
 Showing the first 100,000 files of a very large folder	
+Showing the last successful snapshot.	
 Shrink Selection	
 Side by side	
 Signature not verified: the token is only decoded, not checked	
@@ -1427,11 +1555,13 @@ Snippets: Insert Snippet…
 Software Update	
 Solid blue folders like Finder, outline files with a language dot like GitHub	
 Solid folders colored and marked by purpose, solid files colored by language	
+Sort by	
 Sort object keys alphabetically in the output of Data: Convert To… and Data: Query… (off: keep the file's order)	
 Source Control	
 Source Control (⌃⇧G)	
 Source Control graph view: graph (branch lanes), compact (one line per commit) or dates (grouped by day)	
 Source control	
+Source on server	
 Spaces per indent level (empty: detect per file)	
 Spaces per level in the JSON and YAML written by Data: Convert To… and Data: Query…	
 Spelling: Fix Word at Cursor…	
@@ -1448,12 +1578,15 @@ Staging changes inside a symlink or submodule is not supported
 Staging changes is not supported in files with old-Mac (CR only) line endings	
 Staging changes needs a UTF-8 file	
 Staging changes needs a UTF-8 file (this one is stored in another encoding)	
+Standalone containers	
 Start	
 Start a debug session first (F5): the adapter says which exceptions it can break on.	
+Start and Connect	
 Start and end of a slice must be numbers	
 Start language servers	
 Start search results folded or open	
 Start the new branch from…	
+Start this container?	
 Starting the download…	
 Starting “{}”…	
 Stash (Include Untracked)	
@@ -1462,6 +1595,7 @@ Stash with Name…
 Stashed changes	
 Stashes	
 Stashing…	
+Status	
 Status bar	
 Step Into (F11)	
 Step Out (⇧F11)	
@@ -1470,7 +1604,10 @@ Still staging the previous change…
 Stop	
 Stop (⇧F5)	
 Stop a search after this many matches	
+Stopped	
 Stopped.	
+Storage information is unavailable.	
+Storage type	
 String interpolation is not supported	
 Structural search: the pattern is code; $X matches one node, $$$X several	
 Suggest words from the file when there is no language server	
@@ -1565,6 +1702,7 @@ The update couldn't be verified
 The update failed part-way and Codeyard couldn't put the previous version back. It may be at {0}. If Codeyard doesn't start, move it back to {1}.	
 The update failed. Click for details.	
 The version that was on disk has been kept in Local History.	
+The workspace changed. Open the source project and review its container configuration again.	
 The workspace file lists no folder that exists on this computer.	
 The workspace has no extra folders.	
 The {} dictionary is installed and on.	
@@ -1586,9 +1724,11 @@ They were not found.
 This branch is not published yet. Click to publish it.	
 This can't be undone.	
 This computer	
+This container is paused or restarting. Resume it in Docker before connecting.	
 This copy isn't installed as an app, so download the new version yourself.	
 This debug adapter does not support data breakpoints.	
 This debug adapter has no exception breakpoints.	
+This engine runs Windows containers. Editing requires a Linux container; Windows container editing needs a separate Windows agent. Container logs remain available.	
 This file has merge conflicts: resolve them first (Source Control marks it resolved when staged)	
 This file has no commits or saved copies yet.	
 This file is already on this computer. Use Save As instead.	
@@ -1652,11 +1792,13 @@ Unsaved changes stay open in their tabs; saving recreates the file.
 Unstage	
 Unstage all	
 Untracked files will be deleted. This can't be undone.	
+Unwrapped lines	
 Update failed	
 Update installed	
 Update installed. Restart Codeyard to finish.	
 Update {}	
 Updated the URL of {}	
+Updates paused	
 Updating .gitignore…	
 Updating {}…	
 Updating…	
@@ -1670,6 +1812,7 @@ Uploading has to wait: the connection is still being set up.
 Uploading is not possible in this workspace.	
 Uploading needs the connection to {}, which failed: use Reconnect first.	
 Uploading works with a connected SSH host: connect first (⌃R).	
+User: {}	
 VS Code settings.json could not be read	
 Variables	
 Variables are not supported	
@@ -1680,6 +1823,7 @@ View File History
 View: Close All Editors	
 View: Close Other Editors	
 View: Close Saved Editors	
+View: Containers	
 View: Files	
 View: Focus Left Editor Group	
 View: Focus Right Editor Group	
@@ -1707,7 +1851,11 @@ View: Toggle Word Wrap
 View: Toggle Zen Mode	
 View: Zoom In	
 View: Zoom Out	
+Volume name	
+WSL Containers does not support Compose in this workflow. Choose Docker or Podman for a Compose project.	
 WSL distribution	
+Waiting for enough samples to draw history…	
+Warning	
 Watch	
 Wednesday	
 Welcome	
@@ -1727,6 +1875,7 @@ Workbench
 Workspace: Trust This Folder	
 Workspace: {} folder in the Explorer.|Workspace: {} folders in the Explorer.	
 Wrap long lines at the window edge	
+Wrapped lines	
 You are connected to “{}”. Disconnect first.	
 You can restore it from the Trash.	
 You have unsaved changes	
@@ -1819,6 +1968,7 @@ git {} failed
 goes to an address whose host cannot be read reliably	
 goes to {}, which you have not sent anything to in this session	
 goto	
+image default	
 install Xcode or a Swift toolchain (it contains sourcekit-lsp)	
 install clangd (Xcode tools, apt install clangd)	
 installed · {}	
@@ -1954,6 +2104,8 @@ your words
 {0} (saved) ↔ {1} (editor)	
 {0} (stopped at {1})	
 {0} (while parsing {1})	
+{0} / {1} containers	
+{0} / {1} lines · {2} errors · {3} warnings	
 {0} and {1} cannot be added	
 {0} and {1} cannot be divided	
 {0} and {1} cannot be divided because the divisor is zero	
@@ -1995,6 +2147,7 @@ your words
 {0}: {1} cannot be written in TOML	
 {0}: {1} does not fit in a TOML integer (64 bits, signed)	
 {0}: {1} to pull, {2} to push. Click to sync.	
+{0}: {1}. Start the selected container engine and check Output.	
 {0}: “{1}” is not a name .env files can hold (letters, digits and _)	
 {0}{1} found	
 {{$processEnv}} needs a name	
@@ -2049,12 +2202,14 @@ your words
 {} is not an array	
 {} is not in HEAD yet.	
 {} is not installed	
+{} is not installed. Open the setup instructions, then try again.	
 {} is too large to be a time in seconds or milliseconds	
 {} isn't available. Or set “lsp.servers” in settings.	
 {} item already exists. Replace it?|{} items already exist. Replace them?	
 {} item|{} items	
 {} keeps crashing; restart the folder to try again.	
 {} minute ago|{} minutes ago	
+{} minutes ago	
 {} month ago|{} months ago	
 {} more entry that the comparison hides (ignored by .gitignore or the compare settings) goes too.|{} more entries that the comparison hides (ignored by .gitignore or the compare settings) go too.	
 {} no longer exists, so it was not reopened.	

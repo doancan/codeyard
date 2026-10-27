@@ -23,7 +23,7 @@ Invoke-Cargo -CargoArgs @(
     'test', '--release', '--locked', '-p', 'app', '--bin', 'codeyard', '--',
     'windows_', 'resize_', 'qa_sidebar_sash_drag', 'links::tests', 'terminal::tests', 'ui::path_tests',
     'sysopen::tests', 'workspace_file::tests', 'vscode::tests', 'trash::', 'terminal_web_links',
-    'files_from_the_system', 'qa_workspace_file',
+    'files_from_the_system', 'qa_workspace_file', 'markdown', 'docker',
     '--test-threads=1'
 )
 Invoke-Cargo -CargoArgs @('build', '--release', '--locked', '-p', 'app')
