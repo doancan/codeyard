@@ -150,7 +150,6 @@ Change All Occurrences
 Change Color…	
 Change Local Port…	
 Change the URL of which remote?	
-Change this in Settings (update.check). Check for Updates… always works.	
 Changed	
 Changed {0} file ({1} file operations skipped)|Changed {0} files ({1} file operations skipped)	
 Changed {} file|Changed {} files	
@@ -211,6 +210,7 @@ Closing a terminal ends the programs running in it.
 Closing the window loses everything since the last save.	
 Code	
 Codeyard already has Full Disk Access.	
+Codeyard can check for updates daily. You can change this in Settings.	
 Codeyard can't replace itself in {}: your account can't write there. Download the new version and drag it in yourself.	
 Codeyard can't update itself on this system. Download the new version yourself.	
 Codeyard could not start the new version: {}. The update is installed; open Codeyard again to use it.	
@@ -1223,7 +1223,6 @@ OK
 Object keys must be strings, not {}	
 Oct	
 On this computer	
-Once a day, Codeyard downloads two small files from github.com to look for a newer version. GitHub sees your IP address, nothing about your files.	
 One quiet color, outline glyphs	
 Only My Commits	
 Only When I Ask	

@@ -1362,48 +1362,47 @@ impl Workbench {
                     .items_center()
                     .gap(px(theme::SPACE[1]))
                     .px(px(theme::SPACE[4]))
-                    .text_size(px(text::XXS.0))
+                    .text_size(px(text::SM.0))
+                    .line_height(px(text::SM.1))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .child({
                         let (errors, warnings) = self.problem_counts();
-                        panel_tab("problems-tab", crate::i18n::upper(crate::i18n::t("Problems")), self.chrome.bottom == Bottom::Problems, errors + warnings, p)
-                            .on_click(cx.listener(|this, _, _, cx| {
+                        panel_tab("problems-tab", crate::i18n::t("Problems").into(), self.chrome.bottom == Bottom::Problems, errors + warnings, p).on_click(
+                            cx.listener(|this, _, _, cx| {
                                 this.chrome.bottom = Bottom::Problems;
                                 cx.notify();
-                            }))
+                            }),
+                        )
                     })
-                    .child(panel_tab("output-tab", crate::i18n::upper(crate::i18n::t("Output")), self.chrome.bottom == Bottom::Output, 0, p).on_click(
-                        cx.listener(|this, _, _, cx| {
+                    .child(panel_tab("output-tab", crate::i18n::t("Output").into(), self.chrome.bottom == Bottom::Output, 0, p).on_click(cx.listener(
+                        |this, _, _, cx| {
                             this.chrome.bottom = Bottom::Output;
+                            cx.notify();
+                        },
+                    )))
+                    .when(self.dbg.has_sessions(), |d| {
+                        d.child(panel_tab("debug-tab", crate::i18n::t("Debug Console").into(), self.chrome.bottom == Bottom::Debug, 0, p).on_click(
+                            cx.listener(|this, _, _, cx| {
+                                this.chrome.bottom = Bottom::Debug;
+                                cx.notify();
+                            }),
+                        ))
+                    })
+                    .child(panel_tab("ports-tab", crate::i18n::t("Ports").into(), self.chrome.bottom == Bottom::Ports, self.active_forwards(), p).on_click(
+                        cx.listener(|this, _, _, cx| {
+                            this.chrome.bottom = Bottom::Ports;
                             cx.notify();
                         }),
                     ))
-                    .when(self.dbg.has_sessions(), |d| {
-                        d.child(
-                            panel_tab("debug-tab", crate::i18n::upper(crate::i18n::t("Debug Console")), self.chrome.bottom == Bottom::Debug, 0, p).on_click(
-                                cx.listener(|this, _, _, cx| {
-                                    this.chrome.bottom = Bottom::Debug;
-                                    cx.notify();
-                                }),
-                            ),
-                        )
-                    })
-                    .child(
-                        panel_tab("ports-tab", crate::i18n::upper(crate::i18n::t("Ports")), self.chrome.bottom == Bottom::Ports, self.active_forwards(), p)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.chrome.bottom = Bottom::Ports;
-                                cx.notify();
-                            })),
-                    )
-                    .child(panel_tab("terminal-tab", crate::i18n::upper(crate::i18n::t("Terminal")), self.chrome.bottom == Bottom::Terminal, 0, p).on_click(
-                        cx.listener(|this, _, window, cx| {
+                    .child(panel_tab("terminal-tab", crate::i18n::t("Terminal").into(), self.chrome.bottom == Bottom::Terminal, 0, p).on_click(cx.listener(
+                        |this, _, window, cx| {
                             if this.terminals.is_empty() {
                                 this.new_terminal(&NewTerminal, window, cx);
                             } else {
                                 this.focus_terminal(window, cx);
                             }
-                        }),
-                    ))
+                        },
+                    )))
                     .child(div().flex_1())
                     .child(
                         ui::icon_button("panel-new", "plus", crate::i18n::t("New Terminal (⌃⇧`)"), p)
@@ -2488,20 +2487,20 @@ impl Render for Tooltip {
     }
 }
 
-/// Tab for a view in the panel header (PROBLEMS, PORTS, TERMINAL): underlined when active.
+/// Panel views use quiet button backgrounds for selection and hover.
 fn panel_tab(id: &'static str, label: String, active: bool, badge: usize, p: &Palette) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
-        .h_full()
+        .h(px(layout::VIEW_HEADER_H - 8.))
         .flex()
         .items_center()
         .gap(px(theme::SPACE[2]))
         .px(px(theme::SPACE[3]))
         .cursor_pointer()
-        .border_b_1()
-        .border_color(c(if active { p.accent } else { p.bg }))
+        .rounded(px(theme::radius::SM))
+        .when(active, |d| d.bg(c(p.surface_active)))
         .text_color(c(if active { p.text } else { p.text_muted }))
-        .hover(|d| d.text_color(c(p.text)))
+        .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text))))
         .child(label)
         .when(badge > 0, |d| d.child(div().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).child(badge.to_string())))
 }
