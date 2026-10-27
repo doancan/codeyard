@@ -277,12 +277,14 @@ impl Workbench {
         });
         let return_focus = window.focused(cx);
         window.focus(&menu.focus_handle(cx));
+        self.scm.update(cx, |scm, cx| scm.set_menu_open(true, cx));
         self.menu = Some(MenuState { menu, position, target, commands, actions, return_focus, app_path: None, _sub: sub });
         cx.notify();
     }
 
     pub(super) fn close_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<MenuState> {
         let state = self.menu.take()?;
+        self.scm.update(cx, |scm, cx| scm.set_menu_open(false, cx));
         match &state.return_focus {
             Some(f) => window.focus(f),
             None => window.focus(&self.focus_handle),
@@ -390,6 +392,7 @@ impl Workbench {
             MenuCmd::GitIgnore => self.git_ignore_path(target.path, target.is_dir, cx),
             MenuCmd::GitOpenChanges => self.git_open_changes(target.path, window, cx),
             MenuCmd::GitOpenHead => self.git_open_head_file(target.path, window, cx),
+            MenuCmd::ScmFile(action) => self.run_scm_file_action(action, target.path, window, cx),
             MenuCmd::Download => self.start_download(target.path.clone(), target.is_dir, window, cx),
             MenuCmd::Upload => self.start_upload(target.path.clone(), window, cx),
             MenuCmd::Reveal => {

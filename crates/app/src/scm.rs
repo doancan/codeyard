@@ -33,7 +33,7 @@ pub enum ScmEvent {
     /// Section layout changed (persisted).
     SectionsChanged(String),
     /// Right click on a changed file: its menu (path relative to the repository, window coordinates).
-    FileMenu(String, gpui::Point<gpui::Pixels>),
+    FileMenu(String, bool, gpui::Point<gpui::Pixels>),
     // --- git-sync ---
     /// The Sync Changes button: pull and/or push, asking first when `git.confirmSync` is on.
     Sync,
@@ -41,6 +41,15 @@ pub enum ScmEvent {
     Publish,
     /// A commit went through and `git.postCommitCommand` (or "Commit & Push/Sync") asks for this next.
     PostCommit(git::PostCommit),
+}
+
+#[derive(Clone, Copy)]
+pub enum FileAction {
+    Open,
+    Diff(bool),
+    Stage,
+    Unstage,
+    Discard,
 }
 
 /// What the loaded graph depends on besides HEAD: the checked-out branch (a new branch on the same commit moves the HEAD
@@ -101,6 +110,8 @@ pub struct ScmPanel {
     syncing: bool,
     /// The repository has a remote: without one there is nothing to publish to, so no Publish Branch button.
     has_remote: bool,
+    /// Row tooltips must not cover a context menu opened above them.
+    menu_open: bool,
     _subs: Vec<Subscription>,
 }
 
@@ -154,6 +165,7 @@ impl ScmPanel {
             identity: None,
             syncing: false,
             has_remote: false,
+            menu_open: false,
             _subs: subs,
         }
     }
@@ -168,6 +180,13 @@ impl ScmPanel {
             self.load_graph(cx);
         }
         cx.notify();
+    }
+
+    pub fn set_menu_open(&mut self, open: bool, cx: &mut Context<Self>) {
+        if self.menu_open != open {
+            self.menu_open = open;
+            cx.notify();
+        }
     }
 
     /// Load the graph in the background; the old result stays visible until the new one arrives.
@@ -342,16 +361,22 @@ impl ScmPanel {
     }
 
     /// Irreversible: ask first (untracked files are deleted).
-    fn confirm_discard(&mut self, changes: Vec<Change>, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn confirm_discard(&mut self, changes: Vec<Change>, window: &mut Window, cx: &mut Context<Self>) {
         let deletes = changes.iter().any(|c| c.unstaged == Some(Mark::Untracked));
         let title = match changes.as_slice() {
             [one] => crate::i18n::tf("Discard changes in {}?", &[&format!("“{}”", ui::file_name(&one.path))]),
             many => crate::i18n::tf("Discard changes in {} files?", &[&many.len()]),
         };
         let detail = if deletes { crate::i18n::t("Untracked files will be deleted. This can't be undone.") } else { crate::i18n::t("This can't be undone.") };
-        let answer = window.prompt(PromptLevel::Warning, &title, Some(detail), &[crate::i18n::t("Discard"), crate::i18n::t("Cancel")], cx);
+        let answer = window.prompt(
+            PromptLevel::Warning,
+            &title,
+            Some(detail),
+            &[gpui::PromptButton::cancel(crate::i18n::t("Cancel")), gpui::PromptButton::new(crate::i18n::t("Discard"))],
+            cx,
+        );
         cx.spawn(async move |this, cx| {
-            if answer.await == Ok(0) {
+            if answer.await == Ok(1) {
                 this.update(cx, |this, cx| this.discard(changes, cx)).ok();
             }
         })
@@ -557,12 +582,17 @@ impl ScmPanel {
             .child(div().flex_1().min_w_0().overflow_hidden().text_size(px(text::XS.0)).text_color(c(p.text_muted)).children(dir))
             .child(div().invisible().group_hover(group, |s| s.visible()).child(actions))
             .child(div().w(px(12.)).flex_none().text_size(px(text::XS.0)).text_color(c(mark.color(&p))).child(mark.letter()))
-            .tooltip({
-                let tip = format!("{} · {}", change.path, mark.describe());
-                move |_, cx| cx.new(|_| crate::workbench::Tooltip(tip.clone().into())).into()
+            .when(!self.menu_open, |d| {
+                d.tooltip({
+                    let tip = format!("{} · {}", change.path, mark.describe());
+                    move |_, cx| cx.new(|_| crate::workbench::Tooltip(tip.clone().into())).into()
+                })
             })
             .on_click(cx.listener(move |_, _, _, cx| cx.emit(ScmEvent::OpenDiff { path: path.clone(), staged })))
-            .on_mouse_down(MouseButton::Right, cx.listener(move |_, ev: &MouseDownEvent, _, cx| cx.emit(ScmEvent::FileMenu(menu_path.clone(), ev.position))))
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |_, ev: &MouseDownEvent, _, cx| cx.emit(ScmEvent::FileMenu(menu_path.clone(), staged, ev.position))),
+            )
     }
 
     fn group_header(&self, id: &'static str, title: &str, n: usize, staged: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> {
@@ -1306,6 +1336,20 @@ impl ScmPanel {
 #[cfg(test)]
 mod tests {
     use super::commit_button;
+
+    #[gpui::test]
+    fn discard_confirmation_defaults_to_cancel(cx: &mut gpui::TestAppContext) {
+        cx.update(|cx| {
+            cx.set_global(crate::ui::ActiveTheme(theme::DARK));
+            cx.set_prompt_builder(|level, message, detail, buttons, handle, window, cx| {
+                assert!(matches!(&buttons[0], gpui::PromptButton::Cancel(label) if label == "Cancel"));
+                assert_eq!(buttons[1].label(), "Discard");
+                gpui::fallback_prompt_renderer(level, message, detail, buttons, handle, window, cx)
+            });
+        });
+        let (panel, cx) = cx.add_window_view(|_, cx| super::ScmPanel::new(std::sync::Arc::new(host::local()), cx));
+        panel.update_in(cx, |panel, window, cx| panel.confirm_discard(Vec::new(), window, cx));
+    }
 
     #[test]
     fn commit_button_says_what_will_be_committed() {
