@@ -88,6 +88,7 @@ pub struct Settings {
     pub terminal_shell: Option<String>,
     pub terminal_font_size: f32,
     pub terminal_scrollback: usize,
+    pub terminal_scroll_sensitivity: f32,
     /// Whether a program in the terminal may put text on the clipboard (OSC 52).
     pub terminal_allow_clipboard_write: bool,
     /// zsh, bash and fish mark prompts, commands and their folder (`terminal.shellIntegration`).
@@ -300,6 +301,7 @@ impl Default for Settings {
             terminal_shell: None,
             terminal_font_size: theme::text::CODE.0,
             terminal_scrollback: 2000,
+            terminal_scroll_sensitivity: 2.,
             terminal_allow_clipboard_write: false,
             terminal_shell_integration: true,
             terminal_confirm_close: "running".into(),
@@ -609,6 +611,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.number("terminal.scrollback", 0., crate::terminal::SCROLLBACK_MAX as f64) {
         s.terminal_scrollback = v as usize;
+    }
+    if let Some(v) = r.number("terminal.scrollSensitivity", 0.1, 10.) {
+        s.terminal_scroll_sensitivity = v as f32;
     }
     if let Some(v) = r.bool("terminal.allowClipboardWrite") {
         s.terminal_allow_clipboard_write = v;
@@ -1076,6 +1081,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "terminal.shell",
         "terminal.fontSize",
         "terminal.scrollback",
+        "terminal.scrollSensitivity",
         "terminal.sanitizePaste",
         "terminal.warnMultilinePaste",
         "terminal.confirmOnClose",

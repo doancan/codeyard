@@ -158,6 +158,7 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Default: 12 on macOS, 14 on Windows and Linux.
   // "terminal.fontSize": 12,
   "terminal.scrollback": 2000,
+  "terminal.scrollSensitivity": 2,
   // Let programs in the terminal write to the clipboard (OSC 52). Off by default: a program you run, or a file you cat, could replace
   // what you copied.
   // "terminal.allowClipboardWrite": false,
