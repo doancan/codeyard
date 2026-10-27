@@ -175,6 +175,7 @@ status bar reports it.
 | `terminal.confirmOnClose` | `running`, `always`, `never` | `running` | Ask before closing a terminal |
 | `terminal.defaultProfile` | text | empty | Profile new terminals use |
 | `terminal.fontSize` | number 6–48 | `12` on macOS, `14` on Windows and Linux | Font size of the terminal |
+| `terminal.lineHeight` | number 1–2 | `1.2` | Terminal row height, as a multiple of the font size |
 | `terminal.sanitizePaste` | `auto`, `always`, `off` | `auto` | Remove control characters from pasted text |
 | `terminal.scrollSensitivity` | number 0.1–10 | `2.0` | Mouse wheel and trackpad scroll speed multiplier |
 | `terminal.scrollback` | number 0–50000 | `2000` | Lines kept in terminal history |
@@ -209,7 +210,7 @@ status bar reports it.
 | `workbench.breadcrumbs.enabled` | `true` / `false` | `true` | Show the file path above the editor |
 | `workbench.editor.showTabs` | `true` / `false` | `true` | Show the editor tab bar |
 | `workbench.fontFamily` | text | empty | UI font of the whole window (empty: system font) |
-| `workbench.iconTheme` | `minimal`, `codeyard`, `glyphs`, `badges`, `colorful`, `apple`, `material`, `none` | `minimal` | File and folder icons |
+| `workbench.iconTheme` | `glyphs`, `minimal`, `codeyard`, `badges`, `colorful`, `apple`, `material`, `none` | `glyphs` | File and folder icons |
 | `workbench.statusBar.visible` | `true` / `false` | `true` | Show the status bar |
 | `workbench.tabs.closeButton` | `hover`, `always`, `off` | `hover` | When the close button of a tab shows |
 | `workbench.tabs.showIcons` | `true` / `false` | `true` | Show file icons on tabs |

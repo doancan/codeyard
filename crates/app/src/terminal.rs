@@ -19,7 +19,7 @@ use gpui::{
 };
 use host::{Host, PtyEvent};
 
-use crate::ui::{MONO_FONT, Palette, c, palette, text};
+use crate::ui::{MONO_FONT, Palette, c, palette};
 
 actions!(
     terminal,
@@ -366,7 +366,10 @@ impl TerminalView {
             selecting: false,
             find: None,
             hover_link: None,
-            metrics: metrics(cx.global::<crate::settings::Settings>().terminal_font_size),
+            metrics: {
+                let s = cx.global::<crate::settings::Settings>();
+                metrics(s.terminal_font_size, s.terminal_line_height)
+            },
             scrollback,
             wheel: Default::default(),
             color,
@@ -1021,9 +1024,15 @@ struct Frame {
 
 /// Font size and row height for a terminal font size: the row keeps the design scale's size-to-line ratio
 /// (whole pixels, so rows don't drift apart while painting).
-pub(crate) fn metrics(font_size: f32) -> (f32, f32) {
+/// Default row height as a multiple of the font size. Tighter than the editor's 1.5: terminal output (tables, box drawing,
+/// progress bars) reads as one block.
+pub(crate) const LINE_HEIGHT: f32 = 1.2;
+
+/// Font size and whole-pixel row height for `terminal.fontSize` and `terminal.lineHeight`.
+pub(crate) fn metrics(font_size: f32, line_height: f32) -> (f32, f32) {
     let size = font_size.clamp(6., 48.);
-    (size, (size * text::CODE.1 / text::CODE.0).round())
+    let factor = if line_height.is_finite() { line_height.clamp(1., 2.) } else { LINE_HEIGHT };
+    (size, (size * factor).round().max(size.ceil()))
 }
 
 struct TerminalElement {
@@ -1235,7 +1244,10 @@ impl Element for TerminalElement {
 impl Render for TerminalView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = *palette(cx);
-        self.metrics = metrics(cx.global::<crate::settings::Settings>().terminal_font_size);
+        self.metrics = {
+            let s = cx.global::<crate::settings::Settings>();
+            metrics(s.terminal_font_size, s.terminal_line_height)
+        };
         // A changed `terminal.scrollback` applies to open terminals too.
         let scrollback = cx.global::<crate::settings::Settings>().terminal_scrollback.min(SCROLLBACK_MAX);
         if scrollback != self.scrollback {
@@ -1326,16 +1338,20 @@ impl Render for TerminalView {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ui::text;
 
     #[test]
     fn the_terminal_font_size_setting_sets_the_cell_size() {
-        let (_, base) = metrics(text::CODE.0);
-        assert_eq!(base, text::CODE.1, "the default size keeps the design line height");
-        let (size, line) = metrics(20.);
-        assert_eq!(size, 20.);
+        let (_, base) = metrics(text::CODE.0, LINE_HEIGHT);
+        assert_eq!(base, (text::CODE.0 * LINE_HEIGHT).round(), "rows are 1.2 × the font size by default");
+        let (size, line) = metrics(20., LINE_HEIGHT);
+        assert_eq!((size, line), (20., 24.));
         assert!(line > base && line.fract() == 0., "a bigger font gets taller, whole-pixel rows: {line}");
-        assert_eq!(metrics(2.).0, 6., "absurd sizes are clamped");
-        assert_eq!(metrics(500.).0, 48.);
+        assert_eq!(metrics(2., LINE_HEIGHT).0, 6., "absurd sizes are clamped");
+        assert_eq!(metrics(500., LINE_HEIGHT).0, 48.);
+        assert_eq!(metrics(13., 1.5).1, 20., "terminal.lineHeight widens the rows");
+        assert_eq!(metrics(13., 0.2).1, 13., "never shorter than the font");
+        assert_eq!(metrics(13., f32::NAN).1, 16., "a broken value falls back to the default");
     }
 
     #[test]

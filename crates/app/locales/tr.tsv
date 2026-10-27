@@ -1330,7 +1330,7 @@ Restarting language servers…	Dil sunucuları yeniden başlatılıyor…
 No file “{}” in this project	Bu projede “{}” dosyası yok
 Language Badges	Dil Rozetleri
 Colorful Folders	Renkli Klasörler
-Minimal (Default)	Sade (Varsayılan)
+Minimal	Sade
 None	Yok
 File glyphs tinted by language, accent folders	Dile göre renklendirilmiş dosya simgeleri, vurgu renginde klasörler
 Small colored badges with the language's letters	Dilin harflerini taşıyan küçük renkli rozetler
@@ -1339,7 +1339,7 @@ One quiet color, outline glyphs	Tek ve sakin bir renk, çerçeve çizgili simgel
 Solid blue folders like Finder, outline files with a language dot like GitHub	Finder gibi dolgulu mavi klasörler, GitHub gibi dil noktalı çerçeve çizgili dosyalar
 Solid folders colored and marked by purpose, solid files colored by language	Amacına göre renklendirilmiş ve işaretlenmiş dolgulu klasörler, dile göre renklendirilmiş dolgulu dosyalar
 Names only	Yalnızca adlar
-File Glyphs	Dosya Simgeleri
+File Glyphs (Default)	Dosya Simgeleri (Varsayılan)
 Colored file glyphs, folders with only their arrow; names line up	Renkli dosya simgeleri, klasörlerde yalnızca ok; adlar hizalı durur
 
 # ---- File operations leftovers ----
@@ -2634,6 +2634,7 @@ Maximize window	Pencereyi büyüt
 Restore window	Pencereyi önceki boyutuna getir
 Close window	Pencereyi kapat
 Mouse wheel and trackpad scroll speed multiplier	Fare tekerleği ve izleme dörtgeni kaydırma hızı çarpanı
+Terminal row height, as a multiple of the font size	Terminal satır yüksekliği, yazı boyutunun katı olarak
 Toggle Panel (⌘J)	Paneli Aç/Kapat (⌘J)
 Closes when the pointer leaves · pin to keep open	Fare ayrılınca kapanır · açık tutmak için sabitleyin
 Codeyard memory	Codeyard belleği

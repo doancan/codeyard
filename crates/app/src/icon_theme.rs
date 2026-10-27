@@ -28,11 +28,11 @@ pub enum IconTheme {
     None,
 }
 
-/// The order is the picker's order; the first is the default (the plainest).
+/// The order is the picker's order; the first is the default.
 pub const ALL: &[IconTheme] = &[
+    IconTheme::Glyphs,
     IconTheme::Minimal,
     IconTheme::Default,
-    IconTheme::Glyphs,
     IconTheme::Badges,
     IconTheme::Colorful,
     IconTheme::Apple,
@@ -59,10 +59,10 @@ impl IconTheme {
             IconTheme::Default => "Codeyard",
             IconTheme::Badges => crate::i18n::t("Language Badges"),
             IconTheme::Colorful => crate::i18n::t("Colorful Folders"),
-            IconTheme::Minimal => crate::i18n::t("Minimal (Default)"),
+            IconTheme::Minimal => crate::i18n::t("Minimal"),
             IconTheme::Apple => "Apple / GitHub",
             IconTheme::Material => "Material",
-            IconTheme::Glyphs => crate::i18n::t("File Glyphs"),
+            IconTheme::Glyphs => crate::i18n::t("File Glyphs (Default)"),
             IconTheme::None => crate::i18n::t("None"),
         }
     }
@@ -101,7 +101,7 @@ pub fn set(theme: IconTheme) {
 }
 
 pub fn current() -> IconTheme {
-    ALL.get(CURRENT.load(Ordering::Relaxed) as usize).copied().unwrap_or(IconTheme::Minimal)
+    ALL.get(CURRENT.load(Ordering::Relaxed) as usize).copied().unwrap_or(ALL[0])
 }
 
 fn ext_of(name: &str) -> String {
@@ -331,9 +331,9 @@ mod tests {
     }
 
     #[test]
-    fn the_default_icon_theme_is_the_plainest_one() {
-        assert_eq!(ALL[0], IconTheme::Minimal);
-        assert_eq!(IconTheme::from_id(crate::settings::Settings::default().icon_theme.as_str()), Some(IconTheme::Minimal));
+    fn the_default_icon_theme_marks_files_and_leaves_folders_bare() {
+        assert_eq!(ALL[0], IconTheme::Glyphs);
+        assert_eq!(IconTheme::from_id(crate::settings::Settings::default().icon_theme.as_str()), Some(IconTheme::Glyphs));
     }
 
     #[test]

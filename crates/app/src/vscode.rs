@@ -114,6 +114,11 @@ pub fn convert_settings(text: &str, themes: &[(String, String)]) -> Converted {
                 set("terminal.fontSize", v.clone());
                 true
             }
+            // Same meaning there: a multiple of the font size.
+            "terminal.integrated.lineHeight" => {
+                set("terminal.lineHeight", v.clone());
+                true
+            }
             "terminal.integrated.scrollback" => {
                 set("terminal.scrollback", v.clone());
                 true
