@@ -74,6 +74,7 @@ mod i18n_remote_tests;
 #[cfg(test)]
 mod i18n_tests;
 mod icon_theme;
+mod image_size;
 mod input;
 mod jsonfmt;
 mod large;

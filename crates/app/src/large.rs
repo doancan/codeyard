@@ -196,7 +196,13 @@ impl LargeFileView {
                 match result {
                     Ok((data, _)) => {
                         v.size = data.len() as u64;
-                        v.image = Some(Arc::new(gpui::Image::from_bytes(format, data)));
+                        // Checked before decoding: a few kilobytes can announce an image that takes gigabytes once decoded.
+                        match crate::image_size::dimensions(&data) {
+                            Some((w, h)) if crate::image_size::too_large(w, h) => {
+                                v.error = Some(crate::i18n::tf("This image is {0} × {1} pixels, too large to preview.", &[&w, &h]).into());
+                            }
+                            _ => v.image = Some(Arc::new(gpui::Image::from_bytes(format, data))),
+                        }
                     }
                     Err(e) => v.error = Some(e.to_string().into()),
                 }
@@ -323,6 +329,11 @@ impl LargeFileView {
     #[cfg(test)]
     pub fn image_loaded(&self) -> bool {
         self.image.is_some()
+    }
+
+    #[cfg(test)]
+    pub fn error_for_test(&self) -> Option<String> {
+        self.error.as_ref().map(|e| e.to_string())
     }
 
     pub fn line_count(&self) -> u64 {
