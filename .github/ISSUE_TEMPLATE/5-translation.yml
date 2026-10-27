@@ -1,6 +1,6 @@
 name: Translation
 description: Fix a translation, or offer to translate Codeyard into a new language
-labels: ["type: task", "area: i18n"]
+labels: ["task", "i18n"]
 projects: ["doancan/2"]
 body:
   - type: markdown
