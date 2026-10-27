@@ -300,6 +300,14 @@ impl Workbench {
     }
 
     #[cfg(test)]
+    pub fn markdown_images_for_test(&self, cx: &gpui::App) -> Option<std::collections::HashMap<String, Result<(), String>>> {
+        match &self.tabs.page {
+            Some(Page::Markdown(view)) => Some(view.read(cx).image_results_for_test()),
+            _ => None,
+        }
+    }
+
+    #[cfg(test)]
     pub fn shortcuts_page_for_test(&self) -> Option<gpui::Entity<crate::shortcuts_page::ShortcutsPage>> {
         match &self.tabs.page {
             Some(Page::Shortcuts(v)) => Some(v.clone()),

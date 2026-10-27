@@ -8,7 +8,11 @@ use gpui::{
 use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 use std::time::{Duration, Instant};
-use std::{collections::HashMap, rc::Rc, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    rc::Rc,
+    sync::Arc,
+};
 
 use crate::editor::EditorView;
 use crate::ui::{self, Palette, c, palette, text};
@@ -372,6 +376,31 @@ impl gpui::EventEmitter<PreviewEvent> for MarkdownPreview {}
 #[derive(Default)]
 struct PreviewResources {
     images: HashMap<String, Result<Arc<gpui::Image>, String>>,
+    pending: HashMap<String, u64>,
+    next_request: u64,
+}
+
+impl PreviewResources {
+    fn retain(&mut self, urls: &HashSet<String>) {
+        self.images.retain(|url, _| urls.contains(url));
+        self.pending.retain(|url, _| urls.contains(url));
+    }
+
+    fn begin(&mut self, url: String) -> u64 {
+        self.next_request += 1;
+        let request = self.next_request;
+        self.pending.insert(url.clone(), request);
+        self.images.insert(url, Err(crate::i18n::t("Loading image…").into()));
+        request
+    }
+
+    fn complete(&mut self, url: String, request: u64, result: Result<Arc<gpui::Image>, String>) {
+        // Removing and re-adding a URL starts a different read. An earlier read must not overwrite it.
+        if self.pending.get(&url) == Some(&request) {
+            self.pending.remove(&url);
+            self.images.insert(url, result);
+        }
+    }
 }
 
 type LinkHandler = Rc<dyn Fn(&str, &mut Window, &mut App)>;
@@ -478,7 +507,8 @@ impl MarkdownPreview {
         let host = source.host_arc();
         let mut urls = Vec::new();
         collect_images(&self.blocks, &mut urls);
-        self.resources.images.retain(|url, _| urls.contains(url));
+        let urls: HashSet<_> = urls.into_iter().collect();
+        self.resources.retain(&urls);
         for url in urls {
             if self.resources.images.contains_key(&url) {
                 continue;
@@ -490,21 +520,13 @@ impl MarkdownPreview {
             let Some(format) = crate::large::image_format(&path) else {
                 continue;
             };
-            self.resources.images.insert(url.clone(), Err(crate::i18n::t("Loading image…").into()));
+            let request = self.resources.begin(url.clone());
             let host = host.clone();
-            let task = cx.background_executor().spawn(async move {
-                let meta = host.stat(&path).map_err(|e| e.to_string())?;
-                if meta.size > 20 * 1024 * 1024 {
-                    return Err(crate::i18n::t("Image exceeds 20 MB.").to_string());
-                }
-                host.read(&path).map(|(data, _)| Arc::new(gpui::Image::from_bytes(format, data))).map_err(|e| e.to_string())
-            });
+            let task = cx.background_executor().spawn(async move { crate::image_size::load(host.as_ref(), &path, format).map(|(image, _)| image) });
             cx.spawn(async move |this, cx| {
                 let result = task.await;
                 this.update(cx, |this, cx| {
-                    if this.resources.images.contains_key(&url) {
-                        this.resources.images.insert(url, result);
-                    }
+                    this.resources.complete(url, request, result);
                     cx.notify();
                 })
                 .ok();
@@ -521,6 +543,11 @@ impl MarkdownPreview {
     #[cfg(test)]
     pub fn blocks_for_test(&self, cx: &App) -> Vec<Block> {
         parse(&self.source.read(cx).text_lines().join("\n"))
+    }
+
+    #[cfg(test)]
+    pub fn image_results_for_test(&self) -> HashMap<String, Result<(), String>> {
+        self.resources.images.iter().map(|(url, image)| (url.clone(), image.as_ref().map(|_| ()).map_err(Clone::clone))).collect()
     }
 }
 
@@ -1038,6 +1065,24 @@ fn collect_headings(blocks: &[Block], prefix: &str, out: &mut Vec<(String, Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn obsolete_image_reads_cannot_replace_a_new_request_for_the_same_url() {
+        let mut resources = PreviewResources::default();
+        let url = "image.png".to_string();
+        let old = resources.begin(url.clone());
+        resources.retain(&HashSet::new());
+        let new = resources.begin(url.clone());
+        resources.complete(url.clone(), old, Err("obsolete read".into()));
+        assert_eq!(resources.pending.get(&url), Some(&new), "new read is still pending");
+        resources.complete(url.clone(), new, Err("current read".into()));
+        assert_eq!(resources.images[&url].as_ref().unwrap_err(), "current read");
+        resources.complete(url.clone(), old, Err("late obsolete read".into()));
+        assert_eq!(resources.images[&url].as_ref().unwrap_err(), "current read");
+        resources.retain(&HashSet::new());
+        resources.complete(url, new, Err("removed image".into()));
+        assert!(resources.images.is_empty(), "removed resources stay removed");
+    }
 
     #[test]
     fn document_links_resolve_without_launching_protocol_handlers() {
