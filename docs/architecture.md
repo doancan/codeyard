@@ -47,9 +47,10 @@ musl binary of about 1.5 MB.
 Compare Folders is three files: `compare_logic.rs` (matching two `HashTree` scans, plans, report; no UI), `compare_folders.rs` (the tab) and `workbench_compare.rs` (picker, trust gate, copies and deletes checked against the scan).
 
 `scripts/arch-check.sh` enforces size limits and only ever lowers them: `workbench.rs` ≤ 2600 lines,
-`editor.rs` ≤ 1700, `buffer/src/lib.rs` ≤ 1800, every other source file ≤ 1800 (`*_tests.rs` and test helpers ≤ 2500,
+`editor.rs` ≤ 1700, `buffer/src/lib.rs` ≤ 1800, every other source file ≤ 1500 (`*_tests.rs` and test helpers ≤ 2500,
 `tests.rs` and `qa_*_tests.rs` ≤ 6000), `Workbench` struct ≤ 80 lines. When a
-limit is hit, split the file instead of raising the limit.
+limit is hit, split the file instead of raising the limit. Inline test modules longer than a screen go in a file of
+their own beside the code (`host/src/tests.rs`, `settings_tests.rs`), so a limit measures the code itself.
 
 Test-only accessors (`*_for_test`) are in `workbench_testing.rs`, in a topic's own test-only module
 (`workbench_debug_testing.rs`) and in the editor's own files; tests never reach into private state any other way.
