@@ -19,6 +19,7 @@ was retained. Both sides of the translation-table conflicts were preserved.
 | Updates | Signed manifests, per-asset hashes and replay tracking are implemented; mocked signing/notarization tests exist. | Run verification and credential-cleanup tests. |
 | Release tooling | Both signing scripts reject OpenSSL 4 solely because its version does not start with 3. | Check for `pkeyutl -rawin` support; retain actual Ed25519 signing and verification. |
 | Dependency coverage | GitHub flags `grid 0.18.0` through GPUI/Taffy for GHSA-38c5-483c-4qqp, while the RustSec scan passes. | Update Taffy to compatible 0.9.2, resolve fixed grid and ban affected versions in cargo-deny. |
+| Benchmark isolation | Normal memory scenes also open the first-run update question, including its extra native-window buffers. Main measures 89 MB for terminal and 99 MB for plain text; develop measures 78/89 MB after choosing manual updates. | Isolate normal editor measurements; add a separate first-run question scene without raising existing budgets. |
 | Test isolation | Generic editor/workbench fixtures enable LSP and can launch installed servers while testing unrelated editing/debugging behavior. | Turn LSP off in generic fixtures; explicitly enable it in LSP integration tests. |
 | Maintainability | Topic files and state groups are enforced by `arch-check.sh`; theme tokens and settings catalogs are sources of truth. | Keep limits unchanged; centralize preview policy. |
 | Documentation | Contributing/platform/architecture documents still describe experimental Linux CI and unverified notarization, although CI and release evidence have advanced. | Align statements with current workflows and recorded evidence. |
@@ -54,4 +55,32 @@ and [accessibility](accessibility.md). Green automated checks do not establish t
 - The first full workspace run found the translation-template merge ordering error and 13
   performance/process timing failures while other builds were running. The template was regenerated;
   the scripted debugger scenario passed independently in 1.28 seconds. Generic fixture LSP launches
-  were removed. Final full-suite and platform results will be recorded before merge.
+  were removed. Both subsequent complete local runs passed 1,516 tests, with zero failures and three
+  deliberate manual/data-dependent ignores. The second run includes Taffy 0.9.2 / grid 1.0.1:
+  `CODEYARD_REQUIRE_SSHD=1 CODEYARD_TEST_TIMEOUT_SCALE=3 cargo test --locked --workspace`.
+- `scripts/memcheck.sh` passed with isolated editor scenes on the local Retina Mac. Measurements:
+
+| Scene | Measured | Budget |
+| --- | ---: | ---: |
+| Terminal | 78 MB | 85 MB |
+| Welcome | 78 MB | 85 MB |
+| Rust file | 96 MB | 125 MB |
+| 10k-line plain text | 89 MB | 95 MB |
+| 10k-line highlighted file | 119 MB | 130 MB |
+| First-run update question | 85 MB | 95 MB |
+| Idle remote agent | 2 MB | 8 MB |
+| App binary | 59 MB | 60 MB |
+| x86_64 Linux musl agent | 1,568 KB | 1,600 KB |
+| aarch64 Linux musl agent | 1,360 KB | 1,600 KB |
+
+Both Linux agents were rebuilt with cargo-zigbuild using the release-agent profile; a stale x64
+artifact from a different build had initially exceeded its size limit.
+
+The isolated release bundle starts and its main thread remains in the native event loop. A manual
+visual pass is pending: the desktop automation tool returned `Computer Use permissions are not granted`.
+This is not counted as a passed visual or screen-reader check. Automated Markdown checks cover wrapping,
+real wheel events, live source updates, safe navigation and resource errors.
+
+[PR #15](https://github.com/doancan/codeyard/pull/15) carries the platform check results. Required gates are
+macOS tests and budgets, Windows native tests and standalone packaging, Linux libraries/agent and the Linux
+app workspace, plus dependency/license gates. Optional coverage is excluded from the merge requirement.

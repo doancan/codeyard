@@ -17,6 +17,10 @@ trap 'rm -rf "$TMP"' EXIT
 # old-folder-name migration from running on first start.
 export CODEYARD_STATE_DIR="$TMP/state"
 export CODEYARD_CONFIG_DIR="$TMP/config"
+# Normal scenes measure the editor after update preferences have been chosen. Otherwise the first-run
+# question opens another native window and silently adds its screen buffers to every scene below.
+mkdir -p "$CODEYARD_CONFIG_DIR"
+printf '{"update.check":"manual"}\n' > "$CODEYARD_CONFIG_DIR/settings.jsonc"
 # The runtime Dock icon costs ~3 MB; the budgets are for the app itself.
 export CODEYARD_NO_DOCK_ICON=1
 cp crates/app/testdata/big.rs "$TMP/big.txt"
@@ -84,6 +88,8 @@ measure "empty window (welcome screen)"       85
 measure "small Rust file (360 KB, in a repo)" 125 crates/app/src/workbench.rs
 measure "10k lines, plain text (507 KB)"      95 "$TMP/big.txt"
 measure "10k lines, syntax highlighting"     130 crates/app/testdata/big.rs
+# Keep the first-run window covered explicitly. A clean, undecided profile must never check the network.
+CODEYARD_CONFIG_DIR="$TMP/first-run-config" measure "first-run update question" 95
 
 # Remote agent: same protocol, as a local subprocess.
 CODEYARD_DEV=1 "$APP" --connect agent-stdio >/dev/null 2>&1 &

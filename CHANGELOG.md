@@ -87,6 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Memory benchmarks measure normal editor scenes after choosing manual update checks and cover the first-run question
+  separately, so the question's extra native-window buffers do not inflate every editor measurement. Existing budgets stay unchanged.
 - Generic editor/workbench test fixtures no longer start installed language servers; language-server integration tests opt in explicitly.
 
 - Release signing and verification detect `pkeyutl -rawin` support instead of rejecting OpenSSL 4 by its version string.
