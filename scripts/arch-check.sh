@@ -11,8 +11,8 @@ check() { # file limit
   if [ "$n" -gt "$2" ]; then echo "FAIL $1: $n lines (limit $2)"; fail=1; else echo "ok   $1: $n / $2"; fi
 }
 # Known large files: limits sit just above today's size; lower them as files get split.
-check crates/app/src/workbench.rs 2750
-check crates/app/src/editor.rs 1800
+check crates/app/src/workbench.rs 2600
+check crates/app/src/editor.rs 1700
 check crates/buffer/src/lib.rs 1800
 # Every other source file (vendor and generated code excluded). New files that are not yet `git add`ed count too.
 files=$(git ls-files --cached --others --exclude-standard 'crates/*.rs') || { echo "arch-check: git ls-files failed (not a git checkout?)" >&2; exit 2; }
