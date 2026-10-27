@@ -9,7 +9,7 @@ body:
       value: |
         **Security problems:** do not file them here, use the private advisory link on the issue chooser (see SECURITY.md).
         **Title:** `[Bug] ` followed by what goes wrong ("Crash when …", "… is not saved"), at most **72 characters** in total.
-        **Labels:** exactly two: `type:` (set by this form) and one `area:` (set at triage). Priority, effort and dates are fields on the project board.
+        **Labels:** exactly three: `type:` (set by this form), one `area:` and one `env:` (set at triage). Priority, effort and dates are fields on the project board.
   - type: input
     id: version
     attributes:
