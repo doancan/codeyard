@@ -41,7 +41,8 @@ def next_status(current, *, closed, blocked, assigned, signal=None):
     if signal == "ci_passed":
         return "Test" if current == "In Review" else current
     if signal == "ci_failed":
-        return "In Progress" if current in ("In Review", "Test") else current
+        # Back to review, not to In Progress: the next green run must be able to move it on (#26).
+        return "In Review" if current == "Test" else current
     if signal == "pr_closed":
         return ("In Progress" if assigned else "Backlog") if current in ACTIVE else current
     if current == "Backlog" and assigned:

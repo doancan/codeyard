@@ -48,8 +48,9 @@ class IssueRules(unittest.TestCase):
             ("In Review", "ci_passed", "Test"),
             ("In Progress", "ci_passed", "In Progress"),  # a draft's green run is not a review
             ("Test", "ci_passed", "Test"),
-            ("Test", "ci_failed", "In Progress"),
-            ("In Review", "ci_failed", "In Progress"),
+            ("Test", "ci_failed", "In Review"),  # verified work is back to being reviewed, not restarted
+            ("In Review", "ci_failed", "In Review"),
+            ("In Progress", "ci_failed", "In Progress"),
             ("Backlog", "ci_failed", "Backlog"),
             ("In Review", "pr_closed", "In Progress"),
             ("Backlog", "pr_closed", "Backlog"),
@@ -57,6 +58,14 @@ class IssueRules(unittest.TestCase):
         for current, signal, expected in cases:
             self.assertEqual(next_status(current, closed=False, blocked=False, assigned=True, signal=signal), expected, (current, signal))
         self.assertEqual(next_status("Test", closed=False, blocked=False, assigned=False, signal="pr_closed"), "Backlog")
+
+    def test_a_green_run_after_a_red_one_reaches_test(self):
+        # #26: a red run must not leave a ready pull request's issue somewhere the next green run cannot move it from.
+        for start in ("In Review", "Test"):
+            status = start
+            for signal in ("ci_failed", "ci_passed"):
+                status = next_status(status, closed=False, blocked=False, assigned=True, signal=signal)
+            self.assertEqual(status, "Test", start)
 
     def test_every_result_is_a_board_status(self):
         for current in STATUSES:
