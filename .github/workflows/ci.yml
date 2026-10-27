@@ -4,6 +4,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      coverage:
+        description: Also run the optional instrumented coverage job
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -15,30 +20,75 @@ concurrency:
 
 jobs:
   macos:
+    needs: [macos-tests, macos-budgets]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require both macOS checks
+        env:
+          TESTS_RESULT: ${{ needs.macos-tests.result }}
+          BUDGETS_RESULT: ${{ needs.macos-budgets.result }}
+        run: |
+          echo "macOS tests: $TESTS_RESULT; memory/size budgets: $BUDGETS_RESULT"
+          test "$TESTS_RESULT" = success
+          test "$BUDGETS_RESULT" = success
+
+  macos-tests:
     runs-on: macos-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
+        with:
+          toolchain: stable
       # Xcode 26+ ships the Metal compiler as a separate download; older Xcodes already have it and may refuse the
       # download. So a failed download is only a warning, but the compiler must work afterwards: fail here with a
       # clear message instead of minutes later inside gpui's build.rs.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
+        with:
+          shared-key: ci-macos-tests
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       - name: Metal toolchain (GPUI shaders)
         run: |
-          xcodebuild -downloadComponent MetalToolchain || echo "::warning::xcodebuild -downloadComponent MetalToolchain failed"
+          if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
+            xcodebuild -downloadComponent MetalToolchain || echo "::warning::xcodebuild -downloadComponent MetalToolchain failed"
+          fi
           xcrun -sdk macosx metal --version || { echo "::error::The Metal compiler is not available: GPUI cannot compile its shaders"; exit 1; }
       - run: scripts/arch-check.sh   # also checks the vendor patches (scripts/check-gpui-patches.sh)
       - run: scripts/docs-check.sh
       - run: cargo fmt --all --check
       # Our crates only: the patched copies under vendor/ are not linted.
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       # macOS runners ship sshd: a skipped SSH test is a failure here, not a silent pass.
       # The scale only loosens the wall-clock budgets of the tests (debug builds on shared runners are several times
       # slower than a laptop); a quadratic blow-up still fails them.
-      - run: cargo test --workspace
+      - run: cargo test --locked --workspace
         env:
           CODEYARD_REQUIRE_SSHD: "1"
           CODEYARD_TEST_TIMEOUT_SCALE: "3"
+
+  macos-budgets:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      # Match bundle-macos.sh so its cached production dependencies can be reused.
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
+        with:
+          shared-key: app-macos
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+      - name: Metal toolchain (GPUI shaders)
+        run: |
+          if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
+            xcodebuild -downloadComponent MetalToolchain || echo "::warning::xcodebuild -downloadComponent MetalToolchain failed"
+          fi
+          xcrun -sdk macosx metal --version || { echo "::error::The Metal compiler is not available: GPUI cannot compile its shaders"; exit 1; }
       # What this step guards: the app binary size, the agent sizes and the idle agent daemon's memory do not depend
       # on the display, so they are enforced exactly. The window rows (terminal, welcome, files) are budgeted for
       # Retina and the runner has a 1x display, so they only catch gross regressions (they measure lower here).
@@ -51,7 +101,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
       - uses: EmbarkStudios/cargo-deny-action@v2
 
   # RustSec scan of Cargo.lock; accepted exceptions are in .cargo/audit.toml (scripts/audit.sh).
@@ -59,9 +109,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo install cargo-audit --locked
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
+        with:
+          toolchain: stable
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        with:
+          tool: cargo-audit
       - run: scripts/audit.sh
 
   # Licence files that every release artifact ships (and that bundle-windows.ps1 / codeyard.iss list the same way),
@@ -70,8 +124,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
+        with:
+          toolchain: stable
       - run: scripts/licenses.sh
       # Release signing and verification logic (good release, tampered asset, tampered sums, wrong key, missing signature).
       - run: scripts/verify-release.sh --self-test
@@ -81,23 +137,32 @@ jobs:
 
   # Optional coverage, started by hand only (takes minutes). The result is uploaded as an artifact.
   coverage:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.coverage == true
     runs-on: macos-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
         with:
+          toolchain: stable
           components: llvm-tools
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
+        with:
+          shared-key: ci-coverage
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       - name: Metal toolchain (GPUI shaders)
         run: |
-          xcodebuild -downloadComponent MetalToolchain || echo "::warning::xcodebuild -downloadComponent MetalToolchain failed"
+          if ! xcrun -sdk macosx metal --version >/dev/null 2>&1; then
+            xcodebuild -downloadComponent MetalToolchain || echo "::warning::xcodebuild -downloadComponent MetalToolchain failed"
+          fi
           xcrun -sdk macosx metal --version || { echo "::error::The Metal compiler is not available: GPUI cannot compile its shaders"; exit 1; }
-      - run: cargo install cargo-llvm-cov --locked
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        with:
+          tool: cargo-llvm-cov
       - run: scripts/coverage.sh
         env:
           CODEYARD_REQUIRE_SSHD: "1"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2, Node.js 24
         with:
           name: coverage
           path: coverage/
@@ -109,39 +174,41 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
         with:
+          toolchain: stable
           targets: x86_64-unknown-linux-musl
-      - run: cargo test -p proto -p agent -p host -p buffer -p state -p syntax -p theme
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
+        with:
+          shared-key: ci-linux
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+      - run: cargo test --locked -p proto -p agent -p host -p buffer -p state -p syntax -p theme
       # The shipped Linux agents are built with cargo-zigbuild (release.yml, docs/releasing.md), so the size gate builds
       # the same way. A plain `cargo build` with the system linker produces a static-PIE (+170 KB of relocations) and
       # measures ~1.7 MB: not the artifact users get. pip installs cargo-zigbuild together with zig.
       - run: pip3 install --user cargo-zigbuild
-      - run: cargo zigbuild --profile release-agent -p agent --target x86_64-unknown-linux-musl
+      - run: cargo zigbuild --locked --profile release-agent -p agent --target x86_64-unknown-linux-musl
       - name: Agent size budget
         run: |
           SIZE=$(du -k target/x86_64-unknown-linux-musl/release-agent/codeyard-agent | cut -f1)
           echo "agent: ${SIZE} KB (budget 1600 KB)"
           test "$SIZE" -le 1600
 
-  # Experimental: the full workspace, GPUI included, on Linux. Not a gate: it may fail without
-  # blocking a merge. The package list is derived from the Linux dependencies of vendor/gpui
-  # (xkbcommon links libxkbcommon and libxkbcommon-x11; xcb, fontconfig and freetype are
-  # linked or probed through pkg-config) and has not been confirmed on a runner yet.
-  #
-  # Policy: experimental and NON-BLOCKING. `continue-on-error` makes this job report green even when it fails,
-  # so the last step turns a failure into a warning annotation and a summary line; look at it, but a merge never
-  # waits for it and it must not be added to the required checks. Remove `continue-on-error` (and the report
-  # step) once it has passed on a runner a few times in a row.
+  # Full workspace and GPUI on Linux. Promoted after four consecutive successful
+  # workspace test runs; failures now fail CI instead of being converted to warnings.
   linux-app:
-    name: linux-app (experimental, non-blocking)
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
+        with:
+          shared-key: ci-linux-app
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       - name: GPUI build dependencies
         run: |
           sudo apt-get update
@@ -151,23 +218,55 @@ jobs:
             libfontconfig-dev libfreetype-dev libwayland-dev libvulkan-dev
       # The scale only loosens the wall-clock budgets of the tests (debug builds on shared runners are several times
       # slower than a laptop); a quadratic blow-up still fails them.
-      - run: cargo test --workspace
+      - run: cargo test --locked --workspace
         env:
           CODEYARD_REQUIRE_SSHD: "1"
           CODEYARD_TEST_TIMEOUT_SCALE: "3"
-      - name: Report experimental failure
-        if: failure()
-        run: |
-          echo "::warning title=linux-app (experimental)::the Linux GPUI build or test run failed; not a gate, see the job log"
-          echo "linux-app (experimental, non-blocking) FAILED: see the log of this job" >> "$GITHUB_STEP_SUMMARY"
 
   # The same checks run locally with scripts/check-windows.ps1.
   windows:
+    needs: [windows-tests, windows-standalone]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require native tests and standalone release checks
+        env:
+          TESTS_RESULT: ${{ needs.windows-tests.result }}
+          STANDALONE_RESULT: ${{ needs.windows-standalone.result }}
+        run: |
+          echo "Windows tests: $TESTS_RESULT; standalone release: $STANDALONE_RESULT"
+          test "$TESTS_RESULT" = success
+          test "$STANDALONE_RESULT" = success
+
+  windows-tests:
     runs-on: windows-2022
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
+        with:
+          shared-key: ci-windows
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       - name: Windows native checks
         shell: pwsh
-        run: ./scripts/check-windows.ps1
+        run: ./scripts/check-windows.ps1 -SkipStandalone
+
+  windows-standalone:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
+        with:
+          shared-key: app-windows
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+      - name: Build and validate the standalone release EXE
+        shell: pwsh
+        run: ./scripts/build-windows.ps1 -Profile Release

@@ -28,22 +28,15 @@ so tag builds can restore the default branch cache. App and agent jobs use separ
 
 ## Windows cross-compilation benchmark
 
-`.github/workflows/benchmark-windows.yml` compares native `windows-2022` with Linux `cargo-xwin` using the same commit,
-release profile, x64 MSVC target, embedded Linux agents and FXC-generated shader bytes. Each job starts without a target
-cache, measures a cold build, removes only the app package, and measures a build with compiled dependencies retained.
-Linux uses LLVM 19 MSVC driver aliases and cargo-xwin 0.23.1; its x64 SDK cache is saved before compilation, even if a later
-build fails. Only SDK files are restored: compiled Rust targets are never restored for this benchmark. The optional
-`host=linux` workflow input reruns only the Linux arm when investigating cross toolchains. `host=prepare` checks shader/agent
-preparation and upload/download roundtrips without compiling either app. Release and benchmark checkout/artifact/cache actions
-use commit-pinned Node.js 24 versions, so their jobs do not rely on the retired Node.js 20 runtime.
-SDK/tool installation and dependency downloads are separate steps, outside the compiler timer; include them when comparing
-whole job latency. Runner CPU counts and Rust versions are recorded in `benchmark.json`. These are runner comparisons,
-not a controlled comparison on identical hardware. Both executables undergo native Windows standalone checks.
+The one-off comparison of native Windows MSVC compilation with Linux `cargo-xwin` is complete. Its standalone
+benchmark workflow and timing helper have been retired; normal CI/release jobs do not depend on them. The measured
+source/configuration can be inspected at commit `3dd4b71`, and the results, input hashes and run links remain below.
 
-The Linux path needs `GPUI_PRECOMPILED_SHADERS` pointing to `shaders_bytes.rs` generated from this checkout's vendored
-GPUI HLSL by FXC. The benchmark generates it with the vendored build helper on Windows. GPUI's Windows manifest and the
-app icon are still compiled into the cross-built EXE. This benchmark does not publish artifacts as a release or replace
-the production Windows ZIP/installer job; installer packaging and interactive UI validation remain separate.
+The experiment used cargo-xwin 0.23.1 and LLVM 19 on Linux, the same release profile and x64 MSVC target on both hosts,
+identical embedded Linux agents and FXC-generated shader bytes, and cold plus dependency-cached app builds. SDK/tool
+installation was outside the compiler timer. Both executables passed native Windows GUI/icon/embedded-agent checks.
+GPUI's `GPUI_PRECOMPILED_SHADERS` support remains available for future cross builds; the production Windows ZIP/installer
+continues to be packaged natively. Interactive rendering was not tested by the benchmark.
 
 ### Measured on 2026-10-26
 
