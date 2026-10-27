@@ -582,15 +582,15 @@ The "…" menu and the palette also have *Pull (Rebase)*, *Pull from…* (pick a
 *Push to…* (pick a remote), *Fetch (All Remotes)* and *Publish Branch*, and the commit variants
 *Commit Signed Off* (`-s`), *Commit (No Verify)* (skips hooks), *Commit & Push* and *Commit & Sync*.
 
-These settings change the behaviour: `"git.confirmSync"` (default true: Sync asks before it pulls or
-pushes), `"git.rebaseWhenSync"` (pull with rebase), `"git.pruneOnFetch"` (default true), `"git.pullTags"`
+These settings change the behaviour: `"git.confirmSync"` (default false: Sync pulls and pushes at once; on, it asks
+first), `"git.rebaseWhenSync"` (pull with rebase), `"git.pruneOnFetch"` (default true), `"git.pullTags"`
 (default true), `"git.fetchOnPull"` (fetch every remote before pulling), `"git.postCommitCommand"`
 (`none`, `push` or `sync` after each commit), `"git.enableSmartCommit"` (default true: with nothing
 staged the commit button commits all tracked changes; off, it asks you to stage first) and
 `"git.autofetch"` with `"git.autofetchPeriod"` (off by default; fetches in the background every 180 s
 or more while the window is in front, never in a folder you have not trusted, and a failure only
 shows in the sync item's tooltip). `git.confirmSync` and `git.postCommitCommand` are read from your
-own settings only: a repository cannot turn the question off or make your commits push by themselves.
+own settings only: a repository cannot turn the question on or off or make your commits push by themselves.
 
 ## Projects, favorites, bookmarks, tasks
 

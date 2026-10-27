@@ -237,7 +237,7 @@ fn menus_follow_the_language() {
         let _g = LangGuard::set(lang);
         let desktop = menu_labels(&crate::menus::desktop_menus(&recents));
         let native = menu_labels(&crate::menus::menus(&recents));
-        let dock = menu_labels(&[Menu { name: "dock".into(), items: crate::menus::dock_items(&recents) }]);
+        let dock = menu_labels(&[Menu { name: "dock".into(), items: crate::menus::dock_items(&[], &recents) }]);
         for (what, labels) in [("desktop", &desktop), ("native", &native)] {
             for want in [file, edit, view, source_control] {
                 assert!(labels.iter().any(|l| l == want), "{lang}/{what}: {want} missing in {labels:?}");
@@ -294,7 +294,7 @@ fn known_english_keys(cx: &mut TestAppContext) -> BTreeSet<String> {
     known.extend(menu_labels(&crate::menus::menus(&recents)));
     known.extend(menu_labels(&crate::menus::menus(&[])));
     known.extend(menu_labels(&crate::menus::desktop_menus(&recents)));
-    known.extend(menu_labels(&[Menu { name: "dock".into(), items: crate::menus::dock_items(&recents) }]));
+    known.extend(menu_labels(&[Menu { name: "dock".into(), items: crate::menus::dock_items(&[], &recents) }]));
     known.extend(source_keys());
     // Names from test data (fake dock menu, sample folder, product name) aren't text to translate.
     for not_text in ["dock", "y", "codeyard"] {

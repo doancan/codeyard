@@ -233,6 +233,7 @@ Color Theme…
 Color matching brackets by nesting depth	
 Color symbols by their meaning, from the language server	
 Color theme of the whole window and the editor	
+Colored file glyphs, folders with only their arrow; names line up	
 Colorful Folders	
 Column {0}: {1}	
 Command Palette	
@@ -703,6 +704,7 @@ Fetched
 Fetching in the background: try again in a moment.	
 Fetching…	
 File	
+File Glyphs	
 File Icon Theme	
 File Icon Theme…	
 File and folder icons	

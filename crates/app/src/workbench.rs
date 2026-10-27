@@ -2230,7 +2230,7 @@ impl Workbench {
     }
 
     pub(crate) fn open_recent(&mut self, r: RecentWorkspace, window: &mut Window, cx: &mut Context<Self>) {
-        // If already open in another window, switch to it instead of making a second copy (like VS Code).
+        // If already open in another window, switch to it instead of making a second copy.
         let me = window.window_handle();
         let key = Some((r.host.clone(), r.path.clone()));
         let open_elsewhere = cx
@@ -2370,15 +2370,24 @@ impl Workbench {
         )
     }
 
-    /// VS Code layout: `● file — folder — ssh-host` (● unsaved).
-    fn update_title(&mut self, window: &mut Window, cx: &App) {
+    /// Title layout: `● file — folder — ssh-host` (● unsaved).
+    fn update_title(&mut self, window: &mut Window, cx: &mut App) {
         let remote = self.remote.host.is_remote().then(|| self.remote.host.label());
         let parts: Vec<String> = [self.title_text(cx), remote].into_iter().flatten().collect();
         let title = if parts.is_empty() { "codeyard".to_string() } else { parts.join(" — ") };
         if title != self.title {
             window.set_window_title(&title);
             self.title = title;
+            // The Dock menu lists the open windows by title.
+            #[cfg(target_os = "macos")]
+            crate::menus::refresh_dock_windows(cx);
         }
+    }
+
+    /// The window's title as last set (the Dock menu's window rows).
+    #[cfg(target_os = "macos")]
+    pub(crate) fn window_title(&self) -> &str {
+        &self.title
     }
 }
 
