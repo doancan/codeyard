@@ -11,6 +11,7 @@ import datetime
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 
 OWNER, REPO, PROJECT = "doancan", "codeyard", 2
@@ -247,7 +248,13 @@ def main(argv):
         return 0
     mode = argv[1] if len(argv) > 1 else ""
     gh = GitHub(token, dry_run="--dry-run" in argv)
-    board = Board(gh)
+    try:
+        board = Board(gh)
+    except urllib.error.HTTPError as e:
+        if e.code != 401:
+            raise
+        print("::error::GitHub rejected PROJECT_TOKEN (401): it is expired, revoked or not a token. Set a classic token with the `project` and `public_repo` scopes.")
+        return 1
     if mode == "reconcile":
         reconcile(board, gh)
         return 0
