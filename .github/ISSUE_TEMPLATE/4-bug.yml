@@ -8,7 +8,7 @@ body:
       value: |
         **Security problems:** do not file them here, use the private advisory link on the issue chooser (see SECURITY.md).
         **Title:** what goes wrong ("Crash when …", "… is not saved"), at most **78 characters**. No type prefix: the type label says it.
-        **Labels:** exactly three: the type (set by this form), one area and one environment (set at triage). Priority, effort and dates are fields on the project board.
+        **Labels:** two or three: the type (set by this form) and one area, plus one environment when it matters (set at triage). Priority, effort and dates are fields on the project board.
   - type: input
     id: version
     attributes:

@@ -7,7 +7,7 @@ body:
     attributes:
       value: |
         **Title:** an imperative summary ("Show …", "Pass …"), at most **78 characters**. No type prefix: the type label says it.
-        **Labels:** exactly three: the type (set by this form), one area and one environment (set at triage). Priority, effort and dates are fields on the project board.
+        **Labels:** two or three: the type (set by this form) and one area, plus one environment when it matters (set at triage). Priority, effort and dates are fields on the project board.
         **Relationships:** set the parent epic, sub-issues and *blocked by* in the sidebar, not in the text.
         Not sure yet what you want? Start a Discussion instead; a feature issue is a specification.
   - type: textarea
