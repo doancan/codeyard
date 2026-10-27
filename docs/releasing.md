@@ -90,7 +90,7 @@ warnings in `shaders` and `agents`; all release jobs also had zero such warnings
 9. Checksums and signature: `(cd dist && sha256sum * > ../SHA256SUMS.txt && mv ../SHA256SUMS.txt .)` (every asset except
    `SHA256SUMS.txt` and its `.sig`; add the Windows files first if you have them), then
    `UPDATE_SIGNING_KEY="$(cat ~/.codeyard-release-key/update-signing-key.pem)" scripts/sign-release.sh dist` and
-   `scripts/verify-release.sh --dir dist`. Use Homebrew OpenSSL 3 (`/opt/homebrew/bin`) on macOS: the system LibreSSL cannot sign.
+   `scripts/verify-release.sh --dir dist`. Use Homebrew OpenSSL 3 or newer (`/opt/homebrew/bin`) on macOS: the system LibreSSL cannot sign.
 10. `gh release create vX.Y.Z dist/* --title "vX.Y.Z" --notes-file dist/RELEASE_NOTES.md --verify-tag`. The title style is `v0.1.0`.
 11. Delete the untracked `agents/` and `dist/`.
 12. **Windows files.** The Windows ZIP and setup EXE are only built by the `windows` job of `release.yml`, which needs a Windows
@@ -196,7 +196,7 @@ it or put it in an artifact.
 
 `scripts/sign-release.sh <dir>` signs and verifies with the repo public key, so a wrong secret fails the job before anything is
 published. A tag build fails when the secret is empty or does not match the public key; the `verify` job checks that first, so the
-failure comes in a minute and not after the builds. OpenSSL 3 is required (`pkeyutl -rawin`); `ubuntu-latest` has it, macOS
+failure comes in a minute and not after the builds. OpenSSL with Ed25519 and `pkeyutl -rawin` is required (OpenSSL 3 or newer); `ubuntu-latest` has it, macOS
 `/usr/bin/openssl` is LibreSSL and does not.
 
 ### Verify a download

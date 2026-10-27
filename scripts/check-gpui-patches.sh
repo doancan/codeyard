@@ -13,6 +13,9 @@ absent() { # file pattern description
 }
 need vendor/gpui/Cargo.toml '^\[lints\.rust\]$' "[lints.rust] section"
 need vendor/gpui/Cargo.toml '^warnings = "allow"$' "warnings = \"allow\""
+need vendor/gpui/Cargo.toml '^version = "=0\.9\.2"$' "Taffy patch with fixed grid dependency"
+need vendor/gpui/src/platform.rs 'crate::swap_rgba_pa_to_bgra\(pixel\)' "SVG image channels and alpha match raster images"
+need vendor/gpui/src/elements/text.rs 'let Some\(mouse_down_index\) = mouse_down_on_up.take\(\)' "link click handlers share press state and clear cancellation"
 need vendor/gpui/src/platform/mac/metal_renderer.rs 'set_maximum_drawable_count\(2\)' "drawable count 2"
 absent vendor/gpui/src/platform/mac/metal_renderer.rs 'set_maximum_drawable_count\(3\)' "drawable count 3"
 need vendor/gpui/src/window.rs '^pub struct DispatchEventResult' "pub DispatchEventResult"

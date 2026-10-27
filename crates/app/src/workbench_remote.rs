@@ -96,6 +96,9 @@ impl Workbench {
     /// Lists running containers or WSL distributions in the background.
     fn list_targets(&mut self, group: Group, cx: &mut Context<Self>) {
         let wsl = group == Group::Wsl;
+        if !wsl && !cx.global::<Settings>().docker_enabled {
+            return;
+        }
         if wsl {
             self.remote.view.wsl = None;
         } else {
@@ -113,7 +116,7 @@ impl Workbench {
             this.update(cx, |this, cx| {
                 if wsl {
                     this.remote.view.wsl = Some(listed);
-                } else {
+                } else if cx.global::<Settings>().docker_enabled {
                     this.remote.view.containers = Some(listed);
                 }
                 cx.notify();
@@ -151,6 +154,7 @@ impl Workbench {
             containers: self.remote.view.containers.as_ref(),
             wsl: self.remote.view.wsl.as_ref(),
             show_wsl: cfg!(windows),
+            show_containers: cx.global::<Settings>().docker_enabled,
             toggled: &self.remote.view.toggled,
             current_root: root.as_deref(),
             ports,

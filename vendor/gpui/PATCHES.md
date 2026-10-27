@@ -7,8 +7,11 @@ It is used through `[patch.crates-io]` in the root `Cargo.toml`. The patches bel
 | --- | --- | --- |
 | build.rs, Cargo.toml | Windows build helper also runs on cross hosts; optional `GPUI_PRECOMPILED_SHADERS` supplies same-source FXC output | benchmark Linux → Windows MSVC while retaining manifest embedding |
 | Cargo.toml | `[lints.rust] warnings = "allow"` | keep upstream warnings out of the build output |
+| Cargo.toml | pin Taffy to `=0.9.2` | compatible patch moves layout storage to fixed `grid >=1.0.1`; older grid has integer-overflow UB ([GHSA-38c5-483c-4qqp](https://github.com/becheran/grid/security/advisories/GHSA-38c5-483c-4qqp)). `deny.toml` rejects vulnerable grid versions. |
 | src/platform/mac/metal_renderer.rs | `set_maximum_drawable_count(3)` → `2` | saves ~16 MB of screen buffers per window on Retina.  Measured: budget table in docs/architecture.md (`scripts/memcheck.sh`). |
 | src/window.rs | `DispatchEventResult` `pub(crate)` → `pub` | `Window::dispatch_event` is already pub, but its return type could not be named. Needed to send mouse events to a real window from inside the app (`--do drag:…`) |
+| src/platform.rs | Convert SVG image pixels from premultiplied RGBA to straight BGRA | SVG file/Markdown previews otherwise swap red and blue and darken translucent pixels. Matches the existing SVG resource decoder. |
+| src/elements/text.rs | Register both link click handlers per frame, accept only left clicks, clear cancelled presses | Right-clicks followed links and a release before the next paint could be lost. A cancelled press must not survive to a later release. |
 
 `vendor/xattr` is patched the same way (`libc::ENOATTR` does not exist on Linux, `ENODATA` is used); it has nothing to do with
 GPUI, but the same script checks it. Update the table and `scripts/check-gpui-patches.sh` together; the script runs from
@@ -25,8 +28,11 @@ GPUI, but the same script checks it. Update the table and `scripts/check-gpui-pa
 3. **Re-apply the patches** (table above):
    - `Cargo.toml`: add `warnings = "allow"` to a `[lints.rust]` section (upstream may already have
      `[lints.rust.unexpected_cfgs]`; add a separate `[lints.rust]` table or merge).
+   - `Cargo.toml`: retain Taffy `=0.9.2` or verify an upgraded layout engine uses a fixed `grid` version.
    - `src/platform/mac/metal_renderer.rs`: `layer.set_maximum_drawable_count(3)` → `(2)`.
    - `src/window.rs`: `pub(crate) struct DispatchEventResult` → `pub struct` (with a doc line).
+   - `src/platform.rs`: preserve the SVG image pixel conversion; the app's `svg_pixels_use_the_same_bgra_channels_and_straight_alpha_as_raster_images` test checks it.
+   - `src/elements/text.rs`: retain same-frame link press/release handlers and cancellation; `markdown_links_open_local_files_with_one_fast_left_click` covers them.
    - Run `scripts/check-gpui-patches.sh`: everything must say `ok`. If upstream now contains a patch itself or moved the code,
      update the pattern in the script and this table.
 4. **Build and check** (merge only when all are green): `cargo build -p app`, `cargo clippy --workspace --all-targets -- -D warnings`,

@@ -366,9 +366,9 @@ fn the_remote_explorer_shows_the_live_connection_its_folder_and_ports(cx: &mut T
     let rows = wb.read_with(cx, |w, cx| w.remote_rows_for_test(cx));
     assert!(rows.contains(&"ports".to_string()) && rows.contains(&format!("port:{remote}")), "{rows:?}");
 
-    // Collapsing the host hides its folders; the other groups stay closed until opened.
+    // Collapsing the host hides its folders; the disabled container module stays hidden.
     wb.update(cx, |w, cx| w.toggle_remote_for_test(&format!("host:{}", crate::test_sshd::ALIAS), cx));
     let rows = wb.read_with(cx, |w, cx| w.remote_rows_for_test(cx));
     assert!(!rows.iter().any(|r| r.starts_with("folder:")), "{rows:?}");
-    assert!(rows.contains(&"group:containers:closed".to_string()), "{rows:?}");
+    assert!(!rows.iter().any(|r| r.starts_with("group:containers")), "{rows:?}");
 }

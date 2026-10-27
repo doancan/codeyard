@@ -20,7 +20,7 @@ fn tmp(name: &str, content: &[u8]) -> PathBuf {
 }
 
 fn setup(cx: &mut TestAppContext) -> (Entity<Workbench>, &mut VisualTestContext) {
-    setup_with_settings(cx, crate::settings::Settings::default())
+    setup_with_settings(cx, crate::settings::Settings { lsp_enabled: false, ..Default::default() })
 }
 
 fn setup_with_settings(cx: &mut TestAppContext, settings: crate::settings::Settings) -> (Entity<Workbench>, &mut VisualTestContext) {
@@ -665,12 +665,186 @@ fn markdown_preview_follows_the_editor(cx: &mut TestAppContext) {
     assert_eq!(blocks(cx).len(), 2);
     assert!(matches!(&blocks(cx)[0], crate::markdown::Block::Heading(1, _)));
 
-    // Return to the editor and type: the preview sees the new block.
-    wb.update_in(cx, |wb, window, cx| wb.focus_active_editor(window, cx));
+    // Escape restores the source editor, keeping the preview available.
+    cx.simulate_keystrokes("escape");
+    assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), Some(("markdown", false)));
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Markdown: Open Preview", window, cx));
+    assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), Some(("markdown", true)));
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Markdown: Open Preview", window, cx));
+    assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), Some(("markdown", false)));
+
+    // Type in the restored editor: the preview sees the new block.
     cx.simulate_keystrokes("cmd-down");
     cx.simulate_input("- madde bir\n- madde iki\n");
     assert_eq!(blocks(cx).len(), 3);
     assert!(matches!(&blocks(cx)[2], crate::markdown::Block::List { items, .. } if items.len() == 2));
+}
+
+/// Markdown and standalone image tabs reject the same unsafe resources.
+#[gpui::test]
+fn markdown_images_obey_the_same_pixel_limit_as_image_tabs(cx: &mut TestAppContext) {
+    let dir = project("md-image-limit");
+    let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
+    png.extend(30_000u32.to_be_bytes());
+    png.extend(30_000u32.to_be_bytes());
+    std::fs::write(dir.join("huge.png"), png).unwrap();
+    std::fs::write(dir.join("ok.svg"), br#"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"/>"#).unwrap();
+    std::fs::write(dir.join("doc.md"), "![huge](huge.png)\n\n![ok](ok.svg)\n\n![external](https://example.invalid/image.png)\n").unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir.join("doc.md"), cx);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Markdown: Open Preview", window, cx));
+    cx.run_until_parked();
+    let images = wb.read_with(cx, |wb, cx| wb.markdown_images_for_test(cx)).unwrap();
+    assert!(images["huge.png"].as_ref().is_err_and(|e| e.contains("too large")), "oversized image must not reach the decoder: {images:?}");
+    assert_eq!(images["ok.svg"], Ok(()));
+    assert!(images["https://example.invalid/image.png"].is_err(), "external resources stay offline");
+}
+
+/// The preview must overflow its viewport and respond to real wheel input.
+#[gpui::test]
+fn markdown_preview_scrolls_long_documents(cx: &mut TestAppContext) {
+    let dir = project("md-scroll");
+    let document = (0..100).map(|i| format!("## Section {i}\n\nParagraph {i}: some readable content.\n\n")).collect::<String>();
+    std::fs::write(dir.join("long.md"), document).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir.join("long.md"), cx);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Markdown: Open Preview", window, cx));
+    cx.run_until_parked();
+    let scroll = wb.read_with(cx, |wb, cx| wb.markdown_scroll_for_test(cx)).unwrap();
+    assert!(scroll.max_offset().height > gpui::px(1000.), "document has scrollable height: {:?}", scroll.max_offset());
+    let at = scroll.bounds().center();
+    cx.simulate_event(gpui::ScrollWheelEvent {
+        position: at,
+        delta: gpui::ScrollDelta::Pixels(gpui::point(gpui::px(0.), gpui::px(-300.))),
+        modifiers: Modifiers::none(),
+        touch_phase: gpui::TouchPhase::Moved,
+    });
+    cx.run_until_parked();
+    assert!(scroll.offset().y < gpui::px(-100.), "wheel moves the document: {:?}", scroll.offset());
+}
+
+/// List text retains the document width when placed inside the scrolling column.
+#[gpui::test]
+fn markdown_list_items_keep_their_width(cx: &mut TestAppContext) {
+    let dir = project("md-list-layout");
+    let item = "**No extensions.** There is no extension API and no store. Features that people usually install an extension for are built in. ".repeat(4);
+    std::fs::write(dir.join("list.md"), format!("# Title\n\nIntroduction.\n\n- {item}\n- Second item.\n\nAfter the list.\n")).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir.join("list.md"), cx);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Markdown: Open Preview", window, cx));
+    cx.run_until_parked();
+    let first = cx.debug_bounds("md2-item-0").unwrap();
+    let row = cx.debug_bounds("md2-row-0").unwrap();
+    let second = cx.debug_bounds("md2-row-1").unwrap();
+    assert!(first.size.width > gpui::px(300.), "list text must use document width: {first:?}");
+    assert!(first.size.height > gpui::px(44.), "long list text wraps to multiple readable lines: {first:?}");
+    assert!(row.bottom() <= second.top(), "list rows must not overlap: {row:?}, {second:?}");
+}
+
+/// A click can begin and end before another frame is painted; links still need to open the local file.
+#[gpui::test]
+fn markdown_links_open_local_files_with_one_fast_left_click(cx: &mut TestAppContext) {
+    let dir = project("md-link-click");
+    std::fs::write(dir.join("README.md"), "# Title\n\n[a local document](child.md)\n").unwrap();
+    std::fs::write(dir.join("child.md"), "# Linked document\n").unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir.join("README.md"), cx);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Markdown: Open Preview", window, cx));
+    cx.run_until_parked();
+    let layouts = crate::markdown::text_layouts_for_test();
+    let link = layouts.iter().find(|layout| layout.text() == "a local document").unwrap();
+    let at = link.position_for_index(2).unwrap() + gpui::point(gpui::px(1.), gpui::px(1.));
+    cx.simulate_mouse_down(at, MouseButton::Right, Modifiers::none());
+    cx.simulate_mouse_up(at, MouseButton::Right, Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.active_editor_entity().unwrap().read(cx).name.to_string()), "README.md", "right-click does not follow a link");
+    cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::none());
+    cx.simulate_mouse_up(gpui::point(gpui::px(0.), gpui::px(0.)), MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.active_editor_entity().unwrap().read(cx).name.to_string()), "README.md", "releasing outside cancels the click");
+    cx.simulate_mouse_up(at, MouseButton::Left, Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(
+        wb.read_with(cx, |wb, cx| wb.active_editor_entity().unwrap().read(cx).name.to_string()),
+        "README.md",
+        "a cancelled gesture cannot follow a link on a later release"
+    );
+    // One window update deliberately allows no intervening paint between press and release.
+    cx.update(|window, cx| {
+        window.dispatch_event(
+            gpui::PlatformInput::MouseDown(gpui::MouseDownEvent {
+                button: MouseButton::Left,
+                position: at,
+                modifiers: Modifiers::none(),
+                click_count: 1,
+                first_mouse: false,
+            }),
+            cx,
+        );
+        window.dispatch_event(
+            gpui::PlatformInput::MouseUp(gpui::MouseUpEvent { button: MouseButton::Left, position: at, modifiers: Modifiers::none(), click_count: 1 }),
+            cx,
+        );
+    });
+    cx.run_until_parked();
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.active_editor_entity().unwrap().read(cx).name.to_string()), "child.md");
+}
+
+/// Guard actual shaped text, not just its parent bounds: narrow glyph wrapping can overflow a wide parent.
+#[gpui::test]
+fn markdown_long_paragraphs_wrap_inside_the_document(cx: &mut TestAppContext) {
+    let dir = project("md-paragraph-layout");
+    let paragraph = "The document remains readable while scrolling. ".repeat(20);
+    let document =
+        format!("# Title\n\n[Jump to details](#details)\n\n{}\n\n## Details\n\nEnd.\n", (0..8).map(|_| paragraph.clone()).collect::<Vec<_>>().join("\n\n"));
+    std::fs::write(dir.join("README.md"), document).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir.join("README.md"), cx);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Markdown: Open Preview", window, cx));
+    cx.run_until_parked();
+    for width in [1280., 2560.] {
+        cx.simulate_resize(gpui::size(gpui::px(width), gpui::px(800.)));
+        cx.run_until_parked();
+        let document = cx.debug_bounds("markdown-document").unwrap();
+        let layouts = crate::markdown::text_layouts_for_test();
+        for text in layouts.iter().filter(|layout| layout.text().starts_with("The document remains")) {
+            assert!(text.bounds().right() <= document.right(), "paragraph must not overflow the document: {:?}, {document:?}", text.bounds());
+            let shaped = text.line_layout_for_index(0).unwrap();
+            assert!(
+                shaped.width() <= text.bounds().size.width + gpui::px(1.),
+                "glyph wrapping must fit the assigned width, also after resize: {:?} > {:?}",
+                shaped.width(),
+                text.bounds()
+            );
+        }
+    }
+}
+
+/// Guard actual shaped text, not just its parent bounds: narrow glyph wrapping can overflow a wide parent.
+#[gpui::test]
+fn markdown_readme_lists_shape_at_readable_width(cx: &mut TestAppContext) {
+    let dir = project("md-readme-layout");
+    std::fs::write(dir.join("README.md"), include_str!("../../../README.md")).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir.join("README.md"), cx);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Markdown: Open Preview", window, cx));
+    cx.run_until_parked();
+    let check = || {
+        let layouts = crate::markdown::text_layouts_for_test();
+        let list = layouts.iter().find(|layout| layout.text().starts_with("No extensions.")).expect("README list paragraph rendered");
+        assert!(list.wrapped_text().lines().all(|line| line.chars().count() > 1), "list must not wrap character by character: {:?}", list.wrapped_text());
+        assert!(list.wrapped_text().lines().count() < 12, "list should wrap to a few lines: {:?}", list.wrapped_text());
+    };
+    check();
+    let scroll = wb.read_with(cx, |wb, cx| wb.markdown_scroll_for_test(cx)).unwrap();
+    cx.simulate_event(gpui::ScrollWheelEvent {
+        position: scroll.bounds().center(),
+        delta: gpui::ScrollDelta::Pixels(gpui::point(gpui::px(0.), gpui::px(-400.))),
+        modifiers: Modifiers::none(),
+        touch_phase: gpui::TouchPhase::Moved,
+    });
+    cx.run_until_parked();
+    check();
 }
 
 /// OUTLINE: the active file's symbols; updates as you type (with a short delay).
@@ -1922,7 +2096,7 @@ fn language_server_diagnostics_follow_edits(cx: &mut TestAppContext) {
     std::fs::create_dir_all(&dir).unwrap();
     let dir = std::fs::canonicalize(dir).unwrap();
     std::fs::write(dir.join("main.c"), "int main(void) {\n    return yok;\n}\n").unwrap();
-    let (wb, cx) = setup(cx);
+    let (wb, cx) = setup_with_settings(cx, crate::settings::Settings::default());
     open(&wb, &dir.join("main.c"), cx);
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
     wait_for(cx, "tanı", |cx| ed.read_with(cx, |e, _| !e.diagnostics().is_empty()));
@@ -1957,7 +2131,7 @@ fn language_server_completion_hover_definition(cx: &mut TestAppContext) {
     let dir = std::fs::canonicalize(dir).unwrap();
     let src = "struct nokta { int xeksen; int yeksen; };\n/* iki sayıyı toplar */\nint topla(int a, int b) { return a + b; }\nint main(void) {\n    struct nokta n = {1, 2};\n    return topla(n.xeksen, 0);\n}\n";
     std::fs::write(dir.join("main.c"), src).unwrap();
-    let (wb, cx) = setup(cx);
+    let (wb, cx) = setup_with_settings(cx, crate::settings::Settings::default());
     open(&wb, &dir.join("main.c"), cx);
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
     wait_for(cx, "sunucu bağlandı", |cx| ed.read_with(cx, |e, _| e.lsp_client().is_some()));
@@ -2645,7 +2819,7 @@ fn language_server_rename_references_symbols_fix_format_signature(cx: &mut TestA
         format!(r#"[{{"directory":"{d}","file":"{d}/main.c","arguments":["cc","-I.","-c","main.c"]}},{{"directory":"{d}","file":"{d}/lib.c","arguments":["cc","-I.","-c","lib.c"]}}]"#),
     )
     .unwrap();
-    let (wb, cx) = setup(cx);
+    let (wb, cx) = setup_with_settings(cx, crate::settings::Settings::default());
     open(&wb, &dir.join("main.c"), cx);
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
     let text = |cx: &mut VisualTestContext| ed.read_with(cx, |e, _| e.text());
@@ -4151,7 +4325,7 @@ fn settings_and_shortcuts_pickers_write_the_files(cx: &mut TestAppContext) {
     cx.run_until_parked();
     let keys = std::fs::read_to_string(cfg.join("keybindings.jsonc")).unwrap();
     assert!(keys.contains(r#"{ "key": "", "command": "git.stashPopLatest" },"#), "{keys}");
-    assert_eq!(wb.read_with(cx, |wb, cx| wb.active_path(cx)), Some(cfg.join("keybindings.jsonc").to_string_lossy().into_owned()));
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.active_path(cx)), Some(crate::ui::local_path(&cfg.join("keybindings.jsonc"))));
 }
 
 #[gpui::test]

@@ -455,7 +455,7 @@ impl Workbench {
             };
             if flex_taken {
                 let h = self.sections.height(id, default_h);
-                let sash = sections::sash(SharedString::from(format!("sash-{id}")), p).on_mouse_down(
+                let sash = sections::sash(SharedString::from(format!("sash-{id}")), p, self.sections.dragging_section(id)).on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |this, ev: &gpui::MouseDownEvent, _, cx| {
                         cx.stop_propagation();
