@@ -121,6 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Licence metadata encoding tests run with the macOS system Python without relying on private subprocess APIs.
 - Outline and Timeline resize from the line above their headers, using their actual displayed height. The 28 px status
   bar has larger icons and keeps resource controls visible when long branch names or messages meet a narrow window.
 - Long Git/context menus keep full-height rows and scroll the keyboard selection into view.

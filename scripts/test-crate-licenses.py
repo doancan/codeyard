@@ -14,8 +14,14 @@ class CargoEncodingTests(unittest.TestCase):
     def run_script(self, payload, returncode=0):
         script = pathlib.Path(__file__).with_name("crate-licenses.py")
         real_run = subprocess.run
+        real_popen = subprocess.Popen
         output = io.StringIO()
         stderr = io.StringIO()
+
+        def legacy_popen(*args, **kwargs):
+            if kwargs.get("text") or kwargs.get("universal_newlines"):
+                kwargs.setdefault("encoding", "cp1252")
+            return real_popen(*args, **kwargs)
 
         def cargo(command, **kwargs):
             self.assertEqual(command[:2], ["cargo", "metadata"])
@@ -23,7 +29,7 @@ class CargoEncodingTests(unittest.TestCase):
             code = f"import sys; sys.{'stderr' if returncode else 'stdout'}.buffer.write({payload!r}); sys.exit({returncode})"
             return real_run([sys.executable, "-I", "-c", code], **kwargs)
 
-        with mock.patch.object(subprocess, "_text_encoding", return_value="cp1252"), \
+        with mock.patch.object(subprocess, "Popen", side_effect=legacy_popen), \
              mock.patch.object(subprocess, "run", side_effect=cargo), \
              mock.patch("os.chdir"), mock.patch("builtins.open", return_value=output), \
              mock.patch.object(sys, "argv", [str(script)]), \
