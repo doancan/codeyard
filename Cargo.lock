@@ -64,7 +64,7 @@ dependencies = [
 
 [[package]]
 name = "agent"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "ignore",
  "libc",
@@ -155,7 +155,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "app"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "accesskit",
  "accesskit_consumer",
@@ -839,7 +839,7 @@ dependencies = [
 
 [[package]]
 name = "buffer"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "ropey",
  "unicode-segmentation",
@@ -2845,7 +2845,7 @@ dependencies = [
 
 [[package]]
 name = "host"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "agent",
  "dirs 7.0.0",
@@ -4617,7 +4617,7 @@ dependencies = [
 
 [[package]]
 name = "proto"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "postcard",
  "serde",
@@ -5385,7 +5385,7 @@ dependencies = [
 
 [[package]]
 name = "schema"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "jsonschema",
  "serde_json",
@@ -5809,7 +5809,7 @@ dependencies = [
 
 [[package]]
 name = "spell"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "spellbook",
 ]
@@ -5894,7 +5894,7 @@ dependencies = [
 
 [[package]]
 name = "state"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "rusqlite",
 ]
@@ -6157,7 +6157,7 @@ dependencies = [
 
 [[package]]
 name = "syntax"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "cc",
  "libc",
@@ -6299,7 +6299,7 @@ dependencies = [
 
 [[package]]
 name = "theme"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "serde_json",
 ]
