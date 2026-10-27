@@ -28,7 +28,7 @@ Every issue is opened from a form in `.github/ISSUE_TEMPLATE/`: **Epic** (a goal
 user-visible capability, written as a specification), **Task** (work with no user-visible behaviour of its own), **Bug** and
 **Translation**. Questions and open ideas go to Discussions.
 
-- **Title:** a plain summary, at most 72 characters, with no type prefix (the `type:` label says it).
+- **Title:** a plain summary, at most 78 characters, with no type prefix (the `type:` label says it).
   Features and tasks start with a verb ("Show …", "Pass …"); bugs say what goes wrong.
 - **Labels:** exactly three, one from each group. The form sets `type:`; triage adds `area:` and `env:`.
 
