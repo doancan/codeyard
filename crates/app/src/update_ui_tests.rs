@@ -12,6 +12,7 @@ use gpui::{App, AppContext as _, Entity, Focusable as _, TestAppContext, VisualT
 
 use crate::qa_integration_tests::wait_ticking;
 use crate::qa_workbench_tests::{fresh, open, open_in, project, setup, setup_persistent, setup_with_config};
+use crate::ui;
 use crate::update::{Asset, Downloaded, Progress, Release, UpdateError};
 use crate::update_backend::UpdateBackend;
 use crate::update_install::{InstallKind, InstallPlan, ManualReason};
@@ -668,19 +669,13 @@ fn settings_dir(name: &str, text: &str) -> PathBuf {
 const COMMENTED: &str = "// my settings\n{\n  // keep this comment\n  \"editor.fontSize\": 15,\n}\n";
 
 #[gpui::test]
-fn the_question_names_what_is_sent_and_has_two_buttons(cx: &mut TestAppContext) {
+fn the_question_explains_the_choice_briefly_and_has_two_buttons(cx: &mut TestAppContext) {
     let (wb, cx, _fake) = rig(cx);
     assert!(wb.update_in(cx, |wb, window, cx| wb.ask_update_policy_for_test(true, window, cx)));
     let d = dialog(&wb, cx).expect("the question is on screen");
     assert_eq!(d.title, "Check for updates automatically?");
-    assert!(
-        d.text.contains("github.com") && d.text.contains("two small files") && d.text.contains("IP address") && d.text.contains("nothing about your files"),
-        "{}",
-        d.text
-    );
-    assert!(!d.text.contains("all that is sent") && !d.text.contains("no tracking"), "no promise that is not true: {}", d.text);
-    assert!(d.text.contains("update.check"), "it says where to change it: {}", d.text);
-    assert!(d.text.chars().count() < 260, "the question is two short sentences, not a page: {}", d.text);
+    assert!(d.text.contains("daily") && d.text.contains("Settings"), "the choice and where to change it remain clear: {}", d.text);
+    assert!(d.text.chars().count() < 120, "keep the title and explanation concise: {}", d.text);
     assert_eq!((d.buttons, d.primary.as_deref()), (vec!["Only When I Ask".to_string(), "Check Daily".to_string()], Some("Check Daily")));
 }
 
@@ -1461,7 +1456,7 @@ fn restarting_leaves_the_open_folder_for_the_new_version(cx: &mut TestAppContext
     press(&wb, cx, "Restart Now");
     assert_eq!(fake.count("quit"), 1);
     let h = update_restart::take(&home, "0.2.0", fake_now(&fake)).unwrap().expect("the file the new version reads");
-    assert_eq!(h, Handover { to: "0.2.0".into(), windows: vec![Folder { host: None, path: dir.to_string_lossy().into_owned() }], focused: 0 });
+    assert_eq!(h, Handover { to: "0.2.0".into(), windows: vec![Folder { host: None, path: ui::local_path(&dir) }], focused: 0 });
 }
 
 #[gpui::test]
@@ -1518,7 +1513,7 @@ fn after_the_restart_the_folder_and_its_unsaved_edit_are_back_though_startup_is_
     assert_eq!(first.read_with(cx, |wb, cx| wb.root_for_test(cx)), None);
 
     land(&first, cx, &handover.expect("handover"));
-    assert_eq!(first.read_with(cx, |wb, cx| wb.root_for_test(cx)).as_deref(), dir.to_str());
+    assert_eq!(first.read_with(cx, |wb, cx| wb.root_for_test(cx)), Some(ui::local_path(&dir)));
     let text = first.read_with(cx, |wb, cx| wb.active_editor_entity().map(|e| e.read(cx).text()));
     assert_eq!(text.as_deref(), Some("// not saved\nfn main() {}\n"));
     assert!(first.read_with(cx, |wb, cx| wb.any_dirty(cx)), "still unsaved");
@@ -1553,7 +1548,7 @@ fn session_case(cx: &mut TestAppContext, restore: bool, hot: bool, tab: bool, ed
     let h = update_restart::take(&home, "0.2.0", fake_now(&fake)).unwrap().unwrap();
     let first = new_process(cx, &home);
     land(&first, cx, &h);
-    assert_eq!(first.read_with(cx, |wb, cx| wb.root_for_test(cx)).as_deref(), dir.to_str(), "{n}: the folder always comes back");
+    assert_eq!(first.read_with(cx, |wb, cx| wb.root_for_test(cx)), Some(ui::local_path(&dir)), "{n}: the folder always comes back");
     let tabs = first.read_with(cx, |wb, cx| wb.open_paths(cx));
     let edit_back = first.read_with(cx, |wb, cx| wb.any_dirty(cx));
     assert_eq!((!tabs.is_empty(), edit_back), (tab, edit), "{n}: {tabs:?}");
@@ -1615,7 +1610,7 @@ fn open_test_window(cx: &mut TestAppContext) -> gpui::WindowHandle<Workbench> {
 fn every_window_with_a_folder_is_left_for_the_new_version_and_the_one_in_front_is_marked(cx: &mut TestAppContext) {
     crate::qa_workbench_tests::globals(cx);
     let home = fresh("restart-two-home");
-    let canon = |name: &str| std::fs::canonicalize(project(name)).unwrap().to_string_lossy().into_owned();
+    let canon = |name: &str| ui::local_path(&std::fs::canonicalize(project(name)).unwrap());
     let (a, b, c) = (canon("restart-two-a"), canon("restart-two-b"), canon("restart-two-c"));
     let (first, second, third, _no_folder) = (open_test_window(cx), open_test_window(cx), open_test_window(cx), open_test_window(cx));
     let fake = Fake::new();

@@ -118,6 +118,10 @@ pub fn convert_settings(text: &str, themes: &[(String, String)]) -> Converted {
                 set("terminal.scrollback", v.clone());
                 true
             }
+            "terminal.integrated.mouseWheelScrollSensitivity" => {
+                set("terminal.scrollSensitivity", v.clone());
+                true
+            }
             "workbench.colorTheme" => {
                 let name = v.as_str().unwrap_or_default();
                 match match_theme(name, themes) {

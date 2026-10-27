@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use gpui::{Entity, Focusable, TestAppContext, VisualTestContext};
 
-use crate::ui::ActiveTheme;
+use crate::ui::{self, ActiveTheme};
 use crate::workbench::Workbench;
 
 /// Every QA fixture lives under one scratch directory (never the user's files).
@@ -849,7 +849,7 @@ fn qa_recent_folders_can_be_pinned_and_removed(cx: &mut TestAppContext) {
     for d in [&a, &b, &c] {
         open(&wb, d, cx);
     }
-    let paths: Vec<String> = [&c, &b, &a].iter().map(|d| d.to_string_lossy().into_owned()).collect();
+    let paths: Vec<String> = [&c, &b, &a].iter().map(|d| ui::local_path(d)).collect();
     assert_eq!(recent_paths(&wb, cx).iter().map(|(p, _)| p.clone()).collect::<Vec<_>>(), paths, "most recent first");
 
     // Pin the old one: it moves to the top, marked pinned.
@@ -881,7 +881,7 @@ fn qa_opening_a_missing_recent_asks_to_remove_it(cx: &mut TestAppContext) {
     open(&wb, &keep_dir, cx);
     std::fs::remove_dir_all(&gone_dir).unwrap();
     let wb = restart_with(wb, cx, &home, Startup::Welcome);
-    let gone = gone_dir.to_string_lossy().into_owned();
+    let gone = ui::local_path(&gone_dir);
     let open_gone = |wb: &Entity<Workbench>, cx: &mut VisualTestContext| {
         let r = state::RecentWorkspace { host: None, path: gone.clone(), last_opened_at: 0 };
         wb.update_in(cx, |w, window, cx| w.open_recent(r, window, cx));
@@ -897,5 +897,5 @@ fn qa_opening_a_missing_recent_asks_to_remove_it(cx: &mut TestAppContext) {
     cx.simulate_prompt_answer("Remove from Recent");
     cx.run_until_parked();
     assert!(recent_paths(&wb, cx).iter().all(|(p, _)| *p != gone), "Remove drops it");
-    assert!(recent_paths(&wb, cx).iter().any(|(p, _)| *p == keep_dir.to_string_lossy()), "the other recent stays");
+    assert!(recent_paths(&wb, cx).iter().any(|(p, _)| *p == ui::local_path(&keep_dir)), "the other recent stays");
 }

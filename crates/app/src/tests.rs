@@ -4189,6 +4189,13 @@ fn git_amend_undo_stash_and_discard_all(cx: &mut TestAppContext) {
     run(cx, "Git: Discard All Changes");
     cx.run_until_parked();
     assert!(cx.has_pending_prompt(), "should ask before discarding");
+    cx.simulate_prompt_answer("Cancel");
+    cx.run_until_parked();
+    assert_eq!(std::fs::read_to_string(dir.join("README.md")).unwrap(), "# proje\nbir\n", "cancel keeps tracked edits");
+    assert_eq!(std::fs::read_to_string(dir.join("yeni.txt")).unwrap(), "yeni\n", "cancel keeps untracked files");
+    assert!(git_in(&dir, &["diff", "--cached", "--name-only"]).is_empty(), "cancel leaves the index alone");
+    run(cx, "Git: Discard All Changes");
+    cx.run_until_parked();
     cx.simulate_prompt_answer("Discard");
     wait_ticking(cx, "discard all", |cx| idle(cx) && changes(cx) == Some(0));
     assert!(!dir.join("yeni.txt").exists());

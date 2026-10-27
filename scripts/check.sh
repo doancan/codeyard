@@ -48,6 +48,7 @@ scripts/docs-check.sh
 
 step "scripts/licenses.sh"
 scripts/licenses.sh
+python3 -I scripts/test-crate-licenses.py
 python3 -I scripts/crate-licenses.py --check
 
 step "cargo deny"

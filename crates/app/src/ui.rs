@@ -184,6 +184,7 @@ macro_rules! icons {
 }
 
 const ICONS: &[(&str, &[u8])] = icons![
+    "activity",
     "alert",
     "arrow-down",
     "arrow-up",

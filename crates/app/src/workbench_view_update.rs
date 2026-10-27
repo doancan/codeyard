@@ -124,11 +124,14 @@ impl Workbench {
     }
 
     /// The status bar item: click opens the dialog.
-    pub(super) fn update_status_button(&self, item: StatusItem, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    pub(super) fn update_status_button(&self, item: StatusItem, show_label: bool, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let color = tone_color(item.tone, p);
         let tip = item.tip.clone();
         div()
             .id("sb-update")
+            .debug_selector(|| "sb-update".into())
+            .flex_none()
+            .min_w(px(32.))
             .h_full()
             .px(px(theme::SPACE[4]))
             .flex()
@@ -138,7 +141,7 @@ impl Workbench {
             .hover(|d| d.bg(c(p.surface_hover)))
             .text_color(c(color))
             .child(glyph(item.icon, 14., color, "sb-update-spinner"))
-            .child(item.label)
+            .when(show_label, |d| d.child(div().max_w(px(100.)).truncate().child(item.label)))
             .tooltip(move |_, cx| cx.new(|_| Tooltip(tip.clone())).into())
             .on_click(cx.listener(|this, _, window, cx| this.open_update_dialog(window, cx)))
     }

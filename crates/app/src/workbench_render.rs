@@ -36,6 +36,9 @@ impl Render for Workbench {
         self.sync_timeline(cx);
         self.sync_outline(cx);
         self.sync_update_window(window, cx);
+        let remote = self.remote.host.is_remote();
+        let project = self.root(cx).map(std::path::PathBuf::from);
+        self.chrome.resources.update(cx, |monitor, cx| monitor.set_project(project, remote, cx));
         if let Some(ws) = self.persist.pending_restore.take() {
             self.restore_tabs(ws, window, cx);
         }
@@ -421,6 +424,9 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::open_keybindings))
             .on_action(cx.listener(Self::import_vscode))
             .on_action(cx.listener(Self::toggle_panel))
+            .on_action(cx.listener(|this, _: &crate::resource_monitor::ToggleResources, window, cx| {
+                this.chrome.resources.update(cx, |monitor, cx| monitor.toggle(window, cx));
+            }))
             .on_action(cx.listener(Self::toggle_terminal))
             .on_action(cx.listener(Self::new_terminal))
             .on_action(cx.listener(Self::kill_terminal))
@@ -559,7 +565,7 @@ impl Render for Workbench {
                             .when(self.chrome.panel_open, |d| d.child(self.panel(&p, cx))),
                     ),
             )
-            .when(self.chrome.zen.is_none() && cx.global::<Settings>().status_bar, |d| d.child(self.status_bar(&p, cx)))
+            .when(self.chrome.zen.is_none() && cx.global::<Settings>().status_bar, |d| d.child(self.status_bar(&p, window.viewport_size().width / px(1.), cx)))
             .children(self.error_toast(&p, cx))
             .children(self.update_dialog(&p, cx))
             .when_some(
@@ -624,6 +630,84 @@ impl Render for Workbench {
 mod resize_tests {
     use super::*;
     use gpui::{Modifiers, TestAppContext, point};
+
+    #[gpui::test]
+    fn status_bar_keeps_resource_control_visible_with_long_content(cx: &mut TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        let project = crate::qa_workbench_tests::project("status-overflow");
+        crate::qa_workbench_tests::open_in(&wb, &project.join("src/main.rs"), cx);
+        wb.update(cx, |wb, cx| {
+            wb.vcs.branch = Some("feature/very-long-branch-name-".repeat(12).into());
+            wb.notice = Some(Notice::Info("A long workbench notification. ".repeat(80).into()));
+            cx.notify();
+        });
+        for width in [480., 800., 1280.] {
+            cx.simulate_resize(gpui::size(px(width), px(800.)));
+            cx.run_until_parked();
+            let bar = cx.debug_bounds("status-bar").unwrap();
+            let resources = cx.debug_bounds("sb-resources").unwrap();
+            assert_eq!(bar.size.height, px(28.));
+            assert!(resources.left() >= bar.left() && resources.right() <= bar.right(), "resource control at {width}: {resources:?} inside {bar:?}");
+            assert!(resources.size.width >= px(28.) && resources.size.height >= px(24.));
+        }
+    }
+
+    #[gpui::test]
+    fn dense_status_bar_preserves_controls_in_a_narrow_window(cx: &mut TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        let project = crate::qa_workbench_tests::project("status-dense");
+        let path = project.join("src/main.rs");
+        std::fs::write(&path, "<<<<<<< HEAD\nfn first() {}\n=======\nfn second() {}\n>>>>>>> qa\n").unwrap();
+        crate::qa_workbench_tests::open_in(&wb, &path, cx);
+        wb.update(cx, |wb, cx| {
+            wb.active_editor().unwrap().update(cx, |ed, cx| ed.insert_at_for_test(0, "// unsaved\n", cx));
+            wb.vcs.branch = Some("feature/long-branch-name-".repeat(12).into());
+            wb.vcs.status = Some(std::sync::Arc::new(crate::git::Status { ahead: 1294, behind: 982, ..Default::default() }));
+            wb.lsp.progress = Some("Indexing a large workspace… ".repeat(20).into());
+            wb.update.state = update_glue::UpdateState::Ready { version: "999.999.999".into(), plan: None };
+            cx.notify();
+        });
+        for width in [480., 640., 800., 1100., 1280., 1920.] {
+            cx.simulate_resize(gpui::size(px(width), px(800.)));
+            cx.run_until_parked();
+            let bar = cx.debug_bounds("status-bar").unwrap();
+            let resources = cx.debug_bounds("sb-resources").unwrap();
+            assert!(
+                resources.left() >= bar.left() && resources.right() + px(32.) <= bar.right(),
+                "resource and terminal controls at {width}: {resources:?} inside {bar:?}"
+            );
+            for id in ["sb-conflicts", "sb-unsaved", "sb-update"] {
+                let item = cx.debug_bounds(id).unwrap();
+                assert!(item.left() >= bar.left() && item.right() <= bar.right(), "{id} at {width}: {item:?} inside {bar:?}");
+            }
+        }
+    }
+
+    #[gpui::test]
+    fn explorer_sections_resize_from_above_their_headers(cx: &mut TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        let project = crate::qa_workbench_tests::project("section-edges");
+        crate::qa_workbench_tests::open(&wb, &project, cx);
+        wb.update(cx, |wb, cx| {
+            wb.chrome.panel = Some(Panel::Explorer);
+            wb.vcs.status = Some(std::sync::Arc::new(crate::git::Status::default()));
+            cx.notify();
+        });
+        cx.run_until_parked();
+        for (id, sash_id, header_id) in [("outline", "sash-outline", "sec-outline"), ("timeline", "sash-timeline", "sec-timeline")] {
+            let sash = cx.debug_bounds(sash_id).unwrap();
+            let header = cx.debug_bounds(header_id).unwrap();
+            assert!(sash.bottom() <= header.top(), "{id}: the resize target must be above the header");
+            let at = sash.center();
+            let before = wb.read_with(cx, |wb, _| wb.sections.height(id, 170.));
+            cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::none());
+            cx.simulate_mouse_move(at - point(px(0.), px(40.)), Some(MouseButton::Left), Modifiers::none());
+            cx.simulate_mouse_up(at - point(px(0.), px(40.)), MouseButton::Left, Modifiers::none());
+            assert_eq!(wb.read_with(cx, |wb, _| wb.sections.height(id, 170.)), before + 40.);
+            assert!(wb.read_with(cx, |wb, _| wb.sections.is_open(id, true)), "resizing must not collapse the section");
+            assert!(!wb.read_with(cx, |wb, _| wb.sections.dragging()));
+        }
+    }
 
     #[cfg(windows)]
     #[gpui::test]

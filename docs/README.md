@@ -18,6 +18,7 @@ code they describe.
 | [platforms.md](platforms.md) | what runs and what has been verified on macOS, Linux and Windows |
 | [testing.md](testing.md) | test layers, hermetic rules, fuzzing, hardening practice |
 | [production-readiness.md](production-readiness.md) | readiness findings, implementation plan, validation evidence and platform limits |
+| [ui-readiness.md](ui-readiness.md) | workbench resize, status bar, terminal, Git and resource panel review and validation |
 | [translating.md](translating.md) | adding a language, the translation file format, plurals, quality bar, adding UI text |
 | [releasing.md](releasing.md) | the manual release procedure |
 

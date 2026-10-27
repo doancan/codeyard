@@ -372,12 +372,48 @@ fn a_changed_file_has_a_context_menu_in_source_control(cx: &mut TestAppContext) 
     wait_ticking(cx, "the change shows up", |cx| status(&wb, cx).is_some_and(|s| s.changes.iter().any(|c| c.path == "scratch.log")));
     let scm = wb.read_with(cx, |wb, _| wb.scm_panel());
     let at = gpui::point(gpui::px(60.), gpui::px(60.));
-    scm.update(cx, |_, cx| cx.emit(crate::scm::ScmEvent::FileMenu("scratch.log".into(), at)));
+    scm.update(cx, |_, cx| cx.emit(crate::scm::ScmEvent::FileMenu("scratch.log".into(), false, at)));
     cx.run_until_parked();
     let labels = wb.read_with(cx, |wb, cx| wb.menu_labels(cx)).expect("the menu opened");
-    assert_eq!(labels, ["Copy Path", "Copy Relative Path", "Add to .gitignore"]);
+    assert!(labels.iter().any(|l| l == "Stage"), "file actions must be available without hover: {labels:?}");
+    assert!(labels.iter().any(|l| l == "Discard changes"));
+    assert!(!labels.iter().any(|l| l == "Unstage"));
     wb.update_in(cx, |wb, _, cx| wb.select_menu_for_test("Add to .gitignore", cx));
     cx.run_until_parked();
     let ignore = std::fs::read_to_string(f.dir.join(".gitignore")).unwrap_or_default();
     assert!(ignore.lines().any(|l| l == "/scratch.log"), "{ignore:?}");
+}
+
+#[gpui::test]
+fn file_menu_stages_and_unstages_the_selected_file(cx: &mut TestAppContext) {
+    let f = Fixture::new("scm-menu-staging");
+    std::fs::write(f.dir.join("README.md"), "changed\n").unwrap();
+    let (wb, cx) = opened(cx, &f, quiet());
+    refresh(&wb, cx);
+    wait_ticking(cx, "modified file", |cx| status(&wb, cx).is_some_and(|s| s.changes.iter().any(|c| c.path == "README.md")));
+    let scm = wb.read_with(cx, |wb, _| wb.scm_panel());
+    let at = gpui::point(gpui::px(60.), gpui::px(60.));
+    scm.update(cx, |_, cx| cx.emit(crate::scm::ScmEvent::FileMenu("README.md".into(), false, at)));
+    cx.run_until_parked();
+    wb.update_in(cx, |wb, _, cx| wb.select_menu_for_test("Stage", cx));
+    wait_ticking(cx, "staged through the file menu", |cx| {
+        status(&wb, cx).is_some_and(|s| s.changes.iter().any(|c| c.path == "README.md" && c.staged.is_some() && c.unstaged.is_none()))
+    });
+    assert_eq!(git_in(&f.dir, &["diff", "--cached", "--name-only"]).trim(), "README.md");
+    std::fs::write(f.dir.join("README.md"), "changed again\n").unwrap();
+    refresh(&wb, cx);
+    wait_ticking(cx, "mixed staged and unstaged file", |cx| {
+        status(&wb, cx).is_some_and(|s| s.changes.iter().any(|c| c.path == "README.md" && c.staged.is_some() && c.unstaged.is_some()))
+    });
+    scm.update(cx, |_, cx| cx.emit(crate::scm::ScmEvent::FileMenu("README.md".into(), true, at)));
+    cx.run_until_parked();
+    let labels = wb.read_with(cx, |wb, cx| wb.menu_labels(cx)).unwrap();
+    assert!(labels.iter().any(|l| l == "Unstage"));
+    assert!(!labels.iter().any(|l| l == "Discard changes" || l == "Stage"), "staged rows must keep their own actions: {labels:?}");
+    wb.update_in(cx, |wb, _, cx| wb.select_menu_for_test("Unstage", cx));
+    wait_ticking(cx, "unstaged through the file menu", |cx| {
+        status(&wb, cx).is_some_and(|s| s.changes.iter().any(|c| c.path == "README.md" && c.staged.is_none() && c.unstaged.is_some()))
+    });
+    assert!(git_in(&f.dir, &["diff", "--cached", "--name-only"]).trim().is_empty());
+    assert_eq!(std::fs::read_to_string(f.dir.join("README.md")).unwrap(), "changed again\n");
 }
