@@ -4,7 +4,7 @@
 # The private key (PKCS#8 PEM, Ed25519) comes from the environment variable UPDATE_SIGNING_KEY, or from --key-file.
 # Writes <dir>/SHA256SUMS.txt.sig (the raw 64-byte signature over the exact bytes of SHA256SUMS.txt), then verifies it with
 # the public key (default scripts/update-public-key.pem; --pubkey is for tests). Any failure exits non-zero.
-# The key is copied to a temp file only for the one openssl call (umask 077) and removed on exit. Needs OpenSSL 3
+# The key is copied to a temp file only for the one openssl call (umask 077) and removed on exit. Needs OpenSSL with Ed25519
 # (`pkeyutl -rawin`); the LibreSSL in macOS /usr/bin does not have it.
 set -euo pipefail
 set +x
@@ -22,7 +22,7 @@ done
 [ -n "$dir" ] || { echo "usage: sign-release.sh <dir> [--key-file <pem>] [--pubkey <pem>]" >&2; exit 2; }
 [ -s "$dir/SHA256SUMS.txt" ] || { echo "sign-release: $dir/SHA256SUMS.txt is missing or empty" >&2; exit 1; }
 openssl version
-openssl version | grep -q '^OpenSSL 3' || { echo "sign-release: OpenSSL 3 is required (found: $(openssl version))" >&2; exit 1; }
+openssl pkeyutl -help 2>&1 | grep -- '-rawin' >/dev/null || { echo "sign-release: openssl pkeyutl -rawin is required (found: $(openssl version))" >&2; exit 1; }
 
 tmp="$(mktemp -d)"
 trap 'if [ -f "$tmp/key.pem" ]; then shred -u "$tmp/key.pem" 2>/dev/null || rm -f "$tmp/key.pem"; fi; rm -rf "$tmp"' EXIT

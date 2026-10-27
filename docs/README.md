@@ -16,6 +16,7 @@ code they describe.
 | [accessibility.md](accessibility.md) | the AccessKit tree on macOS, what is verified, what is missing |
 | [platforms.md](platforms.md) | what runs and what has been verified on macOS, Linux and Windows |
 | [testing.md](testing.md) | test layers, hermetic rules, fuzzing, hardening practice |
+| [production-readiness.md](production-readiness.md) | readiness findings, implementation plan, validation evidence and platform limits |
 | [translating.md](translating.md) | adding a language, the translation file format, plurals, quality bar, adding UI text |
 | [releasing.md](releasing.md) | the manual release procedure |
 

@@ -35,12 +35,12 @@ in that order, and stops at the first failure. `--quick` skips the tests. `cargo
 message when missing (`cargo install cargo-deny cargo-audit --locked`); `--strict` makes that a failure. Details of each
 gate are in [docs/testing.md](docs/testing.md).
 
-CI enforces everything above on pull requests (macOS for the app, Windows native checks, Linux for the GPUI-free crates).
-The `linux-app` job, which runs the whole workspace on Linux, is experimental and may fail without blocking a merge.
+CI enforces everything above on pull requests: macOS tests and memory budgets, Windows native tests and
+standalone packaging, Linux library/agent checks, and the full Linux workspace (`linux-app`) are blocking.
 `scripts/memcheck.sh` runs in CI as a blocking step on macOS, but the budgets are set for a Retina display and the runner
 has a 1x display and measures lower, so CI only catches gross regressions. The authoritative numbers come from a Retina
 Mac (`scripts/check.sh --budgets`); if your change could add memory or binary size, run it there if you can and say so.
-Notarization is done by the maintainer when releasing.
+Tag releases use Developer ID signing and Apple notarization in CI; see [release evidence](docs/releasing.md).
 
 House rules:
 

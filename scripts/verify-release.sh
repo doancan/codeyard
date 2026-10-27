@@ -5,7 +5,7 @@
 #   scripts/verify-release.sh --self-test      sign and check a made-up release with a throw-away key (CI runs this)
 # Options: --key <pem>   public key to trust instead of scripts/update-public-key.pem (used by the tests)
 #          --repo <o/r>  repository for <tag> (default doancan/codeyard)
-# Needs OpenSSL 3 (`pkeyutl -rawin`) and sha256sum or shasum. Exit 0 only when the signature is valid, the list is well formed,
+# Needs OpenSSL with Ed25519 (`pkeyutl -rawin`) and sha256sum or shasum. Exit 0 only when the signature is valid, the list is well formed,
 # every listed file matches its hash and no file in the folder is missing from the list.
 #
 # The list must satisfy the rules of the in-app updater (crates/app/src/update.rs, `Sums::parse`): the same ones, so that a
@@ -41,7 +41,7 @@ valid_version() {
 # check_dir <dir> <pubkey>: prints one line per check, returns non-zero on the first failure.
 check_dir() {
   local d="$1" pub="$2" sums="$1/SHA256SUMS.txt" sig="$1/SHA256SUMS.txt.sig"
-  openssl version | grep -q '^OpenSSL 3' || { fail "OpenSSL 3 is required (found: $(openssl version))"; return 1; }
+  openssl pkeyutl -help 2>&1 | grep -- '-rawin' >/dev/null || { fail "openssl pkeyutl -rawin is required (found: $(openssl version))"; return 1; }
   [ -s "$sums" ] || { fail "SHA256SUMS.txt is missing"; return 1; }
   [ -f "$sig" ] || { fail "SHA256SUMS.txt.sig is missing: this release is not signed"; return 1; }
   [ "$(wc -c < "$sig" | tr -d ' ')" = 64 ] || { fail "SHA256SUMS.txt.sig is not 64 bytes"; return 1; }

@@ -238,7 +238,7 @@ Deliberate, with the reason:
   (an `Authorization` token, say) are curl arguments and so visible in `ps` to other users of the machine it runs on; on a shared
   server keep secrets out of the request file or send from your own computer (`http.runOn`: `local`).
 - Windows passes its native check script but has not been verified interactively on a physical machine (SSH login, IME, mixed
-  DPI, installer); macOS builds are ad-hoc signed (notarization script untested); no screen-reader testing (see
+  DPI, installer); macOS tag releases are signed and notarized (ordinary local dry runs remain ad-hoc signed); no screen-reader testing (see
   `platforms.md`, `accessibility.md`).
 
 ## Budgets and gates
