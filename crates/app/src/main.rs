@@ -58,6 +58,7 @@ mod git;
 #[cfg(test)]
 mod git_sync_tests;
 mod github;
+mod globs;
 mod graph;
 #[cfg(test)]
 mod hardening_tests;

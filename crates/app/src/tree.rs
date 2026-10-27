@@ -571,7 +571,7 @@ impl FileTree {
                         let rel_dir = this.root.as_deref().and_then(|r| path.strip_prefix(r)).unwrap_or("").trim_start_matches('/').to_string();
                         entries.retain(|e| {
                             let rel = if rel_dir.is_empty() { e.name.clone() } else { format!("{rel_dir}/{}", e.name) };
-                            !crate::settings::is_excluded(excludes, &rel)
+                            !crate::globs::is_excluded(excludes, &rel)
                         });
                         sort_entries(&mut entries, this.opts.sort);
                         Load::Loaded(entries)
