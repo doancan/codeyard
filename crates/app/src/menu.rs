@@ -183,6 +183,7 @@ pub struct ContextMenu {
     /// Which corner of the menu sits at the given position (default: top left, for the mouse position).
     anchor: Corner,
     flavor: Flavor,
+    scroll: gpui::ScrollHandle,
 }
 
 impl EventEmitter<MenuEvent> for ContextMenu {}
@@ -195,7 +196,14 @@ impl Focusable for ContextMenu {
 
 impl ContextMenu {
     pub fn new(items: Vec<MenuItem>, cx: &mut Context<Self>) -> Self {
-        ContextMenu { items, selected: None, focus_handle: cx.focus_handle(), anchor: Corner::TopLeft, flavor: Flavor::detect() }
+        ContextMenu {
+            items,
+            selected: None,
+            focus_handle: cx.focus_handle(),
+            anchor: Corner::TopLeft,
+            flavor: Flavor::detect(),
+            scroll: gpui::ScrollHandle::new(),
+        }
     }
 
     /// Which corner of the menu the position corresponds to: menus that open upward next to a button want `Corner::BottomLeft`.
@@ -235,6 +243,7 @@ impl ContextMenu {
             i = if forward { (i + 1) % n } else { (i + n - 1) % n };
             if self.items[i].enabled {
                 self.selected = Some(i);
+                self.scroll.scroll_to_item(i);
                 break;
             }
         }
@@ -281,6 +290,7 @@ impl Render for ContextMenu {
         let checks = self.items.iter().any(|i| i.checked.is_some());
         div()
             .id("context-menu")
+            .debug_selector(|| "context-menu".into())
             .key_context("ContextMenu")
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::prev))
@@ -293,6 +303,7 @@ impl Render for ContextMenu {
             .min_w(px(m.min_w))
             .max_h((window.viewport_size().height - px(16.)).max(px(24.)))
             .overflow_y_scroll()
+            .track_scroll(&self.scroll)
             .p(px(m.pad))
             .flex()
             .flex_col()
@@ -319,44 +330,56 @@ impl Render for ContextMenu {
                     p.text
                 };
                 let shortcut_color = if on_accent { p.on_accent } else { p.text_muted };
-                div().flex().flex_col().when(item.separator && i > 0, |d| d.child(div().h(px(1.)).mx(px(m.sep_inset)).my(px(m.sep_my)).bg(c(p.border)))).child(
-                    div()
-                        .id(("menu-item", i))
-                        .h(px(m.row_h))
-                        .px(px(m.row_px))
-                        .flex()
-                        .items_center()
-                        .justify_between()
-                        .gap(px(m.gap))
-                        .rounded(px(m.row_radius))
-                        .text_color(c(label_color))
-                        .when(active, |d| d.bg(c(if m.accent_highlight { p.accent } else { p.surface_hover })))
-                        .when(item.enabled, |d| {
-                            d.cursor_pointer().on_mouse_move(cx.listener(move |this, _, _, cx| {
-                                if this.selected != Some(i) {
-                                    this.selected = Some(i);
-                                    cx.notify();
-                                }
-                            }))
-                        })
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(6.))
-                                .when(checks, |d| {
-                                    d.child(
-                                        div().w(px(14.)).flex_none().when(item.checked == Some(true), |d| d.child(crate::ui::icon("check", 14., label_color))),
-                                    )
-                                })
-                                .child(item.label.clone()),
-                        )
-                        .when_some(item.shortcut.clone(), |d, k| {
-                            d.child(div().text_size(px(m.shortcut_font)).text_color(c(shortcut_color)).opacity(if item.enabled { 0.85 } else { 0.6 }).child(k))
-                        })
-                        .when(item.submenu, |d| d.child(crate::ui::icon("chevron-right", 12., shortcut_color)))
-                        .when(item.enabled, |d| d.on_mouse_up(MouseButton::Left, cx.listener(move |_, _, _, cx| cx.emit(MenuEvent::Select(i))))),
-                )
+                div()
+                    .flex()
+                    .flex_none()
+                    .flex_col()
+                    .when(item.separator && i > 0, |d| d.child(div().h(px(1.)).mx(px(m.sep_inset)).my(px(m.sep_my)).bg(c(p.border))))
+                    .child(
+                        div()
+                            .id(("menu-item", i))
+                            .debug_selector(move || format!("menu-item-{i}"))
+                            .h(px(m.row_h))
+                            .flex_none()
+                            .px(px(m.row_px))
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .gap(px(m.gap))
+                            .rounded(px(m.row_radius))
+                            .text_color(c(label_color))
+                            .when(active, |d| d.bg(c(if m.accent_highlight { p.accent } else { p.surface_hover })))
+                            .when(item.enabled, |d| {
+                                d.cursor_pointer().on_mouse_move(cx.listener(move |this, _, _, cx| {
+                                    if this.selected != Some(i) {
+                                        this.selected = Some(i);
+                                        cx.notify();
+                                    }
+                                }))
+                            })
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(6.))
+                                    .when(checks, |d| {
+                                        d.child(
+                                            div()
+                                                .w(px(14.))
+                                                .flex_none()
+                                                .when(item.checked == Some(true), |d| d.child(crate::ui::icon("check", 14., label_color))),
+                                        )
+                                    })
+                                    .child(item.label.clone()),
+                            )
+                            .when_some(item.shortcut.clone(), |d, k| {
+                                d.child(
+                                    div().text_size(px(m.shortcut_font)).text_color(c(shortcut_color)).opacity(if item.enabled { 0.85 } else { 0.6 }).child(k),
+                                )
+                            })
+                            .when(item.submenu, |d| d.child(crate::ui::icon("chevron-right", 12., shortcut_color)))
+                            .when(item.enabled, |d| d.on_mouse_up(MouseButton::Left, cx.listener(move |_, _, _, cx| cx.emit(MenuEvent::Select(i))))),
+                    )
             }))
     }
 }
@@ -366,6 +389,24 @@ mod tests {
     use super::*;
 
     const ALL: [Flavor; 3] = [Flavor::MacOs, Flavor::Windows, Flavor::Linux];
+
+    #[gpui::test]
+    fn long_menus_keep_row_height_and_scroll_to_keyboard_selection(cx: &mut gpui::TestAppContext) {
+        crate::qa_workbench_tests::globals(cx);
+        let (menu, cx) = cx.add_window_view(|_, cx| ContextMenu::new((0..40).map(|i| MenuItem::new(&format!("Item {i}"))).collect(), cx));
+        cx.simulate_resize(gpui::size(px(500.), px(300.)));
+        cx.run_until_parked();
+        let height = menu.read_with(cx, |menu, _| menu.flavor.metrics().row_h);
+        assert_eq!(cx.debug_bounds("menu-item-0").unwrap().size.height, px(height));
+        menu.update(cx, |menu, cx| menu.step(false, cx));
+        cx.run_until_parked();
+        assert_eq!(menu.read_with(cx, |menu, _| menu.selected), Some(39));
+        assert!(menu.read_with(cx, |menu, _| menu.scroll.offset().y) < px(-100.), "keyboard navigation reveals the last item");
+        let last = cx.debug_bounds("menu-item-39").unwrap();
+        let bounds = cx.debug_bounds("context-menu").unwrap();
+        assert_eq!(last.size.height, px(height));
+        assert!(last.bottom() <= bounds.bottom() && last.top() >= bounds.top(), "selected item must be visible: {last:?} inside {bounds:?}");
+    }
 
     #[test]
     fn every_flavor_has_sane_proportions() {

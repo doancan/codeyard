@@ -950,7 +950,7 @@ impl Workbench {
                 crate::scm::ScmEvent::OpenCommit(commit) => this.show_commit_files(commit.clone(), window, cx),
                 crate::scm::ScmEvent::OpenCommitFile(commit, file) => this.open_commit_file(commit.clone(), file.clone(), window, cx),
                 crate::scm::ScmEvent::CommitMenu(commit, position) => this.open_commit_menu(commit.clone(), *position, window, cx),
-                crate::scm::ScmEvent::FileMenu(path, position) => this.open_scm_file_menu(path, *position, window, cx),
+                crate::scm::ScmEvent::FileMenu(path, staged, position) => this.open_scm_file_menu(path, *staged, *position, window, cx),
                 crate::scm::ScmEvent::SectionsChanged(text) => {
                     if let Some(s) = &this.persist.state {
                         let _ = s.set("scm_sections", text);

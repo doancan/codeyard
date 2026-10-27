@@ -347,7 +347,7 @@ impl ScmPanel {
             uniform_list(
                 "scm-graph-rows",
                 n,
-                cx.processor(move |_this, range: std::ops::Range<usize>, _window, cx| {
+                cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
                     let (show_author, show_hash) = {
                         let st = cx.global::<crate::settings::Settings>();
                         (st.graph_show_author, st.graph_show_hash)
@@ -358,9 +358,9 @@ impl ScmPanel {
                             GraphItem::Commit(ix) => {
                                 let is_sel = selected.as_deref() == Some(g.commits[*ix].hash.as_str());
                                 if mode == GraphView::Graph {
-                                    graph_row(&g, *ix, flat, is_sel, show_author, show_hash, &p, cx)
+                                    graph_row(&g, *ix, flat, is_sel, show_author, show_hash, !this.menu_open, &p, cx)
                                 } else {
-                                    compact_row(&g, *ix, is_sel, &p, cx)
+                                    compact_row(&g, *ix, is_sel, !this.menu_open, &p, cx)
                                 }
                             }
                         })
@@ -412,7 +412,7 @@ fn day_header(label: &str, count: usize, h: f32, p: &Palette) -> AnyElement {
 }
 
 /// Shared row shell: selected highlight, hover, click, right click and hover card.
-fn row_shell(ix: usize, k: &GraphCommit, h: f32, is_sel: bool, p: &Palette, cx: &mut Context<ScmPanel>) -> gpui::Stateful<gpui::Div> {
+fn row_shell(ix: usize, k: &GraphCommit, h: f32, is_sel: bool, show_tooltips: bool, p: &Palette, cx: &mut Context<ScmPanel>) -> gpui::Stateful<gpui::Div> {
     let (entry, menu_entry, card) = (k.clone(), k.clone(), k.clone());
     div()
         .id(("scm-graph", ix))
@@ -428,7 +428,7 @@ fn row_shell(ix: usize, k: &GraphCommit, h: f32, is_sel: bool, p: &Palette, cx: 
         .border_color(c(if is_sel { p.accent } else { p.surface }))
         .when(is_sel, |d| d.bg(c(p.surface_active)))
         .hover(|d| d.bg(c(p.surface_hover)))
-        .tooltip(move |_, cx| cx.new(|_| CommitCard { commit: card.clone() }).into())
+        .when(show_tooltips, |d| d.tooltip(move |_, cx| cx.new(|_| CommitCard { commit: card.clone() }).into()))
         .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, _, cx| {
             this.select_commit(entry.clone(), cx);
             if ev.click_count() >= 2 {
@@ -443,13 +443,23 @@ fn row_shell(ix: usize, k: &GraphCommit, h: f32, is_sel: bool, p: &Palette, cx: 
 
 /// Graph view: one line per commit. The lanes take only the room this row's branches need, then the
 /// subject, the author (dimmed), the most important branch / tag and, if enabled, the short hash.
-fn graph_row(g: &GraphData, ix: usize, flat: bool, is_sel: bool, show_author: bool, show_hash: bool, p: &Palette, cx: &mut Context<ScmPanel>) -> AnyElement {
+fn graph_row(
+    g: &GraphData,
+    ix: usize,
+    flat: bool,
+    is_sel: bool,
+    show_author: bool,
+    show_hash: bool,
+    show_tooltips: bool,
+    p: &Palette,
+    cx: &mut Context<ScmPanel>,
+) -> AnyElement {
     let (commit, row) = (&g.commits[ix], &g.rows[ix]);
     let head = commit.refs.iter().any(|r| r.kind == RefKind::Head);
     let merge = commit.parents.len() > 1;
     let refs = ordered_refs(commit);
     let more = refs.len().saturating_sub(1);
-    row_shell(ix, commit, graph::ROW_H, is_sel, p, cx)
+    row_shell(ix, commit, graph::ROW_H, is_sel, show_tooltips, p, cx)
         .pr(px(theme::SPACE[3]))
         .child(if flat {
             // Rows are skipped, so lines would break: a dot in the commit's lane color stands in for the graph.
@@ -521,13 +531,13 @@ fn graph_row(g: &GraphData, ix: usize, flat: bool, is_sel: bool, show_author: bo
 
 /// Compact and by-day views: single line, dot in the lane's color, subject, one label, time. The author is in the hover card
 /// (an avatar would take space and truncate the subject).
-fn compact_row(g: &GraphData, ix: usize, is_sel: bool, p: &Palette, cx: &mut Context<ScmPanel>) -> AnyElement {
+fn compact_row(g: &GraphData, ix: usize, is_sel: bool, show_tooltips: bool, p: &Palette, cx: &mut Context<ScmPanel>) -> AnyElement {
     let (commit, row) = (&g.commits[ix], &g.rows[ix]);
     let head = commit.refs.iter().any(|r| r.kind == RefKind::Head);
     let merge = commit.parents.len() > 1;
     let refs = ordered_refs(commit);
     let color = graph::lane_color(p, row.color);
-    row_shell(ix, commit, GraphView::Compact.row_height(), is_sel, p, cx)
+    row_shell(ix, commit, GraphView::Compact.row_height(), is_sel, show_tooltips, p, cx)
         .gap(px(theme::SPACE[3]))
         .pl(px(theme::SPACE[4]))
         .pr(px(theme::SPACE[4]))
