@@ -11,7 +11,9 @@ files, search, terminals, git and language servers goes through that one interfa
   binding) they go to `/tmp/cy-<uid>` (mode 0700). The app refuses that directory if it is a symlink or belongs to another user,
   and then connects without sharing. Control masters opened by the app are closed on exit.
 - Scripts the app runs on the server are wrapped in `sh -c`, so they do not depend on the user's login shell.
-  Programs (git, language servers) are found through the login shell so the user's `PATH` applies.
+  Programs (git, language servers) are found through the login shell so the user's `PATH` applies: `exec "$0" "$@"` in
+  POSIX shells, `exec $argv` in fish, and `/bin/sh` for any other shell; the program and its arguments are passed as
+  arguments, never inside the script.
 - Agent install: on first connect the app detects the architecture (`uname -sm`), copies the bundled static agent
   (`codeyard-agent-<triple>`) to `~/.cache/codeyard/agent-v<VERSION>-<sha12>` and verifies its SHA-256 before
   running it. The server never downloads anything, so offline servers work. The version in the path lets agents of
