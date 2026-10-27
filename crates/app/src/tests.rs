@@ -20,10 +20,14 @@ fn tmp(name: &str, content: &[u8]) -> PathBuf {
 }
 
 fn setup(cx: &mut TestAppContext) -> (Entity<Workbench>, &mut VisualTestContext) {
+    setup_with_settings(cx, crate::settings::Settings::default())
+}
+
+fn setup_with_settings(cx: &mut TestAppContext, settings: crate::settings::Settings) -> (Entity<Workbench>, &mut VisualTestContext) {
     cx.update(|cx| {
         crate::bind_keys(cx);
         cx.set_global(ActiveTheme(theme::DARK));
-        cx.set_global(crate::settings::Settings::default());
+        cx.set_global(settings);
     });
     let (wb, cx) = cx.add_window_view(|window, cx| Workbench::with_state(state::State::in_memory().ok(), None, window, cx));
     // Same as main.rs: focus starts on the workbench.
@@ -355,7 +359,8 @@ fn terminal_runs_commands_and_closes(cx: &mut TestAppContext) {
     // Mouse selection: drag across an output line, then double-click a word; ⌘C copies to the clipboard.
     let row = term.read_with(cx, |t, _| t.screen_text().lines().position(|l| l == "ğüş-42")).expect("output line");
     let at: Vec<_> = term.read_with(cx, |t, _| (0..5).map(|col| t.cell_center(row, col)).collect());
-    let (from, to) = (at[0], at[4]);
+    // Just inside the outer halves: a press exactly on a cell's centre is on neither side, and float noise picks one.
+    let (from, to) = (gpui::point(at[0].x - gpui::px(1.), at[0].y), gpui::point(at[4].x + gpui::px(1.), at[4].y));
     cx.simulate_mouse_down(from, MouseButton::Left, Modifiers::none());
     cx.simulate_mouse_move(to, Some(MouseButton::Left), Modifiers::none());
     cx.simulate_mouse_up(to, MouseButton::Left, Modifiers::none());
@@ -368,6 +373,14 @@ fn terminal_runs_commands_and_closes(cx: &mut TestAppContext) {
     // A single click clears the selection.
     cx.simulate_click(at[2], Modifiers::none());
     assert_eq!(term.read_with(cx, |t, _| t.selected_text()), None);
+
+    // `terminal.fontSize` (also what zoom writes) changes the rows on the next frame.
+    let row_h = |cx: &mut VisualTestContext| term.read_with(cx, |t, _| t.cell_center(1, 0).y - t.cell_center(0, 0).y);
+    let before = row_h(cx);
+    cx.update(|_, cx| gpui::BorrowAppContext::update_global::<crate::settings::Settings, _>(cx, |s, _| s.terminal_font_size += 8.));
+    term.update(cx, |_, cx| cx.notify());
+    cx.run_until_parked();
+    assert!(row_h(cx) > before, "taller rows after a bigger font: {:?} -> {:?}", before, row_h(cx));
 
     // The shell starts in the opened folder.
     cx.simulate_keystrokes("p w d enter");
@@ -2238,6 +2251,274 @@ fn ssh_ports_are_forwarded_automatically(cx: &mut TestAppContext) {
     assert!(!wb.read_with(cx, |wb, _| wb.forwards()).iter().any(|f| f.remote == remote), "a stopped port doesn't come back on its own");
 }
 
+/// A port the user forwarded in a project, with its label, is forwarded again when the project opens after a restart.
+#[cfg(unix)]
+#[gpui::test]
+fn a_forwarded_port_comes_back_with_its_project(cx: &mut TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("ports-saved") else { return };
+    let home = crate::qa_workbench_tests::project("ports-saved-home");
+    let dir = crate::qa_workbench_tests::project("ports-saved-repo");
+    let (wb, cx) = crate::qa_workbench_tests::setup_persistent(cx, &home);
+    let tick = |cx: &mut VisualTestContext| cx.executor().advance_clock(std::time::Duration::from_secs(5));
+    wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    wait_for(cx, "connected", |cx| {
+        tick(cx);
+        wb.read_with(cx, |wb, _| wb.ports_ready())
+    });
+    open(&wb, &dir, cx);
+    let app = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let remote = app.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for mut s in app.incoming().flatten() {
+            use std::io::Write;
+            let _ = s.write_all(b"saved");
+        }
+    });
+    wb.update(cx, |wb, cx| wb.forward_port(remote, cx));
+    wait_for(cx, "forwarded", |cx| {
+        cx.run_until_parked();
+        wb.read_with(cx, |wb, _| wb.forwards().iter().any(|f| f.remote == remote))
+    });
+    wb.update(cx, |wb, cx| wb.set_forward_label_for_test(remote, "api", cx));
+
+    let wb = crate::qa_workbench_tests::restart_with(wb, cx, &home, crate::settings::Startup::Continue);
+    wait_for(cx, "forwarded again after the restart", |cx| {
+        tick(cx);
+        wb.read_with(cx, |wb, _| wb.forwards().iter().any(|f| f.remote == remote))
+    });
+    assert_eq!(wb.read_with(cx, |wb, _| wb.forward_label_for_test(remote)).as_deref(), Some("api"));
+    let local = wb.read_with(cx, |wb, _| wb.forwards()).into_iter().find(|f| f.remote == remote).unwrap().local;
+    let mut got = String::new();
+    use std::io::Read;
+    std::net::TcpStream::connect(("127.0.0.1", local)).unwrap().read_to_string(&mut got).unwrap();
+    assert_eq!(got, "saved");
+}
+
+/// Pasting several lines into a shell without bracketed paste asks first; a marker hidden in the text never reaches the
+/// shell; the answer decides whether anything is sent.
+#[cfg(unix)]
+#[gpui::test]
+fn a_multi_line_paste_asks_first_and_hidden_markers_are_removed(cx: &mut TestAppContext) {
+    let dir = single_file_dir("paste");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    cx.simulate_keystrokes("ctrl-`");
+    let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
+    let paste = |cx: &mut VisualTestContext, text: &str| {
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(text.to_string()));
+        cx.simulate_keystrokes(if cfg!(target_os = "macos") { "cmd-v" } else { "ctrl-shift-v" });
+        cx.run_until_parked();
+    };
+    paste(cx, "echo one-\x1b[201~two\n");
+    wait_for(cx, "the single line ran", |cx| term.read_with(cx, |t, _| t.screen_text().contains("one-two")));
+    assert!(!cx.has_pending_prompt(), "one line does not ask");
+
+    paste(cx, "echo first-line\necho second-line\n");
+    assert!(cx.has_pending_prompt(), "several lines ask first");
+    cx.simulate_prompt_answer("Cancel");
+    cx.run_until_parked();
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    cx.run_until_parked();
+    assert!(!term.read_with(cx, |t, _| t.screen_text().contains("first-line")), "nothing was sent");
+
+    paste(cx, "echo first-line\necho second-line\n");
+    cx.simulate_prompt_answer("Paste");
+    // The output line may follow a prompt (dash echoes both typed lines before running them).
+    let ran = |l: &str| l.trim_end().ends_with("second-line") && !l.contains("echo");
+    wait_for(cx, "both lines ran", |cx| term.read_with(cx, |t, _| t.screen_text().lines().filter(|l| ran(l)).count() == 1));
+}
+
+/// Closing a terminal asks only while a program runs in it; a split opens where the shell is now; a profile's
+/// arguments and environment reach the shell.
+#[cfg(unix)]
+#[gpui::test]
+fn terminals_ask_before_killing_a_program_split_where_the_shell_is_and_follow_profiles(cx: &mut TestAppContext) {
+    let dir = single_file_dir("term-profiles");
+    let elsewhere = std::fs::canonicalize(std::env::temp_dir()).unwrap().to_string_lossy().into_owned();
+    let mut settings = crate::settings::Settings::default();
+    let profile = crate::terminal_profiles::Profile {
+        name: "plain".into(),
+        path: "/bin/sh".into(),
+        args: Some(Vec::new()),
+        env: vec![("PROFILE_ENV_PROBE".into(), "from-profile".into())],
+        color: Some("info".into()),
+    };
+    settings.terminal_profiles.insert(crate::terminal_profiles::os_key(std::env::consts::OS).into(), vec![profile]);
+    settings.terminal_default_profile = Some("plain".into());
+    let (wb, cx) = crate::qa_integration_tests::setup_with(cx, settings);
+    open(&wb, &dir, cx);
+    cx.simulate_keystrokes("ctrl-`");
+    let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
+    let screen = |cx: &mut VisualTestContext, t: &gpui::Entity<crate::terminal::TerminalView>| t.read_with(cx, |t, _| t.screen_text());
+    cx.simulate_input("echo \"$PROFILE_ENV_PROBE\"\n");
+    wait_for(cx, "the profile's environment", |cx| screen(cx, &term).lines().any(|l| l == "from-profile"));
+    assert_eq!(term.read_with(cx, |t, _| t.color.clone()).as_deref(), Some("info"));
+
+    // The shell moves; the split follows it.
+    cx.simulate_input(&format!("cd {elsewhere}\n"));
+    cx.run_until_parked();
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Split", window, cx));
+    wait_for(cx, "the split", |cx| wb.read_with(cx, |wb, _| wb.terminal_count()) == 2);
+    let second = wb.read_with(cx, |wb, _| wb.active_terminal()).unwrap();
+    assert_eq!(second.read_with(cx, |t, _| t.cwd_for_test()).as_deref(), Some(elsewhere.as_str()));
+
+    // An idle shell closes without a question; one running `sleep` asks and stays open on Cancel.
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Close", window, cx));
+    wait_for(cx, "closed without asking", |cx| wb.read_with(cx, |wb, _| wb.terminal_count()) == 1);
+    assert!(!cx.has_pending_prompt());
+    wb.update_in(cx, |wb, window, cx| wb.focus_terminal(window, cx));
+    cx.simulate_input("sleep 30\n");
+    cx.run_until_parked();
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Close", window, cx));
+    wait_for(cx, "the question", |cx| cx.has_pending_prompt());
+    cx.simulate_prompt_answer("Cancel");
+    cx.run_until_parked();
+    assert_eq!(wb.read_with(cx, |wb, _| wb.terminal_count()), 1, "still open");
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Kill All Terminals", window, cx));
+    wait_for(cx, "the question", |cx| cx.has_pending_prompt());
+    cx.simulate_prompt_answer("Close");
+    wait_for(cx, "all closed", |cx| wb.read_with(cx, |wb, _| wb.terminal_count()) == 0);
+}
+
+/// Shell integration sequences mark commands: their count, the last output and how they ended.
+#[gpui::test]
+fn command_marks_follow_the_shell_integration_sequences(cx: &mut TestAppContext) {
+    let dir = single_file_dir("marks");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    wb.update(cx, |wb, _| wb.set_shell("/bin/cat"));
+    cx.simulate_keystrokes("ctrl-`");
+    let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
+    let feed = |cx: &mut VisualTestContext, s: &str| term.update(cx, |t, _| t.feed_for_test(s.as_bytes()));
+    feed(cx, "\x1b]7;file://box/srv/app\x07\x1b]133;A\x07$ ls\r\n\x1b]133;C\x07a.txt\r\nb.txt\r\n\x1b]133;D;0\x07");
+    feed(cx, "\x1b]133;A\x07$ false\r\n\x1b]133;C\x07");
+    assert_eq!(term.read_with(cx, |t, _| t.command_count_for_test()), 2);
+    assert_eq!(term.read_with(cx, |t, _| t.last_output_for_test()).as_deref(), Some("a.txt\nb.txt"), "the finished command's output");
+    feed(cx, "\x1b]133;D;1\x07\x1b]133;A\x07$ ");
+    assert_eq!(term.read_with(cx, |t, _| t.last_output_for_test()).as_deref(), Some(""), "the last command printed nothing");
+    assert_eq!(term.read_with(cx, |t, _| t.live_cwd()).as_deref(), Some("/srv/app"));
+    // A prompt without a command (an empty line) is not counted.
+    feed(cx, "\r\n\x1b]133;A\x07$ ");
+    assert_eq!(term.read_with(cx, |t, _| t.command_count_for_test()), 2);
+}
+
+/// Scrolled back while a program with a scroll region (vim, less, tmux) keeps printing: the view stays inside the history
+/// and the screen can be drawn (the terminal parser moved the view past the history's end, and drawing that panicked).
+#[gpui::test]
+fn output_in_a_scroll_region_while_scrolled_back_does_not_break_drawing(cx: &mut TestAppContext) {
+    let dir = single_file_dir("scrolled-dl");
+    let (wb, cx) = setup_with_settings(cx, crate::settings::Settings { terminal_scrollback: 50, ..Default::default() });
+    open(&wb, &dir, cx);
+    wb.update(cx, |wb, _| wb.set_shell("/bin/cat"));
+    cx.simulate_keystrokes("ctrl-`");
+    let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
+    term.update(cx, |t, _| t.feed_for_test(format!("{}\x1b[5;10r", "line\r\n".repeat(50)).as_bytes()));
+    term.update(cx, |t, _| t.scroll_for_test(24));
+    for _ in 0..4 {
+        term.update(cx, |t, _| t.feed_for_test(b"\n\n\n\n\n\n\n\n\x1b[3M"));
+        let _ = term.read_with(cx, |t, _| t.screen_text());
+    }
+}
+
+/// A program can print anything: random sequences mixed with command marks, screen and history clears, resizes of the
+/// scroll region and wide characters. Marks, jumping between commands and copying the last output must survive all of it.
+#[gpui::test]
+fn command_marks_survive_hostile_output(cx: &mut TestAppContext) {
+    let dir = single_file_dir("marks-fuzz");
+    let (wb, cx) = setup_with_settings(cx, crate::settings::Settings { terminal_scrollback: 50, ..Default::default() });
+    open(&wb, &dir, cx);
+    wb.update(cx, |wb, _| wb.set_shell("/bin/cat"));
+    cx.simulate_keystrokes("ctrl-`");
+    let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
+    let pieces: &[&str] = &[
+        "\x1b]133;A\x07$ ",
+        "\x1b]133;C\x07",
+        "\x1b]133;D;0\x07",
+        "\x1b]133;D;1\x07",
+        "\x1b]7;file://h/tmp\x07",
+        "\x1b[2J",
+        "\x1b[3J",
+        "\x1b[H",
+        "\x1bc",
+        "\x1b[5;10r",
+        "\x1b[r",
+        "\x1b[?1049h",
+        "\x1b[?1049l",
+        "\x1b[10S",
+        "\x1b[10T",
+        "\x1b[3L",
+        "\x1b[3M",
+        "中文😀",
+        "\r\n",
+        "\n\n\n\n\n\n\n\n",
+        "line of output\r\n",
+    ];
+    let mut x = 0x9E3779B97F4A7C15u64;
+    let mut next = move |m: usize| {
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        (x % m as u64) as usize
+    };
+    for _ in 0..6000 {
+        let mut chunk = String::new();
+        for _ in 0..(1 + next(8)) {
+            chunk.push_str(pieces[next(pieces.len())]);
+        }
+        term.update(cx, |t, _| t.feed_for_test(chunk.as_bytes()));
+        match next(6) {
+            0 => drop(term.read_with(cx, |t, _| t.last_output_for_test())),
+            1 => term.update(cx, |t, _| t.jump_for_test(next(2) == 0)),
+            2 => drop(term.read_with(cx, |t, _| t.visible_marks_for_test())),
+            3 => drop(term.read_with(cx, |t, _| t.scrollback_text())),
+            4 => drop(term.read_with(cx, |t, _| (t.screen_text(), t.live_cwd()))),
+            _ => {}
+        }
+    }
+}
+
+/// A real zsh with the integration scripts: its commands and exit codes are marked, and it reports its folder.
+#[cfg(unix)]
+#[gpui::test]
+fn zsh_reports_commands_and_its_folder_with_shell_integration(cx: &mut TestAppContext) {
+    if !std::path::Path::new("/bin/zsh").exists() {
+        return;
+    }
+    let dir = single_file_dir("zsh-int");
+    let user = dir.join("zdot");
+    std::fs::create_dir_all(&user).unwrap();
+    let mut settings = crate::settings::Settings::default();
+    let profile = crate::terminal_profiles::Profile {
+        name: "zsh".into(),
+        path: "/bin/zsh".into(),
+        args: None,
+        env: vec![("CODEYARD_USER_ZDOTDIR".into(), user.to_string_lossy().into_owned())],
+        color: None,
+    };
+    settings.terminal_profiles.insert(crate::terminal_profiles::os_key(std::env::consts::OS).into(), vec![profile]);
+    settings.terminal_default_profile = Some("zsh".into());
+    let (wb, cx) = crate::qa_integration_tests::setup_with(cx, settings);
+    open(&wb, &dir, cx);
+    cx.simulate_keystrokes("ctrl-`");
+    let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
+    let elsewhere = std::fs::canonicalize(std::env::temp_dir()).unwrap().to_string_lossy().into_owned();
+    cx.simulate_input(&format!("cd {elsewhere}; echo marked-output\n"));
+    wait_for(cx, "the first command", |cx| {
+        term.read_with(cx, |t, _| t.command_count_for_test()) >= 1 && t_out(&term, cx).is_some_and(|o| o.contains("marked-output"))
+    });
+    assert_eq!(term.read_with(cx, |t, _| t.live_cwd()).as_deref(), Some(elsewhere.as_str()), "OSC 7 from the prompt hook");
+    cx.simulate_input("false\n");
+    wait_for(cx, "the second command", |cx| term.read_with(cx, |t, _| t.command_count_for_test()) >= 2 && t_out(&term, cx).is_some_and(|o| o.is_empty()));
+}
+
+#[cfg(unix)]
+fn t_out(term: &gpui::Entity<crate::terminal::TerminalView>, cx: &mut VisualTestContext) -> Option<String> {
+    term.read_with(cx, |t, _| t.last_output_for_test())
+}
+
 /// Explorer: single-subfolder chains as one row, sort setting, hierarchy line, type-to-search.
 #[gpui::test]
 fn explorer_compacts_chains_sorts_and_types_ahead(cx: &mut TestAppContext) {
@@ -3145,6 +3426,26 @@ fn images_open_in_a_preview(cx: &mut TestAppContext) {
     let view = wb.read_with(cx, |wb, _| wb.large_view()).expect("preview opened");
     assert!(view.read_with(cx, |v, _| v.is_image() && v.image_loaded()));
     assert_eq!(wb.read_with(cx, |wb, _| wb.open_state()).1, None, "no binary-file error");
+}
+
+/// A tiny PNG that announces 30,000 × 30,000 pixels (3.6 GB once decoded) is refused before it is decoded.
+#[gpui::test]
+fn an_image_too_large_to_decode_is_refused(cx: &mut TestAppContext) {
+    let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
+    png.extend(30_000u32.to_be_bytes());
+    png.extend(30_000u32.to_be_bytes());
+    png.extend([8, 6, 0, 0, 0, 0, 0, 0, 0]);
+    let dir = std::fs::canonicalize(project("huge-image")).unwrap();
+    std::fs::write(dir.join("bomb.png"), &png).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    let p = dir.join("bomb.png").to_string_lossy().into_owned();
+    wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(p, window, cx));
+    cx.run_until_parked();
+    let view = wb.read_with(cx, |wb, _| wb.large_view()).expect("preview opened");
+    assert!(view.read_with(cx, |v, _| !v.image_loaded()), "nothing was decoded");
+    let error = view.read_with(cx, |v, _| v.error_for_test());
+    assert!(error.as_deref().is_some_and(|e| e.contains("30000 × 30000")), "{error:?}");
 }
 
 #[gpui::test]

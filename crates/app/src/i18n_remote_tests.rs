@@ -54,7 +54,7 @@ fn ports_and_debugger_texts() {
         "Bağlantı noktası 3000, localhost:3001 adresine yönlendirildi (3000 burada meşguldü)"
     );
     assert_eq!(t("No debug session. F5 starts one."), "Hata ayıklama oturumu yok. F5 bir oturum başlatır.");
-    assert_eq!(tf("{}: paused ({})", &[&"Debug Rust: x", &"kesme noktası"]), "Debug Rust: x: duraklatıldı (kesme noktası)");
+    assert_eq!(tf("paused on {}", &[&"kesme noktası"]), "kesme noktası nedeniyle duraklatıldı");
     let detected = crate::debug_config::detect(Some("[package]\nname = \"demo\"\n"), true, Some("/p/a.py"), "/p");
     let names: Vec<&str> = detected.iter().map(|c| c.name.as_str()).collect();
     assert_eq!(names, ["Rust Hata Ayıklama: demo", "Go Paketi Hata Ayıklama", "Python Hata Ayıklama: a.py"]);
@@ -77,7 +77,7 @@ fn http_explanations_and_confirmations() {
     assert_eq!(http::explain_curl(Some(99), "boom", "x", "http://a/"), "boom (curl çıkış kodu 99)");
     assert_eq!(http::explain_curl(None, "", "x", "http://a/"), "İstek başarısız oldu.");
     let req = http::parse("POST http://a/x\n\n< /etc/passwd\n").requests[0].clone();
-    let parts = http::sensitive_parts(&req);
+    let parts = http::sensitive_parts(&req, &[]);
     assert!(parts.iter().any(|p| p.contains("/etc/passwd dosyasını yüklüyor")), "{parts:?}");
     let ctx_vars: Vec<(String, String)> = Vec::new();
     let responses = std::collections::HashMap::new();

@@ -132,7 +132,7 @@ pub fn header(id: impl Into<gpui::ElementId>, title: &str, count: Option<usize>,
                 .justify_center()
                 .rounded(px(8.))
                 .bg(c(p.surface_active))
-                .text_size(px(10.))
+                .text_size(px(ui::text::BADGE.0))
                 .text_color(c(p.text))
                 .child(n.to_string())
         }))

@@ -1,4 +1,6 @@
 # Native Windows checks. Requires Rust MSVC, C++ Build Tools and Windows SDK (fxc).
+# CI runs the standalone release in a parallel job; local invocation keeps every check.
+param([switch]$SkipStandalone)
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'Run this script on Windows.' }
 Set-Location (Split-Path $PSScriptRoot -Parent)
@@ -26,5 +28,7 @@ Invoke-Cargo -CargoArgs @(
     'files_from_the_system', 'qa_workspace_file',
     '--test-threads=1'
 )
-Invoke-Cargo -CargoArgs @('build', '--release', '--locked', '-p', 'app')
-& "$PSScriptRoot/test-standalone-agents.ps1" -Executable 'target/release/codeyard.exe'
+if (-not $SkipStandalone) {
+    Invoke-Cargo -CargoArgs @('build', '--release', '--locked', '-p', 'app')
+    & "$PSScriptRoot/test-standalone-agents.ps1" -Executable 'target/release/codeyard.exe'
+}

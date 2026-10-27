@@ -27,13 +27,22 @@ const MAX_MESSAGE: usize = 64 * 1024 * 1024;
 #[derive(Default)]
 pub struct Decoder {
     buf: Vec<u8>,
+    /// How far into `buf` no header end was found: a new chunk is searched from there on (less 3 bytes, since `\r\n\r\n`
+    /// can be split between chunks), so text without headers is not searched again with every chunk.
+    scanned: usize,
 }
 
 impl Decoder {
     pub fn push(&mut self, data: &[u8]) -> Vec<Value> {
         self.buf.extend_from_slice(data);
         let mut out = Vec::new();
-        while let Some(head_end) = self.buf.windows(4).position(|w| w == b"\r\n\r\n") {
+        loop {
+            let from = self.scanned.saturating_sub(3);
+            let Some(head_end) = self.buf[from..].windows(4).position(|w| w == b"\r\n\r\n").map(|p| p + from) else {
+                self.scanned = self.buf.len();
+                break;
+            };
+            self.scanned = 0;
             let head = String::from_utf8_lossy(&self.buf[..head_end]).to_string();
             let len = head
                 .lines()
@@ -52,6 +61,8 @@ impl Decoder {
             }
             let start = head_end + 4;
             if self.buf.len() < start + len {
+                // The body is still coming: the next chunk finds this header again at once.
+                self.scanned = head_end;
                 break;
             }
             if let Ok(v) = serde_json::from_slice(&self.buf[start..start + len]) {
@@ -63,6 +74,7 @@ impl Decoder {
         // is either headerless or a partial body, and the body limit is already `MAX_MESSAGE`.
         if self.buf.len() > MAX_MESSAGE + 64 * 1024 {
             self.buf.clear();
+            self.scanned = 0;
         }
         out
     }

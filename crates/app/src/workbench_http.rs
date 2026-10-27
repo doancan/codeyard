@@ -14,6 +14,21 @@ fn random_between(a: i64, b: i64) -> i64 {
 }
 
 /// "https://host/path?x" → "host/path" (shortened for the notification).
+/// The first symbolic link on the way from `dir` to the body file `rel` (named relative to the `.http` file), if any: a link
+/// next to the file can point anywhere (`~/.ssh/id_rsa`, `/proc/self/environ`), so it is not "next to the file".
+fn through_symlink(host: &dyn host::Host, dir: &str, rel: &str) -> Option<String> {
+    let mut at = dir.to_string();
+    for part in rel.split('/').filter(|c| !c.is_empty() && *c != ".") {
+        let entries = host.read_dir(&at).ok()?;
+        let next = ui::join(&at, part);
+        if entries.iter().any(|e| e.name == part && e.kind == proto::Kind::Symlink) {
+            return Some(next);
+        }
+        at = next;
+    }
+    None
+}
+
 fn short_url(url: &str) -> String {
     let rest = url.split_once("://").map_or(url, |(_, r)| r);
     let rest = rest.split(['?', '#']).next().unwrap_or(rest);
@@ -46,7 +61,7 @@ impl Workbench {
         // Two reasons to ask first, both answered by one prompt: the request does something a file from someone else should not do
         // silently (read the environment, upload files from elsewhere; once per file and session), or it goes to a host this
         // session has not contacted yet (`http.confirmRequests`).
-        let sensitive = if self.lsp.http_trusted.contains(&self.trust_key(&path)) { Vec::new() } else { http::sensitive_parts(&request) };
+        let sensitive = if self.lsp.http_trusted.contains(&self.trust_key(&path)) { Vec::new() } else { http::sensitive_parts(&request, &parsed.vars) };
         let mut reasons = sensitive.clone();
         let (mode, gate) = {
             let mode = schema::gate::Confirm::parse(&cx.global::<Settings>().http_confirm).unwrap_or_default();
@@ -135,6 +150,12 @@ impl Workbench {
             let ctx = http::Context { vars: &vars, responses: &responses, now, env: &env, uuid: &uuid, random: &random_between };
             let read = |p: &str| -> Result<Vec<u8>, String> {
                 let full = if p.starts_with('/') { p.to_string() } else { ui::join(&dir, p.trim_start_matches("./")) };
+                // A name next to the file was not confirmed: it must not lead somewhere else through a link.
+                if !p.starts_with('/')
+                    && let Some(link) = through_symlink(file_host.as_ref(), &dir, p)
+                {
+                    return Err(crate::i18n::tf("{} is a symbolic link; write the path it points to, so the upload can be confirmed", &[&link]));
+                }
                 file_host.read(&full).map(|(d, _)| d).map_err(|e| crate::i18n::tf("could not read {}: {}", &[&p, &e]))
             };
             let prepared = http::prepare(&request, &ctx, &read)?;
@@ -251,5 +272,24 @@ impl Workbench {
         }
         text.push_str(&format!("\n# {} ms · {}\n", r.millis, http::human_size(r.size)));
         self.create_scratch_with("response-headers.txt".into(), &text, window, cx);
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    #[test]
+    fn a_body_file_reached_through_a_link_is_found() {
+        let dir = std::env::temp_dir().join(format!("codeyard-http-link-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("real")).unwrap();
+        std::fs::write(dir.join("real/ok.json"), "{}").unwrap();
+        std::os::unix::fs::symlink("/etc/hosts", dir.join("leak.json")).unwrap();
+        std::os::unix::fs::symlink(dir.join("real"), dir.join("linked")).unwrap();
+        let host = host::local();
+        let d = dir.to_string_lossy().into_owned();
+        assert_eq!(super::through_symlink(&host, &d, "./real/ok.json"), None);
+        assert!(super::through_symlink(&host, &d, "leak.json").is_some_and(|l| l.ends_with("/leak.json")));
+        assert!(super::through_symlink(&host, &d, "./linked/ok.json").is_some_and(|l| l.ends_with("/linked")), "a linked folder counts too");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

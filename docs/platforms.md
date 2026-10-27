@@ -5,7 +5,7 @@
 | App | released, daily use, all gates run | builds; the whole app test suite passed once in a Debian arm64 container (469 of 469 tests), not re-run since | builds natively (MSVC) and is checked by `scripts/check-windows.ps1` (library tests, path, terminal and resize regressions); ConPTY terminal, menu bar; SSH needs a key or ssh-agent |
 | Agent (target of SSH) | `aarch64-apple-darwin` bundled | `x86_64` and `aarch64` musl bundled, ≤ 1600 KB | not a target |
 | Installer | `.app` + DMG; Developer ID signing/notarization verified in release CI | none yet | portable ZIP and Inno Setup installer (`scripts/bundle-windows.ps1`), unsigned |
-| CI | `macos-latest` job runs the gates; all gates also run locally with `scripts/check.sh` | `linux` job (GPUI-free crates, musl agent size) is blocking; `linux-app` (whole workspace) is experimental and may fail | blocking `windows-2022` job running `scripts/check-windows.ps1` |
+| CI | `macos-latest` job runs the gates; all gates also run locally with `scripts/check.sh` | `linux` job (GPUI-free crates, musl agent size) is blocking; `linux-app` (whole workspace/GPUI) is blocking after four consecutive successful runs | blocking `windows-2022` job running `scripts/check-windows.ps1` |
 
 ## macOS specifics
 

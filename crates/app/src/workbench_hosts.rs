@@ -202,6 +202,13 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
+                // The Remote Explorer shows the outcome on the host's row.
+                let reachable = match &result {
+                    Ok(p) if p.agent_bundled => Ok(()),
+                    Ok(p) => Err(p.uname.clone()),
+                    Err(e) => Err(e.to_string()),
+                };
+                this.remote.view.probes.insert(alias.clone(), reachable);
                 this.notice = Some(match result {
                     Ok(p) if p.agent_bundled => Notice::Info(crate::i18n::tf("{}: reachable in {} ms · {} · ready", &[&alias, &p.millis, &p.uname]).into()),
                     Ok(p) => Notice::Error(

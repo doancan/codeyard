@@ -76,6 +76,8 @@ mod ports_glue;
 pub mod projects;
 #[path = "workbench_pulls.rs"]
 mod pulls_glue;
+#[path = "workbench_remote.rs"]
+mod remote_glue;
 // --- git-refs ---
 #[path = "workbench_recover.rs"]
 mod recover_glue;
@@ -108,6 +110,8 @@ mod terminals_glue;
 #[cfg(test)]
 #[path = "workbench_testing.rs"]
 mod testing_glue;
+#[path = "workbench_test_explorer.rs"]
+mod tests_glue;
 #[cfg(test)]
 pub(crate) use testing_glue::DialogView;
 #[path = "workbench_theme.rs"]
@@ -118,6 +122,8 @@ mod transfer;
 mod update_glue;
 #[path = "workbench_update_window.rs"]
 mod update_window_glue;
+#[path = "workbench_vcs.rs"]
+mod vcs_glue;
 #[path = "workbench_view_editor.rs"]
 mod view_editor_glue;
 #[path = "workbench_view_explorer.rs"]
@@ -418,7 +424,14 @@ struct Overlay {
     _sub: Subscription,
 }
 
+pub use debug::{
+    AddDebugConfiguration, AddFunctionBreakpoint, ConsoleComplete, ConsoleHistoryNext, ConsoleHistoryPrev, DisableAllBreakpoints, EnableAllBreakpoints,
+    OpenLaunchConfiguration, RunToCursor, RunWithoutDebugging, ShowRunAndDebug, StopAllDebugging, ToggleBreakpointEnabled, ToggleBreakpointsActive,
+};
 pub use host::askpass::{AskKind, AskRequest};
+pub use remote_glue::ShowRemoteExplorer;
+pub use terminals_glue::{ChangeTerminalColor, KillAllTerminals, NewTerminalWithProfile, RenameTerminal, SelectDefaultTerminalProfile};
+pub use tests_glue::{DebugTestAtCursor, RefreshTests, RunAllTests, RunFailedTests, ShowTesting, StopTests};
 pub type AskReply = std::sync::mpsc::Sender<Option<String>>;
 
 /// Options in the status bar pickers.
@@ -552,6 +565,9 @@ enum Panel {
     Explorer,
     Search,
     Scm,
+    Debug,
+    Testing,
+    Remote,
 }
 
 enum Conn {
@@ -900,18 +916,9 @@ impl Workbench {
                 }
             }),
             cx.subscribe_in(&port_field, window, |this, field, ev: &crate::input::FieldEvent, _, cx| {
-                if matches!(ev, crate::input::FieldEvent::Submit) {
-                    let text = field.read(cx).text().trim().trim_start_matches("localhost:").to_string();
-                    match text.parse::<u16>() {
-                        Ok(port) if port > 0 => {
-                            field.update(cx, |f, cx| f.set_text("", cx));
-                            this.forward_port(port, cx);
-                        }
-                        _ => {
-                            this.notice = Some(Notice::Error(crate::i18n::tf("“{}” is not a port number", &[&text]).into()));
-                            cx.notify();
-                        }
-                    }
+                let text = field.read(cx).text().to_string();
+                if matches!(ev, crate::input::FieldEvent::Submit) && this.submit_port_field(&text, cx) {
+                    field.update(cx, |f, cx| f.set_text("", cx));
                 }
             }),
             cx.subscribe_in(&scm, window, |this, _, event: &crate::scm::ScmEvent, window, cx| match event {
@@ -1002,15 +1009,8 @@ impl Workbench {
             term_split: None,
             active_terminal: 0,
             shell: None,
-            dbg: state_glue::DebugUi {
-                session: None,
-                generation: 0,
-                watch_exprs: Vec::new(),
-                exception_filters: None,
-                bp_cache: Default::default(),
-                last: None,
-            },
-            jobs: state_glue::TaskState { last: None, terminal: None, root: None, problems: Vec::new(), scan_pending: false },
+            dbg: Default::default(),
+            jobs: state_glue::TaskState { last: None, terminal: None, root: None, problems: Vec::new(), scan_pending: false, tests: Default::default() },
             lsp: state_glue::LspState {
                 restricted_notified: Default::default(),
                 servers: Default::default(),
@@ -1106,6 +1106,7 @@ impl Workbench {
                 bundle: Arc::new(crate::bundled_agents::discover()),
                 asks: Default::default(),
                 transfer: None,
+                view: Default::default(),
             },
             roots: state_glue::RootsState {
                 primary: tree,
@@ -1358,16 +1359,18 @@ impl Workbench {
                             cx.notify();
                         }),
                     ))
-                    .when(self.dbg.session.is_some(), |d| {
-                        d.child(panel_tab("debug-tab", crate::i18n::upper(crate::i18n::t("Debug")), self.chrome.bottom == Bottom::Debug, 0, p).on_click(
-                            cx.listener(|this, _, _, cx| {
-                                this.chrome.bottom = Bottom::Debug;
-                                cx.notify();
-                            }),
-                        ))
+                    .when(self.dbg.has_sessions(), |d| {
+                        d.child(
+                            panel_tab("debug-tab", crate::i18n::upper(crate::i18n::t("Debug Console")), self.chrome.bottom == Bottom::Debug, 0, p).on_click(
+                                cx.listener(|this, _, _, cx| {
+                                    this.chrome.bottom = Bottom::Debug;
+                                    cx.notify();
+                                }),
+                            ),
+                        )
                     })
                     .child(
-                        panel_tab("ports-tab", crate::i18n::upper(crate::i18n::t("Ports")), self.chrome.bottom == Bottom::Ports, self.ports.forwards.len(), p)
+                        panel_tab("ports-tab", crate::i18n::upper(crate::i18n::t("Ports")), self.chrome.bottom == Bottom::Ports, self.active_forwards(), p)
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.chrome.bottom = Bottom::Ports;
                                 cx.notify();
@@ -1421,49 +1424,8 @@ impl Workbench {
                     Bottom::Debug => d.child(self.debug_view(p, cx)),
                     Bottom::Ports => d.child(self.ports_view(p, cx)),
                     Bottom::Terminal => {
-                        // Multiple terminals: list on the right (like VS Code), name and close.
-                        let list = (self.terminals.len() > 1).then(|| {
-                            div().id("terminal-list").w(px(180.)).flex_none().h_full().border_l_1().border_color(c(p.border)).overflow_y_scroll().children(
-                                self.terminals.iter().enumerate().map(|(i, t)| {
-                                    let active = i == self.active_terminal;
-                                    let t = t.read(cx);
-                                    let label = if t.has_exited() { crate::i18n::tf("{} (exited)", &[&t.title]) } else { t.title.to_string() };
-                                    let group: SharedString = format!("term-row-{i}").into();
-                                    div()
-                                        .id(("term-tab", i))
-                                        .group(group.clone())
-                                        .w_full()
-                                        .h(px(layout::ROW_H))
-                                        .flex()
-                                        .items_center()
-                                        .gap(px(theme::SPACE[2]))
-                                        .px(px(theme::SPACE[4]))
-                                        .cursor_pointer()
-                                        .text_size(px(text::XS.0))
-                                        .when(active, |d| d.bg(c(p.surface_active)))
-                                        .hover(|d| d.bg(c(p.surface_hover)))
-                                        .text_color(c(if active { p.text } else { p.text_muted }))
-                                        .child(icon("terminal", 14., if active { p.text } else { p.text_muted }))
-                                        .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(label))
-                                        .child(
-                                            div()
-                                                .id(("term-close", i))
-                                                .opacity(0.)
-                                                .group_hover(group, |s| s.opacity(1.))
-                                                .child(icon("x", 12., p.text_muted))
-                                                .on_click(cx.listener(move |this, _, window, cx| {
-                                                    cx.stop_propagation();
-                                                    this.close_terminal(i, window, cx);
-                                                })),
-                                        )
-                                        .on_click(cx.listener(move |this, _, window, cx| {
-                                            this.active_terminal = i;
-                                            this.chrome.bottom = Bottom::Terminal;
-                                            this.focus_terminal(window, cx);
-                                        }))
-                                }),
-                            )
-                        });
+                        // Several terminals: their list on the right.
+                        let list = self.terminal_list(p, cx);
                         let active = self.terminals.get(self.active_terminal).cloned();
                         let other = self.term_split.clone().filter(|o| Some(o) != active.as_ref() && self.terminals.contains(o));
                         d.child(
@@ -1609,9 +1571,9 @@ impl Workbench {
         self.persist.pending_restore = self.persist.workspace_id;
         self.restore_tree(cx);
         self.restore_extra_roots(cx);
-        self.load_watches();
-        self.load_exception_filters();
+        self.load_debug_state(cx);
         self.load_favorites();
+        self.restore_forwards(cx);
         self.load_project_settings(cx);
         cx.notify();
     }
@@ -1807,204 +1769,6 @@ impl Workbench {
         })
         .detach();
         cx.notify();
-    }
-
-    // --- Git ---
-
-    /// Refresh git status after `delay` ms (back-to-back events coalesce into one run).
-    pub fn refresh_git(&mut self, delay: u64, cx: &mut Context<Self>) {
-        if let Some(root) = self.vcs.scm_root.clone().or_else(|| self.root(cx)) {
-            self.refresh_git_at(&root, delay, cx);
-            // Tree marks of inactive roots stay current too (Source Control only shows the active root).
-            for other in self.all_roots(cx).into_iter().filter(|r| *r != root) {
-                self.refresh_marks_only(other, cx);
-            }
-        }
-    }
-
-    /// Explorer marks only: one root's `git status`, without touching Source Control.
-    fn refresh_marks_only(&mut self, root: String, cx: &mut Context<Self>) {
-        if !self.vcs.marks_busy.insert(root.clone()) {
-            return;
-        }
-        let host = self.remote.host.clone();
-        let r = root.clone();
-        let trusted = self.is_trusted_root(&root, cx);
-        let task = cx.background_executor().spawn(async move { crate::git::status_for(host.as_ref(), &r, trusted) });
-        cx.spawn(async move |this, cx| {
-            let result = task.await;
-            this.update(cx, |this, cx| {
-                this.vcs.marks_busy.remove(&root);
-                if !this.all_roots(cx).contains(&root) {
-                    return;
-                }
-                if let Ok(st) = result {
-                    let marks = Arc::new(st.map(|s| s.marks()).unwrap_or_default());
-                    if this.vcs.tree_marks.get(&root).map(|m| **m != *marks).unwrap_or(!marks.is_empty()) {
-                        this.vcs.tree_marks.insert(root.clone(), marks.clone());
-                        for t in this.all_trees() {
-                            if t.read(cx).root() == Some(root.as_str()) {
-                                t.update(cx, |t, cx| t.set_git(marks.clone(), cx));
-                            }
-                        }
-                    }
-                }
-            })
-            .ok();
-        })
-        .detach();
-    }
-
-    /// Source control shows the active file's repo: if the file is in another root, branch and status are refreshed.
-    pub(super) fn sync_scm_root(&mut self, cx: &mut Context<Self>) {
-        if self.roots.extra_roots.is_empty() {
-            return;
-        }
-        let Some(root) = self.active_root(cx) else { return };
-        if self.vcs.scm_root.as_deref().or(self.root(cx).as_deref()) == Some(root.as_str()) {
-            return;
-        }
-        self.vcs.scm_root = Some(root.clone());
-        self.load_git_branch(&root, cx);
-        self.vcs.error = None;
-        self.refresh_git(0, cx);
-    }
-
-    fn refresh_git_at(&mut self, dir: &str, delay: u64, cx: &mut Context<Self>) {
-        if self.vcs.refreshing {
-            self.vcs.refresh_again = true;
-            return;
-        }
-        let (host, dir) = (self.remote.host.clone(), dir.to_string());
-        let trusted = self.is_trusted_root(&dir, cx);
-        #[cfg(test)]
-        let hangs = self.git_status_hangs;
-        // A task in its waiting phase is replaced by the newer one (cancelled); a running `git status` isn't.
-        self.vcs.refresh = Some(cx.spawn(async move |this, cx| {
-            if delay > 0 {
-                cx.background_executor().timer(Duration::from_millis(delay)).await;
-            }
-            if this.update(cx, |this, _| this.vcs.refreshing = true).is_err() {
-                return;
-            }
-            let d = dir.clone();
-            let status = cx.background_executor().spawn(async move { crate::git::status_for(host.as_ref(), &d, trusted) });
-            #[cfg(test)]
-            let status: std::pin::Pin<Box<dyn std::future::Future<Output = Result<Option<crate::git::Status>, String>>>> =
-                if hangs { Box::pin(futures::future::pending()) } else { Box::pin(status) };
-            // Watchdog: if no status arrives (hung git, slow network disk) the lock is released; later
-            // refreshes run and the late result isn't applied.
-            let timer = cx.background_executor().timer(GIT_STATUS_TIMEOUT);
-            let result = match futures::future::select(status, timer).await {
-                futures::future::Either::Left((result, _)) => result,
-                futures::future::Either::Right(_) => Err(format!("git status did not finish in {} s", GIT_STATUS_TIMEOUT.as_secs())),
-            };
-            this.update(cx, |this, cx| {
-                this.vcs.refreshing = false;
-                if std::mem::take(&mut this.vcs.refresh_again) {
-                    this.refresh_git(0, cx);
-                }
-                if !this.all_roots(cx).contains(&dir) {
-                    return; // another folder was opened meanwhile
-                }
-                if this.vcs.scm_root.clone().or_else(|| this.root(cx)).as_deref() != Some(dir.as_str()) {
-                    this.refresh_git(0, cx); // the active file's root changed meanwhile
-                    return;
-                }
-                match result {
-                    // No change (most polls): no redraw. Every frame makes Metal allocate ~110 MB of
-                    // temporary buffers; polling every 4 s kept inflating memory.
-                    Ok(st) if this.vcs.error.is_none() && st.as_ref() == this.vcs.status.as_deref() => return,
-                    Ok(st) => {
-                        this.vcs.error = None;
-                        this.apply_git(st.map(Arc::new), cx);
-                    }
-                    Err(e) => {
-                        // Say it only the first time (polling retries every 4 s).
-                        if this.vcs.error.is_none() {
-                            this.notice = Some(Notice::Error(format!("Git: {e}").into())); // i18n-keep: "Git: {}" would read the same in every language; {e} is git's own text
-                        }
-                        this.vcs.error = Some(e.into());
-                    }
-                }
-                cx.notify();
-            })
-            .ok();
-        }));
-    }
-
-    fn apply_git(&mut self, st: Option<Arc<crate::git::Status>>, cx: &mut Context<Self>) {
-        let head_changed = st.as_ref().map(|s| (&s.root, &s.head)) != self.vcs.status.as_ref().map(|s| (&s.root, &s.head));
-        let marks = Arc::new(st.as_ref().map(|s| s.marks()).unwrap_or_default());
-        // Each tree shows the marks of its own root: the new status updates the cache of roots inside the repo
-        // (clears the active root's if there is no repo); other roots' marks are kept.
-        let scm_dir = self.vcs.scm_root.clone().or_else(|| self.root(cx));
-        let repo_root = st.as_ref().map(|s| format!("{}/", s.root.trim_end_matches('/')));
-        for r in self.all_roots(cx) {
-            let inside = repo_root.as_ref().is_some_and(|p| format!("{}/", r.trim_end_matches('/')).starts_with(p.as_str()));
-            if inside {
-                self.vcs.tree_marks.insert(r, marks.clone());
-            } else if repo_root.is_none() && scm_dir.as_deref() == Some(r.as_str()) {
-                self.vcs.tree_marks.remove(&r);
-            }
-        }
-        for t in self.all_trees() {
-            let m = t.read(cx).root().and_then(|r| self.vcs.tree_marks.get(r).cloned()).unwrap_or_default();
-            t.update(cx, |t, cx| t.set_git(m, cx));
-        }
-        if let Some(s) = &st {
-            self.vcs.branch = s.branch.clone().map(Into::into).or(self.vcs.branch.take());
-        }
-        // Gutter base is re-read only when HEAD (or the repo) changes.
-        if head_changed {
-            for ed in self.all_editors() {
-                if ed.read(cx).uses_host(&self.remote.host) {
-                    let (root, changed) = git_context(st.as_deref(), &ed.read(cx).path);
-                    ed.update(cx, |e, cx| e.set_git_root(root, changed, cx));
-                }
-            }
-        }
-        let host = self.remote.host.clone();
-        self.scm.update(cx, |s, cx| s.set_status(host, st.clone(), cx));
-        self.vcs.status = st;
-    }
-
-    pub fn git_status(&self) -> Option<Arc<crate::git::Status>> {
-        self.vcs.status.clone()
-    }
-
-    /// Read `.git/HEAD` through the host (works remotely too); if the root is a
-    /// subfolder, looks up at most 6 parent levels.
-    fn load_git_branch(&mut self, root: &str, cx: &mut Context<Self>) {
-        self.vcs.branch = None;
-        let host = self.remote.host.clone();
-        let root = root.trim_end_matches('/').to_string();
-        let task = cx.background_executor().spawn(async move {
-            let mut dir = root;
-            for _ in 0..6 {
-                if let Ok((data, _)) = host.read(&format!("{dir}/.git/HEAD")) {
-                    let head = String::from_utf8_lossy(&data).trim().to_string();
-                    return Some(match head.strip_prefix("ref: refs/heads/") {
-                        Some(branch) => branch.to_string(),
-                        None => head.chars().take(7).collect(), // detached: short sha
-                    });
-                }
-                match dir.rsplit_once('/') {
-                    Some((parent, _)) if !parent.is_empty() => dir = parent.to_string(),
-                    _ => break,
-                }
-            }
-            None
-        });
-        cx.spawn(async move |this, cx| {
-            let branch = task.await;
-            this.update(cx, |this, cx| {
-                this.vcs.branch = branch.map(Into::into);
-                cx.notify();
-            })
-            .ok();
-        })
-        .detach();
     }
 
     /// Place restored editors into the saved layout: left/right group, order, active ones.
@@ -2641,10 +2405,8 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
             EditorEvent::OpenMergeEditor => return this.open_merge_editor(&OpenMergeEditor, window, cx),
             EditorEvent::SendRequest(line) => return this.send_request_at(Some(*line), window, cx),
             EditorEvent::Changed => {
-                // Breakpoints shift with edits: keep the cache (used on close) current.
-                if !this.dbg.bp_cache.is_empty() || !ed.read(cx).breakpoint_lines().is_empty() {
-                    this.collect_breakpoints(cx);
-                }
+                // Breakpoints shift with edits: keep the store (used on close and saved) current.
+                this.sync_breakpoints_from(ed, cx);
                 this.note_edit(ed, cx);
                 this.schedule_schema(ed, Duration::from_millis(600), cx);
             }

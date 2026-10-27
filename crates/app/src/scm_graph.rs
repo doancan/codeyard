@@ -21,7 +21,7 @@ fn ref_chip(r: &RefLabel, p: &Palette) -> gpui::Div {
         .px(px(theme::SPACE[2]))
         .h(px(14.))
         .rounded(px(7.))
-        .text_size(px(10.))
+        .text_size(px(text::BADGE.0))
         .text_color(c(fg))
         .bg(c(bg))
         .child(icon(glyph, 9., fg))
@@ -101,7 +101,7 @@ impl Render for CommitCard {
                                 .items_center()
                                 .rounded(px(7.))
                                 .bg(c(p.surface_active))
-                                .text_size(px(10.))
+                                .text_size(px(text::BADGE.0))
                                 .child(crate::i18n::t("Merge")),
                         )
                     })
@@ -144,7 +144,7 @@ fn filter_chip(id: &'static str, label: &'static str, p: &Palette) -> gpui::Stat
 /// Header button with a counter next to the icon (commits to pull / to push).
 fn count_button(id: &'static str, glyph: &'static str, n: u32, tip: &'static str, p: &Palette) -> gpui::Stateful<gpui::Div> {
     ui::icon_button(id, glyph, tip, p).when(n > 0, |d| {
-        d.w_auto().px(px(theme::SPACE[1])).gap(px(1.)).child(div().text_size(px(10.)).font_weight(gpui::FontWeight::NORMAL).child(n.to_string()))
+        d.w_auto().px(px(theme::SPACE[1])).gap(px(1.)).child(div().text_size(px(text::BADGE.0)).font_weight(gpui::FontWeight::NORMAL).child(n.to_string()))
     })
 }
 
@@ -502,7 +502,9 @@ fn graph_row(g: &GraphData, ix: usize, flat: bool, is_sel: bool, show_author: bo
                 }),
         )
         .children(refs.first().map(|r| div().flex_none().ml(px(theme::SPACE[2])).child(ref_chip(r, p))))
-        .when(more > 0, |d| d.child(div().flex_none().ml(px(theme::SPACE[1])).text_size(px(10.)).text_color(c(p.text_muted)).child(format!("+{more}"))))
+        .when(more > 0, |d| {
+            d.child(div().flex_none().ml(px(theme::SPACE[1])).text_size(px(text::BADGE.0)).text_color(c(p.text_muted)).child(format!("+{more}")))
+        })
         .when(show_hash, |d| {
             d.child(
                 div()

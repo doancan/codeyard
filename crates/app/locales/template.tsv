@@ -35,15 +35,22 @@ Accept Current
 Accept Current Change	
 Accept Incoming	
 Accept Incoming Change	
+Activate Breakpoints	
 Add	
+Add Configuration…	
 Add Cursor Above	
 Add Cursor Below	
+Add Expression…	
+Add Function Breakpoint…	
 Add Next Occurrence	
+Add SSH Host…	
 Add SSH host…	
+Add a debug configuration	
 Add a host	
 Add remote	
 Add to .gitignore	
 Add to Favorites	
+Add to Watch	
 Add worktree	
 Add “{}” to the dictionary	
 Added	
@@ -67,6 +74,7 @@ Always open *.{0} as {1}
 Amended {}	
 An existing file with the same name is never overwritten.	
 Anchors and aliases were expanded.	
+Another debug adapter	
 App: Quit	
 Applied {}	
 Apply (keep the stash)	
@@ -75,12 +83,16 @@ Apply Stash…
 Apr	
 Ask before .http requests and schema downloads leave this computer: never, remote (the first request to each new host per session) or always. Your own settings only; a folder cannot change it	
 Ask before Sync pulls or pushes. Your own settings only; a folder cannot change it	
+Ask before closing a terminal	
 Ask before moving a file or folder by dragging it in the explorer	
 Ask before moving a file to the Trash	
+Ask before pasting several lines into the terminal	
 Ask before running tasks, tests or the debugger of an untrusted folder	
 At most {} extra folders fit in one workspace.	
+Attach to a native process	
 Aug	
 Auto (follow system)	
+Auto Forwarded	
 Back	
 Back to the default (removes the value from settings.jsonc)	
 Back to this computer; files with unsaved changes must be saved or closed first	
@@ -95,8 +107,12 @@ Both, Incoming First
 Box invisible and look-alike Unicode characters (zero-width spaces, bidi controls, Cyrillic letters inside Latin words)	
 Branch {}	
 Breaking on: {}	
+Breakpoints	
+Breakpoints are active.	
+Breakpoints are deactivated: the program runs past them.	
 Bring a folder's tabs and unsaved changes back when you open it	
 Build failed: {}	
+Building the tests…	
 Call Stack	
 Can't copy a folder into itself.	
 Can't open {0}: {1}	
@@ -116,7 +132,10 @@ Cannot open this link: {}
 Cannot parse {} as a number	
 Cannot use {} as an entry	
 Cannot use {} as an object key	
+Change	
 Change All Occurrences	
+Change Color…	
+Change Local Port…	
 Change the URL of which remote?	
 Change this in Settings (update.check). Check for Updates… always works.	
 Changed	
@@ -165,8 +184,10 @@ Close Others
 Close Saved	
 Close a terminal first: at most {} can be open.	
 Close details	
+Close the terminal?	
 Close to the Right	
 Close without saving	
+Closing a terminal ends the programs running in it.	
 Closing the window loses everything since the last save.	
 Code	
 Codeyard already has Full Disk Access.	
@@ -182,6 +203,7 @@ Codeyard {} is available
 Codeyard {} is available.	
 Codeyard {} is available. Click for details.	
 Codeyard {} is installed. Click for details.	
+Collapse All	
 Collapse All Inside	
 Collapse Folders	
 Collapse all results	
@@ -229,9 +251,12 @@ Compare {} with a commit
 Compare: Folders…	
 Compare: {0} ↔ {1}	
 Comparing contents… {0} of {1}	
+Compound “{}” has no configurations	
 Conflict	
 Conflict {0} of {1}	
 Connect	
+Connect in Current Window	
+Connect in New Window	
 Connect over SSH	
 Connect over SSH and the files, terminal and language servers all run on the server.	
 Connect to SSH Host…	
@@ -240,9 +265,14 @@ Connect to WSL…
 Connect to a running container…	
 Connect to which WSL distribution?	
 Connect to which running container?	
+Connected	
+Connected before	
 Connecting to {}	
 Connecting to {}…	
+Connecting…	
 Connection lost: {}	
+Containers	
+Continue	
 Continue (F5)	
 Continuing rebase…	
 Convert indentation to spaces	
@@ -255,14 +285,19 @@ Copied {} item.|Copied {} items.
 Copied {}.	
 Copied “{}” ({}) to {}	
 Copy	
+Copy Address	
+Copy Call Stack	
 Copy Commit Hash	
+Copy Last Command Output	
 Copy Line Down	
 Copy Line Up	
 Copy Message	
 Copy Path	
 Copy Relative Path	
 Copy Report	
+Copy Value	
 Copy Version	
+Copy as Expression	
 Copy branch name	
 Copy code	
 Copy link	
@@ -277,6 +312,7 @@ Copying files here is not possible in this workspace.
 Copying files here needs the connection to {}, which failed: use Reconnect first.	
 Copying files here works with a connected SSH host: connect first (⌃R).	
 Copying…	
+Could not add the configuration: {}	
 Could not be compared	
 Could not blame: {}	
 Could not change {}	
@@ -298,8 +334,10 @@ Could not keep a copy of the version that was on disk: {}
 Could not list branches: {}	
 Could not list files: {}	
 Could not list stashes: {}	
+Could not list the server's ports: {}	
 Could not list: {}	
 Could not load: {}	
+Could not look for tests: {}	
 Could not minify: {}	
 Could not open the debug session: {}	
 Could not open the state database: {}. Tabs, recent folders and backups will not be remembered this session.	
@@ -321,10 +359,12 @@ Could not save the theme: {}
 Could not save your dictionary: {}	
 Could not save: {}	
 Could not set up key login for {}: {}	
+Could not set {}: {}	
 Could not start a shell: {}	
 Could not start debugging: {}	
 Could not start the debug adapter: {}	
 Could not start the debug session: {}	
+Could not start the test runner: {}	
 Could not switch to {0}: {1}	
 Could not tell whether it is merged ({}): git will refuse if commits would be lost.	
 Could not write {0}: {1}	
@@ -335,6 +375,7 @@ Create Branch Here…
 Create Branch…	
 Create Tag Here…	
 Create Tag…	
+Create a launch configuration	
 Create branch	
 Create file	
 Create folder	
@@ -354,34 +395,47 @@ Data: Copy Path at Cursor
 Data: Decode Selection…	
 Data: Query…	
 Days	
-Debug	
+Deactivate Breakpoints	
 Debug Console	
 Debug Go package	
 Debug Node: {}	
 Debug Python: {}	
 Debug Rust: {}	
+Debug Test	
+Debug Test: {}	
 Debug session ended	
 Debug session stopped	
+Debug: Add Configuration…	
+Debug: Add Function Breakpoint…	
 Debug: Add Watch Expression…	
 Debug: Break When Value Changes…	
 Debug: Break on Exceptions…	
 Debug: Continue	
+Debug: Deactivate/Activate Breakpoints	
+Debug: Disable All Breakpoints	
 Debug: Edit Breakpoint… (condition, log message, hit count)	
+Debug: Enable All Breakpoints	
+Debug: Enable/Disable Breakpoint	
 Debug: Install JavaScript Debugger	
+Debug: Open Launch Configuration	
 Debug: Pause	
 Debug: Remove All Breakpoints	
 Debug: Remove All Watch Expressions	
 Debug: Remove Data Breakpoints	
 Debug: Restart	
+Debug: Run Without Debugging	
+Debug: Run to Cursor	
 Debug: Show Debug Panel	
 Debug: Start Debugging	
 Debug: Step Into	
 Debug: Step Out	
 Debug: Step Over	
 Debug: Stop	
+Debug: Stop All	
 Debug: Toggle Breakpoint	
 Dec	
 Decoded here only: nothing is sent or logged	
+Default terminal profile	
 Delay for afterDelay (ms)	
 Delete	
 Delete Permanently	
@@ -408,6 +462,8 @@ Deleting…
 Deny	
 Developer: Restart Language Servers	
 Diff view side by side (off: inline)	
+Disable All Breakpoints	
+Disable Breakpoint	
 Discard	
 Discard All Changes	
 Discard all changes	
@@ -415,6 +471,7 @@ Discard changes
 Discard changes in {} files?	
 Discard changes in {}?	
 Discard mine, load from disk	
+Disconnect	
 Disconnect from {}	
 Dismiss this file from the results	
 Do you trust the authors of this folder?	
@@ -448,6 +505,8 @@ Duplicate
 Duplicate key	
 Duplicate key “{}”	
 Edit	
+Edit Condition…	
+Edit Host…	
 Edit a host	
 Edit which SSH host?	
 Edit “{}”: which setting?	
@@ -544,6 +603,8 @@ Editor: Unfold All
 Editor: Unfold Recursively	
 Empty folder	
 Empty group: ⌘P opens a file here	
+Enable All Breakpoints	
+Enable Breakpoint	
 Encoding for files that are not UTF-8	
 End files with a newline when saving	
 Enter a folder path on {}…	
@@ -619,6 +680,7 @@ Files with the same name are overwritten; other files in the folder are kept.
 Files: Collapse Folders in Explorer	
 Files: Open Folder…	
 Filter	
+Filter (e.g. text, path)	
 Filtering needs sh, tail, grep and cut on the host (on Windows: Git Bash or WSL). {}	
 Filtering {0} for “{1}”…	
 Find	
@@ -649,10 +711,12 @@ Forward
 Forward Port	
 Forward a port:	
 Forward ports opened on SSH hosts	
+Forwarded Ports	
 Friday	
 Git could not sign in to {}. Set up credentials (credential helper, SSH key or `gh auth login`) and try again	
 Git doesn't know who you are on this host. Run these in the terminal: {0} and {1}	
 Git identity is not set on this host: commits will be refused. Set user.name and user.email (git config --global …).	
+Git is paused in this folder: its repository settings run programs ({}). Trust the folder to use Git here.	
 Git: Abort Merge	
 Git: Abort Rebase	
 Git: Add Remote…	
@@ -719,6 +783,7 @@ GitHub's rate limit for anonymous requests: sign in with `gh auth login` or set 
 GitHub: Pull Requests…	
 Give the theme a name.	
 Go	
+Go package	
 Go to Definition	
 Go to File	
 Go to File…	
@@ -814,6 +879,7 @@ JSON: Minify Document
 Jan	
 JavaScript debugger installed: F5 now works for Node.	
 JavaScript debugging needs Microsoft's js-debug adapter: run “Debug: Install JavaScript Debugger” (a one-time download, MIT licensed), or install VS Code (its copy is used).	
+JavaScript tests can be run here, not debugged: add a launch configuration for the runner.	
 Jul	
 Jun	
 Keep	
@@ -825,6 +891,7 @@ Key login is set up for “{}”. The next connection needs no password.
 Key login was already set up for “{}” (created {}). The next connection needs no password.	
 Key login was already set up for “{}”. The next connection needs no password.	
 Keyboard Shortcuts	
+Kill All Terminals	
 Kill Terminal	
 Language Badges	
 Language mode for this file	
@@ -850,12 +917,15 @@ List
 Ln {}, Col {}	
 Ln {}, Col {} ({} selected)	
 Loading image…	
+Load More Stack Frames	
 Loading pull requests…	
 Loading…	
 Local	
 Local history	
+Local port {} is busy	
 Local time is not available on this system	
 Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it	
+Looking for tests…	
 Lost the connection to {}: {}. Your open files stay here and unsaved changes are kept, but they cannot be saved until you reconnect (File: Save a Copy to This Computer… keeps one locally).	
 Lost the connection to {}: {}. Your open files stay here.	
 Manage SSH hosts	
@@ -864,6 +934,7 @@ Manage: About, Settings, Color Theme…
 Mar	
 Mark all as resolved (stage)	
 Mark as resolved (stage)	
+Mark prompts, commands and the folder in zsh, bash and fish	
 Markdown preview	
 Markdown: Open Preview	
 Match Case	
@@ -917,6 +988,7 @@ Name of the stash (shown in the stash list)
 Name with an extension: the extension picks the language (scratch.md, notes.json…)	
 Names can't contain / or be . or ..	
 Names only	
+Native program (C, C++, Rust, Swift)	
 New (untracked)	
 New File	
 New File…	
@@ -924,6 +996,7 @@ New File… (⌘N)
 New Folder…	
 New Terminal	
 New Terminal (⌃⇧`)	
+New Terminal with Profile…	
 New URL of {}	
 New Window	
 New branch name	
@@ -934,6 +1007,7 @@ Next Match
 Next Problem	
 Next match (↵)	
 Next result (F4)	
+No Configurations	
 No SSH hosts yet. Use Remote: Add SSH Host…	
 No VS Code settings found on this machine	
 No WSL distributions found.	
@@ -941,6 +1015,7 @@ No active debug session.
 No block comment syntax for this file type	
 No bookmarks in this file (⌥⌘K adds one)	
 No bookmarks yet: ⌥⌘K toggles one on the cursor's line.	
+No breakpoints: F9 or a click in the gutter adds one.	
 No change here to revert	
 No change here to stage	
 No changes	
@@ -954,16 +1029,19 @@ No commits to show.
 No commits yet.	
 No debug adapter for type “{0}”. Supported: lldb (C, C++, Rust, Swift), go, python; or add {1} to the configuration.	
 No debug configuration: add .vscode/launch.json, or open a Cargo / Go project or a Python file.	
+No debug session.	
 No debug session. F5 starts one.	
 No definition found	
 No differences.	
 No edits yet in this session.	
 No enclosing brackets	
+No expressions: + adds one.	
 No favorites yet: right-click a file → Add to Favorites, or “Favorites: Toggle Active File”.	
 No file “{}” in this project	
 No files in this folder	
 No folder is open.	
 No git changes to revert	
+No hosts in ~/.ssh/config. Add one with +.	
 No implementations found	
 No incoming calls found	
 No language server for this file	
@@ -982,7 +1060,9 @@ No output yet. Language server logs appear here.
 No problems in this file	
 No problems.	
 No problems. Language servers start when you open a file.	
+No profiles or shells were found on this machine.	
 No quick fixes here	
+No recent folders	
 No references found	
 No results	
 No results in {} file.|No results in {} files.	
@@ -996,16 +1076,21 @@ No symbols found.
 No symbols in this file	
 No symbols matching “{}”	
 No tasks found. “Tasks: Configure Tasks” creates .codeyard/tasks.jsonc.	
+No terminal profiles yet: add them under terminal.profiles in settings.jsonc.	
 No test at the cursor: put it inside a test function.	
 No tests found for this file type.	
+No tests found. Tests are read from Rust, Go, Python and JavaScript test files.	
+No tests to run.	
 No type definition found	
 No unsaved changes: the file matches what is on disk.	
+Node.js program	
 None	
 None of these commits is yours.	
 None of this repository's remotes is on github.com.	
 Not Now	
 Not breaking on exceptions.	
 Not compared	
+Not connected yet	
 Not deleted: {}	
 Not in a git repository	
 Not paused	
@@ -1029,6 +1114,7 @@ Nothing yet.
 Nothing yet: open a folder to see it here.	
 Nov	
 Numbers and booleans were written as text.	
+OK	
 Object keys must be strings, not {}	
 Oct	
 On this computer	
@@ -1050,8 +1136,10 @@ Open Editors ({})
 Open File (HEAD)	
 Open Folder	
 Open Folder…	
+Open Launch Configuration	
 Open Merge Editor	
 Open Recent	
+Open SSH Config File	
 Open Settings (JSON)	
 Open System Settings	
 Open a .http or .rest file to send requests.	
@@ -1071,12 +1159,15 @@ Open a folder first; folders are added to it.
 Open a folder in a Linux distribution	
 Open a folder on {}	
 Open a folder to debug it.	
+Open a folder to find its tests.	
 Open a folder to search in it.	
 Open a project, connect to a host, or switch workspace	
+Open a terminal with…	
 Open as Hex	
 Open files can be undone with ⌘Z; closed files are written to disk.	
 Open in Browser	
 Open in Integrated Terminal	
+Open in New Window	
 Open on GitHub	
 Open recent, or connect to a host… (⌃R)	
 Open settings.jsonc	
@@ -1094,6 +1185,7 @@ Overwrite
 Passphrase	
 Password	
 Paste	
+Paste {} line into the terminal?|Paste {} lines into the terminal?	
 Path (relative to the folder, or absolute)	
 Path of the folder (~ is your home folder)	
 Path on this computer (~ is your home folder)	
@@ -1101,6 +1193,7 @@ Paths are shown for JSON, YAML and TOML files
 Paths can't end with / or contain . or .. parts	
 Pattern, e.g. foo($X, $$$REST)	
 Pause	
+Pause (F6)	
 Pause the program first (a breakpoint or ⏸): the variable has to be in scope.	
 Paused on exception: {}	
 Payload	
@@ -1121,6 +1214,7 @@ Port forwarding works while connected to an SSH host.
 Port {} is forwarded to localhost:{} ({} was busy here)	
 Port {} is forwarded: localhost:{}	
 Ports	
+Ports below 1024 need extra privileges on this computer	
 Preferences: Configure User Snippets	
 Preferences: Import VS Code Settings and Shortcuts	
 Preferences: Keyboard Shortcuts	
@@ -1142,12 +1236,16 @@ Problems (⇧⌘M)
 Process ended. Press any key to close.	
 Process exited with code {}	
 Process exited with code {}. Press any key to close.	
+Profile new terminals use	
 Progress	
 Project name	
 Projects: Add Folder to Projects…	
 Projects: Edit Projects	
 Projects: Remove from Recent…	
 Projects: Switch Project… (Open Recent)	
+Protocol: HTTP	
+Protocol: HTTPS	
+Protocol: TCP	
 Pruned {} stale worktree entry|Pruned {} stale worktree entries	
 Pruning worktrees…	
 Publish Branch	
@@ -1177,6 +1275,8 @@ Pushing {}…
 Pushing…	
 Put the cursor inside a merge conflict	
 Put the cursor on a symbol to rename it	
+Python: attach to a debug server	
+Python: current file	
 Query	
 Query, e.g. .items[].name	
 Query: {}	
@@ -1209,6 +1309,7 @@ Reconnecting to {}… (attempt {})
 Redo	
 Refresh	
 Refresh Explorer	
+Refresh Tests	
 Regex, Ignore Case	
 Regex, Match Case	
 Regular expression	
@@ -1216,6 +1317,7 @@ Regular expression (⌥R)
 Release Page	
 Reload history	
 Remote & Languages	
+Remote Explorer	
 Remote: Add SSH Host…	
 Remote: Connect to Dev Container…	
 Remote: Connect to Host or Switch Workspace…	
@@ -1231,7 +1333,12 @@ Remote: Set Up Key Login…
 Remote: Test SSH Connection…	
 Remote: Upload Files to This Folder…	
 Remove	
+Remove All Breakpoints	
+Remove Breakpoint	
+Remove Expression	
+Remove Host…	
 Remove a host	
+Remove control characters from pasted text	
 Remove folder from workspace	
 Remove from Favorites	
 Remove from Recent	
@@ -1250,7 +1357,9 @@ Removed worktree {}
 Removed {} from “{}”.	
 Removed “{}” from ~/.ssh/config	
 Removing {}…	
+Rename	
 Rename Symbol	
+Rename Terminal…	
 Rename branch	
 Rename remote	
 Rename the matching HTML/XML tag while you edit one	
@@ -1290,6 +1399,8 @@ Respect .gitignore
 Response	
 Restart (⇧⌘F5)	
 Restart Codeyard to finish.	
+Restart Debugging	
+Restart Frame	
 Restart Now	
 Restart to update	
 Restart without saving	
@@ -1297,6 +1408,7 @@ Restarting language servers…
 Restarting loses everything since the last save.	
 Restore Panel Size	
 Result	
+Retry	
 Reveal in Finder	
 Revert	
 Revert File	
@@ -1306,9 +1418,20 @@ Reverting a change is not supported in this file (non-UTF-8 or CR-only line endi
 Right is writable	
 Right-click a commit in the Source Control graph to branch, tag, cherry-pick, revert or reset.	
 Right-click a folder and choose Find in Folder… to search only inside it.	
+Run	
+Run All Tests	
+Run Failed Tests	
+Run Test	
+Run Tests in File	
+Run Without Debugging	
+Run and Debug	
+Run and Debug (⌃⇧D)	
 Run task	
 Run the search again	
+Run to Cursor	
+Running the program in a terminal is not supported on Windows yet: use {} in the configuration.	
 Running…	
+SSH Hosts	
 SSH host	
 Same apart from whitespace	
 Saturday	
@@ -1361,6 +1484,7 @@ Select Language Mode
 Select a JWT or a Unix timestamp first	
 Select a branch to check out	
 Select a color theme	
+Select a configuration	
 Select a debug configuration	
 Select a file icon theme	
 Select a word and press ⌘D to add the next match as another cursor.	
@@ -1379,8 +1503,11 @@ Sending {} {}…
 Sep	
 Services	
 Set	
+Set Label…	
 Set URL	
 Set Up	
+Set Up Key Login…	
+Set Value…	
 Set up key login	
 Set up key login (no password) for which SSH host?	
 Set up key login for “{}”?	
@@ -1393,6 +1520,7 @@ Shell for new terminals (empty: login shell)
 Show All	
 Show Changed Files…	
 Show Codeyard in Finder	
+Show Only Failed Tests	
 Show Stash…	
 Show a color swatch next to #rrggbb values	
 Show a tooltip when the mouse rests on a word	
@@ -1449,6 +1577,8 @@ Staging changes is not supported in files with old-Mac (CR only) line endings
 Staging changes needs a UTF-8 file	
 Staging changes needs a UTF-8 file (this one is stored in another encoding)	
 Start	
+Start Debugging	
+Start Debugging (F5)	
 Start a debug session first (F5): the adapter says which exceptions it can break on.	
 Start and end of a slice must be numbers	
 Start language servers	
@@ -1456,6 +1586,7 @@ Start search results folded or open
 Start the new branch from…	
 Starting the download…	
 Starting “{}”…	
+Starting…	
 Stash (Include Untracked)	
 Stash Staged Changes	
 Stash with Name…	
@@ -1463,12 +1594,17 @@ Stashed changes
 Stashes	
 Stashing…	
 Status bar	
+Step Into	
 Step Into (F11)	
+Step Out	
 Step Out (⇧F11)	
+Step Over	
 Step Over (F10)	
 Still staging the previous change…	
 Stop	
 Stop (⇧F5)	
+Stop Debugging	
+Stop Forwarding	
 Stop a search after this many matches	
 Stopped.	
 String interpolation is not supported	
@@ -1494,19 +1630,38 @@ Tasks: Rerun Last Task
 Tasks: Run Build Task	
 Tasks: Run Task…	
 Terminal	
+Terminal colour	
+Terminal: Change Color…	
 Terminal: Clear	
 Terminal: Close	
+Terminal: Copy Last Command Output	
+Terminal: Go to Next Command	
+Terminal: Go to Previous Command	
+Terminal: Kill All Terminals	
 Terminal: New	
+Terminal: New Terminal with Profile…	
+Terminal: Rename…	
 Terminal: Run Selected Text	
+Terminal: Select Default Profile…	
 Terminal: Split	
 Terminal: Toggle	
+Test Connection	
+Test Results	
 Test a connection	
 Test the connection to which SSH host?	
+Test: Debug Test at Cursor	
+Test: Refresh Tests	
+Test: Run All Tests	
+Test: Run Failed Tests	
 Test: Run Test at Cursor	
 Test: Run Tests in File	
+Test: Stop Running Tests	
+Testing	
 Testing {}…	
+Tests: {0} passed, {1} failed	
 That does not look like a repository address.	
 The JavaScript debugger is already installed.	
+The SSH connection is gone: reconnect to forward again	
 The TLS/SSL handshake with {} failed (certificate or protocol problem): {}	
 The Timeline section of the explorer lists the commits of the open file; click one to see its diff.	
 The address is malformed: {}	
@@ -1525,6 +1680,7 @@ The debug adapter exited before connecting
 The debug adapter exited before it started listening	
 The debug adapter stopped	
 The debug adapter stopped (exit code {})	
+The debugger could not bind this breakpoint.	
 The download finished but js-debug was not found in it.	
 The element can't be renamed.	
 The file changed on disk while you were editing. Nothing was saved.	
@@ -1534,11 +1690,14 @@ The file is not open any more.
 The file is too large for an outline.	
 The folder and everything in it will be deleted.	
 The folder could not be read on the server: {}	
+The input “{0}” is of type “{1}”, which would run a command; use promptString or pickString.	
 The last background fetch failed: {}	
+The local port is busy	
 The new version couldn't be installed from here. You can download it from the release page instead.	
 The number {} cannot be written in JSON	
 The pattern does not parse: {0} (line {1}, column {2})	
 The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code.	
+The program is running: pause it first, or set a breakpoint.	
 The query ends too early	
 The query is nested too deeply	
 The query is too long	
@@ -1556,9 +1715,11 @@ The search stopped at the result limit: only the files listed are changed. Open 
 The selection is neither a JWT nor a Unix timestamp	
 The server did not answer within 60 seconds.	
 The server wants credentials: run the command once in the terminal (or set up an SSH key).	
+The shell may run each line as soon as it arrives.	
 The state database was damaged ({0}). It was moved to {1} and a new one was started; recent folders and open tabs were forgotten.	
 The string is not closed	
 The tag disappears from the remote repository for everyone. Your local copy is kept.	
+The tests did not build: run the test to see the errors.	
 The token has no signature.	
 The update couldn't be installed	
 The update couldn't be verified	
@@ -1577,6 +1738,7 @@ Themes live in {}: drop VS Code or native theme .json files there
 There are no local changes to stash	
 There are no staged changes to stash	
 There are no stashes.	
+There is no breakpoint on this line (F9 adds one).	
 There is no commit to undo	
 There is no request here. Write METHOD URL on a line, separate requests with ###.	
 There is nothing to copy.	
@@ -1587,6 +1749,7 @@ This branch is not published yet. Click to publish it.
 This can't be undone.	
 This computer	
 This copy isn't installed as an app, so download the new version yourself.	
+This debug adapter cannot change values.	
 This debug adapter does not support data breakpoints.	
 This debug adapter has no exception breakpoints.	
 This file has merge conflicts: resolve them first (Source Control marks it resolved when staged)	
@@ -1599,6 +1762,8 @@ This file is {0} MB; Data: Query handles files up to {1} MB.
 This file mixes line endings; saving writes all of them as {}, like its first line. Change it in the status bar.	
 This file was deleted on disk. Saving will create it again.	
 This folder is not a git repository.	
+This frame cannot be restarted.	
+This image is {0} × {1} pixels, too large to preview.	
 This is a development build and can't update itself. Download the new version yourself.	
 This is the portable version, which can't update itself. Download the new version and replace it yourself.	
 This language server does not support incoming calls	
@@ -1614,7 +1779,9 @@ This repository has no remote. Add one with Git: Add Remote…
 This window is installing an update. You can close it in a few seconds.	
 Thursday	
 Timeline	
+To customize Run and Debug, create a launch configuration.	
 Toggle Bookmark	
+Toggle Breakpoint	
 Toggle Line Comment	
 Toggle Panel	
 Toggle Sidebar	
@@ -1646,6 +1813,8 @@ Unexpected text after the closing quote
 Unexpected “{}”	
 Unfold	
 Unfold All	
+Unknown configuration “{}” in compound “{}”	
+Unknown input “{0}” in “{1}”	
 Unknown theme '{0}'. Available: {1}	
 Unpin	
 Unsaved changes stay open in their tabs; saving recreates the file.	
@@ -1670,6 +1839,7 @@ Uploading has to wait: the connection is still being set up.
 Uploading is not possible in this workspace.	
 Uploading needs the connection to {}, which failed: use Reconnect first.	
 Uploading works with a connected SSH host: connect first (⌃R).	
+User Forwarded	
 VS Code settings.json could not be read	
 Variables	
 Variables are not supported	
@@ -1691,11 +1861,14 @@ View: Open Previous Editor
 View: Output	
 View: Ports (SSH port forwarding)	
 View: Problems	
+View: Remote Explorer	
 View: Reopen Closed Editor	
 View: Reset Zoom	
+View: Run and Debug	
 View: Source Control	
 View: Split Editor	
 View: Switch Editor…	
+View: Testing	
 View: Toggle Full Screen	
 View: Toggle Maximized Panel	
 View: Toggle Minimap	
@@ -1707,6 +1880,7 @@ View: Toggle Word Wrap
 View: Toggle Zen Mode	
 View: Zoom In	
 View: Zoom Out	
+WSL Targets	
 WSL distribution	
 Watch	
 Wednesday	
@@ -1716,12 +1890,14 @@ What opens at start: welcome (the start page), continue (where you left off, SSH
 What runs after a commit: nothing, push or sync. Your own settings only; a folder cannot change it	
 When the close button of a tab shows	
 Where .http requests are sent from: the workspace host (the server when connected over SSH) or this computer	
+Where forwarded ports listen: this computer only, or every network interface	
 Whole word	
 Whole word (⌥W)	
 Width of the line cursor (px)	
 Window	
 Windows on a server reconnect, which can ask for a password.	
 Without Full Disk Access, Desktop, Documents or external drives may look empty.	
+Without one, F5 finds a configuration from the project (Cargo, Go, or the open Python or JavaScript file).	
 Word Wrap	
 Workbench	
 Workspace: Trust This Folder	
@@ -1744,9 +1920,11 @@ Zoom Out
 Zoom: {}	
 `{}` did not answer within {} seconds; check the network connection and try again	
 `{}` is not installed or not on PATH	
+a program	
 a theme must be a JSON object	
 about {0} MB · {1}	
 approved	
+args must be a list of texts	
 auto	
 bad array index	
 binary	
@@ -1760,6 +1938,7 @@ cannot read “{}” of the response
 changes requested	
 class	
 click to open · Esc to close	
+color “{}” is not one of accent, success, warning, danger, info, muted	
 condition  ·  log: message with {expr}  ·  hit: 5  ·  empty: plain breakpoint	
 connected	
 connecting	
@@ -1790,13 +1969,17 @@ e.g. 3000
 edit the file by hand	
 empty body	
 empty variable	
+ended	
 entry	
 entry {0} needs {1} and {2}	
 enum	
 enum member	
+env must be an object of texts	
+env.{} is not used: a name of letters, digits and _ with a text value	
 event	
 exception	
 expected a list [ … ]	
+expected an object with path, args, env or color	
 expected an object { … } (previous settings kept)	
 expression to watch (e.g. total * 2, items.len())	
 failed	
@@ -1807,9 +1990,11 @@ files.associations.{}: expected a language name or extension
 files.autoSave: unknown value {} (off, afterDelay, onFocusChange)	
 flatten depth must not be negative	
 folder	
+forwarding…	
 from ~/.ssh/config (a backup is kept)	
 function	
 function breakpoint	
+function name, e.g. main or app::run	
 git blame gave no answer	
 git clone failed	
 git commit failed	
@@ -1833,6 +2018,7 @@ it is not a regular file or folder
 its name differs from another entry only in letter case	
 join needs a string separator, got {}	
 just now	
+label, e.g. web (empty: none)	
 language server is not running	
 latest {} open	
 left	
@@ -1840,20 +2026,21 @@ light
 limit needs a whole number	
 lines {0}–{1}	
 link target differs	
-listening on the server	
 local agent, protocol test	
+local port, e.g. 8080	
 method	
 milliseconds	
 module	
 name url (e.g. origin https://host/repo.git)	
 namespace	
+needs a path to a program	
+new value	
 no configuration directory	
 no file name	
 no item {} in the response	
 no “{}” in the response	
 not UTF-8	
 not available	
-not paused	
 not set	
 now	
 of {}	
@@ -1862,8 +2049,12 @@ operator
 package	
 path branch (new branch is created if it does not exist)	
 pause	
+paused on {}	
 pinned	
 port, user, key file, jump host	
+ports.rules.{}.{}: unexpected value	
+ports.rules.{}: expected a port or a range such as 3000-3010	
+ports.rules.{}: expected an object with label, onForward or protocol	
 preview	
 property	
 reachable? architecture? agent ready?	
@@ -1876,6 +2067,7 @@ remote
 request failed	
 review needed	
 right	
+running	
 seconds	
 send the request named “{}” first	
 sends {} to {}	
@@ -1892,6 +2084,7 @@ symbolic links are not copied
 syntax error at “{}”	
 tag	
 task	
+terminal name	
 test failed: {}	
 test panicked: {}	
 the GitHub token contains characters that cannot be sent	
@@ -1911,6 +2104,8 @@ the file is no longer readable (permission denied)
 the folder cannot be read on the left	
 the folder cannot be read on the right	
 the header “{}” is not valid	
+the launch file is not an object	
+the launch file is not valid JSON: {}	
 the path is now a folder, not a file	
 the repository may be private: sign in with `gh auth login` or set GITHUB_TOKEN	
 the response body is not JSON	
@@ -1947,6 +2142,7 @@ variable name, e.g. total (the program stops when it is written)
 via the GitHub API	
 via the gh CLI	
 via the public GitHub API (set GITHUB_TOKEN or use gh for private repositories and check results)	
+waiting for the connection	
 whole file	
 workbench.colorCustomizations: unknown color role {0} (see crates/theme/design/tokens.json: {1})	
 your words	
@@ -1982,6 +2178,7 @@ your words
 {0} result in {1} files|{0} results in {1} files	
 {0} was left alone: {1}|{0} were left alone, the first one {1}	
 {0}, {1} {2} {3}	
+{0}/{1} passed	
 {0}: a TOML array holds one kind of value, but this one has {1} and {2}	
 {0}: each entry needs {1} and {2}	
 {0}: expected a color like {1}	
@@ -2027,6 +2224,7 @@ your words
 {} definition|{} definitions	
 {} entry is left out.|{} entries are left out.	
 {} exited with {}	
+{} failed	
 {} file skipped, binary or too large|{} files skipped, binary or too large	
 {} file skipped, parse errors|{} files skipped, parse errors	
 {} forwarded	
@@ -2042,6 +2240,7 @@ your words
 {} incoming call|{} incoming calls	
 {} is a binary file: there is no text diff.	
 {} is a date:	
+{} is a symbolic link; write the path it points to, so the upload can be confirmed	
 {} is already in .gitignore	
 {} is already in the workspace.	
 {} is not a trusted folder, so nothing is deleted from it. Open it as a folder and trust it first.	
@@ -2060,14 +2259,17 @@ your words
 {} no longer exists, so it was not reopened.	
 {} open	
 {} outgoing call|{} outgoing calls	
+{} ports are forwarded	
 {} reference|{} references	
 {} result in 1 file|{} results in 1 file	
 {} result|{} results	
+{} skipped	
 {} space|{} spaces	
 {} still has merge conflict markers. Resolve them (Accept Current / Incoming / Both) and save first.	
 {} subtype|{} subtypes	
 {} supertype|{} supertypes	
 {} tab with unsaved changes stayed open.|{} tabs with unsaved changes stayed open.	
+{} terminals have programs running. Close them anyway?	
 {} type definition|{} type definitions	
 {} week ago|{} weeks ago	
 {} year ago|{} years ago	
@@ -2091,12 +2293,9 @@ your words
 {}: invalid color {}	
 {}: no answer from the debug adapter	
 {}: no open pull requests.	
-{}: paused ({})	
 {}: reachable ({}), but this app has no agent for {}	
 {}: reachable in {} ms · {} · ready	
 {}: reachable, but {} is not a supported server	
-{}: running	
-{}: starting…	
 {}: the color must be a string	
 {}: the program did not start	
 {}: unknown value {} ({})	
@@ -2117,11 +2316,13 @@ your words
 “localhost” means {0}: for a service on your own computer set http.runOn to {1}.	
 “{0}” is not a valid regular expression ({1}). Escape special characters with a backslash.	
 “{}” already exists. Replace it?	
+“{}” asks for inputs, which a compound cannot ask for: start it on its own.	
 “{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	
 “{}” can't be opened	
 “{}” is called with the wrong number of arguments	
 “{}” is missing here	
 “{}” is not a branch of a known remote	
+“{}” is not a free local port	
 “{}” is not a function this query language has	
 “{}” is not a number	
 “{}” is not a port number	
@@ -2132,8 +2333,10 @@ your words
 “{}” is not in the SSH config (or shares a Host line with other names: edit the file).	
 “{}” is not in the dictionary. Quick Fix shows suggestions.	
 “{}” is not supported	
+“{}” is still running in this terminal. Close it anyway?	
 “{}” was not found in ~/.ssh/config	
 “{}”: {} = {}	
+… {} more	
 … {} more line|… {} more lines	
 … {} running	
 ↓ {} new line|↓ {} new lines	

@@ -527,9 +527,35 @@ pub fn explain_curl(code: Option<i32>, stderr: &str, place: &str, url: &str) -> 
     }
 }
 
+/// The file variables (`@name = …`) that `texts` use, directly or through other variables, as their values.
+fn referenced_values<'a>(texts: &[&str], vars: &'a [(String, String)]) -> Vec<&'a str> {
+    let mut seen: Vec<&str> = Vec::new();
+    let mut out: Vec<&'a str> = Vec::new();
+    let mut pending: Vec<String> = texts.iter().map(|t| t.to_string()).collect();
+    while let Some(text) = pending.pop() {
+        let mut rest = text.as_str();
+        while let Some(start) = rest.find("{{") {
+            rest = &rest[start + 2..];
+            let Some(end) = rest.find("}}") else { break };
+            let name = rest[..end].trim();
+            rest = &rest[end + 2..];
+            // A later definition overrides an earlier one, as in `substitute`.
+            if let Some((k, v)) = vars.iter().rev().find(|(k, _)| k == name)
+                && !seen.contains(&k.as_str())
+            {
+                seen.push(k);
+                out.push(v);
+                pending.push(v.clone());
+            }
+        }
+    }
+    out
+}
+
 /// Points that must be confirmed with the user before sending: reading environment variables and body files outside the request file's folder.
-/// A `.http` file may come from someone else; it must not silently load `$HOME/.ssh/id_rsa`.
-pub fn sensitive_parts(req: &Request) -> Vec<String> {
+/// A `.http` file may come from someone else; it must not silently load `$HOME/.ssh/id_rsa`. File variables are followed, so
+/// `@k = {{$processEnv SECRET}}` used as `{{k}}` is seen too.
+pub fn sensitive_parts(req: &Request, vars: &[(String, String)]) -> Vec<String> {
     let mut out = Vec::new();
     let mut texts: Vec<&str> = vec![&req.url];
     for (k, v) in &req.headers {
@@ -541,6 +567,8 @@ pub fn sensitive_parts(req: &Request) -> Vec<String> {
         Some(Body::File(p)) => texts.push(p),
         None => {}
     }
+    let indirect = referenced_values(&texts, vars);
+    texts.extend(indirect);
     if texts.iter().any(|t| t.contains("$processEnv")) {
         out.push(crate::i18n::t("reads environment variables from this computer ({{$processEnv}})").to_string());
     }
@@ -841,7 +869,7 @@ mod tests {
         let p = parse(
             "GET https://a/\n\n###\nGET https://a/{{$processEnv HOME}}\n\n###\nPOST https://a/\n\n< ../secret.json\n\n###\nPOST https://a/\n\n< /etc/passwd\n\n###\nPOST https://a/\n\n< {{f}}\n\n###\nPOST https://a/\n\n< ./ok.json\n\n###\nPOST https://a/\nX-Key: {{$processEnv KEY}}\n\nbody\n",
         );
-        let r: Vec<Vec<String>> = p.requests.iter().map(sensitive_parts).collect();
+        let r: Vec<Vec<String>> = p.requests.iter().map(|r| sensitive_parts(r, &p.vars)).collect();
         assert!(r[0].is_empty());
         assert!(r[1][0].contains("environment variables"));
         assert!(r[2][0].contains("outside this file's folder") && r[2][0].contains("../secret.json"));
@@ -849,6 +877,14 @@ mod tests {
         assert!(r[4][0].contains("comes from a variable"));
         assert!(r[5].is_empty(), "files next to the .http file are fine");
         assert!(r[6][0].contains("environment variables"), "headers count too");
+        // Through file variables, also in several steps and in a loop; unused variables do not count.
+        let p = parse(
+            "@k = {{$processEnv AWS_SECRET_ACCESS_KEY}}\n@a = {{b}}\n@b = x{{k}}\n@loop = {{loop}}\n@plain = 1\n\nGET https://x.example/?k={{k}}\n\n###\nPOST https://x.example/\n\n{\"v\": \"{{a}}\"}\n\n###\nGET https://x.example/{{loop}}/{{plain}}\n",
+        );
+        let r: Vec<Vec<String>> = p.requests.iter().map(|r| sensitive_parts(r, &p.vars)).collect();
+        assert!(r[0].iter().any(|m| m.contains("environment variables")), "{:?}", r[0]);
+        assert!(r[1].iter().any(|m| m.contains("environment variables")), "two steps away: {:?}", r[1]);
+        assert!(r[2].is_empty(), "a variable that refers to itself ends the search: {:?}", r[2]);
     }
 
     #[test]
