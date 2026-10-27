@@ -107,6 +107,7 @@ pub(super) struct GitState {
 
 /// Layout: side panel, bottom panel, split editor, zoom, zen mode, window bounds.
 pub(super) struct ChromeLayout {
+    pub(super) resources: Entity<crate::resource_monitor::ResourceMonitor>,
     pub(super) panel: Option<Panel>,
     /// The bottom panel shows the Problems list instead of the terminal.
     pub(super) bottom: Bottom,

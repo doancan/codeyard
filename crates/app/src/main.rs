@@ -110,6 +110,8 @@ mod qa_integration_tests;
 mod qa_workbench_tests;
 #[cfg(test)]
 mod reliability_data_tests;
+mod resource_monitor;
+mod resources;
 mod scm;
 mod search;
 mod sections;

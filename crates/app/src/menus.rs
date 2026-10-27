@@ -291,6 +291,7 @@ pub(crate) fn menus(recent: &[state::RecentWorkspace]) -> Vec<Menu> {
                 I::action(tr("Problems"), wb::ShowProblems),
                 I::action(tr("Ports"), wb::ShowPorts),
                 I::action(tr("Terminal"), wb::ToggleTerminal),
+                I::action(tr("Resources"), crate::resource_monitor::ToggleResources),
                 sep(),
                 I::action(tr("Toggle Sidebar"), wb::ToggleSidebar),
                 I::action(tr("Toggle Panel"), wb::TogglePanel),

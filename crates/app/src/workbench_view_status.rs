@@ -3,12 +3,12 @@
 use super::*;
 
 /// Status bar entries: icon size, gap between icon and label, and horizontal padding of the hover area.
-const SB_ICON: f32 = 14.;
+const SB_ICON: f32 = 16.;
 const SB_GAP: f32 = 5.;
 const SB_PAD: f32 = 8.;
 
 impl Workbench {
-    pub(super) fn status_bar(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn status_bar(&self, p: &Palette, width: f32, cx: &mut Context<Self>) -> impl IntoElement {
         let (remote_label, remote_bg, remote_fg, remote_icon) = match &self.remote.conn {
             Conn::Local => (crate::i18n::t("Local").to_string(), None, p.text_muted, "plug"),
             Conn::Connecting { alias, step } => {
@@ -25,7 +25,7 @@ impl Workbench {
             Conn::Failed { alias, .. } => (crate::i18n::tf("{}: connection failed", &[alias]), Some(p.danger), p.on_accent, "circle-x"),
         };
         // One rhythm for every entry: same icon size, same icon-to-text gap, same side padding.
-        let item = || div().flex().items_center().gap(px(SB_GAP)).px(px(SB_PAD)).h_full();
+        let item = || div().flex().flex_none().items_center().gap(px(SB_GAP)).px(px(SB_PAD)).min_w(px(28.)).h_full();
         let conflicts = self.active_editor().map_or(0, |e| e.read(cx).conflict_count());
         let editor_info = self.active_editor().map(|e| {
             let e = e.read(cx);
@@ -37,6 +37,14 @@ impl Workbench {
             };
             (pos, e.indent_label(), e.line_ending(), e.is_dirty(), e.is_saving(), e.language_label(), e.encoding().label())
         });
+        let busy = usize::from(conflicts > 0)
+            + usize::from(editor_info.as_ref().is_some_and(|info| info.3 || info.4))
+            + usize::from(self.active_forwards() > 0)
+            + usize::from(self.transfer_active().is_some())
+            + usize::from(self.update_status_item().is_some());
+        // Operational signals take priority over secondary editor metadata.
+        let detail_width = width - busy as f32 * 140.;
+        let labels = width >= 1100.;
         let branch = self.vcs.branch.clone();
         // Errors go in the card at bottom right (error_toast); only info here.
         let notice = match &self.notice {
@@ -45,6 +53,8 @@ impl Workbench {
         };
 
         div()
+            .id("status-bar")
+            .debug_selector(|| "status-bar".into())
             .h(px(layout::STATUSBAR_H))
             .flex_none()
             .flex()
@@ -57,6 +67,7 @@ impl Workbench {
             .child(
                 item()
                     .id("remote-indicator")
+                    .flex_shrink()
                     .cursor_pointer()
                     .when_some(remote_bg, |d, bg| d.bg(c(bg)))
                     .text_color(c(remote_fg))
@@ -65,7 +76,7 @@ impl Workbench {
                     } else {
                         icon(remote_icon, SB_ICON, remote_fg).into_any_element()
                     })
-                    .child(remote_label)
+                    .when(width >= 640., |d| d.child(div().min_w_0().max_w(px(180.)).truncate().child(remote_label)))
                     .when_some(
                         match &self.remote.conn {
                             Conn::Failed { message, .. } => Some(message.clone()),
@@ -86,10 +97,12 @@ impl Workbench {
                 d.child(
                     item()
                         .id("sb-branch")
+                        .flex_shrink()
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
                         .child(icon("git-branch", SB_ICON, p.text_muted))
-                        .child(b)
+                        .child(div().min_w_0().max_w(px(if width < 800. { 100. } else { 180. })).truncate().child(b.clone()))
+                        .tooltip(move |_, cx| cx.new(|_| Tooltip(b.clone())).into())
                         .on_click(cx.listener(|this, _, window, cx| this.show_branch_picker(window, cx))),
                 )
                 .child(
@@ -102,7 +115,7 @@ impl Workbench {
                         } else {
                             icon(if unpublished { "cloud-upload" } else { "refresh-cw" }, SB_ICON, p.text_muted).into_any_element()
                         })
-                        .when(!sync.is_empty(), |d| d.child(sync))
+                        .when(labels && !sync.is_empty(), |d| d.child(div().max_w(px(96.)).truncate().child(sync)))
                         .tooltip(move |_, cx| cx.new(|_| Tooltip(tip.clone())).into())
                         .on_click(cx.listener(|this, _, window, cx| this.git_sync_auto(window, cx))),
                 )
@@ -111,7 +124,12 @@ impl Workbench {
                 // Problems: error and warning counts (click: open the panel).
                 let (errors, warnings) = self.problem_counts();
                 let count = |glyph: &'static str, n: usize, color: u32| {
-                    div().flex().items_center().gap(px(SB_GAP)).child(icon(glyph, SB_ICON, if n > 0 { color } else { p.text_muted })).child(n.to_string())
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(SB_GAP))
+                        .child(icon(glyph, SB_ICON, if n > 0 { color } else { p.text_muted }))
+                        .child(div().max_w(px(36.)).truncate().child(n.to_string()))
                 };
                 item()
                     .id("problems-indicator")
@@ -120,10 +138,10 @@ impl Workbench {
                     .hover(|d| d.bg(c(p.surface_hover)))
                     .child(count("circle-x", errors, p.danger))
                     .child(count("alert", warnings, p.warning))
-                    .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Problems (⇧⌘M)").into())).into())
+                    .tooltip(move |_, cx| cx.new(|_| Tooltip(crate::i18n::tf("{0} errors, {1} warnings", &[&errors, &warnings]).into())).into())
                     .on_click(cx.listener(|this, _, w, cx| this.show_problems(&ShowProblems, w, cx)))
             })
-            .when(self.active_forwards() > 0, |d| {
+            .when(self.active_forwards() > 0 && width >= 800., |d| {
                 let n = self.active_forwards();
                 d.child(
                     item()
@@ -131,7 +149,7 @@ impl Workbench {
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
                         .child(icon("plug", SB_ICON, p.text_muted))
-                        .child(crate::i18n::tf("{} forwarded", &[&n]))
+                        .when(labels, |d| d.child(div().max_w(px(80.)).truncate().child(crate::i18n::tf("{} forwarded", &[&n]))))
                         .on_click(cx.listener(|this, _, w, cx| this.show_ports(&ShowPorts, w, cx))),
                 )
             })
@@ -143,31 +161,44 @@ impl Workbench {
                         .hover(|d| d.bg(c(p.surface_hover)))
                         .text_color(c(p.text))
                         .child(ui::spinner("transfer-progress", SB_ICON, p.text_muted))
-                        .child(text)
+                        .when(labels, |d| d.child(div().max_w(px(120.)).truncate().child(text)))
                         .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("File transfer in progress. Click to cancel.").into())).into())
                         .on_click(cx.listener(|this, _, w, cx| this.ask_cancel_transfer(w, cx))),
                 )
             })
-            .when_some(self.lsp.progress.clone(), |d, t| d.child(item().child(ui::spinner("lsp-progress", SB_ICON, p.text_muted)).child(t)))
-            .when_some(notice, |d, (m, color)| d.child(item().text_color(c(color)).child(m)))
-            .child(div().flex_1())
+            .when_some(self.lsp.progress.clone().filter(|_| detail_width >= 1000.), |d, t| {
+                d.child(
+                    item().flex_shrink().child(ui::spinner("lsp-progress", SB_ICON, p.text_muted)).child(div().min_w_0().max_w(px(180.)).truncate().child(t)),
+                )
+            })
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .whitespace_nowrap()
+                    .when_some(notice, |d, (m, color)| d.child(div().px(px(SB_PAD)).text_color(c(color)).truncate().child(m))),
+            )
+            .child(self.chrome.resources.clone())
             .child(
                 item()
                     .id("sb-terminal")
                     .cursor_pointer()
                     .hover(|d| d.bg(c(p.surface_hover)))
                     .child(icon("terminal", SB_ICON, if self.chrome.panel_open { p.text } else { p.text_muted }))
+                    .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Toggle Panel (⌘J)").into())).into())
                     .on_click(cx.listener(|this, _, w, cx| this.toggle_panel(&TogglePanel, w, cx))),
             )
             .when(conflicts > 0, |d| {
                 d.child(
                     item()
                         .id("sb-conflicts")
+                        .debug_selector(|| "sb-conflicts".into())
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
                         .text_color(c(p.warning))
                         .child(icon("git-compare", SB_ICON, p.warning))
-                        .child(crate::i18n::tn("{} conflict", "{} conflicts", conflicts, &[]))
+                        .when(labels, |d| d.child(div().max_w(px(80.)).truncate().child(crate::i18n::tn("{} conflict", "{} conflicts", conflicts, &[]))))
                         .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Go to the next merge conflict").into())).into())
                         .on_click(cx.listener(|this, _, window, cx| {
                             if let Some(ix) = this.tabs.active {
@@ -180,30 +211,51 @@ impl Workbench {
                 )
             })
             // --- data ---
-            .when_some(self.data_path_label(cx), |d, label| {
+            .when_some(self.data_path_label(cx).filter(|_| detail_width >= 1000.), |d, label| {
                 d.child(
                     item()
                         .id("sb-data-path")
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
-                        .child(label)
+                        .child(div().max_w(px(140.)).truncate().child(label))
                         .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Copy the path at the cursor").into())).into())
                         .on_click(cx.listener(|this, _, window, cx| this.data_copy_path(&DataCopyPath, window, cx))),
                 )
             })
             .when_some(editor_info, |d, (pos, indent, eol, dirty, saving, language, encoding)| {
-                d.when(saving, |d| d.child(item().child(crate::i18n::t("Saving…"))))
-                    .when(dirty && !saving, |d| d.child(item().text_color(c(p.text)).child(crate::i18n::t("● Unsaved"))))
-                    .child(
+                d.when(saving, |d| {
+                    d.child(
+                        item()
+                            .id("sb-saving")
+                            .child(ui::spinner("sb-saving", SB_ICON, p.text_muted))
+                            .when(labels, |d| d.child(crate::i18n::t("Saving…")))
+                            .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Saving…").into())).into()),
+                    )
+                })
+                .when(dirty && !saving, |d| {
+                    d.child(
+                        item()
+                            .id("sb-unsaved")
+                            .debug_selector(|| "sb-unsaved".into())
+                            .text_color(c(p.text))
+                            .when(labels, |d| d.child(crate::i18n::t("● Unsaved")))
+                            .when(!labels, |d| d.child(div().size(px(6.)).rounded_full().bg(c(p.text))))
+                            .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("● Unsaved").into())).into()),
+                    )
+                })
+                .when(detail_width >= 720., |d| {
+                    d.child(
                         item()
                             .id("sb-position")
                             .cursor_pointer()
                             .hover(|d| d.bg(c(p.surface_hover)))
-                            .child(pos)
+                            .child(div().max_w(px(180.)).truncate().child(pos))
                             .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Go to Line/Column (⌃G)").into())).into())
                             .on_click(cx.listener(|this, _, window, cx| this.go_to_line(&GoToLine, window, cx))),
                     )
-                    .child(
+                })
+                .when(detail_width >= 1100., |d| {
+                    d.child(
                         item()
                             .id("sb-indent")
                             .cursor_pointer()
@@ -220,16 +272,19 @@ impl Workbench {
                             .child(eol)
                             .on_click(cx.listener(|this, _, window, cx| this.show_eol_picker(window, cx))),
                     )
-                    .child(
+                })
+                .when(detail_width >= 900., |d| {
+                    d.child(
                         item()
                             .id("sb-language")
                             .cursor_pointer()
                             .hover(|d| d.bg(c(p.surface_hover)))
-                            .child(language)
+                            .child(div().max_w(px(120.)).truncate().child(language))
                             .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Select Language Mode").into())).into())
                             .on_click(cx.listener(|this, _, window, cx| this.show_language_picker(window, cx))),
                     )
+                })
             })
-            .when_some(self.update_status_item(), |d, item| d.child(self.update_status_button(item, p, cx)))
+            .when_some(self.update_status_item(), |d, item| d.child(self.update_status_button(item, labels, p, cx)))
     }
 }

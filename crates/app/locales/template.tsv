@@ -206,6 +206,7 @@ Close the terminal?
 Close to the Right	
 Close window	
 Close without saving	
+Closes when the pointer leaves · pin to keep open	
 Closing a terminal ends the programs running in it.	
 Closing the window loses everything since the last save.	
 Code	
@@ -217,6 +218,7 @@ Codeyard couldn't reach the update server. Check your internet connection and tr
 Codeyard couldn't set up a secure connection to the update server. Check that your date and time are right and that no proxy or security software is blocking it, then try again.	
 Codeyard is still installing an update	
 Codeyard is up to date	
+Codeyard memory	
 Codeyard will reopen your windows.	
 Codeyard {} is available	
 Codeyard {} is available.	
@@ -519,6 +521,7 @@ Disconnect the container before disabling the container module. Your open files 
 Discovering containers…	
 Disk I/O total	
 Disk and network activity	
+Disk available	
 Disk read / write rate	
 Disk size	
 Disk size includes the writable layer and virtual image size; volumes are excluded. Disk and network I/O are cumulative totals.	
@@ -914,6 +917,7 @@ Import VS Code Settings and Shortcuts
 Imported {0} settings and {1} shortcuts from VS Code ({2} settings and {3} shortcuts have no equivalent here)	
 In Privacy & Security, press + and add Codeyard, then turn it on.	
 In the file tree, type to jump to a name; ⇧→ opens everything inside a folder, ⇧← closes it.	
+Includes hidden and build files; symlinks are not followed.	
 Incoming	
 Indent of each folder level in the explorer (px)	
 Indent using 2 spaces	
@@ -988,6 +992,7 @@ Live updates
 Ln {}, Col {}	
 Ln {}, Col {} ({} selected)	
 Load More Stack Frames	
+Load average (1 / 5 / 15 min)	
 Loading container details…	
 Loading image…	
 Loading pull requests…	
@@ -996,6 +1001,7 @@ Local
 Local history	
 Local port {} is busy	
 Local time is not available on this system	
+Logical processors	
 Logs	
 Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it	
 Looking for tests…	
@@ -1016,6 +1022,7 @@ Match case (⌥C)
 Maximize Panel	
 Maximize window	
 May	
+Measuring…	
 Memory	
 Memory usage (%)	
 Merge	
@@ -1260,6 +1267,7 @@ Open a folder in a Linux distribution
 Open a folder on {}	
 Open a folder to debug it.	
 Open a folder to find its tests.	
+Open a folder to measure its size.	
 Open a folder to search in it.	
 Open a project, connect to a host, or switch workspace	
 Open a terminal with…	
@@ -1285,6 +1293,7 @@ Outline
 Output	
 Output: Clear	
 Overwrite	
+Partial scan: a time, file or access limit was reached.	
 Passphrase	
 Password	
 Paste	
@@ -1311,6 +1320,7 @@ Pick a stash to show
 Pin	
 Pin the enclosing function or class line while scrolling	
 Pin to the top	
+Pinned · click the pin to restore auto-close	
 Plain Text	
 Pop (apply and drop)	
 Pop Latest Stash	
@@ -1341,15 +1351,17 @@ Previous Problem
 Previous match (⇧↵)	
 Previous result (⇧F4)	
 Problems	
-Problems (⇧⌘M)	
 Process ended. Press any key to close.	
 Process exited with code {}	
 Process exited with code {}. Press any key to close.	
 Processes	
 Profile new terminals use	
 Progress	
+Project	
 Project lifecycle commands will run. Rebuild replaces the container; persistent volumes are kept.	
 Project name	
+Project size	
+Project size is available for local folders.	
 Projects: Add Folder to Projects…	
 Projects: Edit Projects	
 Projects: Remove from Recent…	
@@ -1926,6 +1938,7 @@ Toggle Bookmark
 Toggle Breakpoint	
 Toggle Line Comment	
 Toggle Panel	
+Toggle Panel (⌘J)	
 Toggle Sidebar	
 Toggle Terminal	
 Toggle a break-on-exception filter	
@@ -1947,6 +1960,7 @@ Type a name from ~/.ssh/config or user@host
 Type a query. Esc closes the bar.	
 Type the shortcut for {} (e.g. cmd-shift-d), then save	
 UI font of the whole window (empty: system font)	
+Unavailable	
 Underline misspelled words in prose files and in code comments	
 Undid commit “{}”	
 Undo	
@@ -2010,6 +2024,7 @@ View: Problems
 View: Remote Explorer	
 View: Reopen Closed Editor	
 View: Reset Zoom	
+View: Resources	
 View: Run and Debug	
 View: Source Control	
 View: Split Editor	

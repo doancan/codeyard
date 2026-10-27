@@ -1068,6 +1068,7 @@ impl Workbench {
                 tree_marks: Default::default(),
             },
             chrome: state_glue::ChromeLayout {
+                resources: cx.new(crate::resource_monitor::ResourceMonitor::new),
                 panel: Some(Panel::Explorer),
                 bottom: Bottom::Terminal,
                 sidebar_w,
