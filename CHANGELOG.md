@@ -7,6 +7,105 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Remote Explorer view** in the activity bar: SSH hosts with their recent folders and connection status, running
+  containers (and WSL distributions on Windows), and the forwarded ports of the current connection. Connect or open a
+  folder in this window or a new one, forget a folder, and edit, test, set up key login for or remove a host from the
+  row. *View: Remote Explorer* opens it.
+- **Ports table:** the PORTS panel lists Port, Label, Forwarded Address, Running Process and Origin, with buttons to open,
+  copy and stop, and a menu to set a label, change the local port, choose HTTP, HTTPS or TCP, or retry. `3000:8080` in the
+  field forwards server port 3000 to local port 8080.
+- Forwarded ports are saved per project and forwarded again when the project is opened over SSH, with their label,
+  protocol and chosen local port.
+- `ports.localBind` (`loopback` or `all`; only from your own settings) and `ports.rules` (label, protocol and `notify`,
+  `silent`, `openBrowser` or `ignore` per port or range).
+- The ssh config's `Include` lines are followed when listing hosts.
+- **Run and Debug view** in the activity bar: a configuration selector with a start button, and folding, resizable
+  sections Variables, Watch, Call Stack (threads as a tree, one row per session when several run) and Breakpoints.
+  While a session runs, a toolbar floats over the editors; the bottom panel keeps the Debug Console.
+- **Breakpoints** are saved per project and come back after a restart. They can be disabled one by one or all together,
+  and deactivated without being lost; the adapter's answer marks each one, and the gutter shows a disabled breakpoint as
+  a muted ring and one the debugger could not bind as a red ring. Function breakpoints are new.
+- Variables: *Set Value*, *Copy Value*, *Copy as Expression* and *Add to Watch*; values with many elements load 100 at a
+  time. Call Stack loads 20 frames at a time and offers *Restart Frame* and *Copy Call Stack*. The Debug Console keeps a
+  history (↑ / ↓) and completes with Tab.
+- **Run Without Debugging** (⌃F5), **Run to Cursor**, launch **compounds** (with `stopAll`), `${input:…}` questions
+  (`promptString`, `pickString`), `postDebugTask`, **Add Configuration…** templates, programs that ask to run in a
+  terminal (`"console": "integratedTerminal"`), several sessions at once, and a **Run** menu. F6 pauses.
+- **Terminal shell integration** for zsh, bash and fish: a dot beside each command (green succeeded, red failed),
+  jumping between commands (⌘↑ / ⌘↓), *Copy Last Command Output*, and splits that open where the shell is.
+  `terminal.shellIntegration` turns it off. Links that programs mark (OSC 8) open their real target.
+- **Terminal profiles** (`terminal.profiles.macos` / `.linux` / `.windows`, `terminal.defaultProfile`) with *New Terminal with
+  Profile…* (also listing the machine's shells) and *Select Default Profile…*; terminals can be renamed and coloured, and
+  *Kill All Terminals* closes them all.
+- **Testing view** in the activity bar: the tests of the open folder (Rust, Go, Python and JavaScript), found in the
+  background and grouped by file. Run a test, a file, all tests or the failed ones with the project's own runner, or stop
+  the run; output streams into a *Test Results* terminal, and each test shows its outcome, time and first failure line,
+  which opens where it failed. Rust, Go and Python tests can be debugged from their row or with *Test: Debug Test at
+  Cursor*. A filter and a failed-only toggle narrow the tree; the activity icon counts failures.
+
+### Changed
+
+- **Platform-standard code font size:** the editor and terminal default to 12 px on macOS and 14 px on Windows and Linux
+  (was 13 px everywhere). A size written in your settings file is kept. The settings template now leaves the font keys
+  commented out, so a settings file shared between computers does not pin one platform's size.
+- The status bar is 22 px high.
+- Closing a terminal asks first while a program runs in it, and names the program (`terminal.confirmOnClose`).
+- `terminal.scrollback` is capped at 50,000 lines, and a change applies to open terminals.
+- Every text size in the interface comes from the type scale (new *badge* and *display* steps replace the remaining fixed
+  sizes); a test keeps new code on the scale.
+
+### Security
+
+- **Git is paused in untrusted repositories whose own settings run programs.** Opening a folder ran `git status`, and
+  `git status` runs a repository's clean filter on every file it sees as changed, which is every file of a checkout
+  copied from an archive. In a folder you have not trusted, a repository whose `.git/config` names a program (a filter,
+  diff or merge driver, an ssh, askpass or credential command, a hooks folder) now gets no git at all until it is
+  trusted, and a notice names the settings.
+- Debugging a test from the Testing view built it (running its build script) before asking for trust, and running
+  tests asked about the active file's folder rather than the one they run in. Both now ask for the folder the command
+  runs in.
+- A debug adapter, or whatever answered on its port, could run a program in a terminal by asking (`runInTerminal`)
+  even when no terminal was offered; such a request is now refused.
+- A `.http` file could hide that a request sends environment variables by going through a file variable, and a body
+  file reached through a symbolic link in the folder was uploaded without a question. Both are now confirmed.
+- A project's settings can no longer turn on clipboard writes from the terminal or turn off the paste checks
+  (`terminal.allowClipboardWrite`, `terminal.sanitizePaste`, `terminal.warnMultilinePaste`).
+- Commands typed into fish could be broken out of by a test or file name containing a backslash and a quote; quoting
+  now reads the same in fish as in POSIX shells.
+- Tasks and launch configurations read for one folder are no longer run under another folder's trust when the active
+  file changes while they load.
+
+### Fixed
+
+- The terminal ignored `terminal.fontSize` and zoom: it now uses the setting, with rows sized to match.
+- **Pasting into the terminal is safer:** bracketed-paste markers hidden in pasted text can no longer end the paste early
+  and run what follows; other control characters are removed when the shell does not use bracketed paste
+  (`terminal.sanitizePaste`), and a paste of several lines asks first (`terminal.warnMultilinePaste`).
+- A split terminal opened in the folder the first terminal started in, not where its shell was.
+- Stopping a process the editor started (a test run, a debug adapter) now also stops the programs it started.
+- **Port forwarding is more reliable:** a double click no longer forwards a port twice; forwards restored after a
+  reconnect report failures on their row (with *Retry*) instead of looking active; switching or losing the connection
+  cancels forwards instead of leaking their local ports; after a drop, forwards come back on the same local port.
+- A forward to a port held by another program on this computer's IPv4 loopback looked active while connections went to
+  that program; busy ports are now detected on both loopback addresses.
+- Forwards connect to the exact address a server port listens on (`127.0.0.1`, `::1` or another address), so a service
+  bound to one of them is reached; the Ports panel names the program listening on each port, and a failed scan keeps
+  the last list.
+- Programs named without a path (git, curl, language servers, debug adapters) failed to start for users whose login
+  shell is fish; they now start through fish, and through `/bin/sh` for other non-POSIX shells.
+- **Two terminal crashes**: scrolled back while a program with a scroll region (vim, less, tmux) printed new lines, and
+  *Copy Last Command Output* after a program cleared the history.
+- A language server's rename edit of an unexpected shape, or a theme file that is not an object, no longer crashes the
+  app.
+- Opening an image that announces enormous dimensions (a small PNG or SVG can ask for gigabytes once decoded) no longer
+  exhausts memory: images over 50 megapixels are not decoded, and the preview says how large they are.
+- A language server or debug adapter printing endless output without message headers made the app spend a minute of
+  CPU per 9 MB; that output is now read in linear time.
+- Finding the tests of a file with thousands of tests took tens of seconds; it takes milliseconds. Rescanning a long
+  task terminal for problems is about five times faster.
+
 ## [0.4.1] - 2026-10-26
 
 ### Changed

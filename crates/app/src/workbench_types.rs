@@ -44,6 +44,16 @@ pub(super) enum OverlayKind {
     ExceptionFilters(Vec<(String, String)>),
     /// F5: multiple debug configurations.
     DebugConfigs(Vec<crate::debug_config::LaunchConfig>),
+    /// A `pickString` input of a starting configuration: its options.
+    LaunchInput(Vec<String>),
+    /// "Debug: Add Configuration…": the snippets offered.
+    LaunchTemplates(Vec<serde_json::Value>),
+    /// "Terminal: New Terminal with Profile…": what each row opens.
+    TerminalLaunch(Vec<crate::terminal::Launch>),
+    /// "Terminal: Select Default Profile…": profile names.
+    TerminalDefaultProfile(Vec<String>),
+    /// "Terminal: Change Color…".
+    TerminalColor,
     Stashes {
         refs: Vec<String>,
         op: git_glue::StashOp,
@@ -195,6 +205,17 @@ pub(super) enum InputPurpose {
     },
     /// Debugger: expression to watch.
     AddWatch,
+    /// Debugger: function name to break in.
+    FunctionBreakpoint,
+    /// Debugger: the answer to a `promptString` input of a starting configuration.
+    LaunchInput,
+    /// New name of the active terminal.
+    RenameTerminal,
+    /// Debugger: new value of a variable of the scope or object `parent`.
+    SetVariable {
+        parent: i64,
+        name: String,
+    },
     /// Debugger: variable to break on when its value changes.
     DataBreakpoint,
     /// Save the active colors (including customizations) as a user theme.
@@ -247,6 +268,14 @@ pub(super) enum InputPurpose {
     /// Number or text setting from the settings picker.
     Setting {
         key: &'static str,
+    },
+    /// Label of the forward of a server port.
+    PortLabel {
+        remote: u16,
+    },
+    /// Local port for the forward of a server port.
+    PortLocal {
+        remote: u16,
     },
 }
 
@@ -303,4 +332,10 @@ pub(super) enum MenuCmd {
     /// Send the action in `MenuState::actions` to the focused item.
     Dispatch(usize),
     AppSubmenu(usize),
+    /// A row of the PORTS table (`MenuTarget::path` = the server port).
+    Port(ports_glue::PortMenuCmd),
+    /// A host row of the Remote Explorer (`MenuTarget::path` = the alias).
+    Remote(remote_glue::RemoteMenuCmd),
+    /// The Run and Debug view: configuration selector, breakpoint rows (`MenuTarget::path` = "path\tline").
+    Debug(debug::DebugMenuCmd),
 }

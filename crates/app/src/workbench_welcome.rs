@@ -61,7 +61,7 @@ fn brand_header(p: &Palette) -> impl IntoElement {
                 mark,
             )),
         )
-        .child(div().text_size(px(30.)).font_weight(gpui::FontWeight::SEMIBOLD).text_color(c(p.text)).child("Codeyard")) // i18n-keep: product name
+        .child(div().text_size(px(text::DISPLAY.0)).font_weight(gpui::FontWeight::SEMIBOLD).text_color(c(p.text)).child("Codeyard")) // i18n-keep: product name
 }
 
 impl Workbench {

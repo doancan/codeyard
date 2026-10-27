@@ -63,8 +63,11 @@ text = " ".join(arch.split())
 for f, x in lim.items():
     if f"`{f}` ≤ {x}" not in text: fail(f"docs/architecture.md: size limit of {f} is not {x} (arch-check.sh)")
 other = re.search(r"\*\) check \"\$f\" (\d+)", ac); tests = re.search(r"qa_\*_tests\.rs\) check \"\$f\" (\d+)", ac)
-if not (other and tests): fail("scripts/arch-check.sh: generic file size limits (`check \"$f\" N`) not found")
-elif f"≤ {other.group(1)} (test files ≤ {tests.group(1)})" not in text: fail("docs/architecture.md: generic file size limits differ from arch-check.sh")
+helpers = re.search(r"\*_tests\.rs\|\*/test_\*\.rs\) check \"\$f\" (\d+)", ac)
+flat = " ".join(text.split())
+if not (other and tests and helpers): fail("scripts/arch-check.sh: generic file size limits (`check \"$f\" N`) not found")
+elif f"every other source file ≤ {other.group(1)} (`*_tests.rs` and test helpers ≤ {helpers.group(1)}, `tests.rs` and `qa_*_tests.rs` ≤ {tests.group(1)})" not in flat:
+    fail("docs/architecture.md: generic file size limits differ from arch-check.sh")
 st = re.search(r'"\$n" -gt (\d+) \]; then echo "FAIL Workbench', ac)
 if not st: fail("scripts/arch-check.sh: Workbench struct limit not found")
 elif f"`Workbench` struct ≤ {st.group(1)} lines" not in text: fail(f"docs/architecture.md: Workbench struct limit is not {st.group(1)} lines (arch-check.sh)")

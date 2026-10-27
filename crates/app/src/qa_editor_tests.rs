@@ -907,6 +907,11 @@ fn qa_perf_50k_lines(cx: &mut TestAppContext) {
 /// folding, wrap, clipboard), then undo everything: no panic and the original text back;
 /// redo everything: the edited text back.
 fn random_session(seed: u64, steps: usize, split: bool, cx: &mut TestAppContext) {
+    let original = "fn a() {\n    let x = (1, 2);\n    if x { y(\"s\"); }\n}\n\nfn b() {\n\tz();\n}\n";
+    random_session_on(seed, steps, split, "a.rs", original, cx);
+}
+
+fn random_session_on(seed: u64, steps: usize, split: bool, name: &str, original: &str, cx: &mut TestAppContext) {
     const KEYS: &[&str] = &[
         "left",
         "right",
@@ -961,8 +966,7 @@ fn random_session(seed: u64, steps: usize, split: bool, cx: &mut TestAppContext)
         "cmd-k cmd-j",
     ];
     const INPUT: &[&str] = &["a", "(", "\"", "ğ", " ", "}", "{", "İ", "\t", "x\ny", "😀"];
-    let original = "fn a() {\n    let x = (1, 2);\n    if x { y(\"s\"); }\n}\n\nfn b() {\n\tz();\n}\n";
-    let f = file(&format!("random-{seed}"), "a.rs", original.as_bytes());
+    let f = file(&format!("random-{seed}"), name, original.as_bytes());
     let (wb, cx) = setup(cx);
     let ed = open(&wb, &f, cx);
     if split {
@@ -1108,6 +1112,26 @@ fn qa_random_new_commands_many_seeds(cx: &mut TestAppContext) {
         random_session_new(seed, 600, "a.rs", RS_SRC, cx);
         random_session_new(seed + 1000, 600, "a.html", HTML_SRC, cx);
         random_session_new(seed + 2000, 400, "a.css", "a {\n  color: red;\n}\n", cx);
+    }
+}
+
+/// Text that has broken editors elsewhere: bidirectional overrides, combining marks, joined emoji, every kind of line end,
+/// NUL, a very long line and a file without a final newline. Random editing must not panic, and undo / redo restore it.
+#[gpui::test]
+fn qa_random_keys_on_hostile_text(cx: &mut TestAppContext) {
+    let long = "x".repeat(50_000);
+    let texts = [
+        ("bidi.rs", "let s = \"\u{202e}gnirts\u{202c}\";\n// \u{2066}a\u{2069} \u{200f}b\n".to_string()),
+        ("marks.txt", "e\u{301}\u{301}\u{301} a\u{20d7}\n\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467} \u{1f3f3}\u{fe0f}\u{200d}\u{1f308}\n".to_string()),
+        // Mixed line ends are made uniform on purpose (see `buffer`), so this file keeps one kind, plus the Unicode separators.
+        ("ends.txt", "a\r\nb\r\nc\r\nd\u{2028}e\u{85}f\r\n\r\n".to_string()),
+        // NUL makes a file binary (it opens in the hex view), so only the other control characters are here.
+        ("controls.txt", "a\u{1}b\u{8}\n\u{7f}\u{1b}[31m\u{c}\n".to_string()),
+        ("long.txt", format!("{long}\n{long}")),
+        ("tabs.py", "\t\t \tdef f():\n\t  \treturn\t1".to_string()),
+    ];
+    for (i, (name, text)) in texts.iter().enumerate() {
+        random_session_on(500 + i as u64, 250, i % 2 == 1, name, text, cx);
     }
 }
 

@@ -167,9 +167,7 @@ pub fn start_fake_docker(name: &str) -> Option<FakeDocker> {
     std::fs::write(&shim, "#!/bin/sh\nif [ \"$1\" = exec ]; then shift; shift; shift; exec \"$@\"; fi\nif [ \"$1\" = ps ]; then printf 'fake-box\\tdebian:12\\n'; exit 0; fi\nexit 1\n").ok()?;
     {
         #[cfg(unix)]
-        use std::os::unix::fs::PermissionsExt;
-        #[cfg(unix)]
-        std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).ok()?;
+        crate::test_files::make_executable(&shim);
     }
     let old_path = std::env::var_os("PATH");
     let new_path = format!("{}:{}", dir.join("bin").display(), old_path.as_ref().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default());

@@ -110,8 +110,7 @@ impl Workbench {
             let _ = s.record_host_ok(&alias, info.version, &format!("{}-{}", info.arch, info.os));
         }
         self.shutdown_lsp(cx); // servers were running on the old host
-        self.ports.forwards.clear();
-        self.start_ports(cx);
+        self.attach_ports(&alias, cx);
         let chosen = self.remote.pending_path.take();
         // From a recent: does the folder still exist on the server? If not, offer to remove it and open the folder picker.
         if let (Some(r), Some(path)) = (self.persist.opening_recent.take(), chosen.clone()) {
@@ -155,11 +154,11 @@ impl Workbench {
                                     this.notice = Some(Notice::Info(crate::i18n::tf("The connection to {} dropped. Reconnecting…", &[&alias]).into()));
                                 }
                                 this.remote.conn = Conn::Reconnecting { alias, attempt };
-                                this.ports.task = None;
+                                this.ports_interrupted();
                             }
                             host::ConnStatus::Connected { resumed } => {
                                 this.remote.conn = Conn::Connected { alias };
-                                this.start_ports(cx);
+                                this.ports_reconnected(cx);
                                 this.reattach_lsp(cx);
                                 this.notice = Some(if resumed {
                                     Notice::Info(crate::i18n::t("Reconnected. Terminals kept running.").into())
@@ -177,8 +176,9 @@ impl Workbench {
                                 };
                                 this.notice = Some(Notice::Error(lost.into()));
                                 this.remote.conn = Conn::Failed { alias, message: crate::i18n::tf("Connection lost: {}", &[&e]).into() };
+                                // Forwards wait: "Reconnect" brings them back on the same local ports.
+                                this.ports_interrupted();
                                 this.stop_ports();
-                                this.ports.forwards.clear();
                             }
                         }
                         cx.notify();
@@ -281,7 +281,19 @@ impl Workbench {
         cx: &mut Context<Self>,
         then: impl FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
     ) {
-        let Some(root) = self.active_root(cx).filter(|r| !self.is_trusted_root(r, cx)) else { return then(self, window, cx) };
+        let root = self.active_root(cx);
+        self.require_trust_for(root, window, cx, then);
+    }
+
+    /// `require_trust` for the folder the commands will run in, when that is not the active file's folder.
+    pub(super) fn require_trust_for(
+        &mut self,
+        root: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        then: impl FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
+    ) {
+        let Some(root) = root.filter(|r| !self.is_trusted_root(r, cx)) else { return then(self, window, cx) };
         let detail = crate::i18n::tf(
             "“{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.",
             &[&ui::file_name(&root)],

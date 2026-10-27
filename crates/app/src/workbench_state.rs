@@ -4,17 +4,29 @@
 use super::*;
 
 /// Debug session and its settings (see workbench_debug.rs).
+#[derive(Default)]
 pub(super) struct DebugUi {
-    /// Debug session (its console stays after it ends), sequence number (events of an old session are dropped),
-    /// breakpoints per file (1-based; including closed files) and the last used configuration.
-    pub(super) session: Option<debug::DebugState>,
-    pub(super) generation: u64,
+    /// Debug sessions (an ended one keeps its console until it is replaced), the one the controls act on, the next
+    /// session id (events and answers of a session that is gone are dropped), breakpoints (including closed files; see
+    /// debug_model.rs) and the last used configuration.
+    pub(super) sessions: Vec<debug::DebugState>,
+    pub(super) focused: Option<u64>,
+    pub(super) next_id: u64,
     /// Watch expressions (kept across sessions and per project).
     pub(super) watch_exprs: Vec<String>,
     /// Selected exception filters (`None`: none selected yet, use the adapter's defaults).
     pub(super) exception_filters: Option<Vec<String>>,
-    pub(super) bp_cache: std::collections::BTreeMap<String, Vec<crate::dap::Breakpoint>>,
+    pub(super) bps: crate::debug_model::BreakpointStore,
     pub(super) last: Option<String>,
+    /// Names of the launch file's configurations (the Run and Debug view's selector).
+    pub(super) catalog: Vec<String>,
+    /// Debug console inputs (per project) and the one ↑ / ↓ shows.
+    pub(super) history: Vec<String>,
+    pub(super) history_pos: Option<usize>,
+    /// Group of the sessions a compound is starting (id, stop all together), set while they start.
+    pub(super) starting_group: Option<(u64, bool)>,
+    /// A configuration waiting for the answers to its `${input:…}` questions.
+    pub(super) pending_launch: Option<debug::PendingLaunch>,
 }
 
 /// Last task, plus the problems parsed from its terminal and output (see workbench_tasks.rs).
@@ -27,6 +39,8 @@ pub(super) struct TaskState {
     pub(super) root: Option<String>,
     pub(super) problems: Vec<(String, crate::lsp::Diagnostic)>,
     pub(super) scan_pending: bool,
+    /// The Testing view: tests found, their results and the running test command.
+    pub(super) tests: super::tests_glue::TestingState,
 }
 
 /// Language servers, diagnostics, progress and log (see workbench_lsp.rs).
@@ -183,6 +197,8 @@ pub(super) struct RemoteState {
     pub(super) asks: std::collections::VecDeque<(AskRequest, AskReply)>,
     /// Ongoing file transfer (upload, download, copy); one at a time.
     pub(super) transfer: Option<Arc<super::transfer::TransferRun>>,
+    /// The Remote Explorer view.
+    pub(super) view: super::remote_glue::RemoteView,
 }
 
 /// Explorer roots, clipboard and favorites.

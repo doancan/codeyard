@@ -118,8 +118,20 @@ fn main() {
             "2xs" => "XXS".to_string(),
             other => ident(other).to_uppercase(),
         };
-        writeln!(out, "    pub const {name}: (f32, f32, u16) = ({:.1}, {:.1}, {});", tenth(&v["size"], k), tenth(&v["line"], k), v["weight"].as_u64().unwrap())
-            .unwrap();
+        let weight = v["weight"].as_u64().unwrap();
+        let entry = |size: &Value, line: &Value| format!("({:.1}, {:.1}, {weight})", tenth(size, k), tenth(line, k));
+        let other = entry(&v["size"], &v["line"]);
+        match v.get("macos") {
+            // A step with a macOS value: the target platform picks it (written as `#[cfg]`, since this script runs on the
+            // build machine), and both values stay available for docs and tests as `<NAME>_MACOS` / `<NAME>_OTHER`.
+            Some(mac) => {
+                let mac = entry(&mac["size"], &mac["line"]);
+                writeln!(out, "    #[cfg(target_os = \"macos\")]\n    pub const {name}: (f32, f32, u16) = {mac};").unwrap();
+                writeln!(out, "    #[cfg(not(target_os = \"macos\"))]\n    pub const {name}: (f32, f32, u16) = {other};").unwrap();
+                writeln!(out, "    pub const {name}_MACOS: (f32, f32, u16) = {mac};\n    pub const {name}_OTHER: (f32, f32, u16) = {other};").unwrap();
+            }
+            None => writeln!(out, "    pub const {name}: (f32, f32, u16) = {other};").unwrap(),
+        }
     }
     out.push_str("}\n\n/// Spacing scale: SPACE[n] px.\npub const SPACE: [f32; ");
     let space = dark["space"].as_array().unwrap();
