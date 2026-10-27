@@ -2517,7 +2517,14 @@ fn terminal_split_shows_two_and_caps_the_count(cx: &mut TestAppContext) {
     assert_eq!(wb.read_with(cx, |wb, _| wb.split_partner()), Some(first.clone()));
     // Closing the split terminal removes the split.
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Close", window, cx));
-    wait_for(cx, "closed", |cx| wb.read_with(cx, |wb, _| wb.terminal_count()) == 1);
+    wait_for(cx, "closed", |cx| {
+        // A newly split shell can still have a startup child on a loaded machine. Respect the
+        // normal close confirmation rather than assuming the shell is already idle.
+        if cx.has_pending_prompt() {
+            cx.simulate_prompt_answer("Close");
+        }
+        wb.read_with(cx, |wb, _| wb.terminal_count()) == 1
+    });
     assert_eq!(wb.read_with(cx, |wb, _| wb.split_partner()), None);
     // At most eight terminals.
     for _ in 0..10 {

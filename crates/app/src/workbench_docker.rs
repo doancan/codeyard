@@ -11,44 +11,6 @@ pub(super) enum Action {
     Open(docker::Project, bool),
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[gpui::test]
-    fn ssh_docker_uses_the_connected_host_and_skips_local_engine_prerequisites(cx: &mut gpui::TestAppContext) {
-        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
-        let (req_r, req_w) = std::io::pipe().unwrap();
-        let (resp_r, resp_w) = std::io::pipe().unwrap();
-        std::thread::spawn(move || agent::serve(req_r, resp_w));
-        let remote = host::RemoteHost::from_streams(Box::new(resp_r), Box::new(req_w), "ssh://linux-host").unwrap();
-        wb.update_in(cx, |wb, window, cx| {
-            wb.remote.host = Arc::new(remote);
-            wb.remote.conn = Conn::Connected { alias: "linux-host".into() };
-            assert_eq!(wb.container_ssh_host().as_deref(), Some("linux-host"));
-            let alias = host::ssh::ssh_docker_target("linux-host", "default", "web").unwrap();
-            assert!(wb.container_target_ready(&alias, window, cx));
-            wb.remote.conn = Conn::Connected { alias };
-            assert_eq!(wb.container_ssh_host().as_deref(), Some("linux-host"));
-        });
-        assert!(!cx.has_pending_prompt());
-    }
-
-    #[gpui::test]
-    fn missing_container_engine_shows_setup_without_executing_it(cx: &mut gpui::TestAppContext) {
-        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
-        cx.update(|_, cx| cx.global_mut::<Settings>().docker_enabled = true);
-        wb.update_in(cx, |wb, window, cx| {
-            wb.container_engine_picked(crate::container_engine::Choice { engine: Engine::Docker, installed: false }, Action::Attach, window, cx)
-        });
-        cx.run_until_parked();
-        assert!(cx.has_pending_prompt());
-        assert!(wb.read_with(cx, |wb, _| wb.output_lines()).is_empty());
-        cx.simulate_prompt_answer("Cancel");
-        cx.run_until_parked();
-    }
-}
-
 pub(super) fn is_command(label: &str) -> bool {
     label.starts_with("Docker:") || label == "Remote: Connect to Dev Container…" || label == "View: Containers"
 }
@@ -647,5 +609,43 @@ impl Workbench {
                 }
             });
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[gpui::test]
+    fn ssh_docker_uses_the_connected_host_and_skips_local_engine_prerequisites(cx: &mut gpui::TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        let (req_r, req_w) = std::io::pipe().unwrap();
+        let (resp_r, resp_w) = std::io::pipe().unwrap();
+        std::thread::spawn(move || agent::serve(req_r, resp_w));
+        let remote = host::RemoteHost::from_streams(Box::new(resp_r), Box::new(req_w), "ssh://linux-host").unwrap();
+        wb.update_in(cx, |wb, window, cx| {
+            wb.remote.host = Arc::new(remote);
+            wb.remote.conn = Conn::Connected { alias: "linux-host".into() };
+            assert_eq!(wb.container_ssh_host().as_deref(), Some("linux-host"));
+            let alias = host::ssh::ssh_docker_target("linux-host", "default", "web").unwrap();
+            assert!(wb.container_target_ready(&alias, window, cx));
+            wb.remote.conn = Conn::Connected { alias };
+            assert_eq!(wb.container_ssh_host().as_deref(), Some("linux-host"));
+        });
+        assert!(!cx.has_pending_prompt());
+    }
+
+    #[gpui::test]
+    fn missing_container_engine_shows_setup_without_executing_it(cx: &mut gpui::TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        cx.update(|_, cx| cx.global_mut::<Settings>().docker_enabled = true);
+        wb.update_in(cx, |wb, window, cx| {
+            wb.container_engine_picked(crate::container_engine::Choice { engine: Engine::Docker, installed: false }, Action::Attach, window, cx)
+        });
+        cx.run_until_parked();
+        assert!(cx.has_pending_prompt());
+        assert!(wb.read_with(cx, |wb, _| wb.output_lines()).is_empty());
+        cx.simulate_prompt_answer("Cancel");
+        cx.run_until_parked();
     }
 }

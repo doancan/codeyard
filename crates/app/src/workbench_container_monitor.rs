@@ -22,81 +22,6 @@ pub(super) fn button(id: impl Into<gpui::ElementId>, label: &'static str, p: &Pa
         .child(label)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[gpui::test]
-    fn container_files_can_return_to_original_ssh_folder_without_reconnecting(cx: &mut gpui::TestAppContext) {
-        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
-        let source: Arc<dyn host::Host> = crate::container_monitor::tests::FixtureHost::new();
-        let container: Arc<dyn host::Host> = crate::container_monitor::tests::FixtureHost::new();
-        let root = crate::qa_workbench_tests::fresh("container-return-source").to_string_lossy().into_owned();
-        let inside = crate::qa_workbench_tests::fresh("container-return-inside").to_string_lossy().into_owned();
-        let alias = host::ssh::ssh_docker_target("linux-fixture", "default", "web-id").unwrap();
-        cx.update(|_, cx| cx.global_mut::<Settings>().docker_enabled = true);
-        wb.update_in(cx, |wb, window, cx| {
-            wb.remote.host = source.clone();
-            wb.remote.conn = Conn::Connected { alias: "linux-fixture".into() };
-            wb.remote.docker.monitor.source = Some(source.clone());
-            wb.remote.docker.monitor.host = Some("linux-fixture".into());
-            wb.remote.docker.monitor.paused = true;
-            wb.remote.docker.monitor.browser.selected = Some("web-id".into());
-            wb.set_root(root.clone(), cx);
-            wb.remote.pending_path = Some(inside);
-            wb.attach_host(container, alias, window, cx);
-            assert_eq!(wb.remote.docker.monitor.return_workspace.as_ref().unwrap().root.as_deref(), Some(root.as_str()));
-            wb.tabs.page_active = false;
-        });
-        cx.run_until_parked();
-        let back = cx.debug_bounds("container-return-workspace").expect("file view exposes a persistent return action").center();
-        cx.simulate_click(back, gpui::Modifiers::none());
-        cx.run_until_parked();
-        wb.read_with(cx, |wb, cx| {
-            assert!(Arc::ptr_eq(&wb.remote.host, &source));
-            assert!(matches!(&wb.remote.conn,Conn::Connected{alias} if alias=="linux-fixture"));
-            assert_eq!(wb.root(cx).as_deref(), Some(root.as_str()));
-            assert_eq!(wb.remote.docker.monitor.browser.selected.as_deref(), Some("web-id"));
-            assert_eq!(wb.page_for_test(), Some(("containers", true)));
-            assert!(wb.remote.docker.monitor.return_workspace.is_none());
-        });
-    }
-    #[gpui::test]
-    fn container_monitor_autodiscovers_and_renders_live_resources_and_dashboard(cx: &mut gpui::TestAppContext) {
-        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
-        let source = crate::container_monitor::tests::FixtureHost::new();
-        cx.update(|_, cx| cx.global_mut::<Settings>().docker_enabled = true);
-        wb.update(cx, |wb, cx| {
-            wb.remote.host = source.clone();
-            wb.remote.conn = Conn::Connected { alias: "linux-fixture".into() };
-            wb.sync_container_monitor(cx);
-        });
-        crate::qa_integration_tests::wait_ticking(cx, "automatic container inventory", |cx| {
-            wb.read_with(cx, |wb, _| wb.remote.docker.monitor.updated.is_some())
-        });
-        assert_eq!(source.calls.load(Ordering::Relaxed), 4);
-        wb.update(cx, |wb, cx| {
-            assert_eq!(wb.remote.docker.monitor.containers.len(), 2);
-            assert_eq!(wb.remote.docker.monitor.usage[0].cpu, "145.6%");
-            wb.remote.docker.monitor.paused = true;
-            wb.show_containers(cx);
-        });
-        cx.run_until_parked();
-        assert!(cx.debug_bounds("container-resource-web-id").is_some());
-        assert!(cx.debug_bounds("container-resource-db-id").is_some());
-        let open = cx.debug_bounds("container-resource-web-id").unwrap().center();
-        cx.simulate_click(open, gpui::Modifiers::none());
-        cx.run_until_parked();
-        assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), Some(("containers", true)));
-        assert!(cx.debug_bounds("container-dashboard").is_some());
-        assert!(cx.debug_bounds("dashboard-row-web-id").is_none(), "the main view must not repeat the sidebar inventory");
-        wb.update(cx, |wb, cx| {
-            wb.remote.docker.monitor.clear();
-            assert!(wb.remote.docker.monitor.containers.is_empty());
-            cx.notify();
-        });
-    }
-}
-
 impl Workbench {
     pub(super) fn return_from_container(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.refuse_if_dirty(cx) {
@@ -200,5 +125,80 @@ impl Workbench {
         })
         .detach();
         cx.notify();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[gpui::test]
+    fn container_files_can_return_to_original_ssh_folder_without_reconnecting(cx: &mut gpui::TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        let source: Arc<dyn host::Host> = crate::container_monitor::tests::FixtureHost::new();
+        let container: Arc<dyn host::Host> = crate::container_monitor::tests::FixtureHost::new();
+        let root = crate::qa_workbench_tests::fresh("container-return-source").to_string_lossy().into_owned();
+        let inside = crate::qa_workbench_tests::fresh("container-return-inside").to_string_lossy().into_owned();
+        let alias = host::ssh::ssh_docker_target("linux-fixture", "default", "web-id").unwrap();
+        cx.update(|_, cx| cx.global_mut::<Settings>().docker_enabled = true);
+        wb.update_in(cx, |wb, window, cx| {
+            wb.remote.host = source.clone();
+            wb.remote.conn = Conn::Connected { alias: "linux-fixture".into() };
+            wb.remote.docker.monitor.source = Some(source.clone());
+            wb.remote.docker.monitor.host = Some("linux-fixture".into());
+            wb.remote.docker.monitor.paused = true;
+            wb.remote.docker.monitor.browser.selected = Some("web-id".into());
+            wb.set_root(root.clone(), cx);
+            wb.remote.pending_path = Some(inside);
+            wb.attach_host(container, alias, window, cx);
+            assert_eq!(wb.remote.docker.monitor.return_workspace.as_ref().unwrap().root.as_deref(), Some(root.as_str()));
+            wb.tabs.page_active = false;
+        });
+        cx.run_until_parked();
+        let back = cx.debug_bounds("container-return-workspace").expect("file view exposes a persistent return action").center();
+        cx.simulate_click(back, gpui::Modifiers::none());
+        cx.run_until_parked();
+        wb.read_with(cx, |wb, cx| {
+            assert!(Arc::ptr_eq(&wb.remote.host, &source));
+            assert!(matches!(&wb.remote.conn,Conn::Connected{alias} if alias=="linux-fixture"));
+            assert_eq!(wb.root(cx).as_deref(), Some(root.as_str()));
+            assert_eq!(wb.remote.docker.monitor.browser.selected.as_deref(), Some("web-id"));
+            assert_eq!(wb.page_for_test(), Some(("containers", true)));
+            assert!(wb.remote.docker.monitor.return_workspace.is_none());
+        });
+    }
+    #[gpui::test]
+    fn container_monitor_autodiscovers_and_renders_live_resources_and_dashboard(cx: &mut gpui::TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        let source = crate::container_monitor::tests::FixtureHost::new();
+        cx.update(|_, cx| cx.global_mut::<Settings>().docker_enabled = true);
+        wb.update(cx, |wb, cx| {
+            wb.remote.host = source.clone();
+            wb.remote.conn = Conn::Connected { alias: "linux-fixture".into() };
+            wb.sync_container_monitor(cx);
+        });
+        crate::qa_integration_tests::wait_ticking(cx, "automatic container inventory", |cx| {
+            wb.read_with(cx, |wb, _| wb.remote.docker.monitor.updated.is_some())
+        });
+        assert_eq!(source.calls.load(Ordering::Relaxed), 4);
+        wb.update(cx, |wb, cx| {
+            assert_eq!(wb.remote.docker.monitor.containers.len(), 2);
+            assert_eq!(wb.remote.docker.monitor.usage[0].cpu, "145.6%");
+            wb.remote.docker.monitor.paused = true;
+            wb.show_containers(cx);
+        });
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("container-resource-web-id").is_some());
+        assert!(cx.debug_bounds("container-resource-db-id").is_some());
+        let open = cx.debug_bounds("container-resource-web-id").unwrap().center();
+        cx.simulate_click(open, gpui::Modifiers::none());
+        cx.run_until_parked();
+        assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), Some(("containers", true)));
+        assert!(cx.debug_bounds("container-dashboard").is_some());
+        assert!(cx.debug_bounds("dashboard-row-web-id").is_none(), "the main view must not repeat the sidebar inventory");
+        wb.update(cx, |wb, cx| {
+            wb.remote.docker.monitor.clear();
+            assert!(wb.remote.docker.monitor.containers.is_empty());
+            cx.notify();
+        });
     }
 }

@@ -8,6 +8,9 @@ does not add a new product feature.
 
 `develop` was synchronized with `main` at `eabbd82`. Its Markdown reading view (`360f49c`)
 was retained. Both sides of the translation-table conflicts were preserved.
+The concurrent container-workspace and Windows-title-bar changes through `db1badb` were then
+merged from remote `develop`, together with the heading-anchor collision fix. They were preserved
+and included in the final validation rather than overwritten.
 
 | Area | Evidence and assessment | Action |
 | --- | --- | --- |
@@ -27,6 +30,8 @@ was retained. Both sides of the translation-table conflicts were preserved.
 | Painted SVGs | Real-window inspection found red/blue channel reversal and darkened transparency in SVG image previews. | Convert premultiplied RGBA to straight BGRA in GPUI's image path; compare opaque and translucent pixels in a regression. |
 | Paragraph layout | A long paragraph measured 1,548 px inside an 820 px document and visibly overflowed. | Constrain paragraph children with a column layout; test the shaped text bounds. |
 | Text link gestures | A real link regression showed a right-click opening the linked file. | Accept only left clicks, register press/release in one frame and clear cancellation; cover right clicks, outside releases and a same-frame click. |
+| Resize feedback | The requested hover feedback switches abruptly to a full accent stripe. | Share a 130 ms color fade in and 100 ms fade out across panel, editor and section handles; retain their hitboxes and full feedback during dragging, with no spatial motion or idle animation loop. |
+| Concurrent integration | The incoming CI failed strict Clippy because two container modules put implementation after tests; an SSH assertion expected a container group that the new default disables, and a split-terminal test ignored a possible startup-process close prompt. | Move test modules to the end, check the disabled module's actual contract and handle the normal confirmation in the split regression. |
 
 ## Implementation and validation plan
 
