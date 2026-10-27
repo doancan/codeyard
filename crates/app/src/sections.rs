@@ -16,6 +16,8 @@ pub struct Sections {
     /// Section being dragged: (id, start y, start height, direction). Direction +1: edge at the bottom
     /// (dragging down grows it), -1: edge at the top (dragging up grows it).
     drag: Option<(String, f32, f32, f32)>,
+    /// Painted heights can differ from requested heights when the sidebar is short.
+    measured: std::rc::Rc<std::cell::RefCell<std::collections::BTreeMap<String, f32>>>,
 }
 
 impl Sections {
@@ -50,7 +52,26 @@ impl Sections {
     }
 
     pub fn set_height(&mut self, id: &str, h: f32) {
-        self.entry(id).2 = Some(h.clamp(MIN_H, MAX_H));
+        if h.is_finite() {
+            self.entry(id).2 = Some(h.clamp(MIN_H, MAX_H));
+        }
+    }
+
+    pub fn rendered_height(&self, id: &str, default: f32) -> f32 {
+        self.measured.borrow().get(id).copied().unwrap_or(default)
+    }
+
+    /// A non-interactive, absolutely positioned probe inside the section body.
+    pub fn measure(&self, id: &'static str) -> impl gpui::IntoElement + use<> {
+        let measured = self.measured.clone();
+        gpui::canvas(
+            move |bounds, _, _| {
+                measured.borrow_mut().insert(id.to_string(), bounds.size.height / px(1.));
+            },
+            |_, _, _, _| {},
+        )
+        .absolute()
+        .size_full()
     }
 
     pub fn begin_drag(&mut self, id: &str, y: f32, current_h: f32, sign: f32) {
@@ -96,11 +117,11 @@ impl Sections {
                 let mut f = part.split(':');
                 let id = f.next().filter(|s| !s.is_empty())?.to_string();
                 let open = f.next()? != "0";
-                let h = f.next().and_then(|h| h.parse::<f32>().ok()).map(|h| h.clamp(MIN_H, MAX_H));
+                let h = f.next().and_then(|h| h.parse::<f32>().ok()).filter(|h| h.is_finite()).map(|h| h.clamp(MIN_H, MAX_H));
                 Some((id, open, h))
             })
             .collect();
-        Sections { items, drag: None }
+        Sections { items, ..Self::default() }
     }
 }
 
@@ -144,7 +165,15 @@ pub fn header(id: impl Into<gpui::ElementId>, title: &str, count: Option<usize>,
 
 /// Height handle: soft accent feedback. The caller wires the mouse press.
 pub fn sash(id: impl Into<gpui::ElementId>, p: &Palette, dragging: bool) -> Stateful<Div> {
-    div().id(id).w_full().h(px(4.)).flex_none().cursor(gpui::CursorStyle::ResizeUpDown).child(crate::ui_sash::highlight(p.accent, dragging))
+    div()
+        .id(id)
+        .w_full()
+        .h(px(4.))
+        .flex_none()
+        .border_b_1()
+        .border_color(c(p.border))
+        .cursor(gpui::CursorStyle::ResizeUpDown)
+        .child(crate::ui_sash::highlight(p.accent, dragging))
 }
 
 #[cfg(test)]

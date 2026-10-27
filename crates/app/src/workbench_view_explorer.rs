@@ -312,20 +312,25 @@ impl Workbench {
         let (open_open, fav_open, tree_open, time_open) = (sec("open-editors"), sec("favorites"), sec("folders"), sec("timeline"));
         // Section header + toggle on click.
         let head = |id: &'static str, title: &str, count: Option<usize>, open: bool, cx: &mut Context<Self>| {
-            sections::header(SharedString::from(format!("sec-{id}")), title, count, open, p).on_click(cx.listener(move |this, _, _, cx| {
-                this.sections.toggle(id, id != "open-editors");
-                this.persist_sections(cx);
-            }))
+            sections::header(SharedString::from(format!("sec-{id}")), title, count, open, p).debug_selector(move || format!("sec-{id}")).on_click(cx.listener(
+                move |this, _, _, cx| {
+                    this.sections.toggle(id, id != "open-editors");
+                    this.persist_sections(cx);
+                },
+            ))
         };
         // Bottom edge handle (dragging down grows) and top edge (dragging up grows).
         let sash = |id: &'static str, h: f32, sign: f32, cx: &mut Context<Self>| {
-            sections::sash(SharedString::from(format!("sash-{id}")), p, self.sections.dragging_section(id)).on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |this, ev: &gpui::MouseDownEvent, _, cx| {
-                    cx.stop_propagation();
-                    this.sections.begin_drag(id, ev.position.y / px(1.), h, sign);
-                }),
-            )
+            sections::sash(SharedString::from(format!("sash-{id}")), p, self.sections.dragging_section(id))
+                .debug_selector(move || format!("sash-{id}"))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, ev: &gpui::MouseDownEvent, _, cx| {
+                        cx.stop_propagation();
+                        let current = this.sections.rendered_height(id, h);
+                        this.sections.begin_drag(id, ev.position.y / px(1.), current, sign);
+                    }),
+                )
         };
         let open_h = self.sections.height("open-editors", (22. * open_count.min(8) as f32).max(22.));
         let time_h = self.sections.height("timeline", 170.);
@@ -415,16 +420,34 @@ impl Workbench {
                     .flatten()
                     .collect::<Vec<_>>(),
             )
-            .child(head("outline", crate::i18n::t("Outline"), outline_count, outline_open, cx))
+            .when(outline_open, |d| d.child(sash("outline", outline_h, -1., cx)))
+            .child(head("outline", crate::i18n::t("Outline"), outline_count, outline_open, cx).when(outline_open, |d| d.border_t_0()))
             .when_some(outline_body, |d, body| {
-                d.child(sash("outline", outline_h, -1., cx))
-                    .child(div().when(tree_open, |d| d.h(px(outline_h)).flex_shrink()).when(!tree_open, |d| d.flex_1()).min_h(px(40.)).child(body))
+                let fixed = tree_open || self.sections.has_height("outline");
+                d.child(
+                    div()
+                        .relative()
+                        .when(fixed, |d| d.h(px(outline_h)).flex_shrink())
+                        .when(!fixed, |d| d.flex_1())
+                        .min_h(px(40.))
+                        .child(body)
+                        .child(self.sections.measure("outline")),
+                )
             })
             // History comes from git, so the section shows only for a folder that is a git repo.
-            .when(in_repo, |d| d.child(head("timeline", crate::i18n::t("Timeline"), timeline_count, time_open, cx)))
+            .when(in_repo && time_open, |d| d.child(sash("timeline", time_h, -1., cx)))
+            .when(in_repo, |d| d.child(head("timeline", crate::i18n::t("Timeline"), timeline_count, time_open, cx).when(time_open, |d| d.border_t_0())))
             .when_some(timeline_body.filter(|_| in_repo), |d, body| {
-                d.child(sash("timeline", time_h, -1., cx))
-                    .child(div().when(tree_open, |d| d.h(px(time_h)).flex_shrink()).when(!tree_open, |d| d.flex_1()).min_h(px(40.)).child(body))
+                let fixed = tree_open || self.sections.has_height("timeline");
+                d.child(
+                    div()
+                        .relative()
+                        .when(fixed, |d| d.h(px(time_h)).flex_shrink())
+                        .when(!fixed, |d| d.flex_1())
+                        .min_h(px(40.))
+                        .child(body)
+                        .child(self.sections.measure("timeline")),
+                )
             })
             .into_any_element()
     }

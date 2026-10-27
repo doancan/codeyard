@@ -625,6 +625,32 @@ mod resize_tests {
     use super::*;
     use gpui::{Modifiers, TestAppContext, point};
 
+    #[gpui::test]
+    fn explorer_sections_resize_from_above_their_headers(cx: &mut TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        let project = crate::qa_workbench_tests::project("section-edges");
+        crate::qa_workbench_tests::open(&wb, &project, cx);
+        wb.update(cx, |wb, cx| {
+            wb.chrome.panel = Some(Panel::Explorer);
+            wb.vcs.status = Some(std::sync::Arc::new(crate::git::Status::default()));
+            cx.notify();
+        });
+        cx.run_until_parked();
+        for (id, sash_id, header_id) in [("outline", "sash-outline", "sec-outline"), ("timeline", "sash-timeline", "sec-timeline")] {
+            let sash = cx.debug_bounds(sash_id).unwrap();
+            let header = cx.debug_bounds(header_id).unwrap();
+            assert!(sash.bottom() <= header.top(), "{id}: the resize target must be above the header");
+            let at = sash.center();
+            let before = wb.read_with(cx, |wb, _| wb.sections.height(id, 170.));
+            cx.simulate_mouse_down(at, MouseButton::Left, Modifiers::none());
+            cx.simulate_mouse_move(at - point(px(0.), px(40.)), Some(MouseButton::Left), Modifiers::none());
+            cx.simulate_mouse_up(at - point(px(0.), px(40.)), MouseButton::Left, Modifiers::none());
+            assert_eq!(wb.read_with(cx, |wb, _| wb.sections.height(id, 170.)), before + 40.);
+            assert!(wb.read_with(cx, |wb, _| wb.sections.is_open(id, true)), "resizing must not collapse the section");
+            assert!(!wb.read_with(cx, |wb, _| wb.sections.dragging()));
+        }
+    }
+
     #[cfg(windows)]
     #[gpui::test]
     fn windows_titlebar_mouse_events_preserve_native_drag_and_close_defaults(cx: &mut TestAppContext) {
