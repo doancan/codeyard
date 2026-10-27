@@ -950,7 +950,7 @@ impl Workbench {
                 crate::scm::ScmEvent::OpenCommit(commit) => this.show_commit_files(commit.clone(), window, cx),
                 crate::scm::ScmEvent::OpenCommitFile(commit, file) => this.open_commit_file(commit.clone(), file.clone(), window, cx),
                 crate::scm::ScmEvent::CommitMenu(commit, position) => this.open_commit_menu(commit.clone(), *position, window, cx),
-                crate::scm::ScmEvent::FileMenu(path, position) => this.open_scm_file_menu(path, *position, window, cx),
+                crate::scm::ScmEvent::FileMenu(path, staged, position) => this.open_scm_file_menu(path, *staged, *position, window, cx),
                 crate::scm::ScmEvent::SectionsChanged(text) => {
                     if let Some(s) = &this.persist.state {
                         let _ = s.set("scm_sections", text);
@@ -1068,6 +1068,7 @@ impl Workbench {
                 tree_marks: Default::default(),
             },
             chrome: state_glue::ChromeLayout {
+                resources: cx.new(crate::resource_monitor::ResourceMonitor::new),
                 panel: Some(Panel::Explorer),
                 bottom: Bottom::Terminal,
                 sidebar_w,
@@ -1120,6 +1121,7 @@ impl Workbench {
                 host,
                 conn: Conn::Local,
                 pending_path: None,
+                connection_origin: None,
                 ssh_hosts: host::ssh::list_hosts(),
                 bundle: Arc::new(crate::bundled_agents::discover()),
                 asks: Default::default(),
@@ -1360,48 +1362,47 @@ impl Workbench {
                     .items_center()
                     .gap(px(theme::SPACE[1]))
                     .px(px(theme::SPACE[4]))
-                    .text_size(px(text::XXS.0))
+                    .text_size(px(text::SM.0))
+                    .line_height(px(text::SM.1))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
                     .child({
                         let (errors, warnings) = self.problem_counts();
-                        panel_tab("problems-tab", crate::i18n::upper(crate::i18n::t("Problems")), self.chrome.bottom == Bottom::Problems, errors + warnings, p)
-                            .on_click(cx.listener(|this, _, _, cx| {
+                        panel_tab("problems-tab", crate::i18n::t("Problems").into(), self.chrome.bottom == Bottom::Problems, errors + warnings, p).on_click(
+                            cx.listener(|this, _, _, cx| {
                                 this.chrome.bottom = Bottom::Problems;
                                 cx.notify();
-                            }))
+                            }),
+                        )
                     })
-                    .child(panel_tab("output-tab", crate::i18n::upper(crate::i18n::t("Output")), self.chrome.bottom == Bottom::Output, 0, p).on_click(
-                        cx.listener(|this, _, _, cx| {
+                    .child(panel_tab("output-tab", crate::i18n::t("Output").into(), self.chrome.bottom == Bottom::Output, 0, p).on_click(cx.listener(
+                        |this, _, _, cx| {
                             this.chrome.bottom = Bottom::Output;
+                            cx.notify();
+                        },
+                    )))
+                    .when(self.dbg.has_sessions(), |d| {
+                        d.child(panel_tab("debug-tab", crate::i18n::t("Debug Console").into(), self.chrome.bottom == Bottom::Debug, 0, p).on_click(
+                            cx.listener(|this, _, _, cx| {
+                                this.chrome.bottom = Bottom::Debug;
+                                cx.notify();
+                            }),
+                        ))
+                    })
+                    .child(panel_tab("ports-tab", crate::i18n::t("Ports").into(), self.chrome.bottom == Bottom::Ports, self.active_forwards(), p).on_click(
+                        cx.listener(|this, _, _, cx| {
+                            this.chrome.bottom = Bottom::Ports;
                             cx.notify();
                         }),
                     ))
-                    .when(self.dbg.has_sessions(), |d| {
-                        d.child(
-                            panel_tab("debug-tab", crate::i18n::upper(crate::i18n::t("Debug Console")), self.chrome.bottom == Bottom::Debug, 0, p).on_click(
-                                cx.listener(|this, _, _, cx| {
-                                    this.chrome.bottom = Bottom::Debug;
-                                    cx.notify();
-                                }),
-                            ),
-                        )
-                    })
-                    .child(
-                        panel_tab("ports-tab", crate::i18n::upper(crate::i18n::t("Ports")), self.chrome.bottom == Bottom::Ports, self.active_forwards(), p)
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.chrome.bottom = Bottom::Ports;
-                                cx.notify();
-                            })),
-                    )
-                    .child(panel_tab("terminal-tab", crate::i18n::upper(crate::i18n::t("Terminal")), self.chrome.bottom == Bottom::Terminal, 0, p).on_click(
-                        cx.listener(|this, _, window, cx| {
+                    .child(panel_tab("terminal-tab", crate::i18n::t("Terminal").into(), self.chrome.bottom == Bottom::Terminal, 0, p).on_click(cx.listener(
+                        |this, _, window, cx| {
                             if this.terminals.is_empty() {
                                 this.new_terminal(&NewTerminal, window, cx);
                             } else {
                                 this.focus_terminal(window, cx);
                             }
-                        }),
-                    ))
+                        },
+                    )))
                     .child(div().flex_1())
                     .child(
                         ui::icon_button("panel-new", "plus", crate::i18n::t("New Terminal (⌃⇧`)"), p)
@@ -1544,6 +1545,8 @@ impl Workbench {
         let path = if self.remote.host.is_remote() { path } else { ui::local_path(std::path::Path::new(&path)) };
         // Same folder: keep tabs in place.
         if self.root(cx).as_deref() == Some(path.as_str()) {
+            self.cancel_pending_connection();
+            cx.notify();
             return;
         }
         // With hot exit on, dirty files are backed up and come back when returning to the folder.
@@ -1551,6 +1554,7 @@ impl Workbench {
         if (!cx.global::<Settings>().hot_exit || self.has_unbacked_dirty(cx)) && self.refuse_if_dirty(cx) {
             return;
         }
+        self.cancel_pending_connection();
         self.persist_session(cx);
         self.shutdown_lsp(cx);
         self.roots.extra_roots.clear();
@@ -2247,6 +2251,9 @@ impl Workbench {
                 }
                 if self.remote.host.is_remote() {
                     self.disconnect(cx);
+                    if self.remote.host.is_remote() {
+                        return;
+                    }
                 }
                 self.set_root(r.path, cx);
             }
@@ -2480,20 +2487,20 @@ impl Render for Tooltip {
     }
 }
 
-/// Tab for a view in the panel header (PROBLEMS, PORTS, TERMINAL): underlined when active.
+/// Panel views use quiet button backgrounds for selection and hover.
 fn panel_tab(id: &'static str, label: String, active: bool, badge: usize, p: &Palette) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
-        .h_full()
+        .h(px(layout::VIEW_HEADER_H - 8.))
         .flex()
         .items_center()
         .gap(px(theme::SPACE[2]))
         .px(px(theme::SPACE[3]))
         .cursor_pointer()
-        .border_b_1()
-        .border_color(c(if active { p.accent } else { p.bg }))
+        .rounded(px(theme::radius::SM))
+        .when(active, |d| d.bg(c(p.surface_active)))
         .text_color(c(if active { p.text } else { p.text_muted }))
-        .hover(|d| d.text_color(c(p.text)))
+        .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text))))
         .child(label)
         .when(badge > 0, |d| d.child(div().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).child(badge.to_string())))
 }

@@ -107,6 +107,7 @@ pub(super) struct GitState {
 
 /// Layout: side panel, bottom panel, split editor, zoom, zen mode, window bounds.
 pub(super) struct ChromeLayout {
+    pub(super) resources: Entity<crate::resource_monitor::ResourceMonitor>,
     pub(super) panel: Option<Panel>,
     /// The bottom panel shows the Problems list instead of the terminal.
     pub(super) bottom: Bottom,
@@ -190,6 +191,8 @@ pub(super) struct RemoteState {
     /// For things that always open on this machine, such as settings files.
     pub(super) local_host: Arc<dyn Host>,
     pub(super) conn: Conn,
+    /// State of the still-open workspace while a different connection is pending.
+    pub(super) connection_origin: Option<Conn>,
     /// Folder to open once connected (if picked from recents).
     pub(super) pending_path: Option<String>,
     pub(super) ssh_hosts: Vec<SshHost>,

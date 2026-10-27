@@ -176,6 +176,7 @@ status bar reports it.
 | `terminal.defaultProfile` | text | empty | Profile new terminals use |
 | `terminal.fontSize` | number 6–48 | `12` on macOS, `14` on Windows and Linux | Font size of the terminal |
 | `terminal.sanitizePaste` | `auto`, `always`, `off` | `auto` | Remove control characters from pasted text |
+| `terminal.scrollSensitivity` | number 0.1–10 | `2.0` | Mouse wheel and trackpad scroll speed multiplier |
 | `terminal.scrollback` | number 0–50000 | `2000` | Lines kept in terminal history |
 | `terminal.shell` | text | empty | Shell for new terminals (empty: login shell) |
 | `terminal.shellIntegration` | `true` / `false` | `true` | Mark prompts, commands and the folder in zsh, bash and fish |

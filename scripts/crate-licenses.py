@@ -9,7 +9,7 @@ import json, os, subprocess, sys
 
 root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 os.chdir(root)
-res = subprocess.run(["cargo", "metadata", "--offline", "--format-version", "1", "--locked"], capture_output=True, text=True)
+res = subprocess.run(["cargo", "metadata", "--offline", "--format-version", "1", "--locked"], capture_output=True, text=True, encoding="utf-8")
 if res.returncode != 0:
     print(f"crate-licenses: `cargo metadata --offline --locked` failed (exit {res.returncode}); "
           "run `cargo fetch --locked` first, and check that Cargo.lock matches the manifests:\n" + res.stderr, file=sys.stderr)

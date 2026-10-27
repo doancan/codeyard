@@ -263,7 +263,7 @@ impl Render for EditorView {
                             .flex_1()
                             .min_h_0()
                             .cursor(CursorStyle::IBeam)
-                            .font_family(font_family)
+                            .font_family(font_family.clone())
                             .map(|mut d| {
                                 // Ligature font feature: when off, `calt`/`liga` are disabled (for fonts like Fira Code).
                                 if !ligatures {
@@ -289,7 +289,7 @@ impl Render for EditorView {
                                 uniform_list(
                                     "editor-lines",
                                     rows,
-                                    cx.processor(move |this, range: Range<usize>, _window, cx| {
+                                    cx.processor(move |this, range: Range<usize>, window, cx| {
                                         let entity = cx.entity();
                                         let (ws_mode, rulers, numbers_mode) = (ws_mode.clone(), rulers.clone(), numbers_mode.clone());
                                         let n_lines = this.buffer.len_lines();
@@ -322,6 +322,35 @@ impl Render for EditorView {
                                                 let (start, end) = (line_start + r.start, line_start + r.end);
                                                 let (b0, b1) = (byte_of(full, r.start), byte_of(full, r.end));
                                                 let text = full[b0..b1].to_string();
+                                                let annotation = |id: &'static str, hint: SharedString, opacity| {
+                                                    let run = TextRun {
+                                                        len: text.len(),
+                                                        font: gpui::font(font_family.clone()),
+                                                        color: c(p.text).into(),
+                                                        background_color: None,
+                                                        underline: None,
+                                                        strikethrough: None,
+                                                    };
+                                                    let code = window.text_system().shape_line(text.clone().into(), px(font_size), &[run], None).width;
+                                                    // Current layout clips to the space after code, including during a pane resize.
+                                                    div()
+                                                        .id((id, ix))
+                                                        .debug_selector(move || id.to_string())
+                                                        .absolute()
+                                                        .left(px(gutter_w) + (code - this.hscroll).max(px(0.)) + px(20.))
+                                                        .right(px(28.))
+                                                        .min_w_0()
+                                                        .overflow_hidden()
+                                                        .top_0()
+                                                        .h(px(line_h))
+                                                        .flex()
+                                                        .items_center()
+                                                        .justify_end()
+                                                        .text_size(px(font_size * 0.85))
+                                                        .text_color(ui::ca(p.text_muted, opacity))
+                                                        .child(div().min_w_0().max_w(px(480.)).truncate().child(hint.clone()))
+                                                        .tooltip(move |_, cx| cx.new(|_| crate::workbench::Tooltip(hint.clone())).into())
+                                                };
                                                 // A cursor at the end of a segment is drawn at the start of the next segment.
                                                 let here = |c: usize| c >= start && (c < end || (c == end && last_seg));
                                                 let line_cursors: Vec<usize> =
@@ -548,50 +577,13 @@ impl Render for EditorView {
                                                             }),
                                                     )
                                                     .when_some(
-                                                        this.eol_hint(ix).filter(|h| {
-                                                            seg == 0
-                                                                && inline_blame.as_ref().is_none_or(|(l, ..)| *l != ix)
-                                                                && text.chars().count() + h.chars().count() < 110
-                                                        }),
-                                                        |d, hint| {
-                                                            d.child(
-                                                                div()
-                                                                    .absolute()
-                                                                    .right(px(28.))
-                                                                    .top_0()
-                                                                    .h(px(line_h))
-                                                                    .flex()
-                                                                    .items_center()
-                                                                    .whitespace_nowrap()
-                                                                    .text_size(px(font_size * 0.85))
-                                                                    .text_color(ui::ca(p.text_muted, 0.65))
-                                                                    .child(hint),
-                                                            )
-                                                        },
+                                                        this.eol_hint(ix).filter(|_| seg == 0 && inline_blame.as_ref().is_none_or(|(l, ..)| *l != ix)),
+                                                        |d, hint| d.child(annotation("line-end-hint", hint.into(), 0.65)),
                                                     )
-                                                    // Right-aligned: drawn only if it fits, so it doesn't overlap the code on a long line.
-                                                    .when_some(
-                                                        inline_blame
-                                                            .as_ref()
-                                                            .filter(|(l, _, t)| *l == ix && seg == 0 && text.chars().count() + t.chars().count() < 120),
-                                                        |d, (_, _, text)| {
-                                                            d.child(
-                                                                div()
-                                                                    .absolute()
-                                                                    .right(px(28.))
-                                                                    .top_0()
-                                                                    .h(px(line_h))
-                                                                    .flex()
-                                                                    .items_center()
-                                                                    .max_w(px(480.))
-                                                                    .overflow_hidden()
-                                                                    .whitespace_nowrap()
-                                                                    .text_size(px(font_size * 0.85))
-                                                                    .text_color(ui::ca(p.text_muted, 0.8))
-                                                                    .child(text.clone()),
-                                                            )
-                                                        },
-                                                    )
+                                                    // Right-aligned inside the space left after the shaped code.
+                                                    .when_some(inline_blame.as_ref().filter(|(l, _, _)| *l == ix && seg == 0), |d, (_, _, text)| {
+                                                        d.child(annotation("inline-blame", text.clone(), 0.8))
+                                                    })
                                                     .child(LineElement {
                                                         editor: entity.clone(),
                                                         line: ix,
@@ -810,7 +802,16 @@ impl Render for EditorView {
                     // The find bar floats above the text but outside the "Editor" context:
                     // keys inside it (Tab, Cmd+Z) must not go to the buffer.
                     .when_some(find_bar, |d, bar| {
-                        d.child(div().absolute().top(px(theme::SPACE[2])).right(px(theme::SPACE[7])).shadow_md().rounded(px(theme::radius::MD)).child(bar))
+                        d.child(
+                            div()
+                                .absolute()
+                                .top(px(theme::SPACE[2]))
+                                .left(px(theme::SPACE[2]))
+                                .right(px(theme::SPACE[7]))
+                                .flex()
+                                .justify_end()
+                                .child(div().max_w(gpui::relative(1.)).shadow_md().rounded(px(theme::radius::MD)).child(bar)),
+                        )
                     }),
             )
     }
@@ -1056,5 +1057,37 @@ impl Element for LineElement {
                 }
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod annotation_tests {
+    use super::*;
+
+    #[gpui::test]
+    fn inline_annotations_yield_to_code_when_the_editor_narrows(cx: &mut gpui::TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        let project = crate::qa_workbench_tests::project("annotation-width");
+        let path = project.join("src/main.rs");
+        std::fs::write(&path, "fn main() { println!(\"Codeyard production review\"); }\n").unwrap();
+        crate::qa_workbench_tests::open_in(&wb, &path, cx);
+        let editor = wb.read_with(cx, |wb, _| wb.active_editor_entity().unwrap());
+        editor.update(cx, |ed, cx| {
+            ed.blame = Some((0, ed.buffer.version(), "QA author, an hour ago · Initial workspace".into()));
+            cx.notify();
+        });
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("inline-blame").unwrap().size.width > px(0.), "wide editors have room for the annotation");
+        cx.simulate_resize(gpui::size(px(640.), px(800.)));
+        cx.run_until_parked();
+        assert!(
+            cx.debug_bounds("inline-blame").unwrap().size.width == px(0.),
+            "a short character count does not imply there is space beside the code: width {:?}, bounds {:?}",
+            editor.read_with(cx, |ed, _| ed.text_width),
+            cx.debug_bounds("inline-blame")
+        );
+        cx.simulate_resize(gpui::size(px(1280.), px(800.)));
+        cx.run_until_parked();
+        assert!(cx.debug_bounds("inline-blame").unwrap().size.width > px(0.), "resizing back restores the annotation");
     }
 }

@@ -467,10 +467,7 @@ impl Workbench {
                 tone: Tone::Accent,
                 title: t("Check for updates automatically?").into(),
                 subtitle: None,
-                body: Body::Paragraphs(vec![
-                    t("Once a day, Codeyard downloads two small files from github.com to look for a newer version. GitHub sees your IP address, nothing about your files.").into(),
-                    t("Change this in Settings (update.check). Check for Updates… always works.").into(),
-                ]),
+                body: Body::Paragraphs(vec![t("Codeyard can check for updates daily. You can change this in Settings.").into()]),
                 buttons: vec![button(A::OnlyWhenAsked, t("Only When I Ask"), false), button(A::CheckDaily, t("Check Daily"), true)],
                 escape: A::Close,
             }),
@@ -505,11 +502,7 @@ impl Workbench {
                     buttons.push(start_button(A::ReleasePage, t("Release Page")));
                 }
                 buttons.push(button(A::Close, t("Later"), false));
-                buttons.push(if can_install {
-                    button(A::Install, t("Install and Restart"), true)
-                } else {
-                    button(A::ReleasePage, t("Download Page"), true)
-                });
+                buttons.push(if can_install { button(A::Install, t("Install and Restart"), true) } else { button(A::ReleasePage, t("Download Page"), true) });
                 Some(DialogModel {
                     icon: "arrow-down",
                     tone: Tone::Accent,
@@ -544,7 +537,12 @@ impl Workbench {
                 title: tf("Installing Codeyard {}", &[&release.version]).into(),
                 subtitle: None,
                 body: Body::Working(
-                    if matches!(self.update.kind, InstallKind::WindowsInstalled) { t("Installing — Codeyard will restart.") } else { t("Verifying and installing…") }.into(),
+                    if matches!(self.update.kind, InstallKind::WindowsInstalled) {
+                        t("Installing — Codeyard will restart.")
+                    } else {
+                        t("Verifying and installing…")
+                    }
+                    .into(),
                 ),
                 buttons: vec![button(A::Close, t("Hide"), true)],
                 escape: A::Close,

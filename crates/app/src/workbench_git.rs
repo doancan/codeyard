@@ -521,18 +521,60 @@ impl Workbench {
 
     /// Right-click on a commit in the graph: copy, files, open branch/tag, cherry-pick, revert, reset.
     /// Right click on a changed file in Source Control: the actions that do not depend on the tree being open.
-    pub(super) fn open_scm_file_menu(&mut self, rel: &str, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_scm_file_menu(&mut self, rel: &str, staged: bool, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
         use super::{MenuCmd, MenuTarget};
         use crate::menu::MenuItem;
+        use crate::scm::FileAction;
         let Some(root) = self.vcs.scm_root.clone().or_else(|| self.root(cx)) else { return };
-        let rows: Vec<(MenuItem, MenuCmd)> = vec![
-            (MenuItem::new(crate::i18n::t("Copy Path")), MenuCmd::CopyPath),
-            (MenuItem::new(crate::i18n::t("Copy Relative Path")), MenuCmd::CopyRelativePath),
-            (MenuItem::new(crate::i18n::t("Add to .gitignore")).separator(), MenuCmd::GitIgnore),
+        let Some(change) = self.git_status().and_then(|s| s.changes.iter().find(|c| c.path == rel).cloned()) else { return };
+        let command = MenuCmd::ScmFile;
+        let mut rows = vec![
+            (MenuItem::new(crate::i18n::t("Open Changes")), command(FileAction::Diff(staged))),
+            (
+                MenuItem::new(crate::i18n::t("Open File"))
+                    .enabled(change.unstaged != Some(git::Mark::Deleted) && (change.staged != Some(git::Mark::Deleted) || change.unstaged.is_some())),
+                command(FileAction::Open),
+            ),
         ];
+        if staged && change.staged.is_some() {
+            rows.push((MenuItem::new(crate::i18n::t("Unstage")).separator(), command(FileAction::Unstage)));
+        } else if !staged && change.unstaged.is_some() {
+            let conflict = change.unstaged == Some(git::Mark::Conflict);
+            rows.push((
+                MenuItem::new(if conflict { crate::i18n::t("Mark as resolved (stage)") } else { crate::i18n::t("Stage") }).separator(),
+                command(FileAction::Stage),
+            ));
+            if !conflict {
+                rows.push((MenuItem::new(crate::i18n::t("Discard changes")), command(FileAction::Discard)));
+            }
+        }
+        rows.extend([
+            (MenuItem::new(crate::i18n::t("Copy Path")).separator(), MenuCmd::CopyPath),
+            (MenuItem::new(crate::i18n::t("Copy Relative Path")), MenuCmd::CopyRelativePath),
+        ]);
+        if change.unstaged == Some(git::Mark::Untracked) {
+            rows.push((MenuItem::new(crate::i18n::t("Add to .gitignore")).separator(), MenuCmd::GitIgnore));
+        }
         let (items, commands): (Vec<_>, Vec<_>) = rows.into_iter().unzip();
         let target = MenuTarget { path: crate::ui::join(&root, rel), is_dir: false, tab: None };
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);
+    }
+
+    pub(super) fn run_scm_file_action(&mut self, action: crate::scm::FileAction, absolute: String, window: &mut Window, cx: &mut Context<Self>) {
+        use crate::scm::FileAction;
+        let Some(status) = self.git_status() else { return };
+        let Some(rel) = absolute.strip_prefix(&format!("{}/", status.root.trim_end_matches('/'))).map(str::to_owned) else { return };
+        let Some(change) = status.changes.iter().find(|c| c.path == rel) else { return };
+        match action {
+            FileAction::Open => self.open_file(crate::ui::join(&status.root, &rel), window, cx),
+            FileAction::Diff(staged) => self.open_diff(rel, staged, window, cx),
+            FileAction::Stage if change.unstaged.is_some() => self.scm.update(cx, |s, cx| s.stage(vec![rel], cx)),
+            FileAction::Unstage if change.staged.is_some() => self.scm.update(cx, |s, cx| s.unstage(vec![rel], cx)),
+            FileAction::Discard if change.unstaged.is_some() && change.unstaged != Some(git::Mark::Conflict) => {
+                self.scm.update(cx, |s, cx| s.confirm_discard(vec![change.clone()], window, cx));
+            }
+            _ => {}
+        }
     }
 
     pub(super) fn open_commit_menu(

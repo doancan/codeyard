@@ -137,8 +137,7 @@ impl Workbench {
                 self.chrome.panel = Some(Panel::Explorer);
             }
             if matches!(&self.remote.conn, Conn::Connecting { alias, .. } if crate::docker::is_target(alias)) {
-                self.remote.conn = Conn::Local;
-                self.remote.pending_path = None;
+                self.cancel_pending_connection();
             }
             if matches!(
                 self.overlay.as_ref().map(|o| &o.kind),

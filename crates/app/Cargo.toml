@@ -13,20 +13,20 @@ embed-resource = "3.0.12"
 [dependencies]
 accesskit = "0.25.1"
 alacritty_terminal = "0.26.0"
-buffer = { version = "0.4.1", path = "../buffer" }
+buffer = { version = "0.5.0", path = "../buffer" }
 dirs = "7.0.0"
 futures = { version = "0.3.34", default-features = false, features = ["std", "executor"] }
 gpui = "=0.2.2"
-host = { version = "0.4.1", path = "../host" }
+host = { version = "0.5.0", path = "../host" }
 # Find/replace: the same matcher as search in files (Turkish i/İ/ı, word, regex).
-agent = { version = "0.4.1", path = "../agent" }
+agent = { version = "0.5.0", path = "../agent" }
 regex = { version = "1.13.1", default-features = false, features = ["std", "perf", "unicode-case", "unicode-perl"] }
 # Conflict marker pre-scan (SIMD); already in the dependency tree.
 memchr = "2.8.3"
 mimalloc = "0.1.52"
 nucleo-matcher = "0.3.1"
-proto = { version = "0.4.1", path = "../proto" }
-schema = { version = "0.4.1", path = "../schema" }
+proto = { version = "0.5.0", path = "../proto" }
+schema = { version = "0.5.0", path = "../schema" }
 sha2 = "0.11.1"
 # Ed25519 verification of the update manifest; already in the tree through rustls, so no new code ships.
 ring = { version = "0.17.14", default-features = false }
@@ -35,10 +35,10 @@ serde = { version = "1.0.229", default-features = false, features = ["std"] }
 serde_json = { version = "1.0.154", features = ["preserve_order"] }
 # Data lens: TOML read and write. Same release as the build script of the Windows resource compiler already pulls in.
 toml = { version = "1.1.8", default-features = false, features = ["std", "serde", "parse", "display", "preserve_order"] }
-spell = { version = "0.4.1", path = "../spell" }
-state = { version = "0.4.1", path = "../state" }
-syntax = { version = "0.4.1", path = "../syntax" }
-theme = { version = "0.4.1", path = "../theme" }
+spell = { version = "0.5.0", path = "../spell" }
+state = { version = "0.5.0", path = "../state" }
+syntax = { version = "0.5.0", path = "../syntax" }
+theme = { version = "0.5.0", path = "../theme" }
 similar = { version = "3", default-features = false, features = ["text"] }
 pulldown-cmark = { version = "0.13.5", default-features = false }
 # Match GPUI's SVG sizing rules (XML, units, viewBox); already in the dependency tree.
@@ -50,7 +50,7 @@ path = "src/main.rs"
 
 [dev-dependencies]
 accesskit_consumer = "0.39.1"
-agent = { version = "0.4.1", path = "../agent" }
+agent = { version = "0.5.0", path = "../agent" }
 gpui = { version = "=0.2.2", features = ["test-support"] }
 # Tests generate a throw-away signing key.
 ring = { version = "0.17.14", default-features = false, features = ["alloc"] }
