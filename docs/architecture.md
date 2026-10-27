@@ -119,7 +119,8 @@ for one. It downloads two small files from github.com (see [Updates](#updates) f
   is copied next to the installed one, then checked (bundle identifier, version, `codesign --verify --deep --strict`), then
   exchanged with it in one atomic step (`renamex_np` with `RENAME_SWAP`), or, where the file system cannot, swapped by two renames
   that are undone on failure; the swapped-out copy is deleted. Nothing clears the quarantine flag: `curl` does not set one, so an
-  update installed this way skips Gatekeeper's first-launch check (builds are not notarized yet). Leftovers of a run that died
+  update installed this way skips Gatekeeper's first-launch check. Tag releases are Developer ID signed and notarized
+  (see [platform evidence](platforms.md#macos-specifics)). Leftovers of a run that died
   (`.Codeyard.update-<pid>.app`, `.Codeyard.old-<pid>.app` beside the app, `codeyard-update-mnt-<pid>-*` mount points, an `updates/`
   download folder older than two hours) are removed before staging and at start, never those of a live process, and never the backup
   while the installed app is missing. Windows, Inno installation: the verified setup program runs silently. Everything else (debug
@@ -249,6 +250,7 @@ Measured by `scripts/memcheck.sh` (macOS `footprint`, 1280×800 @2x; the screen 
 | --- | --- |
 | terminal open | 85 MB |
 | empty window (welcome screen) | 85 MB |
+| first-run update question (extra native window) | 95 MB |
 | small Rust file (360 KB, in a repo) | 125 MB |
 | 10k lines, plain text | 95 MB |
 | 10k lines, syntax highlighting | 130 MB |

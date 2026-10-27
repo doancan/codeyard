@@ -1,7 +1,8 @@
 # Testing
 
-`cargo test --workspace` runs everything: about 620 tests in `app`, plus the other crates (host, schema, spell,
-agent, proto, buffer, syntax, state, theme). The whole suite takes roughly 75 seconds on an Apple-silicon laptop.
+`cargo test --workspace` runs the app's workbench/service tests and the other crates (host, schema, spell,
+agent, proto, buffer, syntax, state, theme). Runtime depends on installed integration tools and machine load;
+the 2026-10-27 local run passed 1,516 tests, with three documented manual/data-dependent tests ignored.
 
 ## Layers
 
@@ -87,6 +88,9 @@ Secrets. The signed dry run and six mocked notarization/credential-cleanup tests
 
 `scripts/memcheck.sh` starts the release app in a scripted window, lets it settle and measures `footprint`; see
 `architecture.md` for the budgets.
+Normal editor scenes use an isolated profile with `update.check: manual`, so the first-run update question's
+extra native window does not contaminate them. The undecided profile is measured separately as
+`first-run update question` (95 MB); all existing scene budgets are unchanged.
 
 ## CI build scheduling and caches
 
