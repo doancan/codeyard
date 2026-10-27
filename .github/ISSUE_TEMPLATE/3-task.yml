@@ -1,5 +1,5 @@
 name: Task
-description: Work with no user-visible behaviour of its own - test harness, refactor, tooling, release chores
+description: Work with no user-visible behaviour of its own - test harness, refactor, tooling, release chores (maintainers)
 labels: ["task"]
 projects: ["doancan/2"]
 body:
@@ -8,7 +8,9 @@ body:
       value: |
         **Title:** an imperative summary, at most **78 characters**. No type prefix: the type label says it.
         **Labels:** two or three: the type (set by this form) and one area, plus one environment when it matters (set at triage). Priority, effort and dates are fields on the project board.
-        **Relationships:** set the parent epic, sub-issues and *blocked by* in the sidebar, not in the text.
+        **Relationships:** set the parent epic and *blocked by* in the sidebar, not in the text.
+
+        If users will notice the result, it is a feature, not a task.
   - type: textarea
     id: summary
     attributes:
@@ -20,49 +22,26 @@ body:
     id: context
     attributes:
       label: Context
-      description: Why it is needed and what it unblocks. Code references (`path:line`).
+      description: Why it is needed and what it unblocks, with code references (`path:line`).
     validations:
       required: true
   - type: textarea
     id: deliverables
     attributes:
       label: Deliverables
-      description: Files, functions, scripts or documents this produces, each with a short description.
-    validations:
-      required: true
-  - type: textarea
-    id: io
-    attributes:
-      label: Inputs and outputs
-      description: For a tool or helper - what it takes and what it gives back. Write `None` if it does not apply.
-  - type: textarea
-    id: tests
-    attributes:
-      label: Test and verification
-      description: How we know it works and that nothing else broke.
-    validations:
-      required: true
-  - type: textarea
-    id: dod
-    attributes:
-      label: Definition of Done
+      description: Each file, function or script, with what it does and who uses it.
       value: |
-        - [ ] Deliverables exist and are used by at least one caller or test
-        - [ ] `scripts/check.sh` passes
-        - [ ] No behaviour change for users, or the change is moved to a feature issue
-        - [ ] Reviewed and merged into `main`
+        -
     validations:
       required: true
-  - type: dropdown
-    id: effort
+  - type: textarea
+    id: verification
     attributes:
-      label: Effort
-      description: Copied to the Effort field on the project board at triage.
-      options:
-        - XS (up to two hours)
-        - S (under a day)
-        - M (one to three days)
-        - L (up to a week; consider splitting)
-        - XL (more than a week; split before work starts)
+      label: Verification
+      description: How we know it works and that nothing else changed.
+      value: |
+        - [ ] At least one real caller or test uses each deliverable
+        - [ ] `scripts/check.sh` passes
+        - [ ] No user-visible change
     validations:
       required: true
