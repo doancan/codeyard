@@ -12,6 +12,56 @@ pub mod ssh_config;
 pub mod ssh_hosts;
 pub mod transfer;
 
+/// Resolve tools without requiring a terminal launch of the editor. Container tools
+/// commonly install outside the GUI process's PATH.
+pub fn find_program(program: &str) -> Option<std::path::PathBuf> {
+    use std::path::PathBuf;
+    let mut dirs: Vec<PathBuf> = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect()).unwrap_or_default();
+    #[cfg(windows)]
+    {
+        if let Some(p) = std::env::var_os("ProgramFiles") {
+            let root = PathBuf::from(p);
+            dirs.extend([root.join("Docker/Docker/resources/bin"), root.join("RedHat/Podman"), root.join("WSL")]);
+        }
+        if let Some(p) = std::env::var_os("SystemRoot") {
+            dirs.push(PathBuf::from(p).join("System32"));
+        }
+        if let Some(p) = std::env::var_os("APPDATA") {
+            dirs.push(PathBuf::from(p).join("npm"));
+        }
+    }
+    #[cfg(unix)]
+    dirs.extend(["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/Applications/Docker.app/Contents/Resources/bin"].map(PathBuf::from));
+    let extensions: &[&str] = if cfg!(windows) { &["", "exe", "com", "cmd", "bat"] } else { &[""] };
+    dirs.into_iter()
+        .flat_map(|dir| {
+            extensions.iter().map(move |ext| {
+                let path = dir.join(program);
+                if ext.is_empty() || path.extension().is_some() { path } else { path.with_extension(ext) }
+            })
+        })
+        .find(|p| {
+            if !p.is_file() {
+                return false;
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                p.metadata().is_ok_and(|m| m.permissions().mode() & 0o111 != 0)
+            }
+            #[cfg(not(unix))]
+            {
+                true
+            }
+        })
+}
+
+/// Platform-aware construction (login PATH, npm launchers, hidden Windows consoles).
+pub fn process_command(program: &str, args: &[String], cwd: Option<&str>) -> std::io::Result<std::process::Command> {
+    let path = find_program(program);
+    agent::proc::command(path.as_ref().and_then(|p| p.to_str()).unwrap_or(program), args, cwd)
+}
+
 use std::collections::HashMap;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::process::{Child, Command, Stdio};

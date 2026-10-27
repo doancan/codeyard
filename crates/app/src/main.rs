@@ -20,6 +20,10 @@ mod compare_logic;
 #[cfg(test)]
 mod compare_tests;
 mod conflict;
+mod container_engine;
+mod container_history;
+mod container_logs;
+mod container_monitor;
 mod crash;
 mod dap;
 mod debug_model;
@@ -34,6 +38,9 @@ mod datalens_ui_tests;
 mod debug_config;
 mod diff;
 mod display;
+mod docker;
+#[cfg(test)]
+mod docker_tests;
 #[cfg(test)]
 mod docs_tests;
 mod editor;
@@ -767,10 +774,10 @@ pub fn open_workbench_window(cx: &mut App) -> Option<gpui::WindowHandle<Workbenc
         .open_window(
             WindowOptions {
                 window_bounds: Some(saved.unwrap_or(WindowBounds::Windowed(bounds))),
-                // macOS: we draw the title ourselves (so it follows the theme); native elsewhere.
+                // macOS and Windows use themed title bars; Windows controls keep native hit testing.
                 titlebar: Some(TitlebarOptions {
                     title: Some("codeyard".into()),
-                    appears_transparent: cfg!(target_os = "macos"),
+                    appears_transparent: cfg!(any(target_os = "macos", target_os = "windows")),
                     traffic_light_position: Some(gpui::point(px(12.), px(10.))),
                 }),
                 window_min_size: Some(size(px(480.), px(320.))),

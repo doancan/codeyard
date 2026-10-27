@@ -44,6 +44,8 @@ pub enum AutoSave {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Settings {
+    /// Optional Docker / Dev Container module; user settings only.
+    pub docker_enabled: bool,
     pub theme: String,
     pub editor_font_family: Option<String>,
     pub editor_font_size: f32,
@@ -266,6 +268,7 @@ impl Settings {
 impl Default for Settings {
     fn default() -> Self {
         Settings {
+            docker_enabled: false,
             theme: "auto".into(),
             editor_font_family: None,
             editor_font_size: theme::text::CODE.0,
@@ -457,6 +460,7 @@ pub const RESTRICTED_KEYS: &[&str] = &[
 /// Not read from the project file even in a trusted folder: the gate is global, so one
 /// repo touching it would open it for every folder.
 pub const USER_ONLY_KEYS: &[&str] = &[
+    "modules.containers.enabled",
     "security.workspaceTrust.enabled",
     "http.confirmRequests",
     "ui.language",
@@ -923,6 +927,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         }
         Some(_) => r.warn(crate::i18n::tf("{0}: expected an object {1}", &[&"ports.rules", &"{ \"3000\": { \"label\": \"web\" } }"])),
     }
+    if let Some(v) = r.bool("modules.containers.enabled") {
+        s.docker_enabled = v;
+    }
     if let Some(v) = r.bool("lsp.enabled") {
         s.lsp_enabled = v;
     }
@@ -1081,6 +1088,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "window.restoreSession",
         "window.startup",
         "lsp.enabled",
+        "modules.containers.enabled",
         "lsp.servers",
         "ports.autoForward",
         "ports.localBind",
