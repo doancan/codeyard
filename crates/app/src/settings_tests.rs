@@ -216,6 +216,27 @@ fn set_string_keeps_comments_and_other_lines() {
 }
 
 #[test]
+fn set_value_updates_inline_root_keys_without_shadowing_or_touching_nested_keys() {
+    let text = "/* { \"theme\": \"comment\" } */\n{\"other\": {\"theme\": \"nested\"}, \"theme\": \"codeyard-light\", \"editor.fontSize\": 13}";
+    let out = set_string_in(text, "theme", "codeyard-dark");
+    assert_eq!(out, text.replace("codeyard-light", "codeyard-dark"));
+    assert_eq!(parse(&out).0.theme, "codeyard-dark");
+    let out = set_value_in(&out, "editor.fontSize", &serde_json::json!(15));
+    assert_eq!(parse(&out).0.editor_font_size, 15.);
+    assert!(out.contains("\"other\": {\"theme\": \"nested\"}"));
+}
+
+#[test]
+fn set_value_preserves_nested_comments_and_updates_duplicate_or_escaped_keys() {
+    let text = "{\"files.exclude\": [\n // } ] must not end the value\n \"target\" /* [ */\n], \"theme\": \"old\", \"th\\u0065me\": \"last\"}";
+    let out = set_value_in(text, "files.exclude", &serde_json::json!([".git"]));
+    assert_eq!(out, "{\"files.exclude\": [\".git\"], \"theme\": \"old\", \"th\\u0065me\": \"last\"}");
+    let out = set_string_in(&out, "theme", "fjord");
+    assert_eq!(parse(&out).0.theme, "fjord");
+    assert_eq!(out.matches("\"fjord\"").count(), 2);
+}
+
+#[test]
 fn keybindings_and_unbinding() {
     let (b, w) = parse_keybindings(r#"[{"key":"cmd-1","command":"editor.save","when":"Editor"},{"key":"ctrl-g","command":null},{"key":"x"}]"#);
     assert_eq!(b.len(), 2);
