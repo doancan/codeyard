@@ -10,6 +10,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Panel and sidebar section resize handles gently fade their accent on hover and exit, while staying clear during a drag.
+- Container logs use a dedicated console with numbered rows, separate UTC timestamps, severity labels, error highlighting,
+  literal search highlights, an error/warning filter, copy-visible output and line-wrap/follow controls. Scrolling upward
+  pauses following while snapshots continue; ANSI control sequences are removed from display and clipboard text.
+
+- Container browsing now groups Compose projects, searches names/images/projects and sorts CPU or memory within groups.
+  Compact navigation opens a selected-container workspace with bounded 1/5/15-minute CPU/memory history, counter-safe
+  disk/network rates, automatically refreshed log snapshots, inspected mounts/health and direct file/terminal entry.
+
+- SSH workspaces automatically discover containers through the existing agent. The Containers sidebar and resource-monitor tab
+  show live CPU, memory/limit, disk size, disk I/O, network I/O and process counts, with refresh/pause controls, inline errors
+  and direct connect/log actions. Resource snapshots refresh while visible; disk size is sampled at most every 30 seconds.
+
+- An optional container module (`modules.containers.enabled`, off by default, user settings only): Docker context selection,
+  container status and logs, starting stopped containers, and Dev Container creation/rebuild through the separately installed
+  reference CLI, with cancellation, bounded output and workspace-change guards. Apple Container, WSL Containers and Windows
+  guest requirements and native adapter limitations are documented separately.
+
+- Markdown files have a **Read** button to open the native reading view and a **Code** button to return to the source without
+  losing edits. Code blocks support syntax highlighting, horizontal scrolling and **Copy code**; heading links navigate within
+  the document, relative file links open in Codeyard, and relative images load from local folders or SSH hosts.
+
 
 - **Remote Explorer view** in the activity bar: SSH hosts with their recent folders and connection status, running
   containers (and WSL distributions on Windows), and the forwarded ports of the current connection. Connect or open a
@@ -91,6 +112,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - SVG previews preserve their red/blue channels and translucent colors; long Markdown paragraphs wrap inside the document column.
 - Text links follow only left clicks, accept a press/release arriving in one frame, and discard cancelled presses.
+- Prevented workbench focus handling from swallowing native Windows title-bar drag, double-click and window-control events.
+
+- Removed the redundant container monitor button; selecting a container opens its details. Windows now uses a themed title bar with native drag, minimize, maximize/restore and close control areas.
+
+- Container sidebar filters now show explicit states, result counts and reset; background refresh keeps resource sort order stable and avoids loading-message layout shifts.
+
+- Refined container resource history, separate rate and total readings, structured port bindings and mount access details with copy and refresh actions.
+
+- Container resources now show only the container selected in the sidebar. Search, filtering and sorting stay in the sidebar.
+  Opening container files retains the source SSH connection/folder and exposes a persistent return action that restores
+  the workspace and selected-container details without a new SSH login; unsaved-file guards apply.
+
+- Container actions in an SSH workspace execute Docker on the connected server; listing, start, logs and agent bootstrap
+  retain the SSH host and Docker context, with no local Docker installation required.
+
+- Container actions no longer assume Docker is installed: choose Apple Container, WSL Containers, Podman or Docker as appropriate
+  for the host platform. Missing engines and the Dev Container CLI show setup instructions before execution, including restored
+  connections; GUI launches also find common CLI installation paths. Native Apple/WSLc/Podman adapters support list/start/attach/logs;
+  WSLc/Podman Dev Containers use the reference CLI, with unsupported creation modes explained before setup.
+
+- Enabling the container module now adds a Containers button and sidebar to the left activity bar; disabling it hides both.
+
+- The container module toggle is visible at the top of Commonly Used settings and in a dedicated Modules category.
+
+- Markdown heading links remain distinct when repeated headings collide with numbered titles (for example, "Setup", "Setup-1", "Setup").
+
+
 - Memory benchmarks measure normal editor scenes after choosing manual update checks and cover the first-run question
   separately, so the question's extra native-window buffers do not inflate every editor measurement. Existing budgets stay unchanged.
 - Generic editor/workbench test fixtures no longer start installed language servers; language-server integration tests opt in explicitly.

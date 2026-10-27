@@ -94,6 +94,7 @@ pub struct RemoteTreeInput<'a> {
     pub containers: Option<&'a Targets>,
     pub wsl: Option<&'a Targets>,
     pub show_wsl: bool,
+    pub show_containers: bool,
     /// Keys whose open/closed state the user flipped from the default.
     pub toggled: &'a HashSet<String>,
     pub current_root: Option<&'a str>,
@@ -177,7 +178,9 @@ pub fn build_remote_tree(i: &RemoteTreeInput) -> Vec<RemoteRow> {
     group(Group::Ssh, i.hosts.to_vec(), None, i, &mut out);
     let listed =
         |t: Option<&Targets>| t.and_then(|r| r.as_ref().ok()).map(|v| v.iter().map(|(a, _, d)| (a.clone(), Some(d.clone()))).collect()).unwrap_or_default();
-    group(Group::Containers, listed(i.containers), i.containers, i, &mut out);
+    if i.show_containers {
+        group(Group::Containers, listed(i.containers), i.containers, i, &mut out);
+    }
     if i.show_wsl {
         group(Group::Wsl, listed(i.wsl), i.wsl, i, &mut out);
     }
@@ -232,6 +235,7 @@ mod tests {
             containers,
             wsl: None,
             show_wsl: false,
+            show_containers: true,
             toggled: &f.toggled,
             current_root: Some("/srv/app"),
             ports: None,
@@ -281,6 +285,23 @@ mod tests {
         assert_eq!(status("box"), HostStatus::Failed("timed out".into()));
         assert_eq!(status("db"), HostStatus::Failed("Permission denied".into()));
         assert!(matches!(status("old"), HostStatus::Reachable(_)));
+    }
+
+    #[test]
+    fn disabled_container_module_hides_cached_targets() {
+        let mut f = fixture();
+        f.toggled.insert("group:containers".into());
+        let targets: Targets = Ok(vec![("docker:web".into(), "web".into(), "nginx".into())]);
+        let mut data = input(&f, ConnSummary::Local, Some(&targets));
+        data.show_containers = false;
+        let rows = build_remote_tree(&data);
+        assert!(!rows.iter().any(|row| matches!(
+            row,
+            RemoteRow::Group { group: Group::Containers, .. }
+                | RemoteRow::Host { group: Group::Containers, .. }
+                | RemoteRow::Empty { group: Group::Containers, .. }
+                | RemoteRow::Loading { group: Group::Containers }
+        )));
     }
 
     #[test]

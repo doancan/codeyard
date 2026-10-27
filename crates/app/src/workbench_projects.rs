@@ -59,6 +59,7 @@ pub enum ConnSummary {
 
 /// Switcher entries (pure: `build_switcher` reads no UI state, so it is testable).
 pub struct SwitcherInput<'a> {
+    pub docker_enabled: bool,
     pub saved: &'a [Project],
     pub recent: &'a [RecentWorkspace],
     /// Pinned folders (`state::State::pinned_workspaces`).
@@ -143,7 +144,7 @@ pub fn build_switcher(i: &SwitcherInput) -> Vec<(PickItem, SwitchChoice)> {
         _ => {}
     }
     // 2) Saved projects, 3) recents.
-    for p in i.saved {
+    for p in i.saved.iter().filter(|p| i.docker_enabled || !p.host.as_deref().is_some_and(crate::docker::is_target)) {
         let place = p.host.as_ref().map_or(p.path.clone(), |h| format!("{h}:{}", p.path));
         let tags = if p.tags.is_empty() { String::new() } else { format!(" · {}", p.tags.join(", ")) };
         rows.push((
@@ -152,6 +153,9 @@ pub fn build_switcher(i: &SwitcherInput) -> Vec<(PickItem, SwitchChoice)> {
         ));
     }
     for (r, pinned) in ordered_recent(i.recent, i.pinned) {
+        if !i.docker_enabled && r.host.as_deref().is_some_and(crate::docker::is_target) {
+            continue;
+        }
         let r = &r;
         if i.saved.iter().any(|p| p.path == r.path && p.host == r.host) {
             continue;
@@ -188,7 +192,9 @@ pub fn build_switcher(i: &SwitcherInput) -> Vec<(PickItem, SwitchChoice)> {
     rows.push((action_item(t("Add SSH host…"), t("Save user@host to ~/.ssh/config and connect"), None), SwitchChoice::AddHost));
     rows.push((action_item(t("Manage SSH hosts…"), t("Edit, test, set up key login, remove"), None), SwitchChoice::ManageHosts));
     rows.push((action_item(t("Clone Git Repository…"), t("Into a folder on this computer or the connected host"), None), SwitchChoice::CloneRepository));
-    rows.push((action_item(t("Connect to a running container…"), t("Docker, then open a folder inside it"), None), SwitchChoice::Targets { wsl: false }));
+    if i.docker_enabled {
+        rows.push((action_item(t("Connect to a running container…"), t("Docker, then open a folder inside it"), None), SwitchChoice::Targets { wsl: false }));
+    }
     if cfg!(windows) {
         rows.push((action_item(t("Connect to WSL…"), t("Open a folder in a Linux distribution"), None), SwitchChoice::Targets { wsl: true }));
     }
@@ -217,6 +223,7 @@ impl Workbench {
         let saved = self.saved_projects();
         let current = self.root(cx);
         let rows = build_switcher(&SwitcherInput {
+            docker_enabled: cx.global::<crate::settings::Settings>().docker_enabled,
             saved: &saved,
             recent: &self.persist.recent,
             pinned: &self.persist.pinned,
@@ -500,7 +507,7 @@ mod tests {
     }
 
     fn input<'a>(saved: &'a [Project], recent_list: &'a [RecentWorkspace], hosts: &'a [(String, Option<String>)], conn: ConnSummary) -> SwitcherInput<'a> {
-        SwitcherInput { saved, recent: recent_list, pinned: &[], hosts, conn, current_root: Some("/a/kod"), now_ms: 1_000_000_000 }
+        SwitcherInput { docker_enabled: true, saved, recent: recent_list, pinned: &[], hosts, conn, current_root: Some("/a/kod"), now_ms: 1_000_000_000 }
     }
 
     #[test]
@@ -557,6 +564,19 @@ mod tests {
         let rows = build_switcher(&input(&[], &[recent(None, "/x", 5)], &hosts, ConnSummary::Local));
         assert_eq!(rows.iter().filter(|(_, c)| matches!(c, SwitchChoice::Connect(a) if a == "a" || a == "b")).count(), 2);
         assert!(rows.iter().all(|(i, _)| !i.label.is_empty()));
+    }
+
+    #[test]
+    fn docker_module_off_hides_container_actions_projects_and_recents() {
+        let recents =
+            vec![recent(Some("docker:web"), "/app", 1), recent(Some("devcontainer:default/abc/def"), "/workspace", 2), recent(Some("devbox"), "/srv", 3)];
+        let saved = vec![Project { name: "Container".into(), path: "/app".into(), host: Some("docker-context:remote/abc".into()), tags: vec![] }];
+        let mut input = input(&saved, &recents, &[], ConnSummary::Local);
+        input.docker_enabled = false;
+        let rows = build_switcher(&input);
+        assert!(!rows.iter().any(|(_, c)| matches!(c, SwitchChoice::Targets { wsl: false })));
+        assert!(!rows.iter().any(|(_, c)| matches!(c, SwitchChoice::Open(r) if r.host.as_deref().is_some_and(crate::docker::is_target))));
+        assert!(rows.iter().any(|(_, c)| matches!(c, SwitchChoice::Open(r) if r.host.as_deref() == Some("devbox"))));
     }
 
     #[test]

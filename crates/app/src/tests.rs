@@ -4325,7 +4325,7 @@ fn settings_and_shortcuts_pickers_write_the_files(cx: &mut TestAppContext) {
     cx.run_until_parked();
     let keys = std::fs::read_to_string(cfg.join("keybindings.jsonc")).unwrap();
     assert!(keys.contains(r#"{ "key": "", "command": "git.stashPopLatest" },"#), "{keys}");
-    assert_eq!(wb.read_with(cx, |wb, cx| wb.active_path(cx)), Some(cfg.join("keybindings.jsonc").to_string_lossy().into_owned()));
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.active_path(cx)), Some(crate::ui::local_path(&cfg.join("keybindings.jsonc"))));
 }
 
 #[gpui::test]

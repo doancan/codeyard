@@ -2,6 +2,8 @@
 
 use super::*;
 
+pub(super) const WINDOWS_TITLEBAR_H: f32 = 34.;
+
 impl Workbench {
     /// Editor area: a single group or two side by side (with a draggable divider between).
     pub(super) fn editor_area(&self, main: AnyElement, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
@@ -351,6 +353,7 @@ impl Workbench {
                 let active = self.tabs.page_active;
                 let (glyph, title): (&str, String) = match &page {
                     Page::Welcome => ("rocket", crate::i18n::t("Welcome").into()),
+                    Page::Containers => ("server", crate::i18n::t("Container Resources").into()),
                     Page::Settings(_) => ("settings", crate::i18n::t("Settings").into()),
                     Page::Markdown(v) => ("eye", v.read(cx).title(cx)),
                     Page::Shortcuts(_) => ("keyboard", crate::i18n::t("Keyboard Shortcuts").into()),
@@ -453,6 +456,71 @@ impl Workbench {
                 .whitespace_nowrap()
                 .children(items),
         )
+    }
+
+    /// Native hit-test areas preserve Windows dragging, snapping and WM_CLOSE guards.
+    pub(super) fn windows_title_bar(&self, window: &Window, p: &Palette, _cx: &mut Context<Self>) -> impl IntoElement {
+        let p = *p;
+        let control = |id: &'static str, glyph: &'static str, label: &'static str, area: gpui::WindowControlArea| {
+            div()
+                .id(id)
+                .debug_selector(move || id.into())
+                .w(px(46.))
+                .h_full()
+                .flex_none()
+                .flex()
+                .items_center()
+                .justify_center()
+                .window_control_area(area)
+                .hover(move |s| s.bg(c(if id == "window-close" { ui::tinted_bg(p.surface, p.danger, 0.28, p.text) } else { p.surface_hover })))
+                .tooltip(move |_, cx| cx.new(|_| Tooltip(label.into())).into())
+                .child(icon(glyph, 14., p.text))
+        };
+        div()
+            .id("windows-title-bar")
+            // Keep the focus-tracking workbench from preventing native caption defaults.
+            // Occlusion excludes its hitbox without stopping event propagation to Windows.
+            .occlude()
+            .pt(px(3.))
+            .debug_selector(|| "windows-title-bar".into())
+            .h(px(WINDOWS_TITLEBAR_H))
+            .flex_none()
+            .flex()
+            .items_center()
+            .bg(c(p.surface))
+            .border_b_1()
+            .border_color(c(p.border))
+            .child(
+                div()
+                    .id("window-drag-region")
+                    .debug_selector(|| "window-drag-region".into())
+                    .flex_1()
+                    .min_w_0()
+                    .h_full()
+                    .px(px(theme::SPACE[4]))
+                    .flex()
+                    .items_center()
+                    .gap(px(theme::SPACE[4]))
+                    .window_control_area(gpui::WindowControlArea::Drag)
+                    .child(div().text_size(px(text::XS.0)).font_weight(gpui::FontWeight::SEMIBOLD).text_color(c(p.text)).child("codeyard")) // i18n-keep: application name.
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .truncate()
+                            .text_size(px(text::XS.0))
+                            .text_color(c(if window.is_window_active() { p.text } else { p.text_muted }))
+                            .child(if self.title == "codeyard" { String::new() } else { self.title.clone() }),
+                    ),
+            )
+            .child(control("window-minimize", "minus", crate::i18n::t("Minimize window"), gpui::WindowControlArea::Min))
+            .child(control(
+                "window-maximize",
+                if window.is_maximized() { "copy" } else { "square" },
+                if window.is_maximized() { crate::i18n::t("Restore window") } else { crate::i18n::t("Maximize window") },
+                gpui::WindowControlArea::Max,
+            ))
+            .child(control("window-close", "x", crate::i18n::t("Close window"), gpui::WindowControlArea::Close))
     }
 
     /// macOS: the native title is transparent, we draw it (so it follows the theme color). Back /
