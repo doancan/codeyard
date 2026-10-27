@@ -40,6 +40,9 @@ confidence-threshold = 0.9
 multiple-versions = "warn"
 wildcards = "deny"
 allow-wildcard-paths = true
+# GitHub advisory GHSA-38c5-483c-4qqp is not yet in the RustSec database used by the audit.
+# Keep the release-mode integer-overflow fix even if the UI dependency graph changes again.
+deny = [{ name = "grid", version = ">=0.17.0, <=1.0.0" }]
 
 [sources]
 unknown-registry = "deny"

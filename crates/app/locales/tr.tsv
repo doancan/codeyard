@@ -1112,7 +1112,6 @@ Both, Incoming First	İkisi de, Önce Gelen
 Result	Sonuç
 (the lines are removed)	(satırlar kaldırılır)
 Hover an option to preview the result.	Sonucu önizlemek için bir seçeneğin üzerine gelin.
-[image: {}]	[görsel: {}]
 Preview {}	Önizleme: {}
 Preview of {}	Önizleme: {}
 The file is empty.	Dosya boş.
@@ -2293,6 +2292,13 @@ Fetch from all remotes	Tüm uzak depolardan Fetch yap
 Hide Merge Commits	Merge Commit'lerini Gizle
 Only My Commits	Yalnızca Benim Commit'lerim
 Search Commits	Commit'lerde Ara
+Read	Oku
+Code	Kod
+Copy code	Kodu kopyala
+Loading image…	Görsel yükleniyor…
+Image unavailable	Görsel kullanılamıyor
+Image exceeds 20 MB.	Görsel 20 MB sınırını aşıyor.
+External image: open the link to view it.	Harici görsel: görüntülemek için bağlantıyı açın.
 # ---- Remote Explorer ----
 Remote Explorer	Uzak Gezgin
 View: Remote Explorer	Görünüm: Uzak Gezgin
@@ -2472,3 +2478,158 @@ The tests did not build: run the test to see the errors.	Testler derlenemedi: ha
 Git is paused in this folder: its repository settings run programs ({}). Trust the folder to use Git here.	Git bu klasörde duraklatıldı: deposunun ayarları program çalıştırıyor ({}). Git'i burada kullanmak için klasöre güvenin.
 {} is a symbolic link; write the path it points to, so the upload can be confirmed	{} bir sembolik bağlantı; yüklemenin onaylanabilmesi için gösterdiği yolu yazın
 This image is {0} × {1} pixels, too large to preview.	Bu görüntü {0} × {1} piksel; önizlemek için çok büyük.
+Modules	Modüller
+Container Environments	Konteyner Ortamları
+View: Containers	Görünüm: Konteynerler
+Connect to a Container…	Konteynere Bağlan…
+Create Dev Container…	Geliştirme Konteyneri Oluştur…
+Rebuild Dev Container…	Geliştirme Konteynerini Yeniden Derle…
+Containers and Service Logs…	Konteynerler ve Servis Günlükleri…
+Show Output	Çıktıyı Göster
+Cancel Operation	İşlemi İptal Et
+Dev Container setup failed: {}. Check Output and install the Dev Container CLI if it is missing.	Geliştirme konteyneri kurulamadı: {}. Çıktı'yı kontrol edin; Dev Container CLI eksikse kurun.
+{0}: {1}. Start the selected container engine and check Output.	{0}: {1}. Seçilen konteyner motorunu başlatıp Çıktı'yı kontrol edin.
+Installed; choose this container engine	Kurulu; bu konteyner motorunu seçin
+Not installed; open setup instructions	Kurulu değil; kurulum yönergelerini açın
+Choose a container engine	Konteyner motoru seçin
+{} is not installed. Open the setup instructions, then try again.	{} kurulu değil. Kurulum yönergelerini açıp yeniden deneyin.
+Container setup required	Konteyner kurulumu gerekiyor
+Open Setup Instructions	Kurulum Yönergelerini Aç
+No containers in this environment.	Bu ortamda konteyner yok.
+Apple Container supports connecting, starting containers and viewing logs. Dev Container project creation is not supported by this adapter yet; connect to an existing Apple container.	Apple Container ile bağlanma, konteyner başlatma ve günlük görüntüleme desteklenir. Bu bağdaştırıcı henüz geliştirme konteyneri projesi oluşturmaz; mevcut bir Apple konteynerine bağlanın.
+WSL Containers does not support Compose in this workflow. Choose Docker or Podman for a Compose project.	Bu iş akışında WSL Containers ile Compose desteklenmiyor. Compose projesi için Docker veya Podman seçin.
+Install podman-compose to open a Compose project with Podman, then try again.	Compose projesini Podman ile açmak için podman-compose kurup yeniden deneyin.
+Debug	Hata Ayıklama
+Image: {}	İmaj: {}
+User: {}	Kullanıcı: {}
+image default	imaj varsayılanı
+Ports: {}	Portlar: {}
+Mounts: {}	Bağlama sayısı: {}
+Lifecycle: {}	Yaşam döngüsü: {}
+Container module is off. Enable modules.containers.enabled in Settings.	Konteyner modülü kapalı. Ayarlar'dan modules.containers.enabled seçeneğini açın.
+Container operation cancelled. Existing containers and volumes are kept.	Docker işlemi iptal edildi. Mevcut konteynerler ve birimler korundu.
+A container operation is running. Use Docker: Cancel Operation before starting another.	Bir Docker işlemi sürüyor. Başka bir işlem başlatmadan önce Docker: İşlemi İptal Et komutunu kullanın.
+Container operation running. See Output for progress; Docker: Cancel Operation stops it.	Docker işlemi sürüyor. İlerlemeyi Çıktı'dan izleyin; Docker: İşlemi İptal Et komutuyla durdurabilirsiniz.
+Docker: {}. Check Output. Dev Container creation requires the separately installed Dev Container CLI.	Docker: {}. Çıktı'yı kontrol edin. Geliştirme konteyneri oluşturmak için Dev Container CLI ayrıca kurulmalıdır.
+Docker: {}. Check Output and verify that the selected engine is running.	Docker: {}. Çıktı'yı kontrol edin ve seçilen motorun çalıştığını doğrulayın.
+Choose a Docker environment	Docker ortamı seçin
+No Docker contexts found. Install Docker and start its engine.	Docker bağlamı bulunamadı. Docker'ı kurup motorunu başlatın.
+Could not read Docker environments: {}	Docker ortamları okunamadı: {}
+This engine runs Windows containers. Editing requires a Linux container; Windows container editing needs a separate Windows agent. Container logs remain available.	Bu motor Windows konteynerleri çalıştırıyor. Düzenleme için Linux konteyneri gerekir; Windows konteynerinde düzenleme ayrı bir Windows aracısı gerektirir. Konteyner günlüklerini görüntüleyebilirsiniz.
+Choose a container (stopped containers can be started)	Konteyner seçin (durdurulmuş olanlar başlatılabilir)
+No containers in this Docker environment.	Bu Docker ortamında konteyner yok.
+Could not read containers: {}	Konteynerler okunamadı: {}
+Remote Docker environments currently support attaching to existing containers. Create Dev Containers with a local Docker engine.	Uzak Docker ortamlarında şu anda mevcut konteynerlere bağlanılabilir. Geliştirme konteynerlerini yerel Docker motoruyla oluşturun.
+Rebuild and Open	Yeniden Derle ve Aç
+Build and Open	Derle ve Aç
+Project lifecycle commands will run. Rebuild replaces the container; persistent volumes are kept.	Projenin yaşam döngüsü komutları çalıştırılacak. Yeniden derleme konteyneri değiştirir; kalıcı birimler korunur.
+Review the Dev Container environment	Geliştirme konteyneri ortamını inceleyin
+Docker: {}	Docker işlemi: {}
+Start this container?	Bu konteyner başlatılsın mı?
+Start and Connect	Başlat ve Bağlan
+This container is paused or restarting. Resume it in Docker before connecting.	Bu konteyner duraklatılmış veya yeniden başlatılıyor. Bağlanmadan önce Docker'da çalışır duruma getirin.
+Open this project with Docker: Open Project in Dev Container first.	Önce Docker: Projeyi Geliştirme Konteynerinde Aç komutuyla bu projeyi açın.
+Dev Container configuration: {}	Geliştirme konteyneri yapılandırması: {}
+Open the source folder on this computer to create a Dev Container. Remote Docker contexts support attaching to existing containers.	Geliştirme konteyneri oluşturmak için kaynak klasörünü bu bilgisayarda açın. Uzak Docker bağlamlarında mevcut konteynerlere bağlanılabilir.
+The workspace changed. Open the source project and review its container configuration again.	Çalışma alanı değişti. Kaynak projeyi açıp konteyner yapılandırmasını yeniden inceleyin.
+Dev Container is ready. The current workspace or unsaved files changed, so it was not switched automatically. Connect through the Docker picker.	Geliştirme konteyneri hazır. Çalışma alanı veya kaydedilmemiş dosyalar değiştiği için otomatik geçiş yapılmadı. Docker seçicisinden bağlanın.
+Dev Container result: {}	Geliştirme konteyneri sonucu: {}
+Enable container environments (user settings only; disconnect containers before disabling)	Konteyner ortamlarını etkinleştir (yalnız kullanıcı ayarı; kapatmadan önce konteyner bağlantılarını kesin)
+Disconnect the container before disabling the container module. Your open files are kept.	Konteyner modülünü kapatmadan önce konteyner bağlantısını kesin. Açık dosyalarınız korunur.
+Docker: Open Project in Dev Container…	Docker: Projeyi Geliştirme Konteynerinde Aç…
+Docker: Rebuild Dev Container…	Docker: Geliştirme Konteynerini Yeniden Derle…
+Docker: Show Containers and Services…	Docker: Konteynerleri ve Servisleri Göster…
+Docker: Cancel Operation	Docker: İşlemi İptal Et
+SSH {0}: {1}. Docker must be installed and accessible to the SSH user on the remote host.	SSH {0}: {1}. Docker uzak makinede kurulu olmalı ve SSH kullanıcısı tarafından erişilebilir olmalıdır.
+Connect to an SSH host to discover its containers automatically, or choose a local engine below.	Konteynerlerini otomatik bulmak için bir SSH sunucusuna bağlanın veya aşağıdan yerel bir motor seçin.
+Updates paused	Güncellemeler duraklatıldı
+Discovering containers…	Konteynerler bulunuyor…
+Resume updates	Güncellemeleri sürdür
+Pause updates	Güncellemeleri duraklat
+Could not refresh container data: {}. Check Docker access on the SSH host and retry.	Konteyner verileri yenilenemedi: {}. SSH sunucusundaki Docker erişimini kontrol edip yeniden deneyin.
+Showing the last successful snapshot.	Son başarılı ölçüm gösteriliyor.
+No containers found on this host.	Bu sunucuda konteyner bulunamadı.
+Stopped	Durmuş
+CPU usage	CPU kullanımı
+Disk size	Disk boyutu
+Logs	Günlükler
+Disk size includes the writable layer and virtual image size; volumes are excluded. Disk and network I/O are cumulative totals.	Disk boyutu yazılabilir katmanı ve sanal imaj boyutunu içerir; birimler hariçtir. Disk ve ağ G/Ç değerleri birikimli toplamlardır.
+Container Resources	Konteyner Kaynakları
+No SSH host connected	Bağlı SSH sunucusu yok
+Running	Çalışıyor
+Paused	Duraklatıldı
+Search containers, images or projects…	Konteyner, imaj veya proje ara…
+Standalone containers	Bağımsız konteynerler
+Name	Ad
+No containers match the current filters.	Geçerli filtrelerle eşleşen konteyner yok.
+Select a container to inspect resource history, logs, ports and storage.	Kaynak geçmişini, günlükleri, portları ve depolamayı incelemek için bir konteyner seçin.
+Open files	Dosyaları aç
+Resources	Kaynaklar
+Ports and storage	Portlar ve depolama
+Loading container details…	Konteyner ayrıntıları yükleniyor…
+1 minute	1 dakika
+5 minutes	5 dakika
+15 minutes	15 dakika
+Memory usage (%)	Bellek kullanımı (%)
+Disk read / write rate	Disk okuma / yazma hızı
+Network RX / TX rate	Ağ alım / gönderim hızı
+History is collected while monitoring is active. CPU can exceed 100% across cores. Rates need two samples; counter resets show no rate.	Geçmiş, izleme etkinken toplanır. Çok çekirdekli işlemcilerde CPU %100 değerini aşabilir. Hız hesabı iki ölçüm gerektirir; sayaç sıfırlanırsa hız gösterilmez.
+No published ports	Yayımlanmış port yok
+Mounted storage	Bağlı depolama
+No mounted storage	Bağlı depolama yok
+No log output	Günlük çıktısı yok
+Waiting for enough samples to draw history…	Grafik için yeterli ölçüm bekleniyor…
+{} minutes ago	{} dakika önce
+Now	Şimdi
+Latest 300 lines; refreshed with resource snapshots.	Son 300 satır; kaynak ölçümleriyle birlikte yenilenir.
+Back to SSH workspace and container details	SSH çalışma alanına ve konteyner ayrıntılarına dön
+Search log messages or timestamps…	Günlük mesajlarında veya zaman damgalarında ara…
+Errors and warnings	Hata ve uyarılar
+All levels	Tüm düzeyler
+Wrapped lines	Satır kaydırma açık
+Unwrapped lines	Satır kaydırma kapalı
+Copy visible logs	Görünen günlükleri kopyala
+{0} / {1} lines · {2} errors · {3} warnings	{0} / {1} satır · {2} hata · {3} uyarı
+Following latest logs	Son günlükler izleniyor
+Jump to latest and follow	Sona git ve izle
+Warning	Uyarı
+Info	Bilgi
+No timestamp	Zaman damgası yok
+No log lines match the current filters.	Geçerli filtrelerle eşleşen günlük satırı yok.
+Processes	İşlemler
+Disk and network activity	Disk ve ağ etkinliği
+Disk I/O total	Toplam disk okuma / yazma
+Network I/O total	Toplam ağ alma / gönderme
+Container identity	Konteyner bilgileri
+Refresh details	Ayrıntıları yenile
+Container ID	Konteyner kimliği
+Health	Sağlık
+Port mappings	Port eşlemeleri
+Published addresses belong to the SSH server. Use port forwarding to access remote services locally.	Yayımlanan adresler SSH sunucusuna aittir. Uzak servislere yerel erişim için port yönlendirme kullanın.
+Container port / protocol	Konteyner portu / protokol
+Exposed only; not published on the server.	Yalnızca konteyner içinde açık; sunucuda yayımlanmıyor.
+Server binding	Sunucu adresi
+Read and write	Okuma ve yazma
+Read only	Salt okunur
+Storage type	Depolama türü
+Source on server	Sunucudaki kaynak
+Path in container	Konteynerdeki yol
+Access	Erişim
+Volume name	Birim adı
+Storage information is unavailable.	Depolama bilgisi alınamadı.
+Mount paths are shown as reported by the engine. Volume and bind-mount sizes are not included in container disk usage.	Bağlama yolları motorun bildirdiği şekilde gösterilir. Birim ve bağlı dizin boyutları konteyner disk kullanımına dahil değildir.
+Container details are unavailable. Refresh details to try again.	Konteyner ayrıntıları alınamadı. Tekrar denemek için ayrıntıları yenileyin.
+Image	İmaj
+Status	Durum
+All	Tümü
+Sort by	Sıralama
+CPU	İşlemci
+Memory	Bellek
+Live updates	Canlı güncellemeler
+Clear filters	Filtreleri temizle
+{0} / {1} containers	{0} / {1} konteyner
+Click to sort using current values. Order stays fixed during live updates.	Güncel değerlere göre sıralamak için tıklayın. Canlı güncellemeler sırasında sıra sabit kalır.
+Minimize window	Pencereyi küçült
+Maximize window	Pencereyi büyüt
+Restore window	Pencereyi önceki boyutuna getir
+Close window	Pencereyi kapat

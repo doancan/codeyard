@@ -154,7 +154,22 @@ impl Workbench {
     }
 
     /// ⇧⌘V: live preview of the active Markdown file (updates as you type).
-    pub(super) fn open_markdown_preview(&mut self, _: &OpenMarkdownPreview, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_markdown_preview(&mut self, _: &OpenMarkdownPreview, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(Page::Markdown(view)) = self.tabs.page.clone() {
+            let source = view.read(cx).source();
+            if self.tabs.page_active {
+                self.show_markdown_source(source, window, cx);
+                return;
+            }
+            if self.active_editor() == Some(&source) {
+                self.tabs.page_active = true;
+                self.tabs.diff_active = false;
+                self.tabs.large_active = false;
+                window.focus(&view.focus_handle(cx));
+                cx.notify();
+                return;
+            }
+        }
         let Some(ed) = self.active_editor().cloned() else { return };
         let ext = ed.read(cx).path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
         if !matches!(ext.as_str(), "md" | "markdown" | "mdx") {
@@ -162,13 +177,26 @@ impl Workbench {
             cx.notify();
             return;
         }
+        let source = ed.clone();
         let view = cx.new(|cx| crate::markdown::MarkdownPreview::new(ed, cx));
+        self.tabs._page_sub = Some(cx.subscribe_in(&view, window, move |this, _, event: &crate::markdown::PreviewEvent, window, cx| match event {
+            crate::markdown::PreviewEvent::Code => this.show_markdown_source(source.clone(), window, cx),
+            crate::markdown::PreviewEvent::Open { host, path } => this.open_file_on(host.clone(), path.clone(), window, cx),
+        }));
+        window.focus(&view.focus_handle(cx));
         self.tabs.page = Some(Page::Markdown(view));
-        self.tabs._page_sub = None;
         self.tabs.page_active = true;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;
         cx.notify();
+    }
+
+    fn show_markdown_source(&mut self, source: gpui::Entity<crate::editor::EditorView>, window: &mut Window, cx: &mut Context<Self>) {
+        let index = self.tabs.editors.iter().position(|ed| *ed == source).unwrap_or_else(|| {
+            self.tabs.editors.push(source.clone());
+            self.tabs.editors.len() - 1
+        });
+        self.activate(index, window, cx);
     }
 
     /// "Merge Conflict: Open Merge Editor": conflicts in the open file card by card (Current | Incoming | Result).
@@ -244,6 +272,7 @@ impl Workbench {
             (
                 match p {
                     Page::Welcome => "welcome",
+                    Page::Containers => "containers",
                     Page::Settings(_) => "settings",
                     Page::Markdown(_) => "markdown",
                     Page::Shortcuts(_) => "shortcuts",
@@ -256,9 +285,25 @@ impl Workbench {
     }
 
     #[cfg(test)]
+    pub fn markdown_scroll_for_test(&self, cx: &gpui::App) -> Option<gpui::ScrollHandle> {
+        match &self.tabs.page {
+            Some(Page::Markdown(view)) => Some(view.read(cx).scroll_for_test()),
+            _ => None,
+        }
+    }
+
+    #[cfg(test)]
     pub fn markdown_blocks_for_test(&self, cx: &gpui::App) -> Option<Vec<crate::markdown::Block>> {
         match &self.tabs.page {
             Some(Page::Markdown(v)) => Some(v.read(cx).blocks_for_test(cx)),
+            _ => None,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn markdown_images_for_test(&self, cx: &gpui::App) -> Option<std::collections::HashMap<String, Result<(), String>>> {
+        match &self.tabs.page {
+            Some(Page::Markdown(view)) => Some(view.read(cx).image_results_for_test()),
             _ => None,
         }
     }
@@ -351,7 +396,10 @@ impl Workbench {
                 .child(crate::i18n::upper(h))
         };
         // Pinned ones at the very top (all visible), then filled up with recents to 6 in total.
-        let ordered = super::projects::ordered_recent(&self.persist.recent, &self.persist.pinned);
+        let mut ordered = super::projects::ordered_recent(&self.persist.recent, &self.persist.pinned);
+        if !cx.global::<crate::settings::Settings>().docker_enabled {
+            ordered.retain(|(r, _)| !r.host.as_deref().is_some_and(crate::docker::is_target));
+        }
         let shown = ordered.iter().filter(|(_, pinned)| *pinned).count().max(6);
         let recent: Vec<_> = ordered.iter().take(shown).cloned().collect();
         let more_recent = ordered.len() > recent.len();
@@ -515,7 +563,7 @@ impl Workbench {
                                         .flex()
                                         .flex_col()
                                         .child(heading(crate::i18n::t("Recent")))
-                                        .when(self.persist.recent.is_empty(), |d| {
+                                        .when(ordered.is_empty(), |d| {
                                             d.child(
                                                 div()
                                                     .px(px(theme::SPACE[4]))

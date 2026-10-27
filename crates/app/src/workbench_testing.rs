@@ -222,6 +222,7 @@ impl Workbench {
             Panel::Debug => "debug",
             Panel::Testing => "testing",
             Panel::Remote => "remote",
+            Panel::Containers => "containers",
         })
     }
 

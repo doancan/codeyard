@@ -42,7 +42,7 @@ pub(crate) fn setup_with(cx: &mut TestAppContext, settings: Settings) -> (Entity
 }
 
 fn setup(cx: &mut TestAppContext) -> (Entity<Workbench>, &mut VisualTestContext) {
-    setup_with(cx, Settings::default())
+    setup_with(cx, Settings { lsp_enabled: false, ..Default::default() })
 }
 
 fn open(wb: &Entity<Workbench>, path: &Path, cx: &mut VisualTestContext) {
@@ -422,7 +422,7 @@ fn qa_lsp_snippet_placeholder_is_selected(cx: &mut TestAppContext) {
     }
     let dir = qa_dir("qa-snippet");
     std::fs::write(dir.join("main.c"), "int topla(int a, int b) { return a + b; }\nint main(void) {\n    \n}\n").unwrap();
-    let (wb, cx) = setup(cx);
+    let (wb, cx) = setup_with(cx, Settings::default());
     open(&wb, &dir.join("main.c"), cx);
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
     wait_for(cx, "server", |cx| ed.read_with(cx, |e, _| e.lsp_client().is_some()));
@@ -1507,13 +1507,13 @@ fn qa_multi_root_folder_settings_apply_per_file(cx: &mut TestAppContext) {
     std::fs::write(web.join("w.txt"), "y\n").unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &api, cx);
-    let w = web.to_string_lossy().into_owned();
+    let w = crate::ui::local_path(&web);
     wb.update_in(cx, |wb, window, cx| wb.add_workspace_folder_now(w.clone(), window, cx));
     wait_for(cx, "folder settings loaded", |cx| {
         cx.run_until_parked();
         wb.read_with(cx, |wb, _| wb.folder_settings_for_test(&w)).is_some_and(|f| f.tab_size == Some(2))
     });
-    let (a_path, w_path) = (api.join("a.txt").to_string_lossy().into_owned(), web.join("w.txt").to_string_lossy().into_owned());
+    let (a_path, w_path) = (crate::ui::local_path(&api.join("a.txt")), crate::ui::local_path(&web.join("w.txt")));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(a_path.clone(), window, cx));
     wait_for(cx, "api file open", |cx| {
         cx.run_until_parked();
@@ -1922,6 +1922,11 @@ fn qa_terminal_find_counts_selects_and_closes(cx: &mut TestAppContext) {
     let term = terminal(&wb, &dir, cx);
     type_line(cx, "for i in 1 2 3; do echo row-$i-needle; done");
     wait_for(cx, "rows", |cx| term.read_with(cx, |t, _| t.screen_text().lines().any(|l| l == "row-3-needle")));
+    // The platform's own key opens the bar and typing searches (⌘F on macOS; Ctrl+F belongs to the shell elsewhere).
+    cx.simulate_keystrokes(if cfg!(target_os = "macos") { "cmd-f" } else { "ctrl-shift-f" });
+    cx.simulate_input("needle");
+    assert_eq!(term.update_in(cx, |t, window, cx| t.find_state_for_test(window, cx)), (true, 4), "find bar opened by its key");
+    cx.simulate_keystrokes("escape");
     let (total, selected) = term.update_in(cx, |t, window, cx| t.find_for_test("needle", window, cx));
     // The command line holds the word too.
     assert_eq!(total, 4);
@@ -2512,7 +2517,14 @@ fn terminal_split_shows_two_and_caps_the_count(cx: &mut TestAppContext) {
     assert_eq!(wb.read_with(cx, |wb, _| wb.split_partner()), Some(first.clone()));
     // Closing the split terminal removes the split.
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Close", window, cx));
-    wait_for(cx, "closed", |cx| wb.read_with(cx, |wb, _| wb.terminal_count()) == 1);
+    wait_for(cx, "closed", |cx| {
+        // A newly split shell can still have a startup child on a loaded machine. Respect the
+        // normal close confirmation rather than assuming the shell is already idle.
+        if cx.has_pending_prompt() {
+            cx.simulate_prompt_answer("Close");
+        }
+        wb.read_with(cx, |wb, _| wb.terminal_count()) == 1
+    });
     assert_eq!(wb.read_with(cx, |wb, _| wb.split_partner()), None);
     // At most eight terminals.
     for _ in 0..10 {
@@ -2530,6 +2542,11 @@ fn qa_docker_target_connects_lists_and_opens_files(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-docker-files");
     std::fs::write(dir.join("hello.txt"), "kapsayıcıdan merhaba\n").unwrap();
     let (wb, cx) = setup(cx);
+    cx.update(|_, cx| {
+        let mut settings = cx.global::<crate::settings::Settings>().clone();
+        settings.docker_enabled = true;
+        cx.set_global(settings);
+    });
     wb.update_in(cx, |wb, window, cx| wb.connect("docker:fake-box".into(), window, cx));
     let tick = |cx: &mut VisualTestContext| cx.executor().advance_clock(Duration::from_secs(1));
     wait_secs(cx, 30, "connected", |cx| {
