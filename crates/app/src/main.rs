@@ -123,6 +123,7 @@ mod shortcuts_page;
 mod snippets;
 #[cfg(test)]
 mod text_scale_tests;
+mod web_preview;
 // --- structural ---
 mod shell_quote;
 #[cfg(test)]

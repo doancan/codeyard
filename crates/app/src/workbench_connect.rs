@@ -179,6 +179,7 @@ impl Workbench {
             self.remote.conn = Conn::Local;
             return;
         }
+        self.stop_web_preview(cx);
         let info = host.info().clone();
         if crate::docker::is_target(&alias)
             && self.remote.docker.monitor.return_workspace.is_none()
@@ -312,6 +313,7 @@ impl Workbench {
         self.cancel_pending_connection();
         self.remote.pending_path = None;
         self.persist.opening_recent = None;
+        self.stop_web_preview(cx);
         self.cancel_all_forwards();
         self.stop_ports();
         self.close_all_terminals(cx);
@@ -452,3 +454,7 @@ impl Workbench {
 #[cfg(test)]
 #[path = "workbench_connection_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "workbench_container_live_tests.rs"]
+mod live_tests;

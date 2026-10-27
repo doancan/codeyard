@@ -316,6 +316,9 @@ impl Workbench {
             Command::action("Docker: Show Containers and Services…", DockerServices),
             Command::action("Docker: Cancel Operation", DockerCancel),
             Command::action("View: Containers", ShowContainers),
+            Command::action("Web Preview: Open in Browser", OpenWebPreview),
+            Command::action("Web Preview: Stop Server", StopWebPreview),
+            Command::action("Web Preview: Show Server Log", WebPreviewLog),
             Command::action("Remote: Connect to WSL Distro…", RemoteWsl),
             Command::action("Git: Merge Branch…", GitMergeBranch),
             Command::action("Git: Rebase Branch…", GitRebaseBranch),
@@ -407,6 +410,9 @@ impl Workbench {
         let mut commands = self.commands();
         if !cx.global::<Settings>().docker_enabled {
             commands.retain(|c| !docker_glue::is_command(&c.label));
+        }
+        if !cx.global::<Settings>().web_preview_enabled {
+            commands.retain(|c| !c.label.starts_with("Web Preview:"));
         }
         let rank = |label: &str| self.recent_commands.iter().position(|r| r == label).unwrap_or(usize::MAX);
         commands.sort_by_key(|c| rank(&c.label));

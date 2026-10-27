@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Optional Web Preview module in Settings: a built-in local static server, browser preview from HTML tabs,
+  live page/CSS refresh, status-bar controls and Output logging. Local, SSH and container files share the
+  same agent-backed path; no external runtime or remote listening port is required. Disabling the module
+  or leaving the workspace stops its server.
+
 ## [0.5.0] - 2026-10-27
 
 ### Added

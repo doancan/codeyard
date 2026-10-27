@@ -229,6 +229,13 @@ impl Render for Workbench {
             .on_action(cx.listener(|this, _: &DockerServices, window, cx| this.docker_contexts(docker_glue::Action::Services, window, cx)))
             .on_action(cx.listener(|this, _: &DockerCancel, _, cx| this.cancel_docker(cx)))
             .on_action(cx.listener(|this, _: &ShowContainers, _, cx| this.show_containers(cx)))
+            .on_action(cx.listener(|this, _: &OpenWebPreview, window, cx| this.open_web_preview(window, cx)))
+            .on_action(cx.listener(|this, _: &StopWebPreview, _, cx| this.stop_web_preview(cx)))
+            .on_action(cx.listener(|this, _: &WebPreviewLog, _, cx| {
+                this.chrome.panel_open = true;
+                this.chrome.bottom = Bottom::Output;
+                cx.notify();
+            }))
             .on_action(cx.listener(|this, _: &RemoteWsl, window, cx| this.show_remote_targets(true, window, cx)))
             .on_action(cx.listener(|this, _: &GitRebaseBranch, window, cx| this.show_branch_op_picker(git_glue::BranchOp::Rebase, window, cx)))
             .on_action(cx.listener(|this, _: &GitOpenWorktree, window, cx| this.show_branch_op_picker(git_glue::BranchOp::OpenWorktree, window, cx)))

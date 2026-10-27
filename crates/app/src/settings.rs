@@ -46,6 +46,8 @@ pub enum AutoSave {
 pub struct Settings {
     /// Optional Docker / Dev Container module; user settings only.
     pub docker_enabled: bool,
+    /// Optional static web preview server; user settings only.
+    pub web_preview_enabled: bool,
     pub theme: String,
     pub editor_font_family: Option<String>,
     pub editor_font_size: f32,
@@ -270,6 +272,7 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             docker_enabled: false,
+            web_preview_enabled: false,
             theme: "auto".into(),
             editor_font_family: None,
             editor_font_size: theme::text::CODE.0,
@@ -463,6 +466,7 @@ pub const RESTRICTED_KEYS: &[&str] = &[
 /// repo touching it would open it for every folder.
 pub const USER_ONLY_KEYS: &[&str] = &[
     "modules.containers.enabled",
+    "modules.webPreview.enabled",
     "security.workspaceTrust.enabled",
     "http.confirmRequests",
     "ui.language",
@@ -932,6 +936,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         }
         Some(_) => r.warn(crate::i18n::tf("{0}: expected an object {1}", &[&"ports.rules", &"{ \"3000\": { \"label\": \"web\" } }"])),
     }
+    if let Some(v) = r.bool("modules.webPreview.enabled") {
+        s.web_preview_enabled = v;
+    }
     if let Some(v) = r.bool("modules.containers.enabled") {
         s.docker_enabled = v;
     }
@@ -1095,6 +1102,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "window.startup",
         "lsp.enabled",
         "modules.containers.enabled",
+        "modules.webPreview.enabled",
         "lsp.servers",
         "ports.autoForward",
         "ports.localBind",

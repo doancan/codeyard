@@ -144,6 +144,8 @@ mod view_status_glue;
 mod view_update_glue;
 #[path = "workbench_watch.rs"]
 mod watch_glue;
+#[path = "workbench_web_preview.rs"]
+mod web_preview_glue;
 #[path = "workbench_welcome.rs"]
 mod welcome_glue;
 
@@ -276,6 +278,9 @@ actions!(
         DockerServices,
         DockerCancel,
         ShowContainers,
+        OpenWebPreview,
+        StopWebPreview,
+        WebPreviewLog,
         RemoteWsl,
         GitMergeBranch,
         GitRebaseBranch,
@@ -1069,6 +1074,7 @@ impl Workbench {
             },
             chrome: state_glue::ChromeLayout {
                 resources: cx.new(crate::resource_monitor::ResourceMonitor::new),
+                web_preview: Default::default(),
                 panel: Some(Panel::Explorer),
                 bottom: Bottom::Terminal,
                 sidebar_w,
@@ -1555,6 +1561,7 @@ impl Workbench {
             return;
         }
         self.cancel_pending_connection();
+        self.stop_web_preview(cx);
         self.persist_session(cx);
         self.shutdown_lsp(cx);
         self.roots.extra_roots.clear();
@@ -2395,6 +2402,11 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
     wb._subs.push(cx.subscribe_in(ed, window, |this, ed, ev: &EditorEvent, window, cx| {
         match ev {
             EditorEvent::Saved => {
+                if let Some(server) = &this.chrome.web_preview.server
+                    && ed.read(cx).uses_host(&this.remote.host)
+                {
+                    server.changed(&ed.read(cx).path);
+                }
                 this.reload_snippets_if_edited(ed, cx);
                 this.refresh_git(200, cx);
                 this.record_history(ed, cx);

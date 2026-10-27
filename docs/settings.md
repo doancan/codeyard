@@ -136,6 +136,7 @@ status bar reports it.
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
 | `modules.containers.enabled` | `true` / `false` | `false` | Enable container environments (user settings only; disconnect containers before disabling) |
+| `modules.webPreview.enabled` | `true` / `false` | `false` | Enable Web Preview for HTML, CSS and JavaScript (user settings only; stops servers when disabled) |
 
 ## `ports`
 

@@ -188,3 +188,32 @@ A hidden flag runs palette commands in a real window after start: `codeyard --do
 (debug builds only, or a release build with `CODEYARD_DEV=1` set; `CODEYARD_DO_DELAY_MS` sets the delay, `shortcut:<Command>` goes through the shortcuts page). `--panel` and the
 screenshot helpers are used for visual checks; use throw-away `CODEYARD_STATE_DIR` / `CODEYARD_CONFIG_DIR`
 directories. `scripts/a11y-probe/` reads the live accessibility tree.
+## Opt-in live SSH/container acceptance
+
+`live_ssh_container_acceptance` is ignored in ordinary runs. It uses the real Workbench,
+SSH bootstrap, remote agent, monitor, editor save and terminal against a disposable
+Linux Docker container. It checks two resource samples, inspect/mount data, logs,
+return to the original SSH workspace, container restart and persistence after reattach.
+GPUI input/rendering is driven by the test harness; this is not a physical desktop visual check.
+
+Provision a dedicated container and an empty `/tmp/codeyard-smoke-<token>` directory on
+an explicitly authorized SSH host. Use a random 32-character hexadecimal token, label
+the container `codeyard.smoke=<token>`, name it `codeyard-smoke-<token>`, and give it a
+`/workspace` volume containing `hello.txt` with `initial content\n`. Its long-running
+command must emit `codeyard-live-log` at startup. A shell, tar and the normal agent
+bootstrap prerequisites must be available. Prefer a cached image with networking off
+and CPU, memory and process limits. Do not use an application service as the fixture.
+
+Write the following machine-local configuration to the ignored
+`target/live-container-test.json`: `host` (SSH alias), `id` (full container ID), `name`,
+`root` (the dedicated host directory), and `token`. The test validates the name, ID,
+directory shape and inspected label before restarting the container. Run:
+
+```sh
+cargo test --release --locked -p app --bin codeyard live_ssh_container_acceptance -- --ignored --nocapture --test-threads=1
+```
+
+The Linux agents must be bundled or discoverable. The test modifies only the fixture's
+file and restarts only its validated container. After success or failure, remove that
+container and its anonymous volumes and the dedicated empty host directory. Never use
+global Docker prune or cleanup commands. Remove the local fixture configuration too.

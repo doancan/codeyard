@@ -27,6 +27,7 @@ pub const CATEGORIES: &[&str] =
 /// Keys of the "Commonly Used" category.
 const COMMON: &[&str] = &[
     "modules.containers.enabled",
+    "modules.webPreview.enabled",
     "theme",
     "editor.fontSize",
     "editor.fontFamily",
@@ -401,7 +402,13 @@ impl SettingsPage {
                                     .gap(px(theme::SPACE[3]))
                                     .children(modified.then(|| div().flex_none().size(px(6.)).rounded_full().bg(c(p.accent))))
                                     .child(div().font_weight(gpui::FontWeight::SEMIBOLD).text_size(px(text::SM.0)).child(
-                                        if key == "modules.containers.enabled" { crate::i18n::t("Container Environments").to_string() } else { title_of(key) },
+                                        if key == "modules.containers.enabled" {
+                                            crate::i18n::t("Container Environments").to_string()
+                                        } else if key == "modules.webPreview.enabled" {
+                                            crate::i18n::t("Web Preview").to_string()
+                                        } else {
+                                            title_of(key)
+                                        },
                                     ))
                                     .children(reset),
                             )
@@ -575,6 +582,7 @@ mod tests {
         assert_eq!(category_of("modules.containers.enabled"), "Modules");
         assert!(CATEGORIES.contains(&"Modules"));
         assert!(COMMON.contains(&"modules.containers.enabled"));
+        assert!(COMMON.contains(&"modules.webPreview.enabled"));
     }
 
     #[gpui::test]
@@ -587,7 +595,7 @@ mod tests {
             page.category = CATEGORIES.iter().position(|name| *name == "Modules").unwrap();
             cx.notify();
         });
-        assert_eq!(page.read_with(cx, |page, cx| page.visible_keys(cx)), ["modules.containers.enabled"]);
+        assert_eq!(page.read_with(cx, |page, cx| page.visible_keys(cx)), ["modules.containers.enabled", "modules.webPreview.enabled"]);
         let _tr = crate::i18n::LangGuard::set("tr");
         assert_eq!(category_label("Modules"), "Modüller");
         page.update(cx, |page, cx| page.set_query_for_test("konteyner", cx));

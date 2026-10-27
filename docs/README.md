@@ -12,6 +12,7 @@ code they describe.
 | [architecture.md](architecture.md) | crates, how the workbench is organised, stack choices, budgets and the gates that enforce them |
 | [remote.md](remote.md) | SSH, the agent and its protocol, reconnecting, askpass, file transfer, `~/.ssh/config` editing |
 | [containers.md](containers.md) | optional container module, Docker workflows and research on Apple Container, WSL Containers and Windows guests |
+| [web-preview.md](web-preview.md) | optional HTML/CSS/JavaScript server, browser live refresh, local/SSH/container support and serving boundaries |
 | [editor-services.md](editor-services.md) | schemas, spell check, merge editor, pull requests, `.http`, log follow: how each one works and where it stops |
 | [design-tokens.md](design-tokens.md) | colour roles, themes and how tokens become Rust constants |
 | [accessibility.md](accessibility.md) | the AccessKit tree on macOS, what is verified, what is missing |

@@ -191,6 +191,11 @@ pub const CATALOG: &[Entry] = &[
     e("diffEditor.renderSideBySide", crate::i18n::tr("Diff view side by side (off: inline)"), Kind::Bool),
     e("security.workspaceTrust.enabled", crate::i18n::tr("Ask before running tasks, tests or the debugger of an untrusted folder"), Kind::Bool),
     e("modules.containers.enabled", crate::i18n::tr("Enable container environments (user settings only; disconnect containers before disabling)"), Kind::Bool),
+    e(
+        "modules.webPreview.enabled",
+        crate::i18n::tr("Enable Web Preview for HTML, CSS and JavaScript (user settings only; stops servers when disabled)"),
+        Kind::Bool,
+    ),
 ];
 
 pub fn entry(key: &str) -> Option<&'static Entry> {
@@ -219,6 +224,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "editor.linkedEditing" => json!(s.linked_editing),
         "security.workspaceTrust.enabled" => json!(s.workspace_trust),
         "modules.containers.enabled" => json!(s.docker_enabled),
+        "modules.webPreview.enabled" => json!(s.web_preview_enabled),
         "editor.codeLens" => json!(s.code_lens),
         "editor.unicodeHighlight.enabled" => json!(s.unicode_highlight),
         "editor.semanticHighlighting.enabled" => json!(s.semantic_highlighting),

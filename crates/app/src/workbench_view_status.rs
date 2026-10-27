@@ -179,6 +179,7 @@ impl Workbench {
                     .whitespace_nowrap()
                     .when_some(notice, |d, (m, color)| d.child(div().px(px(SB_PAD)).text_color(c(color)).truncate().child(m))),
             )
+            .children(self.web_preview_status(p, cx))
             .child(self.chrome.resources.clone())
             .child(
                 item()

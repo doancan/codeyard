@@ -186,6 +186,16 @@ impl Workbench {
                             })))
                         },
                     )
+                    .when(active && cx.global::<Settings>().web_preview_enabled && crate::web_preview::is_html(&ed.path), |d| {
+                        d.child(
+                            ui::icon_button("html-preview", "eye", crate::i18n::t("Preview HTML in your browser"), p)
+                                .debug_selector(|| "html-preview".into())
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    cx.stop_propagation();
+                                    this.open_web_preview(window, cx);
+                                })),
+                        )
+                    })
                     .tooltip(move |_, cx| cx.new(|_| Tooltip(rel.clone().into())).into())
                     .when(pinned && !dirty, |d| {
                         // Pinned: a pin instead of close (click: unpin).

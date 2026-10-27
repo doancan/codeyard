@@ -398,6 +398,7 @@ Could not save your dictionary: {}
 Could not save: {}	
 Could not set up key login for {}: {}	
 Could not set {}: {}	
+Could not start Web Preview: {}	
 Could not start a shell: {}	
 Could not start debugging: {}	
 Could not start the debug adapter: {}	
@@ -664,6 +665,8 @@ Empty folder
 Empty group: ⌘P opens a file here	
 Enable All Breakpoints	
 Enable Breakpoint	
+Enable Web Preview for HTML, CSS and JavaScript (user settings only; stops servers when disabled)	
+Enable Web Preview in Settings > Modules to preview HTML files.	
 Enable container environments (user settings only; disconnect containers before disabling)	
 Encoding for files that are not UTF-8	
 End files with a newline when saving	
@@ -1270,6 +1273,7 @@ Open a folder to measure its size.
 Open a folder to search in it.	
 Open a project, connect to a host, or switch workspace	
 Open a terminal with…	
+Open an HTML file or a project folder to start Web Preview.	
 Open as Hex	
 Open files	
 Open files can be undone with ⌘Z; closed files are written to disk.	
@@ -1343,6 +1347,8 @@ Preferences: Open Workspace Settings
 Preferences: Settings	
 Preserve case (⌥P)	
 Preserve case when replacing	
+Preview	
+Preview HTML in your browser	
 Preview of {}	
 Preview {}	
 Previous Match	
@@ -1730,6 +1736,7 @@ Start language servers
 Start search results folded or open	
 Start the new branch from…	
 Start this container?	
+Starting preview…	
 Starting the download…	
 Starting “{}”…	
 Starting…	
@@ -1752,6 +1759,7 @@ Stop
 Stop (⇧F5)	
 Stop Debugging	
 Stop Forwarding	
+Stop Web Preview	
 Stop a search after this many matches	
 Stopped	
 Stopped.	
@@ -2047,6 +2055,13 @@ WSL distribution
 Waiting for enough samples to draw history…	
 Warning	
 Watch	
+Web Preview	
+Web Preview listening on 127.0.0.1:{}	
+Web Preview stopped.	
+Web Preview: Open in Browser	
+Web Preview: Show Server Log	
+Web Preview: Stop Server	
+Web Preview: {}	
 Wednesday	
 Welcome	
 Welcome (no recent folders yet)	
