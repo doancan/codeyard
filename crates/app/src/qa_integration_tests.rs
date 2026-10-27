@@ -1507,13 +1507,13 @@ fn qa_multi_root_folder_settings_apply_per_file(cx: &mut TestAppContext) {
     std::fs::write(web.join("w.txt"), "y\n").unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &api, cx);
-    let w = web.to_string_lossy().into_owned();
+    let w = crate::ui::local_path(&web);
     wb.update_in(cx, |wb, window, cx| wb.add_workspace_folder_now(w.clone(), window, cx));
     wait_for(cx, "folder settings loaded", |cx| {
         cx.run_until_parked();
         wb.read_with(cx, |wb, _| wb.folder_settings_for_test(&w)).is_some_and(|f| f.tab_size == Some(2))
     });
-    let (a_path, w_path) = (api.join("a.txt").to_string_lossy().into_owned(), web.join("w.txt").to_string_lossy().into_owned());
+    let (a_path, w_path) = (crate::ui::local_path(&api.join("a.txt")), crate::ui::local_path(&web.join("w.txt")));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(a_path.clone(), window, cx));
     wait_for(cx, "api file open", |cx| {
         cx.run_until_parked();
@@ -2535,6 +2535,11 @@ fn qa_docker_target_connects_lists_and_opens_files(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-docker-files");
     std::fs::write(dir.join("hello.txt"), "kapsayıcıdan merhaba\n").unwrap();
     let (wb, cx) = setup(cx);
+    cx.update(|_, cx| {
+        let mut settings = cx.global::<crate::settings::Settings>().clone();
+        settings.docker_enabled = true;
+        cx.set_global(settings);
+    });
     wb.update_in(cx, |wb, window, cx| wb.connect("docker:fake-box".into(), window, cx));
     let tick = |cx: &mut VisualTestContext| cx.executor().advance_clock(Duration::from_secs(1));
     wait_secs(cx, 30, "connected", |cx| {

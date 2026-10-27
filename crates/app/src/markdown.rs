@@ -871,10 +871,7 @@ impl Render for MarkdownPreview {
         self.anchors.clear();
         let mut slugs = HashMap::new();
         for (id, title) in headings {
-            let base = heading_slug(&title);
-            let count = slugs.entry(base.clone()).or_insert(0usize);
-            let slug = if *count == 0 { base } else { format!("{base}-{count}") };
-            *count += 1;
+            let slug = unique_heading_slug(&title, &mut slugs);
             let anchor = self.anchors.entry(id.clone()).or_insert_with(|| gpui::ScrollAnchor::for_handle(self.scroll.clone())).clone();
             self.anchors.insert(format!("#{slug}"), anchor);
         }
@@ -950,6 +947,19 @@ fn heading_slug(title: &str) -> String {
         .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_' || c.is_whitespace())
         .map(|c| if c.is_whitespace() { '-' } else { c })
         .collect()
+}
+
+fn unique_heading_slug(title: &str, slugs: &mut HashMap<String, usize>) -> String {
+    let base = heading_slug(title);
+    let mut count = slugs.get(&base).copied().unwrap_or(0);
+    let mut slug = if count == 0 { base.clone() } else { format!("{base}-{count}") };
+    while slugs.contains_key(&slug) {
+        count += 1;
+        slug = format!("{base}-{count}");
+    }
+    slugs.insert(base, count + 1);
+    slugs.entry(slug.clone()).or_insert(1);
+    slug
 }
 
 /// Resolve on the document's Host, never through the system URL handler.
@@ -1092,6 +1102,14 @@ mod tests {
         resources.retain(&HashSet::new());
         resources.complete(url, new, Err("removed image".into()));
         assert!(resources.images.is_empty(), "removed resources stay removed");
+    }
+
+    #[test]
+    fn heading_links_do_not_collide_with_numbered_titles() {
+        let mut slugs = HashMap::new();
+        let titles = ["Setup", "Setup-1", "Setup", "Setup", "Setup-1"];
+        let actual: Vec<_> = titles.iter().map(|title| unique_heading_slug(title, &mut slugs)).collect();
+        assert_eq!(actual, ["setup", "setup-1", "setup-2", "setup-3", "setup-1-1"]);
     }
 
     #[test]

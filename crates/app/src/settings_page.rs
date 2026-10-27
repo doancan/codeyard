@@ -22,10 +22,11 @@ pub enum SettingsEvent {
 }
 
 pub const CATEGORIES: &[&str] =
-    &["Commonly Used", "Modified", "Editor", "Workbench", "Files", "Explorer", "Search", "Git", "Terminal", "Window", "Remote & Languages"];
+    &["Commonly Used", "Modified", "Modules", "Editor", "Workbench", "Files", "Explorer", "Search", "Git", "Terminal", "Window", "Remote & Languages"];
 
 /// Keys of the "Commonly Used" category.
 const COMMON: &[&str] = &[
+    "modules.containers.enabled",
     "theme",
     "editor.fontSize",
     "editor.fontFamily",
@@ -52,6 +53,7 @@ pub fn category_of(key: &str) -> &'static str {
         "git" => "Git",
         "terminal" => "Terminal",
         "window" | "update" => "Window",
+        "modules" => "Modules",
         _ => "Remote & Languages",
     }
 }
@@ -123,6 +125,7 @@ pub fn category_label(name: &str) -> &'static str {
     match name {
         "Commonly Used" => t("Commonly Used"),
         "Modified" => t("Modified"),
+        "Modules" => t("Modules"),
         "Editor" => t("Editor"),
         "Workbench" => t("Workbench"),
         "Files" => t("Files"),
@@ -250,7 +253,7 @@ impl SettingsPage {
         let searching = !query.trim().is_empty();
         let cat = CATEGORIES[self.category];
         let s = cx.global::<Settings>();
-        Self::all_entries()
+        let mut keys: Vec<_> = Self::all_entries()
             .into_iter()
             .filter(|(k, about)| {
                 if searching {
@@ -264,7 +267,11 @@ impl SettingsPage {
                 }
             })
             .map(|(k, _)| k)
-            .collect()
+            .collect();
+        if !searching && cat == "Commonly Used" {
+            keys.sort_by_key(|key| *key != "modules.containers.enabled");
+        }
+        keys
     }
 
     fn entry_view(&self, key: &'static str, ix: usize, s: &Settings, cx: &mut Context<Self>) -> gpui::AnyElement {
@@ -393,7 +400,9 @@ impl SettingsPage {
                                     .items_center()
                                     .gap(px(theme::SPACE[3]))
                                     .children(modified.then(|| div().flex_none().size(px(6.)).rounded_full().bg(c(p.accent))))
-                                    .child(div().font_weight(gpui::FontWeight::SEMIBOLD).text_size(px(text::SM.0)).child(title_of(key)))
+                                    .child(div().font_weight(gpui::FontWeight::SEMIBOLD).text_size(px(text::SM.0)).child(
+                                        if key == "modules.containers.enabled" { crate::i18n::t("Container Environments").to_string() } else { title_of(key) },
+                                    ))
                                     .children(reset),
                             )
                             .child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(crate::i18n::t(about).to_string()))
@@ -560,6 +569,30 @@ impl Render for SettingsPage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn container_module_is_findable_without_search() {
+        assert_eq!(category_of("modules.containers.enabled"), "Modules");
+        assert!(CATEGORIES.contains(&"Modules"));
+        assert!(COMMON.contains(&"modules.containers.enabled"));
+    }
+
+    #[gpui::test]
+    fn container_module_toggle_appears_first_and_has_a_translated_category(cx: &mut gpui::TestAppContext) {
+        crate::qa_workbench_tests::globals(cx);
+        let (page, cx) = cx.add_window_view(|_, cx| SettingsPage::new(cx));
+        let keys = page.read_with(cx, |page, cx| page.visible_keys(cx));
+        assert_eq!(keys.first().copied(), Some("modules.containers.enabled"));
+        page.update(cx, |page, cx| {
+            page.category = CATEGORIES.iter().position(|name| *name == "Modules").unwrap();
+            cx.notify();
+        });
+        assert_eq!(page.read_with(cx, |page, cx| page.visible_keys(cx)), ["modules.containers.enabled"]);
+        let _tr = crate::i18n::LangGuard::set("tr");
+        assert_eq!(category_label("Modules"), "Modüller");
+        page.update(cx, |page, cx| page.set_query_for_test("konteyner", cx));
+        assert!(page.read_with(cx, |page, cx| page.visible_keys(cx)).contains(&"modules.containers.enabled"));
+    }
 
     #[test]
     fn titles_are_readable() {

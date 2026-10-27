@@ -5,10 +5,15 @@ use super::*;
 pub(super) const MENU_BAR_H: f32 = 28.;
 
 impl Workbench {
+    pub(super) fn application_menu_bottom(&self, window: &Window) -> f32 {
+        MENU_BAR_H + if cfg!(target_os = "windows") && !window.is_fullscreen() { super::view_editor_glue::WINDOWS_TITLEBAR_H } else { 0. }
+    }
+
     pub(super) fn application_menu_bar(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
         let active = self.menu.as_ref().and_then(|m| m.app_path.as_ref()).and_then(|p| p.first()).copied();
         div()
             .id("application-menu-bar")
+            .debug_selector(|| "application-menu-bar".into())
             .h(px(MENU_BAR_H))
             .flex_none()
             .flex()
@@ -21,6 +26,7 @@ impl Workbench {
             .children(crate::menus::desktop_menus(&self.persist.recent).into_iter().enumerate().map(|(index, menu)| {
                 div()
                     .id(("application-menu", index))
+                    .debug_selector(move || format!("application-menu-{index}"))
                     .h_full()
                     .px(px(theme::SPACE[4]))
                     .flex()
@@ -35,7 +41,7 @@ impl Workbench {
                             let same = this.menu.as_ref().and_then(|m| m.app_path.as_ref()).is_some_and(|p| p.first() == Some(&index));
                             this.close_menu(window, cx);
                             if !same {
-                                this.open_application_menu(vec![index], gpui::point(ev.position.x, px(MENU_BAR_H)), window, cx);
+                                this.open_application_menu(vec![index], gpui::point(ev.position.x, px(this.application_menu_bottom(window))), window, cx);
                             }
                             cx.stop_propagation();
                         }),
@@ -44,7 +50,7 @@ impl Workbench {
                         let current = this.menu.as_ref().and_then(|m| m.app_path.as_ref()).and_then(|p| p.first()).copied();
                         if current.is_some_and(|i| i != index) {
                             this.close_menu(window, cx);
-                            this.open_application_menu(vec![index], gpui::point(ev.position.x, px(MENU_BAR_H)), window, cx);
+                            this.open_application_menu(vec![index], gpui::point(ev.position.x, px(this.application_menu_bottom(window))), window, cx);
                         }
                     }))
             }))
@@ -91,7 +97,7 @@ impl Workbench {
     }
 
     pub(super) fn open_application_menu_by_index(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
-        self.open_application_menu(vec![index], gpui::point(px(4.), px(MENU_BAR_H)), window, cx);
+        self.open_application_menu(vec![index], gpui::point(px(4.), px(self.application_menu_bottom(window))), window, cx);
     }
 
     pub(super) fn move_application_menu(&mut self, forward: bool, window: &mut Window, cx: &mut Context<Self>) {
@@ -112,16 +118,18 @@ impl Workbench {
 mod tests {
     use super::*;
     use crate::qa_workbench_tests::{open, open_in, project, setup};
-    use gpui::{Modifiers, TestAppContext, point};
+    use gpui::{Modifiers, TestAppContext};
 
     #[gpui::test]
     fn windows_application_menu_opens_from_header_and_keyboard(cx: &mut TestAppContext) {
         let (wb, cx) = setup(cx);
         cx.run_until_parked();
-        cx.simulate_click(point(px(25.), px(14.)), Modifiers::none());
+        let menu_button = cx.debug_bounds("application-menu-0").unwrap().center();
+        cx.simulate_click(menu_button, Modifiers::none());
         assert_eq!(wb.read_with(cx, |w, _| w.menu.as_ref().unwrap().app_path.clone()), Some(vec![0]));
+        assert_eq!(wb.read_with(cx, |w, _| w.menu.as_ref().unwrap().position.y), cx.debug_bounds("application-menu-bar").unwrap().bottom());
         assert!(wb.read_with(cx, |w, cx| w.menu_labels(cx).unwrap()).contains(&"Open Folder…".into()));
-        cx.simulate_click(point(px(25.), px(14.)), Modifiers::none());
+        cx.simulate_click(menu_button, Modifiers::none());
         assert!(wb.read_with(cx, |w, _| w.menu.is_none()));
         cx.simulate_keystrokes("alt-v");
         assert_eq!(wb.read_with(cx, |w, _| w.menu.as_ref().unwrap().app_path.clone()), Some(vec![3]));

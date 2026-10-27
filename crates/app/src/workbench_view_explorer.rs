@@ -10,6 +10,7 @@ impl Workbench {
             let selected = self.chrome.panel == Some(panel);
             div()
                 .id(id)
+                .debug_selector(|| id.to_string())
                 .group(id)
                 .relative()
                 .w(px(layout::ACTIVITYBAR_W))
@@ -54,6 +55,9 @@ impl Workbench {
                 .tooltip(move |_, cx| cx.new(|_| Tooltip(label.into())).into())
                 .on_click(cx.listener(move |this, _, window, cx| {
                     this.chrome.panel = if this.chrome.panel == Some(panel) { None } else { Some(panel) };
+                    if this.chrome.panel == Some(Panel::Containers) {
+                        this.sync_container_monitor(cx);
+                    }
                     if this.chrome.panel == Some(Panel::Explorer) {
                         window.focus(&this.roots.primary.focus_handle(cx));
                     }
@@ -106,6 +110,7 @@ impl Workbench {
             .child(item("act-debug", "bug-play", crate::i18n::t("Run and Debug (⌃⇧D)"), Panel::Debug, 0, cx))
             .child(item("act-testing", "flask-conical", crate::i18n::t("Testing"), Panel::Testing, failed_tests, cx))
             .child(item("act-remote", "screen-share", crate::i18n::t("Remote Explorer"), Panel::Remote, 0, cx))
+            .when(cx.global::<Settings>().docker_enabled, |d| d.child(item("act-containers", "server", crate::i18n::t("Containers"), Panel::Containers, 0, cx)))
             .child(div().flex_1())
             .child(
                 // A single "manage" button: the menu opens to the right of the icon, bottom edge aligned with it (see `open_manage_menu`).

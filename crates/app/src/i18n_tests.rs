@@ -532,6 +532,7 @@ fn settings_categories_are_translated_for_display_only() {
         [
             "Yaygın Kullanılanlar",
             "Değiştirildi",
+            "Modüller",
             "Düzenleyici",
             "Çalışma Ekranı",
             "Dosyalar",

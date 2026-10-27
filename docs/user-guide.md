@@ -331,8 +331,9 @@ UUID, block comment toggle, recently used commands first in the palette,
 Markdown files (`.md`, `.markdown`) also have a **Read** button above the editor. In the
 reading view, **Code**, Escape, or the preview shortcut returns to the source without
 losing edits. Code blocks support syntax colors, horizontal scrolling and **Copy code**.
-Heading links scroll within the document; relative file links open in Codeyard. Relative
-images load from the document's own filesystem, including SSH hosts (up to 20 MB per
+Heading links scroll within the document, with unique anchors for repeated or colliding
+titles; relative file links open in Codeyard. Relative images load from the document's
+own filesystem, including SSH hosts (up to 20 MB per
 image, with the same 50-million-pixel limit as image tabs). External image URLs remain clickable links rather than loading automatically.
 MDX components are not executed.
 
@@ -1000,6 +1001,12 @@ connection (no extra processes) and is removed when you quit.
 ```
 
 ## Remote (SSH)
+
+**Optional container environments.** Enable `modules.containers.enabled` in your own
+Settings to show Docker connections and Dev Container commands. The module is off by
+default and a project cannot enable it. Docker contexts, stopped-container startup,
+status/logs, Dev Container creation, rebuild and cancellation are described in
+[Container environments](containers.md), along with current platform limits.
 
 Uses your system `ssh` and `~/.ssh/config`. Pick a host in the workspace switcher (⌃R) or type a name.
 The last remote folder only opens again at start if `"window.startup"` is `"continue"`. After connecting, a folder prompt opens (like VS Code):
