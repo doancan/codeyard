@@ -1,6 +1,6 @@
 //! codeyard: lightweight, native code editor. Local + SSH.
 //!
-//!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|remote|welcome|settings]
+//!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings]
 
 // Normal Windows launches are GUI applications in every profile. Test harnesses keep their console.
 #![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
@@ -22,6 +22,7 @@ mod compare_tests;
 mod conflict;
 mod crash;
 mod dap;
+mod debug_model;
 // --- data ---
 mod datalens;
 mod datalens_decode;
@@ -57,6 +58,7 @@ mod git;
 #[cfg(test)]
 mod git_sync_tests;
 mod github;
+mod globs;
 mod graph;
 #[cfg(test)]
 mod hardening_tests;
@@ -73,6 +75,7 @@ mod i18n_remote_tests;
 #[cfg(test)]
 mod i18n_tests;
 mod icon_theme;
+mod image_size;
 mod input;
 mod jsonfmt;
 mod large;
@@ -87,8 +90,11 @@ mod menus;
 mod merge;
 mod outline;
 mod picker;
+mod port_forwards;
 mod ports;
 mod problems;
+#[cfg(test)]
+mod qa_debug_tests;
 #[cfg(test)]
 mod qa_editor_tests;
 #[cfg(test)]
@@ -106,7 +112,10 @@ mod settings_docs;
 mod settings_page;
 mod shortcuts_page;
 mod snippets;
+#[cfg(test)]
+mod text_scale_tests;
 // --- structural ---
+mod shell_quote;
 #[cfg(test)]
 mod ssh_error_tests;
 mod structural;
@@ -114,10 +123,16 @@ mod structural;
 mod structural_tests;
 mod sysopen;
 mod terminal;
+mod terminal_osc;
+mod terminal_paste;
+mod terminal_profiles;
+#[cfg(all(test, unix))]
+mod test_files;
 #[cfg(test)]
 mod test_git;
 #[cfg(test)]
 mod test_sshd;
+mod testexp;
 mod testrun;
 #[cfg(test)]
 mod tests;
@@ -183,6 +198,8 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("f4", search::NextResult, None),
         KeyBinding::new("shift-f4", search::PrevResult, None),
         KeyBinding::new("ctrl-shift-g", ShowScm, None),
+        // Ctrl+Shift+D duplicates the selection in the editor on Windows and Linux.
+        KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-shift-d" } else { "alt-shift-d" }, ShowRunAndDebug, None),
         KeyBinding::new("secondary-\\", SplitEditor, None),
         KeyBinding::new("ctrl-secondary-right", MoveEditorToOtherGroup, None),
         KeyBinding::new("ctrl-secondary-left", MoveEditorToOtherGroup, None),
@@ -295,6 +312,11 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("shift-f5", StopDebugging, None),
         KeyBinding::new("secondary-shift-f5", RestartDebugging, None),
         KeyBinding::new("f10", DebugStepOver, None),
+        KeyBinding::new("f6", DebugPause, None),
+        KeyBinding::new("ctrl-f5", workbench::RunWithoutDebugging, None),
+        KeyBinding::new("up", workbench::ConsoleHistoryPrev, Some("DebugRepl")),
+        KeyBinding::new("down", workbench::ConsoleHistoryNext, Some("DebugRepl")),
+        KeyBinding::new("tab", workbench::ConsoleComplete, Some("DebugRepl")),
         KeyBinding::new("shift-f11", DebugStepOut, None),
         KeyBinding::new("f9", ToggleBreakpoint, ed),
         KeyBinding::new("ctrl-tab", NextEditor, None),
@@ -412,6 +434,8 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("cmd-g", terminal::TermFindNext, Some("Terminal")),
         KeyBinding::new("cmd-shift-g", terminal::TermFindPrevious, Some("Terminal")),
         KeyBinding::new("cmd-home", terminal::TermScrollToTop, Some("Terminal")),
+        KeyBinding::new("cmd-up", terminal::TermPrevCommand, Some("Terminal")),
+        KeyBinding::new("cmd-down", terminal::TermNextCommand, Some("Terminal")),
         KeyBinding::new("cmd-end", terminal::TermScrollToBottom, Some("Terminal")),
         KeyBinding::new("cmd-g", FindNext, ed),
         KeyBinding::new("cmd-g", FindNext, Some("FindBar")),
@@ -462,6 +486,8 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("f3", terminal::TermFindNext, Some("Terminal")),
         KeyBinding::new("shift-f3", terminal::TermFindPrevious, Some("Terminal")),
         KeyBinding::new("ctrl-shift-home", terminal::TermScrollToTop, Some("Terminal")),
+        KeyBinding::new("ctrl-shift-up", terminal::TermPrevCommand, Some("Terminal")),
+        KeyBinding::new("ctrl-shift-down", terminal::TermNextCommand, Some("Terminal")),
         KeyBinding::new("ctrl-shift-end", terminal::TermScrollToBottom, Some("Terminal")),
         KeyBinding::new("ctrl-left", MoveWordLeft, ed),
         KeyBinding::new("ctrl-right", MoveWordRight, ed),
@@ -604,7 +630,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
             }
             "-h" | "--help" => {
                 println!(
-                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|remote|welcome|settings]"
+                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings]"
                 );
                 std::process::exit(0);
             }

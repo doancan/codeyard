@@ -33,7 +33,11 @@ musl binary of about 1.5 MB.
 1. **Topic files.** Behaviour lives in `workbench_<topic>.rs` files (`workbench_git`, `workbench_hosts`,
    `workbench_http`, `workbench_schema`, `workbench_spell`, `workbench_pulls`, `workbench_transfer`, …). They are
    child modules included with `#[path]`, so they read the workbench's private fields with `use super::*`.
-   The editor is split the same way (`editor_*.rs`).
+   The editor is split the same way (`editor_*.rs`), and so is `Buffer` (`lines.rs`, `transform.rs`,
+   `occurrences.rs`). A large topic has sub-topic files of its own: Run and Debug is `workbench_debug.rs` (sessions,
+   stack, variables, console) with `workbench_debug_breakpoints.rs`, `workbench_debug_launch.rs`,
+   `workbench_debug_view.rs` and the test-only `workbench_debug_testing.rs`; they reach the workbench through
+   `super::super`. The git status refresh is `workbench_vcs.rs`, separate from the git commands in `workbench_git.rs`.
 2. **State groups.** New state goes into a group struct in `workbench_state.rs` (`TabsState`, `LspState`,
    `GitState`, `ChromeLayout`, `NavState`, `ConfigState`, `PersistState`, `RemoteState`, `RootsState`,
    `TaskState`, `DebugUi`), not into `Workbench` itself. `LspState` also carries the schema, spell and `.http`
@@ -42,12 +46,14 @@ musl binary of about 1.5 MB.
 
 Compare Folders is three files: `compare_logic.rs` (matching two `HashTree` scans, plans, report; no UI), `compare_folders.rs` (the tab) and `workbench_compare.rs` (picker, trust gate, copies and deletes checked against the scan).
 
-`scripts/arch-check.sh` enforces size limits and only ever lowers them: `workbench.rs` ≤ 2750 lines,
-`editor.rs` ≤ 1800, every other source file ≤ 2500 (test files ≤ 6000), `Workbench` struct ≤ 80 lines. When a
-limit is hit, split the file instead of raising the limit.
+`scripts/arch-check.sh` enforces size limits and only ever lowers them: `workbench.rs` ≤ 2600 lines,
+`editor.rs` ≤ 1700, `buffer/src/lib.rs` ≤ 1800, every other source file ≤ 1500 (`*_tests.rs` and test helpers ≤ 2500,
+`tests.rs` and `qa_*_tests.rs` ≤ 6000), `Workbench` struct ≤ 80 lines. When a
+limit is hit, split the file instead of raising the limit. Inline test modules longer than a screen go in a file of
+their own beside the code (`host/src/tests.rs`, `settings_tests.rs`), so a limit measures the code itself.
 
-Test-only accessors (`*_for_test`) are in `workbench_testing.rs` and the editor's own files; tests never reach
-into private state any other way.
+Test-only accessors (`*_for_test`) are in `workbench_testing.rs`, in a topic's own test-only module
+(`workbench_debug_testing.rs`) and in the editor's own files; tests never reach into private state any other way.
 
 ## Stack
 
@@ -195,9 +201,10 @@ An untrusted folder (anything not opened before the trust gate existed and not t
 | --- | --- | --- |
 | tasks, tests, debugger | ask first (“Do you trust the authors of this folder?”) | run |
 | project `terminal.shell`, `lsp.servers`, `json.schemas`, `yaml.schemas` | ignored (the status bar names them) | applied |
+| project `terminal.allowClipboardWrite`, `terminal.sanitizePaste`, `terminal.warnMultilinePaste`, `ports.localBind` | ignored | ignored too (user settings only) |
 | language servers | **not started**; one notice per folder says how to turn them on; trusting starts them at once | start on opening a file |
 | `$schema` URLs and schema `$ref`s | downloaded only from SchemaStore (cached copies still work); a network-share path (`//host/share`, `file://host/…`) is never opened, since Windows would log in to that host | any `http(s)` address |
-| `git status` (every 4 s) | `core.fsmonitor` turned off | as in a terminal |
+| `git status` (every 4 s) | `core.fsmonitor` turned off; a repository whose own config names a program (`filter.*.clean/smudge/process`, diff and merge drivers, `core.sshCommand`, `core.hooksPath`, credential helpers, …: `git::program_settings`, which runs nothing) gets no git at all, and the notice names the keys | as in a terminal |
 | `git show` / `blame` | `--no-textconv` always (raw bytes are also what hunk staging needs) | same |
 
 `security.workspaceTrust.enabled` (user settings only) turns the whole gate off. Folders recorded in the recent list when the

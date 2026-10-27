@@ -88,6 +88,18 @@ pub struct Settings {
     pub terminal_scrollback: usize,
     /// Whether a program in the terminal may put text on the clipboard (OSC 52).
     pub terminal_allow_clipboard_write: bool,
+    /// zsh, bash and fish mark prompts, commands and their folder (`terminal.shellIntegration`).
+    pub terminal_shell_integration: bool,
+    /// Closing a terminal asks first: "running" (a program is in the foreground), "always" or "never".
+    pub terminal_confirm_close: String,
+    /// Terminal profiles per operating system of the machine (`terminal.profiles.macos` / `.linux` / `.windows`).
+    pub terminal_profiles: std::collections::BTreeMap<String, Vec<crate::terminal_profiles::Profile>>,
+    /// Profile new terminals use (`terminal.defaultProfile`).
+    pub terminal_default_profile: Option<String>,
+    /// What pasting into the terminal removes (`terminal.sanitizePaste`).
+    pub terminal_sanitize_paste: crate::terminal_paste::Sanitize,
+    /// When a paste of several lines asks first (`terminal.warnMultilinePaste`).
+    pub terminal_warn_multiline: crate::terminal_paste::WarnMultiline,
     pub restore_session: bool,
     /// Whether to start with the welcome screen or continue where you left off.
     pub startup: Startup,
@@ -137,6 +149,10 @@ pub struct Settings {
     pub auto_close_brackets: bool,
     /// Whether ports opened later over SSH are forwarded automatically.
     pub ports_auto_forward: bool,
+    /// Local addresses forwarded ports listen on (`ports.localBind`: this computer only, or every interface).
+    pub ports_local_bind: host::forward::LocalBind,
+    /// Per-port label, protocol and detection behaviour (`ports.rules`).
+    pub ports_rules: Vec<crate::port_forwards::PortRule>,
     /// Whether language servers are enabled.
     pub lsp_enabled: bool,
     /// Language id → command and arguments (`None`: disabled for that language). Overrides the defaults.
@@ -282,6 +298,12 @@ impl Default for Settings {
             terminal_font_size: theme::text::CODE.0,
             terminal_scrollback: 2000,
             terminal_allow_clipboard_write: false,
+            terminal_shell_integration: true,
+            terminal_confirm_close: "running".into(),
+            terminal_profiles: Default::default(),
+            terminal_default_profile: None,
+            terminal_sanitize_paste: Default::default(),
+            terminal_warn_multiline: Default::default(),
             restore_session: true,
             startup: Startup::Welcome,
             hot_exit: true,
@@ -309,6 +331,8 @@ impl Default for Settings {
             word_based_suggestions: true,
             enable_trash: true,
             ports_auto_forward: true,
+            ports_local_bind: host::forward::LocalBind::Loopback,
+            ports_rules: Vec::new(),
             lsp_enabled: true,
             lsp_servers: Vec::new(),
             fallback_encoding: crate::encoding::Encoding::Windows1254,
@@ -369,192 +393,12 @@ impl Default for Settings {
     }
 }
 
-/// File created on first launch: every setting with its comment.
-pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immediately.
-// Comments and trailing commas are fine.
-{
-  // "auto" follows the system (Codeyard Dark / Codeyard Light), or a theme id:
-  // codeyard-dark, codeyard-light, codeyard-one, studio-dark, midnight, graphite, ember, fjord, daylight, paper,
-  // quarry, dracula, one-dark, nord, solarized-dark, solarized-light,
-  // github-light, high-contrast-dark, high-contrast-light, user:<file name>
-  "theme": "auto",
-
-  // "editor.fontFamily": "JetBrains Mono",
-  "editor.fontSize": 13,
-  "editor.lineHeight": 20,
-  // Leave out to detect from each file.
-  // "editor.tabSize": 4,
-  // "editor.insertSpaces": true,
-  "editor.wordHighlight": true,
-  "editor.indentGuides": true,
-  // "on" wraps long lines at the window edge (toggle with ⌥Z).
-  "editor.wordWrap": "off",
-  // "solid" stops the cursor from blinking (it also settles after ~5 s idle, which lets
-  // the GPU release its frame buffers).
-  "editor.cursorBlinking": "blink",
-  // Files without a language server suggest words from the file (after two letters).
-  "editor.wordBasedSuggestions": true,
-  // Vertical rulers at these columns, e.g. [80, 120].
-  "editor.rulers": [],
-  // "none", "boundary" (all but single spaces between words), "all"
-  "editor.renderWhitespace": "none",
-  // "on", "off", "relative" (distance from the cursor line)
-  "editor.lineNumbers": "on",
-  // "line", "block", "underline"
-  "editor.cursorStyle": "line",
-  // Matching brackets are colored by nesting depth.
-  "editor.bracketPairColorization": true,
-  // The line of the enclosing function or class stays pinned at the top while you scroll.
-  "editor.stickyScroll.enabled": true,
-  // A color swatch next to #rrggbb values.
-  "editor.colorDecorators": true,
-
-  // The line with the cursor is highlighted: "line" or "none".
-  "editor.renderLineHighlight": "line",
-  // The bracket matching the one at the cursor is highlighted.
-  "editor.matchBrackets": true,
-  // Fold arrows in the gutter.
-  "editor.folding": true,
-  // Width of the line cursor (px).
-  "editor.cursorWidth": 2,
-  // Tooltips when the mouse rests on a word (language server).
-  "editor.hover.enabled": true,
-  // Suggestions pop up while you type (false: only on Ctrl+Space).
-  "editor.quickSuggestions": true,
-  // Treat files as another language: { "*.tpl": "html", "Jenkinsfile": "groovy" }.
-  // "files.associations": {},
-  // Extra globs skipped by search (on top of files.exclude).
-  // "search.exclude": ["**/dist", "*.min.js"],
-
-  // File and folder icons: "minimal", "codeyard", "badges", "colorful", "apple", "material", "none"
-  "workbench.iconTheme": "minimal",
-  "workbench.statusBar.visible": true,
-  "workbench.activityBar.visible": true,
-  // UI font for the whole window (the editor has its own "editor.fontFamily").
-  // "workbench.fontFamily": "Inter",
-  "workbench.editor.showTabs": true,
-  "workbench.tabs.showIcons": true,
-  // "hover" (the x shows on the active tab or on hover), "always", "off"
-  "workbench.tabs.closeButton": "hover",
-  "workbench.breadcrumbs.enabled": true,
-  // Override any color of the theme (roles: bg, surface, accent, text, syntax-keyword …).
-  // "[theme name]": { … } applies to that theme only.
-  // "workbench.colorCustomizations": { "accent": "#ff8800", "[Quarry]": { "syntax-string": "#a6e22e" } },
-  // Indent of each folder level in the explorer (px).
-  "workbench.tree.indent": 16,
-
-  // Ask before moving a file to the Trash (permanent deletes always ask).
-  "explorer.confirmDelete": true,
-  // Ask before moving a file or folder by dragging it in the explorer.
-  "explorer.confirmDragAndDrop": true,
-  // Vertical hierarchy lines under every folder arrow in the explorer.
-  "workbench.tree.guides": true,
-  // Source Control graph rows: show the author name and the short hash.
-  "git.graph.showAuthor": true,
-  "git.graph.showHash": false,
-  // Source Control graph view: "graph" (lanes), "compact" (one line per commit) or "dates" (grouped by day).
-  "git.graph.view": "graph",
-  // A query without capital letters ignores case; one with capitals matches case.
-  "search.smartCase": false,
-  "search.showLineNumbers": true,
-  // "auto", "alwaysCollapse", "alwaysExpand": results start folded or open.
-  "search.collapseResults": "auto",
-
-  // Data: Convert To… and Data: Query…: spaces per level in JSON and YAML, and sorted keys (false keeps file order).
-  "data.indent": 2,
-  "data.sortKeys": false,
-
-  // Commits drawn in the Source Control graph, and listed in the explorer's Timeline.
-  "git.graph.limit": 300,
-  "git.timeline.limit": 100,
-  // Who last changed the cursor line, and when, shown faintly at the end of the line.
-  "git.inlineBlame": true,
-  // The graph starts with every branch (false: only the current branch).
-  "git.graph.allBranches": true,
-
-  // Language-server actions run on save, before formatting (e.g. sort and drop unused imports).
-  // "editor.codeActionsOnSave": { "source.organizeImports": "explicit", "source.fixAll": "explicit" },
-  "files.trimTrailingWhitespace": false,
-  "files.insertFinalNewline": false,
-  // "off", "afterDelay", "onFocusChange"
-  "files.autoSave": "off",
-  "files.autoSaveDelay": 1000,
-  // The active file is selected (and its folders opened) in the file tree.
-  "explorer.autoReveal": true,
-  // Folders that only hold one folder show as one row: "src/main/java".
-  "explorer.compactFolders": true,
-  // "default" (folders first), "filesFirst", "mixed", "type" (by extension)
-  "explorer.sortOrder": "default",
-  // The list of open files above the folder tree.
-  "explorer.openEditors": true,
-  // Hidden in the file tree, skipped by search and Go to File.
-  "files.exclude": [".git", ".DS_Store"],
-  // Unsaved changes survive quitting and crashes.
-  "files.hotExit": true,
-  // Deleted local files go to the Trash (SSH hosts have none: deletes are permanent).
-  "files.enableTrash": true,
-  // Files that are not UTF-8 (and have no BOM) are read as: "windows1254"
-  // (Turkish), "iso88599" or "iso88591". They are saved back the same way.
-  "files.fallbackEncoding": "windows1254",
-
-  "search.maxResults": 2000,
-  // --- git-sync ---
-  // Fetch in the background while the window is in front, every this many seconds (30 or more). Not in folders you have not trusted.
-  "git.autofetch": false,
-  "git.autofetchPeriod": 180,
-  // Ask before Sync pulls or pushes (your own settings only: a folder cannot turn the question off).
-  "git.confirmSync": true,
-  // Pull with rebase instead of a merge commit.
-  "git.rebaseWhenSync": false,
-  // Fetch drops remote branches that no longer exist, pull also fetches all tags, and fetchOnPull fetches every remote first.
-  "git.pruneOnFetch": true,
-  "git.pullTags": true,
-  "git.fetchOnPull": false,
-  // "none", "push" or "sync" after every commit (your own settings only).
-  "git.postCommitCommand": "none",
-  // Commit all tracked changes when nothing is staged (false: stage first).
-  "git.enableSmartCommit": true,
-  // --- structural ---
-  // Most files a structural search reads and parses (the rest are left out and the results say so).
-  "search.structural.maxFiles": 5000,
-
-  // Compare Folders: globs skipped on both sides, and how many entries per side before it stops.
-  // "compare.folders.ignore": [".git", "node_modules", "target"],
-  // "compare.folders.maxFiles": 50000,
-
-  // "terminal.shell": "/bin/zsh",
-  "terminal.fontSize": 13,
-  "terminal.scrollback": 2000,
-  // Let programs in the terminal write to the clipboard (OSC 52). Off by default: a program you run, or a file you cat, could replace
-  // what you copied.
-  // "terminal.allowClipboardWrite": false,
-
-  // What opens when you start the app without a folder: "welcome" (the start page; recent folders and SSH
-  // hosts are listed, nothing reconnects by itself), "continue" (like a browser: the last folder or SSH
-  // host and its tabs come back) or "blank" (an empty window).
-  "window.startup": "welcome",
-  // Bring a folder's tabs and unsaved changes back whenever you open that folder.
-  "window.restoreSession": true,
-
-  // Language servers run where the files are (locally or on the SSH host).
-  // Defaults: rust-analyzer, clangd, gopls, pyright-langserver, typescript-language-server, jdtls, csharp-ls, intelephense,
-  // ruby-lsp, kotlin-language-server, sourcekit-lsp, lua-language-server, bash-language-server, vscode-html/css-language-server.
-  // Keys: rust c go python typescript java csharp php ruby kotlin swift lua bash html css (opt-in: json yaml toml).
-  // "lsp.servers": { "python": { "command": "pylsp", "args": [] }, "go": null },
-  "lsp.enabled": true,
-}
-"##;
-
-pub const KEYBINDINGS_TEMPLATE: &str = r#"// codeyard keyboard shortcuts. These are added on top of the defaults.
-// "when" is optional: Editor, FileTree, Terminal, Picker, Workbench...
-// Use "command": null to turn a default shortcut off.
-// Commands: run "Preferences: Open Keyboard Shortcuts" to see this file; the full
-// list is in the command palette (⇧⌘P) and in README.md.
-[
-  // { "key": "cmd-shift-d", "command": "editor.selectAll", "when": "Editor" },
-  // { "key": "ctrl-g", "command": null, "when": "Workbench" },
-]
-"#;
+#[path = "settings_templates.rs"]
+mod templates;
+pub use templates::{KEYBINDINGS_TEMPLATE, TEMPLATE};
+#[path = "settings_text.rs"]
+mod text;
+pub use text::{set_string_in, set_value_in};
 
 pub fn config_dir() -> Option<PathBuf> {
     if let Some(d) = std::env::var_os("CODEYARD_CONFIG_DIR") {
@@ -599,7 +443,16 @@ pub fn parse_layers(user: &str, project: &[Layer]) -> Result<(Settings, Vec<Stri
 
 /// A project's settings file could choose a program by itself: these keys come only from user
 /// settings or a trusted folder.
-pub const RESTRICTED_KEYS: &[&str] = &["terminal.shell", "lsp.servers", "json.schemas", "yaml.schemas"];
+pub const RESTRICTED_KEYS: &[&str] = &[
+    "terminal.shell",
+    "terminal.defaultProfile",
+    "terminal.profiles.macos",
+    "terminal.profiles.linux",
+    "terminal.profiles.windows",
+    "lsp.servers",
+    "json.schemas",
+    "yaml.schemas",
+];
 
 /// Not read from the project file even in a trusted folder: the gate is global, so one
 /// repo touching it would open it for every folder.
@@ -612,6 +465,13 @@ pub const USER_ONLY_KEYS: &[&str] = &[
     // A repository must not turn the question before a sync off, or make every commit push by itself.
     "git.confirmSync",
     "git.postCommitCommand",
+    // A repository must not make forwarded ports reachable from the network.
+    "ports.localBind",
+    // A repository must not let programs fill the clipboard, or turn off the checks on what is pasted back: together
+    // they would put a command on the clipboard that a later paste runs.
+    "terminal.allowClipboardWrite",
+    "terminal.sanitizePaste",
+    "terminal.warnMultilinePaste",
 ];
 
 /// `trusted`: the folder is trusted. If not, `RESTRICTED_KEYS` in the project layer are ignored and a warning is recorded.
@@ -743,11 +603,38 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.number("terminal.fontSize", 6., 48.) {
         s.terminal_font_size = v as f32;
     }
-    if let Some(v) = r.number("terminal.scrollback", 0., 100_000.) {
+    if let Some(v) = r.number("terminal.scrollback", 0., crate::terminal::SCROLLBACK_MAX as f64) {
         s.terminal_scrollback = v as usize;
     }
     if let Some(v) = r.bool("terminal.allowClipboardWrite") {
         s.terminal_allow_clipboard_write = v;
+    }
+    if let Some(v) = r.bool("terminal.shellIntegration") {
+        s.terminal_shell_integration = v;
+    }
+    if let Some(v) = r.choice("terminal.confirmOnClose", &["running", "always", "never"]) {
+        s.terminal_confirm_close = v;
+    }
+    s.terminal_default_profile = r.string("terminal.defaultProfile").filter(|p| !p.trim().is_empty());
+    for os in ["macos", "linux", "windows"] {
+        let key = format!("terminal.profiles.{os}");
+        match obj.get(&key) {
+            None | Some(Value::Null) => {}
+            Some(Value::Object(m)) => {
+                let mut w = Vec::new();
+                s.terminal_profiles.insert(os.to_string(), crate::terminal_profiles::parse_profiles(&key, m, &mut w));
+                for w in w {
+                    r.warn(w);
+                }
+            }
+            Some(_) => r.warn(crate::i18n::tf("{0}: expected an object {1}", &[&key, &"{ \"zsh\": { \"path\": \"/bin/zsh\" } }"])),
+        }
+    }
+    if let Some(v) = r.choice("terminal.sanitizePaste", &["auto", "always", "off"]) {
+        s.terminal_sanitize_paste = crate::terminal_paste::Sanitize::parse(&v).unwrap_or_default();
+    }
+    if let Some(v) = r.choice("terminal.warnMultilinePaste", &["unbracketed", "always", "never"]) {
+        s.terminal_warn_multiline = crate::terminal_paste::WarnMultiline::parse(&v).unwrap_or_default();
     }
     if let Some(v) = r.bool("window.restoreSession") {
         s.restore_session = v;
@@ -1022,6 +909,20 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.bool("ports.autoForward") {
         s.ports_auto_forward = v;
     }
+    if let Some(v) = r.choice("ports.localBind", &["loopback", "all"]) {
+        s.ports_local_bind = if v == "all" { host::forward::LocalBind::All } else { host::forward::LocalBind::Loopback };
+    }
+    match obj.get("ports.rules") {
+        None | Some(Value::Null) => {}
+        Some(Value::Object(m)) => {
+            let mut w = Vec::new();
+            s.ports_rules = crate::port_forwards::parse_rules(m, &mut w);
+            for w in w {
+                r.warn(w);
+            }
+        }
+        Some(_) => r.warn(crate::i18n::tf("{0}: expected an object {1}", &[&"ports.rules", &"{ \"3000\": { \"label\": \"web\" } }"])),
+    }
     if let Some(v) = r.bool("lsp.enabled") {
         s.lsp_enabled = v;
     }
@@ -1168,12 +1069,22 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "terminal.shell",
         "terminal.fontSize",
         "terminal.scrollback",
+        "terminal.sanitizePaste",
+        "terminal.warnMultilinePaste",
+        "terminal.confirmOnClose",
+        "terminal.shellIntegration",
+        "terminal.defaultProfile",
+        "terminal.profiles.macos",
+        "terminal.profiles.linux",
+        "terminal.profiles.windows",
         "terminal.allowClipboardWrite",
         "window.restoreSession",
         "window.startup",
         "lsp.enabled",
         "lsp.servers",
         "ports.autoForward",
+        "ports.localBind",
+        "ports.rules",
         "editor.autoClosingBrackets",
         "editor.formatOnSave",
         "editor.formatOnPaste",
@@ -1350,76 +1261,6 @@ impl Reader<'_> {
     }
 }
 
-/// Change a text setting in the file; comments and other lines are preserved.
-/// If the key is missing it is inserted after the `{`.
-pub fn set_string_in(text: &str, key: &str, value: &str) -> String {
-    set_value_in(text, key, &Value::String(value.to_string()))
-}
-
-/// Any JSON value (number, array, object). Even if the existing value spans several
-/// lines (an array), the whole of it is replaced by tracking brackets and strings.
-pub fn set_value_in(text: &str, key: &str, value: &Value) -> String {
-    let quoted_key = format!("\"{key}\"");
-    let new_value = serde_json::to_string(value).unwrap_or_default();
-    // Find the real line, not a key inside a comment line.
-    let mut offset = 0;
-    for line in text.split_inclusive('\n') {
-        let trimmed = line.trim_start();
-        if !trimmed.starts_with("//")
-            && trimmed.starts_with(&quoted_key)
-            && let Some(colon) = line[line.len() - trimmed.len() + quoted_key.len()..].find(':').map(|c| c + line.len() - trimmed.len() + quoted_key.len())
-        {
-            let after = &line[colon + 1..];
-            let v_start = offset + colon + 1 + (after.len() - after.trim_start().len());
-            let v_end = v_start + value_len(&text[v_start..]);
-            return format!("{}{}{}", &text[..v_start], new_value, &text[v_end..]);
-        }
-        offset += line.len();
-    }
-    match text.find('{') {
-        Some(i) => format!("{}\n  {quoted_key}: {new_value},{}", &text[..=i], &text[i + 1..]),
-        None => format!("{{\n  {quoted_key}: {new_value}\n}}\n"),
-    }
-}
-
-/// Length of a JSON value (bytes): string, nested array/object or bare value.
-fn value_len(rest: &str) -> usize {
-    let bytes = rest.as_bytes();
-    let (mut depth, mut in_str, mut esc) = (0i32, false, false);
-    for (i, &b) in bytes.iter().enumerate() {
-        if in_str {
-            match (esc, b) {
-                (true, _) => esc = false,
-                (false, b'\\') => esc = true,
-                (false, b'"') => {
-                    in_str = false;
-                    if depth == 0 {
-                        return i + 1;
-                    }
-                }
-                _ => {}
-            }
-            continue;
-        }
-        match b {
-            b'"' => in_str = true,
-            b'[' | b'{' => depth += 1,
-            b']' | b'}' => {
-                depth -= 1;
-                if depth == 0 {
-                    return i + 1;
-                }
-                if depth < 0 {
-                    return i; // end of the object: the bare value is over
-                }
-            }
-            b',' | b'\n' | b'/' if depth == 0 => return i,
-            _ => {}
-        }
-    }
-    rest.len()
-}
-
 /// User shortcut: (keys, command id or disable, context).
 #[derive(Debug, Clone, PartialEq)]
 pub struct UserBinding {
@@ -1454,356 +1295,6 @@ pub fn parse_keybindings(text: &str) -> (Vec<UserBinding>, Vec<String>) {
     (out, warnings)
 }
 
-/// Wildcard matching, non-recursive: `star` swallows anything (empty too), `one` matches a single item. Two pointers
-/// backtracking to the last star: O(pattern × input) worst case. The recursive version went exponential on patterns like `*a*a*a*b`, and the pattern
-/// can come from a project file (`.vscode/settings.json`).
-fn glob_match<P, N>(p: &[P], n: &[N], star: impl Fn(&P) -> bool, one: impl Fn(&P, &N) -> bool) -> bool {
-    let (mut pi, mut ni) = (0, 0);
-    let mut last_star: Option<(usize, usize)> = None;
-    while ni < n.len() {
-        if pi < p.len() && star(&p[pi]) {
-            last_star = Some((pi, ni));
-            pi += 1;
-        } else if pi < p.len() && one(&p[pi], &n[ni]) {
-            pi += 1;
-            ni += 1;
-        } else if let Some((sp, sn)) = last_star {
-            pi = sp + 1;
-            ni = sn + 1;
-            last_star = Some((sp, sn + 1));
-        } else {
-            return false;
-        }
-    }
-    while pi < p.len() && star(&p[pi]) {
-        pi += 1;
-    }
-    pi == p.len()
-}
-
-/// Simple glob: `*` and `?`; a pattern without `/` applies to the file/folder name.
-pub fn name_matches(pattern: &str, name: &str) -> bool {
-    let p: Vec<char> = pattern.trim_end_matches('/').chars().collect();
-    let n: Vec<char> = name.chars().collect();
-    glob_match(&p, &n, |c| *c == '*', |c, x| *c == '?' || c == x)
-}
-
-/// Does the root-relative path match the pattern: `**` is zero or more folders, `*`/`?` within one segment.
-pub fn path_matches(pattern: &str, rel_path: &str) -> bool {
-    let p: Vec<&str> = pattern.trim_start_matches("./").trim_matches('/').split('/').collect();
-    let n: Vec<&str> = rel_path.trim_matches('/').split('/').collect();
-    glob_match(&p, &n, |s| *s == "**", |a, b| name_matches(a, b))
-}
-
-/// Is the path excluded: a pattern without "/" matches the name at every level (".git", "*.log"), one with it
-/// (like VS Code's "**/node_modules", "build/out") matches the root-relative path; everything
-/// under a matching folder is excluded too.
-pub fn is_excluded(excludes: &[String], rel_path: &str) -> bool {
-    let parts: Vec<&str> = rel_path.trim_matches('/').split('/').collect();
-    excludes.iter().any(|e| {
-        if e.trim_end_matches('/').contains('/') {
-            (1..=parts.len()).any(|k| path_matches(e, &parts[..k].join("/")))
-        } else {
-            parts.iter().any(|part| name_matches(e, part))
-        }
-    })
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn globs_are_linear_even_for_hostile_patterns() {
-        let t = std::time::Instant::now();
-        assert!(!name_matches("*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*b", &"a".repeat(60)));
-        assert!(name_matches("*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*", &"a".repeat(60)));
-        assert!(!path_matches("**/**/**/**/**/**/**/**/**/**/**/**/x", &vec!["d"; 60].join("/")));
-        assert!(path_matches("**/**/**/**/**/**/**/d", &vec!["d"; 60].join("/")));
-        assert!(!name_matches(&format!("{}b", "?*".repeat(200)), &"a".repeat(2000)));
-        assert!(t.elapsed().as_millis() < 1000 * u128::from(crate::test_sshd::timeout_scale()), "took {:?}", t.elapsed());
-    }
-
-    #[test]
-    fn globs_keep_their_meaning() {
-        for (p, n, want) in [
-            ("*.log", "a.log", true),
-            ("*.log", "a.logx", false),
-            ("a?c", "abc", true),
-            ("a?c", "ac", false),
-            ("*", "", true),
-            ("a*", "a", true),
-            ("*a", "ba", true),
-            ("*a", "bab", false),
-            ("", "", true),
-            ("", "x", false),
-            ("build/", "build", true),
-            ("ç*ş", "çaşış", true),
-        ] {
-            assert_eq!(name_matches(p, n), want, "{p} vs {n}");
-        }
-        for (p, n, want) in [
-            ("**/node_modules", "node_modules", true),
-            ("**/node_modules", "a/b/node_modules", true),
-            ("**/node_modules", "a/node_modules/x", false),
-            ("src/**/*.rs", "src/a/b/c.rs", true),
-            ("src/**/*.rs", "src/c.rs", true),
-            ("src/**/*.rs", "lib/c.rs", false),
-            ("a/*/c", "a/b/c", true),
-            ("a/*/c", "a/b/x/c", false),
-            ("./build/out", "build/out", true),
-        ] {
-            assert_eq!(path_matches(p, n), want, "{p} vs {n}");
-        }
-    }
-
-    #[test]
-    fn color_customizations_parse_globally_and_per_theme_and_report_mistakes() {
-        let text =
-            r##"{ "workbench.colorCustomizations": { "accent": "#ff8800", "[Quarry]": { "syntax-string": "#a6e22e" }, "nope": "#fff", "text": "red" } }"##;
-        let (s, w) = parse_layers(text, &[]).unwrap();
-        assert_eq!(s.color_overrides.len(), 2);
-        assert!(s.color_overrides.contains(&(None, "accent".into(), 0xff8800)));
-        assert!(s.color_overrides.contains(&(Some("Quarry".into()), "syntax-string".into(), 0xa6e22e)));
-        assert_eq!(w.len(), 2, "{w:?}");
-        assert!(w.iter().any(|x| x.contains("unknown color role")) && w.iter().any(|x| x.contains("expected a color")));
-    }
-
-    #[test]
-    fn customization_settings_are_read() {
-        let (s, w) = parse_layers(r#"{ "workbench.tabs.closeButton": "off", "editor.cursorWidth": 4, "workbench.fontFamily": "Inter", "files.associations": { "*.tpl": "html" }, "search.exclude": ["dist"], "editor.hover.enabled": false }"#, &[]).unwrap();
-        assert!(w.is_empty(), "{w:?}");
-        assert_eq!((s.tab_close.as_str(), s.cursor_width, s.ui_font.as_deref()), ("off", 4., Some("Inter")));
-        assert_eq!(s.file_associations, [("*.tpl".to_string(), "html".to_string())]);
-        assert_eq!((s.search_exclude.as_slice(), s.hover_enabled), (&["dist".to_string()][..], false));
-        let (_, w) = parse_layers(r#"{ "workbench.tabs.closeButton": "sometimes", "editor.cursorWidth": 99 }"#, &[]).unwrap();
-        assert_eq!(w.len(), 2);
-    }
-
-    /// A repository must not be able to switch the request confirmation off (or pick its own value): user settings only.
-    #[test]
-    fn http_confirm_requests_parses_and_cannot_come_from_a_project() {
-        assert_eq!(Settings::default().http_confirm, "remote", "the default asks for the first request to a new remote host");
-        for v in ["never", "remote", "always"] {
-            let (s, w) = parse_layers(&format!(r#"{{ "http.confirmRequests": "{v}" }}"#), &[]).unwrap();
-            assert_eq!((s.http_confirm.as_str(), w.len()), (v, 0), "{w:?}");
-        }
-        let (s, w) = parse_layers(r#"{ "http.confirmRequests": "sometimes" }"#, &[]).unwrap();
-        assert_eq!(s.http_confirm, "remote", "an invalid value keeps the default");
-        assert_eq!(w.len(), 1, "{w:?}");
-        let project = [(".codeyard/settings.jsonc", r#"{ "http.confirmRequests": "never" }"#, true)];
-        for trusted in [false, true] {
-            let (s, w) = parse_layers_trusted("{}", &project, trusted).unwrap();
-            assert_eq!(s.http_confirm, "remote", "trusted={trusted}: a folder cannot turn the question off");
-            assert!(w.iter().any(|m| m.contains("only be set in your own")), "{w:?}");
-        }
-        let (s, _) = parse_layers_trusted(r#"{ "http.confirmRequests": "always" }"#, &project, true).unwrap();
-        assert_eq!(s.http_confirm, "always", "the user's own value stands");
-    }
-
-    /// `update.check` decides whether the app contacts github.com by itself: a repository must never choose it, trusted or not.
-    #[test]
-    fn update_check_parses_and_cannot_come_from_a_project() {
-        use crate::update::Policy;
-        assert_eq!(Settings::default().update_check, Policy::Ask, "undecided until the user answers");
-        for (v, want) in [("ask", Policy::Ask), ("daily", Policy::Daily), ("manual", Policy::Manual)] {
-            let (s, w) = parse_layers(&format!(r#"{{ "update.check": "{v}" }}"#), &[]).unwrap();
-            assert_eq!((s.update_check, w.len()), (want, 0), "{w:?}");
-        }
-        let (s, w) = parse_layers(r#"{ "update.check": "weekly" }"#, &[]).unwrap();
-        assert_eq!(s.update_check, Policy::Ask, "an invalid value keeps the default");
-        assert_eq!(w.len(), 1, "{w:?}");
-        let project =
-            [(".codeyard/settings.jsonc", r#"{ "update.check": "daily" }"#, true), (".vscode/settings.json", r#"{ "update.check": "daily" }"#, false)];
-        for trusted in [false, true] {
-            let (s, w) = parse_layers_trusted(r#"{ "update.check": "manual" }"#, &project, trusted).unwrap();
-            assert_eq!(s.update_check, Policy::Manual, "trusted={trusted}: the user's own value wins over every folder file");
-            assert!(w.iter().any(|m| m.contains("only be set in your own")), "{w:?}");
-            let (s, _) = parse_layers_trusted("{}", &project, trusted).unwrap();
-            assert_eq!(s.update_check, Policy::Ask, "trusted={trusted}: a folder cannot turn network checks on");
-        }
-    }
-
-    #[test]
-    fn untrusted_project_layer_drops_restricted_keys_and_says_so() {
-        let project = [(
-            ".codeyard/settings.jsonc",
-            r#"{ "terminal.shell": "/x", "lsp.servers": { "c": { "command": "/y" } }, "security.workspaceTrust.enabled": false, "editor.tabSize": 2 }"#,
-            true,
-        )];
-        let (s, w) = parse_layers_trusted("{}", &project, false).unwrap();
-        assert_eq!((s.terminal_shell, s.lsp_servers.len(), s.tab_size), (None, 0, Some(2)));
-        assert_eq!(w.iter().filter(|m| m.contains("ignored until you trust")).count(), 2, "{w:?}");
-        assert_eq!(w.iter().filter(|m| m.contains("only be set in your own")).count(), 1, "{w:?}");
-        // `parse_layers` (no trust given) is the safe default.
-        assert_eq!(parse_layers("{}", &project).unwrap().0.terminal_shell, None);
-        let (s, w) = parse_layers_trusted("{}", &project, true).unwrap();
-        assert_eq!((s.terminal_shell.as_deref(), s.lsp_servers.len()), (Some("/x"), 1));
-        assert!(s.workspace_trust == Settings::default().workspace_trust, "a trusted project still cannot flip the gate");
-        assert_eq!(w.len(), 1, "{w:?}");
-        // The user's own file is never restricted.
-        let (s, _) = parse_layers_trusted(r#"{ "terminal.shell": "/mine" }"#, &[], false).unwrap();
-        assert_eq!(s.terminal_shell.as_deref(), Some("/mine"));
-    }
-
-    #[test]
-    fn project_layers_override_user_settings() {
-        let user = r#"{ "editor.tabSize": 4, "theme": "ember" }"#;
-        let (s, w) = parse_layers(
-            user,
-            &[
-                (".vscode/settings.json", r#"{ "editor.tabSize": 2, "python.linting": true }"#, false),
-                (".codeyard/settings.jsonc", r#"{ "editor.fontSize": 15 }"#, true),
-            ],
-        )
-        .unwrap();
-        assert_eq!((s.tab_size, s.theme.as_str(), s.editor_font_size), (Some(2), "ember", 15.));
-        assert!(w.is_empty(), "extension settings do not warn: {w:?}");
-        let (_, w) = parse_layers(user, &[(".codeyard/settings.jsonc", "{ bozuk", true)]).unwrap();
-        assert_eq!(w.len(), 1, "a broken project file only warns");
-    }
-
-    #[test]
-    fn exclude_globs_like_vscode() {
-        let ex = |p: &[&str], path: &str| is_excluded(&p.iter().map(|s| s.to_string()).collect::<Vec<_>>(), path);
-        assert!(ex(&["**/node_modules"], "node_modules"));
-        assert!(ex(&["**/node_modules"], "web/node_modules/react/index.js"));
-        assert!(ex(&["node_modules"], "a/node_modules"), "adla her seviyede");
-        assert!(ex(&["build/out"], "build/out/x.o"));
-        assert!(!ex(&["build/out"], "src/build/out"), "relative to the root");
-        assert!(ex(&["**/*.log"], "logs/a.log"));
-        assert!(!ex(&["**/node_modules"], "src/node_modules_x/a"));
-    }
-
-    #[test]
-    fn template_parses_cleanly() {
-        let (s, w) = parse(TEMPLATE);
-        assert!(w.is_empty(), "{w:?}");
-        assert_eq!(s, Settings::default());
-        assert!(parse_keybindings(KEYBINDINGS_TEMPLATE).1.is_empty());
-    }
-
-    #[test]
-    fn bad_values_fall_back_and_warn() {
-        let (s, w) = parse(r#"{ "editor.fontSize": "büyük", "editor.lineHeight": 500, "files.autoSave": "sometimes", "bilinmeyen": 1, "editor.tabSize": 2 }"#);
-        assert_eq!(s.editor_font_size, Settings::default().editor_font_size);
-        assert_eq!(s.editor_line_height, Settings::default().editor_line_height);
-        assert_eq!(s.auto_save, AutoSave::Off);
-        assert_eq!(s.tab_size, Some(2), "valid ones are applied");
-        assert_eq!(w.len(), 4, "{w:?}");
-    }
-
-    #[test]
-    fn auto_save_with_delay() {
-        let (s, _) = parse(r#"{ "files.autoSave": "afterDelay", "files.autoSaveDelay": 500 }"#);
-        assert_eq!(s.auto_save, AutoSave::AfterDelay(500));
-    }
-
-    #[test]
-    fn set_string_keeps_comments_and_other_lines() {
-        let text = "{\n  // \"theme\": \"eski yorum\"\n  \"theme\": \"auto\", // seçim\n  \"x\": 1,\n}\n";
-        let out = set_string_in(text, "theme", "fjord");
-        assert_eq!(out, "{\n  // \"theme\": \"eski yorum\"\n  \"theme\": \"fjord\", // seçim\n  \"x\": 1,\n}\n");
-        let added = set_string_in("{\n  \"x\": 1\n}\n", "theme", "paper");
-        assert_eq!(parse(&added).0.theme, "paper");
-    }
-
-    #[test]
-    fn keybindings_and_unbinding() {
-        let (b, w) = parse_keybindings(r#"[{"key":"cmd-1","command":"editor.save","when":"Editor"},{"key":"ctrl-g","command":null},{"key":"x"}]"#);
-        assert_eq!(b.len(), 2);
-        assert_eq!(b[1].command, None);
-        assert_eq!(w.len(), 1);
-    }
-
-    #[test]
-    fn excludes() {
-        let ex = vec!["node_modules".to_string(), "*.log".to_string(), ".git".to_string()];
-        assert!(is_excluded(&ex, "web/node_modules/x/i.js"));
-        assert!(is_excluded(&ex, "logs/build.log"));
-        assert!(!is_excluded(&ex, "src/main.rs"));
-        assert!(name_matches("*.min.js", "app.min.js"));
-    }
-
-    #[test]
-    fn set_value_replaces_multiline_values() {
-        let text = "{\n  // yorum: \"files.exclude\": []\n  \"files.exclude\": [\n    \".git\",\n    \"target\"\n  ],\n  \"editor.fontSize\": 13,\n}\n";
-        let out = set_value_in(text, "files.exclude", &serde_json::json!(["**/.git"]));
-        assert!(out.contains("\"files.exclude\": [\"**/.git\"],\n  \"editor.fontSize\": 13"), "{out}");
-        assert!(out.contains("// yorum: \"files.exclude\": []"), "comment is preserved");
-        let out = set_value_in(&out, "editor.fontSize", &serde_json::json!(15));
-        let (s, w) = parse(&out);
-        assert!(w.is_empty(), "{w:?}");
-        assert_eq!(s.editor_font_size, 15.);
-        assert_eq!(s.files_exclude, vec!["**/.git".to_string()]);
-        let out = set_value_in(&out, "editor.formatOnSave", &serde_json::json!(true));
-        assert!(parse(&out).0.format_on_save, "added when missing");
-    }
-}
-
-#[cfg(test)]
-mod code_actions_on_save {
-    use super::*;
-
-    #[test]
-    fn reads_vscode_object_and_plain_list() {
-        let (s, w) = parse(
-            r#"{ "editor.codeActionsOnSave": { "source.organizeImports": "explicit", "source.fixAll": true, "source.sortMembers": false, "source.x": "never", "quickfix": true } }"#,
-        );
-        assert!(w.is_empty(), "{w:?}");
-        let mut got = s.code_actions_on_save.clone();
-        got.sort();
-        assert_eq!(got, ["source.fixAll", "source.organizeImports"], "disabled and non-source entries are skipped");
-        let (s, _) = parse(r#"{ "editor.codeActionsOnSave": ["source.organizeImports"] }"#);
-        assert_eq!(s.code_actions_on_save, ["source.organizeImports"]);
-        let (s, w) = parse(r#"{ "editor.codeActionsOnSave": 3 }"#);
-        assert!(s.code_actions_on_save.is_empty() && w.len() == 1, "{w:?}");
-    }
-}
-
-#[cfg(test)]
-mod hardening {
-    use super::*;
-
-    /// Every known key given a value of every type must neither crash parsing nor go unreported: it warns.
-    #[test]
-    fn wrong_types_for_every_key_only_warn() {
-        let keys: Vec<&str> = {
-            let mut v: Vec<&str> = crate::workbench::settings_ui::CATALOG.iter().map(|e| e.key).collect();
-            v.extend([
-                "theme",
-                "workbench.colorCustomizations",
-                "files.associations",
-                "lsp.servers",
-                "json.schemas",
-                "yaml.schemas",
-                "spelling.languages",
-                "files.exclude",
-                "editor.rulers",
-                "search.exclude",
-                "editor.codeActionsOnSave",
-            ]);
-            v
-        };
-        let values = ["null", "true", "-5", "1e308", "\"\"", "\"zzz\"", "[]", "[1,\"a\",null]", "{}", "{\"a\":1}", "{\"[x]\":3,\"accent\":4}", "99999999999"];
-        for key in keys {
-            for v in values {
-                let text = format!("{{ \"{key}\": {v} }}");
-                let parsed = parse_layers(&text, &[]);
-                assert!(parsed.is_ok(), "{text}");
-            }
-        }
-        assert!(parse_layers("{ \"a\": ", &[]).is_err());
-        assert!(parse_layers("[1]", &[]).is_err());
-    }
-
-    #[test]
-    fn default_settings_match_the_template() {
-        // Values in the template (without comments) produce no warnings and agree with the defaults.
-        let (s, w) = parse_layers(TEMPLATE, &[]).unwrap();
-        assert!(w.is_empty(), "{w:?}");
-        let d = Settings::default();
-        assert_eq!((s.graph_limit, s.timeline_limit, s.tree_indent, s.cursor_width), (d.graph_limit, d.timeline_limit, d.tree_indent, d.cursor_width));
-        assert_eq!((s.startup, s.inline_blame, s.tab_close.as_str()), (d.startup, d.inline_blame, d.tab_close.as_str()));
-    }
-}
+#[path = "settings_tests.rs"]
+mod tests;

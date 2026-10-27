@@ -16,6 +16,7 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Projects, favorites, bookmarks, tasks](#projects-favorites-bookmarks-tasks)
 - [Highlighting, diffs and crash reports](#highlighting-diffs-and-crash-reports)
 - [Debugging](#debugging)
+- [Testing](#testing)
 - [Workspaces with several folders](#workspaces-with-several-folders)
 - [Language servers](#language-servers)
 - [JSON and YAML schemas](#json-and-yaml-schemas)
@@ -26,6 +27,7 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Compare folders](#compare-folders)
 - [GitHub pull requests](#github-pull-requests)
 - [HTTP files](#http-files)
+- [Terminal](#terminal)
 - [Port forwarding](#port-forwarding)
 - [Remote (SSH)](#remote-ssh)
 <!-- /toc -->
@@ -92,8 +94,12 @@ is the complete list and always matches your key bindings; every setting is in [
 | Switch project | ⌃R | Ctrl+R |
 | Run build task | ⇧⌘B | Ctrl+Shift+B |
 | Start / continue debugging, stop, restart | F5, ⇧F5, ⇧⌘F5 | F5, Shift+F5, Ctrl+Shift+F5 |
+| Run without debugging | ⌃F5 | Ctrl+F5 |
 | Toggle breakpoint (or click the gutter) | F9 | F9 |
 | Step over / into / out | F10, F11, ⇧F11 | F10, Ctrl+F11, Shift+F11 |
+| Pause the program | F6 | F6 |
+| Terminal: previous / next command (shell integration) | ⌘↑ / ⌘↓ | Ctrl+Shift+↑ / ↓ |
+| Run and Debug view | ⌃⇧D | Alt+Shift+D |
 | Toggle bookmark / next / previous | ⌥⌘K / ⌥⌘L / ⌥⌘J | Ctrl+Alt+K / L / J |
 | Cut / copy / paste in the file tree | ⌘X / ⌘C / ⌘V | Ctrl+X / Ctrl+C / Ctrl+V |
 | Switch editor (open files, last used first) | ⌘E | Ctrl+E |
@@ -337,7 +343,9 @@ A project can override settings in `.codeyard/settings.jsonc` (or `.vscode/setti
 programs. Until you trust a folder, its project settings cannot set `terminal.shell`, `lsp.servers` or schema
 associations (the status bar says which keys were ignored), **language servers do not start** (a notice says so once;
 they can run the project's build scripts), `$schema` addresses are only downloaded from SchemaStore, and running a task,
-a test or the debugger first asks "Do you trust the authors of this folder?". Folders you had already opened before this
+a test or the debugger first asks "Do you trust the authors of this folder?". A repository whose own Git settings name a
+program (a filter, diff or merge driver, an ssh or credential command, a hooks folder) gets **no Git at all** until it is
+trusted: `git status` alone would run its filters. A notice names the settings. Folders you had already opened before this
 rule existed are trusted once. Trusting is remembered per folder (per host over SSH) and starts the language servers at once;
 `Workspace: Trust This Folder` does it without a question. `security.workspaceTrust.enabled: false`
 in your own `settings.jsonc` turns the check off; a project file can never change that key.
@@ -620,8 +628,8 @@ Swift use `lldb-dap` (from PATH or Xcode via `xcrun`). Add `.vscode/launch.json`
 `.codeyard/launch.jsonc`) for anything else: `type` `lldb` / `go` / `python`, `program`, `args`,
 `cwd`, `env`, `${workspaceFolder}` / `${file}`, `preLaunchTask` (a task from tasks.json, run first), or
 `"debugAdapter": { "command": "…", "args": [] }` to use your own adapter. Click the gutter or press F9
-for a breakpoint; the file opens on the paused line, the DEBUG panel lists the call stack, the
-variables (click to expand) and a console that evaluates expressions; `Debug: Add Watch Expression…` keeps expressions evaluated at
+for a breakpoint; the file opens on the paused line, the Run and Debug view lists the call stack, the
+variables (click to expand) and the bottom panel's Debug Console evaluates expressions; `Debug: Add Watch Expression…` keeps expressions evaluated at
 every stop, hovering an expression shows its value while paused, `Debug: Break When Value Changes…` stops the
 program whenever a variable is written, `Debug: Break on Exceptions…` toggles
 the adapter's exception filters, and several threads get a list; local variables also appear at
@@ -636,6 +644,64 @@ To debug a program that is already running, start it with its debug server and a
 `python -m debugpy --listen 5678 --wait-for-client app.py`, then a configuration
 `{ "name": "Attach", "type": "python", "request": "attach", "connect": { "host": "127.0.0.1", "port": 5678 } }`
 (for other servers: `"debugAdapter": { "host": "…", "port": … }`). Stopping the session only detaches.
+
+### Run and Debug view
+
+The bug icon in the activity bar (⌃⇧D, Alt+Shift+D) opens the Run and Debug view. Its selector lists the launch file's
+configurations and compounds; ▶ starts the selected one. *Debug: Add Configuration…* inserts a ready-made one (native
+program or process, Go, Python, Node.js, another adapter) into the existing launch file, or creates `.codeyard/launch.jsonc`. Below it, the sections **Variables**, **Watch**, **Call Stack** and
+**Breakpoints** fold and can be resized by dragging their headers.
+
+- **Variables:** right-click for *Set Value*, *Copy Value*, *Copy as Expression* and *Add to Watch*. Large arrays and maps load
+  100 elements at a time.
+- **Call Stack:** threads form a tree, with one row per session when several run. Frames load 20 at a time; right-click a
+  frame for *Restart Frame* or *Copy Call Stack*.
+- **Breakpoints:** each one has a checkbox. The header can disable all of them, or deactivate them without losing them, and
+  *Add Function Breakpoint…* stops on entry to a named function. Breakpoints are saved per project. The gutter shows a
+  disabled breakpoint as a muted ring, and one the debugger could not bind as a red ring.
+
+While a session runs, a toolbar floats over the editors (continue / pause, step over / into / out, restart, stop). The
+bottom panel's **Debug Console** keeps a history (↑ / ↓) and completes with Tab.
+
+- **Run Without Debugging** (⌃F5) starts the program without stopping at breakpoints.
+- **Run to Cursor** (*Debug: Run to Cursor*) continues to the cursor's line.
+- A **compound** in the launch file (`"compounds": [{ "name": …, "configurations": [...], "stopAll": true }]`) starts
+  several configurations at once.
+- `${input:id}` asks for a value when the configuration starts (`promptString` or `pickString` in `inputs`).
+- `postDebugTask` runs a task after the session ends.
+- A program that asks for a terminal (`"console": "integratedTerminal"`) gets one in the bottom panel.
+
+The **Run** menu has the same commands.
+
+## Testing
+
+The flask icon in the activity bar (*View: Testing*) lists the tests of the open folder, grouped by file:
+
+- Rust `#[test]` functions
+- Go `Test…` functions in `_test.go` files
+- pytest tests in `test_*.py` / `*_test.py`
+- `it` / `test` cases in `*.test.*`, `*.spec.*` and `__tests__` files (Vitest, Jest or the package's `test` script)
+
+Tests are read from the files in the background. Build output and dependency folders are skipped, and ↻ looks again.
+
+Hover a file or a test for ▶ (run it); the header has *Run All Tests*, *Run Failed Tests*, *Show Only Failed Tests*,
+*Refresh Tests* and *Collapse All*, and ■ stops a run (the programs the runner started stop with it). Tests run with the
+project's own runner (`cargo test`, `go test -v`, `python3 -m pytest -rA`, the JavaScript runner) on the machine the folder
+is on, over SSH too. Their output streams into a **Test Results** terminal.
+
+Each test shows passed, failed, skipped or not run, with its time where the runner reports one. A failed test shows the
+first line of its failure underneath; click it to open the line where it failed, or click the test to open its
+definition. Files start closed and open when a test in them fails. The filter field narrows the tree by test name or
+path, and the activity icon counts failures. JavaScript runners do not report single tests in a form that can be read, so
+their tests take the outcome of the whole run.
+
+The 🐞 button on a test (or *Test: Debug Test at Cursor*) starts it under the debugger:
+
+- **Rust:** the test binary is built first (`cargo test --no-run`); if a crate has several, you pick one.
+- **Go:** Delve in test mode.
+- **Python:** pytest under debugpy.
+
+*Test: Run Test at Cursor* and *Test: Run Tests in File* still run in a task terminal, with failures in Problems.
 
 ## Workspaces with several folders
 
@@ -865,15 +931,65 @@ Variables: `@name = value`, `{{$guid}}`, `{{$timestamp}}`, `{{$randomInt min max
 (`< ./payload.json`), and `Authorization: Basic user:password` is encoded for you. While connected over SSH the request is sent **from the
 server** (so `localhost` services work); `"http.runOn": "local"` sends it from your computer instead.
 
+## Terminal
+
+**Shell integration.** zsh, bash and fish mark each prompt and command, with no setup:
+
+- A dot beside each command shows how it ended: green for success, red for failure.
+- ⌘↑ / ⌘↓ (Ctrl+Shift+↑ / ↓) jump between commands.
+- *Terminal: Copy Last Command Output* copies what the last command printed.
+- A split opens in the folder the shell is in.
+
+Your own startup files are still read. `"terminal.shellIntegration": false` turns it off. bash before 4.4 (the macOS
+system bash is 3.2) marks prompts and the folder only, so it has no command dots or jumps.
+
+**Profiles.** *Terminal: New Terminal with Profile…* lists your profiles and the shells installed on the machine, and
+*Terminal: Select Default Profile…* picks the one new terminals use. Profiles are defined in `terminal.profiles.macos`,
+`.linux` or `.windows`, for example:
+
+```jsonc
+"terminal.profiles.macos": { "zsh (clean)": { "path": "/bin/zsh", "args": ["-f"], "env": { "LANG": "C" }, "color": "info" } }
+```
+
+A terminal's tab menu can rename it, give it a colour or kill it. *Terminal: Kill All Terminals* closes every terminal.
+
+**Safety.**
+
+- Closing a terminal while a program runs in it asks first and names the program (`terminal.confirmOnClose`).
+- Pasted text cannot end bracketed paste early. Control characters are removed when the shell does not use bracketed
+  paste (`terminal.sanitizePaste`).
+- A paste of several lines asks before it runs (`terminal.warnMultilinePaste`).
+- Programs may write to the clipboard only with `terminal.allowClipboardWrite`. This setting and the two paste settings
+  above are read only from your own settings, never from a project's.
+- Links that programs mark (OSC 8) show and open their real target.
+- The history is capped at 50,000 lines (`terminal.scrollback`).
+
 ## Port forwarding
 
-While connected over SSH, the Ports tab in the bottom panel (⇧⌘P → "View: Ports") lists
-what is listening on the server. Ports that start listening after you connect (a dev server
-on :5173, say) are forwarded automatically and announced in the status bar; ports that were
-already open (databases, ssh) are only listed, with a Forward button. Type a number to
-forward any port. If the same port is busy on your machine, another free one is used.
-Forwarding rides on the existing ssh connection (no extra processes) and is removed when
-you quit. Turn off the automatic part with `"ports.autoForward": false`.
+While connected over SSH, the **Ports** tab in the bottom panel (*View: Ports*) lists what is listening on the server, in
+the columns Port, Label, Forwarded Address, Running Process and Origin.
+
+- **Automatic forwards.** Ports that start listening after you connect (a dev server on :5173, say) are forwarded on their
+  own and announced in the status bar. Ports that were already open (databases, ssh) are only listed, with a Forward
+  button. `"ports.autoForward": false` turns the automatic part off.
+- **Your own forwards.** Type a port number to forward it, or `3000:8080` to forward server port 3000 to local port 8080.
+  If the port is busy on your computer, a free one is used.
+- **Row actions.** Each row can open the address in the browser, copy it or stop the forward. Its menu sets a label,
+  changes the local port, picks HTTP, HTTPS or TCP, or retries a forward that failed.
+- **Addresses.** Forwards connect to the address the server port listens on (`127.0.0.1`, `::1` or another), so a service
+  bound to only one of them is still reached.
+
+Forwarded ports are saved per project: opening the project over SSH again forwards them again, with their labels and local
+ports. After a dropped connection, forwards come back on the same local port. Forwarding rides on the existing ssh
+connection (no extra processes) and is removed when you quit.
+
+- `"ports.localBind": "all"` lets other machines on your network reach the forwarded ports. This setting is only read
+  from your own settings; the default, `loopback`, keeps them on this computer.
+- `ports.rules` gives ports or ranges a label, a protocol and what happens when they are found:
+
+```jsonc
+"ports.rules": { "3000": { "label": "web", "onForward": "openBrowser" }, "9000-9100": { "onForward": "ignore" } }
+```
 
 ## Remote (SSH)
 
@@ -898,6 +1014,18 @@ Search and terminals run on the server through the agent: only results and termi
 output cross the network.
 
 How the connection, the agent and reconnecting work is described in [remote.md](remote.md).
+
+### Remote Explorer
+
+The monitor icon in the activity bar (*View: Remote Explorer*) lists:
+
+- **SSH hosts** from `~/.ssh/config`, `Include` files too, each with its connection status and recent folders.
+- **Running containers**, and on Windows **WSL distributions**.
+- The current connection's **forwarded ports**.
+
+Hover a host to connect in this window or a new one. Its ⋯ menu edits, tests, sets up key login for or removes the host.
+A recent folder opens with a click, opens in a new window, or can be removed from the list. The workspace switcher (⌃R)
+reaches the same targets from the keyboard.
 
 ### Manage SSH hosts and move files
 

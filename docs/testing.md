@@ -18,6 +18,13 @@ agent, proto, buffer, syntax, state, theme). The whole suite takes roughly 75 se
   server inside the test.
 - **Fuzz and hostile-input tests** (`schema/src/fuzz_tests.rs`, colour round-trips, spell tokenizer, Emmet,
   EditorConfig, semantic tokens): random and adversarial input must produce a bounded, panic-free result.
+  `fuzz_parsers_tests.rs` covers everything a cloned repository, a program or a server can hand the app:
+  - project files: `.http`, launch, tasks, test files;
+  - program output: test runners, compilers, git, port scanners, GitHub;
+  - language-server and debug-adapter replies of random shape, and their framing in any chunking;
+  - the terminal stream in random chunks.
+  The protocol crate decodes mutated frames in both directions. Two tests drive the terminal with hostile output while
+  scrolled back.
 - **Random sessions**: `CODEYARD_QA_SEEDS=N cargo test … qa_random_new_commands_many_seeds` types random keys and
   commands, then undoes everything and checks the original text, then redoes and checks the edited text.
 

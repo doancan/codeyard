@@ -127,7 +127,7 @@ pub fn option_toggle(id: &'static str, label: &'static str, active: bool, tip: &
         .justify_center()
         .rounded(px(theme::radius::SM))
         .bg(c(bg))
-        .text_size(px(11.))
+        .text_size(px(text::XXS.0))
         .font_family(MONO_FONT)
         .font_weight(gpui::FontWeight::MEDIUM)
         .text_color(c(fg))
@@ -268,6 +268,19 @@ const ICONS: &[(&str, &[u8])] = icons![
     "cloud-download",
     "arrow-left",
     "arrow-right",
+    // --- remote ---
+    "screen-share",
+    "container",
+    "key-round",
+    "pencil",
+    // --- run and debug ---
+    "bug-play",
+    "circle-slash-2",
+    // --- testing ---
+    "flask-conical",
+    "circle-check",
+    "circle-dashed",
+    "list-filter",
 ];
 
 /// Embedded icon names (tests: is every name used in source embedded, does every embedded file exist).

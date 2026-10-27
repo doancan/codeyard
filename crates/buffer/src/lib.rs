@@ -595,40 +595,6 @@ impl Buffer {
         self.add_sel(Sel { cursor: at, anchor: None, goal: Some(goal) });
     }
 
-    /// ⌘D: with no selection, select the word at the cursor; otherwise also add a selection at the next
-    /// occurrence of the selected text (wrapping around at the end, skipping already-selected ones).
-    /// `true` if a new selection was added.
-    pub fn select_next_occurrence(&mut self) -> bool {
-        let sel = *self.sel();
-        let Some(range) = sel.selection() else {
-            let Some(word) = self.word_at(sel.cursor) else { return false };
-            self.sels[self.primary] = Sel { cursor: word.end, anchor: Some(word.start), goal: None };
-            self.normalize();
-            self.word_search = true;
-            return true;
-        };
-        let needle = self.rope.slice(range).to_string();
-        let all = self.occurrences(&needle, self.word_search);
-        let from = self.sels.iter().map(Sel::end).max().unwrap_or(0);
-        // First unselected match after the cursor; wraps around at the end.
-        // Selections are sorted and non-overlapping: binary search looks at one neighbor at most (previously all selections were
-        // scanned for every candidate; with tens of thousands of matches ⌘D took seconds).
-        let free = |r: &Range<usize>| {
-            let i = self.sels.partition_point(|s| s.end() <= r.start);
-            !self.sels.get(i).is_some_and(|s| s.start() < r.end)
-        };
-        let next = all.iter().find(|r| r.start >= from && free(r)).or_else(|| all.iter().find(|r| free(r))).cloned();
-        match next {
-            Some(r) => {
-                let word = self.word_search;
-                self.add_sel(Sel { cursor: r.end, anchor: Some(r.start), goal: None });
-                self.word_search = word;
-                true
-            }
-            None => false,
-        }
-    }
-
     /// Occurrences of the text (character ranges, non-overlapping); `whole_word`: on word boundaries.
     fn occurrences(&self, needle: &str, whole_word: bool) -> Vec<Range<usize>> {
         if needle.is_empty() {
@@ -1360,32 +1326,6 @@ impl Buffer {
         true
     }
 
-    /// ⌘K ⌘D: also select the previous occurrence of the selected text (continuing from the end when reaching the start).
-    pub fn select_previous_occurrence(&mut self) -> bool {
-        let sel = *self.sel();
-        let Some(range) = sel.selection() else {
-            let Some(word) = self.word_at(sel.cursor) else { return false };
-            self.sels[self.primary] = Sel { cursor: word.end, anchor: Some(word.start), goal: None };
-            self.normalize();
-            self.word_search = true;
-            return true;
-        };
-        let needle = self.rope.slice(range).to_string();
-        let all = self.occurrences(&needle, self.word_search);
-        let from = self.sels.iter().map(Sel::start).min().unwrap_or(0);
-        let free = |r: &Range<usize>| !self.sels.iter().any(|s| s.start() < r.end && r.start < s.end());
-        let prev = all.iter().rev().find(|r| r.end <= from && free(r)).or_else(|| all.iter().rev().find(|r| free(r))).cloned();
-        match prev {
-            Some(r) => {
-                let word = self.word_search;
-                self.add_sel(Sel { cursor: r.start, anchor: Some(r.end), goal: None });
-                self.word_search = word;
-                true
-            }
-            None => false,
-        }
-    }
-
     /// ⌘⌫: delete from the cursor to the line start (the selection if there is one).
     pub fn delete_to_line_start(&mut self) {
         let parts = self
@@ -1426,112 +1366,6 @@ impl Buffer {
         self.edit_parts(parts, Place::Custom(&|i, start| Sel::at(if below { start + lens[i] } else { start + lens[i] - 1 })), false);
     }
 
-    /// ⇧⌘L: select all occurrences of the selected text (the word at the cursor if no selection).
-    pub fn select_all_occurrences(&mut self) {
-        let sel = *self.sel();
-        let (needle, whole) = match sel.selection() {
-            Some(r) => (self.rope.slice(r).to_string(), self.word_search),
-            None => match self.word_at(sel.cursor) {
-                Some(w) => (self.rope.slice(w).to_string(), true),
-                None => return,
-            },
-        };
-        let all = self.occurrences(&needle, whole);
-        if all.is_empty() {
-            return;
-        }
-        self.cursor_history.push((self.sels.clone(), self.primary));
-        if self.sels.len() == 1 {
-            self.origin = Some(sel.cursor);
-        }
-        self.sels = all.into_iter().map(|r| Sel { cursor: r.end, anchor: Some(r.start), goal: None }).collect();
-        self.primary = self.sels.len() - 1;
-        self.word_search = whole;
-        self.normalize();
-    }
-
-    /// Transform the selected text (the word at the cursor if no selection); the result stays selected.
-    pub fn transform_selections(&mut self, f: impl Fn(&str) -> String) {
-        let mut parts: Vec<(Range<usize>, String)> = Vec::new();
-        let mut changed = false;
-        for s in &self.sels {
-            let r = if s.selection().is_some() { s.range() } else { self.word_at(s.cursor).unwrap_or(s.cursor..s.cursor) };
-            if r.is_empty() || parts.last().is_some_and(|(p, _)| r.start < p.end) {
-                continue;
-            }
-            let before = self.text_range(r.clone());
-            let text = f(&before);
-            changed |= text != before;
-            parts.push((r, text));
-        }
-        // If nothing changed (already uppercase, single line...) no undo step or "changed" marker is created.
-        if parts.is_empty() || !changed {
-            return;
-        }
-        let lens: Vec<usize> = parts.iter().map(|(_, t)| t.chars().count()).collect();
-        self.edit_parts(parts, Place::Custom(&|i, start| Sel { cursor: start + lens[i], anchor: Some(start), goal: None }), false);
-    }
-
-    /// ⌃J: join the selected lines (with the next one if no selection) into one line; the intervening
-    /// indentation and trailing whitespace collapse to a single space.
-    pub fn join_lines(&mut self) {
-        let mut parts = Vec::new();
-        for (first, last) in self.line_blocks() {
-            let last = if first == last { first + 1 } else { last };
-            for l in first..last.min(self.len_lines().saturating_sub(1)) {
-                let (this, next) = (self.line(l), self.line(l + 1));
-                let trailing = this.chars().rev().take_while(|c| *c == ' ' || *c == '\t').count();
-                let leading = next.chars().take_while(|c| *c == ' ' || *c == '\t').count();
-                let start = self.rope.line_to_char(l) + self.line_len_chars(l) - trailing;
-                let stop = self.rope.line_to_char(l + 1) + leading;
-                let sep = if this.trim().is_empty() || next.trim().is_empty() { "" } else { " " };
-                parts.push((start..stop, sep.to_string()));
-            }
-        }
-        if !parts.is_empty() {
-            self.apply_edits(parts);
-        }
-    }
-
-    /// Sort the selected lines (ascending or descending); each block stays selected.
-    pub fn sort_lines(&mut self, descending: bool) {
-        let mut parts: Vec<(Range<usize>, String)> = Vec::new();
-        let mut changed = false;
-        for (first, last) in self.line_blocks() {
-            if first == last {
-                continue;
-            }
-            let mut lines: Vec<String> = (first..=last).map(|l| self.line(l)).collect();
-            lines.sort_by_cached_key(|l| (collation_key(l), l.clone()));
-            if descending {
-                lines.reverse();
-            }
-            let range = self.rope.line_to_char(first)..self.rope.line_to_char(last) + self.line_len_chars(last);
-            let sorted = lines.join("\n");
-            changed |= self.rope.slice(range.clone()) != sorted.as_str();
-            parts.push((range, sorted));
-        }
-        // If already sorted, no undo step or "changed" marker should be created.
-        if parts.is_empty() || !changed {
-            return;
-        }
-        let lens: Vec<usize> = parts.iter().map(|(_, t)| t.chars().count()).collect();
-        self.edit_parts(parts, Place::Custom(&|i, start| Sel { cursor: start + lens[i], anchor: Some(start), goal: None }), false);
-    }
-
-    /// Reverse the order of the selected lines (does nothing without a selection).
-    pub fn reverse_lines(&mut self) {
-        self.rewrite_blocks(true, |lines| lines.into_iter().rev().collect());
-    }
-
-    /// Remove duplicates among the selected lines (the first stays). Whole file if no selection.
-    pub fn delete_duplicate_lines(&mut self) {
-        self.rewrite_blocks(false, |lines| {
-            let mut seen = std::collections::HashSet::new();
-            lines.into_iter().filter(|l| seen.insert(l.clone())).collect()
-        });
-    }
-
     /// Rewrite line blocks; `need_selection`: a bare cursor counts as a single line and
     /// nothing is done. Without a selection (`false`) the whole file.
     fn rewrite_blocks(&mut self, need_selection: bool, f: impl Fn(Vec<String>) -> Vec<String>) {
@@ -1564,53 +1398,6 @@ impl Buffer {
         }
         let lens: Vec<usize> = parts.iter().map(|(_, t)| t.chars().count()).collect();
         self.edit_parts(parts, Place::Custom(&|i, start| Sel { cursor: start + lens[i], anchor: Some(start), goal: None }), false);
-    }
-
-    /// Duplicate the selection right after itself (the copy stays selected); if no selection, copy the line downward.
-    pub fn duplicate_selection(&mut self) {
-        if self.sels.iter().all(|s| s.selection().is_none()) {
-            return self.copy_lines(true);
-        }
-        let parts: Vec<(Range<usize>, String)> = self
-            .sels
-            .iter()
-            .filter(|s| s.selection().is_some())
-            .map(|s| {
-                let r = s.range();
-                (r.end..r.end, self.text_range(r))
-            })
-            .collect();
-        let lens: Vec<usize> = parts.iter().map(|(_, t)| t.chars().count()).collect();
-        self.edit_parts(parts, Place::Custom(&|i, start| Sel { cursor: start + lens[i], anchor: Some(start), goal: None }), false);
-    }
-
-    /// ⌃T: swap the two characters at the cursor (the previous two at the end of a line).
-    pub fn transpose_chars(&mut self) {
-        let mut parts: Vec<(Range<usize>, String)> = Vec::new();
-        let mut cursors: Vec<usize> = Vec::new();
-        for s in &self.sels {
-            if s.selection().is_some() {
-                continue;
-            }
-            let c = s.cursor;
-            let line = self.rope.char_to_line(c);
-            let (ls, le) = (self.rope.line_to_char(line), self.rope.line_to_char(line) + self.line_len_chars(line));
-            // At line end, the previous two; at line start, nothing to do.
-            let at = if c >= le { le.saturating_sub(1) } else { c };
-            if at <= ls || at >= le {
-                continue;
-            }
-            let (a, b) = (self.rope.char(at - 1), self.rope.char(at));
-            if parts.last().is_some_and(|(p, _)| at - 1 < p.end) {
-                continue;
-            }
-            parts.push((at - 1..at + 1, format!("{b}{a}")));
-            cursors.push(at + 1);
-        }
-        if parts.is_empty() {
-            return;
-        }
-        self.edit_parts(parts, Place::Custom(&|i, _| Sel { cursor: cursors[i], anchor: None, goal: None }), false);
     }
 
     /// Set the selections to the given ranges (for extending/shrinking the selection).
@@ -1943,6 +1730,8 @@ fn char_to_byte(s: &str, chars: usize) -> usize {
 
 mod edit_bytes;
 mod lines;
+mod occurrences;
+mod transform;
 use edit_bytes::unify_breaks;
 mod textutil;
 use textutil::{has_mixed_endings, is_combining_mark};

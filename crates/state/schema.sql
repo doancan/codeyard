@@ -96,8 +96,13 @@ create index history_recent on history (kind, used_at desc);
 --   ) where rn > 500
 -- );
 -- delete from history where used_at < :now - 180 * 86400000;
+-- delete from port_forwards where updated_at < :now - 180 * 86400000;   (version 6)
 
 -- Version 2 (crates/state/src/lib.rs MIGRATIONS): key-value store for settings.
 -- create table kv (key text primary key, value text not null, updated_at integer not null);
 -- Version 3: create unique index backups_ws_rel on backups (workspace_id, rel_path);
 -- Version 5: workspaces.hidden: "remove from recents" hides the row instead of deleting it (so backups and tabs don't go away via cascade).
+-- Version 6: port_forwards: ports the user forwarded per workspace (remote port, chosen local port, label, protocol),
+--   at most 200 per workspace; restored when the workspace opens again.
+-- Version 7: breakpoints: debugger breakpoints per workspace (relative path, 0-based line, enabled, condition,
+--   hit count, log message).
