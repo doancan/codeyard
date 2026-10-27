@@ -666,6 +666,11 @@ pub const USER_ONLY_KEYS: &[&str] = &[
     "git.postCommitCommand",
     // A repository must not make forwarded ports reachable from the network.
     "ports.localBind",
+    // A repository must not let programs fill the clipboard, or turn off the checks on what is pasted back: together
+    // they would put a command on the clipboard that a later paste runs.
+    "terminal.allowClipboardWrite",
+    "terminal.sanitizePaste",
+    "terminal.warnMultilinePaste",
 ];
 
 /// `trusted`: the folder is trusted. If not, `RESTRICTED_KEYS` in the project layer are ignored and a warning is recorded.
@@ -1617,6 +1622,27 @@ pub fn is_excluded(excludes: &[String], rel_path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A repository could fill the clipboard through the terminal and switch off the checks on what is pasted back, so a
+    /// later paste would run its command: these keys come only from the user's own settings, even in a trusted folder.
+    #[test]
+    fn a_project_cannot_loosen_the_terminal_clipboard_and_paste_checks() {
+        use crate::terminal_paste::{Sanitize, WarnMultiline};
+        let project = [(
+            ".codeyard/settings.jsonc",
+            r#"{ "terminal.allowClipboardWrite": true, "terminal.sanitizePaste": "off", "terminal.warnMultilinePaste": "never" }"#,
+            true,
+        )];
+        for trusted in [false, true] {
+            let (s, w) = parse_layers_trusted("{}", &project, trusted).unwrap();
+            assert!(!s.terminal_allow_clipboard_write, "trusted={trusted}");
+            assert_eq!(s.terminal_sanitize_paste, Sanitize::Auto, "trusted={trusted}");
+            assert_eq!(s.terminal_warn_multiline, WarnMultiline::Unbracketed, "trusted={trusted}");
+            assert_eq!(w.iter().filter(|m| m.contains("can only be set in your own settings.jsonc")).count(), 3, "{w:?}");
+        }
+        let (s, _) = parse_layers(r#"{ "terminal.allowClipboardWrite": true, "terminal.sanitizePaste": "off" }"#, &[]).unwrap();
+        assert!(s.terminal_allow_clipboard_write && s.terminal_sanitize_paste == Sanitize::Off, "the user can still choose");
+    }
 
     #[test]
     fn globs_are_linear_even_for_hostile_patterns() {

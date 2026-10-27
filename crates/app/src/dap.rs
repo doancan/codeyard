@@ -252,6 +252,8 @@ pub struct Session {
     exception_pref: Mutex<Option<Vec<String>>>,
     /// For `attach` the program isn't killed on close (we just detach).
     attached: AtomicBool,
+    /// The client offered `runInTerminal` (the configuration asked for a terminal); a request is refused otherwise.
+    terminal: AtomicBool,
     /// In a direct connection where we didn't start the process, a dropped connection also ends the session.
     direct: bool,
     me: Weak<Session>,
@@ -301,6 +303,7 @@ impl Session {
             root: Mutex::new(None),
             exception_pref: Mutex::new(None),
             attached: AtomicBool::new(false),
+            terminal: AtomicBool::new(false),
             direct: false,
             me: me.clone(),
             forward: Mutex::new(None),
@@ -503,6 +506,7 @@ impl Session {
             root: Mutex::new(None),
             exception_pref: Mutex::new(None),
             attached: AtomicBool::new(false),
+            terminal: AtomicBool::new(false),
             direct: true,
             forward: Mutex::new(None),
             me: me.clone(),
@@ -631,6 +635,7 @@ impl Session {
         // Only a configuration that asks for a terminal gets one: some adapters change how they start the program
         // as soon as the client says it can.
         let terminal = matches!(launch_args["console"].as_str(), Some("integratedTerminal" | "externalTerminal"));
+        self.terminal.store(terminal, Ordering::Relaxed);
         let init = self.raw_request(
             "initialize",
             json!({
@@ -990,7 +995,10 @@ impl Session {
             // Request from the adapter: `startDebugging` and `runInTerminal` are supported; others don't go unanswered.
             Some("request") => {
                 let command = msg["command"].as_str().unwrap_or_default();
-                let terminal = (command == "runInTerminal").then(|| TerminalRequest::parse(&msg["arguments"])).flatten();
+                // Only when it was offered: whatever is on the other end of the adapter's connection must not be able to
+                // run a program by asking (a TCP adapter's port is reachable by other users of the machine).
+                let offered = self.terminal.load(Ordering::Relaxed);
+                let terminal = (command == "runInTerminal" && offered).then(|| TerminalRequest::parse(&msg["arguments"])).flatten();
                 let ok = (command == "startDebugging" && self.addr.is_some()) || terminal.is_some();
                 if let Some(t) = terminal {
                     let _ = self.events.send(DapEvent::RunInTerminal(t));
@@ -1163,7 +1171,8 @@ while True:
         ok(m, {'breakpoints': [{'verified': b['name'] != 'missing'} for b in a.get('breakpoints', [])]})
     elif cmd == 'configurationDone':
         ok(m)
-        if launch and launch['arguments'].get('console') == 'integratedTerminal':
+        # `sneak`: ask for a terminal although the client did not offer one (a hostile peer would).
+        if launch and (launch['arguments'].get('console') == 'integratedTerminal' or launch['arguments'].get('sneak')):
             send({'type': 'request', 'command': 'runInTerminal', 'arguments': {'kind': 'integrated', 'title': 'Fake program', 'cwd': launch['arguments'].get('cwd', '/'),
                   'args': ['sh', '-c', 'echo ran-in-terminal > ' + launch['arguments']['marker']], 'env': {'FAKE_ENV': 'yes'}}})
         if launch and launch['arguments'].get('noDebug'):
@@ -1254,9 +1263,7 @@ while True:
         )
         .unwrap();
         #[cfg(unix)]
-        use std::os::unix::fs::PermissionsExt;
-        #[cfg(unix)]
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        crate::test_files::make_executable(&script);
         script
     }
 

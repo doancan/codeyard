@@ -5,7 +5,9 @@
 use std::time::{Duration, Instant};
 
 const STACK: usize = 8 << 20;
-const BUDGET: Duration = Duration::from_secs(5);
+/// Linear work on the largest texts (300,000 lines) takes a few seconds in a debug build on a busy machine; quadratic work
+/// takes minutes, which is what this catches.
+const BUDGET: Duration = Duration::from_secs(15);
 
 struct Rng(u64);
 impl Rng {
@@ -194,5 +196,343 @@ fn text_encodings_survive_random_bytes() {
         let _ = crate::hexdump::dump(&bytes);
         let _ = crate::datalens_decode::decode(&String::from_utf8_lossy(&bytes));
         assert!(case < 1000);
+    }
+}
+
+/// `t` alone and behind the start of a real document of the kind, so parsers get past their first check.
+fn framed<'a>(t: &'a str, frames: &'a [&'a str]) -> impl Iterator<Item = String> + 'a {
+    std::iter::once(t.to_string()).chain(frames.iter().map(move |f| format!("{f}{t}")))
+}
+
+/// Files a cloned repository brings: `.http`, launch and task files, test files the Testing view reads, projects and snippets.
+#[test]
+fn project_files_survive_hostile_text() {
+    every_text("project files", |t| {
+        let env = |_: &str| Some("v".to_string());
+        let uuid = String::new;
+        let random = |a: i64, _: i64| a;
+        let responses = std::collections::HashMap::new();
+        for text in framed(t, &["GET http://a/{{x}}\n", "@x = {{y}}\n@y = {{x}}\nPOST https://a/\n\n< ", "GET https://a/\nH: {{$processEnv "]) {
+            let p = crate::http_client::parse(&text);
+            let ctx = crate::http_client::Context { vars: &p.vars, responses: &responses, now: 0, env: &env, uuid: &uuid, random: &random };
+            for r in p.requests.iter().take(50) {
+                let _ = crate::http_client::sensitive_parts(r, &p.vars);
+                let _ = crate::http_client::prepare(r, &ctx, &|_| Ok(Vec::new()));
+            }
+        }
+        for text in framed(t, &["{\"configurations\":[{\"name\":\"a\",\"type\":\"lldb\",\"program\":", "{\"compounds\":[{\"configurations\":"]) {
+            let _ = crate::debug_config::parse_launch_json(&text, "/w", Some("/w/a.rs"), &[]);
+            let _ = crate::debug_config::parse_compounds(&text, "/w", None, &[]);
+            let tasks = crate::workbench::tasks::parse_task_file(&text, "tasks.jsonc");
+            let _ = crate::workbench::tasks::expand_variables_for_shell(&text, "/w", Some("/w/it's.rs"));
+            let _ = tasks.len();
+        }
+        for text in framed(t, &["{\"scripts\":{", "all:\n\t", ".PHONY: "]) {
+            let _ = crate::workbench::tasks::npm_tasks(&text, "npm");
+            let _ = crate::workbench::tasks::make_tasks(&text);
+        }
+        let pj = r#"{"devDependencies":{"vitest":"1"}}"#;
+        for (rel, frame) in [("src/a.rs", "#[test]\nfn "), ("a_test.go", "func Test"), ("test_a.py", "class TestA:\n    def test_"), ("a.test.ts", "it(\"")] {
+            for text in framed(t, &[frame]) {
+                let cases = crate::testrun::cases(rel, &text, Some(pj));
+                let lines = text.lines().count();
+                for line in [0, lines / 2, lines.saturating_sub(1), lines + 5] {
+                    let _ = crate::testrun::plan(rel, &text, line, false, Some(pj));
+                }
+                let _ = crate::testrun::plan(rel, &text, 0, true, Some(pj));
+                assert!(cases.len() <= text.lines().count(), "{rel}: more tests than lines");
+            }
+        }
+        let _ = crate::workbench::projects::parse_projects(t);
+        let _ = crate::snippets::parse_user_file("rust", t);
+        let _ = crate::debug_model::parse_breakpoint_meta(t);
+    });
+}
+
+/// What programs print, which the app reads back: test runners, compilers, git, port scanners, GitHub, containers.
+#[test]
+fn program_output_survives_hostile_text() {
+    every_text("program output", |t| {
+        use crate::testexp::{Kind, parse_results};
+        for text in framed(t, &["test a::b ... ", "---- a stdout ----\nthread 'a' panicked at ", "=== RUN   T\n    ", "--- FAIL: ", "FAILED x.py::t - "]) {
+            for kind in [Kind::Rust, Kind::Go, Kind::Python, Kind::Js] {
+                let _ = parse_results(kind, &text);
+            }
+            let _ = crate::problems::parse_output(&text, "/w");
+            let _ = crate::testexp::test_executables(&text);
+            let _ = crate::testexp::cargo_select_args(&text);
+        }
+        for text in framed(t, &["LISTEN 0 128 ", "  0: 0100007F:", "p1\ncnode\nn"]) {
+            let _ = crate::ports::parse_ss(&text);
+            let _ = crate::ports::parse_proc_net_entries(&text);
+            let _ = crate::ports::parse_lsof_entries(&text);
+        }
+        for text in framed(t, &["## main...origin/main [ahead ", "1 .M N... ", "\u{0}R  a\u{0}"]) {
+            let _ = crate::git::parse_status("/w", text.as_bytes());
+            let _ = crate::git::parse_show_ref(&text);
+            let _ = crate::git::parse_log(&text);
+            let _ = crate::git::parse_blame(&text, "a.rs");
+            let _ = crate::git::parse_branches(&text);
+            let _ = crate::git::parse_worktrees(&text);
+            let _ = crate::git::parse_remotes(&text);
+            let _ = crate::git::parse_branch_infos(&text);
+            let _ = crate::git::parse_track(&text);
+            let _ = crate::git::parse_remote_tags(&text);
+            let _ = crate::graph::parse_refs(&text);
+            let _ = crate::graph::parse_graph_log(&text);
+            let _ = crate::graph::parse_name_status(&text);
+            let _ = crate::graph::parse_detail_head(&text, "abc");
+            let _ = crate::graph::parse_changes(&text);
+        }
+        let _ = crate::github::parse_remote(t);
+        let _ = crate::github::parse_gh(t);
+        let _ = crate::github::parse_api(t);
+        let _ = crate::github::parse_iso(t);
+        let _ = crate::http_client::parse_output(t.as_bytes());
+        let _ = crate::http_client::parse_output(format!("HTTP/1.1 200 OK\r\n{t}{}", crate::http_client::MARKER).as_bytes());
+        let _ = host::ssh::parse_containers(t);
+        let _ = host::ssh::parse_wsl_list(t.as_bytes());
+    });
+}
+
+/// SSH config files, host targets typed by the user and settings values the user writes.
+#[test]
+fn ssh_config_and_setting_values_survive_hostile_text() {
+    every_text("ssh and settings values", |t| {
+        for text in framed(t, &["Host ", "Host a\n  HostName ", "Include "]) {
+            let _ = host::ssh_hosts::parse_config(&text);
+        }
+        let _ = host::ssh_config::parse_target(t);
+        let _ = crate::terminal_osc::parse_cwd(t);
+        let _ = crate::port_forwards::Protocol::parse(t);
+        if let Ok(serde_json::Value::Object(map)) = serde_json::from_str::<serde_json::Value>(t) {
+            let mut warn = Vec::new();
+            let _ = crate::terminal_profiles::parse_profiles("terminal.profiles.macos", &map, &mut warn);
+            let _ = crate::port_forwards::parse_rules(&map, &mut warn);
+        }
+        let mut map = serde_json::Map::new();
+        map.insert(t.chars().take(64).collect(), serde_json::json!({ "path": t, "args": [t], "env": { "K": t }, "label": t, "onForward": t }));
+        let mut warn = Vec::new();
+        let _ = crate::terminal_profiles::parse_profiles("terminal.profiles.linux", &map, &mut warn);
+        let _ = crate::port_forwards::parse_rules(&map, &mut warn);
+    });
+}
+
+/// A terminal's output stream, cut into random chunks: the shell-integration scanner sees every split, and pastes of any text
+/// are prepared without panicking.
+#[test]
+fn the_terminal_stream_survives_hostile_bytes_in_any_chunking() {
+    let mut rng = Rng(11);
+    let pieces: &[&[u8]] =
+        &[b"\x1b]133;A\x07", b"\x1b]133;D;", b"\x1b]7;file://h/", b"\x1b\\", b"\x1b]", b"\x07", b"\x1b[200~", b"\x1b[201~", b"\xff\xfe", b"\n", b"%2"];
+    for _ in 0..300 {
+        let mut data = Vec::new();
+        for _ in 0..(rng.next() % 200) {
+            if rng.next().is_multiple_of(3) {
+                data.extend_from_slice(pieces[(rng.next() as usize) % pieces.len()]);
+            } else {
+                data.push(rng.next() as u8);
+            }
+        }
+        let mut scanner = crate::terminal_osc::Scanner::default();
+        let mut at = 0;
+        while at < data.len() {
+            let n = 1 + (rng.next() as usize) % 17;
+            let end = (at + n).min(data.len());
+            for (i, _) in scanner.scan(&data[at..end]) {
+                assert!(i <= end - at, "an event index past its chunk");
+            }
+            at = end;
+        }
+        let text = String::from_utf8_lossy(&data);
+        for policy in [crate::terminal_paste::Sanitize::Auto, crate::terminal_paste::Sanitize::Always, crate::terminal_paste::Sanitize::Off] {
+            for bracketed in [false, true] {
+                let p = crate::terminal_paste::prepare(&text, bracketed, policy);
+                let _ = crate::terminal_paste::needs_confirm(&p, bracketed, crate::terminal_paste::WarnMultiline::Always);
+            }
+        }
+    }
+}
+
+/// Finding every test in a file must not look at the whole file once per test: 4,000 tests in one file took half a minute
+/// when it did. Each file kind here has to be done well within the budget.
+#[test]
+fn finding_the_tests_of_a_huge_test_file_is_linear() {
+    let n = 4_000;
+    let rust = "#[cfg(test)]\nmod tests {\n".to_string()
+        + &(0..n).map(|i| format!("    #[test]\n    fn t{i}() {{\n        assert!(true);\n    }}\n")).collect::<String>()
+        + "}\n";
+    let py = "class TestA:\n".to_string() + &(0..n).map(|i| format!("    def test_{i}(self):\n        pass\n")).collect::<String>();
+    let go: String = (0..n).map(|i| format!("func Test{i}(t *testing.T) {{\n}}\n")).collect();
+    let js = "describe('a', () => {\n".to_string() + &(0..n).map(|i| format!("  it('t{i}', () => {{}});\n")).collect::<String>() + "});\n";
+    for (rel, text) in [("src/a.rs", rust), ("test_a.py", py), ("a_test.go", go), ("a.test.ts", js)] {
+        let started = Instant::now();
+        let found = crate::testrun::cases(rel, &text, Some(r#"{"devDependencies":{"jest":"1"}}"#));
+        assert_eq!(found.len(), n, "{rel}");
+        assert!(started.elapsed() < BUDGET / 10, "{rel}: {:?} for {n} tests", started.elapsed());
+    }
+}
+
+/// A random JSON value built from the keys and shapes language servers and debug adapters use, with wrong types, huge and
+/// negative numbers, deep nesting and odd strings in every place.
+fn server_value(rng: &mut Rng, depth: usize) -> serde_json::Value {
+    use serde_json::{Value, json};
+    const KEYS: &[&str] = &[
+        "range",
+        "start",
+        "end",
+        "line",
+        "character",
+        "uri",
+        "targetUri",
+        "targetRange",
+        "items",
+        "label",
+        "textEdit",
+        "newText",
+        "insertText",
+        "contents",
+        "value",
+        "kind",
+        "children",
+        "data",
+        "changes",
+        "documentChanges",
+        "edits",
+        "textDocument",
+        "location",
+        "name",
+        "detail",
+        "position",
+        "paddingLeft",
+        "resultId",
+        "tooltip",
+        "command",
+        "arguments",
+        "signatures",
+        "activeSignature",
+        "activeParameter",
+        "parameters",
+        "documentation",
+        "isIncomplete",
+        "stackFrames",
+        "scopes",
+        "variables",
+        "breakpoints",
+        "verified",
+        "id",
+        "source",
+        "path",
+        "column",
+        "variablesReference",
+        "presentationHint",
+        "totalFrames",
+        "diagnostics",
+        "severity",
+        "message",
+        "startLine",
+        "endLine",
+        "target",
+        "placeholder",
+        "defaultBehavior",
+        "from",
+        "to",
+    ];
+    let pick = |rng: &mut Rng| KEYS[(rng.next() as usize) % KEYS.len()];
+    match if depth > 6 { rng.next() % 6 } else { rng.next() % 9 } {
+        0 => Value::Null,
+        1 => json!(rng.next().is_multiple_of(2)),
+        2 => json!([0i64, -1, 1, i64::MAX, i64::MIN, u32::MAX as i64, 65_536][(rng.next() % 7) as usize]),
+        3 => json!([0.5f64, -0.0, 1e300, f64::MAX][(rng.next() % 4) as usize]),
+        4 => json!(["", "file:///a.rs", "file://", "%ZZ", "a\u{0}b", "😀\u{202e}", "x".repeat(10_000).as_str(), "../../etc/passwd"][(rng.next() % 8) as usize]),
+        5 => json!(pick(rng)),
+        6 => Value::Array((0..(rng.next() % 6)).map(|_| server_value(rng, depth + 1)).collect()),
+        _ => Value::Object((0..(1 + rng.next() % 6)).map(|_| (pick(rng).to_string(), server_value(rng, depth + 1))).collect()),
+    }
+}
+
+/// Every reply a language server or debug adapter can send goes through these readers: none may panic on any shape.
+#[test]
+fn language_server_and_debugger_replies_survive_any_shape() {
+    let mut rng = Rng(99);
+    let legend: Vec<String> = ["keyword", "type", "variable"].iter().map(|s| s.to_string()).collect();
+    for _ in 0..4_000 {
+        let v = server_value(&mut rng, 0);
+        let outcome = std::panic::catch_unwind(|| {
+            use crate::lsp::*;
+            let _ = parse_range(&v);
+            let _ = parse_diagnostics(&v);
+            let _ = parse_completions(&v);
+            let _ = hover_text(&v);
+            let _ = parse_locations(&v);
+            let _ = parse_workspace_edit(&v);
+            let _ = parse_symbols(&v);
+            let _ = parse_workspace_symbols(&v);
+            let _ = parse_code_actions(&v);
+            let _ = parse_inlay_hints(&v);
+            let _ = parse_folding_ranges(&v);
+            let _ = parse_document_links(&v);
+            let _ = parse_prepare_rename(&v);
+            let _ = remap_edit_uris(&v, "file:///a", "file:///b");
+            let _ = parse_hierarchy(&v, None);
+            let _ = parse_hierarchy(&v, Some("from"));
+            let _ = parse_code_lenses(&v);
+            let _ = decode_semantic_tokens(&v, &legend);
+            let _ = parse_signature(&v);
+            let _ = crate::dap::parse_bp_results(&v);
+            let _ = crate::dap::parse_frames(&v);
+            let _ = crate::dap::parse_scopes(&v);
+            let _ = crate::dap::parse_variables(&v);
+            let _ = crate::debug_config::parse_inputs(&v);
+        });
+        assert!(outcome.is_ok(), "a reader panicked on {}", serde_json::to_string(&v).unwrap_or_default().chars().take(400).collect::<String>());
+    }
+}
+
+/// A server that writes endless text without a message header (a log to stdout) must not make every new chunk rescan all
+/// that came before: the framing stays linear in what arrives.
+#[test]
+fn server_output_without_headers_is_read_in_linear_time() {
+    let mut decoder = crate::lsp::Decoder::default();
+    let chunk = "log line from a server that prints to stdout\n".repeat(100);
+    let started = Instant::now();
+    for _ in 0..2_000 {
+        assert!(decoder.push(chunk.as_bytes()).is_empty());
+    }
+    // And a real message after it is still found.
+    let msg = crate::lsp::encode(&serde_json::json!({"jsonrpc": "2.0", "id": 1, "result": null}));
+    let mut decoder = crate::lsp::Decoder::default();
+    let mut got = Vec::new();
+    for b in msg.chunks(3) {
+        got.extend(decoder.push(b));
+    }
+    assert_eq!(got.len(), 1);
+    assert!(started.elapsed() < BUDGET, "{:?} for 9 MB without headers", started.elapsed());
+}
+
+/// Messages with log lines between them, cut into chunks of every size, come out whole, in order and once each.
+#[test]
+fn server_messages_survive_any_chunking() {
+    let mut rng = Rng(5);
+    for _ in 0..300 {
+        let mut stream = Vec::new();
+        let n = 1 + rng.next() % 8;
+        for i in 0..n {
+            if rng.next().is_multiple_of(2) {
+                stream.extend_from_slice(b"a server log line\n");
+            }
+            let body = serde_json::json!({ "id": i, "text": "\r\n\r\n".repeat((rng.next() % 3) as usize) + "ğ😀" });
+            stream.extend(crate::lsp::encode(&body));
+        }
+        let mut decoder = crate::lsp::Decoder::default();
+        let mut got = Vec::new();
+        let mut at = 0;
+        while at < stream.len() {
+            let end = (at + 1 + (rng.next() as usize) % 40).min(stream.len());
+            got.extend(decoder.push(&stream[at..end]));
+            at = end;
+        }
+        let ids: Vec<u64> = got.iter().filter_map(|v| v["id"].as_u64()).collect();
+        assert_eq!(ids, (0..n).collect::<Vec<_>>());
     }
 }

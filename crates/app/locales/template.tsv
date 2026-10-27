@@ -713,6 +713,7 @@ Friday
 Git could not sign in to {}. Set up credentials (credential helper, SSH key or `gh auth login`) and try again	
 Git doesn't know who you are on this host. Run these in the terminal: {0} and {1}	
 Git identity is not set on this host: commits will be refused. Set user.name and user.email (git config --global …).	
+Git is paused in this folder: its repository settings run programs ({}). Trust the folder to use Git here.	
 Git: Abort Merge	
 Git: Abort Rebase	
 Git: Add Remote…	
@@ -1755,6 +1756,7 @@ This file mixes line endings; saving writes all of them as {}, like its first li
 This file was deleted on disk. Saving will create it again.	
 This folder is not a git repository.	
 This frame cannot be restarted.	
+This image is {0} × {1} pixels, too large to preview.	
 This is a development build and can't update itself. Download the new version yourself.	
 This is the portable version, which can't update itself. Download the new version and replace it yourself.	
 This language server does not support incoming calls	
@@ -2232,6 +2234,7 @@ your words
 {} incoming call|{} incoming calls	
 {} is a binary file: there is no text diff.	
 {} is a date:	
+{} is a symbolic link; write the path it points to, so the upload can be confirmed	
 {} is already in .gitignore	
 {} is already in the workspace.	
 {} is not a trusted folder, so nothing is deleted from it. Open it as a folder and trust it first.	

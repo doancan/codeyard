@@ -54,9 +54,14 @@ impl Workbench {
             return self.start_named(name, true, window, cx);
         }
         let Some(read) = self.read_launch_configs(true, cx) else { return };
+        let asked = self.active_root(cx);
         cx.spawn(async move |this, cx| {
             let configs: Vec<LaunchConfig> = read.await.0.into_iter().map(|c| LaunchConfig { no_debug: true, ..c }).collect();
-            with_window(&this, cx, move |this, window, cx| this.choose_debug_config(configs, window, cx));
+            with_window(&this, cx, move |this, window, cx| {
+                if this.active_root(cx) == asked {
+                    this.choose_debug_config(configs, window, cx);
+                }
+            });
         })
         .detach();
     }
@@ -64,9 +69,14 @@ impl Workbench {
     /// Start a configuration or compound of the launch files by name.
     pub(in crate::workbench) fn start_named(&mut self, name: String, no_debug: bool, _: &mut Window, cx: &mut Context<Self>) {
         let Some(read) = self.read_launch_configs(false, cx) else { return };
+        let asked = self.active_root(cx);
         cx.spawn(async move |this, cx| {
             let (configs, compounds) = read.await;
             with_window(&this, cx, move |this, window, cx| {
+                // Read from the active file's folder, which is also the one trust is asked for: drop them if it changed.
+                if this.active_root(cx) != asked {
+                    return;
+                }
                 if let Some(compound) = compounds.into_iter().find(|c| c.name == name) {
                     return this.start_compound(compound, configs, no_debug, window, cx);
                 }

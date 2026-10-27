@@ -155,6 +155,9 @@ impl TerminalView {
         let (start, _) = m.output.as_ref()?;
         let (end, _) = m.end?;
         let (first, last) = (start - self.marks.shift - self.history(), end - 1 - self.marks.shift - self.history());
+        // A program can clear the history or reset the terminal after the command ran, so the recorded lines may no longer
+        // exist: only what is still inside the grid is read.
+        let last = last.min(self.term.screen_lines() as i64 - 1);
         if last < first || first < -self.history() {
             return Some(String::new());
         }
@@ -177,6 +180,21 @@ impl TerminalView {
     #[cfg(test)]
     pub fn last_output_for_test(&self) -> Option<String> {
         self.last_output()
+    }
+
+    #[cfg(test)]
+    pub fn scroll_for_test(&mut self, lines: i32) {
+        self.term.scroll_display(alacritty_terminal::grid::Scroll::Delta(lines));
+    }
+
+    #[cfg(test)]
+    pub fn jump_for_test(&mut self, previous: bool) {
+        self.jump_to_command(previous);
+    }
+
+    #[cfg(test)]
+    pub fn visible_marks_for_test(&self) -> Vec<(usize, MarkState)> {
+        self.visible_marks(self.term.screen_lines())
     }
 
     #[cfg(test)]

@@ -226,11 +226,10 @@ fn commit_variants_add_the_trailer_skip_hooks_and_follow_smart_commit(cx: &mut T
     // A refusing hook: a plain commit fails, "No Verify" gets through.
     #[cfg(unix)]
     {
-        use std::os::unix::fs::PermissionsExt;
         let hook = f.dir.join(".git/hooks/pre-commit");
         std::fs::create_dir_all(hook.parent().unwrap()).unwrap();
         std::fs::write(&hook, "#!/bin/sh\necho no >&2\nexit 1\n").unwrap();
-        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+        crate::test_files::make_executable(&hook);
         std::fs::write(f.dir.join("b.txt"), "b\n").unwrap();
         git_in(&f.dir, &["add", "b.txt"]);
         refresh(&wb, cx);

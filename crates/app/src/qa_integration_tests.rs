@@ -136,9 +136,7 @@ fn qa_scm_commit_failure_keeps_message(cx: &mut TestAppContext) {
     std::fs::create_dir_all(hook.parent().unwrap()).unwrap();
     std::fs::write(&hook, "#!/bin/sh\necho 'lint failed' >&2\nexit 1\n").unwrap();
     #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
-    #[cfg(unix)]
-    std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+    crate::test_files::make_executable(&hook);
     std::fs::write(dir.join("README.md"), "# proje\nyeni\n").unwrap();
 
     let (wb, cx) = setup(cx);
@@ -339,9 +337,7 @@ while True:
     )
     .unwrap();
     #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
-    #[cfg(unix)]
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    crate::test_files::make_executable(&script);
     script
 }
 
@@ -527,9 +523,7 @@ while True:
     )
     .unwrap();
     #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
-    #[cfg(unix)]
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    crate::test_files::make_executable(&script);
     std::fs::write(dir.join("main.c"), "int a;\n").unwrap();
     let settings = Settings {
         code_actions_on_save: vec!["source.organizeImports".into()],
@@ -614,9 +608,7 @@ while True:
     )
     .unwrap();
     #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
-    #[cfg(unix)]
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    crate::test_files::make_executable(&script);
     script
 }
 
@@ -1374,9 +1366,7 @@ while True:
     )
     .unwrap();
     #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
-    #[cfg(unix)]
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    crate::test_files::make_executable(&script);
     let settings = Settings {
         lsp_servers: vec![("c".into(), Some((script.to_string_lossy().into_owned(), vec![log.to_string_lossy().into_owned()])))],
         ..Settings::default()
@@ -2242,9 +2232,7 @@ while True:
     )
     .unwrap();
     #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
-    #[cfg(unix)]
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    crate::test_files::make_executable(&script);
     let answers = dir.join("answers.log");
     std::fs::write(dir.join("main.c"), "int main(void) { return 0; }\n").unwrap();
     let settings = Settings {
@@ -2403,9 +2391,7 @@ while True:
     )
     .unwrap();
     #[cfg(unix)]
-    use std::os::unix::fs::PermissionsExt;
-    #[cfg(unix)]
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    crate::test_files::make_executable(&script);
     script
 }
 

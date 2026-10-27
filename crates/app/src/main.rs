@@ -74,6 +74,7 @@ mod i18n_remote_tests;
 #[cfg(test)]
 mod i18n_tests;
 mod icon_theme;
+mod image_size;
 mod input;
 mod jsonfmt;
 mod large;
@@ -113,6 +114,7 @@ mod snippets;
 #[cfg(test)]
 mod text_scale_tests;
 // --- structural ---
+mod shell_quote;
 #[cfg(test)]
 mod ssh_error_tests;
 mod structural;
@@ -123,6 +125,8 @@ mod terminal;
 mod terminal_osc;
 mod terminal_paste;
 mod terminal_profiles;
+#[cfg(all(test, unix))]
+mod test_files;
 #[cfg(test)]
 mod test_git;
 #[cfg(test)]
