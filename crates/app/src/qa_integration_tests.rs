@@ -42,7 +42,7 @@ pub(crate) fn setup_with(cx: &mut TestAppContext, settings: Settings) -> (Entity
 }
 
 fn setup(cx: &mut TestAppContext) -> (Entity<Workbench>, &mut VisualTestContext) {
-    setup_with(cx, Settings::default())
+    setup_with(cx, Settings { lsp_enabled: false, ..Default::default() })
 }
 
 fn open(wb: &Entity<Workbench>, path: &Path, cx: &mut VisualTestContext) {
@@ -422,7 +422,7 @@ fn qa_lsp_snippet_placeholder_is_selected(cx: &mut TestAppContext) {
     }
     let dir = qa_dir("qa-snippet");
     std::fs::write(dir.join("main.c"), "int topla(int a, int b) { return a + b; }\nint main(void) {\n    \n}\n").unwrap();
-    let (wb, cx) = setup(cx);
+    let (wb, cx) = setup_with(cx, Settings::default());
     open(&wb, &dir.join("main.c"), cx);
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
     wait_for(cx, "server", |cx| ed.read_with(cx, |e, _| e.lsp_client().is_some()));

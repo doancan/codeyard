@@ -29,7 +29,7 @@ fn setup(cx: &mut TestAppContext) -> (Entity<Workbench>, &mut VisualTestContext)
     cx.update(|cx| {
         crate::bind_keys(cx);
         cx.set_global(ActiveTheme(theme::DARK));
-        cx.set_global(crate::settings::Settings::default());
+        cx.set_global(crate::settings::Settings { lsp_enabled: false, ..Default::default() });
     });
     let (wb, cx) = cx.add_window_view(|window, cx| Workbench::with_state(state::State::in_memory().ok(), None, window, cx));
     wb.update_in(cx, |wb, window, cx| window.focus(&wb.focus_handle(cx)));

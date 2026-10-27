@@ -1,8 +1,37 @@
 //! An image's size from its header, read before the image is decoded. A small file can announce enormous dimensions (a few
 //! kilobytes of PNG for a 30,000 × 30,000 image take 3.6 GB once decoded), so the preview checks the size first.
 
+use std::sync::Arc;
+
+/// Encoded byte limit shared by image tabs and Markdown resources.
+pub const MAX_BYTES: u64 = 20 * 1024 * 1024;
+
 /// Most pixels the preview decodes (about 200 MB of RGBA).
 pub const MAX_PIXELS: u64 = 50_000_000;
+
+/// Read and validate on a worker before handing bytes to GPUI's decoder. Checking both metadata and the
+/// returned bytes handles a file that grows between stat and read. Host reads themselves are bounded by MAX_FILE.
+pub fn load(host: &dyn host::Host, path: &str, format: gpui::ImageFormat) -> Result<(Arc<gpui::Image>, u64), String> {
+    let too_many_bytes = || crate::i18n::t("Image exceeds 20 MB.").to_string();
+    if host.stat(path).map_err(|e| e.to_string())?.size > MAX_BYTES {
+        return Err(too_many_bytes());
+    }
+    let (data, _) = host.read(path).map_err(|e| e.to_string())?;
+    let size = data.len() as u64;
+    if size > MAX_BYTES {
+        return Err(too_many_bytes());
+    }
+    let dimensions = dimensions(&data);
+    if format == gpui::ImageFormat::Svg && dimensions.is_none() {
+        return Err(crate::i18n::t("Image unavailable").to_string());
+    }
+    if let Some((w, h)) = dimensions
+        && too_large(w, h)
+    {
+        return Err(crate::i18n::tf("This image is {0} × {1} pixels, too large to preview.", &[&w, &h]));
+    }
+    Ok((Arc::new(gpui::Image::from_bytes(format, data)), size))
+}
 
 fn u16_be(d: &[u8], at: usize) -> Option<u64> {
     Some(u16::from_be_bytes(d.get(at..at + 2)?.try_into().ok()?) as u64)
@@ -78,27 +107,16 @@ pub fn dimensions(data: &[u8]) -> Option<(u64, u64)> {
     None
 }
 
-/// The size an SVG is drawn at: the root element's `width` and `height` (plain or `px` numbers), else its `viewBox`.
+/// Use the renderer's parser: substring/attribute scans can be fooled by comments, XML whitespace,
+/// units and an incomplete header. No linked resources are read while calculating the canvas size.
 fn svg_dimensions(data: &[u8]) -> Option<(u64, u64)> {
-    let head = String::from_utf8_lossy(&data[..data.len().min(64 * 1024)]);
-    let start = head.find("<svg")?;
-    // Attributes may be on their own lines.
-    let tag = head[start..start + head[start..].find('>')?].replace(['\n', '\r', '\t'], " ");
-    let attr = |name: &str| {
-        let at = tag.find(&format!(" {name}="))? + name.len() + 2;
-        let quote = tag[at..].chars().next()?;
-        let rest = &tag[at + quote.len_utf8()..];
-        Some(&rest[..rest.find(quote)?])
+    let text = std::str::from_utf8(data).ok()?;
+    let options = usvg::Options {
+        image_href_resolver: usvg::ImageHrefResolver { resolve_data: Box::new(|_, _, _| None), resolve_string: Box::new(|_, _| None) },
+        ..Default::default()
     };
-    let number = |v: &str| v.trim().trim_end_matches("px").parse::<f64>().ok().filter(|n| n.is_finite() && *n >= 0.0);
-    if let (Some(w), Some(h)) = (attr("width").and_then(number), attr("height").and_then(number)) {
-        return Some((w.ceil() as u64, h.ceil() as u64));
-    }
-    let view: Vec<f64> = attr("viewBox")?.split([' ', ',']).filter(|p| !p.is_empty()).filter_map(|p| p.parse().ok()).collect();
-    match view.as_slice() {
-        [_, _, w, h] if w.is_finite() && h.is_finite() => Some((w.abs().ceil() as u64, h.abs().ceil() as u64)),
-        _ => None,
-    }
+    let size = usvg::Tree::from_str(text, &options).ok()?.size();
+    Some((size.width().ceil() as u64, size.height().ceil() as u64))
 }
 
 /// Whether an image this size is too large to decode for the preview.
@@ -142,11 +160,15 @@ mod tests {
         assert_eq!(dimensions(b"GIF8"), None);
         assert_eq!(dimensions(&[0xff, 0xd8, 0xff, 0xe0, 0x00, 0x00]), None, "a zero-length segment");
         assert_eq!(dimensions(&[0xff, 0xd8, 0x00]), None);
-        assert_eq!(dimensions(b"<svg/>"), None);
-        assert_eq!(dimensions(br#"<?xml version="1.0"?><svg xmlns="x" width="100000" height="100000px">"#), Some((100_000, 100_000)));
-        assert_eq!(dimensions(br#"<svg viewBox="0 0 64000,64000"><g/></svg>"#), Some((64_000, 64_000)));
-        assert_eq!(dimensions(br#"<svg width='24' height='24'>"#), Some((24, 24)));
-        assert_eq!(dimensions(b"<svg\n  width=\"9000\"\n\theight=\"9000\">"), Some((9_000, 9_000)), "attributes on their own lines");
+        assert_eq!(dimensions(b"<svg/>"), Some((100, 100)), "the renderer's default canvas");
+        assert_eq!(dimensions(br#"<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="100000" height="100000px"/>"#), Some((100_000, 100_000)));
+        assert_eq!(dimensions(br#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64000,64000"><g/></svg>"#), Some((64_000, 64_000)));
+        assert_eq!(dimensions(br#"<svg xmlns="http://www.w3.org/2000/svg" width='24' height='24'/>"#), Some((24, 24)));
+        assert_eq!(
+            dimensions(b"<svg xmlns=\"http://www.w3.org/2000/svg\"\n  width=\"9000\"\n\theight=\"9000\"/>"),
+            Some((9_000, 9_000)),
+            "attributes on their own lines"
+        );
         assert_eq!(dimensions(br#"<svg width="100%" height="1e999">"#), None, "relative and infinite sizes are not trusted");
         let mut seed = 3u64;
         for _ in 0..20_000 {
@@ -157,5 +179,25 @@ mod tests {
             d.extend((0..(seed % 40)).map(|i| (seed >> (i % 50)) as u8));
             let _ = dimensions(&d);
         }
+    }
+
+    #[test]
+    fn svg_sizing_matches_the_renderer_even_with_xml_whitespace_comments_and_units() {
+        let data = br#"<!-- <svg width="1" height="1"> -->
+            <svg xmlns="http://www.w3.org/2000/svg" width = "100000" height = "100000"/>"#;
+        assert_eq!(dimensions(data), Some((100_000, 100_000)), "a fake root in a comment must not bypass the limit");
+        assert_eq!(dimensions(br#"<svg xmlns="http://www.w3.org/2000/svg" width="100in" height="100in"/>"#), Some((9600, 9600)));
+        assert!(too_large(9600, 9600));
+        assert_eq!(dimensions(br#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1">"#), None, "truncated XML is refused");
+    }
+
+    #[test]
+    fn image_loading_rejects_encoded_files_before_reading_them() {
+        let path = std::env::temp_dir().join(format!("codeyard-image-byte-limit-{}.png", std::process::id()));
+        let file = std::fs::File::create(&path).unwrap();
+        file.set_len(MAX_BYTES + 1).unwrap();
+        let result = load(&host::local(), &path.to_string_lossy(), gpui::ImageFormat::Png);
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(result.unwrap_err(), "Image exceeds 20 MB.");
     }
 }

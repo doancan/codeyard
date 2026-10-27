@@ -189,20 +189,14 @@ impl LargeFileView {
             stale: None,
             _watch: None,
         };
-        let task = cx.background_executor().spawn(async move { host.read(&path) });
+        let task = cx.background_executor().spawn(async move { crate::image_size::load(host.as_ref(), &path, format) });
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |v, cx| {
                 match result {
-                    Ok((data, _)) => {
-                        v.size = data.len() as u64;
-                        // Checked before decoding: a few kilobytes can announce an image that takes gigabytes once decoded.
-                        match crate::image_size::dimensions(&data) {
-                            Some((w, h)) if crate::image_size::too_large(w, h) => {
-                                v.error = Some(crate::i18n::tf("This image is {0} × {1} pixels, too large to preview.", &[&w, &h]).into());
-                            }
-                            _ => v.image = Some(Arc::new(gpui::Image::from_bytes(format, data))),
-                        }
+                    Ok((image, size)) => {
+                        v.size = size;
+                        v.image = Some(image);
                     }
                     Err(e) => v.error = Some(e.to_string().into()),
                 }
