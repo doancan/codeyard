@@ -56,6 +56,7 @@ impl Render for Workbench {
                 .into_any_element(),
             (_, None) if self.tabs.page_active && self.tabs.page.is_some() => match self.tabs.page.clone().unwrap() {
                 Page::Welcome => self.welcome_view(&p, cx),
+                Page::Containers => self.container_dashboard_view(&p, cx),
                 Page::Settings(view) => view.into_any_element(),
                 Page::Markdown(view) => view.into_any_element(),
                 Page::Shortcuts(view) => view.into_any_element(),
@@ -80,6 +81,8 @@ impl Render for Workbench {
             Panel::Debug => self.run_debug_view(&p, cx),
             Panel::Testing => self.testing_view(&p, cx),
             Panel::Remote => self.remote_view(&p, cx),
+            Panel::Containers if cx.global::<Settings>().docker_enabled => self.containers_panel(&p, cx),
+            Panel::Containers => self.explorer_panel(&p, cx),
         });
 
         div()
@@ -218,6 +221,11 @@ impl Render for Workbench {
             .on_action(cx.listener(|this, _: &GitCreateBranch, window, cx| this.create_branch(window, cx)))
             .on_action(cx.listener(|this, _: &GitMergeBranch, window, cx| this.show_branch_op_picker(git_glue::BranchOp::Merge, window, cx)))
             .on_action(cx.listener(|this, _: &RemoteDocker, window, cx| this.show_remote_targets(false, window, cx)))
+            .on_action(cx.listener(|this, _: &DockerOpenProject, window, cx| this.docker_open_project(false, window, cx)))
+            .on_action(cx.listener(|this, _: &DockerRebuild, window, cx| this.docker_open_project(true, window, cx)))
+            .on_action(cx.listener(|this, _: &DockerServices, window, cx| this.docker_contexts(docker_glue::Action::Services, window, cx)))
+            .on_action(cx.listener(|this, _: &DockerCancel, _, cx| this.cancel_docker(cx)))
+            .on_action(cx.listener(|this, _: &ShowContainers, _, cx| this.show_containers(cx)))
             .on_action(cx.listener(|this, _: &RemoteWsl, window, cx| this.show_remote_targets(true, window, cx)))
             .on_action(cx.listener(|this, _: &GitRebaseBranch, window, cx| this.show_branch_op_picker(git_glue::BranchOp::Rebase, window, cx)))
             .on_action(cx.listener(|this, _: &GitOpenWorktree, window, cx| this.show_branch_op_picker(git_glue::BranchOp::OpenWorktree, window, cx)))
@@ -475,7 +483,28 @@ impl Render for Workbench {
             .on_action(cx.listener(|this, _: &crate::menus::WindowMenu, w, cx| this.open_application_menu_by_index(6, w, cx)))
             .on_action(cx.listener(|this, _: &crate::menus::HelpMenu, w, cx| this.open_application_menu_by_index(7, w, cx)))
             .when(cfg!(target_os = "macos"), |d| d.child(self.title_bar(&p, cx)))
+            .when(cfg!(target_os = "windows") && !window.is_fullscreen(), |d| d.child(self.windows_title_bar(window, &p, cx)))
             .when(!cfg!(target_os = "macos") && self.chrome.zen.is_none(), |d| d.child(self.application_menu_bar(&p, cx)))
+            .when(self.docker_connected() && self.remote.docker.monitor.return_workspace.is_some(), |d| {
+                d.child(
+                    div()
+                        .id("container-return-workspace")
+                        .debug_selector(|| "container-return-workspace".into())
+                        .w_full()
+                        .min_h(px(30.))
+                        .px(px(theme::SPACE[5]))
+                        .flex()
+                        .items_center()
+                        .gap(px(theme::SPACE[3]))
+                        .bg(c(p.surface_active))
+                        .text_color(c(p.text))
+                        .text_size(px(text::SM.0))
+                        .cursor_pointer()
+                        .child(icon("arrow-left", 14., p.text))
+                        .child(crate::i18n::t("Back to SSH workspace and container details"))
+                        .on_click(cx.listener(|this, _, window, cx| this.return_from_container(window, cx))),
+                )
+            })
             .child(
                 div()
                     .flex()
@@ -541,7 +570,7 @@ impl Render for Workbench {
                         div()
                             .id("menu-backdrop")
                             .absolute()
-                            .top(px(if application { app_menu_glue::MENU_BAR_H } else { 0. }))
+                            .top(px(if application { self.application_menu_bottom(window) } else { 0. }))
                             .left_0()
                             .right_0()
                             .bottom_0()
@@ -571,8 +600,14 @@ impl Render for Workbench {
                         .size_full()
                         .flex()
                         .justify_center()
-                        // On macOS we draw the title bar ourselves: the palette sits below it.
-                        .pt(px(if cfg!(target_os = "macos") { layout::TITLEBAR_H + 4. } else { theme::SPACE[4] }))
+                        // Keep the palette below the custom title bar.
+                        .pt(px(if cfg!(target_os = "macos") {
+                            layout::TITLEBAR_H + 4.
+                        } else if cfg!(target_os = "windows") && !window.is_fullscreen() {
+                            view_editor_glue::WINDOWS_TITLEBAR_H + 4.
+                        } else {
+                            theme::SPACE[4]
+                        }))
                         .on_mouse_down(
                             MouseButton::Left,
                             cx.listener(|this, _, window, cx| {
@@ -590,6 +625,63 @@ impl Render for Workbench {
 mod resize_tests {
     use super::*;
     use gpui::{Modifiers, TestAppContext, point};
+
+    #[cfg(windows)]
+    #[gpui::test]
+    fn windows_titlebar_mouse_events_preserve_native_drag_and_close_defaults(cx: &mut TestAppContext) {
+        let (_wb, cx) = crate::qa_workbench_tests::setup(cx);
+        cx.run_until_parked();
+        for id in ["window-drag-region", "window-minimize", "window-maximize", "window-close"] {
+            let position = cx.debug_bounds(id).unwrap().center();
+            for click_count in [1, 2] {
+                cx.update(|window, cx| {
+                    window.dispatch_event(
+                        gpui::PlatformInput::MouseMove(gpui::MouseMoveEvent { position, pressed_button: None, modifiers: Modifiers::none() }),
+                        cx,
+                    );
+                    let down = window.dispatch_event(
+                        gpui::PlatformInput::MouseDown(gpui::MouseDownEvent {
+                            button: MouseButton::Left,
+                            position,
+                            modifiers: Modifiers::none(),
+                            click_count,
+                            first_mouse: false,
+                        }),
+                        cx,
+                    );
+                    assert!(down.propagate, "{id} must reach native non-client handling");
+                    assert!(!down.default_prevented, "{id} must not trigger the root focus handler");
+                    let up = window.dispatch_event(
+                        gpui::PlatformInput::MouseUp(gpui::MouseUpEvent { button: MouseButton::Left, position, modifiers: Modifiers::none(), click_count }),
+                        cx,
+                    );
+                    assert!(up.propagate, "{id} must reach native button release handling");
+                });
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    #[gpui::test]
+    fn windows_custom_titlebar_keeps_controls_separate_at_minimum_width(cx: &mut TestAppContext) {
+        let (_wb, cx) = crate::qa_workbench_tests::setup(cx);
+        for width in [1280., 480.] {
+            cx.simulate_resize(gpui::size(px(width), px(800.)));
+            cx.run_until_parked();
+            let bar = cx.debug_bounds("windows-title-bar").unwrap();
+            let drag = cx.debug_bounds("window-drag-region").unwrap();
+            let min = cx.debug_bounds("window-minimize").unwrap();
+            let max = cx.debug_bounds("window-maximize").unwrap();
+            let close = cx.debug_bounds("window-close").unwrap();
+            assert_eq!(bar.size.height, px(34.));
+            assert!(drag.size.width > px(0.));
+            assert!(drag.right() <= min.left());
+            assert!(min.right() <= max.left());
+            assert!(max.right() <= close.left());
+            assert!(close.right() <= bar.right());
+            assert!(drag.top() > bar.top(), "keep the native top resize strip clear");
+        }
+    }
 
     #[cfg(windows)]
     #[gpui::test]

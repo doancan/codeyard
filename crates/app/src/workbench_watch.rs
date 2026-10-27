@@ -128,12 +128,39 @@ impl Workbench {
         // Zoom is applied on top of the sizes in the settings file.
         self.chrome.zoom_base = (new.editor_font_size, new.editor_line_height, new.terminal_font_size);
         let mut new = new;
+        if !new.docker_enabled && self.any_container_connected(cx) {
+            new.docker_enabled = true;
+            warnings.push(crate::i18n::t("Disconnect the container before disabling the container module. Your open files are kept.").into());
+        } else if !new.docker_enabled {
+            self.remote.docker.cancel();
+            if self.chrome.panel == Some(Panel::Containers) {
+                self.chrome.panel = Some(Panel::Explorer);
+            }
+            if matches!(&self.remote.conn, Conn::Connecting { alias, .. } if crate::docker::is_target(alias)) {
+                self.remote.conn = Conn::Local;
+                self.remote.pending_path = None;
+            }
+            if matches!(
+                self.overlay.as_ref().map(|o| &o.kind),
+                Some(
+                    OverlayKind::ContainerEngines { .. }
+                        | OverlayKind::DockerContexts { .. }
+                        | OverlayKind::DockerContainers { .. }
+                        | OverlayKind::DockerPlan { .. }
+                )
+            ) {
+                self.close_overlay(window, cx);
+            }
+        }
         if self.chrome.zoom != 0. {
             new.editor_font_size = (new.editor_font_size + self.chrome.zoom).max(6.);
             new.editor_line_height = (new.editor_line_height + self.chrome.zoom * 1.5).max(10.);
             new.terminal_font_size = (new.terminal_font_size + self.chrome.zoom).max(6.);
         }
         cx.set_global(new.clone());
+        if new.docker_enabled && !old.docker_enabled {
+            self.sync_container_monitor(cx);
+        }
         // UI language: if it changed, the macOS menu bar and Dock menu are rebuilt (other surfaces read it on every render).
         if crate::i18n::apply_setting(&new.ui_language) {
             self.sync_dock_menu(cx);
