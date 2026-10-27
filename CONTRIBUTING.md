@@ -30,8 +30,13 @@ user-visible capability, written as a specification), **Task** (work with no use
 
 - **Title:** the form's prefix (`[Epic]`, `[Feature]`, `[Task]`, `[Bug]`) and a plain summary, at most 72 characters in total.
   Features and tasks start with a verb ("Show …", "Pass …"); bugs say what goes wrong.
-- **Labels:** exactly two. The form sets `type:` (`epic`, `feature`, `task`, `bug`); triage adds one `area:` (`lsp`, `debug`,
-  `editor`, `git`, `remote`, `terminal`, `ui`, `i18n`, `docs`, `infra` for build, release and test harness).
+- **Labels:** exactly three, one from each group. The form sets `type:`; triage adds `area:` and `env:`.
+
+| Group | Labels |
+| --- | --- |
+| `type:` | `epic`, `feature`, `task`, `bug` |
+| `area:` | `lsp`, `debug`, `editor`, `git`, `remote`, `terminal`, `ui`, `i18n`, `docs`, `infra` (build, release, test harness) |
+| `env:` | `local` (only local folders), `ssh` (only remote folders), `both` (local and remote alike) |
 - **Relationships** live in the issue's sidebar, never in its text: a feature or task is a sub-issue of its epic, and
   *blocked by* names the issues it waits for. An epic is closed when all its sub-issues are.
 - **Milestone:** the release the issue ships in (`v0.6.0`). Its due date is the epic's Target date.
