@@ -1,7 +1,7 @@
 use crate::{
     ActiveTooltip, AnyView, App, Bounds, DispatchPhase, Element, ElementId, GlobalElementId,
     HighlightStyle, Hitbox, HitboxBehavior, InspectorElementId, IntoElement, LayoutId,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, Size, TextOverflow,
+    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, SharedString, Size, TextOverflow,
     TextRun, TextStyle, TooltipId, WhiteSpace, Window, WrappedLine, WrappedLineLayout,
     register_tooltip_mouse_handlers, set_tooltip_on_window,
 };
@@ -785,13 +785,19 @@ impl Element for InteractiveText {
 
                     let text_layout = text_layout.clone();
                     let mouse_down = interactive_state.mouse_down_index.clone();
-                    if let Some(mouse_down_index) = mouse_down.get() {
+                    // A complete click can arrive before another paint, so install both handlers in this frame.
+                    {
                         let hitbox = hitbox.clone();
                         let clickable_ranges = mem::take(&mut self.clickable_ranges);
+                        let mouse_down_on_up = mouse_down.clone();
                         window.on_mouse_event(
                             move |event: &MouseUpEvent, phase, window: &mut Window, cx| {
-                                if phase == DispatchPhase::Bubble && hitbox.is_hovered(window) {
-                                    if let Ok(mouse_up_index) =
+                                if phase == DispatchPhase::Bubble
+                                    && event.button == MouseButton::Left
+                                    && let Some(mouse_down_index) = mouse_down_on_up.take()
+                                {
+                                    if hitbox.is_hovered(window)
+                                        && let Ok(mouse_up_index) =
                                         text_layout.index_for_position(event.position)
                                     {
                                         click_listener(
@@ -805,15 +811,17 @@ impl Element for InteractiveText {
                                         )
                                     }
 
-                                    mouse_down.take();
                                     window.refresh();
                                 }
                             },
                         );
-                    } else {
+                    }
+                    {
                         let hitbox = hitbox.clone();
+                        let text_layout = self.text.layout().clone();
                         window.on_mouse_event(move |event: &MouseDownEvent, phase, window, _| {
                             if phase == DispatchPhase::Bubble
+                                && event.button == MouseButton::Left
                                 && hitbox.is_hovered(window)
                                 && let Ok(mouse_down_index) =
                                     text_layout.index_for_position(event.position)

@@ -200,4 +200,19 @@ mod tests {
         std::fs::remove_file(path).unwrap();
         assert_eq!(result.unwrap_err(), "Image exceeds 20 MB.");
     }
+
+    #[gpui::test]
+    fn svg_pixels_use_the_same_bgra_channels_and_straight_alpha_as_raster_images(cx: &mut gpui::TestAppContext) {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="2" height="1">
+            <rect width="1" height="1" fill="#137e69"/>
+            <rect x="1" width="1" height="1" fill="#ff0000" opacity="0.5"/>
+        </svg>"##;
+        let image = gpui::Image::from_bytes(gpui::ImageFormat::Svg, svg.to_vec());
+        let rendered = cx.update(|app| image.to_image_data(app.svg_renderer()).unwrap());
+        let pixels = rendered.as_bytes(0).unwrap();
+        assert_eq!(&pixels[..4], &[0x69, 0x7e, 0x13, 255]);
+        assert_eq!(&pixels[4..6], &[0, 0]);
+        assert!((254..=255).contains(&pixels[6]), "unpremultiplication permits one byte of rounding, not a darkened red: {pixels:?}");
+        assert_eq!(pixels[7], 128);
+    }
 }

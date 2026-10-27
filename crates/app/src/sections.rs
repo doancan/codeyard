@@ -61,6 +61,10 @@ impl Sections {
         self.drag.is_some()
     }
 
+    pub fn dragging_section(&self, id: &str) -> bool {
+        self.drag.as_ref().is_some_and(|(dragged, ..)| dragged == id)
+    }
+
     /// Mouse moved to `y`; `true` if the height changed. `max`: tallest the section can be.
     pub fn drag_to(&mut self, y: f32, max: f32) -> bool {
         let Some((id, y0, h0, sign)) = self.drag.clone() else { return false };
@@ -138,10 +142,9 @@ pub fn header(id: impl Into<gpui::ElementId>, title: &str, count: Option<usize>,
         }))
 }
 
-/// Height handle: thin line, accent on hover. The caller wires the mouse press.
-pub fn sash(id: impl Into<gpui::ElementId>, p: &Palette) -> Stateful<Div> {
-    let accent = p.accent;
-    div().id(id).w_full().h(px(4.)).flex_none().cursor(gpui::CursorStyle::ResizeUpDown).hover(move |d| d.bg(c(accent)))
+/// Height handle: soft accent feedback. The caller wires the mouse press.
+pub fn sash(id: impl Into<gpui::ElementId>, p: &Palette, dragging: bool) -> Stateful<Div> {
+    div().id(id).w_full().h(px(4.)).flex_none().cursor(gpui::CursorStyle::ResizeUpDown).child(crate::ui_sash::highlight(p.accent, dragging))
 }
 
 #[cfg(test)]

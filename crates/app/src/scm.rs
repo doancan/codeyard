@@ -1070,7 +1070,7 @@ impl ScmPanel {
     /// Handle on the section's top edge: dragging up enlarges it.
     fn top_sash(&self, id: &'static str, p: &ui::Palette, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let h = self.section_height(id, if id == "graph" { 260. } else { 170. });
-        sections::sash(SharedString::from(format!("sash-{id}")), p).on_mouse_down(
+        sections::sash(SharedString::from(format!("sash-{id}")), p, self.sections.dragging_section(id)).on_mouse_down(
             gpui::MouseButton::Left,
             cx.listener(move |this, ev: &gpui::MouseDownEvent, _, cx| {
                 cx.stop_propagation();

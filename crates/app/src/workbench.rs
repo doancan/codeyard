@@ -1325,8 +1325,7 @@ impl Workbench {
                             d.top(px(-layout::SASH / 2.)).left_0().right_0().h(px(layout::SASH)).cursor(gpui::CursorStyle::ResizeUpDown)
                         }
                     })
-                    .when(resizing, |d| d.bg(c(p.accent)))
-                    .hover(|d| d.bg(c(p.accent)))
+                    .child(crate::ui_sash::highlight(p.accent, resizing))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|this, _, _, cx| {

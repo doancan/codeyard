@@ -141,6 +141,7 @@ mod texttools;
 mod trash;
 mod tree;
 mod ui;
+mod ui_sash;
 mod update;
 mod update_backend;
 mod update_install;

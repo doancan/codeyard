@@ -665,7 +665,16 @@ fn block_view(b: &Block, id: &str, p: &Palette, depth: usize, compact: bool, doc
             if start < spans.len() {
                 children.push(text_view(SharedString::from(format!("{id}p")), &spans[start..], p, None, document));
             }
-            div().w_full().min_w_0().text_size(px(size)).line_height(px(line)).children(children).into_any_element()
+            // Resolve the column width before measuring its text, as the list-item row does. Percentage
+            // width alone can leave GPUI's glyph layout wrapped to the viewport instead of the document.
+            div()
+                .w_full()
+                .min_w_0()
+                .flex()
+                .text_size(px(size))
+                .line_height(px(line))
+                .child(div().flex_1().min_w_0().flex().flex_col().children(children))
+                .into_any_element()
         }
         Block::Code { text: t, lang } => {
             let copy = t.clone();
@@ -917,6 +926,7 @@ impl Render for MarkdownPreview {
             .child(
                 div().id("markdown-scroll").track_scroll(&self.scroll).flex_1().min_h_0().overflow_y_scroll().flex().flex_col().items_center().child(
                     div()
+                        .debug_selector(|| "markdown-document".to_string())
                         .flex_none()
                         .w_full()
                         .min_w_0()
