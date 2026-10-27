@@ -33,7 +33,11 @@ musl binary of about 1.5 MB.
 1. **Topic files.** Behaviour lives in `workbench_<topic>.rs` files (`workbench_git`, `workbench_hosts`,
    `workbench_http`, `workbench_schema`, `workbench_spell`, `workbench_pulls`, `workbench_transfer`, …). They are
    child modules included with `#[path]`, so they read the workbench's private fields with `use super::*`.
-   The editor is split the same way (`editor_*.rs`).
+   The editor is split the same way (`editor_*.rs`), and so is `Buffer` (`lines.rs`, `transform.rs`,
+   `occurrences.rs`). A large topic has sub-topic files of its own: Run and Debug is `workbench_debug.rs` (sessions,
+   stack, variables, console) with `workbench_debug_breakpoints.rs`, `workbench_debug_launch.rs`,
+   `workbench_debug_view.rs` and the test-only `workbench_debug_testing.rs`; they reach the workbench through
+   `super::super`. The git status refresh is `workbench_vcs.rs`, separate from the git commands in `workbench_git.rs`.
 2. **State groups.** New state goes into a group struct in `workbench_state.rs` (`TabsState`, `LspState`,
    `GitState`, `ChromeLayout`, `NavState`, `ConfigState`, `PersistState`, `RemoteState`, `RootsState`,
    `TaskState`, `DebugUi`), not into `Workbench` itself. `LspState` also carries the schema, spell and `.http`
@@ -46,8 +50,8 @@ Compare Folders is three files: `compare_logic.rs` (matching two `HashTree` scan
 `editor.rs` ≤ 1700, `buffer/src/lib.rs` ≤ 1800, every other source file ≤ 2500 (test files ≤ 6000), `Workbench` struct ≤ 80 lines. When a
 limit is hit, split the file instead of raising the limit.
 
-Test-only accessors (`*_for_test`) are in `workbench_testing.rs` and the editor's own files; tests never reach
-into private state any other way.
+Test-only accessors (`*_for_test`) are in `workbench_testing.rs`, in a topic's own test-only module
+(`workbench_debug_testing.rs`) and in the editor's own files; tests never reach into private state any other way.
 
 ## Stack
 
