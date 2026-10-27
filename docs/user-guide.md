@@ -343,7 +343,9 @@ A project can override settings in `.codeyard/settings.jsonc` (or `.vscode/setti
 programs. Until you trust a folder, its project settings cannot set `terminal.shell`, `lsp.servers` or schema
 associations (the status bar says which keys were ignored), **language servers do not start** (a notice says so once;
 they can run the project's build scripts), `$schema` addresses are only downloaded from SchemaStore, and running a task,
-a test or the debugger first asks "Do you trust the authors of this folder?". Folders you had already opened before this
+a test or the debugger first asks "Do you trust the authors of this folder?". A repository whose own Git settings name a
+program (a filter, diff or merge driver, an ssh or credential command, a hooks folder) gets **no Git at all** until it is
+trusted: `git status` alone would run its filters. A notice names the settings. Folders you had already opened before this
 rule existed are trusted once. Trusting is remembered per folder (per host over SSH) and starts the language servers at once;
 `Workspace: Trust This Folder` does it without a question. `security.workspaceTrust.enabled: false`
 in your own `settings.jsonc` turns the check off; a project file can never change that key.
@@ -957,6 +959,8 @@ A terminal's tab menu can rename it, give it a colour or kill it. *Terminal: Kil
 - Pasted text cannot end bracketed paste early. Control characters are removed when the shell does not use bracketed
   paste (`terminal.sanitizePaste`).
 - A paste of several lines asks before it runs (`terminal.warnMultilinePaste`).
+- Programs may write to the clipboard only with `terminal.allowClipboardWrite`. This setting and the two paste settings
+  above are read only from your own settings, never from a project's.
 - Links that programs mark (OSC 8) show and open their real target.
 - The history is capped at 50,000 lines (`terminal.scrollback`).
 

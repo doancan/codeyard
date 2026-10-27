@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use host::Host;
 
-use super::{git, git_ok};
+use super::{failure_text, git, git_ok};
 use crate::ui::Palette;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -185,13 +185,42 @@ fn parse_branch(head: &str, st: &mut Status) {
     }
 }
 
+/// Repository settings that make git run a program: filter drivers (`git status` runs a clean filter on stale files),
+/// diff and merge drivers, and the programs fetch, push, commit and rebase start. Matched against the lowercased names
+/// `git config` prints (`core.fsmonitor` is handled separately: it is overridden, since `true` is the built-in daemon).
+const PROGRAM_KEYS: &str = r"^(filter\..+\.(clean|smudge|process)|diff\.external|diff\..+\.(command|textconv)|merge\..+\.driver|core\.(sshcommand|askpass|gitproxy|editor|pager|hookspath)|sequence\.editor|credential\..*helper|gpg\.(.+\.)?program|uploadpack\.packobjectshook|extensions\.worktreeconfig)$";
+
+/// The repository's own settings (its `.git/config` and what that includes) that name a program. Reading them runs
+/// nothing. An error means they could not be read, which callers treat like a match.
+pub fn program_settings(host: &dyn Host, dir: &str) -> Result<Vec<String>, String> {
+    let out = git(host, dir, &["config", "--local", "--includes", "--name-only", "--get-regexp", PROGRAM_KEYS])?;
+    match out.code {
+        Some(0) => Ok(out.stdout_str().lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect()),
+        // Nothing matched.
+        Some(1) => Ok(Vec::new()),
+        _ => Err(failure_text(&out)),
+    }
+}
+
 /// Status if the folder is inside a git repository; `None` otherwise.
 /// `trusted == false`: the folder's author is not trusted. A repository's `core.fsmonitor` can run a command every time `git status`
-/// runs (on open and every 4 seconds), so it is disabled in untrusted folders (the built-in watcher is unaffected).
+/// runs (on open and every 4 seconds), so it is disabled in untrusted folders (the built-in watcher is unaffected). A repository
+/// whose settings name any other program (a filter driver runs on `status` itself) gets no git at all until it is trusted: the
+/// error says why, and without a status the editors show no blame or change marks either.
 pub fn status_for(host: &dyn Host, dir: &str, trusted: bool) -> Result<Option<Status>, String> {
     let top = git(host, dir, &["rev-parse", "--show-toplevel", "--show-prefix", "--absolute-git-dir"])?;
     if !top.ok() {
         return Ok(None); // not a repository
+    }
+    if !trusted {
+        let found = program_settings(host, dir).unwrap_or_else(|e| vec![e]);
+        if !found.is_empty() {
+            let shown: Vec<&str> = found.iter().map(String::as_str).take(3).collect();
+            return Err(crate::i18n::tf(
+                "Git is paused in this folder: its repository settings run programs ({}). Trust the folder to use Git here.",
+                &[&shown.join(", ")],
+            ));
+        }
     }
     // The root is derived from the opened path: --show-toplevel resolves symlinks
     // (/tmp → /private/tmp), which would not match the paths in the tree.
@@ -406,17 +435,45 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A repository's clean filter runs on `git status` for every file whose stat data is stale (any freshly extracted
+    /// checkout). In an untrusted folder git is paused instead, and the filter never runs.
+    #[cfg(unix)]
+    #[test]
+    fn an_untrusted_repository_with_a_filter_driver_pauses_git_instead_of_running_it() {
+        let Some((dir, run)) = repo("filter-driver") else { return };
+        let marker = dir.join("..").join(format!("codeyard-filter-marker-{}", std::process::id()));
+        let _ = std::fs::remove_file(&marker);
+        std::fs::write(dir.join(".gitattributes"), "* filter=x\n").unwrap();
+        run(&["config", "filter.x.clean", &format!("sh -c 'touch {}; cat'", marker.display())]).unwrap();
+        // Make the index stale, like a checkout copied from an archive.
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
+        std::fs::File::options().write(true).open(dir.join("f.txt")).unwrap().set_modified(later).unwrap();
+        let host = host::local();
+        let d = dir.to_string_lossy().into_owned();
+        let err = status_for(&host, &d, false).expect_err("git must pause in an untrusted folder with a filter driver");
+        assert!(err.contains("filter.x.clean"), "the message names the setting: {err}");
+        assert!(!marker.exists(), "the repository's filter ran in an untrusted folder");
+        // Trusted: git runs as in a terminal, filter included (this proves the test would notice).
+        assert!(status_for(&host, &d, true).unwrap().is_some());
+        assert!(marker.exists(), "the filter is expected to run for a trusted folder");
+        let _ = std::fs::remove_file(&marker);
+        // Ordinary settings do not pause anything.
+        run(&["config", "--unset", "filter.x.clean"]).unwrap();
+        run(&["config", "core.fsmonitor", "true"]).unwrap();
+        assert!(status_for(&host, &d, false).unwrap().is_some());
+        assert!(program_settings(&host, &d).unwrap().is_empty());
+    }
+
     /// A repository can name a program in `core.fsmonitor` that `git status` runs; in an untrusted folder it must not run.
     #[cfg(unix)]
     #[test]
     fn status_in_an_untrusted_folder_does_not_run_the_repository_fsmonitor_command() {
-        use std::os::unix::fs::PermissionsExt;
         let Some((dir, run)) = repo("fsmonitor-hook") else { return };
         let marker = dir.join("..").join(format!("codeyard-fsmon-marker-{}", std::process::id()));
         let _ = std::fs::remove_file(&marker);
         let hook = dir.join("hook.sh");
         std::fs::write(&hook, format!("#!/bin/sh\ntouch '{}'\nprintf '\\0'\n", marker.display())).unwrap();
-        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+        crate::test_files::make_executable(&hook);
         let hook_path = hook.to_string_lossy().into_owned();
         if run(&["config", "core.fsmonitor", &hook_path]).is_none() {
             return;
@@ -450,11 +507,10 @@ mod tests {
         // A pre-commit hook that refuses: the commit fails, and --no-verify gets past it.
         #[cfg(unix)]
         {
-            use std::os::unix::fs::PermissionsExt;
             let hook = dir.join(".git/hooks/pre-commit");
             std::fs::create_dir_all(hook.parent().unwrap()).unwrap();
             std::fs::write(&hook, "#!/bin/sh\necho refused by hook >&2\nexit 1\n").unwrap();
-            std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+            crate::test_files::make_executable(&hook);
             std::fs::write(dir.join("c.txt"), "c\n").unwrap();
             run(&["add", "-A"]).unwrap();
             assert!(commit(&host, &root, "hooked", CommitOptions::default()).unwrap_err().contains("refused by hook"));

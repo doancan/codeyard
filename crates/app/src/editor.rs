@@ -191,6 +191,8 @@ mod edit_glue;
 mod find_glue;
 #[path = "editor_git.rs"]
 mod git_glue;
+#[path = "editor_indent.rs"]
+mod indent_glue;
 #[path = "editor_io.rs"]
 mod io_glue;
 #[path = "editor_lsp.rs"]
@@ -1201,66 +1203,9 @@ impl EditorView {
         self.display_key = None;
     }
 
-    /// Settings (including project settings) changed: re-resolve the indent unit.
-    pub fn refresh_indent(&mut self, cx: &mut Context<Self>) {
-        self.indent = indent_with_rules(&self.buffer, &self.rules, cx.global::<Settings>().editorconfig, self.indent_prefs(cx));
-        self.display_key = None;
-        cx.notify();
-    }
-
-    /// (indent is spaces?, width): the folder's setting if there is one, otherwise the global setting.
-    fn indent_prefs(&self, cx: &App) -> (Option<bool>, Option<usize>) {
-        let s = cx.global::<Settings>();
-        let f = self.folder.as_deref();
-        (f.and_then(|f| f.insert_spaces).or(s.insert_spaces), f.and_then(|f| f.tab_size).or(s.tab_size))
-    }
-
-    /// Folder setting (files in additional folders): the indent is re-resolved when it changes.
-    pub fn set_folder_settings(&mut self, folder: Option<Arc<crate::folder_settings::FolderSettings>>, cx: &mut Context<Self>) {
-        if self.folder == folder {
-            return;
-        }
-        self.folder = folder;
-        self.refresh_indent(cx);
-    }
-
     /// Source-scoped bool setting: the folder's if it gave one, otherwise the global value.
     fn scoped(&self, pick: impl Fn(&crate::folder_settings::FolderSettings) -> Option<bool>, global: bool) -> bool {
         self.folder.as_deref().and_then(pick).unwrap_or(global)
-    }
-
-    /// Indent unit: `None` is tab, `Some(n)` is n spaces (for text written from now on).
-    pub fn set_indent(&mut self, spaces: Option<usize>, cx: &mut Context<Self>) {
-        self.indent = spaces.map_or("\t".to_string(), |n| " ".repeat(n));
-        self.display_key = None; // tab width affects scrolling
-        cx.emit(EditorEvent::Changed);
-        cx.notify();
-    }
-
-    /// Convert the indentation at line starts to tabs or spaces (single undo step).
-    pub fn convert_indentation(&mut self, to_tabs: bool, cx: &mut Context<Self>) {
-        let unit = self.indent_unit();
-        let mut edits = Vec::new();
-        for l in 0..self.buffer.len_lines() {
-            let line = self.buffer.line(l);
-            let lead: String = line.chars().take_while(|c| *c == ' ' || *c == '\t').collect();
-            if lead.is_empty() {
-                continue;
-            }
-            let width: usize = lead.chars().map(|c| if c == '\t' { unit } else { 1 }).sum();
-            let new = if to_tabs { format!("{}{}", "\t".repeat(width / unit), " ".repeat(width % unit)) } else { " ".repeat(width) };
-            if new != lead {
-                let start = self.buffer.line_to_char(l);
-                edits.push((start..start + lead.chars().count(), new));
-            }
-        }
-        self.indent = if to_tabs { "\t".into() } else { " ".repeat(unit) };
-        if !edits.is_empty() {
-            self.buffer.apply_edits(edits);
-            self.after_edit(cx);
-        }
-        cx.emit(EditorEvent::Changed);
-        cx.notify();
     }
 
     /// 1-based (line, column).
@@ -1277,40 +1222,8 @@ impl EditorView {
         }
     }
 
-    /// The indentation as the English key the indent picker compares against.
-    pub fn indent_key(&self) -> String {
-        if self.indent == "\t" { "Tabs".into() } else { format!("{} spaces", self.indent.len()) }
-    }
-
-    pub fn indent_label(&self) -> String {
-        if self.indent == "\t" { crate::i18n::t("Tabs").into() } else { crate::i18n::tn("{} space", "{} spaces", self.indent.len(), &[]) }
-    }
-
     pub fn is_saving(&self) -> bool {
         self.saving
-    }
-
-    /// Column width of one indent level. A tab is 4 columns in the text painter.
-    #[cfg(test)]
-    pub fn indent_unit_for_test(&self) -> usize {
-        self.indent_unit()
-    }
-
-    fn indent_unit(&self) -> usize {
-        if self.indent == "\t" { TAB_COLS } else { self.indent.len().max(1) }
-    }
-
-    /// Number of guide lines. On an empty line, the smaller of the surrounding non-empty lines
-    /// (so a guide doesn't break on an empty line inside a block).
-    fn guide_levels(&self, ix: usize) -> usize {
-        let unit = self.indent_unit();
-        if let Some(l) = indent_level(&self.buffer.line(ix), unit) {
-            return l;
-        }
-        let n = self.buffer.len_lines();
-        let up = (ix.saturating_sub(50)..ix).rev().find_map(|i| indent_level(&self.buffer.line(i), unit));
-        let down = (ix + 1..(ix + 50).min(n)).find_map(|i| indent_level(&self.buffer.line(i), unit));
-        up.unwrap_or(0).min(down.unwrap_or(0))
     }
 
     /// Tab moved to the foreground/background: a background tab doesn't keep the syntax tree.
@@ -1440,48 +1353,6 @@ impl EditorView {
             });
         }
         syntax.reparse(self.buffer.rope());
-    }
-
-    /// Fetch the last change of the cursor's line (author, time, subject) in the background; shown
-    /// as dim text at the end of the line (`git.inlineBlame`).
-    fn schedule_blame(&mut self, cx: &mut Context<Self>) {
-        if !cx.global::<Settings>().inline_blame {
-            self.blame = None;
-            self.blame_task = None;
-            return;
-        }
-        let Some(root) = self.git_root.clone() else { return };
-        let Some(rel) = self.path.strip_prefix(&format!("{}/", root.trim_end_matches('/'))).map(str::to_string) else { return };
-        let line = self.buffer.char_to_line(self.buffer.cursor());
-        let version = self.buffer.version();
-        if self.blame.as_ref().is_some_and(|(l, v, _)| *l == line && *v == version) {
-            return;
-        }
-        if self.blame.as_ref().is_some_and(|(l, ..)| *l != line) {
-            self.blame = None;
-        }
-        if self.buffer.line(line).trim().is_empty() {
-            self.blame_task = None;
-            return;
-        }
-        let (host, rope, dirty) = (self.host.clone(), self.buffer.rope().clone(), self.is_dirty());
-        self.blame_task = Some(cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(std::time::Duration::from_millis(350)).await;
-            let result =
-                cx.background_executor().spawn(async move { crate::git::blame_line(host.as_ref(), &root, &rel, line, dirty.then(|| rope.to_string())) }).await;
-            this.update(cx, |this, cx| {
-                if let Ok(e) = result {
-                    let text = if e.hash.chars().all(|c| c == '0') {
-                        crate::i18n::t("You · Uncommitted changes").to_string()
-                    } else {
-                        format!("{}, {} · {}", e.author, e.when, e.subject)
-                    };
-                    this.blame = Some((line, version, text.into()));
-                    cx.notify();
-                }
-            })
-            .ok();
-        }));
     }
 
     pub fn cursor_count(&self) -> usize {

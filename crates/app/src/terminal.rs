@@ -376,6 +376,13 @@ impl TerminalView {
             self.on_osc(ev);
         }
         self.parser.advance(&mut self.term, &data[at..]);
+        // Deleting lines (`CSI M`, which full-screen programs send all the time) while the view is scrolled back can leave the
+        // parser's view offset past the end of the history, and drawing that panics: bring it back inside.
+        let grid = self.term.grid();
+        let (offset, history) = (grid.display_offset(), grid.history_size());
+        if offset > history {
+            self.term.scroll_display(alacritty_terminal::grid::Scroll::Delta(history as i32 - offset as i32));
+        }
         self.update_mark_shift();
         // New output can push lines into the history, so a remembered match would point at the wrong cells.
         self.forget_find_match();

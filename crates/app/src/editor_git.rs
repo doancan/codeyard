@@ -4,6 +4,48 @@ use super::*;
 use crate::i18n::{t, tn};
 
 impl EditorView {
+    /// Fetch the last change of the cursor's line (author, time, subject) in the background; shown
+    /// as dim text at the end of the line (`git.inlineBlame`).
+    pub(super) fn schedule_blame(&mut self, cx: &mut Context<Self>) {
+        if !cx.global::<Settings>().inline_blame {
+            self.blame = None;
+            self.blame_task = None;
+            return;
+        }
+        let Some(root) = self.git_root.clone() else { return };
+        let Some(rel) = self.path.strip_prefix(&format!("{}/", root.trim_end_matches('/'))).map(str::to_string) else { return };
+        let line = self.buffer.char_to_line(self.buffer.cursor());
+        let version = self.buffer.version();
+        if self.blame.as_ref().is_some_and(|(l, v, _)| *l == line && *v == version) {
+            return;
+        }
+        if self.blame.as_ref().is_some_and(|(l, ..)| *l != line) {
+            self.blame = None;
+        }
+        if self.buffer.line(line).trim().is_empty() {
+            self.blame_task = None;
+            return;
+        }
+        let (host, rope, dirty) = (self.host.clone(), self.buffer.rope().clone(), self.is_dirty());
+        self.blame_task = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(std::time::Duration::from_millis(350)).await;
+            let result =
+                cx.background_executor().spawn(async move { crate::git::blame_line(host.as_ref(), &root, &rel, line, dirty.then(|| rope.to_string())) }).await;
+            this.update(cx, |this, cx| {
+                if let Ok(e) = result {
+                    let text = if e.hash.chars().all(|c| c == '0') {
+                        crate::i18n::t("You · Uncommitted changes").to_string()
+                    } else {
+                        format!("{}, {} · {}", e.author, e.when, e.subject)
+                    };
+                    this.blame = Some((line, version, text.into()));
+                    cx.notify();
+                }
+            })
+            .ok();
+        }));
+    }
+
     /// Repo (or HEAD) changed: fetch the HEAD content again. `None`: outside a repo.
     /// `changed`: git sees this file as modified; if not and the buffer is clean,
     /// the HEAD content is the buffer itself.

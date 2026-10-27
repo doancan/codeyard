@@ -20,10 +20,14 @@ fn tmp(name: &str, content: &[u8]) -> PathBuf {
 }
 
 fn setup(cx: &mut TestAppContext) -> (Entity<Workbench>, &mut VisualTestContext) {
+    setup_with_settings(cx, crate::settings::Settings::default())
+}
+
+fn setup_with_settings(cx: &mut TestAppContext, settings: crate::settings::Settings) -> (Entity<Workbench>, &mut VisualTestContext) {
     cx.update(|cx| {
         crate::bind_keys(cx);
         cx.set_global(ActiveTheme(theme::DARK));
-        cx.set_global(crate::settings::Settings::default());
+        cx.set_global(settings);
     });
     let (wb, cx) = cx.add_window_view(|window, cx| Workbench::with_state(state::State::in_memory().ok(), None, window, cx));
     // Same as main.rs: focus starts on the workbench.
@@ -2326,6 +2330,81 @@ fn command_marks_follow_the_shell_integration_sequences(cx: &mut TestAppContext)
     assert_eq!(term.read_with(cx, |t, _| t.command_count_for_test()), 2);
 }
 
+/// Scrolled back while a program with a scroll region (vim, less, tmux) keeps printing: the view stays inside the history
+/// and the screen can be drawn (the terminal parser moved the view past the history's end, and drawing that panicked).
+#[gpui::test]
+fn output_in_a_scroll_region_while_scrolled_back_does_not_break_drawing(cx: &mut TestAppContext) {
+    let dir = single_file_dir("scrolled-dl");
+    let (wb, cx) = setup_with_settings(cx, crate::settings::Settings { terminal_scrollback: 50, ..Default::default() });
+    open(&wb, &dir, cx);
+    wb.update(cx, |wb, _| wb.set_shell("/bin/cat"));
+    cx.simulate_keystrokes("ctrl-`");
+    let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
+    term.update(cx, |t, _| t.feed_for_test(format!("{}\x1b[5;10r", "line\r\n".repeat(50)).as_bytes()));
+    term.update(cx, |t, _| t.scroll_for_test(24));
+    for _ in 0..4 {
+        term.update(cx, |t, _| t.feed_for_test(b"\n\n\n\n\n\n\n\n\x1b[3M"));
+        let _ = term.read_with(cx, |t, _| t.screen_text());
+    }
+}
+
+/// A program can print anything: random sequences mixed with command marks, screen and history clears, resizes of the
+/// scroll region and wide characters. Marks, jumping between commands and copying the last output must survive all of it.
+#[gpui::test]
+fn command_marks_survive_hostile_output(cx: &mut TestAppContext) {
+    let dir = single_file_dir("marks-fuzz");
+    let (wb, cx) = setup_with_settings(cx, crate::settings::Settings { terminal_scrollback: 50, ..Default::default() });
+    open(&wb, &dir, cx);
+    wb.update(cx, |wb, _| wb.set_shell("/bin/cat"));
+    cx.simulate_keystrokes("ctrl-`");
+    let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
+    let pieces: &[&str] = &[
+        "\x1b]133;A\x07$ ",
+        "\x1b]133;C\x07",
+        "\x1b]133;D;0\x07",
+        "\x1b]133;D;1\x07",
+        "\x1b]7;file://h/tmp\x07",
+        "\x1b[2J",
+        "\x1b[3J",
+        "\x1b[H",
+        "\x1bc",
+        "\x1b[5;10r",
+        "\x1b[r",
+        "\x1b[?1049h",
+        "\x1b[?1049l",
+        "\x1b[10S",
+        "\x1b[10T",
+        "\x1b[3L",
+        "\x1b[3M",
+        "中文😀",
+        "\r\n",
+        "\n\n\n\n\n\n\n\n",
+        "line of output\r\n",
+    ];
+    let mut x = 0x9E3779B97F4A7C15u64;
+    let mut next = move |m: usize| {
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        (x % m as u64) as usize
+    };
+    for _ in 0..6000 {
+        let mut chunk = String::new();
+        for _ in 0..(1 + next(8)) {
+            chunk.push_str(pieces[next(pieces.len())]);
+        }
+        term.update(cx, |t, _| t.feed_for_test(chunk.as_bytes()));
+        match next(6) {
+            0 => drop(term.read_with(cx, |t, _| t.last_output_for_test())),
+            1 => term.update(cx, |t, _| t.jump_for_test(next(2) == 0)),
+            2 => drop(term.read_with(cx, |t, _| t.visible_marks_for_test())),
+            3 => drop(term.read_with(cx, |t, _| t.scrollback_text())),
+            4 => drop(term.read_with(cx, |t, _| (t.screen_text(), t.live_cwd()))),
+            _ => {}
+        }
+    }
+}
+
 /// A real zsh with the integration scripts: its commands and exit codes are marked, and it reports its folder.
 #[cfg(unix)]
 #[gpui::test]
@@ -3272,6 +3351,26 @@ fn images_open_in_a_preview(cx: &mut TestAppContext) {
     let view = wb.read_with(cx, |wb, _| wb.large_view()).expect("preview opened");
     assert!(view.read_with(cx, |v, _| v.is_image() && v.image_loaded()));
     assert_eq!(wb.read_with(cx, |wb, _| wb.open_state()).1, None, "no binary-file error");
+}
+
+/// A tiny PNG that announces 30,000 × 30,000 pixels (3.6 GB once decoded) is refused before it is decoded.
+#[gpui::test]
+fn an_image_too_large_to_decode_is_refused(cx: &mut TestAppContext) {
+    let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
+    png.extend(30_000u32.to_be_bytes());
+    png.extend(30_000u32.to_be_bytes());
+    png.extend([8, 6, 0, 0, 0, 0, 0, 0, 0]);
+    let dir = std::fs::canonicalize(project("huge-image")).unwrap();
+    std::fs::write(dir.join("bomb.png"), &png).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    let p = dir.join("bomb.png").to_string_lossy().into_owned();
+    wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(p, window, cx));
+    cx.run_until_parked();
+    let view = wb.read_with(cx, |wb, _| wb.large_view()).expect("preview opened");
+    assert!(view.read_with(cx, |v, _| !v.image_loaded()), "nothing was decoded");
+    let error = view.read_with(cx, |v, _| v.error_for_test());
+    assert!(error.as_deref().is_some_and(|e| e.contains("30000 × 30000")), "{error:?}");
 }
 
 #[gpui::test]
