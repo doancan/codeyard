@@ -30,7 +30,8 @@ user-visible capability, written as a specification), **Task** (work with no use
 
 - **Title:** a plain summary, at most 78 characters, with no type prefix (the type label says it).
   Features and tasks start with a verb ("Show …", "Pass …"); bugs say what goes wrong.
-- **Labels:** exactly three, one from each group. The form sets the type; triage adds the area and the environment.
+- **Labels:** two or three, at most one from each group. The form sets the type; triage adds the area, and the environment
+  when the issue depends on it (leave it off when local or remote makes no difference, such as docs).
 
 | Group | Labels |
 | --- | --- |
