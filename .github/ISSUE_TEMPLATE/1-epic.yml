@@ -1,5 +1,5 @@
 name: Epic
-description: A goal that takes several features or tasks to reach (maintainers)
+description: A goal reached through several features and tasks; the hub that tracks them (maintainers)
 labels: ["epic"]
 projects: ["doancan/2"]
 body:
@@ -8,26 +8,28 @@ body:
       value: |
         **Title:** the outcome in plain words, at most **78 characters**. No type prefix: the type label says it.
         **Labels:** two or three: the type (set by this form) and one area, plus one environment when it matters (set at triage). Priority, effort and dates are fields on the project board.
-        **Relationships:** set the parent epic, sub-issues and *blocked by* in the sidebar, not in the text.
+        **Relationships:** every child is a sub-issue of this epic (sidebar), in delivery order. *Blocked by* goes on the children.
+
+        An epic is a hub: it records the goal and how we know it is reached. Discussion of one part belongs in that part's issue.
   - type: textarea
     id: goal
     attributes:
       label: Goal
-      description: The outcome for the user in one or two sentences. What can they do when this epic is closed that they cannot do today?
+      description: What the user can do when this epic is closed that they cannot do today. One or two sentences.
     validations:
       required: true
   - type: textarea
     id: background
     attributes:
       label: Background
-      description: Why now. What was observed (code references, user reports, measurements) that makes this worth doing.
+      description: The evidence that makes this worth doing now - code references (`path:line`), reports, measurements.
     validations:
       required: true
   - type: textarea
     id: scope
     attributes:
       label: Scope
-      description: What is in and what is deliberately left out. Out-of-scope items say why (YAGNI, budget, privacy).
+      description: Out-of-scope items say why (YAGNI, budget, privacy), so they are not proposed again.
       value: |
         **In scope**
         -
@@ -37,22 +39,44 @@ body:
     validations:
       required: true
   - type: textarea
-    id: success
+    id: exit-criteria
     attributes:
-      label: Success criteria
-      description: Observable and checkable. How we know the goal is reached, not that work was done.
+      label: Exit criteria
+      description: Numbered and checkable from the user's side, across children. The epic closes when every one holds.
+      value: |
+        1.
     validations:
       required: true
   - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: What is checked once all children are merged, beyond each child's own tests.
+      value: |
+        - [ ] End-to-end walkthrough of every exit criterion in a release build, locally and over SSH
+        - [ ] `scripts/check.sh --budgets` passes on a Retina Mac (memory and size budgets)
+        - [ ] Windows: `scripts/check-windows.ps1` passes, or the gap is written in docs/platforms.md
+        - [ ] User guide describes the result as one story, not one paragraph per child
+        - [ ] CHANGELOG entry for the release names the outcome
+    validations:
+      required: true
+  - type: textarea
+    id: questions
+    attributes:
+      label: Unresolved questions
+      description: Decisions still open, each with a recommendation and the child issue that settles it.
+      value: |
+        - [ ]
+  - type: textarea
     id: risks
     attributes:
-      label: Risks and open decisions
-      description: What could make this fail or grow, and decisions still to be made (with a recommendation).
+      label: Risks
+      description: What could make this fail, slip or grow, and what we do if it happens.
   - type: checkboxes
     id: obligations
     attributes:
       label: Applicable obligations
-      description: Tick every rule the children must respect; each child repeats the ones that apply to it.
+      description: Rules every child must respect. Each child repeats the ones that apply to it.
       options:
         - label: Memory and size budgets (docs/architecture.md, scripts/memcheck.sh)
         - label: Workspace Trust (nothing runs or is sent for an untrusted folder)
@@ -60,6 +84,5 @@ body:
         - label: SSH parity (works the same on a remote folder)
         - label: Windows parity (builds and behaves on Windows, or the gap is documented)
         - label: Interface text translated (every Complete language)
-        - label: Documentation and CHANGELOG updated
         - label: No new dependency, or the reason is stated
         - label: No third-party product names in interface text, docs or commits

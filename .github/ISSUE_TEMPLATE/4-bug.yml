@@ -6,105 +6,66 @@ body:
   - type: markdown
     attributes:
       value: |
+        Thank you. A bug we can reproduce gets fixed; the fields below are what we need for that.
         **Security problems:** do not file them here, use the private advisory link on the issue chooser (see SECURITY.md).
-        **Title:** what goes wrong ("Crash when …", "… is not saved"), at most **78 characters**. No type prefix: the type label says it.
-        **Labels:** two or three: the type (set by this form) and one area, plus one environment when it matters (set at triage). Priority, effort and dates are fields on the project board.
-  - type: input
-    id: version
+        **Title:** what goes wrong ("Crash when …", "… is not saved"), at most **78 characters**.
+  - type: textarea
+    id: what-happened
     attributes:
-      label: Codeyard version
-      description: "`codeyard --version` or the About dialog"
+      label: What happened?
+      description: The exact message or behaviour. A screenshot helps.
     validations:
       required: true
-  - type: input
-    id: platform
+  - type: textarea
+    id: expected
     attributes:
-      label: OS and architecture
-      placeholder: macOS 15 arm64 / Windows 11 x64
-    validations:
-      required: true
-  - type: dropdown
-    id: location
-    attributes:
-      label: Where does it happen?
-      options:
-        - Local folder
-        - Remote folder (SSH)
-        - Both
-        - Not related to a folder
-    validations:
-      required: true
-  - type: dropdown
-    id: severity
-    attributes:
-      label: Severity
-      description: How bad is it for you?
-      options:
-        - Data loss or crash
-        - A feature does not work, no workaround
-        - A feature does not work, there is a workaround
-        - Cosmetic or wording
-    validations:
-      required: true
-  - type: dropdown
-    id: frequency
-    attributes:
-      label: How often?
-      options:
-        - Every time
-        - Sometimes
-        - Once
+      label: What did you expect?
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
       label: Steps to reproduce
-      description: Numbered steps from a fresh start. A minimal file, folder or settings snippet helps most.
+      description: As few steps as possible from a fresh start, with a minimal file, folder or settings snippet. Say whether it happens every time.
       value: |
         1.
     validations:
       required: true
-  - type: textarea
-    id: expected
+  - type: dropdown
+    id: where
     attributes:
-      label: Expected behaviour
+      label: Folder
+      options:
+        - Local
+        - Remote (SSH)
+        - Both
+        - Does not depend on a folder
     validations:
       required: true
-  - type: textarea
-    id: actual
+  - type: input
+    id: version
     attributes:
-      label: Actual behaviour
-      description: Exact messages, screenshots.
+      label: Codeyard version
+      description: "`codeyard --version`, or the About dialog"
+      placeholder: Codeyard 0.5.0
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS and architecture
+      placeholder: macOS 15.5 arm64, Windows 11 x64
     validations:
       required: true
   - type: input
     id: regression
     attributes:
       label: Last version where it worked
-      description: Leave empty if unknown or if it never worked.
+      description: Leave empty if it never worked or you do not know.
   - type: textarea
     id: logs
     attributes:
-      label: Logs and reports
-      description: The Output panel, a crash report from `crashes/` (see docs/troubleshooting.md), `CODEYARD_DAP_TRACE=1` output. Remove anything private.
+      label: Logs
+      description: |
+        The Output panel, a crash report from `crashes/` (docs/troubleshooting.md), or `CODEYARD_DAP_TRACE=1` output for debugger problems. Remove anything private.
       render: text
-  - type: markdown
-    attributes:
-      value: |
-        ---
-        The fields below are for maintainers. Reporters can leave them empty.
-  - type: textarea
-    id: root-cause
-    attributes:
-      label: Root cause
-      description: "(Maintainers) What is wrong in the code, with `path:line`."
-  - type: textarea
-    id: dod
-    attributes:
-      label: Definition of Done
-      value: |
-        - [ ] A failing test reproduces the bug before the fix
-        - [ ] The test passes with the fix; related failure paths are tested too
-        - [ ] `scripts/check.sh` passes
-        - [ ] CHANGELOG has a line under *Unreleased*

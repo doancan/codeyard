@@ -1,5 +1,5 @@
 name: Feature
-description: A user-visible capability, specified well enough to build and verify
+description: A user-visible capability, written as a specification that can be built and verified (maintainers)
 labels: ["feature"]
 projects: ["doancan/2"]
 body:
@@ -8,8 +8,10 @@ body:
       value: |
         **Title:** an imperative summary ("Show …", "Pass …"), at most **78 characters**. No type prefix: the type label says it.
         **Labels:** two or three: the type (set by this form) and one area, plus one environment when it matters (set at triage). Priority, effort and dates are fields on the project board.
-        **Relationships:** set the parent epic, sub-issues and *blocked by* in the sidebar, not in the text.
-        Not sure yet what you want? Start a Discussion instead; a feature issue is a specification.
+        **Relationships:** set the parent epic and *blocked by* in the sidebar, not in the text.
+
+        A feature issue is a specification: a reviewer should be able to agree or disagree with it before any code exists.
+        Only an idea so far? Start a Discussion.
   - type: textarea
     id: summary
     attributes:
@@ -20,14 +22,15 @@ body:
   - type: textarea
     id: problem
     attributes:
-      label: Problem and motivation
-      description: What goes wrong or is impossible today. Code references (`path:line`) and concrete examples, not the solution.
+      label: Problem
+      description: What goes wrong or is impossible today, with code references (`path:line`) and concrete examples. Not the solution.
     validations:
       required: true
   - type: textarea
     id: scope
     attributes:
       label: Scope
+      description: Out-of-scope items say why.
       value: |
         **In scope**
         -
@@ -47,21 +50,21 @@ body:
     id: outputs
     attributes:
       label: Outputs
-      description: Everything observable - UI, messages (exact text), files written, protocol messages sent, state changes.
+      description: Everything observable - UI, messages (exact English text), files written, protocol messages sent, state changes.
     validations:
       required: true
   - type: textarea
     id: design
     attributes:
       label: Design
-      description: The approach and the modules it touches. Keep it to what a reviewer needs to agree with before code is written.
+      description: The approach and the modules it touches, as much as a reviewer needs to agree with it.
     validations:
       required: true
   - type: textarea
     id: edge-cases
     attributes:
       label: Edge cases and failure modes
-      description: A table of situation → expected behaviour. Hostile or malformed input, missing tools, remote folders, untrusted folders.
+      description: Malformed or hostile input, missing tools, remote and untrusted folders, Windows.
       value: |
         | Situation | Expected behaviour |
         | --- | --- |
@@ -72,30 +75,30 @@ body:
     id: acceptance
     attributes:
       label: Acceptance criteria
-      description: Numbered, each one checkable. Given / When / Then where it helps.
+      description: Numbered (AC1, AC2 …) and each checkable; tests refer to these numbers.
       value: |
-        1. **Given** … **when** … **then** …
+        - **AC1.** **Given** … **when** … **then** …
     validations:
       required: true
   - type: textarea
     id: tests
     attributes:
       label: Test and verification
-      description: The tests that prove each acceptance criterion, by layer (docs/testing.md). Name the file each one goes in.
+      description: The tests that prove each criterion, by layer (docs/testing.md), with the file each goes in. Remove layers that do not apply.
       value: |
-        **Unit**
+        **Unit:**
         -
 
-        **Fuzz / hostile input**
+        **Fuzz / hostile input:**
         -
 
-        **End to end (fake server or adapter)**
+        **End to end (fake server or adapter):**
         -
 
-        **Real tool** (skipped with a message when the tool is missing)
+        **Real tool** (skipped with a message when the tool is missing):
         -
 
-        **Manual check**
+        **Manual:**
         -
     validations:
       required: true
@@ -111,7 +114,6 @@ body:
         - label: SSH parity (works the same on a remote folder)
         - label: Windows parity (builds and behaves on Windows, or the gap is documented)
         - label: Interface text translated (every Complete language)
-        - label: Documentation and CHANGELOG updated
         - label: No new dependency, or the reason is stated
         - label: No third-party product names in interface text, docs or commits
   - type: textarea
@@ -119,27 +121,15 @@ body:
     attributes:
       label: Definition of Done
       value: |
-        - [ ] Every acceptance criterion has a passing test
-        - [ ] `scripts/check.sh` passes (fmt, clippy, arch-check, docs-check, deny, audit, tests)
+        - [ ] Every acceptance criterion has a passing test that names it
         - [ ] Failure paths are tested and their messages asserted (English and Turkish)
-        - [ ] User guide, generated settings reference and CHANGELOG updated
-        - [ ] Reviewed and merged into `main`
+        - [ ] `scripts/check.sh` passes
+        - [ ] User guide, generated settings reference (if settings changed) and CHANGELOG updated
+        - [ ] Manual check done in a build of the branch
     validations:
       required: true
   - type: textarea
     id: risks
     attributes:
       label: Risks and open questions
-  - type: dropdown
-    id: effort
-    attributes:
-      label: Effort
-      description: Copied to the Effort field on the project board at triage.
-      options:
-        - XS (up to two hours)
-        - S (under a day)
-        - M (one to three days)
-        - L (up to a week; consider splitting)
-        - XL (more than a week; split before work starts)
-    validations:
-      required: true
+      description: Each open question with a recommendation.
