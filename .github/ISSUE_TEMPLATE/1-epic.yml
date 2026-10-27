@@ -1,0 +1,66 @@
+name: Epic
+description: A goal that takes several features or tasks to reach (maintainers)
+title: "[Epic] "
+labels: ["type: epic"]
+projects: ["doancan/2"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Title:** `[Epic] ` followed by the outcome in plain words, at most **72 characters** in total.
+        **Labels:** exactly two: `type:` (set by this form) and one `area:` (set at triage). Priority, effort and dates are fields on the project board.
+        **Relationships:** set the parent epic, sub-issues and *blocked by* in the sidebar, not in the text.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: The outcome for the user in one or two sentences. What can they do when this epic is closed that they cannot do today?
+    validations:
+      required: true
+  - type: textarea
+    id: background
+    attributes:
+      label: Background
+      description: Why now. What was observed (code references, user reports, measurements) that makes this worth doing.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: What is in and what is deliberately left out. Out-of-scope items say why (YAGNI, budget, privacy).
+      value: |
+        **In scope**
+        -
+
+        **Out of scope**
+        -
+    validations:
+      required: true
+  - type: textarea
+    id: success
+    attributes:
+      label: Success criteria
+      description: Observable and checkable. How we know the goal is reached, not that work was done.
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks and open decisions
+      description: What could make this fail or grow, and decisions still to be made (with a recommendation).
+  - type: checkboxes
+    id: obligations
+    attributes:
+      label: Applicable obligations
+      description: Tick every rule the children must respect; each child repeats the ones that apply to it.
+      options:
+        - label: Memory and size budgets (docs/architecture.md, scripts/memcheck.sh)
+        - label: Workspace Trust (nothing runs or is sent for an untrusted folder)
+        - label: Privacy (no network request the user did not start, no telemetry)
+        - label: SSH parity (works the same on a remote folder)
+        - label: Windows parity (builds and behaves on Windows, or the gap is documented)
+        - label: Interface text translated (every Complete language)
+        - label: Documentation and CHANGELOG updated
+        - label: No new dependency, or the reason is stated
+        - label: No third-party product names in interface text, docs or commits
