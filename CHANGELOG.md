@@ -47,6 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Markdown resource loads keep their own identity: an old read cannot overwrite a newly added image with the same URL.
+- Readiness and platform documentation now match the blocking Linux checks and verified macOS release notarization.
+
 - **Platform-standard code font size:** the editor and terminal default to 12 px on macOS and 14 px on Windows and Linux
   (was 13 px everywhere). A size written in your settings file is kept. The settings template now leaves the font keys
   commented out, so a settings file shared between computers does not pin one platform's size.
@@ -57,6 +60,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sizes); a test keeps new code on the scale.
 
 ### Security
+
+- Markdown images now use the same 20 MB and 50-million-pixel checks as image tabs, before decoding. SVG canvas sizes
+  use the renderer's XML and unit rules, so comments and attribute spacing cannot bypass the limit.
 
 - **Git is paused in untrusted repositories whose own settings run programs.** Opening a folder ran `git status`, and
   `git status` runs a repository's clean filter on every file it sees as changed, which is every file of a checkout
@@ -78,6 +84,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file changes while they load.
 
 ### Fixed
+
+- Generic editor/workbench test fixtures no longer start installed language servers; language-server integration tests opt in explicitly.
+
+- Release signing and verification detect `pkeyutl -rawin` support instead of rejecting OpenSSL 4 by its version string.
 
 - The terminal ignored `terminal.fontSize` and zoom: it now uses the setting, with rows sized to match.
 - **Pasting into the terminal is safer:** bracketed-paste markers hidden in pasted text can no longer end the paste early

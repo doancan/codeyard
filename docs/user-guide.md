@@ -333,7 +333,7 @@ reading view, **Code**, Escape, or the preview shortcut returns to the source wi
 losing edits. Code blocks support syntax colors, horizontal scrolling and **Copy code**.
 Heading links scroll within the document; relative file links open in Codeyard. Relative
 images load from the document's own filesystem, including SSH hosts (up to 20 MB per
-image). External image URLs remain clickable links rather than loading automatically.
+image, with the same 50-million-pixel limit as image tabs). External image URLs remain clickable links rather than loading automatically.
 MDX components are not executed.
 
 ## Settings and keyboard shortcuts
