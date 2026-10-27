@@ -345,6 +345,7 @@ pub(super) enum MenuCmd {
     GitIgnore,
     GitOpenChanges,
     GitOpenHead,
+    ScmFile(crate::scm::FileAction),
     /// A view or filter choice of the GRAPH section's "…" menu.
     Graph(crate::scm::GraphOption),
     /// Send the action in `MenuState::actions` to the focused item.
