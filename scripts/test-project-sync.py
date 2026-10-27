@@ -122,6 +122,18 @@ class MissingToken(unittest.TestCase):
             self.assertEqual(sync.main(["project-sync.py", "event"]), 0)
         self.assertIn("PROJECT_TOKEN is not set", out.getvalue())
 
+    def test_a_rejected_token_says_so_and_fails_the_job(self):
+        import io
+        import os
+        import urllib.error
+        from contextlib import redirect_stdout
+        from unittest import mock
+
+        rejected = urllib.error.HTTPError("https://api.github.com/graphql", 401, "Unauthorized", {}, None)
+        with mock.patch.dict(os.environ, {"PROJECT_TOKEN": "x"}, clear=True), mock.patch.object(sync.GitHub, "call", side_effect=rejected), redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(sync.main(["project-sync.py", "reconcile"]), 1)
+        self.assertIn("rejected PROJECT_TOKEN (401)", out.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
