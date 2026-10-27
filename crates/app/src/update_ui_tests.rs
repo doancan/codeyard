@@ -12,6 +12,7 @@ use gpui::{App, AppContext as _, Entity, Focusable as _, TestAppContext, VisualT
 
 use crate::qa_integration_tests::wait_ticking;
 use crate::qa_workbench_tests::{fresh, open, open_in, project, setup, setup_persistent, setup_with_config};
+use crate::ui;
 use crate::update::{Asset, Downloaded, Progress, Release, UpdateError};
 use crate::update_backend::UpdateBackend;
 use crate::update_install::{InstallKind, InstallPlan, ManualReason};
@@ -1461,7 +1462,7 @@ fn restarting_leaves_the_open_folder_for_the_new_version(cx: &mut TestAppContext
     press(&wb, cx, "Restart Now");
     assert_eq!(fake.count("quit"), 1);
     let h = update_restart::take(&home, "0.2.0", fake_now(&fake)).unwrap().expect("the file the new version reads");
-    assert_eq!(h, Handover { to: "0.2.0".into(), windows: vec![Folder { host: None, path: dir.to_string_lossy().into_owned() }], focused: 0 });
+    assert_eq!(h, Handover { to: "0.2.0".into(), windows: vec![Folder { host: None, path: ui::local_path(&dir) }], focused: 0 });
 }
 
 #[gpui::test]
@@ -1518,7 +1519,7 @@ fn after_the_restart_the_folder_and_its_unsaved_edit_are_back_though_startup_is_
     assert_eq!(first.read_with(cx, |wb, cx| wb.root_for_test(cx)), None);
 
     land(&first, cx, &handover.expect("handover"));
-    assert_eq!(first.read_with(cx, |wb, cx| wb.root_for_test(cx)).as_deref(), dir.to_str());
+    assert_eq!(first.read_with(cx, |wb, cx| wb.root_for_test(cx)), Some(ui::local_path(&dir)));
     let text = first.read_with(cx, |wb, cx| wb.active_editor_entity().map(|e| e.read(cx).text()));
     assert_eq!(text.as_deref(), Some("// not saved\nfn main() {}\n"));
     assert!(first.read_with(cx, |wb, cx| wb.any_dirty(cx)), "still unsaved");
@@ -1553,7 +1554,7 @@ fn session_case(cx: &mut TestAppContext, restore: bool, hot: bool, tab: bool, ed
     let h = update_restart::take(&home, "0.2.0", fake_now(&fake)).unwrap().unwrap();
     let first = new_process(cx, &home);
     land(&first, cx, &h);
-    assert_eq!(first.read_with(cx, |wb, cx| wb.root_for_test(cx)).as_deref(), dir.to_str(), "{n}: the folder always comes back");
+    assert_eq!(first.read_with(cx, |wb, cx| wb.root_for_test(cx)), Some(ui::local_path(&dir)), "{n}: the folder always comes back");
     let tabs = first.read_with(cx, |wb, cx| wb.open_paths(cx));
     let edit_back = first.read_with(cx, |wb, cx| wb.any_dirty(cx));
     assert_eq!((!tabs.is_empty(), edit_back), (tab, edit), "{n}: {tabs:?}");
@@ -1615,7 +1616,7 @@ fn open_test_window(cx: &mut TestAppContext) -> gpui::WindowHandle<Workbench> {
 fn every_window_with_a_folder_is_left_for_the_new_version_and_the_one_in_front_is_marked(cx: &mut TestAppContext) {
     crate::qa_workbench_tests::globals(cx);
     let home = fresh("restart-two-home");
-    let canon = |name: &str| std::fs::canonicalize(project(name)).unwrap().to_string_lossy().into_owned();
+    let canon = |name: &str| ui::local_path(&std::fs::canonicalize(project(name)).unwrap());
     let (a, b, c) = (canon("restart-two-a"), canon("restart-two-b"), canon("restart-two-c"));
     let (first, second, third, _no_folder) = (open_test_window(cx), open_test_window(cx), open_test_window(cx), open_test_window(cx));
     let fake = Fake::new();

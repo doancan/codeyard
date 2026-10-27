@@ -43,6 +43,22 @@ impl Workbench {
     }
 
     pub fn connect(&mut self, alias: String, window: &mut Window, cx: &mut Context<Self>) {
+        let bundle = self.remote.bundle.clone();
+        let target = alias.clone();
+        self.connect_using(alias, window, cx, move |progress| async move {
+            let remote = if target == LOCAL_AGENT_ALIAS {
+                host::ssh::spawn_local_agent(&bundle)
+            } else {
+                host::ssh::connect(&target, &bundle, |s| progress.store(s as u8, Ordering::Relaxed))
+            }?;
+            Ok(Arc::new(remote) as Arc<dyn Host>)
+        });
+    }
+
+    fn connect_using<F>(&mut self, alias: String, window: &mut Window, cx: &mut Context<Self>, connector: impl FnOnce(Arc<AtomicU8>) -> F)
+    where
+        F: std::future::Future<Output = host::Result<Arc<dyn Host>>> + Send + 'static,
+    {
         if crate::docker::is_target(&alias) && !self.docker_available(cx) {
             self.remote.pending_path = None;
             self.persist.opening_recent = None;
@@ -56,27 +72,35 @@ impl Workbench {
         if matches!(self.remote.conn, Conn::Connecting { .. }) || self.refuse_if_dirty(cx) {
             return;
         }
+        let return_workspace = if crate::docker::is_target(&alias)
+            && let Conn::Connected { alias: source } = &self.remote.conn
+            && matches!(host::ssh::target_of(source), host::ssh::Target::Ssh(_))
+            && self.remote.host.is_remote()
+        {
+            Some(crate::container_monitor::ReturnWorkspace { host: self.remote.host.clone(), alias: source.clone(), root: self.root(cx) })
+        } else {
+            None
+        };
+        // Own request metadata: another UI action must not change this attempt's folder.
+        let pending_path = self.remote.pending_path.take();
+        let opening_recent = self.persist.opening_recent.take();
+        let terminal_target = self.remote.docker.monitor.browser.terminal_target.take();
         let step = Arc::new(AtomicU8::new(Step::Probing as u8));
-        self.remote.conn = Conn::Connecting { alias: alias.clone(), step: step.clone() };
+        self.remote.connection_origin = Some(std::mem::replace(&mut self.remote.conn, Conn::Connecting { alias: alias.clone(), step: step.clone() }));
         self.notice = None;
-        let bundle = self.remote.bundle.clone();
-        let a = alias.clone();
-        let progress = step.clone();
-        let task = cx.background_executor().spawn(async move {
-            if a == LOCAL_AGENT_ALIAS {
-                host::ssh::spawn_local_agent(&bundle)
-            } else {
-                host::ssh::connect(&a, &bundle, |s| progress.store(s as u8, Ordering::Relaxed))
-            }
-        });
+        let task = cx.background_executor().spawn(connector(step.clone()));
         // Refresh the step indicator (while connecting).
+        let progress = step.clone();
         cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(Duration::from_millis(150)).await;
                 let still = this
                     .update(cx, |this, cx| {
-                        cx.notify();
-                        matches!(this.remote.conn, Conn::Connecting { .. })
+                        let current = matches!(&this.remote.conn, Conn::Connecting { step, .. } if Arc::ptr_eq(step, &progress));
+                        if current {
+                            cx.notify();
+                        }
+                        current
                     })
                     .unwrap_or(false);
                 if !still {
@@ -88,13 +112,31 @@ impl Workbench {
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
             this.update_in(cx, |this, window, cx| {
-                if crate::docker::is_target(&alias)
-                    && (!cx.global::<Settings>().docker_enabled || !matches!(&this.remote.conn, Conn::Connecting { alias: current, .. } if current == &alias))
-                {
+                if !matches!(&this.remote.conn, Conn::Connecting { step: current, .. } if Arc::ptr_eq(current, &step)) {
                     return;
                 }
+                if crate::docker::is_target(&alias) && !cx.global::<Settings>().docker_enabled {
+                    this.cancel_pending_connection();
+                    cx.notify();
+                    return;
+                }
+                // Files can become dirty while the network request is in flight.
+                if result.is_ok() && this.refuse_if_dirty(cx) {
+                    this.cancel_pending_connection();
+                    cx.notify();
+                    return;
+                }
+                let origin = this.remote.connection_origin.take().unwrap_or(Conn::Local);
                 match result {
-                    Ok(remote) => this.attach_host(Arc::new(remote), alias, window, cx),
+                    Ok(remote) => {
+                        this.remote.pending_path = pending_path;
+                        this.persist.opening_recent = opening_recent;
+                        this.remote.docker.monitor.browser.terminal_target = terminal_target;
+                        if this.remote.docker.monitor.return_workspace.is_none() {
+                            this.remote.docker.monitor.return_workspace = return_workspace;
+                        }
+                        this.attach_host(remote, alias, window, cx);
+                    }
                     Err(e) => {
                         let message: SharedString = e.to_string().into();
                         if let Some(s) = &this.persist.state {
@@ -105,10 +147,11 @@ impl Workbench {
                         let why = crate::i18n::tf("Could not connect to {}: {}", &[&alias, &message]);
                         this.notice = Some(Notice::Error(why.clone().into()));
                         // Connection started from a recent: if it can't be reached anymore, ask whether to remove it from the list.
-                        if let Some(r) = this.persist.opening_recent.take() {
+                        if let Some(r) = opening_recent {
                             this.ask_forget_unreachable(r, why, window, cx);
                         }
-                        this.remote.conn = Conn::Failed { alias, message };
+                        this.persist.opening_recent = None;
+                        this.remote.conn = if this.remote.host.is_remote() { origin } else { Conn::Failed { alias, message } };
                         cx.notify();
                     }
                 }
@@ -117,6 +160,16 @@ impl Workbench {
         })
         .detach();
         cx.notify();
+    }
+
+    /// Abandon the attempt without abandoning the workspace that is still open.
+    pub(super) fn cancel_pending_connection(&mut self) {
+        if matches!(self.remote.conn, Conn::Connecting { .. }) {
+            self.remote.conn = self.remote.connection_origin.take().unwrap_or(Conn::Local);
+            self.remote.pending_path = None;
+            self.persist.opening_recent = None;
+            self.remote.docker.monitor.browser.terminal_target = None;
+        }
     }
 
     /// Connection established: switch the host, open the remote home directory (or the pending folder).
@@ -180,6 +233,7 @@ impl Workbench {
 
     /// State of the remote connection: drop, reconnect, giving up.
     pub(super) fn listen_status(&mut self, alias: String, cx: &mut Context<Self>) {
+        let source = self.remote.host.clone();
         let rx = self.remote.host.status_events();
         self.status_task = Some(cx.spawn(async move |this, cx| {
             use futures::StreamExt;
@@ -188,6 +242,15 @@ impl Workbench {
                 let alias = alias.clone();
                 let ok = this
                     .update(cx, |this, cx| {
+                        if !Arc::ptr_eq(&this.remote.host, &source) {
+                            return;
+                        }
+                        // Source-host status still matters, but cannot replace an in-flight target.
+                        let pending = if matches!(this.remote.conn, Conn::Connecting { .. }) {
+                            Some(std::mem::replace(&mut this.remote.conn, this.remote.connection_origin.take().unwrap_or(Conn::Local)))
+                        } else {
+                            None
+                        };
                         match status {
                             host::ConnStatus::Reconnecting { attempt, .. } => {
                                 if attempt == 1 {
@@ -221,6 +284,9 @@ impl Workbench {
                                 this.stop_ports();
                             }
                         }
+                        if let Some(pending) = pending {
+                            this.remote.connection_origin = Some(std::mem::replace(&mut this.remote.conn, pending));
+                        }
                         cx.notify();
                     })
                     .is_ok();
@@ -243,6 +309,9 @@ impl Workbench {
         if self.refuse_if_dirty(cx) {
             return;
         }
+        self.cancel_pending_connection();
+        self.remote.pending_path = None;
+        self.persist.opening_recent = None;
         self.cancel_all_forwards();
         self.stop_ports();
         self.close_all_terminals(cx);
@@ -379,3 +448,7 @@ impl Workbench {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "workbench_connection_tests.rs"]
+mod tests;

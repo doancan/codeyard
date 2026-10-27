@@ -1120,6 +1120,7 @@ impl Workbench {
                 host,
                 conn: Conn::Local,
                 pending_path: None,
+                connection_origin: None,
                 ssh_hosts: host::ssh::list_hosts(),
                 bundle: Arc::new(crate::bundled_agents::discover()),
                 asks: Default::default(),
@@ -1544,6 +1545,8 @@ impl Workbench {
         let path = if self.remote.host.is_remote() { path } else { ui::local_path(std::path::Path::new(&path)) };
         // Same folder: keep tabs in place.
         if self.root(cx).as_deref() == Some(path.as_str()) {
+            self.cancel_pending_connection();
+            cx.notify();
             return;
         }
         // With hot exit on, dirty files are backed up and come back when returning to the folder.
@@ -1551,6 +1554,7 @@ impl Workbench {
         if (!cx.global::<Settings>().hot_exit || self.has_unbacked_dirty(cx)) && self.refuse_if_dirty(cx) {
             return;
         }
+        self.cancel_pending_connection();
         self.persist_session(cx);
         self.shutdown_lsp(cx);
         self.roots.extra_roots.clear();
@@ -2247,6 +2251,9 @@ impl Workbench {
                 }
                 if self.remote.host.is_remote() {
                     self.disconnect(cx);
+                    if self.remote.host.is_remote() {
+                        return;
+                    }
                 }
                 self.set_root(r.path, cx);
             }
