@@ -256,7 +256,7 @@ Crates marked vendored live in `vendor/`.
 | gpui_sum_tree | 0.2.2 | Apache-2.0 |  |
 | gpui_util | 0.2.2 | Apache-2.0 |  |
 | gpui_util_macros | 0.2.2 | Apache-2.0 |  |
-| grid | 0.18.0 | MIT |  |
+| grid | 1.0.1 | MIT |  |
 | h2 | 0.4.20 | MIT |  |
 | half | 2.7.1 | MIT OR Apache-2.0 |  |
 | hash32 | 0.2.1 | MIT OR Apache-2.0 |  |
@@ -600,7 +600,7 @@ Crates marked vendored live in `vendor/`.
 | sysinfo | 0.31.4 | MIT |  |
 | system-configuration | 0.6.1 | MIT OR Apache-2.0 |  |
 | system-configuration-sys | 0.6.0 | MIT OR Apache-2.0 |  |
-| taffy | 0.9.0 | MIT |  |
+| taffy | 0.9.2 | MIT |  |
 | take-until | 0.2.0 | MIT |  |
 | tao-core-video-sys | 0.2.0 | MIT |  |
 | tempfile | 3.27.0 | MIT OR Apache-2.0 |  |

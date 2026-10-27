@@ -61,6 +61,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Upgrade the vendored UI's Taffy pin to 0.9.2 to remove vulnerable `grid 0.18.0` (GHSA-38c5-483c-4qqp).
+  The dependency policy now rejects the affected grid versions independently of RustSec advisory coverage.
 - Markdown images now use the same 20 MB and 50-million-pixel checks as image tabs, before decoding. SVG canvas sizes
   use the renderer's XML and unit rules, so comments and attribute spacing cannot bypass the limit.
 

@@ -7,6 +7,7 @@ It is used through `[patch.crates-io]` in the root `Cargo.toml`. The patches bel
 | --- | --- | --- |
 | build.rs, Cargo.toml | Windows build helper also runs on cross hosts; optional `GPUI_PRECOMPILED_SHADERS` supplies same-source FXC output | benchmark Linux → Windows MSVC while retaining manifest embedding |
 | Cargo.toml | `[lints.rust] warnings = "allow"` | keep upstream warnings out of the build output |
+| Cargo.toml | pin Taffy to `=0.9.2` | compatible patch moves layout storage to fixed `grid >=1.0.1`; older grid has integer-overflow UB ([GHSA-38c5-483c-4qqp](https://github.com/becheran/grid/security/advisories/GHSA-38c5-483c-4qqp)). `deny.toml` rejects vulnerable grid versions. |
 | src/platform/mac/metal_renderer.rs | `set_maximum_drawable_count(3)` → `2` | saves ~16 MB of screen buffers per window on Retina.  Measured: budget table in docs/architecture.md (`scripts/memcheck.sh`). |
 | src/window.rs | `DispatchEventResult` `pub(crate)` → `pub` | `Window::dispatch_event` is already pub, but its return type could not be named. Needed to send mouse events to a real window from inside the app (`--do drag:…`) |
 
@@ -25,6 +26,7 @@ GPUI, but the same script checks it. Update the table and `scripts/check-gpui-pa
 3. **Re-apply the patches** (table above):
    - `Cargo.toml`: add `warnings = "allow"` to a `[lints.rust]` section (upstream may already have
      `[lints.rust.unexpected_cfgs]`; add a separate `[lints.rust]` table or merge).
+   - `Cargo.toml`: retain Taffy `=0.9.2` or verify an upgraded layout engine uses a fixed `grid` version.
    - `src/platform/mac/metal_renderer.rs`: `layer.set_maximum_drawable_count(3)` → `(2)`.
    - `src/window.rs`: `pub(crate) struct DispatchEventResult` → `pub struct` (with a doc line).
    - Run `scripts/check-gpui-patches.sh`: everything must say `ok`. If upstream now contains a patch itself or moved the code,

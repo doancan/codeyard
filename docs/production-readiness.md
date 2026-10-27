@@ -18,6 +18,7 @@ was retained. Both sides of the translation-table conflicts were preserved.
 | File integrity | Agent reads are capped at `proto::MAX_FILE`, including growth during reads; writes use conflict hashes; profile writes use atomic replacement. | Exercise workspace and SSH suites. |
 | Updates | Signed manifests, per-asset hashes and replay tracking are implemented; mocked signing/notarization tests exist. | Run verification and credential-cleanup tests. |
 | Release tooling | Both signing scripts reject OpenSSL 4 solely because its version does not start with 3. | Check for `pkeyutl -rawin` support; retain actual Ed25519 signing and verification. |
+| Dependency coverage | GitHub flags `grid 0.18.0` through GPUI/Taffy for GHSA-38c5-483c-4qqp, while the RustSec scan passes. | Update Taffy to compatible 0.9.2, resolve fixed grid and ban affected versions in cargo-deny. |
 | Test isolation | Generic editor/workbench fixtures enable LSP and can launch installed servers while testing unrelated editing/debugging behavior. | Turn LSP off in generic fixtures; explicitly enable it in LSP integration tests. |
 | Maintainability | Topic files and state groups are enforced by `arch-check.sh`; theme tokens and settings catalogs are sources of truth. | Keep limits unchanged; centralize preview policy. |
 | Documentation | Contributing/platform/architecture documents still describe experimental Linux CI and unverified notarization, although CI and release evidence have advanced. | Align statements with current workflows and recorded evidence. |
