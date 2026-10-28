@@ -261,3 +261,68 @@ fn declared_settings_are_checked_and_others_warned() {
     assert_eq!(w.len(), 3, "{w:?}");
     crate::ext::set_for_test(Vec::new());
 }
+
+#[gpui::test]
+fn a_dev_folder_loads_reloads_and_reports_its_errors(cx: &mut TestAppContext) {
+    let cfg = config_dir("dev");
+    let dev = cfg.join("my-theme");
+    std::fs::create_dir_all(dev.join("themes")).unwrap();
+    std::fs::write(dev.join("codeyard-extension.toml"), manifest("you.mine", "[[themes]]\nlabel = \"Mine\"\npath = \"themes/mine.json\"\n")).unwrap();
+    std::fs::write(dev.join("themes/mine.json"), THEME).unwrap();
+    crate::ext::set_dev(Some(dev.clone()));
+    let (wb, cx) = setup(cx, &cfg);
+    assert!(wb.read_with(cx, |wb, _| wb.themes_for_test()).iter().any(|(id, name)| id == "ext:you.mine/mine" && name == "Mine"));
+    // Saving a file changes the fingerprint the settings poll watches.
+    let before = crate::ext::dev_stamp();
+    std::fs::write(dev.join("codeyard-extension.toml"), manifest("you.mine", "[[themes]]\nlabel = \"Mine Too\"\npath = \"themes/mine.json\"\n") + "\n")
+        .unwrap();
+    assert_ne!(crate::ext::dev_stamp(), before);
+    reload(&wb, cx);
+    assert!(wb.read_with(cx, |wb, _| wb.themes_for_test()).iter().any(|(_, name)| name == "Mine Too"));
+    // A mistake shows the author's error instead of the extension.
+    std::fs::remove_file(dev.join("themes/mine.json")).unwrap();
+    reload(&wb, cx);
+    let notice = wb.read_with(cx, |wb, _| wb.notice_for_test()).map(|(_, t)| t).unwrap_or_default();
+    assert!(notice.contains("themes.path points to 'themes/mine.json'"), "{notice}");
+    crate::ext::set_dev(None);
+}
+
+#[cfg(unix)]
+#[test]
+fn cyx_is_linked_into_the_first_writable_folder() {
+    let root = config_dir("cyx-link");
+    let target = root.join("Codeyard.app-cyx");
+    std::fs::write(&target, "#!/bin/sh\n").unwrap();
+    let blocked = root.join("blocked");
+    std::fs::write(&blocked, "a file, not a folder").unwrap();
+    let bin = root.join("bin");
+    let dir = Workbench::install_cyx_link_for_test(&target, &[blocked.clone(), bin.clone()]).unwrap();
+    assert_eq!(dir, bin);
+    assert_eq!(std::fs::read_link(bin.join("cyx")).unwrap(), target);
+    // Again: the old link is replaced.
+    Workbench::install_cyx_link_for_test(&target, std::slice::from_ref(&bin)).unwrap();
+    // A real file of that name is never replaced.
+    std::fs::remove_file(bin.join("cyx")).unwrap();
+    std::fs::write(bin.join("cyx"), "someone else's").unwrap();
+    assert!(Workbench::install_cyx_link_for_test(&target, std::slice::from_ref(&bin)).unwrap_err().contains("not a link"));
+}
+
+#[cfg(unix)]
+#[gpui::test]
+fn a_new_extension_is_loaded_in_development_and_opened(cx: &mut TestAppContext) {
+    let cfg = config_dir("new-ext");
+    let dir = cfg.join("glow");
+    std::fs::create_dir_all(dir.join("themes")).unwrap();
+    std::fs::write(dir.join("codeyard-extension.toml"), manifest("you.glow", "[[themes]]\nlabel = \"Glow\"\npath = \"themes/glow.json\"\n")).unwrap();
+    std::fs::write(dir.join("themes/glow.json"), THEME).unwrap();
+    let (wb, cx) = setup(cx, &cfg);
+    wb.update_in(cx, |wb, window, cx| wb.finish_create_extension_for_test(true, "", dir.clone(), window, cx));
+    cx.run_until_parked();
+    assert_eq!(crate::ext::dev_dir().as_deref(), Some(dir.as_path()));
+    assert!(wb.read_with(cx, |wb, _| wb.themes_for_test()).iter().any(|(id, _)| id == "ext:you.glow/glow"));
+    assert!(wb.read_with(cx, |wb, cx| wb.active_editor_entity().map(|e| e.read(cx).path.ends_with("codeyard-extension.toml"))).unwrap_or(false));
+    wb.update_in(cx, |wb, window, cx| wb.finish_create_extension_for_test(false, "error: glow/ already exists", dir.clone(), window, cx));
+    let notice = wb.read_with(cx, |wb, _| wb.notice_for_test()).map(|(_, t)| t).unwrap_or_default();
+    assert!(notice.contains("already exists"), "{notice}");
+    crate::ext::set_dev(None);
+}

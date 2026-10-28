@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `cyx`, the extension authors' command, ships beside Codeyard: `cyx new` (theme, snippets, keymap, language, language
+  server), `cyx dev` (runs Codeyard with the folder loaded and a DEV badge; it reloads on save), `cyx check` (every
+  problem with its file, line and fix), `cyx package` (a reproducible `.cyx`) and `cyx import-vscode` (themes, snippets,
+  languages and local JSON schemas from a VS Code extension or `.vsix`). *Extensions: Install cyx Command in PATH* links it.
 - Installable declarative extensions: themes, snippets, keymap presets and key bindings, languages, JSON and YAML schemas,
   settings and language servers. The Extensions view installs a `.cyx` package or a folder after a consent sheet that
   lists contributions and permissions in plain words (High-risk sets in red, with *Cancel* focused), and disables,

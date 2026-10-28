@@ -104,6 +104,8 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::show_explorer))
             .on_action(cx.listener(Self::switch_editor))
             .on_action(cx.listener(Self::toggle_zen))
+            .on_action(cx.listener(Self::install_cyx))
+            .on_action(cx.listener(Self::new_extension))
             .on_action(cx.listener(Self::toggle_full_screen))
             .on_action(cx.listener(Self::find_todos))
             .on_action(cx.listener(Self::show_remote))

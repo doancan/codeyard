@@ -153,6 +153,12 @@ impl Workbench {
                     .tooltip(move |_, cx| cx.new(|_| Tooltip(crate::i18n::tf("{0} errors, {1} warnings", &[&errors, &warnings]).into())).into())
                     .on_click(cx.listener(|this, _, w, cx| this.show_problems(&ShowProblems, w, cx)))
             })
+            // `cyx dev`: this window runs an extension straight from the author's folder.
+            .when(crate::ext::dev_dir().is_some(), |d| {
+                d.child(item().id("extension-dev").text_color(c(p.warning)).child(crate::i18n::t("DEV")).tooltip(|_, cx| {
+                    cx.new(|_| Tooltip(crate::i18n::t("Extension in development: it reloads when you save a file in its folder").into())).into()
+                }))
+            })
             .when(self.active_forwards() > 0 && width >= 800., |d| {
                 let n = self.active_forwards();
                 d.child(
