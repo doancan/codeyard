@@ -224,6 +224,7 @@ mod tests {
             m.paused = true;
             m.browser.selected = Some("web-id".into());
             m.browser.tab = crate::container_history::Tab::Logs;
+            m.browser.overview.details = true;
             m.browser.logs = "2026-10-27T12:34:55Z INFO ready\n2026-10-27T12:34:56Z ERROR disk full\n2026-10-27T12:34:57Z WARN slow".into();
             wb.ensure_container_log_search(cx);
             wb.open_container_dashboard(cx);

@@ -9,6 +9,9 @@ impl Workbench {
             self.ensure_container_log_search(cx);
         }
         let m = &mut self.remote.docker.monitor;
+        m.browser.overview.details = true;
+        m.browser.overview.cursor = None;
+        cx.notify();
         if m.browser.selected.as_ref() == Some(&id) && m.browser.tab == tab && tab != Tab::Logs && (tab == Tab::Resources || m.browser.detail.is_some()) {
             return;
         }

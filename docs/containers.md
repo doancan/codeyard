@@ -16,9 +16,11 @@ cancelled. Disconnect an active container before disabling: open files must rema
 available to save. Disabling does not remove containers, images or volumes.
 
 Enabling the module immediately adds a **Containers** button to the left activity bar.
-Its sidebar provides Connect, Create, Rebuild, container/service logs and Output;
-Cancel appears while an operation is running. Opening this sidebar never starts an engine. In an SSH workspace it displays and refreshes the automatically discovered inventory. Disabling the module hides the button and returns an
-open Containers sidebar to Explorer. **View: Containers** also opens the sidebar.
+The activity button and **View: Containers** open the full-width Overview with the sidebar closed.
+Search and filters sit above the table. **Container actions** provides Connect, Create, Rebuild,
+container/service logs, Output and cancellation. Opening this page never starts an engine.
+Disabling the module hides the activity button and closes its page, restoring Explorer.
+
 
 ## Engine selection and prerequisites
 
@@ -44,19 +46,33 @@ No Docker compatibility shim is required for native Apple/WSLc connections.
 
 With the module enabled, connecting to SSH automatically discovers Docker containers through the existing Codeyard agent.
 Opening **Containers** shows running and stopped containers without selecting an engine or context first.
-Click a container in the sidebar to open its detail tab. Containers are selected only in the left sidebar,
-which also holds search, running-only filtering and CPU/memory sorting within Compose groups.
-The main area shows only the selected container, including its current CPU/memory/process count and resource history.
+The Overview is the single container inventory. Click a row to open its detail view.
+The overview shows status (including Docker health), image, CPU, memory usage/limit, network rates and
+Compose project. **Columns** also offers disk read/write rates and published ports; choices last for
+the connected monitoring session. Long values have full-value tooltips and the table scrolls horizontally.
+Network directions have colored ↓ RX / ↑ TX labels and disk rates have R / W labels, with each
+direction on its own aligned line and a descriptive tooltip. CPU and memory have thin usage bars;
+CPU values above 100% remain visible (100% represents one core), while the bar caps at full width.
+Unavailable measurements stay as dashes with empty bars. Status uses both a colored dot and text.
+All/Running/Stopped and **Needs attention** filter the inventory; attention includes unhealthy, dead and
+restarting containers. Search above the table filters names, images, projects and IDs. Name/CPU/Memory sorting stays grouped
+by Compose project and captures ranking values when clicked, so live updates do not reorder rows.
+Selection and table scroll survive refreshes. Stopped containers show no live resource measurements.
+Click a row to select and open that container's details. Logs opens directly;
+the row menu provides Open files, Terminal and Copy container ID. **Back to Containers** returns to the inventory
+without losing the selected container, search, filters or scroll position. The detail area continues to show only that selected container,
+including its current CPU/memory/process count and resource history.
+The table is keyboard focusable: Up/Down moves its cursor and Enter opens the focused container.
 
-Select a sidebar container to open its full diagnostics. Resources provides 1/5/15-minute CPU/memory charts collected in memory while monitoring is active (maximum 360 samples per container, at most 15 minutes). Long gaps remain gaps; no historical measurements are fabricated before monitoring began. Disk/network rates use elapsed-time differences between cumulative counters and are unavailable after counter resets or until a second sample exists. Stopped containers do not display old rates as live data.
+Select a table row to open its full diagnostics. Resources provides 1/5/15-minute CPU/memory charts collected in memory while monitoring is active (maximum 360 samples per container, at most 15 minutes). Long gaps remain gaps; no historical measurements are fabricated before monitoring began. Disk/network rates use elapsed-time differences between cumulative counters and are unavailable after counter resets or until a second sample exists. Stopped containers do not display old rates as live data.
 
-Ports and storage inspects health and mounted paths on selection; no volume contents are scanned. Logs shows the latest 300 timestamped entries in a dedicated monospace console, automatically refreshed alongside resource snapshots while the resource tab is active. Rows separate line numbers, UTC time, severity and message. Hover time to see the complete timestamp. JSON level/severity fields and common line prefixes determine severity; unrecognized messages remain unclassified. ANSI terminal controls are removed for display. Literal, case-insensitive search highlights message matches and also searches full timestamps. An error/warning filter and copy-visible action operate on the filtered lines; copied text retains full timestamps and messages. Line wrapping is adjustable. Scrolling upward pauses automatic following without stopping data refresh; Jump to latest and follow resumes bottom tracking. Open files attaches the editor to the selected container; Terminal attaches and opens a terminal after connection. The previous SSH connection and folder are retained while browsing container files. A persistent **Back to SSH workspace and container details** action restores that connection/folder and the selected-container tab without a new SSH login. Existing unsaved-file guards still apply. Selection changes and module shutdown cancel obsolete detail requests.
+Ports and storage inspects health and mounted paths on selection; no volume contents are scanned. Logs shows the latest 300 timestamped entries in a dedicated monospace console, automatically refreshed alongside resource snapshots while the resource tab is active. Rows separate line numbers, UTC time, severity and message. Hover time to see the complete timestamp. JSON level/severity fields and common line prefixes determine severity; unrecognized messages remain unclassified. ANSI terminal controls are removed for display. Literal, case-insensitive search highlights message matches and also searches full timestamps. An error/warning filter and copy-visible action operate on the filtered lines; copied text retains full timestamps and messages. Line wrapping is adjustable. Scrolling upward pauses automatic following without stopping data refresh; Jump to latest and follow resumes bottom tracking. Open files attaches the editor to the selected container and opens the file explorer; Terminal attaches and opens a terminal after connection. The previous SSH connection and folder are retained while browsing container files. A persistent **Back to SSH workspace and container details** action restores that connection/folder and the selected-container tab without a new SSH login. Existing unsaved-file guards still apply. Selection changes and module shutdown cancel obsolete detail requests.
 
 CPU, memory usage/limit, disk read/write totals, network receive/transmit totals and process counts use
 [`docker stats --no-stream --no-trunc --format`](https://docs.docker.com/reference/cli/docker/container/stats/).
 CPU can exceed 100% on multicore hosts. Stopped containers show unavailable metrics rather than fabricated zeroes.
 The current Docker context is discovered automatically. Snapshots refresh three seconds after the previous one finishes,
-while the sidebar or resource-monitor tab is visible. **Pause updates** stops subsequent samples; **Refresh** resumes them.
+while the container page is visible. **Pause updates** stops subsequent samples; **Refresh** resumes them.
 Discovery also runs once on connection and when the module is enabled in an existing SSH workspace.
 
 Disk size comes from [`docker ps --size`](https://docs.docker.com/reference/cli/docker/container/ls/#show-disk-usage-by-container---size),
@@ -177,4 +193,4 @@ separate implementation and validation project.
 
 Resource details pair current CPU and memory readings with time-scaled history and grid guides. Disk and network rates are separate from cumulative totals. Ports and storage shows individual IPv4/IPv6 server bindings, exposed-only ports, mount sources and destinations, and read/write access. Copy controls retain full identifiers and paths, with horizontal scrolling for long values. Refresh details reloads inspect data. Published addresses refer to the SSH server, not the local machine.
 
-Sidebar filters offer all, running and stopped states, multi-word name/image/project/ID search, a result count and a clear action. CPU/memory ordering uses values captured when the sort button is clicked; click again to re-rank. Routine polling retains the sidebar scroll handle and does not insert refresh/loading messages into populated views.
+Overview filters offer all, running and stopped states, multi-word name/image/project/ID search, a result count and a clear action. CPU/memory ordering uses values captured when the sort button is clicked; click again to re-rank. Routine polling retains the table scroll handle and does not insert refresh/loading messages into populated views.

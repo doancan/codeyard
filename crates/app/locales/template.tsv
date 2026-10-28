@@ -40,6 +40,7 @@ Accept Current Change
 Accept Incoming	
 Accept Incoming Change	
 Access	
+Actions	
 Activate Breakpoints	
 Add	
 Add Configuration…	
@@ -125,6 +126,7 @@ Build failed: {}
 Building the tests…	
 CPU	
 CPU usage	
+CPU: {}. 100% equals one CPU core.	
 Call Stack	
 Can't copy a folder into itself.	
 Can't open {0}: {1}	
@@ -235,6 +237,7 @@ Color symbols by their meaning, from the language server
 Color theme of the whole window and the editor	
 Colorful Folders	
 Column {0}: {1}	
+Columns	
 Command Palette	
 Command Palette…	
 Command palette	
@@ -272,6 +275,7 @@ Compare {} with a commit
 Compare: Folders…	
 Compare: {0} ↔ {1}	
 Comparing contents… {0} of {1}	
+Compose project	
 Compound “{}” has no configurations	
 Conflict	
 Conflict {0} of {1}	
@@ -285,7 +289,6 @@ Connect to SSH host…
 Connect to WSL…	
 Connect to a Container…	
 Connect to a running container…	
-Connect to an SSH host to discover its containers automatically, or choose a local engine below.	
 Connect to which WSL distribution?	
 Connect to which running container?	
 Connected	
@@ -297,6 +300,7 @@ Connection lost: {}
 Container Environments	
 Container ID	
 Container Resources	
+Container actions…	
 Container details are unavailable. Refresh details to try again.	
 Container identity	
 Container module is off. Enable modules.containers.enabled in Settings.	
@@ -334,6 +338,7 @@ Copy Version
 Copy as Expression	
 Copy branch name	
 Copy code	
+Copy container ID	
 Copy link	
 Copy the full hash	
 Copy the path at the cursor	
@@ -523,9 +528,11 @@ Discovering containers…
 Disk I/O total	
 Disk and network activity	
 Disk available	
+Disk read	
 Disk read / write rate	
 Disk size	
 Disk size includes the writable layer and virtual image size; volumes are excluded. Disk and network I/O are cumulative totals.	
+Disk write	
 Dismiss this file from the results	
 Do you trust the authors of this folder?	
 Do you want to save the changes you made to {}?	
@@ -1028,6 +1035,7 @@ May
 Measuring…	
 Memory	
 Memory usage (%)	
+Memory: {0} ({1})	
 Merge	
 Merge Changes	
 Merge Conflict: Accept All Current	
@@ -1082,8 +1090,11 @@ Name with an extension: the extension picks the language (scratch.md, notes.json
 Names can't contain / or be . or ..	
 Names only	
 Native program (C, C++, Rust, Swift)	
+Needs attention	
 Network I/O total	
 Network RX / TX rate	
+Network received	
+Network sent	
 New (untracked)	
 New File	
 New File…	
@@ -1295,6 +1306,7 @@ Order of files and folders in the explorer
 Outline	
 Output	
 Output: Clear	
+Overview	
 Overwrite	
 Partial scan: a time, file or access limit was reached.	
 Passphrase	
@@ -1631,11 +1643,13 @@ Select a configuration
 Select a container to inspect resource history, logs, ports and storage.	
 Select a debug configuration	
 Select a file icon theme	
+Select a row to open its details.	
 Select a word and press ⌘D to add the next match as another cursor.	
 Select all matches (⌥↵)	
 Select at most 20 timestamps	
 Select for Compare	
 Select the active file in the explorer	
+Selected container	
 Selected {} for compare. Right-click another file and choose Compare.	
 Selected {} for compare. Right-click another folder and choose Compare Folder with Selected.	
 Selection	
@@ -1702,7 +1716,6 @@ Snippets: Insert Snippet…
 Software Update	
 Solid blue folders like Finder, outline files with a language dot like GitHub	
 Solid folders colored and marked by purpose, solid files colored by language	
-Sort by	
 Sort object keys alphabetically in the output of Data: Convert To… and Data: Query… (off: keep the file's order)	
 Source Control	
 Source Control (⌃⇧G)	
@@ -1725,7 +1738,6 @@ Staging changes inside a symlink or submodule is not supported
 Staging changes is not supported in files with old-Mac (CR only) line endings	
 Staging changes needs a UTF-8 file	
 Staging changes needs a UTF-8 file (this one is stored in another encoding)	
-Standalone containers	
 Start	
 Start Debugging	
 Start Debugging (F5)	
@@ -1976,6 +1988,7 @@ Unexpected text after the closing quote
 Unexpected “{}”	
 Unfold	
 Unfold All	
+Unhealthy	
 Unknown configuration “{}” in compound “{}”	
 Unknown input “{0}” in “{1}”	
 Unknown theme '{0}'. Available: {1}	
@@ -2341,6 +2354,7 @@ your words
 {0} and {1} cannot have their containment checked	
 {0} cannot be used with {1}	
 {0} commit{1} only exist on this branch and will be lost (the reflog keeps them for a while).	
+{0} containers · {1} running · {2} need attention	
 {0} could not be read ({1})	
 {0} errors, {1} warnings	
 {0} files and {1} folders go from {2} ({3}) to {4} ({5}). Files that exist there are replaced; anything that changed since the scan is left alone.	
@@ -2525,6 +2539,7 @@ your words
 … {} more	
 … {} more line|… {} more lines	
 … {} running	
+← Containers	
 ↓ {} new line|↓ {} new lines	
 ↵ next · ⇧↵ previous · Esc	
 ⇧⌘P opens the command palette: every feature has an entry there.	

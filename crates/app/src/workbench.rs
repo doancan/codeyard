@@ -42,6 +42,8 @@ mod container_detail_glue;
 mod container_logs_glue;
 #[path = "workbench_container_monitor.rs"]
 mod container_monitor_glue;
+#[path = "workbench_container_overview.rs"]
+mod container_overview_glue;
 #[path = "workbench_docker.rs"]
 mod docker_glue;
 // --- data ---

@@ -2539,7 +2539,6 @@ Docker: Rebuild Dev Container…	Docker: Geliştirme Konteynerini Yeniden Derle�
 Docker: Show Containers and Services…	Docker: Konteynerleri ve Servisleri Göster…
 Docker: Cancel Operation	Docker: İşlemi İptal Et
 SSH {0}: {1}. Docker must be installed and accessible to the SSH user on the remote host.	SSH {0}: {1}. Docker uzak makinede kurulu olmalı ve SSH kullanıcısı tarafından erişilebilir olmalıdır.
-Connect to an SSH host to discover its containers automatically, or choose a local engine below.	Konteynerlerini otomatik bulmak için bir SSH sunucusuna bağlanın veya aşağıdan yerel bir motor seçin.
 Updates paused	Güncellemeler duraklatıldı
 Discovering containers…	Konteynerler bulunuyor…
 Resume updates	Güncellemeleri sürdür
@@ -2557,7 +2556,6 @@ No SSH host connected	Bağlı SSH sunucusu yok
 Running	Çalışıyor
 Paused	Duraklatıldı
 Search containers, images or projects…	Konteyner, imaj veya proje ara…
-Standalone containers	Bağımsız konteynerler
 Name	Ad
 No containers match the current filters.	Geçerli filtrelerle eşleşen konteyner yok.
 Select a container to inspect resource history, logs, ports and storage.	Kaynak geçmişini, günlükleri, portları ve depolamayı incelemek için bir konteyner seçin.
@@ -2620,7 +2618,6 @@ Container details are unavailable. Refresh details to try again.	Konteyner ayrı
 Image	İmaj
 Status	Durum
 All	Tümü
-Sort by	Sıralama
 CPU	İşlemci
 Memory	Bellek
 Live updates	Canlı güncellemeler
@@ -2664,3 +2661,21 @@ Web Preview: Open in Browser	Web Önizleme: Tarayıcıda Aç
 Web Preview: Stop Server	Web Önizleme: Sunucuyu Durdur
 Web Preview: Show Server Log	Web Önizleme: Sunucu Günlüğünü Göster
 Enable Web Preview for HTML, CSS and JavaScript (user settings only; stops servers when disabled)	HTML, CSS ve JavaScript için Web Önizlemeyi aç (yalnızca kullanıcı ayarı; kapatıldığında sunucuları durdurur)
+Overview	Genel Bakış
+← Containers	← Konteynerler
+Container actions…	Konteyner işlemleri…
+Select a row to open its details.	Ayrıntıları açmak için bir satır seçin.
+Network received	Alınan ağ trafiği
+Network sent	Gönderilen ağ trafiği
+Disk read	Disk okuma
+Disk write	Disk yazma
+CPU: {}. 100% equals one CPU core.	CPU: {}. %100 bir CPU çekirdeğine karşılık gelir.
+Memory: {0} ({1})	Bellek: {0} ({1})
+Unhealthy	Sağlıksız
+Selected container	Seçili konteyner
+Compose project	Compose projesi
+Needs attention	Sorunlu
+Columns	Sütunlar
+Actions	İşlemler
+Copy container ID	Konteyner kimliğini kopyala
+{0} containers · {1} running · {2} need attention	{0} konteyner · {1} çalışıyor · {2} sorunlu

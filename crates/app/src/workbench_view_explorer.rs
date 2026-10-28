@@ -7,7 +7,8 @@ impl Workbench {
         let changes = self.vcs.status.as_ref().map_or(0, |g| g.changes.len());
         let failed_tests = self.failed_test_count();
         let item = |id: &'static str, name: &'static str, label: &'static str, panel: Panel, badge: usize, cx: &mut Context<Self>| {
-            let selected = self.chrome.panel == Some(panel);
+            let selected =
+                self.chrome.panel == Some(panel) || (panel == Panel::Containers && self.tabs.page_active && matches!(self.tabs.page, Some(Page::Containers)));
             div()
                 .id(id)
                 .debug_selector(|| id.to_string())
@@ -54,10 +55,11 @@ impl Workbench {
                 })
                 .tooltip(move |_, cx| cx.new(|_| Tooltip(label.into())).into())
                 .on_click(cx.listener(move |this, _, window, cx| {
-                    this.chrome.panel = if this.chrome.panel == Some(panel) { None } else { Some(panel) };
-                    if this.chrome.panel == Some(Panel::Containers) {
-                        this.sync_container_monitor(cx);
+                    if panel == Panel::Containers {
+                        this.show_containers(cx);
+                        return;
                     }
+                    this.chrome.panel = if this.chrome.panel == Some(panel) { None } else { Some(panel) };
                     if this.chrome.panel == Some(Panel::Explorer) {
                         window.focus(&this.roots.primary.focus_handle(cx));
                     }

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Full-width Container Overview table with in-page search, live SSH resource data, health filtering,
+  selectable columns, stable refresh ordering and scrolling, detail navigation, logs and container actions.
+
 - Optional Web Preview module in Settings: a built-in local static server, browser preview from HTML tabs,
   live page/CSS refresh, status-bar controls and Output logging. Local, SSH and container files share the
   same agent-backed path; no external runtime or remote listening port is required. Disabling the module

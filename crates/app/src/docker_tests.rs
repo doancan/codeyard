@@ -182,7 +182,7 @@ fn docker_disabled_actions_do_not_launch_processes(cx: &mut gpui::TestAppContext
 }
 
 #[gpui::test]
-fn docker_activity_button_appears_when_enabled_and_opens_the_sidebar(cx: &mut gpui::TestAppContext) {
+fn docker_activity_button_opens_full_width_overview_when_enabled(cx: &mut gpui::TestAppContext) {
     let config = crate::qa_workbench_tests::fresh("docker-activity-config");
     let path = config.join("settings.jsonc");
     std::fs::write(&path, r#"{"modules.containers.enabled":false}"#).unwrap();
@@ -197,10 +197,11 @@ fn docker_activity_button_appears_when_enabled_and_opens_the_sidebar(cx: &mut gp
     let at = cx.debug_bounds("act-containers").expect("enabled module has a left activity button").center();
     cx.simulate_click(at, gpui::Modifiers::none());
     cx.run_until_parked();
-    assert_eq!(wb.read_with(cx, |wb, _| wb.panel_for_test()), Some("containers"));
-    assert!(cx.debug_bounds("containers-panel").is_some());
-    assert!(cx.debug_bounds("containers-connect").is_some());
-    assert!(wb.read_with(cx, |wb, _| wb.output_lines()).is_empty(), "opening the sidebar must not launch Docker");
+    assert_eq!(wb.read_with(cx, |wb, _| wb.panel_for_test()), None);
+    assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), Some(("containers", true)));
+    assert!(cx.debug_bounds("container-dashboard").is_some());
+    assert!(cx.debug_bounds("container-button-Container actions…").is_some());
+    assert!(wb.read_with(cx, |wb, _| wb.output_lines()).is_empty(), "opening the overview must not launch Docker");
 
     std::fs::write(&path, r#"{"modules.containers.enabled":false}"#).unwrap();
     wb.update_in(cx, |wb, window, cx| wb.reload_config_for_test(window, cx));

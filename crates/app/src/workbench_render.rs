@@ -28,6 +28,10 @@ impl Workbench {
 
 impl Render for Workbench {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Accept restored legacy sidebar routes, but keep a single inventory surface.
+        if self.chrome.panel == Some(Panel::Containers) && cx.global::<Settings>().docker_enabled {
+            self.show_containers(cx);
+        }
         self.update_title(window, cx);
         self.chrome.window_bounds = Some(window.window_bounds());
         self.track_notice(cx);
@@ -84,7 +88,6 @@ impl Render for Workbench {
             Panel::Debug => self.run_debug_view(&p, cx),
             Panel::Testing => self.testing_view(&p, cx),
             Panel::Remote => self.remote_view(&p, cx),
-            Panel::Containers if cx.global::<Settings>().docker_enabled => self.containers_panel(&p, cx),
             Panel::Containers => self.explorer_panel(&p, cx),
         });
 

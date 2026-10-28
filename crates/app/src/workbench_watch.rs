@@ -139,6 +139,11 @@ impl Workbench {
             warnings.push(crate::i18n::t("Disconnect the container before disabling the container module. Your open files are kept.").into());
         } else if !new.docker_enabled {
             self.remote.docker.cancel();
+            if matches!(self.tabs.page, Some(Page::Containers)) {
+                self.tabs.page = None;
+                self.tabs.page_active = false;
+                self.chrome.panel = Some(Panel::Explorer);
+            }
             if self.chrome.panel == Some(Panel::Containers) {
                 self.chrome.panel = Some(Panel::Explorer);
             }

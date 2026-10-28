@@ -1,10 +1,13 @@
 //! Container browser: compact navigation, sortable inventory, and selected-container diagnostics.
 use super::container_monitor_glue::button;
 use super::*;
-use crate::container_history::{self as history, Sort, StatusFilter, Tab};
+use crate::container_history::{self as history, Sort};
 
 impl Workbench {
     pub(super) fn ensure_container_search(&mut self, cx: &mut Context<Self>) {
+        if self.remote.docker.monitor.browser.overview.focus.is_none() {
+            self.remote.docker.monitor.browser.overview.focus = Some(cx.focus_handle().tab_stop(true));
+        }
         if self.remote.docker.monitor.browser.field.is_some() {
             return;
         }
@@ -19,7 +22,7 @@ impl Workbench {
         self.remote.docker.monitor.browser.subscription = Some(subscription);
     }
 
-    fn container_rows(&self) -> Vec<&crate::docker::Container> {
+    pub(super) fn container_rows(&self) -> Vec<&crate::docker::Container> {
         let m = &self.remote.docker.monitor;
         let q = m.browser.query.trim().to_lowercase();
         let mut rows: Vec<_> = m
@@ -84,133 +87,6 @@ impl Workbench {
         view.into_any_element()
     }
 
-    pub(super) fn container_inventory_view(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
-        let m = &self.remote.docker.monitor;
-        let Some(host) = &m.host else {
-            return div()
-                .p(px(theme::SPACE[3]))
-                .text_size(px(text::SM.0))
-                .text_color(c(p.text_muted))
-                .child(crate::i18n::t("Connect to an SSH host to discover its containers automatically, or choose a local engine below."))
-                .into_any_element();
-        };
-        let mut view = div()
-            .flex()
-            .flex_col()
-            .gap(px(theme::SPACE[3]))
-            .child(div().px(px(theme::SPACE[3])).text_size(px(text::SM.0)).text_color(c(p.text)).child(format!("SSH · {host}"))) // i18n-keep: SSH protocol name and the user-provided host identity.
-            .child(div().px(px(theme::SPACE[3])).child(self.container_status_view(p)))
-            .when_some(m.browser.field.clone(), |d, field| d.child(div().px(px(theme::SPACE[3])).child(field)))
-            .child(
-                div().flex().flex_wrap().gap(px(theme::SPACE[2])).children(
-                    [
-                        (crate::i18n::t("All"), StatusFilter::All),
-                        (crate::i18n::t("Running"), StatusFilter::Running),
-                        (crate::i18n::t("Stopped"), StatusFilter::Stopped),
-                    ]
-                    .into_iter()
-                    .map(|(label, filter)| {
-                        button(SharedString::from(format!("container-status-{label}")), label, p)
-                            .when(m.browser.status_filter == filter, |s| s.bg(c(p.surface_active)).text_color(c(p.accent)))
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                this.remote.docker.monitor.browser.status_filter = filter;
-                                cx.notify();
-                            }))
-                    }),
-                ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap(px(theme::SPACE[2]))
-                    .child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(crate::i18n::t("Sort by")))
-                    .children(
-                        [(crate::i18n::t("Name"), Sort::Name), (crate::i18n::t("CPU"), Sort::Cpu), (crate::i18n::t("Memory"), Sort::Memory)].into_iter().map(
-                            |(label, sort)| {
-                                button(SharedString::from(format!("sidebar-sort-{label}")), label, p)
-                                    .when(m.browser.sort == sort, |s| s.bg(c(p.surface_active)).text_color(c(p.accent)))
-                                    .tooltip(|_, cx| {
-                                        cx.new(|_| Tooltip(crate::i18n::t("Click to sort using current values. Order stays fixed during live updates.").into()))
-                                            .into()
-                                    })
-                                    .on_click(cx.listener(move |this, _, _, cx| {
-                                        let m = &mut this.remote.docker.monitor;
-                                        m.browser.sort = sort;
-                                        m.browser.sort_usage = m.usage.clone();
-                                        cx.notify();
-                                    }))
-                            },
-                        ),
-                    ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .justify_between()
-                    .gap(px(theme::SPACE[2]))
-                    .child(
-                        div()
-                            .text_size(px(text::XS.0))
-                            .text_color(c(p.text_muted))
-                            .child(crate::i18n::tf("{0} / {1} containers", &[&self.container_rows().len(), &m.containers.len()])),
-                    )
-                    .child(button("container-reset-filters", crate::i18n::t("Clear filters"), p).on_click(cx.listener(|this, _, _, cx| {
-                        let b = &mut this.remote.docker.monitor.browser;
-                        b.status_filter = StatusFilter::All;
-                        b.query.clear();
-                        let field = b.field.clone();
-                        if let Some(field) = field {
-                            field.update(cx, |field, cx| field.set_text("", cx));
-                        }
-                        cx.notify();
-                    }))),
-            );
-        let mut group = None;
-        for row in self.container_rows() {
-            let project = history::project(row).unwrap_or(crate::i18n::t("Standalone containers"));
-            if group != Some(project) {
-                view = view.child(
-                    div().px(px(theme::SPACE[3])).pt(px(theme::SPACE[3])).text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(project.to_string()),
-                );
-                group = Some(project);
-            }
-            let id = row.id.clone();
-            view = view.child(
-                div()
-                    .id(SharedString::from(format!("container-resource-{}", row.id)))
-                    .debug_selector({
-                        let id = id.clone();
-                        move || format!("container-resource-{id}")
-                    })
-                    .px(px(theme::SPACE[3]))
-                    .py(px(theme::SPACE[2]))
-                    .rounded(px(theme::radius::SM))
-                    .cursor_pointer()
-                    .hover(|s| s.bg(c(p.surface_hover)))
-                    .when(m.browser.selected.as_ref() == Some(&id), |s| s.bg(c(p.surface_active)))
-                    .flex()
-                    .justify_between()
-                    .gap(px(theme::SPACE[2]))
-                    .child(div().flex_1().min_w_0().truncate().text_size(px(text::SM.0)).text_color(c(p.text)).child(row.name.clone()))
-                    .child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(state_label(&row.state)))
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.open_container_dashboard(cx);
-                        this.select_container(id.clone(), Tab::Resources, cx);
-                    })),
-            )
-        }
-        if m.updated.is_some() && m.containers.is_empty() {
-            view = view.child(div().text_size(px(text::SM.0)).text_color(c(p.text_muted)).child(crate::i18n::t("No containers found on this host.")));
-        } else if m.updated.is_some() && self.container_rows().is_empty() {
-            view = view.child(div().text_size(px(text::SM.0)).text_color(c(p.text_muted)).child(crate::i18n::t("No containers match the current filters.")));
-        }
-        view.into_any_element()
-    }
-
     pub(super) fn container_dashboard_view(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
         let m = &self.remote.docker.monitor;
         if !cx.global::<Settings>().docker_enabled {
@@ -252,6 +128,10 @@ impl Workbench {
                                 ),
                             ),
                     )
+                    .child(
+                        button("container-tools", crate::i18n::t("Container actions…"), p)
+                            .on_click(cx.listener(|this, _, window, cx| this.open_container_tools(window, cx))),
+                    )
                     .child(button("dashboard-refresh", crate::i18n::t("Refresh"), p).on_click(cx.listener(|this, _, _, cx| {
                         this.remote.docker.monitor.paused = false;
                         this.refresh_container_monitor(cx);
@@ -267,7 +147,10 @@ impl Workbench {
                     )),
             )
             .child(div().px(px(theme::SPACE[5])).pb(px(theme::SPACE[3])).child(self.container_status_view(p)));
-        if let Some(container) = m.browser.selected.as_ref().and_then(|id| m.containers.iter().find(|c| &c.id == id)) {
+        view = view.child(self.container_overview_navigation(p, cx));
+        if !m.browser.overview.details {
+            view = view.child(self.container_overview_view(p, cx));
+        } else if let Some(container) = m.browser.selected.as_ref().and_then(|id| m.containers.iter().find(|c| &c.id == id)) {
             view = view.child(self.container_detail_view(container, p, cx));
         } else {
             view = view.child(
@@ -296,6 +179,7 @@ pub(super) fn state_label(state: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::container_history::Tab;
     #[gpui::test]
     fn container_browser_filters_and_background_refresh_keep_navigation_stable(cx: &mut gpui::TestAppContext) {
         let (wb, cx) = crate::qa_workbench_tests::setup(cx);
@@ -314,7 +198,9 @@ mod tests {
             m.usage.push(crate::container_monitor::Usage { id: "db-id".into(), cpu: "1%".into(), ..Default::default() });
             m.browser.selected = Some("web-id".into());
             wb.ensure_container_search(cx);
-            wb.chrome.panel = Some(Panel::Containers);
+            wb.chrome.panel = None;
+            wb.tabs.page = Some(Page::Containers);
+            wb.tabs.page_active = true;
             cx.notify();
         });
         cx.run_until_parked();
@@ -322,7 +208,7 @@ mod tests {
         cx.simulate_click(sort, gpui::Modifiers::none());
         cx.run_until_parked();
         assert_eq!(wb.read_with(cx, |wb, _| wb.container_rows()[0].id.clone()), "web-id");
-        let before = cx.debug_bounds("container-resource-web-id").unwrap();
+        let before = cx.debug_bounds("overview-row-web-id").unwrap();
         wb.update(cx, |wb, cx| {
             let m = &mut wb.remote.docker.monitor;
             m.paused = false;
@@ -332,7 +218,7 @@ mod tests {
             cx.notify();
         });
         cx.run_until_parked();
-        assert_eq!(cx.debug_bounds("container-resource-web-id").unwrap(), before);
+        assert_eq!(cx.debug_bounds("overview-row-web-id").unwrap(), before);
         assert_eq!(wb.read_with(cx, |wb, _| wb.container_rows()[0].id.clone()), "web-id");
         cx.simulate_click(sort, gpui::Modifiers::none());
         cx.run_until_parked();
