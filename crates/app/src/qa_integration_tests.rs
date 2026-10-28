@@ -77,7 +77,15 @@ pub(crate) fn wait_ticking(cx: &mut VisualTestContext, what: &str, mut done: imp
 }
 
 pub(crate) fn git_in(dir: &Path, args: &[&str]) -> String {
-    let out = crate::test_git::git().args(["-c", "core.hooksPath=.git/hooks"]).args(args).current_dir(dir).output().unwrap();
+    let mut command = crate::test_git::git();
+    command.args(["-c", "core.hooksPath=.git/hooks"]);
+    for arg in args {
+        // Git does not accept Rust's verbatim canonical path prefix as a worktree argument on Windows.
+        #[cfg(windows)]
+        let arg = if arg.starts_with(r"\\?\") { crate::ui::local_path(Path::new(arg)) } else { arg.to_string() };
+        command.arg(arg);
+    }
+    let out = command.current_dir(dir).output().unwrap();
     assert!(out.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&out.stderr));
     String::from_utf8_lossy(&out.stdout).into_owned()
 }
