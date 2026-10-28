@@ -63,7 +63,8 @@ the 2026-10-27 local run passed 1,516 tests, with three documented manual/data-d
 
 ## Gates
 
-On Windows, `scripts/check-windows.ps1` also validates agent inputs and checks that the release EXE contains both Linux
+On Windows, `scripts/check-windows.ps1` requires Python 3 for the scripted Rust debugger fixture and selects the Rust
+hardening, product and accessibility suites alongside its native UI/path tests. It also validates agent inputs and checks that the release EXE contains both Linux
 agents after copying it alone to an empty directory. The check also requires the Windows GUI subsystem and native
 application icon resource, preventing extra console windows and generic EXE icons. `scripts/build-windows.ps1` performs that standalone check for
 local builds too. Build-script validation tests can be run with

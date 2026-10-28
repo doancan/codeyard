@@ -29,7 +29,7 @@ fn product_explorer_right_arrow_stays_on_an_empty_expanded_folder(cx: &mut TestA
     cx.simulate_keystrokes("home right");
     cx.run_until_parked();
     cx.simulate_keystrokes("right");
-    assert_eq!(wb.read_with(cx, |wb, cx| wb.tree_selected(cx)), Some(dir.join("empty").to_string_lossy().into_owned()));
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.tree_selected(cx)), Some(crate::ui::local_path(&dir.join("empty"))));
 }
 
 #[gpui::test]
