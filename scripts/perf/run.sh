@@ -77,12 +77,15 @@ for i in $(seq 1 "$runs"); do
     export CODEYARD_PERF="$TMP/${names[$k]}.jsonl"
     run_scripted "$OUT/codeyard-${names[$k]}"
     cp crates/app/testdata/big.rs "$TMP/big.rs"
-    CODEYARD_PERF_TYPING=40 run_scripted "$OUT/codeyard-${names[$k]}" "$TMP/big.rs"
+    # Only its typing samples count: its startup opens a file, a different scenario from the welcome screen above.
+    : > "$TMP/typing.jsonl"
+    CODEYARD_PERF="$TMP/typing.jsonl" CODEYARD_PERF_TYPING=40 run_scripted "$OUT/codeyard-${names[$k]}" "$TMP/big.rs"
     # The scenario saves after typing: if the keys did not reach the editor, the samples measure nothing.
-    if grep -q '"typing.keystroke_frame_ms"' "$CODEYARD_PERF" && ! grep -q "^a\{40\}" "$TMP/big.rs"; then
+    if grep -q '"typing\.' "$TMP/typing.jsonl" && ! grep -q "^a\{40\}" "$TMP/big.rs"; then
       echo "perf: the typed keys did not reach the editor (${names[$k]}); typing samples are invalid" >&2
       exit 1
     fi
+    grep '"typing\.' "$TMP/typing.jsonl" >> "$CODEYARD_PERF" || true
   done
   printf '\rperf: timing run %s/%s' "$i" "$runs" >&2
 done
