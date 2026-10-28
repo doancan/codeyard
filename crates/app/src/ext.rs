@@ -108,7 +108,12 @@ pub fn store(cfg_dir: &Path) -> ext_core::Store {
 /// Load the installed set again (at startup and whenever settings are reloaded, which includes a change of the lock file).
 /// Cheap when nothing changed: one small file is read. Returns problems worth showing.
 pub fn reload(cfg_dir: Option<&Path>) -> Vec<String> {
-    if turned_off() {
+    reload_with(cfg_dir, true)
+}
+
+/// `reload`, with `extensions.enabled` from the user's settings file.
+pub fn reload_with(cfg_dir: Option<&Path>, enabled: bool) -> Vec<String> {
+    if turned_off() || !enabled {
         set(Arc::new(Registry::default()));
         return Vec::new();
     }
@@ -118,15 +123,19 @@ pub fn reload(cfg_dir: Option<&Path>) -> Vec<String> {
     };
     let store = store(dir);
     let reg = match store.load() {
-        Ok(loaded) => Registry {
-            active: loaded
-                .extensions
-                .into_iter()
-                .filter(|e| !e.disabled)
-                .map(|e| Active { dir: store.store_dir(&e.digest), manifest: Arc::new(e.manifest) })
-                .collect(),
-            problems: loaded.problems,
-        },
+        Ok(loaded) => {
+            let mut problems = loaded.problems;
+            let mut active = Vec::new();
+            for e in loaded.extensions.into_iter().filter(|e| !e.disabled) {
+                // Installed by a newer Codeyard or synced from one: its code would not run here, so none of it applies.
+                if e.manifest.code.is_some() {
+                    problems.push(crate::i18n::tf("{} contains code, which this version does not run", &[&e.manifest.id]));
+                    continue;
+                }
+                active.push(Active { dir: store.store_dir(&e.digest), manifest: Arc::new(e.manifest) });
+            }
+            Registry { active, problems }
+        }
         Err(e) => Registry { active: Vec::new(), problems: vec![e.to_string()] },
     };
     let mut problems: Vec<String> = reg.problems.iter().map(|p| crate::i18n::tf("Extension not loaded: {}", &[p])).collect();

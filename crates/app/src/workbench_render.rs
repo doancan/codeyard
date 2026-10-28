@@ -65,6 +65,7 @@ impl Render for Workbench {
             (_, None) if self.tabs.page_active && self.tabs.page.is_some() => match self.tabs.page.clone().unwrap() {
                 Page::Welcome => self.welcome_view(&p, cx),
                 Page::Containers => self.container_dashboard_view(&p, cx),
+                Page::Extension => self.extension_page(&p, cx),
                 Page::Settings(view) => view.into_any_element(),
                 Page::Markdown(view) => view.into_any_element(),
                 Page::Shortcuts(view) => view.into_any_element(),
@@ -90,6 +91,7 @@ impl Render for Workbench {
             Panel::Testing => self.testing_view(&p, cx),
             Panel::Remote => self.remote_view(&p, cx),
             Panel::Containers => self.explorer_panel(&p, cx),
+            Panel::Extensions => self.extensions_view(&p, cx),
         });
 
         div()
@@ -108,6 +110,9 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::show_remote_explorer))
             .on_action(cx.listener(Self::show_run_debug))
             .on_action(cx.listener(Self::show_testing))
+            .on_action(cx.listener(Self::show_extensions))
+            .on_action(cx.listener(Self::install_extension_from_file))
+            .on_action(cx.listener(Self::install_extension_from_folder))
             .on_action(cx.listener(|this, _: &RunAllTests, w, cx| this.run_all_tests(w, cx)))
             .on_action(cx.listener(|this, _: &RunFailedTests, w, cx| this.run_failed_tests(w, cx)))
             .on_action(cx.listener(|this, _: &RefreshTests, _, cx| this.refresh_tests(cx)))
