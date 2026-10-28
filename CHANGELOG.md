@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   *Problems: Copy Full Diagnostic* copies the compiler's complete message, as a terminal shows it.
 - Rust commands: *Rust: Expand Macro Recursively* shows a macro's expansion in a scratch tab, *Rust: Locate Parent Module*
   jumps to the `mod` line that includes the file, and *Rust: Open Cargo.toml* opens the crate's manifest.
+- Screen readers on macOS see the editor tabs as a tab list (name, modified, the tab in front) and can bring a tab to the
+  front. Notices are spoken when they appear: errors, including a file that could not be opened, interrupt speech. Before,
+  errors were not exposed at all.
+- `ACCESSIBILITY.md` states what works with a screen reader, the keyboard, zoom and high-contrast themes, the known gaps, and
+  how to report a barrier with the new *Accessibility barrier* issue form.
 - The debugger shows Rust values as values: lldb-dap starts with the formatters of the toolchain that builds the program, so
   `String`, `Vec`, `HashMap` and `Option` read as text and elements, and with `rust-src` installed stepping into the
   standard library opens its source. Locally and over SSH (the server's toolchain); the Debug Console says when they cannot
