@@ -28,6 +28,7 @@ The delivery pull request is the authoritative record of the final tree's cross-
 - Source Control's later Git Worktrees inventory/navigation commit is included, with branch/path/status display,
   same-host navigation and protection for unsaved edits. Its focused tests cover refresh, errors, keyboard navigation,
   narrow/light/dark/Turkish layouts and SSH-host retention; Windows CI also selects the worktree suite.
+  Windows fixture commands strip Rust's verbatim canonical path prefix before calling Git, matching application paths.
 - Memory checks measure and stop their own disposable agent daemon. The shared save coordinator avoids three copies
   of the same asynchronous state machine in the release binary. Unused translation keys were removed after integration.
 - Windows CI includes the new Rust, product and accessibility suites alongside its existing selected native regressions.
