@@ -75,7 +75,7 @@ impl Workbench {
             return;
         }
         let owner = self.remote.host.clone();
-        let view = cx.new(|cx| crate::language_services_page::LanguageServicesPage::new(owner.clone(), cx));
+        let view = cx.new(|cx| crate::language_services_page::LanguageServicesPage::new(owner.clone(), window, cx));
         self.tabs._page_sub = Some(cx.subscribe(&view, move |this, _, _: &crate::language_services_page::InstalledEvent, cx| {
             if std::sync::Arc::ptr_eq(&this.remote.host, &owner) {
                 this.restart_lsp(cx);

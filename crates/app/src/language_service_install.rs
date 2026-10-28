@@ -14,7 +14,6 @@ use crate::language_services::{Catalog, PACKAGE_JSON, PACKAGE_LOCK, Service, sup
 const LOG_LIMIT: usize = 64 * 1024;
 const ARCHIVE_LIMIT: u64 = 128 * 1024 * 1024;
 const PROCESS_TIMEOUT: Duration = Duration::from_secs(15 * 60);
-const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Stage {
@@ -180,15 +179,15 @@ fn run(host: &dyn Host, program: &str, args: Vec<String>, cwd: &str, progress: &
     progress.check()?;
     let proc = host.proc_spawn(program, args, Some(cwd.into())).map_err(host_error)?;
     let start = Instant::now();
-    let mut stopping = None;
     let mut output = Vec::new();
     loop {
-        if stopping.is_none() && (progress.cancel.load(Ordering::Acquire) || start.elapsed() > PROCESS_TIMEOUT) {
-            host.proc_kill(proc.id);
-            stopping = Some(Instant::now());
-        }
-        if stopping.is_some_and(|at| at.elapsed() > STOP_TIMEOUT) {
-            return Err(Error::Uncertain);
+        if progress.cancel.load(Ordering::Acquire) || start.elapsed() > PROCESS_TIMEOUT {
+            // ProcExit(None) is also sent after an intentional kill, because the output
+            // reader no longer owns the process. The request acknowledgement comes after
+            // the agent has killed and waited for it; only that permits staging cleanup.
+            host.done(proto::Request::ProcKill { proc: proc.id }).map_err(|_| Error::Uncertain)?;
+            progress.check()?;
+            return Err(failed("The installation process timed out."));
         }
         match proc.events.recv_timeout(Duration::from_millis(50)) {
             Ok(ProcEvent::Output(bytes)) => {
@@ -199,9 +198,6 @@ fn run(host: &dyn Host, program: &str, args: Vec<String>, cwd: &str, progress: &
             Ok(ProcEvent::Exit(None)) | Err(mpsc::RecvTimeoutError::Disconnected) => return Err(Error::Uncertain),
             Ok(ProcEvent::Exit(Some(code))) => {
                 progress.check()?;
-                if stopping.is_some() {
-                    return Err(failed("The installation process timed out."));
-                }
                 return if code == 0 { Ok(output) } else { Err(failed(format!("{program} exited with code {code}"))) };
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {}
@@ -223,21 +219,23 @@ fn verify_entries(host: &dyn Host, installed: &Installed) -> Result<(), Error> {
 // This fixed script finds npm beside the selected Node binary, without searching workspace modules.
 const NODE_PROBE: &str = "const p=require('node:path'),f=require('node:fs'),d=p.dirname(process.execPath);const npm=[p.join(d,'node_modules/npm/bin/npm-cli.js'),p.join(d,'../lib/node_modules/npm/bin/npm-cli.js')].find(x=>f.existsSync(x));console.log(JSON.stringify({node:process.execPath,version:process.version,npm:npm?f.realpathSync(npm):null}))";
 
-fn runtime(host: &dyn Host, staging: &str, progress: &Progress) -> Result<(String, String, String), Error> {
-    let probe = run(host, "node", vec!["-e".into(), NODE_PROBE.into()], staging, progress);
-    match probe {
-        Ok(bytes) => {
-            if let Ok(value) = serde_json::from_slice::<Value>(&bytes)
-                && let (Some(node), Some(version), Some(npm)) = (value["node"].as_str(), value["version"].as_str(), value["npm"].as_str())
-                && absolute(node)
-                && absolute(npm)
-                && supported_node(version)
-            {
-                return Ok((node.into(), version.into(), npm.into()));
+fn runtime(host: &dyn Host, staging: &str, previous: Option<&Installed>, progress: &Progress) -> Result<(String, String, String), Error> {
+    for program in previous.map(|installed| installed.node.as_str()).into_iter().chain(std::iter::once("node")) {
+        let probe = run(host, program, vec!["-e".into(), NODE_PROBE.into()], staging, progress);
+        match probe {
+            Ok(bytes) => {
+                if let Ok(value) = serde_json::from_slice::<Value>(&bytes)
+                    && let (Some(node), Some(version), Some(npm)) = (value["node"].as_str(), value["version"].as_str(), value["npm"].as_str())
+                    && absolute(node)
+                    && absolute(npm)
+                    && supported_node(version)
+                {
+                    return Ok((node.into(), version.into(), npm.into()));
+                }
             }
+            Err(error @ (Error::Cancelled | Error::Uncertain)) => return Err(error),
+            Err(_) => {}
         }
-        Err(error @ (Error::Cancelled | Error::Uncertain)) => return Err(error),
-        Err(_) => {}
     }
     progress.check()?;
     let os = match host.info().os.as_str() {
@@ -328,6 +326,7 @@ pub fn install(host: &dyn Host, root: &str, progress: &Progress) -> Result<Insta
     if !absolute(root) {
         return Err(Error::InvalidInstallation);
     }
+    let previous = discover(host, root).ok().flatten();
     let mut nonce = [0; 16];
     SystemRandom::new().fill(&mut nonce).map_err(failed)?;
     let nonce: String = nonce.iter().map(|b| format!("{b:02x}")).collect();
@@ -337,7 +336,7 @@ pub fn install(host: &dyn Host, root: &str, progress: &Progress) -> Result<Insta
         if host.info().os != "windows" {
             run(host, "chmod", vec!["700".into(), staging.clone()], root, progress)?;
         }
-        let (node, node_version, npm) = runtime(host, &staging, progress)?;
+        let (node, node_version, npm) = runtime(host, &staging, previous.as_ref(), progress)?;
         for (name, content) in [("package.json", PACKAGE_JSON), ("package-lock.json", PACKAGE_LOCK), ("user.npmrc", ""), ("global.npmrc", "")] {
             host.write(&join(&staging, name), content.as_bytes().to_vec(), None).map_err(host_error)?;
         }
@@ -352,6 +351,7 @@ pub fn install(host: &dyn Host, root: &str, progress: &Progress) -> Result<Insta
             "--ignore-scripts".into(),
             "--no-audit".into(),
             "--no-fund".into(),
+            "--no-update-notifier".into(),
             "--registry=https://registry.npmjs.org".into(),
             "--fetch-retries=0".into(),
             "--fetch-timeout=30000".into(),
