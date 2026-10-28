@@ -106,7 +106,14 @@ impl Workbench {
         }
         let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
         if let Some((spath, kpath)) = &paths {
-            self.cfg.stamp = (mtime(spath), mtime(kpath));
+            self.cfg.stamp = (mtime(spath), mtime(kpath), mtime(&spath.with_file_name(crate::ext::LOCK_FILE)));
+        }
+        // Installed extensions first: every reader below takes its entries from them.
+        let ext_before = crate::ext::schema_entries();
+        let mut ext_problems = crate::ext::reload(self.cfg.dir.as_deref());
+        let ext_schemas_changed = ext_before != crate::ext::schema_entries();
+        if self.cfg.dir.is_some() {
+            self.reload_user_themes();
         }
         let kpath = paths.as_ref().map(|(_, k)| k.clone());
         let file = paths.as_ref().and_then(|(s, _)| std::fs::read_to_string(s).ok());
@@ -130,10 +137,16 @@ impl Workbench {
             let ids: Vec<&str> = self.themes.iter().map(|t| t.id.as_str()).collect();
             warnings.insert(0, format!("settings.jsonc: {}", crate::i18n::tf("theme “{}” not found (available: auto, {})", &[&new.theme, &ids.join(", ")])));
         }
+        // Extension language servers go in front of the user's `lsp.servers`: for the same key the user's entry wins, and
+        // a change restarts servers the same way an edit of the settings file does.
+        let mut new = new;
+        let (servers, server_warnings) = crate::ext::server_entries();
+        ext_problems.extend(server_warnings);
+        new.lsp_servers.splice(0..0, servers);
+        warnings.extend(ext_problems);
         let old = cx.global::<Settings>().clone();
         // Zoom is applied on top of the sizes in the settings file.
         self.chrome.zoom_base = (new.editor_font_size, new.editor_line_height, new.terminal_font_size);
-        let mut new = new;
         if !new.docker_enabled && self.any_container_connected(cx) {
             new.docker_enabled = true;
             warnings.push(crate::i18n::t("Disconnect the container before disabling the container module. Your open files are kept.").into());
@@ -182,8 +195,9 @@ impl Workbench {
             self.sync_dock_menu(cx);
         }
         self.refresh_speller(cx);
-        if (old.schema_associations.as_slice(), old.schema_download, old.schema_validate)
-            != (new.schema_associations.as_slice(), new.schema_download, new.schema_validate)
+        if ext_schemas_changed
+            || (old.schema_associations.as_slice(), old.schema_download, old.schema_validate)
+                != (new.schema_associations.as_slice(), new.schema_download, new.schema_validate)
         {
             for ed in self.all_editors() {
                 self.schedule_schema(&ed, Duration::ZERO, cx);
@@ -291,8 +305,9 @@ impl Workbench {
                 let ok = this
                     .update_in(cx, |this, window, cx| {
                         let Some((spath, kpath)) = this.config_paths() else { return };
+                        let lpath = spath.with_file_name(crate::ext::LOCK_FILE);
                         let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
-                        if this.cfg.dirty || (mtime(&spath), mtime(&kpath)) != this.cfg.stamp {
+                        if this.cfg.dirty || (mtime(&spath), mtime(&kpath), mtime(&lpath)) != this.cfg.stamp {
                             this.reload_config(window, cx);
                         }
                     })

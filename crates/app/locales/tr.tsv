@@ -2751,3 +2751,20 @@ Served folder (empty: automatic; relative to the workspace, or an absolute path 
 Web Preview: Copy URL	Web Önizleme: URL’yi Kopyala
 Start Web Preview before copying its URL.	URL’sini kopyalamadan önce Web Önizlemeyi başlatın.
 Preview URL copied.	Önizleme URL’si kopyalandı.
+
+# ---- Declarative extensions ----
+{} · extension {}	{} · {} eklentisi
+Extension not loaded: {}	Eklenti yüklenemedi: {}
+Keymap preset from an installed extension, as publisher.name/label (empty: Codeyard's own keys)	Kurulu bir eklentiden kısayol düzeni, yayıncı.ad/etiket biçiminde (boş: Codeyard'ın kendi kısayolları)
+“{}” cannot be used in a key binding	“{}” bir kısayol koşulunda kullanılamaz
+in a key binding, == and != compare editor.language with a language id	bir kısayol koşulunda == ve != yalnızca editor.language ile bir dil kimliğini karşılaştırır
+a key binding condition needs a context, not a constant	bir kısayol koşulu sabit değil, bir bağlam ister
+“{}” needs extension code, which this version does not run	“{}” eklenti kodu gerektiriyor; bu sürüm eklenti kodu çalıştırmıyor
+keymap preset “{}” is not installed	“{}” kısayol düzeni kurulu değil
+unknown command “{}”	bilinmeyen komut “{}”
+“{}” is a built-in shortcut; an extension cannot change it	“{}” yerleşik bir kısayol; eklentiler onu değiştiremez
+{} is not a setting of an installed extension	{} kurulu bir eklentinin ayarı değil
+{0}: expected {1}	{0}: {1} bekleniyordu
+“{}” ships inside the package; this version only starts language servers found on PATH	“{}” paketin içinde geliyor; bu sürüm yalnızca PATH üzerindeki dil sunucularını başlatır
+language “{0}” names grammar “{1}”, which Codeyard does not have	“{0}” dili “{1}” dil bilgisini istiyor, Codeyard’da bu yok
+keymap preset “{0}” is not installed (installed: {1})	“{0}” kısayol düzeni kurulu değil (kurulu olanlar: {1})

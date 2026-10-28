@@ -332,10 +332,21 @@ fn language_ext(lang: &str) -> String {
         "ruby" => "rb",
         "csharp" => "cs",
         "kotlin" => "kt",
+        "make" | "makefile" => "mk",
         "plaintext" | "text" => "txt",
         other => return other.to_string(),
     }
     .to_string()
+}
+
+/// A grammar name (a language name or file extension, as in `files.associations`) the highlighter has.
+pub fn grammar_known(name: &str) -> bool {
+    syntax::language_for_path(&format!("x.{}", language_ext(name))).is_some()
+}
+
+#[cfg(test)]
+pub fn comment_token_for_test(path: &str) -> Option<&'static str> {
+    comment_token(path)
 }
 
 /// The path the highlighter looks at: if `files.associations` matches, with the language's extension.
@@ -351,6 +362,13 @@ pub fn syntax_path(path: &str) -> std::borrow::Cow<'_, str> {
         if hit {
             return format!("{path}.{}", language_ext(lang)).into();
         }
+    }
+    drop(assoc);
+    // An extension language highlights with the built-in grammar it names, for files no built-in grammar knows.
+    if syntax::language_for_path(path).is_none()
+        && let Some(grammar) = crate::ext::language_for(path).and_then(|l| l.grammar)
+    {
+        return format!("{path}.{}", language_ext(&grammar)).into();
     }
     path.into()
 }
@@ -1395,7 +1413,7 @@ fn comment_token(path: &str) -> Option<&'static str> {
     {
         return Some("#");
     }
-    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase())?;
+    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
     Some(match ext.as_str() {
         "rs" | "c" | "h" | "cc" | "cpp" | "hpp" | "cxx" | "js" | "jsx" | "mjs" | "cjs" | "ts" | "tsx" | "mts" | "go" | "java" | "kt" | "kts" | "swift"
         | "cs" | "scala" | "dart" | "zig" | "proto" | "jsonc" | "scss" | "less" | "php" | "groovy" => "//",
@@ -1405,17 +1423,18 @@ fn comment_token(path: &str) -> Option<&'static str> {
         "vim" => "\"",
         "el" | "lisp" | "clj" | "scm" | "asm" | "s" => ";",
         "erl" | "hrl" | "tex" | "m" => "%",
-        _ => return None,
+        // A language an installed extension adds, for files the table does not know.
+        _ => return crate::ext::language_for(path).and_then(|l| l.line_comment),
     })
 }
 
 /// Block comment for languages without a line comment (each line wrapped separately, like VS Code).
 fn block_comment(path: &str) -> Option<(&'static str, &'static str)> {
-    let ext = path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase())?;
+    let ext = path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
     Some(match ext.as_str() {
         "css" => ("/*", "*/"),
         "html" | "htm" | "xml" | "svg" | "md" | "markdown" | "vue" | "xhtml" | "plist" => ("<!--", "-->"),
-        _ => return None,
+        _ => return crate::ext::language_for(path).filter(|l| l.line_comment.is_none()).and_then(|l| l.block_comment),
     })
 }
 
@@ -1424,7 +1443,7 @@ fn block_delims(path: &str) -> Option<(&'static str, &'static str)> {
     if let Some(d) = block_comment(path) {
         return Some(d);
     }
-    let ext = path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase())?;
+    let ext = path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
     Some(match ext.as_str() {
         "rs" | "c" | "h" | "cc" | "cpp" | "hpp" | "cxx" | "js" | "jsx" | "mjs" | "cjs" | "ts" | "tsx" | "mts" | "go" | "java" | "kt" | "kts" | "swift"
         | "cs" | "scala" | "dart" | "zig" | "proto" | "scss" | "less" | "php" | "groovy" | "sql" => ("/*", "*/"),
@@ -1432,7 +1451,7 @@ fn block_delims(path: &str) -> Option<(&'static str, &'static str)> {
         "hs" => ("{-", "-}"),
         "py" | "pyi" => ("\"\"\"", "\"\"\""),
         "rb" => ("=begin", "=end"),
-        _ => return None,
+        _ => return crate::ext::language_for(path).and_then(|l| l.block_comment),
     })
 }
 

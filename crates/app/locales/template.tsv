@@ -717,6 +717,7 @@ Explorer
 Explorer (⇧⌘E)	
 Export as Text…	
 Exposed only; not published on the server.	
+Extension not loaded: {}	
 External image: open the link to view it.	
 F4 steps through the search results, ⇧F4 goes back.	
 Favorites	
@@ -995,6 +996,7 @@ Key login is set up for “{}”. The next connection needs no password.
 Key login was already set up for “{}” (created {}). The next connection needs no password.	
 Key login was already set up for “{}”. The next connection needs no password.	
 Keyboard Shortcuts	
+Keymap preset from an installed extension, as publisher.name/label (empty: Codeyard's own keys)	
 Kill All Terminals	
 Kill Terminal	
 Language Badges	
@@ -2173,6 +2175,7 @@ Zoom Out
 Zoom: {}	
 `{}` did not answer within {} seconds; check the network connection and try again	
 `{}` is not installed or not on PATH	
+a key binding condition needs a context, not a constant	
 a program	
 a theme must be a JSON object	
 about {0} MB · {1}	
@@ -2259,6 +2262,7 @@ goes to an address whose host cannot be read reliably
 goes to {}, which you have not sent anything to in this session	
 goto	
 image default	
+in a key binding, == and != compare editor.language with a language id	
 install Xcode or a Swift toolchain (it contains sourcekit-lsp)	
 install clangd (Xcode tools, apt install clangd)	
 installed · {}	
@@ -2273,8 +2277,11 @@ it is not a regular file or folder
 its name differs from another entry only in letter case	
 join needs a string separator, got {}	
 just now	
+keymap preset “{0}” is not installed (installed: {1})	
+keymap preset “{}” is not installed	
 label, e.g. web (empty: none)	
 language server is not running	
+language “{0}” names grammar “{1}”, which Codeyard does not have	
 latest {} open	
 left	
 light	
@@ -2382,6 +2389,7 @@ unexpected GitHub response: {}
 unexpected gh output	
 unexpected gh output: {}	
 unexpected output: {}	
+unknown command “{}”	
 unknown error	
 unknown role: {}	
 unknown setting {}	
@@ -2446,6 +2454,7 @@ your words
 {0}: expected an array of {1}	
 {0}: expected an object {1}	
 {0}: expected dictionary names like {1}	
+{0}: expected {1}	
 {0}: expected {1} or a list of kinds	
 {0}: expected {1} or null	
 {0}: no answer from {1}	
@@ -2504,6 +2513,7 @@ your words
 {} is a symbolic link; write the path it points to, so the upload can be confirmed	
 {} is already in .gitignore	
 {} is already in the workspace.	
+{} is not a setting of an installed extension	
 {} is not a trusted folder, so nothing is deleted from it. Open it as a folder and trust it first.	
 {} is not a trusted folder, so nothing is written to it. Open it as a folder and trust it first.	
 {} is not an array	
@@ -2539,6 +2549,7 @@ your words
 {} year ago|{} years ago	
 {} · Color theme (opens the theme picker)	
 {} · VS Code import	
+{} · extension {}	
 {} · user	
 {} ↔ Clipboard	
 {}+ results	
@@ -2585,6 +2596,8 @@ your words
 “{}” asks for inputs, which a compound cannot ask for: start it on its own.	
 “{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	
 “{}” can't be opened	
+“{}” cannot be used in a key binding	
+“{}” is a built-in shortcut; an extension cannot change it	
 “{}” is called with the wrong number of arguments	
 “{}” is missing here	
 “{}” is not a branch of a known remote	
@@ -2600,6 +2613,8 @@ your words
 “{}” is not in the dictionary. Quick Fix shows suggestions.	
 “{}” is not supported	
 “{}” is still running in this terminal. Close it anyway?	
+“{}” needs extension code, which this version does not run	
+“{}” ships inside the package; this version only starts language servers found on PATH	
 “{}” was not found in ~/.ssh/config	
 “{}”: {} = {}	
 … {} more	

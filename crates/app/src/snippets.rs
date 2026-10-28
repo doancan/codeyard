@@ -16,6 +16,8 @@ pub struct Snippet {
     pub body: String,
     pub description: String,
     pub user: bool,
+    /// The extension that contributed it (`publisher.name`); `None` for built-in and the user's own.
+    pub origin: Option<String>,
 }
 
 #[cfg(not(test))]
@@ -76,12 +78,13 @@ pub fn lang_of_path(path: &str) -> &'static str {
         "yaml" | "yml" => "yaml",
         "toml" => "toml",
         "sql" => "sql",
-        _ => "plaintext",
+        // A language an installed extension adds for files no built-in language claims.
+        _ => crate::ext::language_for(path).map_or("plaintext", |l| l.id),
     }
 }
 
 fn b(lang: &str, prefix: &str, body: &str, description: &str) -> Snippet {
-    Snippet { lang: lang.into(), prefix: prefix.into(), body: body.into(), description: description.into(), user: false }
+    Snippet { lang: lang.into(), prefix: prefix.into(), body: body.into(), description: description.into(), user: false, origin: None }
 }
 
 /// Built-in snippets.
@@ -162,13 +165,18 @@ pub fn find(path: &str, prefix: &str) -> Option<Snippet> {
 /// VS Code format: { "Name": { "prefix": "x" | ["x","y"], "body": "…" | ["line", …], "description": "…" } }.
 /// `lang`: language from the file name ("global": every file). Malformed entries are skipped with a warning.
 pub fn parse_user_file(lang: &str, text: &str) -> (Vec<Snippet>, Vec<String>) {
+    parse_file(lang, text, None, &format!("snippets/{lang}.json"))
+}
+
+/// A snippet file in VS Code format; `origin` is the extension that ships it, `label` names the file in warnings.
+pub fn parse_file(lang: &str, text: &str, origin: Option<&str>, label: &str) -> (Vec<Snippet>, Vec<String>) {
     let mut out = Vec::new();
     let mut warnings = Vec::new();
     let value: Value = match serde_json::from_str(&theme::themes::strip_jsonc(text)) {
         Ok(v) => v,
-        Err(e) => return (out, vec![format!("snippets/{lang}.json: {e}")]),
+        Err(e) => return (out, vec![format!("{label}: {e}")]),
     };
-    let Some(map) = value.as_object() else { return (out, vec![format!("snippets/{lang}.json: expected an object")]) };
+    let Some(map) = value.as_object() else { return (out, vec![format!("{label}: expected an object")]) };
     let lang_id = if lang == "global" { String::new() } else { lang.to_string() };
     for (name, def) in map {
         let prefixes: Vec<String> = match def.get("prefix") {
@@ -182,12 +190,19 @@ pub fn parse_user_file(lang: &str, text: &str) -> (Vec<Snippet>, Vec<String>) {
             _ => None,
         };
         let (Some(body), false) = (body, prefixes.is_empty()) else {
-            warnings.push(format!("snippets/{lang}.json: \"{name}\" needs a \"prefix\" and a \"body\""));
+            warnings.push(format!("{label}: \"{name}\" needs a \"prefix\" and a \"body\""));
             continue;
         };
         let description = def.get("description").and_then(Value::as_str).unwrap_or(name).to_string();
         for prefix in prefixes {
-            out.push(Snippet { lang: lang_id.clone(), prefix, body: body.clone(), description: description.clone(), user: true });
+            out.push(Snippet {
+                lang: lang_id.clone(),
+                prefix,
+                body: body.clone(),
+                description: description.clone(),
+                user: true,
+                origin: origin.map(str::to_string),
+            });
         }
     }
     (out, warnings)
@@ -217,7 +232,7 @@ mod tests {
         let rust = for_path("a.rs");
         assert!(rust.iter().any(|s| s.prefix == "fn") && rust.iter().any(|s| s.prefix == "todo"));
         assert!(!rust.iter().any(|s| s.prefix == "def"));
-        set_user(vec![Snippet { lang: "rust".into(), prefix: "fn".into(), body: "mine".into(), description: String::new(), user: true }]);
+        set_user(vec![Snippet { lang: "rust".into(), prefix: "fn".into(), body: "mine".into(), description: String::new(), user: true, origin: None }]);
         assert_eq!(find("a.rs", "fn").unwrap().body, "mine");
         set_user(Vec::new());
         assert!(find("a.rs", "fn").unwrap().body.starts_with("fn ${1:name}"));

@@ -125,6 +125,12 @@ status bar reports it.
 | `json.schemaDownload.enable` | `true` / `false` | `true` | Download schemas from SchemaStore and cache them (off: only local and cached schemas) |
 | `json.validate.enable` | `true` / `false` | `true` | Check JSON and YAML files against their schema (problems, hover, suggestions) |
 
+## `keymap`
+
+| Setting | Values | Default | What it does |
+| --- | --- | --- | --- |
+| `keymap.preset` | text | empty | Keymap preset from an installed extension, as publisher.name/label (empty: Codeyard's own keys) |
+
 ## `lsp`
 
 | Setting | Values | Default | What it does |
