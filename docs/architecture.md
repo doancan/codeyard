@@ -267,7 +267,7 @@ printed by `scripts/memcheck.sh` for the record. The agent keeps its budget beca
 
 **Regression gate.** `scripts/perf/run.sh --baseline <previous tag>` builds the previous release and the candidate and
 runs them interleaved on the same Mac: startup to first frame and key press to drawn frame in a 10k-line Rust file
-(20 runs each) and the settled memory of three scenes (3 runs). `scripts/perf/compare.py` checks each metric of
+(20 runs each) and the settled memory of three scenes (5 runs). `scripts/perf/compare.py` checks each metric of
 `perf/metrics.json` against its budget (p95 +10% for times, median +5% for memory) and fails only when the change is
 also outside the noise of the baseline (a bootstrap interval of the same statistic). The result is committed as `docs/benchmarks/perf-<version>.json`. Details:
 `scripts/perf/README.md`.

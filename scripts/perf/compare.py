@@ -5,8 +5,11 @@ A metric regresses when its statistic (median or p95) is worse than the baseline
 change is not noise. Noise is judged on the same statistic: the candidate's value must also be above the upper end of
 a 95% bootstrap interval of the baseline's value. Small samples (memory has 3) have wide intervals, so for a median
 it is also a regression when every candidate sample is worse than the baseline's median by more than the budget.
-A blocking metric that the baseline has no samples for (a release before the hooks) is reported, not passed."""
+A blocking metric that the baseline has no samples for (a release before the hooks) is reported, not passed, and so
+is a comparison with fewer than MIN_SAMPLES on either side: one GPU texture spike is ±8 MB in a memory scene."""
 import json, math, random, sys
+
+MIN_SAMPLES = 3
 
 args = sys.argv[1:]
 cat_path = "perf/metrics.json"
@@ -51,7 +54,7 @@ for m in catalogue:
         print(f"{m['id']:32} {m['stat']:6} {'-':>10} {'-':>10} {'':>8}  {'FAIL' if blocking else 'warn'}: no samples")
         continue
     cv = stat(c, m["stat"])
-    problems = []
+    problems, notes = [], []
     if m["ceiling"] is not None and cv > m["ceiling"]:
         problems.append(f"over ceiling {m['ceiling']}")
     change, bshow = "", "-"
@@ -61,7 +64,9 @@ for m in catalogue:
         rel = (cv - bv) / bv if bv else 0.0
         change = f"{rel:+.1%}"
         limit = bv * (1 + m["budget"])
-        if cv > limit:
+        if cv > limit and min(len(b), len(c)) < MIN_SAMPLES:
+            notes.append(f"worse, but fewer than {MIN_SAMPLES} samples to judge")
+        elif cv > limit:
             outside_noise = cv > upper_bound(b, m["stat"])
             all_worse = m["stat"] == "median" and min(c) > limit
             if outside_noise or all_worse:
@@ -69,6 +74,8 @@ for m in catalogue:
     if problems:
         failed |= blocking
         result = ("FAIL: " if blocking else "warn: ") + ", ".join(problems)
+    elif notes:
+        result = "warn: " + ", ".join(notes)
     elif not b:
         result = "warn: no baseline samples, not compared" if blocking else "ok (no baseline)"
     else:
