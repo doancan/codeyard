@@ -135,13 +135,13 @@ Codeyard version from the API items and contribution points used (each has a `si
 
 | Contribution | Needs code | Notes |
 | --- | --- | --- |
-| `themes`, `icon-themes` | no | Codeyard or VS Code colour theme JSON; contrast checked with `guard_contrast` |
+| `themes` | no | Codeyard or VS Code colour theme JSON; contrast always repaired with `guard_contrast`. Id `ext:<publisher.name>/<file stem>` |
 | `snippets` | no | VS Code snippet format |
-| `keymap-preset` | no | Vim, Emacs, Sublime. Picked in Settings › Keymap; may override defaults |
-| `keybindings` | no | For your own commands. Never shadow a built-in; clashes are listed on the Shortcuts page |
-| `languages` | no | File mapping, comments, brackets, indent, `.scm` queries for built-in grammars |
+| `keymap-preset` | no | Vim, Emacs, Sublime: a file in `keybindings.jsonc` format. Chosen with the `keymap.preset` setting; may override defaults |
+| `keybindings` | no | For your own or core (`core:workbench.toggleZenMode`) commands; no permission, since only the user's key press runs them. A key a built-in binding or the chosen preset uses is never taken: the binding is left out with a warning. `when` takes `editor`, `terminal`, `file-tree`, `scm`, `search` and `editor.language == '…'` |
+| `languages` | no | File names and extensions, a built-in grammar to highlight with, comment tokens. Only for files no built-in language claims (`files.associations` changes a built-in one) |
 | `json-schemas`, `yaml-schemas`, `settings` | no | Settings appear under "Extensions › Name" |
-| `language-servers`, `debug-adapters` | no | Start a program, so they need `run` and a trusted workspace |
+| `language-servers` | no | Start a program from `PATH` where the files are (so also over SSH), so they need `run` and a trusted workspace. Entered before the user's `lsp.servers`; the user's entry for the same language wins |
 | `commands`, `menus`, `status-bar`, `views` | yes | |
 | `formatters`, `code-actions`, `diagnostics`, `decorations`, `tasks` | yes | |
 | `hover`, `completion`, `code-lens`, `inlay-hints`, SCM and PR providers | yes | Phase 3 |
@@ -227,7 +227,7 @@ signed package; a language server wrapper is therefore a normal High-risk extens
   every connection, so private, CGNAT, link-local, metadata, NAT64 and IPv4-mapped ranges are blocked. No IP
   literals, at most 5 re-checked redirects, environment proxies ignored. WebSockets are not offered in v1.
 - **IPC.** `ext-proto` has its own frame cap (call limit + 64 KiB) and a per-process byte-rate budget.
-- **Parsed data.** Themes, SVG, `.scm` queries, schemas and snippets are size-capped and fuzzed in CI. "No
+- **Parsed data.** Themes, schemas and snippets are size-capped and fuzzed in CI. "No
   extension can crash the app" is a target backed by fuzzing and hostile fixtures, not a guarantee.
 
 ### 6.3 What the user sees
@@ -246,7 +246,7 @@ One consent model (permission set + diff + risk) renders the install sheet, the 
   trusted-publisher record, the client's pin per extension id, and the grant key all use it. A sideloaded
   package with the same id starts with no grants.
 - **Untrusted folders.** Declarative extensions apply. Code may read what it declared and show UI but cannot
-  send, write or run; extension language servers and debug adapters do not start. The dev window shows the
+  send, write or run; extension language servers do not start. The dev window shows the
   trust state, and errors name `untrusted-workspace` with the fix.
 - **Management.** Per-permission switches and a recent-denials list on the extension page (in memory only).
 - **Crashes.** Three crashes within a minute disable the extension and show **Reinstall previous version** and
@@ -339,7 +339,7 @@ minutes with Rust or Node installed; every error says what is wrong, where, and 
 
 Author commands are `cyx new`, `cyx dev`, `cyx test`, `cyx publish [--dry-run|--pre-release]`. Advanced:
 `cyx check [--fix]`, `cyx package`, `cyx doctor`, `cyx explain CY0201`, `cyx import-vscode <dir|.vsix>`
-(themes, icon themes, snippets, keymaps, language configuration; lists what it could not convert), and user
+(themes, snippets, keymaps, language configuration; lists what it could not convert), and user
 commands `install|list|uninstall|sync`.
 
 `cyx` is a small GPUI-free console binary shipped in the app bundle (a Windows GUI exe cannot write to a
@@ -428,6 +428,7 @@ Settings: `extensions.autoUpdate` (`off | notify | install`, default `install`),
 
 ## 13. Later
 
+- Icon themes, `.scm` queries for extension languages, debug adapters as declarative contributions: each needs its own engine (data-driven icons, runtime queries, launch configurations); they come after Phase 0.
 - Index deltas: when the compressed index passes 5 MB.
 - Version ranges and a full resolver (PubGrub): when dependency chains appear in practice.
 - Per-extension generated build world (undeclared API as a compile error): the import check covers it now.
