@@ -956,6 +956,12 @@ impl Workbench {
             cx.subscribe_in(&scm, window, |this, _, event: &crate::scm::ScmEvent, window, cx| match event {
                 crate::scm::ScmEvent::Refresh => this.refresh_git(0, cx),
                 crate::scm::ScmEvent::OpenDiff { path, staged } => this.open_diff(path.clone(), *staged, window, cx),
+                crate::scm::ScmEvent::OpenWorktree { root, path } => {
+                    if this.vcs.status.as_ref().is_some_and(|s| &s.root == root) {
+                        this.set_root(path.clone(), cx);
+                    }
+                }
+                crate::scm::ScmEvent::AddWorktree => this.git_add_worktree(window, cx),
                 crate::scm::ScmEvent::MoreActions(position) => this.open_scm_menu(*position, window, cx),
                 crate::scm::ScmEvent::GraphMenu(position) => this.open_graph_menu(*position, window, cx),
                 // --- git-sync ---
@@ -1600,6 +1606,7 @@ impl Workbench {
         self.roots.file_index = None;
         self.load_git_branch(&path, cx);
         self.vcs.status = None;
+        self.scm.update(cx, |s, cx| s.set_status(self.remote.host.clone(), None, cx));
         self.vcs.scm_root = None;
         self.vcs.tree_marks.clear();
         self.roots.primary.update(cx, |t, cx| t.set_git(Arc::default(), cx));

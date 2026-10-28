@@ -209,6 +209,7 @@ const ICONS: &[(&str, &[u8])] = icons![
     "git-compare",
     "info",
     "loader",
+    "lock",
     "minus",
     "panel-left",
     "pin",

@@ -14,6 +14,7 @@ mod stash;
 mod status;
 mod sync;
 mod tag;
+mod worktree;
 
 pub use branch::*;
 pub use diff::*;
@@ -24,6 +25,9 @@ pub use stash::*;
 pub use status::*;
 pub use sync::*;
 pub use tag::*;
+#[cfg(test)]
+pub use worktree::parse_worktree_entries;
+pub use worktree::{Worktree, worktree_entries};
 
 fn git(host: &dyn Host, cwd: &str, args: &[&str]) -> Result<host::ExecOutput, String> {
     let out = host.exec("git", args, Some(cwd), None).map_err(|e| e.to_string())?;

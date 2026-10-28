@@ -106,6 +106,7 @@ Back
 Back to SSH workspace and container details	
 Back to the default (removes the value from settings.jsonc)	
 Back to this computer; files with unsaved changes must be saved or closed first	
+Bare repository	
 Blame Line	
 Bookmarks: Clear in File	
 Bookmarks: Jump to Next	
@@ -385,6 +386,7 @@ Could not list branches: {}
 Could not list files: {}	
 Could not list stashes: {}	
 Could not list the server's ports: {}	
+Could not list worktrees: {}	
 Could not list: {}	
 Could not load: {}	
 Could not look for tests: {}	
@@ -1019,6 +1021,7 @@ Line {}: {} · {}, {} · {}
 Lines kept in terminal history	
 Link copied.	
 List	
+Listing worktrees timed out. Refresh to try again.	
 Live updates	
 Ln {}, Col {}	
 Ln {}, Col {} ({} selected)	
@@ -1225,6 +1228,7 @@ No tests to run.
 No timestamp	
 No type definition found	
 No unsaved changes: the file matches what is on disk.	
+No worktrees found.	
 Node.js program	
 None	
 None of these commits is yours.	
@@ -1325,6 +1329,7 @@ Open the source folder on this computer to create a Dev Container. Remote Docker
 Open this project with Docker: Open Project in Dev Container first.	
 Open to the Side	
 Open which worktree?	
+Open worktree in this window	
 Open ~/.ssh/config	
 Open “{}”	
 Opening…	
@@ -2139,6 +2144,8 @@ Word Wrap
 Workbench	
 Workspace: Trust This Folder	
 Workspace: {} folder in the Explorer.|Workspace: {} folders in the Explorer.	
+Worktree locked: {}	
+Worktrees	
 Wrap long lines at the window edge	
 Wrapped lines	
 You are connected to “{}”. Disconnect first.	

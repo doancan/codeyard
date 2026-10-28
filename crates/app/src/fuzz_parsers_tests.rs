@@ -276,7 +276,7 @@ fn program_output_survives_hostile_text() {
             let _ = crate::git::parse_log(&text);
             let _ = crate::git::parse_blame(&text, "a.rs");
             let _ = crate::git::parse_branches(&text);
-            let _ = crate::git::parse_worktrees(&text);
+            let _ = crate::git::parse_worktree_entries(&text);
             let _ = crate::git::parse_remotes(&text);
             let _ = crate::git::parse_branch_infos(&text);
             let _ = crate::git::parse_track(&text);

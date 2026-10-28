@@ -6,6 +6,15 @@
 # Host Sunucu, Port Bağlantı Noktası (the word port stays in compounds: SSH port yönlendirme), Debug Hata Ayıklama, Breakpoint Kesme Noktası.
 # Updates: update güncelleme, release/version sürüm, checksum sağlama toplamı, install kur (kurulum), restart yeniden başlat.
 
+# ---- Source Control worktrees ----
+Worktrees	Çalışma Ağaçları
+Could not list worktrees: {}	Çalışma ağaçları listelenemedi: {}
+No worktrees found.	Çalışma ağacı bulunamadı.
+Bare repository	Çalışma ağacı olmayan depo
+Worktree locked: {}	Çalışma ağacı kilitli: {}
+Open worktree in this window	Çalışma ağacını bu pencerede aç
+Listing worktrees timed out. Refresh to try again.	Çalışma ağaçları listelenirken zaman aşımına uğradı. Yeniden denemek için yenileyin.
+
 # ---- Menu bar: menu names ----
 File	Dosya
 Edit	Düzenle

@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cargo target discovery for automatic Rust debugging: virtual workspaces, multiple binaries, examples, required features
   and library-only test harnesses. Programs come from Cargo's artifact messages, including custom target directories.
 - *Rust: Open Cargo.toml* falls back to the nearest manifest inside the file's workspace when no language server is attached.
+- Source Control lists Git worktrees with their branch, path and current checkout, plus add/refresh controls and
+  keyboard-accessible same-window navigation on local and SSH hosts. Detached, locked, stale and bare entries are identified;
+  worktree paths with spaces, Unicode, quotes or line breaks are preserved by NUL-delimited Git output.
+
 - macOS accessibility landmark bounds for the window, primary Explorer viewport, focused text-editor pane
   and status bar, with display-scale conversion and updates when resizing, switching split groups or hiding panels.
 
