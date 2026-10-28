@@ -3,7 +3,7 @@
 #   scripts/perf/run.sh                          the working tree, written to target/perf/candidate.json
 #   scripts/perf/run.sh --baseline v0.5.0        also build v0.5.0 and run both builds interleaved
 #   scripts/perf/run.sh --aa                     A/A: the working tree against itself, to see the noise
-#   scripts/perf/run.sh --runs 20 --mem-runs 3   samples per timing scenario / per memory scene (defaults 20 / 3)
+#   scripts/perf/run.sh --runs 20 --mem-runs 5   runs per timing scenario / per memory scene (defaults 20 / 5)
 # Then: scripts/perf/compare.py target/perf/baseline.json target/perf/candidate.json
 # A baseline without the CODEYARD_PERF hooks (crates/app/src/perf.rs) gives memory rows only.
 set -euo pipefail
@@ -11,7 +11,7 @@ cd "$(dirname "$0")/../.."
 [ "$(uname)" = Darwin ] || { echo "perf: macOS only (needs footprint)" >&2; exit 2; }
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 
-runs=20 mem_runs=3 baseline="" aa=0
+runs=20 mem_runs=5 baseline="" aa=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --baseline) baseline=$2; shift 2 ;;

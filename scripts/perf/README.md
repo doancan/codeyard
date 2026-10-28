@@ -12,8 +12,8 @@ scripts/perf/compare.py target/perf/baseline.json target/perf/candidate.json
 ```
 
 `--aa` runs the working tree against itself instead: every row must pass, otherwise the machine is too noisy (close
-other apps, plug in the power, let it cool). `--runs` and `--mem-runs` change the number of runs (default 20 and 3). A
-full run takes about 15 minutes. The measured windows open in the background and never take the keyboard, but they
+other apps, plug in the power, let it cool). `--runs` and `--mem-runs` change the number of runs (default 20 and 5). A
+full run takes about 25 minutes. The measured windows open in the background and never take the keyboard, but they
 must be visible: keep the display awake and stay on the same Space. A run that draws no frame or loses a key stops
 with a message instead of producing numbers. The baseline is built once in `target/perf/worktree-<commit>` and reused.
 
@@ -42,8 +42,11 @@ than the baseline by more than the budget **and** the change is not noise:
 
 - the candidate's value is above the upper end of a 95% bootstrap interval of the baseline's value (the same statistic
   on resamples of the baseline), or
-- for a median, every candidate sample is worse than the baseline's median by more than the budget. Memory has 3
-  samples, too few for an interval; one outlier must neither hide a regression nor invent one.
+- for a median, every candidate sample is worse than the baseline's median by more than the budget. Memory has 5
+  samples, few for an interval; one outlier must neither hide a regression nor invent one.
+
+With fewer than 3 samples on either side a worse value is reported as a warning, never a failure: a single GPU
+texture spike moves a memory scene by up to 8 MB (a 1-sample run once showed 99 MB for a scene that measures 87-90).
 
 A value above the metric's `ceiling`, when one is set, also fails. `warn` metrics are reported and never fail. A
 blocking metric with no candidate samples fails; one with no baseline samples is reported as not compared. That is the

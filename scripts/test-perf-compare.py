@@ -46,6 +46,16 @@ class CompareTests(unittest.TestCase):
         r = self.run_compare({"t": [10] * 19 + [12]}, {"t": [10] * 15 + [30] * 5}, [self.metric()])
         self.assertEqual(r.returncode, 1, r.stdout)
 
+    def test_too_few_samples_only_warn(self):
+        m = self.metric(stat="median", budget=0.05)
+        r = self.run_compare({"t": [90]}, {"t": [99]}, [m])
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("fewer than 3 samples", r.stdout)
+
+    def test_a_ceiling_fails_even_with_few_samples(self):
+        r = self.run_compare({"t": [10]}, {"t": [30]}, [self.metric(ceiling=20)])
+        self.assertEqual(r.returncode, 1, r.stdout)
+
     def test_one_baseline_outlier_does_not_hide_a_memory_regression(self):
         m = self.metric(stat="median", budget=0.05)
         r = self.run_compare({"t": [100, 100, 130]}, {"t": [120, 120, 120]}, [m])
