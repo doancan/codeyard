@@ -152,8 +152,19 @@ impl Workbench {
             }
             TreeEvent::Rename(path) => this.start_rename(path.clone(), window, cx),
             TreeEvent::Delete(path, is_dir) => this.confirm_delete(path.clone(), *is_dir, window, cx),
-            TreeEvent::Copy(path) => this.roots.file_clip = Some((path.clone(), false)),
-            TreeEvent::Cut(path) => this.roots.file_clip = Some((path.clone(), true)),
+            TreeEvent::Copy(path) => this.set_file_clipboard(vec![path.clone()], false, cx),
+            TreeEvent::Cut(path) => this.set_file_clipboard(vec![path.clone()], true, cx),
+            TreeEvent::CopyMany(paths) => this.set_file_clipboard(paths.clone(), false, cx),
+            TreeEvent::CutMany(paths) => this.set_file_clipboard(paths.clone(), true, cx),
+            TreeEvent::DeleteMany(paths) => this.delete_file_selection(paths.clone(), window, cx),
+            TreeEvent::MoveMany { paths, to_dir } => this.move_file_selection(paths.clone(), to_dir.clone(), window, cx),
+            TreeEvent::SelectionChanged { root } => {
+                for tree in this.all_trees() {
+                    if tree.read(cx).root() != Some(root.as_str()) {
+                        tree.update(cx, |t, cx| t.clear_selection(cx));
+                    }
+                }
+            }
             TreeEvent::Paste { dir } => this.paste_entry(dir.clone(), window, cx),
             TreeEvent::Move { from, to_dir } => this.confirm_drop(from.clone(), to_dir.clone(), window, cx),
             TreeEvent::DropFiles { paths, to_dir } => this.drop_external(paths.clone(), to_dir.clone(), window, cx),

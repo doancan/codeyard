@@ -118,14 +118,21 @@ impl Workbench {
         cx: &mut Context<Self>,
     ) {
         let host = self.remote.host.clone();
-        let task = cx.background_executor().spawn(async move { op(host.as_ref()) });
+        let root = self.root(cx);
+        let operation_host = host.clone();
+        let task = cx.background_executor().spawn(async move { op(operation_host.as_ref()) });
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
-            this.update_in(cx, |this, window, cx| match result {
-                Ok(()) => then(this, window, cx),
-                Err(e) => {
-                    this.notice = Some(Notice::Error(e.to_string().into()));
-                    cx.notify();
+            this.update_in(cx, |this, window, cx| {
+                if !Arc::ptr_eq(&host, &this.remote.host) || this.root(cx) != root {
+                    return;
+                }
+                match result {
+                    Ok(()) => then(this, window, cx),
+                    Err(e) => {
+                        this.notice = Some(Notice::Error(e.to_string().into()));
+                        cx.notify();
+                    }
                 }
             })
             .ok();
@@ -358,6 +365,7 @@ impl Workbench {
             return self.drop_entry(from, to_dir, window, cx);
         }
         let title = crate::i18n::tf("Move “{0}” into “{1}”?", &[&ui::file_name(&from), &ui::file_name(&to_dir)]);
+        let (host, root) = (self.remote.host.clone(), self.root(cx));
         let answer = window.prompt(
             PromptLevel::Info,
             &title,
@@ -367,7 +375,12 @@ impl Workbench {
         );
         cx.spawn_in(window, async move |this, cx| {
             if answer.await == Ok(0) {
-                this.update_in(cx, |this, window, cx| this.drop_entry(from, to_dir, window, cx)).ok();
+                this.update_in(cx, |this, window, cx| {
+                    if Arc::ptr_eq(&host, &this.remote.host) && this.root(cx) == root {
+                        this.drop_entry(from, to_dir, window, cx);
+                    }
+                })
+                .ok();
             }
         })
         .detach();
@@ -383,55 +396,7 @@ impl Workbench {
 
     /// Tree ⌘V: move if cut, copy as "name copy.ext" if copied.
     pub(super) fn paste_entry(&mut self, dir: String, window: &mut Window, cx: &mut Context<Self>) {
-        let Some((from, cut)) = self.roots.file_clip.clone() else { return };
-        if cut {
-            self.roots.file_clip = None;
-            self.drop_entry(from, dir, window, cx);
-            return;
-        }
-        if dir == from || dir.starts_with(&format!("{from}/")) {
-            self.notice = Some(Notice::Error(crate::i18n::t("Can't copy a folder into itself.").into()));
-            cx.notify();
-            return;
-        }
-        let host = self.remote.host.clone();
-        let reload = dir.clone();
-        let task = cx.background_executor().spawn(async move {
-            let name = ui::file_name(&from).to_string();
-            // Keep the name unless taken; else "name copy.ext", "name copy 2.ext"… (VS Code).
-            let target = std::iter::once(ui::join(&dir, &name))
-                .chain((0..1000).map(|n| ui::join(&dir, &copy_name(&name, n))))
-                .find(|t| host.stat(t).is_err())
-                .ok_or_else(|| crate::i18n::t("too many copies").to_string())?;
-            // The protocol has no copy: run `cp` on the machine where the files are (on the server over SSH).
-            let out = host.exec("cp", &["-R", "--", &from, &target], None, None).map_err(|e| e.to_string())?;
-            if !out.ok() {
-                return Err(out.stderr_str());
-            }
-            let is_file = host.stat(&target).is_ok_and(|m| m.kind == proto::Kind::File);
-            Ok((target, is_file))
-        });
-        cx.spawn_in(window, async move |this, cx| {
-            let result: Result<(String, bool), String> = task.await;
-            this.update_in(cx, |this, window, cx| match result {
-                Ok((target, is_file)) => {
-                    this.roots.primary.update(cx, |t, cx| {
-                        t.reload(&reload, cx);
-                        t.reveal(&target, cx);
-                    });
-                    this.roots.file_index = None;
-                    if is_file {
-                        this.open_file(target, window, cx);
-                    }
-                }
-                Err(e) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Could not paste: {}", &[&e.trim()]).into()));
-                    cx.notify();
-                }
-            })
-            .ok();
-        })
-        .detach();
+        self.paste_file_clipboard(dir, window, cx);
     }
 
     pub(super) fn confirm_delete(&mut self, path: String, is_dir: bool, window: &mut Window, cx: &mut Context<Self>) {
@@ -465,6 +430,7 @@ impl Workbench {
         };
         // The trash is recoverable: if the setting is off, move without asking.
         let ask = !trash || cx.global::<Settings>().confirm_delete;
+        let (host, root) = (self.remote.host.clone(), self.root(cx));
         let answer = ask.then(|| window.prompt(PromptLevel::Warning, &title, Some(&detail), &[verb, crate::i18n::t("Cancel")], cx));
         cx.spawn_in(window, async move |this, cx| {
             if let Some(answer) = answer
@@ -473,6 +439,9 @@ impl Workbench {
                 return;
             }
             this.update_in(cx, |this, window, cx| {
+                if !Arc::ptr_eq(&host, &this.remote.host) || this.root(cx) != root {
+                    return;
+                }
                 let p = path.clone();
                 if !trash {
                     this.fs_op(move |h| h.delete(&p), move |this, window, cx| this.after_delete(path, window, cx), window, cx);
@@ -481,10 +450,15 @@ impl Workbench {
                 let task = cx.background_executor().spawn(async move { crate::trash::move_to_trash(std::path::Path::new(&p)) });
                 cx.spawn_in(window, async move |this, cx| {
                     let result = task.await;
-                    this.update_in(cx, |this, window, cx| match result {
-                        Ok(_) => this.after_delete(path, window, cx),
-                        // E.g. a file on another disk can't go to the trash; ask explicitly about permanent deletion.
-                        Err(e) => this.confirm_permanent_delete(path, e.to_string(), window, cx),
+                    this.update_in(cx, |this, window, cx| {
+                        if !Arc::ptr_eq(&host, &this.remote.host) || this.root(cx) != root {
+                            return;
+                        }
+                        match result {
+                            Ok(_) => this.after_delete(path, window, cx),
+                            // E.g. a file on another disk can't go to the trash; ask explicitly about permanent deletion.
+                            Err(e) => this.confirm_permanent_delete(path, e.to_string(), window, cx),
+                        }
                     })
                     .ok();
                 })

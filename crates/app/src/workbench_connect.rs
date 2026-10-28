@@ -317,6 +317,7 @@ impl Workbench {
         self.cancel_pending_connection();
         self.remote.pending_path = None;
         self.persist.opening_recent = None;
+        self.invalidate_file_operation();
         self.flush_backups(cx);
         self.persist_session(cx);
         self.shutdown_lsp(cx);

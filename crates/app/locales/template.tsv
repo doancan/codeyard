@@ -88,6 +88,7 @@ Applied {}
 Apply (keep the stash)	
 Apply .editorconfig files (indent, line endings, final newline…)	
 Apply Stash…	
+Apply a file operation to {} entry?|Apply a file operation to {} entries?	
 Apr	
 Ask before .http requests and schema downloads leave this computer: never, remote (the first request to each new host per session) or always. Your own settings only; a folder cannot change it	
 Ask before Sync pulls or pushes. Your own settings only; a folder cannot change it	
@@ -130,11 +131,13 @@ CPU usage
 CPU: {}. 100% equals one CPU core.	
 Call Stack	
 Can't copy a folder into itself.	
+Can't move a folder into itself.	
 Can't open {0}: {1}	
 Can't read {0}: {1}	
 Cancel	
 Cancel Operation	
 Cancel Transfer	
+Cancel file operation	
 Cancel “{}”?	
 Cancelling…	
 Cannot check out #{}: you have uncommitted changes that would be overwritten. Commit or stash them, then try again	
@@ -350,6 +353,7 @@ Copy branch name
 Copy code	
 Copy container ID	
 Copy link	
+Copy the files again on the current host before pasting.	
 Copy the full hash	
 Copy the path at the cursor	
 Copy to the left	
@@ -393,7 +397,6 @@ Could not look for tests: {}
 Could not minify: {}	
 Could not open the debug session: {}	
 Could not open the state database: {}. Tabs, recent folders and backups will not be remembered this session.	
-Could not paste: {}	
 Could not reach {}: check the network connection and try again	
 Could not read Docker environments: {}	
 Could not read containers: {}	
@@ -523,6 +526,7 @@ Deleted “{0}” from {1}
 Deleting {}…	
 Deleting…	
 Deny	
+Destination: {0} on {1}. Existing files are never overwritten.	
 Dev Container configuration: {}	
 Dev Container is ready. The current workspace or unsaved files changed, so it was not switched automatically. Connect through the Docker picker.	
 Dev Container result: {}	
@@ -740,9 +744,11 @@ File and folder icons
 File glyphs tinted by language, accent folders	
 File icon theme…	
 File name (a path like src/new.rs works too)	
+File operation: {0} completed, {1} failed, {2} not processed.	
 File transfer in progress. Click to cancel.	
 File: Add Folder in New Window…	
 File: Add Folder to Workspace…	
+File: Cancel File Operation	
 File: Close Folder	
 File: Compare Active File With…	
 File: Compare Active File with Clipboard	
@@ -773,6 +779,7 @@ Files to include / exclude
 Files with the same name are overwritten; other files in the folder are kept.	
 Files: Collapse Folders in Explorer	
 Files: Open Folder…	
+Files: {0}/{1}	
 Filter	
 Filter (e.g. text, path)	
 Filtering needs sh, tail, grep and cut on the host (on Windows: Git Bash or WSL). {}	
@@ -1885,6 +1892,7 @@ The branch goes back to how it was before the rebase started.
 The branch is fully merged into the current branch.	
 The branch is removed from the remote repository for everyone. Local branches are not touched.	
 The clipboard has no text.	
+The complete file list is available in Output.	
 The connection dropped; trying to reconnect. Unsaved changes are kept.	
 The connection is down, so files with unsaved changes cannot be saved. Use File: Save a Copy to This Computer… to keep them, or close them, then reconnect.	
 The connection to {} dropped while the data was being exchanged.	
@@ -2115,6 +2123,7 @@ Volume name
 WSL Containers does not support Compose in this workflow. Choose Docker or Podman for a Compose project.	
 WSL Targets	
 WSL distribution	
+Wait for the file operation to finish, or cancel it from the status bar.	
 Waiting for enough samples to draw history…	
 Warning	
 Watch	
@@ -2476,6 +2485,7 @@ your words
 {} day ago|{} days ago	
 {} definition|{} definitions	
 {} entry is left out.|{} entries are left out.	
+{} entry|{} entries	
 {} exited with {}	
 {} failed	
 {} file skipped, binary or too large|{} files skipped, binary or too large	

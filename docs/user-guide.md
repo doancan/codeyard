@@ -135,6 +135,25 @@ jump to the next name that starts with them. OPEN EDITORS lists the open files a
 Right-click also has Duplicate, Open to the Side, Select for Compare / Compare with Selected
 (two files side by side) and Open in Integrated Terminal (in that folder).
 
+**Selecting several entries.** Cmd-click (Ctrl-click on Windows/Linux) toggles an entry;
+Shift-click selects a range. Shift+Up/Down, Shift+Home/End and Shift+PageUp/PageDown extend
+the selection, Cmd+A (Ctrl+A) selects the visible entries and Cmd+Space (Ctrl+Space) toggles
+the focused entry. Sorting and refresh keep the selected paths; collapsing a folder removes
+its hidden children from the selection. A selection belongs to one workspace tree at a time.
+
+Copy, cut, drag and delete apply to the selection, including from the context menu. Selecting
+a folder and its children processes the folder once. Batches show one confirmation with the
+count, destination and source paths; the complete list and failures are in Output. Existing
+targets are never overwritten: copies choose a numbered name, moves report the conflict and
+leave the failed cut entries on the clipboard for retry. Successful moves update open tabs;
+deleting files keeps their unsaved buffers open. A failed Trash operation never escalates to
+permanent batch deletion. The status bar shows progress; cancellation interrupts an active copy and stops before the next move or deletion;
+the palette also has *File: Cancel File Operation*. Closing/changing the workspace invalidates
+pending confirmations and stops the remaining entries. Copies stream on the file's host,
+preserve symlinks and executable permissions, and publish each completed entry atomically.
+One directory copy is limited to 100,000 entries and 128 nested levels; a limit or I/O failure
+removes its staged contents. Copying never needs `cp` or a shell. A lost connection or unconfirmed cancellation stops the batch and reports that the outcome needs inspection before retrying.
+
 **Editor.** `"editor.rulers": [80, 120]` draws vertical rulers; `"editor.renderWhitespace"`
 (`none`, `boundary`, `all`) marks spaces and tabs; `"editor.lineNumbers"` is `on`, `off` or
 `relative`; `"editor.cursorStyle"` is `line`, `block` or `underline`. Matching brackets are

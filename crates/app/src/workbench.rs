@@ -55,6 +55,8 @@ mod debug;
 mod editors_glue;
 #[path = "workbench_extras.rs"]
 mod extras_glue;
+#[path = "workbench_file_batch.rs"]
+mod file_batch_glue;
 #[path = "workbench_folder.rs"]
 mod folder_glue;
 #[path = "workbench_fsops.rs"]
@@ -168,6 +170,7 @@ actions!(
     workbench,
     [
         OpenFolder,
+        CancelFileOperation,
         ToggleSidebar,
         ShowExplorer,
         ShowRemote,
@@ -1168,6 +1171,7 @@ impl Workbench {
                 extra_trees: Vec::new(),
                 pending_extra_roots: Vec::new(),
                 file_clip: None,
+                file_operation: None,
                 compare_a: None,
                 // --- compare ---
                 compare_folder_a: None,
@@ -1594,6 +1598,7 @@ impl Workbench {
             return;
         }
         self.cancel_pending_connection();
+        self.invalidate_file_operation();
         self.stop_web_preview(cx);
         self.persist_session(cx);
         self.shutdown_lsp(cx);
