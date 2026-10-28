@@ -29,6 +29,8 @@ The delivery pull request is the authoritative record of the final tree's cross-
   of the same asynchronous state machine in the release binary. Unused translation keys were removed after integration.
 - Windows CI includes the new Rust, product and accessibility suites alongside its existing selected native regressions.
   The scripted DAP fixture uses an explicit Python interpreter and path assertions use the editor's normalized form.
+- The expanded Windows suite found a real compiler-path mismatch: Problems kept relative backslashes while editors used
+  normalized paths. Compiler and panic locations now normalize drive/UNC paths, preserve spaces and leave POSIX backslashes literal.
 
 ## Validation evidence
 
@@ -37,18 +39,19 @@ The delivery pull request is the authoritative record of the final tree's cross-
 | `scripts/check.sh --strict` with required SSH tests, timeout scale 5 and two test threads | Passed before the final cancellation/integration changes: 1,698 workspace tests passed, five documented ignores; 1,347 application tests passed |
 | `scripts/check.sh --quick --strict` | Passed after integration: formatting, Clippy, architecture, docs, licenses, project rules, dependency policy and RustSec audit |
 | `cargo test --locked -p app --bin codeyard rust_hardening` | 19 passed after integration, including real Cargo builds, actual workspace/features/output paths, save conflicts, Stop and Cargo→DAP launch |
+| `cargo test --locked -p app --bin codeyard problems::tests` | 11 passed after the Windows compiler-path fix, including drive/UNC normalization, panic locations with spaces and POSIX path preservation |
 | `cargo test --locked -p app --bin codeyard product_` | Eight passed after integration, including real Git stage/unstage/commit through AccessKit requests |
 | `cargo test --locked -p app --bin codeyard a11y` | 21 passed after integration, including layout/scale/visibility/split-editor geometry and AccessKit consumer validation |
 | `cargo test --locked -p app --bin codeyard container` | 35 passed after integration; one documented live-engine acceptance test ignored |
 | `cargo test --locked -p app --bin codeyard i18n_` | 50 passed after the integration's two dead translation keys and stale template were corrected |
-| `scripts/memcheck.sh` on Retina | Final run passed all seven memory scenes and all three size checks; existing budgets unchanged |
+| `scripts/memcheck.sh` on Retina after integration | Passed all seven memory scenes and all three size checks before the Windows diagnostic-path fix; existing budgets unchanged; the final commit is rechecked by CI |
 
 The initial baseline had ten debugger/SSH timeouts and was not treated as green. The subsequent complete local run
 passed with the environment above; both real LLDB failures also passed independently. The initial product regressions,
 initial Rust regressions, stale-green-result regression and both late-cancellation regressions failed before their fixes.
 
-The final release binary measured 62,606,560 bytes, within the existing 60 MiB limit. The idle owned agent measured
-2 MB; Linux agent artifacts measured 1,568/1,360 KiB, within their existing limits. The final Retina window readings
+The Retina integration build measured 62,606,560 bytes, within the existing 60 MiB limit. The idle owned agent measured
+2 MB; Linux agent artifacts measured 1,568/1,360 KiB, within their existing limits. The passing Retina window readings
 were 78 MB (terminal), 74 MB (empty), 98 MB (small Rust file), 89 MB (10k plain-text lines), 128 MB (10k highlighted
 lines) and 82 MB (first-run question), all within their existing budgets.
 
