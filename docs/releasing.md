@@ -69,6 +69,9 @@ warnings in `shaders` and `agents`; all release jobs also had zero such warnings
 ## Steps
 
 1. Run all gates (`scripts/check.sh --strict --budgets`, see `testing.md`), including `scripts/docs-check.sh` (it fails if the changelog has no section for the new version).
+   On the reference Mac, compare with the previous release: `scripts/perf/run.sh --baseline vPREVIOUS`, then
+   `scripts/perf/compare.py target/perf/baseline.json target/perf/candidate.json`. Commit `target/perf/candidate.json` as
+   `docs/benchmarks/perf-x.y.z.json`. A regression that is accepted is written as one line in the release notes.
 2. Bump the version: `version` in the root `Cargo.toml` and every path dependency's `version = "x.y.z"` in
    `crates/*/Cargo.toml` (`cargo-deny` rejects wildcard dependencies):
    `sed -i '' 's/version = "OLD", path/version = "NEW", path/' crates/*/Cargo.toml` (macOS `sed`; GNU `sed` takes `-i` without
