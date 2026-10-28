@@ -120,8 +120,8 @@ fn extension_key_bindings_never_take_a_built_in_key(cx: &mut TestAppContext) {
             "codeyard-extension.toml",
             &manifest(
                 "you.keys",
-                // cmd-shift-alt-z is free; cmd-s is Save.
-                "[[keybindings]]\nkey = \"cmd-shift-alt-z\"\ncommand = \"core:workbench.toggleZenMode\"\nwhen = \"editor && editor.language == 'rust'\"\n[[keybindings]]\nkey = \"cmd-s\"\ncommand = \"core:workbench.toggleZenMode\"\n",
+                // cmd-shift-alt-z is free; secondary-s is Save on every platform (cmd on macOS, ctrl elsewhere).
+                "[[keybindings]]\nkey = \"cmd-shift-alt-z\"\ncommand = \"core:workbench.toggleZenMode\"\nwhen = \"editor && editor.language == 'rust'\"\n[[keybindings]]\nkey = \"secondary-s\"\ncommand = \"core:workbench.toggleZenMode\"\n",
             ),
         )],
     );
@@ -129,7 +129,7 @@ fn extension_key_bindings_never_take_a_built_in_key(cx: &mut TestAppContext) {
     std::fs::write(cfg.join("keybindings.jsonc"), "[]").unwrap();
     reload(&wb, cx);
     let notice = wb.read_with(cx, |wb, _| wb.notice_for_test()).map(|(_, t)| t).unwrap_or_default();
-    assert!(notice.contains("“cmd-s” is a built-in shortcut"), "{notice}");
+    assert!(notice.contains("“secondary-s” is a built-in shortcut"), "{notice}");
     let want = keys_of("cmd-shift-alt-z");
     let bound = cx.update(|_, cx| cx.key_bindings().borrow().bindings().any(|b| keys(b) == want));
     assert!(bound, "the free key is bound");
@@ -160,11 +160,11 @@ fn a_chosen_keymap_preset_may_change_built_in_keys(cx: &mut TestAppContext) {
         &cfg,
         &[
             ("codeyard-extension.toml", &manifest("you.emacs", "[[keymap-preset]]\nlabel = \"Emacs\"\npath = \"emacs.json\"\n")),
-            ("emacs.json", r#"[ { "key": "cmd-s", "command": "workbench.toggleZenMode" } ]"#),
+            ("emacs.json", r#"[ { "key": "secondary-s", "command": "workbench.toggleZenMode" } ]"#),
         ],
     );
     let (wb, cx) = setup(cx, &cfg);
-    let save = keys_of("cmd-s");
+    let save = keys_of("secondary-s");
     let zen_on_cmd_s = |cx: &mut VisualTestContext| {
         cx.update(|_, cx| cx.key_bindings().borrow().bindings().any(|b| keys(b) == save && b.action().name().ends_with("ToggleZenMode")))
     };
