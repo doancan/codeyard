@@ -194,6 +194,7 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // ruby-lsp, kotlin-language-server, sourcekit-lsp, lua-language-server, bash-language-server, vscode-html/css-language-server.
   // Keys: rust c go python typescript java csharp php ruby kotlin swift lua bash html css (opt-in: json yaml toml).
   // "lsp.servers": { "python": { "command": "pylsp", "args": [] }, "go": null },
+  // Server settings, without replacing the server: "lsp.servers": { "rust": { "settings": { "rust-analyzer.check.command": "clippy" } } },
   "lsp.enabled": true,
 }
 "##;

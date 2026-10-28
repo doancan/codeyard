@@ -171,6 +171,11 @@ impl Workbench {
         self.run_menu_cmd(cmd, MenuTarget { path, is_dir: false, tab: Some(ix) }, window, cx);
     }
 
+    /// The language server diagnostics of a file (task problems not included).
+    pub fn lsp_diagnostics_for_test(&self, path: &str) -> Vec<crate::lsp::Diagnostic> {
+        self.lsp.diagnostics.get(path).cloned().unwrap_or_default()
+    }
+
     pub fn open_paths(&self, cx: &App) -> Vec<String> {
         self.tabs.editors.iter().map(|e| e.read(cx).path.clone()).collect()
     }
