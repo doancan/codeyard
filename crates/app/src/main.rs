@@ -61,6 +61,8 @@ mod ext;
 #[cfg(test)]
 mod ext_tests;
 #[cfg(test)]
+mod ext_view_tests;
+#[cfg(test)]
 mod features_tests;
 mod find;
 mod folder_settings;
@@ -273,6 +275,7 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-x", picker::PickCut, Some("Picker")),
         // The update dialog: Esc closes it, Tab walks its buttons, Enter and Space press the focused one (Enter: the primary one).
         KeyBinding::new("escape", UpdateDismiss, Some("UpdateDialog")),
+        KeyBinding::new("escape", CancelExtensionConsent, Some("ExtensionConsent")),
         KeyBinding::new("cmd-w", UpdateDismiss, Some("UpdateDialog")),
         KeyBinding::new("tab", UpdateFocusNext, Some("UpdateDialog")),
         KeyBinding::new("shift-tab", UpdateFocusPrev, Some("UpdateDialog")),

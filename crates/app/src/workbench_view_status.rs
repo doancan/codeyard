@@ -165,6 +165,21 @@ impl Workbench {
                         .on_click(cx.listener(|this, _, w, cx| this.show_ports(&ShowPorts, w, cx))),
                 )
             })
+            // `--no-extensions`: always said, so a missing theme or language is never a mystery.
+            .when(crate::ext::turned_off(), |d| {
+                d.child(
+                    item()
+                        .id("sb-extensions-off")
+                        .debug_selector(|| "sb-extensions-off".into())
+                        .cursor_pointer()
+                        .hover(|d| d.bg(c(p.surface_hover)))
+                        .text_color(c(p.warning))
+                        .child(icon("blocks", SB_ICON, p.warning))
+                        .child(div().max_w(px(120.)).truncate().child(crate::i18n::t("Extensions off")))
+                        .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Started with --no-extensions: no extension is loaded.").into())).into())
+                        .on_click(cx.listener(|this, _, w, cx| this.show_extensions(&ShowExtensions, w, cx))),
+                )
+            })
             .when_some(self.transfer_active().map(|t| t.status()), |d, text| {
                 d.child(
                     item()

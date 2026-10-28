@@ -78,6 +78,12 @@ status bar reports it.
 | `explorer.openEditors` | `true` / `false` | `true` | Show the Open Editors list in the explorer |
 | `explorer.sortOrder` | `default`, `filesFirst`, `mixed`, `type` | `default` | Order of files and folders in the explorer |
 
+## `extensions`
+
+| Setting | Values | Default | What it does |
+| --- | --- | --- | --- |
+| `extensions.enabled` | `true` / `false` | `true` | Load installed extensions (off: Codeyard starts as if none were installed) |
+
 ## `files`
 
 | Setting | Values | Default | What it does |
