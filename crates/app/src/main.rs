@@ -58,11 +58,11 @@ mod emmet;
 mod encoding;
 #[cfg(test)]
 mod error_ui_tests;
+#[cfg(test)]
+mod explorer_bulk_tests;
 mod ext;
 #[cfg(test)]
 mod ext_tests;
-#[cfg(test)]
-mod explorer_bulk_tests;
 #[cfg(test)]
 mod features_tests;
 mod file_batch;
