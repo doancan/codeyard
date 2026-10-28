@@ -160,3 +160,9 @@ over the original template. Input/command results are resolved by the caller onc
 again as variable templates. These planning components pass 20 hermetic tests and strict Clippy.
 Process transport, custom matchers, input UI, task/debug integration and native acceptance remain
 unfinished; this foundation is not a completed task-execution delivery.
+
+Two real-process regressions fail before their fixes: a descendant survives cancellation after its
+leader exits, and a process that closes stdout makes cancellation wait 4.9 seconds for natural exit.
+Cancellation now kills the owned group before reaping its leader, and output EOF polls exit without
+removing a still-running process from its session. The regressions pass; 182 agent/host/task-engine
+tests and strict Clippy pass. Windows process-tree ownership and the remaining F04 acceptance are pending.
