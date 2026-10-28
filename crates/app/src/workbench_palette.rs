@@ -358,6 +358,7 @@ impl Workbench {
             Command::action("Git: Commit & Push", GitCommitAndPush),
             Command::action("Git: Commit & Sync", GitCommitAndSync),
             Command::action("Developer: Restart Language Servers", RestartLanguageServers),
+            Command::action("Languages: Manage Language Services", ManageLanguageServices),
             Command::action("Git: View File History", GitFileHistory),
             Command::action("Git: Blame Line", GitBlameLine),
             Command::action("Git: Commit (Amend)", GitCommitAmend),

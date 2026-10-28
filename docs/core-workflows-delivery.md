@@ -125,3 +125,27 @@ wide-window captures were inspected; the last minimap correction still needs its
 All CI checks on the earlier `326612b` candidate pass (Actions run `40766365499`); the final
 hardening commit must pass its own workflow before merge. No real VoiceOver speech or
 human translation review is claimed.
+
+### F03: implementation and integration validation
+
+- The native Language Services page displays the current host, exact versions and destination,
+  with explicit installation, bounded stage/log progress, cancellation and retry. Opening the page
+  only discovers an installation; it never downloads one. Keyboard repair and Escape cancellation
+  pass GPUI tests, including acknowledged process exit before staging cleanup.
+- The installer validates a 35-package npm lock with registry-only URLs and SHA-512 integrity,
+  reuses a compatible host Node/npm or verifies a pinned Node archive with SHA-256 before running
+  it, disables npm lifecycle scripts, isolates its configuration/cache, and publishes completed
+  generations atomically. Failure/cancellation preserves the previous active record; uncertain
+  host outcomes retain staging. Host operations use the same worker on local and SSH connections.
+- A real local run downloaded and verified Node 22.23.4 for macOS ARM64, installed the locked
+  services, published a generation and rediscovered it. The opt-in acceptance then performed a
+  real installation under an owned SSH fixture. Through Codeyard's actual JSON-RPC client,
+  TypeScript/HTML/CSS returned 44/116/888 completions, 9/1/1 formatting edits and one diagnostic
+  each on both local and SSH hosts. Unicode document paths were included.
+- That acceptance initially failed because the HTML server's embedded CSS validator dereferenced
+  null configuration. Default service sections now use empty objects, preserve explicit options,
+  and are normalized again on settings reload. Explicit custom server commands and disabled
+  languages keep their behavior; workspace trust still guards startup.
+- Strict regression, native first-run acceptance, formatter capability negotiation, accessibility,
+  memory/performance comparisons and required platform CI remain pending. Turkish strings are
+  drafted and covered automatically; no human translation review is claimed.

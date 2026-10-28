@@ -14,13 +14,15 @@ pub struct ServerConfig {
     pub settings: Arc<Value>,
     /// Sent unchanged as `initializationOptions` with `initialize`.
     pub init_options: Option<Value>,
+    /// Only default commands may resolve to an explicitly installed managed service.
+    pub managed: Option<crate::language_services::Service>,
 }
 
 #[cfg(test)]
 impl ServerConfig {
     /// A server with no configuration of its own.
     pub fn plain(language: &str, command: &str, args: Vec<String>) -> Self {
-        ServerConfig { language: language.into(), command: command.into(), args, settings: Arc::new(Value::Null), init_options: None }
+        ServerConfig { language: language.into(), command: command.into(), args, settings: Arc::new(Value::Null), init_options: None, managed: None }
     }
 }
 
@@ -203,13 +205,10 @@ pub fn server_for(key: &str, overrides: &ServerOverrides) -> Option<ServerConfig
             (command.to_string(), args.iter().map(|s| s.to_string()).collect())
         }
     };
-    Some(ServerConfig {
-        language: key.into(),
-        command,
-        args,
-        settings: spec.map_or_else(|| Arc::new(Value::Null), |s| s.settings.clone()),
-        init_options: spec.and_then(|s| s.init_options.clone()),
-    })
+    let managed = if spec.is_some_and(|s| s.command.is_some()) { None } else { crate::language_services::Service::for_language(key) };
+    let settings = spec.map_or_else(|| Arc::new(Value::Null), |s| s.settings.clone());
+    let settings = managed.map_or_else(|| settings.clone(), |service| Arc::new(service.configuration(&settings)));
+    Some(ServerConfig { language: key.into(), command, args, settings, init_options: spec.and_then(|s| s.init_options.clone()), managed })
 }
 
 /// What a settings reload means for the running language servers.
@@ -279,6 +278,24 @@ fn insert_path(obj: &mut Map<String, Value>, path: &[&str], v: Value) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn managed_services_apply_only_to_enabled_default_commands() {
+        for (key, service) in [
+            ("typescript", crate::language_services::Service::TypeScript),
+            ("html", crate::language_services::Service::Html),
+            ("css", crate::language_services::Service::Css),
+        ] {
+            assert_eq!(server_for(key, &[]).unwrap().managed, Some(service));
+            assert!(server_for(key, &[(key.into(), None)]).is_none());
+            let custom = vec![(key.into(), Some(("custom-server".into(), vec!["--custom".into()]).into()))];
+            let config = server_for(key, &custom).unwrap();
+            assert_eq!(config.managed, None);
+            assert_eq!(config.command, "custom-server");
+            assert_eq!(config.args, ["--custom"]);
+        }
+        assert_eq!(server_for("rust", &[]).unwrap().managed, None);
+    }
 
     #[test]
     fn server_overrides() {
