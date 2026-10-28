@@ -134,3 +134,14 @@ hardening commit must pass its own workflow before merge. No real VoiceOver spee
 human translation review is claimed.
 
 The final pre-integration F02 Retina budget rerun passes at 72/69/93/83/113/69 MB (terminal/welcome/small Rust/plain 10k/highlighted 10k/first-run), with a 1 MB idle agent and unchanged static-agent sizes. Main integration preserves the new language key context and the per-group minimap behavior; its head requires fresh regression and CI checks.
+
+The integrated editor-grid source passes `CODEYARD_REQUIRE_SSHD=1 scripts/check.sh --strict`:
+1,885 tests, zero failures, five existing opt-in ignores. A locale-merge error joined four comment
+headers to following rows; restoring their line boundaries fixes all 31 localization regressions.
+
+The pre-integration grid candidate `27951f3` also passes the same-machine interleaved comparison
+against Explorer `0293d1a` (20 startup/typing runs, five memory samples per scene): startup p95
+236.5 → 233.1 ms (−1.4%), typing p95 26.0 → 25.7 ms (−1.0%), and welcome/syntax/terminal
+medians 69 → 69 / 114 → 114 / 74 → 73 MB. The current integrated sources are receiving a
+separate comparison against the updated shared main reference. Required CI on the integration
+head remains a merge condition.
