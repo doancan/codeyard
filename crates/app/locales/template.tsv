@@ -39,6 +39,7 @@ Accept Current
 Accept Current Change	
 Accept Incoming	
 Accept Incoming Change	
+Act as your {} account	
 Actions	
 Activate Breakpoints	
 Add	
@@ -125,6 +126,7 @@ Bring a folder's tabs and unsaved changes back when you open it
 Build and Open	
 Build failed: {}	
 Building the tests…	
+Built-in	
 CPU	
 CPU usage	
 CPU: {}. 100% equals one CPU core.	
@@ -142,10 +144,13 @@ Cannot check whether {0} has a key of type {1}
 Cannot index {0} with {1}	
 Cannot index {0} with “{1}”	
 Cannot index {} with object	
+Cannot install the extension: {}	
+Cannot install {0}: {1}	
 Cannot iterate over {}	
 Cannot join {}	
 Cannot open this link: {}	
 Cannot parse {} as a number	
+Cannot read {0}: {1}	
 Cannot use {} as an entry	
 Cannot use {} as an object key	
 Cargo did not report a Rust test executable	
@@ -160,7 +165,9 @@ Change
 Change All Occurrences	
 Change Color…	
 Change Local Port…	
+Change all files in the workspace	
 Change the URL of which remote?	
+Change {}	
 Changed	
 Changed {0} file ({1} file operations skipped)|Changed {0} files ({1} file operations skipped)	
 Changed {} file|Changed {} files	
@@ -192,6 +199,7 @@ Choose a container engine
 Choose a folder on this computer…	
 Choose an action	
 Choose an answer (Esc: none)	
+Choose an extension in the Extensions view.	
 Clear Terminal	
 Clear filters	
 Clear the search	
@@ -244,6 +252,7 @@ Color Theme…
 Color matching brackets by nesting depth	
 Color symbols by their meaning, from the language server	
 Color theme of the whole window and the editor	
+Color theme: {}	
 Colored file glyphs, folders with only their arrow; names line up	
 Colorful Folders	
 Column {0}: {1}	
@@ -251,6 +260,7 @@ Columns
 Command Palette	
 Command Palette…	
 Command palette	
+Command: {}	
 Comments are not kept.	
 Commit	
 Commit & Push	
@@ -299,8 +309,10 @@ Connect to SSH host…
 Connect to WSL…	
 Connect to a Container…	
 Connect to a running container…	
+Connect to any website	
 Connect to which WSL distribution?	
 Connect to which running container?	
+Connect to {}	
 Connected	
 Connected before	
 Connecting to {}	
@@ -323,6 +335,7 @@ Containers and Service Logs…
 Continue	
 Continue (F5)	
 Continuing rebase…	
+Contributes	
 Convert indentation to spaces	
 Convert indentation to tabs	
 Convert to…	
@@ -530,8 +543,11 @@ Dev Container setup failed: {}. Check Output and install the Dev Container CLI i
 Developer: Restart Language Servers	
 Diagnostic copied	
 Diff view side by side (off: inline)	
+Disable	
 Disable All Breakpoints	
 Disable Breakpoint	
+Disabled	
+Disabled: nothing it contributes applies.	
 Discard	
 Discard All Changes	
 Discard all changes	
@@ -689,11 +705,13 @@ Editor: Unfold All
 Editor: Unfold Recursively	
 Empty folder	
 Empty group: ⌘P opens a file here	
+Enable	
 Enable All Breakpoints	
 Enable Breakpoint	
 Enable Web Preview for HTML, CSS and JavaScript (user settings only; stops servers when disabled)	
 Enable Web Preview in Settings > Modules to preview HTML files.	
 Enable container environments (user settings only; disconnect containers before disabling)	
+Enabled	
 Encoding for files that are not UTF-8	
 End files with a newline when saving	
 Enter a folder path on {}…	
@@ -702,6 +720,7 @@ Enter: path branch
 Error	
 Errors and warnings	
 Evaluate an expression (↵)	
+Every file of {} matches its package.	
 Every setting, with comments	
 Everything resolved so far in this merge is discarded.	
 Exit	
@@ -718,6 +737,13 @@ Explorer (⇧⌘E)
 Export as Text…	
 Exposed only; not published on the server.	
 Extension not loaded: {}	
+Extensions	
+Extensions are turned off for this session (--no-extensions).	
+Extensions are turned off for this session (--no-extensions). Start Codeyard without it to load them.	
+Extensions off	
+Extensions: Install from File…	
+Extensions: Install from Folder…	
+Extensions: Show Extensions	
 External image: open the link to view it.	
 F4 steps through the search results, ⇧F4 goes back.	
 Favorites	
@@ -768,6 +794,7 @@ File: Save As…
 File: Save a Copy to This Computer…	
 Files	
 Files are still unsaved. Resolve editor errors, then start debugging again.	
+Files of {0} that are missing or changed: {1}. Reinstall it.	
 Files to exclude	
 Files to include (e.g. *.rs, src/**)	
 Files to include / exclude	
@@ -879,6 +906,7 @@ GitHub's rate limit for anonymous requests: sign in with `gh auth login` or set 
 GitHub: Pull Requests…	
 Give the theme a name.	
 Go	
+Go back to version {}	
 Go package	
 Go to Definition	
 Go to File	
@@ -928,6 +956,8 @@ Hide Merge Commits
 Hide Others	
 Hide Panel (⌘J)	
 Hide codeyard	
+High risk: this extension can read private data and send it elsewhere.	
+High risk: this extension can run programs as you.	
 Highlight other uses of the word under the cursor	
 Highlight the line with the cursor	
 Highlight the matching bracket	
@@ -966,9 +996,18 @@ Info
 Inline	
 Insert a snippet (or type its prefix in the editor and press Tab)	
 Insert the closing bracket or quote	
+Install	
 Install and Restart	
+Install from File…	
+Install from Folder…	
 Install podman-compose to open a Compose project with Podman, then try again.	
 Install which dictionary? (English is built in)	
+Install {}	
+Install {}?	
+Installed ({})	
+Installed from the file {}	
+Installed from the folder {}	
+Installed {0} {1}.	
 Installed; choose this container engine	
 Installing Codeyard {}	
 Installing Codeyard {}. Click for details.	
@@ -978,7 +1017,9 @@ Into a folder on this computer or the connected host
 Invalid pattern	
 Invalid string	
 It can't be moved to the Trash ({}). Deleting it permanently can't be undone.	
+Its contributions are removed from every window, with the data it stored.	
 Its folder is deleted. Git refuses when the worktree has uncommitted changes; the branch stays.	
+JSON schema for {}	
 JSON: Minify Document	
 Jan	
 JavaScript debugger installed: F5 now works for Node.	
@@ -991,12 +1032,14 @@ Keep
 Keep Going	
 Keep Waiting	
 Keep unsaved changes across restarts	
+Key binding: {0} runs {1}	
 Key login is set up for “{}” (created {}). The next connection needs no password.	
 Key login is set up for “{}”. The next connection needs no password.	
 Key login was already set up for “{}” (created {}). The next connection needs no password.	
 Key login was already set up for “{}”. The next connection needs no password.	
 Keyboard Shortcuts	
 Keymap preset from an installed extension, as publisher.name/label (empty: Codeyard's own keys)	
+Keymap preset: {}	
 Kill All Terminals	
 Kill Terminal	
 Language Badges	
@@ -1004,7 +1047,9 @@ Language mode for this file
 Language of Uppercase / Lowercase / Title Case: auto (Turkish rules when the text has ı İ ş ğ), tr (i ↔ İ, ı ↔ I) or en	
 Language of the menus, command palette, Welcome screen, status bar, Source Control, Explorer, Settings page chrome, file operations and Git prompts (the user guide lists exactly what is translated; the rest stays English): auto (the system language) or a language code, en or tr. Your own settings only; a folder cannot change it	
 Language of the pattern (click for the next one)	
+Language server: {0} for {1}	
 Language servers are off in “{}” until you trust it: they can run the project's build scripts. Run “Workspace: Trust This Folder”.	
+Language: {0} ({1})	
 Later	
 Latest 300 lines; refreshed with resource snapshots.	
 Learn	
@@ -1029,6 +1074,7 @@ Ln {}, Col {}
 Ln {}, Col {} ({} selected)	
 Load More Stack Frames	
 Load average (1 / 5 / 15 min)	
+Load installed extensions (off: Codeyard starts as if none were installed)	
 Loading container details…	
 Loading image…	
 Loading pull requests…	
@@ -1175,6 +1221,7 @@ No differences.
 No edits yet in this session.	
 No enclosing brackets	
 No expressions: + adds one.	
+No extensions installed. Install one from a .cyx file or a folder.	
 No favorites yet: right-click a file → Add to Favorites, or “Favorites: Toggle Active File”.	
 No file “{}” in this project	
 No files in this folder	
@@ -1183,6 +1230,7 @@ No git changes to revert
 No hosts in ~/.ssh/config. Add one with +.	
 No implementations found	
 No incoming calls found	
+No installed extension matches the search.	
 No language server for this file	
 No language server is running. Open a file of the language first.	
 No line comment syntax for this file type	
@@ -1235,6 +1283,7 @@ Node.js program
 None	
 None of these commits is yours.	
 None of this repository's remotes is on github.com.	
+None: it only adds data to Codeyard.	
 Not Now	
 Not breaking on exceptions.	
 Not compared	
@@ -1248,6 +1297,7 @@ Not saved: {0} cannot be written in {1}.
 Not valid Base64: left unchanged	
 Not valid URL encoding: left unchanged	
 Not valid {}: left unchanged	
+Nothing	
 Nothing changed: every setting has its default value.	
 Nothing is listening on the server yet.	
 Nothing is listening on {0}:{1} (start the program with its debug server first, e.g. `python -m debugpy --listen {1} --wait-for-client app.py`).	
@@ -1360,6 +1410,7 @@ Pause updates
 Paused	
 Paused on exception: {}	
 Payload	
+Permissions	
 Pick a file from the tree, or:	
 Pick a stash to apply	
 Pick a stash to drop	
@@ -1463,8 +1514,13 @@ Quit without saving
 Quitting loses everything since the last save.	
 Quitting now can leave the installation unfinished. It takes a few seconds.	
 Read	
+Read all files in the workspace	
 Read and write	
+Read and write the clipboard	
+Read files that can hold passwords and keys	
 Read only	
+Read the clipboard	
+Read {}	
 Reading folders… {0} and {1} entries	
 Reading the file…	
 Rebase	
@@ -1604,8 +1660,10 @@ Review the Dev Container environment
 Right is writable	
 Right-click a commit in the Source Control graph to branch, tag, cherry-pick, revert or reset.	
 Right-click a folder and choose Find in Folder… to search only inside it.	
+Roll Back	
 Run	
 Run All Tests	
+Run Codeyard commands: {}	
 Run Failed Tests	
 Run Test	
 Run Tests in File	
@@ -1615,6 +1673,7 @@ Run and Debug (⌃⇧D)
 Run task	
 Run the search again	
 Run to Cursor	
+Run {} with any arguments	
 Running	
 Running the program in a terminal is not supported on Windows yet: use {} in the configuration.	
 Running…	
@@ -1665,6 +1724,7 @@ Search commits (message, author, hash)
 Search containers, images or projects…	
 Search files by name	
 Search files by name (> for commands, : for line, # for symbols)	
+Search installed extensions	
 Search log messages or timestamps…	
 Search settings	
 Search {}	
@@ -1715,6 +1775,7 @@ Set up key login (no password) for which SSH host?
 Set up key login for “{}”?	
 Setting up key login for {}…	
 Setting upstream of {}…	
+Setting: {}	
 Settings	
 Settings…	
 Several Rust targets reported this test name. Run it individually to identify the failing target.	
@@ -1755,6 +1816,7 @@ Signature not verified: the token is only decoded, not checked
 Skip This Version	
 Skip Those Files	
 Small colored badges with the language's letters	
+Snippets for {}	
 Snippets reloaded	
 Snippets: Insert Snippet…	
 Software Update	
@@ -1793,6 +1855,7 @@ Start language servers
 Start search results folded or open	
 Start the new branch from…	
 Start this container?	
+Started with --no-extensions: no extension is loaded.	
 Starting preview…	
 Starting the download…	
 Starting “{}”…	
@@ -1821,6 +1884,7 @@ Stop a search after this many matches
 Stopped	
 Stopped.	
 Storage information is unavailable.	
+Store secrets in your keychain	
 String interpolation is not supported	
 Structural search: the pattern is code; $X matches one node, $$$X several	
 Suggest words from the file when there is no language server	
@@ -1955,6 +2019,7 @@ Theme: Pick Color Theme…
 Theme: Pick File Icon Theme…	
 Theme: Save Current Colors as User Theme…	
 Themes live in {}: drop VS Code or native theme .json files there	
+Themes, languages, language servers, snippets and key bindings that come with Codeyard are built in and always on.	
 There are no local changes to stash	
 There are no staged changes to stash	
 There are no stashes.	
@@ -2027,6 +2092,7 @@ Type a line number between 1 and {}
 Type a name	
 Type a name from ~/.ssh/config or user@host	
 Type a query. Esc closes the bar.	
+Type into terminals	
 Type the shortcut for {} (e.g. cmd-shift-d), then save	
 UI font of the whole window (empty: system font)	
 Unavailable	
@@ -2039,6 +2105,9 @@ Unexpected “{}”
 Unfold	
 Unfold All	
 Unhealthy	
+Uninstall	
+Uninstall {}?	
+Uninstall…	
 Unknown configuration “{}” in compound “{}”	
 Unknown input “{0}” in “{1}”	
 Unknown theme '{0}'. Available: {1}	
@@ -2074,6 +2143,7 @@ User: {}
 VS Code settings.json could not be read	
 Variables	
 Variables are not supported	
+Verify Files	
 Verifying and installing…	
 Version {}	
 View	
@@ -2113,6 +2183,7 @@ View: Toggle Word Wrap
 View: Toggle Zen Mode	
 View: Zoom In	
 View: Zoom Out	
+View: {}	
 Volume name	
 WSL Containers does not support Compose in this workflow. Choose Docker or Podman for a Compose project.	
 WSL Targets	
@@ -2150,6 +2221,8 @@ Worktree locked: {}
 Worktrees	
 Wrap long lines at the window edge	
 Wrapped lines	
+Write to the clipboard	
+YAML schema for {}	
 You are connected to “{}”. Disconnect first.	
 You can restore it from the Trash.	
 You have unsaved changes	
@@ -2421,6 +2494,7 @@ your words
 {0} could not be read ({1})	
 {0} errors, {1} warnings	
 {0} files and {1} folders go from {2} ({3}) to {4} ({5}). Files that exist there are replaced; anything that changed since the scan is left alone.	
+{0} is back at version {1}.	
 {0} isn't available ({1}). Or set “lsp.servers” in settings.	
 {0} isn't available on {1} ({2}). Or set “lsp.servers” in settings.	
 {0} isn't available on {1}. Or set “lsp.servers” in settings.	
@@ -2436,7 +2510,9 @@ your words
 {0} on {1} is deleted for good, with everything in it. It is not moved to the Trash.	
 {0} only on the left, {1} only on the right, {2} changed, {3} identical, {4} errors	
 {0} result in {1} files|{0} results in {1} files	
+{0} says why: “{1}”	
 {0} was left alone: {1}|{0} were left alone, the first one {1}	
+{0} · version {1} · {2} license	
 {0}, {1} {2} {3}	
 {0}/{1} passed	
 {0}: a TOML array holds one kind of value, but this one has {1} and {2}	
@@ -2481,6 +2557,8 @@ your words
 {} conflict left|{} conflicts left	
 {} conflict|{} conflicts	
 {} contains a request that:	
+{} contains code, which this version does not run	
+{} contains code; this version of Codeyard runs data-only extensions (themes, snippets, keymaps, languages, schemas, language servers)	
 {} cursor|{} cursors	
 {} day ago|{} days ago	
 {} definition|{} definitions	
@@ -2505,6 +2583,8 @@ your words
 {} is a symbolic link; write the path it points to, so the upload can be confirmed	
 {} is already in .gitignore	
 {} is already in the workspace.	
+{} is disabled.	
+{} is enabled.	
 {} is not a setting of an installed extension	
 {} is not a trusted folder, so nothing is deleted from it. Open it as a folder and trust it first.	
 {} is not a trusted folder, so nothing is written to it. Open it as a folder and trust it first.	
@@ -2513,6 +2593,7 @@ your words
 {} is not installed	
 {} is not installed. Open the setup instructions, then try again.	
 {} is too large to be a time in seconds or milliseconds	
+{} is uninstalled.	
 {} isn't available. Or set “lsp.servers” in settings.	
 {} item already exists. Replace it?|{} items already exist. Replace them?	
 {} item|{} items	

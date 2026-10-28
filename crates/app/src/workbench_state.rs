@@ -169,6 +169,8 @@ pub(super) struct ConfigState {
     pub(super) dirty: bool,
     /// Own settings of extra folders (root -> settings): applied to that folder's files.
     pub(super) folders: std::collections::HashMap<String, Arc<crate::folder_settings::FolderSettings>>,
+    /// The Extensions view: installed list, search, detail page and consent sheet (see workbench_ext.rs).
+    pub(super) exts: super::ext_glue::ExtViewState,
 }
 
 /// Workspace record, backups, session state and recents.

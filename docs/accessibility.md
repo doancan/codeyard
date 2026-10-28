@@ -130,7 +130,7 @@ macOS. The CPU cost of the 250 ms snapshot loop has not been measured.
   file offsets in long files. Primary selection only; no multi-cursor, folding, wrapped lines, RTL or CRLF handling.
 - The terminal exposes the screen only, not the scrollback, and cannot be written to from the tree (typing goes through
   the keyboard as usual).
-- Not exposed: search, debug, testing and remote sidebars, the Source Control graph, worktrees and sync controls, the bottom
+- Not exposed: search, debug, testing, remote and extensions sidebars (the extension page too), the Source Control graph, worktrees and sync controls, the bottom
   panel's other views (problems, output, ports), hover and signature popups, the Settings and Keyboard Shortcuts pages,
   context menus, and dialogs other than the update dialog. Only the tabs of the focused editor group are listed, and
   diff, large-file and page tabs are not.
