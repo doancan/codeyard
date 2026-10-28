@@ -25,6 +25,12 @@ impl Workbench {
     pub(super) fn open_file_as(&mut self, host: Arc<dyn Host>, path: String, preview: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.chrome.panel_max = false;
         let path = if host.is_remote() { path } else { ui::local_path(std::path::Path::new(&path)) };
+        // Restored files must apply their hot-exit backup before an explicit open reuses them.
+        if let Some(ws) = self.persist.pending_restore.take()
+            && self.restore_tabs_for_open(ws, Some((path.clone(), preview)), window, cx)
+        {
+            return;
+        }
         if let Some(format) = crate::large::image_format(&path) {
             return self.open_image(path, format, window, cx);
         }

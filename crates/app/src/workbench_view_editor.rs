@@ -178,12 +178,16 @@ impl Workbench {
         }
         let reveal = self.tabs.reveal_group.clone();
         let scroll = self.tabs.grid_scroll.clone();
+        let previous_viewport = self.tabs.grid_viewport.clone();
         let repaint = cx.entity().downgrade();
         let grid = gpui::canvas(
             move |bounds, window, cx| {
                 let mut placements = Vec::new();
                 grid_placements(&root, bounds, &mut placements);
                 let viewport = scroll.bounds();
+                if previous_viewport.replace(viewport.size) != viewport.size {
+                    reveal.set(Some(anchor));
+                }
                 if reveal.get() == Some(anchor)
                     && let Some(bounds) = placements.iter().find_map(|part| match part {
                         GridPlacement::Pane(id, bounds) if *id == anchor.id => Some(*bounds),

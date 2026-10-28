@@ -291,3 +291,71 @@ fn editor_grid_deep_highlighted_views_have_bounded_layout_work(cx: &mut TestAppC
     assert_eq!(wb.read_with(cx, |wb, _| wb.tabs.layout.focused()), 0);
     assert_eq!(wb.read_with(cx, |wb, _| wb.all_editors().len()), 1);
 }
+
+#[gpui::test]
+fn editor_grid_window_resize_keeps_the_focused_document_visible(cx: &mut TestAppContext) {
+    let dir = fresh("editor-grid-resize-focus");
+    let file = dir.join("notes.txt");
+    std::fs::write(&file, "hello\n").unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &file, cx);
+    run(&wb, "View: Split Editor", cx);
+    run(&wb, "View: Split Editor", cx);
+    let editor = wb.read_with(cx, |wb, _| wb.active_editor().cloned()).unwrap();
+    let before = editor::slot_paint_count(&editor, 2);
+    cx.simulate_resize(size(px(480.), px(600.)));
+    cx.run_until_parked();
+    assert!(editor::slot_paint_count(&editor, 2) > before, "the focused view must remain painted after shrinking the window");
+}
+
+#[gpui::test]
+fn editor_grid_narrow_views_reserve_text_space_and_restore_the_minimap_when_widened(cx: &mut TestAppContext) {
+    let dir = fresh("editor-grid-minimap-space");
+    let file = dir.join("notes.txt");
+    std::fs::write(&file, "A document with enough text to fill the available width.\n").unwrap();
+    let (wb, cx) = setup(cx);
+    cx.update(|_, cx| cx.global_mut::<Settings>().minimap = true);
+    open(&wb, &file, cx);
+    run(&wb, "View: Split Editor", cx);
+    run(&wb, "View: Split Editor", cx);
+    cx.simulate_resize(size(px(480.), px(600.)));
+    cx.run_until_parked();
+    let ed = wb.read_with(cx, |wb, _| wb.active_editor().cloned()).unwrap();
+    let text = cx.update(|_, cx| editor::slot_text_width(&ed, 2, cx));
+    assert!(text >= px(80.), "narrow pane left only {text:?} for the document");
+    cx.simulate_resize(size(px(2400.), px(800.)));
+    cx.run_until_parked();
+    let surface = cx.debug_bounds("editor-group-2").unwrap().size.width;
+    let text = cx.update(|_, cx| editor::slot_text_width(&ed, 2, cx));
+    assert!(surface - text >= px(130.), "a wide pane must restore its minimap");
+}
+
+#[gpui::test]
+fn editor_grid_command_line_file_open_preserves_the_saved_groups(cx: &mut TestAppContext) {
+    let home = fresh("editor-grid-cli-home");
+    let dir = fresh("editor-grid-cli-project");
+    let file = dir.join("notes.txt");
+    std::fs::write(&file, "hello\n").unwrap();
+    let (wb, cx) = setup_persistent(cx, &home);
+    open(&wb, &dir, cx);
+    open_in(&wb, &file, cx);
+    run(&wb, "View: Split Editor", cx);
+    run(&wb, "View: Split Editor Down", cx);
+    let saved = wb.read_with(cx, |wb, _| wb.tabs.layout.clone());
+    cx.simulate_input("unsaved ");
+    assert!(wb.update(cx, |wb, cx| wb.prepare_quit(cx)));
+    drop(wb);
+    let new = cx.update(|window, cx| {
+        window.replace_root(cx, |window, cx| {
+            let mut wb = Workbench::with_state(state::State::open(&home.join("state.db")).ok(), None, window, cx);
+            wb.set_data_dir(home.clone());
+            wb
+        })
+    });
+    open(&new, &file, cx);
+    assert_eq!(new.read_with(cx, |wb, _| wb.tabs.layout.clone()), saved);
+    assert_eq!(new.read_with(cx, |wb, _| wb.all_editors().len()), 1);
+    assert_eq!(new.read_with(cx, |wb, cx| wb.active_editor().unwrap().read(cx).text()), "unsaved hello\n");
+    assert!(new.read_with(cx, |wb, cx| wb.active_editor().unwrap().read(cx).is_dirty()));
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "hello\n");
+}

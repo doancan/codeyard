@@ -517,6 +517,7 @@ pub struct EditorView {
     surface_origin: Point<Pixels>,
     /// First minimap line at the last paint (to convert a click to a line).
     minimap_start: usize,
+    minimap_hidden: bool,
     /// Height of the editor surface (scrollbar computation) and where the dragged thumb
     /// was grabbed (relative to the top of the thumb).
     surface_h: Pixels,
@@ -617,6 +618,7 @@ struct ViewState {
     hover_task: Option<gpui::Task<()>>,
     surface_origin: Point<Pixels>,
     minimap_start: usize,
+    minimap_hidden: bool,
     hscroll: Pixels,
     surface_h: Pixels,
     scrollbar_drag: Option<Pixels>,
@@ -638,6 +640,17 @@ thread_local! {
 #[cfg(test)]
 pub fn slot_paint_count(editor: &Entity<EditorView>, slot: usize) -> usize {
     SLOT_PAINTS.with(|counts| counts.borrow().get(&(editor.entity_id(), slot)).copied().unwrap_or(0))
+}
+
+#[cfg(test)]
+pub fn slot_text_width(editor: &Entity<EditorView>, slot: usize, cx: &mut App) -> Pixels {
+    editor.update(cx, |e, _| {
+        let previous = e.slot;
+        e.enter(slot);
+        let width = e.text_width;
+        e.enter(previous);
+        width
+    })
 }
 
 /// The view-aware version of `cx.listener`: runs in the view it was painted in.
@@ -730,11 +743,19 @@ impl Element for SlotView {
         &mut self,
         _: Option<&GlobalElementId>,
         _: Option<&gpui::InspectorElementId>,
-        _: Bounds<Pixels>,
+        bounds: Bounds<Pixels>,
         el: &mut gpui::AnyElement,
         window: &mut Window,
         cx: &mut App,
     ) {
+        let hidden = bounds.size.width < px(320.);
+        let changed = self.within(cx, |cx| self.editor.update(cx, |e, _| std::mem::replace(&mut e.minimap_hidden, hidden) != hidden));
+        if changed {
+            let editor = self.editor.downgrade();
+            window.defer(cx, move |_, cx| {
+                editor.update(cx, |_, cx| cx.notify()).ok();
+            });
+        }
         self.within(cx, |cx| el.prepaint(window, cx));
     }
 
@@ -1009,6 +1030,7 @@ impl EditorView {
             http_lines: Default::default(),
             surface_origin: Point::default(),
             minimap_start: 0,
+            minimap_hidden: false,
             surface_h: px(0.),
             scrollbar_drag: None,
             hscroll: px(0.),
@@ -1063,6 +1085,7 @@ impl EditorView {
         swap(&mut self.hover_task, &mut v.hover_task);
         swap(&mut self.surface_origin, &mut v.surface_origin);
         swap(&mut self.minimap_start, &mut v.minimap_start);
+        swap(&mut self.minimap_hidden, &mut v.minimap_hidden);
         swap(&mut self.surface_h, &mut v.surface_h);
         swap(&mut self.scrollbar_drag, &mut v.scrollbar_drag);
         swap(&mut self.hscroll, &mut v.hscroll);
