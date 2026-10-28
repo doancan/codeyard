@@ -29,11 +29,7 @@ for tr, en in rows.items():
     if want is None: fail(f"memcheck.sh has no budget row '{tr}'")
     elif not m: fail(f"docs/architecture.md has no budget row '{en}'")
     elif int(m.group(1)) != want: fail(f"budget '{en}': docs say {m.group(1)} MB, memcheck.sh says {want} MB")
-# binary and agent sizes
-mb = re.search(r"^check \"app binary\" (\d+)", mem, re.M)
-d = re.search(r"\|\s*app binary\s*\|\s*(\d+) MB", arch)
-if not (mb and d): fail("could not find the app binary budget in memcheck.sh or docs/architecture.md")
-elif mb.group(1) != d.group(1): fail(f"app binary budget: docs {d.group(1)} MB, memcheck.sh {mb.group(1)} MB")
+# agent size (the app binary has no size budget)
 ab = re.findall(r'check "agent \(\$t\)" (\d+)', mem)
 d = re.search(r"agent binary \(Linux musl\)\s*\|\s*(\d+) KB", arch)
 if not (ab and d): fail("could not find the agent size budget in memcheck.sh or docs/architecture.md")
