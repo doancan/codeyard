@@ -68,6 +68,9 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   "workbench.tabs.showIcons": true,
   // "hover" (the x shows on the active tab or on hover), "always", "off"
   "workbench.tabs.closeButton": "hover",
+  // "on" leaves out animations (blinking cursor, spinners, sliding panels); "auto" follows the system's
+  // Reduce motion setting (macOS, Windows).
+  "workbench.reduceMotion": "auto",
   "workbench.breadcrumbs.enabled": true,
   // Override any color of the theme (roles: bg, surface, accent, text, syntax-keyword …).
   // "[theme name]": { … } applies to that theme only.

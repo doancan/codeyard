@@ -28,6 +28,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   errors were not exposed at all.
 - `ACCESSIBILITY.md` states what works with a screen reader, the keyboard, zoom and high-contrast themes, the known gaps, and
   how to report a barrier with the new *Accessibility barrier* issue form.
+- Screen readers on Windows: NVDA, JAWS and Narrator get the same accessibility tree as VoiceOver, through UI Automation.
+- Screen readers reach the command palette and every other picker (query, list, the selected row as it changes), the find bar
+  (fields, the match count as it changes, options with their state, buttons), suggestions while typing, the terminal's
+  screen and every folder of a multi-folder workspace.
+- `workbench.reduceMotion` leaves out animations (blinking cursor, spinners, fading panels, the sliding progress bar); `auto`
+  follows the system's Reduce motion setting on macOS and Windows. The *Auto* theme switches to the high-contrast pair while
+  the system asks for more contrast.
+- Choosing a theme or changing `workbench.colorCustomizations` says so when the colours in use fall below WCAG AA contrast,
+  with the first failing pair.
 - The debugger shows Rust values as values: lldb-dap starts with the formatters of the toolchain that builds the program, so
   `String`, `Vec`, `HashMap` and `Option` read as text and elements, and with `rust-src` installed stepping into the
   standard library opens its source. Locally and over SSH (the server's toolchain); the Debug Console says when they cannot

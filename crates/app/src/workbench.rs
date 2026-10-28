@@ -978,11 +978,15 @@ impl Workbench {
             // The first-run update question waits for a quiet keyboard (a letter typed a moment ago must not answer it).
             cx.observe_keystrokes(|this, _, _, _| this.update.last_key = Some(this.update.backend.now())),
             // The Dock menu lists the windows front one first: it changes whenever one comes forward.
-            cx.observe_window_activation(window, |_, _, cx| {
+            cx.observe_window_activation(window, |this, window, cx| {
                 #[cfg(target_os = "macos")]
                 crate::menus::refresh_dock_windows(cx);
-                #[cfg(not(target_os = "macos"))]
-                let _ = cx;
+                // Reduce motion / Increase contrast may have changed in System Settings meanwhile.
+                if window.is_window_active() && crate::system_prefs::refresh(cx) {
+                    let choice = this.theme_choice.clone();
+                    this.apply_theme(&choice, window, cx);
+                    window.refresh();
+                }
             }),
             cx.observe_window_appearance(window, |this, window, cx| {
                 if this.theme_choice == THEME_AUTO {

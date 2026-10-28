@@ -550,6 +550,7 @@ impl Workbench {
                 self.persist_theme(&id);
                 self.apply_theme(&id, window, cx);
                 self.close_overlay(window, cx);
+                self.warn_low_contrast(window, cx);
             }
             (OverlayKind::Theme { original, .. }, PickerEvent::Dismiss) => {
                 let original = original.clone();

@@ -375,7 +375,11 @@ impl Render for ResourceMonitor {
                     .on_click(cx.listener(|this, _, window, cx| this.toggle(window, cx))),
             )
             .when(shown, |d| {
-                d.child(deferred(div().absolute().bottom(px(layout::STATUSBAR_H + 6.)).right_0().child(self.card(window, cx)).with_animation(
+                let card = div().absolute().bottom(px(layout::STATUSBAR_H + 6.)).right_0().child(self.card(window, cx));
+                if crate::system_prefs::reduce_motion(cx) {
+                    return d.child(deferred(card));
+                }
+                d.child(deferred(card.with_animation(
                     if closing { "resources-exit" } else { "resources-enter" },
                     Animation::new(Duration::from_millis(if closing { 120 } else { 160 })),
                     move |d, delta| d.opacity(if closing { 1. - delta } else { delta }),

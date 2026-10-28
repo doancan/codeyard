@@ -182,15 +182,18 @@ impl Workbench {
                 ed.update(cx, |e, cx| e.refresh_indent(cx));
             }
         }
+        let mut colours_changed = false;
         // Theme: if there is no settings file, the old saved value (state) applies.
         if file.is_some() && !self.cfg.theme_override && new.theme != self.theme_choice {
             self.theme_choice = new.theme.clone();
             let t = self.theme_choice.clone();
             self.apply_theme(&t, window, cx);
+            colours_changed = true;
         }
         if old.color_overrides != new.color_overrides {
             let choice = self.theme_choice.clone();
             self.apply_theme(&choice, window, cx);
+            colours_changed = true;
         }
         // Global state: write only if it changed in this reload (an unchanged window must not
         // overwrite another window's associations with an empty list).
@@ -222,6 +225,11 @@ impl Workbench {
             let more = if warnings.len() > 1 { format!(" {}", crate::i18n::tf("(+{} more)", &[&(warnings.len() - 1)])) } else { String::new() };
             Notice::Error(format!("{w}{more}").into())
         });
+        crate::system_prefs::sync(cx);
+        // A broken setting is the more urgent notice.
+        if colours_changed && self.notice.is_none() {
+            self.warn_low_contrast(window, cx);
+        }
         self.sync_settings_page(cx);
         window.refresh();
         cx.notify();

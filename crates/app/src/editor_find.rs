@@ -243,7 +243,6 @@ impl EditorView {
         }
     }
 
-    #[cfg(test)]
     pub fn find_bar(&self) -> Option<Entity<FindBar>> {
         self.find.as_ref().map(|(b, _)| b.clone())
     }
