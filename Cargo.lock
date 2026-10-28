@@ -1893,6 +1893,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ext-manifest"
+version = "0.5.0"
+dependencies = [
+ "serde",
+ "toml 1.1.8+spec-1.1.0",
+]
+
+[[package]]
 name = "fallible-iterator"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

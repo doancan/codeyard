@@ -1,0 +1,45 @@
+name: fuzz
+# Hostile-input tests of the extension crates for longer than `cargo test` runs them: 10 minutes on every pull request
+# that touches them, 4 hours every night with a new seed. A failure prints the seed and round; rerun locally with
+#   CODEYARD_FUZZ_SEED=<seed> CODEYARD_FUZZ_SECS=600 cargo test --release -p <crate> fuzz
+on:
+  pull_request:
+    paths: ["crates/ext-*/**", ".github/workflows/fuzz.yml"]
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: Minutes per fuzz test
+        default: "10"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 270
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
+        with:
+          shared-key: fuzz
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Fuzz
+        env:
+          MINUTES: ${{ github.event_name == 'schedule' && '240' || inputs.minutes || '10' }}
+          CODEYARD_FUZZ_SEED: ${{ github.run_id }}
+        run: |
+          export CODEYARD_FUZZ_SECS=$((MINUTES * 60))
+          echo "fuzz: ${MINUTES} min per test, seed ${CODEYARD_FUZZ_SEED}"
+          crates=$(ls -d crates/ext-*/ | xargs -n1 basename | sed 's/^/-p /')
+          # The tests of each crate run in parallel, so the wall time is about MINUTES per crate.
+          cargo test --locked --release $crates fuzz
