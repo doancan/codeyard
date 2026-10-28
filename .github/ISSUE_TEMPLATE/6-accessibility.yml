@@ -1,0 +1,65 @@
+name: Accessibility barrier
+description: Something you cannot reach, read or use with a screen reader, the keyboard, zoom or a high-contrast theme
+labels: ["accessibility"]
+projects: ["doancan/2"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. Barriers are bugs; see ACCESSIBILITY.md for what is supported today and what is known to be missing.
+        You do not need to know the cause. Describe what you tried to do and what got in the way.
+        **Title:** the barrier ("Command palette is silent in VoiceOver", "Focus lost after closing a tab"), at most **78 characters**.
+  - type: textarea
+    id: barrier
+    attributes:
+      label: What did you try to do, and what got in the way?
+      description: What you heard, saw or could not reach. The exact words a screen reader spoke help most.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: As few steps as possible from a fresh start, using the keys you used.
+      value: |
+        1.
+    validations:
+      required: true
+  - type: dropdown
+    id: technology
+    attributes:
+      label: Assistive technology or setting
+      multiple: true
+      options:
+        - VoiceOver
+        - NVDA
+        - JAWS
+        - Narrator
+        - Orca
+        - Keyboard only
+        - Zoom or large fonts
+        - High-contrast theme or colour settings
+        - Voice control
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: technology-version
+    attributes:
+      label: Version of the assistive technology
+      placeholder: VoiceOver on macOS 15.5, NVDA 2025.1
+  - type: input
+    id: version
+    attributes:
+      label: Codeyard version
+      description: "`codeyard --version`, or the About dialog"
+      placeholder: Codeyard 0.5.0
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS and architecture
+      placeholder: macOS 15.5 arm64, Windows 11 x64
+    validations:
+      required: true
