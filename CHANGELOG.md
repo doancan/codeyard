@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Four built-in dark themes: Catppuccin Mocha, Tokyo Night, Gruvbox Dark and GitHub Dark, with complete colour roles
+  and WCAG AA contrast across all 103 text and UI pairs before runtime adjustment.
 - Accessible Source Control change groups, commit message and commit state, file diffs, Stage/Unstage actions and live
   operation results. Hidden Explorer trees no longer appear in the accessibility tree, and stale file actions resolve paths again.
 - Cargo target discovery for automatic Rust debugging: virtual workspaces, multiple binaries, examples, required features

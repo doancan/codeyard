@@ -15,7 +15,15 @@ exact copy of the upstream theme.
 | `nord.json` | Nord | Sven Greb (Arctic Ice Studio) | MIT |
 | `solarized-dark.json`, `solarized-light.json` | Solarized | Ethan Schoonover | MIT |
 | `one-dark.json` | One Dark (Atom) | GitHub Inc. | MIT |
-| `github-light.json` | GitHub Light (Primer) | GitHub Inc. | MIT |
+| `github-dark.json`, `github-light.json` | GitHub (Primer) | GitHub Inc. / Primer | MIT |
+| `catppuccin-mocha.json` | [Catppuccin Mocha](https://github.com/catppuccin/catppuccin) | Catppuccin | MIT |
+| `tokyo-night.json` | [Tokyo Night](https://github.com/tokyo-night/tokyo-night-vscode-theme) | Enkia | MIT |
+| `gruvbox-dark.json` | [Gruvbox Dark](https://github.com/morhetz/gruvbox) | morhetz | MIT/X11 |
+
+The four dark additions define all 30 roles and pass all 103 contrast pairs as written, before the runtime
+contrast guard. Mocha uses mauve accents and pastel syntax; Tokyo Night pairs indigo surfaces with blue accents;
+Gruvbox Dark uses warm charcoal, amber and earthy syntax; GitHub Dark uses neutral surfaces and restrained blue accents.
+Selection, gutter and comment colours are adjusted where necessary to keep them readable across Codeyard's surfaces.
 
 ## Codeyard's own themes
 
