@@ -155,6 +155,8 @@ folder); holding ⌘ underlines what can be opened. Drag to select, double-click
 to extend; ⌘C copies. On keyboard layouts without a reachable \` key (Turkish Q, German),
 use ⌘J or bind `terminal.toggle` yourself (below).
 
+Opening a file from Explorer or Quick Open restores a maximized terminal panel to its previous size and shows the editor.
+
 Terminal line editing works as in Terminal.app: ⌘← / ⌘→ jump to the start / end of the line, ⌥← / ⌥→ move by word,
 ⌘⌫ deletes to the start of the line, ⌘⌦ to its end and ⌥⌦ the next word (these are the shell's own keys, Ctrl+A, Ctrl+E,
 Esc b…, so they work in bash, zsh and fish; full-screen programs such as vim get the plain keys). ⌘F finds in the output and
@@ -611,6 +613,10 @@ connection indicator, "Connect to SSH Host…" in the menus, the Welcome screen 
 Connect to Host or Switch Workspace…") all open this same switcher; there is no separate hosts panel.
 A folder that is already open in another window brings that window to the front. Windows reopen at their last
 size and place.
+
+Picker inputs support Select All, Copy, Cut and Paste (⌘A/C/X/V on macOS, Ctrl+A/C/X/V on Windows).
+Use Select All before typing or pasting a replacement path in the SSH folder picker. Password inputs accept paste;
+copy and cut leave the password hidden.
 
 Star files and folders ("Add to Favorites" in the tree's menu) to keep them in the Favorites
 section of the explorer and at the top of ⌘P. Bookmarks (⌥⌘K) mark lines; "Bookmarks: List…"
