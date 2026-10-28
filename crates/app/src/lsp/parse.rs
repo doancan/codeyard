@@ -7,7 +7,7 @@ use super::{Range16, path_to_uri, uri_to_path};
 
 // --- Diagnostics ---
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Diagnostic {
     /// (line, UTF-16 column), as the server sent it.
     pub start: (u32, u32),
@@ -16,6 +16,108 @@ pub struct Diagnostic {
     pub severity: u8,
     pub message: String,
     pub source: Option<String>,
+    /// The diagnostic's code (`E0382`), numbers as text.
+    pub code: Option<String>,
+    /// Secondary locations ("value moved here"), at most `MAX_RELATED`.
+    pub related: Vec<Related>,
+    /// How many more related locations the server sent beyond `related`.
+    pub more_related: usize,
+    /// The complete compiler output (`data.rendered`), without terminal colour codes, at most `MAX_RENDERED` bytes.
+    pub rendered: Option<std::sync::Arc<str>>,
+}
+
+/// A location that explains a diagnostic.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Related {
+    pub path: String,
+    pub start: (u32, u32),
+    pub end: (u32, u32),
+    pub message: String,
+}
+
+/// Per diagnostic, a server cannot make the editor hold more than this.
+pub const MAX_RELATED: usize = 20;
+pub const MAX_RELATED_CHARS: usize = 2000;
+pub const MAX_RENDERED: usize = 64 * 1024;
+
+impl Diagnostic {
+    /// The message with its code in front: `E0382: borrow of moved value`.
+    pub fn headline(&self) -> String {
+        match &self.code {
+            Some(code) => format!("{code}: {}", self.message),
+            None => self.message.clone(),
+        }
+    }
+
+    /// The text *Copy Full Diagnostic* puts on the clipboard: the compiler's own output when the server sent it, otherwise
+    /// `error[E0382]: message` with one `  --> path:line:col: message` line per related location (paths as `related_path`).
+    pub fn full_text(&self, root: Option<&str>) -> String {
+        if let Some(r) = &self.rendered {
+            return r.to_string();
+        }
+        // Compiler output words, the same in every interface language.
+        let kind = match self.severity {
+            1 => "error",
+            2 => "warning",
+            3 => "info",
+            _ => "hint",
+        };
+        let mut out = match &self.code {
+            Some(code) => format!("{kind}[{code}]: {}", self.message),
+            None => format!("{kind}: {}", self.message),
+        };
+        for r in &self.related {
+            out.push_str(&format!("\n  --> {}:{}:{}: {}", related_path(&r.path, root), r.start.0 + 1, r.start.1 + 1, r.message));
+        }
+        out
+    }
+}
+
+/// A related location's path for display: relative to the workspace root when inside it, absolute otherwise.
+pub fn related_path<'a>(path: &'a str, root: Option<&str>) -> &'a str {
+    root.and_then(|r| path.strip_prefix(&format!("{}/", r.trim_end_matches('/')))).unwrap_or(path)
+}
+
+/// One row under a diagnostic: `line 12: value moved here` in the same file, `src/lib.rs:12: value moved here` elsewhere.
+pub fn related_label(r: &Related, file: &str, root: Option<&str>) -> String {
+    if r.path == file {
+        crate::i18n::tf("line {0}: {1}", &[&(r.start.0 + 1), &r.message])
+    } else {
+        format!("{}:{}: {}", related_path(&r.path, root), r.start.0 + 1, r.message)
+    }
+}
+
+/// Removes terminal escape sequences (colours, cursor moves, titles) from compiler output.
+pub fn strip_ansi(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '\u{1b}' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            // CSI: parameters, then one final byte in @..~.
+            Some('[') => {
+                for c in chars.by_ref() {
+                    if ('@'..='~').contains(&c) {
+                        break;
+                    }
+                }
+            }
+            // OSC: up to BEL or ESC \.
+            Some(']') => {
+                while let Some(c) = chars.next() {
+                    if c == '\u{7}' || (c == '\u{1b}' && chars.next_if_eq(&'\\').is_some()) {
+                        break;
+                    }
+                }
+            }
+            // Any other escape is two characters long.
+            _ => {}
+        }
+    }
+    out
 }
 
 fn position(v: &Value) -> (u32, u32) {
@@ -26,22 +128,52 @@ pub fn parse_range(v: &Value) -> Range16 {
     (position(&v["start"]), position(&v["end"]))
 }
 
+fn parse_related(v: &Value) -> Option<Related> {
+    let location = &v["location"];
+    let path = uri_to_path(location["uri"].as_str()?)?;
+    let range = location.get("range").filter(|r| r.is_object())?;
+    let (start, end) = parse_range(range);
+    Some(Related { path, start, end, message: super::clip_text(v["message"].as_str().unwrap_or_default(), MAX_RELATED_CHARS) })
+}
+
+fn parse_diagnostic(d: &Value) -> Diagnostic {
+    let (start, end) = parse_range(&d["range"]);
+    let mut related: Vec<Related> = d["relatedInformation"].as_array().map(|a| a.iter().filter_map(parse_related).collect()).unwrap_or_default();
+    let more_related = related.len().saturating_sub(MAX_RELATED);
+    related.truncate(MAX_RELATED);
+    let code = match &d["code"] {
+        Value::String(c) if !c.is_empty() => Some(super::clip_text(c, 100)),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    };
+    let rendered = d["data"]["rendered"].as_str().filter(|r| !r.trim().is_empty()).map(|r| {
+        let mut text = strip_ansi(r);
+        if text.len() > MAX_RENDERED {
+            let mut end = MAX_RENDERED;
+            while !text.is_char_boundary(end) {
+                end -= 1;
+            }
+            text.truncate(end);
+            text.push('…');
+        }
+        std::sync::Arc::from(text)
+    });
+    Diagnostic {
+        start,
+        end,
+        severity: d["severity"].as_u64().unwrap_or(1).clamp(1, 4) as u8,
+        message: d["message"].as_str().unwrap_or_default().to_string(),
+        source: d["source"].as_str().map(str::to_string),
+        code,
+        related,
+        more_related,
+        rendered,
+    }
+}
+
 pub fn parse_diagnostics(params: &Value) -> Option<(String, Vec<Diagnostic>)> {
     let path = uri_to_path(params["uri"].as_str()?)?;
-    let diags = params["diagnostics"]
-        .as_array()?
-        .iter()
-        .map(|d| {
-            let (start, end) = parse_range(&d["range"]);
-            Diagnostic {
-                start,
-                end,
-                severity: d["severity"].as_u64().unwrap_or(1).clamp(1, 4) as u8,
-                message: d["message"].as_str().unwrap_or_default().to_string(),
-                source: d["source"].as_str().map(str::to_string),
-            }
-        })
-        .collect();
+    let diags = params["diagnostics"].as_array()?.iter().map(parse_diagnostic).collect();
     Some((path, diags))
 }
 
@@ -806,5 +938,79 @@ mod tests {
         assert!(moved["changes"].get("file:///a/new/x.ts").is_some() && moved["changes"].get("file:///a/other.ts").is_some());
         let moved_file = remap_edit_uris(&edit, "/a/old.ts", "/a/new.ts");
         assert_eq!(moved_file["documentChanges"][0]["textDocument"]["uri"], "file:///a/new.ts");
+    }
+
+    fn diag_with(extra: Value) -> Diagnostic {
+        let mut d =
+            json!({ "range": { "start": { "line": 2, "character": 4 }, "end": { "line": 2, "character": 5 } }, "message": "borrow of moved value: `s`" });
+        d.as_object_mut().unwrap().extend(extra.as_object().cloned().unwrap_or_default());
+        let (_, mut diags) = parse_diagnostics(&json!({ "uri": "file:///p/src/a.rs", "diagnostics": [d] })).unwrap();
+        diags.remove(0)
+    }
+
+    fn related(uri: &str, line: u32, message: &str) -> Value {
+        json!({ "location": { "uri": uri, "range": { "start": { "line": line, "character": 8 }, "end": { "line": line, "character": 9 } } }, "message": message })
+    }
+
+    #[test]
+    fn diagnostics_keep_their_code_related_locations_and_rendered_output() {
+        let d = diag_with(json!({
+            "code": "E0382",
+            "relatedInformation": [related("file:///p/src/a.rs", 1, "value moved here"), related("file:///p/src/b.rs", 11, "borrow later used here")],
+            "data": { "rendered": "\u{1b}[1m\u{1b}[38;5;9merror[E0382]\u{1b}[0m: borrow of moved value\n  --> src/a.rs:3:5\n" },
+        }));
+        assert_eq!(d.code.as_deref(), Some("E0382"));
+        assert_eq!(d.headline(), "E0382: borrow of moved value: `s`");
+        assert_eq!(d.related.len(), 2);
+        assert_eq!(d.related[1], Related { path: "/p/src/b.rs".into(), start: (11, 8), end: (11, 9), message: "borrow later used here".into() });
+        assert_eq!(d.rendered.as_deref(), Some("error[E0382]: borrow of moved value\n  --> src/a.rs:3:5\n"), "colour codes removed");
+        assert_eq!(d.full_text(Some("/p")), "error[E0382]: borrow of moved value\n  --> src/a.rs:3:5\n");
+        assert_eq!(related_label(&d.related[0], "/p/src/a.rs", Some("/p")), "line 2: value moved here");
+        assert_eq!(related_label(&d.related[1], "/p/src/a.rs", Some("/p")), "src/b.rs:12: borrow later used here");
+        assert_eq!(related_label(&d.related[1], "/p/src/a.rs", Some("/elsewhere")), "/p/src/b.rs:12: borrow later used here", "absolute outside the root");
+    }
+
+    /// Without `rendered`, the copy is built from the parts.
+    #[test]
+    fn the_full_text_without_rendered_output_lists_related_locations() {
+        let d = diag_with(json!({ "code": 382, "severity": 2, "relatedInformation": [related("file:///p/src/b.rs", 0, "here")] }));
+        assert_eq!(d.code.as_deref(), Some("382"), "a numeric code is text");
+        assert_eq!(d.full_text(Some("/p")), "warning[382]: borrow of moved value: `s`\n  --> src/b.rs:1:9: here");
+        let plain = diag_with(json!({}));
+        assert_eq!((plain.code.clone(), plain.related.len(), plain.rendered.clone()), (None, 0, None));
+        assert_eq!(plain.full_text(None), "error: borrow of moved value: `s`");
+        assert_eq!(plain.headline(), plain.message);
+    }
+
+    #[test]
+    fn malformed_related_information_is_ignored_and_the_diagnostic_kept() {
+        for bad in [json!(5), json!("x"), json!({}), json!([1, null, {}]), json!([{ "location": { "uri": "file:///a.rs" }, "message": "no range" }])] {
+            let d = diag_with(json!({ "relatedInformation": bad, "code": { "value": 1 }, "data": { "rendered": 7 } }));
+            assert_eq!((d.related.len(), d.code.clone(), d.rendered.clone()), (0, None, None), "{bad}");
+            assert_eq!(d.message, "borrow of moved value: `s`");
+        }
+        // A location that is not a file is skipped; the others stay.
+        let d = diag_with(
+            json!({ "relatedInformation": [related("untitled:Untitled-1", 0, "x"), related("https://example.com/a.rs", 0, "y"), related("file:///p/c.rs", 0, "z")] }),
+        );
+        assert_eq!(d.related.iter().map(|r| r.message.as_str()).collect::<Vec<_>>(), ["z"]);
+    }
+
+    #[test]
+    fn related_locations_and_rendered_output_are_bounded() {
+        let many: Vec<Value> = (0..21).map(|i| related("file:///p/a.rs", i, &"ğ".repeat(5000))).collect();
+        let d = diag_with(json!({ "relatedInformation": many, "data": { "rendered": "ş".repeat(MAX_RENDERED) } }));
+        assert_eq!((d.related.len(), d.more_related), (MAX_RELATED, 1));
+        assert!(d.related.iter().all(|r| r.message.chars().count() == MAX_RELATED_CHARS + 1 && r.message.ends_with('…')));
+        let rendered = d.rendered.unwrap();
+        assert!(rendered.len() <= MAX_RENDERED + '…'.len_utf8() && rendered.ends_with('…'), "{}", rendered.len());
+    }
+
+    #[test]
+    fn terminal_escapes_are_removed() {
+        assert_eq!(strip_ansi("\u{1b}[0m\u{1b}[1;31mhata\u{1b}[0m: ğ"), "hata: ğ");
+        assert_eq!(strip_ansi("a\u{1b}]8;;file:///x\u{7}link\u{1b}]8;;\u{1b}\\b"), "alinkb", "hyperlinks (OSC) too");
+        assert_eq!(strip_ansi("x\u{1b}"), "x", "a cut-off escape at the end");
+        assert_eq!(strip_ansi("plain"), "plain");
     }
 }

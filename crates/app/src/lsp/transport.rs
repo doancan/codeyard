@@ -483,7 +483,7 @@ fn initialize_params(root: &str, init_options: Option<&Value>) -> Value {
             },
             "textDocument": {
                 "synchronization": { "didSave": true, "dynamicRegistration": false },
-                "publishDiagnostics": { "relatedInformation": false },
+                "publishDiagnostics": { "relatedInformation": true, "dataSupport": true },
                 "hover": { "contentFormat": ["markdown", "plaintext"] },
                 "definition": { "linkSupport": true },
                 "references": {},
@@ -571,7 +571,7 @@ mod tests {
     fn diag(path: &str, n: usize) -> ServerEvent {
         ServerEvent::Diagnostics {
             path: path.into(),
-            diagnostics: vec![Diagnostic { start: (0, 0), end: (0, 1), severity: 1, message: "m".into(), source: None }; n],
+            diagnostics: vec![Diagnostic { start: (0, 0), end: (0, 1), severity: 1, message: "m".into(), ..Diagnostic::default() }; n],
         }
     }
 

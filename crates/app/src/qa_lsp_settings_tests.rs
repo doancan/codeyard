@@ -13,7 +13,7 @@ use crate::qa_workbench_tests::setup_with_config;
 use crate::test_lsp::FakeServer;
 use crate::workbench::Workbench;
 
-fn dir(name: &str) -> PathBuf {
+pub(crate) fn dir(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("codeyard-lsp-settings-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
@@ -42,7 +42,7 @@ fn replies(fake: &FakeServer, id: u64) -> Vec<Value> {
 }
 
 /// A project with `src/lib.rs`, opened in the workbench, with the file open.
-fn open_project(wb: &Entity<Workbench>, cx: &mut VisualTestContext, root: &Path) -> String {
+pub(crate) fn open_project(wb: &Entity<Workbench>, cx: &mut VisualTestContext, root: &Path) -> String {
     std::fs::create_dir_all(root.join("src")).unwrap();
     let file = root.join("src/lib.rs");
     if !file.exists() {
@@ -51,16 +51,18 @@ fn open_project(wb: &Entity<Workbench>, cx: &mut VisualTestContext, root: &Path)
     let (root, file) = (root.to_string_lossy().into_owned(), file.to_string_lossy().into_owned());
     wb.update_in(cx, |wb, window, cx| wb.open_path(&root, window, cx));
     cx.run_until_parked();
-    wb.update_in(cx, |wb, window, cx| wb.open_path(&file, window, cx));
+    // `open_path` on a file makes its folder the root; this keeps the project's.
+    let f = file.clone();
+    wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(f, window, cx));
     file
 }
 
-fn reload(wb: &Entity<Workbench>, cx: &mut VisualTestContext) {
+pub(crate) fn reload(wb: &Entity<Workbench>, cx: &mut VisualTestContext) {
     wb.update_in(cx, |wb, window, cx| wb.reload_config_for_test(window, cx));
 }
 
 /// Ticks for a while so that anything late (a second start, a second message) would have happened.
-fn settle(cx: &mut VisualTestContext) {
+pub(crate) fn settle(cx: &mut VisualTestContext) {
     for _ in 0..10 {
         cx.executor().advance_clock(Duration::from_millis(300));
         cx.run_until_parked();
@@ -320,7 +322,7 @@ fn qa_lsp_settings_over_ssh(cx: &mut TestAppContext) {
 
 // --- Real rust-analyzer (skipped when it is not installed) ---
 
-fn rust_analyzer_installed() -> bool {
+pub(crate) fn rust_analyzer_installed() -> bool {
     let ok = |cmd: &str| std::process::Command::new(cmd).arg("--version").output().is_ok_and(|o| o.status.success());
     if ok("rust-analyzer") && ok("cargo") {
         return true;
@@ -331,7 +333,7 @@ fn rust_analyzer_installed() -> bool {
 
 /// A one-crate Cargo project with `src/lib.rs`, its own target folder, and the user settings in `cfg`. The `rust` entry
 /// has no `command`: the default server (`rust-analyzer`) starts with the settings.
-fn cargo_project(name: &str, lib: &str, features: &str) -> (PathBuf, PathBuf) {
+pub(crate) fn cargo_project(name: &str, lib: &str, features: &str) -> (PathBuf, PathBuf) {
     let d = dir(name);
     let project = d.join(name);
     std::fs::create_dir_all(project.join("src")).unwrap();
@@ -349,7 +351,7 @@ fn write_rust_settings(cfg: &Path, settings: Value) {
 }
 
 /// An edit and a save: an unchanged file is not written, so the server would not be told and would not check again.
-fn save(wb: &Entity<Workbench>, cx: &mut VisualTestContext) {
+pub(crate) fn save(wb: &Entity<Workbench>, cx: &mut VisualTestContext) {
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
     ed.update(cx, |e, cx| {
         let end = e.text().len();
@@ -358,13 +360,13 @@ fn save(wb: &Entity<Workbench>, cx: &mut VisualTestContext) {
     });
 }
 
-fn has_diagnostic(wb: &Entity<Workbench>, cx: &mut VisualTestContext, file: &str, what: impl Fn(&crate::lsp::Diagnostic) -> bool) -> bool {
+pub(crate) fn has_diagnostic(wb: &Entity<Workbench>, cx: &mut VisualTestContext, file: &str, what: impl Fn(&crate::lsp::Diagnostic) -> bool) -> bool {
     wb.read_with(cx, |wb, _| wb.lsp_diagnostics_for_test(file).iter().any(what))
 }
 
 /// Waits (saving now and then, which runs the check) until `done`; the first check of a crate builds it, so it can take
 /// a while.
-fn wait_checked(wb: &Entity<Workbench>, cx: &mut VisualTestContext, what: &str, mut done: impl FnMut(&mut VisualTestContext) -> bool) {
+pub(crate) fn wait_checked(wb: &Entity<Workbench>, cx: &mut VisualTestContext, what: &str, mut done: impl FnMut(&mut VisualTestContext) -> bool) {
     let mut n = 0u32;
     wait_secs(cx, 180, what, |cx| {
         n += 1;

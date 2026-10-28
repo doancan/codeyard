@@ -364,13 +364,25 @@ impl EditorView {
         if let Some(h) = &self.hover {
             let x = h.position.x - self.surface_origin.x;
             let y = self.screen_pos(h.at).map_or(h.position.y, |(v, _)| v.bounds.bottom()) - self.surface_origin.y;
-            let diag_rows = h.diagnostics.iter().map(|(sev, m)| {
-                let (glyph, color) = match sev {
-                    1 => ("circle-x", p.danger),
-                    2 => ("alert", p.warning),
-                    _ => ("info", p.info),
-                };
-                div().flex().gap(px(theme::SPACE[2])).child(icon(glyph, 14., color)).child(div().flex_1().child(m.clone()))
+            let diag_rows = hover_rows(&h.diagnostics, &self.path, self.lsp_root.as_deref()).into_iter().enumerate().map(|(i, row)| match row {
+                HoverRow::Diagnostic { severity, text } => {
+                    let (glyph, color) = match severity {
+                        1 => ("circle-x", p.danger),
+                        2 => ("alert", p.warning),
+                        _ => ("info", p.info),
+                    };
+                    div().flex().gap(px(theme::SPACE[2])).child(icon(glyph, 14., color)).child(div().flex_1().child(text))
+                }
+                HoverRow::Related { text, .. } => {
+                    div().pl(px(theme::SPACE[6])).text_color(c(p.text_muted)).cursor_pointer().hover(|d| d.text_color(c(p.accent))).child(text).on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |e, _, _, cx| {
+                            cx.stop_propagation();
+                            e.open_hover_row(i, cx);
+                        }),
+                    )
+                }
+                HoverRow::More(text) => div().pl(px(theme::SPACE[6])).text_color(c(p.text_muted)).child(text),
             });
             out.push(
                 div()
@@ -401,4 +413,49 @@ impl EditorView {
     }
 
     // --- Git gutter ---
+}
+
+/// One line of the diagnostics in a hover: a diagnostic, a related location under it (clickable), or how many more there are.
+#[derive(Debug, Clone, PartialEq)]
+pub enum HoverRow {
+    Diagnostic { severity: u8, text: String },
+    Related { text: String, path: String, line: u32, col: u32 },
+    More(String),
+}
+
+/// The hover's diagnostic lines: each diagnostic (code first), then its related locations.
+pub fn hover_rows(diagnostics: &[crate::lsp::Diagnostic], file: &str, root: Option<&str>) -> Vec<HoverRow> {
+    let mut rows = Vec::new();
+    for d in diagnostics {
+        rows.push(HoverRow::Diagnostic { severity: d.severity, text: d.headline() });
+        for r in &d.related {
+            rows.push(HoverRow::Related { text: crate::lsp::related_label(r, file, root), path: r.path.clone(), line: r.start.0, col: r.start.1 });
+        }
+        if d.more_related > 0 {
+            rows.push(HoverRow::More(tf("(+{} more)", &[&d.more_related])));
+        }
+    }
+    rows
+}
+
+impl EditorView {
+    /// A click on hover line `i`: a related location opens (the workbench handles `OpenLocation`, remote paths included).
+    pub(super) fn open_hover_row(&mut self, i: usize, cx: &mut Context<Self>) {
+        let Some(h) = &self.hover else { return };
+        if let Some(HoverRow::Related { path, line, col, .. }) = hover_rows(&h.diagnostics, &self.path, self.lsp_root.as_deref()).into_iter().nth(i) {
+            self.hover = None;
+            cx.emit(EditorEvent::OpenLocation { path, line, col });
+            cx.notify();
+        }
+    }
+
+    #[cfg(test)]
+    pub fn hover_rows_for_test(&self) -> Vec<HoverRow> {
+        self.hover.as_ref().map(|h| hover_rows(&h.diagnostics, &self.path, self.lsp_root.as_deref())).unwrap_or_default()
+    }
+
+    #[cfg(test)]
+    pub fn click_hover_row_for_test(&mut self, i: usize, cx: &mut Context<Self>) {
+        self.open_hover_row(i, cx);
+    }
 }
