@@ -271,8 +271,8 @@ and applies at once. A dot marks values that differ from the default, "Reset" re
 
 Make it yours:
 
-- **Colors:** pick one of 19 themes (the plain defaults Codeyard Dark and Codeyard Light, Codeyard One, Studio Dark, Midnight, Graphite, Ember, Fjord, Quarry,
-  Dracula, One Dark, Nord, Solarized Dark/Light, GitHub Light, Daylight, Paper, high contrast…),
+- **Colors:** pick one of 23 themes (the plain defaults Codeyard Dark and Codeyard Light, Codeyard One, Studio Dark, Midnight, Graphite, Ember, Fjord, Quarry,
+  Dracula, One Dark, Nord, Solarized Dark/Light, GitHub Dark/Light, Catppuccin Mocha, Tokyo Night, Gruvbox Dark, Daylight, Paper, high contrast…),
   change single colors with `"workbench.colorCustomizations": { "accent": "#ff8800",
   "[Quarry]": { "syntax-string": "#a6e22e" } }` (roles are the names in the theme files; an
   entry in `[brackets]` applies to that theme only), or "Theme: Save Current Colors as User
@@ -505,7 +505,8 @@ Enter keeps the theme, Esc goes back. "Auto" follows the system light/dark setti
 
 Built in: Codeyard Dark and Codeyard Light (the defaults, following the system appearance), Codeyard One (graphite and mint, the colours of
 the icon), Studio Dark, Midnight,
-Graphite, Ember, Fjord, Quarry, Dracula, One Dark, Nord, Solarized Dark, Solarized Light, GitHub Light, Daylight, Paper,
+Graphite, Ember, Fjord, Quarry, Dracula, One Dark, Nord, Solarized Dark, Solarized Light, GitHub Dark, GitHub Light,
+Catppuccin Mocha (pastel mauve), Tokyo Night (indigo and blue), Gruvbox Dark (warm charcoal and amber), Daylight, Paper,
 High Contrast Dark and High Contrast Light. Every built-in theme passes WCAG AA for all text and UI pairs
 (`cargo test -p theme`).
 
