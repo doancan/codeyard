@@ -34,13 +34,13 @@ impl StatusFilter {
 }
 #[derive(Default)]
 pub struct Browser {
+    pub overview: Overview,
     pub log_view: crate::container_logs::View,
     pub cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     pub query: String,
     pub field: Option<gpui::Entity<crate::input::TextField>>,
     pub subscription: Option<gpui::Subscription>,
     pub status_filter: StatusFilter,
-    pub sidebar_scroll: gpui::ScrollHandle,
     // Freeze ranking values until the user explicitly requests another sort.
     pub sort_usage: Vec<Usage>,
     pub sort: Sort,
@@ -53,6 +53,29 @@ pub struct Browser {
     pub error: Option<String>,
     pub request: u64,
     pub terminal_target: Option<String>,
+}
+
+pub struct Overview {
+    pub cursor: Option<String>,
+    pub focus: Option<gpui::FocusHandle>,
+    pub details: bool,
+    pub scroll: gpui::ScrollHandle,
+    pub columns_open: bool,
+    pub columns: [bool; 7],
+    pub attention: bool,
+}
+impl Default for Overview {
+    fn default() -> Self {
+        Self {
+            cursor: None,
+            focus: None,
+            details: false,
+            scroll: gpui::ScrollHandle::new(),
+            columns_open: false,
+            columns: [true, true, true, true, false, false, true],
+            attention: false,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -109,16 +132,16 @@ fn pair(text: &str) -> Option<(f64, f64)> {
     Some((bytes(a)?, bytes(b)?))
 }
 pub fn speed(value: Option<(f64, f64)>) -> String {
-    let number = |n: f64| {
-        if n >= 1e6 {
-            format!("{:.1} MB/s", n / 1e6)
-        } else if n >= 1e3 {
-            format!("{:.1} kB/s", n / 1e3)
-        } else {
-            format!("{n:.0} B/s")
-        }
-    };
-    value.map(|(a, b)| format!("{} / {}", number(a), number(b))).unwrap_or_else(|| "—".into())
+    value.map(|(a, b)| format!("{} / {}", speed_value(a), speed_value(b))).unwrap_or_else(|| "—".into())
+}
+pub fn speed_value(n: f64) -> String {
+    if n >= 1e6 {
+        format!("{:.1} MB/s", n / 1e6)
+    } else if n >= 1e3 {
+        format!("{:.1} kB/s", n / 1e3)
+    } else {
+        format!("{n:.0} B/s")
+    }
 }
 pub fn project(container: &crate::docker::Container) -> Option<&str> {
     container.labels.split(',').find_map(|p| p.strip_prefix("com.docker.compose.project=")).filter(|s| !s.is_empty())

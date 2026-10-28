@@ -342,7 +342,12 @@ impl Workbench {
                 ui::icon_button("dbg-open-launch", "settings", crate::i18n::t("Open Launch Configuration"), p)
                     .on_click(cx.listener(|this, _, w, cx| this.open_launch_file(w, cx))),
             );
-        let selected = self.dbg.last.clone().filter(|n| self.dbg.catalog.contains(n));
+        let selected = self
+            .dbg
+            .last
+            .clone()
+            .filter(|n| self.dbg.catalog.contains(n))
+            .or_else(|| self.dbg.cur().filter(|session| !matches!(session.status, DebugStatus::Ended(_))).map(|session| session.config.name.clone()));
         let launcher = div()
             .flex_none()
             .flex()
@@ -384,7 +389,7 @@ impl Workbench {
                     .cursor_pointer()
                     .hover(|d| d.bg(c(p.surface_hover)))
                     .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(selected.clone().unwrap_or_else(|| {
-                        if self.dbg.catalog.is_empty() { crate::i18n::t("No Configurations").into() } else { crate::i18n::t("Select a configuration").into() }
+                        if self.dbg.catalog.is_empty() { crate::i18n::t("Auto-detect project").into() } else { crate::i18n::t("Select a configuration").into() }
                     })))
                     .child(icon("chevron-down", layout::ICON - 2., p.text_muted))
                     .on_mouse_down(

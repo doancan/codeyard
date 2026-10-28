@@ -192,6 +192,12 @@ gpui::actions!(
     ]
 );
 
+#[path = "debug_cargo.rs"]
+mod cargo;
+
+#[path = "workbench_debug_save.rs"]
+mod save;
+
 #[path = "workbench_debug_breakpoints.rs"]
 mod breakpoints;
 #[path = "workbench_debug_launch.rs"]
@@ -226,26 +232,29 @@ type StartError = (String, String);
 /// For a Rust configuration: the `initCommands` to launch with (formatters first), or why the formatters are not loaded.
 type RustSetup = Option<Result<Vec<String>, String>>;
 
-/// In the background: pre-build, the Rust formatters for lldb-dap, adapter process.
+/// In the background: pre-build, resolve Cargo artifacts, load Rust formatters and start the adapter.
 fn launch_session(
     host: Arc<dyn host::Host>,
-    config: &LaunchConfig,
+    mut config: LaunchConfig,
     root: &str,
     tx: mpsc::Sender<DapEvent>,
-) -> Result<(Arc<dap::Session>, RustSetup), StartError> {
+) -> Result<(Arc<dap::Session>, LaunchConfig, RustSetup), StartError> {
+    let adapter = config.adapter.clone().map_err(|e| (e, String::new()))?;
     if let Some(cmd) = &config.pre_launch {
         run_pre_launch(&host, cmd, root)?;
     }
-    let rust = crate::debug_config::is_rust_config(config, host.stat(&format!("{}/Cargo.toml", root.trim_end_matches('/'))).is_ok())
+    if let Some(bin) = &config.cargo_target {
+        config.args["program"] = serde_json::json!(cargo::build(host.as_ref(), bin, root)?);
+    }
+    let rust = crate::debug_config::is_rust_config(&config, host.stat(&format!("{}/Cargo.toml", root.trim_end_matches('/'))).is_ok())
         .then(|| {
             let existing: Vec<String> =
                 config.args["initCommands"].as_array().map(|a| a.iter().filter_map(|c| c.as_str().map(str::to_string)).collect()).unwrap_or_default();
             crate::debug_config::rust_formatters(host.as_ref(), root, &existing).transpose()
         })
         .flatten();
-    let adapter = config.adapter.clone().map_err(|e| (e, String::new()))?;
     if let Some((host_name, port)) = &adapter.connect {
-        return dap::Session::attach_socket(host, host_name, *port, tx).map(|s| (s, rust)).map_err(|e| (e, String::new()));
+        return dap::Session::attach_socket(host, host_name, *port, tx).map(|session| (session, config, rust)).map_err(|e| (e, String::new()));
     }
     // lldb resolves a relative source path to an absolute one if the file exists in the adapter's cwd, which
     // breaks matching against debug info built with the logical path. So the adapter starts outside the project
@@ -253,7 +262,7 @@ fn launch_session(
     let neutral = if cfg!(windows) && !host.is_remote() { std::env::temp_dir().to_string_lossy().into_owned() } else { "/".to_string() };
     let adapter_cwd = if adapter.id == "lldb-dap" { neutral } else { root.to_string() };
     dap::Session::start(host, &adapter.command, adapter.args, Some(adapter_cwd), tx)
-        .map(|s| (s, rust))
+        .map(|session| (session, config, rust))
         .map_err(|e| (crate::i18n::tf("Could not start the debug adapter: {}", &[&e]), String::new()))
 }
 
@@ -414,7 +423,7 @@ impl Workbench {
     // --- Launch ---
 
     /// F5: continue if stopped; if not running, find the configuration and launch.
-    pub(super) fn start_debugging(&mut self, _: &super::StartDebugging, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn start_debugging(&mut self, _: &super::StartDebugging, window: &mut Window, cx: &mut Context<Self>) {
         match self.dbg.cur().map(|d| d.status.clone()) {
             Some(DebugStatus::Stopped(_)) => return self.debug_control("continue", cx),
             Some(DebugStatus::Starting | DebugStatus::Running) => {
@@ -424,51 +433,40 @@ impl Workbench {
             }
             _ => {}
         }
-        let Some(read) = self.read_launch_configs(true, cx) else {
+        if self.active_root(cx).is_none() {
             self.notice = Some(Notice::Info(crate::i18n::t("Open a folder to debug it.").into()));
             cx.notify();
             return;
-        };
+        }
+        self.require_trust(window, cx, |this, window, cx| this.choose_detected_debug_configs(false, window, cx));
+    }
+
+    /// Cargo discovery can invoke the toolchain: callers pass the workspace trust gate first.
+    pub(super) fn choose_detected_debug_configs(&mut self, no_debug: bool, _: &mut Window, cx: &mut Context<Self>) {
+        if self.dbg.save_task.is_some() {
+            return;
+        }
+        if let Some(root) = self.active_root(cx)
+            && !self.debug_unsaved_editors(&root, cx).is_empty()
+        {
+            self.save_before_debug(root, cx, Box::new(move |this, window, cx| this.choose_detected_debug_configs(no_debug, window, cx)));
+            return;
+        }
+        let Some(read) = self.read_launch_configs(true, cx) else { return };
+        self.dbg.prepare_epoch = self.dbg.prepare_epoch.wrapping_add(1);
+        let prepare_epoch = self.dbg.prepare_epoch;
         let asked = self.active_root(cx);
+        let generation = self.lsp.generation;
         cx.spawn(async move |this, cx| {
             let (configs, _) = read.await;
             with_window(&this, cx, move |this, window, cx| {
                 // The configurations were read from (and trust is asked for) the active file's folder: drop them if it changed.
-                if this.active_root(cx) == asked {
-                    this.choose_debug_config(configs, window, cx);
+                if this.active_root(cx) == asked && this.lsp.generation == generation && this.dbg.prepare_epoch == prepare_epoch {
+                    this.choose_debug_config(configs.into_iter().map(|c| LaunchConfig { no_debug, ..c }).collect(), window, cx);
                 }
             });
         })
         .detach();
-    }
-
-    /// Configurations of the open folder, read in the background: `.codeyard/launch.jsonc` and `.vscode/launch.json`,
-    /// then (with `detected`) the ones found from the project (Cargo, Go, the open Python or JavaScript file).
-    pub(super) fn read_launch_configs(&self, detected: bool, cx: &mut Context<Self>) -> Option<gpui::Task<(Vec<LaunchConfig>, Vec<debug_config::Compound>)>> {
-        let (root, host) = (self.active_root(cx)?, self.remote.host.clone());
-        let file = self.active_editor().map(|e| e.read(cx).path.clone());
-        Some(cx.background_executor().spawn(async move {
-            let read = |rel: &str| host.read(&ui::join(&root, rel)).ok().map(|(d, _)| String::from_utf8_lossy(&d).into_owned());
-            let mut tasks = Vec::new();
-            for (path, source) in [(".vscode/tasks.json", ".vscode/tasks.json"), (".codeyard/tasks.jsonc", "tasks.jsonc")] {
-                if let Some(t) = read(path) {
-                    tasks.extend(super::tasks::parse_task_file(&t, source));
-                }
-            }
-            let (mut configs, mut compounds) = (Vec::new(), Vec::new());
-            for path in [".codeyard/launch.jsonc", ".vscode/launch.json"] {
-                if let Some(t) = read(path) {
-                    configs.extend(debug_config::parse_launch_json(&t, &root, file.as_deref(), &tasks));
-                    compounds.extend(debug_config::parse_compounds(&t, &root, file.as_deref(), &tasks));
-                }
-            }
-            if detected {
-                let cargo = read("Cargo.toml");
-                let go = host.stat(&ui::join(&root, "go.mod")).is_ok();
-                configs.extend(debug_config::detect(cargo.as_deref(), go, file.as_deref(), &root));
-            }
-            (configs, compounds)
-        }))
     }
 
     /// The configurations of the launch files, for the Run and Debug view's selector.
@@ -541,6 +539,13 @@ impl Workbench {
 
     pub(super) fn start_debug(&mut self, config: LaunchConfig, cx: &mut Context<Self>) {
         let Some(root) = self.active_root(cx) else { return };
+        if self.dbg.save_task.is_some() {
+            return;
+        }
+        if !self.debug_unsaved_editors(&root, cx).is_empty() {
+            self.save_before_debug(root, cx, Box::new(move |this, _, cx| this.start_debug(config, cx)));
+            return;
+        }
         // Starting a configuration again replaces its session (restart); other sessions keep running.
         self.retire_sessions(&config.name, cx);
         self.dbg.last = Some(config.name.clone());
@@ -615,11 +620,11 @@ impl Workbench {
         })
         .detach();
         let host = self.remote.host.clone();
-        let (cfg, root2, session_root) = (config.clone(), root.clone(), root.clone());
-        let start = cx.background_executor().spawn(async move { launch_session(host, &cfg, &root2, tx) });
+        let (cfg, root2, session_root) = (config, root.clone(), root.clone());
+        let start = cx.background_executor().spawn(async move { launch_session(host, cfg, &root2, tx) });
         cx.spawn(async move |this, cx| {
-            let (session, rust) = match start.await {
-                Ok(s) => s,
+            let (session, config, rust) = match start.await {
+                Ok(started) => started,
                 Err((message, output)) => {
                     this.update(cx, |this, cx| this.on_debug_failed(sid, message, output, cx)).ok();
                     return;
@@ -627,15 +632,16 @@ impl Workbench {
             };
             let attached = this
                 .update(cx, |this, _| {
-                    let current = this.dbg.by_id(sid).is_some();
-                    if let Some(d) = this.dbg.by_id_mut(sid) {
+                    let current = this.dbg.by_id(sid).is_some_and(|d| d.status == DebugStatus::Starting);
+                    if let Some(d) = this.dbg.by_id_mut(sid).filter(|d| d.status == DebugStatus::Starting) {
+                        d.config = config.clone();
                         d.session = Some(session.clone());
                     }
                     if current {
                         session.set_root(&session_root);
                         session.set_exception_pref(this.dbg.exception_filters.clone());
                     }
-                    if let (Some(Err(reason)), Some(d)) = (&rust, this.dbg.by_id_mut(sid)) {
+                    if let (Some(Err(reason)), Some(d)) = (&rust, this.dbg.by_id_mut(sid).filter(|d| d.status == DebugStatus::Starting)) {
                         d.push_console("console", crate::i18n::tf("Rust formatters not loaded: {}", &[reason]));
                     }
                     current
@@ -674,7 +680,7 @@ impl Workbench {
 
     /// Launch failed: message in a Notice, pre-build output in the console and in Problems.
     fn on_debug_failed(&mut self, sid: u64, message: String, output: String, cx: &mut Context<Self>) {
-        if self.dbg.by_id(sid).is_none() {
+        if self.dbg.by_id(sid).is_none_or(|d| matches!(d.status, DebugStatus::Ended(_))) {
             return;
         }
         if !output.is_empty() {
@@ -703,6 +709,9 @@ impl Workbench {
                 }
             }
             DapEvent::Stopped { thread_id, reason, text } => {
+                if matches!(d.status, DebugStatus::Ended(_)) {
+                    return;
+                }
                 d.stopped_once = true;
                 d.status = DebugStatus::Stopped(reason.clone());
                 d.thread = thread_id;
@@ -1156,6 +1165,7 @@ impl Workbench {
     }
 
     pub(super) fn stop_debugging(&mut self, _: &super::StopDebugging, _: &mut Window, cx: &mut Context<Self>) {
+        self.cancel_pending_debug_start(cx);
         let Some(d) = self.dbg.cur().filter(|d| !matches!(d.status, DebugStatus::Ended(_))) else { return };
         // A compound with `stopAll`: its other sessions stop too.
         let ids: Vec<u64> = match d.group {
@@ -1221,6 +1231,7 @@ impl Workbench {
 
     /// Folder change: close every session silently.
     pub(super) fn stop_debug_quietly(&mut self, cx: &mut Context<Self>) {
+        self.cancel_pending_debug_start(cx);
         for d in std::mem::take(&mut self.dbg.sessions) {
             if let Some(s) = d.session {
                 cx.background_executor().spawn(async move { s.stop() }).detach();

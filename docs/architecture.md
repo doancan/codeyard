@@ -55,6 +55,11 @@ their own beside the code (`host/src/tests.rs`, `settings_tests.rs`), so a limit
 Test-only accessors (`*_for_test`) are in `workbench_testing.rs`, in a topic's own test-only module
 (`workbench_debug_testing.rs`) and in the editor's own files; tests never reach into private state any other way.
 
+Rust workspace discovery, target selection and compiler messages share `cargo_project.rs`; `cargo_args.rs` turns
+generated test commands back into literal Cargo argv. Debug executable paths come from Cargo artifacts rather than
+directory guesses. `workbench_debug_save.rs` coordinates workspace saves before discovery/build/start and cancels
+the start on a save error, Stop or a changed workspace. Editor saves keep their hash/conflict protection.
+
 ## Stack
 
 | Layer | Choice | Why |

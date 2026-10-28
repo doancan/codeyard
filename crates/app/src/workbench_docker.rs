@@ -16,6 +16,46 @@ pub(super) fn is_command(label: &str) -> bool {
 }
 
 impl Workbench {
+    pub(super) fn open_container_tools(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let labels = [
+            crate::i18n::t("Connect to a Container…"),
+            crate::i18n::t("Create Dev Container…"),
+            crate::i18n::t("Rebuild Dev Container…"),
+            crate::i18n::t("Containers and Service Logs…"),
+            crate::i18n::t("Show Output"),
+            crate::i18n::t("Cancel Operation"),
+        ];
+        let items = labels.into_iter().enumerate().map(|(i, label)| MenuItem::new(label).enabled(i != 5 || self.remote.docker.cancel.is_some())).collect();
+        self.show_menu(
+            items,
+            (0..6).map(MenuCmd::ContainerTool).collect(),
+            Vec::new(),
+            MenuTarget { path: String::new(), is_dir: false, tab: None },
+            window.mouse_position(),
+            window,
+            cx,
+        );
+    }
+
+    pub(super) fn run_container_tool(&mut self, command: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.docker_available(cx) {
+            return;
+        }
+        match command {
+            0 => self.docker_contexts(Action::Attach, window, cx),
+            1 => self.docker_open_project(false, window, cx),
+            2 => self.docker_open_project(true, window, cx),
+            3 => self.docker_contexts(Action::Services, window, cx),
+            4 => {
+                self.chrome.panel_open = true;
+                self.chrome.bottom = Bottom::Output;
+                cx.notify();
+            }
+            5 => self.cancel_docker(cx),
+            _ => {}
+        }
+    }
+
     fn container_ssh_host(&self) -> Option<String> {
         match &self.remote.conn {
             Conn::Connected { alias } if self.remote.host.is_remote() && matches!(host::ssh::target_of(alias), host::ssh::Target::Ssh(_)) => {
@@ -68,86 +108,8 @@ impl Workbench {
         if !self.docker_available(cx) {
             return;
         }
-        self.chrome.panel = Some(Panel::Containers);
-        self.sync_container_monitor(cx);
-        cx.notify();
-    }
-
-    pub(super) fn containers_panel(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
-        let row = |id: &'static str, symbol: &'static str, label: &'static str| {
-            div()
-                .id(id)
-                .debug_selector(|| id.to_string())
-                .w_full()
-                .min_h(px(32.))
-                .px(px(theme::SPACE[4]))
-                .py(px(theme::SPACE[2]))
-                .flex()
-                .items_center()
-                .gap(px(theme::SPACE[3]))
-                .rounded(px(theme::radius::SM))
-                .cursor_pointer()
-                .hover(|d| d.bg(c(p.surface_hover)))
-                .child(icon(symbol, 14., p.text_muted))
-                .child(div().flex_1().min_w_0().text_size(px(text::SM.0)).text_color(c(p.text)).child(label))
-        };
-        div()
-            .id("containers-panel")
-            .debug_selector(|| "containers-panel".into())
-            .size_full()
-            .flex()
-            .flex_col()
-            .child(self.view_header(crate::i18n::upper(crate::i18n::t("Containers")), p))
-            .child(
-                div()
-                    .id("containers-actions")
-                    .track_scroll(&self.remote.docker.monitor.browser.sidebar_scroll)
-                    .flex_1()
-                    .min_h_0()
-                    .overflow_y_scroll()
-                    .p(px(theme::SPACE[4]))
-                    .flex()
-                    .flex_col()
-                    .gap(px(theme::SPACE[2]))
-                    .child(self.container_inventory_view(p, cx))
-                    .when(self.docker_connected(), |d| {
-                        d.child(
-                            div()
-                                .px(px(theme::SPACE[4]))
-                                .py(px(theme::SPACE[3]))
-                                .text_size(px(text::XS.0))
-                                .text_color(c(p.text_muted))
-                                .child(self.remote.host.label()),
-                        )
-                    })
-                    .child(
-                        row("containers-connect", "plug", crate::i18n::t("Connect to a Container…"))
-                            .on_click(cx.listener(|this, _, window, cx| this.docker_contexts(Action::Attach, window, cx))),
-                    )
-                    .child(
-                        row("containers-create", "plus", crate::i18n::t("Create Dev Container…"))
-                            .on_click(cx.listener(|this, _, window, cx| this.docker_open_project(false, window, cx))),
-                    )
-                    .child(
-                        row("containers-rebuild", "refresh-cw", crate::i18n::t("Rebuild Dev Container…"))
-                            .on_click(cx.listener(|this, _, window, cx| this.docker_open_project(true, window, cx))),
-                    )
-                    .child(
-                        row("containers-services", "list", crate::i18n::t("Containers and Service Logs…"))
-                            .on_click(cx.listener(|this, _, window, cx| this.docker_contexts(Action::Services, window, cx))),
-                    )
-                    .child(row("containers-output", "terminal", crate::i18n::t("Show Output")).on_click(cx.listener(|this, _, _, cx| {
-                        this.chrome.panel_open = true;
-                        this.chrome.bottom = Bottom::Output;
-                        cx.notify();
-                    })))
-                    .when(self.remote.docker.cancel.is_some(), |d| {
-                        d.child(
-                            row("containers-cancel", "x", crate::i18n::t("Cancel Operation")).on_click(cx.listener(|this, _, _, cx| this.cancel_docker(cx))),
-                        )
-                    }),
-            )
-            .into_any_element()
+        self.open_container_dashboard(cx);
+        self.remote.docker.monitor.browser.overview.details = false;
     }
 
     pub(super) fn any_container_connected(&self, cx: &App) -> bool {
@@ -293,9 +255,7 @@ impl Workbench {
             return;
         }
         if self.container_ssh_host().is_some() {
-            self.chrome.panel = Some(Panel::Containers);
-            self.sync_container_monitor(cx);
-            cx.notify();
+            self.show_containers(cx);
             return;
         }
         let choices = Engine::discover();

@@ -30,6 +30,8 @@ pub struct LaunchConfig {
     pub args: Value,
     /// Shell command to run before launch (`preLaunchTask` or automatic build).
     pub pre_launch: Option<String>,
+    /// Automatically detected Cargo target; its executable is resolved from build artifacts.
+    pub cargo_target: Option<crate::cargo_project::CargoTarget>,
     /// Task to run after the session ends (`postDebugTask`): (label, command).
     pub post_debug: Option<(String, String)>,
     /// "Run Without Debugging": the program runs, breakpoints are not sent.
@@ -427,6 +429,7 @@ pub fn parse_launch_json(text: &str, root: &str, file: Option<&str>, tasks: &[Ta
                 request: c["request"].as_str().unwrap_or("launch").to_string(),
                 args,
                 pre_launch,
+                cargo_target: None,
                 post_debug,
                 no_debug: false,
                 inputs: Vec::new(),
@@ -447,7 +450,7 @@ fn expand_value(v: &Value, root: &str, file: Option<&str>) -> Value {
     }
 }
 
-/// Auto from the project: `Cargo.toml` (`[package] name`) -> `cargo build` + `target/debug/<name>`;
+/// Auto from the project: `Cargo.toml` (`[package] name`) -> build and debug the Cargo binary;
 /// `go.mod` -> run the package with `dlv dap`; open `.py` file -> debugpy.
 pub fn detect(cargo_toml: Option<&str>, has_go_mod: bool, file: Option<&str>, root: &str) -> Vec<LaunchConfig> {
     let mut out = Vec::new();
@@ -456,8 +459,9 @@ pub fn detect(cargo_toml: Option<&str>, has_go_mod: bool, file: Option<&str>, ro
             name: crate::i18n::tf("Debug Rust: {}", &[&name]),
             adapter: adapter_for("lldb"),
             request: "launch".into(),
-            args: json!({ "program": format!("{}/target/debug/{name}", root.trim_end_matches('/')), "args": [], "cwd": root }),
-            pre_launch: Some("cargo build".into()),
+            args: json!({ "args": [], "cwd": root }),
+            pre_launch: None,
+            cargo_target: Some(crate::cargo_project::CargoTarget::binary(name)),
             post_debug: None,
             no_debug: false,
             inputs: Vec::new(),
@@ -471,6 +475,7 @@ pub fn detect(cargo_toml: Option<&str>, has_go_mod: bool, file: Option<&str>, ro
             // outputMode remote: program output reaches the console as a DAP event (default: delve's stdout).
             args: json!({ "mode": "debug", "program": root, "cwd": root, "outputMode": "remote" }),
             pre_launch: None,
+            cargo_target: None,
             post_debug: None,
             no_debug: false,
             inputs: Vec::new(),
@@ -484,6 +489,7 @@ pub fn detect(cargo_toml: Option<&str>, has_go_mod: bool, file: Option<&str>, ro
             request: "launch".into(),
             args: json!({ "type": "pwa-node", "name": format!("Debug Node: {base}"), "program": f, "cwd": root, "console": "internalConsole" }),
             pre_launch: None,
+            cargo_target: None,
             post_debug: None,
             no_debug: false,
             inputs: Vec::new(),
@@ -497,6 +503,7 @@ pub fn detect(cargo_toml: Option<&str>, has_go_mod: bool, file: Option<&str>, ro
             request: "launch".into(),
             args: json!({ "program": f, "cwd": root, "console": "internalConsole" }),
             pre_launch: None,
+            cargo_target: None,
             post_debug: None,
             no_debug: false,
             inputs: Vec::new(),
@@ -780,8 +787,9 @@ mod tests {
         let cargo = "[workspace]\nmembers = []\n\n[package]\nname = \"demo\"\nversion = \"0.1.0\"\n\n[dependencies]\nname = \"not-this\"\n";
         let c = detect(Some(cargo), true, Some("/p/a.py"), "/p/");
         assert_eq!(c.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["Debug Rust: demo", "Debug Go package", "Debug Python: a.py"]);
-        assert_eq!(c[0].args["program"], "/p/target/debug/demo");
-        assert_eq!(c[0].pre_launch.as_deref(), Some("cargo build"));
+        assert!(c[0].args.get("program").is_none());
+        assert_eq!(c[0].cargo_target.as_ref().map(|t| t.name.as_str()), Some("demo"));
+        assert!(c[0].pre_launch.is_none());
         assert!(detect(Some("[workspace]\nmembers = []\n"), false, Some("/p/a.rs"), "/p").is_empty(), "workspace without a package and a non-.py file");
     }
 

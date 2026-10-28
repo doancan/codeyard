@@ -16,6 +16,11 @@ use super::*;
 use crate::i18n::{t, tf, tn};
 use accesskit::{Action, ActionData, ActionRequest, Live, Node, NodeId, Role, TextPosition, TextSelection, Toggled, TreeId, TreeInfo, TreeUpdate};
 
+#[path = "a11y_geometry.rs"]
+mod geometry;
+pub use geometry::Geometry;
+pub(super) use geometry::{Landmark, PaintedBounds, landmark};
+
 const ROOT: NodeId = NodeId(1);
 const EXPLORER: NodeId = NodeId(2);
 const EDITOR: NodeId = NodeId(3);
@@ -33,6 +38,12 @@ const FIND_REPLACE: NodeId = NodeId(14);
 const FIND_STATUS: NodeId = NodeId(15);
 const COMPLETION: NodeId = NodeId(16);
 const TERMINAL: NodeId = NodeId(17);
+const SCM: NodeId = NodeId(18);
+const SCM_MESSAGE: NodeId = NodeId(19);
+const SCM_COMMIT: NodeId = NodeId(20);
+const SCM_BRANCH: NodeId = NodeId(21);
+const SCM_RESULT: NodeId = NodeId(22);
+const SCM_EMPTY: NodeId = NodeId(23);
 const STATUS_ITEM: u64 = 0x10_0000;
 const UPDATE_BUTTON: u64 = 0x20_0000;
 const TAB_BASE: u64 = 0x30_0000;
@@ -41,13 +52,15 @@ const FIND_CONTROL: u64 = 0x50_0000;
 const COMPLETION_OPTION: u64 = 0x60_0000;
 /// Explorer trees of the added folders (the first folder's tree is `EXPLORER`).
 const EXTRA_TREE: u64 = 0x70_0000;
+const SCM_GROUP: u64 = 0x80_0000;
+const SCM_FILE: u64 = 0x90_0000;
 /// Ids per block (status items, update buttons, tabs, ...).
 const BLOCK: u64 = 0x10_0000;
 const ROW_BASE: u64 = 0x2_0000_0000;
 const RUN_BASE: u64 = 0x4_0000_0000;
 const TERM_RUN_BASE: u64 = 0x8_0000_0000;
 const _: () = {
-    let blocks = [STATUS_ITEM, UPDATE_BUTTON, TAB_BASE, PICK_OPTION, FIND_CONTROL, COMPLETION_OPTION, EXTRA_TREE, ROW_BASE];
+    let blocks = [STATUS_ITEM, UPDATE_BUTTON, TAB_BASE, PICK_OPTION, FIND_CONTROL, COMPLETION_OPTION, EXTRA_TREE, SCM_GROUP, SCM_FILE, ROW_BASE];
     let mut i = 1;
     while i < blocks.len() {
         assert!(blocks[i - 1] + BLOCK <= blocks[i]);
@@ -163,6 +176,7 @@ pub enum FocusSnap {
     Find(usize),
     Picker,
     Terminal,
+    ScmMessage,
 }
 
 /// The update dialog (or the first-run question) while it is open.
@@ -191,8 +205,20 @@ pub struct NoticeSnap {
     pub error: bool,
 }
 
+#[path = "a11y_scm.rs"]
+mod scm_access;
+
+#[derive(Clone, PartialEq, Debug)]
+pub(crate) struct ScmSnap {
+    generation: u64,
+    pub view: crate::scm::AccessView,
+}
+
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Snapshot {
+    generation: u64,
+    /// Physical landmark frames from the latest painted layout.
+    pub geometry: Geometry,
     pub title: String,
     pub explorers: Vec<ExplorerSnap>,
     pub tabs: Vec<TabSnap>,
@@ -202,6 +228,7 @@ pub struct Snapshot {
     pub find: Option<FindSnap>,
     pub completion: Option<ListSnap>,
     pub terminal: Option<TerminalSnap>,
+    pub(crate) scm: Option<ScmSnap>,
     pub picker: Option<PickerSnap>,
     pub notice: Option<NoticeSnap>,
     pub status: Vec<String>,
@@ -337,12 +364,14 @@ impl Snapshot {
     pub fn to_tree(&self) -> TreeUpdate {
         let mut nodes: Vec<(NodeId, Node)> = Vec::new();
         let mut root = Node::new(Role::Window);
+        self.geometry.apply(ROOT, &mut root);
         root.set_label(self.title.clone());
         let mut kids = Vec::new();
 
         // Explorer: one tree per folder of the workspace.
         for (k, ex) in self.explorers.iter().enumerate() {
             let mut tree = Node::new(Role::Tree);
+            self.geometry.apply(explorer_id(k), &mut tree);
             tree.set_label(if self.explorers.len() > 1 { format!("{}: {}", t("Explorer"), ex.name) } else { t("Explorer").to_string() });
             tree.set_size_of_set(ex.rows_total);
             let mut row_ids = Vec::new();
@@ -366,6 +395,11 @@ impl Snapshot {
             tree.add_action(Action::Focus);
             nodes.push((explorer_id(k), tree));
             kids.push(explorer_id(k));
+        }
+
+        if let Some(scm) = &self.scm {
+            scm.append_tree(&mut nodes);
+            kids.push(SCM);
         }
 
         // Tabs
@@ -436,6 +470,7 @@ impl Snapshot {
         // Editor
         if let Some(e) = &self.editor {
             let mut ed = Node::new(Role::MultilineTextInput);
+            self.geometry.apply(EDITOR, &mut ed);
             ed.set_label(if e.dirty { tf("{} (modified)", &[&e.name]) } else { e.name.clone() });
             ed.set_description(tf("{0} lines, showing from line {1}", &[&e.total_lines, &(e.first_line + 1)]));
             ed.add_action(Action::Focus);
@@ -478,6 +513,7 @@ impl Snapshot {
 
         // Status bar
         let mut status = Node::new(Role::Status);
+        self.geometry.apply(STATUS, &mut status);
         status.set_label(t("Status bar"));
         let mut items = Vec::new();
         for (i, t) in self.status.iter().enumerate() {
@@ -570,6 +606,7 @@ impl Snapshot {
             FocusSnap::Find(_) if self.find.as_ref().is_some_and(|f| f.replacement.is_some()) => FIND_REPLACE,
             FocusSnap::Editor if self.editor.is_some() => EDITOR,
             FocusSnap::Terminal if self.terminal.is_some() => TERMINAL,
+            FocusSnap::ScmMessage if self.scm.as_ref().is_some_and(|s| s.view.root.is_some()) => SCM_MESSAGE,
             FocusSnap::Explorer(k) if k < self.explorers.len() => self.explorers[k].rows.iter().find(|r| r.selected).map_or(explorer_id(k), |r| NodeId(r.id)),
             _ => ROOT,
         };
@@ -580,7 +617,7 @@ impl Snapshot {
 impl Workbench {
     /// Flat summary of the current view (the tree is only built while AT is active).
     pub(crate) fn a11y_snapshot(&self, window: &Window, cx: &App) -> Snapshot {
-        let trees = self.all_trees();
+        let trees = if self.chrome.panel == Some(Panel::Explorer) { self.all_trees() } else { Vec::new() };
         let explorers = trees
             .iter()
             .map(|tree| {
@@ -715,8 +752,11 @@ impl Workbench {
             }
         });
 
+        let scm = (self.chrome.panel == Some(Panel::Scm)).then(|| ScmSnap { generation: self.lsp.generation, view: self.scm.read(cx).a11y_view(window, cx) });
         let focus = if let Some(k) = trees.iter().position(|t| t.read(cx).focus_handle(cx).is_focused(window)) {
             FocusSnap::Explorer(k)
+        } else if scm.as_ref().is_some_and(|s| s.view.message_focused) {
+            FocusSnap::ScmMessage
         } else if picker_entity.as_ref().is_some_and(|p| p.focus_handle(cx).is_focused(window)) {
             FocusSnap::Picker
         } else if let Some(field) = find_bar.as_ref().and_then(|b| b.read(cx).a11y_focus(window, cx)) {
@@ -728,11 +768,35 @@ impl Workbench {
         } else {
             FocusSnap::Window
         };
-        Snapshot { title, explorers, tabs, active_tab, editor, find, completion, terminal, picker, notice, status, dialog, focus }
+        Snapshot {
+            generation: self.lsp.generation,
+            geometry: Geometry::new(&self.chrome.a11y_bounds, window),
+            title,
+            explorers,
+            tabs,
+            active_tab,
+            editor,
+            find,
+            completion,
+            terminal,
+            scm,
+            picker,
+            notice,
+            status,
+            dialog,
+            focus,
+        }
     }
 
     /// Action from AT (main thread, in the GPUI context).
     fn a11y_action(&mut self, req: &ActionRequest, last: &Snapshot, window: &mut Window, cx: &mut Context<Self>) {
+        if last.generation != self.lsp.generation {
+            return;
+        }
+        if self.a11y_scm_action(req, last, window, cx) {
+            cx.notify();
+            return;
+        }
         match (req.action, req.target_node) {
             (Action::Focus, EDITOR) => {
                 if let Some(e) = self.active_editor() {
@@ -740,20 +804,25 @@ impl Workbench {
                 }
             }
             (Action::Focus, id) if id == EXPLORER || (id.0 >= EXTRA_TREE && id.0 < EXTRA_TREE + BLOCK) => {
+                if self.chrome.panel != Some(Panel::Explorer) {
+                    return;
+                }
                 let k = if id == EXPLORER { 0 } else { (id.0 - EXTRA_TREE) as usize };
                 if let Some(tree) = self.all_trees().get(k) {
                     window.focus(&tree.read(cx).focus_handle(cx));
                 }
             }
             (Action::Focus | Action::Click, id) if id.0 & !0xffff_ffff == ROW_BASE => {
+                if self.chrome.panel != Some(Panel::Explorer) {
+                    return;
+                }
                 let Some((k, ix)) = last.explorers.iter().enumerate().find_map(|(k, ex)| ex.rows.iter().position(|r| r.id == id.0).map(|ix| (k, ix))) else {
                     return;
                 };
                 let Some(tree) = self.all_trees().get(k).cloned() else { return };
                 window.focus(&tree.read(cx).focus_handle(cx));
-                if req.action == Action::Click {
-                    tree.update(cx, |t, cx| t.a11y_activate(ix, cx));
-                }
+                let path = &last.explorers[k].rows[ix].path;
+                tree.update(cx, |t, cx| t.a11y_select(path, req.action == Action::Click, cx));
             }
             (Action::Focus, PICKER_INPUT) => {
                 if let Some(o) = &self.overlay {
@@ -834,6 +903,11 @@ impl Workbench {
             _ => {}
         }
         cx.notify();
+    }
+
+    #[cfg(test)]
+    pub(crate) fn a11y_action_for_test(&mut self, req: &ActionRequest, last: &Snapshot, window: &mut Window, cx: &mut Context<Self>) {
+        self.a11y_action(req, last, window, cx);
     }
 }
 
@@ -1009,6 +1083,8 @@ mod tests {
         let lines = vec![(0, "fn main() {".to_string()), (12, "    println!(\"hé\");".to_string()), (31, "}".to_string())];
         let runs = runs_for(lines, 3, 0);
         Snapshot {
+            generation: 0,
+            geometry: Geometry::default(),
             title: "Codeyard \u{2014} demo".into(),
             explorers: vec![ExplorerSnap {
                 name: "d".into(),
@@ -1033,6 +1109,7 @@ mod tests {
             find: None,
             completion: None,
             terminal: None,
+            scm: None,
             picker: None,
             status: vec!["Local".into(), "Ln 1, Col 4 (4 selected)".into()],
             dialog: None,
@@ -1193,3 +1270,7 @@ mod tests {
         assert_eq!(state.focus().unwrap().label().as_deref(), Some("x.rs"));
     }
 }
+
+#[cfg(test)]
+#[path = "a11y_geometry_tests.rs"]
+mod geometry_tests;

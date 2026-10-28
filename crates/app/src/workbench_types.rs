@@ -299,6 +299,8 @@ pub(super) enum InputPurpose {
 
 #[derive(Clone, Copy)]
 pub(super) enum MenuCmd {
+    ContainerTool(usize),
+    Container(super::container_overview_glue::ContainerAction),
     NewFile,
     NewFolder,
     Rename,

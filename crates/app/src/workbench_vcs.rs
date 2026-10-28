@@ -108,10 +108,18 @@ impl Workbench {
                 match result {
                     // No change (most polls): no redraw. Every frame makes Metal allocate ~110 MB of
                     // temporary buffers; polling every 4 s kept inflating memory.
-                    Ok(st) if this.vcs.error.is_none() && st.as_ref() == this.vcs.status.as_deref() => return,
+                    Ok(st) if this.vcs.error.is_none() && st.as_ref() == this.vcs.status.as_deref() => {
+                        if this.chrome.panel == Some(Panel::Scm) {
+                            this.scm.update(cx, |s, cx| s.refresh_worktrees(cx));
+                        }
+                        return;
+                    }
                     Ok(st) => {
                         this.vcs.error = None;
                         this.apply_git(st.map(Arc::new), cx);
+                        if this.chrome.panel == Some(Panel::Scm) {
+                            this.scm.update(cx, |s, cx| s.refresh_worktrees(cx));
+                        }
                     }
                     Err(e) => {
                         // Say it only the first time (polling retries every 4 s).

@@ -6,6 +6,15 @@
 # Host Sunucu, Port Bağlantı Noktası (the word port stays in compounds: SSH port yönlendirme), Debug Hata Ayıklama, Breakpoint Kesme Noktası.
 # Updates: update güncelleme, release/version sürüm, checksum sağlama toplamı, install kur (kurulum), restart yeniden başlat.
 
+# ---- Source Control worktrees ----
+Worktrees	Çalışma Ağaçları
+Could not list worktrees: {}	Çalışma ağaçları listelenemedi: {}
+No worktrees found.	Çalışma ağacı bulunamadı.
+Bare repository	Çalışma ağacı olmayan depo
+Worktree locked: {}	Çalışma ağacı kilitli: {}
+Open worktree in this window	Çalışma ağacını bu pencerede aç
+Listing worktrees timed out. Refresh to try again.	Çalışma ağaçları listelenirken zaman aşımına uğradı. Yeniden denemek için yenileyin.
+
 # ---- Menu bar: menu names ----
 File	Dosya
 Edit	Düzenle
@@ -2351,7 +2360,6 @@ Start Debugging (F5)	Hata Ayıklamayı Başlat (F5)
 Pause (F6)	Duraklat (F6)
 Open Launch Configuration	Başlatma Yapılandırmasını Aç
 Select a configuration	Bir yapılandırma seçin
-No Configurations	Yapılandırma Yok
 To customize Run and Debug, create a launch configuration.	Çalıştır ve Hata Ayıkla'yı özelleştirmek için bir başlatma yapılandırması oluşturun.
 Create a launch configuration	Başlatma yapılandırması oluştur
 Without one, F5 finds a configuration from the project (Cargo, Go, or the open Python or JavaScript file).	Yapılandırma yoksa F5 projeden bir tane bulur (Cargo, Go ya da açık Python veya JavaScript dosyası).
@@ -2492,7 +2500,6 @@ Run Tests in File	Dosyadaki Testleri Çalıştır
 Show Only Failed Tests	Yalnızca Başarısız Testleri Göster
 Test Results	Test Sonuçları
 Tests: {0} passed, {1} failed	Testler: {0} geçti, {1} başarısız
-The tests did not build: run the test to see the errors.	Testler derlenemedi: hataları görmek için testi çalıştırın.
 {0}/{1} passed	{0}/{1} geçti
 {} failed	{} başarısız
 {} skipped	{} atlandı
@@ -2562,7 +2569,6 @@ Docker: Rebuild Dev Container…	Docker: Geliştirme Konteynerini Yeniden Derle�
 Docker: Show Containers and Services…	Docker: Konteynerleri ve Servisleri Göster…
 Docker: Cancel Operation	Docker: İşlemi İptal Et
 SSH {0}: {1}. Docker must be installed and accessible to the SSH user on the remote host.	SSH {0}: {1}. Docker uzak makinede kurulu olmalı ve SSH kullanıcısı tarafından erişilebilir olmalıdır.
-Connect to an SSH host to discover its containers automatically, or choose a local engine below.	Konteynerlerini otomatik bulmak için bir SSH sunucusuna bağlanın veya aşağıdan yerel bir motor seçin.
 Updates paused	Güncellemeler duraklatıldı
 Discovering containers…	Konteynerler bulunuyor…
 Resume updates	Güncellemeleri sürdür
@@ -2580,7 +2586,6 @@ No SSH host connected	Bağlı SSH sunucusu yok
 Running	Çalışıyor
 Paused	Duraklatıldı
 Search containers, images or projects…	Konteyner, imaj veya proje ara…
-Standalone containers	Bağımsız konteynerler
 Name	Ad
 No containers match the current filters.	Geçerli filtrelerle eşleşen konteyner yok.
 Select a container to inspect resource history, logs, ports and storage.	Kaynak geçmişini, günlükleri, portları ve depolamayı incelemek için bir konteyner seçin.
@@ -2632,10 +2637,8 @@ Exposed only; not published on the server.	Yalnızca konteyner içinde açık; s
 Server binding	Sunucu adresi
 Read and write	Okuma ve yazma
 Read only	Salt okunur
-Storage type	Depolama türü
 Source on server	Sunucudaki kaynak
 Path in container	Konteynerdeki yol
-Access	Erişim
 Volume name	Birim adı
 Storage information is unavailable.	Depolama bilgisi alınamadı.
 Mount paths are shown as reported by the engine. Volume and bind-mount sizes are not included in container disk usage.	Bağlama yolları motorun bildirdiği şekilde gösterilir. Birim ve bağlı dizin boyutları konteyner disk kullanımına dahil değildir.
@@ -2643,7 +2646,6 @@ Container details are unavailable. Refresh details to try again.	Konteyner ayrı
 Image	İmaj
 Status	Durum
 All	Tümü
-Sort by	Sıralama
 CPU	İşlemci
 Memory	Bellek
 Live updates	Canlı güncellemeler
@@ -2673,3 +2675,67 @@ Project size	Proje boyutu
 Project size is available for local folders.	Proje boyutu yerel klasörlerde gösterilir.
 Unavailable	Kullanılamıyor
 View: Resources	Görünüm: Kaynaklar
+Web Preview	Web Önizleme
+Preview	Önizleme
+Web Preview stopped.	Web Önizleme durduruldu.
+Enable Web Preview in Settings > Modules to preview HTML files.	HTML dosyalarını önizlemek için Ayarlar > Modüller bölümünden Web Önizleme özelliğini açın.
+Open an HTML file or a project folder to start Web Preview.	Web Önizlemeyi başlatmak için bir HTML dosyası veya proje klasörü açın.
+Web Preview listening on 127.0.0.1:{}	Web Önizleme 127.0.0.1:{} adresinde çalışıyor
+Web Preview: {}	Web Önizleme: {}
+Could not start Web Preview: {}	Web Önizleme başlatılamadı: {}
+Starting preview…	Önizleme başlatılıyor…
+Preview HTML in your browser	HTML dosyasını tarayıcıda önizle
+Stop Web Preview	Web Önizlemeyi durdur
+Web Preview: Open in Browser	Web Önizleme: Tarayıcıda Aç
+Web Preview: Stop Server	Web Önizleme: Sunucuyu Durdur
+Web Preview: Show Server Log	Web Önizleme: Sunucu Günlüğünü Göster
+Enable Web Preview for HTML, CSS and JavaScript (user settings only; stops servers when disabled)	HTML, CSS ve JavaScript için Web Önizlemeyi aç (yalnızca kullanıcı ayarı; kapatıldığında sunucuları durdurur)
+Overview	Genel Bakış
+← Containers	← Konteynerler
+Container actions…	Konteyner işlemleri…
+Select a row to open its details.	Ayrıntıları açmak için bir satır seçin.
+Network received	Alınan ağ trafiği
+Network sent	Gönderilen ağ trafiği
+Disk read	Disk okuma
+Disk write	Disk yazma
+CPU: {}. 100% equals one CPU core.	CPU: {}. %100 bir CPU çekirdeğine karşılık gelir.
+Memory: {0} ({1})	Bellek: {0} ({1})
+Unhealthy	Sağlıksız
+Selected container	Seçili konteyner
+Compose project	Compose projesi
+Needs attention	Sorunlu
+Columns	Sütunlar
+Actions	İşlemler
+Copy container ID	Konteyner kimliğini kopyala
+{0} containers · {1} running · {2} need attention	{0} konteyner · {1} çalışıyor · {2} sorunlu
+
+# ---- Product quality and Rust workflow hardening ----
+Stage {}	{} Dosyasını Stage’e Al
+Unstage {}	{} Dosyasını Stage’den Çıkar
+Rust language features are disabled. Enable lsp.enabled in Settings.	Rust dil özellikleri kapalı. Ayarlar’da lsp.enabled seçeneğini etkinleştirin.
+Rust language server is not ready. Check Output, then run “Developer: Restart Language Servers”.	Rust dil sunucusu hazır değil. Çıktı’yı kontrol edin, ardından “Geliştirici: Dil Sunucularını Yeniden Başlat” komutunu çalıştırın.
+Debug Rust: {0} / {1}	Rust Hata Ayıklama: {0} / {1}
+Debug Rust example: {0} / {1}	Rust Örneğinde Hata Ayıklama: {0} / {1}
+Could not inspect Cargo targets: {}	Cargo hedefleri incelenemedi: {}
+Cargo reported {0} executables for target {1}	Cargo, {1} hedefi için {0} çalıştırılabilir dosya bildirdi
+Unterminated quote in the Cargo test command	Cargo test komutunda kapatılmamış tırnak var
+Expected a cargo test command	cargo test komutu bekleniyordu
+Missing value for Cargo option {}	{} Cargo seçeneğinin değeri eksik
+Cargo did not report a Rust test executable	Cargo, çalıştırılabilir bir Rust test dosyası bildirmedi
+Rust tests did not build. See Output and Problems for the compiler errors.	Rust testleri derlenemedi. Derleyici hataları için Çıktı ve Sorunlar panellerine bakın.
+Several Rust targets reported this test name. Run it individually to identify the failing target.	Birden fazla Rust hedefi bu test adını bildirdi. Başarısız olan hedefi belirlemek için testi tek başına çalıştırın.
+The test runner stopped without reporting this test. See Test Results for build or runner errors.	Test çalıştırıcısı bu testin sonucunu bildirmeden durdu. Derleme veya çalıştırıcı hataları için Test Sonuçları’na bakın.
+Cargo metadata has no workspace members	Cargo meta verisinde çalışma alanı üyeleri yok
+Cargo metadata has no packages	Cargo meta verisinde paket yok
+Cargo package has no name	Cargo paketinin adı yok
+Cargo package has no manifest path	Cargo paketinin manifest yolu yok
+Cargo package has no targets	Cargo paketinin hedefi yok
+Cargo target has no name	Cargo hedefinin adı yok
+Debug Rust library tests: {0} / {1}	Rust Kitaplık Testlerinde Hata Ayıklama: {0} / {1}
+Debug Rust integration test: {0} / {1}	Rust Entegrasyon Testinde Hata Ayıklama: {0} / {1}
+Saving files before debugging…	Hata ayıklamadan önce dosyalar kaydediliyor…
+Could not save files before debugging: {}	Hata ayıklamadan önce dosyalar kaydedilemedi: {}
+Resolve the file conflict before debugging.	Hata ayıklamadan önce dosya çakışmasını çözün.
+This file was deleted on disk. Save it explicitly before debugging.	Bu dosya diskten silinmiş. Hata ayıklamadan önce dosyayı açıkça kaydedin.
+Files are still unsaved. Resolve editor errors, then start debugging again.	Dosyalar henüz kaydedilmedi. Düzenleyici hatalarını çözün, ardından hata ayıklamayı yeniden başlatın.
+Auto-detect project	Projeyi Otomatik Algıla

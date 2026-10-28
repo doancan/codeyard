@@ -477,9 +477,13 @@ impl FileTree {
         (rows, self.selected)
     }
 
-    /// Accessibility action: select and activate the row (open the file / expand-collapse the folder).
-    pub fn a11y_activate(&mut self, ix: usize, cx: &mut Context<Self>) {
-        self.activate(ix, false, cx);
+    /// Resolve a snapshot's path again: a refresh may have inserted or removed rows since AT read it.
+    pub fn a11y_select(&mut self, path: &str, activate: bool, cx: &mut Context<Self>) {
+        let Some(ix) = self.rows.iter().position(|r| r.path == path) else { return };
+        self.select(ix, cx);
+        if activate {
+            self.activate(ix, false, cx);
+        }
     }
 
     #[cfg(test)]
@@ -728,7 +732,7 @@ impl FileTree {
         let Some(row) = self.selected.and_then(|i| self.rows.get(i)).cloned() else { return };
         if row.is_dir && !self.expanded.contains(&row.path) {
             self.toggle(&row.path, cx);
-        } else if row.is_dir {
+        } else if row.is_dir && self.rows.get(self.selected.unwrap() + 1).is_some_and(|child| child.depth > row.depth) {
             self.select(self.selected.unwrap() + 1, cx); // step into the first child
         }
     }

@@ -44,6 +44,8 @@ animations* on Windows). `editor.cursorBlinking: "solid"` stops only the cursor.
 **Screen readers (macOS and Windows).** An assistive technology can read and use:
 - the file explorer, one tree per folder of the workspace (name, level, expanded or collapsed, selected). Activating a row
   opens the file;
+- Source Control: the branch, commit message and commit state, expandable change groups, file diffs, Stage/Unstage and
+  operation results. Hidden Explorer trees are omitted while another sidebar is visible;
 - the editor tabs as a tab list (name, modified, the tab in front). Activating a tab brings it to the front;
 - the active editor as a text field: the text around the caret, the caret and the selection. Moving the selection from the
   assistive technology moves the real caret;
@@ -69,10 +71,10 @@ These are the important gaps, in rough order of how much they get in the way. Th
   every change, but no one has run a real VoiceOver, NVDA, JAWS or Narrator session against it. Expect rough edges and please
   report them.
 - **No screen reader on Linux.**
-- **No on-screen positions.** Elements have no on-screen bounds, so the VoiceOver cursor highlight, Narrator's focus
-  rectangle, exploring with the mouse or touch, and Zoom or Magnifier following the caret do not work.
-- **Some views are still silent:** the sidebar panels other than the explorer (search results, source control, debug,
-  testing, remote), the problems, output and ports panels, hover popups, the Settings and Keyboard Shortcuts pages, context
+- **Incomplete on-screen positions.** The window, primary Explorer viewport, active editor pane and status bar have
+  bounds. Individual controls, rows and characters still need geometry for precise cursor highlights and caret tracking.
+- **Some views are still silent:** search results, the Source Control graph, worktrees and sync controls, debug, testing and remote
+  views, the problems, output and ports panels, hover popups, the Settings and Keyboard Shortcuts pages, context
   menus and dialogs other than the update dialog.
 - The editor exposes about 300 lines around the caret, not the whole file. Only the primary selection is exposed, not extra
   cursors. Folding and wrapped lines are not reflected. The terminal exposes the screen, not the scrollback.

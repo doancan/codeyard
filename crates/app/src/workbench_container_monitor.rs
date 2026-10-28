@@ -22,6 +22,29 @@ pub(super) fn button(id: impl Into<gpui::ElementId>, label: &'static str, p: &Pa
         .child(label)
 }
 
+pub(super) fn search_field(id: &'static str, field: Entity<crate::input::TextField>, p: &Palette, cx: &App) -> gpui::Stateful<gpui::Div> {
+    let focus = field.focus_handle(cx);
+    div()
+        .id(id)
+        .debug_selector(move || id.into())
+        .w_full()
+        .min_w_0()
+        .min_h(px(34.))
+        .pl(px(theme::SPACE[3]))
+        .flex()
+        .items_center()
+        .border_1()
+        .border_color(c(p.border))
+        .rounded(px(theme::radius::SM))
+        .bg(c(p.surface))
+        .on_click(move |_, window, cx| {
+            cx.stop_propagation();
+            window.focus(&focus);
+        })
+        .child(icon("search", 14., p.text_muted))
+        .child(field)
+}
+
 impl Workbench {
     pub(super) fn return_from_container(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.refuse_if_dirty(cx) {
@@ -33,7 +56,6 @@ impl Workbench {
         self.remote.pending_path = previous.root.or_else(|| Some(previous.host.info().home.clone()));
         self.persist.opening_recent = None;
         self.attach_host(previous.host, previous.alias, window, cx);
-        self.chrome.panel = Some(Panel::Containers);
         self.open_container_dashboard(cx);
         cx.notify();
     }
@@ -43,12 +65,14 @@ impl Workbench {
             return;
         }
         self.ensure_container_search(cx);
+        self.chrome.panel = None;
         self.tabs.page = Some(Page::Containers);
         self.tabs._page_sub = None;
         self.tabs.page_active = true;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;
         self.sync_container_monitor(cx);
+
         cx.notify();
     }
 
@@ -105,6 +129,7 @@ impl Workbench {
                 if this.tabs.page_active
                     && matches!(this.tabs.page, Some(Page::Containers))
                     && this.remote.docker.monitor.browser.tab == crate::container_history::Tab::Logs
+                    && this.remote.docker.monitor.browser.overview.details
                     && !this.remote.docker.monitor.browser.loading
                     && let Some(id) = this.remote.docker.monitor.browser.selected.clone()
                 {
@@ -187,14 +212,14 @@ mod tests {
             wb.show_containers(cx);
         });
         cx.run_until_parked();
-        assert!(cx.debug_bounds("container-resource-web-id").is_some());
-        assert!(cx.debug_bounds("container-resource-db-id").is_some());
-        let open = cx.debug_bounds("container-resource-web-id").unwrap().center();
+        assert!(cx.debug_bounds("overview-row-web-id").is_some());
+        assert!(cx.debug_bounds("overview-row-db-id").is_some());
+        let open = cx.debug_bounds("overview-row-web-id").unwrap().origin + gpui::point(px(30.), px(20.));
         cx.simulate_click(open, gpui::Modifiers::none());
         cx.run_until_parked();
         assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), Some(("containers", true)));
         assert!(cx.debug_bounds("container-dashboard").is_some());
-        assert!(cx.debug_bounds("dashboard-row-web-id").is_none(), "the main view must not repeat the sidebar inventory");
+        assert!(cx.debug_bounds("dashboard-row-web-id").is_none(), "the detail view must show only the selected container");
         wb.update(cx, |wb, cx| {
             wb.remote.docker.monitor.clear();
             assert!(wb.remote.docker.monitor.containers.is_empty());

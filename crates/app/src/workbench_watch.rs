@@ -26,6 +26,9 @@ impl Workbench {
     /// every render and sent only on change, so nothing gets forgotten.
     pub(super) fn sync_watches(&mut self, cx: &App) {
         let mut paths: Vec<String> = self.tabs.editors.iter().map(|e| e.read(cx)).filter(|e| e.uses_host(&self.remote.host)).map(|e| e.path.clone()).collect();
+        if let Some(server) = &self.chrome.web_preview.server {
+            paths.extend(server.watched_paths());
+        }
         for t in self.all_trees() {
             paths.extend(t.read(cx).expanded_dirs());
         }
@@ -66,6 +69,9 @@ impl Workbench {
             }
         }
         for (path, kind) in changes {
+            if let Some(server) = &self.chrome.web_preview.server {
+                server.changed(&path);
+            }
             if self.reload_in_trees(&path, cx) {
                 self.roots.file_index = None;
             }
@@ -133,6 +139,11 @@ impl Workbench {
             warnings.push(crate::i18n::t("Disconnect the container before disabling the container module. Your open files are kept.").into());
         } else if !new.docker_enabled {
             self.remote.docker.cancel();
+            if matches!(self.tabs.page, Some(Page::Containers)) {
+                self.tabs.page = None;
+                self.tabs.page_active = false;
+                self.chrome.panel = Some(Panel::Explorer);
+            }
             if self.chrome.panel == Some(Panel::Containers) {
                 self.chrome.panel = Some(Panel::Explorer);
             }
@@ -157,6 +168,9 @@ impl Workbench {
             new.terminal_font_size = (new.terminal_font_size + self.chrome.zoom).max(6.);
         }
         cx.set_global(new.clone());
+        if !new.web_preview_enabled {
+            self.stop_web_preview(cx);
+        }
         if new.docker_enabled && !old.docker_enabled {
             self.sync_container_monitor(cx);
         }

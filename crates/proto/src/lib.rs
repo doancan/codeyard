@@ -431,11 +431,12 @@ pub fn write_frame<T: Serialize>(w: &mut impl Write, frame: &Frame<T>) -> io::Re
 /// `Ok(None)` if the stream closed cleanly.
 pub fn read_frame<T: for<'de> Deserialize<'de>>(r: &mut impl Read) -> io::Result<Option<Frame<T>>> {
     let mut len = [0u8; 4];
-    match r.read_exact(&mut len) {
+    match r.read_exact(&mut len[..1]) {
         Ok(()) => {}
         Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
         Err(e) => return Err(e),
     }
+    r.read_exact(&mut len[1..])?;
     let len = u32::from_le_bytes(len) as usize;
     if len > MAX_FRAME {
         return Err(io::Error::other(format!("frame too large: {len} bytes")));
@@ -493,6 +494,16 @@ mod tests {
         let data: Vec<u8> = (0..700_000u32).map(|i| (i % 251) as u8).collect();
         assert_eq!(content_hash_reader(&mut data.as_slice()).unwrap(), content_hash(&data));
         assert_eq!(content_hash_reader(&mut [].as_slice()).unwrap(), content_hash(&[]));
+    }
+
+    #[test]
+    fn truncated_header_is_an_error_not_a_clean_close() {
+        assert!(read_frame::<Request>(&mut [].as_slice()).unwrap().is_none());
+        for count in 1..4 {
+            let bytes = [1u8, 0, 0];
+            let err = read_frame::<Request>(&mut &bytes[..count]).unwrap_err();
+            assert_eq!(err.kind(), io::ErrorKind::UnexpectedEof, "header length {count}");
+        }
     }
 
     #[test]
