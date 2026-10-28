@@ -61,6 +61,8 @@ mod ext;
 #[cfg(test)]
 mod ext_tests;
 #[cfg(test)]
+mod ext_view_tests;
+#[cfg(test)]
 mod features_tests;
 mod find;
 mod folder_settings;

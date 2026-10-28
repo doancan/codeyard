@@ -288,6 +288,7 @@ const ICONS: &[(&str, &[u8])] = icons![
     "circle-check",
     "circle-dashed",
     "list-filter",
+    "blocks",
 ];
 
 /// Embedded icon names (tests: is every name used in source embedded, does every embedded file exist).

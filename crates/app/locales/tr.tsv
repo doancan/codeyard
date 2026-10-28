@@ -2754,3 +2754,83 @@ unknown command “{}”	bilinmeyen komut “{}”
 “{}” ships inside the package; this version only starts language servers found on PATH	“{}” paketin içinde geliyor; bu sürüm yalnızca PATH üzerindeki dil sunucularını başlatır
 language “{0}” names grammar “{1}”, which Codeyard does not have	“{0}” dili “{1}” dil bilgisini istiyor, Codeyard’da bu yok
 keymap preset “{0}” is not installed (installed: {1})	“{0}” kısayol düzeni kurulu değil (kurulu olanlar: {1})
+
+# ---- Extensions view ----
+Extensions	Eklentiler
+Extensions: Show Extensions	Eklentiler: Eklentileri Göster
+Extensions: Install from File…	Eklentiler: Dosyadan Kur…
+Extensions: Install from Folder…	Eklentiler: Klasörden Kur…
+Install from File…	Dosyadan Kur…
+Install from Folder…	Klasörden Kur…
+Install	Kur
+Install {}	{} Kur
+Install {}?	{} kurulsun mu?
+Installed ({})	Kurulu ({})
+Built-in	Yerleşik
+Search installed extensions	Kurulu eklentilerde ara
+No extensions installed. Install one from a .cyx file or a folder.	Kurulu eklenti yok. Bir .cyx dosyasından ya da klasörden kurabilirsiniz.
+No installed extension matches the search.	Aramaya uyan kurulu eklenti yok.
+Themes, languages, language servers, snippets and key bindings that come with Codeyard are built in and always on.	Codeyard ile gelen temalar, diller, dil sunucuları, kod parçacıkları ve kısayollar yerleşiktir ve her zaman açıktır.
+Choose an extension in the Extensions view.	Eklentiler görünümünden bir eklenti seçin.
+Extensions are turned off for this session (--no-extensions).	Eklentiler bu oturumda kapalı (--no-extensions).
+Extensions are turned off for this session (--no-extensions). Start Codeyard without it to load them.	Eklentiler bu oturumda kapalı (--no-extensions). Yüklemek için Codeyard’ı bu seçenek olmadan başlatın.
+Extensions off	Eklentiler kapalı
+Started with --no-extensions: no extension is loaded.	--no-extensions ile başlatıldı: hiçbir eklenti yüklenmedi.
+Installed from the file {}	{} dosyasından kuruldu
+Installed from the folder {}	{} klasöründen kuruldu
+{0} · version {1} · {2} license	{0} · sürüm {1} · {2} lisansı
+Contributes	Kattıkları
+Nothing	Hiçbir şey
+Permissions	İzinler
+None: it only adds data to Codeyard.	Yok: Codeyard’a yalnızca veri ekler.
+{0} says why: “{1}”	{0} nedenini şöyle açıklıyor: “{1}”
+High risk: this extension can run programs as you.	Yüksek risk: bu eklenti sizin adınıza program çalıştırabilir.
+High risk: this extension can read private data and send it elsewhere.	Yüksek risk: bu eklenti özel verileri okuyup başka bir yere gönderebilir.
+Disable	Devre Dışı Bırak
+Enable	Etkinleştir
+Disabled	Devre dışı
+Enabled	Etkin
+Disabled: nothing it contributes applies.	Devre dışı: kattıklarının hiçbiri uygulanmıyor.
+Uninstall	Kaldır
+Uninstall…	Kaldır…
+Uninstall {}?	{} kaldırılsın mı?
+Its contributions are removed from every window, with the data it stored.	Kattıkları, sakladığı verilerle birlikte tüm pencerelerden kaldırılır.
+Roll Back	Geri Al
+Go back to version {}	{} sürümüne geri dön
+Verify Files	Dosyaları Doğrula
+Cannot read {0}: {1}	{0} okunamadı: {1}
+Cannot install the extension: {}	Eklenti kurulamadı: {}
+Cannot install {0}: {1}	{0} kurulamadı: {1}
+Installed {0} {1}.	{0} {1} kuruldu.
+{} is enabled.	{} etkinleştirildi.
+{} is disabled.	{} devre dışı bırakıldı.
+{} is uninstalled.	{} kaldırıldı.
+{0} is back at version {1}.	{0} yeniden {1} sürümünde.
+Every file of {} matches its package.	{} eklentisinin tüm dosyaları paketiyle eşleşiyor.
+Files of {0} that are missing or changed: {1}. Reinstall it.	{0} eklentisinin eksik ya da değişmiş dosyaları: {1}. Yeniden kurun.
+Color theme: {}	Renk teması: {}
+Snippets for {}	{} için kod parçacıkları
+Keymap preset: {}	Kısayol düzeni: {}
+Key binding: {0} runs {1}	Kısayol: {0}, {1} komutunu çalıştırır
+Language: {0} ({1})	Dil: {0} ({1})
+JSON schema for {}	{} için JSON şeması
+YAML schema for {}	{} için YAML şeması
+Setting: {}	Ayar: {}
+Language server: {0} for {1}	Dil sunucusu: {1} için {0}
+Command: {}	Komut: {}
+View: {}	Görünüm: {}
+Read all files in the workspace	Çalışma alanındaki tüm dosyaları okuma
+Read {}	{} okuma
+Read files that can hold passwords and keys	Parola ve anahtar barındırabilecek dosyaları okuma
+Change all files in the workspace	Çalışma alanındaki tüm dosyaları değiştirme
+Change {}	{} değiştirme
+Connect to any website	Herhangi bir web sitesine bağlanma
+Connect to {}	{} adresine bağlanma
+Act as your {} account	{} hesabınız adına işlem yapma
+Store secrets in your keychain	Anahtar zincirinizde gizli bilgi saklama
+Run {} with any arguments	{} programını herhangi bir argümanla çalıştırma
+Read the clipboard	Panoyu okuma
+Write to the clipboard	Panoya yazma
+Read and write the clipboard	Panoyu okuma ve panoya yazma
+Type into terminals	Terminallere yazma
+Run Codeyard commands: {}	Codeyard komutlarını çalıştırma: {}

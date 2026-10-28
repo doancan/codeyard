@@ -259,6 +259,7 @@ impl Workbench {
             self.warn_low_contrast(window, cx);
         }
         self.sync_settings_page(cx);
+        self.sync_extensions_view();
         window.refresh();
         cx.notify();
     }
