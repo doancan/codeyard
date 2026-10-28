@@ -527,7 +527,7 @@ pub struct EditorView {
     /// scroll, focus, find bar, popups); the document (text, undo, syntax,
     /// LSP, git) is single. `slot`: the view currently in the fields; the others are in `parked`.
     slot: usize,
-    parked: [Option<ViewState>; 2],
+    parked: Vec<Option<ViewState>>,
     /// Drag started by a double click: the selection grows word by word (the starting word).
     word_drag: Option<Range<usize>>,
     /// Current state of the blinking cursor and the signature that resets the cycle (version, cursor, focus).
@@ -583,8 +583,8 @@ type DisplayKey = (u64, usize, Option<usize>, Vec<usize>);
 const SNIPPET_MARKS: usize = 97;
 /// Linked tag editing: [start of the typed name, start of its counterpart].
 const LINK_MARKS: usize = 95;
-/// Find-in-selection scope (start, end), per view slot: 90 + slot.
-const FIND_SCOPE_MARKS: usize = 90;
+/// View-specific marks have disjoint namespaces, separate from document marks.
+const FIND_SCOPE_MARKS: usize = 0x1000;
 
 /// Key of line bookmarks in buffer marks (tied to line starts, they shift).
 const BOOKMARK_MARKS: usize = 98;
@@ -595,7 +595,7 @@ pub use crate::debug_model::BpMeta;
 const BREAKPOINT_MARKS: usize = 96;
 
 /// Key of fold headers in buffer marks (+ view slot).
-const FOLD_MARKS: usize = 100;
+const FOLD_MARKS: usize = 0x2000;
 
 /// Fields belonging to a view (swapped with the same-named fields in EditorView).
 #[derive(Default)]
@@ -1004,7 +1004,7 @@ impl EditorView {
             scrollbar_drag: None,
             hscroll: px(0.),
             slot: 0,
-            parked: [None, None],
+            parked: vec![None, None],
             snippet_stop: None,
             word_drag: None,
             cursor_on: true,
@@ -1099,9 +1099,10 @@ impl EditorView {
 
     /// Also opened in the second group: that group's view (cursor and scroll same as the current one).
     pub fn open_slot(&mut self, slot: usize, cx: &mut Context<Self>) {
-        if self.has_slot(slot) || slot >= self.parked.len() {
+        if self.has_slot(slot) || slot >= 32 {
             return;
         }
+        self.parked.resize_with(self.parked.len().max(slot + 1), || None);
         let line = self.buffer.char_to_line(self.buffer.cursor());
         let scroll = UniformListScrollHandle::new();
         scroll.scroll_to_item(line, ScrollStrategy::Center);

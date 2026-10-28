@@ -103,3 +103,46 @@ fn editor_grid_group_limits_leave_the_current_layout_unchanged() {
     assert_eq!(layout.split(99, Direction::Down), Err(Error::MissingGroup));
     assert_eq!(Layout::from_json(&layout.to_json().unwrap()).unwrap(), layout);
 }
+
+#[test]
+fn editor_grid_mixed_operations_preserve_a_nonoverlapping_complete_partition() {
+    let mut layout = Layout::default();
+    let mut seed = 0x6179_21b3_u32;
+    for _ in 0..500 {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        let groups = layout.groups();
+        let group = groups[seed as usize % groups.len()];
+        match seed % 4 {
+            0 => {
+                let _ = layout.split(group, [Direction::Left, Direction::Right, Direction::Up, Direction::Down][(seed >> 3) as usize % 4]);
+            }
+            1 => {
+                layout.remove(group);
+            }
+            2 => {
+                layout.focus(group);
+            }
+            _ => {
+                let mut splits = HashSet::new();
+                collect_split_ids(layout.root(), &mut splits);
+                for id in splits {
+                    layout.set_ratio(id, (seed % 100) as f32 / 100.);
+                }
+            }
+        }
+        let rects = layout.rects();
+        assert!(rects.iter().any(|(id, _)| *id == layout.focused()));
+        let area: f32 = rects.iter().map(|(_, r)| r.width * r.height).sum();
+        assert!((area - 1.).abs() < 0.0001);
+        for (i, (_, a)) in rects.iter().enumerate() {
+            for (_, b) in &rects[i + 1..] {
+                let overlap_x = (a.x + a.width).min(b.x + b.width) - a.x.max(b.x);
+                let overlap_y = (a.y + a.height).min(b.y + b.height) - a.y.max(b.y);
+                assert!(overlap_x <= 0.00001 || overlap_y <= 0.00001);
+            }
+        }
+        assert_eq!(Layout::from_json(&layout.to_json().unwrap()).unwrap(), layout);
+    }
+}
