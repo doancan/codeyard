@@ -1,0 +1,591 @@
+//! From `raw` to `Manifest`: every check, every error with its place and fix.
+
+use std::collections::HashSet;
+use std::ops::Range;
+
+use crate::raw::{RawManifest, RawPermissions, S};
+use crate::risk::{self, Clipboard, Permissions};
+use crate::{
+    Activation, CodeEntry, CodeLanguage, Command, Contributions, DebugAdapter, ExtId, FileEntry, Keybinding, Language, LanguageServer, Manifest,
+    SchemaAssociation, Setting, SettingKind, Snippets, Version, View, ViewLocation, check_id_part, limits, when,
+};
+use crate::{Code as C, Diagnostic};
+
+struct Ctx {
+    errors: Vec<Diagnostic>,
+}
+
+impl Ctx {
+    fn err(&mut self, code: C, span: Range<usize>, message: impl Into<String>) -> &mut Diagnostic {
+        self.errors.push(Diagnostic::new(code, message).at(Some(span)));
+        self.errors.last_mut().expect("just pushed")
+    }
+
+    /// A required text field: not empty, at most `max` characters, no control characters.
+    fn text(&mut self, what: &str, v: &S<String>, max: usize) -> String {
+        let s = v.get_ref().trim();
+        if s.is_empty() {
+            self.err(C::BadText, v.span(), format!("{what} is empty"));
+        } else if s.chars().count() > max {
+            self.err(C::BadText, v.span(), format!("{what} is longer than {max} characters"));
+        } else if s.chars().any(char::is_control) {
+            self.err(C::BadText, v.span(), format!("{what} contains a control character"));
+        }
+        s.to_string()
+    }
+
+    /// A path inside the package: relative, `/`-separated, no `..`, no empty parts.
+    fn path(&mut self, what: &str, v: &S<String>) -> String {
+        let p = v.get_ref();
+        if let Err(e) = check_package_path(p) {
+            self.err(C::BadPath, v.span(), format!("{what} '{p}' {e}")).fix = Some("use a path relative to the extension folder, like themes/dark.json".into());
+        }
+        p.clone()
+    }
+
+    fn when(&mut self, what: &str, v: &Option<S<String>>) -> Option<String> {
+        let v = v.as_ref()?;
+        if let Err(e) = when::parse(v.get_ref()) {
+            self.err(C::BadWhen, v.span(), format!("{what}: {e}"));
+        }
+        Some(v.get_ref().clone())
+    }
+
+    fn count<T>(&mut self, what: &str, items: &[S<T>]) {
+        if items.len() > limits::CONTRIBUTIONS_PER_KIND
+            && let Some(first) = items.get(limits::CONTRIBUTIONS_PER_KIND)
+        {
+            self.err(C::BadContribution, first.span(), format!("more than {} {what}", limits::CONTRIBUTIONS_PER_KIND));
+        }
+    }
+}
+
+/// A path inside the package.
+pub fn check_package_path(p: &str) -> Result<(), String> {
+    if p.is_empty() {
+        return Err("is empty".into());
+    }
+    if p.len() > limits::ITEM_LEN {
+        return Err(format!("is longer than {} characters", limits::ITEM_LEN));
+    }
+    if p.contains('\\') {
+        return Err("uses '\\'; use '/'".into());
+    }
+    if p.starts_with('/') || p.as_bytes().get(1) == Some(&b':') {
+        return Err("is absolute".into());
+    }
+    if p.split('/').any(|part| part.is_empty() || part == "..") || p.chars().any(char::is_control) {
+        return Err("must not contain '..' or empty parts".into());
+    }
+    Ok(())
+}
+
+pub fn parse(text: &str) -> Result<Manifest, Vec<Diagnostic>> {
+    if text.len() > limits::MANIFEST_BYTES {
+        return Err(vec![Diagnostic::new(C::TooLarge, format!("the manifest is larger than {} KiB", limits::MANIFEST_BYTES / 1024))]);
+    }
+    let raw: RawManifest = match toml::from_str(text) {
+        Ok(r) => r,
+        Err(e) => {
+            let message = e.message().trim().to_string();
+            let fix = if message.contains("missing field `extension`") {
+                Some("start the file with [extension] and its id, version, name and license")
+            } else if message.contains("unknown field") {
+                Some("check the spelling against the manifest reference")
+            } else {
+                None
+            };
+            let d = Diagnostic::new(C::Syntax, message).at(e.span());
+            return Err(vec![match fix {
+                Some(f) => d.fix(f),
+                None => d,
+            }]);
+        }
+    };
+    let mut cx = Ctx { errors: Vec::new() };
+    let m = build(&mut cx, raw);
+    if cx.errors.is_empty() { Ok(m) } else { Err(cx.errors) }
+}
+
+fn build(cx: &mut Ctx, raw: RawManifest) -> Manifest {
+    let ext = raw.extension.get_ref();
+    let id = match ExtId::parse(ext.id.get_ref()) {
+        Ok(id) => id,
+        Err(e) => {
+            cx.err(C::BadId, ext.id.span(), format!("extension.id {e}")).fix = Some("use <publisher>.<name>, like dogan.deploy-status".into());
+            ExtId("invalid.invalid".into())
+        }
+    };
+    let version = Version::parse(ext.version.get_ref()).unwrap_or_else(|e| {
+        cx.err(C::BadVersion, ext.version.span(), format!("extension.version {e}"));
+        Version { major: 0, minor: 0, patch: 0, pre: None }
+    });
+    let name = cx.text("extension.name", &ext.name, limits::NAME_LEN);
+    let license = cx.text("extension.license", &ext.license, limits::ITEM_LEN);
+    let description = ext.description.as_ref().map(|d| cx.text("extension.description", d, limits::DESCRIPTION_LEN));
+    let repository = ext.repository.as_ref().map(|r| {
+        let s = cx.text("extension.repository", r, limits::ITEM_LEN);
+        if !s.starts_with("https://") {
+            cx.err(C::BadText, r.span(), "extension.repository must be an https:// URL");
+        }
+        s
+    });
+    if let Some(extra) = ext.categories.get(limits::CATEGORIES) {
+        cx.err(C::BadText, extra.span(), format!("more than {} categories", limits::CATEGORIES));
+    }
+    let categories = ext.categories.iter().map(|c| cx.text("a category", c, limits::NAME_LEN)).collect();
+    let icon = ext.icon.as_ref().map(|i| cx.path("extension.icon", i));
+
+    let code = raw.code.as_ref().map(|c| {
+        let entry = c.get_ref().entry.get_ref().clone();
+        let span = c.get_ref().entry.span();
+        let language = if entry == "Cargo.toml" || entry.ends_with("/Cargo.toml") {
+            CodeLanguage::Rust
+        } else if entry.ends_with(".ts") {
+            CodeLanguage::TypeScript
+        } else if entry.ends_with(".js") || entry.ends_with(".mjs") {
+            CodeLanguage::JavaScript
+        } else {
+            cx.err(C::BadContribution, span.clone(), format!("code.entry '{entry}' is not a Cargo.toml, .ts or .js file")).fix =
+                Some("point code.entry at Cargo.toml for Rust or at the main .ts/.js file".into());
+            CodeLanguage::Rust
+        };
+        cx.path("code.entry", &c.get_ref().entry);
+        CodeEntry { entry, language }
+    });
+
+    let permissions = raw.permissions.as_ref().map(|p| permissions(cx, p.get_ref())).unwrap_or_default();
+
+    let mut dependencies = Vec::new();
+    if raw.dependencies.len() > limits::DEPENDENCIES {
+        cx.errors.push(Diagnostic::new(C::BadDependency, format!("more than {} dependencies", limits::DEPENDENCIES)));
+    }
+    for (dep, min) in &raw.dependencies {
+        match (ExtId::parse(dep.get_ref()), Version::parse_minimum(min.get_ref())) {
+            (Ok(d), _) if d == id => {
+                cx.err(C::BadDependency, dep.span(), "an extension cannot depend on itself");
+            }
+            (Ok(d), Ok(v)) => dependencies.push((d, v)),
+            (Err(e), _) => {
+                cx.err(C::BadDependency, dep.span(), format!("dependency '{}' {e}", dep.get_ref()));
+            }
+            (_, Err(e)) => {
+                cx.err(C::BadDependency, min.span(), format!("dependency version '{}' {e}", min.get_ref()));
+            }
+        }
+    }
+
+    let contributions = contributions(cx, &raw, &id, &permissions);
+
+    let mut activation: Vec<Activation> = Vec::new();
+    if code.is_some() {
+        activation.extend(contributions.commands.iter().map(|c| Activation::Command(c.id.clone())));
+        activation.extend(contributions.views.iter().map(|v| Activation::View(v.id.clone())));
+    }
+    for g in raw.activation.iter().flat_map(|a| &a.workspace_contains) {
+        if let Err(e) = check_workspace_glob(g.get_ref()) {
+            cx.err(C::BadPath, g.span(), format!("activation.workspace-contains '{}' {e}", g.get_ref()));
+        }
+        activation.push(Activation::WorkspaceContains(g.get_ref().clone()));
+    }
+    if let Some(c) = &raw.code
+        && activation.is_empty()
+    {
+        cx.err(C::NeverActivates, c.span(), "this extension has code but nothing ever starts it").fix =
+            Some("add a [[commands]] or [[views]] entry, or [activation] workspace-contains = [\"some-file\"]".into());
+    }
+    if code.is_none() && contributions.needs_code() {
+        let span = raw.commands.first().map(|c| c.span()).or_else(|| raw.views.first().map(|v| v.span()));
+        cx.errors.push(
+            Diagnostic::new(C::NeedsCode, "commands and views need extension code, but there is no [code] table")
+                .at(span)
+                .fix("add [code] entry = \"src/main.ts\" (or \"Cargo.toml\"), or run `cyx new command` to start from a template"),
+        );
+    }
+
+    Manifest {
+        id,
+        version,
+        name,
+        license,
+        description,
+        repository,
+        categories,
+        icon,
+        code,
+        permissions,
+        activation,
+        dependencies,
+        untrusted: raw.untrusted.unwrap_or(true),
+        contributions,
+    }
+}
+
+fn check_workspace_glob(g: &str) -> Result<(), String> {
+    if g.is_empty() || g.len() > limits::ITEM_LEN {
+        return Err(format!("must be 1 to {} characters", limits::ITEM_LEN));
+    }
+    if g.starts_with('/') || g.contains('\\') || g.split('/').any(|p| p == "..") || g.as_bytes().get(1) == Some(&b':') {
+        return Err("must be relative to the workspace, '/'-separated and without '..'".into());
+    }
+    Ok(())
+}
+
+fn check_host(h: &str) -> Result<(), String> {
+    let name = h.strip_prefix("*.").unwrap_or(h);
+    if h == "*" {
+        return Err("allows every host; list the hosts you call".into());
+    }
+    if h.contains("://") || h.contains('/') || h.contains(':') {
+        return Err("must be a host name only, without scheme, port or path".into());
+    }
+    if name.parse::<std::net::Ipv4Addr>().is_ok() || name.split('.').next_back().is_some_and(|l| l.bytes().all(|b| b.is_ascii_digit())) {
+        return Err("must be a name, not an IP address".into());
+    }
+    if name.len() > 253 || !name.contains('.') {
+        return Err("must be a full host name, like api.example.com".into());
+    }
+    for label in name.split('.') {
+        if label.is_empty() || label.len() > 63 || label.starts_with('-') || label.ends_with('-') {
+            return Err(format!("has an invalid label '{label}'"));
+        }
+        if !label.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') {
+            return Err("must be lowercase a-z, 0-9, - and dots".into());
+        }
+    }
+    Ok(())
+}
+
+fn check_program(p: &str) -> Result<(), String> {
+    if p.is_empty() || p.len() > limits::ITEM_LEN {
+        return Err(format!("must be 1 to {} characters", limits::ITEM_LEN));
+    }
+    if p.contains(char::is_whitespace) {
+        return Err("must be one program name; arguments are not part of it".into());
+    }
+    if p.starts_with('/') || p.contains('\\') || p.as_bytes().get(1) == Some(&b':') || p.starts_with('~') {
+        return Err("must be a program name found on PATH, or a path inside the package".into());
+    }
+    if p.contains('/') {
+        check_package_path(p.trim_start_matches("./"))?;
+    }
+    Ok(())
+}
+
+fn list(cx: &mut Ctx, what: &str, items: &[S<String>], check: impl Fn(&str) -> Result<(), String>) -> Vec<String> {
+    if let Some(extra) = items.get(limits::PERMISSION_ENTRIES) {
+        cx.err(C::BadPermission, extra.span(), format!("permissions.{what} has more than {} entries", limits::PERMISSION_ENTRIES));
+    }
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for v in items {
+        if let Err(e) = check(v.get_ref()) {
+            cx.err(C::BadPermission, v.span(), format!("permissions.{what} '{}' {e}", v.get_ref()));
+        }
+        if seen.insert(v.get_ref().clone()) {
+            out.push(v.get_ref().clone());
+        }
+    }
+    out
+}
+
+fn permissions(cx: &mut Ctx, p: &RawPermissions) -> Permissions {
+    let read = list(cx, "read", &p.read, check_workspace_glob);
+    let write = list(cx, "write", &p.write, check_workspace_glob);
+    let net = list(cx, "net", &p.net, check_host);
+    let auth = list(cx, "auth", &p.auth, check_id_part);
+    let run = list(cx, "run", &p.run, check_program);
+    let commands = list(cx, "commands", &p.commands, |c| match c.strip_prefix("core:") {
+        Some(rest) if !rest.is_empty() => Ok(()),
+        _ => Err("must name a core command, like core:workbench.open-settings".into()),
+    });
+    let clipboard = match p.clipboard.as_ref().map(|c| (c.get_ref().as_str(), c.span())) {
+        None => Clipboard::None,
+        Some(("read", _)) => Clipboard::Read,
+        Some(("write", _)) => Clipboard::Write,
+        Some(("read-write", _)) => Clipboard::ReadWrite,
+        Some((other, span)) => {
+            cx.err(C::BadPermission, span, format!("permissions.clipboard '{other}' must be \"read\", \"write\" or \"read-write\""));
+            Clipboard::None
+        }
+    };
+    let why = p.why.as_ref().map(|w| {
+        let s = cx.text("permissions.why", w, limits::WHY_LEN);
+        if s.contains("://") || s.contains("www.") {
+            cx.err(C::BadText, w.span(), "permissions.why must not contain links");
+        }
+        s
+    });
+    let perms = Permissions { read, write, net, auth, secrets: p.secrets, run, clipboard, terminal: p.terminal, commands, why };
+    let r = risk::risk(&perms);
+    if r.needs_why() && perms.why.is_none() {
+        let reason = if r.runs_code {
+            "it can run programs".to_string()
+        } else {
+            format!("it can read private data ({}) and send it ({})", r.reads.join(", "), r.sends.join(", "))
+        };
+        cx.errors.push(
+            Diagnostic::new(C::WhyRequired, format!("these permissions are high risk because {reason}, so users need to know why"))
+                .fix("add to [permissions]:  why = \"One honest sentence about what you do with them.\""),
+        );
+        // Point at the table so the error has a line.
+        if let Some(last) = cx.errors.last_mut() {
+            last.span = p.run.first().or(p.net.first()).or(p.read.first()).map(|s| s.span());
+        }
+    }
+    perms
+}
+
+fn local_id(cx: &mut Ctx, what: &str, v: &S<String>, seen: &mut HashSet<String>) -> String {
+    let s = v.get_ref();
+    if let Err(e) = check_id_part(s) {
+        cx.err(C::BadContribution, v.span(), format!("{what} id '{s}' {e}")).fix =
+            Some("use a short local id like refresh; Codeyard adds your extension id in front".into());
+    } else if !seen.insert(s.clone()) {
+        cx.err(C::DuplicateId, v.span(), format!("{what} id '{s}' is used twice"));
+    }
+    s.clone()
+}
+
+fn contributions(cx: &mut Ctx, raw: &RawManifest, id: &ExtId, perms: &Permissions) -> Contributions {
+    let mut out = Contributions::default();
+    let file_entries = |cx: &mut Ctx, what: &str, items: &[S<crate::raw::RawFileEntry>]| -> Vec<FileEntry> {
+        cx.count(what, items);
+        items
+            .iter()
+            .map(|e| {
+                let e = e.get_ref();
+                FileEntry { label: cx.text(&format!("{what} label"), &e.label, limits::NAME_LEN), path: cx.path(&format!("{what} path"), &e.path) }
+            })
+            .collect()
+    };
+    out.themes = file_entries(cx, "themes", &raw.themes);
+    out.icon_themes = file_entries(cx, "icon-themes", &raw.icon_themes);
+    out.keymap_presets = file_entries(cx, "keymap-preset", &raw.keymap_preset);
+    for e in out.themes.iter().zip(&raw.themes).chain(out.icon_themes.iter().zip(&raw.icon_themes)) {
+        if !e.0.path.ends_with(".json") {
+            cx.err(C::BadContribution, e.1.get_ref().path.span(), format!("theme '{}' must be a .json file", e.0.path));
+        }
+    }
+
+    cx.count("snippets", &raw.snippets);
+    out.snippets = raw
+        .snippets
+        .iter()
+        .map(|s| {
+            let s = s.get_ref();
+            Snippets { language: cx.text("snippets language", &s.language, limits::ID_PART_LEN), path: cx.path("snippets path", &s.path) }
+        })
+        .collect();
+
+    let mut command_ids = HashSet::new();
+    cx.count("commands", &raw.commands);
+    for c in &raw.commands {
+        let c = c.get_ref();
+        let local = local_id(cx, "command", &c.id, &mut command_ids);
+        let title = cx.text("command title", &c.title, limits::NAME_LEN);
+        let category = c.category.as_ref().map(|v| cx.text("command category", v, limits::NAME_LEN));
+        let enablement = cx.when("command enablement", &c.enablement);
+        out.commands.push(Command { id: id.qualify(&local), title, category, enablement });
+    }
+
+    let mut view_ids = HashSet::new();
+    cx.count("views", &raw.views);
+    for v in &raw.views {
+        let v = v.get_ref();
+        let local = local_id(cx, "view", &v.id, &mut view_ids);
+        let title = cx.text("view title", &v.title, limits::NAME_LEN);
+        let location = match v.location.get_ref().as_str() {
+            "sidebar" => ViewLocation::Sidebar,
+            "bottom" => ViewLocation::Bottom,
+            "editor" => ViewLocation::Editor,
+            other => {
+                cx.err(C::BadContribution, v.location.span(), format!("view location '{other}' must be \"sidebar\", \"bottom\" or \"editor\""));
+                ViewLocation::Sidebar
+            }
+        };
+        let when = cx.when("view when", &v.when);
+        out.views.push(View { id: id.qualify(&local), title, location, when });
+    }
+
+    cx.count("keybindings", &raw.keybindings);
+    let deps: HashSet<&str> = raw.dependencies.keys().map(|k| k.get_ref().as_str()).collect();
+    for k in &raw.keybindings {
+        let k = k.get_ref();
+        let key = k.key.get_ref().trim().to_string();
+        if key.is_empty() || key.len() > 64 || key.split(' ').any(|stroke| stroke.is_empty() || stroke.split('-').any(str::is_empty)) {
+            cx.err(C::BadContribution, k.key.span(), format!("key '{key}' must look like \"cmd-shift-r\" or \"ctrl-k ctrl-r\""));
+        }
+        let cmd = k.command.get_ref();
+        let command = if cmd.starts_with("core:") {
+            cmd.clone()
+        } else if command_ids.contains(cmd) {
+            id.qualify(cmd)
+        } else if cmd.rsplit_once('.').is_some_and(|(owner, _)| deps.contains(owner)) {
+            cmd.clone()
+        } else {
+            cx.err(
+                C::BadContribution,
+                k.command.span(),
+                format!("keybinding command '{cmd}' is not one of your [[commands]], a dependency's command or a core: command"),
+            );
+            cmd.clone()
+        };
+        let when = cx.when("keybinding when", &k.when);
+        out.keybindings.push(Keybinding { key, command, when });
+    }
+
+    cx.count("languages", &raw.languages);
+    let mut language_ids = HashSet::new();
+    for l in &raw.languages {
+        let l = l.get_ref();
+        let lid = l.id.get_ref().clone();
+        if let Err(e) = check_id_part(&lid) {
+            cx.err(C::BadContribution, l.id.span(), format!("language id '{lid}' {e}"));
+        } else if !language_ids.insert(lid.clone()) {
+            cx.err(C::DuplicateId, l.id.span(), format!("language id '{lid}' is used twice"));
+        }
+        if l.extensions.is_empty() && l.filenames.is_empty() {
+            cx.err(C::BadContribution, l.id.span(), format!("language '{lid}' matches no files")).fix =
+                Some("add extensions = [\"ext\"] or filenames = [\"Name\"]".into());
+        }
+        let extensions = l
+            .extensions
+            .iter()
+            .map(|e| {
+                let s = e.get_ref().trim_start_matches('.').to_string();
+                if s.is_empty() || s.contains('/') || s.contains(char::is_whitespace) {
+                    cx.err(C::BadContribution, e.span(), format!("file extension '{}' must be like \"toml\"", e.get_ref()));
+                }
+                s
+            })
+            .collect();
+        let filenames = l
+            .filenames
+            .iter()
+            .map(|f| {
+                if f.get_ref().is_empty() || f.get_ref().contains('/') {
+                    cx.err(C::BadContribution, f.span(), format!("file name '{}' must be a plain name like \"Justfile\"", f.get_ref()));
+                }
+                f.get_ref().clone()
+            })
+            .collect();
+        let queries = l.queries.as_ref().map(|q| cx.path("language queries", q));
+        if queries.is_some() && l.grammar.is_none() {
+            cx.err(C::BadContribution, l.id.span(), format!("language '{lid}' has queries but no grammar")).fix =
+                Some("add grammar = \"<built-in language>\" for the queries to apply to".into());
+        }
+        out.languages.push(Language {
+            id: lid,
+            name: l.name.as_ref().map(|n| cx.text("language name", n, limits::NAME_LEN)),
+            extensions,
+            filenames,
+            grammar: l.grammar.as_ref().map(|g| g.get_ref().clone()),
+            queries,
+            line_comment: l.line_comment.as_ref().map(|c| c.get_ref().clone()),
+            block_comment: l.block_comment.as_ref().map(|b| (b.get_ref()[0].clone(), b.get_ref()[1].clone())),
+        });
+    }
+
+    for (what, items, target) in [("json-schemas", &raw.json_schemas, 0), ("yaml-schemas", &raw.yaml_schemas, 1)] {
+        cx.count(what, items);
+        let list: Vec<SchemaAssociation> = items
+            .iter()
+            .map(|s| {
+                let s = s.get_ref();
+                if s.file_match.is_empty() {
+                    cx.err(C::BadContribution, s.path.span(), format!("{what} entry needs at least one file-match glob"));
+                }
+                let file_match = s
+                    .file_match
+                    .iter()
+                    .map(|g| {
+                        if let Err(e) = check_workspace_glob(g.get_ref()) {
+                            cx.err(C::BadPath, g.span(), format!("{what} file-match '{}' {e}", g.get_ref()));
+                        }
+                        g.get_ref().clone()
+                    })
+                    .collect();
+                SchemaAssociation { file_match, path: cx.path(&format!("{what} path"), &s.path) }
+            })
+            .collect();
+        if target == 0 {
+            out.json_schemas = list;
+        } else {
+            out.yaml_schemas = list;
+        }
+    }
+
+    for (key, s) in &raw.settings {
+        let s = s.get_ref();
+        let mut ignored = HashSet::new();
+        let key_s = local_id(cx, "setting", key, &mut ignored);
+        let kind = match s.kind.get_ref().as_str() {
+            "string" => SettingKind::String,
+            "number" => SettingKind::Number,
+            "boolean" => SettingKind::Boolean,
+            "array" => SettingKind::Array,
+            "object" => SettingKind::Object,
+            other => {
+                cx.err(C::BadContribution, s.kind.span(), format!("setting type '{other}' must be string, number, boolean, array or object"));
+                SettingKind::String
+            }
+        };
+        if let Some(d) = &s.default {
+            let ok = matches!(
+                (kind, d),
+                (SettingKind::String, toml::Value::String(_))
+                    | (SettingKind::Number, toml::Value::Integer(_) | toml::Value::Float(_))
+                    | (SettingKind::Boolean, toml::Value::Boolean(_))
+                    | (SettingKind::Array, toml::Value::Array(_))
+                    | (SettingKind::Object, toml::Value::Table(_))
+            );
+            if !ok {
+                cx.err(C::BadContribution, s.kind.span(), format!("setting '{key_s}' default does not match its type {}", s.kind.get_ref()));
+            }
+        }
+        if !s.choices.is_empty() && kind != SettingKind::String {
+            cx.err(C::BadContribution, s.kind.span(), format!("setting '{key_s}' has enum values, so its type must be string"));
+        }
+        if let (Some(toml::Value::String(d)), false) = (&s.default, s.choices.is_empty())
+            && !s.choices.iter().any(|c| c.get_ref() == d)
+        {
+            cx.err(C::BadContribution, s.kind.span(), format!("setting '{key_s}' default '{d}' is not one of its enum values"));
+        }
+        out.settings.push(Setting {
+            key: key_s,
+            kind,
+            default: s.default.clone(),
+            description: cx.text("setting description", &s.description, limits::DESCRIPTION_LEN),
+            choices: s.choices.iter().map(|c| c.get_ref().clone()).collect(),
+        });
+    }
+
+    let need_run = |cx: &mut Ctx, what: &str, command: &S<String>| {
+        let c = command.get_ref();
+        if let Err(e) = check_program(c) {
+            cx.err(C::BadContribution, command.span(), format!("{what} command '{c}' {e}"));
+        } else if !perms.run.iter().any(|r| r == c) {
+            cx.err(C::NotDeclared, command.span(), format!("run access to \"{c}\" is not declared")).fix =
+                Some(format!("add to [permissions]:  run = [\"{c}\"]"));
+        }
+        c.clone()
+    };
+    cx.count("language-servers", &raw.language_servers);
+    for s in &raw.language_servers {
+        let s = s.get_ref();
+        let command = need_run(cx, "language server", &s.command);
+        if s.languages.is_empty() {
+            cx.err(C::BadContribution, s.command.span(), "a language server needs at least one language");
+        }
+        out.language_servers.push(LanguageServer { command, args: s.args.clone(), languages: s.languages.iter().map(|l| l.get_ref().clone()).collect() });
+    }
+    cx.count("debug-adapters", &raw.debug_adapters);
+    for d in &raw.debug_adapters {
+        let d = d.get_ref();
+        let command = need_run(cx, "debug adapter", &d.command);
+        let kind = cx.text("debug adapter type", &d.kind, limits::ID_PART_LEN);
+        out.debug_adapters.push(DebugAdapter { kind, command, args: d.args.clone(), languages: d.languages.iter().map(|l| l.get_ref().clone()).collect() });
+    }
+    out
+}

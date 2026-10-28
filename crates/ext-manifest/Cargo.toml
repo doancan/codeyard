@@ -1,0 +1,12 @@
+[package]
+name = "ext-manifest"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Extension manifest (codeyard-extension.toml): parsing, validation, activation, permissions and risk"
+repository.workspace = true
+publish = false
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+toml = { version = "1.1.8", default-features = false, features = ["std", "serde", "parse"] }
