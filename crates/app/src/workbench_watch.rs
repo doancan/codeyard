@@ -198,8 +198,15 @@ impl Workbench {
             crate::editor::set_associations(new.file_associations.clone());
         }
         warnings.extend(self.reload_snippets());
-        if (old.lsp_enabled, &old.lsp_servers) != (new.lsp_enabled, &new.lsp_servers) {
-            self.restart_lsp(cx);
+        let servers = if old.lsp_enabled != new.lsp_enabled {
+            crate::lsp::ServersReload::Restart
+        } else {
+            crate::lsp::servers_reload(&old.lsp_servers, &new.lsp_servers)
+        };
+        match servers {
+            crate::lsp::ServersReload::Unchanged => {}
+            crate::lsp::ServersReload::Settings(keys) => self.change_lsp_settings(&keys, cx),
+            crate::lsp::ServersReload::Restart => self.restart_lsp(cx),
         }
         if old.files_exclude != new.files_exclude {
             self.roots.file_index = None;

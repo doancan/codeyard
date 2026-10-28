@@ -130,6 +130,10 @@ pub fn merge_server_event(queue: &mut std::collections::VecDeque<ServerEvent>, e
 
 type Pending = Arc<Mutex<HashMap<i64, mpsc::Sender<Result<Value, String>>>>>;
 
+/// The `settings` tree of a running server, swapped whole when the settings file changes; the reader thread answers
+/// `workspace/configuration` from whatever is current.
+type SharedSettings = Arc<Mutex<Arc<Value>>>;
+
 pub struct Client {
     pub config: ServerConfig,
     host: Arc<dyn Host>,
@@ -137,6 +141,7 @@ pub struct Client {
     next_id: AtomicI64,
     pending: Pending,
     alive: Arc<AtomicBool>,
+    settings: SharedSettings,
     pub capabilities: Value,
 }
 
@@ -156,18 +161,19 @@ impl Client {
         let proc = host.proc_spawn(&config.command, config.args.clone(), Some(root.to_string())).map_err(|e| e.to_string())?;
         let pending: Pending = Arc::default();
         let alive = Arc::new(AtomicBool::new(true));
+        let settings: SharedSettings = Arc::new(Mutex::new(config.settings.clone()));
         let (writer_host, id) = (host.clone(), proc.id);
         // Reader: responses go to whoever is waiting, notifications to the event channel; it answers
         // the server's own requests (configuration, registration) itself.
         let reader = {
-            let (pending, alive) = (pending.clone(), alive.clone());
+            let (pending, alive, settings) = (pending.clone(), alive.clone(), settings.clone());
             std::thread::Builder::new().name(format!("lsp-{}", config.language)).spawn(move || {
                 let mut dec = Decoder::default();
                 while let Ok(ev) = proc.events.recv() {
                     match ev {
                         ProcEvent::Output(data) => {
                             for msg in dec.push(&data) {
-                                route(msg, &pending, &events, &writer_host, id);
+                                route(msg, &pending, &events, &writer_host, id, &settings);
                             }
                         }
                         ProcEvent::Exit(code) => {
@@ -190,10 +196,10 @@ impl Client {
             host.proc_kill(id);
             return Err(e.to_string());
         }
-        let mut client = Client { config, host, proc: id, next_id: AtomicI64::new(1), pending, alive, capabilities: Value::Null };
+        let mut client = Client { config, host, proc: id, next_id: AtomicI64::new(1), pending, alive, settings, capabilities: Value::Null };
         // A server that never answers (or answers with an error) must not be left running: the caller only sees the Err and
         // marks the slot failed, and a later restart would spawn a second process next to this one.
-        let init = match client.request("initialize", initialize_params(root), init_timeout) {
+        let init = match client.request("initialize", initialize_params(root, client.config.init_options.as_ref()), init_timeout) {
             Ok(init) => init,
             Err(e) => {
                 client.host.proc_kill(client.proc);
@@ -202,8 +208,27 @@ impl Client {
         };
         client.capabilities = init["capabilities"].clone();
         client.notify("initialized", json!({}));
-        client.notify("workspace/didChangeConfiguration", json!({ "settings": {} }));
+        client.notify_settings();
         Ok(Arc::new(client))
+    }
+
+    /// The `settings` tree the server currently gets.
+    pub fn settings(&self) -> Arc<Value> {
+        self.settings.lock().unwrap().clone()
+    }
+
+    /// New `settings` for a running server: later `workspace/configuration` requests are answered from them, and the
+    /// server is told with `workspace/didChangeConfiguration` (most servers then ask again).
+    pub fn change_settings(&self, settings: Arc<Value>) {
+        *self.settings.lock().unwrap() = settings;
+        self.notify_settings();
+    }
+
+    /// `{}` stands in for no settings, as before any were configurable: some servers read fields of it without a check.
+    fn notify_settings(&self) {
+        let settings = self.settings();
+        let settings = if settings.is_null() { json!({}) } else { (*settings).clone() };
+        self.notify("workspace/didChangeConfiguration", json!({ "settings": settings }));
     }
 
     pub fn is_alive(&self) -> bool {
@@ -280,7 +305,64 @@ pub fn clip_text(text: &str, max: usize) -> String {
     }
 }
 
-fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host: &Arc<dyn Host>, proc: u32) {
+/// At most this many items of one `workspace/configuration` request are looked up, and at most this many bytes of
+/// settings are put in one reply; later items get `null`. A server asking for a multi-megabyte tree hundreds of times
+/// would otherwise make the editor build a reply of gigabytes.
+const MAX_CONFIGURATION_ITEMS: usize = 256;
+const MAX_CONFIGURATION_BYTES: usize = 16 * 1024 * 1024;
+
+/// The length of `v` as JSON text, without building the text.
+fn json_len(v: &Value) -> usize {
+    struct Count(usize);
+    impl std::io::Write for Count {
+        fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+            self.0 += b.len();
+            Ok(b.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut n = Count(0);
+    let _ = serde_json::to_writer(&mut n, v);
+    n.0
+}
+
+/// The reply to `workspace/configuration`: one value per requested item, in order. No `section` (or an empty one) is the
+/// whole tree; `"a.b.c"` is the value at that path, `null` when a step is missing or not an object. Malformed requests get
+/// a well-formed reply (`[]` without `items`, `null` for a malformed item).
+pub fn configuration_reply(settings: &Value, params: &Value) -> Value {
+    let Some(items) = params["items"].as_array() else { return json!([]) };
+    let lookup = |item: &Value| -> Value {
+        let Value::Object(item) = item else { return Value::Null };
+        let section = match item.get("section") {
+            None | Some(Value::Null) => "",
+            Some(Value::String(s)) => s.as_str(),
+            Some(_) => return Value::Null,
+        };
+        if section.is_empty() {
+            return settings.clone();
+        }
+        section.split('.').try_fold(settings, |v, step| v.as_object()?.get(step)).cloned().unwrap_or(Value::Null)
+    };
+    let mut budget = MAX_CONFIGURATION_BYTES;
+    let reply = items.iter().enumerate().map(|(i, item)| {
+        if i >= MAX_CONFIGURATION_ITEMS {
+            return Value::Null;
+        }
+        let v = lookup(item);
+        match json_len(&v) {
+            n if n <= budget => {
+                budget -= n;
+                v
+            }
+            _ => Value::Null,
+        }
+    });
+    Value::Array(reply.collect())
+}
+
+fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host: &Arc<dyn Host>, proc: u32, settings: &SharedSettings) {
     let method = msg["method"].as_str();
     if std::env::var_os("CODEYARD_LSP_TRACE").is_some() {
         eprintln!("lsp<- {} {} bytes", method.unwrap_or("(response)"), msg.to_string().len());
@@ -301,8 +383,8 @@ fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host
         (Some(id), Some(method)) => {
             let result = match method {
                 "workspace/configuration" => {
-                    let n = msg["params"]["items"].as_array().map_or(0, |a| a.len());
-                    json!(vec![Value::Null; n])
+                    let settings = settings.lock().unwrap().clone();
+                    configuration_reply(&settings, &msg["params"])
                 }
                 "window/workDoneProgress/create" | "client/registerCapability" | "client/unregisterCapability" => Value::Null,
                 "workspace/workspaceFolders" => Value::Null,
@@ -377,10 +459,10 @@ pub const SEMANTIC_TYPES: [&str; 14] = [
     "macro",
 ];
 
-fn initialize_params(root: &str) -> Value {
+fn initialize_params(root: &str, init_options: Option<&Value>) -> Value {
     let uri = path_to_uri(root);
     let name = root.rsplit('/').next().unwrap_or(root);
-    json!({
+    let mut params = json!({
         "processId": Value::Null,
         "clientInfo": { "name": "codeyard", "version": env!("CARGO_PKG_VERSION") },
         "rootUri": uri,
@@ -441,7 +523,11 @@ fn initialize_params(root: &str) -> Value {
                 },
             },
         },
-    })
+    });
+    if let Some(options) = init_options {
+        params["initializationOptions"] = options.clone();
+    }
+    params
 }
 
 #[cfg(test)]
@@ -524,13 +610,20 @@ mod tests {
         assert_eq!(latest(&q, "/a.rs"), Some(0));
     }
 
-    /// The local host with a count of `proc_kill` calls.
-    struct KillCounter {
+    /// The local host with a count of `proc_kill` calls and a copy of what is written to processes.
+    struct Probe {
         inner: host::RemoteHost,
         kills: std::sync::atomic::AtomicUsize,
+        input: Mutex<Vec<Vec<u8>>>,
     }
 
-    impl Host for KillCounter {
+    impl Probe {
+        fn new() -> Self {
+            Probe { inner: host::local(), kills: Default::default(), input: Mutex::default() }
+        }
+    }
+
+    impl Host for Probe {
         fn info(&self) -> &proto::HostInfo {
             self.inner.info()
         }
@@ -577,6 +670,7 @@ mod tests {
             self.inner.proc_spawn(program, args, cwd)
         }
         fn proc_input(&self, proc: u32, data: Vec<u8>) {
+            self.input.lock().unwrap().push(data.clone());
             self.inner.proc_input(proc, data)
         }
         fn proc_kill(&self, proc: u32) {
@@ -587,9 +681,9 @@ mod tests {
 
     #[test]
     fn a_server_that_never_answers_initialize_is_killed() {
-        let host = Arc::new(KillCounter { inner: host::local(), kills: Default::default() });
+        let host = Arc::new(Probe::new());
         // `sleep` never reads the request, let alone answers it.
-        let cfg = ServerConfig { language: "x".into(), command: "sleep".into(), args: vec!["30".into()] };
+        let cfg = ServerConfig::plain("x", "sleep", vec!["30".into()]);
         let (tx, _rx) = mpsc::channel();
         let dir = std::env::temp_dir().to_string_lossy().into_owned();
         let err = Client::start_with(host.clone(), cfg, &dir, tx, Duration::from_millis(300)).err().expect("no answer is an error");
@@ -603,12 +697,19 @@ mod tests {
         let (tx, rx) = mpsc::channel();
         let pending: Pending = Arc::default();
         let big = "ğ".repeat(5 * 1024 * 1024 / 2);
-        route(json!({ "method": "window/showMessage", "params": { "type": 1, "message": big } }), &pending, &tx, &host, 0);
+        route(json!({ "method": "window/showMessage", "params": { "type": 1, "message": big } }), &pending, &tx, &host, 0, &Arc::default());
         let Ok(ServerEvent::Message(m)) = rx.try_recv() else { panic!("no message") };
         assert!(m.chars().count() <= MAX_MESSAGE_CHARS + 1 && m.ends_with('…'), "{} chars", m.chars().count());
 
         let actions: Vec<Value> = (0..500).map(|_| json!({ "title": "x".repeat(10_000) })).collect();
-        route(json!({ "id": 3, "method": "window/showMessageRequest", "params": { "message": big, "actions": actions } }), &pending, &tx, &host, 0);
+        route(
+            json!({ "id": 3, "method": "window/showMessageRequest", "params": { "message": big, "actions": actions } }),
+            &pending,
+            &tx,
+            &host,
+            0,
+            &Arc::default(),
+        );
         let Ok(ServerEvent::Question { message, actions, .. }) = rx.try_recv() else { panic!("no question") };
         assert!(message.chars().count() <= MAX_MESSAGE_CHARS + 1);
         assert_eq!(actions.len(), MAX_ACTIONS);
@@ -616,10 +717,84 @@ mod tests {
 
         let (rtx, rrx) = mpsc::channel();
         pending.lock().unwrap().insert(7, rtx);
-        route(json!({ "id": 7, "error": { "message": big } }), &pending, &tx, &host, 0);
+        route(json!({ "id": 7, "error": { "message": big } }), &pending, &tx, &host, 0, &Arc::default());
         assert!(rrx.try_recv().unwrap().unwrap_err().chars().count() <= MAX_MESSAGE_CHARS + 1);
         assert_eq!(clip_text("kısa", 10), "kısa");
         assert_eq!(clip_text("şğüiö", 3), "şğü…");
+    }
+
+    fn items(sections: &[Value]) -> Value {
+        json!({ "items": sections.iter().map(|s| if s.is_null() { json!({}) } else { json!({ "section": s }) }).collect::<Vec<_>>() })
+    }
+
+    #[test]
+    fn configuration_reply_walks_sections() {
+        let tree = json!({ "rust-analyzer": { "check": { "command": "clippy" }, "n": 1 }, "flat": 5 });
+        let reply = configuration_reply(
+            &tree,
+            &items(&[Value::Null, json!(""), json!("rust-analyzer"), json!("rust-analyzer.check"), json!("rust-analyzer.check.command")]),
+        );
+        assert_eq!(reply, json!([tree.clone(), tree.clone(), tree["rust-analyzer"].clone(), { "command": "clippy" }, "clippy"]));
+        // Missing steps, a step through a value that is not an object, a section that is not text, an item that is not an object.
+        let reply = configuration_reply(
+            &tree,
+            &json!({ "items": [{ "section": "nope" }, { "section": "flat.x" }, { "section": "rust-analyzer.n.m" }, { "section": 3 }, 7, { "scopeUri": "file:///p" }] }),
+        );
+        assert_eq!(reply, json!([null, null, null, null, null, tree.clone()]));
+        // Nothing configured: the whole tree is `null`, so is every section.
+        assert_eq!(configuration_reply(&Value::Null, &items(&[Value::Null, json!("rust-analyzer")])), json!([null, null]));
+    }
+
+    /// AC6 of the settings feature: a malformed request still gets a well-formed reply.
+    #[test]
+    fn configuration_reply_to_malformed_requests_is_well_formed() {
+        let tree = json!({ "a": 1 });
+        for params in [Value::Null, json!({}), json!({ "items": 5 }), json!({ "items": { "section": "a" } }), json!("x")] {
+            assert_eq!(configuration_reply(&tree, &params), json!([]), "{params}");
+        }
+        let many: Vec<Value> = (0..300).map(|_| json!("a")).collect();
+        let reply = configuration_reply(&tree, &items(&many));
+        let reply = reply.as_array().unwrap();
+        assert_eq!(reply.len(), 300, "one value per item");
+        assert!(reply[..MAX_CONFIGURATION_ITEMS].iter().all(|v| v == 1));
+        assert!(reply[MAX_CONFIGURATION_ITEMS..].iter().all(Value::is_null), "items past the cap are not looked up");
+    }
+
+    /// A tree of megabytes is answered whole, but a reply never carries more than the byte budget of it.
+    #[test]
+    fn a_huge_settings_tree_is_answered_within_a_byte_budget() {
+        let big = json!({ "s": "x".repeat(5 * 1024 * 1024) });
+        let reply = configuration_reply(&big, &items(&vec![Value::Null; 10]));
+        let reply = reply.as_array().unwrap();
+        assert_eq!(reply.len(), 10);
+        let answered = reply.iter().filter(|v| !v.is_null()).count();
+        assert_eq!(answered, 3, "three copies of 5 MB fit in 16 MB");
+        assert!(reply[..3].iter().all(|v| v == &big) && reply[3..].iter().all(Value::is_null));
+        assert_eq!(json_len(&big), big.to_string().len());
+    }
+
+    /// The reader answers from the shared tree, so a swapped tree is what the next request sees.
+    #[test]
+    fn the_server_s_configuration_request_is_answered_from_the_current_settings() {
+        let (tx, _rx) = mpsc::channel();
+        let pending: Pending = Arc::default();
+        let settings: SharedSettings = Arc::new(Mutex::new(Arc::new(json!({ "s": { "v": 1 } }))));
+        let host = Arc::new(Probe::new());
+        let dyn_host: Arc<dyn Host> = host.clone();
+        let req = json!({ "id": 5, "method": "workspace/configuration", "params": { "items": [{ "section": "s.v" }] } });
+        route(req.clone(), &pending, &tx, &dyn_host, 0, &settings);
+        *settings.lock().unwrap() = Arc::new(json!({ "s": { "v": 2 } }));
+        route(req, &pending, &tx, &dyn_host, 0, &settings);
+        let sent: Vec<Value> = host.input.lock().unwrap().iter().flat_map(|b| Decoder::default().push(b)).collect();
+        assert_eq!(sent, vec![json!({ "jsonrpc": "2.0", "id": 5, "result": [1] }), json!({ "jsonrpc": "2.0", "id": 5, "result": [2] })]);
+    }
+
+    #[test]
+    fn initialize_carries_the_options_only_when_configured() {
+        let with = initialize_params("/p", Some(&json!({ "cargo": { "features": ["x"] } })));
+        assert_eq!(with["initializationOptions"], json!({ "cargo": { "features": ["x"] } }));
+        assert_eq!(initialize_params("/p", Some(&json!("text")))["initializationOptions"], "text", "any JSON is sent unchanged");
+        assert!(initialize_params("/p", None).get("initializationOptions").is_none(), "absent, not null");
     }
 
     /// Real language server (if clangd is available): handshake, diagnostics, hover, definition.

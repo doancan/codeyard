@@ -160,7 +160,8 @@ pub struct Settings {
     pub ports_rules: Vec<crate::port_forwards::PortRule>,
     /// Whether language servers are enabled.
     pub lsp_enabled: bool,
-    /// Language id → command and arguments (`None`: disabled for that language). Overrides the defaults.
+    /// Language key → command, arguments, settings and initialization options (`None`: disabled for that language).
+    /// Overrides the defaults.
     pub lsp_servers: Vec<ServerOverride>,
     /// Files that are not UTF-8 (and have no BOM) are read with this encoding.
     pub fallback_encoding: crate::encoding::Encoding,
@@ -256,8 +257,8 @@ pub struct Settings {
     pub file_associations: Vec<(String, String)>,
 }
 
-/// Language id → (command, arguments); `None`: disabled for that language.
-pub type ServerOverride = (String, Option<(String, Vec<String>)>);
+/// Language key → server entry; `None`: disabled for that language.
+pub type ServerOverride = (String, Option<crate::lsp::ServerSpec>);
 
 impl Global for Settings {}
 
@@ -518,6 +519,37 @@ pub fn parse_layers_trusted(user: &str, project: &[Layer], trusted: bool) -> Res
     let (s, more) = parse_object(&merged, &quiet);
     warnings.extend(more);
     Ok((s, warnings))
+}
+
+/// One `lsp.servers` entry: `Some(None)` turns the language off, `None` is malformed. An object needs at least one of
+/// `command`, `settings` and `initializationOptions`; a `settings` value that is not an object is warned about and the rest
+/// of the entry still applies.
+fn server_entry(lang: &str, cfg: &Value, warnings: &mut Vec<String>) -> Option<Option<crate::lsp::ServerSpec>> {
+    let o = match cfg {
+        Value::Null => return Some(None),
+        Value::String(cmd) if !cmd.trim().is_empty() => return Some(Some((cmd.clone(), Vec::new()).into())),
+        Value::Object(o) => o,
+        _ => return None,
+    };
+    let command = match o.get("command") {
+        None => None,
+        Some(Value::String(c)) if !c.trim().is_empty() => Some(c.clone()),
+        Some(_) => return None,
+    };
+    if command.is_none() && !o.contains_key("settings") && !o.contains_key("initializationOptions") {
+        return None;
+    }
+    let args = o.get("args").and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default();
+    let settings = match o.get("settings") {
+        None | Some(Value::Null) => Value::Null,
+        Some(v @ Value::Object(_)) => crate::lsp::expand_dotted(v),
+        Some(_) => {
+            warnings.push(format!("settings.jsonc: {}", crate::i18n::tf("{}: expected an object", &[&format!("lsp.servers.{lang}.settings")])));
+            Value::Null
+        }
+    };
+    let init_options = o.get("initializationOptions").filter(|v| !v.is_null()).cloned();
+    Some(Some(crate::lsp::ServerSpec { command, args, settings: std::sync::Arc::new(settings), init_options }))
 }
 
 fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<String>) {
@@ -948,27 +980,14 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         None | Some(Value::Null) => {}
         Some(Value::Object(m)) => {
             for (lang, cfg) in m {
-                let entry = match cfg {
-                    Value::Null => Some(None),
-                    Value::String(cmd) if !cmd.trim().is_empty() => Some(Some((cmd.clone(), Vec::new()))),
-                    Value::Object(o) => match o.get("command").and_then(Value::as_str) {
-                        Some(cmd) => {
-                            let args = o
-                                .get("args")
-                                .and_then(Value::as_array)
-                                .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
-                                .unwrap_or_default();
-                            Some(Some((cmd.to_string(), args)))
-                        }
-                        None => None,
-                    },
-                    _ => None,
-                };
-                match entry {
+                match server_entry(lang, cfg, &mut warnings) {
                     Some(e) => s.lsp_servers.push((lang.clone(), e)),
                     None => warnings.push(format!(
                         "settings.jsonc: {}",
-                        crate::i18n::tf("{0}: expected {1} or null", &[&format!("lsp.servers.{lang}"), &"{ \"command\": \"…\", \"args\": [] }"])
+                        crate::i18n::tf(
+                            "{0}: expected {1} or null",
+                            &[&format!("lsp.servers.{lang}"), &"{ \"command\": \"…\", \"args\": [], \"settings\": {} }"]
+                        )
                     )),
                 }
             }
