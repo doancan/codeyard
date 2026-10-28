@@ -1,6 +1,6 @@
 //! codeyard: lightweight, native code editor. Local + SSH.
 //!
-//!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings]
+//!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions]
 
 // Normal Windows launches are GUI applications in every profile. Test harnesses keep their console.
 #![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
@@ -58,6 +58,9 @@ mod emmet;
 mod encoding;
 #[cfg(test)]
 mod error_ui_tests;
+mod ext;
+#[cfg(test)]
+mod ext_tests;
 #[cfg(test)]
 mod explorer_bulk_tests;
 #[cfg(test)]
@@ -560,11 +563,72 @@ fn bind_keys(cx: &mut App) {
 
 /// Default shortcuts + the user's file (if any). The user's are bound later:
 /// in GPUI the later binding wins. Returns the list of warnings.
+/// Rebuild the keymap in layers, each able to change the one before: the built-in defaults, the keymap preset an extension
+/// ships if the user chose one (`keymap.preset`), key bindings extensions contribute, and the user's `keybindings.jsonc`.
+/// An extension binding never takes a key the defaults or the preset use: a pressed key must keep doing what the user
+/// knows, so such a binding is left out with a warning.
 pub fn apply_keymap(cx: &mut App, user_file: Option<&std::path::Path>) -> Vec<String> {
     cx.clear_key_bindings();
     bind_keys(cx);
-    let Some(text) = user_file.and_then(|p| std::fs::read_to_string(p).ok()) else { return Vec::new() };
-    let (entries, mut warnings) = settings::parse_keybindings(&text);
+    let mut warnings = Vec::new();
+    let preset = cx.try_global::<settings::Settings>().map(|s| s.keymap_preset.clone()).unwrap_or_default();
+    match ext::preset(&preset) {
+        None => {}
+        Some(Ok((label, path))) => match std::fs::read_to_string(&path) {
+            Ok(text) => warnings.extend(bind_file(cx, &text, &label)),
+            Err(e) => warnings.push(format!("{label}: {e}")),
+        },
+        Some(Err(e)) => warnings.push(format!("keymap.preset: {e}")),
+    }
+    warnings.extend(bind_extension_keys(cx));
+    if let Some(text) = user_file.and_then(|p| std::fs::read_to_string(p).ok()) {
+        warnings.extend(bind_file(cx, &text, "keybindings.jsonc"));
+    }
+    warnings
+}
+
+/// Key bindings from extensions, minus any whose keys are already bound.
+fn bind_extension_keys(cx: &mut App) -> Vec<String> {
+    let (list, mut warnings) = ext::bindings();
+    if list.is_empty() {
+        return warnings;
+    }
+    let taken: std::collections::HashSet<String> =
+        cx.key_bindings().borrow().bindings().map(|b| b.keystrokes().iter().map(|k| k.unparse()).collect::<Vec<_>>().join(" ")).collect();
+    let mut bindings = Vec::new();
+    for b in list {
+        let Some(action) = commands::action_by_id(&b.command) else {
+            warnings.push(format!("{}: {}", b.ext, i18n::tf("unknown command “{}”", &[&b.command])));
+            continue;
+        };
+        let predicate = match b.when.as_deref().map(gpui::KeyBindingContextPredicate::parse) {
+            None => None,
+            Some(Ok(p)) => Some(std::rc::Rc::new(p)),
+            Some(Err(e)) => {
+                warnings.push(format!("{}: \"when\": {e}", b.ext));
+                continue;
+            }
+        };
+        match KeyBinding::load(&b.key, action, predicate, false, None, &gpui::DummyKeyboardMapper) {
+            Ok(k) => {
+                let keys = k.keystrokes().iter().map(|k| k.unparse()).collect::<Vec<_>>().join(" ");
+                if taken.contains(&keys) {
+                    warnings.push(format!("{}: {}", b.ext, i18n::tf("“{}” is a built-in shortcut; an extension cannot change it", &[&b.key])));
+                } else {
+                    bindings.push(k);
+                }
+            }
+            Err(e) => warnings.push(format!("{}: \"{}\": {e}", b.ext, b.key)),
+        }
+    }
+    cx.bind_keys(bindings);
+    warnings
+}
+
+/// Bind the entries of a `keybindings.jsonc`-format file; `label` names it in warnings.
+fn bind_file(cx: &mut App, text: &str, label: &str) -> Vec<String> {
+    let (entries, warnings) = settings::parse_keybindings(text);
+    let mut warnings: Vec<String> = warnings.into_iter().map(|w| w.replacen("keybindings.jsonc", label, 1)).collect();
     let mut bindings = Vec::new();
     for b in entries {
         let action: Box<dyn gpui::Action> = match &b.command {
@@ -579,7 +643,7 @@ pub fn apply_keymap(cx: &mut App, user_file: Option<&std::path::Path>) -> Vec<St
                         .max_by_key(|(s, _)| *s)
                         .map(|(_, c)| format!(", did you mean \"{c}\"?"))
                         .unwrap_or_default();
-                    warnings.push(format!("keybindings.jsonc: unknown command \"{id}\"{guess}"));
+                    warnings.push(format!("{label}: unknown command \"{id}\"{guess}"));
                     continue;
                 }
             },
@@ -588,13 +652,13 @@ pub fn apply_keymap(cx: &mut App, user_file: Option<&std::path::Path>) -> Vec<St
             None => None,
             Some(Ok(p)) => Some(std::rc::Rc::new(p)),
             Some(Err(e)) => {
-                warnings.push(format!("keybindings.jsonc: \"when\": {e}"));
+                warnings.push(format!("{label}: \"when\": {e}"));
                 continue;
             }
         };
         match KeyBinding::load(&b.key, action, predicate, false, None, &gpui::DummyKeyboardMapper) {
             Ok(k) => bindings.push(k),
-            Err(e) => warnings.push(format!("keybindings.jsonc: \"{}\": {e}", b.key)),
+            Err(e) => warnings.push(format!("{label}: \"{}\": {e}", b.key)),
         }
     }
     cx.bind_keys(bindings);
@@ -613,6 +677,8 @@ struct Args {
     run: Vec<String>,
     /// Started by the relaunch after an update: reopen the windows the old version left (`update_restart.rs`).
     after_update: bool,
+    /// `--no-extensions`: start with no extension loaded (safe mode).
+    no_extensions: bool,
 }
 
 /// The windows an update restart left for this process; the file is consumed here. Anything wrong with it is logged and means
@@ -652,13 +718,15 @@ fn parse_args() -> Args {
 /// `--do` can press keys, click and run any palette command, "Workspace: Trust This Folder" and tasks among them: whoever builds the
 /// command line (a launcher, a `codeyard://`-style handler, a document's "open with") must not get that from a release build.
 fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
-    let mut args = Args { path: None, connect: None, theme: None, terminal: false, search: None, panel: None, run: Vec::new(), after_update: false };
+    let mut args =
+        Args { path: None, connect: None, theme: None, terminal: false, search: None, panel: None, run: Vec::new(), after_update: false, no_extensions: false };
     let mut it = argv;
     while let Some(a) = it.next() {
         match a.as_str() {
             "--connect" => args.connect = it.next(),
             "--theme" => args.theme = it.next(),
             "--terminal" => args.terminal = true,
+            "--no-extensions" => args.no_extensions = true,
             update_restart::FLAG => args.after_update = true,
             "--search" => args.search = it.next(),
             "--panel" => args.panel = it.next(),
@@ -677,7 +745,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
             }
             "-h" | "--help" => {
                 println!(
-                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings]"
+                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions]"
                 );
                 std::process::exit(0);
             }
@@ -705,6 +773,14 @@ mod args_tests {
         // Its value is not taken for a path, and a trailing --do is harmless.
         assert_eq!(parse(false, &["--do", "key:enter"]).path, None);
         assert!(parse(false, &["--do"]).run.is_empty());
+    }
+
+    #[test]
+    fn safe_mode_turns_extensions_off() {
+        let a = parse(false, &["--no-extensions", "/work"]);
+        assert!(a.no_extensions);
+        assert_eq!(a.path.as_deref(), Some("/work"));
+        assert!(!parse(false, &["/work"]).no_extensions);
     }
 }
 
@@ -874,6 +950,9 @@ fn main() {
     workbench::migrate_legacy_dirs();
     crash::install(workbench::crash_dir());
     let args = parse_args();
+    if args.no_extensions {
+        ext::turn_off();
+    }
     // A folder or host on the command line wins; the file is consumed either way.
     let reopen = args.after_update.then(update_handover).flatten().filter(|_| args.path.is_none() && args.connect.is_none());
     // Finder's "Open With", dropping on the Dock icon and `open -a Codeyard x` addresses are forwarded to the window through this channel

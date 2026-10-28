@@ -24,8 +24,6 @@ pub struct RawManifest {
     #[serde(default)]
     pub themes: Vec<S<RawFileEntry>>,
     #[serde(default)]
-    pub icon_themes: Vec<S<RawFileEntry>>,
-    #[serde(default)]
     pub snippets: Vec<S<RawSnippets>>,
     #[serde(default)]
     pub keymap_preset: Vec<S<RawFileEntry>>,
@@ -41,8 +39,6 @@ pub struct RawManifest {
     pub settings: BTreeMap<S<String>, S<RawSetting>>,
     #[serde(default)]
     pub language_servers: Vec<S<RawLanguageServer>>,
-    #[serde(default)]
-    pub debug_adapters: Vec<S<RawDebugAdapter>>,
     #[serde(default)]
     pub commands: Vec<S<RawCommand>>,
     #[serde(default)]
@@ -99,7 +95,7 @@ pub struct RawActivation {
     pub workspace_contains: Vec<S<String>>,
 }
 
-/// `[[themes]]`, `[[icon-themes]]`, `[[keymap-preset]]`.
+/// `[[themes]]`, `[[keymap-preset]]`.
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct RawFileEntry {
@@ -133,8 +129,6 @@ pub struct RawLanguage {
     pub filenames: Vec<S<String>>,
     /// A built-in grammar to highlight with, by its language id (`rust`, `toml`, …).
     pub grammar: Option<S<String>>,
-    /// Folder of `.scm` queries for that grammar, inside the package.
-    pub queries: Option<S<String>>,
     pub line_comment: Option<S<String>>,
     pub block_comment: Option<S<[String; 2]>>,
 }
@@ -163,18 +157,6 @@ pub struct RawLanguageServer {
     pub command: S<String>,
     #[serde(default)]
     pub args: Vec<String>,
-    pub languages: Vec<S<String>>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct RawDebugAdapter {
-    #[serde(rename = "type")]
-    pub kind: S<String>,
-    pub command: S<String>,
-    #[serde(default)]
-    pub args: Vec<String>,
-    #[serde(default)]
     pub languages: Vec<S<String>>,
 }
 

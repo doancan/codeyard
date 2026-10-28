@@ -180,6 +180,9 @@ dependencies = [
  "buffer",
  "dirs 7.0.0",
  "embed-resource",
+ "ext-core",
+ "ext-manifest",
+ "ext-pkg",
  "futures",
  "gpui",
  "host",
@@ -1890,6 +1893,17 @@ dependencies = [
  "rayon-core",
  "smallvec",
  "zune-inflate",
+]
+
+[[package]]
+name = "ext-core"
+version = "0.5.0"
+dependencies = [
+ "ext-manifest",
+ "ext-pkg",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
 ]
 
 [[package]]
