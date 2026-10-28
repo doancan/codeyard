@@ -561,6 +561,9 @@ wrong. The status bar says *Extensions off* for the whole session, and the Exten
 To keep them off across sessions, set `"extensions.enabled": false` in your own settings (a project's settings cannot
 change it, nor `keymap.preset`).
 
+**Write your own.** *Extensions: New Extension…* creates one and loads it in the window with a DEV badge; it reloads
+when you save. The [extension guide](extensions/developer-guide.md) takes it from there to a `.cyx` package.
+
 ## Git
 
 Uses the `git` on the machine where the files are (locally or on the SSH host), so it
