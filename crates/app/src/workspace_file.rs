@@ -40,7 +40,8 @@ pub fn folders(text: &str, base_dir: &str, exists: impl Fn(&str) -> bool) -> Vec
     out
 }
 
-fn normalize(path: &str) -> String {
+/// Normalize an absolute path lexically, including drive and UNC roots.
+pub(crate) fn normalize(path: &str) -> String {
     let path = if let Some(rest) = path.strip_prefix("//?/UNC/") { format!("//{rest}") } else { path.strip_prefix("//?/").unwrap_or(path).to_string() };
     let drive = path.len() >= 3 && path.as_bytes()[0].is_ascii_alphabetic() && path.as_bytes()[1..3] == *b":/";
     let unc = path.starts_with("//");

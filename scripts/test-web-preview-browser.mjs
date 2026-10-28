@@ -48,6 +48,7 @@ try {
     return result.result.value;
   }
   await until(() => evaluate("document.querySelector('h1')?.textContent === 'Before' && document.documentElement.dataset.script === 'before'"), 'HTML, root-relative JS and cookie authentication');
+  await until(() => evaluate("document.querySelector('script[src=\"/__codeyard_live.js\"]')?.dataset.interval === '500'"), 'configured live reload interval');
   await until(() => evaluate("getComputedStyle(document.querySelector('h1')).color === 'rgb(255, 0, 0)'"), 'initial CSS');
   await evaluate('window.previewSentinel = 42');
   await delay(1200); // Let the agent install its watches and the browser take its initial revision.
@@ -58,7 +59,7 @@ try {
   await until(() => evaluate("document.documentElement.dataset.script === 'after'"), 'JavaScript reload');
   await fs.writeFile(path.join(fixture.root, 'index.html'), '<!doctype html><link rel=stylesheet href=/style.css><h1>After</h1><script src=/app.js></script>');
   await until(() => evaluate("document.querySelector('h1')?.textContent === 'After'"), 'HTML reload');
-  const result = {passed: true, checks: ['HTML rendering', 'authenticated root-relative assets', 'CSS update without navigation', 'JavaScript reload', 'HTML reload', 'external file changes through agent watcher']};
+  const result = {passed: true, checks: ['HTML rendering', 'authenticated root-relative assets', 'configured live reload interval', 'CSS update without navigation', 'JavaScript reload', 'HTML reload', 'external file changes through agent watcher']};
   await fs.writeFile(done, JSON.stringify(result));
   console.log(JSON.stringify(result, null, 2));
 } catch (error) {

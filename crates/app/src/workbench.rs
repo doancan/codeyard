@@ -289,6 +289,7 @@ actions!(
         DockerCancel,
         ShowContainers,
         OpenWebPreview,
+        CopyWebPreviewUrl,
         StopWebPreview,
         WebPreviewLog,
         RemoteWsl,
