@@ -19,7 +19,7 @@ passing their checks. Do not mark a feature complete from unit tests alone.
   workspace tests pass. Required macOS, Windows and Linux PR checks pass on the proposed head.
 - A native-window acceptance pass verifies the changed interaction. Accessibility claims need
   real assistive-technology evidence; platform limitations and unperformed checks remain explicit.
-- Memory/size gates pass. Large-data or rendering changes receive bounded workload measurements.
+- Memory/agent-size and performance gates pass. Large-data or rendering changes receive bounded workload measurements.
 - Each feature has its own PR and professional commits describing the resulting behavior.
   PRs record validation and remaining limitations. Main receives only validated changes.
 
@@ -65,14 +65,19 @@ No feature has completed its PR acceptance yet. Keep acceptance requirements int
   are pending. PR: https://github.com/doancan/codeyard/pull/48. New Turkish strings are drafted and pass localization checks; no human native-speaker
   review or real VoiceOver speech session is claimed.
 
-The first Retina run passed all memory scenes (74/69/94/84/114/77 MB, agent 1 MB), but its
-63,218,688-byte executable exceeded the 60 MiB allocation gate. A separate baseline build was
-63,333,712 bytes, so this was a pre-existing limit breach rather than feature growth. Whole-program
-release LTO reduced the candidate executable to 59,823,376 bytes without dropping functionality
-or lowering optimization of the editor's dependencies. The measured cold build took 198 seconds
-and peaked at 7.14 GB resident memory; final budget and CI runs must validate this configuration.
-The first cross-platform run also found musl has no exported `renameat2` wrapper. Static agents
-now invoke the same exclusive kernel operation directly; local x64 and ARM64 musl builds pass.
+The earlier Retina validation passed all memory scenes (74/69/94/84/116/76 MB, idle agent 1 MB).
+A separate baseline-size investigation confirmed the executable-size breach already existed on the
+baseline. Main subsequently adopted recorded startup/typing/memory comparisons and removed its app
+size gate. This branch now follows that policy and keeps the existing thin-LTO release profile;
+agent size limits remain unchanged. The latest merged-main candidate still needs its performance
+comparison and repeated memory run.
+
+Cross-platform validation found musl has no exported `renameat2` wrapper. Static agents now invoke
+the same exclusive kernel operation directly; local x64/ARM64 builds and Linux CI pass. Native Windows
+packaging passed. Expanded Windows Explorer coverage exposed non-normalized fixture paths and an
+unbounded recursive-read retry after errors. Fixtures now use native-path normalization, read errors
+stop recursion, and a regression asserts no replacement read is scheduled. Windows UI checks are
+being rerun. The daemon permission assertion now waits for its handshake readiness barrier.
 
 Cancellation interrupts staged copies and stops before the next move/delete. A connection loss or
 missing cancellation acknowledgement stops the batch with an explicit uncertain outcome; it never
