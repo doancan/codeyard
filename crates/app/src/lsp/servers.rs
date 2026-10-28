@@ -1,11 +1,52 @@
 //! Language server table: which server serves which file, install hints, user overrides.
 
+use std::sync::Arc;
+
+use serde_json::{Map, Value};
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerConfig {
     /// Key in the settings and the LSP languageId ("rust", "python"...).
     pub language: String,
     pub command: String,
     pub args: Vec<String>,
+    /// The `settings` tree the server reads through `workspace/configuration` (`Null`: none configured).
+    pub settings: Arc<Value>,
+    /// Sent unchanged as `initializationOptions` with `initialize`.
+    pub init_options: Option<Value>,
+}
+
+#[cfg(test)]
+impl ServerConfig {
+    /// A server with no configuration of its own.
+    pub fn plain(language: &str, command: &str, args: Vec<String>) -> Self {
+        ServerConfig { language: language.into(), command: command.into(), args, settings: Arc::new(Value::Null), init_options: None }
+    }
+}
+
+/// One `lsp.servers` entry. `command: None` keeps the default server of the key.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ServerSpec {
+    pub command: Option<String>,
+    pub args: Vec<String>,
+    /// Dotted keys already expanded (`expand_dotted`); `Null` when none is configured. Shared, never copied: a tree can be
+    /// megabytes.
+    pub settings: Arc<Value>,
+    pub init_options: Option<Value>,
+}
+
+impl From<(String, Vec<String>)> for ServerSpec {
+    fn from((command, args): (String, Vec<String>)) -> Self {
+        ServerSpec { command: Some(command), args, ..ServerSpec::default() }
+    }
+}
+
+impl ServerSpec {
+    /// Whether a reload from `self` to `new` needs the server process restarted: everything but `settings` is only read
+    /// at start; `settings` reach a running server through `workspace/didChangeConfiguration`.
+    fn restart_needed(&self, new: &ServerSpec) -> bool {
+        (&self.command, &self.args, &self.init_options) != (&new.command, &new.args, &new.init_options)
+    }
 }
 
 /// File -> (languageId, server key). One server can carry several languages.
@@ -86,6 +127,7 @@ pub fn locations_title(what: &str, n: usize) -> String {
         "outgoing calls" => tn("{} outgoing call", "{} outgoing calls", n, &[]),
         "supertypes" => tn("{} supertype", "{} supertypes", n, &[]),
         "subtypes" => tn("{} subtype", "{} subtypes", n, &[]),
+        "parent modules" => tn("{} parent module", "{} parent modules", n, &[]),
         _ => format!("{n} {what}"),
     }
 }
@@ -137,26 +179,111 @@ pub fn install_hint(key: &str) -> Option<&'static str> {
     DEFAULT_SERVERS.iter().find(|d| d.0 == key).map(|d| d.3)
 }
 
-/// Server definitions from the settings: language → (command, arguments); `None` disables that language.
-pub type ServerOverrides = [(String, Option<(String, Vec<String>)>)];
+/// Server definitions from the settings: language → entry; `None` disables that language. A later entry wins.
+pub type ServerOverrides = [(String, Option<ServerSpec>)];
 
-/// Configuration for a server key: settings override the defaults.
+/// The entry that applies to `key`: `None` when there is none, `Some(None)` when the language is turned off.
+fn override_for<'a>(key: &str, overrides: &'a ServerOverrides) -> Option<Option<&'a ServerSpec>> {
+    overrides.iter().rev().find(|(k, _)| k == key).map(|(_, o)| o.as_ref())
+}
+
+/// Configuration for a server key: settings override the defaults. An entry without `command` configures the default
+/// server; a key with neither a default nor a `command` has no server.
 pub fn server_for(key: &str, overrides: &ServerOverrides) -> Option<ServerConfig> {
-    if let Some((_, o)) = overrides.iter().rev().find(|(k, _)| k == key) {
-        return o.as_ref().map(|(command, args)| ServerConfig { language: key.into(), command: command.clone(), args: args.clone() });
+    let spec = match override_for(key, overrides) {
+        Some(None) => return None,
+        Some(Some(spec)) => Some(spec),
+        None => None,
+    };
+    let (command, args) = match spec.and_then(|s| s.command.as_ref()) {
+        Some(command) => (command.clone(), spec.map(|s| s.args.clone()).unwrap_or_default()),
+        None => {
+            let (command, args) = default_server(key)?;
+            // `args` without `command` would be arguments for a program the user did not name: the default's own apply.
+            (command.to_string(), args.iter().map(|s| s.to_string()).collect())
+        }
+    };
+    Some(ServerConfig {
+        language: key.into(),
+        command,
+        args,
+        settings: spec.map_or_else(|| Arc::new(Value::Null), |s| s.settings.clone()),
+        init_options: spec.and_then(|s| s.init_options.clone()),
+    })
+}
+
+/// What a settings reload means for the running language servers.
+#[derive(Debug, PartialEq)]
+pub enum ServersReload {
+    Unchanged,
+    /// Only `settings` changed for these keys: tell their servers, do not restart them.
+    Settings(Vec<String>),
+    /// A command, its arguments or its initialization options changed, or an entry was added, removed or turned off.
+    Restart,
+}
+
+/// Compares the `lsp.servers` of two settings, key by key (the effective entry of each key, so a duplicate that
+/// changes nothing changes nothing).
+pub fn servers_reload(old: &ServerOverrides, new: &ServerOverrides) -> ServersReload {
+    let mut keys: Vec<&str> = old.iter().chain(new).map(|(k, _)| k.as_str()).collect();
+    keys.sort_unstable();
+    keys.dedup();
+    let mut settings = Vec::new();
+    for key in keys {
+        match (override_for(key, old), override_for(key, new)) {
+            (a, b) if a == b => {}
+            (Some(Some(a)), Some(Some(b))) if !a.restart_needed(b) => settings.push(key.to_string()),
+            _ => return ServersReload::Restart,
+        }
     }
-    let (command, args) = default_server(key)?;
-    Some(ServerConfig { language: key.into(), command: command.into(), args: args.iter().map(|s| s.to_string()).collect() })
+    if settings.is_empty() { ServersReload::Unchanged } else { ServersReload::Settings(settings) }
+}
+
+/// Expands dotted keys into nested objects (`"a.b": 1` → `{ "a": { "b": 1 } }`), in document order: when two forms set
+/// the same key, objects are merged and otherwise the later one wins. Keys with an empty segment (`"a..b"`, `".a"`) are
+/// kept as they are.
+pub fn expand_dotted(v: &Value) -> Value {
+    let Value::Object(m) = v else { return v.clone() };
+    let mut out = Map::new();
+    for (k, v) in m {
+        let v = expand_dotted(v);
+        let path: Vec<&str> = if k.split('.').any(str::is_empty) { vec![k.as_str()] } else { k.split('.').collect() };
+        insert_path(&mut out, &path, v);
+    }
+    Value::Object(out)
+}
+
+fn insert_path(obj: &mut Map<String, Value>, path: &[&str], v: Value) {
+    let (first, rest) = path.split_first().expect("a key has at least one segment");
+    if rest.is_empty() {
+        match (obj.get_mut(*first), v) {
+            (Some(Value::Object(old)), Value::Object(new)) => {
+                for (k, v) in new {
+                    insert_path(old, &[k.as_str()], v);
+                }
+            }
+            (_, v) => {
+                obj.insert(first.to_string(), v);
+            }
+        }
+        return;
+    }
+    let slot = obj.entry(first.to_string()).or_insert_with(|| Value::Object(Map::new()));
+    if !slot.is_object() {
+        *slot = Value::Object(Map::new());
+    }
+    insert_path(slot.as_object_mut().expect("just made an object"), rest, v);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn server_overrides() {
         assert_eq!(server_for("rust", &[]).unwrap().command, "rust-analyzer");
-        let o = vec![("python".to_string(), Some(("pylsp".to_string(), vec![]))), ("go".to_string(), None)];
+        let o = vec![("python".to_string(), Some(("pylsp".to_string(), vec![]).into())), ("go".to_string(), None)];
         assert_eq!(server_for("python", &o).unwrap().command, "pylsp");
         assert!(server_for("go", &o).is_none(), "null disables");
         assert_eq!(language_of("/a/b.tsx"), Some(("typescriptreact", "typescript")));
@@ -216,13 +343,91 @@ mod tests {
             assert!(server_for(k, &[]).is_none(), "{key} must have no default server");
             assert!(install_hint(k).is_none());
         }
-        let o = vec![("toml".to_string(), Some(("taplo".to_string(), vec!["lsp".to_string(), "stdio".to_string()])))];
+        let o = vec![("toml".to_string(), Some(("taplo".to_string(), vec!["lsp".to_string(), "stdio".to_string()]).into()))];
         let cfg = server_for("toml", &o).unwrap();
         assert_eq!((cfg.command.as_str(), cfg.args.as_slice()), ("taplo", &["lsp".to_string(), "stdio".to_string()][..]));
         // Defaults can be turned off, and a later entry wins over an earlier one.
         let off = vec![("java".to_string(), None)];
         assert!(server_for("java", &off).is_none());
-        let twice = vec![("php".to_string(), None), ("php".to_string(), Some(("phpactor".to_string(), vec!["language-server".to_string()])))];
+        let twice = vec![("php".to_string(), None), ("php".to_string(), Some(("phpactor".to_string(), vec!["language-server".to_string()]).into()))];
         assert_eq!(server_for("php", &twice).unwrap().command, "phpactor");
+    }
+
+    fn spec(command: Option<&str>, settings: Value, init: Option<Value>) -> Option<ServerSpec> {
+        Some(ServerSpec { command: command.map(str::to_string), args: Vec::new(), settings: Arc::new(settings), init_options: init })
+    }
+
+    /// An entry with only `settings` keeps the default server and carries the settings; `command` replaces it.
+    #[test]
+    fn server_for_falls_back_to_the_default_command_and_keeps_settings() {
+        let tree = json!({ "rust-analyzer": { "check": { "command": "clippy" } } });
+        let o = vec![("rust".to_string(), spec(None, tree.clone(), Some(json!({ "cargo": { "features": ["x"] } }))))];
+        let cfg = server_for("rust", &o).unwrap();
+        assert_eq!((cfg.command.as_str(), cfg.args.len()), ("rust-analyzer", 0));
+        assert_eq!(*cfg.settings, tree);
+        assert_eq!(cfg.init_options, Some(json!({ "cargo": { "features": ["x"] } })));
+        // A default server's own arguments stay when only settings are given.
+        let o = vec![("python".to_string(), spec(None, json!({ "python": {} }), None))];
+        assert_eq!(server_for("python", &o).unwrap().args, vec!["--stdio".to_string()]);
+        let o = vec![("go".to_string(), spec(Some("my-gopls"), json!({ "gopls": {} }), None))];
+        let cfg = server_for("go", &o).unwrap();
+        assert_eq!((cfg.command.as_str(), &*cfg.settings), ("my-gopls", &json!({ "gopls": {} })));
+        // Without an entry: no settings, no options.
+        let cfg = server_for("rust", &[]).unwrap();
+        assert_eq!((&*cfg.settings, cfg.init_options), (&Value::Null, None));
+    }
+
+    /// `json` has no default server: settings alone start nothing.
+    #[test]
+    fn a_key_with_no_default_and_no_command_has_no_server() {
+        let o = vec![("json".to_string(), spec(None, json!({ "json": { "format": {} } }), None))];
+        assert!(server_for("json", &o).is_none());
+    }
+
+    #[test]
+    fn a_reload_restarts_only_for_what_a_running_server_cannot_take() {
+        let base = vec![("rust".to_string(), spec(None, json!({ "a": 1 }), None)), ("go".to_string(), spec(Some("gopls"), Value::Null, None))];
+        assert_eq!(servers_reload(&base, &base.clone()), ServersReload::Unchanged);
+        // Only settings: no restart, just the key.
+        let mut only_settings = base.clone();
+        only_settings[0].1 = spec(None, json!({ "a": 2 }), None);
+        assert_eq!(servers_reload(&base, &only_settings), ServersReload::Settings(vec!["rust".into()]));
+        // Arguments, options or the command: restart.
+        let mut args = base.clone();
+        args[1].1.as_mut().unwrap().args = vec!["-rpc.trace".into()];
+        assert_eq!(servers_reload(&base, &args), ServersReload::Restart);
+        let mut init = base.clone();
+        init[0].1 = spec(None, json!({ "a": 1 }), Some(json!({})));
+        assert_eq!(servers_reload(&base, &init), ServersReload::Restart);
+        // Added, removed, turned off.
+        assert_eq!(servers_reload(&base, &base[..1]), ServersReload::Restart);
+        assert_eq!(servers_reload(&base[..1], &base), ServersReload::Restart);
+        let mut off = base.clone();
+        off[1].1 = None;
+        assert_eq!(servers_reload(&base, &off), ServersReload::Restart);
+        // A duplicate that leaves the effective entry as it was changes nothing.
+        let mut dup = base.clone();
+        dup.insert(0, ("go".to_string(), None));
+        assert_eq!(servers_reload(&base, &dup), ServersReload::Unchanged);
+    }
+
+    #[test]
+    fn dotted_keys_expand_and_merge_in_document_order() {
+        let v: Value = serde_json::from_str(
+            r#"{ "rust-analyzer": { "check": { "command": "check", "extraArgs": [] } }, "rust-analyzer.check.command": "clippy",
+                 "rust-analyzer.cargo.features": ["x"], "a.b": 1, "a": { "c": 2 }, "x": 1, "x.y": 2, "..odd": 3,
+                 "deep": { "p.q": { "r.s": true } } }"#,
+        )
+        .unwrap();
+        let e = expand_dotted(&v);
+        assert_eq!(e["rust-analyzer"], json!({ "check": { "command": "clippy", "extraArgs": [] }, "cargo": { "features": ["x"] } }));
+        assert_eq!(e["a"], json!({ "b": 1, "c": 2 }), "nested after dotted merges");
+        assert_eq!(e["x"], json!({ "y": 2 }), "a later dotted key replaces a value that is not an object");
+        assert_eq!(e["..odd"], json!(3));
+        assert_eq!(e["deep"], json!({ "p": { "q": { "r": { "s": true } } } }), "inside nested objects too");
+        // Later nested form wins over an earlier dotted one, at the leaf.
+        let v: Value = serde_json::from_str(r#"{ "a.b": 1, "a": { "b": 2 } }"#).unwrap();
+        assert_eq!(expand_dotted(&v), json!({ "a": { "b": 2 } }));
+        assert_eq!(expand_dotted(&json!([1, { "a.b": 1 }])), json!([1, { "a.b": 1 }]), "arrays are values, not settings");
     }
 }

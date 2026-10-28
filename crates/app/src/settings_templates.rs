@@ -60,8 +60,8 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Extra globs skipped by search (on top of files.exclude).
   // "search.exclude": ["**/dist", "*.min.js"],
 
-  // File and folder icons: "minimal", "codeyard", "badges", "colorful", "apple", "material", "none"
-  "workbench.iconTheme": "minimal",
+  // File and folder icons: "glyphs", "minimal", "codeyard", "badges", "colorful", "apple", "material", "none"
+  "workbench.iconTheme": "glyphs",
   "workbench.statusBar.visible": true,
   "workbench.activityBar.visible": true,
   // UI font for the whole window (the editor has its own "editor.fontFamily").
@@ -70,6 +70,9 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   "workbench.tabs.showIcons": true,
   // "hover" (the x shows on the active tab or on hover), "always", "off"
   "workbench.tabs.closeButton": "hover",
+  // "on" leaves out animations (blinking cursor, spinners, sliding panels); "auto" follows the system's
+  // Reduce motion setting (macOS, Windows).
+  "workbench.reduceMotion": "auto",
   "workbench.breadcrumbs.enabled": true,
   // Override any color of the theme (roles: bg, surface, accent, text, syntax-keyword …).
   // "[theme name]": { … } applies to that theme only.
@@ -136,8 +139,8 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Fetch in the background while the window is in front, every this many seconds (30 or more). Not in folders you have not trusted.
   "git.autofetch": false,
   "git.autofetchPeriod": 180,
-  // Ask before Sync pulls or pushes (your own settings only: a folder cannot turn the question off).
-  "git.confirmSync": true,
+  // Ask before Sync pulls or pushes (your own settings only: a folder cannot change it).
+  "git.confirmSync": false,
   // Pull with rebase instead of a merge commit.
   "git.rebaseWhenSync": false,
   // Fetch drops remote branches that no longer exist, pull also fetches all tags, and fetchOnPull fetches every remote first.
@@ -159,6 +162,8 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // "terminal.shell": "/bin/zsh",
   // Default: 12 on macOS, 14 on Windows and Linux.
   // "terminal.fontSize": 12,
+  // Row height as a multiple of the font size (1 to 2).
+  "terminal.lineHeight": 1.2,
   "terminal.scrollback": 2000,
   "terminal.scrollSensitivity": 2,
   // Let programs in the terminal write to the clipboard (OSC 52). Off by default: a program you run, or a file you cat, could replace
@@ -194,6 +199,7 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // ruby-lsp, kotlin-language-server, sourcekit-lsp, lua-language-server, bash-language-server, vscode-html/css-language-server.
   // Keys: rust c go python typescript java csharp php ruby kotlin swift lua bash html css (opt-in: json yaml toml).
   // "lsp.servers": { "python": { "command": "pylsp", "args": [] }, "go": null },
+  // Server settings, without replacing the server: "lsp.servers": { "rust": { "settings": { "rust-analyzer.check.command": "clippy" } } },
   "lsp.enabled": true,
 }
 "##;

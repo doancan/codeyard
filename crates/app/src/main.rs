@@ -28,6 +28,8 @@ mod crash;
 mod dap;
 mod debug_model;
 // --- data ---
+#[cfg(test)]
+mod a11y_ui_tests;
 mod datalens;
 mod datalens_decode;
 mod datalens_query;
@@ -101,11 +103,19 @@ mod port_forwards;
 mod ports;
 mod problems;
 #[cfg(test)]
+mod qa_debug_rust_tests;
+#[cfg(test)]
 mod qa_debug_tests;
 #[cfg(test)]
 mod qa_editor_tests;
 #[cfg(test)]
 mod qa_integration_tests;
+#[cfg(test)]
+mod qa_lsp_diagnostics_tests;
+#[cfg(test)]
+mod qa_lsp_rust_commands_tests;
+#[cfg(test)]
+mod qa_lsp_settings_tests;
 #[cfg(test)]
 mod qa_workbench_tests;
 #[cfg(test)]
@@ -132,6 +142,7 @@ mod structural;
 #[cfg(test)]
 mod structural_tests;
 mod sysopen;
+mod system_prefs;
 mod terminal;
 mod terminal_osc;
 mod terminal_paste;
@@ -140,6 +151,8 @@ mod terminal_profiles;
 mod test_files;
 #[cfg(test)]
 mod test_git;
+#[cfg(test)]
+mod test_lsp;
 #[cfg(test)]
 mod test_sshd;
 mod testexp;
@@ -785,13 +798,17 @@ pub fn open_workbench_window(cx: &mut App) -> Option<gpui::WindowHandle<Workbenc
                     traffic_light_position: Some(gpui::point(px(12.), px(10.))),
                 }),
                 window_min_size: Some(size(px(480.), px(320.))),
+                // Windows: the UI Automation adapter must be attached before the window is first shown.
+                show: !cfg!(windows),
                 ..Default::default()
             },
             |window, cx| cx.new(|cx| Workbench::new(window, cx)),
         )
         .ok()?;
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", windows))]
     workbench::a11y::attach(window, cx);
+    #[cfg(windows)]
+    window.update(cx, |_, window, _| window.activate_window()).ok();
     window
         .update(cx, |_, window, cx| {
             let entity = cx.entity().downgrade();
@@ -862,6 +879,7 @@ fn main() {
         menus::install(cx);
         cx.set_global(ActiveTheme(theme::DARK));
         cx.set_global(settings::Settings::default());
+        system_prefs::refresh(cx);
         let window = open_workbench_window(cx).expect("could not open window");
         #[cfg(unix)]
         install_askpass(cx);
@@ -1008,6 +1026,9 @@ fn main() {
         cx.on_window_closed(|cx| {
             if cx.windows().is_empty() {
                 cx.quit();
+            } else {
+                #[cfg(target_os = "macos")]
+                crate::menus::refresh_dock_windows(cx);
             }
         })
         .detach();

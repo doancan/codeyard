@@ -235,6 +235,7 @@ Color Theme…
 Color matching brackets by nesting depth	
 Color symbols by their meaning, from the language server	
 Color theme of the whole window and the editor	
+Colored file glyphs, folders with only their arrow; names line up	
 Colorful Folders	
 Column {0}: {1}	
 Columns	
@@ -511,6 +512,7 @@ Dev Container is ready. The current workspace or unsaved files changed, so it wa
 Dev Container result: {}	
 Dev Container setup failed: {}. Check Output and install the Dev Container CLI if it is missing.	
 Developer: Restart Language Servers	
+Diagnostic copied	
 Diff view side by side (off: inline)	
 Disable All Breakpoints	
 Disable Breakpoint	
@@ -580,6 +582,7 @@ Edit “{}”: which setting?
 Edit, test, set up key login, remove	
 Editor	
 Editor font (empty: built-in monospace)	
+Editor tabs	
 Editor: Add Cursor Above	
 Editor: Add Cursor Below	
 Editor: Add Line Comment	
@@ -713,6 +716,7 @@ Fetched
 Fetching in the background: try again in a moment.	
 Fetching…	
 File	
+File Glyphs (Default)	
 File Icon Theme	
 File Icon Theme…	
 File and folder icons	
@@ -984,6 +988,7 @@ Language servers are off in “{}” until you trust it: they can run the projec
 Later	
 Latest 300 lines; refreshed with resource snapshots.	
 Learn	
+Leave out animations: the blinking cursor, spinners and sliding panels (auto: follow the system setting)	
 Left is writable	
 Left ↔ Right	
 Let programs in the terminal write to the clipboard	
@@ -1056,7 +1061,7 @@ Merging {}…
 Message (↵ to commit)	
 Mine	
 Minified	
-Minimal (Default)	
+Minimal	
 Minimize	
 Minimize window	
 Modified	
@@ -1113,6 +1118,7 @@ Next Match
 Next Problem	
 Next match (↵)	
 Next result (F4)	
+No Cargo.toml found for this file	
 No Configurations	
 No Docker contexts found. Install Docker and start its engine.	
 No SSH host connected	
@@ -1162,6 +1168,7 @@ No line comment syntax for this file type
 No lines match “{}”.	
 No log lines match the current filters.	
 No log output	
+No macro at the cursor	
 No matches	
 No matching folders	
 No merge conflicts in this file	
@@ -1172,6 +1179,8 @@ No mounted storage
 No outgoing calls found	
 No outline for this file type.	
 No output yet. Language server logs appear here.	
+No parent module found	
+No problem at the cursor	
 No problems in this file	
 No problems.	
 No problems. Language servers start when you open a file.	
@@ -1264,6 +1273,7 @@ Open Setup Instructions
 Open System Settings	
 Open a .http or .rest file to send requests.	
 Open a Markdown file (.md) to preview it.	
+Open a Rust file first	
 Open a file first	
 Open a file first.	
 Open a file inside a folder to run its tests.	
@@ -1368,6 +1378,7 @@ Previous Problem
 Previous match (⇧↵)	
 Previous result (⇧F4)	
 Problems	
+Problems: Copy Full Diagnostic	
 Process ended. Press any key to close.	
 Process exited with code {}	
 Process exited with code {}. Press any key to close.	
@@ -1583,6 +1594,10 @@ Run to Cursor
 Running	
 Running the program in a terminal is not supported on Windows yet: use {} in the configuration.	
 Running…	
+Rust formatters not loaded: {}	
+Rust: Expand Macro Recursively	
+Rust: Locate Parent Module	
+Rust: Open Cargo.toml	
 SSH Hosts	
 SSH host	
 SSH {0}: {1}. Docker must be installed and accessible to the SSH user on the remote host.	
@@ -1780,6 +1795,7 @@ Storage type
 String interpolation is not supported	
 Structural search: the pattern is code; $X matches one node, $$$X several	
 Suggest words from the file when there is no language server	
+Suggestions	
 Suggestions pop up while typing (off: only Ctrl+Space)	
 Sunday	
 Switch Workspace or Connect to Host…	
@@ -1801,6 +1817,8 @@ Tasks: Run Build Task
 Tasks: Run Task…	
 Terminal	
 Terminal colour	
+Terminal row height, as a multiple of the font size	
+Terminal {0} of {1}	
 Terminal: Change Color…	
 Terminal: Clear	
 Terminal: Close	
@@ -1831,6 +1849,7 @@ Testing {}…
 Tests: {0} passed, {1} failed	
 That does not look like a repository address.	
 The JavaScript debugger is already installed.	
+The Rust language server does not support this command	
 The SSH connection is gone: reconnect to forward again	
 The TLS/SSL handshake with {} failed (certificate or protocol problem): {}	
 The Timeline section of the explorer lists the commits of the open file; click one to see its diff.	
@@ -1901,6 +1920,7 @@ The workspace file lists no folder that exists on this computer.
 The workspace has no extra folders.	
 The {} dictionary is installed and on.	
 Theme skipped: {}	
+Theme “{1}”: {0} colour pair is below WCAG AA contrast ({2} on {3}: {4}:1, needs {5}:1)|Theme “{1}”: {0} colour pairs are below WCAG AA contrast, for example {2} on {3}: {4}:1, needs {5}:1	
 Theme: Open User Themes Folder	
 Theme: Pick Color Theme…	
 Theme: Pick File Icon Theme…	
@@ -2179,6 +2199,7 @@ failed
 fetches {} from {}	
 field	
 file	
+files not found in the toolchain	
 files.associations.{}: expected a language name or extension	
 files.autoSave: unknown value {} (off, afterDelay, onFocusChange)	
 flatten depth must not be negative	
@@ -2218,6 +2239,7 @@ latest {} open
 left	
 light	
 limit needs a whole number	
+line {0}: {1}	
 lines {0}–{1}	
 link target differs	
 local agent, protocol test	
@@ -2262,6 +2284,7 @@ request failed
 review needed	
 right	
 running	
+rustc not found	
 seconds	
 send the request named “{}” first	
 sends {} to {}	
@@ -2459,6 +2482,7 @@ your words
 {} no longer exists, so it was not reopened.	
 {} open	
 {} outgoing call|{} outgoing calls	
+{} parent module|{} parent modules	
 {} ports are forwarded	
 {} reference|{} references	
 {} result in 1 file|{} results in 1 file	

@@ -16,6 +16,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   live page/CSS refresh, status-bar controls and Output logging. Local, SSH and container files share the
   same agent-backed path; no external runtime or remote listening port is required. Disabling the module
   or leaving the workspace stops its server.
+- File icon theme "File Glyphs" (`workbench.iconTheme: "glyphs"`, now the default): colored file glyphs and no folder icons. A
+  file's glyph sits in the column of a folder's arrow, so every name in a level lines up.
+- The macOS Dock menu lists the open windows at the top, front one first, and follows as windows come forward, open, close or
+  change title; choosing one brings it to the front. Recent projects follow, newest first, without those already open.
+- `terminal.lineHeight` sets the terminal's row height as a multiple of the font size (1–2, default 1.2).
+- Language servers take their own configuration from `lsp.servers`: `settings` (what the server reads as its configuration,
+  dotted keys allowed) and `initializationOptions`, with or without `command`. Rust developers can now turn on Clippy on save
+  (`"rust-analyzer.check.command": "clippy"`) and analyse code behind Cargo features. Changing `settings` reaches a running
+  server without a restart; it works the same in SSH folders.
+- Problems explain themselves: the places a language server attaches to a problem ("value moved here", "borrow later used
+  here") show under it in the hover and in Problems, and a click opens them. The problem's code comes first (`E0382: …`), and
+  *Problems: Copy Full Diagnostic* copies the compiler's complete message, as a terminal shows it.
+- Rust commands: *Rust: Expand Macro Recursively* shows a macro's expansion in a scratch tab, *Rust: Locate Parent Module*
+  jumps to the `mod` line that includes the file, and *Rust: Open Cargo.toml* opens the crate's manifest.
+- Screen readers on macOS see the editor tabs as a tab list (name, modified, the tab in front) and can bring a tab to the
+  front. Notices are spoken when they appear: errors, including a file that could not be opened, interrupt speech. Before,
+  errors were not exposed at all.
+- `ACCESSIBILITY.md` states what works with a screen reader, the keyboard, zoom and high-contrast themes, the known gaps, and
+  how to report a barrier with the new *Accessibility barrier* issue form.
+- Screen readers on Windows: NVDA, JAWS and Narrator get the same accessibility tree as VoiceOver, through UI Automation.
+- Screen readers reach the command palette and every other picker (query, list, the selected row as it changes), the find bar
+  (fields, the match count as it changes, options with their state, buttons), suggestions while typing, the terminal's
+  screen and every folder of a multi-folder workspace.
+- `workbench.reduceMotion` leaves out animations (blinking cursor, spinners, fading panels, the sliding progress bar); `auto`
+  follows the system's Reduce motion setting on macOS and Windows. The *Auto* theme switches to the high-contrast pair while
+  the system asks for more contrast.
+- Choosing a theme or changing `workbench.colorCustomizations` says so when the colours in use fall below WCAG AA contrast,
+  with the first failing pair.
+- The debugger shows Rust values as values: lldb-dap starts with the formatters of the toolchain that builds the program, so
+  `String`, `Vec`, `HashMap` and `Option` read as text and elements, and with `rust-src` installed stepping into the
+  standard library opens its source. Locally and over SSH (the server's toolchain); the Debug Console says when they cannot
+  be loaded.
+
+### Changed
+
+- Sync no longer asks before it pulls or pushes: `git.confirmSync` now defaults to `false` (turn it on in your own settings to
+  get the question back). The status bar keeps the ↓/↑ counts visible at every width, marks a branch with uncommitted changes
+  with `*` and says "Publish Branch" for an unpublished branch.
+- The terminal keeps 14 px of space at the sides and 8 px at the top and bottom instead of running into the panel's edges, and its
+  rows are 1.2 × the font size instead of the editor's looser 1.5 ×.
+- File tree rows are a little taller and roomier (24 px rows, wider side padding and icon gap).
+
+### Fixed
+
+- The workspace-symbol test ran with language servers turned off, so it could never pass; it now starts rust-analyzer.
 
 ## [0.5.0] - 2026-10-27
 

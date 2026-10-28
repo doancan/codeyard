@@ -12,6 +12,12 @@ use proto::DirEntry;
 
 use crate::ui::{self, c, icon, layout, palette};
 
+/// Row metrics: a little taller and roomier than the shared list row, so a deep tree stays easy to scan and to hit.
+const ROW_H: f32 = 24.;
+const ROW_PAD_L: f32 = 10.;
+const ROW_PAD_R: f32 = 12.;
+const ROW_GAP: f32 = 6.;
+
 actions!(
     tree,
     [
@@ -812,7 +818,7 @@ impl Render for FileTree {
                                 return div()
                                     .id(("tree-spacer", ix))
                                     .w_full()
-                                    .h(px(layout::ROW_H))
+                                    .h(px(ROW_H))
                                     .on_mouse_down(
                                         MouseButton::Left,
                                         cx.listener(|this, _, window, cx| {
@@ -832,19 +838,27 @@ impl Render for FileTree {
                                 _ => None,
                             };
                             let expanded = this.expanded.contains(&row.path);
-                            // Folder: arrow + folder icon. File: spacing the width of the arrow + icon by type.
+                            // Folder: arrow + folder icon. File: spacing the width of the arrow + icon by type. A theme without
+                            // folder icons puts the file's icon in the arrow's column instead, so every name in a level lines up.
+                            let folder_icons = crate::icon_theme::current().folder_icons();
                             let lead = if !row.is_dir {
-                                div().w(px(layout::ICON)).flex_none().into_any_element()
+                                if folder_icons {
+                                    div().w(px(layout::ICON)).flex_none().into_any_element()
+                                } else {
+                                    crate::icon_theme::file_icon_el(&row.name, layout::ICON, &p)
+                                }
                             } else if row.loading {
                                 ui::spinner(("tree-load", ix), layout::ICON, p.text_muted).into_any_element()
                             } else {
                                 icon(if expanded { "chevron-down" } else { "chevron-right" }, layout::ICON, p.text_muted).into_any_element()
                             };
                             let indent = cx.global::<crate::settings::Settings>().tree_indent;
-                            let leading_icon = if row.is_dir {
-                                crate::icon_theme::folder_icon_el(row.name.rsplit('/').next().unwrap_or(&row.name), expanded, layout::ICON, &p)
+                            let leading_icon = if !folder_icons {
+                                None
+                            } else if row.is_dir {
+                                Some(crate::icon_theme::folder_icon_el(row.name.rsplit('/').next().unwrap_or(&row.name), expanded, layout::ICON, &p))
                             } else {
-                                crate::icon_theme::file_icon_el(&row.name, layout::ICON, &p)
+                                Some(crate::icon_theme::file_icon_el(&row.name, layout::ICON, &p))
                             };
                             // The dropped item goes into the folder; if dropped on a file, into that file's folder.
                             let drop_dir = if row.is_dir { row.path.clone() } else { row.path.rsplit_once('/').map_or(String::new(), |(d, _)| d.to_string()) };
@@ -865,12 +879,12 @@ impl Render for FileTree {
                                 }))
                                 .relative()
                                 .w_full()
-                                .h(px(layout::ROW_H))
+                                .h(px(ROW_H))
                                 .flex()
                                 .items_center()
-                                .gap(px(theme::SPACE[2]))
-                                .pl(px(theme::SPACE[3] + row.depth as f32 * indent))
-                                .pr(px(theme::SPACE[4]))
+                                .gap(px(ROW_GAP))
+                                .pl(px(ROW_PAD_L + row.depth as f32 * indent))
+                                .pr(px(ROW_PAD_R))
                                 .whitespace_nowrap()
                                 .overflow_hidden()
                                 .when_some(bg, |d, bg| d.bg(c(bg)))
@@ -883,12 +897,12 @@ impl Render for FileTree {
                                         .absolute()
                                         .top_0()
                                         .bottom_0()
-                                        .left(px(theme::SPACE[3] + col as f32 * indent + layout::ICON / 2.))
+                                        .left(px(ROW_PAD_L + col as f32 * indent + layout::ICON / 2.))
                                         .w(px(1.))
                                         .bg(ui::ca(p.text_muted, if on { 0.6 } else { 0.16 }))
                                 }))
                                 .child(lead)
-                                .child(leading_icon)
+                                .children(leading_icon)
                                 .child({
                                     let mark = this.git.get(&row.path).copied();
                                     div()

@@ -96,7 +96,7 @@ status bar reports it.
 | --- | --- | --- | --- |
 | `git.autofetch` | `true` / `false` | `false` | Fetch from the remote in the background while the window is in front |
 | `git.autofetchPeriod` | number 30–86400 | `180` | Seconds between background fetches |
-| `git.confirmSync` | `true` / `false` | `true` | Ask before Sync pulls or pushes. Your own settings only; a folder cannot change it |
+| `git.confirmSync` | `true` / `false` | `false` | Ask before Sync pulls or pushes. Your own settings only; a folder cannot change it |
 | `git.enableSmartCommit` | `true` / `false` | `true` | Commit all tracked changes when nothing is staged |
 | `git.fetchOnPull` | `true` / `false` | `false` | Fetch every remote before pulling |
 | `git.graph.allBranches` | `true` / `false` | `true` | Graph starts with every branch |
@@ -176,6 +176,7 @@ status bar reports it.
 | `terminal.confirmOnClose` | `running`, `always`, `never` | `running` | Ask before closing a terminal |
 | `terminal.defaultProfile` | text | empty | Profile new terminals use |
 | `terminal.fontSize` | number 6–48 | `12` on macOS, `14` on Windows and Linux | Font size of the terminal |
+| `terminal.lineHeight` | number 1–2 | `1.2` | Terminal row height, as a multiple of the font size |
 | `terminal.sanitizePaste` | `auto`, `always`, `off` | `auto` | Remove control characters from pasted text |
 | `terminal.scrollSensitivity` | number 0.1–10 | `2.0` | Mouse wheel and trackpad scroll speed multiplier |
 | `terminal.scrollback` | number 0–50000 | `2000` | Lines kept in terminal history |
@@ -210,7 +211,8 @@ status bar reports it.
 | `workbench.breadcrumbs.enabled` | `true` / `false` | `true` | Show the file path above the editor |
 | `workbench.editor.showTabs` | `true` / `false` | `true` | Show the editor tab bar |
 | `workbench.fontFamily` | text | empty | UI font of the whole window (empty: system font) |
-| `workbench.iconTheme` | `minimal`, `codeyard`, `badges`, `colorful`, `apple`, `material`, `none` | `minimal` | File and folder icons |
+| `workbench.iconTheme` | `glyphs`, `minimal`, `codeyard`, `badges`, `colorful`, `apple`, `material`, `none` | `glyphs` | File and folder icons |
+| `workbench.reduceMotion` | `auto`, `on`, `off` | `auto` | Leave out animations: the blinking cursor, spinners and sliding panels (auto: follow the system setting) |
 | `workbench.statusBar.visible` | `true` / `false` | `true` | Show the status bar |
 | `workbench.tabs.closeButton` | `hover`, `always`, `off` | `hover` | When the close button of a tab shows |
 | `workbench.tabs.showIcons` | `true` / `false` | `true` | Show file icons on tabs |
@@ -236,6 +238,6 @@ status bar reports it.
 | `ports.rules` | object of port or range → rule | `{}` | Label, protocol (`http`, `https`, `tcp`) and detection behaviour (`notify`, `silent`, `openBrowser`, `ignore`) per forwarded port, e.g. `{ "3000": { "label": "web", "onForward": "openBrowser" } }`; a single port beats a range. |
 | `json.schemas` | list of `{ fileMatch, url }` | `[]` | Associate JSON files with a schema (URL or path relative to the workspace). Ignored in untrusted folders. |
 | `yaml.schemas` | object of schema → globs | `{}` | Associate YAML files with a schema. Ignored in untrusted folders. |
-| `lsp.servers` | object of language → `{ command, args }` or `null` | built-in servers | Replace or turn off (`null`) the language server of a language. Keys: `rust`, `c`, `go`, `python`, `typescript`, `java`, `csharp`, `php`, `ruby`, `kotlin`, `swift`, `lua`, `bash`, `html`, `css`; `json`, `yaml` and `toml` have no default and are opt-in. Ignored in untrusted folders. |
+| `lsp.servers` | object of language → `{ command, args, settings, initializationOptions }` or `null` | built-in servers | Replace, configure or turn off (`null`) the language server of a language. `settings` is what the server reads as its configuration (dotted keys are nested objects; a change reaches a running server without a restart), `initializationOptions` is sent when it starts; without `command` the default server is used. Keys: `rust`, `c`, `go`, `python`, `typescript`, `java`, `csharp`, `php`, `ruby`, `kotlin`, `swift`, `lua`, `bash`, `html`, `css`; `json`, `yaml` and `toml` have no default and are opt-in. Ignored in untrusted folders. |
 | `spelling.languages` | list of dictionary ids | `["en"]` | Dictionaries used together; install more with *Spelling: Install Dictionary…*. |
 | `workbench.colorCustomizations` | object | `{}` | Override single colour roles; an entry in `[Theme Name]` applies to that theme only. |

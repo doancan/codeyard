@@ -355,7 +355,7 @@ fn qa_lsp_crash_loop_by_signal_is_bounded(cx: &mut TestAppContext) {
     let starts = dir.join("starts.log");
     std::fs::write(dir.join("main.c"), "int main(void) { return 0; }\n").unwrap();
     let settings = Settings {
-        lsp_servers: vec![("c".into(), Some((script.to_string_lossy().into_owned(), vec![starts.to_string_lossy().into_owned()])))],
+        lsp_servers: vec![("c".into(), Some((script.to_string_lossy().into_owned(), vec![starts.to_string_lossy().into_owned()]).into()))],
         ..Settings::default()
     };
     let (wb, cx) = setup_with(cx, settings);
@@ -378,7 +378,7 @@ fn qa_lsp_crash_loop_by_signal_is_bounded(cx: &mut TestAppContext) {
 fn qa_lsp_missing_server_is_reported(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-lspmissing");
     std::fs::write(dir.join("main.c"), "int main(void) { return 0; }\n").unwrap();
-    let settings = Settings { lsp_servers: vec![("c".into(), Some(("/nonexistent/qa-ls".into(), vec![])))], ..Settings::default() };
+    let settings = Settings { lsp_servers: vec![("c".into(), Some(("/nonexistent/qa-ls".into(), vec![]).into()))], ..Settings::default() };
     let (wb, cx) = setup_with(cx, settings);
     open(&wb, &dir.join("main.c"), cx);
     wait_ticking(cx, "missing server notice", |cx| notice(&wb, cx).contains("qa-ls"));
@@ -395,7 +395,7 @@ fn qa_lsp_new_language_keys_follow_settings(cx: &mut TestAppContext) {
     std::fs::write(dir.join("a.sh"), "echo hi\n").unwrap();
     std::fs::write(dir.join("Cargo.toml"), "[package]\n").unwrap();
     let settings = Settings {
-        lsp_servers: vec![("bash".into(), None), ("toml".into(), Some(("/nonexistent/qa-taplo".into(), vec!["lsp".into()])))],
+        lsp_servers: vec![("bash".into(), None), ("toml".into(), Some(("/nonexistent/qa-taplo".into(), vec!["lsp".into()]).into()))],
         ..Settings::default()
     };
     let (wb, cx) = setup_with(cx, settings);
@@ -527,7 +527,7 @@ while True:
     std::fs::write(dir.join("main.c"), "int a;\n").unwrap();
     let settings = Settings {
         code_actions_on_save: vec!["source.organizeImports".into()],
-        lsp_servers: vec![("c".into(), Some((script.to_string_lossy().into_owned(), Vec::new())))],
+        lsp_servers: vec![("c".into(), Some((script.to_string_lossy().into_owned(), Vec::new()).into()))],
         ..Settings::default()
     };
     let (wb, cx) = setup_with(cx, settings);
@@ -612,8 +612,8 @@ while True:
     script
 }
 
-pub(crate) fn c_server(script: &Path) -> Vec<(String, Option<(String, Vec<String>)>)> {
-    vec![("c".into(), Some((script.to_string_lossy().into_owned(), Vec::new())))]
+pub(crate) fn c_server(script: &Path) -> Vec<crate::settings::ServerOverride> {
+    vec![("c".into(), Some((script.to_string_lossy().into_owned(), Vec::new()).into()))]
 }
 
 /// `editor.formatOnPaste` / `editor.formatOnType` are off by default: nothing is reformatted.
@@ -1370,7 +1370,7 @@ while True:
     #[cfg(unix)]
     crate::test_files::make_executable(&script);
     let settings = Settings {
-        lsp_servers: vec![("c".into(), Some((script.to_string_lossy().into_owned(), vec![log.to_string_lossy().into_owned()])))],
+        lsp_servers: vec![("c".into(), Some((script.to_string_lossy().into_owned(), vec![log.to_string_lossy().into_owned()]).into()))],
         ..Settings::default()
     };
     let (wb, cx) = setup_with(cx, settings);
@@ -2243,7 +2243,7 @@ while True:
     let answers = dir.join("answers.log");
     std::fs::write(dir.join("main.c"), "int main(void) { return 0; }\n").unwrap();
     let settings = Settings {
-        lsp_servers: vec![("c".into(), Some((script.to_string_lossy().into_owned(), vec![answers.to_string_lossy().into_owned()])))],
+        lsp_servers: vec![("c".into(), Some((script.to_string_lossy().into_owned(), vec![answers.to_string_lossy().into_owned()]).into()))],
         ..Settings::default()
     };
     let (wb, cx) = setup_with(cx, settings);
@@ -2417,14 +2417,17 @@ fn lsp_inlay_hints_folding_links_prepare_rename_and_output(cx: &mut TestAppConte
     let settings = Settings {
         lsp_servers: vec![(
             "c".into(),
-            Some((
-                script.to_string_lossy().into_owned(),
-                vec![
-                    seen.to_string_lossy().into_owned(),
-                    dir.join("main.c").to_string_lossy().into_owned(),
-                    dir.join("other.c").to_string_lossy().into_owned(),
-                ],
-            )),
+            Some(
+                (
+                    script.to_string_lossy().into_owned(),
+                    vec![
+                        seen.to_string_lossy().into_owned(),
+                        dir.join("main.c").to_string_lossy().into_owned(),
+                        dir.join("other.c").to_string_lossy().into_owned(),
+                    ],
+                )
+                    .into(),
+            ),
         )],
         ..Settings::default()
     };

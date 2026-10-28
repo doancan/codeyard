@@ -5,13 +5,14 @@ field of each crate's `Cargo.toml`. `cargo deny check` (see `deny.toml`) enforce
 allowed licence. This list covers all target platforms, including crates that a given build does not compile.
 Crates marked vendored live in `vendor/`.
 
-821 crates.
+830 crates.
 
 | Crate | Version | Licence | |
 | --- | --- | --- | --- |
-| accesskit | 0.25.1 | MIT OR Apache-2.0 |  |
-| accesskit_consumer | 0.39.1 | MIT OR Apache-2.0 |  |
+| accesskit | 0.25.2 | MIT OR Apache-2.0 |  |
+| accesskit_consumer | 0.39.2 | MIT OR Apache-2.0 |  |
 | accesskit_macos | 0.27.1 | MIT OR Apache-2.0 |  |
+| accesskit_windows | 0.35.2 | MIT OR Apache-2.0 |  |
 | addr2line | 0.25.1 | Apache-2.0 OR MIT |  |
 | adler2 | 2.0.1 | 0BSD OR MIT OR Apache-2.0 |  |
 | aes | 0.8.4 | MIT OR Apache-2.0 |  |
@@ -727,11 +728,15 @@ Crates marked vendored live in `vendor/`.
 | winapi-x86_64-pc-windows-gnu | 0.4.0 | MIT/Apache-2.0 |  |
 | windows | 0.57.0 | MIT OR Apache-2.0 |  |
 | windows | 0.61.3 | MIT OR Apache-2.0 |  |
+| windows | 0.62.2 | MIT OR Apache-2.0 |  |
 | windows-capture | 1.5.0 | MIT |  |
 | windows-collections | 0.2.0 | MIT OR Apache-2.0 |  |
+| windows-collections | 0.3.2 | MIT OR Apache-2.0 |  |
 | windows-core | 0.57.0 | MIT OR Apache-2.0 |  |
 | windows-core | 0.61.2 | MIT OR Apache-2.0 |  |
+| windows-core | 0.62.2 | MIT OR Apache-2.0 |  |
 | windows-future | 0.2.1 | MIT OR Apache-2.0 |  |
+| windows-future | 0.3.2 | MIT OR Apache-2.0 |  |
 | windows-implement | 0.57.0 | MIT OR Apache-2.0 |  |
 | windows-implement | 0.60.2 | MIT OR Apache-2.0 |  |
 | windows-interface | 0.57.0 | MIT OR Apache-2.0 |  |
@@ -739,12 +744,15 @@ Crates marked vendored live in `vendor/`.
 | windows-link | 0.1.3 | MIT OR Apache-2.0 |  |
 | windows-link | 0.2.1 | MIT OR Apache-2.0 |  |
 | windows-numerics | 0.2.0 | MIT OR Apache-2.0 |  |
+| windows-numerics | 0.3.1 | MIT OR Apache-2.0 |  |
 | windows-registry | 0.4.0 | MIT OR Apache-2.0 |  |
 | windows-registry | 0.5.3 | MIT OR Apache-2.0 |  |
 | windows-result | 0.1.2 | MIT OR Apache-2.0 |  |
 | windows-result | 0.3.4 | MIT OR Apache-2.0 |  |
+| windows-result | 0.4.1 | MIT OR Apache-2.0 |  |
 | windows-strings | 0.3.1 | MIT OR Apache-2.0 |  |
 | windows-strings | 0.4.2 | MIT OR Apache-2.0 |  |
+| windows-strings | 0.5.1 | MIT OR Apache-2.0 |  |
 | windows-sys | 0.48.0 | MIT OR Apache-2.0 |  |
 | windows-sys | 0.52.0 | MIT OR Apache-2.0 |  |
 | windows-sys | 0.59.0 | MIT OR Apache-2.0 |  |
@@ -753,6 +761,7 @@ Crates marked vendored live in `vendor/`.
 | windows-targets | 0.52.6 | MIT OR Apache-2.0 |  |
 | windows-targets | 0.53.5 | MIT OR Apache-2.0 |  |
 | windows-threading | 0.1.0 | MIT OR Apache-2.0 |  |
+| windows-threading | 0.2.1 | MIT OR Apache-2.0 |  |
 | windows_aarch64_gnullvm | 0.48.5 | MIT OR Apache-2.0 |  |
 | windows_aarch64_gnullvm | 0.52.6 | MIT OR Apache-2.0 |  |
 | windows_aarch64_gnullvm | 0.53.1 | MIT OR Apache-2.0 |  |

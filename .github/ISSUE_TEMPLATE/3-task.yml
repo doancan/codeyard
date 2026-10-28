@@ -1,0 +1,47 @@
+name: Task
+description: Work with no user-visible behaviour of its own - test harness, refactor, tooling, release chores (maintainers)
+labels: ["task"]
+projects: ["doancan/2"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Title:** an imperative summary, at most **78 characters**. No type prefix: the type label says it.
+        **Labels:** two or three: the type (set by this form) and one area, plus one environment when it matters (set at triage). Priority, effort and dates are fields on the project board.
+        **Relationships:** set the parent epic and *blocked by* in the sidebar, not in the text.
+
+        If users will notice the result, it is a feature, not a task.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What will exist or be different when this is done.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why it is needed and what it unblocks, with code references (`path:line`).
+    validations:
+      required: true
+  - type: textarea
+    id: deliverables
+    attributes:
+      label: Deliverables
+      description: Each file, function or script, with what it does and who uses it.
+      value: |
+        -
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: How we know it works and that nothing else changed.
+      value: |
+        - [ ] At least one real caller or test uses each deliverable
+        - [ ] `scripts/check.sh` passes
+        - [ ] No user-visible change
+    validations:
+      required: true

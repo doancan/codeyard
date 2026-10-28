@@ -93,6 +93,9 @@ impl Workbench {
                 let (ahead, behind) = self.git_status().map_or((0, 0), |s| (s.ahead, s.behind));
                 let sync = crate::git::counts_label(ahead, behind);
                 let unpublished = self.git_status().is_some_and(|s| s.branch.is_some() && s.upstream.is_none());
+                // A star after the branch name: the working tree has changes that are not committed yet.
+                let dirty = self.git_status().is_some_and(|s| !s.changes.is_empty());
+                let running = self.vcs.sync.running == Some(sync_glue::Running::Sync);
                 let tip = self.sync_tooltip();
                 d.child(
                     item()
@@ -101,7 +104,11 @@ impl Workbench {
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
                         .child(icon("git-branch", SB_ICON, p.text_muted))
-                        .child(div().min_w_0().max_w(px(if width < 800. { 100. } else { 180. })).truncate().child(b.clone()))
+                        .child(div().min_w_0().max_w(px(if width < 800. { 100. } else { 180. })).truncate().child(if dirty {
+                            format!("{b}*")
+                        } else {
+                            b.to_string()
+                        }))
                         .tooltip(move |_, cx| cx.new(|_| Tooltip(b.clone())).into())
                         .on_click(cx.listener(|this, _, window, cx| this.show_branch_picker(window, cx))),
                 )
@@ -110,12 +117,15 @@ impl Workbench {
                         .id("sb-sync")
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
-                        .child(if self.vcs.sync.running == Some(sync_glue::Running::Sync) {
+                        .child(if running {
                             ui::spinner("sb-sync-busy", SB_ICON, p.text_muted).into_any_element()
                         } else {
                             icon(if unpublished { "cloud-upload" } else { "refresh-cw" }, SB_ICON, p.text_muted).into_any_element()
                         })
-                        .when(labels && !sync.is_empty(), |d| d.child(div().max_w(px(96.)).truncate().child(sync)))
+                        // The counts are what tell you a sync is due, so they stay at every width; pending commits read in
+                        // the regular text color.
+                        .when(!sync.is_empty(), |d| d.text_color(c(p.text)).child(div().max_w(px(96.)).truncate().child(sync)))
+                        .when(labels && unpublished && !running, |d| d.child(crate::i18n::t("Publish Branch")))
                         .tooltip(move |_, cx| cx.new(|_| Tooltip(tip.clone())).into())
                         .on_click(cx.listener(|this, _, window, cx| this.git_sync_auto(window, cx))),
                 )

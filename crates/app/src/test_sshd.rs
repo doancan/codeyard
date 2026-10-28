@@ -112,6 +112,12 @@ fn try_start(name: &str) -> Result<Sshd, String> {
 }
 
 impl Sshd {
+    /// Runs `command` through the test server the way the agent's shell does (non-login); stdout on success.
+    pub fn run(&self, command: &str) -> Option<String> {
+        let out = Command::new("ssh").arg("-F").arg(self.dir.join("ssh_config")).arg(ALIAS).arg(command).output().ok()?;
+        out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+    }
+
     /// Kill the server (cuts the connection and new ones; also closes the remote agent's bridge).
     pub fn stop_server(&mut self) {
         let _ = self.child.kill();

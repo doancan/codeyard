@@ -19,6 +19,10 @@ pub(super) fn theme_load_error(path: &std::path::Path, error: &themes::ThemeErro
     format!("{}: {reason}", path.display())
 }
 
+/// What "Auto" picks while the system asks for more contrast.
+const HIGH_CONTRAST_DARK: &str = "high-contrast-dark";
+const HIGH_CONTRAST_LIGHT: &str = "high-contrast-light";
+
 impl Workbench {
     /// Re-read user themes (after an import).
     /// User themes folder: under the given settings folder (temporary in tests), else the default.
@@ -55,11 +59,15 @@ impl Workbench {
 
     // --- Themes ---
 
-    pub(super) fn resolve_theme(&self, choice: &str, window: &Window) -> &Theme {
+    pub(super) fn resolve_theme(&self, choice: &str, window: &Window, cx: &App) -> &Theme {
         let id = if choice == THEME_AUTO {
-            match window.appearance() {
-                gpui::WindowAppearance::Light | gpui::WindowAppearance::VibrantLight => themes::DEFAULT_LIGHT,
-                _ => themes::DEFAULT_DARK,
+            let light = matches!(window.appearance(), gpui::WindowAppearance::Light | gpui::WindowAppearance::VibrantLight);
+            // The system's Increase contrast (macOS) or a high-contrast theme (Windows) picks the high-contrast pair.
+            match (light, crate::system_prefs::increase_contrast(cx)) {
+                (true, false) => themes::DEFAULT_LIGHT,
+                (false, false) => themes::DEFAULT_DARK,
+                (true, true) => HIGH_CONTRAST_LIGHT,
+                (false, true) => HIGH_CONTRAST_DARK,
             }
         } else {
             choice
@@ -72,7 +80,7 @@ impl Workbench {
     }
 
     pub(super) fn apply_theme(&mut self, choice: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let t = self.resolve_theme(choice, window);
+        let t = self.resolve_theme(choice, window, cx);
         let (mut palette, id, name) = (t.palette, t.id.clone(), t.name.clone());
         // `workbench.colorCustomizations`: first those that apply to every theme, then those specific to this theme.
         let overrides = &cx.global::<Settings>().color_overrides;
@@ -88,12 +96,29 @@ impl Workbench {
         cx.notify();
     }
 
+    /// After a theme is chosen or the colour settings change: say so when the colours in use (theme plus
+    /// `workbench.colorCustomizations`) fall below WCAG AA. Built-in themes pass on their own; a theme you wrote or a
+    /// customization may not.
+    pub(super) fn warn_low_contrast(&mut self, window: &Window, cx: &App) {
+        let failures = themes::palette_contrast_failures(&cx.global::<ActiveTheme>().0);
+        let Some((fg, bg, ratio, min)) = failures.first() else { return };
+        let name = self.resolve_theme(&self.theme_choice, window, cx).name.clone();
+        let msg = crate::i18n::tn(
+            "Theme “{1}”: {0} colour pair is below WCAG AA contrast ({2} on {3}: {4}:1, needs {5}:1)",
+            "Theme “{1}”: {0} colour pairs are below WCAG AA contrast, for example {2} on {3}: {4}:1, needs {5}:1",
+            failures.len(),
+            &[&name, fg, bg, &format!("{ratio:.1}"), &format!("{min:.1}")],
+        );
+        self.notice = Some(Notice::Info(msg.into()));
+    }
+
     /// `--theme`: for this session only, without writing to the saved preference.
     pub fn use_theme(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
         if self.themes.iter().any(|t| t.id == id) || id == THEME_AUTO {
             self.cfg.theme_override = true;
             self.theme_choice = id.to_string();
             self.apply_theme(id, window, cx);
+            self.warn_low_contrast(window, cx);
         } else {
             let known: Vec<&str> = self.themes.iter().map(|t| t.id.as_str()).collect();
             self.notice = Some(Notice::Error(crate::i18n::tf("Unknown theme '{0}'. Available: {1}", &[&id, &known.join(", ")]).into()));

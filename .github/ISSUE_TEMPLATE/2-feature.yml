@@ -1,0 +1,135 @@
+name: Feature
+description: A user-visible capability, written as a specification that can be built and verified (maintainers)
+labels: ["feature"]
+projects: ["doancan/2"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Title:** an imperative summary ("Show …", "Pass …"), at most **78 characters**. No type prefix: the type label says it.
+        **Labels:** two or three: the type (set by this form) and one area, plus one environment when it matters (set at triage). Priority, effort and dates are fields on the project board.
+        **Relationships:** set the parent epic and *blocked by* in the sidebar, not in the text.
+
+        A feature issue is a specification: a reviewer should be able to agree or disagree with it before any code exists.
+        Only an idea so far? Start a Discussion.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What the feature does, in two or three sentences a user would understand.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What goes wrong or is impossible today, with code references (`path:line`) and concrete examples. Not the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Out-of-scope items say why.
+      value: |
+        **In scope**
+        -
+
+        **Out of scope**
+        -
+    validations:
+      required: true
+  - type: textarea
+    id: inputs
+    attributes:
+      label: Inputs
+      description: Everything the feature reads or reacts to - settings and their shape, user actions, commands, files, protocol messages.
+    validations:
+      required: true
+  - type: textarea
+    id: outputs
+    attributes:
+      label: Outputs
+      description: Everything observable - UI, messages (exact English text), files written, protocol messages sent, state changes.
+    validations:
+      required: true
+  - type: textarea
+    id: design
+    attributes:
+      label: Design
+      description: The approach and the modules it touches, as much as a reviewer needs to agree with it.
+    validations:
+      required: true
+  - type: textarea
+    id: edge-cases
+    attributes:
+      label: Edge cases and failure modes
+      description: Malformed or hostile input, missing tools, remote and untrusted folders, Windows.
+      value: |
+        | Situation | Expected behaviour |
+        | --- | --- |
+        |  |  |
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Numbered (AC1, AC2 …) and each checkable; tests refer to these numbers.
+      value: |
+        - **AC1.** **Given** … **when** … **then** …
+    validations:
+      required: true
+  - type: textarea
+    id: tests
+    attributes:
+      label: Test and verification
+      description: The tests that prove each criterion, by layer (docs/testing.md), with the file each goes in. Remove layers that do not apply.
+      value: |
+        **Unit:**
+        -
+
+        **Fuzz / hostile input:**
+        -
+
+        **End to end (fake server or adapter):**
+        -
+
+        **Real tool** (skipped with a message when the tool is missing):
+        -
+
+        **Manual:**
+        -
+    validations:
+      required: true
+  - type: checkboxes
+    id: obligations
+    attributes:
+      label: Applicable obligations
+      description: Tick the ones that apply; each ticked rule is checked in review.
+      options:
+        - label: Memory and size budgets (docs/architecture.md, scripts/memcheck.sh)
+        - label: Workspace Trust (nothing runs or is sent for an untrusted folder)
+        - label: Privacy (no network request the user did not start, no telemetry)
+        - label: SSH parity (works the same on a remote folder)
+        - label: Windows parity (builds and behaves on Windows, or the gap is documented)
+        - label: Interface text translated (every Complete language)
+        - label: No new dependency, or the reason is stated
+        - label: No third-party product names in interface text, docs or commits
+  - type: textarea
+    id: dod
+    attributes:
+      label: Definition of Done
+      value: |
+        - [ ] Every acceptance criterion has a passing test that names it
+        - [ ] Failure paths are tested and their messages asserted (English and Turkish)
+        - [ ] `scripts/check.sh` passes
+        - [ ] User guide, generated settings reference (if settings changed) and CHANGELOG updated
+        - [ ] Manual check done in a build of the branch
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks and open questions
+      description: Each open question with a recommendation.

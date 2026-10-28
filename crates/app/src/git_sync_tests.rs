@@ -112,8 +112,10 @@ fn the_sync_button_follows_ahead_behind_and_publish(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn sync_asks_first_when_it_moves_commits_and_skips_the_question_when_off(cx: &mut TestAppContext) {
+    // Off by default: Sync pulls and pushes at once. This test turns the question on.
+    assert!(!Settings::default().git_confirm_sync);
     let f = Fixture::new("sync-confirm");
-    let (wb, cx) = opened(cx, &f, Settings::default());
+    let (wb, cx) = opened(cx, &f, Settings { git_confirm_sync: true, ..Settings::default() });
     f.push_elsewhere("b.txt", "b\n");
     git_in(&f.dir, &["fetch", "-q"]);
     refresh(&wb, cx);

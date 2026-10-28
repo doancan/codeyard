@@ -1,0 +1,71 @@
+name: Bug report
+description: Something does not work as documented
+labels: ["bug"]
+projects: ["doancan/2"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. A bug we can reproduce gets fixed; the fields below are what we need for that.
+        **Security problems:** do not file them here, use the private advisory link on the issue chooser (see SECURITY.md).
+        **Title:** what goes wrong ("Crash when …", "… is not saved"), at most **78 characters**.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: The exact message or behaviour. A screenshot helps.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: As few steps as possible from a fresh start, with a minimal file, folder or settings snippet. Say whether it happens every time.
+      value: |
+        1.
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Folder
+      options:
+        - Local
+        - Remote (SSH)
+        - Both
+        - Does not depend on a folder
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Codeyard version
+      description: "`codeyard --version`, or the About dialog"
+      placeholder: Codeyard 0.5.0
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: OS and architecture
+      placeholder: macOS 15.5 arm64, Windows 11 x64
+    validations:
+      required: true
+  - type: input
+    id: regression
+    attributes:
+      label: Last version where it worked
+      description: Leave empty if it never worked or you do not know.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        The Output panel, a crash report from `crashes/` (docs/troubleshooting.md), or `CODEYARD_DAP_TRACE=1` output for debugger problems. Remove anything private.
+      render: text

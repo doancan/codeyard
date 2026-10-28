@@ -334,7 +334,7 @@ impl Workbench {
     }
 
     /// The window's folder: (ssh alias, path).
-    pub(super) fn workspace_key(&self, cx: &App) -> Option<(Option<String>, String)> {
+    pub(crate) fn workspace_key(&self, cx: &App) -> Option<(Option<String>, String)> {
         let alias = match &self.remote.conn {
             Conn::Connected { alias } | Conn::Reconnecting { alias, .. } if self.remote.host.is_remote() => Some(alias.clone()),
             _ => None,

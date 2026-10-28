@@ -22,6 +22,52 @@ Read [docs/architecture.md](docs/architecture.md) first (crates, the workbench t
 New workbench state goes into a group in `workbench_state.rs`; new behaviour goes into a `workbench_<topic>.rs` file;
 only `crates/app` may depend on GPUI.
 
+## Issues and labels
+
+Every issue is opened from a form in `.github/ISSUE_TEMPLATE/`: **Epic** (a goal made of several issues), **Feature** (a
+user-visible capability, written as a specification), **Task** (work with no user-visible behaviour of its own), **Bug** and
+**Translation**. Questions and open ideas go to Discussions.
+
+- **Title:** a plain summary, at most 78 characters, with no type prefix (the type label says it).
+  Features and tasks start with a verb ("Show …", "Pass …"); bugs say what goes wrong.
+- **Labels:** two or three, at most one from each group. The form sets the type; triage adds the area, and the environment
+  when the issue depends on it (leave it off when local or remote makes no difference, such as docs).
+
+| Group | Labels |
+| --- | --- |
+| Type | `epic`, `feature`, `task`, `bug` |
+| Area | `lsp`, `debug`, `editor`, `git`, `remote`, `terminal`, `ui`, `i18n`, `docs`, `infra` (build, release, test harness) |
+| Environment | `local` (only local folders), `ssh` (only remote folders), `local+ssh` (both alike) |
+- **Relationships** live in the issue's sidebar, never in its text: a feature or task is a sub-issue of its epic, and
+  *blocked by* names the issues it waits for. An epic is closed when all its sub-issues are.
+- **Milestone:** the release the issue ships in (`v0.6.0`). Its due date is the epic's Target date.
+
+Every issue is on the [Codeyard project](https://github.com/users/doancan/projects/2). Priority, effort and dates are project
+fields, set at triage:
+
+| Field | Values |
+| --- | --- |
+| Status | `Backlog` → `In Progress` → `In Review` → `Test` → `Done`; `Blocked` from any open stage |
+| Priority | `P0` broken for everyone, drop other work · `P1` next up · `P2` planned · `P3` when there is time |
+| Effort | `XS` ≤ 2 hours · `S` < 1 day · `M` 1–3 days · `L` ≤ 1 week · `XL` more, split it before starting |
+| Start date, Target date | Shown on the Roadmap view |
+
+Every move is automatic: `.github/workflows/project.yml` runs `scripts/project-sync.py` on issue, pull request, review
+and CI events, and once an hour to catch what sends no event (relationships edited in the sidebar). Nothing is moved by
+hand; a status set by hand stays until an event gives a reason to move it.
+
+| Stage | Entered when |
+| --- | --- |
+| Backlog | The issue is opened or reopened, unassigned, or its last blocker closes while nobody is assigned |
+| In Progress | Someone is assigned (`scripts/issue-start.sh N` assigns you and checks out the linked branch), a draft pull request that says `Closes #N` is opened, or a review asks for changes. Start date is set the first time |
+| In Review | The pull request is ready for review, or CI fails on it while it is in Test |
+| Test | The review approves, or CI passes on the ready pull request: what is left is the issue's manual checks |
+| Done | The issue is closed (merging a pull request that says `Closes #N` closes it) |
+| Blocked | A *blocked by* issue is open; it leaves Blocked by itself when the last one closes |
+
+Opening a pull request for an unassigned issue assigns it to the pull request's author. An epic follows its sub-issues:
+In Progress once one has started, Test when all are closed (its own verification list is left), Done when it is closed.
+
 ## Before you open a pull request
 
 Run one command:

@@ -46,6 +46,8 @@ Windows x64 is built and released as a ZIP and a setup EXE (unsigned, so SmartSc
 
 - The terminal uses ConPTY (Windows 10 1809 or newer); Git and language servers run without `/bin/sh`, resolve npm `.cmd`
   launchers and hide console windows; the application menu bar replaces the macOS global menu.
+- Accessibility: the AccessKit tree reaches UI Automation (NVDA, JAWS, Narrator) through `accesskit_windows`; the window
+  opens hidden and is shown once the adapter is attached. Not yet tried with a screen reader (see `accessibility.md`).
 - `scripts/check-windows.ps1` runs the library tests, selected UI, path and keyboard regressions and the release build.
   GPUI needs `fxc.exe` from the Windows SDK.
 - `./scripts/build-windows.ps1` builds a standalone EXE with Linux x64 and ARM64 SSH agents embedded; use
@@ -53,6 +55,9 @@ Windows x64 is built and released as a ZIP and a setup EXE (unsigned, so SmartSc
   the EXE to an empty directory and verifies both embedded agents. Release CI also embeds its supplied macOS agents.
 - Native OpenSSH has no ControlMaster sockets: SSH needs a key or ssh-agent and an existing known-host entry (the password and
   host-key prompt bridge is Unix-only), and in-app port forwarding is unavailable; use `ssh -L` / `ssh -R` in a terminal.
+- Rust debugging with the MSVC toolchain (`*-pc-windows-msvc`): lldb reads the PDB debug information there, which the
+  toolchain's lldb formatters are not made for, so they are not loaded and `String`, `Vec` and `HashMap` show their fields.
+  The `*-pc-windows-gnu` toolchains get them as on other systems.
 - Not verified: real SSH authentication, mixed-DPI displays, physical keyboard and IME behaviour.
 - `scripts/check-windows.sh` is the quick cross-compile check from macOS or Linux (`x86_64-pc-windows-gnu`); it runs nothing.
 
