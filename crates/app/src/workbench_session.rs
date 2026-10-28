@@ -227,9 +227,15 @@ impl Workbench {
 
     /// Restore the folder's tabs and backups (in order, in one go).
     pub(super) fn restore_tabs(&mut self, ws: i64, window: &mut Window, cx: &mut Context<Self>) {
-        let (Some(s), Some(root)) = (&self.persist.state, self.root(cx)) else { return };
+        self.restore_tabs_for_open(ws, None, window, cx);
+    }
+
+    /// Coalesce an explicit open with its saved document read, including any unsaved backup.
+    /// Returns whether the open will be completed by the restore task.
+    pub(super) fn restore_tabs_for_open(&mut self, ws: i64, request: Option<(String, bool)>, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let (Some(s), Some(root)) = (&self.persist.state, self.root(cx)) else { return false };
         if !cx.global::<Settings>().restore_session {
-            return;
+            return false;
         }
         let mut tabs = s.tabs(ws).unwrap_or_default();
         let saved = s.tab_layout(ws).as_deref().and_then(SavedEditorSession::parse);
@@ -246,7 +252,7 @@ impl Workbench {
             if saved.is_some() && self.tabs.opening.is_none() {
                 self.restore_layout(&[], saved, focus_left, window, cx);
             }
-            return;
+            return false;
         }
         // Don't load a file that's being opened from the command line (or is already open)
         // twice: a 500 KB file's syntax tree is ~20 MB, and the dropped copy
@@ -257,8 +263,10 @@ impl Workbench {
         };
         tabs.retain(|t| !busy(&t.rel_path));
         if tabs.is_empty() {
-            return;
+            return false;
         }
+        let request = request.filter(|(path, _)| tabs.iter().any(|tab| ui::join(&root, &tab.rel_path) == *path));
+        let requested = request.is_some();
         // Layout: the tab order and active tabs of the two groups; the file is loaded once.
         let layout: Vec<(String, u8, bool)> = tabs.iter().map(|t| (ui::join(&root, &t.rel_path), t.group, t.active)).collect();
         let mut seen = std::collections::HashSet::new();
@@ -324,10 +332,14 @@ impl Workbench {
                     }
                 }
                 this.restore_layout(&layout, saved, focus_left, window, cx);
+                if let Some((path, preview)) = request {
+                    this.open_file_as(restore_host, path, preview, window, cx);
+                }
             })
             .ok();
         })
         .detach();
+        requested
     }
 
     /// At app startup (if there are no arguments): the last folder and its tabs.

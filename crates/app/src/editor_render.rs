@@ -69,7 +69,7 @@ impl Render for EditorView {
         let popups = self.popups(&p, font_family.clone(), font_size, line_h, cx);
         // If a positioned item is wanted and this frame's line layout turns out different, paint asks for one more frame.
         self.popup_basis = (self.visible_sig(), self.wants_anchored());
-        let minimap = cx.global::<Settings>().minimap;
+        let minimap = cx.global::<Settings>().minimap && !self.minimap_hidden;
         if bracket_on {
             self.ensure_bracket_cache();
         }

@@ -240,6 +240,7 @@ pub(super) struct TabsState {
     pub(super) resizing: Option<GroupResize>,
     pub(super) revision: u64,
     pub(super) grid_scroll: gpui::ScrollHandle,
+    pub(super) grid_viewport: std::rc::Rc<std::cell::Cell<gpui::Size<gpui::Pixels>>>,
     pub(super) reveal_group: std::rc::Rc<std::cell::Cell<Option<GroupKey>>>,
 }
 
