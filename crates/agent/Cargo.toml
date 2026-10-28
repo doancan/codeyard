@@ -8,6 +8,8 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+cap-fs-ext = "4.0.3"
+cap-std = "4.0.3"
 ignore = "0.4.33"
 libc = "0.2.191"
 proto = { version = "0.5.0", path = "../proto" }

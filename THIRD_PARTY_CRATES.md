@@ -5,7 +5,7 @@ field of each crate's `Cargo.toml`. `cargo deny check` (see `deny.toml`) enforce
 allowed licence. This list covers all target platforms, including crates that a given build does not compile.
 Crates marked vendored live in `vendor/`.
 
-830 crates.
+841 crates.
 
 | Crate | Version | Licence | |
 | --- | --- | --- | --- |
@@ -22,6 +22,7 @@ Crates marked vendored live in `vendor/`.
 | aligned | 0.4.3 | MIT OR Apache-2.0 |  |
 | aligned-vec | 0.6.4 | MIT |  |
 | allocator-api2 | 0.2.21 | MIT OR Apache-2.0 |  |
+| ambient-authority | 0.0.2 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | anyhow | 1.0.104 | MIT OR Apache-2.0 |  |
 | ar_archive_writer | 0.5.3 | Apache-2.0 WITH LLVM-exception |  |
 | arbitrary | 1.5.0 | MIT OR Apache-2.0 |  |
@@ -90,6 +91,9 @@ Crates marked vendored live in `vendor/`.
 | bytes | 1.12.1 | MIT |  |
 | calloop | 0.13.0 | MIT |  |
 | calloop-wayland-source | 0.3.0 | MIT |  |
+| cap-fs-ext | 4.0.3 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| cap-primitives | 4.0.3 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| cap-std | 4.0.3 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | cbc | 0.1.2 | MIT OR Apache-2.0 |  |
 | cbindgen | 0.28.0 | MPL-2.0 |  |
 | cc | 1.2.67 | MIT OR Apache-2.0 |  |
@@ -218,6 +222,7 @@ Crates marked vendored live in `vendor/`.
 | form_urlencoded | 1.2.2 | MIT OR Apache-2.0 |  |
 | fraction | 0.17.0 | MIT OR Apache-2.0 |  |
 | freetype-sys | 0.20.1 | MIT |  |
+| fs-set-times | 0.20.3 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | futf | 0.1.5 | MIT / Apache-2.0 |  |
 | futures | 0.3.34 | MIT OR Apache-2.0 |  |
 | futures-channel | 0.3.34 | MIT OR Apache-2.0 |  |
@@ -302,6 +307,9 @@ Crates marked vendored live in `vendor/`.
 | instant | 0.1.13 | BSD-3-Clause |  |
 | interpolate_name | 0.2.4 | MIT |  |
 | inventory | 0.3.25 | MIT OR Apache-2.0 |  |
+| io-extras | 0.19.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| io-lifetimes | 2.0.4 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| io-lifetimes | 3.0.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | io-surface | 0.16.1 | MIT OR Apache-2.0 |  |
 | ipnet | 2.12.2 | MIT OR Apache-2.0 |  |
 | is-docker | 0.2.0 | MIT |  |
@@ -344,6 +352,7 @@ Crates marked vendored live in `vendor/`.
 | lyon_tessellation | 1.0.23 | MIT OR Apache-2.0 |  |
 | mac | 0.1.1 | MIT/Apache-2.0 |  |
 | malloc_buf | 0.0.6 | MIT |  |
+| maybe-owned | 0.3.4 | MIT OR Apache-2.0 |  |
 | maybe-rayon | 0.1.1 | MIT |  |
 | md-5 | 0.10.6 | MIT OR Apache-2.0 |  |
 | memchr | 2.8.3 | Unlicense OR MIT |  |
@@ -505,6 +514,7 @@ Crates marked vendored live in `vendor/`.
 | rustc_version | 0.4.1 | MIT OR Apache-2.0 |  |
 | rustix | 0.38.44 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | rustix | 1.1.5 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| rustix-linux-procfs | 0.1.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | rustix-openpty | 0.2.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | rustls | 0.23.46 | Apache-2.0 OR ISC OR MIT |  |
 | rustls-native-certs | 0.8.5 | Apache-2.0 OR ISC OR MIT |  |
@@ -790,6 +800,7 @@ Crates marked vendored live in `vendor/`.
 | winreg | 0.10.1 | MIT |  |
 | winreg | 0.56.0 | MIT |  |
 | winsafe | 0.0.19 | MIT |  |
+| winx | 0.36.4 | Apache-2.0 WITH LLVM-exception |  |
 | wio | 0.2.2 | MIT/Apache-2.0 |  |
 | wit-bindgen | 0.57.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | writeable | 0.6.4 | Unicode-3.0 |  |
