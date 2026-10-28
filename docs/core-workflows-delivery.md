@@ -87,7 +87,7 @@ automatically retries a mutation. Batches preserve failed/unprocessed cut entrie
 
 - The storage regression initially reassigned groups 2/7/31 to group 1. Stable IDs now round-trip,
   and a rejecting SQLite trigger proves that layout-write failure rolls back the tab update too.
-- Eight layout tests cover splitting in all directions, spatial neighbors, stable identities,
+- Nine layout tests cover splitting in all directions, spatial neighbors, stable identities,
   bounded/corrupt input, ratio validation and 500 mixed operations preserving a complete partition.
 - GPUI coverage exercises three views of one shared document, independent cursors and undo,
   nested geometry and resizing, stale drag/drop and late file completion, background-load focus,
@@ -97,3 +97,12 @@ automatically retries a mutation. Batches preserve failed/unprocessed cut entrie
   opening. Empty legacy sessions now leave that request intact. Group lifetime tokens prevent a
   late completion from populating a newly created group with a reused slot number.
 - Full regression, native-window acceptance, memory/size and required PR checks remain pending.
+
+The 32-group navigation regression initially skipped siblings after group 25 because normalized
+coordinates rounded together. Directional navigation now uses minimum-extent geometry. Native pane
+placement is calculated once and each visible pane is laid out independently; fully clipped panes
+keep their views without being rendered. This also removes repeated intrinsic-size measurement
+through deeply nested flex regions. The debug workload that creates 32 highlighted 10k-line views
+and focuses left 31 times improved from 75.4 seconds to 9.1 seconds without relaxing its 15-second
+local budget (CI's existing timeout scale applies). The related random-command torture test passes.
+PR: https://github.com/doancan/codeyard/pull/56. Native acceptance and final gates remain pending.

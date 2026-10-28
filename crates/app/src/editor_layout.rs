@@ -183,28 +183,51 @@ impl Layout {
     }
 
     pub fn rects(&self) -> Vec<(GroupId, Rect)> {
+        // Use the same minimum-extent principle as the rendered grid. Unbounded
+        // normalized subdivision makes deep siblings share rounded coordinates,
+        // so a direction key can skip groups that remain visible on screen.
+        fn minimum(node: &Node) -> (f32, f32) {
+            match node {
+                Node::Group { .. } => (1., 1.),
+                Node::Split { axis, first, second, .. } => {
+                    let (a, b) = (minimum(first), minimum(second));
+                    match axis {
+                        Axis::Horizontal => (a.0 + b.0, a.1.max(b.1)),
+                        Axis::Vertical => (a.0.max(b.0), a.1 + b.1),
+                    }
+                }
+            }
+        }
         fn visit(node: &Node, bounds: Rect, out: &mut Vec<(GroupId, Rect)>) {
             match node {
                 Node::Group { id } => out.push((*id, bounds)),
                 Node::Split { axis, ratio, first, second, .. } => {
-                    let (a, b) = match axis {
-                        Axis::Horizontal => (
-                            Rect { width: bounds.width * ratio, ..bounds },
-                            Rect { x: bounds.x + bounds.width * ratio, width: bounds.width * (1. - ratio), ..bounds },
-                        ),
-                        Axis::Vertical => (
-                            Rect { height: bounds.height * ratio, ..bounds },
-                            Rect { y: bounds.y + bounds.height * ratio, height: bounds.height * (1. - ratio), ..bounds },
-                        ),
+                    let (a, b) = (minimum(first), minimum(second));
+                    let (first_bounds, second_bounds) = match axis {
+                        Axis::Horizontal => {
+                            let width = (bounds.width * ratio).clamp(a.0, bounds.width - b.0);
+                            (Rect { width, ..bounds }, Rect { x: bounds.x + width, width: bounds.width - width, ..bounds })
+                        }
+                        Axis::Vertical => {
+                            let height = (bounds.height * ratio).clamp(a.1, bounds.height - b.1);
+                            (Rect { height, ..bounds }, Rect { y: bounds.y + height, height: bounds.height - height, ..bounds })
+                        }
                     };
-                    visit(first, a, out);
-                    visit(second, b, out);
+                    visit(first, first_bounds, out);
+                    visit(second, second_bounds, out);
                 }
             }
         }
-        let mut out = Vec::new();
-        visit(&self.root, Rect { x: 0., y: 0., width: 1., height: 1. }, &mut out);
-        out
+        let mut rects = Vec::new();
+        visit(&self.root, Rect { x: 0., y: 0., width: MAX_GROUPS as f32, height: MAX_GROUPS as f32 }, &mut rects);
+        let extent = MAX_GROUPS as f32;
+        for (_, rect) in &mut rects {
+            rect.x /= extent;
+            rect.y /= extent;
+            rect.width /= extent;
+            rect.height /= extent;
+        }
+        rects
     }
 
     pub fn neighbor(&self, direction: Direction) -> Option<GroupId> {
