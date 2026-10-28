@@ -157,7 +157,7 @@ mod watch_glue;
 #[path = "workbench_web_preview.rs"]
 mod web_preview_glue;
 #[path = "workbench_welcome.rs"]
-mod welcome_glue;
+pub(crate) mod welcome_glue;
 
 /// Project settings file (root-relative).
 const PROJECT_SETTINGS: &str = ".codeyard/settings.jsonc";
@@ -443,6 +443,7 @@ struct OutlineState {
 #[derive(Clone)]
 enum Page {
     Welcome,
+    About(Entity<crate::about_page::AboutPage>),
     Containers,
     /// The Extensions view's detail page and consent sheet (state in `ConfigState::exts`).
     Extension,

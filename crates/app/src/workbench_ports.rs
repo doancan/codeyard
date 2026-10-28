@@ -149,6 +149,14 @@ impl Workbench {
 
     /// The connection dropped (it may come back): forwards wait, the scan stops.
     pub(super) fn ports_interrupted(&mut self) {
+        // Standalone Windows forwards are independent of the main SSH session.
+        // Stop only this window's forwards before marking them interrupted.
+        #[cfg(windows)]
+        for f in self.ports.set.iter().filter(|f| f.is_active()) {
+            if let Some(spec) = &f.spec {
+                let _ = host::forward::cancel(&f.alias, spec);
+            }
+        }
         self.ports.set.on_disconnected();
         self.ports.task = None;
     }
@@ -197,6 +205,22 @@ impl Workbench {
                 wait = if found.is_ok() { SCAN_EVERY } else { (wait * 2).min(SCAN_MAX) };
                 if this
                     .update(cx, |this, cx| {
+                        #[cfg(windows)]
+                        {
+                            let exited: Vec<_> = this
+                                .ports
+                                .set
+                                .iter()
+                                .filter(|f| f.is_active())
+                                .filter_map(|f| {
+                                    let spec = f.spec.as_ref()?;
+                                    (!host::forward::is_alive(&f.alias, spec)).then(|| (f.id, spec.clone()))
+                                })
+                                .collect();
+                            for (id, spec) in exited {
+                                this.ports.set.process_exited(id, &spec);
+                            }
+                        }
                         this.ports.method = method;
                         this.on_ports(found, cx)
                     })

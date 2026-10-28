@@ -13,17 +13,17 @@ fn about_dialog_and_buttons_are_turkish(cx: &mut TestAppContext) {
         let _g = LangGuard::set("tr");
         wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Help: About Codeyard", window, cx));
         cx.run_until_parked();
-        let (title, detail) = cx.pending_prompt().expect("about dialog");
-        assert_eq!(title, "Codeyard");
-        assert!(detail.contains(&format!("Sürüm {}", env!("CARGO_PKG_VERSION"))), "{detail}");
-        cx.simulate_prompt_answer("Kapat");
+        assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), Some(("about", true)));
+        assert_eq!(t("Application details"), "Uygulama bilgileri");
+        assert_eq!(t("Client protocol"), "İstemci protokolü");
+        cx.simulate_keystrokes("escape");
         cx.run_until_parked();
     }
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Help: About Codeyard", window, cx));
     cx.run_until_parked();
-    let (_, detail) = cx.pending_prompt().expect("about dialog");
-    assert!(detail.contains(&format!("Version {}", env!("CARGO_PKG_VERSION"))), "{detail}");
-    cx.simulate_prompt_answer("Close");
+    assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), Some(("about", true)));
+    assert_eq!(t("Application details"), "Application details");
+    cx.simulate_keystrokes("escape");
 }
 
 #[test]

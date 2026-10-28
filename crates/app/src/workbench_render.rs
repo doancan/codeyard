@@ -64,6 +64,7 @@ impl Render for Workbench {
                 .into_any_element(),
             (_, None) if self.tabs.page_active && self.tabs.page.is_some() => match self.tabs.page.clone().unwrap() {
                 Page::Welcome => self.welcome_view(&p, cx),
+                Page::About(view) => view.into_any_element(),
                 Page::Containers => self.container_dashboard_view(&p, cx),
                 Page::Extension => self.extension_page(&p, cx),
                 Page::Settings(view) => view.into_any_element(),

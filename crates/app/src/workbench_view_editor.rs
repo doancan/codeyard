@@ -366,6 +366,7 @@ impl Workbench {
                 let active = self.tabs.page_active;
                 let (glyph, title): (&str, String) = match &page {
                     Page::Welcome => ("rocket", crate::i18n::t("Welcome").into()),
+                    Page::About(_) => ("info", crate::i18n::t("About Codeyard").into()),
                     Page::Containers => ("server", crate::i18n::t("Container Resources").into()),
                     Page::Extension => ("blocks", self.extension_page_title()),
                     Page::Settings(_) => ("settings", crate::i18n::t("Settings").into()),
@@ -413,6 +414,9 @@ impl Workbench {
                             this.tabs.large_active = false;
                             if let Some(Page::Settings(v)) = &this.tabs.page {
                                 v.read(cx).focus_search(window, cx);
+                            }
+                            if let Some(Page::About(v)) = &this.tabs.page {
+                                window.focus(&v.focus_handle(cx));
                             }
                             cx.notify();
                         })),

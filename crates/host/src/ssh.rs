@@ -672,6 +672,21 @@ else if [ -s "$f" ] && [ "$(tail -c1 "$f" | wc -l | tr -d ' ')" = 0 ]; then prin
     Ok(out.trim() == "added")
 }
 
+/// An agent is selected by its hash, but its bytes may come from a stale local
+/// bundle. Check the actual executable before attaching or starting a daemon.
+fn check_agent_version(output: &str) -> Result<()> {
+    let version = output.trim().parse::<u32>().map_err(|_| {
+        HostError::Disconnected("Could not determine the remote agent's protocol version. Rebuild or reinstall the Codeyard agent bundle.".into())
+    })?;
+    if version != proto::VERSION {
+        return Err(HostError::Disconnected(format!(
+            "The bundled SSH agent uses protocol {version}, but this Codeyard client requires protocol {}. Rebuild the agent bundle with scripts/build-windows.ps1 or reinstall Codeyard; check CODEYARD_AGENT_DIR if set.",
+            proto::VERSION
+        )));
+    }
+    Ok(())
+}
+
 /// Connect: identify the server, install the agent if missing (SHA-256 verified), start it.
 pub fn connect(alias: &str, bundle: &AgentBundle, mut progress: impl FnMut(Step)) -> Result<RemoteHost> {
     progress(Step::Probing);
@@ -691,20 +706,25 @@ pub fn connect(alias: &str, bundle: &AgentBundle, mut progress: impl FnMut(Step)
     // CODEYARD_REMOTE_DIR: agent location on the server (default ~/.cache/codeyard).
     let dir = std::env::var("CODEYARD_REMOTE_DIR").unwrap_or_else(|_| format!("{home}/.cache/{APP_DIR}"));
     let remote = format!("{dir}/agent-v{}-{}", proto::VERSION, &sha[..12]);
-    let installed = run(alias, &format!("test -x {} && echo ok || true", sh_quote(&remote)), None)?;
-    if installed.trim() != "ok" {
+    let remote_quoted = sh_quote(&remote);
+    let installed = run(alias, &format!("if test -x {remote_quoted}; then {remote_quoted} --version; else printf '%s' missing; fi"), None)?;
+    let reported = if installed.trim() == "missing" {
         progress(Step::Uploading);
         // Write to a temp file, verify the hash on the server, move into place only on a match.
         let script = format!(
             r#"set -e; mkdir -p {dir}; t={remote}.tmp.$$; cat > "$t"; chmod 755 "$t";
 h=$( (sha256sum "$t" 2>/dev/null || shasum -a 256 "$t") | cut -d' ' -f1);
-if [ "$h" = {sha} ]; then mv "$t" {remote}; else rm -f "$t"; echo "agent hash mismatch: $h" >&2; exit 3; fi"#,
+if [ "$h" = {sha} ]; then mv "$t" {remote}; else rm -f "$t"; echo "agent hash mismatch: $h" >&2; exit 3; fi
+{remote} --version"#,
             dir = sh_quote(&dir),
             remote = sh_quote(&remote),
             sha = sh_quote(&sha),
         );
-        run(alias, &script, Some(&binary))?;
-    }
+        run(alias, &script, Some(&binary))?
+    } else {
+        installed
+    };
+    check_agent_version(&reported)?;
 
     progress(Step::Starting);
     // Each ssh connection bridges to the daemon, so sessions (terminals) outlive an ssh drop.
@@ -744,6 +764,8 @@ pub fn forward_port_reverse(alias: &str, remote: u16, local: u16, cancel: bool) 
 /// Close the shared ControlMaster connection (ends its forwards too).
 pub fn close_master(alias: &str) {
     if cfg!(windows) {
+        #[cfg(windows)]
+        crate::forward::close_windows_forwards(alias);
         return;
     }
     if !matches!(target_of(alias), Target::Ssh(_)) {
@@ -755,6 +777,8 @@ pub fn close_master(alias: &str) {
 /// On exit: close every ControlMaster this process opened. `ControlPersist`
 /// would keep them alive after quit, and macOS shows that as "running in the background".
 pub fn close_all_masters() {
+    #[cfg(windows)]
+    crate::forward::close_all_windows_forwards();
     let aliases = std::mem::take(&mut *MASTERS.lock().unwrap_or_else(|e| e.into_inner()));
     for alias in aliases {
         close_master(&alias);
@@ -792,6 +816,16 @@ pub fn spawn_local_agent(bundle: &AgentBundle) -> Result<RemoteHost> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn agent_protocol_is_checked_before_attach() {
+        assert!(super::check_agent_version(&format!("{}\n", proto::VERSION)).is_ok());
+        let stale = super::check_agent_version("11\n").unwrap_err().to_string();
+        assert!(stale.contains("protocol 11"));
+        assert!(stale.contains(&format!("protocol {}", proto::VERSION)));
+        assert!(stale.contains("CODEYARD_AGENT_DIR"));
+        assert!(super::check_agent_version("not a version").is_err());
+    }
+
     static EMBEDDED: &[EmbeddedAgent] = &[EmbeddedAgent { triple: "x86_64-unknown-linux-musl", bytes: b"embedded agent" }];
 
     #[test]
@@ -869,7 +903,6 @@ mod tests {
         assert!(args.iter().any(|a| a == "ControlMaster=no"));
         assert!(args.iter().any(|a| a == "ControlPath=none"));
         assert!(!args.iter().any(|a| a == "ControlMaster=auto" || a == "ControlPersist=600"));
-        assert!(forward_port("example", 3000, 3000, false).unwrap_err().to_string().contains("Windows OpenSSH"));
         assert!(forward_port_reverse("example", 3000, 3000, false).is_err());
     }
 
