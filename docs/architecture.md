@@ -262,12 +262,21 @@ Measured by `scripts/memcheck.sh` (macOS `footprint`, 1280×800 @2x; the screen 
 | 10k lines, plain text | 95 MB |
 | 10k lines, syntax highlighting | 130 MB |
 | remote agent daemon, idle | 8 MB |
-| app binary | 60 MB |
 | agent binary (Linux musl) | 1600 KB |
+
+The app binary has no size budget: it grows with features, and users feel time and memory, not bytes. Its size is
+printed by `scripts/memcheck.sh` for the record. The agent keeps its budget because it is copied to every server.
+
+**Regression gate.** `scripts/perf/run.sh --baseline <previous tag>` builds the previous release and the candidate and
+runs them interleaved on the same Mac: startup to first frame and key press to drawn frame in a 10k-line Rust file
+(20 runs each) and the settled memory of three scenes (5 runs). `scripts/perf/compare.py` checks each metric of
+`perf/metrics.json` against its budget (p95 +10% for times, median +5% for memory) and fails only when the change is
+also outside the noise of the baseline (a bootstrap interval of the same statistic). The result is committed as `docs/benchmarks/perf-<version>.json`. Details:
+`scripts/perf/README.md`.
 
 Before a release all of these must pass: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
 warnings`, `cargo deny check` (licences, advisories, sources), `scripts/arch-check.sh`, `cargo test --workspace`,
-`scripts/memcheck.sh`. A new feature that adds 10 MB or more is investigated first; a budget is only raised as a
+`scripts/memcheck.sh`, `scripts/perf/compare.py` against the previous release. A new feature that adds 10 MB or more is investigated first; a budget is only raised as a
 last resort and the reason is written next to it in the script.
 
 ## Dependencies
