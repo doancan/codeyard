@@ -10,24 +10,28 @@ pub(super) enum ContainerAction {
     CopyId,
 }
 
-fn unhealthy(container: &crate::docker::Container) -> bool {
+pub(super) fn unhealthy(container: &crate::docker::Container) -> bool {
     container.status.contains("(unhealthy)") || matches!(container.state.as_str(), "dead" | "restarting")
 }
 
+// Minimum cell widths keep the default inventory readable in a 1280-point window.
+const NAME_WIDTH: f32 = 200.;
+const STATUS_WIDTH: f32 = 124.;
+const ACTIONS_WIDTH: f32 = 128.;
+
 fn columns() -> [(&'static str, f32); 7] {
     [
-        (crate::i18n::t("Image"), 200.),
-        (crate::i18n::t("CPU"), 85.),
-        (crate::i18n::t("Memory"), 190.),
-        (crate::i18n::t("Network RX / TX rate"), 200.),
-        (crate::i18n::t("Disk read / write rate"), 200.),
-        (crate::i18n::t("Ports"), 220.),
-        (crate::i18n::t("Compose project"), 145.),
+        (crate::i18n::t("Image"), 180.),
+        (crate::i18n::t("CPU"), 84.),
+        (crate::i18n::t("Memory"), 176.),
+        (crate::i18n::t("Network RX / TX rate"), 176.),
+        (crate::i18n::t("Disk read / write rate"), 176.),
+        (crate::i18n::t("Ports"), 200.),
+        (crate::i18n::t("Compose project"), 128.),
     ]
 }
 
-fn cell(value: impl Into<String>, width: f32, p: &Palette) -> gpui::Stateful<gpui::Div> {
-    let value = value.into();
+fn text_cell(value: impl Into<String>, width: f32, p: &Palette) -> gpui::Stateful<gpui::Div> {
     div()
         .id(SharedString::from(format!("cell-{width}")))
         .w(px(width))
@@ -35,11 +39,12 @@ fn cell(value: impl Into<String>, width: f32, p: &Palette) -> gpui::Stateful<gpu
         .px(px(theme::SPACE[3]))
         .truncate()
         .text_color(c(p.text_muted))
-        .tooltip({
-            let value = value.clone();
-            move |_, cx| cx.new(|_| Tooltip(value.clone().into())).into()
-        })
-        .child(value)
+        .child(value.into())
+}
+
+fn cell(value: impl Into<String>, width: f32, p: &Palette) -> gpui::Stateful<gpui::Div> {
+    let value = value.into();
+    text_cell(value.clone(), width, p).tooltip(move |_, cx| cx.new(|_| Tooltip(value.clone().into())).into())
 }
 
 fn rate_cell(index: usize, rates: Option<(f64, f64)>, p: &Palette) -> gpui::Stateful<gpui::Div> {
@@ -56,6 +61,7 @@ fn rate_cell(index: usize, rates: Option<(f64, f64)>, p: &Palette) -> gpui::Stat
             div()
                 .id(("direction", direction))
                 .h(px(18.))
+                .line_height(px(18.))
                 .flex()
                 .items_center()
                 .gap(px(theme::SPACE[3]))
@@ -107,7 +113,7 @@ fn status_cell(row: &crate::docker::Container, p: &Palette) -> gpui::Stateful<gp
     let description = row.status.clone();
     div()
         .id("status")
-        .w(px(150.))
+        .w(px(STATUS_WIDTH))
         .flex_shrink_0()
         .px(px(theme::SPACE[3]))
         .flex()
@@ -115,10 +121,45 @@ fn status_cell(row: &crate::docker::Container, p: &Palette) -> gpui::Stateful<gp
         .gap(px(theme::SPACE[3]))
         .tooltip(move |_, cx| cx.new(|_| Tooltip(description.clone().into())).into())
         .child(div().size(px(6.)).flex_shrink_0().rounded_full().bg(c(color)))
-        .child(div().truncate().text_color(c(color)).child(label))
+        .child(div().min_w_0().truncate().text_color(c(color)).child(label))
 }
 
 impl Workbench {
+    fn sort_container_overview(&mut self, sort: Sort, cx: &mut Context<Self>) {
+        let m = &mut self.remote.docker.monitor;
+        m.browser.sort = sort;
+        m.browser.sort_usage = m.usage.clone();
+        cx.notify();
+    }
+
+    fn container_sort_header(&self, label: &'static str, width: f32, sort: Sort, p: &Palette, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
+        let selected = self.remote.docker.monitor.browser.sort == sort;
+        let key = match sort {
+            Sort::Name => "N",
+            Sort::Cpu => "C",
+            Sort::Memory => "M",
+        };
+        text_cell(label, width, p)
+            .debug_selector(move || format!("overview-sort-{label}"))
+            .flex()
+            .items_center()
+            .gap(px(theme::SPACE[2]))
+            .when(sort != Sort::Name, |d| d.justify_end())
+            .cursor_pointer()
+            .hover(|s| s.bg(c(p.surface_active)))
+            .when(selected, |d| d.text_color(c(p.accent)).child(icon(if sort == Sort::Name { "arrow-up" } else { "arrow-down" }, 12., p.accent)))
+            .tooltip(move |_, cx| {
+                cx.new(|_| Tooltip(format!("{} ({key})", crate::i18n::t("Click to sort using current values. Order stays fixed during live updates.")).into()))
+                    .into()
+            })
+            .on_click(cx.listener(move |this, _, window, cx| {
+                if let Some(focus) = &this.remote.docker.monitor.browser.overview.focus {
+                    window.focus(focus);
+                }
+                this.sort_container_overview(sort, cx);
+            }))
+    }
+
     fn container_overview_rows(&self) -> Vec<&crate::docker::Container> {
         self.container_rows().into_iter().filter(|row| !self.remote.docker.monitor.browser.overview.attention || unhealthy(row)).collect()
     }
@@ -176,14 +217,21 @@ impl Workbench {
         let m = &self.remote.docker.monitor;
         let b = &m.browser;
         let rows = self.container_overview_rows();
-        let running = m.containers.iter().filter(|c| c.state == "running").count();
-        let issues = m.containers.iter().filter(|c| unhealthy(c)).count();
-        let mut toolbar = div().flex().flex_wrap().items_center().gap(px(theme::SPACE[2]));
+        let mut status_filters = div()
+            .id("overview-status-filters")
+            .flex_none()
+            .flex()
+            .p(px(theme::SPACE[1]))
+            .rounded(px(theme::radius::SM))
+            .border_1()
+            .border_color(c(p.border))
+            .bg(c(p.surface_hover));
         for (label, filter) in
             [(crate::i18n::t("All"), StatusFilter::All), (crate::i18n::t("Running"), StatusFilter::Running), (crate::i18n::t("Stopped"), StatusFilter::Stopped)]
         {
-            toolbar = toolbar.child(
+            status_filters = status_filters.child(
                 button(SharedString::from(format!("overview-filter-{label}")), label, p)
+                    .bg(c(p.surface_hover))
                     .when(b.status_filter == filter && !b.overview.attention, |s| s.bg(c(p.surface_active)).text_color(c(p.accent)))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         let b = &mut this.remote.docker.monitor.browser;
@@ -193,16 +241,19 @@ impl Workbench {
                     })),
             );
         }
-        toolbar = toolbar.child(button("overview-clear", crate::i18n::t("Clear filters"), p).on_click(cx.listener(|this, _, _, cx| {
-            let b = &mut this.remote.docker.monitor.browser;
-            b.status_filter = StatusFilter::All;
-            b.overview.attention = false;
-            b.query.clear();
-            if let Some(field) = b.field.clone() {
-                field.update(cx, |field, cx| field.set_text("", cx));
-            }
-            cx.notify();
-        })));
+        let mut toolbar = div().flex_1().min_w(px(320.)).flex().flex_wrap().items_center().justify_end().gap(px(theme::SPACE[2])).child(status_filters);
+        if b.status_filter != StatusFilter::All || b.overview.attention || !b.query.trim().is_empty() {
+            toolbar = toolbar.child(button("overview-clear", crate::i18n::t("Clear filters"), p).on_click(cx.listener(|this, _, _, cx| {
+                let b = &mut this.remote.docker.monitor.browser;
+                b.status_filter = StatusFilter::All;
+                b.overview.attention = false;
+                b.query.clear();
+                if let Some(field) = b.field.clone() {
+                    field.update(cx, |field, cx| field.set_text("", cx));
+                }
+                cx.notify();
+            })));
+        }
         toolbar = toolbar.child(
             button("overview-attention", crate::i18n::t("Needs attention"), p)
                 .when(b.overview.attention, |s| s.bg(c(p.surface_active)).text_color(c(p.accent)))
@@ -213,21 +264,6 @@ impl Workbench {
                     cx.notify();
                 })),
         );
-        for (label, sort) in [(crate::i18n::t("Name"), Sort::Name), (crate::i18n::t("CPU"), Sort::Cpu), (crate::i18n::t("Memory"), Sort::Memory)] {
-            toolbar = toolbar.child(
-                button(SharedString::from(format!("overview-sort-{label}")), label, p)
-                    .when(b.sort == sort, |s| s.text_color(c(p.accent)))
-                    .tooltip(|_, cx| {
-                        cx.new(|_| Tooltip(crate::i18n::t("Click to sort using current values. Order stays fixed during live updates.").into())).into()
-                    })
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        let m = &mut this.remote.docker.monitor;
-                        m.browser.sort = sort;
-                        m.browser.sort_usage = m.usage.clone();
-                        cx.notify();
-                    })),
-            );
-        }
         toolbar =
             toolbar.child(button("overview-columns", crate::i18n::t("Columns"), p).when(b.overview.columns_open, |s| s.bg(c(p.surface_active))).on_click(
                 cx.listener(|this, _, _, cx| {
@@ -236,20 +272,18 @@ impl Workbench {
                     cx.notify();
                 }),
             ));
-        let mut view = div()
-            .flex_1()
-            .min_h_0()
-            .flex()
-            .flex_col()
-            .gap(px(theme::SPACE[3]))
-            .child(
-                div()
-                    .px(px(theme::SPACE[5]))
-                    .text_size(px(text::SM.0))
-                    .child(crate::i18n::tf("{0} containers · {1} running · {2} need attention", &[&m.containers.len(), &running, &issues])),
-            )
-            .when_some(b.field.clone(), |d, field| d.child(div().px(px(theme::SPACE[5])).max_w(px(520.)).child(field)))
-            .child(div().px(px(theme::SPACE[5])).child(toolbar));
+        let mut view = div().flex_1().min_w_0().min_h_0().flex().flex_col().pt(px(theme::SPACE[4])).gap(px(theme::SPACE[3])).child(
+            div()
+                .px(px(theme::SPACE[5]))
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap(px(theme::SPACE[3]))
+                .when_some(b.field.clone(), |d, field| {
+                    d.child(div().flex_1().min_w(px(240.)).max_w(px(480.)).child(super::container_monitor_glue::search_field("overview-search", field, p, cx)))
+                })
+                .child(toolbar),
+        );
         if b.overview.columns_open {
             view = view.child(div().px(px(theme::SPACE[5])).flex().flex_wrap().gap(px(theme::SPACE[2])).children(columns().into_iter().enumerate().map(
                 |(index, (label, _))| {
@@ -265,11 +299,16 @@ impl Workbench {
         }
         view = view.child(
             div()
+                .id("overview-hint")
+                .debug_selector(|| "overview-hint".into())
                 .px(px(theme::SPACE[5]))
+                .flex()
+                .flex_wrap()
+                .items_center()
+                .gap(px(theme::SPACE[3]))
                 .text_size(px(text::XS.0))
                 .text_color(c(p.text_muted))
-                .child(crate::i18n::tf("{0} / {1} containers", &[&rows.len(), &m.containers.len()]))
-                .child(" · ")
+                .when(rows.len() != m.containers.len(), |d| d.child(crate::i18n::tf("{0} / {1} containers", &[&rows.len(), &m.containers.len()])))
                 .child(crate::i18n::t("Select a row to open its details.")),
         );
         if rows.is_empty() {
@@ -284,20 +323,30 @@ impl Workbench {
             };
             return view.child(div().p(px(theme::SPACE[6])).text_color(c(p.text_muted)).child(message)).into_any_element();
         }
-        let width = 510. + columns().iter().enumerate().filter(|(i, _)| b.overview.columns[*i]).map(|(_, (_, w))| w).sum::<f32>();
-        let mut header =
-            div().id("overview-header").flex().items_center().h(px(32.)).bg(c(p.surface_hover)).child(cell(crate::i18n::t("Name"), 220., p)).child(cell(
-                crate::i18n::t("Status"),
-                150.,
-                p,
-            ));
+        let width =
+            NAME_WIDTH + STATUS_WIDTH + ACTIONS_WIDTH + columns().iter().enumerate().filter(|(i, _)| b.overview.columns[*i]).map(|(_, (_, w))| w).sum::<f32>();
+        let mut header = div()
+            .id("overview-header")
+            .debug_selector(|| "overview-header".into())
+            .w_full()
+            .flex()
+            .items_center()
+            .h(px(34.))
+            .bg(c(p.surface_hover))
+            .child(self.container_sort_header(crate::i18n::t("Name"), NAME_WIDTH, Sort::Name, p, cx).flex_grow())
+            .child(cell(crate::i18n::t("Status"), STATUS_WIDTH, p));
         for (index, (label, width)) in columns().into_iter().enumerate() {
             if b.overview.columns[index] {
-                header = header.child(cell(label, width, p).id(("column", index)));
+                let column = match index {
+                    1 => self.container_sort_header(label, width, Sort::Cpu, p, cx),
+                    2 => self.container_sort_header(label, width, Sort::Memory, p, cx),
+                    _ => cell(label, width, p),
+                };
+                header = header.child(column.id(("column", index)).when(index == 0, |d| d.flex_grow()));
             }
         }
-        header = header.child(cell(crate::i18n::t("Actions"), 140., p));
-        let mut table = div().w(px(width)).text_size(px(text::XS.0)).child(header);
+        header = header.child(cell(crate::i18n::t("Actions"), ACTIONS_WIDTH, p).text_right());
+        let mut table = div().id("overview-table").debug_selector(|| "overview-table".into()).w_full().min_w(px(width)).text_size(px(text::SM.0)).child(header);
         for row in rows {
             let id = row.id.clone();
             let logs_id = id.clone();
@@ -320,6 +369,7 @@ impl Workbench {
                     let id = id.clone();
                     move || format!("overview-row-{id}")
                 })
+                .w_full()
                 .flex()
                 .items_center()
                 .h(px(42.))
@@ -328,7 +378,7 @@ impl Workbench {
                 .cursor_pointer()
                 .hover(|s| s.bg(c(p.surface_hover)))
                 .when(b.overview.cursor.as_ref().or(b.selected.as_ref()) == Some(&id), |s| s.bg(c(p.surface_active)))
-                .child(cell(&row.name, 220., p).text_color(c(p.text)).font_weight(gpui::FontWeight::MEDIUM))
+                .child(cell(&row.name, NAME_WIDTH, p).flex_grow().text_color(c(p.text)).font_weight(gpui::FontWeight::MEDIUM))
                 .child(status_cell(row, p))
                 .on_click(cx.listener(move |this, _, _, cx| this.select_container(id.clone(), Tab::Resources, cx)));
             for (index, value) in values.into_iter().enumerate() {
@@ -337,41 +387,52 @@ impl Workbench {
                         1 | 2 => usage_cell(index, value, usage, p).into_any_element(),
                         3 => rate_cell(index, last.and_then(|s| s.network), p).into_any_element(),
                         4 => rate_cell(index, last.and_then(|s| s.disk), p).into_any_element(),
-                        _ => cell(value, columns()[index].1, p).id(("column", index)).into_any_element(),
+                        _ => cell(value, columns()[index].1, p).id(("column", index)).when(index == 0, |d| d.flex_grow()).into_any_element(),
                     });
                 }
             }
-            line = line.child(div().w(px(70.)).flex_shrink_0().child(
-                button(SharedString::from(format!("overview-logs-{logs_id}")), crate::i18n::t("Logs"), p).on_click(cx.listener(move |this, _, _, cx| {
-                    cx.stop_propagation();
-                    this.select_container(logs_id.clone(), Tab::Logs, cx);
-                })),
-            ));
             line = line.child(
-                div().w(px(70.)).flex_shrink_0().child(
-                    button(SharedString::from(format!("overview-actions-{action_id}")), "…", p)
-                        .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Actions").into())).into())
-                        .on_click(cx.listener(move |this, _, window, cx| {
+                div()
+                    .id("row-actions")
+                    .w(px(ACTIONS_WIDTH))
+                    .flex_shrink_0()
+                    .px(px(theme::SPACE[3]))
+                    .flex()
+                    .items_center()
+                    .justify_end()
+                    .gap(px(theme::SPACE[1]))
+                    .child(button(SharedString::from(format!("overview-logs-{logs_id}")), crate::i18n::t("Logs"), p).flex_none().on_click(cx.listener(
+                        move |this, _, _, cx| {
                             cx.stop_propagation();
-                            this.show_menu(
-                                vec![
-                                    MenuItem::new(crate::i18n::t("Open files")),
-                                    MenuItem::new(crate::i18n::t("Terminal")),
-                                    MenuItem::new(crate::i18n::t("Copy container ID")),
-                                ],
-                                vec![
-                                    MenuCmd::Container(ContainerAction::Files),
-                                    MenuCmd::Container(ContainerAction::Terminal),
-                                    MenuCmd::Container(ContainerAction::CopyId),
-                                ],
-                                Vec::new(),
-                                MenuTarget { path: action_id.clone(), is_dir: false, tab: None },
-                                window.mouse_position(),
-                                window,
-                                cx,
-                            );
-                        })),
-                ),
+                            this.select_container(logs_id.clone(), Tab::Logs, cx);
+                        },
+                    )))
+                    .child(
+                        button(SharedString::from(format!("overview-actions-{action_id}")), "…", p)
+                            .w(px(28.))
+                            .flex_none()
+                            .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Actions").into())).into())
+                            .on_click(cx.listener(move |this, _, window, cx| {
+                                cx.stop_propagation();
+                                this.show_menu(
+                                    vec![
+                                        MenuItem::new(crate::i18n::t("Open files")),
+                                        MenuItem::new(crate::i18n::t("Terminal")),
+                                        MenuItem::new(crate::i18n::t("Copy container ID")),
+                                    ],
+                                    vec![
+                                        MenuCmd::Container(ContainerAction::Files),
+                                        MenuCmd::Container(ContainerAction::Terminal),
+                                        MenuCmd::Container(ContainerAction::CopyId),
+                                    ],
+                                    Vec::new(),
+                                    MenuTarget { path: action_id.clone(), is_dir: false, tab: None },
+                                    window.mouse_position(),
+                                    window,
+                                    cx,
+                                );
+                            })),
+                    ),
             );
             table = table.child(line);
         }
@@ -380,7 +441,10 @@ impl Workbench {
                 .id("container-overview-scroll")
                 .debug_selector(|| "container-overview-scroll".into())
                 .flex_1()
+                .min_w_0()
                 .min_h_0()
+                .mx(px(theme::SPACE[5]))
+                .mb(px(theme::SPACE[5]))
                 .overflow_scroll()
                 .track_scroll(&b.overview.scroll)
                 .when_some(b.overview.focus.as_ref(), |d, focus| {
@@ -388,6 +452,18 @@ impl Workbench {
                 })
                 .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, _, cx| {
                     let key = event.keystroke.key.as_str();
+                    if event.keystroke.modifiers == gpui::Modifiers::none()
+                        && let Some(sort) = match key {
+                            "n" => Some(Sort::Name),
+                            "c" => Some(Sort::Cpu),
+                            "m" => Some(Sort::Memory),
+                            _ => None,
+                        }
+                    {
+                        cx.stop_propagation();
+                        this.sort_container_overview(sort, cx);
+                        return;
+                    }
                     if !matches!(key, "up" | "down" | "enter") {
                         return;
                     }

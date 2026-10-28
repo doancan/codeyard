@@ -56,35 +56,29 @@ impl Workbench {
         rows
     }
 
-    fn container_status_view(&self, p: &Palette) -> AnyElement {
+    fn container_update_status(&self, p: &Palette) -> gpui::Stateful<gpui::Div> {
         let m = &self.remote.docker.monitor;
-        let status = if m.host.is_none() {
-            crate::i18n::t("No SSH host connected").to_string()
+        let (status, color) = if m.error.is_some() && m.updated.is_some() {
+            (crate::i18n::t("Showing the last successful snapshot."), p.warning)
         } else if m.paused {
-            crate::i18n::t("Updates paused").to_string()
+            (crate::i18n::t("Updates paused"), p.warning)
         } else if m.updated.is_some() {
-            crate::i18n::t("Live updates").into()
+            (crate::i18n::t("Live updates"), if m.warning.is_some() { p.warning } else { p.success })
         } else {
-            crate::i18n::t("Discovering containers…").into()
+            (crate::i18n::t("Discovering containers…"), p.info)
         };
-        let mut view = div()
+        div()
+            .id("container-update-status")
+            .debug_selector(|| "container-update-status".into())
+            .flex_none()
+            .max_w_full()
             .flex()
-            .flex_col()
+            .items_center()
             .gap(px(theme::SPACE[2]))
             .text_size(px(text::XS.0))
             .text_color(c(p.text_muted))
-            .child(div().h(px(18.)).truncate().child(status));
-        if let Some(error) = m.error.as_ref().or(m.warning.as_ref()) {
-            view = view.child(
-                div()
-                    .text_color(c(p.text))
-                    .child(crate::i18n::tf("Could not refresh container data: {}. Check Docker access on the SSH host and retry.", &[&error])),
-            );
-            if m.error.is_some() && m.updated.is_some() {
-                view = view.child(crate::i18n::t("Showing the last successful snapshot."));
-            }
-        }
-        view.into_any_element()
+            .child(div().size(px(6.)).rounded_full().flex_none().bg(c(color)))
+            .child(div().min_w_0().truncate().child(status))
     }
 
     pub(super) fn container_dashboard_view(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
@@ -96,58 +90,150 @@ impl Workbench {
                 .child(crate::i18n::t("Container module is off. Enable modules.containers.enabled in Settings."))
                 .into_any_element();
         }
+        let context = m
+            .host
+            .as_ref()
+            .map(|h| format!("SSH · {h} · {}", m.context.as_ref().map(|c| c.name.as_str()).unwrap_or("—")))
+            .unwrap_or_else(|| crate::i18n::t("No SSH host connected").into());
+        let selected = m.browser.overview.details.then(|| m.browser.selected.as_ref().and_then(|id| m.containers.iter().find(|c| &c.id == id))).flatten();
+        let title = selected.map(|container| container.name.clone()).unwrap_or_else(|| crate::i18n::t("Containers").to_string());
+        let running = m.containers.iter().filter(|c| c.state == "running").count();
+        let issues = m.containers.iter().filter(|c| super::container_overview_glue::unhealthy(c)).count();
         let mut view = div()
             .id("container-dashboard")
             .debug_selector(|| "container-dashboard".into())
             .size_full()
+            .min_w_0()
+            .min_h_0()
             .flex()
             .flex_col()
             .bg(c(p.bg))
             .text_color(c(p.text))
             .child(
                 div()
+                    .id("container-dashboard-header")
+                    .debug_selector(|| "container-dashboard-header".into())
                     .p(px(theme::SPACE[5]))
+                    .border_b_1()
+                    .border_color(c(p.border))
+                    .bg(c(p.surface))
                     .flex()
+                    .flex_wrap()
                     .items_center()
-                    .justify_between()
-                    .gap(px(theme::SPACE[3]))
+                    .gap(px(theme::SPACE[4]))
                     .child(
                         div()
                             .flex_1()
-                            .min_w_0()
+                            .min_w(px(220.))
                             .flex()
                             .flex_col()
-                            .gap(px(theme::SPACE[2]))
-                            .child(div().text_size(px(text::XL.0)).font_weight(gpui::FontWeight::SEMIBOLD).child(crate::i18n::t("Containers")))
+                            .gap(px(theme::SPACE[3]))
                             .child(
-                                div().truncate().text_size(px(text::SM.0)).text_color(c(p.text_muted)).child(
-                                    m.host
-                                        .as_ref()
-                                        .map(|h| format!("SSH · {h} · {}", m.context.as_ref().map(|c| c.name.as_str()).unwrap_or("—")))
-                                        .unwrap_or_else(|| crate::i18n::t("No SSH host connected").into()),
-                                ),
+                                div()
+                                    .flex()
+                                    .flex_wrap()
+                                    .items_center()
+                                    .gap(px(theme::SPACE[4]))
+                                    .child(
+                                        div()
+                                            .id("container-dashboard-title")
+                                            .debug_selector(|| "container-dashboard-title".into())
+                                            .flex_none()
+                                            .min_w_0()
+                                            .max_w_full()
+                                            .truncate()
+                                            .text_size(px(text::XL.0))
+                                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                                            .tooltip({
+                                                let title = title.clone();
+                                                move |_, cx| cx.new(|_| Tooltip(title.clone().into())).into()
+                                            })
+                                            .child(title),
+                                    )
+                                    .when(m.host.is_some(), |d| d.child(self.container_update_status(p))),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_wrap()
+                                    .items_center()
+                                    .gap(px(theme::SPACE[4]))
+                                    .text_size(px(text::XS.0))
+                                    .text_color(c(p.text_muted))
+                                    .child(
+                                        div()
+                                            .id("container-dashboard-context")
+                                            .min_w_0()
+                                            .max_w_full()
+                                            .truncate()
+                                            .tooltip({
+                                                let context = context.clone();
+                                                move |_, cx| cx.new(|_| Tooltip(context.clone().into())).into()
+                                            })
+                                            .child(context),
+                                    )
+                                    .when(!m.browser.overview.details && m.updated.is_some(), |d| {
+                                        d.child(div().id("container-fleet-summary").debug_selector(|| "container-fleet-summary".into()).child(crate::i18n::tf(
+                                            "{0} containers · {1} running · {2} need attention",
+                                            &[&m.containers.len(), &running, &issues],
+                                        )))
+                                    }),
                             ),
                     )
                     .child(
-                        button("container-tools", crate::i18n::t("Container actions…"), p)
-                            .on_click(cx.listener(|this, _, window, cx| this.open_container_tools(window, cx))),
-                    )
-                    .child(button("dashboard-refresh", crate::i18n::t("Refresh"), p).on_click(cx.listener(|this, _, _, cx| {
-                        this.remote.docker.monitor.paused = false;
-                        this.refresh_container_monitor(cx);
-                    })))
-                    .child(button("dashboard-pause", if m.paused { crate::i18n::t("Resume updates") } else { crate::i18n::t("Pause updates") }, p).on_click(
-                        cx.listener(|this, _, _, cx| {
-                            this.remote.docker.monitor.paused = !this.remote.docker.monitor.paused;
-                            if !this.remote.docker.monitor.paused {
+                        div()
+                            .min_w_0()
+                            .max_w_full()
+                            .flex()
+                            .flex_wrap()
+                            .items_center()
+                            .gap(px(theme::SPACE[2]))
+                            .child(button("dashboard-refresh", crate::i18n::t("Refresh"), p).flex_none().on_click(cx.listener(|this, _, _, cx| {
+                                this.remote.docker.monitor.paused = false;
                                 this.refresh_container_monitor(cx);
-                            }
-                            cx.notify();
-                        }),
-                    )),
-            )
-            .child(div().px(px(theme::SPACE[5])).pb(px(theme::SPACE[3])).child(self.container_status_view(p)));
-        view = view.child(self.container_overview_navigation(p, cx));
+                            })))
+                            .child(
+                                button("dashboard-pause", if m.paused { crate::i18n::t("Resume updates") } else { crate::i18n::t("Pause updates") }, p)
+                                    .flex_none()
+                                    .on_click(cx.listener(|this, _, _, cx| {
+                                        this.remote.docker.monitor.paused = !this.remote.docker.monitor.paused;
+                                        if !this.remote.docker.monitor.paused {
+                                            this.refresh_container_monitor(cx);
+                                        }
+                                        cx.notify();
+                                    })),
+                            )
+                            .when_some(selected, |d, container| d.child(self.container_detail_actions(container, p, cx)))
+                            .when(selected.is_none(), |d| {
+                                d.child(
+                                    button("container-tools", crate::i18n::t("Container actions…"), p)
+                                        .flex_none()
+                                        .on_click(cx.listener(|this, _, window, cx| this.open_container_tools(window, cx))),
+                                )
+                            }),
+                    ),
+            );
+        if let Some(error) = m.error.as_ref().or(m.warning.as_ref()) {
+            view = view.child(
+                div()
+                    .id("container-dashboard-error")
+                    .debug_selector(|| "container-dashboard-error".into())
+                    .min_w_0()
+                    .mx(px(theme::SPACE[5]))
+                    .mt(px(theme::SPACE[3]))
+                    .p(px(theme::SPACE[3]))
+                    .rounded(px(theme::radius::SM))
+                    .border_1()
+                    .border_color(c(p.border))
+                    .bg(ui::ca(p.warning, 0.08))
+                    .text_size(px(text::SM.0))
+                    .text_color(c(p.text))
+                    .child(crate::i18n::tf("Could not refresh container data: {}. Check Docker access on the SSH host and retry.", &[error])),
+            );
+        }
+        if m.browser.overview.details || m.browser.selected.is_some() {
+            view = view.child(div().pt(px(theme::SPACE[3])).child(self.container_overview_navigation(p, cx)));
+        }
         if !m.browser.overview.details {
             view = view.child(self.container_overview_view(p, cx));
         } else if let Some(container) = m.browser.selected.as_ref().and_then(|id| m.containers.iter().find(|c| &c.id == id)) {
@@ -204,7 +290,7 @@ mod tests {
             cx.notify();
         });
         cx.run_until_parked();
-        let sort = cx.debug_bounds("container-button-CPU").unwrap().center();
+        let sort = cx.debug_bounds("overview-sort-CPU").unwrap().center();
         cx.simulate_click(sort, gpui::Modifiers::none());
         cx.run_until_parked();
         assert_eq!(wb.read_with(cx, |wb, _| wb.container_rows()[0].id.clone()), "web-id");

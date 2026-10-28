@@ -107,6 +107,7 @@ pub(super) struct GitState {
 
 /// Layout: side panel, bottom panel, split editor, zoom, zen mode, window bounds.
 pub(super) struct ChromeLayout {
+    pub(super) a11y_bounds: super::a11y::PaintedBounds,
     pub(super) web_preview: super::web_preview_glue::State,
     pub(super) resources: Entity<crate::resource_monitor::ResourceMonitor>,
     pub(super) panel: Option<Panel>,

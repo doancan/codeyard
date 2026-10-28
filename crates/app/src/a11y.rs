@@ -15,6 +15,11 @@ use super::*;
 use crate::i18n::{t, tf, tn};
 use accesskit::{Action, ActionData, ActionRequest, Node, NodeId, Role, TextPosition, TextSelection, TreeId, TreeInfo, TreeUpdate};
 
+#[path = "a11y_geometry.rs"]
+mod geometry;
+pub use geometry::Geometry;
+pub(super) use geometry::{Landmark, PaintedBounds, landmark};
+
 const ROOT: NodeId = NodeId(1);
 const EXPLORER: NodeId = NodeId(2);
 const EDITOR: NodeId = NodeId(3);
@@ -96,6 +101,8 @@ pub struct DialogSnap {
 
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Snapshot {
+    /// Physical landmark frames from the latest painted layout.
+    pub geometry: Geometry,
     pub title: String,
     pub rows: Vec<RowSnap>,
     pub rows_total: usize,
@@ -184,11 +191,13 @@ impl Snapshot {
     pub fn to_tree(&self) -> TreeUpdate {
         let mut nodes: Vec<(NodeId, Node)> = Vec::new();
         let mut root = Node::new(Role::Window);
+        self.geometry.apply(ROOT, &mut root);
         root.set_label(self.title.clone());
         let mut kids = Vec::new();
 
         // Explorer
         let mut tree = Node::new(Role::Tree);
+        self.geometry.apply(EXPLORER, &mut tree);
         tree.set_label(t("Explorer"));
         tree.set_size_of_set(self.rows_total);
         let mut row_ids = Vec::new();
@@ -216,6 +225,7 @@ impl Snapshot {
         // Editor
         if let Some(e) = &self.editor {
             let mut ed = Node::new(Role::MultilineTextInput);
+            self.geometry.apply(EDITOR, &mut ed);
             ed.set_label(if e.dirty { tf("{} (modified)", &[&e.name]) } else { e.name.clone() });
             ed.set_description(tf("{0} lines, showing from line {1}", &[&e.total_lines, &(e.first_line + 1)]));
             ed.add_action(Action::Focus);
@@ -242,6 +252,7 @@ impl Snapshot {
 
         // Status bar
         let mut status = Node::new(Role::Status);
+        self.geometry.apply(STATUS, &mut status);
         status.set_label(t("Status bar"));
         let mut items = Vec::new();
         for (i, t) in self.status.iter().enumerate() {
@@ -388,7 +399,7 @@ impl Workbench {
         } else {
             FocusSnap::Window
         };
-        Snapshot { title, rows, rows_total, editor, status, dialog, focus }
+        Snapshot { geometry: Geometry::new(&self.chrome.a11y_bounds, window), title, rows, rows_total, editor, status, dialog, focus }
     }
 
     /// Action from AT (main thread, in the GPUI context).
@@ -574,6 +585,7 @@ mod tests {
         let lines = vec![(0, "fn main() {".to_string()), (12, "    println!(\"hé\");".to_string()), (31, "}".to_string())];
         let runs = runs_for(lines, 3, 0);
         Snapshot {
+            geometry: Geometry::default(),
             title: "Codeyard \u{2014} demo".into(),
             rows: vec![
                 RowSnap { id: row_id("/d/src").0, path: "/d/src".into(), name: "src".into(), depth: 0, is_dir: true, expanded: true, selected: false },
@@ -632,3 +644,7 @@ mod tests {
         assert_eq!(runs.iter().map(|r| r.chars).sum::<usize>(), 801);
     }
 }
+
+#[cfg(test)]
+#[path = "a11y_geometry_tests.rs"]
+mod geometry_tests;

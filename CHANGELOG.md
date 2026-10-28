@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- macOS accessibility landmark bounds for the window, primary Explorer viewport, focused text-editor pane
+  and status bar, with display-scale conversion and updates when resizing, switching split groups or hiding panels.
+
 - Full-width Container Overview table with in-page search, live SSH resource data, health filtering,
   selectable columns, stable refresh ordering and scrolling, detail navigation, logs and container actions.
 
@@ -16,6 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   live page/CSS refresh, status-bar controls and Output logging. Local, SSH and container files share the
   same agent-backed path; no external runtime or remote listening port is required. Disabling the module
   or leaving the workspace stops its server.
+
+### Changed
+
+- Port mappings and mounted storage use responsive inspection cards with copyable addresses and paths.
+  Log entries place timestamp and severity above full-width messages, with a full-width search and console footer.
+
+- Container details promote the selected name and file/terminal actions into the header. Responsive CPU/memory
+  cards show current readings above charts, disk/network activity shares the available width, and log search has a visible field frame.
+
+- Container Overview fills the available width when resizing or hiding columns. Name and Image expand while
+  metrics stay aligned with larger table text; header actions and search/filters wrap in narrow windows. Sorting moves to the
+  Name/CPU/Memory column headers, and Clear filters appears only for an active query or filter.
+- The Container Overview header combines connection, update state and fleet counts, with grouped filters
+  and a framed search field. Redundant initial navigation and duplicate count rows are removed.
 
 ## [0.5.0] - 2026-10-27
 
