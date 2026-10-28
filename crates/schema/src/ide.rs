@@ -404,6 +404,8 @@ pub fn associate(path: &str, text: &str, format: Format, user: &UserAssociations
 pub struct Service {
     pub store: Arc<Store>,
     sets: Mutex<HashMap<String, Arc<SchemaSet>>>,
+    /// Folders on this machine whose schemas are always read here, also for a remote workspace (installed extensions).
+    local_only: Mutex<Vec<PathBuf>>,
 }
 
 pub struct Analysis {
@@ -414,11 +416,16 @@ pub struct Analysis {
 
 impl Service {
     pub fn new(cache: Option<PathBuf>, download: bool) -> Arc<Service> {
-        Arc::new(Service { store: Store::new(cache, download), sets: Mutex::new(HashMap::new()) })
+        Arc::new(Service { store: Store::new(cache, download), sets: Mutex::new(HashMap::new()), local_only: Mutex::new(Vec::new()) })
     }
 
     pub fn with_store(store: Arc<Store>) -> Arc<Service> {
-        Arc::new(Service { store, sets: Mutex::new(HashMap::new()) })
+        Arc::new(Service { store, sets: Mutex::new(HashMap::new()), local_only: Mutex::new(Vec::new()) })
+    }
+
+    /// Folders whose schema files are read on this machine even when `files` reads a remote workspace.
+    pub fn set_local_only(&self, dirs: Vec<PathBuf>) {
+        *self.local_only.lock().unwrap_or_else(|e| e.into_inner()) = dirs;
     }
 
     pub fn clear(&self) {
@@ -429,6 +436,8 @@ impl Service {
     /// Schema for a source (URL or path); reloaded if the local file changed. `files`: local paths are read on the
     /// workspace's host (SSH), not on this machine.
     pub fn set_for(&self, source: &str, files: Option<&Arc<dyn FileSource>>) -> Result<Arc<SchemaSet>, String> {
+        let local = !source.contains("://") && self.local_only.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|d| Path::new(source).starts_with(d));
+        let files = files.filter(|_| !local);
         // Before the key below stats the path: that alone would reach a network share.
         if !source.contains("://") {
             self.store.check_local(source)?;
@@ -490,6 +499,30 @@ pub fn is_meta_schema(url: &str) -> bool {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn local_only_folders_are_read_here_for_a_remote_workspace() {
+        struct Remote;
+        impl FileSource for Remote {
+            fn read(&self, _: &str) -> Result<String, String> {
+                Err("remote host has no such file".into())
+            }
+            fn mtime(&self, _: &str) -> Option<i64> {
+                None
+            }
+        }
+        let dir = std::env::temp_dir().join(format!("schema-local-only-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let schema = dir.join("s.json");
+        std::fs::write(&schema, r#"{"type":"object","required":["name"]}"#).unwrap();
+        let svc = Service::new(None, false);
+        let remote: Arc<dyn FileSource> = Arc::new(Remote);
+        let src = schema.to_string_lossy().into_owned();
+        assert!(svc.set_for(&src, Some(&remote)).is_err(), "without the folder, the remote host is asked");
+        svc.set_local_only(vec![dir.clone()]);
+        assert!(svc.set_for(&src, Some(&remote)).is_ok());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn a_multibyte_character_across_the_scan_limit_does_not_panic() {

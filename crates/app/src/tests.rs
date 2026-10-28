@@ -977,6 +977,7 @@ fn snippets_expand_on_tab_and_walk_the_tab_stops(cx: &mut TestAppContext) {
         body: "// benim ${1:fn}".into(),
         description: String::new(),
         user: true,
+        origin: None,
     }]);
     cx.simulate_keystrokes("escape cmd-down");
     cx.simulate_input("\nfn");

@@ -278,7 +278,6 @@ pub struct Language {
     pub extensions: Vec<String>,
     pub filenames: Vec<String>,
     pub grammar: Option<String>,
-    pub queries: Option<String>,
     pub line_comment: Option<String>,
     pub block_comment: Option<(String, String)>,
 }
@@ -316,14 +315,6 @@ pub struct LanguageServer {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DebugAdapter {
-    pub kind: String,
-    pub command: String,
-    pub args: Vec<String>,
-    pub languages: Vec<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Command {
     /// Full id: `publisher.name.local`.
     pub id: String,
@@ -352,7 +343,6 @@ pub struct View {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Contributions {
     pub themes: Vec<FileEntry>,
-    pub icon_themes: Vec<FileEntry>,
     pub snippets: Vec<Snippets>,
     pub keymap_presets: Vec<FileEntry>,
     pub keybindings: Vec<Keybinding>,
@@ -361,7 +351,6 @@ pub struct Contributions {
     pub yaml_schemas: Vec<SchemaAssociation>,
     pub settings: Vec<Setting>,
     pub language_servers: Vec<LanguageServer>,
-    pub debug_adapters: Vec<DebugAdapter>,
     pub commands: Vec<Command>,
     pub views: Vec<View>,
 }
