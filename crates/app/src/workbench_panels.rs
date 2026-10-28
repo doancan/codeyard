@@ -439,7 +439,7 @@ pub fn problem_rows(all: &std::collections::BTreeMap<String, Vec<crate::lsp::Dia
                 path: path.clone(),
                 severity: d.severity,
                 text: d.headline().lines().next().unwrap_or_default().to_string(),
-                detail: format!("{source} [{}:{}]", d.start.0 + 1, d.start.1 + 1),
+                detail: format!("{source} [{}:{}]", d.start.0.saturating_add(1), d.start.1.saturating_add(1)),
                 line: d.start.0,
                 col: d.start.1,
             });

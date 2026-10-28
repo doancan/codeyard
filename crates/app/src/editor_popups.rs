@@ -342,7 +342,7 @@ impl EditorView {
                             .text_size(px(font_size - 1.))
                             .text_color(c(p.text_muted))
                             .hover(|d| d.text_color(c(p.accent)))
-                            .child(format!("{rel}:{}", pk.line + 1))
+                            .child(format!("{rel}:{}", pk.line.saturating_add(1)))
                             .when(pk.more > 0, |d| d.child(tf("(+{} more)", &[&pk.more])))
                             .child(div().flex_1())
                             .child(t("click to open · Esc to close"))

@@ -67,7 +67,7 @@ impl Diagnostic {
             None => format!("{kind}: {}", self.message),
         };
         for r in &self.related {
-            out.push_str(&format!("\n  --> {}:{}:{}: {}", related_path(&r.path, root), r.start.0 + 1, r.start.1 + 1, r.message));
+            out.push_str(&format!("\n  --> {}:{}:{}: {}", related_path(&r.path, root), r.start.0.saturating_add(1), r.start.1.saturating_add(1), r.message));
         }
         out
     }
@@ -81,9 +81,9 @@ pub fn related_path<'a>(path: &'a str, root: Option<&str>) -> &'a str {
 /// One row under a diagnostic: `line 12: value moved here` in the same file, `src/lib.rs:12: value moved here` elsewhere.
 pub fn related_label(r: &Related, file: &str, root: Option<&str>) -> String {
     if r.path == file {
-        crate::i18n::tf("line {0}: {1}", &[&(r.start.0 + 1), &r.message])
+        crate::i18n::tf("line {0}: {1}", &[&r.start.0.saturating_add(1), &r.message])
     } else {
-        format!("{}:{}: {}", related_path(&r.path, root), r.start.0 + 1, r.message)
+        format!("{}:{}: {}", related_path(&r.path, root), r.start.0.saturating_add(1), r.message)
     }
 }
 
@@ -128,26 +128,35 @@ pub fn parse_range(v: &Value) -> Range16 {
     (position(&v["start"]), position(&v["end"]))
 }
 
+/// Whether `parse_related` would keep this entry (checked without building it, for the count beyond the limit).
+fn is_related(v: &Value) -> bool {
+    let location = &v["location"];
+    location["range"].is_object() && location["uri"].as_str().is_some_and(|u| uri_to_path(u).is_some())
+}
+
 fn parse_related(v: &Value) -> Option<Related> {
+    if !is_related(v) {
+        return None;
+    }
     let location = &v["location"];
     let path = uri_to_path(location["uri"].as_str()?)?;
-    let range = location.get("range").filter(|r| r.is_object())?;
+    let range = &location["range"];
     let (start, end) = parse_range(range);
     Some(Related { path, start, end, message: super::clip_text(v["message"].as_str().unwrap_or_default(), MAX_RELATED_CHARS) })
 }
 
 fn parse_diagnostic(d: &Value) -> Diagnostic {
     let (start, end) = parse_range(&d["range"]);
-    let mut related: Vec<Related> = d["relatedInformation"].as_array().map(|a| a.iter().filter_map(parse_related).collect()).unwrap_or_default();
-    let more_related = related.len().saturating_sub(MAX_RELATED);
-    related.truncate(MAX_RELATED);
+    // Only the kept entries are built; the rest are counted.
+    let all = d["relatedInformation"].as_array().map(Vec::as_slice).unwrap_or_default();
+    let related: Vec<Related> = all.iter().filter_map(parse_related).take(MAX_RELATED).collect();
+    let more_related = all.iter().filter(|v| is_related(v)).count() - related.len();
     let code = match &d["code"] {
         Value::String(c) if !c.is_empty() => Some(super::clip_text(c, 100)),
         Value::Number(n) => Some(n.to_string()),
         _ => None,
     };
-    let rendered = d["data"]["rendered"].as_str().filter(|r| !r.trim().is_empty()).map(|r| {
-        let mut text = strip_ansi(r);
+    let rendered = d["data"]["rendered"].as_str().map(strip_ansi).filter(|r| !r.trim().is_empty()).map(|mut text| {
         if text.len() > MAX_RENDERED {
             let mut end = MAX_RENDERED;
             while !text.is_char_boundary(end) {
@@ -1012,5 +1021,19 @@ mod tests {
         assert_eq!(strip_ansi("a\u{1b}]8;;file:///x\u{7}link\u{1b}]8;;\u{1b}\\b"), "alinkb", "hyperlinks (OSC) too");
         assert_eq!(strip_ansi("x\u{1b}"), "x", "a cut-off escape at the end");
         assert_eq!(strip_ansi("plain"), "plain");
+    }
+
+    /// Found in review: a hostile line number, a flood of related entries and output that is nothing but escapes.
+    #[test]
+    fn hostile_related_information_is_bounded_and_never_overflows() {
+        let d = diag_with(json!({ "severity": 1, "relatedInformation": [related("file:///p/src/a.rs", u32::MAX, "far away")] }));
+        assert_eq!(related_label(&d.related[0], "/p/src/a.rs", None), "line 4294967295: far away", "no overflow");
+        assert!(d.full_text(None).contains(":4294967295:9: far away"));
+        let flood: Vec<Value> = (0..100_000).map(|i| if i % 2 == 0 { related("file:///p/a.rs", 1, "x") } else { json!({ "location": 5 }) }).collect();
+        let d = diag_with(json!({ "relatedInformation": flood }));
+        assert_eq!((d.related.len(), d.more_related), (MAX_RELATED, 50_000 - MAX_RELATED), "only valid entries are counted");
+        for only_escapes in ["\u{1b}[0m\u{1b}[1m", "\u{1b}]8;;unterminated", "  \u{1b}[31m \n"] {
+            assert_eq!(diag_with(json!({ "data": { "rendered": only_escapes } })).rendered, None, "{only_escapes:?}: the copy falls back to the parts");
+        }
     }
 }
