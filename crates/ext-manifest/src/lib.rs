@@ -19,6 +19,8 @@ mod tests;
 use std::cmp::Ordering;
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
+
 pub use diagnostics::{Code, Diagnostic};
 pub use risk::{Clipboard, Level, Permissions, Risk, risk};
 
@@ -37,9 +39,23 @@ pub fn parse_with(text: &str, options: Options) -> Result<Manifest, Vec<Diagnost
     validate::parse(text, options)
 }
 
-/// `publisher.name`.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// `publisher.name`. Serialized as its text and checked again when read back.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
 pub struct ExtId(String);
+
+impl TryFrom<String> for ExtId {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, String> {
+        ExtId::parse(&s)
+    }
+}
+
+impl From<ExtId> for String {
+    fn from(id: ExtId) -> String {
+        id.0
+    }
+}
 
 impl ExtId {
     /// Check the form: two parts, each lowercase `a-z 0-9 -`, starting with a letter, no `--`, no trailing `-`.
@@ -97,8 +113,9 @@ pub fn check_id_part(part: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// `major.minor.patch` with an optional `-pre` part; build metadata (`+…`) is not allowed.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// `major.minor.patch` with an optional `-pre` part; build metadata (`+…`) is not allowed. Serialized as its text.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
 pub struct Version {
     pub major: u64,
     pub minor: u64,
@@ -146,6 +163,19 @@ impl Version {
             return Err(format!("pre-release '{p}' has a number with a leading zero"));
         }
         Ok(Version { major: n[0], minor: n[1], patch: n[2], pre: pre.map(str::to_string) })
+    }
+}
+
+impl TryFrom<String> for Version {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, String> {
+        Version::parse(&s)
+    }
+}
+
+impl From<Version> for String {
+    fn from(v: Version) -> String {
+        v.to_string()
     }
 }
 
@@ -199,40 +229,40 @@ impl fmt::Display for Version {
 }
 
 /// The language of `[code] entry`, from its file name.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CodeLanguage {
     Rust,
     TypeScript,
     JavaScript,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CodeEntry {
     pub entry: String,
     pub language: CodeLanguage,
 }
 
 /// When a code extension starts. Inferred from contributions; `WorkspaceContains` is the only form written by hand.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Activation {
     Command(String),
     View(String),
     WorkspaceContains(String),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FileEntry {
     pub label: String,
     pub path: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Snippets {
     pub language: String,
     pub path: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Keybinding {
     pub key: String,
     /// Full id: `publisher.name.local`, another extension's full id, or `core:…`.
@@ -240,7 +270,7 @@ pub struct Keybinding {
     pub when: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Language {
     pub id: String,
     pub name: Option<String>,
@@ -248,18 +278,17 @@ pub struct Language {
     pub extensions: Vec<String>,
     pub filenames: Vec<String>,
     pub grammar: Option<String>,
-    pub queries: Option<String>,
     pub line_comment: Option<String>,
     pub block_comment: Option<(String, String)>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SchemaAssociation {
     pub file_match: Vec<String>,
     pub path: String,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SettingKind {
     String,
     Number,
@@ -268,7 +297,7 @@ pub enum SettingKind {
     Object,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Setting {
     /// Local key; users see and set it as `ext.<publisher.name>.<key>`.
     pub key: String,
@@ -278,22 +307,14 @@ pub struct Setting {
     pub choices: Vec<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LanguageServer {
     pub command: String,
     pub args: Vec<String>,
     pub languages: Vec<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DebugAdapter {
-    pub kind: String,
-    pub command: String,
-    pub args: Vec<String>,
-    pub languages: Vec<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Command {
     /// Full id: `publisher.name.local`.
     pub id: String,
@@ -302,14 +323,14 @@ pub struct Command {
     pub enablement: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ViewLocation {
     Sidebar,
     Bottom,
     Editor,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct View {
     /// Full id: `publisher.name.local`.
     pub id: String,
@@ -319,10 +340,9 @@ pub struct View {
 }
 
 /// Everything an extension adds to Codeyard.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Contributions {
     pub themes: Vec<FileEntry>,
-    pub icon_themes: Vec<FileEntry>,
     pub snippets: Vec<Snippets>,
     pub keymap_presets: Vec<FileEntry>,
     pub keybindings: Vec<Keybinding>,
@@ -331,7 +351,6 @@ pub struct Contributions {
     pub yaml_schemas: Vec<SchemaAssociation>,
     pub settings: Vec<Setting>,
     pub language_servers: Vec<LanguageServer>,
-    pub debug_adapters: Vec<DebugAdapter>,
     pub commands: Vec<Command>,
     pub views: Vec<View>,
 }
@@ -343,7 +362,7 @@ impl Contributions {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Manifest {
     pub id: ExtId,
     pub version: Version,

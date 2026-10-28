@@ -82,6 +82,13 @@ Cancellation interrupts staged copies and stops before the next move/delete. A c
 missing cancellation acknowledgement stops the batch with an explicit uncertain outcome; it never
 automatically retries a mutation. Batches preserve failed/unprocessed cut entries for inspection or retry.
 
+The Explorer candidate `0293d1a` passes all required platform checks (Actions run
+`40766240680`) and a same-machine interleaved comparison against `c790c79`: 20 startup/typing
+runs and five samples per memory scene. Startup p95 changed 238.3 → 236.8 ms (−0.6%),
+typing p95 24.9 → 25.6 ms (+2.6%), and welcome/syntax/terminal memory medians changed
+69 → 69 / 114 → 113 / 73 → 74 MB. Every comparison gate passes. The branch subsequently
+integrates main's declarative-extension delivery; its integration head requires its own CI.
+
 ### F02: implementation in progress
 
 - The storage regression initially reassigned groups 2/7/31 to group 1. Stable IDs now round-trip,
@@ -121,7 +128,7 @@ the idle agent used 1 MB. Static x64/ARM64 agents were 1,576/1,372 KiB.
 An isolated native QA bundle created a four-group grid through the menu and command palette.
 Typing in two groups and saving produced both edits in the same file. Restarting with that file
 retained the four-group topology, focus and per-group views. Native Turkish narrow-window and
-wide-window captures were inspected; the last minimap correction still needs its confirmation.
+wide-window captures were inspected; the final minimap correction is confirmed in a native 480 px Turkish/light window and restores the minimap after widening.
 All CI checks on the earlier `326612b` candidate pass (Actions run `40766365499`); the final
 hardening commit must pass its own workflow before merge. No real VoiceOver speech or
 human translation review is claimed.
@@ -149,3 +156,5 @@ human translation review is claimed.
 - Strict regression, native first-run acceptance, formatter capability negotiation, accessibility,
   memory/performance comparisons and required platform CI remain pending. Turkish strings are
   drafted and covered automatically; no human translation review is claimed.
+
+The final pre-integration F02 Retina budget rerun passes at 72/69/93/83/113/69 MB (terminal/welcome/small Rust/plain 10k/highlighted 10k/first-run), with a 1 MB idle agent and unchanged static-agent sizes. Main integration preserves the new language key context and the per-group minimap behavior; its head requires fresh regression and CI checks.

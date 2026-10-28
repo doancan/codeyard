@@ -824,8 +824,7 @@ Delete Permanently	Kalıcı Olarak Sil
 {} result|{} results	{} sonuç
 {} command|{} commands	{} komut
 
-# ======== Editor, search, pickers, language servers, terminal, tasks, markdown, spell, merge editor (surfaces of part A) ========
-# ---- Language servers (LSP) and code navigation ----
+# ======== Editor, search, pickers, language servers, terminal, tasks, markdown, spell, merge editor (surfaces of part A) =# ---- Language servers (LSP) and code navigation ----
 Language servers are off in “{}” until you trust it: they can run the project's build scripts. Run “Workspace: Trust This Folder”.	“{}” klasörüne güvenmediğiniz sürece dil sunucuları kapalı: projenin derleme betiklerini çalıştırabilirler. “Çalışma Alanı: Bu Klasöre Güven” komutunu çalıştırın.
 {} isn't available. Or set “lsp.servers” in settings.	{} kullanılamıyor. Ya da ayarlarda “lsp.servers” değerini belirleyin.
 {0} isn't available ({1}). Or set “lsp.servers” in settings.	{0} kullanılamıyor ({1}). Ya da ayarlarda “lsp.servers” değerini belirleyin.
@@ -1397,8 +1396,7 @@ operator	işleç
 type parameter	tür parametresi
 symbol	sembol
 
-# ======== SSH, transfers, ports, debugger, .http, GitHub, git operations, dialogs, settings notices (surfaces of part B) ========
-# ---- SSH hosts: management menu, add/edit/remove/test, key login ----
+# ======== SSH, transfers, ports, debugger, .http, GitHub, git operations, dialogs, settings notices (surfaces of part B) =# ---- SSH hosts: management menu, add/edit/remove/test, key login ----
 Add a host	Sunucu ekle
 user@host or user@host:port as name	user@host veya user@host:port; takma ad için “as ad” ekleyin
 Edit a host	Sunucuyu düzenle
@@ -1857,8 +1855,7 @@ Name with an extension: the extension picks the language (scratch.md, notes.json
 Could not read the file: {}	Dosya okunamadı: {}
 Could not create the scratch file: {}	Taslak dosya oluşturulamadı: {}
 
-# ======== Diff view and reconnect banner (found by the untranslated-literal scan) ========
-HEAD ↔ Staged	HEAD ↔ Stage'deki
+# ======== Diff view and reconnect banner (found by the untranslated-literal scan) =HEAD ↔ Staged	HEAD ↔ Stage'deki
 Index ↔ Working Tree	Stage ↔ Çalışma Ağacı
 Inline	Satır İçi
 Side by side	Yan Yana
@@ -1867,8 +1864,7 @@ No changes	Değişiklik yok
 Reconnect	Yeniden Bağlan
 No settings folder on this machine.	Bu bilgisayarda ayar klasörü yok.
 
-# ======== Updates ========
-Help: Check for Updates…	Yardım: Güncellemeleri Denetle…
+# ======== Updates =Help: Check for Updates…	Yardım: Güncellemeleri Denetle…
 Check for Updates…	Güncellemeleri Denetle…
 Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it	Yeni Codeyard sürümlerine bak: ask (henüz karar verilmedi; hiçbir şey denetlenmez), daily (günde bir kez github.com'dan iki küçük dosya indirir: son sürümün sağlama toplamı listesi ve imzası; GitHub IP adresinizi ve isteğin curl'den geldiğini görür, dosyalarınızla ilgili hiçbir şey gönderilmez) ya da manual (yalnızca Güncellemeleri Denetle'yi seçtiğinizde). Yalnızca kendi ayarlarınızda geçerlidir; bir klasör bunu değiştiremez
 Check for updates automatically?	Güncellemeler otomatik denetlensin mi?
@@ -2785,3 +2781,19 @@ Destination: {}	Hedef: {}
 Installs JavaScript/TypeScript, HTML and CSS services from the locked npm catalogue. A pinned Node.js runtime is downloaded from nodejs.org when a compatible runtime with npm is unavailable. Package scripts are disabled.	JavaScript/TypeScript, HTML ve CSS servislerini sabitlenmiş npm kataloğundan kurar. npm içeren uyumlu bir çalışma ortamı yoksa nodejs.org üzerinden sabit sürümlü Node.js indirilir. Paket betikleri çalıştırılmaz.
 Existing custom server commands are preserved. Services start only in trusted folders. Closing this tab cancels an installation that has not reached activation.	Mevcut özel sunucu komutları korunur. Servisler yalnızca güvenilen klasörlerde başlatılır. Bu sekmeyi kapatmak, etkinleştirme aşamasına ulaşmamış kurulumu iptal eder.
 Enter installs or retries. Escape cancels while installation is running.	Enter kurar veya yeniden dener. Kurulum sürerken Escape iptal eder.
+
+{} · extension {}	{} · {} eklentisi
+Extension not loaded: {}	Eklenti yüklenemedi: {}
+Keymap preset from an installed extension, as publisher.name/label (empty: Codeyard's own keys)	Kurulu bir eklentiden kısayol düzeni, yayıncı.ad/etiket biçiminde (boş: Codeyard'ın kendi kısayolları)
+“{}” cannot be used in a key binding	“{}” bir kısayol koşulunda kullanılamaz
+in a key binding, == and != compare editor.language with a language id	bir kısayol koşulunda == ve != yalnızca editor.language ile bir dil kimliğini karşılaştırır
+a key binding condition needs a context, not a constant	bir kısayol koşulu sabit değil, bir bağlam ister
+“{}” needs extension code, which this version does not run	“{}” eklenti kodu gerektiriyor; bu sürüm eklenti kodu çalıştırmıyor
+keymap preset “{}” is not installed	“{}” kısayol düzeni kurulu değil
+unknown command “{}”	bilinmeyen komut “{}”
+“{}” is a built-in shortcut; an extension cannot change it	“{}” yerleşik bir kısayol; eklentiler onu değiştiremez
+{} is not a setting of an installed extension	{} kurulu bir eklentinin ayarı değil
+{0}: expected {1}	{0}: {1} bekleniyordu
+“{}” ships inside the package; this version only starts language servers found on PATH	“{}” paketin içinde geliyor; bu sürüm yalnızca PATH üzerindeki dil sunucularını başlatır
+language “{0}” names grammar “{1}”, which Codeyard does not have	“{0}” dili “{1}” dil bilgisini istiyor, Codeyard’da bu yok
+keymap preset “{0}” is not installed (installed: {1})	“{0}” kısayol düzeni kurulu değil (kurulu olanlar: {1})
