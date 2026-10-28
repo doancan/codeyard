@@ -98,10 +98,28 @@ fn absolute(path: &str) -> bool {
 }
 
 pub fn destination(host: &dyn Host) -> Result<String, Error> {
-    if !absolute(&host.info().home) {
+    let state = if host.is_remote() {
+        None
+    } else {
+        std::env::var_os("CODEYARD_STATE_DIR")
+            .map(|path| {
+                let path = std::path::PathBuf::from(path);
+                if path.is_absolute() { Ok(path) } else { std::env::current_dir().map(|cwd| cwd.join(path)).map_err(failed) }
+            })
+            .transpose()?
+    };
+    let state = state.as_deref().map(|path| path.to_str().ok_or(Error::InvalidInstallation)).transpose()?;
+    destination_for(&host.info().home, host.is_remote(), state)
+}
+
+fn destination_for(home: &str, remote: bool, state: Option<&str>) -> Result<String, Error> {
+    if !remote && let Some(state) = state {
+        return if absolute(state) { Ok(join(state, "language-services")) } else { Err(Error::InvalidInstallation) };
+    }
+    if !absolute(home) {
         return Err(Error::InvalidInstallation);
     }
-    Ok(join(&host.info().home, ".codeyard/language-services"))
+    Ok(join(home, ".codeyard/language-services"))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -291,7 +309,10 @@ fn runtime(host: &dyn Host, staging: &str, progress: &Progress) -> Result<(Strin
     } else {
         (join(&runtime, "bin/node"), join(&runtime, "lib/node_modules/npm/bin/npm-cli.js"))
     };
-    let version = run(host, &node, vec!["--version".into()], staging, progress)?;
+    let version = match run(host, &node, vec!["--version".into()], staging, progress) {
+        Err(Error::Failed(_)) => return Err(Error::UnsupportedRuntime),
+        result => result?,
+    };
     let version = String::from_utf8_lossy(&version).trim().to_string();
     if !supported_node(&version) {
         return Err(Error::UnsupportedRuntime);

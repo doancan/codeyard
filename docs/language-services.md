@@ -23,7 +23,9 @@ SHA-256 is verified against the bundled official checksum before extraction or e
 require curl, tar and a SHA-256 tool (shasum on macOS, sha256sum on Linux, certutil on Windows). The
 official Linux archives need glibc; musl hosts should provide a compatible Node.js installation with npm.
 
-Installations live below `~/.codeyard/language-services` on the selected host. Each attempt gets an
+Installations live below `~/.codeyard/language-services` on the selected host. With a local
+`CODEYARD_STATE_DIR` override they live in that profile’s `language-services` subdirectory;
+remote installations always use the remote host’s own home. Each attempt gets an
 unpredictable private staging directory. A completed generation is published under a unique name,
 then `active.json` is replaced atomically. Earlier generations are retained. A failed generation
 never replaces the active record. If the connection is lost or process cancellation cannot be

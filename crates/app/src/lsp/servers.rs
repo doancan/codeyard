@@ -219,7 +219,12 @@ pub fn server_for(key: &str, overrides: &ServerOverrides) -> Option<ServerConfig
     let managed = if spec.is_some_and(|s| s.command.is_some()) { None } else { crate::language_services::Service::for_language(key) };
     let settings = spec.map_or_else(|| Arc::new(Value::Null), |s| s.settings.clone());
     let settings = managed.map_or_else(|| settings.clone(), |service| Arc::new(service.configuration(&settings)));
-    Some(ServerConfig { language: key.into(), command, args, settings, init_options: spec.and_then(|s| s.init_options.clone()), managed })
+    let init_options = spec.and_then(|s| s.init_options.clone());
+    let init_options = match managed {
+        Some(service) => service.initialization_options(init_options.as_ref()),
+        None => init_options,
+    };
+    Some(ServerConfig { language: key.into(), command, args, settings, init_options, managed })
 }
 
 /// What a settings reload means for the running language servers.

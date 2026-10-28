@@ -43,6 +43,7 @@ fn probe(host: Arc<dyn Host>, installed: &Installed, project: &Path) {
         config.managed = None; // Use this explicit disposable installation, never the user's profile.
         let (tx, rx) = mpsc::channel();
         let client = Running(Client::start(host.clone(), config, &crate::ui::local_path(project), tx).unwrap());
+        assert_eq!(client.0.capabilities["documentFormattingProvider"], true, "{language} must advertise formatting so the editor can expose it");
         let mut uris = Vec::new();
         for (kind, text) in [("bad", bad), ("completion", completion), ("formatting", formatting)] {
             let file = project.join(format!("şablon {language} {kind}.{ext}"));

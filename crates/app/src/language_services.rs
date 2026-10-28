@@ -18,6 +18,15 @@ pub enum Service {
 }
 
 impl Service {
+    pub fn initialization_options(self, options: Option<&Value>) -> Option<Value> {
+        if self == Self::TypeScript {
+            return options.cloned();
+        }
+        let mut options = options.and_then(Value::as_object).cloned().unwrap_or_default();
+        options.entry("provideFormatter").or_insert(Value::Bool(true));
+        Some(Value::Object(options))
+    }
+
     /// The HTML/CSS servers read requested configuration sections as objects. Missing/null
     /// sections must use their empty defaults; passing null can disable diagnostics upstream.
     pub fn configuration(self, settings: &Value) -> Value {
