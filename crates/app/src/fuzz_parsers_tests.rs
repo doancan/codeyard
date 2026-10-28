@@ -447,6 +447,7 @@ fn server_value(rng: &mut Rng, depth: usize) -> serde_json::Value {
         "relatedInformation",
         "rendered",
         "code",
+        "expansion",
     ];
     let pick = |rng: &mut Rng| KEYS[(rng.next() as usize) % KEYS.len()];
     match if depth > 6 { rng.next() % 6 } else { rng.next() % 9 } {
@@ -472,6 +473,10 @@ fn language_server_and_debugger_replies_survive_any_shape() {
             use crate::lsp::*;
             use serde_json::json;
             let _ = parse_range(&v);
+            if let Some((name, text)) = parse_expansion(&v) {
+                assert!(text.len() <= MAX_EXPANSION + 20);
+                assert!(!expansion_file_name(&name).contains(['/', '\\']));
+            }
             if let Some((path, diags)) = parse_diagnostics(&v) {
                 for d in &diags {
                     assert!(d.related.len() <= MAX_RELATED && d.rendered.as_ref().is_none_or(|r| r.len() <= MAX_RENDERED + 3));

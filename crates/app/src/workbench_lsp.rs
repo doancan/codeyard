@@ -99,6 +99,10 @@ impl Workbench {
             (e.path.clone(), e.uses_host(&self.remote.host))
         };
         let Some((lang, key)) = lsp::language_of(&path).filter(|_| same_host) else { return };
+        // A scratch (a macro expansion, notes) is outside every folder: the project's server would report it full of errors.
+        if !self.remote.host.is_remote() && std::path::Path::new(&path).starts_with(self.scratch_dir()) {
+            return;
+        }
         let Some(config) = lsp::server_for(key, &settings.lsp_servers) else { return };
         // The file's own root: a separate server for files in additional folders (rust-analyzer, gopls… work per root).
         let primary = self.root(cx);
