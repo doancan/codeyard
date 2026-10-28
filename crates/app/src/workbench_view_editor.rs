@@ -80,6 +80,7 @@ impl Workbench {
                     Some(Page::Compare(view)) => view.into_any_element(),
                     Some(Page::Welcome) => self.welcome_view(p, cx).into_any_element(),
                     Some(Page::Containers) => self.container_dashboard_view(p, cx).into_any_element(),
+                    Some(Page::Extension) => self.extension_page(p, cx),
                     None => hint(),
                 }
             } else if state.diff_active {
