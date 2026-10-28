@@ -100,6 +100,7 @@ mod menu;
 mod menus;
 mod merge;
 mod outline;
+mod perf;
 mod picker;
 mod port_forwards;
 mod ports;
@@ -841,6 +842,7 @@ pub fn open_workbench_window(cx: &mut App) -> Option<gpui::WindowHandle<Workbenc
 }
 
 fn main() {
+    perf::init();
     if std::env::args_os().len() == 2 && std::env::args_os().nth(1).is_some_and(|arg| arg == "--check-agent-bundle") {
         match bundled_agents::check() {
             Ok(()) => return,
@@ -930,6 +932,7 @@ fn main() {
                 cx.activate(true);
             })
             .ok();
+        perf::first_window(window, cx);
         if let Some(h) = &reopen {
             update_restart::reopen_windows(h, window, &mut open_workbench_window, cx);
         }
