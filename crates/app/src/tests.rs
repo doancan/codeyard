@@ -831,7 +831,7 @@ fn markdown_readme_lists_shape_at_readable_width(cx: &mut TestAppContext) {
     cx.run_until_parked();
     let check = || {
         let layouts = crate::markdown::text_layouts_for_test();
-        let list = layouts.iter().find(|layout| layout.text().starts_with("No extensions.")).expect("README list paragraph rendered");
+        let list = layouts.iter().find(|layout| layout.text().starts_with("Complete core, optional extensions.")).expect("README list paragraph rendered");
         assert!(list.wrapped_text().lines().all(|line| line.chars().count() > 1), "list must not wrap character by character: {:?}", list.wrapped_text());
         assert!(list.wrapped_text().lines().count() < 12, "list should wrap to a few lines: {:?}", list.wrapped_text());
     };
@@ -4086,7 +4086,7 @@ fn explorer_menu_duplicates_compares_and_opens_terminals(cx: &mut TestAppContext
     open(&wb, &dir, cx);
     wait_for(cx, "ağaç", |cx| wb.read_with(cx, |wb, cx| wb.tree_names(cx)).contains(&"README.md".to_string()));
     let menu_on = |cx: &mut VisualTestContext, path: &std::path::Path, is_dir: bool| {
-        let ev = crate::tree::TreeEvent::ContextMenu { path: crate::ui::local_path(&path), is_dir, position: gpui::point(gpui::px(100.), gpui::px(100.)) };
+        let ev = crate::tree::TreeEvent::ContextMenu { path: crate::ui::local_path(path), is_dir, position: gpui::point(gpui::px(100.), gpui::px(100.)) };
         wb.update_in(cx, |wb, window, cx| wb.tree_event_for_test(ev, window, cx));
     };
     let readme = dir.join("README.md");

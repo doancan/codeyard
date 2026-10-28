@@ -1,0 +1,197 @@
+//! `codeyard-extension.toml` exactly as written. Unknown fields are errors, so a typo is reported instead of ignored.
+//! Fields an error can point at are `Spanned`.
+
+use std::collections::BTreeMap;
+
+use serde::Deserialize;
+use toml::Spanned;
+
+pub type S<T> = Spanned<T>;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawManifest {
+    pub extension: S<RawExtension>,
+    pub code: Option<S<RawCode>>,
+    #[serde(default)]
+    pub permissions: Option<S<RawPermissions>>,
+    #[serde(default)]
+    pub activation: Option<RawActivation>,
+    #[serde(default)]
+    pub dependencies: BTreeMap<S<String>, S<String>>,
+    pub untrusted: Option<bool>,
+
+    #[serde(default)]
+    pub themes: Vec<S<RawFileEntry>>,
+    #[serde(default)]
+    pub icon_themes: Vec<S<RawFileEntry>>,
+    #[serde(default)]
+    pub snippets: Vec<S<RawSnippets>>,
+    #[serde(default)]
+    pub keymap_preset: Vec<S<RawFileEntry>>,
+    #[serde(default)]
+    pub keybindings: Vec<S<RawKeybinding>>,
+    #[serde(default)]
+    pub languages: Vec<S<RawLanguage>>,
+    #[serde(default)]
+    pub json_schemas: Vec<S<RawSchema>>,
+    #[serde(default)]
+    pub yaml_schemas: Vec<S<RawSchema>>,
+    #[serde(default)]
+    pub settings: BTreeMap<S<String>, S<RawSetting>>,
+    #[serde(default)]
+    pub language_servers: Vec<S<RawLanguageServer>>,
+    #[serde(default)]
+    pub debug_adapters: Vec<S<RawDebugAdapter>>,
+    #[serde(default)]
+    pub commands: Vec<S<RawCommand>>,
+    #[serde(default)]
+    pub views: Vec<S<RawView>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawExtension {
+    pub id: S<String>,
+    pub version: S<String>,
+    pub name: S<String>,
+    pub license: S<String>,
+    pub description: Option<S<String>>,
+    pub repository: Option<S<String>>,
+    #[serde(default)]
+    pub categories: Vec<S<String>>,
+    pub icon: Option<S<String>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawCode {
+    pub entry: S<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawPermissions {
+    #[serde(default)]
+    pub read: Vec<S<String>>,
+    #[serde(default)]
+    pub write: Vec<S<String>>,
+    #[serde(default)]
+    pub net: Vec<S<String>>,
+    #[serde(default)]
+    pub auth: Vec<S<String>>,
+    #[serde(default)]
+    pub secrets: bool,
+    #[serde(default)]
+    pub run: Vec<S<String>>,
+    pub clipboard: Option<S<String>>,
+    #[serde(default)]
+    pub terminal: bool,
+    #[serde(default)]
+    pub commands: Vec<S<String>>,
+    pub why: Option<S<String>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawActivation {
+    #[serde(default)]
+    pub workspace_contains: Vec<S<String>>,
+}
+
+/// `[[themes]]`, `[[icon-themes]]`, `[[keymap-preset]]`.
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawFileEntry {
+    pub label: S<String>,
+    pub path: S<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawSnippets {
+    pub language: S<String>,
+    pub path: S<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawKeybinding {
+    pub key: S<String>,
+    pub command: S<String>,
+    pub when: Option<S<String>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawLanguage {
+    pub id: S<String>,
+    pub name: Option<S<String>>,
+    #[serde(default)]
+    pub extensions: Vec<S<String>>,
+    #[serde(default)]
+    pub filenames: Vec<S<String>>,
+    /// A built-in grammar to highlight with, by its language id (`rust`, `toml`, …).
+    pub grammar: Option<S<String>>,
+    /// Folder of `.scm` queries for that grammar, inside the package.
+    pub queries: Option<S<String>>,
+    pub line_comment: Option<S<String>>,
+    pub block_comment: Option<S<[String; 2]>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawSchema {
+    pub file_match: Vec<S<String>>,
+    pub path: S<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawSetting {
+    #[serde(rename = "type")]
+    pub kind: S<String>,
+    pub default: Option<toml::Value>,
+    pub description: S<String>,
+    #[serde(default, rename = "enum")]
+    pub choices: Vec<S<String>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawLanguageServer {
+    pub command: S<String>,
+    #[serde(default)]
+    pub args: Vec<String>,
+    pub languages: Vec<S<String>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawDebugAdapter {
+    #[serde(rename = "type")]
+    pub kind: S<String>,
+    pub command: S<String>,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub languages: Vec<S<String>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawCommand {
+    pub id: S<String>,
+    pub title: S<String>,
+    pub category: Option<S<String>>,
+    pub enablement: Option<S<String>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawView {
+    pub id: S<String>,
+    pub title: S<String>,
+    pub location: S<String>,
+    pub when: Option<S<String>>,
+}
