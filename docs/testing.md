@@ -87,6 +87,7 @@ scripts/docs-check.sh
 scripts/licenses.sh        # the licence files that releases ship exist; also checks THIRD_PARTY_CRATES.md (scripts/crate-licenses.py --check)
 cargo test --workspace
 scripts/memcheck.sh        # rerun once if the first Rust-file row spikes (GPU texture noise ±5–8 MB)
+scripts/perf/run.sh --baseline <tag> && scripts/perf/compare.py target/perf/baseline.json target/perf/candidate.json
 ```
 
 CI runs fmt, clippy, arch-check, docs-check, tests, `cargo deny` and the audit. `scripts/memcheck.sh` also runs on the macOS CI

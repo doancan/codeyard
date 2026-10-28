@@ -47,10 +47,12 @@ How it sits next to other editors:
   AI features; its remote editing runs a small static agent on the server and uses your own `ssh`.
 - **Helix** is a modal terminal editor. Codeyard is a graphical editor with conventional keys and mouse support.
 
-Numbers: `docs/architecture.md` lists memory and size **budgets** that `scripts/memcheck.sh` enforces before every release. They are
-limits, not benchmarks. Examples: an empty window must stay under 85 MB, a 10k-line file with syntax highlighting under 130 MB, the
-app binary under 60 MB and the Linux SSH agent under 1600 KB. They are measured with macOS `footprint` at 1280x800 @2x, and the
-screen buffers are part of the number. Files over 32 MB open in a chunked read-only view.
+Numbers: every release is measured against the previous one. `scripts/perf` runs both builds side by side and blocks the
+release when startup, typing latency or memory regresses past its budget (see [Budgets and gates](docs/architecture.md#budgets-and-gates)).
+`scripts/memcheck.sh` also keeps absolute memory limits: an empty window must stay under 85 MB, a 10k-line file with syntax
+highlighting under 130 MB, measured with macOS `footprint` at 1280x800 @2x with the screen buffers included. The Linux SSH agent
+stays under 1600 KB because it is copied to every server. The app binary has no size limit. Files over 32 MB open in a chunked
+read-only view.
 
 ## Highlights
 

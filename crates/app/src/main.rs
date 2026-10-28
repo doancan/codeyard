@@ -100,6 +100,7 @@ mod menu;
 mod menus;
 mod merge;
 mod outline;
+mod perf;
 mod picker;
 mod port_forwards;
 mod ports;
@@ -841,6 +842,7 @@ pub fn open_workbench_window(cx: &mut App) -> Option<gpui::WindowHandle<Workbenc
 }
 
 fn main() {
+    perf::init();
     if std::env::args_os().len() == 2 && std::env::args_os().nth(1).is_some_and(|arg| arg == "--check-agent-bundle") {
         match bundled_agents::check() {
             Ok(()) => return,
@@ -927,9 +929,13 @@ fn main() {
                     update_install::sweep_at_start(&update_install::install_kind(), update::updates_dir().ok());
                 }
                 window.focus(&wb.focus_handle(cx));
-                cx.activate(true);
+                // A measured run stays in the background: it must not take the keyboard from whoever is working while it runs.
+                if !perf::enabled() {
+                    cx.activate(true);
+                }
             })
             .ok();
+        perf::first_window(window, cx);
         if let Some(h) = &reopen {
             update_restart::reopen_windows(h, window, &mut open_workbench_window, cx);
         }
