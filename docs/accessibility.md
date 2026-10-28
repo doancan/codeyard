@@ -45,6 +45,9 @@ The tree, in the order a screen reader walks it:
   tab order; the focused button is the tree's focus. On macOS the dialog is a window of its own ("Software Update"); the
   tree belongs to the editor window and still lists the dialog, but the separate window has no adapter yet, so a screen
   reader reaches its title and nothing more there. The status bar item and *Help: Check for Updates…* are the way in.
+- Geometry: the window, primary Explorer viewport, focused text-editor pane and status bar expose their painted bounds.
+  Bounds are clipped to the visible content mask and scaled from GPUI logical pixels to AccessKit physical pixels.
+  Resizing, switching split-editor focus and hiding/restoring panels update or clear these coordinates.
 
 Focus follows the keyboard: the selected explorer row, the editor (or its selected suggestion), a find field, the
 picker's combo box (its selected row), the terminal or a dialog button.
@@ -82,7 +85,11 @@ repository, branch and file state, and committing checks the reviewed status and
    `update_if_active` only when it changed. On macOS it also reports window focus; the Windows adapter follows
    `WM_SETFOCUS` / `WM_KILLFOCUS` itself. Polling is a simplification; observer-driven updates are the planned
    replacement.
-4. **Actions** may arrive on another thread (UI Automation does that). They go through an unbounded channel to a task on
+4. **Geometry.** Three non-interactive canvas probes capture the primary Explorer viewport, focused editor body and status bar
+   during painting, without drawing, taking focus or scheduling another frame. The workbench clears these cached bounds
+   before each render, so hidden surfaces lose their coordinates. The window uses its content viewport. Geometry is part
+   of the snapshot comparison, so a layout or display-scale change reaches AccessKit even when text is unchanged.
+5. **Actions** may arrive on another thread (UI Automation does that). They go through an unbounded channel to a task on
    the main thread and run in a GPUI context through `AsyncApp::update_window`, so they never re-enter a GPUI borrow.
 
 `CODEYARD_NO_A11Y=1` disables the adapter. `attach` is skipped under test because `TestWindow::window_handle()` is
@@ -114,10 +121,9 @@ macOS. The CPU cost of the 250 ms snapshot loop has not been measured.
 
 - **No screen reader has been run.** VoiceOver (speech, rotor, VO cursor, "interact with text area") and NVDA, JAWS or
   Narrator on Windows. The Windows adapter builds and passes CI, but no UI Automation client has read its tree yet.
-- **No bounds.** Nodes have no frames, so VoiceOver's cursor highlight, Narrator's focus rectangle, mouse and touch
-  exploration and hit testing have nothing to work with, and magnifier caret tracking is impossible. This needs painted
-  element bounds from GPUI (a small patch or per-landmark `canvas` bounds) and then `set_bounds`,
-  `character_positions`, `character_widths`.
+- **Fine-grained bounds.** Landmark frames are available, but individual Explorer rows, status items, Source Control
+  controls and text runs do not yet expose their painted frames. Text still needs `character_positions` and
+  `character_widths`; precise character hit testing, caret highlighting and magnifier caret tracking remain unimplemented.
 - **Focus** was not observed live on macOS (`Focused="0"` in every dump: the test window was not key). The code path
   (`TreeUpdate.focus`, `update_view_focus_state`) exists but is unverified.
 - The editor exposes a window of lines around the caret, not the whole document, so absolute offsets differ from
@@ -137,8 +143,23 @@ macOS. The CPU cost of the 250 ms snapshot loop has not been measured.
 ## Order of work
 
 1. Screen-reader passes (VoiceOver, NVDA, Narrator) on real machines; fix what they find.
-2. Bounds and real focus tracking, observer-driven updates.
-3. The remaining panels (search results, source control, problems), the Settings page, context menus and dialogs.
+2. Per-control/text-run bounds and real focus tracking, observer-driven updates.
+3. The remaining panels (search results, Source Control graph/sync, problems), the Settings page, context menus and dialogs.
 4. The editor proper: visible lines only with shaped character positions, correct absolute offsets, scroll actions,
    multi-cursor policy, diagnostics announcements.
 5. Interface text scaling, the Linux adapter and regression tests against a real accessibility client.
+
+## Landmark geometry verification
+
+Automated regressions exercise the real GPUI layout at narrow and wide window sizes, then pass the
+resulting tree to AccessKit's consumer and hit-test the Explorer, editor and status bar. Separate cases
+check split-editor focus and hiding/restoring panels in Zen mode. Coordinate conversion covers 1×,
+1.5× and 2× displays and rejects empty or non-finite geometry. This establishes landmark geometry,
+not per-character navigation or VoiceOver speech/rotor behavior.
+
+A native macOS AXUIElement probe on 2026-10-28 opened a disposable project in an isolated
+profile, activated `main.rs` through its accessible Explorer row, and read non-zero frames for
+`AXOutline`, `AXTextArea` and the status bar (`AXGroup`). Native point hit testing returned each
+landmark at its own center. Resizing the window from 1280 to 920 points changed the editor width
+from 972 to 612 points and the status-bar width from 1280 to 920, and all three hit tests still
+passed. The probe did not run VoiceOver or validate per-character bounds.

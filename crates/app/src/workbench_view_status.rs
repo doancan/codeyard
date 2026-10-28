@@ -54,6 +54,7 @@ impl Workbench {
 
         div()
             .id("status-bar")
+            .relative()
             .debug_selector(|| "status-bar".into())
             .h(px(layout::STATUSBAR_H))
             .flex_none()
@@ -64,6 +65,7 @@ impl Workbench {
             .border_color(c(p.border))
             .text_size(px(text::XS.0))
             .text_color(c(p.text_muted))
+            .child(a11y::landmark(a11y::Landmark::Status, cx))
             .child(
                 item()
                     .id("remote-indicator")

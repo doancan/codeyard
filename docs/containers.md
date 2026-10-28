@@ -49,20 +49,28 @@ Opening **Containers** shows running and stopped containers without selecting an
 The Overview is the single container inventory. Click a row to open its detail view.
 The overview shows status (including Docker health), image, CPU, memory usage/limit, network rates and
 Compose project. **Columns** also offers disk read/write rates and published ports; choices last for
-the connected monitoring session. Long values have full-value tooltips and the table scrolls horizontally.
+the connected monitoring session. The table fills the available width, including when optional columns
+are hidden; Name and Image share extra space while metric columns keep readable minimum widths.
+The page header combines update state, host/context and fleet counts. The initial Overview tab is
+hidden until a container has been selected; navigating back to an existing selection remains available.
+Long values have full-value tooltips. On narrow windows or with extra columns enabled, the table scrolls
+horizontally within the page. The header actions and search/filter toolbar wrap to remain reachable.
 Network directions have colored ↓ RX / ↑ TX labels and disk rates have R / W labels, with each
 direction on its own aligned line and a descriptive tooltip. CPU and memory have thin usage bars;
 CPU values above 100% remain visible (100% represents one core), while the bar caps at full width.
 Unavailable measurements stay as dashes with empty bars. Status uses both a colored dot and text.
 All/Running/Stopped and **Needs attention** filter the inventory; attention includes unhealthy, dead and
-restarting containers. Search above the table filters names, images, projects and IDs. Name/CPU/Memory sorting stays grouped
-by Compose project and captures ranking values when clicked, so live updates do not reorder rows.
+restarting containers. Search above the table filters names, images, projects and IDs; **Clear filters**
+appears while a filter or query is active and also recovers an empty result. Click the **Name**, **CPU**
+or **Memory** column header to sort; the active header shows the direction. Sorting stays grouped by
+Compose project and captures ranking values when clicked, so live updates do not reorder rows.
 Selection and table scroll survive refreshes. Stopped containers show no live resource measurements.
 Click a row to select and open that container's details. Logs opens directly;
 the row menu provides Open files, Terminal and Copy container ID. **Back to Containers** returns to the inventory
 without losing the selected container, search, filters or scroll position. The detail area continues to show only that selected container,
 including its current CPU/memory/process count and resource history.
 The table is keyboard focusable: Up/Down moves its cursor and Enter opens the focused container.
+While the table has focus, N sorts by name, C by CPU and M by memory; header tooltips show these keys.
 
 Select a table row to open its full diagnostics. Resources provides 1/5/15-minute CPU/memory charts collected in memory while monitoring is active (maximum 360 samples per container, at most 15 minutes). Long gaps remain gaps; no historical measurements are fabricated before monitoring began. Disk/network rates use elapsed-time differences between cumulative counters and are unavailable after counter resets or until a second sample exists. Stopped containers do not display old rates as live data.
 
@@ -194,3 +202,19 @@ separate implementation and validation project.
 Resource details pair current CPU and memory readings with time-scaled history and grid guides. Disk and network rates are separate from cumulative totals. Ports and storage shows individual IPv4/IPv6 server bindings, exposed-only ports, mount sources and destinations, and read/write access. Copy controls retain full identifiers and paths, with horizontal scrolling for long values. Refresh details reloads inspect data. Published addresses refer to the SSH server, not the local machine.
 
 Overview filters offer all, running and stopped states, multi-word name/image/project/ID search, a result count and a clear action. CPU/memory ordering uses values captured when the sort button is clicked; click again to re-rank. Routine polling retains the table scroll handle and does not insert refresh/loading messages into populated views.
+
+### Detail layout
+
+The selected container name becomes the page title, with Open files and Terminal beside
+the refresh controls. CPU and memory cards share a row when space allows and stack in
+narrow windows. Each card keeps its current reading above the history plot; disk and
+network activity use separate columns when space permits. Resource, port/storage and log
+tabs remain available below the back navigation. Log search uses the same framed field
+as the overview; clicking the search icon focuses the input.
+
+Ports and storage use two columns on wider windows, stacking on narrow windows. Each
+port card distinguishes published server bindings from exposed-only ports. Mount cards
+show access mode, server source, container destination and optional volume name; long
+values scroll horizontally without pushing Copy outside the card. Log entries place
+line number, timestamp and severity above the message, preserving the full message
+width. Search occupies its own row and the snapshot limit appears in the console footer.

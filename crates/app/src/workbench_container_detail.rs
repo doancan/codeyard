@@ -83,69 +83,76 @@ impl Workbench {
         cx.notify();
     }
 
-    pub(super) fn container_detail_view(&self, container: &crate::docker::Container, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
-        let m = &self.remote.docker.monitor;
-        let b = &m.browser;
-        let context = m.context.clone();
+    pub(super) fn container_detail_actions(&self, container: &crate::docker::Container, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
+        let context = self.remote.docker.monitor.context.clone();
         let target = container.clone();
         let terminal_context = context.clone();
         let terminal_target = target.clone();
-        let mut view = div()
-            .id("container-detail")
-            .debug_selector(|| "container-detail".into())
-            .flex_1()
-            .min_h_0()
+        div()
+            .id("container-detail-actions")
+            .debug_selector(|| "container-detail-actions".into())
             .flex()
-            .flex_col()
-            .border_t_1()
-            .border_color(c(p.border))
-            .child(
-                div()
-                    .px(px(theme::SPACE[5]))
-                    .py(px(theme::SPACE[3]))
-                    .flex()
-                    .items_center()
-                    .gap(px(theme::SPACE[3]))
-                    .child(div().flex_1().min_w_0().truncate().text_size(px(text::SM.0)).font_weight(gpui::FontWeight::SEMIBOLD).child(container.name.clone()))
-                    .child(button("detail-files", crate::i18n::t("Open files"), p).on_click(cx.listener(move |this, _, window, cx| {
-                        if let Some(context) = context.clone() {
-                            this.docker_container_picked(context, target.clone(), false, window, cx);
-                        }
-                    })))
-                    .child(button("detail-terminal", crate::i18n::t("Terminal"), p).on_click(cx.listener(move |this, _, window, cx| {
-                        if this.refuse_if_dirty(cx) {
+            .flex_wrap()
+            .items_center()
+            .gap(px(theme::SPACE[2]))
+            .child(button("detail-files", crate::i18n::t("Open files"), p).flex_none().on_click(cx.listener(move |this, _, window, cx| {
+                if let Some(context) = context.clone() {
+                    this.docker_container_picked(context, target.clone(), false, window, cx);
+                }
+            })))
+            .child(button("detail-terminal", crate::i18n::t("Terminal"), p).flex_none().on_click(cx.listener(move |this, _, window, cx| {
+                if this.refuse_if_dirty(cx) {
+                    return;
+                }
+                if let Some(context) = terminal_context.clone() {
+                    if let Ok(alias) = context.container_alias(&terminal_target.id) {
+                        if matches!(&this.remote.conn, Conn::Connected { alias: current } if current == &alias) {
+                            this.open_terminal(window, cx);
                             return;
                         }
-                        if let Some(context) = terminal_context.clone() {
-                            if let Ok(alias) = context.container_alias(&terminal_target.id) {
-                                if matches!(&this.remote.conn,Conn::Connected{alias:current} if current==&alias) {
-                                    this.open_terminal(window, cx);
-                                    return;
-                                }
-                                this.remote.docker.monitor.browser.terminal_target = Some(alias);
-                            }
-                            this.docker_container_picked(context, terminal_target.clone(), false, window, cx);
-                        }
-                    }))),
-            );
-        let mut tabs = div().px(px(theme::SPACE[5])).pb(px(theme::SPACE[3])).flex().gap(px(theme::SPACE[3]));
+                        this.remote.docker.monitor.browser.terminal_target = Some(alias);
+                    }
+                    this.docker_container_picked(context, terminal_target.clone(), false, window, cx);
+                }
+            })))
+            .into_any_element()
+    }
+
+    pub(super) fn container_detail_view(&self, container: &crate::docker::Container, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
+        let m = &self.remote.docker.monitor;
+        let b = &m.browser;
+        let mut view = div().id("container-detail").debug_selector(|| "container-detail".into()).flex_1().min_w_0().min_h_0().flex().flex_col();
+        let mut tabs = div()
+            .id("container-detail-tabs")
+            .debug_selector(|| "container-detail-tabs".into())
+            .px(px(theme::SPACE[5]))
+            .py(px(theme::SPACE[3]))
+            .flex()
+            .flex_wrap()
+            .gap(px(theme::SPACE[2]))
+            .border_b_1()
+            .border_color(c(p.border));
         for (label, tab) in
             [(crate::i18n::t("Resources"), Tab::Resources), (crate::i18n::t("Ports and storage"), Tab::Details), (crate::i18n::t("Logs"), Tab::Logs)]
         {
             let id = container.id.clone();
             tabs = tabs.child(
                 button(SharedString::from(format!("container-detail-{label}")), label, p)
-                    .when(b.tab == tab, |s| s.bg(c(p.surface_active)))
+                    .bg(c(p.bg))
+                    .when(b.tab == tab, |s| s.bg(c(p.surface_active)).text_color(c(p.accent)))
                     .on_click(cx.listener(move |this, _, _, cx| this.select_container(id.clone(), tab, cx))),
             );
         }
         view = view.child(tabs);
         let mut body = div()
             .id("container-detail-scroll")
+            .debug_selector(|| "container-detail-scroll".into())
+            .min_w_0()
             .flex_1()
             .min_h_0()
             .overflow_y_scroll()
             .px(px(theme::SPACE[5]))
+            .pt(px(theme::SPACE[3]))
             .pb(px(theme::SPACE[5]))
             .flex()
             .flex_col()
@@ -159,20 +166,40 @@ impl Workbench {
         match b.tab {
             Tab::Resources => {
                 let usage = m.usage.iter().find(|u| u.id == container.id);
-                body = body.child(
-                    div()
-                        .id(SharedString::from(format!("selected-container-info-{}", container.id)))
-                        .debug_selector({
-                            let id = container.id.clone();
-                            move || format!("selected-container-info-{id}")
-                        })
-                        .flex()
-                        .flex_col()
-                        .gap(px(theme::SPACE[2]))
-                        .text_size(px(text::SM.0))
-                        .child(div().text_color(c(p.text_muted)).child(format!("{} · {}", container.image, container.status)))
-                        .child(value_row(crate::i18n::t("Processes"), usage.map(|u| u.pids.as_str()).unwrap_or("—"), p)),
-                );
+                let description = format!("{} · {}", container.image, container.status);
+                let info = div()
+                    .id(SharedString::from(format!("selected-container-info-{}", container.id)))
+                    .debug_selector({
+                        let id = container.id.clone();
+                        move || format!("selected-container-info-{id}")
+                    })
+                    .flex_1()
+                    .min_w(px(220.))
+                    .flex()
+                    .flex_col()
+                    .gap(px(theme::SPACE[2]))
+                    .child(
+                        div()
+                            .id("description")
+                            .w_full()
+                            .truncate()
+                            .text_size(px(text::XS.0))
+                            .text_color(c(p.text_muted))
+                            .tooltip({
+                                let description = description.clone();
+                                move |_, cx| cx.new(|_| Tooltip(description.clone().into())).into()
+                            })
+                            .child(description),
+                    )
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(theme::SPACE[3]))
+                            .text_size(px(text::XS.0))
+                            .child(div().text_color(c(p.text_muted)).child(crate::i18n::t("Processes")))
+                            .child(div().font_family(ui::MONO_FONT).child(usage.map(|u| u.pids.as_str()).unwrap_or("—").to_string())),
+                    );
                 let mut toolbar = div().flex().flex_wrap().items_center().gap(px(theme::SPACE[3]));
                 for (label, minutes) in [(crate::i18n::t("1 minute"), 1), (crate::i18n::t("5 minutes"), 5), (crate::i18n::t("15 minutes"), 15)] {
                     toolbar = toolbar.child(
@@ -184,7 +211,7 @@ impl Workbench {
                             })),
                     );
                 }
-                body = body.child(toolbar);
+                body = body.child(div().w_full().flex().flex_wrap().items_center().gap(px(theme::SPACE[4])).child(info).child(toolbar));
                 let samples = m.history.get(&container.id);
                 let now = std::time::Instant::now();
                 let seconds = (b.minutes.max(1) * 60) as f32;
@@ -199,28 +226,54 @@ impl Workbench {
                         })
                         .collect::<Vec<_>>()
                 };
-                body = body.child(chart(crate::i18n::t("CPU usage"), usage.map(|u| u.cpu.as_str()).unwrap_or("—"), points(false), seconds, p.accent, p)).child(
-                    chart(
-                        crate::i18n::t("Memory usage (%)"),
-                        &usage.map(|u| format!("{} · {}", u.memory_percent, u.memory)).unwrap_or_else(|| "—".into()),
-                        points(true),
-                        seconds,
-                        p.info,
-                        p,
-                    ),
+                body = body.child(
+                    div()
+                        .id("container-charts")
+                        .debug_selector(|| "container-charts".into())
+                        .w_full()
+                        .flex()
+                        .flex_wrap()
+                        .gap(px(theme::SPACE[4]))
+                        .child(div().flex_1().min_w(px(300.)).max_w_full().child(chart(
+                            crate::i18n::t("CPU usage"),
+                            usage.map(|u| u.cpu.as_str()).unwrap_or("—"),
+                            points(false),
+                            seconds,
+                            p.accent,
+                            p,
+                        )))
+                        .child(div().flex_1().min_w(px(300.)).max_w_full().child(chart(
+                            crate::i18n::t("Memory usage (%)"),
+                            &usage.map(|u| format!("{} · {}", u.memory_percent, u.memory)).unwrap_or_else(|| "—".into()),
+                            points(true),
+                            seconds,
+                            p.info,
+                            p,
+                        ))),
                 );
                 let last = samples.and_then(|s| s.back()).filter(|s| container.state == "running" && now.duration_since(s.at).as_secs() < 15);
                 let disk = m.disks.iter().find(|d| d.id == container.id);
                 body = body.child(section(crate::i18n::t("Disk and network activity"), p));
-                for (label, value) in [
-                    (crate::i18n::t("Disk read / write rate"), history::speed(last.and_then(|s| s.disk))),
-                    (crate::i18n::t("Network RX / TX rate"), history::speed(last.and_then(|s| s.network))),
-                    (crate::i18n::t("Disk I/O total"), usage.map(|u| u.disk_io.clone()).unwrap_or_else(|| "—".into())),
-                    (crate::i18n::t("Network I/O total"), usage.map(|u| u.network.clone()).unwrap_or_else(|| "—".into())),
-                    (crate::i18n::t("Disk size"), disk.map(|d| d.size.clone()).unwrap_or_else(|| "—".into())),
-                ] {
-                    body = body.child(value_row(label, &value, p));
-                }
+                let disk_values = div()
+                    .flex_1()
+                    .min_w(px(380.))
+                    .max_w_full()
+                    .flex()
+                    .flex_col()
+                    .gap(px(theme::SPACE[3]))
+                    .child(value_row(crate::i18n::t("Disk read / write rate"), &history::speed(last.and_then(|s| s.disk)), p))
+                    .child(value_row(crate::i18n::t("Disk I/O total"), usage.map(|u| u.disk_io.as_str()).unwrap_or("—"), p))
+                    .child(value_row(crate::i18n::t("Disk size"), disk.map(|d| d.size.as_str()).unwrap_or("—"), p));
+                let network_values = div()
+                    .flex_1()
+                    .min_w(px(380.))
+                    .max_w_full()
+                    .flex()
+                    .flex_col()
+                    .gap(px(theme::SPACE[3]))
+                    .child(value_row(crate::i18n::t("Network RX / TX rate"), &history::speed(last.and_then(|s| s.network)), p))
+                    .child(value_row(crate::i18n::t("Network I/O total"), usage.map(|u| u.network.as_str()).unwrap_or("—"), p));
+                body = body.child(div().w_full().flex().flex_wrap().gap(px(theme::SPACE[5])).child(disk_values).child(network_values));
                 body=body.child(note(crate::i18n::t("History is collected while monitoring is active. CPU can exceed 100% across cores. Rates need two samples; counter resets show no rate."), p))
                     .child(note(crate::i18n::t("Disk size includes the writable layer and virtual image size; volumes are excluded. Disk and network I/O are cumulative totals."), p));
             }
@@ -239,31 +292,34 @@ impl Workbench {
                             this.select_container(id.clone(), Tab::Details, cx);
                         }))),
                 );
-                body = body
-                    .child(copy_row("container-id", crate::i18n::t("Container ID"), &container.id, p, cx))
-                    .child(copy_row("container-image", crate::i18n::t("Image"), &container.image, p, cx))
-                    .child(value_row(crate::i18n::t("Status"), &container.status, p));
+                let mut identity = inspection_card("container-identity", p)
+                    .flex_row()
+                    .flex_wrap()
+                    .child(copy_row("container-id", crate::i18n::t("Container ID"), &container.id, p, cx).flex_1().min_w(px(240.)))
+                    .child(copy_row("container-image", crate::i18n::t("Image"), &container.image, p, cx).flex_1().min_w(px(240.)))
+                    .child(value_row(crate::i18n::t("Status"), &container.status, p).w_full());
+                if let Some(health) = b.detail.as_ref().and_then(|detail| detail.pointer("/State/Health/Status")).and_then(|v| v.as_str()) {
+                    identity = identity.child(value_row(crate::i18n::t("Health"), health, p).w_full());
+                }
+                body = body.child(identity);
                 if let Some(detail) = &b.detail {
-                    if let Some(health) = detail.pointer("/State/Health/Status").and_then(|v| v.as_str()) {
-                        body = body.child(value_row(crate::i18n::t("Health"), health, p));
-                    }
-                    body = body
+                    let mut ports = div()
+                        .flex_1()
+                        .min_w(px(280.))
+                        .max_w_full()
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::SPACE[3]))
                         .child(section(crate::i18n::t("Port mappings"), p))
                         .child(note(crate::i18n::t("Published addresses belong to the SSH server. Use port forwarding to access remote services locally."), p));
-                    let ports = port_mappings(detail);
-                    if ports.is_empty() {
-                        body = body.child(note(crate::i18n::t("No published ports"), p));
+                    let mappings = port_mappings(detail);
+                    if mappings.is_empty() {
+                        ports = ports.child(inspection_card("container-ports-empty", p).child(note(crate::i18n::t("No published ports"), p)));
                     }
-                    for (index, (port, bindings)) in ports.iter().enumerate() {
-                        let mut row = div()
-                            .id(("container-port", index))
-                            .py(px(theme::SPACE[3]))
-                            .border_b_1()
-                            .border_color(c(p.border))
-                            .flex()
-                            .flex_col()
-                            .gap(px(theme::SPACE[2]))
-                            .child(value_row(crate::i18n::t("Container port / protocol"), port, p));
+                    for (index, (port, bindings)) in mappings.iter().enumerate() {
+                        let mut row = inspection_card(SharedString::from(format!("container-port-{index}")), p)
+                            .child(div().font_family(ui::MONO_FONT).text_size(px(text::LG.0)).font_weight(gpui::FontWeight::SEMIBOLD).child(port.clone()))
+                            .child(note(crate::i18n::t("Container port / protocol"), p));
                         if bindings.is_empty() {
                             row = row.child(note(crate::i18n::t("Exposed only; not published on the server."), p));
                         }
@@ -276,12 +332,19 @@ impl Workbench {
                                 cx,
                             ));
                         }
-                        body = body.child(row);
+                        ports = ports.child(row);
                     }
-                    body = body.child(section(crate::i18n::t("Mounted storage"), p));
+                    let mut storage = div()
+                        .flex_1()
+                        .min_w(px(280.))
+                        .max_w_full()
+                        .flex()
+                        .flex_col()
+                        .gap(px(theme::SPACE[3]))
+                        .child(section(crate::i18n::t("Mounted storage"), p));
                     if let Some(mounts) = detail["Mounts"].as_array() {
                         if mounts.is_empty() {
-                            body = body.child(note(crate::i18n::t("No mounted storage"), p));
+                            storage = storage.child(inspection_card("container-mounts-empty", p).child(note(crate::i18n::t("No mounted storage"), p)));
                         }
                         for (index, mount) in mounts.iter().enumerate() {
                             let s = |key: &str| mount[key].as_str().unwrap_or("—");
@@ -290,15 +353,16 @@ impl Workbench {
                                 Some(false) => crate::i18n::t("Read only"),
                                 None => "—",
                             };
-                            let mut row = div()
-                                .id(("container-mount", index))
-                                .py(px(theme::SPACE[3]))
-                                .border_b_1()
-                                .border_color(c(p.border))
-                                .flex()
-                                .flex_col()
-                                .gap(px(theme::SPACE[2]))
-                                .child(value_row(crate::i18n::t("Storage type"), s("Type"), p))
+                            let mut row = inspection_card(SharedString::from(format!("container-mount-{index}")), p)
+                                .child(
+                                    div()
+                                        .flex()
+                                        .flex_wrap()
+                                        .justify_between()
+                                        .gap(px(theme::SPACE[3]))
+                                        .child(div().font_weight(gpui::FontWeight::SEMIBOLD).child(s("Type").to_string()))
+                                        .child(div().text_color(c(p.text_muted)).child(access)),
+                                )
                                 .child(copy_row(SharedString::from(format!("mount-source-{index}")), crate::i18n::t("Source on server"), s("Source"), p, cx))
                                 .child(copy_row(
                                     SharedString::from(format!("mount-target-{index}")),
@@ -306,26 +370,38 @@ impl Workbench {
                                     s("Destination"),
                                     p,
                                     cx,
-                                ))
-                                .child(value_row(crate::i18n::t("Access"), access, p));
+                                ));
                             if let Some(name) = mount["Name"].as_str().filter(|s| !s.is_empty()) {
                                 row = row.child(copy_row(SharedString::from(format!("mount-name-{index}")), crate::i18n::t("Volume name"), name, p, cx));
                             }
-                            body = body.child(row);
+                            storage = storage.child(row);
                         }
                     } else {
-                        body = body.child(note(crate::i18n::t("Storage information is unavailable."), p));
+                        storage = storage.child(note(crate::i18n::t("Storage information is unavailable."), p));
                     }
-                    body = body.child(note(
+                    storage = storage.child(note(
                         crate::i18n::t(
                             "Mount paths are shown as reported by the engine. Volume and bind-mount sizes are not included in container disk usage.",
                         ),
                         p,
                     ));
+                    body = body.child(
+                        div()
+                            .id("container-inspection-columns")
+                            .debug_selector(|| "container-inspection-columns".into())
+                            .w_full()
+                            .flex()
+                            .flex_wrap()
+                            .items_start()
+                            .gap(px(theme::SPACE[5]))
+                            .child(ports)
+                            .child(storage),
+                    );
                 } else if !b.loading {
                     body = body.child(note(crate::i18n::t("Container details are unavailable. Refresh details to try again."), p));
                 }
             }
+
             Tab::Logs => {
                 return view.child(self.container_logs_view(p, cx)).into_any_element();
             }
@@ -337,28 +413,44 @@ impl Workbench {
 fn chart(label: &'static str, current: &str, points: Vec<(f32, f32)>, seconds: f32, color: u32, p: &Palette) -> AnyElement {
     let peak = points.iter().map(|(_, v)| *v).fold(100., f32::max).ceil();
     let grid = p.border;
+    let current = current.to_string();
     let mut view = div()
+        .id(SharedString::from(format!("container-chart-{label}")))
+        .debug_selector(move || format!("container-chart-{label}"))
+        .w_full()
+        .min_w_0()
+        .min_h(px(232.))
         .flex()
         .flex_col()
         .gap(px(theme::SPACE[3]))
-        .py(px(theme::SPACE[3]))
+        .p(px(theme::SPACE[4]))
+        .rounded(px(theme::radius::SM))
+        .border_1()
+        .border_color(c(p.border))
+        .bg(c(p.surface))
         .child(
-            div()
-                .flex()
-                .flex_wrap()
-                .justify_between()
-                .gap(px(theme::SPACE[3]))
-                .text_size(px(text::SM.0))
-                .font_weight(gpui::FontWeight::SEMIBOLD)
-                .child(label)
-                .child(div().font_family(ui::MONO_FONT).text_color(c(color)).child(current.to_string())),
+            div().flex().flex_col().gap(px(theme::SPACE[2])).child(div().text_size(px(text::SM.0)).text_color(c(p.text_muted)).child(label)).child(
+                div()
+                    .id("current")
+                    .w_full()
+                    .truncate()
+                    .font_family(ui::MONO_FONT)
+                    .text_size(px(text::LG.0))
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(c(color))
+                    .tooltip({
+                        let current = current.clone();
+                        move |_, cx| cx.new(|_| Tooltip(current.clone().into())).into()
+                    })
+                    .child(current),
+            ),
         )
         .child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(format!("0–{peak:.0}%")));
     if points.len() < 2 {
         return view
             .child(
                 div()
-                    .h(px(60.))
+                    .h(px(112.))
                     .flex()
                     .items_center()
                     .text_size(px(text::XS.0))
@@ -438,13 +530,53 @@ fn value_row(label: &'static str, value: &str, p: &Palette) -> gpui::Div {
         )
 }
 
+fn inspection_card(id: impl Into<gpui::ElementId>, p: &Palette) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(id)
+        .w_full()
+        .min_w_0()
+        .p(px(theme::SPACE[4]))
+        .flex()
+        .flex_col()
+        .gap(px(theme::SPACE[3]))
+        .border_1()
+        .border_color(c(p.border))
+        .rounded(px(theme::radius::SM))
+        .bg(c(p.surface))
+        .text_size(px(text::SM.0))
+}
+
 fn copy_row(id: impl Into<gpui::ElementId>, label: &'static str, value: &str, p: &Palette, cx: &mut Context<Workbench>) -> gpui::Div {
     let copy = value.to_string();
-    div().flex().items_start().gap(px(theme::SPACE[3])).child(value_row(label, value, p).flex_1().min_w_0()).child(
-        button(id, crate::i18n::t("Copy"), p).debug_selector(move || format!("container-copy-{label}")).on_click(cx.listener(move |_, _, _, cx| {
-            cx.write_to_clipboard(gpui::ClipboardItem::new_string(copy.clone()));
-        })),
-    )
+    div()
+        .min_w_0()
+        .flex()
+        .items_end()
+        .gap(px(theme::SPACE[3]))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(theme::SPACE[2]))
+                .child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(label))
+                .child(
+                    div()
+                        .id(SharedString::from(format!("copy-value-{label}-{value}")))
+                        .w_full()
+                        .font_family(ui::MONO_FONT)
+                        .text_size(px(text::SM.0))
+                        .whitespace_nowrap()
+                        .overflow_x_scroll()
+                        .child(value.to_string()),
+                ),
+        )
+        .child(button(id, crate::i18n::t("Copy"), p).flex_none().debug_selector(move || format!("container-copy-{label}")).on_click(cx.listener(
+            move |_, _, _, cx| {
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(copy.clone()));
+            },
+        )))
 }
 
 /// Keep exposed-only ports and every IPv4/IPv6 binding; never invent a local URL.

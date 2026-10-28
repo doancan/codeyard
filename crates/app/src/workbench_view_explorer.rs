@@ -401,7 +401,9 @@ impl Workbench {
                     .when(fav_open, |d| d.children(favorites))
             })
             .child(head("folders", &root, None, tree_open, cx).font_weight(gpui::FontWeight::BOLD).text_color(c(p.text)))
-            .when(tree_open, |d| d.child(div().flex_1().min_h(px(80.)).child(self.roots.primary.clone())))
+            .when(tree_open, |d| {
+                d.child(div().relative().flex_1().min_h(px(80.)).child(self.roots.primary.clone()).child(a11y::landmark(a11y::Landmark::Explorer, cx)))
+            })
             .children(
                 self.roots
                     .extra_trees
