@@ -7,6 +7,7 @@ pub mod bigfile;
 pub mod daemon;
 mod fileops;
 pub mod hashtree;
+mod preview;
 pub mod proc;
 pub mod pty;
 pub mod search;
@@ -41,6 +42,7 @@ pub fn handle(req: Request) -> Response {
         Request::ReadDir { path } => read_dir(&expand(&path)).map(Response::Entries),
         Request::Stat { path } => stat(&expand(&path)).map(Response::Stat),
         Request::Read { path } => read(&expand(&path)),
+        Request::ReadPreview { root, path } => preview::read(&expand(&root), &path),
         Request::Write { path, data, expect_hash } => write(&expand(&path), &data, expect_hash).map(|hash| Response::Written { hash }),
         Request::CreateFile { path } => create_file(&expand(&path)).map(|_| Response::Done),
         Request::CreateDir { path } => {

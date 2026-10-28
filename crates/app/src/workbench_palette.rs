@@ -43,6 +43,8 @@ impl Workbench {
             Command::action("Search: Structural Replace…", crate::search::StructuralReplace),
             Command::action("View: Switch Editor…", SwitchEditor),
             Command::action("View: Toggle Zen Mode", ToggleZenMode),
+            Command::action("Extensions: Install cyx Command in PATH", InstallCyx),
+            Command::action("Extensions: New Extension…", NewExtension),
             Command::action("View: Toggle Full Screen", ToggleFullScreen),
             Command::action("Files: Open Folder…", OpenFolder),
             Command::action("Editor: Save", editor::Save),
@@ -305,6 +307,9 @@ impl Workbench {
             Command::action("View: Source Control", ShowScm),
             Command::action("View: Run and Debug", ShowRunAndDebug),
             Command::action("View: Testing", ShowTesting),
+            Command::action("Extensions: Show Extensions", ShowExtensions),
+            Command::action("Extensions: Install from File…", InstallExtensionFromFile),
+            Command::action("Extensions: Install from Folder…", InstallExtensionFromFolder),
             Command::action("Terminal: New Terminal with Profile…", NewTerminalWithProfile),
             Command::action("Terminal: Select Default Profile…", SelectDefaultTerminalProfile),
             Command::action("Terminal: Rename…", RenameTerminal),
@@ -328,6 +333,7 @@ impl Workbench {
             Command::action("Docker: Cancel Operation", DockerCancel),
             Command::action("View: Containers", ShowContainers),
             Command::action("Web Preview: Open in Browser", OpenWebPreview),
+            Command::action("Web Preview: Copy URL", CopyWebPreviewUrl),
             Command::action("Web Preview: Stop Server", StopWebPreview),
             Command::action("Web Preview: Show Server Log", WebPreviewLog),
             Command::action("Remote: Connect to WSL Distro…", RemoteWsl),
@@ -582,6 +588,21 @@ impl Workbench {
             (OverlayKind::IconTheme { .. }, PickerEvent::Preview(Pick::Item { index, .. })) => {
                 crate::icon_theme::set(crate::icon_theme::ALL[*index]);
                 cx.notify();
+            }
+            (OverlayKind::NewExtensionKind, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let kind = super::cyx_glue::KINDS[*index];
+                self.close_overlay(window, cx);
+                self.show_input(
+                    InputPurpose::NewExtension { kind },
+                    crate::i18n::t("Create"),
+                    crate::i18n::t("Name of the new extension, like my-theme"),
+                    "",
+                    window,
+                    cx,
+                );
+            }
+            (OverlayKind::NewExtensionKind, PickerEvent::Dismiss) => {
+                self.close_overlay(window, cx);
             }
             (OverlayKind::IconTheme { .. }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let t = crate::icon_theme::ALL[*index];

@@ -122,6 +122,8 @@ registry! {
     "workbench.openFolder" => wb::OpenFolder,
     "workbench.switchEditor" => wb::SwitchEditor,
     "workbench.toggleZenMode" => wb::ToggleZenMode,
+    "extensions.installCyx" => wb::InstallCyx,
+    "extensions.newExtension" => wb::NewExtension,
     "workbench.toggleFullScreen" => wb::ToggleFullScreen,
     "search.findTodos" => wb::FindTodos,
     // --- structural ---
@@ -149,6 +151,9 @@ registry! {
     "workbench.showRemoteExplorer" => wb::ShowRemoteExplorer,
     "workbench.showRunAndDebug" => wb::ShowRunAndDebug,
     "workbench.showTesting" => wb::ShowTesting,
+    "workbench.showExtensions" => wb::ShowExtensions,
+    "extensions.installFromFile" => wb::InstallExtensionFromFile,
+    "extensions.installFromFolder" => wb::InstallExtensionFromFolder,
     "test.runAll" => wb::RunAllTests,
     "test.runFailed" => wb::RunFailedTests,
     "test.refresh" => wb::RefreshTests,

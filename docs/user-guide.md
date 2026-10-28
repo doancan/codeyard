@@ -12,6 +12,7 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Interface language](#interface-language)
 - [Updates](#updates)
 - [Themes](#themes)
+- [Extensions](#extensions)
 - [Git](#git)
 - [Projects, favorites, bookmarks, tasks](#projects-favorites-bookmarks-tasks)
 - [Highlighting, diffs and crash reports](#highlighting-diffs-and-crash-reports)
@@ -558,6 +559,46 @@ Missing roles fall back to the default dark or light theme. The full role list i
 **VS Code themes:** drop the theme's `.json` file (from its extension's `themes/` folder)
 into the same directory. Workbench colors and syntax colors (TextMate scopes) are mapped
 to the editor's roles; comments and trailing commas are fine.
+
+## Extensions
+
+Extensions add themes, snippets, keymap presets, key bindings, languages, JSON and YAML schemas, settings and language
+servers. They contain data only: this version runs no extension code. *Extensions: Show Extensions* in the command
+palette (or the blocks icon in the activity bar, or *View › Extensions*) lists what is installed, turned-off ones
+included, with a search field. What comes with Codeyard is built in and always on.
+
+**Install.** *Extensions: Install from File…* takes a `.cyx` package; *Extensions: Install from Folder…* packages an
+extension folder (for example one you are writing) and installs that. Packages are installed on this computer, also
+in an SSH window. Before anything is installed, a consent sheet shows the extension's name, version and source, what it
+contributes and what it may reach, in plain words ("Run taplo with any arguments"), with the author's reason quoted.
+A red line marks a **High risk** set: one that can run programs as you, or read private data and send it somewhere.
+For those, the keyboard starts on *Cancel*, so Enter never installs by accident; Escape cancels any sheet. A package
+that is not valid is not installed; the error says what is wrong, as the packaging tool would. A package with code
+(commands, views) is refused with that reason: this version runs data-only extensions. A new extension applies at
+once, in every open window, without a restart.
+
+**Rules that keep them predictable.** An extension key binding never takes a key a built-in shortcut uses (the
+binding is left out and the status bar says so); a keymap preset you choose with `keymap.preset` may. An extension
+language only applies to files no built-in language claims. Extension language servers start in trusted folders only,
+and your own `lsp.servers` entry for the same language wins.
+
+From a terminal or a script, `codeyard --install-extension FILE.cyx` (repeat the flag for several) installs without
+opening a window; running it is your consent, and the same checks apply.
+
+**Manage.** Choose an extension in the list to open its page: contributions, permissions and these actions:
+
+- *Disable* / *Enable*: none of its contributions apply while it is disabled; it stays installed.
+- *Uninstall…*: asks first, then removes it with the data it stored.
+- *Roll Back*: goes back to the version this one replaced (shown only when that version is still kept; no download).
+- *Verify Files*: checks the installed files against the package's hashes and names any that are missing or changed.
+
+**Safe mode.** `codeyard --no-extensions` starts with no extension loaded, which rules them out when something looks
+wrong. The status bar says *Extensions off* for the whole session, and the Extensions view says so instead of listing.
+To keep them off across sessions, set `"extensions.enabled": false` in your own settings (a project's settings cannot
+change it, nor `keymap.preset`).
+
+**Write your own.** *Extensions: New Extension…* creates one and loads it in the window with a DEV badge; it reloads
+when you save. The [extension guide](extensions/developer-guide.md) takes it from there to a `.cyx` package.
 
 ## Git
 

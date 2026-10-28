@@ -15,7 +15,7 @@ use std::io::{self, Read, Write};
 use serde::{Deserialize, Serialize};
 
 /// Compared in the handshake; on mismatch the agent is reinstalled.
-pub const VERSION: u32 = 12;
+pub const VERSION: u32 = 13;
 
 /// Max size of one frame. Larger files are read in chunks.
 pub const MAX_FRAME: usize = 64 * 1024 * 1024;
@@ -169,6 +169,13 @@ pub enum Request {
     },
     /// The shells this machine offers (`Shells`).
     ListShells,
+    /// Read one regular file beneath `root` through directory handles, without following symlinks.
+    /// `path` is a nonempty '/'-separated relative path; hidden and special components are refused.
+    /// Answers `File`, or `Error` (including `IsDirectory` and `TooLarge`).
+    ReadPreview {
+        root: String,
+        path: String,
+    },
     /// Copy a file, directory or symlink without following links. Publishes atomically;
     /// `AlreadyExists` if the destination is occupied. Failed copies leave no destination.
     Copy {
@@ -585,6 +592,8 @@ mod tests {
             Request::Write { path: "a/ğüş.rs".into(), data: vec![1, 2, 3], expect_hash: Some(9) },
             Request::ListFiles { root: "/".into(), limit: 10 },
             Request::Hello { client_version: VERSION, session: None },
+            Request::ReadPreview { root: "/preview".into(), path: "assets/style.css".into() },
+            Request::Copy { from: "/source".into(), to: "/copy".into() },
         ];
         for body in requests {
             let mut b = Vec::new();
@@ -640,5 +649,15 @@ mod tests {
         assert!(err.to_string().contains("too large"), "{err}");
         assert_ne!(err.kind(), io::ErrorKind::UnexpectedEof);
         assert!(BIGGEST.with(|b| b.get()) < 1024 * 1024, "the header alone must not cause a big allocation");
+    }
+    #[test]
+    fn copy_appends_after_the_existing_preview_request() {
+        for (request, tag) in
+            [(Request::ReadPreview { root: "/root".into(), path: "file.txt".into() }, 29), (Request::Copy { from: "/from".into(), to: "/to".into() }, 30)]
+        {
+            let bytes = postcard::to_stdvec(&request).unwrap();
+            assert_eq!(bytes[0], tag);
+            assert_eq!(postcard::from_bytes::<Request>(&bytes).unwrap(), request);
+        }
     }
 }
