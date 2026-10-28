@@ -69,6 +69,56 @@ fn web_preview_paths_reject_traversal_dotfiles_special_names_and_unknown_types()
 }
 
 #[test]
+fn web_preview_redirects_preserve_query_parameters() {
+    let (server, root, _rx) = fixture("preview-query");
+    std::fs::create_dir(root.join("nested")).unwrap();
+    std::fs::write(root.join("nested/index.html"), "nested").unwrap();
+    let response = request(&server, "GET", "/nested?mode=dark&lang=tr&x=a%26b", true, None);
+    assert!(response.contains("Location: /nested/?mode=dark&lang=tr&x=a%26b\r\n"), "{response}");
+    let entry = server.url("index.html").strip_prefix(&format!("http://{}", server.addr)).unwrap().to_string();
+    let response = request(&server, "GET", &format!("{entry}&mode=dark&x=a%26b"), false, None);
+    assert!(response.contains("Location: /index.html?mode=dark&x=a%26b\r\n"), "{response}");
+    assert!(!response.lines().find(|line| line.starts_with("Location:")).unwrap().contains("__codeyard_token"));
+    let response = request(&server, "GET", "/nested//index.html", true, None);
+    assert!(response.starts_with("HTTP/1.1 200"));
+    assert!(server.watched_paths().contains(&crate::ui::local_path(&root.join("nested/index.html"))));
+}
+
+#[test]
+fn web_preview_nested_asset_uses_one_agent_request() {
+    use proto::{Frame, Request};
+    let root = crate::qa_workbench_tests::fresh("preview-one-request");
+    std::fs::create_dir_all(root.join("assets/css")).unwrap();
+    std::fs::write(root.join("assets/css/style.css"), "body {}").unwrap();
+    let (request_reader, request_writer) = std::io::pipe().unwrap();
+    let (response_reader, mut response_writer) = std::io::pipe().unwrap();
+    let (calls_tx, calls_rx) = mpsc::channel();
+    let agent = std::thread::spawn(move || {
+        let mut reader = std::io::BufReader::new(request_reader);
+        while let Ok(Some(Frame { id, body })) = proto::read_frame::<Request>(&mut reader) {
+            if matches!(body, Request::Bye) {
+                break;
+            }
+            if !matches!(body, Request::Hello { .. } | Request::Ping) {
+                calls_tx.send(body.clone()).unwrap();
+            }
+            let response = agent::handle(body);
+            if proto::write_frame(&mut response_writer, &Frame { id, body: response }).is_err() {
+                break;
+            }
+        }
+    });
+    let host = host::RemoteHost::from_streams(Box::new(response_reader), Box::new(request_writer), "preview-test").unwrap();
+    let (server, _events) = Server::start(Arc::new(host), crate::ui::local_path(&root)).unwrap();
+    let response = request(&server, "GET", "/assets/css/style.css", true, None);
+    assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+    assert!(response.ends_with("body {}"));
+    assert_eq!(calls_rx.try_iter().collect::<Vec<_>>(), [Request::ReadPreview { root: crate::ui::local_path(&root), path: "assets/css/style.css".into() }]);
+    drop(server);
+    agent.join().unwrap();
+}
+
+#[test]
 fn web_preview_tracks_served_files_and_distinguishes_css_reload() {
     let (server, root, rx) = fixture("preview-changes");
     request(&server, "GET", "/style.css", true, None);

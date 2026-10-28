@@ -15,7 +15,7 @@ use std::io::{self, Read, Write};
 use serde::{Deserialize, Serialize};
 
 /// Compared in the handshake; on mismatch the agent is reinstalled.
-pub const VERSION: u32 = 11;
+pub const VERSION: u32 = 12;
 
 /// Max size of one frame. Larger files are read in chunks.
 pub const MAX_FRAME: usize = 64 * 1024 * 1024;
@@ -169,6 +169,13 @@ pub enum Request {
     },
     /// The shells this machine offers (`Shells`).
     ListShells,
+    /// Read one regular file beneath `root` through directory handles, without following symlinks.
+    /// `path` is a nonempty '/'-separated relative path; hidden and special components are refused.
+    /// Answers `File`, or `Error` (including `IsDirectory` and `TooLarge`).
+    ReadPreview {
+        root: String,
+        path: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -577,6 +584,7 @@ mod tests {
             Request::Write { path: "a/ğüş.rs".into(), data: vec![1, 2, 3], expect_hash: Some(9) },
             Request::ListFiles { root: "/".into(), limit: 10 },
             Request::Hello { client_version: VERSION, session: None },
+            Request::ReadPreview { root: "/preview".into(), path: "assets/style.css".into() },
         ];
         for body in requests {
             let mut b = Vec::new();
