@@ -146,3 +146,22 @@ fn editor_grid_mixed_operations_preserve_a_nonoverlapping_complete_partition() {
         assert_eq!(Layout::from_json(&layout.to_json().unwrap()).unwrap(), layout);
     }
 }
+
+#[test]
+fn editor_grid_navigation_reaches_every_group_in_deeply_nested_extreme_ratios() {
+    for ratio in [0.1, 0.5, 0.9] {
+        let mut layout = Layout::default();
+        for _ in 1..MAX_GROUPS {
+            layout.split(layout.focused(), Direction::Right).unwrap();
+        }
+        for id in 0..MAX_GROUPS as u8 - 1 {
+            layout.set_ratio(id, ratio);
+        }
+        let groups = layout.groups();
+        for (index, group) in groups.iter().enumerate() {
+            layout.focus(*group);
+            assert_eq!(layout.neighbor(Direction::Left), index.checked_sub(1).map(|i| groups[i]), "left from {group}, ratio {ratio}");
+            assert_eq!(layout.neighbor(Direction::Right), groups.get(index + 1).copied(), "right from {group}, ratio {ratio}");
+        }
+    }
+}

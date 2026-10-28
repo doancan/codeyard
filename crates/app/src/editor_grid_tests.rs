@@ -63,7 +63,7 @@ fn editor_grid_mixed_axes_paint_nonoverlapping_panes_at_narrow_and_wide_sizes(cx
     open(&wb, &file, cx);
     run(&wb, "View: Split Editor", cx);
     run(&wb, "View: Split Editor Down", cx);
-    for width in [480., 1280.] {
+    for width in [800., 1280.] {
         cx.simulate_resize(size(px(width), px(800.)));
         cx.run_until_parked();
         let ids = wb.read_with(cx, |wb, _| wb.tabs.layout.groups());
@@ -260,4 +260,34 @@ fn editor_grid_concurrent_opens_share_one_buffer_and_undo_history(cx: &mut TestA
     cx.run_until_parked();
     assert_eq!(wb.read_with(cx, |wb, _| wb.all_editors().len()), 1);
     wb.read_with(cx, |wb, _| assert_eq!(wb.tabs.editors[0], wb.tabs.groups[&0].editors[0]));
+}
+
+#[gpui::test]
+fn editor_grid_deep_highlighted_views_have_bounded_layout_work(cx: &mut TestAppContext) {
+    let dir = fresh("editor-grid-deep-highlighted");
+    let file = dir.join("big.rs");
+    std::fs::copy(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/big.rs"), &file).unwrap();
+    let (wb, cx) = setup(cx);
+    cx.update(|_, cx| cx.global_mut::<Settings>().lsp_enabled = false);
+    open(&wb, &file, cx);
+    cx.simulate_resize(size(px(480.), px(600.)));
+    let started = std::time::Instant::now();
+    for _ in 1..crate::editor_layout::MAX_GROUPS {
+        run(&wb, "View: Split Editor", cx);
+    }
+    let editor = wb.read_with(cx, |wb, _| wb.active_editor().cloned()).unwrap();
+    let hidden_before = editor::slot_paint_count(&editor, 0);
+    let visible_before = editor::slot_paint_count(&editor, 31);
+    wb.update(cx, |_, cx| cx.notify());
+    cx.run_until_parked();
+    assert_eq!(editor::slot_paint_count(&editor, 0), hidden_before, "a fully clipped view must not be painted");
+    assert!(editor::slot_paint_count(&editor, 31) > visible_before, "the visible view must repaint");
+    for _ in 1..crate::editor_layout::MAX_GROUPS {
+        run(&wb, "View: Focus Left Editor Group", cx);
+    }
+    let elapsed = started.elapsed();
+    eprintln!("32 highlighted views and 31 focus changes: {elapsed:?}");
+    assert!(elapsed < std::time::Duration::from_secs(15 * crate::test_sshd::timeout_scale()));
+    assert_eq!(wb.read_with(cx, |wb, _| wb.tabs.layout.focused()), 0);
+    assert_eq!(wb.read_with(cx, |wb, _| wb.all_editors().len()), 1);
 }

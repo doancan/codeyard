@@ -631,6 +631,13 @@ thread_local! {
     /// View being painted: listeners set up during painting switch to this view
     /// first when an event arrives (two groups paint the same editor with different views).
     static RENDER_SLOT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    #[cfg(test)]
+    static SLOT_PAINTS: std::cell::RefCell<std::collections::HashMap<(gpui::EntityId, usize), usize>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+#[cfg(test)]
+pub fn slot_paint_count(editor: &Entity<EditorView>, slot: usize) -> usize {
+    SLOT_PAINTS.with(|counts| counts.borrow().get(&(editor.entity_id(), slot)).copied().unwrap_or(0))
 }
 
 /// The view-aware version of `cx.listener`: runs in the view it was painted in.
@@ -741,6 +748,8 @@ impl Element for SlotView {
         window: &mut Window,
         cx: &mut App,
     ) {
+        #[cfg(test)]
+        SLOT_PAINTS.with(|counts| *counts.borrow_mut().entry((self.editor.entity_id(), self.slot)).or_default() += 1);
         self.within(cx, |cx| el.paint(window, cx));
     }
 }
