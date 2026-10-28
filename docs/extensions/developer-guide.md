@@ -1,16 +1,16 @@
 # Writing Codeyard extensions
 
-Themes, snippets, commands, views and language servers. If you have built a VS Code extension, most of this will feel familiar. Parts marked **(draft)** may still change before API 1.0.
+Themes, snippets, keymaps, languages, schemas and language servers today; commands and views with code extensions next. If you have built a VS Code extension, most of this will feel familiar. Parts marked **(draft)** may still change before API 1.0, and sections marked **(coming)** describe code extensions, which this version does not run yet.
 
 <!-- toc -->
 - [Quick start](#quick-start)
 - [A theme or snippet pack](#a-theme-or-snippet-pack)
-- [Your first command](#your-first-command)
+- [Your first command (coming)](#your-first-command-coming)
 - [The manifest](#the-manifest)
 - [Permissions](#permissions)
 - [Recipes](#recipes)
 - [Test and debug](#test-and-debug)
-- [Publish](#publish)
+- [Publish (coming)](#publish-coming)
 - [Coming from VS Code](#coming-from-vs-code)
 - [Troubleshooting](#troubleshooting)
 <!-- /toc -->
@@ -20,15 +20,20 @@ Themes, snippets, commands, views and language servers. If you have built a VS C
 1. **Get `cyx`.** Open the palette and run **Extensions: Install cyx Command in PATH**. It ships with Codeyard, so there is nothing to download.
 2. **Scaffold.**
    ```sh
-   cyx new command my-tools
-   cd my-tools
+   cyx new theme my-theme       # or: snippets, keymap, language, language-server
+   cd my-theme
    ```
-   You can also use the palette: **Extensions: New Extension…**. It uses the same templates.
 3. **Run.**
    ```sh
    cyx dev
    ```
-   A dev window opens with a **DEV** badge. Save a file and the extension reloads.
+   Codeyard opens with your extension loaded and a **DEV** badge in the status bar. Save a file and it reloads within a second; a mistake shows up as a message with the fix instead.
+4. **Check and package.**
+   ```sh
+   cyx check                    # every problem, with its file, line and fix
+   cyx package                  # writes you.my-theme-0.1.0.cyx
+   ```
+   Install the `.cyx` from the Extensions view, or send it to someone.
 
 That's all. The only file you have to have is `codeyard-extension.toml`.
 
@@ -37,7 +42,7 @@ That's all. The only file you have to have is `codeyard-extension.toml`.
 You don't need code or a toolchain for this. Codeyard is all you need.
 
 ```sh
-cyx new theme midnight        # or: cyx new snippets my-snippets   (draft)
+cyx new theme midnight        # or: cyx new snippets my-snippets
 cd midnight && cyx dev
 ```
 
@@ -49,11 +54,11 @@ version = "0.1.0"
 name    = "Midnight"
 license = "MIT"
 
-[[themes]]                       # (draft) field names
+[[themes]]
 label = "Midnight"
 path  = "themes/midnight.json"   # Codeyard or VS Code colour theme JSON
 
-[[snippets]]                     # (draft) field names
+[[snippets]]
 language = "rust"
 path     = "snippets/rust.json"  # VS Code snippet format
 ```
@@ -75,9 +80,9 @@ The same goes for other no-code contributions: `keymap-preset`, `keybindings`, `
 - A language server is a program on `PATH` where the files are, so it works over SSH too.
 - Start Codeyard with `--no-extensions` to rule your extension out when something looks wrong.
 
-## Your first command
+## Your first command (coming)
 
-You need Rust or Node installed.
+Commands, views and other code arrive with code extensions; this section shows what they will look like. You will need Rust or Node installed.
 
 ### TypeScript
 
@@ -364,7 +369,9 @@ cyx test       # runs the real built extension
 
 While a debugger is attached, nothing times out. `storage` keeps data across sessions, and in `cyx dev` hot reload also keeps your in-memory state.
 
-## Publish
+## Publish (coming)
+
+The registry opens in the next phase. Until then, `cyx package` writes a `.cyx` that anyone can install from the Extensions view.
 
 ```sh
 cyx publish --dry-run   # check everything and show the consent sheet

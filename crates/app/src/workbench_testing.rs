@@ -680,3 +680,10 @@ pub struct DialogView {
     pub buttons: Vec<String>,
     pub primary: Option<String>,
 }
+
+impl Workbench {
+    #[cfg(unix)]
+    pub fn install_cyx_link_for_test(target: &std::path::Path, dirs: &[std::path::PathBuf]) -> Result<std::path::PathBuf, String> {
+        super::cyx_glue::install_link(target, dirs)
+    }
+}

@@ -58,6 +58,68 @@ thread_local! {
     static CURRENT_TL: std::cell::RefCell<Option<Arc<Registry>>> = const { std::cell::RefCell::new(None) };
 }
 
+/// `--extension-dev <folder>` (what `cyx dev` starts): the author's folder, loaded as it is on disk.
+#[cfg(not(test))]
+static DEV: RwLock<Option<PathBuf>> = RwLock::new(None);
+#[cfg(test)]
+thread_local! {
+    static DEV_TL: std::cell::RefCell<Option<PathBuf>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Load `dir` as an extension in development: unpacked, checked like a package, reloaded when a file in it changes.
+pub fn set_dev(dir: Option<PathBuf>) {
+    #[cfg(not(test))]
+    {
+        *DEV.write().unwrap_or_else(|e| e.into_inner()) = dir;
+    }
+    #[cfg(test)]
+    DEV_TL.with(|d| *d.borrow_mut() = dir);
+}
+
+pub fn dev_dir() -> Option<PathBuf> {
+    #[cfg(not(test))]
+    {
+        DEV.read().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+    #[cfg(test)]
+    DEV_TL.with(|d| d.borrow().clone())
+}
+
+/// A cheap fingerprint of the dev folder (names, sizes, modification times), polled once a second for hot reload.
+pub fn dev_stamp() -> u64 {
+    use std::hash::{Hash, Hasher};
+    let Some(dir) = dev_dir() else { return 0 };
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    fn walk(dir: &Path, h: &mut std::collections::hash_map::DefaultHasher, budget: &mut usize) {
+        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        let mut entries: Vec<_> = rd.flatten().collect();
+        entries.sort_by_key(|e| e.file_name());
+        for e in entries {
+            if *budget == 0 || ext_pkg::EXCLUDED.iter().any(|x| e.file_name() == *x) {
+                continue;
+            }
+            *budget -= 1;
+            let Ok(m) = e.metadata() else { continue };
+            e.file_name().hash(h);
+            m.len().hash(h);
+            m.modified().ok().hash(h);
+            if m.is_dir() {
+                walk(&e.path(), h, budget);
+            }
+        }
+    }
+    walk(&dir, &mut h, &mut 5000);
+    h.finish()
+}
+
+/// The dev folder as an extension, or the author-facing reason it cannot load (the same checks as `cyx check`).
+fn load_dev(dir: &Path) -> Result<Active, String> {
+    let files = ext_pkg::collect_dir(dir).map_err(|e| e.to_string())?;
+    let (bytes, _) = ext_pkg::write(files).map_err(|e| e.to_string())?;
+    let pkg = ext_pkg::read(&bytes).map_err(|e| e.to_string())?;
+    Ok(Active { manifest: Arc::new(pkg.manifest), dir: dir.to_path_buf() })
+}
+
 /// `--no-extensions`: nothing is loaded for the rest of the session.
 pub fn turn_off() {
     #[cfg(not(test))]
@@ -129,7 +191,19 @@ pub fn reload(cfg_dir: Option<&Path>) -> Vec<String> {
         },
         Err(e) => Registry { active: Vec::new(), problems: vec![e.to_string()] },
     };
+    let mut reg = reg;
     let mut problems: Vec<String> = reg.problems.iter().map(|p| crate::i18n::tf("Extension not loaded: {}", &[p])).collect();
+    // The extension in development replaces an installed copy of itself.
+    if let Some(dir) = dev_dir() {
+        match load_dev(&dir) {
+            Ok(dev) => {
+                reg.active.retain(|e| e.id() != dev.id());
+                reg.active.push(dev);
+                reg.active.sort_by(|a, b| a.id().cmp(b.id()));
+            }
+            Err(e) => problems.insert(0, crate::i18n::tf("Extension in development not loaded: {}", &[&e])),
+        }
+    }
     for e in &reg.active {
         for l in &e.manifest.contributions.languages {
             if let Some(g) = l.grammar.as_deref().filter(|g| !crate::editor::grammar_known(g)) {

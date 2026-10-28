@@ -41,6 +41,7 @@ Name: "contextmenu"; Description: "Add ""Open with Codeyard"" to the Explorer co
 
 [Files]
 Source: "..\..\target\release\codeyard.exe"; DestDir: "{app}"; DestName: "Codeyard.exe"; Flags: ignoreversion
+Source: "..\..\target\release\cyx.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\crates\app\assets\windows\codeyard.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\LICENSE-MIT"; DestDir: "{app}\licenses"; Flags: ignoreversion
 Source: "..\..\LICENSE-APACHE"; DestDir: "{app}\licenses"; Flags: ignoreversion
