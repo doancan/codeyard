@@ -34,10 +34,36 @@ class CompareTests(unittest.TestCase):
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("regressed more than 10%", r.stdout)
 
-    def test_shift_inside_the_baseline_spread_passes(self):
-        # p95 is 20% worse, but the candidate's median (12) is not above the baseline's p95 (20): noise.
-        r = self.run_compare({"t": [10, 11, 12, 20]}, {"t": [10, 11, 12, 24]}, [self.metric()])
+    def test_noise_of_the_same_build_passes(self):
+        # Two runs of one build: same spread, different order and a few different draws.
+        base = [20 + (i * 7) % 13 for i in range(40)]
+        cand = [20 + (i * 5 + 3) % 13 for i in range(40)]
+        r = self.run_compare({"t": base}, {"t": cand}, [self.metric()])
         self.assertEqual(r.returncode, 0, r.stdout)
+
+    def test_a_regression_in_the_tail_alone_fails(self):
+        # The median does not move, but one key press in four is three times slower: p95 +200%.
+        r = self.run_compare({"t": [10] * 19 + [12]}, {"t": [10] * 15 + [30] * 5}, [self.metric()])
+        self.assertEqual(r.returncode, 1, r.stdout)
+
+    def test_one_baseline_outlier_does_not_hide_a_memory_regression(self):
+        m = self.metric(stat="median", budget=0.05)
+        r = self.run_compare({"t": [100, 100, 130]}, {"t": [120, 120, 120]}, [m])
+        self.assertEqual(r.returncode, 1, r.stdout)
+
+    def test_one_candidate_outlier_is_not_a_memory_regression(self):
+        m = self.metric(stat="median", budget=0.05)
+        r = self.run_compare({"t": [100, 101, 100]}, {"t": [100, 130, 101]}, [m])
+        self.assertEqual(r.returncode, 0, r.stdout)
+
+    def test_a_blocking_metric_without_baseline_is_reported(self):
+        r = self.run_compare({}, {"t": [10, 11]}, [self.metric()])
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("warn: no baseline samples", r.stdout)
+
+    def test_different_machines_are_called_out(self):
+        r = self.run_compare({"t": [10]}, {"t": [10]}, [self.metric()])
+        self.assertNotIn("different machines", r.stdout)
 
     def test_warn_metric_never_fails(self):
         r = self.run_compare({"t": [10, 10]}, {"t": [30, 30]}, [self.metric(gate="warn")])
