@@ -22,30 +22,40 @@ while [ $# -gt 0 ]; do
     *) echo "perf: unknown option '$1' (try --help)" >&2; exit 2 ;;
   esac
 done
+case "$runs$mem_runs" in *[!0-9]*) echo "perf: --runs and --mem-runs take a number" >&2; exit 2 ;; esac
+[ "$runs" -ge 1 ] && [ "$mem_runs" -ge 1 ] || { echo "perf: --runs and --mem-runs must be at least 1" >&2; exit 2; }
 
 OUT=target/perf
 mkdir -p "$OUT"
 TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
+pid=""
+# Stop a running app too: an interrupted run must not leave Codeyard open on a deleted profile.
+trap '[ -n "$pid" ] && kill "$pid" 2>/dev/null; rm -rf "$TMP"' EXIT
+trap 'exit 130' INT TERM
 . scripts/perf/footprint.sh
 
 cargo build --release -q -p app
 cp target/release/codeyard "$OUT/codeyard-candidate"
 names=(candidate)
 commits=("$(git rev-parse HEAD)")
+versions=("$(git describe --tags --always --dirty)")
 if [ -n "$baseline" ]; then
   rev=$(git rev-parse --verify "$baseline^{commit}")
   wt="$OUT/worktree-$rev"
+  # Kept between runs so the baseline is built once; `prune` forgets one whose folder was deleted (cargo clean).
+  git worktree prune
   [ -d "$wt" ] || git worktree add -q --detach "$wt" "$rev"
   # Its own target directory: sharing one would rebuild both revisions on every run.
   (cd "$wt" && CARGO_TARGET_DIR="$PWD/../target-$rev" cargo build --release -q -p app)
   cp "$OUT/target-$rev/release/codeyard" "$OUT/codeyard-baseline"
   names+=(baseline)
   commits+=("$rev")
+  versions+=("$(git describe --tags --always "$rev")")
 elif [ "$aa" = 1 ]; then
   cp "$OUT/codeyard-candidate" "$OUT/codeyard-baseline"
   names+=(baseline)
   commits+=("${commits[0]}")
+  versions+=("${versions[0]}")
 fi
 
 # A fresh profile per start: no recent folders, no restored tabs, no first-run question, no Dock icon.
@@ -62,27 +72,45 @@ launch() { # app args... (background; $! is the pid)
 run_scripted() { # app args...
   fresh_profile
   launch "$@"
-  local pid=$! i
+  pid=$!
+  local i
   for i in $(seq 1 300); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
   kill "$pid" 2>/dev/null || true
   wait "$pid" 2>/dev/null || true
+  pid=""
 }
+count() { grep -c "\"$1\"" "$2" || true; } # metric file
 
 for n in "${names[@]}"; do : > "$TMP/$n.jsonl"; done
 
-# Timing scenarios, interleaved so that thermal state and background load hit every build alike.
+# Timing scenarios, interleaved so that thermal state and background load hit every build alike; the order alternates
+# so that neither build always runs first. A build without the hooks (a release before them) is timed once only.
 export CODEYARD_PERF_EXIT=1
+untimed=" "
 for i in $(seq 1 "$runs"); do
-  for k in "${!names[@]}"; do
+  order=("${!names[@]}")
+  [ $((i % 2)) = 0 ] && [ ${#order[@]} = 2 ] && order=(1 0)
+  for k in "${order[@]}"; do
+    case "$untimed" in *" $k "*) continue ;; esac
     export CODEYARD_PERF="$TMP/${names[$k]}.jsonl"
+    before=$(count startup.first_frame_ms "$CODEYARD_PERF")
     run_scripted "$OUT/codeyard-${names[$k]}"
+    if [ "$(count startup.first_frame_ms "$CODEYARD_PERF")" != $((before + 1)) ]; then
+      if [ "$i" = 1 ] && [ "${names[$k]}" = baseline ]; then
+        echo "perf: the baseline has no CODEYARD_PERF hooks; it is compared on memory only" >&2
+        untimed="$untimed$k "
+        continue
+      fi
+      echo "perf: no first frame from ${names[$k]}: the window must be visible (display awake, not covered, same Space)" >&2
+      exit 1
+    fi
     cp crates/app/testdata/big.rs "$TMP/big.rs"
     # Only its typing samples count: its startup opens a file, a different scenario from the welcome screen above.
     : > "$TMP/typing.jsonl"
     CODEYARD_PERF="$TMP/typing.jsonl" CODEYARD_PERF_TYPING=40 run_scripted "$OUT/codeyard-${names[$k]}" "$TMP/big.rs"
     # The scenario saves after typing: if the keys did not reach the editor, the samples measure nothing.
-    if grep -q '"typing\.' "$TMP/typing.jsonl" && ! grep -q "^a\{40\}" "$TMP/big.rs"; then
-      echo "perf: the typed keys did not reach the editor (${names[$k]}); typing samples are invalid" >&2
+    if [ "$(count typing.keystroke_frame_ms "$TMP/typing.jsonl")" != 40 ] || ! grep -q "^a\{40\}" "$TMP/big.rs"; then
+      echo "perf: the typing run of ${names[$k]} did not type and draw 40 keys; the window must be visible and nothing else may type into it" >&2
       exit 1
     fi
     grep '"typing\.' "$TMP/typing.jsonl" >> "$CODEYARD_PERF" || true
@@ -105,6 +133,7 @@ for i in $(seq 1 "$mem_runs"); do
       v=$(settled_mb "$pid")
       kill "$pid" 2>/dev/null || true
       wait "$pid" 2>/dev/null || true
+      pid=""
       case "$v" in ''|*[!0-9]*) echo "perf: no measurement for $metric (${names[$k]})" >&2 ;;
         *) printf '{"metric":"%s","value":%s}\n' "$metric" "$v" >> "$TMP/${names[$k]}.jsonl" ;;
       esac
@@ -116,6 +145,6 @@ echo >&2
 
 for k in "${!names[@]}"; do
   c=${commits[$k]}
-  python3 -I scripts/perf/collect.py "$TMP/${names[$k]}.jsonl" "$c" "$(git describe --tags --always "$c")" > "$OUT/${names[$k]}.json"
+  python3 -I scripts/perf/collect.py "$TMP/${names[$k]}.jsonl" "$c" "${versions[$k]}" > "$OUT/${names[$k]}.json"
   echo "perf: wrote $OUT/${names[$k]}.json"
 done

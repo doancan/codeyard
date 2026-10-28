@@ -12,16 +12,18 @@ scripts/perf/compare.py target/perf/baseline.json target/perf/candidate.json
 ```
 
 `--aa` runs the working tree against itself instead: every row must pass, otherwise the machine is too noisy (close
-other apps, plug in the power, let it cool). `--runs` and `--mem-runs` change the sample counts (default 20 and 3). A
-full run takes about 15 minutes.
+other apps, plug in the power, let it cool). `--runs` and `--mem-runs` change the number of runs (default 20 and 3). A
+full run takes about 15 minutes. The measured windows open in the background and never take the keyboard, but they
+must be visible: keep the display awake and stay on the same Space. A run that draws no frame or loses a key stops
+with a message instead of producing numbers. The baseline is built once in `target/perf/worktree-<commit>` and reused.
 
 ## What is measured
 
 | Metric | Scenario | Statistic | Budget |
 | --- | --- | --- | --- |
-| `startup.first_frame_ms` | process start to the first drawn frame, welcome screen | p95 | +10% |
-| `startup.window_open_ms` | process start to the window being created (warn only) | p95 | +10% |
-| `typing.keystroke_frame_ms` | key press to the drawn frame, 10k-line Rust file with highlighting, 40 keys | p95 | +10% |
+| `startup.first_frame_ms` | start of `main` to the first drawn frame, welcome screen; one sample per run | p95 | +10% |
+| `startup.window_open_ms` | start of `main` to the window being created (warn only) | p95 | +10% |
+| `typing.keystroke_frame_ms` | key press to the drawn frame, 10k-line Rust file with highlighting; 40 keys per run | p95 | +10% |
 | `memory.empty_window_mb` | settled footprint, welcome screen | median | +5% |
 | `memory.syntax_10k_mb` | settled footprint, 10k-line Rust file | median | +5% |
 | `memory.terminal_mb` | settled footprint, terminal open | median | +5% |
@@ -35,16 +37,23 @@ before it draws. They are upper bounds by at most one display refresh; that is t
 
 ## How a regression is decided
 
-For each metric, `compare.py` takes the statistic (median or p95) of both builds and fails when:
+For each metric, `compare.py` takes the statistic (median or p95) of both builds. It fails when the candidate is worse
+than the baseline by more than the budget **and** the change is not noise:
 
-- the candidate is worse than the baseline by more than the budget, **and**
-- the candidate's median is worse than the baseline's p95 (the change is outside the baseline's own spread), or
-- the value is above the metric's `ceiling`, when one is set.
+- the candidate's value is above the upper end of a 95% bootstrap interval of the baseline's value (the same statistic
+  on resamples of the baseline), or
+- for a median, every candidate sample is worse than the baseline's median by more than the budget. Memory has 3
+  samples, too few for an interval; one outlier must neither hide a regression nor invent one.
 
-`warn` metrics are reported and never fail. A blocking metric with no samples fails.
+A value above the metric's `ceiling`, when one is set, also fails. `warn` metrics are reported and never fail. A
+blocking metric with no candidate samples fails; one with no baseline samples is reported as not compared. That is the
+case for timing against releases before the hooks (v0.5.0): the first gated release compares memory only, the one
+after it everything. A different `machine` in the two files is printed as a warning.
 
 ## Release
 
-Run it on the reference Mac before tagging (`docs/releasing.md`), commit `target/perf/candidate.json` as
-`docs/benchmarks/perf-<version>.json`, and it becomes the next release's baseline. Accepting a regression is one line in
-the release notes saying which metric and why.
+Run it on the reference Mac before tagging (`docs/releasing.md`) and commit `target/perf/candidate.json` as
+`docs/benchmarks/perf-<version>.json`: the record of what each release measured. The gate itself always rebuilds and
+reruns the previous tag next to the candidate, so both are measured in the same session. Accepting a regression is one
+line in the release notes saying which metric and why. `docs/benchmarks/perf-baseline-2026-10-28.json` is the first
+record, taken before the platform work started.

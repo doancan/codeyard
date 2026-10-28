@@ -1,8 +1,8 @@
 {
   "_comment": "Metric catalogue for scripts/perf/compare.py. budget: allowed regression of the statistic against the baseline (0.10 = 10%). ceiling: absolute limit, null when the memory budgets in scripts/memcheck.sh already cover it. gate: block fails the comparison, warn only reports.",
   "metrics": [
-    {"id": "startup.first_frame_ms", "what": "process start to the first drawn frame, welcome screen", "stat": "p95", "budget": 0.10, "ceiling": null, "gate": "block"},
-    {"id": "startup.window_open_ms", "what": "process start to the first window created", "stat": "p95", "budget": 0.10, "ceiling": null, "gate": "warn"},
+    {"id": "startup.first_frame_ms", "what": "start of main to the first drawn frame, welcome screen", "stat": "p95", "budget": 0.10, "ceiling": null, "gate": "block"},
+    {"id": "startup.window_open_ms", "what": "start of main to the first window created", "stat": "p95", "budget": 0.10, "ceiling": null, "gate": "warn"},
     {"id": "typing.keystroke_frame_ms", "what": "key press to the drawn frame, 10k-line Rust file with highlighting", "stat": "p95", "budget": 0.10, "ceiling": null, "gate": "block"},
     {"id": "memory.empty_window_mb", "what": "settled footprint, welcome screen", "stat": "median", "budget": 0.05, "ceiling": null, "gate": "block"},
     {"id": "memory.syntax_10k_mb", "what": "settled footprint, 10k-line Rust file with highlighting", "stat": "median", "budget": 0.05, "ceiling": null, "gate": "block"},

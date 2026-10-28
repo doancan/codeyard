@@ -266,10 +266,10 @@ The app binary has no size budget: it grows with features, and users feel time a
 printed by `scripts/memcheck.sh` for the record. The agent keeps its budget because it is copied to every server.
 
 **Regression gate.** `scripts/perf/run.sh --baseline <previous tag>` builds the previous release and the candidate and
-runs them interleaved on the same Mac: startup to first frame, key press to drawn frame in a 10k-line Rust file (20
-samples each) and the settled memory of three scenes. `scripts/perf/compare.py` checks each metric of
+runs them interleaved on the same Mac: startup to first frame and key press to drawn frame in a 10k-line Rust file
+(20 runs each) and the settled memory of three scenes (3 runs). `scripts/perf/compare.py` checks each metric of
 `perf/metrics.json` against its budget (p95 +10% for times, median +5% for memory) and fails only when the change is
-also outside the baseline's own spread. The result is committed as `docs/benchmarks/perf-<version>.json`. Details:
+also outside the noise of the baseline (a bootstrap interval of the same statistic). The result is committed as `docs/benchmarks/perf-<version>.json`. Details:
 `scripts/perf/README.md`.
 
 Before a release all of these must pass: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
