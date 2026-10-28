@@ -88,8 +88,9 @@ fn rust_hardening_failed_real_test_build_reaches_problems_and_never_starts_a_ses
 
 #[gpui::test]
 fn rust_hardening_detected_workspace_target_reaches_dap_with_the_real_cargo_artifact(cx: &mut gpui::TestAppContext) {
-    if std::process::Command::new("python3").arg("-V").output().is_err() {
-        crate::test_sshd::skip_missing("python3");
+    let python = if cfg!(windows) { "python" } else { "python3" };
+    if std::process::Command::new(python).arg("-V").output().is_err() {
+        crate::test_sshd::skip_missing(python);
         return;
     }
     let dir = crate::qa_workbench_tests::fresh("rust-hardening-workspace-dap");
@@ -129,8 +130,8 @@ fn rust_hardening_detected_workspace_target_reaches_dap_with_the_real_cargo_arti
     assert_eq!(config.cargo_target.as_ref().unwrap().name, "worker");
     config.adapter = Ok(crate::debug_config::Adapter {
         id: "lldb-dap".into(),
-        command: script.to_string_lossy().into_owned(),
-        args: vec![log.to_string_lossy().into_owned()],
+        command: python.into(),
+        args: vec![script.to_string_lossy().into_owned(), log.to_string_lossy().into_owned()],
         connect: None,
     });
     config.args["source"] = serde_json::json!(source.to_string_lossy());

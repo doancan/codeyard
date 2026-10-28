@@ -88,6 +88,8 @@ Include interface scaling (Q08) and bounded visible-range navigation (Q10) befor
 Core target discovery shipped in Pass 1. Continue Q07 with a unified user-selected features/profile model shared by
 Run, Debug and Testing; cover explicit module remapping, macro-generated cases and cross-root path dependencies.
 Extend the actual Cargo/adapter acceptance matrix over a test SSH host and native Windows.
+The new Cargo/DAP, product and accessibility regressions are also selected by Windows CI; real hardware/adapter
+acceptance remains separate from these native automated fixtures.
 
 Q12: expose presets through existing settings and tasks rather than adding another configuration format.
 Keep VS Code imports, folder-specific settings, custom launch files and user keybindings working.

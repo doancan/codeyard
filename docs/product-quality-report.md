@@ -27,6 +27,8 @@ The delivery pull request is the authoritative record of the final tree's cross-
   Existing web preview, container overview/detail/log improvements and landmark accessibility geometry are retained.
 - Memory checks measure and stop their own disposable agent daemon. The shared save coordinator avoids three copies
   of the same asynchronous state machine in the release binary. Unused translation keys were removed after integration.
+- Windows CI includes the new Rust, product and accessibility suites alongside its existing selected native regressions.
+  The scripted DAP fixture uses an explicit Python interpreter and path assertions use the editor's normalized form.
 
 ## Validation evidence
 

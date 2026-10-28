@@ -84,6 +84,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rust workspace test runs continue after a target fails. Duplicate test names cannot overwrite a failure with a pass,
   and unreported tests cannot keep an earlier green result after a build or runner failure.
 - Memory checks measure and stop their own disposable agent daemon instead of looking up an unrelated running daemon.
+- Windows CI also runs Rust Cargo/debug, product and accessibility regressions; the scripted adapter fixture launches
+  through Python explicitly instead of relying on executable script associations.
 
 - The workspace-symbol test ran with language servers turned off, so it could never pass; it now starts rust-analyzer.
 
