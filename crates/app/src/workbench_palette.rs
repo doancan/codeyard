@@ -324,6 +324,7 @@ impl Workbench {
             Command::action("Docker: Cancel Operation", DockerCancel),
             Command::action("View: Containers", ShowContainers),
             Command::action("Web Preview: Open in Browser", OpenWebPreview),
+            Command::action("Web Preview: Copy URL", CopyWebPreviewUrl),
             Command::action("Web Preview: Stop Server", StopWebPreview),
             Command::action("Web Preview: Show Server Log", WebPreviewLog),
             Command::action("Remote: Connect to WSL Distro…", RemoteWsl),

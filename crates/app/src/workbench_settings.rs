@@ -204,6 +204,15 @@ pub const CATALOG: &[Entry] = &[
         crate::i18n::tr("Enable Web Preview for HTML, CSS and JavaScript (user settings only; stops servers when disabled)"),
         Kind::Bool,
     ),
+    e("webPreview.port", crate::i18n::tr("Preview port (0: choose a free port automatically)"), Kind::Number { min: 0., max: 65535. }),
+    e(
+        "webPreview.host",
+        crate::i18n::tr("Listen address (local: 127.0.0.1 or ::1; network: 0.0.0.0 or ::)"),
+        Kind::Choice(&["127.0.0.1", "::1", "0.0.0.0", "::"]),
+    ),
+    e("webPreview.liveReload", crate::i18n::tr("Refresh the browser when saved preview files change"), Kind::Bool),
+    e("webPreview.reloadInterval", crate::i18n::tr("Milliseconds between live preview checks"), Kind::Number { min: 250., max: 60000. }),
+    e("webPreview.root", crate::i18n::tr("Served folder (empty: automatic; relative to the workspace, or an absolute path on the active host)"), Kind::Text),
 ];
 
 pub fn entry(key: &str) -> Option<&'static Entry> {
@@ -233,6 +242,11 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "security.workspaceTrust.enabled" => json!(s.workspace_trust),
         "modules.containers.enabled" => json!(s.docker_enabled),
         "modules.webPreview.enabled" => json!(s.web_preview_enabled),
+        "webPreview.port" => json!(s.web_preview.port),
+        "webPreview.host" => json!(s.web_preview.host.to_string()),
+        "webPreview.liveReload" => json!(s.web_preview.live_reload),
+        "webPreview.reloadInterval" => json!(s.web_preview.reload_interval),
+        "webPreview.root" => json!(s.web_preview.root),
         "editor.codeLens" => json!(s.code_lens),
         "editor.unicodeHighlight.enabled" => json!(s.unicode_highlight),
         "editor.semanticHighlighting.enabled" => json!(s.semantic_highlighting),
@@ -381,6 +395,18 @@ pub fn parse_input(kind: Kind, text: &str) -> Result<Value, String> {
     }
 }
 
+/// Apply constraints specific to a setting before it is written from either settings UI.
+pub fn parse_setting_input(key: &str, kind: Kind, text: &str) -> Result<Value, String> {
+    let value = parse_input(kind, text)?;
+    if matches!(key, "webPreview.port" | "webPreview.reloadInterval") && value.as_f64().is_some_and(|n| n.fract() != 0.) {
+        return Err(crate::i18n::tf("{}: expected a whole number", &[&key]));
+    }
+    if key == "webPreview.root" && value.as_str().is_some_and(|s| s.chars().any(char::is_control)) {
+        return Err(crate::i18n::tf("{}: path must not contain control characters", &[&key]));
+    }
+    Ok(value)
+}
+
 impl Workbench {
     /// "Preferences: Settings": the settings list (key, value, description).
     pub(super) fn show_settings_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -471,7 +497,7 @@ impl Workbench {
     /// The value entered after the picker closed.
     pub(super) fn finish_setting_input(&mut self, key: &'static str, text: String, window: &mut Window, cx: &mut Context<Self>) {
         let Some(entry) = entry(key) else { return };
-        match parse_input(entry.kind, &text) {
+        match parse_setting_input(key, entry.kind, &text) {
             Ok(v) => self.write_setting(key, v, window, cx),
             Err(e) => {
                 self.notice = Some(Notice::Error(format!("{key}: {e}").into()));

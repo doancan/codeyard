@@ -239,6 +239,7 @@ impl Render for Workbench {
             .on_action(cx.listener(|this, _: &DockerCancel, _, cx| this.cancel_docker(cx)))
             .on_action(cx.listener(|this, _: &ShowContainers, _, cx| this.show_containers(cx)))
             .on_action(cx.listener(|this, _: &OpenWebPreview, window, cx| this.open_web_preview(window, cx)))
+            .on_action(cx.listener(|this, _: &CopyWebPreviewUrl, _, cx| this.copy_web_preview_url(cx)))
             .on_action(cx.listener(|this, _: &StopWebPreview, _, cx| this.stop_web_preview(cx)))
             .on_action(cx.listener(|this, _: &WebPreviewLog, _, cx| {
                 this.chrome.panel_open = true;
