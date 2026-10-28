@@ -2,33 +2,88 @@
 
 use super::*;
 
+/// Layout and view metadata share the tab transaction; document contents remain in backups.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct SavedEditorSession {
+    version: u8,
+    pub(super) grid: crate::editor_layout::Layout,
+    views: Vec<SavedGroupView>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SavedGroupView {
+    group: u8,
+    path: String,
+    line: usize,
+    column: usize,
+    scroll_line: usize,
+}
+
+impl SavedEditorSession {
+    fn parse(text: &str) -> Option<Self> {
+        if text.len() > 1024 * 1024 {
+            return None;
+        }
+        let session: Self = serde_json::from_str(text).ok()?;
+        if session.version != 1 || session.views.len() > 4096 {
+            return None;
+        }
+        crate::editor_layout::Layout::from_json(&session.grid.to_json().ok()?).ok()?;
+        let ids = session.grid.groups();
+        let mut seen = std::collections::HashSet::new();
+        for view in &session.views {
+            if !ids.contains(&view.group) || view.path.len() > 32768 || view.path.contains('\0') || !seen.insert((view.group, &view.path)) {
+                return None;
+            }
+        }
+        Some(session)
+    }
+}
+
 impl Workbench {
     /// Tabs and views (when the folder changes, when a tab is opened or closed, on exit).
-    pub(super) fn persist_session(&self, cx: &App) {
+    pub(super) fn persist_session(&self, cx: &mut App) {
         if let (Some(b), Some(s)) = (self.chrome.window_bounds, &self.persist.state) {
             s.set(WINDOW_BOUNDS_KEY, &format_bounds(b)).ok();
         }
         let (Some(ws), Some(s)) = (self.persist.workspace_id, &self.persist.state) else { return };
         let mut tabs = Vec::new();
-        // Left group 0, right group 1 (if split); each group's active tab is marked.
-        let focused = (&self.tabs.editors[..], self.tabs.active);
-        let other = self.tabs.other.as_ref().map(|g| (&g.editors[..], g.active));
-        let groups = if self.tabs.focused_left { [Some(focused), other] } else { [other, Some(focused)] };
-        for (group, (editors, active)) in groups.into_iter().enumerate().filter_map(|(g, x)| x.map(|x| (g, x))) {
-            for (i, ed) in editors.iter().enumerate() {
+        let mut views = Vec::new();
+        for id in self.tabs.layout.groups() {
+            let group = self.tabs.group(id).expect("layout group has state");
+            for (index, ed) in group.editors.iter().enumerate() {
                 let e = ed.read(cx);
                 if !e.uses_host(&self.remote.host) {
-                    continue; // those that don't belong to this folder, like the settings file
+                    continue;
                 }
-                if let Some(rel) = self.rel(&e.path, cx) {
-                    let _ = s.save_view(ws, &rel, e.view());
-                    self.save_bookmarks(ed, cx);
-                    tabs.push(state::Tab { rel_path: rel, active: active == Some(i), pinned: e.pinned, group: group as u8 });
-                }
+                let Some(path) = self.rel(&e.path, cx) else { continue };
+                let pinned = e.pinned;
+                let view = ed.update(cx, |e, _| e.view_for_slot(usize::from(id)));
+                let _ = s.save_view(ws, &path, view);
+                self.save_bookmarks(ed, cx);
+                views.push(SavedGroupView { group: id, path: path.clone(), line: view.line, column: view.column, scroll_line: view.scroll_line });
+                tabs.push(state::Tab { rel_path: path, active: group.active == Some(index), pinned, group: id });
             }
         }
-        let _ = s.save_tabs(ws, &tabs);
-        let _ = s.set(&format!("focus_left:{ws}"), if self.tabs.focused_left { "1" } else { "0" });
+        let session = SavedEditorSession { version: 1, grid: self.tabs.layout.clone(), views };
+        if let Ok(json) = serde_json::to_string(&session) {
+            let _ = s.save_tabs_with_layout(ws, &tabs, Some(&json));
+        }
+    }
+
+    pub(super) fn restore_group_views(&self, saved: SavedEditorSession, cx: &mut App) {
+        let Some(root) = self.root(cx) else { return };
+        for view in saved.views {
+            let Some(group) = self.tabs.group(view.group) else { continue };
+            let path = ui::join(&root, &view.path);
+            if let Some(ed) = group.editors.iter().find(|ed| ed.read(cx).path == path) {
+                ed.update(cx, |e, _| {
+                    e.set_view_for_slot(usize::from(view.group), state::View { line: view.line, column: view.column, scroll_line: view.scroll_line })
+                });
+            }
+        }
     }
 
     /// Back up 1 s after an edit. The file write (fsync included, hundreds of ms for a big file) runs in the background; only scheduling and
@@ -116,6 +171,9 @@ impl Workbench {
             return;
         }
         let mut tabs = s.tabs(ws).unwrap_or_default();
+        let saved = s.tab_layout(ws).as_deref().and_then(SavedEditorSession::parse);
+        let focus_left = s.get(&format!("focus_left:{ws}")).is_none_or(|v| v != "0");
+
         let backups = if cx.global::<Settings>().hot_exit { s.backups(ws).unwrap_or_default() } else { Vec::new() };
         // Tab not saved but has a backup (crash): open it anyway, so changes aren't lost.
         for b in &backups {
@@ -124,6 +182,7 @@ impl Workbench {
             }
         }
         if tabs.is_empty() {
+            self.restore_layout(&[], saved, focus_left, window, cx);
             return;
         }
         // Don't load a file that's being opened from the command line (or is already open)
@@ -139,12 +198,13 @@ impl Workbench {
         }
         // Layout: the tab order and active tabs of the two groups; the file is loaded once.
         let layout: Vec<(String, u8, bool)> = tabs.iter().map(|t| (ui::join(&root, &t.rel_path), t.group, t.active)).collect();
-        let focus_left = s.get(&format!("focus_left:{ws}")).is_none_or(|v| v != "0");
         let mut seen = std::collections::HashSet::new();
         tabs.retain(|t| seen.insert(t.rel_path.clone()));
         let views: Vec<Option<state::View>> = tabs.iter().map(|t| s.view(ws, &t.rel_path)).collect();
         let pinned: Vec<bool> = tabs.iter().map(|t| t.pinned).collect();
         let host = self.remote.host.clone();
+        let restore_host = host.clone();
+        let restore_group = self.tabs.current_key();
         let jobs: Vec<(String, Option<state::Backup>)> =
             tabs.iter().map(|t| (ui::join(&root, &t.rel_path), backups.iter().find(|b| b.rel_path == t.rel_path).cloned())).collect();
         let fallback = cx.global::<Settings>().fallback_encoding;
@@ -160,7 +220,7 @@ impl Workbench {
         cx.spawn_in(window, async move |this, cx| {
             let results = task.await;
             this.update_in(cx, |this, window, cx| {
-                if this.persist.workspace_id != Some(ws) {
+                if this.persist.workspace_id != Some(ws) || !Arc::ptr_eq(&this.remote.host, &restore_host) || !this.tabs.contains_key(restore_group) {
                     return; // switched to another folder in the meantime
                 }
                 for (((path, loaded, blob), view), pin) in results.into_iter().zip(views).zip(pinned) {
@@ -200,7 +260,7 @@ impl Workbench {
                         this.apply_breakpoints_to(&ed, cx);
                     }
                 }
-                this.restore_layout(&layout, focus_left, window, cx);
+                this.restore_layout(&layout, saved, focus_left, window, cx);
             })
             .ok();
         })

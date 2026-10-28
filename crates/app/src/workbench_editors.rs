@@ -143,9 +143,7 @@ impl Workbench {
         self.invalidate_file_operation();
         self.shutdown_lsp(cx);
         self.persist.backed_up.clear();
-        self.tabs.editors.clear();
-        self.tabs.other = None;
-        self.tabs.focused_left = true;
+        self.tabs = Default::default();
         self.tabs.active = None;
         self.tabs.diff = None;
         self.tabs.large = None;

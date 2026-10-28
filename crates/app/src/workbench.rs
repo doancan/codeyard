@@ -207,6 +207,10 @@ actions!(
         FormatSelection,
         SaveAll,
         SplitEditor,
+        SplitEditorLeft,
+        SplitEditorUp,
+        SplitEditorDown,
+        CloseEmptyEditorGroup,
         MoveEditorToOtherGroup,
         ToggleWordWrap,
         CloseSavedEditors,
@@ -319,6 +323,8 @@ actions!(
         GitCommitAndSync,
         FocusLeftGroup,
         FocusRightGroup,
+        FocusUpGroup,
+        FocusDownGroup,
         GitCommitAmend,
         GitUndoLastCommit,
         GitStash,
@@ -525,9 +531,64 @@ fn extra_folder_id(i: usize) -> &'static str {
 }
 
 /// The editor group that isn't focused.
-struct Group {
-    editors: Vec<Entity<EditorView>>,
-    active: Option<usize>,
+/// Every view in a group shares this lifetime token. Late reads and stale UI
+/// actions cannot target a new group that happens to reuse its numeric slot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct GroupKey {
+    id: crate::editor_layout::GroupId,
+    epoch: u64,
+}
+
+#[derive(Clone, Copy)]
+struct GroupResize {
+    split: u8,
+    axis: crate::editor_layout::Axis,
+    bounds: gpui::Bounds<gpui::Pixels>,
+    anchor: GroupKey,
+}
+
+pub(super) struct Group {
+    epoch: u64,
+    pub(super) editors: Vec<Entity<EditorView>>,
+    pub(super) active: Option<usize>,
+    pub(super) opening: Option<String>,
+    pub(super) open_error: Option<(String, SharedString)>,
+    /// Single diff tab (a new diff replaces the previous one); `diff_active`: that tab is in front.
+    pub(super) diff: Option<Entity<crate::diff::DiffView>>,
+    pub(super) diff_active: bool,
+    /// Single large-file view (read-only; a separate tab like diff).
+    pub(super) large: Option<Entity<crate::large::LargeFileView>>,
+    pub(super) large_active: bool,
+    /// Welcome or Settings page (single tab, like diff); `page_active`: that tab is in front.
+    pub(super) page: Option<Page>,
+    pub(super) page_active: bool,
+    pub(super) _page_sub: Option<Subscription>,
+    /// Match to show in the file opened from a search result: (path, line, column, length).
+    pub(super) pending_reveal: Option<(String, u32, u32, u32)>,
+    /// Tab bar scroll (so the active tab stays visible).
+    pub(super) tab_scroll: gpui::ScrollHandle,
+}
+
+impl Default for Group {
+    fn default() -> Self {
+        static NEXT_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        Self {
+            epoch: NEXT_EPOCH.fetch_add(1, Ordering::Relaxed),
+            editors: Vec::new(),
+            active: None,
+            opening: None,
+            open_error: None,
+            diff: None,
+            diff_active: false,
+            large: None,
+            large_active: false,
+            page: None,
+            page_active: false,
+            _page_sub: None,
+            pending_reveal: None,
+            tab_scroll: gpui::ScrollHandle::new(),
+        }
+    }
 }
 
 /// Context menu of the file tree.
@@ -826,7 +887,7 @@ pub(super) fn tilde(path: &str) -> String {
 struct DraggedTab {
     editor: Entity<EditorView>,
     /// Whether it was in the focused group when the drag started.
-    from_focused: bool,
+    from: GroupKey,
     name: SharedString,
 }
 
@@ -1178,23 +1239,7 @@ impl Workbench {
                 favorites: Vec::new(),
                 file_index: None,
             },
-            tabs: state_glue::TabsState {
-                editors: Vec::new(),
-                other: None,
-                focused_left: true,
-                active: None,
-                opening: None,
-                open_error: None,
-                diff: None,
-                diff_active: false,
-                large: None,
-                large_active: false,
-                page: None,
-                page_active: false,
-                _page_sub: None,
-                pending_reveal: None,
-                tab_scroll: gpui::ScrollHandle::new(),
-            },
+            tabs: Default::default(),
             update: state_glue::UpdateUi::new(dev, cx),
             data: Default::default(),
             focus_handle: cx.focus_handle(),
@@ -1539,8 +1584,12 @@ impl Workbench {
     /// All editors in both groups (focused group first; one open in both counts once).
     fn all_editors(&self) -> Vec<Entity<EditorView>> {
         let mut v = self.tabs.editors.clone();
-        if let Some(g) = &self.tabs.other {
-            v.extend(g.editors.iter().filter(|e| !self.tabs.editors.contains(e)).cloned());
+        for g in self.tabs.groups.values() {
+            for ed in &g.editors {
+                if !v.contains(ed) {
+                    v.push(ed.clone());
+                }
+            }
         }
         v
     }
@@ -1607,9 +1656,7 @@ impl Workbench {
         self.roots.pending_extra_roots.clear();
         self.cfg.folders.clear();
         self.persist.backed_up.clear();
-        self.tabs.editors.clear();
-        self.tabs.other = None;
-        self.tabs.focused_left = true;
+        self.tabs = Default::default();
         self.tabs.active = None;
         self.tabs.open_error = None;
         self.tabs.opening = None;
@@ -1767,7 +1814,7 @@ impl Workbench {
         }
         // If open in the other group, the same document shows in this group too (no second copy is loaded).
         if !self.tabs.editors.iter().any(|e| e.read(cx).path == path)
-            && let Some(ed) = self.tabs.other.as_ref().and_then(|g| g.editors.iter().find(|e| e.read(cx).path == path)).cloned()
+            && let Some(ed) = self.tabs.groups.values().flat_map(|g| &g.editors).find(|e| e.read(cx).path == path && e.read(cx).uses_host(&host)).cloned()
         {
             ed.update(cx, |e, _| e.preview = e.preview && preview);
             self.tabs.editors.push(ed);
@@ -1785,15 +1832,22 @@ impl Workbench {
         self.tabs.opening = Some(path.clone());
         self.tabs.open_error = None;
         let editor_host = host.clone();
+        let group_key = self.tabs.current_key();
+        let workspace_host = self.remote.host.clone();
         let p = path.clone();
         let fallback = cx.global::<Settings>().fallback_encoding;
         let task = cx.background_executor().spawn(async move { editor::load(host.as_ref(), &p, fallback) });
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
             this.update_in(cx, |this, window, cx| {
-                if this.tabs.opening.as_deref() != Some(path.as_str()) {
+                if !this.tabs.contains_key(group_key)
+                    || !Arc::ptr_eq(&this.remote.host, &workspace_host)
+                    || this.tabs.group(group_key.id).and_then(|g| g.opening.as_deref()) != Some(path.as_str())
+                {
                     return; // something else was opened meanwhile
                 }
+                let previous_group = this.tabs.current_key();
+                this.tabs.focus(group_key);
                 this.tabs.opening = None;
                 match result {
                     Ok(loaded) => {
@@ -1838,6 +1892,9 @@ impl Workbench {
                         cx.notify();
                     }
                 }
+                if previous_group != group_key && this.tabs.contains_key(previous_group) {
+                    this.focus_group_key(previous_group, window, cx);
+                }
             })
             .ok();
         })
@@ -1845,43 +1902,53 @@ impl Workbench {
         cx.notify();
     }
 
-    /// Place restored editors into the saved layout: left/right group, order, active ones.
-    fn restore_layout(&mut self, layout: &[(String, u8, bool)], focus_left: bool, window: &mut Window, cx: &mut Context<Self>) {
+    /// Restore arbitrary groups, or migrate a legacy left/right session.
+    fn restore_layout(
+        &mut self,
+        layout: &[(String, u8, bool)],
+        saved: Option<session_glue::SavedEditorSession>,
+        focus_left: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        use crate::editor_layout::{Direction, Layout};
         let all = self.all_editors();
-        let find = |p: &str| all.iter().find(|e| e.read(cx).path == p).cloned();
-        let mut groups: [(Vec<Entity<EditorView>>, Option<usize>); 2] = [(Vec::new(), None), (Vec::new(), None)];
-        for (path, g, active) in layout {
-            let Some(ed) = find(path) else { continue };
-            let group = &mut groups[(*g as usize).min(1)];
-            if !group.0.contains(&ed) {
-                group.0.push(ed);
-                if *active {
-                    group.1 = Some(group.0.len() - 1);
-                }
+        let mut grid = saved.as_ref().map(|s| s.grid.clone()).unwrap_or_default();
+        if saved.is_none() && layout.iter().any(|(_, id, _)| *id == 1) {
+            let _ = grid.split(0, Direction::Right);
+            if focus_left {
+                grid.focus(0);
             }
         }
-        // Anything not in the layout (opened from the command line) goes to the left group.
+        let mut groups: std::collections::BTreeMap<_, Group> = grid.groups().into_iter().map(|id| (id, Group::default())).collect();
+        for (path, id, active) in layout {
+            let Some(ed) = all.iter().find(|e| e.read(cx).path == *path).cloned() else { continue };
+            let target = if groups.contains_key(id) { *id } else { grid.focused() };
+            let group = groups.get_mut(&target).expect("focused group exists");
+            if !group.editors.contains(&ed) {
+                group.editors.push(ed);
+            }
+            if *active {
+                group.active = group.editors.iter().position(|e| e.read(cx).path == *path);
+            }
+        }
         for ed in all {
-            if !groups[0].0.contains(&ed) && !groups[1].0.contains(&ed) {
-                groups[0].0.push(ed);
+            if !groups.values().any(|group| group.editors.contains(&ed)) {
+                groups.get_mut(&grid.focused()).expect("focused group exists").editors.push(ed);
             }
         }
-        let [(left, left_active), (right, right_active)] = groups;
-        if left.is_empty() && right.is_empty() {
-            return;
+        for group in groups.values_mut() {
+            if group.active.is_none() && !group.editors.is_empty() {
+                group.active = Some(0);
+            }
         }
-        let pick = |v: &Vec<Entity<EditorView>>, a: Option<usize>| a.filter(|&a| a < v.len()).or((!v.is_empty()).then(|| v.len() - 1));
-        let (la, ra) = (pick(&left, left_active), pick(&right, right_active));
-        let split = !left.is_empty() && !right.is_empty();
-        let focus_left = !split || focus_left || right.is_empty();
-        let (focused, focused_active, other, other_active) = if focus_left || left.is_empty() { (left, la, right, ra) } else { (right, ra, left, la) };
-        let (focused, focused_active) = if focused.is_empty() { (other.clone(), other_active) } else { (focused, focused_active) };
-        self.tabs.editors = focused;
-        self.tabs.other = split.then(|| Group { editors: other, active: other_active });
-        self.tabs.focused_left = !split || focus_left;
-        if let Some(ix) = focused_active {
-            self.activate(ix, window, cx);
+        let current = groups.remove(&grid.focused()).expect("focused group exists");
+        self.tabs = state_glue::TabsState { current, groups, layout: grid, resizing: None };
+        self.sync_slots(cx);
+        if let Some(saved) = saved {
+            self.restore_group_views(saved, cx);
         }
+        self.focus_group_key(self.tabs.current_key(), window, cx);
     }
 
     fn add_editor(&mut self, host: Arc<dyn Host>, path: String, loaded: editor::Loaded, window: &mut Window, cx: &mut Context<Self>) -> Entity<EditorView> {
@@ -2019,10 +2086,8 @@ impl Workbench {
         }
         self.sync_slots(cx);
         // When a split group's last tab closes, the group closes too and the other becomes the only one.
-        if self.tabs.editors.is_empty() && self.tabs.other.is_some() {
-            self.swap_groups();
-            self.tabs.other = None;
-            self.tabs.focused_left = true;
+        let group_key = self.tabs.current_key();
+        if self.tabs.remove_empty(group_key) {
             if let Some(a) = self.tabs.active {
                 self.activate(a, window, cx);
             }
