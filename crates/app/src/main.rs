@@ -929,7 +929,10 @@ fn main() {
                     update_install::sweep_at_start(&update_install::install_kind(), update::updates_dir().ok());
                 }
                 window.focus(&wb.focus_handle(cx));
-                cx.activate(true);
+                // A measured run stays in the background: it must not take the keyboard from whoever is working while it runs.
+                if !perf::enabled() {
+                    cx.activate(true);
+                }
             })
             .ok();
         perf::first_window(window, cx);
