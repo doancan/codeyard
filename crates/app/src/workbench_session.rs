@@ -43,6 +43,67 @@ impl SavedEditorSession {
 }
 
 impl Workbench {
+    /// Restore arbitrary groups, or migrate a legacy left/right session.
+    pub(super) fn restore_layout(
+        &mut self,
+        layout: &[(String, u8, bool)],
+        saved: Option<session_glue::SavedEditorSession>,
+        focus_left: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        use crate::editor_layout::Direction;
+        let all = self.all_editors();
+        let mut grid = saved.as_ref().map(|s| s.grid.clone()).unwrap_or_default();
+        if saved.is_none() && layout.iter().any(|(_, id, _)| *id == 1) {
+            let _ = grid.split(0, Direction::Right);
+            if focus_left {
+                grid.focus(0);
+            }
+        }
+        let previous = std::mem::take(&mut self.tabs);
+        let mut previous_groups = previous.groups;
+        previous_groups.insert(previous.layout.focused(), previous.current);
+        let mut groups: std::collections::BTreeMap<_, Group> = grid
+            .groups()
+            .into_iter()
+            .map(|id| {
+                let mut group = previous_groups.remove(&id).unwrap_or_default();
+                group.editors.clear();
+                group.active = None;
+                (id, group)
+            })
+            .collect();
+        for (path, id, active) in layout {
+            let Some(ed) = all.iter().find(|e| e.read(cx).path == *path).cloned() else { continue };
+            let target = if groups.contains_key(id) { *id } else { grid.focused() };
+            let group = groups.get_mut(&target).expect("focused group exists");
+            if !group.editors.contains(&ed) {
+                group.editors.push(ed);
+            }
+            if *active {
+                group.active = group.editors.iter().position(|e| e.read(cx).path == *path);
+            }
+        }
+        for ed in all {
+            if !groups.values().any(|group| group.editors.contains(&ed)) {
+                groups.get_mut(&grid.focused()).expect("focused group exists").editors.push(ed);
+            }
+        }
+        for group in groups.values_mut() {
+            if group.active.is_none() && !group.editors.is_empty() {
+                group.active = Some(0);
+            }
+        }
+        let current = groups.remove(&grid.focused()).expect("focused group exists");
+        self.tabs = state_glue::TabsState { current, groups, layout: grid, ..Default::default() };
+        self.sync_slots(cx);
+        if let Some(saved) = saved {
+            self.restore_group_views(saved, cx);
+        }
+        self.focus_group_key(self.tabs.current_key(), window, cx);
+    }
+
     /// Tabs and views (when the folder changes, when a tab is opened or closed, on exit).
     pub(super) fn persist_session(&self, cx: &mut App) {
         if let (Some(b), Some(s)) = (self.chrome.window_bounds, &self.persist.state) {
@@ -182,7 +243,9 @@ impl Workbench {
             }
         }
         if tabs.is_empty() {
-            self.restore_layout(&[], saved, focus_left, window, cx);
+            if saved.is_some() && self.tabs.opening.is_none() {
+                self.restore_layout(&[], saved, focus_left, window, cx);
+            }
             return;
         }
         // Don't load a file that's being opened from the command line (or is already open)
@@ -295,7 +358,7 @@ impl Workbench {
 
     /// Before exit: write backups and the session. If hot exit is off and there are dirty
     /// files, `false`: the caller should ask.
-    pub fn prepare_quit(&mut self, cx: &App) -> bool {
+    pub fn prepare_quit(&mut self, cx: &mut App) -> bool {
         let hot_exit = cx.global::<Settings>().hot_exit;
         if !hot_exit && self.any_dirty(cx) {
             return false;

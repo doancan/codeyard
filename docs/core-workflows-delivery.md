@@ -27,8 +27,8 @@ passing their checks. Do not mark a feature complete from unit tests alone.
 
 | ID | Feature / proposed PR | Required behavior and hardening | Completion evidence |
 | --- | --- | --- | --- |
-| F01 | Select and manage multiple Explorer entries | Modifier-toggle and Shift-range mouse selection; keyboard range/select-all; stable path selection through refresh, sorting and collapse; selected-row semantics. Copy, cut, drag, paste and delete operate on the selection with one reviewable summary, parent/child deduplication, root protection, no overwrites, per-entry failures, retryable failed cuts, preserved dirty tabs and stale-host guards. File copying works through the agent without shell-specific commands. | Pending: selection, filesystem, GPUI and SSH regressions; native interaction; required PR checks. |
-| F02 | Arrange editors in a persistent grid | Arbitrary nested horizontal/vertical groups; split in each direction; resize, move/reorder tabs, focus/navigation and close empty groups; shared document/independent views. Persist and validate layouts across restart, workspace changes, narrow windows and many groups; migrate existing two-group sessions. | Pending: layout model/property cases, GPUI editing/restore tests, native layout and memory measurements. |
+| F01 | Select and manage multiple Explorer entries | Modifier-toggle and Shift-range mouse selection; keyboard range/select-all; stable path selection through refresh, sorting and collapse; selected-row semantics. Copy, cut, drag, paste and delete operate on the selection with one reviewable summary, parent/child deduplication, root protection, no overwrites, per-entry failures, retryable failed cuts, preserved dirty tabs and stale-host guards. File copying works through the agent without shell-specific commands. | Local strict checks, filesystem/GPUI/SSH coverage, native macOS copy walkthrough and Retina memory/size gates pass. PR #48 is ready for review; required platform CI remains pending. |
+| F02 | Arrange editors in a persistent grid | Arbitrary nested horizontal/vertical groups; split in each direction; resize, move/reorder tabs, focus/navigation and close empty groups; shared document/independent views. Persist and validate layouts across restart, workspace changes, narrow windows and many groups; migrate existing two-group sessions. | Implementation in progress: validated layout model, atomic session storage and GPUI workflows. Full regression checks, native layout and memory measurements remain pending. |
 | F03 | Set up language services from the editor | Discover bundled/installed JS/TS, HTML and CSS services; an explicit, discoverable install/retry flow with progress, cancellation, exact destination, offline errors and version/integrity controls. Install on the file's host; respect workspace trust and explicit user commands. Verify completion, diagnostics, formatting and restart without a terminal setup step. | Pending: fake installer/server failure matrix, local/SSH language interactions and native first-run flow. |
 | F04 | Execute dependency-aware tasks | Typed shell/process tasks, cwd/env/platform options, variable/input expansion, parallel/sequence dependencies and cycle validation; background/watch readiness and custom problem matchers; pre/post-debug integration. Bounded output, cancellation of the process tree, concurrency policy, clear diagnostics and correct failed dependency behavior. | Pending: actual child-process DAG/watch/input/problem tests, local/SSH cancellation, debug integration. |
 | F05 | Complete accessible application workflows | Search/results, Problems/fixes, Settings/shortcuts, debug/testing/remote views, SCM graph/worktrees/sync, output/ports, menus and dialogs expose roles, states, actions, errors and focus restoration. Row/control/text geometry, document-relative text selection, scroll actions and terminal scrollback work with bounded snapshots and stale-action rejection. | Pending: AccessKit consumer/geometry/action regressions, native VoiceOver task transcripts and Windows UI Automation evidence. |
@@ -82,3 +82,18 @@ being rerun. The daemon permission assertion now waits for its handshake readine
 Cancellation interrupts staged copies and stops before the next move/delete. A connection loss or
 missing cancellation acknowledgement stops the batch with an explicit uncertain outcome; it never
 automatically retries a mutation. Batches preserve failed/unprocessed cut entries for inspection or retry.
+
+### F02: implementation in progress
+
+- The storage regression initially reassigned groups 2/7/31 to group 1. Stable IDs now round-trip,
+  and a rejecting SQLite trigger proves that layout-write failure rolls back the tab update too.
+- Eight layout tests cover splitting in all directions, spatial neighbors, stable identities,
+  bounded/corrupt input, ratio validation and 500 mixed operations preserving a complete partition.
+- GPUI coverage exercises three views of one shared document, independent cursors and undo,
+  nested geometry and resizing, stale drag/drop and late file completion, background-load focus,
+  restart restoration, empty groups and group-local settings pages. A 32-group workload exercises
+  minimum dimensions, focus scrolling and the unchanged group limit after another split request.
+- The first integration tests found an empty-session restore could cancel a command-line file
+  opening. Empty legacy sessions now leave that request intact. Group lifetime tokens prevent a
+  late completion from populating a newly created group with a reused slot number.
+- Full regression, native-window acceptance, memory/size and required PR checks remain pending.

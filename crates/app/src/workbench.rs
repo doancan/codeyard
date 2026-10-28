@@ -51,6 +51,9 @@ mod docker_glue;
 mod data_glue;
 #[path = "workbench_debug.rs"]
 mod debug;
+#[cfg(test)]
+#[path = "editor_grid_tests.rs"]
+mod editor_grid_tests;
 #[path = "workbench_editors.rs"]
 mod editors_glue;
 #[path = "workbench_extras.rs"]
@@ -65,6 +68,7 @@ mod fsops_glue;
 mod git_glue;
 #[path = "workbench_groups.rs"]
 mod groups_glue;
+use groups_glue::{Group, GroupKey, GroupResize};
 #[path = "workbench_hosts.rs"]
 mod hosts;
 #[path = "workbench_types.rs"]
@@ -528,67 +532,6 @@ pub(super) const ROOT_SEP: &str = " › ";
 fn extra_folder_id(i: usize) -> &'static str {
     static IDS: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
     IDS.get_or_init(|| (1..=folder_glue::MAX_EXTRA_ROOTS).map(|n| &*Box::leak(format!("folder-{n}").into_boxed_str())).collect())[i]
-}
-
-/// The editor group that isn't focused.
-/// Every view in a group shares this lifetime token. Late reads and stale UI
-/// actions cannot target a new group that happens to reuse its numeric slot.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct GroupKey {
-    id: crate::editor_layout::GroupId,
-    epoch: u64,
-}
-
-#[derive(Clone, Copy)]
-struct GroupResize {
-    split: u8,
-    axis: crate::editor_layout::Axis,
-    bounds: gpui::Bounds<gpui::Pixels>,
-    anchor: GroupKey,
-}
-
-pub(super) struct Group {
-    epoch: u64,
-    pub(super) editors: Vec<Entity<EditorView>>,
-    pub(super) active: Option<usize>,
-    pub(super) opening: Option<String>,
-    pub(super) open_error: Option<(String, SharedString)>,
-    /// Single diff tab (a new diff replaces the previous one); `diff_active`: that tab is in front.
-    pub(super) diff: Option<Entity<crate::diff::DiffView>>,
-    pub(super) diff_active: bool,
-    /// Single large-file view (read-only; a separate tab like diff).
-    pub(super) large: Option<Entity<crate::large::LargeFileView>>,
-    pub(super) large_active: bool,
-    /// Welcome or Settings page (single tab, like diff); `page_active`: that tab is in front.
-    pub(super) page: Option<Page>,
-    pub(super) page_active: bool,
-    pub(super) _page_sub: Option<Subscription>,
-    /// Match to show in the file opened from a search result: (path, line, column, length).
-    pub(super) pending_reveal: Option<(String, u32, u32, u32)>,
-    /// Tab bar scroll (so the active tab stays visible).
-    pub(super) tab_scroll: gpui::ScrollHandle,
-}
-
-impl Default for Group {
-    fn default() -> Self {
-        static NEXT_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-        Self {
-            epoch: NEXT_EPOCH.fetch_add(1, Ordering::Relaxed),
-            editors: Vec::new(),
-            active: None,
-            opening: None,
-            open_error: None,
-            diff: None,
-            diff_active: false,
-            large: None,
-            large_active: false,
-            page: None,
-            page_active: false,
-            _page_sub: None,
-            pending_reveal: None,
-            tab_scroll: gpui::ScrollHandle::new(),
-        }
-    }
 }
 
 /// Context menu of the file tree.
@@ -1177,7 +1120,6 @@ impl Workbench {
                 panel_w,
                 panel_max: false,
                 resizing_panel: false,
-                split_ratio: 0.5,
                 resizing_split: false,
                 zoom: 0.,
                 zoom_base: (theme::text::CODE.0, theme::text::CODE.1, theme::text::CODE.0),
@@ -1790,165 +1732,6 @@ impl Workbench {
         } else {
             self.set_root(abs.to_string_lossy().into_owned(), cx);
         }
-    }
-
-    fn open_file(&mut self, path: String, window: &mut Window, cx: &mut Context<Self>) {
-        let host = self.remote.host.clone();
-        self.open_file_on(host, path, window, cx);
-    }
-
-    fn open_file_on(&mut self, host: Arc<dyn Host>, path: String, window: &mut Window, cx: &mut Context<Self>) {
-        self.open_file_as(host, path, false, window, cx);
-    }
-
-    /// `preview`: preview tab. Opens in place of a non-dirty preview tab if there is one
-    /// (so tabs don't pile up while browsing).
-    fn open_file_as(&mut self, host: Arc<dyn Host>, path: String, preview: bool, window: &mut Window, cx: &mut Context<Self>) {
-        self.chrome.panel_max = false;
-        let path = if host.is_remote() { path } else { ui::local_path(std::path::Path::new(&path)) };
-        if let Some(format) = crate::large::image_format(&path) {
-            return self.open_image(path, format, window, cx);
-        }
-        if self.active_editor().is_some_and(|e| e.read(cx).path != path) {
-            self.record_nav(cx);
-        }
-        // If open in the other group, the same document shows in this group too (no second copy is loaded).
-        if !self.tabs.editors.iter().any(|e| e.read(cx).path == path)
-            && let Some(ed) = self.tabs.groups.values().flat_map(|g| &g.editors).find(|e| e.read(cx).path == path && e.read(cx).uses_host(&host)).cloned()
-        {
-            ed.update(cx, |e, _| e.preview = e.preview && preview);
-            self.tabs.editors.push(ed);
-            let ix = self.tabs.editors.len() - 1;
-            self.activate(ix, window, cx);
-            return;
-        }
-        if let Some(ix) = self.tabs.editors.iter().position(|e| e.read(cx).path == path) {
-            if !preview {
-                self.tabs.editors[ix].update(cx, |e, _| e.preview = false);
-            }
-            self.activate(ix, window, cx);
-            return;
-        }
-        self.tabs.opening = Some(path.clone());
-        self.tabs.open_error = None;
-        let editor_host = host.clone();
-        let group_key = self.tabs.current_key();
-        let workspace_host = self.remote.host.clone();
-        let p = path.clone();
-        let fallback = cx.global::<Settings>().fallback_encoding;
-        let task = cx.background_executor().spawn(async move { editor::load(host.as_ref(), &p, fallback) });
-        cx.spawn_in(window, async move |this, cx| {
-            let result = task.await;
-            this.update_in(cx, |this, window, cx| {
-                if !this.tabs.contains_key(group_key)
-                    || !Arc::ptr_eq(&this.remote.host, &workspace_host)
-                    || this.tabs.group(group_key.id).and_then(|g| g.opening.as_deref()) != Some(path.as_str())
-                {
-                    return; // something else was opened meanwhile
-                }
-                let previous_group = this.tabs.current_key();
-                this.tabs.focus(group_key);
-                this.tabs.opening = None;
-                match result {
-                    Ok(loaded) => {
-                        let reuse = preview
-                            .then(|| {
-                                this.tabs.editors.iter().position(|e| {
-                                    let e = e.read(cx);
-                                    e.preview && !e.is_dirty()
-                                })
-                            })
-                            .flatten();
-                        let ed = this.add_editor(editor_host, path, loaded, window, cx);
-                        ed.update(cx, |e, _| e.preview = preview);
-                        // Mixed line endings collapse to one style on save (can cause a big git diff): warn beforehand.
-                        let (mixed, name) = ed.read_with(cx, |e, _| (e.has_mixed_line_endings(), e.line_ending_name()));
-                        if mixed {
-                            this.notice = Some(Notice::Info(
-                                crate::i18n::tf(
-                                    "This file mixes line endings; saving writes all of them as {}, like its first line. Change it in the status bar.",
-                                    &[&name],
-                                )
-                                .into(),
-                            ));
-                        }
-                        let ix = match reuse {
-                            Some(old) => {
-                                // Take the preview tab's place (same position).
-                                let new = this.tabs.editors.pop().expect("just pushed");
-                                this.tabs.editors[old] = new;
-                                old
-                            }
-                            None => this.tabs.editors.len() - 1,
-                        };
-                        this.activate(ix, window, cx);
-                    }
-                    // Too big to read in one go: read-only view loaded in pieces.
-                    Err(editor::OpenError::Host(host::HostError::Op(proto::Error::TooLarge { .. }))) => {
-                        this.open_large(path, window, cx);
-                    }
-                    Err(e) => {
-                        this.tabs.open_error = Some((path, e.to_string().into()));
-                        cx.notify();
-                    }
-                }
-                if previous_group != group_key && this.tabs.contains_key(previous_group) {
-                    this.focus_group_key(previous_group, window, cx);
-                }
-            })
-            .ok();
-        })
-        .detach();
-        cx.notify();
-    }
-
-    /// Restore arbitrary groups, or migrate a legacy left/right session.
-    fn restore_layout(
-        &mut self,
-        layout: &[(String, u8, bool)],
-        saved: Option<session_glue::SavedEditorSession>,
-        focus_left: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        use crate::editor_layout::{Direction, Layout};
-        let all = self.all_editors();
-        let mut grid = saved.as_ref().map(|s| s.grid.clone()).unwrap_or_default();
-        if saved.is_none() && layout.iter().any(|(_, id, _)| *id == 1) {
-            let _ = grid.split(0, Direction::Right);
-            if focus_left {
-                grid.focus(0);
-            }
-        }
-        let mut groups: std::collections::BTreeMap<_, Group> = grid.groups().into_iter().map(|id| (id, Group::default())).collect();
-        for (path, id, active) in layout {
-            let Some(ed) = all.iter().find(|e| e.read(cx).path == *path).cloned() else { continue };
-            let target = if groups.contains_key(id) { *id } else { grid.focused() };
-            let group = groups.get_mut(&target).expect("focused group exists");
-            if !group.editors.contains(&ed) {
-                group.editors.push(ed);
-            }
-            if *active {
-                group.active = group.editors.iter().position(|e| e.read(cx).path == *path);
-            }
-        }
-        for ed in all {
-            if !groups.values().any(|group| group.editors.contains(&ed)) {
-                groups.get_mut(&grid.focused()).expect("focused group exists").editors.push(ed);
-            }
-        }
-        for group in groups.values_mut() {
-            if group.active.is_none() && !group.editors.is_empty() {
-                group.active = Some(0);
-            }
-        }
-        let current = groups.remove(&grid.focused()).expect("focused group exists");
-        self.tabs = state_glue::TabsState { current, groups, layout: grid, resizing: None };
-        self.sync_slots(cx);
-        if let Some(saved) = saved {
-            self.restore_group_views(saved, cx);
-        }
-        self.focus_group_key(self.tabs.current_key(), window, cx);
     }
 
     fn add_editor(&mut self, host: Arc<dyn Host>, path: String, loaded: editor::Loaded, window: &mut Window, cx: &mut Context<Self>) -> Entity<EditorView> {

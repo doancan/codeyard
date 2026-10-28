@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Nested horizontal and vertical editor groups with directional splitting/focus, independent views of
+  shared documents, tab transfers, nested divider resizing and atomic layout/session restoration.
+  Up to 32 groups retain usable minimum sizes with scrolling in narrow windows.
+
 - Explorer multi-selection with modifier clicks, keyboard ranges and select-all, plus batch copy,
   cut, drag and deletion with a single confirmation, progress/cancellation and per-entry errors.
   Failed cuts remain available for retry; dirty buffers and successful moves retain their edits.
