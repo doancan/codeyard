@@ -53,6 +53,10 @@ mod data_glue;
 mod debug;
 #[path = "workbench_editors.rs"]
 mod editors_glue;
+#[path = "workbench_ext.rs"]
+mod ext_glue;
+#[path = "workbench_ext_view.rs"]
+mod ext_view_glue;
 #[path = "workbench_extras.rs"]
 mod extras_glue;
 #[path = "workbench_file_batch.rs"]
@@ -86,6 +90,8 @@ mod palette_glue;
 mod panels_glue;
 #[cfg(test)]
 pub use panels_glue::ProblemRow;
+#[path = "workbench_cyx.rs"]
+mod cyx_glue;
 #[path = "workbench_ports.rs"]
 mod ports_glue;
 #[path = "workbench_projects.rs"]
@@ -288,6 +294,7 @@ actions!(
         DockerCancel,
         ShowContainers,
         OpenWebPreview,
+        CopyWebPreviewUrl,
         StopWebPreview,
         WebPreviewLog,
         RemoteWsl,
@@ -361,6 +368,8 @@ actions!(
         FindTodos,
         SwitchEditor,
         ToggleZenMode,
+        InstallCyx,
+        NewExtension,
         ToggleFullScreen,
         SelectIconTheme,
         InsertSnippet,
@@ -442,6 +451,8 @@ struct OutlineState {
 enum Page {
     Welcome,
     Containers,
+    /// The Extensions view's detail page and consent sheet (state in `ConfigState::exts`).
+    Extension,
     Settings(Entity<crate::settings_page::SettingsPage>),
     Markdown(Entity<crate::markdown::MarkdownPreview>),
     Shortcuts(Entity<crate::shortcuts_page::ShortcutsPage>),
@@ -462,6 +473,7 @@ pub use debug::{
     AddDebugConfiguration, AddFunctionBreakpoint, ConsoleComplete, ConsoleHistoryNext, ConsoleHistoryPrev, DisableAllBreakpoints, EnableAllBreakpoints,
     OpenLaunchConfiguration, RunToCursor, RunWithoutDebugging, ShowRunAndDebug, StopAllDebugging, ToggleBreakpointEnabled, ToggleBreakpointsActive,
 };
+pub use ext_glue::{CancelExtensionConsent, InstallExtensionFromFile, InstallExtensionFromFolder, ShowExtensions};
 pub use host::askpass::{AskKind, AskRequest};
 pub use remote_glue::ShowRemoteExplorer;
 pub use terminals_glue::{ChangeTerminalColor, KillAllTerminals, NewTerminalWithProfile, RenameTerminal, SelectDefaultTerminalProfile};
@@ -603,6 +615,7 @@ enum Panel {
     Testing,
     Remote,
     Containers,
+    Extensions,
 }
 
 enum Conn {
@@ -1014,7 +1027,9 @@ impl Workbench {
         let (recent, pinned) = state.as_ref().map(projects::load_recent).unwrap_or_default();
         let dev = std::env::var_os("CODEYARD_DEV").is_some() || cfg!(debug_assertions);
         // The settings folder given (a temporary one in tests), as `theme_dir` does later, else the default.
+        let loading = std::time::Instant::now();
         crate::ext::reload(config_dir.as_deref());
+        crate::perf::sample("startup.extensions_ms", loading.elapsed().as_secs_f64() * 1000.0);
         let (themes, errors) = theme_glue::all_themes(config_dir.as_ref().map(|d| d.join("themes")).or_else(user_theme_dir).as_deref());
         let notice = errors.first().map(|reason| Notice::Error(crate::i18n::tf("Theme skipped: {}", &[reason]).into()));
         let theme_choice = state.as_ref().and_then(|s| s.get("theme")).unwrap_or_else(|| THEME_AUTO.into());
@@ -1128,12 +1143,13 @@ impl Workbench {
             },
             cfg: state_glue::ConfigState {
                 dir: config_dir,
-                stamp: (None, None, None),
+                stamp: (None, None, None, 0),
                 theme_override: false,
                 project: Vec::new(),
                 trusted: Default::default(),
                 dirty: false,
                 folders: Default::default(),
+                exts: Default::default(),
             },
             persist: state_glue::PersistState {
                 workspace_id: None,

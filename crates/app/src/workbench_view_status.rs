@@ -166,6 +166,12 @@ impl Workbench {
                     .tooltip(move |_, cx| cx.new(|_| Tooltip(crate::i18n::tf("{0} errors, {1} warnings", &[&errors, &warnings]).into())).into())
                     .on_click(cx.listener(|this, _, w, cx| this.show_problems(&ShowProblems, w, cx)))
             })
+            // `cyx dev`: this window runs an extension straight from the author's folder.
+            .when(crate::ext::dev_dir().is_some(), |d| {
+                d.child(item().id("extension-dev").text_color(c(p.warning)).child(crate::i18n::t("DEV")).tooltip(|_, cx| {
+                    cx.new(|_| Tooltip(crate::i18n::t("Extension in development: it reloads when you save a file in its folder").into())).into()
+                }))
+            })
             .when(self.active_forwards() > 0 && width >= 800., |d| {
                 let n = self.active_forwards();
                 d.child(
@@ -176,6 +182,21 @@ impl Workbench {
                         .child(icon("plug", SB_ICON, p.text_muted))
                         .when(labels, |d| d.child(div().max_w(px(80.)).truncate().child(crate::i18n::tf("{} forwarded", &[&n]))))
                         .on_click(cx.listener(|this, _, w, cx| this.show_ports(&ShowPorts, w, cx))),
+                )
+            })
+            // `--no-extensions`: always said, so a missing theme or language is never a mystery.
+            .when(crate::ext::turned_off(), |d| {
+                d.child(
+                    item()
+                        .id("sb-extensions-off")
+                        .debug_selector(|| "sb-extensions-off".into())
+                        .cursor_pointer()
+                        .hover(|d| d.bg(c(p.surface_hover)))
+                        .text_color(c(p.warning))
+                        .child(icon("blocks", SB_ICON, p.warning))
+                        .child(div().max_w(px(120.)).truncate().child(crate::i18n::t("Extensions off")))
+                        .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Started with --no-extensions: no extension is loaded.").into())).into())
+                        .on_click(cx.listener(|this, _, w, cx| this.show_extensions(&ShowExtensions, w, cx))),
                 )
             })
             .when_some(self.transfer_active().map(|t| t.status()), |d, text| {

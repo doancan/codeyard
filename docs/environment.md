@@ -26,6 +26,7 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_DEV_UPDATE` | Developer builds: play a whole update with canned data instead of asking GitHub: `available`, `uptodate`, `offline`, `untrusted` or `install-fails`. The download crawls at 1 MB/s, nothing touches the disk, and quitting only prints a line. Also lets a debug build show the first-run question about update checks, which it never does otherwise. |
 | `CODEYARD_DEV` | Enable developer commands in a release build (always on in debug builds). Without it, release builds ignore `--do`, because a command line another program put together could otherwise trust a folder and run its tasks. |
 | `CODEYARD_MENU_FLAVOR` | `macos`, `windows` or `linux`: draw menus in that platform's style instead of the running one (to review the other platforms' look). |
+| `CODEYARD_BIN` | The Codeyard binary `cyx dev` starts (default: `codeyard` on `PATH`, then the one beside `cyx`, then `/Applications/Codeyard.app` on macOS). |
 | `CODEYARD_PERF` | Append performance samples (one JSON line each) to this file; used by `scripts/perf/run.sh`. |
 | `CODEYARD_PERF_TYPING` | With `CODEYARD_PERF`: after startup, type this many characters into the focused editor, record key press to drawn frame for each, then save. |
 | `CODEYARD_PERF_EXIT` | With `CODEYARD_PERF`: quit when the scripted scenario is done. |
