@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Paste clipboard images into programs such as Codex in an SSH terminal: the image is transferred to a private temporary
+  file on the remote host and its path is pasted into the terminal.
+- Local SSH port forwarding on Windows using a dedicated OpenSSH process for each forward.
 - Installable declarative extensions: themes, snippets, keymap presets and key bindings, languages, JSON and YAML schemas,
   settings and language servers. The Extensions view installs a `.cyx` package or a folder after a consent sheet that
   lists contributions and permissions in plain words (High-risk sets in red, with *Cancel* focused), and disables,
@@ -73,6 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The About page groups application, platform and client protocol details, and shows the remote agent protocol when connected.
 - Releases are gated on performance instead of app size: `scripts/perf` compares startup, typing latency and memory with
   the previous release and blocks regressions beyond their budget. The app binary size limit is removed; the SSH agent keeps
   its limit.
@@ -85,6 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Terminal Space sends a space, and Ctrl+C copies a selection while still interrupting the program when nothing is selected.
+- SSH connections detect an incompatible bundled agent before attaching to its daemon and explain how to rebuild or reinstall it.
 - Web Preview reads files through directory handles without following symlinks or reparse points,
   preventing pathname replacement races. Each file now needs one agent request, reducing SSH round trips;
   directory and session redirects preserve URL query parameters.
