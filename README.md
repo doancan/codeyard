@@ -70,19 +70,6 @@ screen buffers are part of the number. Files over 32 MB open in a chunked read-o
 - **Turkish interface.** The whole interface is translated to Turkish; the system language is followed by default
   (see [Interface language](docs/user-guide.md#interface-language)).
 
-## Screenshots
-
-All images are real screenshots of the app opening a throw-away demo project.
-
-| | |
-| --- | --- |
-| ![Source control with the commit graph](docs/screenshots/source-control.png) | ![Search across files](docs/screenshots/search.png) |
-| Source control and the commit graph | Search in files |
-| ![Light theme](docs/screenshots/light.png) | ![Settings page](docs/screenshots/settings.png) |
-| Light theme | Settings page |
-| ![Turkish interface](docs/screenshots/turkish.png) | |
-| Turkish interface | |
-
 ## Install
 
 **macOS (Apple silicon).** Download the DMG from [Releases](https://github.com/doancan/codeyard/releases), open it and drag
@@ -121,6 +108,7 @@ codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TE
 | [Troubleshooting](docs/troubleshooting.md) | SSH, language servers, schemas, `.http`, reporting a problem |
 | [Changelog](CHANGELOG.md) | what changed in every version |
 | [Contributing](CONTRIBUTING.md) · [Code of conduct](CODE_OF_CONDUCT.md) · [Security](SECURITY.md) | building, the quality gates, behaviour, reporting a vulnerability |
+| [Accessibility](ACCESSIBILITY.md) | what works with a screen reader, keyboard and zoom, known gaps, reporting a barrier |
 
 ## Build from source
 
@@ -138,7 +126,7 @@ folders so it never touches your real profile. Full instructions and the gates a
 **Beta.** Codeyard is used daily on macOS. Windows is released (setup EXE and portable ZIP, unsigned) and
 passes the native checks in `scripts\check-windows.ps1`, but real SSH authentication, mixed-DPI displays, IME input and the installer
 itself have not been verified on a physical machine. Linux builds and passed the app test suite once in a container; it has no release
-or installer yet. Screen-reader support is groundwork only (see [accessibility](docs/accessibility.md)). Per-platform detail:
+or installer yet. Screen-reader support is partial and macOS-only (see [ACCESSIBILITY.md](ACCESSIBILITY.md)). Per-platform detail:
 [platforms](docs/platforms.md).
 
 ## License

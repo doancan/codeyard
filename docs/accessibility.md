@@ -1,4 +1,7 @@
-# Accessibility
+# Accessibility (implementation)
+
+The public statement (support, limitations, how to report a barrier) is [ACCESSIBILITY.md](../ACCESSIBILITY.md).
+This page is the technical detail behind it.
 
 GPUI 0.2.2 has no accessibility tree of its own. Codeyard adds one on macOS with AccessKit
 (`crates/app/src/a11y.rs`, `accesskit 0.25`, `accesskit_macos 0.27`); no GPUI patch is needed. VoiceOver itself has
@@ -7,16 +10,21 @@ GPUI 0.2.2 has no accessibility tree of its own. Codeyard adds one on macOS with
 ## What exists
 
 - `Window` → `Tree` "Explorer" (one `TreeItem` per visible row: name, level, selected, expanded, set position;
-  capped at 5,000 rows) → `MultilineTextInput` for the active editor (file name, `(modified)`, a text window around
-  the caret, text runs of at most 200 characters, the primary selection) → `Status` "Status bar" (one label per item).
+  capped at 5,000 rows) → `TabList` "Editor tabs" (one `Tab` per editor tab of the focused group: file name, `(modified)`,
+  selected for the tab in front, set position) → `MultilineTextInput` for the active editor (file name, `(modified)`, a
+  text window around the caret, text runs of at most 200 characters, the primary selection) → `Status` "Status bar"
+  (one label per item).
+- The notice in the status bar is a live region of its own: an error (including a file that could not be opened) is an
+  `Alert` with `Live::Assertive`, so it interrupts speech; an information notice is a `Status` with `Live::Polite`. A
+  screen reader speaks the text when it appears or changes.
 - While the update dialog (or the first-run question about update checks) is open: a modal `Dialog` with its title and text,
   a `ProgressIndicator` (0 to 100 while a download has a known size, without a value otherwise) and one `Button` per choice in
   tab order; the focused button is the tree's focus. The status bar names the update item. Everything in it is also reachable by
   keyboard (Tab, Shift+Tab, Enter, Space, Esc). On macOS the dialog is a window of its own ("Software Update"); the accessibility
   tree above belongs to the editor window and still lists the dialog, but the separate window itself has no adapter yet, so a screen
   reader reaches its title and nothing more. Until it has one, the status bar item and *Help: Check for Updates…* are the way in.
-- Actions: `Focus` (editor, explorer, row, dialog button), `Click` on a row (select and open) or a dialog button,
-  `SetTextSelection` on the editor.
+- Actions: `Focus` (editor, explorer, row, tab, dialog button), `Click` on a row (select and open), a tab (bring it to
+  the front and focus its editor) or a dialog button, `SetTextSelection` on the editor.
 - Accessibility of the interface that does not need a tree: two high-contrast themes, a contrast test for every
   theme, every command reachable from the palette and the keyboard.
 
@@ -62,18 +70,16 @@ The CPU cost of the 250 ms snapshot loop has not been measured.
   (`TreeUpdate.focus`, `update_view_focus_state`) exists but is unverified.
 - The editor exposes a window of lines around the caret, not the whole document, so absolute offsets differ from
   file offsets in long files. Primary selection only; no multi-cursor, folding, wrapped lines, RTL or CRLF handling.
-- Not exposed: tabs, sidebar panels other than the explorer, bottom panel, terminal, find bar, pickers and the command
-  palette, completion popup, hover, settings, other dialogs, notices (these should be live regions; an update notice is
-  only in the status bar's text). Only the first
-  explorer root is exposed.
+- Not exposed: sidebar panels other than the explorer, bottom panel, terminal, find bar, pickers and the command
+  palette, completion popup, hover, settings, other dialogs. Only the tabs of the focused editor group are listed, and
+  diff, large-file and page tabs are not. Only the first explorer root is exposed.
 - No scroll actions, no `Blur`, no explicit expand/collapse action (Click toggles).
 - Windows (UI Automation) and Linux (AT-SPI) are not implemented. The same AccessKit tree applies; Windows needs an
   `HWND` subclass adapter, Linux needs bounds, window events and an async D-Bus runtime.
 
 ## Order of work
 
-1. Bounds, real focus tracking, tabs, panels, status items as buttons, pickers, live-region notices, observer-driven
-   updates.
+1. Bounds, real focus tracking, panels, status items as buttons, pickers, observer-driven updates.
 2. The editor proper: visible lines only with shaped character positions, correct absolute offsets, scroll actions,
    multi-cursor policy, diagnostics and completion announcements, find bar.
 3. Terminal grid (one run per row) and the remaining panels.

@@ -918,6 +918,7 @@ Plain Text	Düz Metin
 You · Uncommitted changes	Siz · Commit edilmemiş değişiklikler
 folder	klasör
 Status bar	Durum çubuğu
+Editor tabs	Düzenleyici sekmeleri
 {} (modified)	{} (değiştirildi)
 {0} lines, showing from line {1}	{0} satır, {1}. satırdan itibaren gösteriliyor
 Connecting to {}	{} sunucusuna bağlanılıyor

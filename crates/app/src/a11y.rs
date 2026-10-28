@@ -1,5 +1,5 @@
-//! Accessibility tree (spike): exposes the window, explorer rows, the active
-//! editor (text field + cursor/selection) and the status bar text to VoiceOver through AccessKit.
+//! Accessibility tree (spike): exposes the window, explorer rows, the editor tabs, the active
+//! editor (text field + cursor/selection), notices (live region) and the status bar text to VoiceOver through AccessKit.
 //!
 //! Submodule of `workbench` (`#[path]`), so it can read Workbench's private fields.
 //! Design (details: docs/accessibility.md):
@@ -13,7 +13,7 @@
 //!    with `AsyncApp`.
 use super::*;
 use crate::i18n::{t, tf, tn};
-use accesskit::{Action, ActionData, ActionRequest, Node, NodeId, Role, TextPosition, TextSelection, TreeId, TreeInfo, TreeUpdate};
+use accesskit::{Action, ActionData, ActionRequest, Live, Node, NodeId, Role, TextPosition, TextSelection, TreeId, TreeInfo, TreeUpdate};
 
 const ROOT: NodeId = NodeId(1);
 const EXPLORER: NodeId = NodeId(2);
@@ -21,8 +21,14 @@ const EDITOR: NodeId = NodeId(3);
 const STATUS: NodeId = NodeId(4);
 const UPDATE_DIALOG: NodeId = NodeId(5);
 const UPDATE_PROGRESS: NodeId = NodeId(6);
+const TABS: NodeId = NodeId(7);
+const NOTICE: NodeId = NodeId(8);
 const STATUS_ITEM: u64 = 0x10_0000;
 const UPDATE_BUTTON: u64 = 0x20_0000;
+const TAB_BASE: u64 = 0x30_0000;
+/// Ids per block (status items, update buttons, tabs).
+const BLOCK: u64 = 0x10_0000;
+const _: () = assert!(STATUS_ITEM + BLOCK <= UPDATE_BUTTON && UPDATE_BUTTON + BLOCK <= TAB_BASE && TAB_BASE + BLOCK <= ROW_BASE);
 const ROW_BASE: u64 = 0x2_0000_0000;
 const RUN_BASE: u64 = 0x4_0000_0000;
 /// Window shown to AT in the editor: this many lines before/after the cursor line.
@@ -94,12 +100,30 @@ pub struct DialogSnap {
     pub focused: Option<usize>,
 }
 
+/// An editor tab of the focused group.
+#[derive(Clone, PartialEq, Debug)]
+pub struct TabSnap {
+    pub name: String,
+    pub dirty: bool,
+}
+
+/// The notice shown in the status bar; errors interrupt the screen reader, info waits its turn.
+#[derive(Clone, PartialEq, Debug)]
+pub struct NoticeSnap {
+    pub text: String,
+    pub error: bool,
+}
+
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Snapshot {
     pub title: String,
     pub rows: Vec<RowSnap>,
     pub rows_total: usize,
+    pub tabs: Vec<TabSnap>,
+    /// Index into `tabs` of the tab in front (`None` while a diff, large file or page tab is in front).
+    pub active_tab: Option<usize>,
     pub editor: Option<EditorSnap>,
+    pub notice: Option<NoticeSnap>,
     pub status: Vec<String>,
     pub dialog: Option<DialogSnap>,
     pub focus: FocusSnap,
@@ -213,6 +237,28 @@ impl Snapshot {
         nodes.push((EXPLORER, tree));
         kids.push(EXPLORER);
 
+        // Tabs
+        if !self.tabs.is_empty() {
+            let mut list = Node::new(Role::TabList);
+            list.set_label(t("Editor tabs"));
+            let mut tab_ids = Vec::new();
+            for (i, tab) in self.tabs.iter().enumerate() {
+                let id = NodeId(TAB_BASE + i as u64);
+                let mut n = Node::new(Role::Tab);
+                n.set_label(if tab.dirty { tf("{} (modified)", &[&tab.name]) } else { tab.name.clone() });
+                n.set_selected(self.active_tab == Some(i));
+                n.set_position_in_set(i + 1);
+                n.set_size_of_set(self.tabs.len());
+                n.add_action(Action::Click);
+                n.add_action(Action::Focus);
+                tab_ids.push(id);
+                nodes.push((id, n));
+            }
+            list.set_children(tab_ids);
+            nodes.push((TABS, list));
+            kids.push(TABS);
+        }
+
         // Editor
         if let Some(e) = &self.editor {
             let mut ed = Node::new(Role::MultilineTextInput);
@@ -254,6 +300,15 @@ impl Snapshot {
         status.set_children(items);
         nodes.push((STATUS, status));
         kids.push(STATUS);
+
+        // Notice: a live region, so a screen reader speaks it when it appears or changes.
+        if let Some(n) = &self.notice {
+            let mut alert = Node::new(if n.error { Role::Alert } else { Role::Status });
+            alert.set_label(n.text.clone());
+            alert.set_live(if n.error { Live::Assertive } else { Live::Polite });
+            nodes.push((NOTICE, alert));
+            kids.push(NOTICE);
+        }
 
         // The update dialog is modal: while it is open it is the only thing a screen reader should land on.
         if let Some(d) = &self.dialog {
@@ -366,9 +421,14 @@ impl Workbench {
         if let Some(item) = self.update_status_item() {
             status.push(item.tip.to_string());
         }
-        if let Some(Notice::Info(m)) = &self.notice {
-            status.push(m.to_string());
-        }
+        let notice = match (&self.notice, &self.tabs.open_error) {
+            (Some(Notice::Error(m)), _) => Some(NoticeSnap { text: m.to_string(), error: true }),
+            (_, Some((_, m))) => Some(NoticeSnap { text: m.to_string(), error: true }),
+            (Some(Notice::Info(m)), _) => Some(NoticeSnap { text: m.to_string(), error: false }),
+            (None, None) => None,
+        };
+        let tabs = self.tabs.editors.iter().map(|e| e.read(cx)).map(|e| TabSnap { name: e.name.to_string(), dirty: e.is_dirty() }).collect();
+        let active_tab = self.tabs.active.filter(|_| editor_visible);
         let dialog = self.dialog_model(cx).map(|model| DialogSnap {
             description: model.text().split_once('\n').map_or(String::new(), |(_, rest)| rest.to_string()),
             progress: match &model.body {
@@ -388,7 +448,7 @@ impl Workbench {
         } else {
             FocusSnap::Window
         };
-        Snapshot { title, rows, rows_total, editor, status, dialog, focus }
+        Snapshot { title, rows, rows_total, tabs, active_tab, editor, notice, status, dialog, focus }
     }
 
     /// Action from AT (main thread, in the GPUI context).
@@ -408,7 +468,15 @@ impl Workbench {
                     tree.update(cx, |t, cx| t.a11y_activate(ix, cx));
                 }
             }
-            (Action::Focus | Action::Click, id) if id.0 >= UPDATE_BUTTON && id.0 < ROW_BASE => {
+            (Action::Focus | Action::Click, id) if id.0 >= TAB_BASE && id.0 < TAB_BASE + BLOCK => {
+                let index = (id.0 - TAB_BASE) as usize;
+                // Same check as the dialog buttons: the tree may be a quarter of a second old.
+                let Some(snap) = last.tabs.get(index) else { return };
+                let Some(ed) = self.tabs.editors.get(index).cloned().filter(|e| e.read(cx).name.as_ref() == snap.name) else { return };
+                self.activate(index, window, cx);
+                window.focus(&ed.read(cx).focus_handle(cx));
+            }
+            (Action::Focus | Action::Click, id) if id.0 >= UPDATE_BUTTON && id.0 < UPDATE_BUTTON + BLOCK => {
                 let (Some(snap), Some(index)) = (&last.dialog, id.0.checked_sub(UPDATE_BUTTON).map(|i| i as usize)) else { return };
                 // The tree may be a quarter of a second old: act only if that button is still there under the same name.
                 let Some(model) = self.dialog_model(cx) else { return };
@@ -588,6 +656,9 @@ mod tests {
                 },
             ],
             rows_total: 2,
+            tabs: vec![TabSnap { name: "lib.rs".into(), dirty: true }, TabSnap { name: "main.rs".into(), dirty: false }],
+            active_tab: Some(1),
+            notice: None,
             editor: Some(EditorSnap { name: "main.rs".into(), dirty: false, runs, selection: (3, 7), total_lines: 3, first_line: 0 }),
             status: vec!["Local".into(), "Ln 1, Col 4 (4 selected)".into()],
             dialog: None,
@@ -630,5 +701,32 @@ mod tests {
         assert!(runs.iter().all(|r| r.text.chars().count() <= RUN_CHARS + 1));
         assert!(runs.last().unwrap().text.ends_with('\n'));
         assert_eq!(runs.iter().map(|r| r.chars).sum::<usize>(), 801);
+    }
+
+    #[test]
+    fn tabs_are_a_tab_list_with_the_front_tab_selected() {
+        let tree = accesskit_consumer::Tree::new(snap().to_tree(), true);
+        let state = tree.state();
+        let list = state.root().children().find(|n| n.role() == Role::TabList).unwrap();
+        assert_eq!(list.role(), Role::TabList);
+        let tabs: Vec<_> = list.children().collect();
+        assert_eq!(tabs.len(), 2);
+        assert!(tabs.iter().all(|t| t.role() == Role::Tab));
+        assert_eq!(tabs[0].label().as_deref(), Some("lib.rs (modified)"));
+        assert_eq!(tabs.iter().map(|t| t.is_selected()).collect::<Vec<_>>(), [Some(false), Some(true)]);
+    }
+
+    #[test]
+    fn notices_are_live_regions_and_errors_interrupt() {
+        let mut s = snap();
+        assert!(s.to_tree().nodes.iter().all(|(id, _)| *id != NOTICE));
+        s.notice = Some(NoticeSnap { text: "Saved".into(), error: false });
+        let tree = accesskit_consumer::Tree::new(s.to_tree(), true);
+        let n = tree.state().root().children().last().unwrap();
+        assert_eq!((n.role(), n.live(), n.label().as_deref()), (Role::Status, Live::Polite, Some("Saved")));
+        s.notice = Some(NoticeSnap { text: "Could not save".into(), error: true });
+        let tree = accesskit_consumer::Tree::new(s.to_tree(), true);
+        let n = tree.state().root().children().last().unwrap();
+        assert_eq!((n.role(), n.live()), (Role::Alert, Live::Assertive));
     }
 }
