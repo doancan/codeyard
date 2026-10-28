@@ -16,6 +16,11 @@ use super::*;
 use crate::i18n::{t, tf, tn};
 use accesskit::{Action, ActionData, ActionRequest, Live, Node, NodeId, Role, TextPosition, TextSelection, Toggled, TreeId, TreeInfo, TreeUpdate};
 
+#[path = "a11y_geometry.rs"]
+mod geometry;
+pub use geometry::Geometry;
+pub(super) use geometry::{Landmark, PaintedBounds, landmark};
+
 const ROOT: NodeId = NodeId(1);
 const EXPLORER: NodeId = NodeId(2);
 const EDITOR: NodeId = NodeId(3);
@@ -212,6 +217,8 @@ pub(crate) struct ScmSnap {
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct Snapshot {
     generation: u64,
+    /// Physical landmark frames from the latest painted layout.
+    pub geometry: Geometry,
     pub title: String,
     pub explorers: Vec<ExplorerSnap>,
     pub tabs: Vec<TabSnap>,
@@ -357,12 +364,14 @@ impl Snapshot {
     pub fn to_tree(&self) -> TreeUpdate {
         let mut nodes: Vec<(NodeId, Node)> = Vec::new();
         let mut root = Node::new(Role::Window);
+        self.geometry.apply(ROOT, &mut root);
         root.set_label(self.title.clone());
         let mut kids = Vec::new();
 
         // Explorer: one tree per folder of the workspace.
         for (k, ex) in self.explorers.iter().enumerate() {
             let mut tree = Node::new(Role::Tree);
+            self.geometry.apply(explorer_id(k), &mut tree);
             tree.set_label(if self.explorers.len() > 1 { format!("{}: {}", t("Explorer"), ex.name) } else { t("Explorer").to_string() });
             tree.set_size_of_set(ex.rows_total);
             let mut row_ids = Vec::new();
@@ -461,6 +470,7 @@ impl Snapshot {
         // Editor
         if let Some(e) = &self.editor {
             let mut ed = Node::new(Role::MultilineTextInput);
+            self.geometry.apply(EDITOR, &mut ed);
             ed.set_label(if e.dirty { tf("{} (modified)", &[&e.name]) } else { e.name.clone() });
             ed.set_description(tf("{0} lines, showing from line {1}", &[&e.total_lines, &(e.first_line + 1)]));
             ed.add_action(Action::Focus);
@@ -503,6 +513,7 @@ impl Snapshot {
 
         // Status bar
         let mut status = Node::new(Role::Status);
+        self.geometry.apply(STATUS, &mut status);
         status.set_label(t("Status bar"));
         let mut items = Vec::new();
         for (i, t) in self.status.iter().enumerate() {
@@ -759,6 +770,7 @@ impl Workbench {
         };
         Snapshot {
             generation: self.lsp.generation,
+            geometry: Geometry::new(&self.chrome.a11y_bounds, window),
             title,
             explorers,
             tabs,
@@ -1072,6 +1084,7 @@ mod tests {
         let runs = runs_for(lines, 3, 0);
         Snapshot {
             generation: 0,
+            geometry: Geometry::default(),
             title: "Codeyard \u{2014} demo".into(),
             explorers: vec![ExplorerSnap {
                 name: "d".into(),
@@ -1257,3 +1270,7 @@ mod tests {
         assert_eq!(state.focus().unwrap().label().as_deref(), Some("x.rs"));
     }
 }
+
+#[cfg(test)]
+#[path = "a11y_geometry_tests.rs"]
+mod geometry_tests;

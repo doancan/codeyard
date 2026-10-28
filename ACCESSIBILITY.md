@@ -71,8 +71,8 @@ These are the important gaps, in rough order of how much they get in the way. Th
   every change, but no one has run a real VoiceOver, NVDA, JAWS or Narrator session against it. Expect rough edges and please
   report them.
 - **No screen reader on Linux.**
-- **No on-screen positions.** Elements have no on-screen bounds, so the VoiceOver cursor highlight, Narrator's focus
-  rectangle, exploring with the mouse or touch, and Zoom or Magnifier following the caret do not work.
+- **Incomplete on-screen positions.** The window, primary Explorer viewport, active editor pane and status bar have
+  bounds. Individual controls, rows and characters still need geometry for precise cursor highlights and caret tracking.
 - **Some views are still silent:** search results, the Source Control graph and sync controls, debug, testing and remote
   views, the problems, output and ports panels, hover popups, the Settings and Keyboard Shortcuts pages, context
   menus and dialogs other than the update dialog.

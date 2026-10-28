@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cargo target discovery for automatic Rust debugging: virtual workspaces, multiple binaries, examples, required features
   and library-only test harnesses. Programs come from Cargo's artifact messages, including custom target directories.
 - *Rust: Open Cargo.toml* falls back to the nearest manifest inside the file's workspace when no language server is attached.
+- macOS accessibility landmark bounds for the window, primary Explorer viewport, focused text-editor pane
+  and status bar, with display-scale conversion and updates when resizing, switching split groups or hiding panels.
 
 - Full-width Container Overview table with in-page search, live SSH resource data, health filtering,
   selectable columns, stable refresh ordering and scrolling, detail navigation, logs and container actions.
@@ -84,6 +86,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Memory checks measure and stop their own disposable agent daemon instead of looking up an unrelated running daemon.
 
 - The workspace-symbol test ran with language servers turned off, so it could never pass; it now starts rust-analyzer.
+
+### Changed
+
+- Port mappings and mounted storage use responsive inspection cards with copyable addresses and paths.
+  Log entries place timestamp and severity above full-width messages, with a full-width search and console footer.
+
+- Container details promote the selected name and file/terminal actions into the header. Responsive CPU/memory
+  cards show current readings above charts, disk/network activity shares the available width, and log search has a visible field frame.
+
+- Container Overview fills the available width when resizing or hiding columns. Name and Image expand while
+  metrics stay aligned with larger table text; header actions and search/filters wrap in narrow windows. Sorting moves to the
+  Name/CPU/Memory column headers, and Clear filters appears only for an active query or filter.
+- The Container Overview header combines connection, update state and fleet counts, with grouped filters
+  and a framed search field. Redundant initial navigation and duplicate count rows are removed.
 
 ## [0.5.0] - 2026-10-27
 

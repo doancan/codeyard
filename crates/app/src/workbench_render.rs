@@ -32,6 +32,7 @@ impl Render for Workbench {
         if self.chrome.panel == Some(Panel::Containers) && cx.global::<Settings>().docker_enabled {
             self.show_containers(cx);
         }
+        self.chrome.a11y_bounds = Default::default();
         self.update_title(window, cx);
         self.chrome.window_bounds = Some(window.window_bounds());
         self.track_notice(cx);

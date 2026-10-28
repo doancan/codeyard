@@ -22,6 +22,29 @@ pub(super) fn button(id: impl Into<gpui::ElementId>, label: &'static str, p: &Pa
         .child(label)
 }
 
+pub(super) fn search_field(id: &'static str, field: Entity<crate::input::TextField>, p: &Palette, cx: &App) -> gpui::Stateful<gpui::Div> {
+    let focus = field.focus_handle(cx);
+    div()
+        .id(id)
+        .debug_selector(move || id.into())
+        .w_full()
+        .min_w_0()
+        .min_h(px(34.))
+        .pl(px(theme::SPACE[3]))
+        .flex()
+        .items_center()
+        .border_1()
+        .border_color(c(p.border))
+        .rounded(px(theme::radius::SM))
+        .bg(c(p.surface))
+        .on_click(move |_, window, cx| {
+            cx.stop_propagation();
+            window.focus(&focus);
+        })
+        .child(icon("search", 14., p.text_muted))
+        .child(field)
+}
+
 impl Workbench {
     pub(super) fn return_from_container(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.refuse_if_dirty(cx) {
@@ -49,6 +72,7 @@ impl Workbench {
         self.tabs.diff_active = false;
         self.tabs.large_active = false;
         self.sync_container_monitor(cx);
+
         cx.notify();
     }
 

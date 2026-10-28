@@ -1094,6 +1094,7 @@ impl Workbench {
                 tree_marks: Default::default(),
             },
             chrome: state_glue::ChromeLayout {
+                a11y_bounds: Default::default(),
                 resources: cx.new(crate::resource_monitor::ResourceMonitor::new),
                 web_preview: Default::default(),
                 panel: Some(Panel::Explorer),

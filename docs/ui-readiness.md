@@ -144,3 +144,46 @@ macOS captures sometimes required raising or resizing the QA window before displ
 fresh pixels; the cause and automatic redraw timing are not established. New Turkish
 resource labels were authored by Codex; no independent native-speaker review is recorded.
 Release validation should retain these limits alongside the successful local checks.
+
+
+## Container Overview layout (2026-10-28)
+
+The inventory now stretches to the table viewport instead of stopping at the sum of fixed column widths.
+Name and Image absorb spare space; metric columns keep minimum widths and align their headings with their
+values. The table uses the standard small UI text size rather than the smaller metadata step. Header and
+row actions share one right-aligned column, and the table has the same side gutters as the page controls.
+Search and filters share a wrapping toolbar. Header actions wrap below the title when necessary. Clear
+filters is shown only for an active query/status/attention filter, including an empty result.
+
+Name, CPU and Memory headers now sort directly and indicate the current direction. With the table focused,
+N/C/M provide the same actions; header tooltips show the keys. Ranking values remain frozen until another
+explicit sort, preserving row order and scroll position during live refreshes.
+
+The original regression measured a 1,330-point row inside a 1,872-point viewport at a 1,920-point window,
+leaving about 542 points unused. GPUI layout tests now require rows to reach the right table border within
+2 points at 1,280, 1,920 and 2,560 points, with both default columns and all optional columns hidden.
+Other cases cover long names/images, English/Turkish controls at 480/800/1280 points, sorting without
+opening details, clearing an empty search, and horizontal scrolling to row actions with every column enabled.
+The existing live-refresh/navigation regression also uses the new column-header sorting control.
+
+Native window inspection was completed after Screen Recording access became available. Disposable
+container snapshots in isolated profiles were checked at 480, 1280 and 1920 points, in English/light
+and Turkish/dark variants. The revised header puts update state beside the title, keeps host/context
+and fleet counts together, and places a framed search field beside grouped status filters. Duplicate
+counters and the redundant initial Overview tab are removed. The hint is one wrapping flex row rather
+than three stacked text nodes, and the update label no longer collapses into an ellipsis.
+
+Header regressions require a readable update label, a single-line desktop hint and table content within
+210 points of the page top at 1280 points. Clicking the search icon focuses the text field; typing is
+verified through dispatched input events. Initial discovery does not report zero fleet counts before
+a successful snapshot. Stale-data errors remain explicit below the header. This is native rendering
+and interaction evidence with sample data, not a live-server or screen-reader certification.
+
+Container detail polish was checked in the native macOS app with isolated sample data:
+resource cards at 1280 px and the log console at 480 px. Automated layout coverage checks
+chart wrapping, header action bounds and long selected-container names at both widths.
+These checks do not constitute a live remote-engine acceptance run.
+
+The revised port/storage cards were inspected in a native 1280 px window, and the
+full-width log message layout at 1280 and 480 px using isolated sample data. A GPUI
+regression covers long mount paths, port-copy IPv6 formatting and wrapped log bounds.
