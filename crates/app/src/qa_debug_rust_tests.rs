@@ -168,6 +168,11 @@ fn over_ssh<'a>(
     toolchain: Toolchain,
 ) -> Option<(Entity<Workbench>, &'a mut VisualTestContext, PathBuf, String, crate::test_sshd::Sshd)> {
     let sshd = crate::test_sshd::start(name)?;
+    // The server's non-login shell must find rustup's `rustc` (CI runners keep `~/.cargo/bin` out of that PATH).
+    if sshd.run("command -v rustup").is_none() {
+        crate::test_sshd::skip_missing("rustup on the SSH server's PATH");
+        return None;
+    }
     let (dir, log, sysroot) = rust_project(name, "lldb", extra, toolchain);
     let (wb, cx) = crate::qa_integration_tests::ssh_workbench(cx, &dir);
     start(&wb, cx);
