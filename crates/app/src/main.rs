@@ -263,6 +263,10 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("enter", picker::PickConfirm, Some("Picker")),
         KeyBinding::new("escape", picker::PickDismiss, Some("Picker")),
         KeyBinding::new("backspace", picker::PickBackspace, Some("Picker")),
+        KeyBinding::new("secondary-a", picker::PickSelectAll, Some("Picker")),
+        KeyBinding::new("secondary-v", picker::PickPaste, Some("Picker")),
+        KeyBinding::new("secondary-c", picker::PickCopy, Some("Picker")),
+        KeyBinding::new("secondary-x", picker::PickCut, Some("Picker")),
         // The update dialog: Esc closes it, Tab walks its buttons, Enter and Space press the focused one (Enter: the primary one).
         KeyBinding::new("escape", UpdateDismiss, Some("UpdateDialog")),
         KeyBinding::new("cmd-w", UpdateDismiss, Some("UpdateDialog")),

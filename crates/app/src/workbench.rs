@@ -1583,6 +1583,11 @@ impl Workbench {
             cx.notify();
             return;
         }
+        self.replace_root(path, cx);
+    }
+
+    /// Replace the workspace even if another host uses the same absolute folder path.
+    pub(super) fn replace_root(&mut self, path: String, cx: &mut Context<Self>) {
         // With hot exit on, dirty files are backed up and come back when returning to the folder.
         self.flush_backups(cx);
         if (!cx.global::<Settings>().hot_exit || self.has_unbacked_dirty(cx)) && self.refuse_if_dirty(cx) {
@@ -1602,6 +1607,7 @@ impl Workbench {
         self.tabs.focused_left = true;
         self.tabs.active = None;
         self.tabs.open_error = None;
+        self.tabs.opening = None;
         self.notice = None;
         self.roots.file_index = None;
         self.load_git_branch(&path, cx);
@@ -1655,6 +1661,8 @@ impl Workbench {
             return;
         }
         let host = self.remote.host.clone();
+        let source = host.clone();
+        let generation = self.lsp.generation;
         let task = cx.background_executor().spawn(async move {
             files
                 .into_iter()
@@ -1665,6 +1673,9 @@ impl Workbench {
             let loaded = task.await;
             let changed = this
                 .update(cx, |this, _| {
+                    if this.lsp.generation != generation || !Arc::ptr_eq(&this.remote.host, &source) {
+                        return None;
+                    }
                     let changed = loaded != this.cfg.project;
                     this.cfg.project = loaded;
                     changed.then_some(this.window_handle)
@@ -1741,6 +1752,7 @@ impl Workbench {
     /// `preview`: preview tab. Opens in place of a non-dirty preview tab if there is one
     /// (so tabs don't pile up while browsing).
     fn open_file_as(&mut self, host: Arc<dyn Host>, path: String, preview: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.chrome.panel_max = false;
         let path = if host.is_remote() { path } else { ui::local_path(std::path::Path::new(&path)) };
         if let Some(format) = crate::large::image_format(&path) {
             return self.open_image(path, format, window, cx);
@@ -1894,6 +1906,7 @@ impl Workbench {
     }
 
     fn activate(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.chrome.panel_max = false;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;
         self.tabs.page_active = false;

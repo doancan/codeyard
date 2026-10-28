@@ -162,3 +162,96 @@ fn connection_attempt_preserves_edits_made_while_connecting(cx: &mut gpui::TestA
         assert_eq!(wb.root(cx), Some(ui::local_path(&root)));
     });
 }
+
+#[gpui::test]
+fn connection_attempt_same_path_on_another_host_replaces_the_workspace(cx: &mut gpui::TestAppContext) {
+    let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+    cx.update(|_, cx| cx.global_mut::<Settings>().lsp_enabled = false);
+    let root = crate::qa_workbench_tests::project("attempt-same-path");
+    let path = ui::local_path(&root);
+    let source: Arc<dyn Host> = crate::container_monitor::tests::FixtureHost::new();
+    let target: Arc<dyn Host> = crate::container_monitor::tests::FixtureHost::new();
+    wb.update_in(cx, |wb, window, cx| {
+        wb.remote.pending_path = Some(path.clone());
+        wb.attach_host(source.clone(), "source".into(), window, cx);
+    });
+    crate::qa_workbench_tests::open_in(&wb, &root.join("src/main.rs"), cx);
+    assert_eq!(wb.read_with(cx, |wb, _| wb.tabs.editors.len()), 1);
+    let source_workspace = wb.read_with(cx, |wb, _| wb.persist.workspace_id);
+    let tx = wb.update_in(cx, |wb, window, cx| {
+        wb.remote.pending_path = Some(path.clone());
+        pending(wb, "target", window, cx)
+    });
+    assert!(tx.send(Ok(target.clone())).is_ok());
+    settle(cx);
+    wb.read_with(cx, |wb, cx| {
+        assert!(Arc::ptr_eq(&wb.remote.host, &target));
+        assert!(wb.tabs.editors.is_empty(), "tabs from the previous server must be closed even when the path is identical");
+        assert_ne!(wb.persist.workspace_id, source_workspace, "each host must keep its own session");
+        let saved = wb.persist.state.as_ref().unwrap().tabs(source_workspace.unwrap()).unwrap();
+        assert_eq!(saved.len(), 1, "switching servers must preserve the old server's saved tabs");
+        assert_eq!(saved[0].rel_path, "src/main.rs");
+        assert_eq!(wb.root(cx).as_deref(), Some(path.as_str()));
+    });
+}
+
+#[gpui::test]
+fn disconnect_clears_the_previous_remote_workspace(cx: &mut gpui::TestAppContext) {
+    let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+    let root = ui::local_path(&crate::qa_workbench_tests::fresh("disconnect-root"));
+    wb.update_in(cx, |wb, window, cx| {
+        wb.remote.pending_path = Some(root);
+        wb.attach_host(crate::container_monitor::tests::FixtureHost::new(), "source".into(), window, cx);
+        wb.roots.extra_roots.push("/srv/other".into());
+        wb.vcs.branch = Some("old-remote-branch".into());
+        wb.cfg.project.push(("settings.jsonc".into(), "{}".into(), false));
+        wb.disconnect(cx);
+    });
+    wb.read_with(cx, |wb, cx| {
+        assert!(matches!(wb.remote.conn, Conn::Local));
+        assert!(wb.root(cx).is_none());
+        assert!(wb.roots.extra_roots.is_empty(), "disconnected folders must not remain in Explorer");
+        assert!(wb.vcs.branch.is_none(), "the old server's branch must not appear in a local empty window");
+        assert!(wb.cfg.project.is_empty());
+        assert!(wb.persist.workspace_id.is_none(), "closing an empty window must not overwrite the remote session");
+    });
+}
+
+#[gpui::test]
+fn connecting_and_disconnecting_a_second_window_leaves_the_first_connected(cx: &mut gpui::TestAppContext) {
+    crate::qa_workbench_tests::globals(cx);
+    let open = |cx: &mut gpui::TestAppContext| {
+        cx.update(|cx| {
+            cx.open_window(gpui::WindowOptions::default(), |window, cx| cx.new(|cx| Workbench::with_state(state::State::in_memory().ok(), None, window, cx)))
+                .unwrap()
+        })
+    };
+    let first = open(cx);
+    let second = open(cx);
+    let source: Arc<dyn Host> = crate::container_monitor::tests::FixtureHost::new();
+    let target: Arc<dyn Host> = crate::container_monitor::tests::FixtureHost::new();
+    let root = ui::local_path(&crate::qa_workbench_tests::fresh("two-window-source"));
+    first
+        .update(cx, |wb, window, cx| {
+            wb.remote.pending_path = Some(root.clone());
+            wb.attach_host(source.clone(), "first-host".into(), window, cx);
+        })
+        .unwrap();
+    let tx = second.update(cx, |wb, window, cx| pending(wb, "second-host", window, cx)).unwrap();
+    assert!(tx.send(Ok(target.clone())).is_ok());
+    cx.run_until_parked();
+    second
+        .read_with(cx, |wb, _| {
+            assert!(matches!(&wb.remote.conn, Conn::Connected { alias } if alias == "second-host"));
+            assert!(Arc::ptr_eq(&wb.remote.host, &target));
+        })
+        .unwrap();
+    second.update(cx, |wb, _, cx| wb.disconnect(cx)).unwrap();
+    first
+        .read_with(cx, |wb, cx| {
+            assert!(matches!(&wb.remote.conn, Conn::Connected { alias } if alias == "first-host"));
+            assert!(Arc::ptr_eq(&wb.remote.host, &source));
+            assert_eq!(wb.root(cx).as_deref(), Some(root.as_str()));
+        })
+        .unwrap();
+}
