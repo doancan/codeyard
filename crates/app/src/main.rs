@@ -1,6 +1,6 @@
 //! codeyard: lightweight, native code editor. Local + SSH.
 //!
-//!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER]
+//!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx]
 
 // Normal Windows launches are GUI applications in every profile. Test harnesses keep their console.
 #![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
@@ -672,6 +672,31 @@ struct Args {
     no_extensions: bool,
     /// `--extension-dev FOLDER` (`cyx dev`): load that folder as an extension and reload it on every save.
     extension_dev: Option<String>,
+    /// `--install-extension FILE.cyx` (repeatable): install these packages and exit, without a window.
+    install: Vec<String>,
+}
+
+/// `--install-extension`: install each package into the user's store, as the Extensions view does after its consent
+/// sheet (the person running the command is the one consenting), and report one line per package. Exit status 1 when any
+/// failed; the others are still installed.
+fn install_extensions(files: &[String]) -> i32 {
+    let Some(cfg) = settings::config_dir() else {
+        eprintln!("codeyard: no settings folder");
+        return 1;
+    };
+    let store = ext::store(&cfg);
+    let mut status = 0;
+    for f in files {
+        let path = std::fs::canonicalize(f).unwrap_or_else(|_| f.into());
+        match ext::install_file(&store, &path) {
+            Ok(m) => println!("installed {} {}", m.id, m.version),
+            Err(e) => {
+                eprintln!("{f}: {e}");
+                status = 1;
+            }
+        }
+    }
+    status
 }
 
 /// The windows an update restart left for this process; the file is consumed here. Anything wrong with it is logged and means
@@ -722,6 +747,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
         after_update: false,
         no_extensions: false,
         extension_dev: None,
+        install: Vec::new(),
     };
     let mut it = argv;
     while let Some(a) = it.next() {
@@ -731,6 +757,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
             "--terminal" => args.terminal = true,
             "--no-extensions" => args.no_extensions = true,
             "--extension-dev" => args.extension_dev = it.next(),
+            "--install-extension" => args.install.extend(it.next()),
             update_restart::FLAG => args.after_update = true,
             "--search" => args.search = it.next(),
             "--panel" => args.panel = it.next(),
@@ -749,7 +776,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
             }
             "-h" | "--help" => {
                 println!(
-                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER]"
+                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx]"
                 );
                 std::process::exit(0);
             }
@@ -787,6 +814,8 @@ mod args_tests {
         assert!(!parse(false, &["/work"]).no_extensions);
         let dev = parse(false, &["--extension-dev", "/ext", "/work"]);
         assert_eq!((dev.extension_dev.as_deref(), dev.path.as_deref()), (Some("/ext"), Some("/work")), "its value is not the folder to open");
+        let inst = parse(false, &["--install-extension", "a.cyx", "--install-extension", "b.cyx"]);
+        assert_eq!((inst.install.as_slice(), inst.path.as_deref()), (&["a.cyx".to_string(), "b.cyx".to_string()][..], None));
     }
 }
 
@@ -956,6 +985,9 @@ fn main() {
     workbench::migrate_legacy_dirs();
     crash::install(workbench::crash_dir());
     let args = parse_args();
+    if !args.install.is_empty() {
+        std::process::exit(install_extensions(&args.install));
+    }
     if args.no_extensions {
         ext::turn_off();
     }

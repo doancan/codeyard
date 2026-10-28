@@ -23,6 +23,7 @@ with a message instead of producing numbers. The baseline is built once in `targ
 | --- | --- | --- | --- |
 | `startup.first_frame_ms` | start of `main` to the first drawn frame, welcome screen; one sample per run | p95 | +10% |
 | `startup.window_open_ms` | start of `main` to the window being created (warn only) | p95 | +10% |
+| `startup.extensions_ms` | loading 100 installed, inactive extensions at startup (themes made by `cyx new`) | p95 | +10% and +1 ms; ceiling 5 ms |
 | `typing.keystroke_frame_ms` | key press to the drawn frame, 10k-line Rust file with highlighting; 40 keys per run | p95 | +10% |
 | `memory.empty_window_mb` | settled footprint, welcome screen | median | +5% |
 | `memory.syntax_10k_mb` | settled footprint, 10k-line Rust file | median | +5% |

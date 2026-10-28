@@ -326,3 +326,26 @@ fn a_new_extension_is_loaded_in_development_and_opened(cx: &mut TestAppContext) 
     assert!(notice.contains("already exists"), "{notice}");
     crate::ext::set_dev(None);
 }
+
+#[test]
+fn install_file_checks_like_the_view() {
+    let cfg = config_dir("install-file");
+    let pkg = |manifest_text: String, extra: Vec<(&str, &str)>| {
+        let mut entries = vec![ext_pkg::Entry { path: "codeyard-extension.toml".into(), data: manifest_text.into_bytes(), executable: false }];
+        entries.extend(extra.into_iter().map(|(p, t)| ext_pkg::Entry { path: p.into(), data: t.as_bytes().to_vec(), executable: false }));
+        ext_pkg::write(entries).unwrap().0
+    };
+    let store = crate::ext::store(&cfg);
+    let good = cfg.join("good.cyx");
+    std::fs::write(&good, pkg(manifest("you.night", "[[themes]]\nlabel = \"Night\"\npath = \"t.json\"\n"), vec![("t.json", THEME)])).unwrap();
+    let m = crate::ext::install_file(&store, &good).unwrap();
+    assert_eq!(m.id.as_str(), "you.night");
+    assert!(store.locked().unwrap().contains_key(&m.id));
+    let code = cfg.join("code.cyx");
+    std::fs::write(&code, pkg(manifest("you.code", "[code]\nentry = \"main.ts\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n"), vec![("main.ts", "")]))
+        .unwrap();
+    assert!(crate::ext::install_file(&store, &code).unwrap_err().contains("contains code"));
+    let junk = cfg.join("junk.cyx");
+    std::fs::write(&junk, b"not a package").unwrap();
+    assert!(crate::ext::install_file(&store, &junk).unwrap_err().contains("no gzip header"));
+}
