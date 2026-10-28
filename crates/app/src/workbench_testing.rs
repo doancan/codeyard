@@ -650,6 +650,11 @@ impl Workbench {
         self.persist.state.is_some()
     }
 
+    /// (id, name) of every theme the picker offers.
+    pub fn themes_for_test(&self) -> Vec<(String, String)> {
+        self.themes.iter().map(|t| (t.id.clone(), t.name.clone())).collect()
+    }
+
     pub fn clear_notice_for_test(&mut self) {
         self.notice = None;
     }

@@ -156,8 +156,8 @@ pub(super) struct NavState {
 pub(super) struct ConfigState {
     /// Settings folder (`None` in tests: the user's files are left alone).
     pub(super) dir: Option<std::path::PathBuf>,
-    /// Last modification times of (settings, keybindings): live reload.
-    pub(super) stamp: (Option<std::time::SystemTime>, Option<std::time::SystemTime>),
+    /// Last modification times of (settings, keybindings, extensions lock): live reload.
+    pub(super) stamp: (Option<std::time::SystemTime>, Option<std::time::SystemTime>, Option<std::time::SystemTime>),
     /// `--theme` was given: the theme in the settings file isn't applied this session.
     pub(super) theme_override: bool,
     /// Project settings: (file name, text, unknown-key warning). Applied on top of the

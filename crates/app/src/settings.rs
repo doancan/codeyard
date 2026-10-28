@@ -190,6 +190,10 @@ pub struct Settings {
     pub color_decorators: bool,
     /// File and folder icon theme (`workbench.iconTheme`).
     pub icon_theme: String,
+    /// A keymap preset from an installed extension, `<publisher.name>/<label>` (`keymap.preset`); empty: none.
+    pub keymap_preset: String,
+    /// Values of settings that installed extensions declare (`ext.<publisher.name>.<key>`), checked against their type.
+    pub ext_settings: std::collections::BTreeMap<String, Value>,
     pub status_bar: bool,
     pub activity_bar: bool,
     /// Explorer indent width (px).
@@ -363,6 +367,8 @@ impl Default for Settings {
             sticky_scroll: true,
             color_decorators: true,
             icon_theme: crate::icon_theme::ALL[0].id().into(),
+            keymap_preset: String::new(),
+            ext_settings: std::collections::BTreeMap::new(),
             status_bar: true,
             activity_bar: true,
             tree_indent: theme::layout::TREE_INDENT,
@@ -899,6 +905,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     let mut cw: Vec<String> = Vec::new();
     s.ui_font = r.string("workbench.fontFamily");
+    s.keymap_preset = r.string("keymap.preset").unwrap_or_default();
     if let Some(v) = r.bool("workbench.editor.showTabs") {
         s.show_tabs = v;
     }
@@ -1214,6 +1221,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "workbench.activityBar.visible",
         "workbench.tree.indent",
         "workbench.fontFamily",
+        "keymap.preset",
         "workbench.editor.showTabs",
         "workbench.tabs.showIcons",
         "workbench.tabs.closeButton",
@@ -1244,6 +1252,16 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "editor.folding",
     ];
     for k in obj.keys().filter(|k| !KNOWN.contains(&k.as_str()) && !quiet.contains(k)) {
+        // A setting an installed extension declares: kept when its value has the declared type.
+        if k.starts_with("ext.") {
+            match crate::ext::check_setting(k, &obj[k]) {
+                Ok(()) => {
+                    s.ext_settings.insert(k.clone(), obj[k].clone());
+                }
+                Err(e) => warnings.push(format!("settings.jsonc: {e}")),
+            }
+            continue;
+        }
         warnings.push(format!("settings.jsonc: {}", crate::i18n::tf("unknown setting {}", &[&format!("\"{k}\"")])));
     }
     (s, warnings)
