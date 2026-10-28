@@ -46,6 +46,13 @@ class CompareTests(unittest.TestCase):
         r = self.run_compare({"t": [10] * 19 + [12]}, {"t": [10] * 15 + [30] * 5}, [self.metric()])
         self.assertEqual(r.returncode, 1, r.stdout)
 
+    def test_an_absolute_budget_absorbs_millisecond_noise(self):
+        m = self.metric(budget=0.10, budget_abs=1.0)
+        r = self.run_compare({"t": [0.9, 1.0, 1.1, 1.2]}, {"t": [0.9, 1.0, 1.1, 2.1]}, [m])
+        self.assertEqual(r.returncode, 0, r.stdout)
+        r = self.run_compare({"t": [0.9, 1.0, 1.1, 1.2]}, {"t": [3.0, 3.1, 3.2, 3.3]}, [m])
+        self.assertEqual(r.returncode, 1, r.stdout)
+
     def test_too_few_samples_only_warn(self):
         m = self.metric(stat="median", budget=0.05)
         r = self.run_compare({"t": [90]}, {"t": [99]}, [m])

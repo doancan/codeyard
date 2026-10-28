@@ -34,7 +34,7 @@ trap '[ -n "$pid" ] && kill "$pid" 2>/dev/null; rm -rf "$TMP"' EXIT
 trap 'exit 130' INT TERM
 . scripts/perf/footprint.sh
 
-cargo build --release -q -p app
+cargo build --release -q -p app -p cyx
 cp target/release/codeyard "$OUT/codeyard-candidate"
 names=(candidate)
 commits=("$(git rev-parse HEAD)")
@@ -58,12 +58,33 @@ elif [ "$aa" = 1 ]; then
   versions+=("${versions[0]}")
 fi
 
-# A fresh profile per start: no recent folders, no restored tabs, no first-run question, no Dock icon.
+# A fresh profile per start: no recent folders, no restored tabs, no first-run question, no Dock icon. With PROFILE_FROM
+# set, a copy of that prepared profile instead.
 fresh_profile() {
   rm -rf "$TMP/state" "$TMP/config"
+  if [ -n "${PROFILE_FROM:-}" ]; then
+    cp -R "$PROFILE_FROM/state" "$TMP/state"
+    cp -R "$PROFILE_FROM/config" "$TMP/config"
+    return
+  fi
   mkdir -p "$TMP/config"
   printf '{"update.check":"manual"}\n' > "$TMP/config/settings.jsonc"
 }
+
+# A profile with 100 installed extensions (themes made by `cyx new`), built once per run with the candidate.
+EXT_PROFILE="$TMP/ext-profile"
+mkdir -p "$EXT_PROFILE/config" "$EXT_PROFILE/state" "$TMP/gen"
+printf '{"update.check":"manual"}\n' > "$EXT_PROFILE/config/settings.jsonc"
+CYX="$PWD/target/release/cyx"
+for n in $(seq 1 100); do
+  (cd "$TMP/gen" && "$CYX" new theme "t$n" --publisher perf >/dev/null)
+  "$CYX" package "$TMP/gen/t$n" -o "$TMP/gen/t$n.cyx" >/dev/null
+done
+install_args=()
+for f in "$TMP"/gen/*.cyx; do install_args+=(--install-extension "$f"); done
+CODEYARD_CONFIG_DIR="$EXT_PROFILE/config" CODEYARD_STATE_DIR="$EXT_PROFILE/state" "$OUT/codeyard-candidate" "${install_args[@]}" >/dev/null
+installed=$(grep -c '"digest"' "$EXT_PROFILE/config/extensions.lock.jsonc" 2>/dev/null || echo 0)
+[ "$installed" = 100 ] || { echo "perf: the extension profile has $installed extensions, not 100" >&2; exit 1; }
 launch() { # app args... (background; $! is the pid)
   local app=$1; shift
   CODEYARD_STATE_DIR="$TMP/state" CODEYARD_CONFIG_DIR="$TMP/config" CODEYARD_NO_DOCK_ICON=1 "$app" "$@" >/dev/null 2>&1 &
@@ -93,9 +114,11 @@ for i in $(seq 1 "$runs"); do
   for k in "${order[@]}"; do
     case "$untimed" in *" $k "*) continue ;; esac
     export CODEYARD_PERF="$TMP/${names[$k]}.jsonl"
-    before=$(count startup.first_frame_ms "$CODEYARD_PERF")
-    run_scripted "$OUT/codeyard-${names[$k]}"
-    if [ "$(count startup.first_frame_ms "$CODEYARD_PERF")" != $((before + 1)) ]; then
+    # The welcome screen with nothing installed: its startup marks, not the (empty) extension load.
+    : > "$TMP/welcome.jsonl"
+    CODEYARD_PERF="$TMP/welcome.jsonl" run_scripted "$OUT/codeyard-${names[$k]}"
+    grep -v '"startup.extensions_ms"' "$TMP/welcome.jsonl" >> "$CODEYARD_PERF" || true
+    if [ "$(count startup.first_frame_ms "$TMP/welcome.jsonl")" != 1 ]; then
       if [ "$i" = 1 ] && [ "${names[$k]}" = baseline ]; then
         echo "perf: the baseline has no CODEYARD_PERF hooks; it is compared on memory only" >&2
         untimed="$untimed$k "
@@ -114,6 +137,10 @@ for i in $(seq 1 "$runs"); do
       exit 1
     fi
     grep '"typing\.' "$TMP/typing.jsonl" >> "$CODEYARD_PERF" || true
+    # 100 installed extensions: only the time to load them counts.
+    : > "$TMP/ext.jsonl"
+    CODEYARD_PERF="$TMP/ext.jsonl" PROFILE_FROM="$EXT_PROFILE" run_scripted "$OUT/codeyard-${names[$k]}"
+    grep '"startup.extensions_ms"' "$TMP/ext.jsonl" >> "$CODEYARD_PERF" || true
   done
   printf '\rperf: timing run %s/%s' "$i" "$runs" >&2
 done

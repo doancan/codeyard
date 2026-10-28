@@ -106,17 +106,19 @@ impl Workbench {
         }
         let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
         if let Some((spath, kpath)) = &paths {
-            self.cfg.stamp = (mtime(spath), mtime(kpath), mtime(&spath.with_file_name(crate::ext::LOCK_FILE)));
+            self.cfg.stamp = (mtime(spath), mtime(kpath), mtime(&spath.with_file_name(crate::ext::LOCK_FILE)), crate::ext::dev_stamp());
         }
-        // Installed extensions first: every reader below takes its entries from them.
+        let kpath = paths.as_ref().map(|(_, k)| k.clone());
+        let file = paths.as_ref().and_then(|(s, _)| std::fs::read_to_string(s).ok());
+        // Installed extensions first: every reader below takes its entries from them. Only the user's own file can turn
+        // them off (`extensions.enabled`), not a project's.
+        let ext_enabled = file.as_deref().is_none_or(|f| settings::parse_layers(f, &[]).map_or(true, |(s, _)| s.extensions_enabled));
         let ext_before = crate::ext::schema_entries();
-        let mut ext_problems = crate::ext::reload(self.cfg.dir.as_deref());
+        let mut ext_problems = crate::ext::reload_with(self.cfg.dir.as_deref(), ext_enabled);
         let ext_schemas_changed = ext_before != crate::ext::schema_entries();
         if self.cfg.dir.is_some() {
             self.reload_user_themes();
         }
-        let kpath = paths.as_ref().map(|(_, k)| k.clone());
-        let file = paths.as_ref().and_then(|(s, _)| std::fs::read_to_string(s).ok());
         let layers: Vec<settings::Layer> = self.cfg.project.iter().map(|(n, t, w)| (n.as_str(), t.as_str(), *w)).collect();
         self.cfg.dirty = false;
         // If the user turned the gate off in their own file (even if not applied yet), every folder is trusted.
@@ -183,6 +185,9 @@ impl Workbench {
         cx.set_global(new.clone());
         if !new.web_preview_enabled {
             self.stop_web_preview(cx);
+        } else if self.web_preview_needs_restart(&new.web_preview) {
+            self.stop_web_preview(cx);
+            self.open_web_preview(window, cx);
         }
         if new.docker_enabled && !old.docker_enabled {
             self.sync_container_monitor(cx);
@@ -259,6 +264,7 @@ impl Workbench {
             self.warn_low_contrast(window, cx);
         }
         self.sync_settings_page(cx);
+        self.sync_extensions_view();
         window.refresh();
         cx.notify();
     }
@@ -304,7 +310,7 @@ impl Workbench {
                         let Some((spath, kpath)) = this.config_paths() else { return };
                         let lpath = spath.with_file_name(crate::ext::LOCK_FILE);
                         let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
-                        if this.cfg.dirty || (mtime(&spath), mtime(&kpath), mtime(&lpath)) != this.cfg.stamp {
+                        if this.cfg.dirty || (mtime(&spath), mtime(&kpath), mtime(&lpath), crate::ext::dev_stamp()) != this.cfg.stamp {
                             this.reload_config(window, cx);
                         }
                     })
