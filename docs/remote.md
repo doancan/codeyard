@@ -22,6 +22,9 @@ files, search, terminals, git and language servers goes through that one interfa
   local extraction or extra download is needed. Embedded agents take precedence over old sidecar files; an explicit
   `CODEYARD_AGENT_DIR` can override them for development. They ship inside the app's normal signed update.
 - `Remote: Test SSH Connection…` reports reachability, architecture and whether a matching agent is bundled.
+- Workspaces are identified by both host and folder path. Switching servers resets the editor even when their
+  absolute folder paths match, and each server keeps its own saved tabs. Disconnect saves that session and clears
+  its folders, Git state, language servers and project settings from the window.
 
 ## Authentication prompts
 

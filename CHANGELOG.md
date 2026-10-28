@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and a custom served folder. Options appear under Modules, belong to user settings, and restart an active preview when changed.
   *Web Preview: Copy URL* copies the authenticated launch link for use in another browser or device.
 
+- Four built-in dark themes: Catppuccin Mocha, Tokyo Night, Gruvbox Dark and GitHub Dark, with complete colour roles
+  and WCAG AA contrast across all 103 text and UI pairs before runtime adjustment.
 - Accessible Source Control change groups, commit message and commit state, file diffs, Stage/Unstage actions and live
   operation results. Hidden Explorer trees no longer appear in the accessibility tree, and stale file actions resolve paths again.
 - Cargo target discovery for automatic Rust debugging: virtual workspaces, multiple binaries, examples, required features
@@ -67,6 +69,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Releases are gated on performance instead of app size: `scripts/perf` compares startup, typing latency and memory with
+  the previous release and blocks regressions beyond their budget. The app binary size limit is removed; the SSH agent keeps
+  its limit.
 - Sync no longer asks before it pulls or pushes: `git.confirmSync` now defaults to `false` (turn it on in your own settings to
   get the question back). The status bar keeps the ↓/↑ counts visible at every width, marks a branch with uncommitted changes
   with `*` and says "Publish Branch" for an unpublished branch.
@@ -80,6 +85,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preventing pathname replacement races. Each file now needs one agent request, reducing SSH round trips;
   directory and session redirects preserve URL query parameters.
 
+- Opening or selecting a file restores a maximized terminal panel to its previous size so the editor is visible.
+- Picker inputs support Select All, Copy, Cut and Paste, including remote folder paths and SSH password paste.
+- Switching SSH hosts resets the workspace even when both servers use the same folder path, and preserves the
+  previous server's saved tabs. Disconnecting clears remote folders, Git state and project settings without overwriting its session.
+- The empty Explorer's workspace link stays on one line in narrow sidebars.
 - Run and Debug shows an automatic session's real name; without a launch file its selector says "Auto-detect project"
   instead of claiming there are no configurations.
 - Debugging saves workspace buffers before building or starting, honors format-on-save, and cancels on save errors,

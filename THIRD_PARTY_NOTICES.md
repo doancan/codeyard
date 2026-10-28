@@ -67,6 +67,44 @@ Nord needs a caveat. The Nord repository's licence file was not read; only the `
 
 The Quarry theme (`quarry.json`) and the Codeyard One theme (`codeyard-one.json`, drawn from the colours of the Codeyard icon: graphite and mint) are original palettes written for this project and are not derived from any other theme.
 
+The following additional palettes are mapped onto Codeyard's colour roles, with selection, text and status colours
+adjusted for contrast. They are adaptations, not exact copies of the upstream editor themes:
+
+- Catppuccin Mocha: [Catppuccin palette](https://github.com/catppuccin/palette), MIT,
+  Copyright (c) 2021 Catppuccin.
+- Tokyo Night: [Tokyo Night](https://github.com/tokyo-night/tokyo-night-vscode-theme), MIT,
+  Copyright (c) 2018-present Enkia.
+- Gruvbox Dark: [Gruvbox](https://github.com/morhetz/gruvbox), by morhetz. The upstream README declares MIT/X11;
+  the palette comes from `colors/gruvbox.vim`.
+- GitHub Dark: [GitHub's VS Code theme](https://github.com/primer/github-vscode-theme) and Primer,
+  MIT, Copyright (c) 2020 Primer; the Primer primitives attribution above also applies.
+
+MIT permission and warranty notice for these palette adaptations:
+
+```text
+Copyright (c) 2021 Catppuccin
+Copyright (c) 2018-present Enkia
+Copyright (c) 2020 Primer
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## Spell-check dictionary
 
 `crates/spell/dicts/en/` holds the `en_US` Hunspell dictionary derived from SCOWL (Spell Checker Oriented Word

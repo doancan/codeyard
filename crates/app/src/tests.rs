@@ -831,7 +831,7 @@ fn markdown_readme_lists_shape_at_readable_width(cx: &mut TestAppContext) {
     cx.run_until_parked();
     let check = || {
         let layouts = crate::markdown::text_layouts_for_test();
-        let list = layouts.iter().find(|layout| layout.text().starts_with("No extensions.")).expect("README list paragraph rendered");
+        let list = layouts.iter().find(|layout| layout.text().starts_with("Complete core, optional extensions.")).expect("README list paragraph rendered");
         assert!(list.wrapped_text().lines().all(|line| line.chars().count() > 1), "list must not wrap character by character: {:?}", list.wrapped_text());
         assert!(list.wrapped_text().lines().count() < 12, "list should wrap to a few lines: {:?}", list.wrapped_text());
     };

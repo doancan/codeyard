@@ -155,6 +155,8 @@ folder); holding ⌘ underlines what can be opened. Drag to select, double-click
 to extend; ⌘C copies. On keyboard layouts without a reachable \` key (Turkish Q, German),
 use ⌘J or bind `terminal.toggle` yourself (below).
 
+Opening a file from Explorer or Quick Open restores a maximized terminal panel to its previous size and shows the editor.
+
 Terminal line editing works as in Terminal.app: ⌘← / ⌘→ jump to the start / end of the line, ⌥← / ⌥→ move by word,
 ⌘⌫ deletes to the start of the line, ⌘⌦ to its end and ⌥⌦ the next word (these are the shell's own keys, Ctrl+A, Ctrl+E,
 Esc b…, so they work in bash, zsh and fish; full-screen programs such as vim get the plain keys). ⌘F finds in the output and
@@ -269,8 +271,8 @@ and applies at once. A dot marks values that differ from the default, "Reset" re
 
 Make it yours:
 
-- **Colors:** pick one of 19 themes (the plain defaults Codeyard Dark and Codeyard Light, Codeyard One, Studio Dark, Midnight, Graphite, Ember, Fjord, Quarry,
-  Dracula, One Dark, Nord, Solarized Dark/Light, GitHub Light, Daylight, Paper, high contrast…),
+- **Colors:** pick one of 23 themes (the plain defaults Codeyard Dark and Codeyard Light, Codeyard One, Studio Dark, Midnight, Graphite, Ember, Fjord, Quarry,
+  Dracula, One Dark, Nord, Solarized Dark/Light, GitHub Dark/Light, Catppuccin Mocha, Tokyo Night, Gruvbox Dark, Daylight, Paper, high contrast…),
   change single colors with `"workbench.colorCustomizations": { "accent": "#ff8800",
   "[Quarry]": { "syntax-string": "#a6e22e" } }` (roles are the names in the theme files; an
   entry in `[brackets]` applies to that theme only), or "Theme: Save Current Colors as User
@@ -503,7 +505,8 @@ Enter keeps the theme, Esc goes back. "Auto" follows the system light/dark setti
 
 Built in: Codeyard Dark and Codeyard Light (the defaults, following the system appearance), Codeyard One (graphite and mint, the colours of
 the icon), Studio Dark, Midnight,
-Graphite, Ember, Fjord, Quarry, Dracula, One Dark, Nord, Solarized Dark, Solarized Light, GitHub Light, Daylight, Paper,
+Graphite, Ember, Fjord, Quarry, Dracula, One Dark, Nord, Solarized Dark, Solarized Light, GitHub Dark, GitHub Light,
+Catppuccin Mocha (pastel mauve), Tokyo Night (indigo and blue), Gruvbox Dark (warm charcoal and amber), Daylight, Paper,
 High Contrast Dark and High Contrast Light. Every built-in theme passes WCAG AA for all text and UI pairs
 (`cargo test -p theme`).
 
@@ -611,6 +614,10 @@ connection indicator, "Connect to SSH Host…" in the menus, the Welcome screen 
 Connect to Host or Switch Workspace…") all open this same switcher; there is no separate hosts panel.
 A folder that is already open in another window brings that window to the front. Windows reopen at their last
 size and place.
+
+Picker inputs support Select All, Copy, Cut and Paste (⌘A/C/X/V on macOS, Ctrl+A/C/X/V on Windows).
+Use Select All before typing or pasting a replacement path in the SSH folder picker. Password inputs accept paste;
+copy and cut leave the password hidden.
 
 Star files and folders ("Add to Favorites" in the tree's menu) to keep them in the Favorites
 section of the explorer and at the top of ⌘P. Bookmarks (⌥⌘K) mark lines; "Bookmarks: List…"

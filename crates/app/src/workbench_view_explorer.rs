@@ -198,6 +198,8 @@ impl Workbench {
                         .child(
                             div()
                                 .id("explorer-recent")
+                                .w_full()
+                                .text_ellipsis()
                                 .cursor_pointer()
                                 .text_color(c(p.accent))
                                 .hover(|d| d.underline())

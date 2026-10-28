@@ -2,6 +2,10 @@
 
 use super::*;
 
+#[cfg(test)]
+#[path = "workbench_panel_tests.rs"]
+mod panel_tests;
+
 impl Workbench {
     /// Zoom: editor and terminal font size (for the session; applied on top if the
     /// settings file changes).
@@ -233,6 +237,7 @@ impl Workbench {
 
     /// Open the image in a preview (read-only tab, replacing the previous one).
     pub(super) fn open_image(&mut self, path: String, format: gpui::ImageFormat, window: &mut Window, cx: &mut Context<Self>) {
+        self.chrome.panel_max = false;
         self.record_nav(cx);
         self.remember_file(&path);
         let host = self.remote.host.clone();
@@ -247,6 +252,7 @@ impl Workbench {
 
     /// Open a large file in a read-only view (replacing the previous one).
     pub(super) fn open_large(&mut self, path: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.chrome.panel_max = false;
         let host = self.remote.host.clone();
         let view = cx.new(|cx| crate::large::LargeFileView::new(host, path, cx));
         view.update(cx, |v, cx| {
