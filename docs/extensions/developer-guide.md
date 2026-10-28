@@ -23,6 +23,7 @@ Themes, snippets, keymaps, languages, schemas and language servers today; comman
    cyx new theme my-theme       # or: snippets, keymap, language, language-server
    cd my-theme
    ```
+   Or, without a terminal: **Extensions: New Extension…** in the palette asks for the kind, the name and a folder, then loads the new extension in this window, ready to edit.
 3. **Run.**
    ```sh
    cyx dev

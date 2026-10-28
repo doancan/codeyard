@@ -767,3 +767,17 @@ impl Workbench {
         super::cyx_glue::install_link(target, dirs)
     }
 }
+
+impl Workbench {
+    /// What `create_extension` does once `cyx new` has finished.
+    #[cfg(unix)]
+    pub fn finish_create_extension_for_test(&mut self, ok: bool, stderr: &str, dir: std::path::PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+        use std::os::unix::process::ExitStatusExt;
+        let out = std::process::Output {
+            status: std::process::ExitStatus::from_raw(if ok { 0 } else { 1 << 8 }),
+            stdout: Vec::new(),
+            stderr: stderr.as_bytes().to_vec(),
+        };
+        self.finish_create_extension(Ok(out), dir, window, cx);
+    }
+}

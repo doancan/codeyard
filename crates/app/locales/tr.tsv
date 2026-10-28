@@ -2847,3 +2847,15 @@ Run Codeyard commands: {}	Codeyard komutlarını çalıştırma: {}
 {} contains code; this version of Codeyard runs data-only extensions (themes, snippets, keymaps, languages, schemas, language servers)	{} kod içeriyor; Codeyard’ın bu sürümü yalnızca veri eklentilerini çalıştırır (temalar, snippet’ler, kısayol düzenleri, diller, şemalar, dil sunucuları)
 {} contains code, which this version does not run	{} kod içeriyor; bu sürüm kodu çalıştırmaz
 Load installed extensions (off: Codeyard starts as if none were installed)	Kurulu eklentileri yükle (kapalı: Codeyard hiç eklenti kurulu değilmiş gibi açılır)
+Extensions: New Extension…	Eklentiler: Yeni Eklenti…
+Create	Oluştur
+Name of the new extension, like my-theme	Yeni eklentinin adı, örneğin my-theme
+Color theme	Renk teması
+Snippets	Snippet’ler
+Keymap preset	Kısayol düzeni
+Language	Dil
+Language server	Dil sunucusu
+What kind of extension?	Ne tür bir eklenti?
+Create Here	Buraya Oluştur
+{} is loaded as an extension in development: save a file to reload it	{} geliştirilen eklenti olarak yüklendi: yeniden yüklemek için bir dosyayı kaydedin
+Could not create the extension: {}	Eklenti oluşturulamadı: {}

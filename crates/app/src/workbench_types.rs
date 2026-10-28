@@ -11,6 +11,8 @@ pub(super) enum OverlayKind {
     },
     /// "Insert Snippet…": snippets for the active file's language.
     Snippets(Vec<crate::snippets::Snippet>),
+    /// "Extensions: New Extension…": which kind to scaffold.
+    NewExtensionKind,
     /// File icon theme picker; the theme to revert to on Esc.
     IconTheme {
         original: crate::icon_theme::IconTheme,
@@ -255,6 +257,10 @@ pub(super) enum InputPurpose {
     },
     CloneTarget {
         url: String,
+    },
+    /// The name of a new extension of this kind (`cyx new <kind>`).
+    NewExtension {
+        kind: &'static str,
     },
     /// New branch / tag from a commit in the graph.
     CommitBranch {

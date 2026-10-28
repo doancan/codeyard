@@ -123,6 +123,7 @@ registry! {
     "workbench.switchEditor" => wb::SwitchEditor,
     "workbench.toggleZenMode" => wb::ToggleZenMode,
     "extensions.installCyx" => wb::InstallCyx,
+    "extensions.newExtension" => wb::NewExtension,
     "workbench.toggleFullScreen" => wb::ToggleFullScreen,
     "search.findTodos" => wb::FindTodos,
     // --- structural ---

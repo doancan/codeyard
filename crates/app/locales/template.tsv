@@ -251,6 +251,7 @@ Color Theme
 Color Theme…	
 Color matching brackets by nesting depth	
 Color symbols by their meaning, from the language server	
+Color theme	
 Color theme of the whole window and the editor	
 Color theme: {}	
 Colored file glyphs, folders with only their arrow; names line up	
@@ -382,6 +383,7 @@ Could not change {}
 Could not compare: {}	
 Could not connect to {}: nothing is listening there, or a firewall blocks it (the request ran on {}).	
 Could not connect to {}: {}	
+Could not create the extension: {}	
 Could not create the scratch file: {}	
 Could not create {0}: {1}	
 Could not create {}: {}	
@@ -442,9 +444,11 @@ Could not write {0}: {1}
 Could not write {}: {}	
 Couldn't check for updates	
 Couldn't download the update	
+Create	
 Create Branch Here…	
 Create Branch…	
 Create Dev Container…	
+Create Here	
 Create Tag Here…	
 Create Tag…	
 Create a launch configuration	
@@ -748,6 +752,7 @@ Extensions off
 Extensions: Install cyx Command in PATH	
 Extensions: Install from File…	
 Extensions: Install from Folder…	
+Extensions: New Extension…	
 Extensions: Show Extensions	
 External image: open the link to view it.	
 F4 steps through the search results, ⇧F4 goes back.	
@@ -1043,15 +1048,18 @@ Key login is set up for “{}”. The next connection needs no password.
 Key login was already set up for “{}” (created {}). The next connection needs no password.	
 Key login was already set up for “{}”. The next connection needs no password.	
 Keyboard Shortcuts	
+Keymap preset	
 Keymap preset from an installed extension, as publisher.name/label (empty: Codeyard's own keys)	
 Keymap preset: {}	
 Kill All Terminals	
 Kill Terminal	
+Language	
 Language Badges	
 Language mode for this file	
 Language of Uppercase / Lowercase / Title Case: auto (Turkish rules when the text has ı İ ş ğ), tr (i ↔ İ, ı ↔ I) or en	
 Language of the menus, command palette, Welcome screen, status bar, Source Control, Explorer, Settings page chrome, file operations and Git prompts (the user guide lists exactly what is translated; the rest stays English): auto (the system language) or a language code, en or tr. Your own settings only; a folder cannot change it	
 Language of the pattern (click for the next one)	
+Language server	
 Language server: {0} for {1}	
 Language servers are off in “{}” until you trust it: they can run the project's build scripts. Run “Workspace: Trust This Folder”.	
 Language: {0} ({1})	
@@ -1160,6 +1168,7 @@ Name
 Name of the new branch (from the current one)	
 Name of the new branch (starts at this commit)	
 Name of the new branch (starts at {})	
+Name of the new extension, like my-theme	
 Name of the new file	
 Name of the new folder	
 Name of the new theme (it joins the theme list)	
@@ -1821,6 +1830,7 @@ Signature not verified: the token is only decoded, not checked
 Skip This Version	
 Skip Those Files	
 Small colored badges with the language's letters	
+Snippets	
 Snippets for {}	
 Snippets reloaded	
 Snippets: Insert Snippet…	
@@ -2206,6 +2216,7 @@ Web Preview: {}
 Wednesday	
 Welcome	
 Welcome (no recent folders yet)	
+What kind of extension?	
 What opens at start: welcome (the start page), continue (where you left off, SSH hosts included) or blank (an empty window)	
 What runs after a commit: nothing, push or sync. Your own settings only; a folder cannot change it	
 When the close button of a tab shows	
@@ -2595,6 +2606,7 @@ your words
 {} is already in the workspace.	
 {} is disabled.	
 {} is enabled.	
+{} is loaded as an extension in development: save a file to reload it	
 {} is not a setting of an installed extension	
 {} is not a trusted folder, so nothing is deleted from it. Open it as a folder and trust it first.	
 {} is not a trusted folder, so nothing is written to it. Open it as a folder and trust it first.	
