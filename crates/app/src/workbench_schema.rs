@@ -45,11 +45,14 @@ impl Workbench {
             }
             return;
         }
-        let user = settings.schema_associations.clone();
+        // The user's own mappings first (the first match wins), then what installed extensions contribute.
+        let mut user = settings.schema_associations.clone();
+        user.extend(crate::ext::schema_entries());
         let root = self.root(cx);
         let host = ed.read(cx).host_arc();
         let files: Option<Arc<dyn schema::store::FileSource>> = host.is_remote().then(|| Arc::new(HostFiles(host)) as Arc<dyn schema::store::FileSource>);
         let svc = self.schema_service(cx);
+        svc.set_local_only(crate::ext::package_dirs());
         svc.store.set_download(settings.schema_download && !cfg!(test));
         // A `$schema` in an untrusted folder must not make us fetch from an arbitrary server.
         svc.store.set_restricted(root.as_deref().is_some_and(|r| !self.is_trusted_root(r, cx)));

@@ -68,7 +68,12 @@ cyx import-vscode ./my-vscode-theme     # a folder or a .vsix
 
 It converts everything it can and lists anything it could not convert.
 
-The same goes for other no-code contributions: `keymap-preset`, `keybindings`, `languages`, `json-schemas`, `yaml-schemas`, `settings` and `language-servers`.
+The same goes for other no-code contributions: `keymap-preset`, `keybindings`, `languages`, `json-schemas`, `yaml-schemas`, `settings` and `language-servers`. A few rules keep them predictable:
+
+- A key binding never takes a key a built-in shortcut uses; Codeyard leaves it out and says so. A keymap preset may, because the user picks it (`"keymap.preset": "you.emacs/Emacs"`).
+- A language you add applies to files no built-in language claims. It can borrow a built-in grammar for highlighting (`grammar = "toml"`).
+- A language server is a program on `PATH` where the files are, so it works over SSH too.
+- Start Codeyard with `--no-extensions` to rule your extension out when something looks wrong.
 
 ## Your first command
 
