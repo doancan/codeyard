@@ -30,6 +30,9 @@ the 2026-10-27 local run passed 1,516 tests, with three documented manual/data-d
   - the terminal stream in random chunks.
   The protocol crate decodes mutated frames in both directions. Two tests drive the terminal with hostile output while
   scrolled back.
+  The extension crates (`crates/ext-*`, `fuzz_tests.rs`) parse what strangers publish, so they also run longer:
+  `.github/workflows/fuzz.yml` keeps their fuzz tests going for 10 minutes on every pull request that touches them and
+  4 hours every night, with a new seed each run (`CODEYARD_FUZZ_SECS`, `CODEYARD_FUZZ_SEED`).
 - **Random sessions**: `CODEYARD_QA_SEEDS=N cargo test … qa_random_new_commands_many_seeds` types random keys and
   commands, then undoes everything and checks the original text, then redoes and checks the edited text.
 

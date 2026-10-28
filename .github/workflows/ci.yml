@@ -188,7 +188,7 @@ jobs:
         with:
           shared-key: ci-linux
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
-      - run: cargo test --locked -p proto -p agent -p host -p buffer -p state -p syntax -p theme
+      - run: cargo test --locked -p proto -p agent -p host -p buffer -p state -p syntax -p theme -p ext-manifest
       # The shipped Linux agents are built with cargo-zigbuild (release.yml, docs/releasing.md), so the size gate builds
       # the same way. A plain `cargo build` with the system linker produces a static-PIE (+170 KB of relocations) and
       # measures ~1.7 MB: not the artifact users get. pip installs cargo-zigbuild together with zig.
