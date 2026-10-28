@@ -1574,6 +1574,7 @@ Run to Cursor
 Running	
 Running the program in a terminal is not supported on Windows yet: use {} in the configuration.	
 Running…	
+Rust formatters not loaded: {}	
 Rust: Expand Macro Recursively	
 Rust: Locate Parent Module	
 Rust: Open Cargo.toml	
@@ -2165,6 +2166,7 @@ failed
 fetches {} from {}	
 field	
 file	
+files not found in the toolchain	
 files.associations.{}: expected a language name or extension	
 files.autoSave: unknown value {} (off, afterDelay, onFocusChange)	
 flatten depth must not be negative	
@@ -2249,6 +2251,7 @@ request failed
 review needed	
 right	
 running	
+rustc not found	
 seconds	
 send the request named “{}” first	
 sends {} to {}	
