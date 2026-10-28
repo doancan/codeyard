@@ -204,9 +204,13 @@ URL on a `net` host.
 
 One function, `risk(permission_set)` in `ext-manifest`, decides everything risk-related: whether `why` is
 required, the banner on the consent sheet, whether the registry needs human review, and what
-`cyx publish --dry-run` prints. Something that reads (wide `read`, `clipboard` read, `secrets`, `auth`)
-combined with something that sends (`net`, `run`, `write`, `terminal`) is High. Any `run` counts as "can run
-code as you". Authors never see the levels, only the sheet that `--dry-run` prints.
+`cyx publish --dry-run` prints. Something that reads private data (a wide `read`, a `read` of credential files
+such as `.env*`, `.git/` or keys, `clipboard` read, `secrets`, `auth`) combined with something that sends (`net`,
+`run`, `write`, `terminal`) is High. Anything that can run code as the user is High: `run`, `terminal`, and
+`write` to anything wide or to files other tools execute (hooks, build files, editor tasks). A glob is wide when
+it has `**`, a wildcard in a folder part, or a file part other than `name*.ext`. Text shown on the sheet may not
+contain control, bidirectional or zero-width characters. Authors never see the levels, only the sheet that
+`--dry-run` prints.
 
 Interpreters and shells (`sh`, `node`, `python`, …) are allowed only when the script they run ships inside the
 signed package; a language server wrapper is therefore a normal High-risk extension, not a special case.
@@ -361,9 +365,9 @@ code has a fix line, a docs anchor and a test.
 There is no app binary size budget. Sizes are recorded each release for information.
 
 Each release builds the previous tag and the candidate on the reference Mac and runs them interleaved, 20 runs
-each. A metric blocks the release when it regresses past its budget and beyond the noise floor measured by an
-A/A run, or crosses its ceiling. Statistics and the metric catalogue (`perf/metrics.toml`) are described in
-`scripts/perf/README.md`. PRs gate only on deterministic metrics; nightly runs open issues; Windows rows are
+each. A metric blocks the release when it regresses past its budget and beyond the noise of the baseline (a
+bootstrap interval of the same statistic), or crosses its ceiling; `--aa` checks the machine's noise. Statistics
+and the metric catalogue (`perf/metrics.json`) are described in `scripts/perf/README.md`. PRs gate only on deterministic metrics; nightly runs open issues; Windows rows are
 `warn` until there is a physical Windows reference machine. Ceilings are provisional until the first baseline,
 then set to `min(stated, baseline × 1.25)` and only lowered. A waiver is one line in the release notes.
 `CODEYARD_PERF=<file>` writes spans locally; when off, a span costs one relaxed atomic load.
