@@ -260,6 +260,9 @@ impl Render for Workbench {
             .on_action(cx.listener(|this, _: &ShowSettings, window, cx| this.show_settings_picker(window, cx)))
             .on_action(cx.listener(|this, _: &ShowKeyboardShortcuts, window, cx| this.show_shortcuts_picker(window, cx)))
             .on_action(cx.listener(|this, _: &CopyFullDiagnostic, _, cx| this.copy_full_diagnostic(cx)))
+            .on_action(cx.listener(Self::rust_expand_macro))
+            .on_action(cx.listener(Self::rust_parent_module))
+            .on_action(cx.listener(Self::rust_open_cargo_toml))
             .on_action(cx.listener(|this, _: &RestartLanguageServers, _, cx| {
                 this.restart_lsp(cx);
                 this.notice = Some(Notice::Info(crate::i18n::t("Restarting language servers…").into()));

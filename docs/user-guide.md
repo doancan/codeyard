@@ -797,6 +797,12 @@ in Problems they are rows under the problem; a click opens the place. The proble
 `-->` arrows, notes and help, ready to paste into a question or a search. When a server repeats those places as hints of
 their own, Problems shows them once, under their problem.
 
+In a Rust file, three commands ask rust-analyzer directly. *Rust: Expand Macro Recursively* opens what the macro at the
+cursor expands to in a scratch tab (`vec!.expansion.rs`, with Rust highlighting and no problems of its own: scratches get no
+language server). *Rust: Locate Parent Module* jumps to the `mod` line that includes the current file. *Rust: Open
+Cargo.toml* opens the manifest of the crate the file belongs to, a member's own in a workspace. They have no default keys;
+bind them in `keybindings.jsonc` (`rust.expandMacro`, `rust.parentModule`, `rust.openCargoToml`).
+
 Besides errors, suggestions, hover and definition: rename (F2), references (⇧F12), symbols
 in the file (⇧⌘O), quick fixes (⌘.), format (⇧⌥F, or `"editor.formatOnSave": true`) and
 parameter hints while typing a call. `"editor.codeActionsOnSave": { "source.organizeImports":

@@ -857,6 +857,7 @@ This language server does not support subtypes	Bu dil sunucusu alt türleri dest
 {} outgoing call|{} outgoing calls	{} giden çağrı
 {} supertype|{} supertypes	{} üst tür
 {} subtype|{} subtypes	{} alt tür
+{} parent module|{} parent modules	{} üst modül
 No symbols in this file	Bu dosyada sembol yok
 Go to symbol in file	Dosyada sembole git
 No language server is running. Open a file of the language first.	Çalışan bir dil sunucusu yok. Önce bu dilde bir dosya açın.
@@ -971,6 +972,14 @@ No output yet. Language server logs appear here.	Henüz çıktı yok. Dil sunucu
 No problems. Language servers start when you open a file.	Sorun yok. Dil sunucuları bir dosya açtığınızda başlar.
 No problems.	Sorun yok.
 Problems: Copy Full Diagnostic	Sorunlar: Tanının Tamamını Kopyala
+Rust: Expand Macro Recursively	Rust: Makroyu Özyinelemeli Genişlet
+Rust: Locate Parent Module	Rust: Üst Modülü Bul
+Rust: Open Cargo.toml	Rust: Cargo.toml Dosyasını Aç
+Open a Rust file first	Önce bir Rust dosyası açın
+No macro at the cursor	İmleçte makro yok
+No parent module found	Üst modül bulunamadı
+No Cargo.toml found for this file	Bu dosya için Cargo.toml bulunamadı
+The Rust language server does not support this command	Rust dil sunucusu bu komutu desteklemiyor
 Diagnostic copied	Tanı kopyalandı
 No problem at the cursor	İmleçte sorun yok
 line {0}: {1}	satır {0}: {1}

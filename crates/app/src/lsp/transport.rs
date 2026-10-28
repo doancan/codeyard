@@ -128,7 +128,17 @@ pub fn merge_server_event(queue: &mut std::collections::VecDeque<ServerEvent>, e
     }
 }
 
-type Pending = Arc<Mutex<HashMap<i64, mpsc::Sender<Result<Value, String>>>>>;
+/// A failed request: the server's error (with its code) or no answer at all (`code: None`).
+#[derive(Debug, Clone, PartialEq)]
+pub struct RpcError {
+    pub code: Option<i64>,
+    pub message: String,
+}
+
+/// The server does not have the method (rust-analyzer's extensions on another server, or an older version).
+pub const METHOD_NOT_FOUND: i64 = -32601;
+
+type Pending = Arc<Mutex<HashMap<i64, mpsc::Sender<Result<Value, RpcError>>>>>;
 
 /// The `settings` tree of a running server, swapped whole when the settings file changes; the reader thread answers
 /// `workspace/configuration` from whatever is current.
@@ -179,11 +189,12 @@ impl Client {
                         ProcEvent::Exit(code) => {
                             alive.store(false, Ordering::Relaxed);
                             for (_, tx) in pending.lock().unwrap().drain() {
-                                let _ = tx.send(Err(match code {
+                                let message = match code {
                                     Some(127) => "not found".to_string(),
                                     Some(c) => format!("exited with code {c}"),
                                     None => "stopped".to_string(),
-                                }));
+                                };
+                                let _ = tx.send(Err(RpcError { code: None, message }));
                             }
                             let _ = events.send(ServerEvent::Exited(code));
                             break;
@@ -245,8 +256,13 @@ impl Client {
 
     /// Send a request and wait for the response (called on a background thread).
     pub fn request(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, String> {
+        self.request_raw(method, params, timeout).map_err(|e| e.message)
+    }
+
+    /// `request`, keeping the server's error code.
+    pub fn request_raw(&self, method: &str, params: Value, timeout: Duration) -> Result<Value, RpcError> {
         if !self.is_alive() {
-            return Err(crate::i18n::t("language server is not running").into());
+            return Err(RpcError { code: None, message: crate::i18n::t("language server is not running").into() });
         }
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = mpsc::channel();
@@ -256,7 +272,7 @@ impl Client {
             self.pending.lock().unwrap().remove(&id);
             // Tell the server we gave up too (so it drops the expensive work).
             self.notify("$/cancelRequest", json!({ "id": id }));
-            crate::i18n::tf("{0}: no answer from {1}", &[&method, &self.config.command])
+            RpcError { code: None, message: crate::i18n::tf("{0}: no answer from {1}", &[&method, &self.config.command]) }
         });
         result?
     }
@@ -370,7 +386,7 @@ fn route(msg: Value, pending: &Pending, events: &mpsc::Sender<ServerEvent>, host
             let Some(id) = id.as_i64() else { return };
             if let Some(tx) = pending.lock().unwrap().remove(&id) {
                 let result = match msg.get("error") {
-                    Some(e) => Err(clip_text(e["message"].as_str().unwrap_or("error"), MAX_MESSAGE_CHARS)),
+                    Some(e) => Err(RpcError { code: e["code"].as_i64(), message: clip_text(e["message"].as_str().unwrap_or("error"), MAX_MESSAGE_CHARS) }),
                     None => Ok(msg.get("result").cloned().unwrap_or(Value::Null)),
                 };
                 let _ = tx.send(result);
@@ -715,7 +731,11 @@ mod tests {
         let (rtx, rrx) = mpsc::channel();
         pending.lock().unwrap().insert(7, rtx);
         route(json!({ "id": 7, "error": { "message": big } }), &pending, &tx, &host, 0, &Arc::default());
-        assert!(rrx.try_recv().unwrap().unwrap_err().chars().count() <= MAX_MESSAGE_CHARS + 1);
+        assert!(rrx.try_recv().unwrap().unwrap_err().message.chars().count() <= MAX_MESSAGE_CHARS + 1);
+        let (rtx, rrx) = mpsc::channel();
+        pending.lock().unwrap().insert(8, rtx);
+        route(json!({ "id": 8, "error": { "code": -32601, "message": "unknown" } }), &pending, &tx, &host, 0, &Arc::default());
+        assert_eq!(rrx.try_recv().unwrap(), Err(RpcError { code: Some(METHOD_NOT_FOUND), message: "unknown".into() }), "the code is kept");
         assert_eq!(clip_text("kısa", 10), "kısa");
         assert_eq!(clip_text("şğüiö", 3), "şğü…");
     }

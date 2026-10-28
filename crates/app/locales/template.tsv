@@ -1102,6 +1102,7 @@ Next Match
 Next Problem	
 Next match (↵)	
 Next result (F4)	
+No Cargo.toml found for this file	
 No Configurations	
 No Docker contexts found. Install Docker and start its engine.	
 No SSH host connected	
@@ -1151,6 +1152,7 @@ No line comment syntax for this file type
 No lines match “{}”.	
 No log lines match the current filters.	
 No log output	
+No macro at the cursor	
 No matches	
 No matching folders	
 No merge conflicts in this file	
@@ -1161,6 +1163,7 @@ No mounted storage
 No outgoing calls found	
 No outline for this file type.	
 No output yet. Language server logs appear here.	
+No parent module found	
 No problem at the cursor	
 No problems in this file	
 No problems.	
@@ -1254,6 +1257,7 @@ Open Setup Instructions
 Open System Settings	
 Open a .http or .rest file to send requests.	
 Open a Markdown file (.md) to preview it.	
+Open a Rust file first	
 Open a file first	
 Open a file first.	
 Open a file inside a folder to run its tests.	
@@ -1570,6 +1574,9 @@ Run to Cursor
 Running	
 Running the program in a terminal is not supported on Windows yet: use {} in the configuration.	
 Running…	
+Rust: Expand Macro Recursively	
+Rust: Locate Parent Module	
+Rust: Open Cargo.toml	
 SSH Hosts	
 SSH host	
 SSH {0}: {1}. Docker must be installed and accessible to the SSH user on the remote host.	
@@ -1817,6 +1824,7 @@ Testing {}…
 Tests: {0} passed, {1} failed	
 That does not look like a repository address.	
 The JavaScript debugger is already installed.	
+The Rust language server does not support this command	
 The SSH connection is gone: reconnect to forward again	
 The TLS/SSL handshake with {} failed (certificate or protocol problem): {}	
 The Timeline section of the explorer lists the commits of the open file; click one to see its diff.	
@@ -2437,6 +2445,7 @@ your words
 {} no longer exists, so it was not reopened.	
 {} open	
 {} outgoing call|{} outgoing calls	
+{} parent module|{} parent modules	
 {} ports are forwarded	
 {} reference|{} references	
 {} result in 1 file|{} results in 1 file	

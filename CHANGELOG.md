@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Problems explain themselves: the places a language server attaches to a problem ("value moved here", "borrow later used
   here") show under it in the hover and in Problems, and a click opens them. The problem's code comes first (`E0382: …`), and
   *Problems: Copy Full Diagnostic* copies the compiler's complete message, as a terminal shows it.
+- Rust commands: *Rust: Expand Macro Recursively* shows a macro's expansion in a scratch tab, *Rust: Locate Parent Module*
+  jumps to the `mod` line that includes the file, and *Rust: Open Cargo.toml* opens the crate's manifest.
 
 ### Changed
 

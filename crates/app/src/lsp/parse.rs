@@ -439,6 +439,37 @@ pub fn parse_locations(v: &Value) -> Vec<(String, (u32, u32))> {
     }
 }
 
+/// Expansions longer than this are cut (a recursive derive can expand to megabytes).
+pub const MAX_EXPANSION: usize = 4 * 1024 * 1024;
+
+/// rust-analyzer's `rust-analyzer/expandMacro` reply → (macro name, expanded text); `None` for `null` or any other shape.
+/// Text over `MAX_EXPANSION` bytes is cut at a line and ends with a `// … (truncated)` line.
+pub fn parse_expansion(v: &Value) -> Option<(String, String)> {
+    let name = v["name"].as_str()?.trim();
+    let text = v["expansion"].as_str()?;
+    if name.is_empty() {
+        return None;
+    }
+    let text = if text.len() > MAX_EXPANSION {
+        let mut end = MAX_EXPANSION;
+        while !text.is_char_boundary(end) {
+            end -= 1;
+        }
+        let cut = text[..end].rfind('\n').map_or(end, |i| i + 1);
+        format!("{}// … (truncated)\n", &text[..cut])
+    } else {
+        text.to_string()
+    };
+    Some((name.to_string(), text))
+}
+
+/// The scratch file name for an expansion: `vec!.expansion.rs` (whether the server names it `vec` or `vec!`). Characters
+/// that do not belong in a file name become `_`.
+pub fn expansion_file_name(name: &str) -> String {
+    let safe: String = name.trim_end_matches('!').chars().take(100).map(|c| if c.is_alphanumeric() || c == '_' || c == '-' { c } else { '_' }).collect();
+    format!("{}!.expansion.rs", if safe.is_empty() { "macro" } else { &safe })
+}
+
 /// WorkspaceEdit → edits per file. `changes` and `documentChanges`
 /// (TextDocumentEdit) are supported; file create/delete/move is counted but not applied.
 pub fn parse_workspace_edit(v: &Value) -> (Vec<(String, Vec<(Range16, String)>)>, usize) {
@@ -1035,5 +1066,41 @@ mod tests {
         for only_escapes in ["\u{1b}[0m\u{1b}[1m", "\u{1b}]8;;unterminated", "  \u{1b}[31m \n"] {
             assert_eq!(diag_with(json!({ "data": { "rendered": only_escapes } })).rendered, None, "{only_escapes:?}: the copy falls back to the parts");
         }
+    }
+
+    #[test]
+    fn expansions_parse_and_are_bounded() {
+        let v = json!({ "name": "vec", "expansion": "<[_]>::into_vec(box [1, 2])" });
+        assert_eq!(parse_expansion(&v), Some(("vec".into(), "<[_]>::into_vec(box [1, 2])".into())));
+        for bad in [
+            Value::Null,
+            json!({}),
+            json!({ "name": "vec" }),
+            json!({ "expansion": "x" }),
+            json!({ "name": 5, "expansion": "x" }),
+            json!({ "name": " ", "expansion": "x" }),
+            json!([]),
+        ] {
+            assert_eq!(parse_expansion(&bad), None, "{bad}");
+        }
+        let big = "let ğ = 1;\n".repeat(MAX_EXPANSION / 10);
+        let (_, text) = parse_expansion(&json!({ "name": "big", "expansion": big })).unwrap();
+        assert!(text.len() <= MAX_EXPANSION + 20 && text.ends_with("let ğ = 1;\n// … (truncated)\n"), "{}", text.len());
+        assert_eq!(expansion_file_name("vec"), "vec!.expansion.rs");
+        assert_eq!(expansion_file_name("vec!"), "vec!.expansion.rs", "rust-analyzer 1.99 names it with the `!`");
+        assert_eq!(expansion_file_name("tokio::main"), "tokio__main!.expansion.rs");
+        assert_eq!(expansion_file_name("../x"), "___x!.expansion.rs");
+        assert_eq!(expansion_file_name(""), "macro!.expansion.rs");
+    }
+
+    /// `experimental/parentModule` answers with a Location, Location[] or LocationLink[].
+    #[test]
+    fn parent_module_replies_in_every_shape() {
+        let loc = json!({ "uri": "file:///p/src/lib.rs", "range": { "start": { "line": 3, "character": 0 }, "end": { "line": 3, "character": 8 } } });
+        let link = json!({ "targetUri": "file:///p/src/lib.rs", "targetRange": loc["range"], "targetSelectionRange": { "start": { "line": 3, "character": 4 }, "end": { "line": 3, "character": 7 } } });
+        assert_eq!(parse_locations(&loc), vec![("/p/src/lib.rs".to_string(), (3, 0))]);
+        assert_eq!(parse_locations(&json!([loc, loc])).len(), 2);
+        assert_eq!(parse_locations(&json!([link])), vec![("/p/src/lib.rs".to_string(), (3, 4))]);
+        assert!(parse_locations(&Value::Null).is_empty());
     }
 }
