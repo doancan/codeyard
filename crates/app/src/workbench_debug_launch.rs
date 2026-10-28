@@ -48,22 +48,67 @@ fn templates() -> Vec<(&'static str, serde_json::Value)> {
 }
 
 impl Workbench {
+    /// Configurations of the open folder, read in the background: `.codeyard/launch.jsonc` and `.vscode/launch.json`,
+    /// then (with `detected`) the ones found from the project (Cargo, Go, the open Python or JavaScript file).
+    pub(in crate::workbench) fn read_launch_configs(
+        &self,
+        detected: bool,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::Task<(Vec<LaunchConfig>, Vec<debug_config::Compound>)>> {
+        let (root, host) = (self.active_root(cx)?, self.remote.host.clone());
+        let trusted = self.is_trusted_root(&root, cx);
+        let file = self.active_editor().map(|e| e.read(cx).path.clone());
+        Some(cx.background_executor().spawn(async move {
+            let read = |rel: &str| host.read(&ui::join(&root, rel)).ok().map(|(d, _)| String::from_utf8_lossy(&d).into_owned());
+            let mut tasks = Vec::new();
+            for (path, source) in [(".vscode/tasks.json", ".vscode/tasks.json"), (".codeyard/tasks.jsonc", "tasks.jsonc")] {
+                if let Some(t) = read(path) {
+                    tasks.extend(super::super::tasks::parse_task_file(&t, source));
+                }
+            }
+            let (mut configs, mut compounds) = (Vec::new(), Vec::new());
+            for path in [".codeyard/launch.jsonc", ".vscode/launch.json"] {
+                if let Some(t) = read(path) {
+                    configs.extend(debug_config::parse_launch_json(&t, &root, file.as_deref(), &tasks));
+                    compounds.extend(debug_config::parse_compounds(&t, &root, file.as_deref(), &tasks));
+                }
+            }
+            if detected {
+                let cargo = read("Cargo.toml");
+                let go = host.stat(&ui::join(&root, "go.mod")).is_ok();
+                if cargo.is_some() && trusted {
+                    match crate::cargo_project::discover(host.as_ref(), &root) {
+                        Ok(targets) => configs.extend(crate::cargo_project::launch_configs(targets, &root)),
+                        Err(error) => {
+                            // Preserve an explicit, actionable error instead of guessing a binary name from a directory.
+                            let mut fallback = debug_config::detect(cargo.as_deref(), false, None, &root);
+                            if fallback.is_empty() {
+                                fallback =
+                                    crate::cargo_project::launch_configs(vec![crate::cargo_project::CargoTarget::binary(ui::file_name(&root).into())], &root);
+                            }
+                            for config in &mut fallback {
+                                config.adapter = Err(crate::i18n::tf("Could not inspect Cargo targets: {}", &[&error]));
+                            }
+                            configs.extend(fallback);
+                        }
+                    }
+                } else {
+                    configs.extend(debug_config::detect(cargo.as_deref(), false, None, &root));
+                }
+                configs.extend(debug_config::detect(None, go, file.as_deref(), &root));
+            }
+            (configs, compounds)
+        }))
+    }
+
     /// "Debug: Run Without Debugging" (⌃F5): the selected configuration (or the one F5 would find) runs without stopping.
     pub(in crate::workbench) fn run_without_debugging(&mut self, _: &super::RunWithoutDebugging, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(name) = self.dbg.last.clone().filter(|n| self.dbg.catalog.contains(n)) {
             return self.start_named(name, true, window, cx);
         }
-        let Some(read) = self.read_launch_configs(true, cx) else { return };
-        let asked = self.active_root(cx);
-        cx.spawn(async move |this, cx| {
-            let configs: Vec<LaunchConfig> = read.await.0.into_iter().map(|c| LaunchConfig { no_debug: true, ..c }).collect();
-            with_window(&this, cx, move |this, window, cx| {
-                if this.active_root(cx) == asked {
-                    this.choose_debug_config(configs, window, cx);
-                }
-            });
-        })
-        .detach();
+        if self.active_root(cx).is_some() {
+            self.require_trust(window, cx, |this, window, cx| this.choose_detected_debug_configs(true, window, cx));
+        }
     }
 
     /// Start a configuration or compound of the launch files by name.
@@ -226,6 +271,7 @@ impl Workbench {
 
     /// "Debug: Stop All".
     pub(in crate::workbench) fn stop_all_debugging(&mut self, _: &super::StopAllDebugging, _: &mut Window, cx: &mut Context<Self>) {
+        self.cancel_pending_debug_start(cx);
         let live: Vec<u64> = self.dbg.sessions.iter().filter(|d| !matches!(d.status, DebugStatus::Ended(_))).map(|d| d.id).collect();
         for sid in live {
             self.end_debug(sid, crate::i18n::t("Debug session stopped").into(), cx);

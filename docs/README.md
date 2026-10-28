@@ -20,6 +20,7 @@ code they describe.
 | [testing.md](testing.md) | test layers, hermetic rules, fuzzing, hardening practice |
 | [production-readiness.md](production-readiness.md) | readiness findings, implementation plan, validation evidence and platform limits |
 | [ui-readiness.md](ui-readiness.md) | workbench resize, status bar, terminal, Git and resource panel review and validation |
+| [product-quality-plan.md](product-quality-plan.md) | 2026-10-28 native product findings, prioritized development batches and acceptance criteria |
 | [translating.md](translating.md) | adding a language, the translation file format, plurals, quality bar, adding UI text |
 | [releasing.md](releasing.md) | the manual release procedure |
 

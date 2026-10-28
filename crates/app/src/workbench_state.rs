@@ -27,6 +27,10 @@ pub(super) struct DebugUi {
     pub(super) starting_group: Option<(u64, bool)>,
     /// A configuration waiting for the answers to its `${input:…}` questions.
     pub(super) pending_launch: Option<debug::PendingLaunch>,
+    /// A debug request waiting for workspace files to save; Stop cancels the pending start.
+    pub(super) save_task: Option<gpui::Task<()>>,
+    /// Invalidates late discovery/test-build replies when Stop or another preparation supersedes them.
+    pub(super) prepare_epoch: u64,
 }
 
 /// Last task, plus the problems parsed from its terminal and output (see workbench_tasks.rs).

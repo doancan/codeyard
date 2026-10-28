@@ -55,6 +55,39 @@ pub fn cases(rel: &str, text: &str, package_json: Option<&str>) -> Vec<Case> {
     out
 }
 
+pub fn cases_in_crate(rel: &str, text: &str, package_json: Option<&str>, context: Option<&crate::cargo_project::CrateContext>) -> Vec<Case> {
+    let Some(context) = context.filter(|_| rel.ends_with(".rs")) else { return cases(rel, text, package_json) };
+    let mut found = cases(&context.relative, text, package_json);
+    for case in &mut found {
+        use_manifest(&mut case.run, &context.manifest);
+    }
+    found
+}
+
+pub fn plan_in_crate(
+    rel: &str,
+    text: &str,
+    cursor: usize,
+    whole_file: bool,
+    package_json: Option<&str>,
+    context: Option<&crate::cargo_project::CrateContext>,
+) -> Option<TestRun> {
+    let Some(context) = context.filter(|_| rel.ends_with(".rs")) else { return plan(rel, text, cursor, whole_file, package_json) };
+    let mut run = plan(&context.relative, text, cursor, whole_file, package_json)?;
+    use_manifest(&mut run, &context.manifest);
+    if whole_file {
+        run.label = format!("test: {rel}");
+        run.id = rel.to_string();
+    }
+    Some(run)
+}
+
+fn use_manifest(run: &mut TestRun, manifest: &str) {
+    if let Some(tail) = run.command.strip_prefix("cargo test") {
+        run.command = format!("cargo test --manifest-path {}{tail}", word(manifest));
+    }
+}
+
 /// A file split into lines once, with what every planner looks up around a line.
 struct Source<'a> {
     rel: &'a str,
@@ -121,7 +154,8 @@ fn indent(line: &str) -> usize {
     line.len() - line.trim_start().len()
 }
 
-static RUST_FN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+(\w+)").unwrap());
+static RUST_FN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?fn\s+(?:r#)?(\w+)").unwrap());
+static RUST_TEST: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^#\[\s*(?:(?:\w+::)*test\s*(?:\]|\()|(?:test_case|rstest)\b)").unwrap());
 static RUST_MOD: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+(\w+)\s*\{").unwrap());
 static GO_TEST: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^func\s+(Test\w*)\s*\(").unwrap());
 static JS_CASE: LazyLock<Regex> =
@@ -173,7 +207,7 @@ fn rust(src: &Source, cursor: usize, whole_file: bool) -> Option<TestRun> {
             .rev()
             .map(|j| lines[j].trim())
             .take_while(|l| l.starts_with("#[") || l.starts_with("///") || l.is_empty() || l.starts_with("//"))
-            .any(|l| l.starts_with("#[") && (l == "#[test]" || l.ends_with("::test]") || l.starts_with("#[test_case") || l.starts_with("#[rstest")));
+            .any(|l| RUST_TEST.is_match(l));
         if !is_test {
             // Cursor is in a non-test function: running a test above it would be wrong.
             return None;

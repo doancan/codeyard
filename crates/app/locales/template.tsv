@@ -102,6 +102,7 @@ Attach to a native process
 Aug	
 Auto (follow system)	
 Auto Forwarded	
+Auto-detect project	
 Back	
 Back to SSH workspace and container details	
 Back to the default (removes the value from settings.jsonc)	
@@ -147,6 +148,14 @@ Cannot open this link: {}
 Cannot parse {} as a number	
 Cannot use {} as an entry	
 Cannot use {} as an object key	
+Cargo did not report a Rust test executable	
+Cargo metadata has no packages	
+Cargo metadata has no workspace members	
+Cargo package has no manifest path	
+Cargo package has no name	
+Cargo package has no targets	
+Cargo reported {0} executables for target {1}	
+Cargo target has no name	
 Change	
 Change All Occurrences	
 Change Color…	
@@ -369,6 +378,7 @@ Could not find your home folder
 Could not format: {}	
 Could not forward port {}: {}	
 Could not forward the debug port over SSH: {}	
+Could not inspect Cargo targets: {}	
 Could not install the {0} dictionary: {1}.	
 Could not install the {0} dictionary: {1}. Check your internet connection and try again.	
 Could not keep a copy of the version that was on disk: {}	
@@ -398,6 +408,7 @@ Could not read {}: {}
 Could not refresh container data: {}. Check Docker access on the SSH host and retry.	
 Could not resolve “{}”: check the spelling and the network (the request ran on {}).	
 Could not run “{}”: {}	
+Could not save files before debugging: {}	
 Could not save the report: {}	
 Could not save the theme: {}	
 Could not save your dictionary: {}	
@@ -447,6 +458,10 @@ Debug Console
 Debug Go package	
 Debug Node: {}	
 Debug Python: {}	
+Debug Rust example: {0} / {1}	
+Debug Rust integration test: {0} / {1}	
+Debug Rust library tests: {0} / {1}	
+Debug Rust: {0} / {1}	
 Debug Rust: {}	
 Debug Test	
 Debug Test: {}	
@@ -695,6 +710,7 @@ Expand Folders (the selected one, or the open file's folders)
 Expand Selection	
 Expand all results	
 Expected KEY=value	
+Expected a cargo test command	
 Expected “{}”	
 Explorer	
 Explorer (⇧⌘E)	
@@ -749,6 +765,7 @@ File: Save All
 File: Save As…	
 File: Save a Copy to This Computer…	
 Files	
+Files are still unsaved. Resolve editor errors, then start debugging again.	
 Files to exclude	
 Files to include (e.g. *.rs, src/**)	
 Files to include / exclude	
@@ -1064,6 +1081,7 @@ Minified
 Minimal	
 Minimize	
 Minimize window	
+Missing value for Cargo option {}	
 Modified	
 Modules	
 Monday	
@@ -1119,7 +1137,6 @@ Next Problem
 Next match (↵)	
 Next result (F4)	
 No Cargo.toml found for this file	
-No Configurations	
 No Docker contexts found. Install Docker and start its engine.	
 No SSH host connected	
 No SSH hosts yet. Use Remote: Add SSH Host…	
@@ -1552,6 +1569,7 @@ Reset Mixed to Here
 Reset Soft to Here	
 Reset Zoom	
 Reset to {0} ({1})	
+Resolve the file conflict before debugging.	
 Resolved {} conflict|Resolved {} conflicts	
 Resources	
 Respect .gitignore	
@@ -1595,6 +1613,9 @@ Running
 Running the program in a terminal is not supported on Windows yet: use {} in the configuration.	
 Running…	
 Rust formatters not loaded: {}	
+Rust language features are disabled. Enable lsp.enabled in Settings.	
+Rust language server is not ready. Check Output, then run “Developer: Restart Language Servers”.	
+Rust tests did not build. See Output and Problems for the compiler errors.	
 Rust: Expand Macro Recursively	
 Rust: Locate Parent Module	
 Rust: Open Cargo.toml	
@@ -1621,6 +1642,7 @@ Saved project “{}” (⌃R to switch)
 Saved to ~/.ssh/config. Connecting uses your SSH keys and ssh-agent; a password prompt appears in this window if needed.	
 Saved {} (edit the colors in that file)	
 Saved · {}	
+Saving files before debugging…	
 Saving…	
 Scan Again	
 Schema cache cleared. Schemas are downloaded again when needed.	
@@ -1689,6 +1711,7 @@ Setting up key login for {}…
 Setting upstream of {}…	
 Settings	
 Settings…	
+Several Rust targets reported this test name. Run it individually to identify the failing target.	
 Shape of the cursor	
 Shell for new terminals (empty: login shell)	
 Show All	
@@ -1747,6 +1770,7 @@ Spelling: “{}”
 Split Editor	
 Stage	
 Stage all	
+Stage {}	
 Staged Changes	
 Staged {} change|Staged {} changes	
 Staging changes inside a symlink or submodule is not supported	
@@ -1908,7 +1932,7 @@ The shell may run each line as soon as it arrives.
 The state database was damaged ({0}). It was moved to {1} and a new one was started; recent folders and open tabs were forgotten.	
 The string is not closed	
 The tag disappears from the remote repository for everyone. Your local copy is kept.	
-The tests did not build: run the test to see the errors.	
+The test runner stopped without reporting this test. See Test Results for build or runner errors.	
 The token has no signature.	
 The update couldn't be installed	
 The update couldn't be verified	
@@ -1953,6 +1977,7 @@ This file is outside the open folder.
 This file is outside the repository root	
 This file is {0} MB; Data: Query handles files up to {1} MB.	
 This file mixes line endings; saving writes all of them as {}, like its first line. Change it in the status bar.	
+This file was deleted on disk. Save it explicitly before debugging.	
 This file was deleted on disk. Saving will create it again.	
 This folder is not a git repository.	
 This frame cannot be restarted.	
@@ -2016,6 +2041,8 @@ Unpin
 Unsaved changes stay open in their tabs; saving recreates the file.	
 Unstage	
 Unstage all	
+Unstage {}	
+Unterminated quote in the Cargo test command	
 Untracked files will be deleted. This can't be undone.	
 Unwrapped lines	
 Update failed	

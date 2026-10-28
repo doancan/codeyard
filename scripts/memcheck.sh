@@ -91,16 +91,12 @@ measure "10k lines, syntax highlighting"     130 crates/app/testdata/big.rs
 # Keep the first-run window covered explicitly. A clean, undecided profile must never check the network.
 CODEYARD_CONFIG_DIR="$TMP/first-run-config" measure "first-run update question" 95
 
-# Remote agent: same protocol, as a local subprocess.
-CODEYARD_DEV=1 "$APP" --connect agent-stdio >/dev/null 2>&1 &
-pid=$!
-sleep 3
-# The daemon outlives a dropped ssh connection (the bridge is a separate, small process).
-agent=$(pgrep -f "codeyard-agent --daemon" | head -1 || true)
+# Measure an owned idle daemon. Looking up an arbitrary process can select another
+# test's or the user's persistent daemon, then kill it during cleanup.
+./target/release/codeyard-agent --daemon "$TMP/agent.sock" >/dev/null 2>&1 &
+agent=$!
 check "remote agent daemon (idle)" 8 "$(settled_mb "$agent")"
-kill $pid 2>/dev/null || true; wait $pid 2>/dev/null || true
-# Kill the measured daemon by PID; otherwise it idles for 15 minutes before exiting.
-[ -n "$agent" ] && kill "$agent" 2>/dev/null || true
+kill "$agent" 2>/dev/null || true; wait "$agent" 2>/dev/null || true
 
 echo "size:"
 size_mb() { du -m "$1" | cut -f1; }

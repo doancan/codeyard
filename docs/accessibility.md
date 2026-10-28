@@ -14,7 +14,12 @@ The tree, in the order a screen reader walks it:
 
 - `Window` (title "Codeyard — folder").
 - One `Tree` per folder of the workspace: "Explorer", or "Explorer: name" when there are several. One `TreeItem` per
-  visible row: name, level, selected, expanded, set position; capped at 5,000 rows per tree.
+  visible row: name, level, selected, expanded, set position; capped at 5,000 rows per tree. These trees are omitted
+  while Explorer is hidden. Row actions resolve the current path rather than reusing an old row index.
+- While Source Control is visible, a `Group` with the branch, a writable `MultilineTextInput` for the commit message,
+  a correctly labeled/enabled commit button, change groups with expand/collapse buttons, file diff buttons and
+  Stage/Unstage buttons. Operation errors are assertive live regions; successful results are polite. The message
+  field's real focus is exposed. The graph and sync controls are not exposed yet.
 - `TabList` "Editor tabs": one `Tab` per editor tab of the focused group (file name, `(modified)`, selected for the tab
   in front, set position).
 - While the find bar is open, a `Group` "Find": a `SearchInput` with the query, a `TextInput` "Replace" while the replace
@@ -47,8 +52,8 @@ picker's combo box (its selected row), the terminal or a dialog button.
 Actions: `Focus` on the explorer, a row, a tab, the editor, a find field, the terminal, the picker's input or a row,
 a suggestion or a dialog button; `Click` on a row (select and open), a tab (bring it to the front), a picker row (pick
 it), a suggestion (insert it), a find option (toggle) or button (run) and a dialog button; `SetTextSelection` on the
-editor. An action is only carried out if its target still has the label the last tree showed, because the tree can be a
-quarter of a second old.
+editor, and `SetValue` on the Source Control message. Actions reject a changed workspace; Source Control also checks the
+repository, branch and file state, and committing checks the reviewed status and message. A tree may be a quarter of a second old.
 
 ### Without a tree
 
@@ -119,7 +124,7 @@ macOS. The CPU cost of the 250 ms snapshot loop has not been measured.
   file offsets in long files. Primary selection only; no multi-cursor, folding, wrapped lines, RTL or CRLF handling.
 - The terminal exposes the screen only, not the scrollback, and cannot be written to from the tree (typing goes through
   the keyboard as usual).
-- Not exposed: sidebar panels other than the explorer (search, source control, debug, testing, remote), the bottom
+- Not exposed: search, debug, testing and remote sidebars, the Source Control graph and sync controls, the bottom
   panel's other views (problems, output, ports), hover and signature popups, the Settings and Keyboard Shortcuts pages,
   context menus, and dialogs other than the update dialog. Only the tabs of the focused editor group are listed, and
   diff, large-file and page tabs are not.

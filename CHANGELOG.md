@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Accessible Source Control change groups, commit message and commit state, file diffs, Stage/Unstage actions and live
+  operation results. Hidden Explorer trees no longer appear in the accessibility tree, and stale file actions resolve paths again.
+- Cargo target discovery for automatic Rust debugging: virtual workspaces, multiple binaries, examples, required features
+  and library-only test harnesses. Programs come from Cargo's artifact messages, including custom target directories.
+- *Rust: Open Cargo.toml* falls back to the nearest manifest inside the file's workspace when no language server is attached.
+
 - Full-width Container Overview table with in-page search, live SSH resource data, health filtering,
   selectable columns, stable refresh ordering and scrolling, detail navigation, logs and container actions.
 
@@ -59,6 +65,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - File tree rows are a little taller and roomier (24 px rows, wider side padding and icon gap).
 
 ### Fixed
+
+- Run and Debug shows an automatic session's real name; without a launch file its selector says "Auto-detect project"
+  instead of claiming there are no configurations.
+- Debugging saves workspace buffers before building or starting, honors format-on-save, and cancels on save errors,
+  disk conflicts, Stop or a workspace switch instead of debugging an older on-disk program.
+- Stop invalidates pending target discovery and test-build replies; late adapter starts, pre-launch errors and stopped
+  events cannot revive a cancelled debug session.
+- Right Arrow stays on an expanded empty Explorer folder instead of selecting a sibling.
+- Rust commands distinguish a non-Rust file, disabled language features, an untrusted workspace and an unavailable server.
+  Old Rust replies and test-discovery/build replies are discarded after a workspace change.
+- Rust test discovery recognizes parameterized async test attributes and raw identifiers. File/cursor test commands use the
+  actual nearest manifest instead of guessing a package name from a directory.
+- Debug Test at Cursor refuses unrelated helper functions; failed or interrupted test builds cannot launch partial artifacts.
+  Build diagnostics reach Output and Problems, and quoted manifest/target/feature arguments remain literal argv.
+- Rust workspace test runs continue after a target fails. Duplicate test names cannot overwrite a failure with a pass,
+  and unreported tests cannot keep an earlier green result after a build or runner failure.
+- Memory checks measure and stop their own disposable agent daemon instead of looking up an unrelated running daemon.
 
 - The workspace-symbol test ran with language servers turned off, so it could never pass; it now starts rust-analyzer.
 
