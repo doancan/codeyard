@@ -141,3 +141,15 @@ fn task_parse_supports_a_single_global_command_and_rejects_invalid_task_lists() 
     assert_eq!(parsed.tasks[0].options.cwd.as_deref(), Some("${workspaceFolder}"));
     assert!(Registry::parse(r#"{"command":"build","tasks":17}"#, Platform::Linux).is_err());
 }
+
+#[test]
+fn task_matcher_omission_keeps_automatic_detection_but_an_explicit_empty_list_disables_it() {
+    let parsed = registry(json!([
+        {"label":"auto","command":"build"},
+        {"label":"none","command":"build","problemMatcher":[]},
+        {"label":"explicit","command":"build","problemMatcher":"$tsc"}
+    ]));
+    assert!(parsed.tasks[0].auto_match);
+    assert!(!parsed.tasks[1].auto_match);
+    assert!(!parsed.tasks[2].auto_match);
+}

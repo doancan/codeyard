@@ -171,3 +171,11 @@ Windows piped processes now start suspended, enter a private job with kill-on-cl
 and resume only after assignment. Native Windows fixtures cover live and already-exited leaders;
 their actual execution remains a CI condition. Windows GNU cross-target all-target Clippy passes,
 and the existing 182 macOS agent/host/engine regressions still pass.
+
+The matcher core supports custom consecutive-line patterns, repeating final lines, file/range
+captures, built-in templates and overrides, and file-scoped watch readiness. It validates capture
+indices and required fields before execution, shares a regex compilation budget across a plan,
+and bounds regex size, delegated automata and backtracking. Lookarounds/backreferences reuse the
+already-locked regex implementation. An explicit empty matcher list disables automatic detection.
+The engine's 28 tests and strict Clippy pass. Byte-stream decoding, workbench diagnostics and
+runtime readiness integration remain pending.
