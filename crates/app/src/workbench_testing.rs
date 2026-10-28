@@ -228,6 +228,7 @@ impl Workbench {
             Panel::Testing => "testing",
             Panel::Remote => "remote",
             Panel::Containers => "containers",
+            Panel::Extensions => "extensions",
         })
     }
 
@@ -665,6 +666,85 @@ impl Workbench {
             Some(Notice::Error(m)) => Some((true, m.to_string())),
             None => None,
         }
+    }
+
+    // --- extensions ---
+
+    /// Installed extensions the view lists (after the search filter): (id, disabled).
+    pub fn extensions_for_test(&self, cx: &App) -> Vec<(String, bool)> {
+        let list = &self.cfg.exts.list;
+        self.visible_extensions(cx).into_iter().map(|i| (list[i].manifest.id.to_string(), list[i].disabled)).collect()
+    }
+
+    pub fn set_extension_filter_for_test(&mut self, text: &str, cx: &mut Context<Self>) {
+        if let Some(f) = self.cfg.exts.filter.clone() {
+            f.update(cx, |f, cx| f.set_text(text, cx));
+        }
+    }
+
+    pub fn select_extension_for_test(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.select_extension(id, cx);
+    }
+
+    pub fn set_extension_enabled_for_test(&mut self, id: &str, enabled: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.set_extension_enabled(ext_manifest::ExtId::parse(id).unwrap(), enabled, window, cx);
+    }
+
+    /// Asks first (answer with `simulate_prompt_answer`).
+    pub fn uninstall_extension_for_test(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.uninstall_extension(ext_manifest::ExtId::parse(id).unwrap(), window, cx);
+    }
+
+    pub fn roll_back_extension_for_test(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.roll_back_extension(ext_manifest::ExtId::parse(id).unwrap(), window, cx);
+    }
+
+    pub fn verify_extension_for_test(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.verify_extension(id, cx);
+    }
+
+    /// What the file dialog would hand over: a `.cyx` file (`file`) or a folder.
+    pub fn review_extension_for_test(&mut self, path: &str, file: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let path = path.to_string();
+        let source = if file { ext_core::Source::File { path } } else { ext_core::Source::Folder { path } };
+        self.review_extension(source, window, cx);
+    }
+
+    /// The consent sheet on screen: (extension id, permission lines, the High-risk line, the button with the focus).
+    pub fn consent_for_test(&self, window: &Window) -> Option<(String, Vec<String>, Option<String>, &'static str)> {
+        let p = self.cfg.exts.pending.as_ref()?;
+        let (install, cancel) = self.cfg.exts.consent_focus.as_ref()?;
+        let focus = if install.is_focused(window) {
+            "install"
+        } else if cancel.is_focused(window) {
+            "cancel"
+        } else {
+            ""
+        };
+        Some((p.manifest.id.to_string(), ext_glue::permission_lines(&p.manifest.permissions), ext_glue::high_risk_line(&p.manifest), focus))
+    }
+
+    pub fn install_extension_from_folder_for_test(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.install_extension_from_folder(&InstallExtensionFromFolder, window, cx);
+    }
+
+    pub fn permission_lines_for_test(p: &ext_manifest::Permissions) -> Vec<String> {
+        ext_glue::permission_lines(p)
+    }
+
+    pub fn answer_consent_for_test(&mut self, install: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if install {
+            self.confirm_consent(window, cx);
+        } else {
+            self.cancel_consent(cx);
+        }
+    }
+
+    /// The detail page's extension: (id, version, contribution lines, permission lines, version a rollback goes to).
+    pub fn extension_detail_for_test(&self) -> Option<(String, String, Vec<String>, Vec<String>, Option<String>)> {
+        let e = self.selected_extension()?;
+        let m = &e.manifest;
+        Some((m.id.to_string(), m.version.to_string(), ext_glue::contribution_lines(m), ext_glue::permission_lines(&m.permissions), e.previous.clone()))
     }
 }
 

@@ -53,6 +53,10 @@ mod data_glue;
 mod debug;
 #[path = "workbench_editors.rs"]
 mod editors_glue;
+#[path = "workbench_ext.rs"]
+mod ext_glue;
+#[path = "workbench_ext_view.rs"]
+mod ext_view_glue;
 #[path = "workbench_extras.rs"]
 mod extras_glue;
 #[path = "workbench_folder.rs"]
@@ -442,6 +446,8 @@ struct OutlineState {
 enum Page {
     Welcome,
     Containers,
+    /// The Extensions view's detail page and consent sheet (state in `ConfigState::exts`).
+    Extension,
     Settings(Entity<crate::settings_page::SettingsPage>),
     Markdown(Entity<crate::markdown::MarkdownPreview>),
     Shortcuts(Entity<crate::shortcuts_page::ShortcutsPage>),
@@ -462,6 +468,7 @@ pub use debug::{
     AddDebugConfiguration, AddFunctionBreakpoint, ConsoleComplete, ConsoleHistoryNext, ConsoleHistoryPrev, DisableAllBreakpoints, EnableAllBreakpoints,
     OpenLaunchConfiguration, RunToCursor, RunWithoutDebugging, ShowRunAndDebug, StopAllDebugging, ToggleBreakpointEnabled, ToggleBreakpointsActive,
 };
+pub use ext_glue::{CancelExtensionConsent, InstallExtensionFromFile, InstallExtensionFromFolder, ShowExtensions};
 pub use host::askpass::{AskKind, AskRequest};
 pub use remote_glue::ShowRemoteExplorer;
 pub use terminals_glue::{ChangeTerminalColor, KillAllTerminals, NewTerminalWithProfile, RenameTerminal, SelectDefaultTerminalProfile};
@@ -603,6 +610,7 @@ enum Panel {
     Testing,
     Remote,
     Containers,
+    Extensions,
 }
 
 enum Conn {
@@ -1134,6 +1142,7 @@ impl Workbench {
                 trusted: Default::default(),
                 dirty: false,
                 folders: Default::default(),
+                exts: Default::default(),
             },
             persist: state_glue::PersistState {
                 workspace_id: None,
