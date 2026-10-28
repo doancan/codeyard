@@ -326,3 +326,71 @@ fn a_new_extension_is_loaded_in_development_and_opened(cx: &mut TestAppContext) 
     assert!(notice.contains("already exists"), "{notice}");
     crate::ext::set_dev(None);
 }
+
+#[test]
+fn install_file_checks_like_the_view() {
+    let cfg = config_dir("install-file");
+    let pkg = |manifest_text: String, extra: Vec<(&str, &str)>| {
+        let mut entries = vec![ext_pkg::Entry { path: "codeyard-extension.toml".into(), data: manifest_text.into_bytes(), executable: false }];
+        entries.extend(extra.into_iter().map(|(p, t)| ext_pkg::Entry { path: p.into(), data: t.as_bytes().to_vec(), executable: false }));
+        ext_pkg::write(entries).unwrap().0
+    };
+    let store = crate::ext::store(&cfg);
+    let good = cfg.join("good.cyx");
+    std::fs::write(&good, pkg(manifest("you.night", "[[themes]]\nlabel = \"Night\"\npath = \"t.json\"\n"), vec![("t.json", THEME)])).unwrap();
+    let m = crate::ext::install_file(&store, &good).unwrap();
+    assert_eq!(m.id.as_str(), "you.night");
+    assert!(store.locked().unwrap().contains_key(&m.id));
+    let code = cfg.join("code.cyx");
+    std::fs::write(&code, pkg(manifest("you.code", "[code]\nentry = \"main.ts\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n"), vec![("main.ts", "")]))
+        .unwrap();
+    assert!(crate::ext::install_file(&store, &code).unwrap_err().contains("contains code"));
+    let junk = cfg.join("junk.cyx");
+    std::fs::write(&junk, b"not a package").unwrap();
+    assert!(crate::ext::install_file(&store, &junk).unwrap_err().contains("no gzip header"));
+}
+
+/// Local and SSH are the same (#35, exit criterion 5): over SSH a file in an extension's language gets that language, and
+/// the extension's language server starts on the host, found on PATH there, and is told the language id.
+#[gpui::test]
+fn extension_language_and_server_work_over_ssh(cx: &mut TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("ext-ssh") else { return };
+    let cfg = config_dir("ssh");
+    let Some(fake) = crate::test_lsp::FakeServer::new(&cfg.join("server"), &serde_json::json!({})) else { return };
+    let (program, args) = fake.command();
+    let args = args.iter().map(|a| format!("{a:?}")).collect::<Vec<_>>().join(", ");
+    install(
+        &cfg,
+        &[(
+            "codeyard-extension.toml",
+            &manifest(
+                "you.foo",
+                &format!(
+                    "[permissions]\nrun = [\"{program}\"]\nwhy = \"Starts the Foo language server.\"\n[[languages]]\nid = \"foo\"\nextensions = [\"foo\"]\nline-comment = \"#\"\n[[language-servers]]\ncommand = \"{program}\"\nargs = [{args}]\nlanguages = [\"foo\"]\n"
+                ),
+            ),
+        )],
+    );
+    let root = cfg.join("project");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("a.foo"), "# hello\n").unwrap();
+    let (wb, cx) = setup(cx, &cfg);
+    assert!(cx.update(|_, cx| cx.global::<crate::settings::Settings>().lsp_servers.iter().any(|(k, _)| k == "foo")), "the server joins lsp.servers");
+    wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    crate::qa_integration_tests::wait_secs(cx, 30, "connected", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_secs(1));
+        wb.read_with(cx, |wb, _| wb.ports_ready())
+    });
+    let r = root.to_string_lossy().into_owned();
+    wb.update_in(cx, |wb, window, cx| wb.open_path(&r, window, cx));
+    cx.run_until_parked();
+    crate::qa_integration_tests::ssh_open_file(&wb, cx, &root.join("a.foo"));
+    crate::qa_integration_tests::wait_secs(cx, 30, "the extension's server opened a.foo on the host", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(500));
+        !fake.received("textDocument/didOpen").is_empty()
+    });
+    let open = &fake.received("textDocument/didOpen")[0];
+    assert_eq!(open["params"]["textDocument"]["languageId"], "foo");
+    assert!(open["params"]["textDocument"]["uri"].as_str().unwrap_or_default().ends_with("/a.foo"), "{open}");
+    crate::ext::set_for_test(Vec::new());
+}

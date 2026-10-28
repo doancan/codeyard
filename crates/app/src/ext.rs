@@ -447,3 +447,15 @@ pub fn check_setting(key: &str, value: &serde_json::Value) -> Result<(), String>
     };
     Err(crate::i18n::tf("{0}: expected {1}", &[&format!("\"{key}\""), &kind]))
 }
+
+/// Install a package file (`codeyard --install-extension`): the checks of the Extensions view, without its sheet.
+/// Data-only packages, as everywhere in this version.
+pub fn install_file(store: &ext_core::Store, path: &Path) -> Result<Manifest, String> {
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    let pkg = ext_pkg::read(&bytes).map_err(|e| e.to_string())?;
+    if pkg.manifest.code.is_some() {
+        return Err(crate::i18n::tf("{} contains code, which this version does not run", &[&pkg.manifest.id]));
+    }
+    let installed = store.install(&bytes, ext_core::Source::File { path: path.display().to_string() }).map_err(|e| e.to_string())?;
+    Ok(installed.manifest)
+}

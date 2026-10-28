@@ -63,14 +63,15 @@ for m in catalogue:
         bshow = f"{bv:.1f}"
         rel = (cv - bv) / bv if bv else 0.0
         change = f"{rel:+.1%}"
-        limit = bv * (1 + m["budget"])
+        # A metric of a few milliseconds also has an absolute budget: one cold disk read is +80% there.
+        limit = max(bv * (1 + m["budget"]), bv + m.get("budget_abs", 0))
         if cv > limit and min(len(b), len(c)) < MIN_SAMPLES:
             notes.append(f"worse, but fewer than {MIN_SAMPLES} samples to judge")
         elif cv > limit:
             outside_noise = cv > upper_bound(b, m["stat"])
             all_worse = m["stat"] == "median" and min(c) > limit
             if outside_noise or all_worse:
-                problems.append(f"regressed more than {m['budget']:.0%}")
+                problems.append(f"regressed more than {m['budget']:.0%}" + (f" and {m['budget_abs']:g}" if m.get("budget_abs") else ""))
     if problems:
         failed |= blocking
         result = ("FAIL: " if blocking else "warn: ") + ", ".join(problems)

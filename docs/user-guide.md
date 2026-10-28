@@ -546,6 +546,9 @@ binding is left out and the status bar says so); a keymap preset you choose with
 language only applies to files no built-in language claims. Extension language servers start in trusted folders only,
 and your own `lsp.servers` entry for the same language wins.
 
+From a terminal or a script, `codeyard --install-extension FILE.cyx` (repeat the flag for several) installs without
+opening a window; running it is your consent, and the same checks apply.
+
 **Manage.** Choose an extension in the list to open its page: contributions, permissions and these actions:
 
 - *Disable* / *Enable*: none of its contributions apply while it is disabled; it stays installed.
@@ -557,6 +560,9 @@ and your own `lsp.servers` entry for the same language wins.
 wrong. The status bar says *Extensions off* for the whole session, and the Extensions view says so instead of listing.
 To keep them off across sessions, set `"extensions.enabled": false` in your own settings (a project's settings cannot
 change it, nor `keymap.preset`).
+
+**Write your own.** *Extensions: New Extension…* creates one and loads it in the window with a DEV badge; it reloads
+when you save. The [extension guide](extensions/developer-guide.md) takes it from there to a `.cyx` package.
 
 ## Git
 

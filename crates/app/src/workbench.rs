@@ -1024,7 +1024,9 @@ impl Workbench {
         let (recent, pinned) = state.as_ref().map(projects::load_recent).unwrap_or_default();
         let dev = std::env::var_os("CODEYARD_DEV").is_some() || cfg!(debug_assertions);
         // The settings folder given (a temporary one in tests), as `theme_dir` does later, else the default.
+        let loading = std::time::Instant::now();
         crate::ext::reload(config_dir.as_deref());
+        crate::perf::sample("startup.extensions_ms", loading.elapsed().as_secs_f64() * 1000.0);
         let (themes, errors) = theme_glue::all_themes(config_dir.as_ref().map(|d| d.join("themes")).or_else(user_theme_dir).as_deref());
         let notice = errors.first().map(|reason| Notice::Error(crate::i18n::tf("Theme skipped: {}", &[reason]).into()));
         let theme_choice = state.as_ref().and_then(|s| s.get("theme")).unwrap_or_else(|| THEME_AUTO.into());
