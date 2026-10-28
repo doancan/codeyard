@@ -1097,9 +1097,9 @@ impl EditorView {
         self.slot == slot || self.parked.get(slot).is_some_and(Option::is_some)
     }
 
-    /// Also opened in the second group: that group's view (cursor and scroll same as the current one).
+    /// Opened in another group: that group's view (cursor and scroll same as the current one).
     pub fn open_slot(&mut self, slot: usize, cx: &mut Context<Self>) {
-        if self.has_slot(slot) || slot >= 32 {
+        if self.has_slot(slot) || slot >= crate::editor_layout::MAX_GROUPS {
             return;
         }
         self.parked.resize_with(self.parked.len().max(slot + 1), || None);

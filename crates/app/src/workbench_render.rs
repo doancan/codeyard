@@ -478,7 +478,7 @@ impl Render for Workbench {
                     cx.notify();
                 }
                 if let Some(resize) = this.tabs.resizing {
-                    if this.tabs.contains_key(resize.anchor) {
+                    if this.tabs.contains_key(resize.anchor) && this.tabs.revision == resize.revision {
                         let (position, start, size) = match resize.axis {
                             crate::editor_layout::Axis::Horizontal => (ev.position.x, resize.bounds.origin.x, resize.bounds.size.width),
                             crate::editor_layout::Axis::Vertical => (ev.position.y, resize.bounds.origin.y, resize.bounds.size.height),
@@ -828,7 +828,7 @@ mod resize_tests {
                 cx.notify();
             });
             cx.run_until_parked();
-            let sizes = wb.read_with(cx, |wb, _| (wb.chrome.sidebar_w, wb.chrome.panel_h, wb.chrome.panel_w, wb.chrome.split_ratio));
+            let sizes = wb.read_with(cx, |wb, _| (wb.chrome.sidebar_w, wb.chrome.panel_h, wb.chrome.panel_w));
             if let Some(position) = release {
                 // An unrelated button must not end a left-button drag.
                 cx.simulate_mouse_up(position, MouseButton::Right, Modifiers::none());
@@ -838,7 +838,7 @@ mod resize_tests {
             }
             cx.simulate_mouse_move(point(px(600.), px(300.)), None, Modifiers::none());
             assert!(wb.read_with(cx, |wb, _| !wb.chrome.resizing_sidebar && !wb.chrome.resizing_panel && !wb.chrome.resizing_split));
-            assert_eq!(wb.read_with(cx, |wb, _| (wb.chrome.sidebar_w, wb.chrome.panel_h, wb.chrome.panel_w, wb.chrome.split_ratio)), sizes);
+            assert_eq!(wb.read_with(cx, |wb, _| (wb.chrome.sidebar_w, wb.chrome.panel_h, wb.chrome.panel_w)), sizes);
         }
     }
 }

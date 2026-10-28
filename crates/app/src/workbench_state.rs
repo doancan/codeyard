@@ -126,8 +126,6 @@ pub(super) struct ChromeLayout {
     pub(super) panel_w: f32,
     pub(super) panel_max: bool,
     pub(super) resizing_panel: bool,
-    /// Width ratio of the left group while split.
-    pub(super) split_ratio: f32,
     pub(super) resizing_split: bool,
     /// Zoom delta (pt) and the base sizes from settings (editor, line, terminal).
     pub(super) zoom: f32,
@@ -240,6 +238,9 @@ pub(super) struct TabsState {
     pub(super) groups: std::collections::BTreeMap<crate::editor_layout::GroupId, Group>,
     pub(super) layout: crate::editor_layout::Layout,
     pub(super) resizing: Option<GroupResize>,
+    pub(super) revision: u64,
+    pub(super) grid_scroll: gpui::ScrollHandle,
+    pub(super) reveal_group: std::rc::Rc<std::cell::Cell<Option<GroupKey>>>,
 }
 
 impl std::ops::Deref for TabsState {

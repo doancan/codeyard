@@ -4,6 +4,20 @@ use super::*;
 
 pub(super) const WINDOWS_TITLEBAR_H: f32 = 34.;
 
+fn grid_minimum(node: &crate::editor_layout::Node) -> gpui::Size<gpui::Pixels> {
+    use crate::editor_layout::{Axis, Node};
+    match node {
+        Node::Group { .. } => gpui::size(px(160.), px(96.)),
+        Node::Split { axis, first, second, .. } => {
+            let (a, b) = (grid_minimum(first), grid_minimum(second));
+            match axis {
+                Axis::Horizontal => gpui::size(a.width + b.width + px(layout::SASH), a.height.max(b.height)),
+                Axis::Vertical => gpui::size(a.width.max(b.width), a.height + b.height + px(layout::SASH)),
+            }
+        }
+    }
+}
+
 impl Workbench {
     /// Render every group once inside the validated split tree.
     pub(super) fn editor_area(&self, main: AnyElement, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
@@ -36,9 +50,50 @@ impl Workbench {
             } else {
                 state.active.and_then(|a| state.editors.get(a)).map(|ed| editor::slot_view(ed.clone(), usize::from(id)).into_any_element()).unwrap_or_else(hint)
             };
+            let reveal = self.tabs.reveal_group.clone();
+            let scroll = self.tabs.grid_scroll.clone();
+            let repaint = cx.entity().downgrade();
+            let reveal_canvas = gpui::canvas(
+                move |bounds, window, cx| {
+                    if reveal.get() != Some(key) {
+                        return;
+                    }
+                    let viewport = scroll.bounds();
+                    if viewport.size.width <= px(0.) || viewport.size.height <= px(0.) {
+                        return;
+                    }
+                    let delta = |start, end, near, far| {
+                        if start < near || end - start > far - near {
+                            near - start
+                        } else if end > far {
+                            far - end
+                        } else {
+                            px(0.)
+                        }
+                    };
+                    let previous = scroll.offset();
+                    let maximum = scroll.max_offset();
+                    let next = gpui::point(
+                        (previous.x + delta(bounds.left(), bounds.right(), viewport.left(), viewport.right())).clamp(-maximum.width, px(0.)),
+                        (previous.y + delta(bounds.top(), bounds.bottom(), viewport.top(), viewport.bottom())).clamp(-maximum.height, px(0.)),
+                    );
+                    reveal.set(None);
+                    if next != previous {
+                        scroll.set_offset(next);
+                        window.defer(cx, move |_, cx| {
+                            repaint.update(cx, |_, cx| cx.notify()).ok();
+                        });
+                    }
+                },
+                |_, (), _, _| {},
+            )
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full();
             let pane = div()
                 .id(("editor-group", usize::from(id)))
-                .debug_selector(move || format!("editor-group-{id}").into())
+                .debug_selector(move || format!("editor-group-{id}"))
                 .relative()
                 .flex_1()
                 .min_w_0()
@@ -46,6 +101,7 @@ impl Workbench {
                 .flex()
                 .flex_col()
                 .overflow_hidden()
+                .child(reveal_canvas)
                 .when(
                     (!state.editors.is_empty() && cx.global::<Settings>().show_tabs) || state.diff.is_some() || state.large.is_some() || state.page.is_some(),
                     |d| d.child(self.tabs(key, p, cx)),
@@ -75,7 +131,16 @@ impl Workbench {
                 );
             panes.insert(id, pane.into_any_element());
         }
-        self.editor_grid_node(self.tabs.layout.root(), &mut panes, p, cx)
+        let minimum = grid_minimum(self.tabs.layout.root());
+        div()
+            .id("editor-grid-viewport")
+            .flex_1()
+            .min_w_0()
+            .min_h_0()
+            .overflow_scroll()
+            .track_scroll(&self.tabs.grid_scroll)
+            .child(div().size_full().min_w(minimum.width).min_h(minimum.height).flex().child(self.editor_grid_node(self.tabs.layout.root(), &mut panes, p, cx)))
+            .into_any_element()
     }
 
     fn editor_grid_node(
@@ -94,10 +159,13 @@ impl Workbench {
         let bounds = std::rc::Rc::new(std::cell::Cell::new(gpui::Bounds::<gpui::Pixels>::default()));
         let captured = bounds.clone();
         let capture = gpui::canvas(|bounds, _, _| bounds, move |_, value, _, _| captured.set(value)).absolute().top_0().left_0().size_full();
+        let first_minimum = grid_minimum(first);
+        let second_minimum = grid_minimum(second);
         let first = self.editor_grid_node(first, panes, p, cx);
         let second = self.editor_grid_node(second, panes, p, cx);
         let horizontal = axis == Axis::Horizontal;
         let anchor = self.tabs.current_key();
+        let revision = self.tabs.revision;
         let resizing = self.tabs.resizing.is_some_and(|r| r.split == id);
         div()
             .id(("editor-split", usize::from(id)))
@@ -108,11 +176,20 @@ impl Workbench {
             .flex()
             .when(!horizontal, |d| d.flex_col())
             .child(capture)
-            .child(div().flex_basis(gpui::relative(ratio)).flex_shrink().min_w_0().min_h_0().flex().overflow_hidden().child(first))
+            .child(
+                div()
+                    .flex_basis(gpui::relative(ratio))
+                    .flex_shrink()
+                    .min_w(first_minimum.width)
+                    .min_h(first_minimum.height)
+                    .flex()
+                    .overflow_hidden()
+                    .child(first),
+            )
             .child(
                 div()
                     .id(("group-sash", usize::from(id)))
-                    .debug_selector(move || format!("group-sash-{id}").into())
+                    .debug_selector(move || format!("group-sash-{id}"))
                     .flex_none()
                     .bg(c(p.border))
                     .when(horizontal, |d| d.w(px(layout::SASH)).h_full().cursor(gpui::CursorStyle::ResizeLeftRight))
@@ -126,12 +203,21 @@ impl Workbench {
                                 return;
                             }
                             this.chrome.resizing_split = true;
-                            this.tabs.resizing = Some(GroupResize { split: id, axis, bounds: bounds.get(), anchor });
+                            this.tabs.resizing = Some(GroupResize { split: id, axis, bounds: bounds.get(), anchor, revision });
                             cx.notify();
                         }),
                     ),
             )
-            .child(div().flex_basis(gpui::relative(1. - ratio)).flex_shrink().min_w_0().min_h_0().flex().overflow_hidden().child(second))
+            .child(
+                div()
+                    .flex_basis(gpui::relative(1. - ratio))
+                    .flex_shrink()
+                    .min_w(second_minimum.width)
+                    .min_h(second_minimum.height)
+                    .flex()
+                    .overflow_hidden()
+                    .child(second),
+            )
             .into_any_element()
     }
 

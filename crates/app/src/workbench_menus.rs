@@ -349,8 +349,7 @@ impl Workbench {
             MenuCmd::CompareFolderWithSelected => self.compare_folder_with_selected(target.path, window, cx),
             MenuCmd::Follow => self.follow_path(target.path, window, cx),
             MenuCmd::OpenSide => {
-                self.open_file(target.path, window, cx);
-                self.split_editor(&SplitEditor, window, cx);
+                self.open_editor_beside(target.path, window, cx);
             }
             MenuCmd::ExpandAllInside => self.tree_for(&target.path, cx).update(cx, |t, cx| t.expand_recursive(&target.path, cx)),
             MenuCmd::CollapseAllInside => self.tree_for(&target.path, cx).update(cx, |t, cx| t.collapse_recursive(&target.path, cx)),

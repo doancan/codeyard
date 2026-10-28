@@ -3,6 +3,67 @@
 use super::*;
 use crate::editor_layout::{Direction, GroupId, MAX_GROUPS};
 
+/// Every view in a group shares this lifetime token. Late reads and stale UI
+/// actions cannot target a new group that happens to reuse its numeric slot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct GroupKey {
+    pub(super) id: crate::editor_layout::GroupId,
+    pub(super) epoch: u64,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct GroupResize {
+    pub(super) split: u8,
+    pub(super) axis: crate::editor_layout::Axis,
+    pub(super) bounds: gpui::Bounds<gpui::Pixels>,
+    pub(super) anchor: GroupKey,
+    pub(super) revision: u64,
+}
+
+pub(super) struct Group {
+    epoch: u64,
+    pub(super) editors: Vec<Entity<EditorView>>,
+    pub(super) active: Option<usize>,
+    pub(super) opening: Option<String>,
+    pub(super) open_error: Option<(String, SharedString)>,
+    /// Single diff tab (a new diff replaces the previous one); `diff_active`: that tab is in front.
+    pub(super) diff: Option<Entity<crate::diff::DiffView>>,
+    pub(super) diff_active: bool,
+    /// Single large-file view (read-only; a separate tab like diff).
+    pub(super) large: Option<Entity<crate::large::LargeFileView>>,
+    pub(super) large_active: bool,
+    /// Welcome or Settings page (single tab, like diff); `page_active`: that tab is in front.
+    pub(super) page: Option<Page>,
+    pub(super) page_active: bool,
+    pub(super) _page_sub: Option<Subscription>,
+    /// Match to show in the file opened from a search result: (path, line, column, length).
+    pub(super) pending_reveal: Option<(String, u32, u32, u32)>,
+    /// Tab bar scroll (so the active tab stays visible).
+    pub(super) tab_scroll: gpui::ScrollHandle,
+}
+
+impl Default for Group {
+    fn default() -> Self {
+        static NEXT_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        Self {
+            epoch: NEXT_EPOCH.fetch_add(1, Ordering::Relaxed),
+            editors: Vec::new(),
+            active: None,
+            opening: None,
+            open_error: None,
+            diff: None,
+            diff_active: false,
+            large: None,
+            large_active: false,
+            page: None,
+            page_active: false,
+            _page_sub: None,
+            pending_reveal: None,
+            tab_scroll: gpui::ScrollHandle::new(),
+        }
+    }
+}
+
 impl state_glue::TabsState {
     pub(super) fn group(&self, id: GroupId) -> Option<&Group> {
         if self.layout.focused() == id { Some(&self.current) } else { self.groups.get(&id) }
@@ -34,6 +95,7 @@ impl state_glue::TabsState {
             let previous = std::mem::replace(&mut self.current, next);
             self.groups.insert(old, previous);
             self.layout.focus(key.id);
+            self.reveal_group.set(Some(key));
         }
         true
     }
@@ -41,8 +103,10 @@ impl state_glue::TabsState {
     pub(super) fn split(&mut self, direction: Direction) -> Result<GroupKey, crate::editor_layout::Error> {
         let old = self.layout.focused();
         let new = self.layout.split(old, direction)?;
+        self.revision = self.revision.wrapping_add(1);
         let previous = std::mem::take(&mut self.current);
         self.groups.insert(old, previous);
+        self.reveal_group.set(Some(self.current_key()));
         Ok(self.current_key_with_id(new))
     }
 
@@ -58,17 +122,19 @@ impl state_glue::TabsState {
         if !self.layout.remove(key.id) {
             return false;
         }
+        self.revision = self.revision.wrapping_add(1);
         if was_current {
             self.current = self.groups.remove(&self.layout.focused()).expect("layout group has state");
         } else {
             self.groups.remove(&key.id);
         }
+        self.reveal_group.set(Some(self.current_key()));
         true
     }
 }
 
 impl Group {
-    fn is_empty(&self) -> bool {
+    pub(super) fn is_empty(&self) -> bool {
         self.editors.is_empty() && self.diff.is_none() && self.large.is_none() && self.page.is_none() && self.opening.is_none()
     }
 }
@@ -146,7 +212,15 @@ impl Workbench {
                 window.focus(&self.focus_handle);
             }
         } else {
-            window.focus(&self.focus_handle);
+            let handle = match &self.tabs.page {
+                Some(Page::Settings(view)) => view.focus_handle(cx),
+                Some(Page::Markdown(view)) => view.focus_handle(cx),
+                Some(Page::Shortcuts(view)) => view.focus_handle(cx),
+                Some(Page::Merge(view)) => view.focus_handle(cx),
+                Some(Page::Compare(view)) => view.focus_handle(cx),
+                _ => self.focus_handle.clone(),
+            };
+            window.focus(&handle);
         }
         self.persist_session(cx);
         cx.notify();
@@ -183,10 +257,10 @@ impl Workbench {
         if !self.tabs.contains_key(from) || !self.tabs.contains_key(to) || Some(&ed) == before.as_ref() {
             return;
         }
-        if let Some(before) = &before {
-            if !self.tabs.group(to.id).is_some_and(|g| g.editors.contains(before)) {
-                return;
-            }
+        if let Some(before) = &before
+            && !self.tabs.group(to.id).is_some_and(|g| g.editors.contains(before))
+        {
+            return;
         }
         let source = self.tabs.group_mut(from.id).expect("validated group");
         let Some(index) = source.editors.iter().position(|e| *e == ed) else { return };
@@ -237,6 +311,19 @@ impl Workbench {
     pub(super) fn split_editor(&mut self, _: &SplitEditor, window: &mut Window, cx: &mut Context<Self>) {
         self.split_direction(Direction::Right, window, cx);
     }
+
+    pub(super) fn open_editor_beside(&mut self, path: String, window: &mut Window, cx: &mut Context<Self>) {
+        match self.tabs.split(Direction::Right) {
+            Ok(key) => {
+                self.focus_group_key(key, window, cx);
+                self.open_file(path, window, cx);
+            }
+            Err(_) => {
+                self.notice = Some(Notice::Info(crate::i18n::tf("A window supports up to {} editor groups.", &[&MAX_GROUPS.to_string()]).into()));
+                cx.notify();
+            }
+        }
+    }
     pub(super) fn split_editor_left(&mut self, _: &SplitEditorLeft, window: &mut Window, cx: &mut Context<Self>) {
         self.split_direction(Direction::Left, window, cx);
     }
@@ -249,6 +336,10 @@ impl Workbench {
 
     pub(super) fn close_empty_editor_group(&mut self, _: &CloseEmptyEditorGroup, window: &mut Window, cx: &mut Context<Self>) {
         let key = self.tabs.current_key();
+        if self.tabs.editors.is_empty() && self.tabs.diff.is_none() && self.tabs.large.is_none() && self.tabs.page.is_none() {
+            self.tabs.opening = None;
+            self.tabs.open_error = None;
+        }
         if self.tabs.remove_empty(key) {
             self.focus_group_key(self.tabs.current_key(), window, cx);
         }
