@@ -62,8 +62,17 @@ No feature has completed its PR acceptance yet. Keep acceptance requirements int
   walkthrough copied the two entries into `destination`, accepted the native Copy confirmation
   through AX, and verified both contents on disk with `c.txt` excluded.
 - Windows CI includes the Explorer regression group. Required PR checks and memory/size budgets
-  are pending. New Turkish strings are drafted and pass localization checks; no human native-speaker
+  are pending. PR: https://github.com/doancan/codeyard/pull/48. New Turkish strings are drafted and pass localization checks; no human native-speaker
   review or real VoiceOver speech session is claimed.
+
+The first Retina run passed all memory scenes (74/69/94/84/114/77 MB, agent 1 MB), but its
+63,218,688-byte executable exceeded the 60 MiB allocation gate. A separate baseline build was
+63,333,712 bytes, so this was a pre-existing limit breach rather than feature growth. Whole-program
+release LTO reduced the candidate executable to 59,823,376 bytes without dropping functionality
+or lowering optimization of the editor's dependencies. The measured cold build took 198 seconds
+and peaked at 7.14 GB resident memory; final budget and CI runs must validate this configuration.
+The first cross-platform run also found musl has no exported `renameat2` wrapper. Static agents
+now invoke the same exclusive kernel operation directly; local x64 and ARM64 musl builds pass.
 
 Cancellation interrupts staged copies and stops before the next move/delete. A connection loss or
 missing cancellation acknowledgement stops the batch with an explicit uncertain outcome; it never
