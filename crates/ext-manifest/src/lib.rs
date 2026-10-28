@@ -25,9 +25,16 @@ pub use risk::{Clipboard, Level, Permissions, Risk, risk};
 /// The file name of the manifest at the root of an extension.
 pub const FILE_NAME: &str = "codeyard-extension.toml";
 
-/// Parse and validate a manifest. Every problem is reported, not just the first.
+pub use validate::{Options, check_package_path, is_deceptive};
+
+/// Parse and validate a manifest, as install and publish do. Every problem is reported, not just the first.
 pub fn parse(text: &str) -> Result<Manifest, Vec<Diagnostic>> {
-    validate::parse(text)
+    validate::parse(text, Options::default())
+}
+
+/// Parse with `options`; `cyx dev` uses this to warn about a missing `why` instead of failing (see `Manifest::missing_why`).
+pub fn parse_with(text: &str, options: Options) -> Result<Manifest, Vec<Diagnostic>> {
+    validate::parse(text, options)
 }
 
 /// `publisher.name`.
@@ -132,6 +139,11 @@ impl Version {
             && (p.is_empty() || !p.split('.').all(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')))
         {
             return Err(format!("pre-release '{p}' must be dot-separated a-z, 0-9 and -"));
+        }
+        if let Some(p) = pre
+            && p.split('.').any(|id| id.len() > 1 && id.starts_with('0') && id.bytes().all(|b| b.is_ascii_digit()))
+        {
+            return Err(format!("pre-release '{p}' has a number with a leading zero"));
         }
         Ok(Version { major: n[0], minor: n[1], patch: n[2], pre: pre.map(str::to_string) })
     }
@@ -343,7 +355,8 @@ pub struct Manifest {
     pub icon: Option<String>,
     pub code: Option<CodeEntry>,
     pub permissions: Permissions,
-    /// Inferred from the contributions plus `activation.workspace-contains`; empty for declarative extensions.
+    /// Inferred from commands and views plus `activation.workspace-contains`; empty for declarative extensions.
+    /// (Language, URI-handler and account activation arrive with those contribution points in Phase 2.)
     pub activation: Vec<Activation>,
     pub dependencies: Vec<(ExtId, Version)>,
     /// Runs in untrusted folders (with no outbound permissions there). Default true.
@@ -359,5 +372,10 @@ impl Manifest {
 
     pub fn risk(&self) -> Risk {
         risk(&self.permissions)
+    }
+
+    /// The permission set is high risk and has no `why`: an error at install and publish, a warning in `cyx dev`.
+    pub fn missing_why(&self) -> bool {
+        self.risk().needs_why() && self.permissions.why.is_none()
     }
 }

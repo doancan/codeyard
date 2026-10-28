@@ -13,6 +13,7 @@ use crate::{Code as C, Diagnostic};
 
 struct Ctx {
     errors: Vec<Diagnostic>,
+    options: Options,
 }
 
 impl Ctx {
@@ -21,15 +22,15 @@ impl Ctx {
         self.errors.last_mut().expect("just pushed")
     }
 
-    /// A required text field: not empty, at most `max` characters, no control characters.
+    /// A required text field: not empty, at most `max` characters, nothing that can disguise text on the consent sheet.
     fn text(&mut self, what: &str, v: &S<String>, max: usize) -> String {
         let s = v.get_ref().trim();
         if s.is_empty() {
             self.err(C::BadText, v.span(), format!("{what} is empty"));
         } else if s.chars().count() > max {
             self.err(C::BadText, v.span(), format!("{what} is longer than {max} characters"));
-        } else if s.chars().any(char::is_control) {
-            self.err(C::BadText, v.span(), format!("{what} contains a control character"));
+        } else if let Some(c) = s.chars().find(|&c| is_deceptive(c)) {
+            self.err(C::BadText, v.span(), format!("{what} contains the invisible or control character U+{:04X}", c as u32));
         }
         s.to_string()
     }
@@ -60,7 +61,20 @@ impl Ctx {
     }
 }
 
-/// A path inside the package.
+/// Characters that change how text looks without being seen: controls, bidirectional overrides and zero-width
+/// characters. Rejected everywhere the consent sheet or a file name could show them.
+pub fn is_deceptive(c: char) -> bool {
+    c.is_control()
+        || matches!(c, '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2064}' | '\u{2066}'..='\u{2069}' | '\u{061C}' | '\u{FEFF}' | '\u{00AD}')
+}
+
+/// Windows device names, refused as a file name with any extension (`con.json` opens the console there).
+const RESERVED: &[&str] = &[
+    "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7",
+    "lpt8", "lpt9",
+];
+
+/// A path inside the package: relative, `/`-separated, the same file on every platform.
 pub fn check_package_path(p: &str) -> Result<(), String> {
     if p.is_empty() {
         return Err("is empty".into());
@@ -71,16 +85,42 @@ pub fn check_package_path(p: &str) -> Result<(), String> {
     if p.contains('\\') {
         return Err("uses '\\'; use '/'".into());
     }
-    if p.starts_with('/') || p.as_bytes().get(1) == Some(&b':') {
-        return Err("is absolute".into());
+    if p.starts_with('/') || p.starts_with('~') || p.contains(':') {
+        return Err("is absolute or names a drive or stream".into());
     }
-    if p.split('/').any(|part| part.is_empty() || part == "..") || p.chars().any(char::is_control) {
-        return Err("must not contain '..' or empty parts".into());
+    if p.chars().any(is_deceptive) || p.contains(['*', '?', '"', '<', '>', '|']) {
+        return Err("contains a character file names cannot have on every platform".into());
+    }
+    for part in p.split('/') {
+        if part.is_empty() || part == "." || part == ".." {
+            return Err("must not contain '.', '..' or empty parts".into());
+        }
+        if part.ends_with(['.', ' ']) {
+            return Err(format!("has a part ending in '.' or a space ('{part}')"));
+        }
+        let stem = part.split('.').next().unwrap_or(part).to_ascii_lowercase();
+        if RESERVED.contains(&stem.as_str()) {
+            return Err(format!("uses the reserved Windows name '{part}'"));
+        }
     }
     Ok(())
 }
 
-pub fn parse(text: &str) -> Result<Manifest, Vec<Diagnostic>> {
+/// Options for `parse_with`.
+#[derive(Clone, Copy, Debug)]
+pub struct Options {
+    /// A high-risk permission set without `why` is an error. `cyx dev` turns this off to warn instead (it calls
+    /// `missing_why`), so an author can try things before writing the sentence; install and publish keep it on.
+    pub require_why: bool,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Options { require_why: true }
+    }
+}
+
+pub fn parse(text: &str, options: Options) -> Result<Manifest, Vec<Diagnostic>> {
     if text.len() > limits::MANIFEST_BYTES {
         return Err(vec![Diagnostic::new(C::TooLarge, format!("the manifest is larger than {} KiB", limits::MANIFEST_BYTES / 1024))]);
     }
@@ -102,7 +142,7 @@ pub fn parse(text: &str) -> Result<Manifest, Vec<Diagnostic>> {
             }]);
         }
     };
-    let mut cx = Ctx { errors: Vec::new() };
+    let mut cx = Ctx { errors: Vec::new(), options };
     let m = build(&mut cx, raw);
     if cx.errors.is_empty() { Ok(m) } else { Err(cx.errors) }
 }
@@ -182,6 +222,12 @@ fn build(cx: &mut Ctx, raw: RawManifest) -> Manifest {
         activation.extend(contributions.commands.iter().map(|c| Activation::Command(c.id.clone())));
         activation.extend(contributions.views.iter().map(|v| Activation::View(v.id.clone())));
     }
+    if let (Some(a), None) = (&raw.activation, &raw.code)
+        && let Some(first) = a.workspace_contains.first()
+    {
+        cx.err(C::BadContribution, first.span(), "[activation] only applies to extensions with [code]").fix =
+            Some("remove [activation]: themes, snippets, languages and other no-code contributions are always on".into());
+    }
     for g in raw.activation.iter().flat_map(|a| &a.workspace_contains) {
         if let Err(e) = check_workspace_glob(g.get_ref()) {
             cx.err(C::BadPath, g.span(), format!("activation.workspace-contains '{}' {e}", g.get_ref()));
@@ -225,10 +271,30 @@ fn check_workspace_glob(g: &str) -> Result<(), String> {
     if g.is_empty() || g.len() > limits::ITEM_LEN {
         return Err(format!("must be 1 to {} characters", limits::ITEM_LEN));
     }
-    if g.starts_with('/') || g.contains('\\') || g.split('/').any(|p| p == "..") || g.as_bytes().get(1) == Some(&b':') {
-        return Err("must be relative to the workspace, '/'-separated and without '..'".into());
+    if g.starts_with('/') || g.starts_with('~') || g.contains('\\') || g.contains(':') {
+        return Err("must be relative to the workspace and '/'-separated".into());
+    }
+    if g.contains(['{', '}']) {
+        return Err("must not use {a,b} alternatives; list each glob separately".into());
+    }
+    if g.chars().any(is_deceptive) {
+        return Err("contains an invisible or control character".into());
+    }
+    let body = g.strip_prefix("./").unwrap_or(g);
+    if body.split('/').any(|p| p.is_empty() || p == "." || p == "..") {
+        return Err("must not contain '.', '..' or empty parts".into());
     }
     Ok(())
+}
+
+/// `core:` followed by a command id: lowercase `a-z 0-9`, `-` and `.`.
+fn check_core_command(c: &str) -> Result<(), String> {
+    let ok = c.strip_prefix("core:").is_some_and(|id| {
+        !id.is_empty()
+            && id.len() <= limits::ID_LEN
+            && id.split('.').all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'))
+    });
+    if ok { Ok(()) } else { Err("must name a core command, like core:workbench.open-settings".into()) }
 }
 
 fn check_host(h: &str) -> Result<(), String> {
@@ -295,10 +361,7 @@ fn permissions(cx: &mut Ctx, p: &RawPermissions) -> Permissions {
     let net = list(cx, "net", &p.net, check_host);
     let auth = list(cx, "auth", &p.auth, check_id_part);
     let run = list(cx, "run", &p.run, check_program);
-    let commands = list(cx, "commands", &p.commands, |c| match c.strip_prefix("core:") {
-        Some(rest) if !rest.is_empty() => Ok(()),
-        _ => Err("must name a core command, like core:workbench.open-settings".into()),
-    });
+    let commands = list(cx, "commands", &p.commands, check_core_command);
     let clipboard = match p.clipboard.as_ref().map(|c| (c.get_ref().as_str(), c.span())) {
         None => Clipboard::None,
         Some(("read", _)) => Clipboard::Read,
@@ -318,9 +381,9 @@ fn permissions(cx: &mut Ctx, p: &RawPermissions) -> Permissions {
     });
     let perms = Permissions { read, write, net, auth, secrets: p.secrets, run, clipboard, terminal: p.terminal, commands, why };
     let r = risk::risk(&perms);
-    if r.needs_why() && perms.why.is_none() {
+    if r.needs_why() && perms.why.is_none() && cx.options.require_why {
         let reason = if r.runs_code {
-            "it can run programs".to_string()
+            "it can run code as you".to_string()
         } else {
             format!("it can read private data ({}) and send it ({})", r.reads.join(", "), r.sends.join(", "))
         };
@@ -418,6 +481,12 @@ fn contributions(cx: &mut Ctx, raw: &RawManifest, id: &ExtId, perms: &Permission
         }
         let cmd = k.command.get_ref();
         let command = if cmd.starts_with("core:") {
+            if let Err(e) = check_core_command(cmd) {
+                cx.err(C::BadContribution, k.command.span(), format!("keybinding command '{cmd}' {e}"));
+            } else if !perms.commands.contains(cmd) {
+                cx.err(C::NotDeclared, k.command.span(), format!("command access to \"{cmd}\" is not declared")).fix =
+                    Some(format!("add to [permissions]:  commands = [\"{cmd}\"]"));
+            }
             cmd.clone()
         } else if command_ids.contains(cmd) {
             id.qualify(cmd)

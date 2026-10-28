@@ -284,7 +284,9 @@ fn interpreters_are_flagged_for_the_package_check() {
 
 #[test]
 fn keybindings_resolve_their_command() {
-    let base = with("[code]\nentry = \"Cargo.toml\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n[dependencies]\n\"other.ext\" = \"1.2\"\n");
+    let base = with(
+        "[code]\nentry = \"Cargo.toml\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n[dependencies]\n\"other.ext\" = \"1.2\"\n[permissions]\ncommands = [\"core:debug.start\"]\n",
+    );
     let m = parse(&format!("{base}[[keybindings]]\nkey = \"cmd-shift-g\"\ncommand = \"go\"\nwhen = \"editor.language == 'rust'\"\n[[keybindings]]\nkey = \"ctrl-k ctrl-o\"\ncommand = \"other.ext.open\"\n[[keybindings]]\nkey = \"f5\"\ncommand = \"core:debug.start\"\n")).unwrap();
     let cmds: Vec<_> = m.contributions.keybindings.iter().map(|k| k.command.as_str()).collect();
     assert_eq!(cmds, vec!["a.b.go", "other.ext.open", "core:debug.start"]);
@@ -391,4 +393,131 @@ fn consent_lines_use_plain_words() {
     assert_eq!(p.describe(), vec!["Read vercel.json", "Connect to api.vercel.com", "Act as your GitHub account", "Run vercel with any arguments"]);
     let wide = Permissions { read: vec!["**".into()], net: vec!["*.com".into()], ..Default::default() };
     assert_eq!(wide.describe(), vec!["Read all files in the workspace", "Connect to any website"]);
+}
+
+// Regressions from the hardening review of #50: each input once rated too low or was accepted.
+
+#[test]
+fn every_way_to_say_all_files_is_wide() {
+    for g in ["*/**", ".//**", "**/?*", "**/[!.]*", "**/**/*", "?**", "[a-z]*/**", "src/**", "*/x.json", "*", "?", "*.*", "x*"] {
+        assert!(is_wide_glob(g), "{g}");
+        let p = Permissions { read: vec![g.into()], net: vec!["evil.example.com".into()], ..Default::default() };
+        assert_eq!(risk(&p).level, Level::High, "{g}");
+    }
+    for g in ["vercel.json", "src/*.rs", ".github/workflows/*.yml", "deploy-*.json", "docs/index.md"] {
+        assert!(!is_wide_glob(g), "{g}");
+    }
+}
+
+#[test]
+fn secret_files_count_as_private_data() {
+    for g in [".env", ".env.local", ".git/config", "config/.npmrc", "certs/server.pem", "deploy.key", ".ssh/id_ed25519", ".e*", ".aws/credentials"] {
+        assert!(crate::risk::is_sensitive_glob(g), "{g}");
+        let p = Permissions { read: vec![g.into()], net: vec!["api.example.com".into()], ..Default::default() };
+        assert_eq!(risk(&p).level, Level::High, "{g}");
+    }
+    assert!(!crate::risk::is_sensitive_glob("vercel.json"));
+    let p = Permissions { read: vec![".env".into()], ..Default::default() };
+    assert!(p.describe().contains(&"Read files that can hold passwords and keys".to_string()));
+}
+
+#[test]
+fn terminals_and_code_files_run_code() {
+    let lvl = |p: Permissions| {
+        let r = risk(&p);
+        assert!(r.runs_code, "{p:?}");
+        r.level
+    };
+    assert_eq!(lvl(Permissions { terminal: true, ..Default::default() }), Level::High);
+    assert_eq!(lvl(Permissions { write: vec!["**".into()], ..Default::default() }), Level::High);
+    for g in [".git/hooks/pre-commit", ".vscode/tasks.json", ".envrc", "Makefile", "build.rs", "package.json", ".github/workflows/ci.yml"] {
+        assert_eq!(lvl(Permissions { write: vec![g.into()], ..Default::default() }), Level::High, "{g}");
+    }
+    assert!(!risk(&Permissions { write: vec!["CHANGELOG.md".into()], ..Default::default() }).runs_code);
+}
+
+#[test]
+fn invisible_characters_cannot_disguise_the_sheet() {
+    for bad in ["\u{202e}", "\u{200b}", "\u{2066}", "\u{feff}", "\u{00ad}"] {
+        assert_eq!(codes(&with(&format!("[permissions]\nwhy = \"ok{bad}ok\"\n"))), vec![Code::BadText], "{bad:?}");
+        assert_eq!(codes(&THEME.replace("name    = \"Midnight\"", &format!("name    = \"Mid{bad}night\""))), vec![Code::BadText], "{bad:?}");
+    }
+    assert_eq!(codes(&with("[permissions]\nread = [\"vercel.json\\nConnect to nothing\"]\n")), vec![Code::BadPermission]);
+    assert_eq!(codes(&with("[permissions]\ncommands = [\"core:a\\u202eb c\"]\n")), vec![Code::BadPermission]);
+}
+
+#[test]
+fn interpreters_are_recognised_in_any_spelling() {
+    for p in [
+        "python.exe",
+        "NODE.EXE",
+        "bash.exe",
+        "py",
+        "python2",
+        "pypy3",
+        "pythonw",
+        "node22",
+        "wsl",
+        "busybox",
+        "xargs",
+        "npx",
+        "Rscript",
+        "wscript",
+        "pwsh.exe",
+        "cmd.bat",
+    ] {
+        assert!(crate::risk::is_interpreter(p), "{p}");
+    }
+    for p in ["taplo", "rust-analyzer", "vercel", "nodemon", "pythonista-lsp"] {
+        assert!(!crate::risk::is_interpreter(p), "{p}");
+    }
+}
+
+#[test]
+fn keybindings_to_core_commands_need_the_permission() {
+    let base = with("");
+    let e = errors(&format!("{base}[[keybindings]]\nkey = \"f5\"\ncommand = \"core:debug.start\"\n"));
+    assert_eq!(e[0].code, Code::NotDeclared);
+    assert_eq!(e[0].fix.as_deref(), Some("add to [permissions]:  commands = [\"core:debug.start\"]"));
+    assert_eq!(codes(&format!("{base}[[keybindings]]\nkey = \"f5\"\ncommand = \"core:\"\n")), vec![Code::BadContribution]);
+}
+
+#[test]
+fn activation_without_code_is_refused() {
+    let e = errors(&format!("{THEME}[activation]\nworkspace-contains = [\"x\"]\n"));
+    assert_eq!(e[0].code, Code::BadContribution);
+    assert!(e[0].message.contains("[activation]"));
+}
+
+#[test]
+fn cyx_dev_can_warn_about_a_missing_why() {
+    let text = with("[permissions]\nrun = [\"taplo\"]\n");
+    assert_eq!(codes(&text), vec![Code::WhyRequired]);
+    let m = parse_with(&text, Options { require_why: false }).unwrap();
+    assert!(m.missing_why());
+}
+
+#[test]
+fn numeric_pre_releases_have_no_leading_zeros() {
+    assert!(Version::parse("1.0.0-01").is_err());
+    assert!(Version::parse("1.0.0-0").is_ok() && Version::parse("1.0.0-0a").is_ok());
+}
+
+#[test]
+fn file_names_are_portable() {
+    for bad in
+        ["themes/a.json:evil.json", "con.json", "themes/NUL", "aux/x.json", "themes/x.json.", "themes/x.json ", ".. /x", "~/x.json", "t*.json", "./x.json"]
+    {
+        assert!(check_package_path(bad).is_err(), "{bad}");
+    }
+    for g in ["~/.ssh/id_rsa", "{..,x}/secret", "C:/x", "a//b", "a/./b"] {
+        assert!(codes(&with(&format!("[permissions]\nread = [\"{g}\"]\nwhy = \"x\"\n"))).contains(&Code::BadPermission), "{g}");
+    }
+}
+
+#[test]
+fn more_shared_suffixes_are_any_host() {
+    for h in ["*.s3.amazonaws.com", "*.ngrok.io", "*.workers.dev", "*.com.br"] {
+        assert!(is_wide_host(h), "{h}");
+    }
 }

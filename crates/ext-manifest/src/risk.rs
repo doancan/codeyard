@@ -2,8 +2,9 @@
 //! sheet shows a red banner, whether the registry asks for a human review and what `cyx publish --dry-run` prints.
 //! Authors never see the levels; they see the sheet.
 
-/// Programs that run whatever script they are given. Allowed in `run` only when the script ships inside the package
-/// (checked by `ext-pkg`), so a language server wrapper is a normal high-risk extension, not a way around review.
+/// Programs that run whatever script or command line they are given. Allowed in `run` only when the script ships inside
+/// the package (checked by `ext-pkg`), so a language server wrapper is a normal high-risk extension, not a way around
+/// review. Matched on the file name without `.exe`/`.cmd`/`.bat`/`.com`, ignoring case.
 pub const INTERPRETERS: &[&str] = &[
     "sh",
     "bash",
@@ -13,24 +14,40 @@ pub const INTERPRETERS: &[&str] = &[
     "ksh",
     "csh",
     "tcsh",
+    "nu",
+    "elvish",
+    "xonsh",
+    "busybox",
     "cmd",
-    "cmd.exe",
     "powershell",
-    "powershell.exe",
     "pwsh",
-    "pwsh.exe",
-    "node",
+    "wsl",
+    "env",
+    "xargs",
+    "nohup",
+    "sudo",
+    "doas",
+    "npx",
+    "pnpx",
+    "bunx",
     "deno",
     "bun",
-    "python",
-    "python3",
-    "ruby",
-    "perl",
-    "php",
-    "lua",
+    "py",
+    "rscript",
     "osascript",
-    "env",
+    "wscript",
+    "cscript",
+    "mshta",
+    "rundll32",
+    "regsvr32",
+    "tclsh",
+    "wish",
+    "awk",
+    "gawk",
+    "expect",
 ];
+/// Interpreter names that also come with a version suffix: `python3.12`, `node22`, `pypy3`, `pythonw`.
+pub const INTERPRETER_FAMILIES: &[&str] = &["python", "pypy", "node", "ruby", "perl", "php", "lua", "luajit", "julia", "java", "dotnet"];
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Clipboard {
@@ -95,6 +112,9 @@ impl Permissions {
         let list = |v: &[String]| v.join(", ");
         if !self.read.is_empty() {
             out.push(if self.read.iter().any(|g| is_wide_glob(g)) { "Read all files in the workspace".into() } else { format!("Read {}", list(&self.read)) });
+            if self.read.iter().any(|g| is_sensitive_glob(g)) {
+                out.push("Read files that can hold passwords and keys".into());
+            }
         }
         if !self.write.is_empty() {
             out.push(if self.write.iter().any(|g| is_wide_glob(g)) {
@@ -141,14 +161,88 @@ fn provider_name(id: &str) -> String {
 }
 
 pub fn is_interpreter(program: &str) -> bool {
-    let base = program.rsplit(['/', '\\']).next().unwrap_or(program);
-    INTERPRETERS.iter().any(|i| i.eq_ignore_ascii_case(base)) || base.starts_with("python3.")
+    let base = program.rsplit(['/', '\\']).next().unwrap_or(program).to_ascii_lowercase();
+    let base = [".exe", ".cmd", ".bat", ".com"].iter().find_map(|x| base.strip_suffix(x)).unwrap_or(&base);
+    INTERPRETERS.contains(&base)
+        || INTERPRETER_FAMILIES.iter().any(|f| base.strip_prefix(f).is_some_and(|v| v.chars().all(|c| c.is_ascii_digit() || matches!(c, '.' | '-' | 'w'))))
 }
 
-/// A glob that matches the whole workspace (or most of it) rather than named files.
+fn segments(glob: &str) -> Vec<&str> {
+    glob.split('/').filter(|s| !s.is_empty() && *s != ".").collect()
+}
+
+fn has_wildcard(s: &str) -> bool {
+    s.contains(['*', '?', '[', '{'])
+}
+
+/// A glob that reaches more than named files in one folder: anything with `**`, a wildcard in a folder part, or a
+/// wildcard file part other than `name*.ext`. `src/*.rs` and `.github/workflows/*.yml` are narrow; `src/**`, `*/x`,
+/// `**/*.rs`, `?*` and `*` are wide.
 pub fn is_wide_glob(glob: &str) -> bool {
-    let g = glob.trim_start_matches("./");
-    matches!(g, "*" | "**" | "**/*" | "**/**") || g.starts_with("**/*.") || (g.starts_with("**/") && g.ends_with("/**"))
+    let parts = segments(glob);
+    let Some((last, dirs)) = parts.split_last() else { return true };
+    if parts.iter().any(|p| p.contains("**")) || dirs.iter().any(|d| has_wildcard(d)) {
+        return true;
+    }
+    if !has_wildcard(last) {
+        return false;
+    }
+    if last.contains(['?', '[', '{']) || last.matches('*').count() != 1 {
+        return true;
+    }
+    let after = last.split_once('*').map_or("", |(_, a)| a);
+    !(after.len() > 1 && after.starts_with('.'))
+}
+
+/// Folders and files that hold credentials, or that run code when a tool opens them. Reading them counts as reading
+/// private data; writing them counts as running code. Matched on any path part, ignoring case.
+const SENSITIVE_DIRS: &[&str] =
+    &[".git", ".ssh", ".gnupg", ".aws", ".azure", ".kube", ".docker", ".vscode", ".idea", ".cargo", ".husky", ".github", ".config", ".devcontainer"];
+const SENSITIVE_FILES: &[&str] = &[
+    ".envrc",
+    ".npmrc",
+    ".yarnrc",
+    ".yarnrc.yml",
+    ".pypirc",
+    ".netrc",
+    ".git-credentials",
+    ".gitconfig",
+    ".gitattributes",
+    ".pgpass",
+    "credentials",
+    "id_rsa",
+    "id_ecdsa",
+    "id_ed25519",
+    "makefile",
+    "justfile",
+    "build.rs",
+    "cargo.toml",
+    "package.json",
+    "setup.py",
+    "pyproject.toml",
+    "gradlew",
+    "build.gradle",
+    "pom.xml",
+    "dockerfile",
+    "docker-compose.yml",
+    "flake.nix",
+    ".pre-commit-config.yaml",
+    ".bashrc",
+    ".zshrc",
+    ".profile",
+];
+const SENSITIVE_EXTENSIONS: &[&str] = &[".pem", ".key", ".p12", ".pfx", ".keystore", ".jks", ".kdbx", ".ovpn", ".tfstate", ".tfvars"];
+
+/// A glob that names or can match a credential file, or a file that runs code when a tool opens it.
+pub fn is_sensitive_glob(glob: &str) -> bool {
+    let g = glob.to_ascii_lowercase();
+    segments(&g).iter().any(|p| {
+        SENSITIVE_DIRS.contains(p)
+            || SENSITIVE_FILES.contains(p)
+            || p.starts_with(".env")
+            || SENSITIVE_EXTENSIONS.iter().any(|x| p.ends_with(x))
+            || (p.starts_with('.') && has_wildcard(p))
+    })
 }
 
 /// `*.com` and friends: a wildcard directly under a public suffix is any host. Without a public-suffix list, a wildcard
@@ -158,19 +252,44 @@ pub fn is_wide_host(host: &str) -> bool {
     rest.split('.').count() < 2 || SHARED_SUFFIXES.contains(&rest)
 }
 
+/// Suffixes under which anyone can get a host name. A full public-suffix list would be exact; this list covers the common
+/// ones, and only the sheet's wording depends on it (any `net` already counts as sending).
 const SHARED_SUFFIXES: &[&str] = &[
     "co.uk",
+    "org.uk",
     "com.tr",
     "com.au",
     "co.jp",
+    "co.in",
+    "com.br",
+    "com.cn",
+    "co.nz",
+    "co.za",
+    "com.mx",
     "github.io",
+    "githubusercontent.com",
+    "gitlab.io",
     "vercel.app",
     "netlify.app",
     "pages.dev",
+    "workers.dev",
     "herokuapp.com",
     "azurewebsites.net",
     "cloudfront.net",
     "appspot.com",
+    "web.app",
+    "firebaseapp.com",
+    "s3.amazonaws.com",
+    "amazonaws.com",
+    "blogspot.com",
+    "ngrok.io",
+    "ngrok-free.app",
+    "onrender.com",
+    "fly.dev",
+    "railway.app",
+    "glitch.me",
+    "repl.co",
+    "trycloudflare.com",
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -190,7 +309,7 @@ pub struct Risk {
     pub reads: Vec<&'static str>,
     /// The permissions that send data out (`net`, `run`, `write`, terminal).
     pub sends: Vec<&'static str>,
-    /// `run` is declared: the extension can run code as the user.
+    /// The extension can run code as the user: `run`, `terminal`, or writing files that other tools run.
     pub runs_code: bool,
 }
 
@@ -201,11 +320,11 @@ impl Risk {
     }
 }
 
-/// The one judgement of a permission set. Reading private data together with any way to send it is High; any `run` is
-/// High ("can run code as you").
+/// The one judgement of a permission set. Reading private data together with any way to send it is High; anything that
+/// can run code as the user is High.
 pub fn risk(p: &Permissions) -> Risk {
     let mut reads = Vec::new();
-    if p.read.iter().any(|g| is_wide_glob(g)) {
+    if p.read.iter().any(|g| is_wide_glob(g) || is_sensitive_glob(g)) {
         reads.push("read");
     }
     if p.clipboard.reads() {
@@ -230,7 +349,9 @@ pub fn risk(p: &Permissions) -> Risk {
     if p.terminal {
         sends.push("terminal");
     }
-    let runs_code = !p.run.is_empty();
+    // Typing into a terminal runs a command; writing build files, hooks or editor tasks runs code at the next build,
+    // commit or open.
+    let runs_code = !p.run.is_empty() || p.terminal || p.write.iter().any(|g| is_wide_glob(g) || is_sensitive_glob(g));
     let level = if runs_code || (!reads.is_empty() && !sends.is_empty()) {
         Level::High
     } else if !reads.is_empty() || !sends.is_empty() || !p.read.is_empty() || p.clipboard.writes() || !p.commands.is_empty() {
