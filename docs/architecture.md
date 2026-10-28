@@ -16,6 +16,8 @@ crates/
   schema/   JSON/YAML schema engine (parse with spans, validate, hover, completion, SchemaStore)
   spell/    Hunspell dictionaries, tokenizer rules, personal dictionary, dictionary download
   state/    local SQLite state (`schema.sql`)
+  ext-manifest/ extension manifest (`codeyard-extension.toml`): parsing, validation with author-facing errors,
+            activation, permissions and risk; shared by the app, `cyx` and the registry (see plugin-architecture.md)
   theme/    colour tokens -> Rust constants (`design/tokens*.json`, `build.rs`), built-in themes
   app/      GPUI views, commands, keybindings, the workbench; the only crate that depends on GPUI
 vendor/
