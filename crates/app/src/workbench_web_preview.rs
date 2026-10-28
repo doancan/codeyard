@@ -7,13 +7,36 @@ pub(super) struct State {
     events: Option<gpui::Task<()>>,
     generation: u64,
     starting: bool,
+    config: Option<crate::web_preview_config::Config>,
 }
 
 impl Workbench {
+    pub(super) fn copy_web_preview_url(&mut self, cx: &mut Context<Self>) {
+        let Some(server) = self.chrome.web_preview.server.as_ref() else {
+            self.notice = Some(Notice::Info(crate::i18n::t("Start Web Preview before copying its URL.").into()));
+            cx.notify();
+            return;
+        };
+        let relative = self.active_editor().and_then(|editor| {
+            let editor = editor.read(cx);
+            (editor.uses_host(&self.remote.host) && crate::web_preview::is_html(&editor.path))
+                .then(|| editor.path.strip_prefix(&format!("{}/", server.root().trim_end_matches('/'))).map(str::to_owned))
+                .flatten()
+        });
+        cx.write_to_clipboard(gpui::ClipboardItem::new_string(server.url(relative.as_deref().unwrap_or(""))));
+        self.notice = Some(Notice::Info(crate::i18n::t("Preview URL copied.").into()));
+        cx.notify();
+    }
+
+    pub(super) fn web_preview_needs_restart(&self, config: &crate::web_preview_config::Config) -> bool {
+        self.chrome.web_preview.config.as_ref().is_some_and(|current| current != config)
+    }
+
     pub(super) fn stop_web_preview(&mut self, cx: &mut Context<Self>) {
         let state = &mut self.chrome.web_preview;
         state.generation += 1;
         state.starting = false;
+        state.config = None;
         state.events = None;
         if state.server.take().is_some() {
             self.log_output(crate::i18n::t("Web Preview stopped.").to_string());
@@ -33,11 +56,14 @@ impl Workbench {
             .filter(|ed| ed.read(cx).uses_host(&self.remote.host))
             .map(|ed| ed.read(cx).path.clone())
             .filter(|p| crate::web_preview::is_html(p));
-        let root = path
+        let base = path
             .as_ref()
             .and_then(|path| self.all_roots(cx).into_iter().filter(|r| path.starts_with(&format!("{}/", r.trim_end_matches('/')))).max_by_key(String::len))
             .or_else(|| path.as_ref().map(|p| parent_of(p)))
             .or_else(|| self.root(cx));
+        let config = cx.global::<Settings>().web_preview.clone();
+        let info = self.remote.host.info();
+        let root = config.resolve_root(base.as_deref(), &info.home, &info.os);
         let Some(root) = root else {
             self.notice = Some(Notice::Info(crate::i18n::t("Open an HTML file or a project folder to start Web Preview.").into()));
             cx.notify();
@@ -47,7 +73,11 @@ impl Workbench {
         let host = self.remote.host.clone();
         let generation = self.chrome.web_preview.generation;
         self.require_trust_for(Some(root.clone()), window, cx, move |this, _, cx| {
-            if !cx.global::<Settings>().web_preview_enabled || generation != this.chrome.web_preview.generation || !Arc::ptr_eq(&host, &this.remote.host) {
+            if !cx.global::<Settings>().web_preview_enabled
+                || cx.global::<Settings>().web_preview != config
+                || generation != this.chrome.web_preview.generation
+                || !Arc::ptr_eq(&host, &this.remote.host)
+            {
                 return;
             }
             this.start_web_preview(root, relative, cx);
@@ -55,9 +85,11 @@ impl Workbench {
     }
 
     fn start_web_preview(&mut self, root: String, relative: String, cx: &mut Context<Self>) {
+        let config = cx.global::<Settings>().web_preview.clone();
         if let Some(server) = &self.chrome.web_preview.server
             && server.root().trim_end_matches('/') == root.trim_end_matches('/')
             && server.uses_host(&self.remote.host)
+            && server.config() == &config
         {
             cx.open_url(&server.url(&relative));
             return;
@@ -67,12 +99,13 @@ impl Workbench {
         }
         self.stop_web_preview(cx);
         self.chrome.web_preview.starting = true;
+        self.chrome.web_preview.config = Some(config.clone());
         let generation = self.chrome.web_preview.generation;
         let host = self.remote.host.clone();
         let task = cx.background_executor().spawn(async move {
             // Check the source before binding a listener; remote failures never block the UI.
             host.read_dir(&root).map_err(|e| e.to_string())?;
-            crate::web_preview::Server::start(host, root)
+            crate::web_preview::Server::start(host, root, config)
         });
         cx.spawn(async move |this, cx| {
             let result = task.await;
@@ -84,7 +117,7 @@ impl Workbench {
                 match result {
                     Ok((server, rx)) => {
                         let url = server.url(&relative);
-                        this.log_output(crate::i18n::tf("Web Preview listening on 127.0.0.1:{}", &[&server.port()]));
+                        this.log_output(crate::i18n::tf("Web Preview listening on {}", &[&server.listen_addr()]));
                         this.chrome.web_preview.server = Some(server);
                         this.chrome.web_preview.events = Some(cx.spawn(async move |this, cx| {
                             use futures::StreamExt;
@@ -112,6 +145,7 @@ impl Workbench {
                         cx.open_url(&url);
                     }
                     Err(error) => {
+                        this.chrome.web_preview.config = None;
                         let message = crate::i18n::tf("Could not start Web Preview: {}", &[&error]);
                         this.log_output(message.clone());
                         this.notice = Some(Notice::Error(message.into()));
