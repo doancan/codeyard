@@ -1998,7 +1998,7 @@ fn explorer_recursive_expand_persists_and_timeline_follows_the_file(cx: &mut Tes
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     wait_ticking(cx, "kök", |cx| wb.read_with(cx, |wb, cx| wb.tree_names(cx).contains(&"a".to_string())));
-    let a = dir.join("a").to_string_lossy().into_owned();
+    let a = crate::ui::local_path(&dir.join("a"));
     wb.update(cx, |wb, cx| wb.tree_expand_for_test(&a, true, cx));
     wait_ticking(cx, "hepsi açıldı", |cx| {
         wb.read_with(cx, |wb, cx| {
@@ -2640,7 +2640,7 @@ fn explorer_compacts_chains_sorts_and_types_ahead(cx: &mut TestAppContext) {
     assert_eq!(names(cx), ["docs", "src", "Alpha.rs", "beta.txt", "zeta.txt"], "folders first, natural order");
 
     // When src opens the chain is a single row: "src/main/java", its files one level deeper.
-    let src = dir.join("src").to_string_lossy().into_owned();
+    let src = crate::ui::local_path(&dir.join("src"));
     wb.update(cx, |wb, cx| wb.tree_reveal_dir_for_test(&src, cx));
     wait_for(cx, "zincir", |cx| names(cx).contains(&"src/main/java".to_string()) && names(cx).contains(&"Util.java".to_string()));
     assert_eq!(names(cx), ["docs", "src/main/java", "App.java", "Util.java", "Alpha.rs", "beta.txt", "zeta.txt"]);
@@ -2664,22 +2664,18 @@ fn explorer_compacts_chains_sorts_and_types_ahead(cx: &mut TestAppContext) {
     // Type-to-search: tree focused, "z" → zeta.txt, "b" → beta.txt; the selected folder gets a stronger guide line.
     cx.simulate_keystrokes("cmd-shift-e");
     cx.simulate_input("z");
-    assert_eq!(wb.read_with(cx, |wb, cx| wb.tree_selected_for_test(cx)), Some(dir.join("zeta.txt").to_string_lossy().into_owned()));
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.tree_selected_for_test(cx)), Some(crate::ui::local_path(&dir.join("zeta.txt"))));
     std::thread::sleep(std::time::Duration::from_millis(1100)); // new search
     cx.simulate_input("b");
-    assert_eq!(wb.read_with(cx, |wb, cx| wb.tree_selected_for_test(cx)), Some(dir.join("beta.txt").to_string_lossy().into_owned()));
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.tree_selected_for_test(cx)), Some(crate::ui::local_path(&dir.join("beta.txt"))));
     std::thread::sleep(std::time::Duration::from_millis(1100));
     cx.simulate_input("al");
-    assert_eq!(
-        wb.read_with(cx, |wb, cx| wb.tree_selected_for_test(cx)),
-        Some(dir.join("Alpha.rs").to_string_lossy().into_owned()),
-        "büyük/küçük harf fark etmez"
-    );
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.tree_selected_for_test(cx)), Some(crate::ui::local_path(&dir.join("Alpha.rs"))), "büyük/küçük harf fark etmez");
 
     // Hierarchy: with an open folder selected, its children's line (column 0, rows 2-3) is emphasized;
     // with a file inside it selected, the same folder's line is emphasized too.
     cx.simulate_keystrokes("up up up"); // Alpha.rs → Util.java → App.java → src/main/java
-    assert_eq!(wb.read_with(cx, |wb, cx| wb.tree_selected_for_test(cx)), Some(dir.join("src/main/java").to_string_lossy().into_owned()));
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.tree_selected_for_test(cx)), Some(crate::ui::local_path(&dir.join("src/main/java"))));
     assert_eq!(wb.read_with(cx, |wb, cx| wb.tree_guide_for_test(cx)), Some((0, 2, 3)));
     cx.simulate_keystrokes("down");
     assert_eq!(wb.read_with(cx, |wb, cx| wb.tree_guide_for_test(cx)), Some((0, 2, 3)));
@@ -4090,8 +4086,7 @@ fn explorer_menu_duplicates_compares_and_opens_terminals(cx: &mut TestAppContext
     open(&wb, &dir, cx);
     wait_for(cx, "ağaç", |cx| wb.read_with(cx, |wb, cx| wb.tree_names(cx)).contains(&"README.md".to_string()));
     let menu_on = |cx: &mut VisualTestContext, path: &std::path::Path, is_dir: bool| {
-        let ev =
-            crate::tree::TreeEvent::ContextMenu { path: path.to_string_lossy().into_owned(), is_dir, position: gpui::point(gpui::px(100.), gpui::px(100.)) };
+        let ev = crate::tree::TreeEvent::ContextMenu { path: crate::ui::local_path(&path), is_dir, position: gpui::point(gpui::px(100.), gpui::px(100.)) };
         wb.update_in(cx, |wb, window, cx| wb.tree_event_for_test(ev, window, cx));
     };
     let readme = dir.join("README.md");
@@ -4123,11 +4118,11 @@ fn explorer_menu_duplicates_compares_and_opens_terminals(cx: &mut TestAppContext
     menu_on(cx, &dir.join("src"), true);
     wb.update_in(cx, |wb, _, cx| wb.select_menu_for_test("Open in Integrated Terminal", cx));
     cx.run_until_parked();
-    assert_eq!(wb.read_with(cx, |wb, cx| wb.terminal_cwds_for_test(cx)), [Some(dir.join("src").to_string_lossy().into_owned())]);
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.terminal_cwds_for_test(cx)), [Some(crate::ui::local_path(&dir.join("src")))]);
     menu_on(cx, &dir.join("src/lib.rs"), false);
     wb.update_in(cx, |wb, _, cx| wb.select_menu_for_test("Open in Integrated Terminal", cx));
     cx.run_until_parked();
-    assert_eq!(wb.read_with(cx, |wb, cx| wb.terminal_cwds_for_test(cx)).last(), Some(&Some(dir.join("src").to_string_lossy().into_owned())));
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.terminal_cwds_for_test(cx)).last(), Some(&Some(crate::ui::local_path(&dir.join("src")))));
 
     // Open side by side: a second group is created.
     menu_on(cx, &readme, false);
@@ -4206,11 +4201,11 @@ fn git_amend_undo_stash_and_discard_all(cx: &mut TestAppContext) {
 fn explorer_copy_cut_paste_and_drag_move(cx: &mut TestAppContext) {
     use crate::tree::TreeEvent;
     let dir = std::fs::canonicalize(project("clipboard")).unwrap();
-    let d = |p: &str| dir.join(p).to_string_lossy().into_owned();
+    let d = |p: &str| crate::ui::local_path(&dir.join(p));
     std::fs::create_dir_all(dir.join("hedef")).unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let root = dir.to_string_lossy().into_owned();
+    let root = crate::ui::local_path(&dir);
     let ev = |cx: &mut VisualTestContext, e: TreeEvent| {
         wb.update_in(cx, |wb, window, cx| wb.tree_event_for_test(e, window, cx));
         cx.run_until_parked();

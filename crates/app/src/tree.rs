@@ -669,6 +669,7 @@ impl FileTree {
             return;
         }
         self.load_epochs.remove(&path);
+        let loaded = result.is_ok();
         let load = match result {
             Ok(mut entries) => {
                 let excludes = &cx.global::<crate::settings::Settings>().files_exclude;
@@ -691,7 +692,11 @@ impl FileTree {
         let open = self.expanded.contains(&path);
         self.children.insert(path.clone(), load);
         if self.recursive.remove(&path) {
-            self.expand_rec(&path, cx);
+            // A failed read stays failed until an explicit retry. Re-entering
+            // expansion here would immediately retry the same unreadable folder.
+            if loaded {
+                self.expand_rec(&path, cx);
+            }
             if self.recursive.is_empty() {
                 // The last folder has loaded too: the fully expanded state is saved.
                 cx.emit(TreeEvent::ExpandedChanged);
