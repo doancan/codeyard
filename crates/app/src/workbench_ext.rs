@@ -12,7 +12,7 @@ use gpui::{Context, Entity, FocusHandle, Window};
 use super::*;
 use crate::input::{FieldEvent, TextField};
 
-gpui::actions!(workbench, [ShowExtensions, InstallExtensionFromFile, InstallExtensionFromFolder]);
+gpui::actions!(workbench, [ShowExtensions, InstallExtensionFromFile, InstallExtensionFromFolder, CancelExtensionConsent]);
 
 /// One installed extension as the view lists it.
 #[derive(Clone)]
@@ -54,65 +54,29 @@ pub(super) fn source_line(s: &ExtSource) -> String {
     }
 }
 
-/// `Permissions::describe` in the UI language: one line per permission, the words of the consent sheet. The English
-/// text is the same as `describe` (a test keeps them together).
+/// The consent sheet's lines (`Permissions::lines`) in the UI language.
 pub(super) fn permission_lines(p: &Permissions) -> Vec<String> {
-    use ext_manifest::Clipboard;
-    use ext_manifest::risk::{is_sensitive_glob, is_wide_glob, is_wide_host};
-    let list = |v: &[String]| v.join(", ");
-    let mut out = Vec::new();
-    if !p.read.is_empty() {
-        out.push(if p.read.iter().any(|g| is_wide_glob(g)) {
-            crate::i18n::t("Read all files in the workspace").to_string()
-        } else {
-            crate::i18n::tf("Read {}", &[&list(&p.read)])
-        });
-        if p.read.iter().any(|g| is_sensitive_glob(g)) {
-            out.push(crate::i18n::t("Read files that can hold passwords and keys").to_string());
-        }
-    }
-    if !p.write.is_empty() {
-        out.push(if p.write.iter().any(|g| is_wide_glob(g)) {
-            crate::i18n::t("Change all files in the workspace").to_string()
-        } else {
-            crate::i18n::tf("Change {}", &[&list(&p.write)])
-        });
-    }
-    if !p.net.is_empty() {
-        out.push(if p.net.iter().any(|h| is_wide_host(h)) {
-            crate::i18n::t("Connect to any website").to_string()
-        } else {
-            crate::i18n::tf("Connect to {}", &[&list(&p.net)])
-        });
-    }
-    for a in &p.auth {
-        let name = match a.as_str() {
-            "github" => "GitHub",
-            "gitlab" => "GitLab",
-            "vercel" => "Vercel",
-            other => other,
-        };
-        out.push(crate::i18n::tf("Act as your {} account", &[&name]));
-    }
-    if p.secrets {
-        out.push(crate::i18n::t("Store secrets in your keychain").to_string());
-    }
-    for r in &p.run {
-        out.push(crate::i18n::tf("Run {} with any arguments", &[r]));
-    }
-    match p.clipboard {
-        Clipboard::None => {}
-        Clipboard::Read => out.push(crate::i18n::t("Read the clipboard").to_string()),
-        Clipboard::Write => out.push(crate::i18n::t("Write to the clipboard").to_string()),
-        Clipboard::ReadWrite => out.push(crate::i18n::t("Read and write the clipboard").to_string()),
-    }
-    if p.terminal {
-        out.push(crate::i18n::t("Type into terminals").to_string());
-    }
-    if !p.commands.is_empty() {
-        out.push(crate::i18n::tf("Run Codeyard commands: {}", &[&list(&p.commands)]));
-    }
-    out
+    use ext_manifest::{Clipboard, Line};
+    p.lines()
+        .iter()
+        .map(|l| match l {
+            Line::ReadAll => crate::i18n::t("Read all files in the workspace").to_string(),
+            Line::Read(g) => crate::i18n::tf("Read {}", &[g]),
+            Line::ReadSecrets => crate::i18n::t("Read files that can hold passwords and keys").to_string(),
+            Line::ChangeAll => crate::i18n::t("Change all files in the workspace").to_string(),
+            Line::Change(g) => crate::i18n::tf("Change {}", &[g]),
+            Line::ConnectAny => crate::i18n::t("Connect to any website").to_string(),
+            Line::Connect(h) => crate::i18n::tf("Connect to {}", &[h]),
+            Line::Account(a) => crate::i18n::tf("Act as your {} account", &[a]),
+            Line::Secrets => crate::i18n::t("Store secrets in your keychain").to_string(),
+            Line::Run(r) => crate::i18n::tf("Run {} with any arguments", &[r]),
+            Line::Clipboard(Clipboard::Read) => crate::i18n::t("Read the clipboard").to_string(),
+            Line::Clipboard(Clipboard::Write) => crate::i18n::t("Write to the clipboard").to_string(),
+            Line::Clipboard(_) => crate::i18n::t("Read and write the clipboard").to_string(),
+            Line::Terminal => crate::i18n::t("Type into terminals").to_string(),
+            Line::Commands(c) => crate::i18n::tf("Run Codeyard commands: {}", &[c]),
+        })
+        .collect()
 }
 
 /// The red line on the sheet and the detail page, for a High-risk permission set.
@@ -159,6 +123,14 @@ fn read_package(source: &ExtSource) -> Result<Pending, String> {
         }
     };
     let pkg = ext_pkg::read(&bytes).map_err(|e| e.to_string())?;
+    // Commands and views need the extension host, which comes in a later version: installing one now would list
+    // features that do nothing.
+    if pkg.manifest.code.is_some() {
+        return Err(crate::i18n::tf(
+            "{} contains code; this version of Codeyard runs data-only extensions (themes, snippets, keymaps, languages, schemas, language servers)",
+            &[&pkg.manifest.id],
+        ));
+    }
     Ok(Pending { manifest: Arc::new(pkg.manifest), bytes, source: source.clone() })
 }
 
@@ -335,6 +307,10 @@ impl Workbench {
         self.open_extension_page(cx);
         // Install is never the default answer for a High-risk set: Enter on the sheet cancels.
         window.focus(if high { &cancel } else { &install });
+    }
+
+    pub(super) fn cancel_consent_key(&mut self, _: &CancelExtensionConsent, _: &mut Window, cx: &mut Context<Self>) {
+        self.cancel_consent(cx);
     }
 
     pub(super) fn cancel_consent(&mut self, cx: &mut Context<Self>) {

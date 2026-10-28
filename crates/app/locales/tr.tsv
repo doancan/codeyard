@@ -2834,3 +2834,6 @@ Write to the clipboard	Panoya yazma
 Read and write the clipboard	Panoyu okuma ve panoya yazma
 Type into terminals	Terminallere yazma
 Run Codeyard commands: {}	Codeyard komutlarını çalıştırma: {}
+{} contains code; this version of Codeyard runs data-only extensions (themes, snippets, keymaps, languages, schemas, language servers)	{} kod içeriyor; Codeyard’ın bu sürümü yalnızca veri eklentilerini çalıştırır (temalar, snippet’ler, kısayol düzenleri, diller, şemalar, dil sunucuları)
+{} contains code, which this version does not run	{} kod içeriyor; bu sürüm kodu çalıştırmaz
+Load installed extensions (off: Codeyard starts as if none were installed)	Kurulu eklentileri yükle (kapalı: Codeyard hiç eklenti kurulu değilmiş gibi açılır)

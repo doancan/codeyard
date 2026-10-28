@@ -182,7 +182,10 @@ impl Workbench {
                         .track_focus(&cancel)
                         .on_click(cx.listener(|this, _, _, cx| this.cancel_consent(cx))),
                 );
+            // Escape answers Cancel, as in every other dialog.
             return page
+                .key_context("ExtensionConsent")
+                .on_action(cx.listener(Self::cancel_consent_key))
                 .child(
                     column
                         .child(self.extension_heading(&crate::i18n::tf("Install {}?", &[&m.name]), m, p))
