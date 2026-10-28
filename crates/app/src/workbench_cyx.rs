@@ -5,6 +5,7 @@
 use super::*;
 
 /// Where the link goes: the first of these that is writable without asking for a password.
+#[cfg(unix)]
 fn link_dirs() -> Vec<std::path::PathBuf> {
     let mut v = vec![std::path::PathBuf::from("/usr/local/bin")];
     if let Some(home) = dirs::home_dir() {
