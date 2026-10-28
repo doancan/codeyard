@@ -87,6 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Stopping a piped process also kills descendants when its leader has already exited. A process
+  that closes stdout remains cancellable instead of blocking the agent until its natural exit.
 - Opening or selecting a file restores a maximized terminal panel to its previous size so the editor is visible.
 - Picker inputs support Select All, Copy, Cut and Paste, including remote folder paths and SSH password paste.
 - Switching SSH hosts resets the workspace even when both servers use the same folder path, and preserves the

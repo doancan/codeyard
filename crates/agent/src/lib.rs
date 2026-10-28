@@ -474,7 +474,20 @@ impl Session {
                             while let Ok(n @ 1..) = reader.read(&mut buf) {
                                 let _ = send(&out, 0, Response::ProcOutput { proc: pid, data: buf[..n].to_vec() });
                             }
-                            let code = procs.locked().remove(&pid).and_then(|(_, mut p)| p.wait());
+                            let code = loop {
+                                let mut processes = procs.locked();
+                                let Some((_, process)) = processes.get_mut(&pid) else { break None };
+                                match process.try_wait() {
+                                    Ok(None) => {
+                                        drop(processes);
+                                        std::thread::sleep(std::time::Duration::from_millis(10));
+                                    }
+                                    result => {
+                                        processes.remove(&pid);
+                                        break result.ok().flatten();
+                                    }
+                                }
+                            };
                             let _ = send(&out, 0, Response::ProcExit { proc: pid, code });
                         });
                         Ok(())
