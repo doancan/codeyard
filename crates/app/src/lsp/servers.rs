@@ -88,8 +88,19 @@ pub fn language_of(path: &str) -> Option<(&'static str, &'static str)> {
         "jsonc" => ("jsonc", "json"),
         "yaml" | "yml" => ("yaml", "yaml"),
         "toml" => ("toml", "toml"),
-        _ => return None,
+        // A language an installed extension adds, for files no built-in language claims: its id is also its key.
+        _ => return crate::ext::language_for(path).map(|l| (l.id, l.id)),
     })
+}
+
+/// The server key of a built-in language id (`typescriptreact` → `typescript`); `None` for ids the table does not know,
+/// whose key is the id itself.
+pub fn key_for_language(lang: &str) -> Option<&'static str> {
+    const SAMPLES: &[&str] = &[
+        "x.rs", "x.c", "x.cpp", "x.go", "x.py", "x.ts", "x.tsx", "x.js", "x.jsx", "x.java", "x.cs", "x.php", "x.rb", "x.kt", "x.swift", "x.lua", "x.sh",
+        "x.html", "x.css", "x.scss", "x.less", "x.json", "x.jsonc", "x.yaml", "x.toml",
+    ];
+    SAMPLES.iter().filter_map(|f| language_of(f)).find(|(id, _)| *id == lang).map(|(_, key)| key)
 }
 
 /// Default server per key: (key, command, arguments, install hint shown when it is missing).

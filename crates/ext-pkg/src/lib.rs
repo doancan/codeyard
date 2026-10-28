@@ -190,7 +190,6 @@ fn check_references(m: &Manifest, files: &BTreeMap<String, Entry>) -> Result<(),
     let c = &m.contributions;
     let mut refs: Vec<(&str, &str)> = Vec::new();
     refs.extend(c.themes.iter().map(|t| ("themes.path", t.path.as_str())));
-    refs.extend(c.icon_themes.iter().map(|t| ("icon-themes.path", t.path.as_str())));
     refs.extend(c.keymap_presets.iter().map(|t| ("keymap-preset.path", t.path.as_str())));
     refs.extend(c.snippets.iter().map(|s| ("snippets.path", s.path.as_str())));
     refs.extend(c.json_schemas.iter().map(|s| ("json-schemas.path", s.path.as_str())));
@@ -201,14 +200,6 @@ fn check_references(m: &Manifest, files: &BTreeMap<String, Entry>) -> Result<(),
     for (field, path) in refs {
         if !files.contains_key(path) {
             return Err(Error::MissingFile { field: field.into(), path: path.into() });
-        }
-    }
-    for l in &c.languages {
-        if let Some(q) = &l.queries {
-            let prefix = format!("{q}/");
-            if !files.keys().any(|k| k.starts_with(&prefix) && k.ends_with(".scm")) {
-                return Err(Error::MissingFile { field: "languages.queries".into(), path: format!("{q}/*.scm") });
-            }
         }
     }
     // A program inside the package (`run = ["bin/server"]`) must be there and be executable.

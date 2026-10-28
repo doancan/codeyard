@@ -251,7 +251,7 @@ fn malformed_permissions_are_named() {
         assert!(codes(&text).contains(&Code::BadPermission), "{b}");
     }
     let ok = with(
-        "[permissions]\nnet = [\"*.example.com\", \"api.github.com\"]\nrun = [\"taplo\", \"bin/server\"]\nclipboard = \"write\"\ncommands = [\"core:workbench.open-settings\"]\nwhy = \"x\"\n",
+        "[permissions]\nnet = [\"*.example.com\", \"api.github.com\"]\nrun = [\"taplo\", \"bin/server\"]\nclipboard = \"write\"\ncommands = [\"core:workbench.openSettings\", \"core:debug.start\"]\nwhy = \"x\"\n",
     );
     parse(&ok).unwrap();
 }
@@ -284,9 +284,7 @@ fn interpreters_are_flagged_for_the_package_check() {
 
 #[test]
 fn keybindings_resolve_their_command() {
-    let base = with(
-        "[code]\nentry = \"Cargo.toml\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n[dependencies]\n\"other.ext\" = \"1.2\"\n[permissions]\ncommands = [\"core:debug.start\"]\n",
-    );
+    let base = with("[code]\nentry = \"Cargo.toml\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n[dependencies]\n\"other.ext\" = \"1.2\"\n");
     let m = parse(&format!("{base}[[keybindings]]\nkey = \"cmd-shift-g\"\ncommand = \"go\"\nwhen = \"editor.language == 'rust'\"\n[[keybindings]]\nkey = \"ctrl-k ctrl-o\"\ncommand = \"other.ext.open\"\n[[keybindings]]\nkey = \"f5\"\ncommand = \"core:debug.start\"\n")).unwrap();
     let cmds: Vec<_> = m.contributions.keybindings.iter().map(|k| k.command.as_str()).collect();
     assert_eq!(cmds, vec!["a.b.go", "other.ext.open", "core:debug.start"]);
@@ -305,13 +303,16 @@ fn dependencies_are_checked() {
 #[test]
 fn languages_and_schemas() {
     let m = parse(&with(
-        "[[languages]]\nid = \"just\"\nfilenames = [\"Justfile\"]\nextensions = [\".just\"]\ngrammar = \"make\"\nqueries = \"queries/just\"\nline-comment = \"#\"\n[[json-schemas]]\nfile-match = [\"vercel.json\"]\npath = \"schemas/vercel.json\"\n",
+        "[[languages]]\nid = \"just\"\nfilenames = [\"Justfile\"]\nextensions = [\".just\"]\ngrammar = \"make\"\nline-comment = \"#\"\n[[json-schemas]]\nfile-match = [\"vercel.json\"]\npath = \"schemas/vercel.json\"\n",
     ))
     .unwrap();
     assert_eq!(m.contributions.languages[0].extensions, vec!["just"]);
     assert_eq!(m.contributions.json_schemas[0].file_match, vec!["vercel.json"]);
     assert_eq!(codes(&with("[[languages]]\nid = \"x\"\n")), vec![Code::BadContribution]);
-    assert_eq!(codes(&with("[[languages]]\nid = \"x\"\nextensions = [\"x\"]\nqueries = \"q\"\n")), vec![Code::BadContribution]);
+    // Not in this version: language queries, icon themes, debug adapters (docs/plugin-architecture.md, Later).
+    assert_eq!(codes(&with("[[languages]]\nid = \"x\"\nextensions = [\"x\"]\nqueries = \"q\"\n")), vec![Code::Syntax]);
+    assert_eq!(codes(&with("[[icon-themes]]\nlabel = \"x\"\npath = \"x.json\"\n")), vec![Code::Syntax]);
+    assert_eq!(codes(&with("[[debug-adapters]]\ntype = \"x\"\ncommand = \"x\"\n")), vec![Code::Syntax]);
     assert_eq!(codes(&with("[[yaml-schemas]]\nfile-match = []\npath = \"s.json\"\n")), vec![Code::BadContribution]);
 }
 
@@ -474,12 +475,14 @@ fn interpreters_are_recognised_in_any_spelling() {
 }
 
 #[test]
-fn keybindings_to_core_commands_need_the_permission() {
+fn keybindings_to_core_commands_are_checked_by_grammar() {
     let base = with("");
-    let e = errors(&format!("{base}[[keybindings]]\nkey = \"f5\"\ncommand = \"core:debug.start\"\n"));
-    assert_eq!(e[0].code, Code::NotDeclared);
-    assert_eq!(e[0].fix.as_deref(), Some("add to [permissions]:  commands = [\"core:debug.start\"]"));
-    assert_eq!(codes(&format!("{base}[[keybindings]]\nkey = \"f5\"\ncommand = \"core:\"\n")), vec![Code::BadContribution]);
+    let m = parse(&format!("{base}[[keybindings]]\nkey = \"f5\"\ncommand = \"core:debug.start\"\n")).unwrap();
+    assert_eq!(m.contributions.keybindings[0].command, "core:debug.start");
+    assert!(m.permissions.is_empty(), "a key binding needs no permission");
+    for bad in ["core:", "core:.x", "core:a..b", "core:a b", "core:1x"] {
+        assert_eq!(codes(&format!("{base}[[keybindings]]\nkey = \"f5\"\ncommand = \"{bad}\"\n")), vec![Code::BadContribution], "{bad}");
+    }
 }
 
 #[test]

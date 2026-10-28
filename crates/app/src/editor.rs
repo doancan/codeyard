@@ -332,10 +332,21 @@ fn language_ext(lang: &str) -> String {
         "ruby" => "rb",
         "csharp" => "cs",
         "kotlin" => "kt",
+        "make" | "makefile" => "mk",
         "plaintext" | "text" => "txt",
         other => return other.to_string(),
     }
     .to_string()
+}
+
+/// A grammar name (a language name or file extension, as in `files.associations`) the highlighter has.
+pub fn grammar_known(name: &str) -> bool {
+    syntax::language_for_path(&format!("x.{}", language_ext(name))).is_some()
+}
+
+#[cfg(test)]
+pub fn comment_token_for_test(path: &str) -> Option<&'static str> {
+    comment_token(path)
 }
 
 /// The path the highlighter looks at: if `files.associations` matches, with the language's extension.
@@ -351,6 +362,13 @@ pub fn syntax_path(path: &str) -> std::borrow::Cow<'_, str> {
         if hit {
             return format!("{path}.{}", language_ext(lang)).into();
         }
+    }
+    drop(assoc);
+    // An extension language highlights with the built-in grammar it names, for files no built-in grammar knows.
+    if syntax::language_for_path(path).is_none()
+        && let Some(grammar) = crate::ext::language_for(path).and_then(|l| l.grammar)
+    {
+        return format!("{path}.{}", language_ext(&grammar)).into();
     }
     path.into()
 }
@@ -676,104 +694,9 @@ impl SlotListener for Context<'_, EditorView> {
     }
 }
 
-/// Element that paints the editor with a given view (one per group).
-pub struct SlotView {
-    editor: Entity<EditorView>,
-    slot: usize,
-}
-
-pub fn slot_view(editor: Entity<EditorView>, slot: usize) -> SlotView {
-    SlotView { editor, slot }
-}
-
-impl SlotView {
-    /// While `f` runs the editor is in this view; afterwards it returns to its old view.
-    fn within<R>(&self, cx: &mut App, f: impl FnOnce(&mut App) -> R) -> R {
-        let slot = self.slot;
-        let prev = self.editor.update(cx, |e, _| {
-            let prev = e.slot;
-            e.enter(slot);
-            prev
-        });
-        let r = f(cx);
-        self.editor.update(cx, |e, _| e.enter(prev));
-        r
-    }
-}
-
-impl IntoElement for SlotView {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
-
-impl Element for SlotView {
-    type RequestLayoutState = gpui::AnyElement;
-    type PrepaintState = ();
-
-    fn id(&self) -> Option<ElementId> {
-        None
-    }
-
-    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
-        None
-    }
-
-    fn request_layout(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> (LayoutId, gpui::AnyElement) {
-        let editor = self.editor.clone();
-        let slot = self.slot;
-        let mut el = self.within(cx, |cx| {
-            editor.update(cx, |e, cx| {
-                e.enter(slot);
-                e.render(window, cx).into_any_element()
-            })
-        });
-        let id = self.within(cx, |cx| el.request_layout(window, cx));
-        (id, el)
-    }
-
-    fn prepaint(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        bounds: Bounds<Pixels>,
-        el: &mut gpui::AnyElement,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        let hidden = bounds.size.width < px(320.);
-        let changed = self.within(cx, |cx| self.editor.update(cx, |e, _| std::mem::replace(&mut e.minimap_hidden, hidden) != hidden));
-        if changed {
-            let editor = self.editor.downgrade();
-            window.defer(cx, move |_, cx| {
-                editor.update(cx, |_, cx| cx.notify()).ok();
-            });
-        }
-        self.within(cx, |cx| el.prepaint(window, cx));
-    }
-
-    fn paint(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        _: Bounds<Pixels>,
-        el: &mut gpui::AnyElement,
-        _: &mut (),
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        #[cfg(test)]
-        SLOT_PAINTS.with(|counts| *counts.borrow_mut().entry((self.editor.entity_id(), self.slot)).or_default() += 1);
-        self.within(cx, |cx| el.paint(window, cx));
-    }
-}
+#[path = "editor_slots.rs"]
+mod slots;
+pub use slots::slot_view;
 
 impl Drop for EditorView {
     fn drop(&mut self) {
@@ -1428,7 +1351,7 @@ fn comment_token(path: &str) -> Option<&'static str> {
     {
         return Some("#");
     }
-    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase())?;
+    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
     Some(match ext.as_str() {
         "rs" | "c" | "h" | "cc" | "cpp" | "hpp" | "cxx" | "js" | "jsx" | "mjs" | "cjs" | "ts" | "tsx" | "mts" | "go" | "java" | "kt" | "kts" | "swift"
         | "cs" | "scala" | "dart" | "zig" | "proto" | "jsonc" | "scss" | "less" | "php" | "groovy" => "//",
@@ -1438,17 +1361,18 @@ fn comment_token(path: &str) -> Option<&'static str> {
         "vim" => "\"",
         "el" | "lisp" | "clj" | "scm" | "asm" | "s" => ";",
         "erl" | "hrl" | "tex" | "m" => "%",
-        _ => return None,
+        // A language an installed extension adds, for files the table does not know.
+        _ => return crate::ext::language_for(path).and_then(|l| l.line_comment),
     })
 }
 
 /// Block comment for languages without a line comment (each line wrapped separately, like VS Code).
 fn block_comment(path: &str) -> Option<(&'static str, &'static str)> {
-    let ext = path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase())?;
+    let ext = path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
     Some(match ext.as_str() {
         "css" => ("/*", "*/"),
         "html" | "htm" | "xml" | "svg" | "md" | "markdown" | "vue" | "xhtml" | "plist" => ("<!--", "-->"),
-        _ => return None,
+        _ => return crate::ext::language_for(path).filter(|l| l.line_comment.is_none()).and_then(|l| l.block_comment),
     })
 }
 
@@ -1457,7 +1381,7 @@ fn block_delims(path: &str) -> Option<(&'static str, &'static str)> {
     if let Some(d) = block_comment(path) {
         return Some(d);
     }
-    let ext = path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase())?;
+    let ext = path.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
     Some(match ext.as_str() {
         "rs" | "c" | "h" | "cc" | "cpp" | "hpp" | "cxx" | "js" | "jsx" | "mjs" | "cjs" | "ts" | "tsx" | "mts" | "go" | "java" | "kt" | "kts" | "swift"
         | "cs" | "scala" | "dart" | "zig" | "proto" | "scss" | "less" | "php" | "groovy" | "sql" => ("/*", "*/"),
@@ -1465,7 +1389,7 @@ fn block_delims(path: &str) -> Option<(&'static str, &'static str)> {
         "hs" => ("{-", "-}"),
         "py" | "pyi" => ("\"\"\"", "\"\"\""),
         "rb" => ("=begin", "=end"),
-        _ => return None,
+        _ => return crate::ext::language_for(path).and_then(|l| l.block_comment),
     })
 }
 
