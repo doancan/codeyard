@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The macOS Dock menu lists the open windows at the top, front one first, and follows as windows come forward, open, close or
   change title; choosing one brings it to the front. Recent projects follow, newest first, without those already open.
 - `terminal.lineHeight` sets the terminal's row height as a multiple of the font size (1–2, default 1.2).
+- Language servers take their own configuration from `lsp.servers`: `settings` (what the server reads as its configuration,
+  dotted keys allowed) and `initializationOptions`, with or without `command`. Rust developers can now turn on Clippy on save
+  (`"rust-analyzer.check.command": "clippy"`) and analyse code behind Cargo features. Changing `settings` reaches a running
+  server without a restart; it works the same in SSH folders.
 
 ### Changed
 

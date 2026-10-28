@@ -770,6 +770,26 @@ turn off servers in settings:
 "lsp.enabled": true,
 ```
 
+An entry can also configure its server. `settings` is the configuration the server reads (a dotted key such as
+`"rust-analyzer.check.command"` is the same as the nested objects); `initializationOptions` is sent once, when the server
+starts. An entry without `command` keeps the default server:
+
+```jsonc
+"lsp.servers": {
+  "rust": { "settings": {
+    "rust-analyzer.check.command": "clippy",      // Clippy lints in the editor and in Problems when you save
+    "rust-analyzer.cargo.features": ["serde"],    // analyse the code behind these Cargo features
+    "rust-analyzer.cargo.targetDir": true         // a target folder of its own, so it never waits for your builds
+  } },
+  "go": { "settings": { "gopls.buildFlags": ["-tags=integration"] } }
+}
+```
+
+A change to `settings` reaches the running servers at once, without a restart; a change to `command`, `args` or
+`initializationOptions` restarts the server. A few options are read only when a server starts, and a server may keep a
+value you delete until it restarts: set the value you want instead, or run "Developer: Restart Language Servers". Each
+server reports unknown keys itself, in the Output panel.
+
 Besides errors, suggestions, hover and definition: rename (F2), references (⇧F12), symbols
 in the file (⇧⌘O), quick fixes (⌘.), format (⇧⌥F, or `"editor.formatOnSave": true`) and
 parameter hints while typing a call. `"editor.codeActionsOnSave": { "source.organizeImports":

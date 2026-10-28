@@ -177,6 +177,12 @@ impl Workbench {
         };
         match result {
             Ok(client) => {
+                // The settings may have changed while the server was starting: it gets the current ones, not a restart.
+                if let Some(config) = lsp::server_for(slot_language(key), &cx.global::<Settings>().lsp_servers)
+                    && config.settings != client.settings()
+                {
+                    client.change_settings(config.settings);
+                }
                 for (ed, lang) in waiting {
                     if let Some(ed) = ed.upgrade() {
                         let c = client.clone();
@@ -374,6 +380,21 @@ impl Workbench {
         self.lsp.restarts.clear();
     }
 
+    /// Only the `settings` of these keys changed: their running servers are told, not restarted. A server still starting
+    /// picks them up in `on_lsp_started`, one in its crash back-off when `attach_lsp` starts it again.
+    pub(super) fn change_lsp_settings(&mut self, keys: &[String], cx: &mut Context<Self>) {
+        for key in keys {
+            let Some(config) = lsp::server_for(key, &cx.global::<Settings>().lsp_servers) else { continue };
+            for (slot, server) in &self.lsp.servers {
+                if let ServerSlot::Running(client) = server
+                    && slot_language(slot) == key
+                {
+                    client.change_settings(config.settings.clone());
+                }
+            }
+        }
+    }
+
     /// Settings changed: set the servers up from scratch.
     pub(super) fn restart_lsp(&mut self, cx: &mut Context<Self>) {
         self.shutdown_lsp(cx);
@@ -443,7 +464,8 @@ fn slot_root(slot: &str) -> Option<&str> {
 }
 
 fn config_is_default(key: &str, command: &str, cx: &gpui::App) -> bool {
-    lsp::server_for(key, &[]).is_some_and(|d| d.command == command) && !cx.global::<Settings>().lsp_servers.iter().any(|(k, _)| k == key)
+    lsp::server_for(key, &[]).is_some_and(|d| d.command == command)
+        && !cx.global::<Settings>().lsp_servers.iter().any(|(k, spec)| k == key && spec.as_ref().is_none_or(|s| s.command.is_some()))
 }
 
 // --- Language server actions (via the active editor) ---

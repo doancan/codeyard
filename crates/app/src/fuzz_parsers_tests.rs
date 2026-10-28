@@ -440,6 +440,10 @@ fn server_value(rng: &mut Rng, depth: usize) -> serde_json::Value {
         "defaultBehavior",
         "from",
         "to",
+        "section",
+        "scopeUri",
+        "a.b",
+        "rust-analyzer.check",
     ];
     let pick = |rng: &mut Rng| KEYS[(rng.next() as usize) % KEYS.len()];
     match if depth > 6 { rng.next() % 6 } else { rng.next() % 9 } {
@@ -490,6 +494,38 @@ fn language_server_and_debugger_replies_survive_any_shape() {
         });
         assert!(outcome.is_ok(), "a reader panicked on {}", serde_json::to_string(&v).unwrap_or_default().chars().take(400).collect::<String>());
     }
+}
+
+/// `workspace/configuration` answers any request shape from any settings tree (dotted keys expanded first): one value per
+/// item, never a panic.
+#[test]
+fn configuration_replies_survive_any_request_and_settings_tree() {
+    use serde_json::{Value, json};
+    let mut rng = Rng(17);
+    let started = Instant::now();
+    for i in 0..4_000 {
+        let settings = crate::lsp::expand_dotted(&server_value(&mut rng, 0));
+        let params = if i % 2 == 0 {
+            server_value(&mut rng, 0)
+        } else {
+            // Mostly well formed, with sections built from the keys the tree may hold.
+            let items: Vec<Value> = (0..rng.next() % 300)
+                .map(|_| match rng.next() % 4 {
+                    0 => server_value(&mut rng, 3),
+                    _ => {
+                        let steps: Vec<&str> =
+                            (0..rng.next() % 5).map(|_| ["section", "a", "b", "items", "rust-analyzer", "check", ""][(rng.next() % 7) as usize]).collect();
+                        json!({ "section": steps.join(".") })
+                    }
+                })
+                .collect();
+            json!({ "items": items })
+        };
+        let outcome = std::panic::catch_unwind(|| crate::lsp::configuration_reply(&settings, &params));
+        let Ok(Value::Array(reply)) = outcome else { panic!("no array for {}", params.to_string().chars().take(400).collect::<String>()) };
+        assert_eq!(reply.len(), params["items"].as_array().map_or(0, Vec::len), "one value per item");
+    }
+    assert!(started.elapsed() < BUDGET, "{:?}", started.elapsed());
 }
 
 /// A server that writes endless text without a message header (a log to stdout) must not make every new chunk rescan all
