@@ -81,6 +81,21 @@ pub enum PickerEvent {
     Query(String),
 }
 
+/// What the accessibility tree (a11y.rs) shows of a picker.
+#[derive(Clone, PartialEq, Debug)]
+pub struct PickerA11y {
+    pub placeholder: String,
+    pub message: Option<String>,
+    /// The query, masked for a secret.
+    pub query: String,
+    /// (label, detail) of the first rows.
+    pub rows: Vec<(String, Option<String>)>,
+    pub rows_total: usize,
+    pub selected: Option<usize>,
+    /// Shown instead of rows when there are none.
+    pub empty: Option<String>,
+}
+
 struct Row {
     pick: Option<Pick>,
     label: SharedString,
@@ -244,6 +259,30 @@ impl Picker {
 
     pub fn query(&self) -> &str {
         &self.query
+    }
+
+    /// For the accessibility tree (a11y.rs): at most `limit` rows.
+    pub fn a11y_view(&self, limit: usize) -> PickerA11y {
+        PickerA11y {
+            placeholder: self.placeholder.to_string(),
+            message: self.message.as_ref().map(|m| m.to_string()),
+            query: if self.masked() { "•".repeat(self.query.chars().count()) } else { self.query.clone() },
+            rows: self.rows.iter().take(limit).map(|r| (r.label.to_string(), r.detail.as_ref().map(|d| d.to_string()))).collect(),
+            rows_total: self.rows.len(),
+            selected: (!self.rows.is_empty()).then_some(self.selected),
+            empty: self.rows.is_empty().then(|| self.empty_message().to_string()),
+        }
+    }
+
+    /// Accessibility action: select row `ix`, and pick it if `confirm`.
+    pub fn a11y_choose(&mut self, ix: usize, confirm: bool, cx: &mut Context<Self>) {
+        if ix >= self.rows.len() {
+            return;
+        }
+        self.select(ix, cx);
+        if confirm && let Some(pick) = self.rows[self.selected].pick {
+            cx.emit(PickerEvent::Confirm(pick));
+        }
     }
 
     /// Path from the file source (after Confirm).

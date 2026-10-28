@@ -116,9 +116,67 @@ impl FindBar {
         cx.notify();
     }
 
-    #[cfg(test)]
     pub fn status_text(&self) -> Option<&str> {
         self.status.as_ref().map(|(s, _)| s.as_ref())
+    }
+
+    /// For the accessibility tree (a11y.rs): the bar's controls in visual order, with the state of each option
+    /// (`None` for a button).
+    pub fn a11y_controls(&self) -> Vec<(&'static str, Option<bool>)> {
+        let t = crate::i18n::t;
+        let mut out = vec![
+            (t("Match case (⌥C)"), Some(self.case_sensitive)),
+            (t("Whole word (⌥W)"), Some(self.whole_word)),
+            (t("Regular expression (⌥R)"), Some(self.regex)),
+            (t("Previous match (⇧↵)"), None),
+            (t("Next match (↵)"), None),
+            (t("Find in selection (⌥⌘L)"), Some(self.in_selection)),
+            (t("Select all matches (⌥↵)"), None),
+            (t("Close (Esc)"), None),
+        ];
+        if self.show_replace {
+            out.extend([(t("Preserve case (⌥P)"), Some(self.preserve_case)), (t("Replace (↵)"), None), (t("Replace all (⌥⌘↵)"), None)]);
+        }
+        out
+    }
+
+    /// Accessibility action: press control `i` of `a11y_controls` (toggle an option or run a button).
+    pub fn a11y_press(&mut self, i: usize, cx: &mut Context<Self>) {
+        let replace = self.show_replace;
+        let option = match i {
+            0 => Some(&mut self.case_sensitive),
+            1 => Some(&mut self.whole_word),
+            2 => Some(&mut self.regex),
+            5 => Some(&mut self.in_selection),
+            8 if replace => Some(&mut self.preserve_case),
+            _ => None,
+        };
+        let event = match (option, i) {
+            (Some(on), _) => {
+                *on = !*on;
+                FindEvent::Changed
+            }
+            (None, 3) => FindEvent::Prev,
+            (None, 4) => FindEvent::Next,
+            (None, 6) => FindEvent::SelectAll,
+            (None, 7) => FindEvent::Close,
+            (None, 9) if replace => FindEvent::ReplaceOne,
+            (None, 10) if replace => FindEvent::ReplaceAll,
+            _ => return,
+        };
+        cx.emit(event);
+        cx.notify();
+    }
+
+    /// For the accessibility tree (a11y.rs): which field has focus (0 query, 1 replacement).
+    pub fn a11y_focus(&self, window: &Window, cx: &App) -> Option<usize> {
+        if self.query.focus_handle(cx).is_focused(window) {
+            Some(0)
+        } else if self.replacement.focus_handle(cx).is_focused(window) {
+            Some(1)
+        } else {
+            None
+        }
     }
 
     /// Compile with the current options. Empty query: `Ok(None)`.

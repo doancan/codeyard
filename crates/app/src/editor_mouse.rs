@@ -19,7 +19,7 @@ impl EditorView {
         // ~5 s: every frame pins ~110 MB of transient GPU buffers on macOS; endless blinking
         // would have held idle memory at 200 MB instead of 88 MB.
         const BLINKS: usize = 10;
-        let blink = focused && cx.global::<Settings>().cursor_blinking;
+        let blink = focused && cx.global::<Settings>().cursor_blinking && !crate::system_prefs::reduce_motion(cx);
         let sig = (self.buffer.version(), self.buffer.cursor(), blink);
         if sig == self.blink_sig {
             return;

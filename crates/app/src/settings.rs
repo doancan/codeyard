@@ -247,6 +247,8 @@ pub struct Settings {
     pub tab_icons: bool,
     /// "hover", "always", "off".
     pub tab_close: String,
+    /// Leave out animations (`workbench.reduceMotion`): `None` follows the system ("auto").
+    pub reduce_motion: Option<bool>,
     pub breadcrumbs: bool,
     pub cursor_width: f32,
     pub hover_enabled: bool,
@@ -392,6 +394,7 @@ impl Default for Settings {
             show_tabs: true,
             tab_icons: true,
             tab_close: "hover".into(),
+            reduce_motion: None,
             breadcrumbs: true,
             cursor_width: 2.,
             hover_enabled: true,
@@ -894,6 +897,13 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.choice("workbench.tabs.closeButton", &["hover", "always", "off"]) {
         s.tab_close = v;
     }
+    if let Some(v) = r.choice("workbench.reduceMotion", &["auto", "on", "off"]) {
+        s.reduce_motion = match v.as_str() {
+            "on" => Some(true),
+            "off" => Some(false),
+            _ => None,
+        };
+    }
     if let Some(v) = r.bool("workbench.breadcrumbs.enabled") {
         s.breadcrumbs = v;
     }
@@ -1166,6 +1176,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "workbench.editor.showTabs",
         "workbench.tabs.showIcons",
         "workbench.tabs.closeButton",
+        "workbench.reduceMotion",
         "workbench.breadcrumbs.enabled",
         "editor.cursorWidth",
         "editor.hover.enabled",

@@ -650,6 +650,10 @@ impl Workbench {
         self.persist.state.is_some()
     }
 
+    pub fn clear_notice_for_test(&mut self) {
+        self.notice = None;
+    }
+
     pub fn notice_for_test(&self) -> Option<(bool, String)> {
         match &self.notice {
             Some(Notice::Info(m)) => Some((false, m.to_string())),
