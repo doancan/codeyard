@@ -82,3 +82,10 @@ being rerun. The daemon permission assertion now waits for its handshake readine
 Cancellation interrupts staged copies and stops before the next move/delete. A connection loss or
 missing cancellation acknowledgement stops the batch with an explicit uncertain outcome; it never
 automatically retries a mutation. Batches preserve failed/unprocessed cut entries for inspection or retry.
+
+The Explorer candidate `0293d1a` passes all required platform checks (Actions run
+`40766240680`) and a same-machine interleaved comparison against `c790c79`: 20 startup/typing
+runs and five samples per memory scene. Startup p95 changed 238.3 → 236.8 ms (−0.6%),
+typing p95 24.9 → 25.6 ms (+2.6%), and welcome/syntax/terminal memory medians changed
+69 → 69 / 114 → 113 / 73 → 74 MB. Every comparison gate passes. The branch subsequently
+integrates main's declarative-extension delivery; its integration head requires its own CI.

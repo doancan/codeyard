@@ -6,8 +6,8 @@ use std::ops::Range;
 use crate::raw::{RawManifest, RawPermissions, S};
 use crate::risk::{self, Clipboard, Permissions};
 use crate::{
-    Activation, CodeEntry, CodeLanguage, Command, Contributions, DebugAdapter, ExtId, FileEntry, Keybinding, Language, LanguageServer, Manifest,
-    SchemaAssociation, Setting, SettingKind, Snippets, Version, View, ViewLocation, check_id_part, limits, when,
+    Activation, CodeEntry, CodeLanguage, Command, Contributions, ExtId, FileEntry, Keybinding, Language, LanguageServer, Manifest, SchemaAssociation, Setting,
+    SettingKind, Snippets, Version, View, ViewLocation, check_id_part, limits, when,
 };
 use crate::{Code as C, Diagnostic};
 
@@ -287,14 +287,15 @@ fn check_workspace_glob(g: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// `core:` followed by a command id: lowercase `a-z 0-9`, `-` and `.`.
+/// `core:` followed by a command id as the command palette lists it: ASCII letters, digits and `-`, in dot-separated
+/// parts (`core:workbench.openSettings`).
 fn check_core_command(c: &str) -> Result<(), String> {
     let ok = c.strip_prefix("core:").is_some_and(|id| {
         !id.is_empty()
             && id.len() <= limits::ID_LEN
-            && id.split('.').all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'))
+            && id.split('.').all(|p| p.starts_with(|c: char| c.is_ascii_alphabetic()) && p.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'))
     });
-    if ok { Ok(()) } else { Err("must name a core command, like core:workbench.open-settings".into()) }
+    if ok { Ok(()) } else { Err("must name a core command, like core:workbench.openSettings".into()) }
 }
 
 fn check_host(h: &str) -> Result<(), String> {
@@ -423,9 +424,8 @@ fn contributions(cx: &mut Ctx, raw: &RawManifest, id: &ExtId, perms: &Permission
             .collect()
     };
     out.themes = file_entries(cx, "themes", &raw.themes);
-    out.icon_themes = file_entries(cx, "icon-themes", &raw.icon_themes);
     out.keymap_presets = file_entries(cx, "keymap-preset", &raw.keymap_preset);
-    for e in out.themes.iter().zip(&raw.themes).chain(out.icon_themes.iter().zip(&raw.icon_themes)) {
+    for e in out.themes.iter().zip(&raw.themes) {
         if !e.0.path.ends_with(".json") {
             cx.err(C::BadContribution, e.1.get_ref().path.span(), format!("theme '{}' must be a .json file", e.0.path));
         }
@@ -480,12 +480,11 @@ fn contributions(cx: &mut Ctx, raw: &RawManifest, id: &ExtId, perms: &Permission
             cx.err(C::BadContribution, k.key.span(), format!("key '{key}' must look like \"cmd-shift-r\" or \"ctrl-k ctrl-r\""));
         }
         let cmd = k.command.get_ref();
+        // A binding only acts when the user presses the key, so binding a core command needs no permission. What it may
+        // not do is take a key a built-in binding uses; the app refuses that when it applies the keymap.
         let command = if cmd.starts_with("core:") {
             if let Err(e) = check_core_command(cmd) {
                 cx.err(C::BadContribution, k.command.span(), format!("keybinding command '{cmd}' {e}"));
-            } else if !perms.commands.contains(cmd) {
-                cx.err(C::NotDeclared, k.command.span(), format!("command access to \"{cmd}\" is not declared")).fix =
-                    Some(format!("add to [permissions]:  commands = [\"{cmd}\"]"));
             }
             cmd.clone()
         } else if command_ids.contains(cmd) {
@@ -539,18 +538,12 @@ fn contributions(cx: &mut Ctx, raw: &RawManifest, id: &ExtId, perms: &Permission
                 f.get_ref().clone()
             })
             .collect();
-        let queries = l.queries.as_ref().map(|q| cx.path("language queries", q));
-        if queries.is_some() && l.grammar.is_none() {
-            cx.err(C::BadContribution, l.id.span(), format!("language '{lid}' has queries but no grammar")).fix =
-                Some("add grammar = \"<built-in language>\" for the queries to apply to".into());
-        }
         out.languages.push(Language {
             id: lid,
             name: l.name.as_ref().map(|n| cx.text("language name", n, limits::NAME_LEN)),
             extensions,
             filenames,
             grammar: l.grammar.as_ref().map(|g| g.get_ref().clone()),
-            queries,
             line_comment: l.line_comment.as_ref().map(|c| c.get_ref().clone()),
             block_comment: l.block_comment.as_ref().map(|b| (b.get_ref()[0].clone(), b.get_ref()[1].clone())),
         });
@@ -648,13 +641,6 @@ fn contributions(cx: &mut Ctx, raw: &RawManifest, id: &ExtId, perms: &Permission
             cx.err(C::BadContribution, s.command.span(), "a language server needs at least one language");
         }
         out.language_servers.push(LanguageServer { command, args: s.args.clone(), languages: s.languages.iter().map(|l| l.get_ref().clone()).collect() });
-    }
-    cx.count("debug-adapters", &raw.debug_adapters);
-    for d in &raw.debug_adapters {
-        let d = d.get_ref();
-        let command = need_run(cx, "debug adapter", &d.command);
-        let kind = cx.text("debug adapter type", &d.kind, limits::ID_PART_LEN);
-        out.debug_adapters.push(DebugAdapter { kind, command, args: d.args.clone(), languages: d.languages.iter().map(|l| l.get_ref().clone()).collect() });
     }
     out
 }
