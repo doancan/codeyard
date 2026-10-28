@@ -308,13 +308,18 @@ impl Workbench {
         .detach();
     }
 
+    /// Where scratch files live (on this computer, whatever folder is open).
+    pub(super) fn scratch_dir(&self) -> std::path::PathBuf {
+        self.cfg.dir.clone().or_else(crate::settings::config_dir).unwrap_or_else(std::env::temp_dir).join("scratches")
+    }
+
     /// Scratch file with the given content (e.g. search results). Returns the path it opens under; the tab itself appears once loaded.
     pub(super) fn create_scratch_with(&mut self, name: String, content: &str, window: &mut Window, cx: &mut Context<Self>) -> Option<String> {
         let name = ui::file_name(name.trim()).to_string();
         if name.is_empty() {
             return None;
         }
-        let dir = self.cfg.dir.clone().or_else(crate::settings::config_dir).unwrap_or_else(std::env::temp_dir).join("scratches");
+        let dir = self.scratch_dir();
         // Scratches hold HTTP responses (tokens, personal data) as well as notes: owner-only.
         let result = crate::fsutil::create_private_dir(&dir).map(|_| {
             // If the name exists: "scratch 2.md", "scratch 3.md"…

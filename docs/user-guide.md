@@ -19,6 +19,7 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Testing](#testing)
 - [Workspaces with several folders](#workspaces-with-several-folders)
 - [Language servers](#language-servers)
+- [Working in Rust](#working-in-rust)
 - [JSON and YAML schemas](#json-and-yaml-schemas)
 - [Data tools](#data-tools)
 - [Colours](#colours)
@@ -582,15 +583,15 @@ The "…" menu and the palette also have *Pull (Rebase)*, *Pull from…* (pick a
 *Push to…* (pick a remote), *Fetch (All Remotes)* and *Publish Branch*, and the commit variants
 *Commit Signed Off* (`-s`), *Commit (No Verify)* (skips hooks), *Commit & Push* and *Commit & Sync*.
 
-These settings change the behaviour: `"git.confirmSync"` (default true: Sync asks before it pulls or
-pushes), `"git.rebaseWhenSync"` (pull with rebase), `"git.pruneOnFetch"` (default true), `"git.pullTags"`
+These settings change the behaviour: `"git.confirmSync"` (default false: Sync pulls and pushes at once; on, it asks
+first), `"git.rebaseWhenSync"` (pull with rebase), `"git.pruneOnFetch"` (default true), `"git.pullTags"`
 (default true), `"git.fetchOnPull"` (fetch every remote before pulling), `"git.postCommitCommand"`
 (`none`, `push` or `sync` after each commit), `"git.enableSmartCommit"` (default true: with nothing
 staged the commit button commits all tracked changes; off, it asks you to stage first) and
 `"git.autofetch"` with `"git.autofetchPeriod"` (off by default; fetches in the background every 180 s
 or more while the window is in front, never in a folder you have not trusted, and a failure only
 shows in the sync item's tooltip). `git.confirmSync` and `git.postCommitCommand` are read from your
-own settings only: a repository cannot turn the question off or make your commits push by themselves.
+own settings only: a repository cannot turn the question on or off or make your commits push by themselves.
 
 ## Projects, favorites, bookmarks, tasks
 
@@ -647,7 +648,7 @@ a logpoint (`log: i is {i}`) or a hit-count one (`hit: >= 5`). Node needs Micros
 `Debug: Install JavaScript Debugger` fetches it once (VS Code's copy is used when installed).
 Over SSH the adapter runs on the server; Go and Node adapters talk TCP and are reached through a
 port forward on the shared SSH connection. `CODEYARD_DAP_TRACE=1` prints the protocol when a
-configuration misbehaves.
+configuration misbehaves. Rust values and the standard library's sources: see [Working in Rust](#working-in-rust).
 
 To debug a program that is already running, start it with its debug server and attach:
 `python -m debugpy --listen 5678 --wait-for-client app.py`, then a configuration
@@ -770,6 +771,29 @@ turn off servers in settings:
 "lsp.enabled": true,
 ```
 
+An entry can also configure its server. `settings` is the configuration the server reads (a dotted key such as
+`"gopls.buildFlags"` is the same as the nested objects); `initializationOptions` is sent once, when the server starts. An
+entry without `command` keeps the default server:
+
+```jsonc
+"lsp.servers": {
+  "go": { "settings": { "gopls.buildFlags": ["-tags=integration"] } },
+  "python": { "settings": { "python.analysis.typeCheckingMode": "strict" } }
+}
+```
+
+A change to `settings` reaches the running servers at once, without a restart; a change to `command`, `args` or
+`initializationOptions` restarts the server. A few options are read only when a server starts, and a server may keep a
+value you delete until it restarts: set the value you want instead, or run "Developer: Restart Language Servers". Each
+server reports unknown keys itself, in the Output panel.
+
+A problem can point at other places that explain it: where a value was moved, where a borrow is used later. Hovering the
+problem lists them under its message (`line 12: value moved here` in the same file, `src/lib.rs:12: …` in another one), and
+in Problems they are rows under the problem; a click opens the place. The problem's code comes first (`E0382: …`).
+*Problems: Copy Full Diagnostic* copies the problem under the cursor the way the compiler prints it in a terminal, with its
+`-->` arrows, notes and help, ready to paste into a question or a search. When a server repeats those places as hints of
+their own, Problems shows them once, under their problem. Scratch files get no language server.
+
 Besides errors, suggestions, hover and definition: rename (F2), references (⇧F12), symbols
 in the file (⇧⌘O), quick fixes (⌘.), format (⇧⌥F, or `"editor.formatOnSave": true`) and
 parameter hints while typing a call. `"editor.codeActionsOnSave": { "source.organizeImports":
@@ -777,6 +801,46 @@ parameter hints while typing a call. `"editor.codeActionsOnSave": { "source.orga
 file is saved anyway). Invisible characters (zero-width spaces, bidi controls) and Cyrillic / Greek
 letters inside Latin words are boxed (`"editor.unicodeHighlight.enabled"`), which exposes
 "Trojan Source" tricks and look-alike identifiers.
+
+## Working in Rust
+
+A Cargo folder needs no setup. Install `rust-analyzer` (`rustup component add rust-analyzer`) for the editor and, so that
+the debugger can show the standard library's code, `rust-src` (`rustup component add rust-src`). In an SSH folder both are
+used from the server, with the toolchain the project's `rust-toolchain.toml` picks there.
+
+**Check the way you build.** rust-analyzer runs `cargo check` when you save. Tell it to run Clippy instead, to analyse the
+code behind your Cargo features, or to keep a target folder of its own, in `lsp.servers` (no `command`: the default server
+keeps running, with these settings):
+
+```jsonc
+"lsp.servers": {
+  "rust": { "settings": {
+    "rust-analyzer.check.command": "clippy",      // Clippy lints in the editor and in Problems when you save
+    "rust-analyzer.cargo.features": ["serde"],    // analyse the code behind #[cfg(feature = "serde")]
+    "rust-analyzer.cargo.targetDir": true         // a target folder of its own, so it never waits for your builds
+  } }
+}
+```
+
+Saving the settings file is enough: the running server gets the new values, and the next save checks with them.
+
+**Errors that explain themselves.** A borrow-checker error says where things happened, not only where it noticed. Hover
+`E0382: borrow of moved value: s` and the line where `s` was moved is listed under it; click it to go there. Problems shows
+the same places under the error, once each. *Problems: Copy Full Diagnostic* copies the error as `cargo build` prints it,
+arrows, notes and the suggested fix included.
+
+**Macros and modules.** *Rust: Expand Macro Recursively* shows what the macro at the cursor (`vec!`, a derive,
+`#[tokio::main]`) expands to, in a scratch tab with Rust highlighting (`vec!.expansion.rs`). *Rust: Locate Parent Module*
+jumps to the `mod` line that includes the current file, and *Rust: Open Cargo.toml* opens the manifest of the crate the
+file belongs to, a member's own in a workspace. They have no default keys; bind `rust.expandMacro`, `rust.parentModule`
+and `rust.openCargoToml` in `keybindings.jsonc` if you use them often.
+
+**Debugging.** F5 builds with `cargo build` and starts lldb-dap with the formatters that come with your toolchain, so the
+Variables view shows a `String` as `"merhaba"` and a `Vec` or `HashMap` with its elements; with `rust-src`, stepping into
+`s.len()` opens the standard library's source. The same goes for *Debug Test*, and for `lldb` entries of a launch file in a
+Cargo folder: your own `initCommands` run after ours, and an entry that imports `lldb_lookup` itself is left alone. If the
+formatters cannot be loaded (no `rustc`, or a toolchain without them), the Debug Console says why in one line and the
+session runs as before. On Windows with the MSVC toolchain they are not loaded (see [platforms](platforms.md)).
 
 ## JSON and YAML schemas
 

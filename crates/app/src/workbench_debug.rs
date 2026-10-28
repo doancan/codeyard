@@ -226,22 +226,32 @@ const CONSOLE_SHOWN: usize = 300;
 /// Launch error: (message, pre-build output if any).
 type StartError = (String, String);
 
-/// In the background: pre-build + adapter process.
+/// For a Rust configuration: the `initCommands` to launch with (formatters first), or why the formatters are not loaded.
+type RustSetup = Option<Result<Vec<String>, String>>;
+
+/// In the background: pre-build, resolve Cargo artifacts, load Rust formatters and start the adapter.
 fn launch_session(
     host: Arc<dyn host::Host>,
     mut config: LaunchConfig,
     root: &str,
     tx: mpsc::Sender<DapEvent>,
-) -> Result<(Arc<dap::Session>, LaunchConfig), StartError> {
+) -> Result<(Arc<dap::Session>, LaunchConfig, RustSetup), StartError> {
     if let Some(cmd) = &config.pre_launch {
         run_pre_launch(&host, cmd, root)?;
     }
     if let Some(bin) = &config.cargo_bin {
         config.args["program"] = serde_json::json!(cargo::build(host.as_ref(), bin, root)?);
     }
+    let rust = crate::debug_config::is_rust_config(&config, host.stat(&format!("{}/Cargo.toml", root.trim_end_matches('/'))).is_ok())
+        .then(|| {
+            let existing: Vec<String> =
+                config.args["initCommands"].as_array().map(|a| a.iter().filter_map(|c| c.as_str().map(str::to_string)).collect()).unwrap_or_default();
+            crate::debug_config::rust_formatters(host.as_ref(), root, &existing).transpose()
+        })
+        .flatten();
     let adapter = config.adapter.clone().map_err(|e| (e, String::new()))?;
     if let Some((host_name, port)) = &adapter.connect {
-        return dap::Session::attach_socket(host, host_name, *port, tx).map(|session| (session, config)).map_err(|e| (e, String::new()));
+        return dap::Session::attach_socket(host, host_name, *port, tx).map(|session| (session, config, rust)).map_err(|e| (e, String::new()));
     }
     // lldb resolves a relative source path to an absolute one if the file exists in the adapter's cwd, which
     // breaks matching against debug info built with the logical path. So the adapter starts outside the project
@@ -249,7 +259,7 @@ fn launch_session(
     let neutral = if cfg!(windows) && !host.is_remote() { std::env::temp_dir().to_string_lossy().into_owned() } else { "/".to_string() };
     let adapter_cwd = if adapter.id == "lldb-dap" { neutral } else { root.to_string() };
     dap::Session::start(host, &adapter.command, adapter.args, Some(adapter_cwd), tx)
-        .map(|session| (session, config))
+        .map(|session| (session, config, rust))
         .map_err(|e| (crate::i18n::tf("Could not start the debug adapter: {}", &[&e]), String::new()))
 }
 
@@ -614,7 +624,7 @@ impl Workbench {
         let (cfg, root2, session_root) = (config, root.clone(), root.clone());
         let start = cx.background_executor().spawn(async move { launch_session(host, cfg, &root2, tx) });
         cx.spawn(async move |this, cx| {
-            let (session, config) = match start.await {
+            let (session, config, rust) = match start.await {
                 Ok(started) => started,
                 Err((message, output)) => {
                     this.update(cx, |this, cx| this.on_debug_failed(sid, message, output, cx)).ok();
@@ -632,6 +642,9 @@ impl Workbench {
                         session.set_root(&session_root);
                         session.set_exception_pref(this.dbg.exception_filters.clone());
                     }
+                    if let (Some(Err(reason)), Some(d)) = (&rust, this.dbg.by_id_mut(sid)) {
+                        d.push_console("console", crate::i18n::tf("Rust formatters not loaded: {}", &[reason]));
+                    }
                     current
                 })
                 .unwrap_or(false);
@@ -641,6 +654,9 @@ impl Workbench {
             }
             let adapter_id = config.adapter.as_ref().map(|a| a.id.clone()).unwrap_or_default();
             let (request, mut args) = (config.request.clone(), config.args.clone());
+            if let (Some(Ok(commands)), Some(o)) = (rust, args.as_object_mut()) {
+                o.insert("initCommands".into(), serde_json::json!(commands));
+            }
             if config.no_debug
                 && let Some(o) = args.as_object_mut()
             {

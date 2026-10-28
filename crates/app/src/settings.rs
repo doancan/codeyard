@@ -89,6 +89,8 @@ pub struct Settings {
     pub compare_max_files: u32,
     pub terminal_shell: Option<String>,
     pub terminal_font_size: f32,
+    /// Row height as a multiple of the terminal's font size.
+    pub terminal_line_height: f32,
     pub terminal_scrollback: usize,
     pub terminal_scroll_sensitivity: f32,
     /// Whether a program in the terminal may put text on the clipboard (OSC 52).
@@ -160,7 +162,8 @@ pub struct Settings {
     pub ports_rules: Vec<crate::port_forwards::PortRule>,
     /// Whether language servers are enabled.
     pub lsp_enabled: bool,
-    /// Language id → command and arguments (`None`: disabled for that language). Overrides the defaults.
+    /// Language key → command, arguments, settings and initialization options (`None`: disabled for that language).
+    /// Overrides the defaults.
     pub lsp_servers: Vec<ServerOverride>,
     /// Files that are not UTF-8 (and have no BOM) are read with this encoding.
     pub fallback_encoding: crate::encoding::Encoding,
@@ -246,6 +249,8 @@ pub struct Settings {
     pub tab_icons: bool,
     /// "hover", "always", "off".
     pub tab_close: String,
+    /// Leave out animations (`workbench.reduceMotion`): `None` follows the system ("auto").
+    pub reduce_motion: Option<bool>,
     pub breadcrumbs: bool,
     pub cursor_width: f32,
     pub hover_enabled: bool,
@@ -256,8 +261,8 @@ pub struct Settings {
     pub file_associations: Vec<(String, String)>,
 }
 
-/// Language id → (command, arguments); `None`: disabled for that language.
-pub type ServerOverride = (String, Option<(String, Vec<String>)>);
+/// Language key → server entry; `None`: disabled for that language.
+pub type ServerOverride = (String, Option<crate::lsp::ServerSpec>);
 
 impl Global for Settings {}
 
@@ -289,7 +294,7 @@ impl Default for Settings {
             // --- git-sync ---
             git_autofetch: false,
             git_autofetch_period: 180,
-            git_confirm_sync: true,
+            git_confirm_sync: false,
             git_rebase_when_sync: false,
             git_prune_on_fetch: true,
             git_pull_tags: true,
@@ -303,6 +308,7 @@ impl Default for Settings {
             compare_max_files: 50_000,
             terminal_shell: None,
             terminal_font_size: theme::text::CODE.0,
+            terminal_line_height: crate::terminal::LINE_HEIGHT,
             terminal_scrollback: 2000,
             terminal_scroll_sensitivity: 2.,
             terminal_allow_clipboard_write: false,
@@ -391,6 +397,7 @@ impl Default for Settings {
             show_tabs: true,
             tab_icons: true,
             tab_close: "hover".into(),
+            reduce_motion: None,
             breadcrumbs: true,
             cursor_width: 2.,
             hover_enabled: true,
@@ -521,6 +528,37 @@ pub fn parse_layers_trusted(user: &str, project: &[Layer], trusted: bool) -> Res
     Ok((s, warnings))
 }
 
+/// One `lsp.servers` entry: `Some(None)` turns the language off, `None` is malformed. An object needs at least one of
+/// `command`, `settings` and `initializationOptions`; a `settings` value that is not an object is warned about and the rest
+/// of the entry still applies.
+fn server_entry(lang: &str, cfg: &Value, warnings: &mut Vec<String>) -> Option<Option<crate::lsp::ServerSpec>> {
+    let o = match cfg {
+        Value::Null => return Some(None),
+        Value::String(cmd) if !cmd.trim().is_empty() => return Some(Some((cmd.clone(), Vec::new()).into())),
+        Value::Object(o) => o,
+        _ => return None,
+    };
+    let command = match o.get("command") {
+        None => None,
+        Some(Value::String(c)) if !c.trim().is_empty() => Some(c.clone()),
+        Some(_) => return None,
+    };
+    if command.is_none() && !o.contains_key("settings") && !o.contains_key("initializationOptions") {
+        return None;
+    }
+    let args = o.get("args").and_then(Value::as_array).map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default();
+    let settings = match o.get("settings") {
+        None | Some(Value::Null) => Value::Null,
+        Some(v @ Value::Object(_)) => crate::lsp::expand_dotted(v),
+        Some(_) => {
+            warnings.push(format!("settings.jsonc: {}", crate::i18n::tf("{}: expected an object", &[&format!("lsp.servers.{lang}.settings")])));
+            Value::Null
+        }
+    };
+    let init_options = o.get("initializationOptions").filter(|v| !v.is_null()).cloned();
+    Some(Some(crate::lsp::ServerSpec { command, args, settings: std::sync::Arc::new(settings), init_options }))
+}
+
 fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<String>) {
     let mut s = Settings::default();
     let mut warnings = Vec::new();
@@ -612,6 +650,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     s.terminal_shell = r.string("terminal.shell");
     if let Some(v) = r.number("terminal.fontSize", 6., 48.) {
         s.terminal_font_size = v as f32;
+    }
+    if let Some(v) = r.number("terminal.lineHeight", 1., 2.) {
+        s.terminal_line_height = v as f32;
     }
     if let Some(v) = r.number("terminal.scrollback", 0., crate::terminal::SCROLLBACK_MAX as f64) {
         s.terminal_scrollback = v as usize;
@@ -770,7 +811,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.bool("editor.colorDecorators") {
         s.color_decorators = v;
     }
-    if let Some(v) = r.choice("workbench.iconTheme", &["codeyard", "badges", "colorful", "minimal", "apple", "material", "none"]) {
+    if let Some(v) = r.choice("workbench.iconTheme", &["codeyard", "glyphs", "badges", "colorful", "minimal", "apple", "material", "none"]) {
         s.icon_theme = v;
     }
     if let Some(v) = r.bool("workbench.statusBar.visible") {
@@ -859,6 +900,13 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.choice("workbench.tabs.closeButton", &["hover", "always", "off"]) {
         s.tab_close = v;
+    }
+    if let Some(v) = r.choice("workbench.reduceMotion", &["auto", "on", "off"]) {
+        s.reduce_motion = match v.as_str() {
+            "on" => Some(true),
+            "off" => Some(false),
+            _ => None,
+        };
     }
     if let Some(v) = r.bool("workbench.breadcrumbs.enabled") {
         s.breadcrumbs = v;
@@ -949,27 +997,14 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         None | Some(Value::Null) => {}
         Some(Value::Object(m)) => {
             for (lang, cfg) in m {
-                let entry = match cfg {
-                    Value::Null => Some(None),
-                    Value::String(cmd) if !cmd.trim().is_empty() => Some(Some((cmd.clone(), Vec::new()))),
-                    Value::Object(o) => match o.get("command").and_then(Value::as_str) {
-                        Some(cmd) => {
-                            let args = o
-                                .get("args")
-                                .and_then(Value::as_array)
-                                .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
-                                .unwrap_or_default();
-                            Some(Some((cmd.to_string(), args)))
-                        }
-                        None => None,
-                    },
-                    _ => None,
-                };
-                match entry {
+                match server_entry(lang, cfg, &mut warnings) {
                     Some(e) => s.lsp_servers.push((lang.clone(), e)),
                     None => warnings.push(format!(
                         "settings.jsonc: {}",
-                        crate::i18n::tf("{0}: expected {1} or null", &[&format!("lsp.servers.{lang}"), &"{ \"command\": \"…\", \"args\": [] }"])
+                        crate::i18n::tf(
+                            "{0}: expected {1} or null",
+                            &[&format!("lsp.servers.{lang}"), &"{ \"command\": \"…\", \"args\": [], \"settings\": {} }"]
+                        )
                     )),
                 }
             }
@@ -1087,6 +1122,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "compare.folders.maxFiles",
         "terminal.shell",
         "terminal.fontSize",
+        "terminal.lineHeight",
         "terminal.scrollback",
         "terminal.scrollSensitivity",
         "terminal.sanitizePaste",
@@ -1148,6 +1184,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "workbench.editor.showTabs",
         "workbench.tabs.showIcons",
         "workbench.tabs.closeButton",
+        "workbench.reduceMotion",
         "workbench.breadcrumbs.enabled",
         "editor.cursorWidth",
         "editor.hover.enabled",

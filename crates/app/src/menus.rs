@@ -35,9 +35,22 @@ actions!(
         OpenRecent6,
         OpenRecent7,
         OpenRecent8,
-        OpenRecent9
+        OpenRecent9,
+        ShowWindow0,
+        ShowWindow1,
+        ShowWindow2,
+        ShowWindow3,
+        ShowWindow4,
+        ShowWindow5,
+        ShowWindow6,
+        ShowWindow7,
+        ShowWindow8,
+        ShowWindow9
     ]
 );
+
+/// Open windows at the top of the Dock menu, in the order they were listed (the row number is the digit at the end of the action).
+static DOCK_WINDOWS: std::sync::Mutex<Vec<gpui::AnyWindowHandle>> = std::sync::Mutex::new(Vec::new());
 
 /// "Recently opened" in the Dock menu (the row number is the digit at the end of the action).
 static DOCK_RECENT: std::sync::Mutex<Vec<state::RecentWorkspace>> = std::sync::Mutex::new(Vec::new());
@@ -71,20 +84,40 @@ pub(crate) fn desktop_menus(recent: &[state::RecentWorkspace]) -> Vec<Menu> {
     menus
 }
 
-/// Rows of the Dock menu. Built on every platform for the tests; only macOS has a Dock to show it.
+/// An open window as the Dock menu shows it: its title, and the workspace it holds (host alias, folder) if any.
 #[cfg(any(target_os = "macos", test))]
-pub(crate) fn dock_items(recent: &[state::RecentWorkspace]) -> Vec<MenuItem> {
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DockWindow {
+    pub title: String,
+    pub workspace: Option<(Option<String>, String)>,
+}
+
+/// Rows of the Dock menu, top to bottom: the open windows (front one first), the recent projects that are not open (newest
+/// first), then the shortcuts. Built on every platform for the tests; only macOS has a Dock to show it.
+#[cfg(any(target_os = "macos", test))]
+pub(crate) fn dock_items(windows: &[DockWindow], recent: &[state::RecentWorkspace]) -> Vec<MenuItem> {
     use MenuItem as I;
-    let mut items = vec![
+    let mut items = window_items(windows);
+    // A project open in a window is already listed above; its recent row would only repeat it.
+    let closed: Vec<_> = recent_rows(recent)
+        .filter(|(_, r)| !windows.iter().any(|w| w.workspace.as_ref().is_some_and(|(host, path)| *host == r.host && *path == r.path)))
+        .map(|(ix, r)| recent_item(ix, r))
+        .collect();
+    if !closed.is_empty() {
+        if !items.is_empty() {
+            items.push(I::separator());
+        }
+        items.extend(closed);
+    }
+    if !items.is_empty() {
+        items.push(I::separator());
+    }
+    items.extend([
         I::action(tr("New Window"), wb::NewWindow),
         I::action(tr("Open Folder…"), wb::OpenFolder),
         I::action(tr("Connect to SSH Host…"), wb::ShowRemote),
         I::action(tr("Go to File…"), wb::QuickOpen),
-    ];
-    if !recent.is_empty() {
-        items.push(I::separator());
-        items.extend(recent_items(recent));
-    }
+    ]);
     items.push(I::separator());
     items.push(I::action(tr("Settings…"), wb::OpenSettingsPage));
     items.push(I::action(tr("Welcome"), wb::ShowWelcome));
@@ -103,11 +136,53 @@ pub fn set_dock_menu(cx: &mut App, recent: &[state::RecentWorkspace]) {
     cx.defer(move |cx| rebuild(cx, &recent));
 }
 
+/// Only the Dock menu, for a window that came forward, opened, closed or changed its title. Deferred like `set_dock_menu`: the
+/// titles are read from every workbench, and the one asking is usually still being updated.
+#[cfg(target_os = "macos")]
+pub fn refresh_dock_windows(cx: &mut App) {
+    cx.defer(|cx| {
+        let recent = DOCK_RECENT.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let windows = open_windows(cx);
+        cx.set_dock_menu(dock_items(&windows, &recent));
+    });
+}
+
+/// The open workbench windows (at most 10) in the order the window server stacks them, front one first, so the window used last
+/// leads the list. Windows the stack leaves out (minimized ones) follow in opening order. Remembered for the `ShowWindow` actions.
+#[cfg(target_os = "macos")]
+fn open_windows(cx: &App) -> Vec<DockWindow> {
+    let mut order = cx.window_stack().unwrap_or_default();
+    for w in cx.windows() {
+        if !order.contains(&w) {
+            order.push(w);
+        }
+    }
+    let mut handles = Vec::new();
+    let mut windows = Vec::new();
+    for w in order {
+        let Some(row) = w
+            .downcast::<wb::Workbench>()
+            .and_then(|h| h.read(cx).ok())
+            .map(|wb| DockWindow { title: wb.window_title().to_string(), workspace: wb.workspace_key(cx) })
+        else {
+            continue;
+        };
+        handles.push(w);
+        windows.push(row);
+        if windows.len() == 10 {
+            break;
+        }
+    }
+    *DOCK_WINDOWS.lock().unwrap_or_else(|e| e.into_inner()) = handles;
+    windows
+}
+
 #[cfg(target_os = "macos")]
 fn rebuild(cx: &mut App, recent: &[state::RecentWorkspace]) {
     #[cfg(test)]
     tests::validate_like_appkit(cx);
-    cx.set_dock_menu(dock_items(recent));
+    let windows = open_windows(cx);
+    cx.set_dock_menu(dock_items(&windows, recent));
     // File ▸ Open Recent in the menu bar is refreshed with the same list.
     cx.set_menus(menus(recent));
 }
@@ -126,6 +201,15 @@ fn open_recent(n: usize, cx: &mut App) {
             })
             .ok();
         }
+    });
+}
+
+/// The `n`th window of the Dock menu: bring it to the front (deferred like `open_recent`).
+fn show_window(n: usize, cx: &mut App) {
+    let Some(w) = DOCK_WINDOWS.lock().unwrap_or_else(|e| e.into_inner()).get(n).copied() else { return };
+    cx.defer(move |cx| {
+        cx.activate(true);
+        w.update(cx, |_, window, _| window.activate_window()).ok();
     });
 }
 
@@ -153,36 +237,66 @@ pub fn install(cx: &mut App) {
     cx.on_action(|_: &OpenRecent7, cx| open_recent(7, cx));
     cx.on_action(|_: &OpenRecent8, cx| open_recent(8, cx));
     cx.on_action(|_: &OpenRecent9, cx| open_recent(9, cx));
+    cx.on_action(|_: &ShowWindow0, cx| show_window(0, cx));
+    cx.on_action(|_: &ShowWindow1, cx| show_window(1, cx));
+    cx.on_action(|_: &ShowWindow2, cx| show_window(2, cx));
+    cx.on_action(|_: &ShowWindow3, cx| show_window(3, cx));
+    cx.on_action(|_: &ShowWindow4, cx| show_window(4, cx));
+    cx.on_action(|_: &ShowWindow5, cx| show_window(5, cx));
+    cx.on_action(|_: &ShowWindow6, cx| show_window(6, cx));
+    cx.on_action(|_: &ShowWindow7, cx| show_window(7, cx));
+    cx.on_action(|_: &ShowWindow8, cx| show_window(8, cx));
+    cx.on_action(|_: &ShowWindow9, cx| show_window(9, cx));
     cx.set_menus(menus(&[]));
+}
+
+/// One Dock row per open window, titled like the window (at most 10).
+#[cfg(any(target_os = "macos", test))]
+fn window_items(windows: &[DockWindow]) -> Vec<MenuItem> {
+    let actions: [Box<dyn gpui::Action>; 10] = [
+        Box::new(ShowWindow0),
+        Box::new(ShowWindow1),
+        Box::new(ShowWindow2),
+        Box::new(ShowWindow3),
+        Box::new(ShowWindow4),
+        Box::new(ShowWindow5),
+        Box::new(ShowWindow6),
+        Box::new(ShowWindow7),
+        Box::new(ShowWindow8),
+        Box::new(ShowWindow9),
+    ];
+    windows.iter().zip(actions).map(|(w, action)| MenuItem::Action { name: w.title.clone().into(), action, os_action: None }).collect()
 }
 
 /// Shared rows for the "Open Recent" submenu and the Dock menu (at most 10).
 fn recent_items(recent: &[state::RecentWorkspace]) -> Vec<MenuItem> {
-    let actions: [Box<dyn gpui::Action>; 10] = [
-        Box::new(OpenRecent0),
-        Box::new(OpenRecent1),
-        Box::new(OpenRecent2),
-        Box::new(OpenRecent3),
-        Box::new(OpenRecent4),
-        Box::new(OpenRecent5),
-        Box::new(OpenRecent6),
-        Box::new(OpenRecent7),
-        Box::new(OpenRecent8),
-        Box::new(OpenRecent9),
-    ];
-    recent
-        .iter()
-        .take(10)
-        .zip(actions)
-        .map(|(r, action)| {
-            let name = r.path.rsplit('/').find(|s| !s.is_empty()).unwrap_or(&r.path);
-            let label = match &r.host {
-                Some(h) => format!("{name}  (ssh://{h})"),
-                None => name.to_string(),
-            };
-            MenuItem::Action { name: label.into(), action, os_action: None }
-        })
-        .collect()
+    recent_rows(recent).map(|(ix, r)| recent_item(ix, r)).collect()
+}
+
+/// The recent projects a menu can offer, with the row number their `OpenRecent` action carries.
+fn recent_rows(recent: &[state::RecentWorkspace]) -> impl Iterator<Item = (usize, &state::RecentWorkspace)> {
+    recent.iter().take(10).enumerate()
+}
+
+fn recent_item(ix: usize, r: &state::RecentWorkspace) -> MenuItem {
+    let action: Box<dyn gpui::Action> = match ix {
+        0 => Box::new(OpenRecent0),
+        1 => Box::new(OpenRecent1),
+        2 => Box::new(OpenRecent2),
+        3 => Box::new(OpenRecent3),
+        4 => Box::new(OpenRecent4),
+        5 => Box::new(OpenRecent5),
+        6 => Box::new(OpenRecent6),
+        7 => Box::new(OpenRecent7),
+        8 => Box::new(OpenRecent8),
+        _ => Box::new(OpenRecent9),
+    };
+    let name = r.path.rsplit('/').find(|s| !s.is_empty()).unwrap_or(&r.path);
+    let label = match &r.host {
+        Some(h) => format!("{name}  (ssh://{h})"),
+        None => name.to_string(),
+    };
+    MenuItem::Action { name: label.into(), action, os_action: None }
 }
 
 pub(crate) fn menus(recent: &[state::RecentWorkspace]) -> Vec<Menu> {
@@ -417,5 +531,33 @@ pub(crate) mod tests {
         });
         cx.run_until_parked();
         assert_eq!(REBUILDS.with(Cell::get), 1, "rebuilt once, after the update had finished");
+    }
+
+    /// Open windows lead, front one first; a recent project already open in one of them is not listed again, and the rest keep
+    /// their newest-first order and their own `OpenRecent` row numbers.
+    #[test]
+    fn the_dock_lists_open_windows_first_and_skips_their_recent_rows() {
+        use super::{DockWindow, dock_items};
+        use gpui::MenuItem;
+        let recent = |host: Option<&str>, path: &str| state::RecentWorkspace { host: host.map(Into::into), path: path.into(), last_opened_at: 0 };
+        let recents = [recent(None, "/p/front"), recent(None, "/p/old"), recent(Some("box"), "/srv/api"), recent(None, "/p/back")];
+        let windows = [
+            DockWindow { title: "main.rs — front".into(), workspace: Some((None, "/p/front".into())) },
+            DockWindow { title: "back".into(), workspace: Some((None, "/p/back".into())) },
+            DockWindow { title: "codeyard".into(), workspace: None },
+        ];
+        let rows: Vec<(String, Option<String>)> = dock_items(&windows, &recents)
+            .into_iter()
+            .map(|i| match i {
+                MenuItem::Action { name, action, .. } => (name.to_string(), Some(action.name().to_string())),
+                _ => ("---".into(), None),
+            })
+            .collect();
+        let names: Vec<&str> = rows.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(names[..7], ["main.rs — front", "back", "codeyard", "---", "old", "api  (ssh://box)", "---"]);
+        assert_eq!(rows[4].1.as_deref(), Some("app::OpenRecent1"), "a skipped row keeps the others' numbers");
+        assert_eq!(rows[5].1.as_deref(), Some("app::OpenRecent2"));
+        assert_eq!(rows[0].1.as_deref(), Some("app::ShowWindow0"));
+        assert!(!names[3..].iter().any(|n| *n == "front" || *n == "back"), "open projects are not repeated");
     }
 }

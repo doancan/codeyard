@@ -857,6 +857,7 @@ This language server does not support subtypes	Bu dil sunucusu alt türleri dest
 {} outgoing call|{} outgoing calls	{} giden çağrı
 {} supertype|{} supertypes	{} üst tür
 {} subtype|{} subtypes	{} alt tür
+{} parent module|{} parent modules	{} üst modül
 No symbols in this file	Bu dosyada sembol yok
 Go to symbol in file	Dosyada sembole git
 No language server is running. Open a file of the language first.	Çalışan bir dil sunucusu yok. Önce bu dilde bir dosya açın.
@@ -917,6 +918,11 @@ Plain Text	Düz Metin
 You · Uncommitted changes	Siz · Commit edilmemiş değişiklikler
 folder	klasör
 Status bar	Durum çubuğu
+Editor tabs	Düzenleyici sekmeleri
+Suggestions	Öneriler
+Leave out animations: the blinking cursor, spinners and sliding panels (auto: follow the system setting)	Animasyonları kapat: yanıp sönen imleç, dönen simgeler ve kayan paneller (auto: sistem ayarını izle)
+Theme “{1}”: {0} colour pair is below WCAG AA contrast ({2} on {3}: {4}:1, needs {5}:1)|Theme “{1}”: {0} colour pairs are below WCAG AA contrast, for example {2} on {3}: {4}:1, needs {5}:1	“{1}” teması: {0} renk çifti WCAG AA kontrastının altında (örneğin {3} üzerinde {2}: {4}:1, en az {5}:1 olmalı)
+Terminal {0} of {1}	Terminal {0} / {1}
 {} (modified)	{} (değiştirildi)
 {0} lines, showing from line {1}	{0} satır, {1}. satırdan itibaren gösteriliyor
 Connecting to {}	{} sunucusuna bağlanılıyor
@@ -970,6 +976,21 @@ Zoom: {}	Yakınlaştırma: {}
 No output yet. Language server logs appear here.	Henüz çıktı yok. Dil sunucusu günlükleri burada görünür.
 No problems. Language servers start when you open a file.	Sorun yok. Dil sunucuları bir dosya açtığınızda başlar.
 No problems.	Sorun yok.
+Problems: Copy Full Diagnostic	Sorunlar: Tanının Tamamını Kopyala
+Rust: Expand Macro Recursively	Rust: Makroyu Özyinelemeli Genişlet
+Rust: Locate Parent Module	Rust: Üst Modülü Bul
+Rust: Open Cargo.toml	Rust: Cargo.toml Dosyasını Aç
+Open a Rust file first	Önce bir Rust dosyası açın
+No macro at the cursor	İmleçte makro yok
+No parent module found	Üst modül bulunamadı
+No Cargo.toml found for this file	Bu dosya için Cargo.toml bulunamadı
+The Rust language server does not support this command	Rust dil sunucusu bu komutu desteklemiyor
+Rust formatters not loaded: {}	Rust biçimlendiricileri yüklenmedi: {}
+rustc not found	rustc bulunamadı
+files not found in the toolchain	dosyalar araç zincirinde bulunamadı
+Diagnostic copied	Tanı kopyalandı
+No problem at the cursor	İmleçte sorun yok
+line {0}: {1}	satır {0}: {1}
 Filter	Süz
 Filtering {0} for “{1}”…	{0} dosyası “{1}” için süzülüyor…
 Filtering needs sh, tail, grep and cut on the host (on Windows: Git Bash or WSL). {}	Süzme için sunucuda sh, tail, grep ve cut gerekir (Windows'ta: Git Bash ya da WSL). {}
@@ -1330,7 +1351,7 @@ Restarting language servers…	Dil sunucuları yeniden başlatılıyor…
 No file “{}” in this project	Bu projede “{}” dosyası yok
 Language Badges	Dil Rozetleri
 Colorful Folders	Renkli Klasörler
-Minimal (Default)	Sade (Varsayılan)
+Minimal	Sade
 None	Yok
 File glyphs tinted by language, accent folders	Dile göre renklendirilmiş dosya simgeleri, vurgu renginde klasörler
 Small colored badges with the language's letters	Dilin harflerini taşıyan küçük renkli rozetler
@@ -1339,6 +1360,8 @@ One quiet color, outline glyphs	Tek ve sakin bir renk, çerçeve çizgili simgel
 Solid blue folders like Finder, outline files with a language dot like GitHub	Finder gibi dolgulu mavi klasörler, GitHub gibi dil noktalı çerçeve çizgili dosyalar
 Solid folders colored and marked by purpose, solid files colored by language	Amacına göre renklendirilmiş ve işaretlenmiş dolgulu klasörler, dile göre renklendirilmiş dolgulu dosyalar
 Names only	Yalnızca adlar
+File Glyphs (Default)	Dosya Simgeleri (Varsayılan)
+Colored file glyphs, folders with only their arrow; names line up	Renkli dosya simgeleri, klasörlerde yalnızca ok; adlar hizalı durur
 
 # ---- File operations leftovers ----
 too many copies	çok fazla kopya
@@ -2629,6 +2652,7 @@ Maximize window	Pencereyi büyüt
 Restore window	Pencereyi önceki boyutuna getir
 Close window	Pencereyi kapat
 Mouse wheel and trackpad scroll speed multiplier	Fare tekerleği ve izleme dörtgeni kaydırma hızı çarpanı
+Terminal row height, as a multiple of the font size	Terminal satır yüksekliği, yazı boyutunun katı olarak
 Toggle Panel (⌘J)	Paneli Aç/Kapat (⌘J)
 Closes when the pointer leaves · pin to keep open	Fare ayrılınca kapanır · açık tutmak için sabitleyin
 Codeyard memory	Codeyard belleği

@@ -440,6 +440,14 @@ fn server_value(rng: &mut Rng, depth: usize) -> serde_json::Value {
         "defaultBehavior",
         "from",
         "to",
+        "section",
+        "scopeUri",
+        "a.b",
+        "rust-analyzer.check",
+        "relatedInformation",
+        "rendered",
+        "code",
+        "expansion",
     ];
     let pick = |rng: &mut Rng| KEYS[(rng.next() as usize) % KEYS.len()];
     match if depth > 6 { rng.next() % 6 } else { rng.next() % 9 } {
@@ -463,8 +471,24 @@ fn language_server_and_debugger_replies_survive_any_shape() {
         let v = server_value(&mut rng, 0);
         let outcome = std::panic::catch_unwind(|| {
             use crate::lsp::*;
+            use serde_json::json;
             let _ = parse_range(&v);
-            let _ = parse_diagnostics(&v);
+            if let Some((name, text)) = parse_expansion(&v) {
+                assert!(text.len() <= MAX_EXPANSION + 20);
+                assert!(!expansion_file_name(&name).contains(['/', '\\']));
+            }
+            if let Some((path, diags)) = parse_diagnostics(&v) {
+                for d in &diags {
+                    assert!(d.related.len() <= MAX_RELATED && d.rendered.as_ref().is_none_or(|r| r.len() <= MAX_RENDERED + 3));
+                    let _ = (d.headline(), d.full_text(Some("/")));
+                    for r in &d.related {
+                        let _ = related_label(r, &path, None);
+                    }
+                }
+            }
+            let _ = parse_diagnostics(
+                &json!({ "uri": "file:///a.rs", "diagnostics": [v.clone(), { "relatedInformation": v.clone(), "data": v.clone(), "code": v.clone() }] }),
+            );
             let _ = parse_completions(&v);
             let _ = hover_text(&v);
             let _ = parse_locations(&v);
@@ -490,6 +514,38 @@ fn language_server_and_debugger_replies_survive_any_shape() {
         });
         assert!(outcome.is_ok(), "a reader panicked on {}", serde_json::to_string(&v).unwrap_or_default().chars().take(400).collect::<String>());
     }
+}
+
+/// `workspace/configuration` answers any request shape from any settings tree (dotted keys expanded first): one value per
+/// item, never a panic.
+#[test]
+fn configuration_replies_survive_any_request_and_settings_tree() {
+    use serde_json::{Value, json};
+    let mut rng = Rng(17);
+    let started = Instant::now();
+    for i in 0..4_000 {
+        let settings = crate::lsp::expand_dotted(&server_value(&mut rng, 0));
+        let params = if i % 2 == 0 {
+            server_value(&mut rng, 0)
+        } else {
+            // Mostly well formed, with sections built from the keys the tree may hold.
+            let items: Vec<Value> = (0..rng.next() % 300)
+                .map(|_| match rng.next() % 4 {
+                    0 => server_value(&mut rng, 3),
+                    _ => {
+                        let steps: Vec<&str> =
+                            (0..rng.next() % 5).map(|_| ["section", "a", "b", "items", "rust-analyzer", "check", ""][(rng.next() % 7) as usize]).collect();
+                        json!({ "section": steps.join(".") })
+                    }
+                })
+                .collect();
+            json!({ "items": items })
+        };
+        let outcome = std::panic::catch_unwind(|| crate::lsp::configuration_reply(&settings, &params));
+        let Ok(Value::Array(reply)) = outcome else { panic!("no array for {}", params.to_string().chars().take(400).collect::<String>()) };
+        assert_eq!(reply.len(), params["items"].as_array().map_or(0, Vec::len), "one value per item");
+    }
+    assert!(started.elapsed() < BUDGET, "{:?}", started.elapsed());
 }
 
 /// A server that writes endless text without a message header (a log to stdout) must not make every new chunk rescan all

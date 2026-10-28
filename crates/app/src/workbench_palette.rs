@@ -284,6 +284,10 @@ impl Workbench {
             Command::action("Preferences: Open Keyboard Shortcuts", OpenKeybindings),
             Command::action("Preferences: Import VS Code Settings and Shortcuts", ImportVsCode),
             Command::action("View: Problems", ShowProblems),
+            Command::action("Problems: Copy Full Diagnostic", CopyFullDiagnostic),
+            Command::action("Rust: Expand Macro Recursively", RustExpandMacro),
+            Command::action("Rust: Locate Parent Module", RustParentModule),
+            Command::action("Rust: Open Cargo.toml", RustOpenCargoToml),
             Command::action("View: Output", ShowOutput),
             Command::action("Output: Clear", ClearOutput),
             Command::action("View: Ports (SSH port forwarding)", ShowPorts),
@@ -552,6 +556,7 @@ impl Workbench {
                 self.persist_theme(&id);
                 self.apply_theme(&id, window, cx);
                 self.close_overlay(window, cx);
+                self.warn_low_contrast(window, cx);
             }
             (OverlayKind::Theme { original, .. }, PickerEvent::Dismiss) => {
                 let original = original.clone();

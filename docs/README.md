@@ -15,7 +15,7 @@ code they describe.
 | [web-preview.md](web-preview.md) | optional HTML/CSS/JavaScript server, browser live refresh, local/SSH/container support and serving boundaries |
 | [editor-services.md](editor-services.md) | schemas, spell check, merge editor, pull requests, `.http`, log follow: how each one works and where it stops |
 | [design-tokens.md](design-tokens.md) | colour roles, themes and how tokens become Rust constants |
-| [accessibility.md](accessibility.md) | the AccessKit tree on macOS, what is verified, what is missing |
+| [accessibility.md](accessibility.md) | the AccessKit tree on macOS and Windows, motion and contrast, what is verified, what is missing |
 | [platforms.md](platforms.md) | what runs and what has been verified on macOS, Linux and Windows |
 | [testing.md](testing.md) | test layers, hermetic rules, fuzzing, hardening practice |
 | [production-readiness.md](production-readiness.md) | readiness findings, implementation plan, validation evidence and platform limits |

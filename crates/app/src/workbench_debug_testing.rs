@@ -128,6 +128,12 @@ impl Workbench {
         self.dbg.watch_exprs.iter().cloned().zip(values).collect()
     }
 
+    /// For tests: every loaded variable (name, value), the children of opened ones included.
+    pub fn debug_variables_deep_for_test(&self) -> Vec<(String, String)> {
+        let Some(d) = self.dbg.cur() else { return Vec::new() };
+        d.children.values().flatten().map(|v| (v.name.clone(), v.value.clone())).collect()
+    }
+
     /// For tests: visible variables (name, value), from the expanded scopes.
     pub fn debug_variables(&self) -> Vec<(String, String)> {
         let Some(d) = self.dbg.cur() else { return Vec::new() };

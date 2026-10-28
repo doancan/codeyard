@@ -1,6 +1,8 @@
 ## What and why
 
-<!-- One or two sentences. Link the issue if there is one. -->
+<!-- One or two sentences. -->
+
+Closes #<!-- issue number: links this pull request to the issue, moves it to In Review, closes it on merge -->
 
 ## Checklist
 

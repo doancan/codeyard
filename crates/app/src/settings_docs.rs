@@ -53,9 +53,9 @@ pub const FILE_ONLY: &[(&str, &str, &str, &str)] = &[
     ("yaml.schemas", "object of schema → globs", "`{}`", "Associate YAML files with a schema. Ignored in untrusted folders."),
     (
         "lsp.servers",
-        "object of language → `{ command, args }` or `null`",
+        "object of language → `{ command, args, settings, initializationOptions }` or `null`",
         "built-in servers",
-        "Replace or turn off (`null`) the language server of a language. Keys: `rust`, `c`, `go`, `python`, `typescript`, `java`, `csharp`, `php`, `ruby`, `kotlin`, `swift`, `lua`, `bash`, `html`, `css`; `json`, `yaml` and `toml` have no default and are opt-in. Ignored in untrusted folders.",
+        "Replace, configure or turn off (`null`) the language server of a language. `settings` is what the server reads as its configuration (dotted keys are nested objects; a change reaches a running server without a restart), `initializationOptions` is sent when it starts; without `command` the default server is used. Keys: `rust`, `c`, `go`, `python`, `typescript`, `java`, `csharp`, `php`, `ruby`, `kotlin`, `swift`, `lua`, `bash`, `html`, `css`; `json`, `yaml` and `toml` have no default and are opt-in. Ignored in untrusted folders.",
     ),
     ("spelling.languages", "list of dictionary ids", "`[\"en\"]`", "Dictionaries used together; install more with *Spelling: Install Dictionary…*."),
     ("workbench.colorCustomizations", "object", "`{}`", "Override single colour roles; an entry in `[Theme Name]` applies to that theme only."),

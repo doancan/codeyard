@@ -11,7 +11,7 @@ use alacritty_terminal::index::{Column, Line, Point as GridPoint, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::{Config, Term, TermMode};
-use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Processor, Rgb, StdSyncHandler};
+use alacritty_terminal::vte::ansi::{CursorShape, Processor, StdSyncHandler};
 use gpui::{
     App, Bounds, ClipboardItem, Context, Element, ElementId, Entity, EventEmitter, FocusHandle, Focusable, FontStyle, FontWeight, GlobalElementId,
     KeyDownEvent, LayoutId, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, Point, ScrollWheelEvent, SharedString, Style, TextRun, Window, actions, div,
@@ -19,7 +19,9 @@ use gpui::{
 };
 use host::{Host, PtyEvent};
 
-use crate::ui::{MONO_FONT, Palette, c, palette, text};
+use crate::ui::{MONO_FONT, Palette, c, palette};
+
+use colors::{mix, resolve};
 
 actions!(
     terminal,
@@ -41,6 +43,8 @@ actions!(
     ]
 );
 
+#[path = "terminal_colors.rs"]
+mod colors;
 #[path = "terminal_find.rs"]
 mod find;
 #[path = "terminal_marks.rs"]
@@ -366,7 +370,10 @@ impl TerminalView {
             selecting: false,
             find: None,
             hover_link: None,
-            metrics: metrics(cx.global::<crate::settings::Settings>().terminal_font_size),
+            metrics: {
+                let s = cx.global::<crate::settings::Settings>();
+                metrics(s.terminal_font_size, s.terminal_line_height)
+            },
             scrollback,
             wheel: Default::default(),
             color,
@@ -507,15 +514,24 @@ impl TerminalView {
 
     #[cfg(test)]
     pub fn screen_text(&self) -> String {
+        self.a11y_view().0.join("\n")
+    }
+
+    /// For the accessibility tree (a11y.rs): the rows on screen (trailing blanks trimmed) and the cursor (row, column),
+    /// if it is on screen.
+    pub fn a11y_view(&self) -> (Vec<String>, Option<(usize, usize)>) {
         let content = self.term.renderable_content();
+        let offset = content.display_offset as i32;
         let mut rows = vec![String::new(); self.size.rows];
         for cell in content.display_iter {
-            let row = (cell.point.line.0 + content.display_offset as i32) as usize;
+            let row = (cell.point.line.0 + offset) as usize;
             if row < rows.len() && !cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
                 rows[row].push(cell.c);
             }
         }
-        rows.iter().map(|r| r.trim_end()).collect::<Vec<_>>().join("\n")
+        let cur_row = content.cursor.point.line.0 + offset;
+        let cursor = (cur_row >= 0 && (cur_row as usize) < rows.len()).then_some((cur_row as usize, content.cursor.point.column.0));
+        (rows.into_iter().map(|r| r.trim_end().to_string()).collect(), cursor)
     }
 
     fn on_key_down(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
@@ -878,124 +894,6 @@ pub fn key_to_bytes(k: &gpui::Keystroke, mode: TermMode) -> Option<Vec<u8>> {
     Some(bytes)
 }
 
-// --- Colors: ANSI palette from the theme's roles ---
-
-fn mix(a: u32, b: u32, t: f32) -> u32 {
-    let ch = |s: u32| {
-        let (x, y) = (((a >> s) & 0xff) as f32, ((b >> s) & 0xff) as f32);
-        ((x + (y - x) * t).round() as u32) << s
-    };
-    ch(16) | ch(8) | ch(0)
-}
-
-fn is_dark(p: &Palette) -> bool {
-    let l = |s: u32| ((p.bg >> s) & 0xff) as f32;
-    0.2126 * l(16) + 0.7152 * l(8) + 0.0722 * l(0) < 128.
-}
-
-fn named(p: &Palette, n: NamedColor) -> u32 {
-    let dark = is_dark(p);
-    let bright = |c: u32| if dark { mix(c, 0xffffff, 0.25) } else { mix(c, 0x000000, 0.15) };
-    let base = |i: usize| match i {
-        0 => {
-            if dark {
-                mix(p.bg, 0x000000, 0.4)
-            } else {
-                mix(p.text, 0xffffff, 0.15)
-            }
-        }
-        1 => p.danger,
-        2 => p.success,
-        3 => p.warning,
-        4 => p.syntax_function,
-        5 => p.syntax_keyword,
-        6 => p.syntax_type,
-        _ => {
-            if dark {
-                mix(p.text, p.bg, 0.15)
-            } else {
-                mix(p.text, p.bg, 0.3)
-            }
-        }
-    };
-    use NamedColor::*;
-    match n {
-        Black => base(0),
-        Red => base(1),
-        Green => base(2),
-        Yellow => base(3),
-        Blue => base(4),
-        Magenta => base(5),
-        Cyan => base(6),
-        White => base(7),
-        BrightBlack => p.text_muted,
-        BrightRed => bright(base(1)),
-        BrightGreen => bright(base(2)),
-        BrightYellow => bright(base(3)),
-        BrightBlue => bright(base(4)),
-        BrightMagenta => bright(base(5)),
-        BrightCyan => bright(base(6)),
-        BrightWhite => p.text,
-        Foreground | BrightForeground => p.text,
-        Background => p.bg,
-        Cursor => p.accent,
-        DimForeground => mix(p.text, p.bg, 0.4),
-        DimBlack | DimRed | DimGreen | DimYellow | DimBlue | DimMagenta | DimCyan | DimWhite => {
-            let i = n as usize - DimBlack as usize;
-            mix(base(i), p.bg, 0.4)
-        }
-    }
-}
-
-fn rgb(r: Rgb) -> u32 {
-    (r.r as u32) << 16 | (r.g as u32) << 8 | r.b as u32
-}
-
-fn resolve(p: &Palette, color: Color, overrides: &alacritty_terminal::term::color::Colors) -> u32 {
-    match color {
-        Color::Spec(r) => rgb(r),
-        Color::Named(n) => overrides[n].map(rgb).unwrap_or_else(|| named(p, n)),
-        Color::Indexed(i) => {
-            if let Some(r) = overrides[i as usize] {
-                return rgb(r);
-            }
-            match i {
-                0..=15 => {
-                    let names = [
-                        NamedColor::Black,
-                        NamedColor::Red,
-                        NamedColor::Green,
-                        NamedColor::Yellow,
-                        NamedColor::Blue,
-                        NamedColor::Magenta,
-                        NamedColor::Cyan,
-                        NamedColor::White,
-                        NamedColor::BrightBlack,
-                        NamedColor::BrightRed,
-                        NamedColor::BrightGreen,
-                        NamedColor::BrightYellow,
-                        NamedColor::BrightBlue,
-                        NamedColor::BrightMagenta,
-                        NamedColor::BrightCyan,
-                        NamedColor::BrightWhite,
-                    ];
-                    named(p, names[i as usize])
-                }
-                16..=231 => {
-                    // 6×6×6 color cube
-                    let i = i as u32 - 16;
-                    let v = |x: u32| if x == 0 { 0 } else { 55 + x * 40 };
-                    v(i / 36) << 16 | v((i / 6) % 6) << 8 | v(i % 6)
-                }
-                _ => {
-                    let g = 8 + (i as u32 - 232) * 10;
-                    g << 16 | g << 8 | g
-                }
-            }
-        }
-    }
-}
-
 // --- Drawing ---
 
 struct Run {
@@ -1021,9 +919,15 @@ struct Frame {
 
 /// Font size and row height for a terminal font size: the row keeps the design scale's size-to-line ratio
 /// (whole pixels, so rows don't drift apart while painting).
-pub(crate) fn metrics(font_size: f32) -> (f32, f32) {
+/// Default row height as a multiple of the font size. Tighter than the editor's 1.5: terminal output (tables, box drawing,
+/// progress bars) reads as one block.
+pub(crate) const LINE_HEIGHT: f32 = 1.2;
+
+/// Font size and whole-pixel row height for `terminal.fontSize` and `terminal.lineHeight`.
+pub(crate) fn metrics(font_size: f32, line_height: f32) -> (f32, f32) {
     let size = font_size.clamp(6., 48.);
-    (size, (size * text::CODE.1 / text::CODE.0).round())
+    let factor = if line_height.is_finite() { line_height.clamp(1., 2.) } else { LINE_HEIGHT };
+    (size, (size * factor).round().max(size.ceil()))
 }
 
 struct TerminalElement {
@@ -1037,6 +941,14 @@ impl IntoElement for TerminalElement {
     fn into_element(self) -> Self {
         self
     }
+}
+
+/// Space between the panel's edges and the text grid. The left one also holds the command marks.
+const PAD_X: f32 = 14.;
+const PAD_Y: f32 = 8.;
+
+fn grid_origin(bounds: Bounds<Pixels>) -> gpui::Point<Pixels> {
+    point(bounds.left() + px(PAD_X), bounds.top() + px(PAD_Y))
 }
 
 impl Element for TerminalElement {
@@ -1072,9 +984,9 @@ impl Element for TerminalElement {
         let probe = TextRun { len: 1, font: style.font(), color: c(self.palette.text).into(), background_color: None, underline: None, strikethrough: None };
         let cell_w = window.text_system().shape_line("0".into(), font_size, &[probe], None).width;
         let line_h = self.view.read(cx).line_h();
-        let cols = ((bounds.size.width - px(16.)) / cell_w).floor().max(2.) as usize;
-        let rows = (bounds.size.height / line_h).floor().max(1.) as usize;
-        let origin = point(bounds.left() + px(8.), bounds.top());
+        let cols = ((bounds.size.width - px(PAD_X * 2.)) / cell_w).floor().max(2.) as usize;
+        let rows = ((bounds.size.height - px(PAD_Y * 2.)) / line_h).floor().max(1.) as usize;
+        let origin = grid_origin(bounds);
         self.view.update(cx, |v, _| {
             v.set_size(cols, rows);
             v.grid = (origin, cell_w);
@@ -1167,7 +1079,7 @@ impl Element for TerminalElement {
         let Some(frame) = frame.take() else { return };
         let p = self.palette;
         let line_h = frame.line_h;
-        let origin = point(bounds.left() + px(8.), bounds.top());
+        let origin = grid_origin(bounds);
         let cell = |row: usize, col: usize| point(origin.x + frame.cell_w * col as f32, origin.y + line_h * row as f32);
         for (row, a, b, color) in &frame.backgrounds {
             window.paint_quad(fill(Bounds::new(cell(*row, *a), size(frame.cell_w * (b - a) as f32, line_h)), c(*color)));
@@ -1203,7 +1115,7 @@ impl Element for TerminalElement {
                 marks::MarkState::Running => p.text_muted,
             };
             let d = px(5.);
-            let at = point(bounds.left() + px(1.5), origin.y + line_h * *row as f32 + (line_h - d) / 2.);
+            let at = point(bounds.left() + px((PAD_X - 5.) / 2.), origin.y + line_h * *row as f32 + (line_h - d) / 2.);
             window.paint_quad(fill(Bounds::new(at, size(d, d)), c(color)).corner_radii(d / 2.));
         }
         if let Some((row, a, b)) = frame.link {
@@ -1227,7 +1139,10 @@ impl Element for TerminalElement {
 impl Render for TerminalView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = *palette(cx);
-        self.metrics = metrics(cx.global::<crate::settings::Settings>().terminal_font_size);
+        self.metrics = {
+            let s = cx.global::<crate::settings::Settings>();
+            metrics(s.terminal_font_size, s.terminal_line_height)
+        };
         // A changed `terminal.scrollback` applies to open terminals too.
         let scrollback = cx.global::<crate::settings::Settings>().terminal_scrollback.min(SCROLLBACK_MAX);
         if scrollback != self.scrollback {
@@ -1317,17 +1232,23 @@ impl Render for TerminalView {
 
 #[cfg(test)]
 mod tests {
+    use alacritty_terminal::vte::ansi::{Color, NamedColor, Rgb};
+
     use super::*;
+    use crate::ui::text;
 
     #[test]
     fn the_terminal_font_size_setting_sets_the_cell_size() {
-        let (_, base) = metrics(text::CODE.0);
-        assert_eq!(base, text::CODE.1, "the default size keeps the design line height");
-        let (size, line) = metrics(20.);
-        assert_eq!(size, 20.);
+        let (_, base) = metrics(text::CODE.0, LINE_HEIGHT);
+        assert_eq!(base, (text::CODE.0 * LINE_HEIGHT).round(), "rows are 1.2 × the font size by default");
+        let (size, line) = metrics(20., LINE_HEIGHT);
+        assert_eq!((size, line), (20., 24.));
         assert!(line > base && line.fract() == 0., "a bigger font gets taller, whole-pixel rows: {line}");
-        assert_eq!(metrics(2.).0, 6., "absurd sizes are clamped");
-        assert_eq!(metrics(500.).0, 48.);
+        assert_eq!(metrics(2., LINE_HEIGHT).0, 6., "absurd sizes are clamped");
+        assert_eq!(metrics(500., LINE_HEIGHT).0, 48.);
+        assert_eq!(metrics(13., 1.5).1, 20., "terminal.lineHeight widens the rows");
+        assert_eq!(metrics(13., 0.2).1, 13., "never shorter than the font");
+        assert_eq!(metrics(13., f32::NAN).1, 16., "a broken value falls back to the default");
     }
 
     #[test]

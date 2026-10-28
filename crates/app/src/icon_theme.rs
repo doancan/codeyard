@@ -21,13 +21,24 @@ pub enum IconTheme {
     Apple,
     /// Material: filled folders colored by purpose (small icon inside), filled files colored by language.
     Material,
+    /// Colored file glyphs, no folder icons: a folder shows only its arrow and a file's glyph takes the arrow's column, so every
+    /// name in a level lines up.
+    Glyphs,
     /// No icons, name only.
     None,
 }
 
-/// The order is the picker's order; the first is the default (the plainest).
-pub const ALL: &[IconTheme] =
-    &[IconTheme::Minimal, IconTheme::Default, IconTheme::Badges, IconTheme::Colorful, IconTheme::Apple, IconTheme::Material, IconTheme::None];
+/// The order is the picker's order; the first is the default.
+pub const ALL: &[IconTheme] = &[
+    IconTheme::Glyphs,
+    IconTheme::Minimal,
+    IconTheme::Default,
+    IconTheme::Badges,
+    IconTheme::Colorful,
+    IconTheme::Apple,
+    IconTheme::Material,
+    IconTheme::None,
+];
 
 impl IconTheme {
     pub fn id(self) -> &'static str {
@@ -38,6 +49,7 @@ impl IconTheme {
             IconTheme::Minimal => "minimal",
             IconTheme::Apple => "apple",
             IconTheme::Material => "material",
+            IconTheme::Glyphs => "glyphs",
             IconTheme::None => "none",
         }
     }
@@ -47,9 +59,10 @@ impl IconTheme {
             IconTheme::Default => "Codeyard",
             IconTheme::Badges => crate::i18n::t("Language Badges"),
             IconTheme::Colorful => crate::i18n::t("Colorful Folders"),
-            IconTheme::Minimal => crate::i18n::t("Minimal (Default)"),
+            IconTheme::Minimal => crate::i18n::t("Minimal"),
             IconTheme::Apple => "Apple / GitHub",
             IconTheme::Material => "Material",
+            IconTheme::Glyphs => crate::i18n::t("File Glyphs (Default)"),
             IconTheme::None => crate::i18n::t("None"),
         }
     }
@@ -62,12 +75,18 @@ impl IconTheme {
             IconTheme::Minimal => crate::i18n::t("One quiet color, outline glyphs"),
             IconTheme::Apple => crate::i18n::t("Solid blue folders like Finder, outline files with a language dot like GitHub"),
             IconTheme::Material => crate::i18n::t("Solid folders colored and marked by purpose, solid files colored by language"),
+            IconTheme::Glyphs => crate::i18n::t("Colored file glyphs, folders with only their arrow; names line up"),
             IconTheme::None => crate::i18n::t("Names only"),
         }
     }
 
     pub fn from_id(id: &str) -> Option<IconTheme> {
         ALL.iter().copied().find(|t| t.id() == id)
+    }
+
+    /// Whether folders get an icon of their own. Without one the tree puts a file's icon in the arrow's column.
+    pub fn folder_icons(self) -> bool {
+        !matches!(self, IconTheme::Glyphs)
     }
 
     fn code(self) -> u8 {
@@ -82,7 +101,7 @@ pub fn set(theme: IconTheme) {
 }
 
 pub fn current() -> IconTheme {
-    ALL.get(CURRENT.load(Ordering::Relaxed) as usize).copied().unwrap_or(IconTheme::Minimal)
+    ALL.get(CURRENT.load(Ordering::Relaxed) as usize).copied().unwrap_or(ALL[0])
 }
 
 fn ext_of(name: &str) -> String {
@@ -191,7 +210,7 @@ fn spacer(size: f32) -> AnyElement {
 /// File icon, according to the active icon theme.
 pub fn file_icon_el(name: &str, size: f32, p: &Palette) -> AnyElement {
     match current() {
-        IconTheme::Default | IconTheme::Colorful => {
+        IconTheme::Default | IconTheme::Colorful | IconTheme::Glyphs => {
             let (glyph, tint) = ui::file_icon(name, p);
             icon(glyph, size, tint).into_any_element()
         }
@@ -254,7 +273,7 @@ pub fn folder_icon_el(name: &str, open: bool, size: f32, p: &Palette) -> AnyElem
                 .map(|g| div().absolute().inset_0().pt(px(size * 0.12)).flex().items_center().justify_center().child(icon(g, size * 0.46, p.bg)));
             div().relative().flex_none().size(px(size)).child(icon(base, size, folder_tint(name, p))).children(mark).into_any_element()
         }
-        IconTheme::None => spacer(size),
+        IconTheme::None | IconTheme::Glyphs => spacer(size),
     }
 }
 
@@ -312,9 +331,9 @@ mod tests {
     }
 
     #[test]
-    fn the_default_icon_theme_is_the_plainest_one() {
-        assert_eq!(ALL[0], IconTheme::Minimal);
-        assert_eq!(IconTheme::from_id(crate::settings::Settings::default().icon_theme.as_str()), Some(IconTheme::Minimal));
+    fn the_default_icon_theme_marks_files_and_leaves_folders_bare() {
+        assert_eq!(ALL[0], IconTheme::Glyphs);
+        assert_eq!(IconTheme::from_id(crate::settings::Settings::default().icon_theme.as_str()), Some(IconTheme::Glyphs));
     }
 
     #[test]
@@ -329,6 +348,12 @@ mod tests {
         for t in ALL {
             assert!(!t.label().is_empty() && !t.about().is_empty(), "{:?}", t);
         }
+    }
+
+    #[test]
+    fn only_the_glyphs_theme_leaves_folders_bare() {
+        let bare: Vec<_> = ALL.iter().filter(|t| !t.folder_icons()).collect();
+        assert_eq!(bare, [&IconTheme::Glyphs]);
     }
 
     #[test]

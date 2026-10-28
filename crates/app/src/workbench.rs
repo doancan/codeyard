@@ -82,6 +82,8 @@ mod nav_glue;
 mod palette_glue;
 #[path = "workbench_panels.rs"]
 mod panels_glue;
+#[cfg(test)]
+pub use panels_glue::ProblemRow;
 #[path = "workbench_ports.rs"]
 mod ports_glue;
 #[path = "workbench_projects.rs"]
@@ -90,6 +92,8 @@ pub mod projects;
 mod pulls_glue;
 #[path = "workbench_remote.rs"]
 mod remote_glue;
+#[path = "workbench_rust.rs"]
+mod rust_glue;
 // --- git-refs ---
 #[path = "workbench_recover.rs"]
 mod recover_glue;
@@ -343,6 +347,10 @@ actions!(
         GitPruneWorktrees,
         GitDiscardAll,
         RestartLanguageServers,
+        CopyFullDiagnostic,
+        RustExpandMacro,
+        RustParentModule,
+        RustOpenCargoToml,
         ShowSettings,
         ShowKeyboardShortcuts,
         GitFileHistory,
@@ -976,6 +984,17 @@ impl Workbench {
             }),
             // The first-run update question waits for a quiet keyboard (a letter typed a moment ago must not answer it).
             cx.observe_keystrokes(|this, _, _, _| this.update.last_key = Some(this.update.backend.now())),
+            // The Dock menu lists the windows front one first: it changes whenever one comes forward.
+            cx.observe_window_activation(window, |this, window, cx| {
+                #[cfg(target_os = "macos")]
+                crate::menus::refresh_dock_windows(cx);
+                // Reduce motion / Increase contrast may have changed in System Settings meanwhile.
+                if window.is_window_active() && crate::system_prefs::refresh(cx) {
+                    let choice = this.theme_choice.clone();
+                    this.apply_theme(&choice, window, cx);
+                    window.refresh();
+                }
+            }),
             cx.observe_window_appearance(window, |this, window, cx| {
                 if this.theme_choice == THEME_AUTO {
                     let choice = this.theme_choice.clone();
@@ -2239,7 +2258,7 @@ impl Workbench {
     }
 
     pub(crate) fn open_recent(&mut self, r: RecentWorkspace, window: &mut Window, cx: &mut Context<Self>) {
-        // If already open in another window, switch to it instead of making a second copy (like VS Code).
+        // If already open in another window, switch to it instead of making a second copy.
         let me = window.window_handle();
         let key = Some((r.host.clone(), r.path.clone()));
         let open_elsewhere = cx
@@ -2379,15 +2398,24 @@ impl Workbench {
         )
     }
 
-    /// VS Code layout: `● file — folder — ssh-host` (● unsaved).
-    fn update_title(&mut self, window: &mut Window, cx: &App) {
+    /// Title layout: `● file — folder — ssh-host` (● unsaved).
+    fn update_title(&mut self, window: &mut Window, cx: &mut App) {
         let remote = self.remote.host.is_remote().then(|| self.remote.host.label());
         let parts: Vec<String> = [self.title_text(cx), remote].into_iter().flatten().collect();
         let title = if parts.is_empty() { "codeyard".to_string() } else { parts.join(" — ") };
         if title != self.title {
             window.set_window_title(&title);
             self.title = title;
+            // The Dock menu lists the open windows by title.
+            #[cfg(target_os = "macos")]
+            crate::menus::refresh_dock_windows(cx);
         }
+    }
+
+    /// The window's title as last set (the Dock menu's window rows).
+    #[cfg(target_os = "macos")]
+    pub(crate) fn window_title(&self) -> &str {
+        &self.title
     }
 }
 

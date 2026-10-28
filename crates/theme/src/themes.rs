@@ -66,14 +66,19 @@ pub struct Theme {
 impl Theme {
     /// Pairs still failing AA: (foreground, background, ratio, required).
     pub fn contrast_failures(&self) -> Vec<(&'static str, &'static str, f64, f64)> {
-        PAIRS
-            .iter()
-            .filter_map(|&(fg, bg, min)| {
-                let r = contrast(self.palette.get(fg)?, self.palette.get(bg)?);
-                (r < min).then_some((fg, bg, r, min))
-            })
-            .collect()
+        palette_contrast_failures(&self.palette)
     }
+}
+
+/// Pairs of a palette failing AA: (foreground, background, ratio, required).
+pub fn palette_contrast_failures(p: &Palette) -> Vec<(&'static str, &'static str, f64, f64)> {
+    PAIRS
+        .iter()
+        .filter_map(|&(fg, bg, min)| {
+            let r = contrast(p.get(fg)?, p.get(bg)?);
+            (r < min).then_some((fg, bg, r, min))
+        })
+        .collect()
 }
 
 /// Default themes: the two plainest (neutral greys, a single blue accent). Follows the system appearance.

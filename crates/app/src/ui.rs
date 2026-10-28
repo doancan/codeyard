@@ -166,12 +166,17 @@ pub fn icon(name: &str, size: f32, color: u32) -> Svg {
     svg().path(format!("icons/{name}.svg")).size(px(size)).flex_none().text_color(c(color))
 }
 
-/// Spinning "loading" icon (one turn per second). `id` must be unique among siblings.
-pub fn spinner(id: impl Into<gpui::ElementId>, size: f32, color: u32) -> impl gpui::IntoElement {
-    use gpui::{Animation, AnimationExt as _, Transformation, percentage};
-    icon("loader", size, color).with_animation(id, Animation::new(std::time::Duration::from_millis(1000)).repeat(), |svg, delta| {
-        svg.with_transformation(Transformation::rotate(percentage(delta)))
-    })
+/// Spinning "loading" icon (one turn per second; still with reduced motion). `id` must be unique among siblings.
+pub fn spinner(id: impl Into<gpui::ElementId>, size: f32, color: u32) -> gpui::AnyElement {
+    use gpui::{Animation, AnimationExt as _, IntoElement as _, Transformation, percentage};
+    if crate::system_prefs::motion_reduced() {
+        return icon("loader", size, color).into_any_element();
+    }
+    icon("loader", size, color)
+        .with_animation(id, Animation::new(std::time::Duration::from_millis(1000)).repeat(), |svg, delta| {
+            svg.with_transformation(Transformation::rotate(percentage(delta)))
+        })
+        .into_any_element()
 }
 
 /// Lucide (ISC) icons, embedded in the binary.

@@ -11,7 +11,7 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_SSH_CONFIG` | Use this file instead of `~/.ssh/config` for host lists and connections. |
 | `CODEYARD_AGENT_DIR` | Optional developer override for `codeyard-agent-<triple>` binaries. Windows uses embedded agents by default; Unix packages use `agents/` next to the executable (or the macOS bundle's Resources directory). |
 | `CODEYARD_REMOTE_DIR` | Where the agent is installed on the server (default `~/.cache/codeyard`). |
-| `CODEYARD_NO_A11Y` | Set to disable the macOS accessibility tree. |
+| `CODEYARD_NO_A11Y` | Set to disable the accessibility tree (macOS and Windows). |
 | `CODEYARD_NO_DOCK_ICON` | Do not set the Dock icon at run time (bare binaries only). |
 | `CODEYARD_DAP_TRACE` | Print the debug adapter protocol traffic to stderr. |
 | `CODEYARD_LSP_TRACE` | Print language server messages to stderr. |

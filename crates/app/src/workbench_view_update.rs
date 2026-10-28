@@ -480,12 +480,16 @@ fn update_button(ix: usize, b: &DialogButton, handle: Option<&FocusHandle>, p: &
     )
 }
 
-/// A bar that fills as `fraction` grows; without a fraction a short piece slides back and forth.
+/// A bar that fills as `fraction` grows; without a fraction a short piece slides back and forth (with reduced motion
+/// it stands still in the middle).
 fn progress_bar(fraction: Option<f32>, p: &Palette, native: bool) -> impl IntoElement + use<> {
     let (height, track) = if native { (NATIVE_BAR_H, ui::mix(p.bg, p.text, 0.16)) } else { (BAR_H, ui::mix(p.surface_raised, p.text_muted, 0.25)) };
     let track = div().h(px(height)).w_full().rounded_full().overflow_hidden().bg(c(track));
     match fraction {
         Some(f) => track.child(div().h_full().w(relative(f.clamp(0., 1.))).rounded_full().bg(c(accent_pair(p).0))).into_any_element(),
+        None if crate::system_prefs::motion_reduced() => {
+            track.child(div().h_full().w(relative(0.3)).ml(relative(0.35)).rounded_full().bg(c(accent_pair(p).0))).into_any_element()
+        }
         None => track
             .child(div().h_full().w(relative(0.3)).rounded_full().bg(c(accent_pair(p).0)).with_animation(
                 "update-indeterminate",

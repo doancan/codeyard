@@ -529,6 +529,93 @@ fn package_name(cargo: &str) -> Option<String> {
     None
 }
 
+// --- Rust values in lldb-dap ---
+
+/// The toolchain that builds the program being debugged, as `rustc --print sysroot && rustc -vV` reports it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RustToolchain {
+    pub sysroot: String,
+    /// `None` for a locally built toolchain (`commit-hash: unknown`) or anything that is not a hash.
+    pub commit_hash: Option<String>,
+    /// Target triple of the toolchain's host (`aarch64-apple-darwin`).
+    pub host: Option<String>,
+}
+
+/// Reads the output of `rustc --print sysroot && rustc -vV`: the sysroot is the first line, the rest is `key: value`.
+pub fn parse_rustc_info(out: &str) -> Option<RustToolchain> {
+    let mut lines = out.lines().map(str::trim).filter(|l| !l.is_empty());
+    let sysroot = lines.next()?.to_string();
+    if sysroot.contains(": ") || !(sysroot.starts_with('/') || sysroot.as_bytes().get(1) == Some(&b':')) {
+        return None;
+    }
+    let (mut commit_hash, mut host) = (None, None);
+    for line in lines {
+        match line.split_once(": ") {
+            Some(("commit-hash", h)) if (7..=64).contains(&h.len()) && h.bytes().all(|b| b.is_ascii_hexdigit()) => commit_hash = Some(h.to_string()),
+            Some(("host", h)) if !h.is_empty() => host = Some(h.to_string()),
+            _ => {}
+        }
+    }
+    Some(RustToolchain { sysroot: sysroot.trim_end_matches(['/', '\\']).to_string(), commit_hash, host })
+}
+
+/// Whether a configuration debugs Rust: lldb-dap (or an `lldb` entry with its own adapter command) in a folder with a
+/// `Cargo.toml`. A C program in a folder without one, and every other adapter, is left as it is.
+pub fn is_rust_config(config: &LaunchConfig, has_cargo_toml: bool) -> bool {
+    has_cargo_toml && config.adapter.as_ref().is_ok_and(|a| matches!(a.id.as_str(), "lldb-dap" | "lldb"))
+}
+
+/// A path as one argument of an lldb command line.
+fn lldb_quote(path: &str) -> String {
+    format!("\"{}\"", path.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// `initCommands` that load the toolchain's formatters (`String`, `Vec`, `HashMap` as values) and, with `rust-src`, map the
+/// standard library's build paths to its sources; the configuration's own commands follow, in their order. Toolchains
+/// before 1.89 also ship `lldb_commands`, which is sourced when present. A configuration that imports `lldb_lookup`
+/// itself is left alone.
+pub fn rust_init_commands(tc: &RustToolchain, has_commands_file: bool, has_src: bool, existing: &[String]) -> Vec<String> {
+    if existing.iter().any(|c| c.contains("lldb_lookup")) {
+        return existing.to_vec();
+    }
+    let etc = format!("{}/lib/rustlib/etc", tc.sysroot);
+    let mut out = vec![format!("command script import {}", lldb_quote(&format!("{etc}/lldb_lookup.py")))];
+    if has_commands_file {
+        out.push(format!("command source {}", lldb_quote(&format!("{etc}/lldb_commands"))));
+    }
+    if let (true, Some(hash)) = (has_src, &tc.commit_hash) {
+        out.push(format!("settings set target.source-map /rustc/{hash} {}", lldb_quote(&format!("{}/lib/rustlib/src/rust", tc.sysroot))));
+    }
+    out.extend(existing.iter().cloned());
+    out
+}
+
+/// The `initCommands` a Rust configuration starts with, found on the machine that runs the program (`rustc` runs in the
+/// project root, so `rust-toolchain.toml` picks the toolchain). `Ok(None)`: nothing to add (Windows MSVC, whose debug
+/// info lldb's Rust formatters are not made for). `Err`: why the formatters are not loaded.
+pub fn rust_formatters(host: &dyn host::Host, root: &str, existing: &[String]) -> Result<Option<Vec<String>>, String> {
+    // rustup would download a toolchain the project names but nobody installed: asking about it must not start a download.
+    let (shell, flag, probe) = if cfg!(windows) && !host.is_remote() {
+        ("cmd", "/C", "set RUSTUP_AUTO_INSTALL=0&& rustc --print sysroot && rustc -vV")
+    } else {
+        ("sh", "-c", "RUSTUP_AUTO_INSTALL=0 rustc --print sysroot && RUSTUP_AUTO_INSTALL=0 rustc -vV")
+    };
+    let info = host
+        .exec(shell, &[flag, probe], Some(root), None)
+        .ok()
+        .filter(|o| o.ok())
+        .and_then(|o| parse_rustc_info(&o.stdout_str()))
+        .ok_or_else(|| crate::i18n::t("rustc not found").to_string())?;
+    if info.host.as_deref().is_some_and(|h| h.ends_with("windows-msvc")) {
+        return Ok(None);
+    }
+    let exists = |p: &str| host.stat(&format!("{}/lib/rustlib/{p}", info.sysroot)).is_ok();
+    if !exists("etc/lldb_lookup.py") {
+        return Err(crate::i18n::t("files not found in the toolchain").to_string());
+    }
+    Ok(Some(rust_init_commands(&info, exists("etc/lldb_commands"), exists("src/rust/library"), existing)))
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -739,5 +826,85 @@ mod tests {
     fn unknown_type_message_lists_what_is_supported() {
         let e = adapter_for("ruby").unwrap_err();
         assert!(e.contains("lldb") && e.contains("go") && e.contains("python") && e.contains("debugAdapter"), "{e}");
+    }
+
+    fn toolchain(sysroot: &str, hash: Option<&str>) -> RustToolchain {
+        RustToolchain { sysroot: sysroot.into(), commit_hash: hash.map(str::to_string), host: Some("aarch64-apple-darwin".into()) }
+    }
+
+    #[test]
+    fn rust_init_commands_come_first_and_keep_the_user_s() {
+        let tc = toolchain("/home/u/.rustup/toolchains/stable", Some("58cf8f9c35b355199727627d07ae34a4e2846d67"));
+        let user = vec!["settings set target.x 1".to_string(), "breakpoint set -n main".to_string()];
+        assert_eq!(
+            rust_init_commands(&tc, true, true, &user),
+            [
+                r#"command script import "/home/u/.rustup/toolchains/stable/lib/rustlib/etc/lldb_lookup.py""#,
+                r#"command source "/home/u/.rustup/toolchains/stable/lib/rustlib/etc/lldb_commands""#,
+                r#"settings set target.source-map /rustc/58cf8f9c35b355199727627d07ae34a4e2846d67 "/home/u/.rustup/toolchains/stable/lib/rustlib/src/rust""#,
+                "settings set target.x 1",
+                "breakpoint set -n main",
+            ]
+        );
+        // Newer toolchains have no lldb_commands; without rust-src or a hash there is no source map.
+        assert_eq!(rust_init_commands(&tc, false, false, &[]).len(), 1);
+        assert_eq!(rust_init_commands(&toolchain("/t", None), false, true, &[]).len(), 1, "unknown hash: no map");
+        // The user already imports the formatters: nothing is added.
+        let own = vec!["command script import /x/lldb_lookup.py".to_string()];
+        assert_eq!(rust_init_commands(&tc, true, true, &own), own);
+    }
+
+    #[test]
+    fn sysroot_paths_are_quoted_for_lldb() {
+        let tc = toolchain(r#"/Users/Ayşe Yılmaz/my "rust"\tools"#, None);
+        assert_eq!(
+            rust_init_commands(&tc, false, false, &[])[0],
+            r#"command script import "/Users/Ayşe Yılmaz/my \"rust\"\\tools/lib/rustlib/etc/lldb_lookup.py""#
+        );
+    }
+
+    #[test]
+    fn rustc_info_is_read_and_garbage_rejected() {
+        let out = "/home/u/.rustup/toolchains/stable\nrustc 1.99.1 (58cf8f9c3 2026-10-13)\nbinary: rustc\ncommit-hash: 58cf8f9c35b355199727627d07ae34a4e2846d67\nhost: x86_64-unknown-linux-gnu\nrelease: 1.99.1\n";
+        assert_eq!(
+            parse_rustc_info(out),
+            Some(RustToolchain {
+                sysroot: "/home/u/.rustup/toolchains/stable".into(),
+                commit_hash: Some("58cf8f9c35b355199727627d07ae34a4e2846d67".into()),
+                host: Some("x86_64-unknown-linux-gnu".into())
+            })
+        );
+        let local = parse_rustc_info("/opt/rust/\ncommit-hash: unknown\nhost: aarch64-apple-darwin\n").unwrap();
+        assert_eq!((local.sysroot.as_str(), local.commit_hash), ("/opt/rust", None));
+        assert_eq!(parse_rustc_info(r"C:\Users\u\.rustup\toolchains\stable-x86_64-pc-windows-msvc").unwrap().commit_hash, None);
+        for garbage in ["", "\n\n", "error: no such command\n", "rustc 1.99.1\n", "relative/path\n", "commit-hash: abc\n"] {
+            assert_eq!(parse_rustc_info(garbage), None, "{garbage:?}");
+        }
+        assert_eq!(parse_rustc_info("/t\ncommit-hash: not-hex-at-all\n").unwrap().commit_hash, None);
+    }
+
+    #[test]
+    fn rust_configurations_are_lldb_in_a_cargo_folder() {
+        let root = "/p";
+        let cargo = detect(Some("[package]\nname = \"demo\"\n"), false, None, root);
+        assert!(is_rust_config(&cargo[0], true), "the automatic Cargo configuration");
+        let launch = parse_launch_json(
+            r#"{ "configurations": [
+                { "name": "Native", "type": "lldb", "request": "launch", "program": "x" },
+                { "name": "Attach", "type": "lldb", "request": "attach", "pid": 1 },
+                { "name": "Own lldb-dap", "type": "lldb", "debugAdapter": { "command": "/opt/lldb-dap" }, "program": "x" },
+                { "name": "Go", "type": "go", "request": "launch", "program": "." },
+                { "name": "Py", "type": "python", "request": "launch", "program": "a.py" },
+                { "name": "Other", "type": "custom", "debugAdapter": { "command": "x" } }
+            ] }"#,
+            root,
+            None,
+            &[],
+        );
+        let rust: Vec<bool> = launch.iter().map(|c| is_rust_config(c, true)).collect();
+        assert_eq!(rust, [true, true, true, false, false, false]);
+        assert!(!is_rust_config(&launch[0], false), "a C program in a folder without Cargo.toml");
+        let py = detect(None, false, Some("/p/a.py"), root);
+        assert!(!is_rust_config(&py[0], true));
     }
 }
