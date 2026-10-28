@@ -21,7 +21,7 @@ pub(crate) fn dir(name: &str) -> PathBuf {
 }
 
 /// `settings.jsonc` with the fake server as the `rust` server; `entry` adds keys to that entry, `top` to the file.
-fn write_settings(cfg: &Path, fake: &FakeServer, entry: Value, top: Value) {
+pub(crate) fn write_settings(cfg: &Path, fake: &FakeServer, entry: Value, top: Value) {
     let (command, args) = fake.command();
     let mut server = json!({ "command": command, "args": args });
     server.as_object_mut().unwrap().extend(entry.as_object().cloned().unwrap_or_default());

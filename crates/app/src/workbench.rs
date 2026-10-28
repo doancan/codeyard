@@ -90,6 +90,8 @@ pub mod projects;
 mod pulls_glue;
 #[path = "workbench_remote.rs"]
 mod remote_glue;
+#[path = "workbench_rust.rs"]
+mod rust_glue;
 // --- git-refs ---
 #[path = "workbench_recover.rs"]
 mod recover_glue;
@@ -339,6 +341,9 @@ actions!(
         GitDiscardAll,
         RestartLanguageServers,
         CopyFullDiagnostic,
+        RustExpandMacro,
+        RustParentModule,
+        RustOpenCargoToml,
         ShowSettings,
         ShowKeyboardShortcuts,
         GitFileHistory,

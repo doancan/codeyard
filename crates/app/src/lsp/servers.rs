@@ -127,6 +127,7 @@ pub fn locations_title(what: &str, n: usize) -> String {
         "outgoing calls" => tn("{} outgoing call", "{} outgoing calls", n, &[]),
         "supertypes" => tn("{} supertype", "{} supertypes", n, &[]),
         "subtypes" => tn("{} subtype", "{} subtypes", n, &[]),
+        "parent modules" => tn("{} parent module", "{} parent modules", n, &[]),
         _ => format!("{n} {what}"),
     }
 }
