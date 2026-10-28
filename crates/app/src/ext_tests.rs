@@ -306,3 +306,23 @@ fn cyx_is_linked_into_the_first_writable_folder() {
     std::fs::write(bin.join("cyx"), "someone else's").unwrap();
     assert!(Workbench::install_cyx_link_for_test(&target, std::slice::from_ref(&bin)).unwrap_err().contains("not a link"));
 }
+
+#[cfg(unix)]
+#[gpui::test]
+fn a_new_extension_is_loaded_in_development_and_opened(cx: &mut TestAppContext) {
+    let cfg = config_dir("new-ext");
+    let dir = cfg.join("glow");
+    std::fs::create_dir_all(dir.join("themes")).unwrap();
+    std::fs::write(dir.join("codeyard-extension.toml"), manifest("you.glow", "[[themes]]\nlabel = \"Glow\"\npath = \"themes/glow.json\"\n")).unwrap();
+    std::fs::write(dir.join("themes/glow.json"), THEME).unwrap();
+    let (wb, cx) = setup(cx, &cfg);
+    wb.update_in(cx, |wb, window, cx| wb.finish_create_extension_for_test(true, "", dir.clone(), window, cx));
+    cx.run_until_parked();
+    assert_eq!(crate::ext::dev_dir().as_deref(), Some(dir.as_path()));
+    assert!(wb.read_with(cx, |wb, _| wb.themes_for_test()).iter().any(|(id, _)| id == "ext:you.glow/glow"));
+    assert!(wb.read_with(cx, |wb, cx| wb.active_editor_entity().map(|e| e.read(cx).path.ends_with("codeyard-extension.toml"))).unwrap_or(false));
+    wb.update_in(cx, |wb, window, cx| wb.finish_create_extension_for_test(false, "error: glow/ already exists", dir.clone(), window, cx));
+    let notice = wb.read_with(cx, |wb, _| wb.notice_for_test()).map(|(_, t)| t).unwrap_or_default();
+    assert!(notice.contains("already exists"), "{notice}");
+    crate::ext::set_dev(None);
+}

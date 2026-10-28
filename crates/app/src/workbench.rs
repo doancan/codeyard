@@ -365,6 +365,7 @@ actions!(
         SwitchEditor,
         ToggleZenMode,
         InstallCyx,
+        NewExtension,
         ToggleFullScreen,
         SelectIconTheme,
         InsertSnippet,
