@@ -1010,16 +1010,10 @@ impl Workbench {
         ];
         let (recent, pinned) = state.as_ref().map(projects::load_recent).unwrap_or_default();
         let dev = std::env::var_os("CODEYARD_DEV").is_some() || cfg!(debug_assertions);
-        let mut themes = themes::builtin();
-        let mut notice = None;
-        if let Some(dir) = user_theme_dir() {
-            let (user, errors) = themes::load_dir(&dir);
-            themes.extend(user);
-            if let Some((path, error)) = errors.first() {
-                let reason = theme_glue::theme_load_error(path, error);
-                notice = Some(Notice::Error(crate::i18n::tf("Theme skipped: {}", &[&reason]).into()));
-            }
-        }
+        // The settings folder given (a temporary one in tests), as `theme_dir` does later, else the default.
+        crate::ext::reload(config_dir.as_deref());
+        let (themes, errors) = theme_glue::all_themes(config_dir.as_ref().map(|d| d.join("themes")).or_else(user_theme_dir).as_deref());
+        let notice = errors.first().map(|reason| Notice::Error(crate::i18n::tf("Theme skipped: {}", &[reason]).into()));
         let theme_choice = state.as_ref().and_then(|s| s.get("theme")).unwrap_or_else(|| THEME_AUTO.into());
         let sidebar_w = state
             .as_ref()
@@ -1131,7 +1125,7 @@ impl Workbench {
             },
             cfg: state_glue::ConfigState {
                 dir: config_dir,
-                stamp: (None, None),
+                stamp: (None, None, None),
                 theme_override: false,
                 project: Vec::new(),
                 trusted: Default::default(),

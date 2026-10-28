@@ -23,6 +23,28 @@ pub(super) fn theme_load_error(path: &std::path::Path, error: &themes::ThemeErro
 const HIGH_CONTRAST_DARK: &str = "high-contrast-dark";
 const HIGH_CONTRAST_LIGHT: &str = "high-contrast-light";
 
+/// Built-in themes, then the user's folder, then installed extensions. Ids never collide (`user:`, `ext:` prefixes). The
+/// second value is one message per file that could not be loaded.
+pub(super) fn all_themes(user_dir: Option<&std::path::Path>) -> (Vec<themes::Theme>, Vec<String>) {
+    let mut all = themes::builtin();
+    let mut errors = Vec::new();
+    if let Some(dir) = user_dir {
+        let (user, errs) = themes::load_dir(dir);
+        all.extend(user);
+        errors.extend(errs.iter().map(|(path, e)| theme_load_error(path, e)));
+    }
+    for ext in &crate::ext::current().active {
+        for t in &ext.manifest.contributions.themes {
+            let path = ext.file(&t.path);
+            match themes::load_extension_theme(ext.id(), &path, &t.label) {
+                Ok(theme) => all.push(theme),
+                Err(e) => errors.push(format!("{}: {}", ext.id(), theme_load_error(&path, &e))),
+            }
+        }
+    }
+    (all, errors)
+}
+
 impl Workbench {
     /// Re-read user themes (after an import).
     /// User themes folder: under the given settings folder (temporary in tests), else the default.
@@ -31,11 +53,7 @@ impl Workbench {
     }
 
     pub(super) fn reload_user_themes(&mut self) {
-        let mut all = themes::builtin();
-        if let Some(dir) = self.theme_dir() {
-            all.extend(themes::load_dir(&dir).0);
-        }
-        self.themes = all;
+        self.themes = all_themes(self.theme_dir().as_deref()).0;
     }
 
     /// Write the theme choice to the settings file (comments preserved).
@@ -139,6 +157,7 @@ impl Workbench {
                 Source::Builtin => kind.to_string(),
                 Source::User(_) => crate::i18n::tf("{} · user", &[&kind]),
                 Source::VsCode(_) => crate::i18n::tf("{} · VS Code import", &[&kind]),
+                Source::Extension { ext, .. } => crate::i18n::tf("{} · extension {}", &[&kind, ext]),
             };
             items.push(PickItem { label: t.name.clone().into(), detail: Some(detail.into()), keys: None });
         }
