@@ -46,6 +46,8 @@ Windows x64 is built and released as a ZIP and a setup EXE (unsigned, so SmartSc
 
 - The terminal uses ConPTY (Windows 10 1809 or newer); Git and language servers run without `/bin/sh`, resolve npm `.cmd`
   launchers and hide console windows; the application menu bar replaces the macOS global menu.
+- Accessibility: the AccessKit tree reaches UI Automation (NVDA, JAWS, Narrator) through `accesskit_windows`; the window
+  opens hidden and is shown once the adapter is attached. Not yet tried with a screen reader (see `accessibility.md`).
 - `scripts/check-windows.ps1` runs the library tests, selected UI, path and keyboard regressions and the release build.
   GPUI needs `fxc.exe` from the Windows SDK.
 - `./scripts/build-windows.ps1` builds a standalone EXE with Linux x64 and ARM64 SSH agents embedded; use

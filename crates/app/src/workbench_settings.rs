@@ -76,6 +76,11 @@ pub const CATALOG: &[Entry] = &[
     e("workbench.editor.showTabs", crate::i18n::tr("Show the editor tab bar"), Kind::Bool),
     e("workbench.tabs.showIcons", crate::i18n::tr("Show file icons on tabs"), Kind::Bool),
     e("workbench.tabs.closeButton", crate::i18n::tr("When the close button of a tab shows"), Kind::Choice(&["hover", "always", "off"])),
+    e(
+        "workbench.reduceMotion",
+        crate::i18n::tr("Leave out animations: the blinking cursor, spinners and sliding panels (auto: follow the system setting)"),
+        Kind::Choice(&["auto", "on", "off"]),
+    ),
     e("workbench.breadcrumbs.enabled", crate::i18n::tr("Show the file path above the editor"), Kind::Bool),
     e("editor.cursorWidth", crate::i18n::tr("Width of the line cursor (px)"), Kind::Number { min: 1., max: 8. }),
     e("editor.hover.enabled", crate::i18n::tr("Show a tooltip when the mouse rests on a word"), Kind::Bool),
@@ -258,6 +263,11 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "workbench.editor.showTabs" => json!(s.show_tabs),
         "workbench.tabs.showIcons" => json!(s.tab_icons),
         "workbench.tabs.closeButton" => json!(s.tab_close),
+        "workbench.reduceMotion" => json!(match s.reduce_motion {
+            Some(true) => "on",
+            Some(false) => "off",
+            None => "auto",
+        }),
         "workbench.breadcrumbs.enabled" => json!(s.breadcrumbs),
         "editor.cursorWidth" => json!(s.cursor_width),
         "editor.hover.enabled" => json!(s.hover_enabled),

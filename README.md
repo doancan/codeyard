@@ -126,7 +126,7 @@ folders so it never touches your real profile. Full instructions and the gates a
 **Beta.** Codeyard is used daily on macOS. Windows is released (setup EXE and portable ZIP, unsigned) and
 passes the native checks in `scripts\check-windows.ps1`, but real SSH authentication, mixed-DPI displays, IME input and the installer
 itself have not been verified on a physical machine. Linux builds and passed the app test suite once in a container; it has no release
-or installer yet. Screen-reader support is partial and macOS-only (see [ACCESSIBILITY.md](ACCESSIBILITY.md)). Per-platform detail:
+or installer yet. Screen-reader support (macOS and Windows) is partial and not yet tested with a screen reader (see [ACCESSIBILITY.md](ACCESSIBILITY.md)). Per-platform detail:
 [platforms](docs/platforms.md).
 
 ## License

@@ -978,6 +978,7 @@ Language servers are off in “{}” until you trust it: they can run the projec
 Later	
 Latest 300 lines; refreshed with resource snapshots.	
 Learn	
+Leave out animations: the blinking cursor, spinners and sliding panels (auto: follow the system setting)	
 Left is writable	
 Left ↔ Right	
 Let programs in the terminal write to the clipboard	
@@ -1774,6 +1775,7 @@ Storage type
 String interpolation is not supported	
 Structural search: the pattern is code; $X matches one node, $$$X several	
 Suggest words from the file when there is no language server	
+Suggestions	
 Suggestions pop up while typing (off: only Ctrl+Space)	
 Sunday	
 Switch Workspace or Connect to Host…	
@@ -1796,6 +1798,7 @@ Tasks: Run Task…
 Terminal	
 Terminal colour	
 Terminal row height, as a multiple of the font size	
+Terminal {0} of {1}	
 Terminal: Change Color…	
 Terminal: Clear	
 Terminal: Close	
@@ -1897,6 +1900,7 @@ The workspace file lists no folder that exists on this computer.
 The workspace has no extra folders.	
 The {} dictionary is installed and on.	
 Theme skipped: {}	
+Theme “{1}”: {0} colour pair is below WCAG AA contrast ({2} on {3}: {4}:1, needs {5}:1)|Theme “{1}”: {0} colour pairs are below WCAG AA contrast, for example {2} on {3}: {4}:1, needs {5}:1	
 Theme: Open User Themes Folder	
 Theme: Pick Color Theme…	
 Theme: Pick File Icon Theme…	

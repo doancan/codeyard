@@ -514,15 +514,24 @@ impl TerminalView {
 
     #[cfg(test)]
     pub fn screen_text(&self) -> String {
+        self.a11y_view().0.join("\n")
+    }
+
+    /// For the accessibility tree (a11y.rs): the rows on screen (trailing blanks trimmed) and the cursor (row, column),
+    /// if it is on screen.
+    pub fn a11y_view(&self) -> (Vec<String>, Option<(usize, usize)>) {
         let content = self.term.renderable_content();
+        let offset = content.display_offset as i32;
         let mut rows = vec![String::new(); self.size.rows];
         for cell in content.display_iter {
-            let row = (cell.point.line.0 + content.display_offset as i32) as usize;
+            let row = (cell.point.line.0 + offset) as usize;
             if row < rows.len() && !cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
                 rows[row].push(cell.c);
             }
         }
-        rows.iter().map(|r| r.trim_end()).collect::<Vec<_>>().join("\n")
+        let cur_row = content.cursor.point.line.0 + offset;
+        let cursor = (cur_row >= 0 && (cur_row as usize) < rows.len()).then_some((cur_row as usize, content.cursor.point.column.0));
+        (rows.into_iter().map(|r| r.trim_end().to_string()).collect(), cursor)
     }
 
     fn on_key_down(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {

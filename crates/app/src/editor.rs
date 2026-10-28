@@ -1274,6 +1274,26 @@ impl EditorView {
         cx.notify();
     }
 
+    /// For the accessibility tree (a11y.rs): the shown suggestions (label, detail), at most `limit`, and the selected one.
+    pub fn a11y_completion(&self, limit: usize) -> Option<(Vec<(String, Option<String>)>, usize)> {
+        let c = self.completion.as_ref()?;
+        let rows = c.shown.iter().take(limit).map(|&i| (c.items[i].label.clone(), c.items[i].detail.clone())).collect();
+        Some((rows, c.selected))
+    }
+
+    /// Accessibility action: select suggestion `ix`, and insert it if `accept`.
+    pub fn a11y_choose_completion(&mut self, ix: usize, accept: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(c) = &mut self.completion else { return };
+        if ix >= c.shown.len() {
+            return;
+        }
+        c.selected = ix;
+        if accept {
+            self.completion_accept(&CompletionAccept, window, cx);
+        }
+        cx.notify();
+    }
+
     /// File was renamed/moved.
     pub fn set_path(&mut self, path: String, cx: &mut Context<Self>) {
         self.name = SharedString::from(ui::file_name(&path).to_string());
