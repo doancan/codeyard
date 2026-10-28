@@ -27,7 +27,9 @@ pub(super) fn rename_exclusive(from: &Path, to: &Path) -> io::Result<()> {
         #[cfg(target_os = "macos")]
         let result = unsafe { libc::renamex_np(from.as_ptr(), to.as_ptr(), libc::RENAME_EXCL) };
         #[cfg(target_os = "linux")]
-        let result = unsafe { libc::renameat2(libc::AT_FDCWD, from.as_ptr(), libc::AT_FDCWD, to.as_ptr(), libc::RENAME_NOREPLACE) };
+        // musl does not export the libc wrapper; use the kernel operation on
+        // both glibc and static agents so publication has identical semantics.
+        let result = unsafe { libc::syscall(libc::SYS_renameat2, libc::AT_FDCWD, from.as_ptr(), libc::AT_FDCWD, to.as_ptr(), libc::RENAME_NOREPLACE) };
         if result == 0 { Ok(()) } else { Err(io::Error::last_os_error()) }
     }
     #[cfg(windows)]
@@ -102,7 +104,7 @@ pub(super) fn copy_cancellable(from: &Path, to: &Path, cancel: &AtomicBool) -> R
                 )));
             }
         }
-        return result.map_err(|e| if e.kind() == io::ErrorKind::Interrupted { Error::Cancelled } else { map_err(to, e) });
+        return result.map_err(|e| if e.kind() == io::ErrorKind::Interrupted && cancel.load(Ordering::Acquire) { Error::Cancelled } else { map_err(to, e) });
     }
     Err(Error::Other("could not reserve a temporary copy".into()))
 }
