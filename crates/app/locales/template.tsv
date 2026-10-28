@@ -1074,6 +1074,7 @@ Ln {}, Col {}
 Ln {}, Col {} ({} selected)	
 Load More Stack Frames	
 Load average (1 / 5 / 15 min)	
+Load installed extensions (off: Codeyard starts as if none were installed)	
 Loading container details…	
 Loading image…	
 Loading pull requests…	
@@ -2556,6 +2557,8 @@ your words
 {} conflict left|{} conflicts left	
 {} conflict|{} conflicts	
 {} contains a request that:	
+{} contains code, which this version does not run	
+{} contains code; this version of Codeyard runs data-only extensions (themes, snippets, keymaps, languages, schemas, language servers)	
 {} cursor|{} cursors	
 {} day ago|{} days ago	
 {} definition|{} definitions	

@@ -258,3 +258,58 @@ fn permission_lines_are_the_consent_sheet_words() {
         assert_eq!(Workbench::permission_lines_for_test(&m.permissions), m.permissions.describe(), "{perms}");
     }
 }
+
+#[gpui::test]
+fn escape_cancels_the_consent_sheet(cx: &mut TestAppContext) {
+    let cfg = config_dir("escape");
+    let src = cfg.join("src-ext");
+    write_folder(&src, &theme_files("you.esc", "0.1.0"));
+    let (wb, cx) = setup(cx, &cfg);
+    wb.update_in(cx, |wb, window, cx| wb.review_extension_for_test(&src.to_string_lossy(), false, window, cx));
+    cx.run_until_parked();
+    assert!(wb.update_in(cx, |wb, window, _| wb.consent_for_test(window)).is_some());
+    cx.simulate_keystrokes("escape");
+    assert!(wb.update_in(cx, |wb, window, _| wb.consent_for_test(window)).is_none());
+    assert!(listed(&wb, cx).is_empty());
+}
+
+#[gpui::test]
+fn a_package_with_code_is_refused_with_the_reason(cx: &mut TestAppContext) {
+    let cfg = config_dir("code");
+    let src = cfg.join("code");
+    write_folder(
+        &src,
+        &[
+            ("codeyard-extension.toml".into(), manifest("you.code", "1.0.0", "[code]\nentry = \"src/main.ts\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n")),
+            ("src/main.ts".into(), "export {}".into()),
+        ],
+    );
+    let (wb, cx) = setup(cx, &cfg);
+    wb.update_in(cx, |wb, window, cx| wb.review_extension_for_test(&src.to_string_lossy(), false, window, cx));
+    cx.run_until_parked();
+    let (error, text) = wb.read_with(cx, |wb, _| wb.notice_for_test()).unwrap();
+    assert!(error && text.contains("you.code contains code"), "{text}");
+    assert!(wb.update_in(cx, |wb, window, _| wb.consent_for_test(window)).is_none());
+}
+
+#[gpui::test]
+fn the_setting_turns_every_extension_off(cx: &mut TestAppContext) {
+    let cfg = config_dir("setting-off");
+    install(&cfg, &theme_files("you.night", "1.0.0"));
+    let (wb, cx) = setup(cx, &cfg);
+    assert!(has_theme(&wb, cx, "ext:you.night/t"));
+    std::fs::write(cfg.join("settings.jsonc"), r#"{ "extensions.enabled": false }"#).unwrap();
+    wb.update_in(cx, |wb, window, cx| wb.reload_config_for_test(window, cx));
+    assert!(!has_theme(&wb, cx, "ext:you.night/t"));
+    std::fs::write(cfg.join("settings.jsonc"), r#"{ "extensions.enabled": true }"#).unwrap();
+    wb.update_in(cx, |wb, window, cx| wb.reload_config_for_test(window, cx));
+    assert!(has_theme(&wb, cx, "ext:you.night/t"));
+}
+
+#[test]
+fn a_project_cannot_turn_extensions_off_or_pick_a_preset() {
+    let layers = [(".codeyard/settings.jsonc", r#"{ "extensions.enabled": false, "keymap.preset": "evil.keys/Trap" }"#, true)];
+    let (s, _) = crate::settings::parse_layers_trusted("{}", &layers, true).unwrap();
+    assert!(s.extensions_enabled);
+    assert!(s.keymap_preset.is_empty());
+}

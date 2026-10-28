@@ -536,9 +536,15 @@ extension folder (for example one you are writing) and installs that. Packages a
 in an SSH window. Before anything is installed, a consent sheet shows the extension's name, version and source, what it
 contributes and what it may reach, in plain words ("Run taplo with any arguments"), with the author's reason quoted.
 A red line marks a **High risk** set: one that can run programs as you, or read private data and send it somewhere.
-For those, the keyboard starts on *Cancel*, so Enter never installs by accident. A package that is not valid is not
-installed; the error says what is wrong, as the packaging tool would. A new extension applies at once, in every
-open window, without a restart.
+For those, the keyboard starts on *Cancel*, so Enter never installs by accident; Escape cancels any sheet. A package
+that is not valid is not installed; the error says what is wrong, as the packaging tool would. A package with code
+(commands, views) is refused with that reason: this version runs data-only extensions. A new extension applies at
+once, in every open window, without a restart.
+
+**Rules that keep them predictable.** An extension key binding never takes a key a built-in shortcut uses (the
+binding is left out and the status bar says so); a keymap preset you choose with `keymap.preset` may. An extension
+language only applies to files no built-in language claims. Extension language servers start in trusted folders only,
+and your own `lsp.servers` entry for the same language wins.
 
 **Manage.** Choose an extension in the list to open its page: contributions, permissions and these actions:
 
@@ -549,6 +555,8 @@ open window, without a restart.
 
 **Safe mode.** `codeyard --no-extensions` starts with no extension loaded, which rules them out when something looks
 wrong. The status bar says *Extensions off* for the whole session, and the Extensions view says so instead of listing.
+To keep them off across sessions, set `"extensions.enabled": false` in your own settings (a project's settings cannot
+change it, nor `keymap.preset`).
 
 ## Git
 

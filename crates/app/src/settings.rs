@@ -191,6 +191,8 @@ pub struct Settings {
     pub icon_theme: String,
     /// A keymap preset from an installed extension, `<publisher.name>/<label>` (`keymap.preset`); empty: none.
     pub keymap_preset: String,
+    /// `extensions.enabled`: false loads no extension, like `--no-extensions` but kept across sessions.
+    pub extensions_enabled: bool,
     /// Values of settings that installed extensions declare (`ext.<publisher.name>.<key>`), checked against their type.
     pub ext_settings: std::collections::BTreeMap<String, Value>,
     pub status_bar: bool,
@@ -366,6 +368,7 @@ impl Default for Settings {
             color_decorators: true,
             icon_theme: crate::icon_theme::ALL[0].id().into(),
             keymap_preset: String::new(),
+            extensions_enabled: true,
             ext_settings: std::collections::BTreeMap::new(),
             status_bar: true,
             activity_bar: true,
@@ -484,6 +487,9 @@ pub const USER_ONLY_KEYS: &[&str] = &[
     "http.confirmRequests",
     "ui.language",
     "update.check",
+    // A repository must not switch extensions on or off for the user, or swap their keys for a preset.
+    "extensions.enabled",
+    "keymap.preset",
     // --- git-sync ---
     // A repository must not turn the question before a sync off, or make every commit push by itself.
     "git.confirmSync",
@@ -899,6 +905,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     let mut cw: Vec<String> = Vec::new();
     s.ui_font = r.string("workbench.fontFamily");
     s.keymap_preset = r.string("keymap.preset").unwrap_or_default();
+    if let Some(v) = r.bool("extensions.enabled") {
+        s.extensions_enabled = v;
+    }
     if let Some(v) = r.bool("workbench.editor.showTabs") {
         s.show_tabs = v;
     }
@@ -1189,6 +1198,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "workbench.tree.indent",
         "workbench.fontFamily",
         "keymap.preset",
+        "extensions.enabled",
         "workbench.editor.showTabs",
         "workbench.tabs.showIcons",
         "workbench.tabs.closeButton",
