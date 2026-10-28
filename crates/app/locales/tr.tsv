@@ -970,6 +970,10 @@ Zoom: {}	Yakınlaştırma: {}
 No output yet. Language server logs appear here.	Henüz çıktı yok. Dil sunucusu günlükleri burada görünür.
 No problems. Language servers start when you open a file.	Sorun yok. Dil sunucuları bir dosya açtığınızda başlar.
 No problems.	Sorun yok.
+Problems: Copy Full Diagnostic	Sorunlar: Tanının Tamamını Kopyala
+Diagnostic copied	Tanı kopyalandı
+No problem at the cursor	İmleçte sorun yok
+line {0}: {1}	satır {0}: {1}
 Filter	Süz
 Filtering {0} for “{1}”…	{0} dosyası “{1}” için süzülüyor…
 Filtering needs sh, tail, grep and cut on the host (on Windows: Git Bash or WSL). {}	Süzme için sunucuda sh, tail, grep ve cut gerekir (Windows'ta: Git Bash ya da WSL). {}

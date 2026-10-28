@@ -333,31 +333,28 @@ fn json_len(v: &Value) -> usize {
 /// a well-formed reply (`[]` without `items`, `null` for a malformed item).
 pub fn configuration_reply(settings: &Value, params: &Value) -> Value {
     let Some(items) = params["items"].as_array() else { return json!([]) };
-    let lookup = |item: &Value| -> Value {
-        let Value::Object(item) = item else { return Value::Null };
+    let lookup = |item: &Value| -> Option<&Value> {
+        let Value::Object(item) = item else { return None };
         let section = match item.get("section") {
             None | Some(Value::Null) => "",
             Some(Value::String(s)) => s.as_str(),
-            Some(_) => return Value::Null,
+            Some(_) => return None,
         };
         if section.is_empty() {
-            return settings.clone();
+            return Some(settings);
         }
-        section.split('.').try_fold(settings, |v, step| v.as_object()?.get(step)).cloned().unwrap_or(Value::Null)
+        section.split('.').try_fold(settings, |v, step| v.as_object()?.get(step))
     };
     let mut budget = MAX_CONFIGURATION_BYTES;
+    // Measured before it is copied: a reply that does not fit costs no copy of the tree.
     let reply = items.iter().enumerate().map(|(i, item)| {
-        if i >= MAX_CONFIGURATION_ITEMS {
+        let Some(v) = lookup(item).filter(|_| i < MAX_CONFIGURATION_ITEMS) else { return Value::Null };
+        let n = json_len(v);
+        if n > budget {
             return Value::Null;
         }
-        let v = lookup(item);
-        match json_len(&v) {
-            n if n <= budget => {
-                budget -= n;
-                v
-            }
-            _ => Value::Null,
-        }
+        budget -= n;
+        v.clone()
     });
     Value::Array(reply.collect())
 }
@@ -483,7 +480,7 @@ fn initialize_params(root: &str, init_options: Option<&Value>) -> Value {
             },
             "textDocument": {
                 "synchronization": { "didSave": true, "dynamicRegistration": false },
-                "publishDiagnostics": { "relatedInformation": false },
+                "publishDiagnostics": { "relatedInformation": true, "dataSupport": true },
                 "hover": { "contentFormat": ["markdown", "plaintext"] },
                 "definition": { "linkSupport": true },
                 "references": {},
@@ -571,7 +568,7 @@ mod tests {
     fn diag(path: &str, n: usize) -> ServerEvent {
         ServerEvent::Diagnostics {
             path: path.into(),
-            diagnostics: vec![Diagnostic { start: (0, 0), end: (0, 1), severity: 1, message: "m".into(), source: None }; n],
+            diagnostics: vec![Diagnostic { start: (0, 0), end: (0, 1), severity: 1, message: "m".into(), ..Diagnostic::default() }; n],
         }
     }
 

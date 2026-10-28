@@ -86,6 +86,7 @@ fn diagnostic(line: &str, col: Option<&str>, sev: u8, message: &str) -> Diagnost
         severity: sev,
         message: message.trim().to_string(),
         source: Some("task".into()),
+        ..Diagnostic::default()
     }
 }
 

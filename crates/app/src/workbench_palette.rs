@@ -284,6 +284,7 @@ impl Workbench {
             Command::action("Preferences: Open Keyboard Shortcuts", OpenKeybindings),
             Command::action("Preferences: Import VS Code Settings and Shortcuts", ImportVsCode),
             Command::action("View: Problems", ShowProblems),
+            Command::action("Problems: Copy Full Diagnostic", CopyFullDiagnostic),
             Command::action("View: Output", ShowOutput),
             Command::action("Output: Clear", ClearOutput),
             Command::action("View: Ports (SSH port forwarding)", ShowPorts),

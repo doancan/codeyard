@@ -539,6 +539,30 @@ impl EditorView {
         );
     }
 
+    /// The diagnostics covering character `ix` (an empty range counts as one character), most severe first.
+    pub(super) fn diagnostics_at(&self, ix: usize) -> Vec<crate::lsp::Diagnostic> {
+        let mut out: Vec<crate::lsp::Diagnostic> = self
+            .diagnostics
+            .iter()
+            .filter(|d| {
+                let (a, b) = (self.buffer.from_lsp_position(d.start.0, d.start.1), self.buffer.from_lsp_position(d.end.0, d.end.1));
+                (a..b.max(a + 1)).contains(&ix)
+            })
+            .cloned()
+            .collect();
+        out.sort_by_key(|d| d.severity);
+        out
+    }
+
+    /// The most severe diagnostic under the cursor (for *Problems: Copy Full Diagnostic*).
+    pub fn diagnostic_at_cursor(&self) -> Option<crate::lsp::Diagnostic> {
+        self.diagnostics_at(self.buffer.cursor()).into_iter().next()
+    }
+
+    pub fn set_lsp_root(&mut self, root: Option<String>) {
+        self.lsp_root = root;
+    }
+
     pub fn set_diagnostics(&mut self, diagnostics: Vec<crate::lsp::Diagnostic>, cx: &mut Context<Self>) {
         self.diagnostics = diagnostics;
         cx.notify();
@@ -599,18 +623,10 @@ impl EditorView {
             self.hover = None;
             cx.notify();
         }
-        let diagnostics: Vec<(u8, String)> = self
-            .diagnostics
-            .iter()
-            .filter(|d| {
-                let (a, b) = (self.buffer.from_lsp_position(d.start.0, d.start.1), self.buffer.from_lsp_position(d.end.0, d.end.1));
-                (a..b.max(a + 1)).contains(&ix)
-            })
-            .map(|d| (d.severity, d.message.clone()))
-            .collect();
-        let mut diagnostics = diagnostics;
+        let mut diagnostics = self.diagnostics_at(ix);
         if let Some((_, word)) = self.misspelling_at(ix, cx) {
-            diagnostics.push((3, tf("“{}” is not in the dictionary. Quick Fix shows suggestions.", &[&word])));
+            let message = tf("“{}” is not in the dictionary. Quick Fix shows suggestions.", &[&word]);
+            diagnostics.push(crate::lsp::Diagnostic { severity: 3, message, ..Default::default() });
         }
         let client = self.lsp.clone();
         let debug = self.debug_eval.clone().zip(self.debug_expression_at(ix));
@@ -740,7 +756,7 @@ impl EditorView {
     #[cfg(test)]
     pub fn hover_text(&self) -> Option<String> {
         self.hover.as_ref().map(|h| {
-            let mut parts: Vec<String> = h.diagnostics.iter().map(|(_, m)| m.clone()).collect();
+            let mut parts: Vec<String> = h.diagnostics.iter().map(|d| d.message.clone()).collect();
             parts.extend(h.text.clone());
             parts.join("\n")
         })
