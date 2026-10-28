@@ -41,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   live page/CSS refresh, status-bar controls and Output logging. Local, SSH and container files share the
   same agent-backed path; no external runtime or remote listening port is required. Disabling the module
   or leaving the workspace stops its server.
+- Web Preview settings for a fixed or automatic port, IPv4/IPv6 listen address, live reload toggle and interval,
+  and a custom served folder. Options appear under Modules, belong to user settings, and restart an active preview when changed.
+  *Web Preview: Copy URL* copies the authenticated launch link for use in another browser or device.
 - File icon theme "File Glyphs" (`workbench.iconTheme: "glyphs"`, now the default): colored file glyphs and no folder icons. A
   file's glyph sits in the column of a folder's arrow, so every name in a level lines up.
 - The macOS Dock menu lists the open windows at the top, front one first, and follows as windows come forward, open, close or
@@ -87,6 +90,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - File tree rows are a little taller and roomier (24 px rows, wider side padding and icon gap).
 
 ### Fixed
+
+- Web Preview reads files through directory handles without following symlinks or reparse points,
+  preventing pathname replacement races. Each file now needs one agent request, reducing SSH round trips;
+  directory and session redirects preserve URL query parameters.
 
 - Opening or selecting a file restores a maximized terminal panel to its previous size so the editor is visible.
 - Picker inputs support Select All, Copy, Cut and Paste, including remote folder paths and SSH password paste.

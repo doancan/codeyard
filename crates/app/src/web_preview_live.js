@@ -1,4 +1,5 @@
 (() => {
+  const interval = Math.min(60000, Math.max(250, Number(document.currentScript?.dataset.interval) || 1000));
   let revision = null;
   let stopped = false;
   addEventListener('pagehide', () => { stopped = true; });
@@ -26,7 +27,7 @@
       }
       revision = update.revision;
     } catch (_) { /* The next poll recovers after a temporary connection loss. */ }
-    if (!stopped) setTimeout(poll, 1000);
+    if (!stopped) setTimeout(poll, interval);
   }
   poll();
 })();

@@ -185,6 +185,9 @@ impl Workbench {
         cx.set_global(new.clone());
         if !new.web_preview_enabled {
             self.stop_web_preview(cx);
+        } else if self.web_preview_needs_restart(&new.web_preview) {
+            self.stop_web_preview(cx);
+            self.open_web_preview(window, cx);
         }
         if new.docker_enabled && !old.docker_enabled {
             self.sync_container_monitor(cx);
