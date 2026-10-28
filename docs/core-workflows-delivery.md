@@ -145,3 +145,18 @@ against Explorer `0293d1a` (20 startup/typing runs, five memory samples per scen
 medians 69 → 69 / 114 → 114 / 74 → 73 MB. The current integrated sources are receiving a
 separate comparison against the updated shared main reference. Required CI on the integration
 head remains a merge condition.
+
+### F04: task engine foundation
+
+The UI-independent `task-engine` crate parses bounded JSONC task definitions, preserves literal
+process arguments and platform/environment options, validates reachable dependency graphs and
+constructs parallel or sequential barriers without duplicating shared prerequisites. Expanded
+inherited configuration is capped at 8 MiB to prevent a small file multiplying into large state.
+The scheduler reserves each command once, requires watch readiness before releasing dependents,
+propagates failures to running dependents and bounds concurrent startup/live processes.
+
+Variable resolution uses the file host's supplied environment, named workspace roots and one pass
+over the original template. Input/command results are resolved by the caller once and never parsed
+again as variable templates. These planning components pass 20 hermetic tests and strict Clippy.
+Process transport, custom matchers, input UI, task/debug integration and native acceptance remain
+unfinished; this foundation is not a completed task-execution delivery.
