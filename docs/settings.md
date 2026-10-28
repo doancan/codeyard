@@ -78,6 +78,12 @@ status bar reports it.
 | `explorer.openEditors` | `true` / `false` | `true` | Show the Open Editors list in the explorer |
 | `explorer.sortOrder` | `default`, `filesFirst`, `mixed`, `type` | `default` | Order of files and folders in the explorer |
 
+## `extensions`
+
+| Setting | Values | Default | What it does |
+| --- | --- | --- | --- |
+| `extensions.enabled` | `true` / `false` | `true` | Load installed extensions (off: Codeyard starts as if none were installed) |
+
 ## `files`
 
 | Setting | Values | Default | What it does |
@@ -201,6 +207,16 @@ status bar reports it.
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
 | `update.check` | `ask`, `daily`, `manual` | `ask` | Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it |
+
+## `webPreview`
+
+| Setting | Values | Default | What it does |
+| --- | --- | --- | --- |
+| `webPreview.host` | `127.0.0.1`, `::1`, `0.0.0.0`, `::` | `127.0.0.1` | Listen address (local: 127.0.0.1 or ::1; network: 0.0.0.0 or ::) |
+| `webPreview.liveReload` | `true` / `false` | `true` | Refresh the browser when saved preview files change |
+| `webPreview.port` | number 0–65535 | `0` | Preview port (0: choose a free port automatically) |
+| `webPreview.reloadInterval` | number 250–60000 | `1000` | Milliseconds between live preview checks |
+| `webPreview.root` | text | empty | Served folder (empty: automatic; relative to the workspace, or an absolute path on the active host) |
 
 ## `window`
 

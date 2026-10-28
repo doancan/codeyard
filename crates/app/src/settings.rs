@@ -48,6 +48,7 @@ pub struct Settings {
     pub docker_enabled: bool,
     /// Optional static web preview server; user settings only.
     pub web_preview_enabled: bool,
+    pub web_preview: crate::web_preview_config::Config,
     pub theme: String,
     pub editor_font_family: Option<String>,
     pub editor_font_size: f32,
@@ -191,6 +192,8 @@ pub struct Settings {
     pub icon_theme: String,
     /// A keymap preset from an installed extension, `<publisher.name>/<label>` (`keymap.preset`); empty: none.
     pub keymap_preset: String,
+    /// `extensions.enabled`: false loads no extension, like `--no-extensions` but kept across sessions.
+    pub extensions_enabled: bool,
     /// Values of settings that installed extensions declare (`ext.<publisher.name>.<key>`), checked against their type.
     pub ext_settings: std::collections::BTreeMap<String, Value>,
     pub status_bar: bool,
@@ -282,6 +285,7 @@ impl Default for Settings {
         Settings {
             docker_enabled: false,
             web_preview_enabled: false,
+            web_preview: crate::web_preview_config::Config::default(),
             theme: "auto".into(),
             editor_font_family: None,
             editor_font_size: theme::text::CODE.0,
@@ -366,6 +370,7 @@ impl Default for Settings {
             color_decorators: true,
             icon_theme: crate::icon_theme::ALL[0].id().into(),
             keymap_preset: String::new(),
+            extensions_enabled: true,
             ext_settings: std::collections::BTreeMap::new(),
             status_bar: true,
             activity_bar: true,
@@ -480,10 +485,18 @@ pub const RESTRICTED_KEYS: &[&str] = &[
 pub const USER_ONLY_KEYS: &[&str] = &[
     "modules.containers.enabled",
     "modules.webPreview.enabled",
+    "webPreview.port",
+    "webPreview.host",
+    "webPreview.liveReload",
+    "webPreview.reloadInterval",
+    "webPreview.root",
     "security.workspaceTrust.enabled",
     "http.confirmRequests",
     "ui.language",
     "update.check",
+    // A repository must not switch extensions on or off for the user, or swap their keys for a preset.
+    "extensions.enabled",
+    "keymap.preset",
     // --- git-sync ---
     // A repository must not turn the question before a sync off, or make every commit push by itself.
     "git.confirmSync",
@@ -899,6 +912,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     let mut cw: Vec<String> = Vec::new();
     s.ui_font = r.string("workbench.fontFamily");
     s.keymap_preset = r.string("keymap.preset").unwrap_or_default();
+    if let Some(v) = r.bool("extensions.enabled") {
+        s.extensions_enabled = v;
+    }
     if let Some(v) = r.bool("workbench.editor.showTabs") {
         s.show_tabs = v;
     }
@@ -993,6 +1009,27 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.bool("modules.webPreview.enabled") {
         s.web_preview_enabled = v;
+    }
+    if let Some(v) = r.integer("webPreview.port", 0, 65535) {
+        s.web_preview.port = v as u16;
+    }
+    if let Some(v) = r.choice("webPreview.host", &["127.0.0.1", "::1", "0.0.0.0", "::"])
+        && let Ok(host) = v.parse()
+    {
+        s.web_preview.host = host;
+    }
+    if let Some(v) = r.bool("webPreview.liveReload") {
+        s.web_preview.live_reload = v;
+    }
+    if let Some(v) = r.integer("webPreview.reloadInterval", 250, 60000) {
+        s.web_preview.reload_interval = v;
+    }
+    if let Some(v) = r.string("webPreview.root") {
+        if v.chars().any(char::is_control) {
+            r.warn(crate::i18n::tf("{}: path must not contain control characters", &[&"webPreview.root"]));
+        } else {
+            s.web_preview.root = v;
+        }
     }
     if let Some(v) = r.bool("modules.containers.enabled") {
         s.docker_enabled = v;
@@ -1146,6 +1183,11 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "lsp.enabled",
         "modules.containers.enabled",
         "modules.webPreview.enabled",
+        "webPreview.port",
+        "webPreview.host",
+        "webPreview.liveReload",
+        "webPreview.reloadInterval",
+        "webPreview.root",
         "lsp.servers",
         "ports.autoForward",
         "ports.localBind",
@@ -1189,6 +1231,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "workbench.tree.indent",
         "workbench.fontFamily",
         "keymap.preset",
+        "extensions.enabled",
         "workbench.editor.showTabs",
         "workbench.tabs.showIcons",
         "workbench.tabs.closeButton",
@@ -1281,6 +1324,15 @@ impl Reader<'_> {
                 None
             }
         }
+    }
+
+    fn integer(&mut self, key: &str, min: u64, max: u64) -> Option<u64> {
+        let number = self.number(key, min as f64, max as f64)?;
+        if number.fract() != 0. {
+            self.warn(crate::i18n::tf("{}: expected a whole number", &[&key]));
+            return None;
+        }
+        Some(number as u64)
     }
 
     /// One of the fixed options; any other value produces a warning.

@@ -11,6 +11,16 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   "theme": "auto",
   // Optional HTML/CSS/JS preview. No server runs until explicitly started.
   "modules.webPreview.enabled": false,
+  // Web Preview options (user settings only). A running preview restarts when changed.
+  // 0 selects a free port. A fixed port must be available.
+  "webPreview.port": 0,
+  // 127.0.0.1 or ::1: this computer. 0.0.0.0 or :: also allow network connections.
+  "webPreview.host": "127.0.0.1",
+  "webPreview.liveReload": true,
+  // Milliseconds between browser checks (250–60000).
+  "webPreview.reloadInterval": 1000,
+  // Empty: automatic. Relative to the workspace, or an absolute path on the active host.
+  "webPreview.root": "",
 
   // "editor.fontFamily": "JetBrains Mono",
   // Default: 12 (line 18) on macOS, 14 (line 20) on Windows and Linux.

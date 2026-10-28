@@ -72,6 +72,9 @@ impl Workbench {
                     if this.chrome.panel == Some(Panel::Testing) {
                         this.testing_opened(window, cx);
                     }
+                    if this.chrome.panel == Some(Panel::Extensions) {
+                        this.extensions_opened(window, cx);
+                    }
                     cx.notify();
                 }))
         };
@@ -112,6 +115,7 @@ impl Workbench {
             .child(item("act-debug", "bug-play", crate::i18n::t("Run and Debug (⌃⇧D)"), Panel::Debug, 0, cx))
             .child(item("act-testing", "flask-conical", crate::i18n::t("Testing"), Panel::Testing, failed_tests, cx))
             .child(item("act-remote", "screen-share", crate::i18n::t("Remote Explorer"), Panel::Remote, 0, cx))
+            .child(item("act-extensions", "blocks", crate::i18n::t("Extensions"), Panel::Extensions, 0, cx))
             .when(cx.global::<Settings>().docker_enabled, |d| d.child(item("act-containers", "server", crate::i18n::t("Containers"), Panel::Containers, 0, cx)))
             .child(div().flex_1())
             .child(

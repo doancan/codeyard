@@ -327,6 +327,17 @@ pub trait Host: Send + Sync + 'static {
         }
     }
 
+    /// Read a preview file beneath `root` in one call, without following symlinks.
+    ///
+    /// # Errors
+    /// Returns the agent's path, file type, size or I/O error, or a transport error.
+    fn read_preview(&self, root: &str, path: &str) -> Result<(Vec<u8>, u64)> {
+        match self.call(Request::ReadPreview { root: root.into(), path: path.into() })? {
+            Response::File { data, hash } => Ok((data, hash)),
+            other => Err(unexpected(other)),
+        }
+    }
+
     /// Files under the root (relative), honouring .gitignore.
     fn list_files(&self, root: &str, limit: u32) -> Result<FileList> {
         match self.call(Request::ListFiles { root: root.into(), limit })? {
