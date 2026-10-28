@@ -1,7 +1,9 @@
 # Architecture
 
 Codeyard is a native code editor written in Rust on GPUI. Design goals: low memory, fast start, one code path
-for local and SSH workspaces, no telemetry, no extension host, no embedded web view.
+for local and SSH workspaces, no telemetry, no embedded web view. The core is complete on its own; extensions are optional and
+are being built to the design in [plugin-architecture.md](plugin-architecture.md): Wasm code in a separate sandboxed
+process, never in the app. Nothing on this page describes extension code yet.
 
 ## Workspace layout
 
@@ -16,6 +18,9 @@ crates/
   schema/   JSON/YAML schema engine (parse with spans, validate, hover, completion, SchemaStore)
   spell/    Hunspell dictionaries, tokenizer rules, personal dictionary, dictionary download
   state/    local SQLite state (`schema.sql`)
+  ext-manifest/ extension manifest (`codeyard-extension.toml`): parsing, validation with author-facing errors,
+            activation, permissions and risk; shared by the app, `cyx` and the registry (see plugin-architecture.md)
+  ext-pkg/  extension packages (`.cyx`): reproducible writer, strict reader, content digest
   theme/    colour tokens -> Rust constants (`design/tokens*.json`, `build.rs`), built-in themes
   app/      GPUI views, commands, keybindings, the workbench; the only crate that depends on GPUI
 vendor/
@@ -85,7 +90,7 @@ the start on a save error, Stop or a changed workspace. Editor saves keep their 
 | Data tools | `serde_json` (key order kept), `toml`, `yaml-rust2` through the schema crate | convert and query JSON, YAML, TOML and .env in `datalens*.rs`; pure functions on text, a query language with no I/O |
 | Spelling | `spellbook` (pure Rust Hunspell) | English built in, other languages installable |
 
-No server, no account, no plugin store. Outbound requests: SchemaStore and schema downloads (cached 7 days, can be disabled),
+No server and no account; the extension registry is not live yet. Outbound requests: SchemaStore and schema downloads (cached 7 days, can be disabled),
 dictionary installs, GitHub pull request listing, requests sent from `.http` files and update checks. The update check is the one
 the app starts by itself, and only when the user chose daily checks (`update.check`); otherwise it happens when the user asks
 for one. It downloads two small files from github.com (see [Updates](#updates) for exactly what GitHub sees).
@@ -260,12 +265,21 @@ Measured by `scripts/memcheck.sh` (macOS `footprint`, 1280×800 @2x; the screen 
 | 10k lines, plain text | 95 MB |
 | 10k lines, syntax highlighting | 130 MB |
 | remote agent daemon, idle | 8 MB |
-| app binary | 60 MB |
 | agent binary (Linux musl) | 1600 KB |
+
+The app binary has no size budget: it grows with features, and users feel time and memory, not bytes. Its size is
+printed by `scripts/memcheck.sh` for the record. The agent keeps its budget because it is copied to every server.
+
+**Regression gate.** `scripts/perf/run.sh --baseline <previous tag>` builds the previous release and the candidate and
+runs them interleaved on the same Mac: startup to first frame and key press to drawn frame in a 10k-line Rust file
+(20 runs each) and the settled memory of three scenes (5 runs). `scripts/perf/compare.py` checks each metric of
+`perf/metrics.json` against its budget (p95 +10% for times, median +5% for memory) and fails only when the change is
+also outside the noise of the baseline (a bootstrap interval of the same statistic). The result is committed as `docs/benchmarks/perf-<version>.json`. Details:
+`scripts/perf/README.md`.
 
 Before a release all of these must pass: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D
 warnings`, `cargo deny check` (licences, advisories, sources), `scripts/arch-check.sh`, `cargo test --workspace`,
-`scripts/memcheck.sh`. A new feature that adds 10 MB or more is investigated first; a budget is only raised as a
+`scripts/memcheck.sh`, `scripts/perf/compare.py` against the previous release. A new feature that adds 10 MB or more is investigated first; a budget is only raised as a
 last resort and the reason is written next to it in the script.
 
 ## Dependencies
