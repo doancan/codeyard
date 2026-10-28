@@ -108,48 +108,86 @@ impl Permissions {
         self.run.iter().map(String::as_str).filter(|p| is_interpreter(p))
     }
 
-    /// One line per permission, in the words of the consent sheet.
-    pub fn describe(&self) -> Vec<String> {
+    /// One line per permission, in the words of the consent sheet: what the user is asked about, in order. The app
+    /// translates each kind; `describe` gives the English, for `cyx` and the registry.
+    pub fn lines(&self) -> Vec<Line> {
         let mut out = Vec::new();
         let list = |v: &[String]| v.join(", ");
         if !self.read.is_empty() {
-            out.push(if self.read.iter().any(|g| is_wide_glob(g)) { "Read all files in the workspace".into() } else { format!("Read {}", list(&self.read)) });
+            out.push(if self.read.iter().any(|g| is_wide_glob(g)) { Line::ReadAll } else { Line::Read(list(&self.read)) });
             if self.read.iter().any(|g| is_sensitive_glob(g)) {
-                out.push("Read files that can hold passwords and keys".into());
+                out.push(Line::ReadSecrets);
             }
         }
         if !self.write.is_empty() {
-            out.push(if self.write.iter().any(|g| is_wide_glob(g)) {
-                "Change all files in the workspace".into()
-            } else {
-                format!("Change {}", list(&self.write))
-            });
+            out.push(if self.write.iter().any(|g| is_wide_glob(g)) { Line::ChangeAll } else { Line::Change(list(&self.write)) });
         }
         if !self.net.is_empty() {
-            out.push(if self.net.iter().any(|h| is_wide_host(h)) { "Connect to any website".into() } else { format!("Connect to {}", list(&self.net)) });
+            out.push(if self.net.iter().any(|h| is_wide_host(h)) { Line::ConnectAny } else { Line::Connect(list(&self.net)) });
         }
-        for a in &self.auth {
-            out.push(format!("Act as your {} account", provider_name(a)));
-        }
+        out.extend(self.auth.iter().map(|a| Line::Account(provider_name(a))));
         if self.secrets {
-            out.push("Store secrets in your keychain".into());
+            out.push(Line::Secrets);
         }
-        for p in &self.run {
-            out.push(format!("Run {p} with any arguments"));
-        }
-        match self.clipboard {
-            Clipboard::None => {}
-            Clipboard::Read => out.push("Read the clipboard".into()),
-            Clipboard::Write => out.push("Write to the clipboard".into()),
-            Clipboard::ReadWrite => out.push("Read and write the clipboard".into()),
+        out.extend(self.run.iter().map(|p| Line::Run(p.clone())));
+        if self.clipboard != Clipboard::None {
+            out.push(Line::Clipboard(self.clipboard));
         }
         if self.terminal {
-            out.push("Type into terminals".into());
+            out.push(Line::Terminal);
         }
         if !self.commands.is_empty() {
-            out.push(format!("Run Codeyard commands: {}", list(&self.commands)));
+            out.push(Line::Commands(list(&self.commands)));
         }
         out
+    }
+
+    /// `lines` in English.
+    pub fn describe(&self) -> Vec<String> {
+        self.lines().iter().map(Line::english).collect()
+    }
+}
+
+/// One line of the consent sheet.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Line {
+    ReadAll,
+    /// The globs, comma-separated.
+    Read(String),
+    /// Added after a `read` line that can match credential files.
+    ReadSecrets,
+    ChangeAll,
+    Change(String),
+    ConnectAny,
+    Connect(String),
+    /// The account provider's display name.
+    Account(String),
+    Secrets,
+    Run(String),
+    Clipboard(Clipboard),
+    Terminal,
+    Commands(String),
+}
+
+impl Line {
+    pub fn english(&self) -> String {
+        match self {
+            Line::ReadAll => "Read all files in the workspace".into(),
+            Line::Read(g) => format!("Read {g}"),
+            Line::ReadSecrets => "Read files that can hold passwords and keys".into(),
+            Line::ChangeAll => "Change all files in the workspace".into(),
+            Line::Change(g) => format!("Change {g}"),
+            Line::ConnectAny => "Connect to any website".into(),
+            Line::Connect(h) => format!("Connect to {h}"),
+            Line::Account(a) => format!("Act as your {a} account"),
+            Line::Secrets => "Store secrets in your keychain".into(),
+            Line::Run(p) => format!("Run {p} with any arguments"),
+            Line::Clipboard(Clipboard::Read) => "Read the clipboard".into(),
+            Line::Clipboard(Clipboard::Write) => "Write to the clipboard".into(),
+            Line::Clipboard(_) => "Read and write the clipboard".into(),
+            Line::Terminal => "Type into terminals".into(),
+            Line::Commands(c) => format!("Run Codeyard commands: {c}"),
+        }
     }
 }
 

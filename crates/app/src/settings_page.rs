@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::input::{FieldEvent, TextField};
 use crate::settings::Settings;
 use crate::ui::{self, c, icon, palette, text};
-use crate::workbench::settings_ui::{CATALOG, Entry, Kind, current, parse_input};
+use crate::workbench::settings_ui::{CATALOG, Entry, Kind, current, parse_setting_input};
 
 pub enum SettingsEvent {
     /// (key, value); `null`: revert to the default.
@@ -55,7 +55,7 @@ pub fn category_of(key: &str) -> &'static str {
         "git" => "Git",
         "terminal" => "Terminal",
         "window" | "update" => "Window",
-        "modules" => "Modules",
+        "modules" | "webPreview" => "Modules",
         _ => "Remote & Languages",
     }
 }
@@ -170,7 +170,7 @@ impl SettingsPage {
                     return;
                 }
                 let text = f.read(cx).text().to_string();
-                match parse_input(kind, &text) {
+                match parse_setting_input(key, kind, &text) {
                     Ok(v) => {
                         this.errors.remove(key);
                         cx.emit(SettingsEvent::Write(key.to_string(), v));
@@ -596,11 +596,24 @@ mod tests {
             page.category = CATEGORIES.iter().position(|name| *name == "Modules").unwrap();
             cx.notify();
         });
-        assert_eq!(page.read_with(cx, |page, cx| page.visible_keys(cx)), ["modules.containers.enabled", "modules.webPreview.enabled"]);
+        assert_eq!(
+            page.read_with(cx, |page, cx| page.visible_keys(cx)),
+            [
+                "modules.containers.enabled",
+                "modules.webPreview.enabled",
+                "webPreview.port",
+                "webPreview.host",
+                "webPreview.liveReload",
+                "webPreview.reloadInterval",
+                "webPreview.root"
+            ]
+        );
         let _tr = crate::i18n::LangGuard::set("tr");
         assert_eq!(category_label("Modules"), "Modüller");
         page.update(cx, |page, cx| page.set_query_for_test("konteyner", cx));
         assert!(page.read_with(cx, |page, cx| page.visible_keys(cx)).contains(&"modules.containers.enabled"));
+        page.update(cx, |page, cx| page.set_query_for_test("yenile", cx));
+        assert!(page.read_with(cx, |page, cx| page.visible_keys(cx)).contains(&"webPreview.liveReload"));
     }
 
     #[test]
