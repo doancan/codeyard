@@ -166,3 +166,8 @@ leader exits, and a process that closes stdout makes cancellation wait 4.9 secon
 Cancellation now kills the owned group before reaping its leader, and output EOF polls exit without
 removing a still-running process from its session. The regressions pass; 182 agent/host/task-engine
 tests and strict Clippy pass. Windows process-tree ownership and the remaining F04 acceptance are pending.
+
+Windows piped processes now start suspended, enter a private job with kill-on-close ownership,
+and resume only after assignment. Native Windows fixtures cover live and already-exited leaders;
+their actual execution remains a CI condition. Windows GNU cross-target all-target Clippy passes,
+and the existing 182 macOS agent/host/engine regressions still pass.

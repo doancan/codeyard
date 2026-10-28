@@ -1,5 +1,70 @@
 use super::*;
 
+#[cfg(windows)]
+#[test]
+#[ignore = "owned process-tree subprocess fixture"]
+fn windows_fixture_tree_descendant() {
+    std::thread::sleep(Duration::from_secs(30));
+}
+
+#[cfg(windows)]
+#[test]
+#[ignore = "owned process-tree subprocess fixture"]
+#[allow(clippy::zombie_processes)] // The outer test holds a process handle and owns tree termination.
+fn windows_fixture_tree_parent() {
+    let descendant = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "proc::tests::windows_fixture_tree_descendant", "--ignored", "--nocapture"])
+        .stdin(Stdio::null())
+        .spawn()
+        .unwrap();
+    println!("owned-descendant:{}", descendant.id());
+    io::stdout().flush().unwrap();
+    let mut command = String::new();
+    io::stdin().read_line(&mut command).unwrap();
+    // Returning deliberately leaves the descendant alive; it still belongs to the outer job.
+}
+
+#[cfg(windows)]
+#[test]
+fn stopping_a_windows_process_kills_its_descendants_with_a_live_or_exited_leader() {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use windows_sys::Win32::Foundation::WAIT_OBJECT_0;
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE, TerminateProcess, WaitForSingleObject};
+
+    for exit_early in [false, true] {
+        let (mut process, reader) = spawn(
+            &std::env::current_exe().unwrap().to_string_lossy(),
+            &["--exact".into(), "proc::tests::windows_fixture_tree_parent".into(), "--ignored".into(), "--nocapture".into()],
+            None,
+        )
+        .unwrap();
+        let mut lines = std::io::BufRead::lines(std::io::BufReader::new(reader));
+        let descendant = lines.find_map(|line| line.unwrap().split_once("owned-descendant:").map(|(_, id)| id.trim().parse::<u32>().unwrap())).unwrap();
+        // Hold the owned fixture's process handle before cancellation; its identity cannot be reused.
+        // SAFETY: the id came from our child and grants only synchronization/termination access.
+        let raw = unsafe { OpenProcess(PROCESS_SYNCHRONIZE | PROCESS_TERMINATE, 0, descendant) };
+        assert!(!raw.is_null(), "{}", io::Error::last_os_error());
+        // SAFETY: the successful fresh handle transfers ownership exactly once.
+        let descendant = unsafe { OwnedHandle::from_raw_handle(raw) };
+        if exit_early {
+            process.write(b"exit\n").unwrap();
+            // SAFETY: the child handle is owned and live, even after the process exits.
+            assert_eq!(unsafe { WaitForSingleObject(process.child.as_raw_handle(), 2000) }, WAIT_OBJECT_0);
+        }
+        drop(process);
+        // SAFETY: the process handle remains live while waiting and optional failure cleanup run.
+        let result = unsafe { WaitForSingleObject(descendant.as_raw_handle(), 2000) };
+        if result != WAIT_OBJECT_0 {
+            // SAFETY: this is the same owned fixture process handle, never a looked-up replacement pid.
+            unsafe {
+                TerminateProcess(descendant.as_raw_handle(), 99);
+                WaitForSingleObject(descendant.as_raw_handle(), 2000);
+            }
+        }
+        assert_eq!(result, WAIT_OBJECT_0, "descendant outlived cancellation; exited leader: {exit_early}");
+    }
+}
+
 /// Programs found through the login shell get their arguments unchanged whatever that shell is (fish has no `$@`; a
 /// csh-style shell falls back to `/bin/sh`).
 #[cfg(unix)]
@@ -77,6 +142,7 @@ fn windows_fixture_flood() {
 #[cfg(windows)]
 #[test]
 #[ignore = "subprocess fixture"]
+#[allow(clippy::zombie_processes)] // This bounded fixture deliberately tests pipes inherited after its parent exits.
 fn windows_fixture_background() {
     let _child = Command::new(std::env::current_exe().unwrap())
         .args(["--exact", "proc::tests::windows_fixture_sleep", "--ignored", "--nocapture"])
