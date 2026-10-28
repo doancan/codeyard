@@ -2628,10 +2628,8 @@ Exposed only; not published on the server.	Yalnızca konteyner içinde açık; s
 Server binding	Sunucu adresi
 Read and write	Okuma ve yazma
 Read only	Salt okunur
-Storage type	Depolama türü
 Source on server	Sunucudaki kaynak
 Path in container	Konteynerdeki yol
-Access	Erişim
 Volume name	Birim adı
 Storage information is unavailable.	Depolama bilgisi alınamadı.
 Mount paths are shown as reported by the engine. Volume and bind-mount sizes are not included in container disk usage.	Bağlama yolları motorun bildirdiği şekilde gösterilir. Birim ve bağlı dizin boyutları konteyner disk kullanımına dahil değildir.

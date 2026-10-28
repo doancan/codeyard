@@ -3,6 +3,7 @@
 Review date: 2026-10-28. Platform: macOS, Apple silicon, native GPUI window at 1280 × 800 logical pixels.
 Baseline: `main` at `7fbeae2`, merged into `develop` at `94a7ae2`, preserving develop's web preview,
 container overview and SSH/Cargo artifact fixes. Main receives these changes through a pull request after its checks pass.
+The concurrent upstream develop commit `2ea3ad8` was integrated at `f5dcdb2`, preserving its container refinements and landmark geometry.
 
 This is an evidence-based backlog, not a claim that every workflow or platform is certified. Findings distinguish
 native-window observations, executable regressions, implementation limitations and work that still needs measurement.
@@ -19,10 +20,10 @@ are not used for destructive tests. No real SSH host is contacted by the walkthr
 | Editor and navigation | Native quick open, Rust syntax, tab and text exposure; workspace editor regression suite | IME, RTL, mixed DPI and long sessions on real Windows hardware |
 | Explorer | Native keyboard navigation; expanded empty-folder regression; path-based accessibility actions | Multi-selection, bulk operations and accessibility beyond the row limit |
 | Git | Native Source Control; disposable index/commit action tests; existing branch, sync, conflict and local-remote tests | Accessible graph, repository selection and large change sets |
-| Rust IDE | Native unavailable-server recovery; scripted/real language-server and debugger tests | Virtual workspaces, selecting binary/example/test targets, Cargo feature profiles |
+| Rust IDE | Native server-independent manifest lookup and real program/test debugging; actual virtual-workspace, named-target and required-feature builds | Unified user-selected feature/profile settings, macros/module remapping and the real SSH/Windows adapter matrix |
 | Customization | Existing settings catalog, JSONC, keybinding/import and theme tests | Full-interface scaling and a discoverable Rust configuration preset |
 | Accessibility | Real macOS AX tree; AccessKit consumer validation; focus/action regression tests | VoiceOver speech/rotor, bounds, other panels/dialogs and real Windows UI Automation |
-| Reliability/performance | Build, Clippy, architecture/docs/i18n gates and workspace tests | Release memory budgets, startup/frame timings and active-AT CPU cost |
+| Reliability/performance | Build, Clippy, architecture/docs/i18n gates, workspace tests and final Retina memory/size budgets | Startup/frame timings, long sessions and active-AT CPU cost |
 
 ## Verified findings
 
@@ -35,7 +36,7 @@ with a workaround; P3 is cosmetic. No P0 was reproduced in this walkthrough.
 | Q02 | P2 · native AX + failing regression | Switching to Source Control leaves the hidden Explorer in AX. Users encounter controls from another view. | `crates/app/src/a11y.rs` | Only expose Explorer while its sidebar is visible; stale tree actions cannot operate on a hidden sidebar. |
 | Q03 | P2 · native keyboard + failing regression | Right Arrow on an expanded empty folder selects its next sibling instead of remaining on the folder. | `crates/app/src/tree.rs` | Enter a child only when a visible child exists; empty, loading and nonempty folders retain correct keyboard behavior. |
 | Q04 | P2 · native notice + failing regression | A Rust command says “Open a Rust file first” while `main.rs` is already active and its server is unavailable. | `crates/app/src/workbench_rust.rs` | Distinguish a non-Rust file, disabled features, restricted workspace and unavailable server. Opening the nearest manifest should work without a language server. |
-| Q05 | P1 · implementation + documented limitation | AccessKit nodes lack painted bounds. Assistive cursor highlights, hit testing and magnifier tracking cannot follow controls. | `crates/app/src/a11y.rs`, `docs/accessibility.md` | Supply logical bounds and shaped text positions, then verify VoiceOver and Windows focus tracking in real windows. |
+| Q05 | P1 · implementation + documented limitation; landmarks integrated | Window, primary Explorer, focused editor and status-bar landmarks now have bounds. Individual rows, controls and text positions still lack the geometry needed for precise assistive cursor/caret tracking. | `crates/app/src/a11y.rs`, `a11y_geometry.rs`, `docs/accessibility.md` | Extend painted bounds to controls and shaped text positions, then verify VoiceOver and Windows focus tracking in real windows. |
 | Q06 | P1 · implementation + documented limitation | Search, Problems, Settings, debug/testing views, context menus and most dialogs lack complete AX representations. Keyboard shortcuts do not replace screen-reader semantics. | `docs/accessibility.md`, the corresponding view modules | Cover search→result→diagnostic→fix, settings editing and every confirmation/cancellation path, with focus restoration and live errors. |
 | Q07 | P2 · implementation | Rust auto-debug detection starts from a root `[package]` name. A virtual workspace or a crate whose binary has another name needs launch configuration. Cargo artifact resolution alone does not discover targets. | `crates/app/src/debug_config.rs`, `debug_cargo.rs` | Discover workspace/package targets, offer a picker and build the selected target with the chosen features/profile; respect custom target directories locally and over SSH. |
 | Q08 | P2 · implementation + documented limitation | Zoom and font settings scale editor/terminal text while sidebar, settings and other UI text keep their size. | `crates/app/src/workbench_state.rs`, `docs/accessibility.md` | Provide a persisted interface scale with keyboard entry, no clipped controls at 100/150/200%, and a reset command. |
@@ -77,7 +78,7 @@ this pass establishes accessible change inspection, staging and committing.
 
 ### Pass 2: complete the accessible task chain
 
-Q05 and Q06: introduce painted bounds, then Search, Problems and Settings, followed by input/confirmation/context
+Q05 and Q06: extend the integrated landmark bounds to controls/text, then Search, Problems and Settings, followed by input/confirmation/context
 menus. Each view needs semantic roles, state, actionable errors, predictable reading order and focus restoration.
 Test the complete task with VoiceOver on macOS and NVDA/Narrator on Windows. AX dumps alone do not certify speech.
 Include interface scaling (Q08) and bounded visible-range navigation (Q10) before claiming broad accessibility.
@@ -122,14 +123,13 @@ Initial merge: `cargo fmt --all --check`, `cargo clippy --workspace --all-target
 Before fixes: `cargo test --locked -p app --bin codeyard product_` ran four new regressions; all four failed for
 the observed reasons (empty-folder selection, hidden Explorer, missing Source Control and misleading Rust notice).
 
-Final validation results are recorded here after the implementation and native confirmation pass.
+The [delivery report](product-quality-report.md) records the native confirmation and validation evidence. After integration,
+eight product, 19 Rust hardening, 21 accessibility and 35 container tests passed. All 50 localization checks passed after
+removing the integration's two obsolete translation keys and refreshing the template.
 
-Intermediate evidence: eight product regressions passed, including real Git index/commit operations through AccessKit.
-Seventeen Rust hardening regressions passed, including actual Cargo builds, a scripted DAP launch, save/conflict/Stop
-boundaries and a failed real test build. The old code failed the five initial Rust regressions plus the unreported-build
-regression before those fixes were applied.
-
-The initial full application run had 1,312 passes, ten timeouts and four documented ignores. The timeouts were in
-real debugger/SSH journeys; they are being rerun separately and are not treated as a passing baseline.
+The complete local strict run passed 1,698 workspace tests with five documented ignores before the final cancellation
+and integration changes; the targeted checks above cover those changes. The initial baseline's ten debugger/SSH timeouts
+were not treated as green. Both real LLDB cases also passed independently. The initial product/Rust regressions and both
+late-cancellation regressions failed before their fixes. Final-tree cross-platform checks are attached to the delivery PR.
 
 New Turkish strings were drafted by the coding agent; no human native-speaker review is claimed.
