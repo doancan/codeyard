@@ -101,6 +101,8 @@ mod port_forwards;
 mod ports;
 mod problems;
 #[cfg(test)]
+mod qa_debug_rust_tests;
+#[cfg(test)]
 mod qa_debug_tests;
 #[cfg(test)]
 mod qa_editor_tests;

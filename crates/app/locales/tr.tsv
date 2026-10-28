@@ -980,6 +980,9 @@ No macro at the cursor	İmleçte makro yok
 No parent module found	Üst modül bulunamadı
 No Cargo.toml found for this file	Bu dosya için Cargo.toml bulunamadı
 The Rust language server does not support this command	Rust dil sunucusu bu komutu desteklemiyor
+Rust formatters not loaded: {}	Rust biçimlendiricileri yüklenmedi: {}
+rustc not found	rustc bulunamadı
+files not found in the toolchain	dosyalar araç zincirinde bulunamadı
 Diagnostic copied	Tanı kopyalandı
 No problem at the cursor	İmleçte sorun yok
 line {0}: {1}	satır {0}: {1}
