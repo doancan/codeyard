@@ -202,6 +202,20 @@ impl Workbench {
             all.extend(list);
             warnings.extend(w);
         }
+        // Extensions' snippets after the user's own: for the same prefix, yours wins.
+        for ext in &crate::ext::current().active {
+            for s in &ext.manifest.contributions.snippets {
+                let label = format!("{}: {}", ext.id(), s.path);
+                match std::fs::read_to_string(ext.file(&s.path)) {
+                    Ok(text) => {
+                        let (list, w) = crate::snippets::parse_file(&s.language, &text, Some(ext.id()), &label);
+                        all.extend(list);
+                        warnings.extend(w);
+                    }
+                    Err(e) => warnings.push(format!("{label}: {e}")),
+                }
+            }
+        }
         crate::snippets::set_user(all);
         warnings
     }
@@ -230,7 +244,14 @@ impl Workbench {
             .iter()
             .map(|s| crate::picker::PickItem {
                 label: s.prefix.clone().into(),
-                detail: Some(format!("{}{}", if s.user { format!("{} · ", crate::i18n::t("user")) } else { String::new() }, s.description).into()),
+                detail: Some(
+                    match (&s.origin, s.user) {
+                        (Some(ext), _) => format!("{ext} · {}", s.description),
+                        (None, true) => format!("{} · {}", crate::i18n::t("user"), s.description),
+                        (None, false) => s.description.clone(),
+                    }
+                    .into(),
+                ),
                 keys: None,
             })
             .collect();

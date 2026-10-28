@@ -70,6 +70,14 @@ impl Render for EditorView {
         // If a positioned item is wanted and this frame's line layout turns out different, paint asks for one more frame.
         self.popup_basis = (self.visible_sig(), self.wants_anchored());
         let minimap = cx.global::<Settings>().minimap;
+        // `language=<id>` lets key bindings test `editor.language == '…'` (extension keymaps).
+        let lang = crate::snippets::lang_of_path(&self.path);
+        let key_context = match crate::ext::language_context(lang) {
+            Some(l) if self.completion.is_some() => format!("Editor completing language={l}"),
+            Some(l) => format!("Editor language={l}"),
+            None if self.completion.is_some() => "Editor completing".to_string(),
+            None => "Editor".to_string(),
+        };
         if bracket_on {
             self.ensure_bracket_cache();
         }
@@ -110,7 +118,7 @@ impl Render for EditorView {
                             // When the minimap is open, the text must not overflow beneath it.
                             .when(minimap, |d| d.pr(px(MINIMAP_W + 16.)))
                             // While the completion list is open, Up/Down/Enter/Tab/Esc go to the list.
-                            .key_context(if self.completion.is_some() { "Editor completing" } else { "Editor" })
+                            .key_context(key_context.as_str())
                             .on_action(cx.on(Self::trigger_completion))
                             .on_action(cx.on(Self::completion_next))
                             .on_action(cx.on(Self::completion_prev))

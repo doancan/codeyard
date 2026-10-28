@@ -13,6 +13,11 @@ pub enum Source {
     User(PathBuf),
     /// A VS Code color theme, mapped onto our roles.
     VsCode(PathBuf),
+    /// A theme from an installed extension (`publisher.name`), in either format.
+    Extension {
+        ext: String,
+        path: PathBuf,
+    },
 }
 
 /// Why a theme file was rejected. `Display` is English; a UI that localizes matches on the variants.
@@ -132,6 +137,17 @@ pub fn load_dir(dir: &Path) -> (Vec<Theme>, Vec<(PathBuf, ThemeError)>) {
         }
     }
     (themes, errors)
+}
+
+/// A theme contributed by an extension: id `ext:<publisher.name>/<file stem>`. Its contrast is always repaired, as for a
+/// VS Code import: it comes from a stranger, and an unreadable palette is a bug report against Codeyard.
+pub fn load_extension_theme(ext: &str, path: &Path, label: &str) -> Result<Theme, ThemeError> {
+    let text = std::fs::read_to_string(path).map_err(|e| ThemeError::Read(e.to_string()))?;
+    let mut t = parse(&text, Source::Extension { ext: ext.to_string(), path: path.to_path_buf() })?;
+    t.palette = guard_contrast(t.palette);
+    t.id = format!("ext:{ext}/{}", path.file_stem().unwrap_or_default().to_string_lossy());
+    t.name = label.to_string();
+    Ok(t)
 }
 
 /// Our own format (`color` + role names) or a VS Code theme (`colors`, `tokenColors`).
@@ -419,6 +435,21 @@ pub fn strip_jsonc(src: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extension_themes_are_repaired_and_named_by_their_label() {
+        let dir = std::env::temp_dir().join(format!("theme-ext-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("night.json");
+        // Grey on grey: the contrast guard must fix it.
+        std::fs::write(&path, r##"{"name":"ignored","colors":{"editor.background":"#333333","editor.foreground":"#3a3a3a"}}"##).unwrap();
+        let t = load_extension_theme("you.night", &path, "Night").unwrap();
+        assert_eq!((t.id.as_str(), t.name.as_str()), ("ext:you.night/night", "Night"));
+        assert!(matches!(t.source, Source::Extension { .. }));
+        assert!(t.contrast_failures().is_empty(), "{:?}", t.contrast_failures());
+        assert!(matches!(load_extension_theme("you.night", &dir.join("missing.json"), "x"), Err(ThemeError::Read(_))));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn colors_with_non_ascii_text_are_rejected_not_panicked_on() {
