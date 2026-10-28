@@ -65,6 +65,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Releases are gated on performance instead of app size: `scripts/perf` compares startup, typing latency and memory with
+  the previous release and blocks regressions beyond their budget. The app binary size limit is removed; the SSH agent keeps
+  its limit.
 - Sync no longer asks before it pulls or pushes: `git.confirmSync` now defaults to `false` (turn it on in your own settings to
   get the question back). The status bar keeps the ↓/↑ counts visible at every width, marks a branch with uncommitted changes
   with `*` and says "Publish Branch" for an unpublished branch.
