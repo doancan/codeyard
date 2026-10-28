@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Web Preview settings for a fixed or automatic port, IPv4/IPv6 listen address, live reload toggle and interval,
+  and a custom served folder. Options appear under Modules, belong to user settings, and restart an active preview when changed.
+  *Web Preview: Copy URL* copies the authenticated launch link for use in another browser or device.
+
 - Accessible Source Control change groups, commit message and commit state, file diffs, Stage/Unstage actions and live
   operation results. Hidden Explorer trees no longer appear in the accessibility tree, and stale file actions resolve paths again.
 - Cargo target discovery for automatic Rust debugging: virtual workspaces, multiple binaries, examples, required features

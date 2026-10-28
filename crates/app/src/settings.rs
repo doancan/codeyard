@@ -48,6 +48,7 @@ pub struct Settings {
     pub docker_enabled: bool,
     /// Optional static web preview server; user settings only.
     pub web_preview_enabled: bool,
+    pub web_preview: crate::web_preview_config::Config,
     pub theme: String,
     pub editor_font_family: Option<String>,
     pub editor_font_size: f32,
@@ -278,6 +279,7 @@ impl Default for Settings {
         Settings {
             docker_enabled: false,
             web_preview_enabled: false,
+            web_preview: crate::web_preview_config::Config::default(),
             theme: "auto".into(),
             editor_font_family: None,
             editor_font_size: theme::text::CODE.0,
@@ -474,6 +476,11 @@ pub const RESTRICTED_KEYS: &[&str] = &[
 pub const USER_ONLY_KEYS: &[&str] = &[
     "modules.containers.enabled",
     "modules.webPreview.enabled",
+    "webPreview.port",
+    "webPreview.host",
+    "webPreview.liveReload",
+    "webPreview.reloadInterval",
+    "webPreview.root",
     "security.workspaceTrust.enabled",
     "http.confirmRequests",
     "ui.language",
@@ -987,6 +994,27 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.bool("modules.webPreview.enabled") {
         s.web_preview_enabled = v;
     }
+    if let Some(v) = r.integer("webPreview.port", 0, 65535) {
+        s.web_preview.port = v as u16;
+    }
+    if let Some(v) = r.choice("webPreview.host", &["127.0.0.1", "::1", "0.0.0.0", "::"])
+        && let Ok(host) = v.parse()
+    {
+        s.web_preview.host = host;
+    }
+    if let Some(v) = r.bool("webPreview.liveReload") {
+        s.web_preview.live_reload = v;
+    }
+    if let Some(v) = r.integer("webPreview.reloadInterval", 250, 60000) {
+        s.web_preview.reload_interval = v;
+    }
+    if let Some(v) = r.string("webPreview.root") {
+        if v.chars().any(char::is_control) {
+            r.warn(crate::i18n::tf("{}: path must not contain control characters", &[&"webPreview.root"]));
+        } else {
+            s.web_preview.root = v;
+        }
+    }
     if let Some(v) = r.bool("modules.containers.enabled") {
         s.docker_enabled = v;
     }
@@ -1139,6 +1167,11 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "lsp.enabled",
         "modules.containers.enabled",
         "modules.webPreview.enabled",
+        "webPreview.port",
+        "webPreview.host",
+        "webPreview.liveReload",
+        "webPreview.reloadInterval",
+        "webPreview.root",
         "lsp.servers",
         "ports.autoForward",
         "ports.localBind",
@@ -1263,6 +1296,15 @@ impl Reader<'_> {
                 None
             }
         }
+    }
+
+    fn integer(&mut self, key: &str, min: u64, max: u64) -> Option<u64> {
+        let number = self.number(key, min as f64, max as f64)?;
+        if number.fract() != 0. {
+            self.warn(crate::i18n::tf("{}: expected a whole number", &[&key]));
+            return None;
+        }
+        Some(number as u64)
     }
 
     /// One of the fixed options; any other value produces a warning.

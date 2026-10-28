@@ -2680,7 +2680,7 @@ Preview	Önizleme
 Web Preview stopped.	Web Önizleme durduruldu.
 Enable Web Preview in Settings > Modules to preview HTML files.	HTML dosyalarını önizlemek için Ayarlar > Modüller bölümünden Web Önizleme özelliğini açın.
 Open an HTML file or a project folder to start Web Preview.	Web Önizlemeyi başlatmak için bir HTML dosyası veya proje klasörü açın.
-Web Preview listening on 127.0.0.1:{}	Web Önizleme 127.0.0.1:{} adresinde çalışıyor
+Web Preview listening on {}	Web Önizleme {} adresinde çalışıyor
 Web Preview: {}	Web Önizleme: {}
 Could not start Web Preview: {}	Web Önizleme başlatılamadı: {}
 Starting preview…	Önizleme başlatılıyor…
@@ -2739,3 +2739,15 @@ Resolve the file conflict before debugging.	Hata ayıklamadan önce dosya çakı
 This file was deleted on disk. Save it explicitly before debugging.	Bu dosya diskten silinmiş. Hata ayıklamadan önce dosyayı açıkça kaydedin.
 Files are still unsaved. Resolve editor errors, then start debugging again.	Dosyalar henüz kaydedilmedi. Düzenleyici hatalarını çözün, ardından hata ayıklamayı yeniden başlatın.
 Auto-detect project	Projeyi Otomatik Algıla
+
+# ---- Web Preview options ----
+Preview port (0: choose a free port automatically)	Önizleme portu (0: boş bir portu otomatik seç)
+Listen address (local: 127.0.0.1 or ::1; network: 0.0.0.0 or ::)	Dinleme adresi (yerel: 127.0.0.1 veya ::1; ağ: 0.0.0.0 veya ::)
+Refresh the browser when saved preview files change	Kaydedilmiş önizleme dosyaları değiştiğinde tarayıcıyı yenile
+Milliseconds between live preview checks	Canlı önizleme kontrolleri arasındaki süre (milisaniye)
+Served folder (empty: automatic; relative to the workspace, or an absolute path on the active host)	Sunulan klasör (boş: otomatik; çalışma alanına göre veya etkin sunucuda mutlak yol)
+{}: expected a whole number	{}: bir tam sayı bekleniyor
+{}: path must not contain control characters	{}: yol denetim karakterleri içeremez
+Web Preview: Copy URL	Web Önizleme: URL’yi Kopyala
+Start Web Preview before copying its URL.	URL’sini kopyalamadan önce Web Önizlemeyi başlatın.
+Preview URL copied.	Önizleme URL’si kopyalandı.
