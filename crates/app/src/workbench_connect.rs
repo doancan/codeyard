@@ -191,6 +191,10 @@ impl Workbench {
                 Some(crate::container_monitor::ReturnWorkspace { host: self.remote.host.clone(), alias: source.clone(), root: self.root(cx) });
         }
         self.close_all_terminals(cx);
+        // Save with the old host: persist_session ignores editors belonging to another host.
+        self.flush_backups(cx);
+        self.persist_session(cx);
+        self.persist.workspace_id = None;
         self.remote.host = host;
         self.listen_fs(cx);
         self.listen_status(alias.clone(), cx);
@@ -217,7 +221,7 @@ impl Workbench {
             .detach();
         }
         let ask_folder = chosen.is_none() && alias != LOCAL_AGENT_ALIAS;
-        self.set_root(chosen.unwrap_or(info.home), cx);
+        self.replace_root(chosen.unwrap_or(info.home), cx);
         self.chrome.panel = Some(Panel::Explorer);
         self.sync_container_monitor(cx);
         if self.remote.docker.monitor.browser.terminal_target.as_ref() == Some(&alias) {
@@ -313,6 +317,9 @@ impl Workbench {
         self.cancel_pending_connection();
         self.remote.pending_path = None;
         self.persist.opening_recent = None;
+        self.flush_backups(cx);
+        self.persist_session(cx);
+        self.shutdown_lsp(cx);
         self.stop_web_preview(cx);
         self.cancel_all_forwards();
         self.stop_ports();
@@ -322,12 +329,43 @@ impl Workbench {
         self.status_task = None;
         self.remote.conn = Conn::Local;
         self.remote.docker.monitor.clear();
+        self.folder_task = None;
+        self.persist.workspace_id = None;
+        self.persist.pending_restore = None;
+        self.persist.backup_task = None;
+        self.persist.backed_up.clear();
+        self.roots.extra_roots.clear();
+        self.roots.extra_trees.clear();
+        self.roots.pending_extra_roots.clear();
+        self.roots.favorites.clear();
+        self.roots.file_index = None;
+        self.roots.file_clip = None;
+        self.cfg.dirty |= !self.cfg.project.is_empty();
+        self.cfg.project.clear();
+        self.cfg.folders.clear();
+        self.vcs.branch = None;
+        self.vcs.status = None;
+        self.vcs.refresh = None;
+        self.vcs.refreshing = false;
+        self.vcs.refresh_again = false;
+        self.vcs.scm_root = None;
+        self.vcs.tree_marks.clear();
+        self.scm.update(cx, |s, cx| s.set_status(self.remote.host.clone(), None, cx));
         let h = self.remote.host.clone();
         self.search.update(cx, |s, cx| s.set_context(h, None, cx));
         self.tabs.editors.clear();
         self.tabs.other = None;
         self.tabs.focused_left = true;
         self.tabs.active = None;
+        self.tabs.opening = None;
+        self.tabs.open_error = None;
+        self.tabs.diff = None;
+        self.tabs.diff_active = false;
+        self.tabs.large = None;
+        self.tabs.large_active = false;
+        self.tabs.page = None;
+        self.tabs.page_active = false;
+        self.tabs._page_sub = None;
         let host = self.remote.host.clone();
         self.roots.primary.update(cx, |t, cx| t.set_root(host, None, cx));
         cx.notify();

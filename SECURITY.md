@@ -33,6 +33,10 @@ matter most are:
 - Until a folder is trusted: project settings cannot change `terminal.shell`, `lsp.servers` or schema associations, language
   servers do not start, schema downloads are limited to SchemaStore and `git status` runs with `core.fsmonitor` off
   (details: [architecture](docs/architecture.md#workspace-trust-in-one-place)).
+- Extensions are in development and the current release loads none. The planned security model (WebAssembly in a sandboxed
+  process, declared permissions enforced by the app, signed registry index, revocation) is in
+  [plugin-architecture.md](docs/plugin-architecture.md#6-permissions-and-security). The registry's root signing key is split
+  into three shares; the maintainer holds two and the third is an offline backup until a second holder is named.
 
 ## Updates and signatures
 

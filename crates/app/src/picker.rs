@@ -15,7 +15,11 @@ use nucleo_matcher::{Config, Matcher, Utf32Str};
 use crate::fuzzy;
 use crate::ui::{c, ca, layout, palette, text};
 
-actions!(picker, [PickPrev, PickNext, PickConfirm, PickDismiss, PickBackspace]);
+#[cfg(test)]
+#[path = "picker_tests.rs"]
+mod tests;
+
+actions!(picker, [PickPrev, PickNext, PickConfirm, PickDismiss, PickBackspace, PickSelectAll, PickPaste, PickCopy, PickCut]);
 
 #[derive(Clone)]
 pub struct PickItem {
@@ -542,6 +546,31 @@ impl Picker {
         }
     }
 
+    fn select_all(&mut self, _: &PickSelectAll, _: &mut Window, cx: &mut Context<Self>) {
+        self.initial_selected = !self.query.is_empty();
+        self.marked = None;
+        cx.notify();
+    }
+
+    fn paste(&mut self, _: &PickPaste, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
+            self.replace_text_in_range(None, &text, window, cx);
+        }
+    }
+
+    fn copy(&mut self, _: &PickCopy, _: &mut Window, cx: &mut Context<Self>) {
+        if self.initial_selected && !self.masked() {
+            cx.write_to_clipboard(gpui::ClipboardItem::new_string(self.query.clone()));
+        }
+    }
+
+    fn cut(&mut self, _: &PickCut, window: &mut Window, cx: &mut Context<Self>) {
+        if self.initial_selected && !self.masked() {
+            self.copy(&PickCopy, window, cx);
+            self.backspace(&PickBackspace, window, cx);
+        }
+    }
+
     fn utf16_len(&self) -> usize {
         self.query.encode_utf16().count()
     }
@@ -583,7 +612,7 @@ impl EntityInputHandler for Picker {
 
     fn selected_text_range(&mut self, _: bool, _: &mut Window, _: &mut Context<Self>) -> Option<UTF16Selection> {
         let n = self.utf16_len();
-        Some(UTF16Selection { range: n..n, reversed: false })
+        Some(UTF16Selection { range: if self.initial_selected { 0..n } else { n..n }, reversed: false })
     }
 
     fn marked_text_range(&self, _: &mut Window, _: &mut Context<Self>) -> Option<Range<usize>> {
@@ -602,7 +631,7 @@ impl EntityInputHandler for Picker {
             self.query.clear();
         }
         let r = range.map(|r| self.byte_of_utf16(r.start)..self.byte_of_utf16(r.end)).or(self.marked.take()).unwrap_or(self.query.len()..self.query.len());
-        self.query.replace_range(r, &new.replace('\n', ""));
+        self.query.replace_range(r, &new.replace(['\r', '\n'], ""));
         self.marked = None;
         self.query_changed(cx);
     }
@@ -644,6 +673,10 @@ impl Render for Picker {
             .on_action(cx.listener(Self::confirm))
             .on_action(cx.listener(Self::dismiss))
             .on_action(cx.listener(Self::backspace))
+            .on_action(cx.listener(Self::select_all))
+            .on_action(cx.listener(Self::paste))
+            .on_action(cx.listener(Self::copy))
+            .on_action(cx.listener(Self::cut))
             .w(px(layout::PALETTE_W))
             .flex()
             .flex_col()
