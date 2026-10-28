@@ -1,0 +1,348 @@
+//! `cyx`: the one command extension authors need.
+//!
+//! ```text
+//! cyx new <theme|snippets|keymap|language|language-server> <name> [--publisher NAME]
+//! cyx dev [FOLDER] [-- CODEYARD ARGS…]   run Codeyard with the extension loaded from FOLDER; it reloads on save
+//! cyx check [FOLDER]                     every problem with its file, line and fix
+//! cyx package [FOLDER] [-o FILE]         a reproducible .cyx
+//! cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]
+//! ```
+//!
+//! Everything it checks is checked by `ext-manifest` and `ext-pkg`, the same code the app and the registry run, so a
+//! folder `cyx check` accepts installs. No network.
+
+mod scaffold;
+mod vscode;
+
+#[cfg(test)]
+mod tests;
+
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
+
+const HELP: &str = "cyx: build Codeyard extensions
+
+usage:
+  cyx new <kind> <name> [--publisher NAME]   start an extension (kind: theme, snippets, keymap, language, language-server)
+  cyx dev [FOLDER] [-- CODEYARD ARGS…]       run Codeyard with it loaded; it reloads when you save
+  cyx check [FOLDER]                         list every problem with its file, line and fix
+  cyx package [FOLDER] [-o FILE]             write a .cyx to install or publish
+  cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]
+                                             convert a VS Code theme, snippets, keymap or language
+  cyx --version
+
+FOLDER defaults to the current folder. Docs: docs/extensions/developer-guide.md";
+
+fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match run(&args) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            if !e.is_empty() {
+                eprintln!("{e}");
+            }
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Run one command; the error is the full text to print (already formatted), empty when it was printed already.
+fn run(args: &[String]) -> Result<(), String> {
+    let (cmd, rest) = args.split_first().ok_or_else(|| HELP.to_string())?;
+    match cmd.as_str() {
+        "-h" | "--help" | "help" => {
+            println!("{HELP}");
+            Ok(())
+        }
+        "-V" | "--version" => {
+            println!("cyx {}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
+        "new" => {
+            let (kind, name, publisher) = parse_new(rest)?;
+            let dir = PathBuf::from(&name);
+            scaffold::create(&dir, kind, &name, &publisher)?;
+            println!("Created {}/ ({} extension, id {publisher}.{name}).\n\nNext:\n  cd {name}\n  cyx dev", name, kind.word());
+            Ok(())
+        }
+        "check" => {
+            let dir = folder(rest.first())?;
+            let report = check(&dir)?;
+            for w in &report.warnings {
+                eprintln!("{w}");
+            }
+            println!("{} {} is ready to package.", report.id, report.version);
+            Ok(())
+        }
+        "package" => {
+            let (dir, out) = parse_package(rest)?;
+            let (path, digest) = package(&dir, out.as_deref())?;
+            println!("Wrote {}\ncontent digest {digest}", path.display());
+            Ok(())
+        }
+        "dev" => {
+            let (folder_arg, extra) = match rest.iter().position(|a| a == "--") {
+                Some(i) => (rest[..i].first(), &rest[i + 1..]),
+                None => (rest.first(), &rest[rest.len()..]),
+            };
+            let dir = folder(folder_arg)?;
+            // Start only something that loads: the window would otherwise open with an error the terminal explains better.
+            let report = check_dev(&dir)?;
+            for w in &report.warnings {
+                eprintln!("{w}");
+            }
+            dev(&dir, extra)
+        }
+        "import-vscode" => {
+            let (src, out) = parse_import(rest)?;
+            let report = vscode::import(&src, out.as_deref())?;
+            println!("Converted into {}/", report.out.display());
+            for c in &report.converted {
+                println!("  ✓ {c}");
+            }
+            for s in &report.skipped {
+                println!("  – {s}");
+            }
+            println!("\nNext:\n  cd {}\n  cyx dev", report.out.display());
+            Ok(())
+        }
+        other => Err(format!("cyx: unknown command '{other}'\n\n{HELP}")),
+    }
+}
+
+fn folder(arg: Option<&String>) -> Result<PathBuf, String> {
+    let dir = arg.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
+    if !dir.join(ext_manifest::FILE_NAME).is_file() {
+        return Err(format!(
+            "error: {} has no {}\n   = fix: run this in your extension's folder, or start one with `cyx new theme my-theme`",
+            dir.display(),
+            ext_manifest::FILE_NAME
+        ));
+    }
+    Ok(dir)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+    Theme,
+    Snippets,
+    Keymap,
+    Language,
+    LanguageServer,
+}
+
+impl Kind {
+    fn parse(s: &str) -> Option<Kind> {
+        Some(match s {
+            "theme" => Kind::Theme,
+            "snippets" => Kind::Snippets,
+            "keymap" => Kind::Keymap,
+            "language" => Kind::Language,
+            "language-server" | "lsp" => Kind::LanguageServer,
+            _ => return None,
+        })
+    }
+
+    fn word(self) -> &'static str {
+        match self {
+            Kind::Theme => "theme",
+            Kind::Snippets => "snippets",
+            Kind::Keymap => "keymap",
+            Kind::Language => "language",
+            Kind::LanguageServer => "language server",
+        }
+    }
+}
+
+fn parse_new(rest: &[String]) -> Result<(Kind, String, String), String> {
+    let usage = "usage: cyx new <theme|snippets|keymap|language|language-server> <name> [--publisher NAME]";
+    let mut positional = Vec::new();
+    let mut publisher = None;
+    let mut it = rest.iter();
+    while let Some(a) = it.next() {
+        if a == "--publisher" {
+            publisher = Some(it.next().ok_or(usage)?.clone());
+        } else {
+            positional.push(a.clone());
+        }
+    }
+    let [kind, name] = positional.as_slice() else { return Err(usage.into()) };
+    let kind = Kind::parse(kind)
+        .ok_or_else(|| format!("cyx: unknown kind '{kind}'\n{usage}\n(commands, views and other code come with code extensions in a later version)"))?;
+    ext_manifest::check_id_part(name).map_err(|e| format!("error: the name '{name}' {e}\n   = fix: use lowercase letters, digits and -, like my-theme"))?;
+    let publisher = publisher.unwrap_or_else(default_publisher);
+    ext_manifest::check_id_part(&publisher)
+        .map_err(|e| format!("error: the publisher '{publisher}' {e}\n   = fix: pass --publisher with lowercase letters, digits and -"))?;
+    if Path::new(name).exists() {
+        return Err(format!("error: {name}/ already exists\n   = fix: pick another name or remove the folder"));
+    }
+    Ok((kind, name.clone(), publisher))
+}
+
+/// The publisher part of new ids: `git config user.name` made into an id, or `me`.
+fn default_publisher() -> String {
+    let name = std::process::Command::new("git")
+        .args(["config", "user.name"])
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default();
+    slug(&name).filter(|s| ext_manifest::check_id_part(s).is_ok()).unwrap_or_else(|| "me".into())
+}
+
+/// Lowercase ASCII letters and digits joined by single `-`; Turkish and other Latin letters lose their marks.
+pub fn slug(s: &str) -> Option<String> {
+    let mut out = String::new();
+    for c in s.chars() {
+        let c = match c {
+            'ç' | 'Ç' => 'c',
+            'ğ' | 'Ğ' => 'g',
+            'ı' | 'İ' | 'í' | 'î' | 'ï' | 'ì' => 'i',
+            'ö' | 'Ö' | 'ó' | 'ô' | 'ò' => 'o',
+            'ş' | 'Ş' => 's',
+            'ü' | 'Ü' | 'ú' | 'û' | 'ù' => 'u',
+            'á' | 'à' | 'â' | 'ä' => 'a',
+            'é' | 'è' | 'ê' | 'ë' => 'e',
+            c => c,
+        };
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+        } else if !out.is_empty() && !out.ends_with('-') {
+            out.push('-');
+        }
+    }
+    // An id part starts with a letter.
+    let out = out.trim_end_matches('-').trim_start_matches(|c: char| c.is_ascii_digit() || c == '-').to_string();
+    (!out.is_empty()).then(|| out.chars().take(ext_manifest::limits::ID_PART_LEN).collect::<String>().trim_end_matches('-').to_string())
+}
+
+#[derive(Debug)]
+pub struct CheckReport {
+    pub id: String,
+    pub version: String,
+    pub warnings: Vec<String>,
+}
+
+/// Everything install and publish check, printed the way the guide shows: code, file:line, fix.
+pub fn check(dir: &Path) -> Result<CheckReport, String> {
+    check_with(dir, ext_manifest::Options::default())
+}
+
+/// `cyx dev` lets an author try high-risk permissions before writing `why`: a warning, not an error.
+fn check_dev(dir: &Path) -> Result<CheckReport, String> {
+    check_with(dir, ext_manifest::Options { require_why: false })
+}
+
+fn check_with(dir: &Path, options: ext_manifest::Options) -> Result<CheckReport, String> {
+    let manifest_path = dir.join(ext_manifest::FILE_NAME);
+    let text = std::fs::read_to_string(&manifest_path).map_err(|e| format!("error: cannot read {}: {e}", manifest_path.display()))?;
+    let m = ext_manifest::parse_with(&text, options).map_err(|errors| render(&errors, &text))?;
+    let mut warnings = Vec::new();
+    if m.missing_why() {
+        warnings.push(format!(
+            "warning: these permissions are high risk, so installing and publishing need a `why`\n  --> {}\n   = fix: add to [permissions]:  why = \"One honest sentence about what you do with them.\"",
+            ext_manifest::FILE_NAME
+        ));
+    }
+    // The package rules (files the manifest names, paths, sizes) as a full package build would apply them.
+    let files = ext_pkg::collect_dir(dir).map_err(|e| format!("error: {e}"))?;
+    let check_files: Vec<ext_pkg::Entry> = if m.missing_why() {
+        // Validate the rest as if `why` were there, so the author sees every other problem now.
+        files
+            .into_iter()
+            .map(|mut e| {
+                if e.path == ext_manifest::FILE_NAME {
+                    e.data = with_placeholder_why(&String::from_utf8_lossy(&e.data)).into_bytes();
+                }
+                e
+            })
+            .collect()
+    } else {
+        files
+    };
+    match ext_pkg::write(check_files) {
+        Ok(_) => Ok(CheckReport { id: m.id.to_string(), version: m.version.to_string(), warnings }),
+        Err(ext_pkg::Error::Manifest(errors)) => Err(render(&errors, &text)),
+        Err(e) => Err(format!("error: {e}")),
+    }
+}
+
+fn with_placeholder_why(manifest: &str) -> String {
+    match manifest.find("[permissions]") {
+        Some(i) => {
+            let at = i + "[permissions]".len();
+            format!("{}\nwhy = \"(dev)\"{}", &manifest[..at], &manifest[at..])
+        }
+        None => manifest.to_string(),
+    }
+}
+
+fn render(errors: &[ext_manifest::Diagnostic], text: &str) -> String {
+    let mut out: Vec<String> = errors.iter().map(|d| d.render(ext_manifest::FILE_NAME, text)).collect();
+    out.push(format!("\n{} problem{} found", errors.len(), if errors.len() == 1 { "" } else { "s" }));
+    out.join("\n\n")
+}
+
+fn parse_package(rest: &[String]) -> Result<(PathBuf, Option<PathBuf>), String> {
+    let mut dir = None;
+    let mut out = None;
+    let mut it = rest.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "-o" | "--output" => out = Some(PathBuf::from(it.next().ok_or("usage: cyx package [FOLDER] [-o FILE]")?)),
+            _ => dir = Some(a.clone()),
+        }
+    }
+    Ok((folder(dir.as_ref())?, out))
+}
+
+/// Check, then write `<id>-<version>.cyx` (or `out`).
+pub fn package(dir: &Path, out: Option<&Path>) -> Result<(PathBuf, ext_pkg::ContentDigest), String> {
+    let report = check(dir)?;
+    let files = ext_pkg::collect_dir(dir).map_err(|e| format!("error: {e}"))?;
+    let (bytes, digest) = ext_pkg::write(files).map_err(|e| format!("error: {e}"))?;
+    let path = out.map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from(format!("{}-{}.cyx", report.id, report.version)));
+    std::fs::write(&path, bytes).map_err(|e| format!("error: cannot write {}: {e}", path.display()))?;
+    Ok((path, digest))
+}
+
+fn parse_import(rest: &[String]) -> Result<(PathBuf, Option<PathBuf>), String> {
+    let usage = "usage: cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]";
+    let mut src = None;
+    let mut out = None;
+    let mut it = rest.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "-o" | "--output" => out = Some(PathBuf::from(it.next().ok_or(usage)?)),
+            _ => src = Some(PathBuf::from(a)),
+        }
+    }
+    Ok((src.ok_or(usage)?, out))
+}
+
+/// The Codeyard to start: `CODEYARD_BIN`, then `codeyard` on PATH, then the usual install locations.
+fn codeyard_binary() -> Option<PathBuf> {
+    if let Some(p) = std::env::var_os("CODEYARD_BIN") {
+        return Some(PathBuf::from(p));
+    }
+    let exe = if cfg!(windows) { "codeyard.exe" } else { "codeyard" };
+    let on_path = std::env::var_os("PATH").and_then(|paths| std::env::split_paths(&paths).map(|d| d.join(exe)).find(|p| p.is_file()));
+    // Shipped next to the app (the bundle's MacOS folder, the Windows install folder).
+    let beside = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join(exe))).filter(|p| p.is_file());
+    let known = Some(PathBuf::from("/Applications/Codeyard.app/Contents/MacOS/codeyard")).filter(|p| cfg!(target_os = "macos") && p.is_file());
+    on_path.or(beside).or(known)
+}
+
+fn dev(dir: &Path, extra: &[String]) -> Result<(), String> {
+    let bin = codeyard_binary()
+        .ok_or_else(|| "error: Codeyard was not found\n   = fix: install Codeyard, or set CODEYARD_BIN to the path of its codeyard binary".to_string())?;
+    let dir = std::fs::canonicalize(dir).map_err(|e| format!("error: {}: {e}", dir.display()))?;
+    println!("Running {} with {} loaded. Save a file to reload; close the window to stop.", bin.display(), dir.display());
+    let status = std::process::Command::new(&bin)
+        .arg("--extension-dev")
+        .arg(&dir)
+        .args(extra)
+        .status()
+        .map_err(|e| format!("error: cannot start {}: {e}", bin.display()))?;
+    if status.success() { Ok(()) } else { Err(format!("Codeyard exited with {status}")) }
+}
