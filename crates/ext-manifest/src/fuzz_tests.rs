@@ -1,7 +1,42 @@
 //! Random (but repeatable) inputs: a manifest comes from strangers, so no input may panic, every error span must sit on
-//! a char boundary inside the text, and whatever parses must re-validate the same way.
+//! a char boundary inside the text, and whatever parses must keep the invariants the rest of the platform relies on.
+//!
+//! `cargo test` runs a fixed number of rounds. The fuzz job (`.github/workflows/fuzz.yml`) sets `CODEYARD_FUZZ_SECS`
+//! to keep going for that long and `CODEYARD_FUZZ_SEED` to explore other inputs; a failure prints the seed and round.
+
+use std::time::{Duration, Instant};
 
 use crate::{limits, parse, when};
+
+/// Rounds of one fuzz test: at least `min`, and with `CODEYARD_FUZZ_SECS` until that many seconds have passed.
+struct Budget {
+    seed: u64,
+    round: usize,
+    min: usize,
+    deadline: Option<Instant>,
+}
+
+impl Budget {
+    fn new(base_seed: u64, min: usize) -> (Budget, Rng) {
+        let extra: u64 = std::env::var("CODEYARD_FUZZ_SEED").ok().and_then(|s| s.parse().ok()).unwrap_or(0);
+        let secs: Option<u64> = std::env::var("CODEYARD_FUZZ_SECS").ok().and_then(|s| s.parse().ok());
+        let seed = (base_seed ^ extra.wrapping_mul(0x9e37_79b9_7f4a_7c15)).max(1);
+        (Budget { seed, round: 0, min, deadline: secs.map(|s| Instant::now() + Duration::from_secs(s)) }, Rng(seed))
+    }
+
+    fn next(&mut self) -> bool {
+        self.round += 1;
+        self.round <= self.min || self.deadline.is_some_and(|d| Instant::now() < d)
+    }
+}
+
+impl Drop for Budget {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            eprintln!("fuzz: failed at round {} of seed {:#x} (rerun with the same CODEYARD_FUZZ_SEED)", self.round, self.seed);
+        }
+    }
+}
 
 struct Rng(u64);
 
@@ -144,9 +179,9 @@ fn check(text: &str) {
 
 #[test]
 fn mutated_manifests_never_panic() {
-    let mut rng = Rng(0x5eed_cafe);
+    let (mut budget, mut rng) = Budget::new(0x5eed_cafe, 4000);
     check(SEED);
-    for _ in 0..4000 {
+    while budget.next() {
         let mut text = SEED.to_string();
         for _ in 0..1 + rng.below(6) {
             let mut at = rng.below(text.len() + 1);
@@ -174,8 +209,8 @@ fn mutated_manifests_never_panic() {
 
 #[test]
 fn random_bytes_never_panic() {
-    let mut rng = Rng(0xdead_beef);
-    for _ in 0..2000 {
+    let (mut budget, mut rng) = Budget::new(0xdead_beef, 2000);
+    while budget.next() {
         let len = rng.below(300);
         let text: String = (0..len).map(|_| PIECES[rng.below(PIECES.len())]).collect();
         check(&text);
@@ -184,8 +219,8 @@ fn random_bytes_never_panic() {
 
 #[test]
 fn when_never_panics() {
-    let mut rng = Rng(0x0bad_f00d);
-    for _ in 0..5000 {
+    let (mut budget, mut rng) = Budget::new(0x0bad_f00d, 5000);
+    while budget.next() {
         let src: String = (0..rng.below(40)).map(|_| PIECES[rng.below(PIECES.len())]).collect();
         if let Ok(e) = when::parse(&src) {
             let _ = e.eval(&|_| None);
