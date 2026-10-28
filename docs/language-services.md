@@ -8,8 +8,11 @@ or this page.
 
 Click Install, or press Enter while the page has focus. Escape or Cancel stops an installation before
 activation; closing the page also requests cancellation. Cancellation waits for the running process
-to exit before deleting its staging files. Activation finishes as a single publication step. Existing
+kill acknowledgement before deleting its staging files. Activation finishes as a single publication step. Existing
 working services remain available during installation and after a failed or cancelled attempt.
+Install and Cancel stay above the scrollable details in narrow windows. Tab focuses the current
+action; Enter or Space activates it. Assistive technology can read the live status and invoke the
+same guarded actions. Requests from an earlier installation or a closed page cannot start a new one.
 
 The bundled catalogue pins TypeScript 6.0.3, TypeScript Language Server 6.0.2 and
 `vscode-langservers-extracted` 4.10.0. Every transitive package is locked to its npm registry URL and
@@ -17,7 +20,8 @@ SHA-512 integrity value. `npm ci` runs with lifecycle scripts, audit and funding
 an isolated cache, and separate empty user/global npm configuration files. It never changes global
 packages or workspace files.
 
-A compatible Node.js runtime (22.22.2 or newer) with npm beside it is reused. Otherwise the installer
+A compatible Node.js runtime (22.22.2 or newer) with npm beside it is reused, checking the active
+managed generation before the host PATH. Otherwise the installer
 downloads the pinned Node.js 22.23.4 archive for macOS, Linux or Windows on x64/ARM64. The archive's
 SHA-256 is verified against the bundled official checksum before extraction or execution. Downloads
 require curl, tar and a SHA-256 tool (shasum on macOS, sha256sum on Linux, certutil on Windows). The
@@ -46,7 +50,9 @@ application update and require another explicit installation.
 
 Hermetic catalogue, installer and GPUI tests cover pinned dependencies, unsafe sources, malformed
 records, bounded logs, previous-generation preservation, cancellation acknowledgement, disconnects,
-keyboard repair/cancellation and custom command precedence. A separate opt-in test uses actual
+keyboard repair/cancellation, accessible control geometry/actions, runtime reuse and custom command
+precedence. A real-process cancellation regression confirms acknowledgement follows process exit.
+A separate opt-in test uses actual
 language servers through Codeyard's JSON-RPC client on local and disposable SSH hosts:
 
 ```sh

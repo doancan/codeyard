@@ -23,7 +23,7 @@ fn managed_service_page_repairs_an_invalid_installation_from_the_keyboard(cx: &m
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(format!("{root}/active.json"), "previous active generation").unwrap();
     let owner = host.clone();
-    let (page, cx) = cx.add_window_view(move |_, cx| LanguageServicesPage::new(owner, cx));
+    let (page, cx) = cx.add_window_view(move |window, cx| LanguageServicesPage::new(owner, window, cx));
     page.update_in(cx, |page, window, cx| window.focus(&page.focus_handle(cx)));
     wait(&page, cx, |page| matches!(page.status, Status::Failed(Error::InvalidInstallation)));
     cx.simulate_keystrokes("enter");
@@ -38,7 +38,7 @@ fn managed_service_page_escape_cancels_the_process_and_cleans_staging(cx: &mut T
     let host = FakeHost::new(&fixture, Outcome::Cancel);
     let root = installer::destination(host.as_ref()).unwrap();
     let owner = host.clone();
-    let (page, cx) = cx.add_window_view(move |_, cx| LanguageServicesPage::new(owner, cx));
+    let (page, cx) = cx.add_window_view(move |window, cx| LanguageServicesPage::new(owner, window, cx));
     page.update_in(cx, |page, window, cx| window.focus(&page.focus_handle(cx)));
     wait(&page, cx, |page| matches!(page.status, Status::Available(None)));
     cx.simulate_keystrokes("enter");

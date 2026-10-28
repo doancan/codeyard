@@ -44,6 +44,11 @@ const SCM_COMMIT: NodeId = NodeId(20);
 const SCM_BRANCH: NodeId = NodeId(21);
 const SCM_RESULT: NodeId = NodeId(22);
 const SCM_EMPTY: NodeId = NodeId(23);
+const SERVICES: NodeId = NodeId(24);
+const SERVICES_INFO: NodeId = NodeId(25);
+const SERVICES_STATUS: NodeId = NodeId(26);
+const SERVICES_INSTALL: NodeId = NodeId(27);
+const SERVICES_CANCEL: NodeId = NodeId(28);
 const STATUS_ITEM: u64 = 0x10_0000;
 const UPDATE_BUTTON: u64 = 0x20_0000;
 const TAB_BASE: u64 = 0x30_0000;
@@ -208,6 +213,8 @@ pub struct NoticeSnap {
 
 #[path = "a11y_scm.rs"]
 mod scm_access;
+#[path = "a11y_language_services.rs"]
+mod services_access;
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct ScmSnap {
@@ -230,6 +237,7 @@ pub struct Snapshot {
     pub completion: Option<ListSnap>,
     pub terminal: Option<TerminalSnap>,
     pub(crate) scm: Option<ScmSnap>,
+    pub(crate) services: Option<crate::language_services_page::AccessView>,
     pub picker: Option<PickerSnap>,
     pub notice: Option<NoticeSnap>,
     pub status: Vec<String>,
@@ -368,6 +376,10 @@ impl Snapshot {
         self.geometry.apply(ROOT, &mut root);
         root.set_label(self.title.clone());
         let mut kids = Vec::new();
+        if let Some(view) = &self.services {
+            services_access::append_tree(view, &mut nodes);
+            kids.push(SERVICES);
+        }
 
         // Explorer: one tree per folder of the workspace.
         for (k, ex) in self.explorers.iter().enumerate() {
@@ -603,6 +615,7 @@ impl Snapshot {
 
         let focus = match self.focus {
             _ if self.dialog.is_some() => self.dialog.as_ref().and_then(|d| d.focused).map_or(UPDATE_DIALOG, |i| NodeId(UPDATE_BUTTON + i as u64)),
+            _ if self.services.as_ref().is_some_and(|view| view.focused) => services_access::focus_node(self.services.as_ref().expect("focused page")),
             FocusSnap::Picker if self.picker.is_some() => PICKER_INPUT,
             FocusSnap::Find(0) if self.find.is_some() => FIND_QUERY,
             FocusSnap::Find(_) if self.find.as_ref().is_some_and(|f| f.replacement.is_some()) => FIND_REPLACE,
@@ -772,6 +785,10 @@ impl Workbench {
         };
         Snapshot {
             generation: self.lsp.generation,
+            services: self.tabs.page.as_ref().filter(|_| self.tabs.page_active).and_then(|page| match page {
+                Page::LanguageServices(page) => Some(page.read(cx).access_view(window, cx)),
+                _ => None,
+            }),
             geometry: Geometry::new(&self.chrome.a11y_bounds, window),
             title,
             explorers,
@@ -793,6 +810,9 @@ impl Workbench {
     /// Action from AT (main thread, in the GPUI context).
     fn a11y_action(&mut self, req: &ActionRequest, last: &Snapshot, window: &mut Window, cx: &mut Context<Self>) {
         if last.generation != self.lsp.generation {
+            return;
+        }
+        if self.a11y_services_action(req, last, window, cx) {
             return;
         }
         if self.a11y_scm_action(req, last, window, cx) {
@@ -1086,6 +1106,7 @@ mod tests {
         let runs = runs_for(lines, 3, 0);
         Snapshot {
             generation: 0,
+            services: None,
             geometry: Geometry::default(),
             title: "Codeyard \u{2014} demo".into(),
             explorers: vec![ExplorerSnap {

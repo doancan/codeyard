@@ -42,6 +42,9 @@ pub(crate) struct FakeHost {
 }
 
 impl FakeHost {
+    pub(crate) fn install_starts(&self) -> usize {
+        self.commands.lock().unwrap().iter().filter(|(_, args, _)| args.iter().any(|arg| arg == "ci")).count()
+    }
     pub(crate) fn waiting_for_cancel(&self) -> bool {
         self.pending.lock().unwrap().is_some()
     }
@@ -79,6 +82,10 @@ impl Host for FakeHost {
         true // Its owned home must be independent of the process's local profile override.
     }
     fn call(&self, req: proto::Request) -> host::Result<proto::Response> {
+        if let proto::Request::ProcKill { proc } = req {
+            self.proc_kill(proc);
+            return Ok(proto::Response::Done);
+        }
         self.inner.call(req)
     }
     fn proc_spawn(&self, program: &str, args: Vec<String>, cwd: Option<String>) -> host::Result<host::Proc> {
@@ -87,7 +94,7 @@ impl Host for FakeHost {
         let (tx, rx) = mpsc::channel();
         if program == "chmod" {
             assert!(self.inner.exec(program, &args.iter().map(String::as_str).collect::<Vec<_>>(), Some(&cwd), None)?.ok());
-        } else if program == "node" {
+        } else if args == ["-e", NODE_PROBE] {
             assert_eq!(args, ["-e", NODE_PROBE]);
             tx.send(ProcEvent::Output(json!({"node":self.node,"version":"v22.23.4","npm":self.npm}).to_string().into_bytes())).unwrap();
         } else {
@@ -99,10 +106,9 @@ impl Host for FakeHost {
                 std::fs::write(file, "fixture entry").unwrap();
             }
             // Publication must not happen until verification has finished.
-            assert!(
-                !PathBuf::from(&cwd).parent().unwrap().join("active.json").exists()
-                    || std::fs::read_to_string(PathBuf::from(&cwd).parent().unwrap().join("active.json")).unwrap() == "previous active generation"
-            );
+            if let Ok(active) = std::fs::read_to_string(PathBuf::from(&cwd).parent().unwrap().join("active.json")) {
+                assert!(!active.contains(cwd.rsplit(".staging-").next().unwrap()));
+            }
             self.started.store(true, Ordering::Release);
             match self.outcome {
                 Outcome::Failure => {
@@ -128,7 +134,7 @@ impl Host for FakeHost {
         assert_eq!(proc, 9);
         self.kill_count.fetch_add(1, Ordering::Relaxed);
         if let Some(tx) = self.pending.lock().unwrap().take() {
-            tx.send(ProcEvent::Exit(Some(137))).unwrap();
+            tx.send(ProcEvent::Exit(None)).unwrap(); // Killing removes the process before its output reader reports exit.
         }
     }
     fn proc_input(&self, _: u32, _: Vec<u8>) {
@@ -166,6 +172,38 @@ impl Host for FakeHost {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn managed_install_real_process_cancellation_requires_the_kill_acknowledgement() {
+    let fixture = Fixture::new();
+    let host: Arc<dyn Host> = Arc::new(host::local());
+    let progress = Arc::new(Progress::default());
+    let worker = {
+        let (host, progress, cwd) = (host.clone(), progress.clone(), fixture.path(""));
+        std::thread::spawn(move || {
+            run(host.as_ref(), "/bin/sh", vec!["-c".into(), "printf 'managed-cancel-ready:%s\\n' $$; exec /bin/sleep 30".into()], &cwd, &progress)
+        })
+    };
+    let start = Instant::now();
+    let pid = loop {
+        if let Some(pid) = progress.snapshot().log.lines().find_map(|line| line.strip_prefix("managed-cancel-ready:").and_then(|pid| pid.parse::<u32>().ok())) {
+            break pid;
+        }
+        assert!(start.elapsed() < Duration::from_secs(5));
+        std::thread::sleep(Duration::from_millis(5));
+    };
+    progress.cancel.store(true, Ordering::Release);
+    assert_eq!(worker.join().unwrap(), Err(Error::Cancelled));
+    let alive = std::process::Command::new("/bin/kill")
+        .args(["-0", &pid.to_string()])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .unwrap()
+        .success();
+    assert!(!alive, "the acknowledged cancellation must have reaped its process");
+}
+
 #[test]
 fn managed_install_destination_respects_local_profiles_and_keeps_remote_paths_on_the_remote_host() {
     assert_eq!(destination_for("/home/owner", false, Some("/owned/profile")).unwrap(), "/owned/profile/language-services");
@@ -195,6 +233,24 @@ fn managed_install_publishes_a_complete_generation_without_using_workspace_or_gl
     }
     assert!(commands.iter().all(|(_, _, cwd)| cwd.starts_with(&root)));
     assert!(installed.command(Service::TypeScript).1[0].starts_with(&installed.directory));
+}
+
+#[test]
+fn managed_install_reuses_a_verified_previous_runtime_and_retains_both_generations() {
+    let fixture = Fixture::new();
+    let host = FakeHost::new(&fixture, Outcome::Success);
+    let root = fixture.path("managed");
+    let first = install(host.as_ref(), &root, &Progress::default()).unwrap();
+    let second = install(host.as_ref(), &root, &Progress::default()).unwrap();
+    assert_ne!(first.directory, second.directory);
+    assert_eq!(first.node, second.node);
+    assert!(PathBuf::from(&first.directory).exists());
+    assert_eq!(discover(host.as_ref(), &root).unwrap(), Some(second));
+    assert_eq!(
+        host.commands.lock().unwrap().iter().filter(|(program, _, _)| program == "node").count(),
+        1,
+        "a verified runtime should be reused before probing PATH again"
+    );
 }
 
 #[test]
