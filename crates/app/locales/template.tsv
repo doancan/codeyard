@@ -39,7 +39,6 @@ Accept Current
 Accept Current Change	
 Accept Incoming	
 Accept Incoming Change	
-Access	
 Actions	
 Activate Breakpoints	
 Add	
@@ -1815,7 +1814,6 @@ Stop a search after this many matches
 Stopped	
 Stopped.	
 Storage information is unavailable.	
-Storage type	
 String interpolation is not supported	
 Structural search: the pattern is code; $X matches one node, $$$X several	
 Suggest words from the file when there is no language server	
