@@ -76,7 +76,7 @@ impl Host for FakeHost {
         "Owned installer fixture".into()
     }
     fn is_remote(&self) -> bool {
-        false
+        true // Its owned home must be independent of the process's local profile override.
     }
     fn call(&self, req: proto::Request) -> host::Result<proto::Response> {
         self.inner.call(req)
@@ -164,6 +164,14 @@ impl Host for FakeHost {
     fn status_events(&self) -> mpsc::Receiver<host::ConnStatus> {
         panic!("not used")
     }
+}
+
+#[test]
+fn managed_install_destination_respects_local_profiles_and_keeps_remote_paths_on_the_remote_host() {
+    assert_eq!(destination_for("/home/owner", false, Some("/owned/profile")).unwrap(), "/owned/profile/language-services");
+    assert_eq!(destination_for("/home/owner", true, Some("/owned/profile")).unwrap(), "/home/owner/.codeyard/language-services");
+    assert_eq!(destination_for("C:/Users/owner", false, None).unwrap(), "C:/Users/owner/.codeyard/language-services");
+    assert_eq!(destination_for("relative", true, None), Err(Error::InvalidInstallation));
 }
 
 #[test]

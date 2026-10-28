@@ -158,3 +158,9 @@ human translation review is claimed.
   drafted and covered automatically; no human translation review is claimed.
 
 The final pre-integration F02 Retina budget rerun passes at 72/69/93/83/113/69 MB (terminal/welcome/small Rust/plain 10k/highlighted 10k/first-run), with a 1 MB idle agent and unchanged static-agent sizes. Main integration preserves the new language key context and the per-group minimap behavior; its head requires fresh regression and CI checks.
+
+The real-client acceptance also asserts advertised formatting capabilities, rather than only
+calling the formatting method directly. Its baseline failed for HTML: the server returned
+`documentFormattingProvider: false`. Default HTML/CSS initialization now enables the formatter
+while preserving an explicit `provideFormatter: false` option. Local profile overrides isolate
+managed-service storage along with the profile; SSH paths remain on their own host.

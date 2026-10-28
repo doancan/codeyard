@@ -1,6 +1,16 @@
 use super::*;
 
 #[test]
+fn managed_service_formatters_are_enabled_without_overriding_explicit_options() {
+    for service in [Service::Html, Service::Css] {
+        assert_eq!(service.initialization_options(None).unwrap()["provideFormatter"], true);
+        let options = serde_json::json!({"provideFormatter":false,"extra":{"enabled":true}});
+        assert_eq!(service.initialization_options(Some(&options)), Some(options));
+    }
+    assert_eq!(Service::TypeScript.initialization_options(None), None);
+}
+
+#[test]
 fn managed_service_configuration_keeps_html_css_diagnostics_enabled_and_preserves_user_options() {
     let defaults = Service::Html.configuration(&Value::Null);
     assert_eq!(defaults["css"], serde_json::json!({}));
