@@ -19,6 +19,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Filesystem-native recursive copies on local and SSH agents, with exclusive atomic publication,
   symlink and executable-permission preservation, bounded traversal and no shell dependency.
 
+- `codeyard --install-extension FILE.cyx` installs an extension without opening a window (repeat the flag for several).
+  The performance gate now measures loading 100 installed extensions at startup (ceiling 5 ms).
+- `cyx`, the extension authors' command, ships beside Codeyard: `cyx new` (theme, snippets, keymap, language, language
+  server), `cyx dev` (runs Codeyard with the folder loaded and a DEV badge; it reloads on save), `cyx check` (every
+  problem with its file, line and fix), `cyx package` (a reproducible `.cyx`) and `cyx import-vscode` (themes, snippets,
+  languages and local JSON schemas from a VS Code extension or `.vsix`). *Extensions: Install cyx Command in PATH* links it.
+- Installable declarative extensions: themes, snippets, keymap presets and key bindings, languages, JSON and YAML schemas,
+  settings and language servers. The Extensions view installs a `.cyx` package or a folder after a consent sheet that
+  lists contributions and permissions in plain words (High-risk sets in red, with *Cancel* focused), and disables,
+  uninstalls, rolls back or verifies an extension without a restart. `--no-extensions` loads none and says so in the
+  status bar.
 - Four built-in dark themes: Catppuccin Mocha, Tokyo Night, Gruvbox Dark and GitHub Dark, with complete colour roles
   and WCAG AA contrast across all 103 text and UI pairs before runtime adjustment.
 - Accessible Source Control change groups, commit message and commit state, file diffs, Stage/Unstage actions and live
@@ -40,6 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   live page/CSS refresh, status-bar controls and Output logging. Local, SSH and container files share the
   same agent-backed path; no external runtime or remote listening port is required. Disabling the module
   or leaving the workspace stops its server.
+- Web Preview settings for a fixed or automatic port, IPv4/IPv6 listen address, live reload toggle and interval,
+  and a custom served folder. Options appear under Modules, belong to user settings, and restart an active preview when changed.
+  *Web Preview: Copy URL* copies the authenticated launch link for use in another browser or device.
 - File icon theme "File Glyphs" (`workbench.iconTheme: "glyphs"`, now the default): colored file glyphs and no folder icons. A
   file's glyph sits in the column of a folder's arrow, so every name in a level lines up.
 - The macOS Dock menu lists the open windows at the top, front one first, and follows as windows come forward, open, close or
@@ -86,6 +100,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - File tree rows are a little taller and roomier (24 px rows, wider side padding and icon gap).
 
 ### Fixed
+
+- Web Preview reads files through directory handles without following symlinks or reparse points,
+  preventing pathname replacement races. Each file now needs one agent request, reducing SSH round trips;
+  directory and session redirects preserve URL query parameters.
 
 - Opening or selecting a file restores a maximized terminal panel to its previous size so the editor is visible.
 - Picker inputs support Select All, Copy, Cut and Paste, including remote folder paths and SSH password paste.

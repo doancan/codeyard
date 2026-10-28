@@ -2679,7 +2679,7 @@ Preview	Önizleme
 Web Preview stopped.	Web Önizleme durduruldu.
 Enable Web Preview in Settings > Modules to preview HTML files.	HTML dosyalarını önizlemek için Ayarlar > Modüller bölümünden Web Önizleme özelliğini açın.
 Open an HTML file or a project folder to start Web Preview.	Web Önizlemeyi başlatmak için bir HTML dosyası veya proje klasörü açın.
-Web Preview listening on 127.0.0.1:{}	Web Önizleme 127.0.0.1:{} adresinde çalışıyor
+Web Preview listening on {}	Web Önizleme {} adresinde çalışıyor
 Web Preview: {}	Web Önizleme: {}
 Could not start Web Preview: {}	Web Önizleme başlatılamadı: {}
 Starting preview…	Önizleme başlatılıyor…
@@ -2756,6 +2756,20 @@ View: Close Empty Editor Group	Görünüm: Boş Düzenleyici Grubunu Kapat
 View: Focus Upper Editor Group	Görünüm: Üstteki Düzenleyici Grubuna Odaklan
 View: Focus Lower Editor Group	Görünüm: Alttaki Düzenleyici Grubuna Odaklan
 A window supports up to {} editor groups.	Bir pencerede en fazla {} düzenleyici grubu açılabilir.
+
+# ---- Web Preview options ----
+Preview port (0: choose a free port automatically)	Önizleme portu (0: boş bir portu otomatik seç)
+Listen address (local: 127.0.0.1 or ::1; network: 0.0.0.0 or ::)	Dinleme adresi (yerel: 127.0.0.1 veya ::1; ağ: 0.0.0.0 veya ::)
+Refresh the browser when saved preview files change	Kaydedilmiş önizleme dosyaları değiştiğinde tarayıcıyı yenile
+Milliseconds between live preview checks	Canlı önizleme kontrolleri arasındaki süre (milisaniye)
+Served folder (empty: automatic; relative to the workspace, or an absolute path on the active host)	Sunulan klasör (boş: otomatik; çalışma alanına göre veya etkin sunucuda mutlak yol)
+{}: expected a whole number	{}: bir tam sayı bekleniyor
+{}: path must not contain control characters	{}: yol denetim karakterleri içeremez
+Web Preview: Copy URL	Web Önizleme: URL’yi Kopyala
+Start Web Preview before copying its URL.	URL’sini kopyalamadan önce Web Önizlemeyi başlatın.
+Preview URL copied.	Önizleme URL’si kopyalandı.
+
+# ---- Declarative extensions ----
 {} · extension {}	{} · {} eklentisi
 Extension not loaded: {}	Eklenti yüklenemedi: {}
 Keymap preset from an installed extension, as publisher.name/label (empty: Codeyard's own keys)	Kurulu bir eklentiden kısayol düzeni, yayıncı.ad/etiket biçiminde (boş: Codeyard'ın kendi kısayolları)
@@ -2771,3 +2785,108 @@ unknown command “{}”	bilinmeyen komut “{}”
 “{}” ships inside the package; this version only starts language servers found on PATH	“{}” paketin içinde geliyor; bu sürüm yalnızca PATH üzerindeki dil sunucularını başlatır
 language “{0}” names grammar “{1}”, which Codeyard does not have	“{0}” dili “{1}” dil bilgisini istiyor, Codeyard’da bu yok
 keymap preset “{0}” is not installed (installed: {1})	“{0}” kısayol düzeni kurulu değil (kurulu olanlar: {1})
+Extension in development not loaded: {}	Geliştirilen eklenti yüklenemedi: {}
+DEV	GELİŞTİRME
+Extension in development: it reloads when you save a file in its folder	Geliştirilen eklenti: klasöründe bir dosyayı kaydettiğinizde yeniden yüklenir
+Extensions: Install cyx Command in PATH	Eklentiler: cyx Komutunu PATH’e Kur
+{} exists and is not a link; remove it first	{} var ve bir bağlantı değil; önce onu kaldırın
+cyx is not next to Codeyard in this build; install it with cargo install --path crates/cyx	Bu derlemede cyx Codeyard’ın yanında değil; cargo install --path crates/cyx ile kurun
+cyx is installed in {}: run cyx new theme my-theme in a terminal	cyx {} içine kuruldu: bir terminalde cyx new theme my-theme çalıştırın
+cyx is installed in {}; add that folder to PATH in your shell profile	cyx {} içine kuruldu; bu klasörü kabuk profilinizde PATH’e ekleyin
+Could not install cyx: {}	cyx kurulamadı: {}
+cyx is in {}; add that folder to PATH to use it in a terminal	cyx {} içinde; terminalde kullanmak için bu klasörü PATH’e ekleyin
+
+# ---- Extensions view ----
+Extensions	Eklentiler
+Extensions: Show Extensions	Eklentiler: Eklentileri Göster
+Extensions: Install from File…	Eklentiler: Dosyadan Kur…
+Extensions: Install from Folder…	Eklentiler: Klasörden Kur…
+Install from File…	Dosyadan Kur…
+Install from Folder…	Klasörden Kur…
+Install	Kur
+Install {}	{} Kur
+Install {}?	{} kurulsun mu?
+Installed ({})	Kurulu ({})
+Built-in	Yerleşik
+Search installed extensions	Kurulu eklentilerde ara
+No extensions installed. Install one from a .cyx file or a folder.	Kurulu eklenti yok. Bir .cyx dosyasından ya da klasörden kurabilirsiniz.
+No installed extension matches the search.	Aramaya uyan kurulu eklenti yok.
+Themes, languages, language servers, snippets and key bindings that come with Codeyard are built in and always on.	Codeyard ile gelen temalar, diller, dil sunucuları, kod parçacıkları ve kısayollar yerleşiktir ve her zaman açıktır.
+Choose an extension in the Extensions view.	Eklentiler görünümünden bir eklenti seçin.
+Extensions are turned off for this session (--no-extensions).	Eklentiler bu oturumda kapalı (--no-extensions).
+Extensions are turned off for this session (--no-extensions). Start Codeyard without it to load them.	Eklentiler bu oturumda kapalı (--no-extensions). Yüklemek için Codeyard’ı bu seçenek olmadan başlatın.
+Extensions off	Eklentiler kapalı
+Started with --no-extensions: no extension is loaded.	--no-extensions ile başlatıldı: hiçbir eklenti yüklenmedi.
+Installed from the file {}	{} dosyasından kuruldu
+Installed from the folder {}	{} klasöründen kuruldu
+{0} · version {1} · {2} license	{0} · sürüm {1} · {2} lisansı
+Contributes	Kattıkları
+Nothing	Hiçbir şey
+Permissions	İzinler
+None: it only adds data to Codeyard.	Yok: Codeyard’a yalnızca veri ekler.
+{0} says why: “{1}”	{0} nedenini şöyle açıklıyor: “{1}”
+High risk: this extension can run programs as you.	Yüksek risk: bu eklenti sizin adınıza program çalıştırabilir.
+High risk: this extension can read private data and send it elsewhere.	Yüksek risk: bu eklenti özel verileri okuyup başka bir yere gönderebilir.
+Disable	Devre Dışı Bırak
+Enable	Etkinleştir
+Disabled	Devre dışı
+Enabled	Etkin
+Disabled: nothing it contributes applies.	Devre dışı: kattıklarının hiçbiri uygulanmıyor.
+Uninstall	Kaldır
+Uninstall…	Kaldır…
+Uninstall {}?	{} kaldırılsın mı?
+Its contributions are removed from every window, with the data it stored.	Kattıkları, sakladığı verilerle birlikte tüm pencerelerden kaldırılır.
+Roll Back	Geri Al
+Go back to version {}	{} sürümüne geri dön
+Verify Files	Dosyaları Doğrula
+Cannot read {0}: {1}	{0} okunamadı: {1}
+Cannot install the extension: {}	Eklenti kurulamadı: {}
+Cannot install {0}: {1}	{0} kurulamadı: {1}
+Installed {0} {1}.	{0} {1} kuruldu.
+{} is enabled.	{} etkinleştirildi.
+{} is disabled.	{} devre dışı bırakıldı.
+{} is uninstalled.	{} kaldırıldı.
+{0} is back at version {1}.	{0} yeniden {1} sürümünde.
+Every file of {} matches its package.	{} eklentisinin tüm dosyaları paketiyle eşleşiyor.
+Files of {0} that are missing or changed: {1}. Reinstall it.	{0} eklentisinin eksik ya da değişmiş dosyaları: {1}. Yeniden kurun.
+Color theme: {}	Renk teması: {}
+Snippets for {}	{} için kod parçacıkları
+Keymap preset: {}	Kısayol düzeni: {}
+Key binding: {0} runs {1}	Kısayol: {0}, {1} komutunu çalıştırır
+Language: {0} ({1})	Dil: {0} ({1})
+JSON schema for {}	{} için JSON şeması
+YAML schema for {}	{} için YAML şeması
+Setting: {}	Ayar: {}
+Language server: {0} for {1}	Dil sunucusu: {1} için {0}
+Command: {}	Komut: {}
+View: {}	Görünüm: {}
+Read all files in the workspace	Çalışma alanındaki tüm dosyaları okuma
+Read {}	{} okuma
+Read files that can hold passwords and keys	Parola ve anahtar barındırabilecek dosyaları okuma
+Change all files in the workspace	Çalışma alanındaki tüm dosyaları değiştirme
+Change {}	{} değiştirme
+Connect to any website	Herhangi bir web sitesine bağlanma
+Connect to {}	{} adresine bağlanma
+Act as your {} account	{} hesabınız adına işlem yapma
+Store secrets in your keychain	Anahtar zincirinizde gizli bilgi saklama
+Run {} with any arguments	{} programını herhangi bir argümanla çalıştırma
+Read the clipboard	Panoyu okuma
+Write to the clipboard	Panoya yazma
+Read and write the clipboard	Panoyu okuma ve panoya yazma
+Type into terminals	Terminallere yazma
+Run Codeyard commands: {}	Codeyard komutlarını çalıştırma: {}
+{} contains code; this version of Codeyard runs data-only extensions (themes, snippets, keymaps, languages, schemas, language servers)	{} kod içeriyor; Codeyard’ın bu sürümü yalnızca veri eklentilerini çalıştırır (temalar, snippet’ler, kısayol düzenleri, diller, şemalar, dil sunucuları)
+{} contains code, which this version does not run	{} kod içeriyor; bu sürüm kodu çalıştırmaz
+Load installed extensions (off: Codeyard starts as if none were installed)	Kurulu eklentileri yükle (kapalı: Codeyard hiç eklenti kurulu değilmiş gibi açılır)
+Extensions: New Extension…	Eklentiler: Yeni Eklenti…
+Create	Oluştur
+Name of the new extension, like my-theme	Yeni eklentinin adı, örneğin my-theme
+Color theme	Renk teması
+Snippets	Snippet’ler
+Keymap preset	Kısayol düzeni
+Language	Dil
+Language server	Dil sunucusu
+What kind of extension?	Ne tür bir eklenti?
+Create Here	Buraya Oluştur
+{} is loaded as an extension in development: save a file to reload it	{} geliştirilen eklenti olarak yüklendi: yeniden yüklemek için bir dosyayı kaydedin
+Could not create the extension: {}	Eklenti oluşturulamadı: {}
