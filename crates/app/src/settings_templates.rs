@@ -9,6 +9,8 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // quarry, dracula, one-dark, nord, solarized-dark, solarized-light,
   // github-light, high-contrast-dark, high-contrast-light, user:<file name>
   "theme": "auto",
+  // Optional HTML/CSS/JS preview. No server runs until explicitly started.
+  "modules.webPreview.enabled": false,
 
   // "editor.fontFamily": "JetBrains Mono",
   // Default: 12 (line 18) on macOS, 14 (line 20) on Windows and Linux.

@@ -58,20 +58,21 @@ impl Writer {
 
     /// Queue `bytes` and wait until they were written (and flushed). A write error comes back as the error.
     pub(crate) fn send(&self, bytes: Vec<u8>) -> io::Result<()> {
-        let rx = self.enqueue(bytes, true)?;
+        let rx = self.enqueue(bytes, Some(Instant::now() + ROOM_TIMEOUT))?;
         rx.recv().unwrap_or_else(|_| Err(io::ErrorKind::NotConnected.into()))
     }
 
-    /// Like `send`, but gives up waiting for the write after `limit` (the frame stays queued).
+    /// Wait at most `limit` for queue room and the write together. A frame already queued stays queued.
     pub(crate) fn send_within(&self, bytes: Vec<u8>, limit: Duration) -> io::Result<()> {
-        let rx = self.enqueue(bytes, true)?;
-        rx.recv_timeout(limit).unwrap_or_else(|_| Err(io::ErrorKind::TimedOut.into()))
+        let deadline = Instant::now() + limit;
+        let rx = self.enqueue(bytes, Some(deadline))?;
+        rx.recv_timeout(deadline.saturating_duration_since(Instant::now())).unwrap_or_else(|_| Err(io::ErrorKind::TimedOut.into()))
     }
 
     /// Queue `bytes` without waiting for anything. `WouldBlock` means the peer has stopped reading and the queue is
     /// full even with the slack: the caller has to treat the connection as lost, the frame is not queued.
     pub(crate) fn post(&self, bytes: Vec<u8>) -> io::Result<()> {
-        self.enqueue(bytes, false).map(drop)
+        self.enqueue(bytes, None).map(drop)
     }
 
     /// Stop accepting frames; the thread writes what is queued and exits.
@@ -80,9 +81,8 @@ impl Writer {
         self.shared.changed.notify_all();
     }
 
-    fn enqueue(&self, bytes: Vec<u8>, wait: bool) -> io::Result<mpsc::Receiver<io::Result<()>>> {
+    fn enqueue(&self, bytes: Vec<u8>, deadline: Option<Instant>) -> io::Result<mpsc::Receiver<io::Result<()>>> {
         let len = bytes.len();
-        let deadline = Instant::now() + ROOM_TIMEOUT;
         let mut st = self.shared.state.locked();
         loop {
             if let Some(kind) = st.failed {
@@ -91,13 +91,13 @@ impl Writer {
             if st.closed {
                 return Err(io::ErrorKind::NotConnected.into());
             }
-            let cap = if wait { QUEUE_LIMIT } else { QUEUE_LIMIT + POST_SLACK };
+            let cap = if deadline.is_some() { QUEUE_LIMIT } else { QUEUE_LIMIT + POST_SLACK };
             if st.bytes == 0 || st.bytes + len <= cap {
                 break;
             }
-            if !wait {
+            let Some(deadline) = deadline else {
                 return Err(io::Error::new(io::ErrorKind::WouldBlock, "the connection is not accepting data"));
-            }
+            };
             let left = deadline.saturating_duration_since(Instant::now());
             if left.is_zero() {
                 return Err(io::ErrorKind::TimedOut.into());
@@ -106,7 +106,7 @@ impl Writer {
         }
         let (tx, rx) = mpsc::channel();
         st.bytes += len;
-        st.queue.push_back(Item { bytes, done: wait.then_some(tx) });
+        st.queue.push_back(Item { bytes, done: deadline.map(|_| tx) });
         drop(st);
         self.shared.changed.notify_all();
         Ok(rx)
@@ -157,5 +157,39 @@ fn run(shared: &Shared, mut w: BufWriter<Box<dyn Write + Send>>) {
                 return;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn send_within_bounds_the_wait_for_queue_room() {
+        struct Stalled {
+            entered: mpsc::Sender<()>,
+            release: mpsc::Receiver<()>,
+        }
+        impl Write for Stalled {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                let _ = self.entered.send(());
+                let _ = self.release.recv_timeout(Duration::from_secs(2));
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        let (entered, ready) = mpsc::channel();
+        let (release, gate) = mpsc::channel();
+        let writer = Writer::start(BufWriter::new(Box::new(Stalled { entered, release: gate }))).unwrap();
+        writer.post(vec![0; QUEUE_LIMIT]).unwrap();
+        ready.recv_timeout(Duration::from_secs(5)).unwrap();
+        let start = Instant::now();
+        let result = writer.send_within(vec![1], Duration::from_millis(30));
+        let elapsed = start.elapsed();
+        drop(release);
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::TimedOut);
+        assert!(elapsed < Duration::from_secs(1), "30 ms queue timeout took {elapsed:?}");
     }
 }

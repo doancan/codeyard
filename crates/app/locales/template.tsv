@@ -39,7 +39,7 @@ Accept Current
 Accept Current Change	
 Accept Incoming	
 Accept Incoming Change	
-Access	
+Actions	
 Activate Breakpoints	
 Add	
 Add Configuration…	
@@ -101,10 +101,12 @@ Attach to a native process
 Aug	
 Auto (follow system)	
 Auto Forwarded	
+Auto-detect project	
 Back	
 Back to SSH workspace and container details	
 Back to the default (removes the value from settings.jsonc)	
 Back to this computer; files with unsaved changes must be saved or closed first	
+Bare repository	
 Blame Line	
 Bookmarks: Clear in File	
 Bookmarks: Jump to Next	
@@ -125,6 +127,7 @@ Build failed: {}
 Building the tests…	
 CPU	
 CPU usage	
+CPU: {}. 100% equals one CPU core.	
 Call Stack	
 Can't copy a folder into itself.	
 Can't open {0}: {1}	
@@ -145,6 +148,14 @@ Cannot open this link: {}
 Cannot parse {} as a number	
 Cannot use {} as an entry	
 Cannot use {} as an object key	
+Cargo did not report a Rust test executable	
+Cargo metadata has no packages	
+Cargo metadata has no workspace members	
+Cargo package has no manifest path	
+Cargo package has no name	
+Cargo package has no targets	
+Cargo reported {0} executables for target {1}	
+Cargo target has no name	
 Change	
 Change All Occurrences	
 Change Color…	
@@ -236,6 +247,7 @@ Color theme of the whole window and the editor
 Colored file glyphs, folders with only their arrow; names line up	
 Colorful Folders	
 Column {0}: {1}	
+Columns	
 Command Palette	
 Command Palette…	
 Command palette	
@@ -273,6 +285,7 @@ Compare {} with a commit
 Compare: Folders…	
 Compare: {0} ↔ {1}	
 Comparing contents… {0} of {1}	
+Compose project	
 Compound “{}” has no configurations	
 Conflict	
 Conflict {0} of {1}	
@@ -286,7 +299,6 @@ Connect to SSH host…
 Connect to WSL…	
 Connect to a Container…	
 Connect to a running container…	
-Connect to an SSH host to discover its containers automatically, or choose a local engine below.	
 Connect to which WSL distribution?	
 Connect to which running container?	
 Connected	
@@ -298,6 +310,7 @@ Connection lost: {}
 Container Environments	
 Container ID	
 Container Resources	
+Container actions…	
 Container details are unavailable. Refresh details to try again.	
 Container identity	
 Container module is off. Enable modules.containers.enabled in Settings.	
@@ -335,6 +348,7 @@ Copy Version
 Copy as Expression	
 Copy branch name	
 Copy code	
+Copy container ID	
 Copy link	
 Copy the full hash	
 Copy the path at the cursor	
@@ -364,6 +378,7 @@ Could not find your home folder
 Could not format: {}	
 Could not forward port {}: {}	
 Could not forward the debug port over SSH: {}	
+Could not inspect Cargo targets: {}	
 Could not install the {0} dictionary: {1}.	
 Could not install the {0} dictionary: {1}. Check your internet connection and try again.	
 Could not keep a copy of the version that was on disk: {}	
@@ -371,6 +386,7 @@ Could not list branches: {}
 Could not list files: {}	
 Could not list stashes: {}	
 Could not list the server's ports: {}	
+Could not list worktrees: {}	
 Could not list: {}	
 Could not load: {}	
 Could not look for tests: {}	
@@ -393,12 +409,14 @@ Could not read {}: {}
 Could not refresh container data: {}. Check Docker access on the SSH host and retry.	
 Could not resolve “{}”: check the spelling and the network (the request ran on {}).	
 Could not run “{}”: {}	
+Could not save files before debugging: {}	
 Could not save the report: {}	
 Could not save the theme: {}	
 Could not save your dictionary: {}	
 Could not save: {}	
 Could not set up key login for {}: {}	
 Could not set {}: {}	
+Could not start Web Preview: {}	
 Could not start a shell: {}	
 Could not start debugging: {}	
 Could not start the debug adapter: {}	
@@ -441,6 +459,10 @@ Debug Console
 Debug Go package	
 Debug Node: {}	
 Debug Python: {}	
+Debug Rust example: {0} / {1}	
+Debug Rust integration test: {0} / {1}	
+Debug Rust library tests: {0} / {1}	
+Debug Rust: {0} / {1}	
 Debug Rust: {}	
 Debug Test	
 Debug Test: {}	
@@ -524,9 +546,11 @@ Discovering containers…
 Disk I/O total	
 Disk and network activity	
 Disk available	
+Disk read	
 Disk read / write rate	
 Disk size	
 Disk size includes the writable layer and virtual image size; volumes are excluded. Disk and network I/O are cumulative totals.	
+Disk write	
 Dismiss this file from the results	
 Do you trust the authors of this folder?	
 Do you want to save the changes you made to {}?	
@@ -667,6 +691,8 @@ Empty folder
 Empty group: ⌘P opens a file here	
 Enable All Breakpoints	
 Enable Breakpoint	
+Enable Web Preview for HTML, CSS and JavaScript (user settings only; stops servers when disabled)	
+Enable Web Preview in Settings > Modules to preview HTML files.	
 Enable container environments (user settings only; disconnect containers before disabling)	
 Encoding for files that are not UTF-8	
 End files with a newline when saving	
@@ -685,6 +711,7 @@ Expand Folders (the selected one, or the open file's folders)
 Expand Selection	
 Expand all results	
 Expected KEY=value	
+Expected a cargo test command	
 Expected “{}”	
 Explorer	
 Explorer (⇧⌘E)	
@@ -739,6 +766,7 @@ File: Save All
 File: Save As…	
 File: Save a Copy to This Computer…	
 Files	
+Files are still unsaved. Resolve editor errors, then start debugging again.	
 Files to exclude	
 Files to include (e.g. *.rs, src/**)	
 Files to include / exclude	
@@ -993,6 +1021,7 @@ Line {}: {} · {}, {} · {}
 Lines kept in terminal history	
 Link copied.	
 List	
+Listing worktrees timed out. Refresh to try again.	
 Live updates	
 Ln {}, Col {}	
 Ln {}, Col {} ({} selected)	
@@ -1030,6 +1059,7 @@ May
 Measuring…	
 Memory	
 Memory usage (%)	
+Memory: {0} ({1})	
 Merge	
 Merge Changes	
 Merge Conflict: Accept All Current	
@@ -1053,6 +1083,7 @@ Minified
 Minimal	
 Minimize	
 Minimize window	
+Missing value for Cargo option {}	
 Modified	
 Modules	
 Monday	
@@ -1084,8 +1115,11 @@ Name with an extension: the extension picks the language (scratch.md, notes.json
 Names can't contain / or be . or ..	
 Names only	
 Native program (C, C++, Rust, Swift)	
+Needs attention	
 Network I/O total	
 Network RX / TX rate	
+Network received	
+Network sent	
 New (untracked)	
 New File	
 New File…	
@@ -1105,7 +1139,6 @@ Next Problem
 Next match (↵)	
 Next result (F4)	
 No Cargo.toml found for this file	
-No Configurations	
 No Docker contexts found. Install Docker and start its engine.	
 No SSH host connected	
 No SSH hosts yet. Use Remote: Add SSH Host…	
@@ -1195,6 +1228,7 @@ No tests to run.
 No timestamp	
 No type definition found	
 No unsaved changes: the file matches what is on disk.	
+No worktrees found.	
 Node.js program	
 None	
 None of these commits is yours.	
@@ -1280,6 +1314,7 @@ Open a folder to measure its size.
 Open a folder to search in it.	
 Open a project, connect to a host, or switch workspace	
 Open a terminal with…	
+Open an HTML file or a project folder to start Web Preview.	
 Open as Hex	
 Open files	
 Open files can be undone with ⌘Z; closed files are written to disk.	
@@ -1294,6 +1329,7 @@ Open the source folder on this computer to create a Dev Container. Remote Docker
 Open this project with Docker: Open Project in Dev Container first.	
 Open to the Side	
 Open which worktree?	
+Open worktree in this window	
 Open ~/.ssh/config	
 Open “{}”	
 Opening…	
@@ -1301,6 +1337,7 @@ Order of files and folders in the explorer
 Outline	
 Output	
 Output: Clear	
+Overview	
 Overwrite	
 Partial scan: a time, file or access limit was reached.	
 Passphrase	
@@ -1353,6 +1390,8 @@ Preferences: Open Workspace Settings
 Preferences: Settings	
 Preserve case (⌥P)	
 Preserve case when replacing	
+Preview	
+Preview HTML in your browser	
 Preview of {}	
 Preview {}	
 Previous Match	
@@ -1534,6 +1573,7 @@ Reset Mixed to Here
 Reset Soft to Here	
 Reset Zoom	
 Reset to {0} ({1})	
+Resolve the file conflict before debugging.	
 Resolved {} conflict|Resolved {} conflicts	
 Resources	
 Respect .gitignore	
@@ -1577,6 +1617,9 @@ Running
 Running the program in a terminal is not supported on Windows yet: use {} in the configuration.	
 Running…	
 Rust formatters not loaded: {}	
+Rust language features are disabled. Enable lsp.enabled in Settings.	
+Rust language server is not ready. Check Output, then run “Developer: Restart Language Servers”.	
+Rust tests did not build. See Output and Problems for the compiler errors.	
 Rust: Expand Macro Recursively	
 Rust: Locate Parent Module	
 Rust: Open Cargo.toml	
@@ -1603,6 +1646,7 @@ Saved project “{}” (⌃R to switch)
 Saved to ~/.ssh/config. Connecting uses your SSH keys and ssh-agent; a password prompt appears in this window if needed.	
 Saved {} (edit the colors in that file)	
 Saved · {}	
+Saving files before debugging…	
 Saving…	
 Scan Again	
 Schema cache cleared. Schemas are downloaded again when needed.	
@@ -1640,11 +1684,13 @@ Select a configuration
 Select a container to inspect resource history, logs, ports and storage.	
 Select a debug configuration	
 Select a file icon theme	
+Select a row to open its details.	
 Select a word and press ⌘D to add the next match as another cursor.	
 Select all matches (⌥↵)	
 Select at most 20 timestamps	
 Select for Compare	
 Select the active file in the explorer	
+Selected container	
 Selected {} for compare. Right-click another file and choose Compare.	
 Selected {} for compare. Right-click another folder and choose Compare Folder with Selected.	
 Selection	
@@ -1669,6 +1715,7 @@ Setting up key login for {}…
 Setting upstream of {}…	
 Settings	
 Settings…	
+Several Rust targets reported this test name. Run it individually to identify the failing target.	
 Shape of the cursor	
 Shell for new terminals (empty: login shell)	
 Show All	
@@ -1711,7 +1758,6 @@ Snippets: Insert Snippet…
 Software Update	
 Solid blue folders like Finder, outline files with a language dot like GitHub	
 Solid folders colored and marked by purpose, solid files colored by language	
-Sort by	
 Sort object keys alphabetically in the output of Data: Convert To… and Data: Query… (off: keep the file's order)	
 Source Control	
 Source Control (⌃⇧G)	
@@ -1728,13 +1774,13 @@ Spelling: “{}”
 Split Editor	
 Stage	
 Stage all	
+Stage {}	
 Staged Changes	
 Staged {} change|Staged {} changes	
 Staging changes inside a symlink or submodule is not supported	
 Staging changes is not supported in files with old-Mac (CR only) line endings	
 Staging changes needs a UTF-8 file	
 Staging changes needs a UTF-8 file (this one is stored in another encoding)	
-Standalone containers	
 Start	
 Start Debugging	
 Start Debugging (F5)	
@@ -1745,6 +1791,7 @@ Start language servers
 Start search results folded or open	
 Start the new branch from…	
 Start this container?	
+Starting preview…	
 Starting the download…	
 Starting “{}”…	
 Starting…	
@@ -1767,11 +1814,11 @@ Stop
 Stop (⇧F5)	
 Stop Debugging	
 Stop Forwarding	
+Stop Web Preview	
 Stop a search after this many matches	
 Stopped	
 Stopped.	
 Storage information is unavailable.	
-Storage type	
 String interpolation is not supported	
 Structural search: the pattern is code; $X matches one node, $$$X several	
 Suggest words from the file when there is no language server	
@@ -1888,7 +1935,7 @@ The shell may run each line as soon as it arrives.
 The state database was damaged ({0}). It was moved to {1} and a new one was started; recent folders and open tabs were forgotten.	
 The string is not closed	
 The tag disappears from the remote repository for everyone. Your local copy is kept.	
-The tests did not build: run the test to see the errors.	
+The test runner stopped without reporting this test. See Test Results for build or runner errors.	
 The token has no signature.	
 The update couldn't be installed	
 The update couldn't be verified	
@@ -1933,6 +1980,7 @@ This file is outside the open folder.
 This file is outside the repository root	
 This file is {0} MB; Data: Query handles files up to {1} MB.	
 This file mixes line endings; saving writes all of them as {}, like its first line. Change it in the status bar.	
+This file was deleted on disk. Save it explicitly before debugging.	
 This file was deleted on disk. Saving will create it again.	
 This folder is not a git repository.	
 This frame cannot be restarted.	
@@ -1988,6 +2036,7 @@ Unexpected text after the closing quote
 Unexpected “{}”	
 Unfold	
 Unfold All	
+Unhealthy	
 Unknown configuration “{}” in compound “{}”	
 Unknown input “{0}” in “{1}”	
 Unknown theme '{0}'. Available: {1}	
@@ -1995,6 +2044,8 @@ Unpin
 Unsaved changes stay open in their tabs; saving recreates the file.	
 Unstage	
 Unstage all	
+Unstage {}	
+Unterminated quote in the Cargo test command	
 Untracked files will be deleted. This can't be undone.	
 Unwrapped lines	
 Update failed	
@@ -2067,6 +2118,13 @@ WSL distribution
 Waiting for enough samples to draw history…	
 Warning	
 Watch	
+Web Preview	
+Web Preview listening on 127.0.0.1:{}	
+Web Preview stopped.	
+Web Preview: Open in Browser	
+Web Preview: Show Server Log	
+Web Preview: Stop Server	
+Web Preview: {}	
 Wednesday	
 Welcome	
 Welcome (no recent folders yet)	
@@ -2086,6 +2144,8 @@ Word Wrap
 Workbench	
 Workspace: Trust This Folder	
 Workspace: {} folder in the Explorer.|Workspace: {} folders in the Explorer.	
+Worktree locked: {}	
+Worktrees	
 Wrap long lines at the window edge	
 Wrapped lines	
 You are connected to “{}”. Disconnect first.	
@@ -2349,6 +2409,7 @@ your words
 {0} and {1} cannot have their containment checked	
 {0} cannot be used with {1}	
 {0} commit{1} only exist on this branch and will be lost (the reflog keeps them for a while).	
+{0} containers · {1} running · {2} need attention	
 {0} could not be read ({1})	
 {0} errors, {1} warnings	
 {0} files and {1} folders go from {2} ({3}) to {4} ({5}). Files that exist there are replaced; anything that changed since the scan is left alone.	
@@ -2534,6 +2595,7 @@ your words
 … {} more	
 … {} more line|… {} more lines	
 … {} running	
+← Containers	
 ↓ {} new line|↓ {} new lines	
 ↵ next · ⇧↵ previous · Esc	
 ⇧⌘P opens the command palette: every feature has an entry there.	

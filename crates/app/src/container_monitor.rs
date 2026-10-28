@@ -98,6 +98,7 @@ impl Monitor {
                     self.disks.clear();
                     self.disk_updated = None;
                     self.browser.selected = None;
+                    self.browser.overview.details = false;
                 }
                 self.history.retain(|id, _| snapshot.containers.iter().any(|c| &c.id == id));
                 for usage in &snapshot.usage {
@@ -110,6 +111,7 @@ impl Monitor {
                 }
                 if self.browser.selected.as_ref().is_some_and(|id| !snapshot.containers.iter().any(|c| &c.id == id)) {
                     self.browser.selected = None;
+                    self.browser.overview.details = false;
                 }
                 self.context = Some(snapshot.context);
                 self.containers = snapshot.containers;

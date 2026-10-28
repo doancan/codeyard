@@ -1,9 +1,11 @@
-# Native Windows checks. Requires Rust MSVC, C++ Build Tools and Windows SDK (fxc).
+# Native Windows checks. Requires Rust MSVC, C++ Build Tools, Windows SDK (fxc) and Python 3.
 # CI runs the standalone release in a parallel job; local invocation keeps every check.
 param([switch]$SkipStandalone)
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'Run this script on Windows.' }
 Set-Location (Split-Path $PSScriptRoot -Parent)
+$pythonVersion = & python --version 2>&1
+if ($LASTEXITCODE -ne 0 -or $pythonVersion -notmatch '^Python 3\.') { throw 'Python 3 is required for the scripted Rust debugger regression.' }
 & "$PSScriptRoot/test-agent-bundle.ps1"
 if (-not $env:AGENTS_DIR) { & "$PSScriptRoot/build-agents.ps1" }
 & rustc --edition=2024 --test crates/app/build.rs -o target/agent-build-tests.exe
@@ -20,12 +22,13 @@ function Invoke-Cargo {
 Invoke-Cargo -CargoArgs @('fmt', '--all', '--', '--check')
 Invoke-Cargo -CargoArgs @('clippy', '--locked', '--workspace', '--lib', '--bins', '--', '-D', 'warnings')
 Invoke-Cargo -CargoArgs @('test', '--release', '--locked', '--workspace', '--lib', '--', '--test-threads=1')
-# Native UI/path/keyboard regressions. POSIX shell/server fixtures remain on macOS/Linux.
+# Native UI/path/keyboard and Rust Cargo/debug regressions. POSIX server fixtures remain on macOS/Linux.
 Invoke-Cargo -CargoArgs @(
     'test', '--release', '--locked', '-p', 'app', '--bin', 'codeyard', '--',
     'windows_', 'resize_', 'qa_sidebar_sash_drag', 'links::tests', 'terminal::tests', 'ui::path_tests',
     'sysopen::tests', 'workspace_file::tests', 'vscode::tests', 'trash::', 'terminal_web_links',
-    'files_from_the_system', 'qa_workspace_file', 'markdown', 'docker',
+    'files_from_the_system', 'qa_workspace_file', 'markdown', 'docker', 'web_preview',
+    'rust_hardening', 'product_', 'a11y', 'worktree',
     '--test-threads=1'
 )
 if (-not $SkipStandalone) {

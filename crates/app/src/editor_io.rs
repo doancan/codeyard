@@ -310,6 +310,28 @@ impl EditorView {
         }
     }
 
+    /// A build must never use the explicit second-save overwrite behavior of a conflicted editor.
+    pub fn save_for_build(&mut self, cx: &mut Context<Self>) -> Result<(), String> {
+        if let Some(error) = self.build_save_error().filter(|_| self.conflict || self.deleted_on_disk) {
+            return Err(error);
+        }
+        if !self.saving {
+            self.error = None;
+            self.save_now(cx);
+        }
+        Ok(())
+    }
+
+    pub fn build_save_error(&self) -> Option<String> {
+        if self.conflict {
+            Some(crate::i18n::t("Resolve the file conflict before debugging.").to_string())
+        } else if self.deleted_on_disk {
+            Some(crate::i18n::t("This file was deleted on disk. Save it explicitly before debugging.").to_string())
+        } else {
+            self.error.as_ref().map(|error| error.to_string())
+        }
+    }
+
     /// Tests: what the banner above the editor says ("conflict", "deleted" or the error text).
     #[cfg(test)]
     pub fn status_for_test(&self) -> Option<String> {

@@ -551,6 +551,13 @@ message the tag is annotated); Git: Delete Tag, Delete Remote Tag, Push Tag and 
 remote (`origin`, else the first one). Rename Remote, Edit Remote URL, Remove Worktree and Prune Worktrees
 complete Add Remote and Add Worktree.
 
+**Worktrees in Source Control.** The **Worktrees** section lists the repository's checkouts with their branch and full folder
+path. **Current** marks the open checkout; click another row (or focus it with Tab and press Enter) to open its folder in this
+window, on the same local or SSH host. The normal unsaved-file protection applies. Detached checkouts are labelled, locked
+ones show a lock, and stale or bare entries cannot be opened from the list. Hover for the full path, commit and lock reason.
+The header offers **Add worktree** and **Refresh**. The list also refreshes with Git while Source Control and this section are
+visible, including checkouts added or removed in a terminal. Collapsing the section is remembered and pauses its refreshes.
+
 **Stash.** Besides stash and stash with untracked files there are "Stash Staged Changes" (only what is staged;
 needs git 2.35 or newer), "Stash with Name…" and "Show Stash…", which lists the files a stash changed and opens one
 as a diff (untracked files kept by a stash are not shown).
@@ -632,7 +639,12 @@ Over SSH, "File: Save a Copy to This Computer…" saves the open remote file to 
 
 ## Debugging
 
-F5 debugs the project: a Cargo crate (`cargo build`, then `target/debug/<name>`), a Go module
+Debugging saves open files in the active workspace root before building or starting. A failed save or disk conflict
+stops the start; resolve the editor error and retry. Shift+F5 also cancels a start waiting for saves.
+Stop also rejects a pending target-discovery/test-build reply. A Cargo command already running may finish in the
+background, but its cancelled result cannot start a session or replace the cancellation with an error.
+
+F5 debugs the project: a Cargo target (discovered with Cargo, built first, its executable taken from artifact messages), a Go module
 (`dlv dap`) or the open Python file (`python3 -m debugpy.adapter`) with no setup; C, C++, Rust and
 Swift use `lldb-dap` (from PATH or Xcode via `xcrun`). Add `.vscode/launch.json` (or
 `.codeyard/launch.jsonc`) for anything else: `type` `lldb` / `go` / `python`, `program`, `args`,
@@ -707,11 +719,17 @@ their tests take the outcome of the whole run.
 
 The 🐞 button on a test (or *Test: Debug Test at Cursor*) starts it under the debugger:
 
-- **Rust:** the test binary is built first (`cargo test --no-run`); if a crate has several, you pick one.
+- **Rust:** the test binary is built first (`cargo test --no-run`); if a crate has several, you pick one. The nearest
+  `Cargo.toml` selects the crate even when the folder and package names differ. A failed build opens no debug session;
+  its compiler errors appear in Output and Problems. Parameterized async test attributes are discovered too.
 - **Go:** Delve in test mode.
 - **Python:** pytest under debugpy.
 
 *Test: Run Test at Cursor* and *Test: Run Tests in File* still run in a task terminal, with failures in Problems.
+
+Rust Run All continues through other targets after one fails. A failed build or runner does not leave old passing
+results green. When different targets report the same test name, any failure is retained with a note to run that
+test individually for precise attribution.
 
 ## Workspaces with several folders
 
@@ -835,7 +853,17 @@ jumps to the `mod` line that includes the current file, and *Rust: Open Cargo.to
 file belongs to, a member's own in a workspace. They have no default keys; bind `rust.expandMacro`, `rust.parentModule`
 and `rust.openCargoToml` in `keybindings.jsonc` if you use them often.
 
-**Debugging.** F5 builds with `cargo build` and starts lldb-dap with the formatters that come with your toolchain, so the
+Opening the manifest also works while the Rust server is off or starting: Codeyard looks from the file's folder up to
+its workspace boundary and opens the nearest manifest. The other Rust commands explain whether language features are
+disabled, the folder needs trust, or the server needs attention; replies from an old workspace are discarded.
+
+**Debugging.** After the workspace trust gate, F5 asks Cargo for its real targets (`cargo metadata --no-deps --offline`).
+A virtual workspace, multiple binaries, examples and binary names different from the package name are supported.
+Choose a target when there is more than one; its required features are enabled. A library-only workspace offers its
+library and integration-test harnesses. Cargo's JSON artifacts determine the executable, including a custom target
+directory. Other feature/profile choices remain configurable through tasks and launch files.
+
+F5 starts lldb-dap with the formatters that come with your toolchain, so the
 Variables view shows a `String` as `"merhaba"` and a `Vec` or `HashMap` with its elements; with `rust-src`, stepping into
 `s.len()` opens the standard library's source. The same goes for *Debug Test*, and for `lldb` entries of a launch file in a
 Cargo folder: your own `initCommands` run after ours, and an entry that imports `lldb_lookup` itself is left alone. If the

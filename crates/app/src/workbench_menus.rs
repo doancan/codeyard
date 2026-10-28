@@ -315,6 +315,8 @@ impl Workbench {
             MenuCmd::Port(c) => self.run_port_menu(c, target.path.parse().unwrap_or(0), window, cx),
             MenuCmd::Remote(c) => self.run_remote_menu(c, target.path, window, cx),
             MenuCmd::Debug(c) => self.run_debug_menu(c, target, window, cx),
+            MenuCmd::Container(action) => self.run_container_action(action, &target.path, window, cx),
+            MenuCmd::ContainerTool(command) => self.run_container_tool(command, window, cx),
             // Without touching the copy clipboard: "name copy.ext" in the same folder.
             MenuCmd::Duplicate => {
                 let previous = self.roots.file_clip.replace((target.path.clone(), false));

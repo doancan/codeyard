@@ -3,6 +3,14 @@
 use super::*;
 
 impl Workbench {
+    pub fn detected_debug_configs_for_test(&self, cx: &mut Context<Self>) -> Option<gpui::Task<(Vec<LaunchConfig>, Vec<debug_config::Compound>)>> {
+        self.read_launch_configs(true, cx)
+    }
+
+    pub fn start_debug_config_for_test(&mut self, config: LaunchConfig, cx: &mut Context<Self>) {
+        self.start_debug(config, cx);
+    }
+
     /// Summary of state for tests: (state, frame names, stopped line, console).
     pub fn debug_snapshot(&self) -> Option<(String, Vec<String>, Option<(String, usize)>, Vec<String>)> {
         self.dbg.cur().map(|d| {

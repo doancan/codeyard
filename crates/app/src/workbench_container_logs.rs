@@ -35,10 +35,12 @@ impl Workbench {
             .id("container-log-console")
             .debug_selector(|| "container-log-console".into())
             .flex_1()
+            .min_w_0()
             .min_h_0()
             .flex()
             .flex_col()
             .gap(px(theme::SPACE[3]))
+            .pt(px(theme::SPACE[3]))
             .child(
                 div()
                     .px(px(theme::SPACE[5]))
@@ -46,9 +48,12 @@ impl Workbench {
                     .flex_wrap()
                     .items_center()
                     .gap(px(theme::SPACE[3]))
-                    .when_some(state.field.clone(), |d, field| d.child(div().min_w(px(180.)).flex_1().child(field)))
+                    .when_some(state.field.clone(), |d, field| {
+                        d.child(div().w_full().min_w_0().child(super::container_monitor_glue::search_field("container-log-search", field, p, cx)))
+                    })
                     .child(
                         button("logs-problems", if state.problems_only { crate::i18n::t("Errors and warnings") } else { crate::i18n::t("All levels") }, p)
+                            .flex_none()
                             .on_click(cx.listener(|this, _, _, cx| {
                                 let s = &mut this.remote.docker.monitor.browser.log_view;
                                 s.problems_only = !s.problems_only;
@@ -58,21 +63,25 @@ impl Workbench {
                                 cx.notify();
                             })),
                     )
-                    .child(button("logs-wrap", if state.wrap { crate::i18n::t("Wrapped lines") } else { crate::i18n::t("Unwrapped lines") }, p).on_click(
-                        cx.listener(|this, _, _, cx| {
-                            let s = &mut this.remote.docker.monitor.browser.log_view;
-                            s.wrap = !s.wrap;
-                            if s.follow {
-                                s.scroll.scroll_to_bottom();
+                    .child(
+                        button("logs-wrap", if state.wrap { crate::i18n::t("Wrapped lines") } else { crate::i18n::t("Unwrapped lines") }, p)
+                            .flex_none()
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                let s = &mut this.remote.docker.monitor.browser.log_view;
+                                s.wrap = !s.wrap;
+                                if s.follow {
+                                    s.scroll.scroll_to_bottom();
+                                }
+                                cx.notify();
+                            })),
+                    )
+                    .child(button("logs-copy", crate::i18n::t("Copy visible logs"), p).flex_none().when(copy.is_empty(), |d| d.opacity(0.5)).on_click(
+                        cx.listener(move |_, _, _, cx| {
+                            if !copy.is_empty() {
+                                cx.write_to_clipboard(gpui::ClipboardItem::new_string(copy.clone()));
                             }
-                            cx.notify();
                         }),
-                    ))
-                    .child(button("logs-copy", crate::i18n::t("Copy visible logs"), p).on_click(cx.listener(move |_, _, _, cx| {
-                        if !copy.is_empty() {
-                            cx.write_to_clipboard(gpui::ClipboardItem::new_string(copy.clone()));
-                        }
-                    }))),
+                    )),
             )
             .child(
                 div()
@@ -104,13 +113,6 @@ impl Workbench {
                             cx.notify();
                         })),
                     ),
-            )
-            .child(
-                div()
-                    .px(px(theme::SPACE[5]))
-                    .text_size(px(text::XS.0))
-                    .text_color(c(p.text_muted))
-                    .child(crate::i18n::t("Latest 300 lines; refreshed with resource snapshots.")),
             );
         if browser.loading && browser.logs.is_empty() {
             view = view
@@ -120,7 +122,7 @@ impl Workbench {
             view = view.child(div().px(px(theme::SPACE[5])).text_size(px(text::SM.0)).text_color(c(p.danger)).child(error.clone()));
         }
         let regex = logs::matcher(&state.query);
-        let mut rows = div().min_w_full().flex().flex_col().font_family(ui::MONO_FONT).text_size(px(text::XS.0)).text_color(c(p.text));
+        let mut rows = div().min_w_full().flex().flex_col().font_family(ui::MONO_FONT).text_size(px(text::SM.0)).text_color(c(p.text));
         for line in &visible {
             let (label, color) = match line.level {
                 Level::Error => (crate::i18n::t("Error"), p.danger),
@@ -144,36 +146,44 @@ impl Workbench {
                 .unwrap_or_default();
             let timestamp = line.timestamp.clone();
             let time = timestamp.as_ref().map(|t| format!("{}Z", &t[11..19])).unwrap_or_else(|| "—".into());
-            rows =
-                rows.child(
-                    div()
-                        .id(("container-log-line", line.number))
-                        .debug_selector({
-                            let n = line.number;
-                            move || format!("container-log-line-{n}")
-                        })
-                        .min_w_full()
-                        .flex_none()
-                        .when(state.wrap, |d| d.w_full())
-                        .flex()
-                        .items_start()
-                        .gap(px(theme::SPACE[3]))
-                        .px(px(theme::SPACE[4]))
-                        .py(px(3.))
-                        .when(line.level == Level::Error, |d| d.bg(c(p.diff_removed)))
-                        .hover(|d| d.bg(c(p.surface_hover)))
-                        .child(div().w(px(30.)).flex_none().text_right().text_color(c(p.text_muted)).child(line.number.to_string()))
-                        .child(div().id("container-log-time").w(px(90.)).flex_none().text_color(c(p.text_muted)).child(time).tooltip(move |_, cx| {
-                            cx.new(|_| Tooltip(timestamp.clone().unwrap_or_else(|| crate::i18n::t("No timestamp").into()).into())).into()
-                        }))
-                        .child(div().w(px(62.)).flex_none().text_color(c(color)).child(label))
-                        .child(
-                            div()
-                                .when(state.wrap, |d| d.flex_1().min_w_0())
-                                .when(!state.wrap, |d| d.flex_none().whitespace_nowrap())
-                                .child(gpui::StyledText::new(line.message.clone()).with_highlights(highlights)),
-                        ),
-                );
+            rows = rows.child(
+                div()
+                    .id(("container-log-line", line.number))
+                    .debug_selector({
+                        let n = line.number;
+                        move || format!("container-log-line-{n}")
+                    })
+                    .min_w_full()
+                    .flex_none()
+                    .when(state.wrap, |d| d.w_full())
+                    .flex()
+                    .flex_col()
+                    .gap(px(theme::SPACE[2]))
+                    .px(px(theme::SPACE[5]))
+                    .py(px(theme::SPACE[3]))
+                    .border_b_1()
+                    .border_color(c(p.border))
+                    .when(line.level == Level::Error, |d| d.bg(c(p.diff_removed)))
+                    .hover(|d| d.bg(c(p.surface_hover)))
+                    .child(
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(theme::SPACE[3]))
+                            .text_size(px(text::XS.0))
+                            .child(div().text_color(c(p.text_muted)).child(format!("#{}", line.number)))
+                            .child(div().id("container-log-time").text_color(c(p.text_muted)).child(time).tooltip(move |_, cx| {
+                                cx.new(|_| Tooltip(timestamp.clone().unwrap_or_else(|| crate::i18n::t("No timestamp").into()).into())).into()
+                            }))
+                            .child(div().font_weight(gpui::FontWeight::SEMIBOLD).text_color(c(color)).child(label)),
+                    )
+                    .child(
+                        div()
+                            .when(state.wrap, |d| d.w_full().min_w_0())
+                            .when(!state.wrap, |d| d.flex_none().whitespace_nowrap())
+                            .child(gpui::StyledText::new(line.message.clone()).with_highlights(highlights)),
+                    ),
+            );
         }
         if visible.is_empty() && !browser.loading {
             rows = rows.child(div().p(px(theme::SPACE[5])).text_color(c(p.text_muted)).child(if lines.is_empty() {
@@ -186,6 +196,7 @@ impl Workbench {
             div()
                 .id("container-log-scroll")
                 .debug_selector(|| "container-log-scroll".into())
+                .min_w_0()
                 .flex_1()
                 .min_h_0()
                 .overflow_scroll()
@@ -200,6 +211,14 @@ impl Workbench {
                         cx.notify();
                     }
                 })),
+        )
+        .child(
+            div()
+                .px(px(theme::SPACE[5]))
+                .pb(px(theme::SPACE[3]))
+                .text_size(px(text::XS.0))
+                .text_color(c(p.text_muted))
+                .child(crate::i18n::t("Latest 300 lines; refreshed with resource snapshots.")),
         )
         .into_any_element()
     }
@@ -224,6 +243,7 @@ mod tests {
             m.paused = true;
             m.browser.selected = Some("web-id".into());
             m.browser.tab = crate::container_history::Tab::Logs;
+            m.browser.overview.details = true;
             m.browser.logs = "2026-10-27T12:34:55Z INFO ready\n2026-10-27T12:34:56Z ERROR disk full\n2026-10-27T12:34:57Z WARN slow".into();
             wb.ensure_container_log_search(cx);
             wb.open_container_dashboard(cx);

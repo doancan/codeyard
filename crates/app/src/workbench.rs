@@ -42,6 +42,8 @@ mod container_detail_glue;
 mod container_logs_glue;
 #[path = "workbench_container_monitor.rs"]
 mod container_monitor_glue;
+#[path = "workbench_container_overview.rs"]
+mod container_overview_glue;
 #[path = "workbench_docker.rs"]
 mod docker_glue;
 // --- data ---
@@ -148,6 +150,8 @@ mod view_status_glue;
 mod view_update_glue;
 #[path = "workbench_watch.rs"]
 mod watch_glue;
+#[path = "workbench_web_preview.rs"]
+mod web_preview_glue;
 #[path = "workbench_welcome.rs"]
 mod welcome_glue;
 
@@ -280,6 +284,9 @@ actions!(
         DockerServices,
         DockerCancel,
         ShowContainers,
+        OpenWebPreview,
+        StopWebPreview,
+        WebPreviewLog,
         RemoteWsl,
         GitMergeBranch,
         GitRebaseBranch,
@@ -949,6 +956,12 @@ impl Workbench {
             cx.subscribe_in(&scm, window, |this, _, event: &crate::scm::ScmEvent, window, cx| match event {
                 crate::scm::ScmEvent::Refresh => this.refresh_git(0, cx),
                 crate::scm::ScmEvent::OpenDiff { path, staged } => this.open_diff(path.clone(), *staged, window, cx),
+                crate::scm::ScmEvent::OpenWorktree { root, path } => {
+                    if this.vcs.status.as_ref().is_some_and(|s| &s.root == root) {
+                        this.set_root(path.clone(), cx);
+                    }
+                }
+                crate::scm::ScmEvent::AddWorktree => this.git_add_worktree(window, cx),
                 crate::scm::ScmEvent::MoreActions(position) => this.open_scm_menu(*position, window, cx),
                 crate::scm::ScmEvent::GraphMenu(position) => this.open_graph_menu(*position, window, cx),
                 // --- git-sync ---
@@ -1087,7 +1100,9 @@ impl Workbench {
                 tree_marks: Default::default(),
             },
             chrome: state_glue::ChromeLayout {
+                a11y_bounds: Default::default(),
                 resources: cx.new(crate::resource_monitor::ResourceMonitor::new),
+                web_preview: Default::default(),
                 panel: Some(Panel::Explorer),
                 bottom: Bottom::Terminal,
                 sidebar_w,
@@ -1574,6 +1589,7 @@ impl Workbench {
             return;
         }
         self.cancel_pending_connection();
+        self.stop_web_preview(cx);
         self.persist_session(cx);
         self.shutdown_lsp(cx);
         self.roots.extra_roots.clear();
@@ -1590,6 +1606,7 @@ impl Workbench {
         self.roots.file_index = None;
         self.load_git_branch(&path, cx);
         self.vcs.status = None;
+        self.scm.update(cx, |s, cx| s.set_status(self.remote.host.clone(), None, cx));
         self.vcs.scm_root = None;
         self.vcs.tree_marks.clear();
         self.roots.primary.update(cx, |t, cx| t.set_git(Arc::default(), cx));
@@ -2423,6 +2440,11 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
     wb._subs.push(cx.subscribe_in(ed, window, |this, ed, ev: &EditorEvent, window, cx| {
         match ev {
             EditorEvent::Saved => {
+                if let Some(server) = &this.chrome.web_preview.server
+                    && ed.read(cx).uses_host(&this.remote.host)
+                {
+                    server.changed(&ed.read(cx).path);
+                }
                 this.reload_snippets_if_edited(ed, cx);
                 this.refresh_git(200, cx);
                 this.record_history(ed, cx);

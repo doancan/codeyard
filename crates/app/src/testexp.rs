@@ -94,6 +94,7 @@ pub fn parse_results(kind: Kind, output: &str) -> BTreeMap<String, TestResult> {
 /// cargo's harness: `test a::b ... ok|FAILED|ignored`, then `---- a::b stdout ----` blocks with the panic.
 fn parse_libtest(output: &str) -> BTreeMap<String, TestResult> {
     let mut out = BTreeMap::new();
+    let mut repeated = HashSet::new();
     let lines: Vec<&str> = output.lines().collect();
     for l in &lines {
         let Some(rest) = l.strip_prefix("test ") else { continue };
@@ -104,7 +105,16 @@ fn parse_libtest(output: &str) -> BTreeMap<String, TestResult> {
             v if v.starts_with("ignored") => Outcome::Skipped,
             _ => continue,
         };
-        out.insert(id.trim().to_string(), TestResult { outcome, ..Default::default() });
+        let id = id.trim().to_string();
+        if out.contains_key(&id) {
+            repeated.insert(id.clone());
+        }
+        let result = out.entry(id).or_insert(TestResult { outcome, ..Default::default() });
+        if outcome == Outcome::Failed || result.outcome == Outcome::Failed {
+            result.outcome = Outcome::Failed;
+        } else if outcome == Outcome::Skipped {
+            result.outcome = Outcome::Skipped;
+        }
     }
     let mut i = 0;
     while i < lines.len() {
@@ -133,6 +143,15 @@ fn parse_libtest(output: &str) -> BTreeMap<String, TestResult> {
             }
         }
         i = end;
+    }
+    for id in repeated {
+        if let Some(result) = out.get_mut(&id)
+            && result.outcome == Outcome::Failed
+        {
+            let note = crate::i18n::t("Several Rust targets reported this test name. Run it individually to identify the failing target.");
+            let message = format!("{note}\n{}", result.message.take().unwrap_or_default());
+            result.message = Some(message.trim().chars().take(MAX_MESSAGE).collect());
+        }
     }
     out
 }
@@ -325,7 +344,7 @@ pub fn run_all(files: &[TestFile], js_runner: Option<&str>) -> Vec<Job> {
             continue;
         }
         let command = match kind {
-            Kind::Rust => "cargo test --workspace".to_string(),
+            Kind::Rust => "cargo test --workspace --no-fail-fast".to_string(),
             Kind::Go => "go test ./...".to_string(),
             Kind::Python => "python3 -m pytest".to_string(),
             Kind::Js => match js_runner {
@@ -349,8 +368,8 @@ pub fn job_for(file: &TestFile, test: Option<usize>) -> Option<Job> {
     }
 }
 
-/// What a finished job reports for each test in its scope. Tests the output does not mention keep their old result
-/// (the filter may not have reached them), except JavaScript, which is judged by the exit code. A Rust test whose module
+/// What a finished job reports for each test in its scope. Rust tests absent from a successful run become NotRun;
+/// a failed build/runner must not leave earlier green results visible. JavaScript is judged by exit code. A Rust test whose module
 /// path is not the file's (a `#[path]` module) is found by its last two segments when that is unambiguous.
 pub fn outcomes(job: &Job, output: &str, exit: Option<i32>) -> Vec<((String, String), TestResult)> {
     let parsed = parse_results(job.kind, output);
@@ -358,14 +377,26 @@ pub fn outcomes(job: &Job, output: &str, exit: Option<i32>) -> Vec<((String, Str
     for (rel, id) in &job.scope {
         let found = match job.kind {
             Kind::Js => Some(TestResult { outcome: if exit == Some(0) { Outcome::Passed } else { Outcome::Failed }, ..Default::default() }),
-            Kind::Rust => parsed.get(id).cloned().or_else(|| {
-                let segs: Vec<&str> = id.rsplit("::").take(2).collect();
-                (segs.len() == 2).then_some(())?;
-                let tail = format!("::{}::{}", segs[1], segs[0]);
-                let mut hits = parsed.iter().filter(|(k, _)| k.ends_with(&tail));
-                let first = hits.next()?;
-                hits.next().is_none().then(|| first.1.clone())
-            }),
+            Kind::Rust => parsed
+                .get(id)
+                .cloned()
+                .or_else(|| {
+                    let segs: Vec<&str> = id.rsplit("::").take(2).collect();
+                    (segs.len() == 2).then_some(())?;
+                    let tail = format!("::{}::{}", segs[1], segs[0]);
+                    let mut hits = parsed.iter().filter(|(k, _)| k.ends_with(&tail));
+                    let first = hits.next()?;
+                    hits.next().is_none().then(|| first.1.clone())
+                })
+                .or_else(|| {
+                    Some(TestResult {
+                        outcome: if exit == Some(0) { Outcome::NotRun } else { Outcome::Failed },
+                        message: (exit != Some(0)).then(|| {
+                            crate::i18n::t("The test runner stopped without reporting this test. See Test Results for build or runner errors.").to_string()
+                        }),
+                        ..Default::default()
+                    })
+                }),
             _ => parsed.get(id).cloned(),
         };
         if let Some(r) = found {
@@ -376,35 +407,36 @@ pub fn outcomes(job: &Job, output: &str, exit: Option<i32>) -> Vec<((String, Str
 }
 
 /// `cargo test` arguments that pick the test binary (`-p name`, `--test name`), for building it without running.
-pub fn cargo_select_args(command: &str) -> Vec<String> {
-    let mut words = command.split_whitespace().skip_while(|w| *w != "test").skip(1);
-    let mut out = Vec::new();
-    while let Some(w) = words.next() {
-        if w == "--" {
-            break;
-        }
-        if matches!(w, "-p" | "--package" | "--test" | "--lib" | "--bins" | "--workspace") {
-            out.push(w.to_string());
-            if matches!(w, "-p" | "--package" | "--test") {
-                out.extend(words.next().map(str::to_string));
-            }
-        }
-    }
-    out
+pub fn cargo_select_args(command: &str) -> Result<Vec<String>, String> {
+    crate::cargo_args::selection(command)
 }
 
 /// Test binaries from `cargo test --no-run --message-format=json`: (target name, kind, path).
 pub fn test_executables(json_lines: &str) -> Vec<(String, String, String)> {
+    let mut seen = HashSet::new();
     json_lines
         .lines()
         .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
         .filter(|v| v["reason"] == "compiler-artifact" && v["profile"]["test"] == true)
         .filter_map(|v| {
-            let exe = v["executable"].as_str()?.to_string();
+            let exe = v["executable"].as_str().filter(|p| !p.is_empty())?.to_string();
             let kind = v["target"]["kind"].get(0).and_then(|k| k.as_str()).unwrap_or("lib").to_string();
             Some((v["target"]["name"].as_str().unwrap_or_default().to_string(), kind, exe))
         })
+        .filter(|artifact| seen.insert(artifact.clone()))
         .collect()
+}
+
+/// A partial Cargo build may already have emitted binaries before a later target fails.
+pub fn built_test_executables(output: &str, exit: Option<i32>) -> Result<Vec<(String, String, String)>, String> {
+    if exit != Some(0) || !crate::cargo_project::build_finished(output) {
+        return Err(crate::cargo_project::diagnostics(output));
+    }
+    let binaries = test_executables(output);
+    if binaries.is_empty() {
+        return Err(crate::i18n::t("Cargo did not report a Rust test executable").to_string());
+    }
+    Ok(binaries)
 }
 
 /// Debug configurations for a test: the Rust test binary (one per candidate binary) under lldb, `go test` under Delve,
@@ -418,6 +450,7 @@ pub fn debug_configs(file: &TestFile, test: &TestItem, root: &str, rust_binaries
         request: "launch".into(),
         args,
         pre_launch: None,
+        cargo_target: None,
         post_debug: None,
         no_debug: false,
         inputs: Vec::new(),
@@ -582,13 +615,15 @@ ERROR t/test_u.py::test_db - fixture 'db' not found
     fn jobs_cover_each_runner_and_results_map_back() {
         let files = vec![file("a.rs", Kind::Rust, &["app::tests::one"]), file("x_test.go", Kind::Go, &["TestX"]), file("w/a.test.js", Kind::Js, &["adds"])];
         let jobs = run_all(&files, Some("npm test --"));
-        assert_eq!(jobs.iter().map(|j| j.command.as_str()).collect::<Vec<_>>(), ["cargo test --workspace", "go test -v ./...", "npm test"]);
+        assert_eq!(jobs.iter().map(|j| j.command.as_str()).collect::<Vec<_>>(), ["cargo test --workspace --no-fail-fast", "go test -v ./...", "npm test"]);
         assert!(run_all(&files, None).iter().all(|j| j.kind != Kind::Js), "no runner, no JavaScript job");
         // A module declared with #[path] reports under another path: found by its last two segments.
         let r = outcomes(&jobs[0], "test workbench::remote_glue::tests::one ... ok\n", Some(0));
         assert_eq!(r, vec![(("a.rs".into(), "app::tests::one".into()), TestResult { outcome: Outcome::Passed, ..Default::default() })]);
         let ambiguous = "test a::tests::one ... ok\ntest b::tests::one ... FAILED\n";
-        assert!(outcomes(&jobs[0], ambiguous, Some(1)).is_empty());
+        let ambiguous = outcomes(&jobs[0], ambiguous, Some(1));
+        assert_eq!(ambiguous[0].1.outcome, Outcome::Failed, "an ambiguous failed run cannot retain an earlier green result");
+        assert!(ambiguous[0].1.message.as_deref().unwrap().contains("Test Results"));
         assert_eq!(outcomes(&jobs[2], "", Some(1))[0].1.outcome, Outcome::Failed, "JavaScript is judged by the exit code");
         assert_eq!(job_for(&files[1], Some(0)).unwrap().command, "run TestX");
         assert_eq!(job_for(&files[0], None).unwrap().scope.len(), 1);
@@ -596,8 +631,8 @@ ERROR t/test_u.py::test_db - fixture 'db' not found
 
     #[test]
     fn debugging_a_test_builds_the_runner_configuration() {
-        assert_eq!(cargo_select_args("cargo test -p app --test api x::y -- --exact"), ["-p", "app", "--test", "api"]);
-        assert!(cargo_select_args("cargo test x").is_empty());
+        assert_eq!(cargo_select_args("cargo test -p app --test api x::y -- --exact").unwrap(), ["-p", "app", "--test", "api"]);
+        assert!(cargo_select_args("cargo test x").unwrap().is_empty());
         let json = r#"{"reason":"compiler-artifact","target":{"name":"app","kind":["bin"]},"profile":{"test":true},"executable":"/t/app-1"}
 {"reason":"compiler-artifact","target":{"name":"dep","kind":["lib"]},"profile":{"test":false},"executable":null}
 not json

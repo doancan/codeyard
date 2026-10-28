@@ -31,7 +31,10 @@ impl Workbench {
             )
             // --- data ---
             .children(self.data_query_bar(p, cx))
-            .child(div().flex_1().min_h_0().child(main));
+            .child(div().relative().flex_1().min_h_0().child(main).when(
+                self.active_editor().is_some() && !self.tabs.diff_active && !self.tabs.large_active && !self.tabs.page_active && self.tabs.open_error.is_none(),
+                |d| d.child(a11y::landmark(a11y::Landmark::Editor, cx)),
+            ));
         let Some(g) = &self.tabs.other else { return focused_pane.into_any_element() };
         let other_main = match g.active.and_then(|a| g.editors.get(a)) {
             Some(ed) => editor::slot_view(ed.clone(), 1 - self.focused_slot()).into_any_element(),
@@ -186,6 +189,16 @@ impl Workbench {
                             })))
                         },
                     )
+                    .when(active && cx.global::<Settings>().web_preview_enabled && crate::web_preview::is_html(&ed.path), |d| {
+                        d.child(
+                            ui::icon_button("html-preview", "eye", crate::i18n::t("Preview HTML in your browser"), p)
+                                .debug_selector(|| "html-preview".into())
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    cx.stop_propagation();
+                                    this.open_web_preview(window, cx);
+                                })),
+                        )
+                    })
                     .tooltip(move |_, cx| cx.new(|_| Tooltip(rel.clone().into())).into())
                     .when(pinned && !dirty, |d| {
                         // Pinned: a pin instead of close (click: unpin).

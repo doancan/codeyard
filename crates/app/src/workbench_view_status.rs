@@ -54,6 +54,7 @@ impl Workbench {
 
         div()
             .id("status-bar")
+            .relative()
             .debug_selector(|| "status-bar".into())
             .h(px(layout::STATUSBAR_H))
             .flex_none()
@@ -64,6 +65,7 @@ impl Workbench {
             .border_color(c(p.border))
             .text_size(px(text::XS.0))
             .text_color(c(p.text_muted))
+            .child(a11y::landmark(a11y::Landmark::Status, cx))
             .child(
                 item()
                     .id("remote-indicator")
@@ -189,6 +191,7 @@ impl Workbench {
                     .whitespace_nowrap()
                     .when_some(notice, |d, (m, color)| d.child(div().px(px(SB_PAD)).text_color(c(color)).truncate().child(m))),
             )
+            .children(self.web_preview_status(p, cx))
             .child(self.chrome.resources.clone())
             .child(
                 item()

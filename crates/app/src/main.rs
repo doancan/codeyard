@@ -12,6 +12,8 @@
 
 mod access;
 mod bundled_agents;
+mod cargo_args;
+mod cargo_project;
 mod color;
 mod commands;
 // --- compare ---
@@ -103,6 +105,8 @@ mod port_forwards;
 mod ports;
 mod problems;
 #[cfg(test)]
+mod product_quality_tests;
+#[cfg(test)]
 mod qa_debug_rust_tests;
 #[cfg(test)]
 mod qa_debug_tests;
@@ -122,6 +126,8 @@ mod qa_workbench_tests;
 mod reliability_data_tests;
 mod resource_monitor;
 mod resources;
+#[cfg(test)]
+mod rust_hardening_tests;
 mod scm;
 mod search;
 mod sections;
@@ -133,6 +139,7 @@ mod shortcuts_page;
 mod snippets;
 #[cfg(test)]
 mod text_scale_tests;
+mod web_preview;
 // --- structural ---
 mod shell_quote;
 #[cfg(test)]

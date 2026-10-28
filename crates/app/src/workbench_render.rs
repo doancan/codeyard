@@ -28,6 +28,11 @@ impl Workbench {
 
 impl Render for Workbench {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Accept restored legacy sidebar routes, but keep a single inventory surface.
+        if self.chrome.panel == Some(Panel::Containers) && cx.global::<Settings>().docker_enabled {
+            self.show_containers(cx);
+        }
+        self.chrome.a11y_bounds = Default::default();
         self.update_title(window, cx);
         self.chrome.window_bounds = Some(window.window_bounds());
         self.track_notice(cx);
@@ -84,7 +89,6 @@ impl Render for Workbench {
             Panel::Debug => self.run_debug_view(&p, cx),
             Panel::Testing => self.testing_view(&p, cx),
             Panel::Remote => self.remote_view(&p, cx),
-            Panel::Containers if cx.global::<Settings>().docker_enabled => self.containers_panel(&p, cx),
             Panel::Containers => self.explorer_panel(&p, cx),
         });
 
@@ -229,6 +233,13 @@ impl Render for Workbench {
             .on_action(cx.listener(|this, _: &DockerServices, window, cx| this.docker_contexts(docker_glue::Action::Services, window, cx)))
             .on_action(cx.listener(|this, _: &DockerCancel, _, cx| this.cancel_docker(cx)))
             .on_action(cx.listener(|this, _: &ShowContainers, _, cx| this.show_containers(cx)))
+            .on_action(cx.listener(|this, _: &OpenWebPreview, window, cx| this.open_web_preview(window, cx)))
+            .on_action(cx.listener(|this, _: &StopWebPreview, _, cx| this.stop_web_preview(cx)))
+            .on_action(cx.listener(|this, _: &WebPreviewLog, _, cx| {
+                this.chrome.panel_open = true;
+                this.chrome.bottom = Bottom::Output;
+                cx.notify();
+            }))
             .on_action(cx.listener(|this, _: &RemoteWsl, window, cx| this.show_remote_targets(true, window, cx)))
             .on_action(cx.listener(|this, _: &GitRebaseBranch, window, cx| this.show_branch_op_picker(git_glue::BranchOp::Rebase, window, cx)))
             .on_action(cx.listener(|this, _: &GitOpenWorktree, window, cx| this.show_branch_op_picker(git_glue::BranchOp::OpenWorktree, window, cx)))

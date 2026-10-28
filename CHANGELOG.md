@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Accessible Source Control change groups, commit message and commit state, file diffs, Stage/Unstage actions and live
+  operation results. Hidden Explorer trees no longer appear in the accessibility tree, and stale file actions resolve paths again.
+- Cargo target discovery for automatic Rust debugging: virtual workspaces, multiple binaries, examples, required features
+  and library-only test harnesses. Programs come from Cargo's artifact messages, including custom target directories.
+- *Rust: Open Cargo.toml* falls back to the nearest manifest inside the file's workspace when no language server is attached.
+- Source Control lists Git worktrees with their branch, path and current checkout, plus add/refresh controls and
+  keyboard-accessible same-window navigation on local and SSH hosts. Detached, locked, stale and bare entries are identified;
+  worktree paths with spaces, Unicode, quotes or line breaks are preserved by NUL-delimited Git output.
+
+- macOS accessibility landmark bounds for the window, primary Explorer viewport, focused text-editor pane
+  and status bar, with display-scale conversion and updates when resizing, switching split groups or hiding panels.
+
+- Full-width Container Overview table with in-page search, live SSH resource data, health filtering,
+  selectable columns, stable refresh ordering and scrolling, detail navigation, logs and container actions.
+
+- Optional Web Preview module in Settings: a built-in local static server, browser preview from HTML tabs,
+  live page/CSS refresh, status-bar controls and Output logging. Local, SSH and container files share the
+  same agent-backed path; no external runtime or remote listening port is required. Disabling the module
+  or leaving the workspace stops its server.
 - File icon theme "File Glyphs" (`workbench.iconTheme: "glyphs"`, now the default): colored file glyphs and no folder icons. A
   file's glyph sits in the column of a folder's arrow, so every name in a level lines up.
 - The macOS Dock menu lists the open windows at the top, front one first, and follows as windows come forward, open, close or
@@ -53,7 +72,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Run and Debug shows an automatic session's real name; without a launch file its selector says "Auto-detect project"
+  instead of claiming there are no configurations.
+- Debugging saves workspace buffers before building or starting, honors format-on-save, and cancels on save errors,
+  disk conflicts, Stop or a workspace switch instead of debugging an older on-disk program.
+- Stop invalidates pending target discovery and test-build replies; late adapter starts, pre-launch errors and stopped
+  events cannot revive a cancelled debug session.
+- Right Arrow stays on an expanded empty Explorer folder instead of selecting a sibling.
+- Rust commands distinguish a non-Rust file, disabled language features, an untrusted workspace and an unavailable server.
+  Old Rust replies and test-discovery/build replies are discarded after a workspace change.
+- Rust test discovery recognizes parameterized async test attributes and raw identifiers. File/cursor test commands use the
+  actual nearest manifest instead of guessing a package name from a directory.
+- Debug Test at Cursor refuses unrelated helper functions; failed or interrupted test builds cannot launch partial artifacts.
+  Build diagnostics reach Output and Problems, and quoted manifest/target/feature arguments remain literal argv.
+- Rust workspace test runs continue after a target fails. Duplicate test names cannot overwrite a failure with a pass,
+  and unreported tests cannot keep an earlier green result after a build or runner failure.
+- Memory checks measure and stop their own disposable agent daemon instead of looking up an unrelated running daemon.
+- Windows CI also runs Rust Cargo/debug, product and accessibility regressions; the scripted adapter fixture launches
+  through Python explicitly instead of relying on executable script associations.
+- Rust build errors and test panics normalize Windows drive/UNC paths to the editor's path form, restoring matching
+  Problems entries and squiggles. Spaces and drive letters in panic locations are preserved; POSIX backslashes remain literal.
+
 - The workspace-symbol test ran with language servers turned off, so it could never pass; it now starts rust-analyzer.
+
+### Changed
+
+- Port mappings and mounted storage use responsive inspection cards with copyable addresses and paths.
+  Log entries place timestamp and severity above full-width messages, with a full-width search and console footer.
+
+- Container details promote the selected name and file/terminal actions into the header. Responsive CPU/memory
+  cards show current readings above charts, disk/network activity shares the available width, and log search has a visible field frame.
+
+- Container Overview fills the available width when resizing or hiding columns. Name and Image expand while
+  metrics stay aligned with larger table text; header actions and search/filters wrap in narrow windows. Sorting moves to the
+  Name/CPU/Memory column headers, and Clear filters appears only for an active query or filter.
+- The Container Overview header combines connection, update state and fleet counts, with grouped filters
+  and a framed search field. Redundant initial navigation and duplicate count rows are removed.
 
 ## [0.5.0] - 2026-10-27
 

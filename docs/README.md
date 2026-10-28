@@ -12,6 +12,7 @@ code they describe.
 | [architecture.md](architecture.md) | crates, how the workbench is organised, stack choices, budgets and the gates that enforce them |
 | [remote.md](remote.md) | SSH, the agent and its protocol, reconnecting, askpass, file transfer, `~/.ssh/config` editing |
 | [containers.md](containers.md) | optional container module, Docker workflows and research on Apple Container, WSL Containers and Windows guests |
+| [web-preview.md](web-preview.md) | optional HTML/CSS/JavaScript server, browser live refresh, local/SSH/container support and serving boundaries |
 | [editor-services.md](editor-services.md) | schemas, spell check, merge editor, pull requests, `.http`, log follow: how each one works and where it stops |
 | [design-tokens.md](design-tokens.md) | colour roles, themes and how tokens become Rust constants |
 | [accessibility.md](accessibility.md) | the AccessKit tree on macOS and Windows, motion and contrast, what is verified, what is missing |
@@ -19,6 +20,8 @@ code they describe.
 | [testing.md](testing.md) | test layers, hermetic rules, fuzzing, hardening practice |
 | [production-readiness.md](production-readiness.md) | readiness findings, implementation plan, validation evidence and platform limits |
 | [ui-readiness.md](ui-readiness.md) | workbench resize, status bar, terminal, Git and resource panel review and validation |
+| [product-quality-plan.md](product-quality-plan.md) | 2026-10-28 native product findings, prioritized development batches and acceptance criteria |
+| [product-quality-report.md](product-quality-report.md) | delivered Rust/product fixes, integration scope, native walkthrough and validation evidence |
 | [translating.md](translating.md) | adding a language, the translation file format, plurals, quality bar, adding UI text |
 | [releasing.md](releasing.md) | the manual release procedure |
 
