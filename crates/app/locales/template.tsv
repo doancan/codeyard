@@ -1021,6 +1021,7 @@ Line {}: {} · {}, {} · {}
 Lines kept in terminal history	
 Link copied.	
 List	
+Listen address (local: 127.0.0.1 or ::1; network: 0.0.0.0 or ::)	
 Listing worktrees timed out. Refresh to try again.	
 Live updates	
 Ln {}, Col {}	
@@ -1078,6 +1079,7 @@ Merge {} into {}?
 Merged {}	
 Merging {}…	
 Message (↵ to commit)	
+Milliseconds between live preview checks	
 Mine	
 Minified	
 Minimal	
@@ -1392,7 +1394,9 @@ Preserve case (⌥P)
 Preserve case when replacing	
 Preview	
 Preview HTML in your browser	
+Preview URL copied.	
 Preview of {}	
+Preview port (0: choose a free port automatically)	
 Preview {}	
 Previous Match	
 Previous Problem	
@@ -1488,6 +1492,7 @@ Refresh
 Refresh Explorer	
 Refresh Tests	
 Refresh details	
+Refresh the browser when saved preview files change	
 Regex, Ignore Case	
 Regex, Match Case	
 Regular expression	
@@ -1700,6 +1705,7 @@ Send a request first.
 Send this request?	
 Sending {} {}…	
 Sep	
+Served folder (empty: automatic; relative to the workspace, or an absolute path on the active host)	
 Server binding	
 Services	
 Set	
@@ -1784,6 +1790,7 @@ Staging changes needs a UTF-8 file (this one is stored in another encoding)
 Start	
 Start Debugging	
 Start Debugging (F5)	
+Start Web Preview before copying its URL.	
 Start a debug session first (F5): the adapter says which exceptions it can break on.	
 Start and Connect	
 Start and end of a slice must be numbers	
@@ -2119,8 +2126,9 @@ Waiting for enough samples to draw history…
 Warning	
 Watch	
 Web Preview	
-Web Preview listening on 127.0.0.1:{}	
+Web Preview listening on {}	
 Web Preview stopped.	
+Web Preview: Copy URL	
 Web Preview: Open in Browser	
 Web Preview: Show Server Log	
 Web Preview: Stop Server	
@@ -2542,6 +2550,7 @@ your words
 {}: expected a list of numbers ({}–{})	
 {}: expected a list of text	
 {}: expected a number	
+{}: expected a whole number	
 {}: expected an object	
 {}: expected an object { … }	
 {}: expected text	
@@ -2549,6 +2558,7 @@ your words
 {}: invalid color {}	
 {}: no answer from the debug adapter	
 {}: no open pull requests.	
+{}: path must not contain control characters	
 {}: reachable ({}), but this app has no agent for {}	
 {}: reachable in {} ms · {} · ready	
 {}: reachable, but {} is not a supported server	

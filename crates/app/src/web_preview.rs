@@ -1,4 +1,5 @@
-//! Optional loopback-only static preview. Files come from the active Host, including SSH.
+//! Optional static preview, loopback by default. Files come from the active Host, including SSH.
+use crate::web_preview_config::Config;
 use host::Host;
 use std::collections::{HashSet, VecDeque};
 use std::io::{Read, Write};
@@ -31,6 +32,7 @@ struct Shared {
     host: Arc<dyn Host>,
     root: String,
     authority: String,
+    config: Config,
     token: String,
     stopped: AtomicBool,
     changes: Mutex<Changes>,
@@ -40,22 +42,30 @@ struct Shared {
 pub struct Server {
     shared: Arc<Shared>,
     addr: SocketAddr,
+    listen_addr: SocketAddr,
     listener: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Server {
-    pub fn start(host: Arc<dyn Host>, root: String) -> Result<(Self, mpsc::Receiver<Event>), String> {
+    pub fn start(host: Arc<dyn Host>, root: String, config: Config) -> Result<(Self, mpsc::Receiver<Event>), String> {
         use ring::rand::{SecureRandom, SystemRandom};
         let mut bytes = [0u8; 24];
         SystemRandom::new().fill(&mut bytes).map_err(|_| "Could not create preview session".to_string())?;
         let token = bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
-        let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).map_err(|e| e.to_string())?;
-        let addr = listener.local_addr().map_err(|e| e.to_string())?;
+        let bind = SocketAddr::new(config.host, config.port);
+        let listener = TcpListener::bind(bind).map_err(|e| format!("{bind}: {e}"))?;
+        let listen_addr = listener.local_addr().map_err(|e| e.to_string())?;
+        // Wildcard addresses listen on all interfaces; navigation and accept-loop wakeup use loopback.
+        let mut addr = listen_addr;
+        if addr.ip().is_unspecified() {
+            addr.set_ip(if addr.is_ipv4() { std::net::Ipv4Addr::LOCALHOST.into() } else { std::net::Ipv6Addr::LOCALHOST.into() });
+        }
         let (tx, rx) = mpsc::sync_channel(1024);
         let shared = Arc::new(Shared {
             host,
             root: if root == "/" || (root.len() == 3 && root.ends_with(":/")) { root } else { root.trim_end_matches('/').to_string() },
             authority: addr.to_string(),
+            config,
             token,
             stopped: AtomicBool::new(false),
             changes: Mutex::new(Changes::default()),
@@ -95,7 +105,7 @@ impl Server {
                 }
             })
             .map_err(|e| e.to_string())?;
-        Ok((Self { shared, addr, listener: Some(thread) }, rx))
+        Ok((Self { shared, addr, listen_addr, listener: Some(thread) }, rx))
     }
     pub fn root(&self) -> &str {
         &self.shared.root
@@ -103,11 +113,17 @@ impl Server {
     pub fn port(&self) -> u16 {
         self.addr.port()
     }
+    pub fn listen_addr(&self) -> SocketAddr {
+        self.listen_addr
+    }
+    pub fn config(&self) -> &Config {
+        &self.shared.config
+    }
     pub fn uses_host(&self, host: &Arc<dyn Host>) -> bool {
         Arc::ptr_eq(&self.shared.host, host)
     }
     pub fn url(&self, relative: &str) -> String {
-        format!("http://{}/{}?__codeyard_token={}", self.addr, encode_path(relative), self.shared.token)
+        format!("http://{}/{}?__codeyard_token={}", self.shared.authority, encode_path(relative), self.shared.token)
     }
     pub fn watched_paths(&self) -> Vec<String> {
         self.shared.changes.lock().unwrap_or_else(|e| e.into_inner()).paths.iter().map(|p| crate::ui::join(self.root(), p)).collect()
@@ -234,6 +250,8 @@ fn reply_changes(stream: &mut impl Write, state: &Shared, since: Option<u64>, he
 }
 
 fn serve(mut stream: TcpStream, state: &Shared) {
+    let Ok(local_addr) = stream.local_addr() else { return };
+    let expected_authority = local_addr.to_string();
     let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
     let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
     let mut bytes = Vec::new();
@@ -261,7 +279,7 @@ fn serve(mut stream: TcpStream, state: &Shared) {
         let _ = state.events.try_send(Event::Error(format!("HTTP {status}: {path}")));
         reply(stream, status, "text/plain; charset=utf-8", b"Preview request rejected or file unavailable.", head, "");
     };
-    if authority.len() != 1 || authority[0].1.trim() != state.authority {
+    if authority.len() != 1 || authority[0].1.trim() != expected_authority {
         return error(&mut stream, 403);
     }
     if method != "GET" && !head {
@@ -292,14 +310,20 @@ fn serve(mut stream: TcpStream, state: &Shared) {
     }
     if headers.iter().any(|(k, v)| {
         (k.eq_ignore_ascii_case("sec-fetch-site") && !matches!(v.trim(), "same-origin" | "none"))
-            || (k.eq_ignore_ascii_case("origin") && v.trim() != format!("http://{}", state.authority))
+            || (k.eq_ignore_ascii_case("origin") && v.trim() != format!("http://{expected_authority}"))
     }) {
         return error(&mut stream, 403);
     }
     if relative == "__codeyard_live.js" {
+        if !state.config.live_reload {
+            return error(&mut stream, 404);
+        }
         return reply(&mut stream, 200, "text/javascript; charset=utf-8", LIVE_SCRIPT.as_bytes(), head, "");
     }
     if relative == "__codeyard_changes" {
+        if !state.config.live_reload {
+            return error(&mut stream, 404);
+        }
         let since = query.strip_prefix("since=").and_then(|s| s.parse::<u64>().ok());
         return reply_changes(&mut stream, state, since, head);
     }
@@ -326,15 +350,15 @@ fn serve(mut stream: TcpStream, state: &Shared) {
     if state.stopped.load(Ordering::Acquire) {
         return;
     }
-    {
+    if state.config.live_reload {
         let mut changes = state.changes.lock().unwrap_or_else(|e| e.into_inner());
         if changes.paths.len() < MAX_WATCHED && changes.paths.insert(relative.clone()) {
             let _ = state.events.try_send(Event::Watch);
         }
     }
-    if is_html(&relative) {
+    if state.config.live_reload && is_html(&relative) {
         // External same-origin script also works with a typical script-src 'self' policy.
-        body.extend_from_slice(b"\n<script src=\"/__codeyard_live.js\"></script>\n");
+        body.extend_from_slice(format!("\n<script src=\"/__codeyard_live.js\" data-interval=\"{}\"></script>\n", state.config.reload_interval).as_bytes());
     }
     reply(&mut stream, 200, content_type, &body, head, "");
 }
