@@ -2,6 +2,8 @@
 //! sheet shows a red banner, whether the registry asks for a human review and what `cyx publish --dry-run` prints.
 //! Authors never see the levels; they see the sheet.
 
+use serde::{Deserialize, Serialize};
+
 /// Programs that run whatever script or command line they are given. Allowed in `run` only when the script ships inside
 /// the package (checked by `ext-pkg`), so a language server wrapper is a normal high-risk extension, not a way around
 /// review. Matched on the file name without `.exe`/`.cmd`/`.bat`/`.com`, ignoring case.
@@ -49,7 +51,7 @@ pub const INTERPRETERS: &[&str] = &[
 /// Interpreter names that also come with a version suffix: `python3.12`, `node22`, `pypy3`, `pythonw`.
 pub const INTERPRETER_FAMILIES: &[&str] = &["python", "pypy", "node", "ruby", "perl", "php", "lua", "luajit", "julia", "java", "dotnet"];
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Clipboard {
     #[default]
     None,
@@ -68,7 +70,7 @@ impl Clipboard {
 }
 
 /// What the manifest declares in `[permissions]`, validated.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Permissions {
     /// Workspace globs.
     pub read: Vec<String>,
