@@ -92,21 +92,9 @@ pub fn rebase_in_progress(host: &dyn Host, root: &str) -> bool {
     })
 }
 
-/// `git worktree list --porcelain` → (path, branch or None).
+/// Worktree paths and branches for the command palette.
 pub fn worktrees(host: &dyn Host, root: &str) -> Result<Vec<(String, Option<String>)>, String> {
-    Ok(parse_worktrees(&git_ok(host, root, &["worktree", "list", "--porcelain"])?))
-}
-
-pub fn parse_worktrees(out: &str) -> Vec<(String, Option<String>)> {
-    let mut v: Vec<(String, Option<String>)> = Vec::new();
-    for line in out.lines() {
-        if let Some(p) = line.strip_prefix("worktree ") {
-            v.push((p.to_string(), None));
-        } else if let (Some(b), Some(last)) = (line.strip_prefix("branch "), v.last_mut()) {
-            last.1 = Some(b.trim_start_matches("refs/heads/").to_string());
-        }
-    }
-    v
+    Ok(super::worktree_entries(host, root)?.into_iter().map(|entry| (entry.path, entry.branch)).collect())
 }
 
 /// New worktree: checks out `branch` if given; otherwise creates it from the current branch with `-b`.
@@ -318,10 +306,6 @@ mod tests {
         assert!(list.iter().any(|(_, b)| b.as_deref() == Some("wt-new")));
         assert!(wt.join("f.txt").exists() || wt.exists());
         let _ = crate::test_git::git().args(["worktree", "remove", "--force"]).arg(&wt).current_dir(&dir).output();
-        assert_eq!(
-            parse_worktrees("worktree /a\nHEAD x\nbranch refs/heads/main\n\nworktree /b\nHEAD y\ndetached\n"),
-            vec![("/a".to_string(), Some("main".to_string())), ("/b".to_string(), None)]
-        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

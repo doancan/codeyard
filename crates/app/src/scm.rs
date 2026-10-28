@@ -19,7 +19,16 @@ pub enum ScmEvent {
     /// An operation finished: refresh the state.
     Refresh,
     /// Show diff: index ↔ HEAD if `staged`, otherwise working tree ↔ index.
-    OpenDiff { path: String, staged: bool },
+    OpenDiff {
+        path: String,
+        staged: bool,
+    },
+    /// Open another worktree on the same host, keeping the normal unsaved-file guard.
+    OpenWorktree {
+        root: String,
+        path: String,
+    },
+    AddWorktree,
     /// The "…" in the header: more git operations (window coordinates).
     MoreActions(gpui::Point<gpui::Pixels>),
     /// The "…" in the GRAPH header: view, filters and history actions (window coordinates).
@@ -103,6 +112,7 @@ pub struct ScmPanel {
     detail_error: Option<SharedString>,
     detail_task: Option<gpui::Task<()>>,
     stashes: Vec<(String, String)>,
+    worktrees: Box<worktree_ui::Worktrees>,
     /// Identity that will author commits (name, email); `None` if not read yet.
     identity: Option<(Option<String>, Option<String>)>,
     // --- git-sync ---
@@ -122,6 +132,9 @@ pub use graph_ui::GraphOption;
 #[path = "scm_access.rs"]
 mod access;
 pub(crate) use access::AccessView;
+
+#[path = "scm_worktrees.rs"]
+mod worktree_ui;
 
 impl EventEmitter<ScmEvent> for ScmPanel {}
 
@@ -166,6 +179,7 @@ impl ScmPanel {
             detail_error: None,
             detail_task: None,
             stashes: Vec::new(),
+            worktrees: Default::default(),
             identity: None,
             syncing: false,
             has_remote: false,
@@ -175,6 +189,9 @@ impl ScmPanel {
     }
 
     pub fn set_status(&mut self, host: Arc<dyn Host>, status: Option<Arc<Status>>, cx: &mut Context<Self>) {
+        if !Arc::ptr_eq(&self.host, &host) || self.status.as_ref().map(|s| &s.root) != status.as_ref().map(|s| &s.root) {
+            self.worktrees.reset();
+        }
         self.host = host;
         self.status = status;
         // Commit, branch switch, pull: the graph refreshes when HEAD or the repo changes.
@@ -667,6 +684,9 @@ impl ScmPanel {
 
 impl Render for ScmPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if !self.worktrees.loaded {
+            self.refresh_worktrees(cx);
+        }
         let p = *palette(cx);
         let header = div()
             .h(px(layout::VIEW_HEADER_H))
@@ -697,6 +717,7 @@ impl Render for ScmPanel {
                     .on_click(cx.listener(|this, _, _, cx| {
                         // A remote added since the graph was read shows up here (HEAD did not move, so nothing else reloads it).
                         this.load_graph(cx);
+                        this.refresh_worktrees(cx);
                         cx.emit(ScmEvent::Refresh);
                     })),
             )
@@ -748,6 +769,19 @@ impl Render for ScmPanel {
         div()
             .key_context("ScmPanel")
             .track_focus(&self.focus_handle)
+            .tab_group()
+            .on_key_down(|event: &gpui::KeyDownEvent, window, cx| {
+                let modifiers = event.keystroke.modifiers;
+                if event.keystroke.key == "tab" && !modifiers.control && !modifiers.alt && !modifiers.platform && !modifiers.function {
+                    if modifiers.shift {
+                        window.focus_prev();
+                    } else {
+                        window.focus_next();
+                    }
+                    window.prevent_default();
+                    cx.stop_propagation();
+                }
+            })
             .overflow_hidden()
             .on_mouse_move(cx.listener(|this, ev: &gpui::MouseMoveEvent, _, cx| {
                 if !this.sections.dragging() {
@@ -876,6 +910,7 @@ impl Render for ScmPanel {
                     }),
             )
             .children(self.stash_section(cx))
+            .child(self.worktree_section(cx))
             .child(self.graph_section(self.query.focus_handle(cx).is_focused(window), graph_fills, cx))
             .children(self.detail_section(cx))
     }

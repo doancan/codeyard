@@ -551,6 +551,13 @@ message the tag is annotated); Git: Delete Tag, Delete Remote Tag, Push Tag and 
 remote (`origin`, else the first one). Rename Remote, Edit Remote URL, Remove Worktree and Prune Worktrees
 complete Add Remote and Add Worktree.
 
+**Worktrees in Source Control.** The **Worktrees** section lists the repository's checkouts with their branch and full folder
+path. **Current** marks the open checkout; click another row (or focus it with Tab and press Enter) to open its folder in this
+window, on the same local or SSH host. The normal unsaved-file protection applies. Detached checkouts are labelled, locked
+ones show a lock, and stale or bare entries cannot be opened from the list. Hover for the full path, commit and lock reason.
+The header offers **Add worktree** and **Refresh**. The list also refreshes with Git while Source Control and this section are
+visible, including checkouts added or removed in a terminal. Collapsing the section is remembered and pauses its refreshes.
+
 **Stash.** Besides stash and stash with untracked files there are "Stash Staged Changes" (only what is staged;
 needs git 2.35 or newer), "Stash with Name…" and "Show Stash…", which lists the files a stash changed and opens one
 as a diff (untracked files kept by a stash are not shown).
