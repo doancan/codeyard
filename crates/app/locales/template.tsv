@@ -379,6 +379,7 @@ Could not format: {}
 Could not forward port {}: {}	
 Could not forward the debug port over SSH: {}	
 Could not inspect Cargo targets: {}	
+Could not install cyx: {}	
 Could not install the {0} dictionary: {1}.	
 Could not install the {0} dictionary: {1}. Check your internet connection and try again.	
 Could not keep a copy of the version that was on disk: {}	
@@ -446,6 +447,7 @@ Current branch
 Cursor animation	
 Customize	
 Cut	
+DEV	
 Data breakpoint set: the program stops when {} is written.	
 Data breakpoint: {}	
 Data: Convert To…	
@@ -717,7 +719,10 @@ Explorer
 Explorer (⇧⌘E)	
 Export as Text…	
 Exposed only; not published on the server.	
+Extension in development not loaded: {}	
+Extension in development: it reloads when you save a file in its folder	
 Extension not loaded: {}	
+Extensions: Install cyx Command in PATH	
 External image: open the link to view it.	
 F4 steps through the search results, ⇧F4 goes back.	
 Favorites	
@@ -2201,6 +2206,10 @@ could not run curl on {}: {}
 curl is not installed on {0}; install it or set http.runOn to {1}	
 curl returned no response headers	
 current	
+cyx is in {}; add that folder to PATH to use it in a terminal	
+cyx is installed in {}: run cyx new theme my-theme in a terminal	
+cyx is installed in {}; add that folder to PATH in your shell profile	
+cyx is not next to Codeyard in this build; install it with cargo install --path crates/cyx	
 dark	
 data breakpoint	
 debug output was dropped: the debugger could not keep up	
@@ -2485,6 +2494,7 @@ your words
 {} day ago|{} days ago	
 {} definition|{} definitions	
 {} entry is left out.|{} entries are left out.	
+{} exists and is not a link; remove it first	
 {} exited with {}	
 {} failed	
 {} file skipped, binary or too large|{} files skipped, binary or too large	

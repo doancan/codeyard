@@ -43,6 +43,7 @@ impl Workbench {
             Command::action("Search: Structural Replace…", crate::search::StructuralReplace),
             Command::action("View: Switch Editor…", SwitchEditor),
             Command::action("View: Toggle Zen Mode", ToggleZenMode),
+            Command::action("Extensions: Install cyx Command in PATH", InstallCyx),
             Command::action("View: Toggle Full Screen", ToggleFullScreen),
             Command::action("Files: Open Folder…", OpenFolder),
             Command::action("Editor: Save", editor::Save),

@@ -84,6 +84,8 @@ mod palette_glue;
 mod panels_glue;
 #[cfg(test)]
 pub use panels_glue::ProblemRow;
+#[path = "workbench_cyx.rs"]
+mod cyx_glue;
 #[path = "workbench_ports.rs"]
 mod ports_glue;
 #[path = "workbench_projects.rs"]
@@ -358,6 +360,7 @@ actions!(
         FindTodos,
         SwitchEditor,
         ToggleZenMode,
+        InstallCyx,
         ToggleFullScreen,
         SelectIconTheme,
         InsertSnippet,
@@ -1125,7 +1128,7 @@ impl Workbench {
             },
             cfg: state_glue::ConfigState {
                 dir: config_dir,
-                stamp: (None, None, None),
+                stamp: (None, None, None, 0),
                 theme_override: false,
                 project: Vec::new(),
                 trusted: Default::default(),

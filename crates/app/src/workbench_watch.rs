@@ -106,7 +106,7 @@ impl Workbench {
         }
         let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
         if let Some((spath, kpath)) = &paths {
-            self.cfg.stamp = (mtime(spath), mtime(kpath), mtime(&spath.with_file_name(crate::ext::LOCK_FILE)));
+            self.cfg.stamp = (mtime(spath), mtime(kpath), mtime(&spath.with_file_name(crate::ext::LOCK_FILE)), crate::ext::dev_stamp());
         }
         // Installed extensions first: every reader below takes its entries from them.
         let ext_before = crate::ext::schema_entries();
@@ -304,7 +304,7 @@ impl Workbench {
                         let Some((spath, kpath)) = this.config_paths() else { return };
                         let lpath = spath.with_file_name(crate::ext::LOCK_FILE);
                         let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
-                        if this.cfg.dirty || (mtime(&spath), mtime(&kpath), mtime(&lpath)) != this.cfg.stamp {
+                        if this.cfg.dirty || (mtime(&spath), mtime(&kpath), mtime(&lpath), crate::ext::dev_stamp()) != this.cfg.stamp {
                             this.reload_config(window, cx);
                         }
                     })

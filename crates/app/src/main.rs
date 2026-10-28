@@ -1,6 +1,6 @@
 //! codeyard: lightweight, native code editor. Local + SSH.
 //!
-//!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions]
+//!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER]
 
 // Normal Windows launches are GUI applications in every profile. Test harnesses keep their console.
 #![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
@@ -667,6 +667,8 @@ struct Args {
     after_update: bool,
     /// `--no-extensions`: start with no extension loaded (safe mode).
     no_extensions: bool,
+    /// `--extension-dev FOLDER` (`cyx dev`): load that folder as an extension and reload it on every save.
+    extension_dev: Option<String>,
 }
 
 /// The windows an update restart left for this process; the file is consumed here. Anything wrong with it is logged and means
@@ -706,8 +708,18 @@ fn parse_args() -> Args {
 /// `--do` can press keys, click and run any palette command, "Workspace: Trust This Folder" and tasks among them: whoever builds the
 /// command line (a launcher, a `codeyard://`-style handler, a document's "open with") must not get that from a release build.
 fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
-    let mut args =
-        Args { path: None, connect: None, theme: None, terminal: false, search: None, panel: None, run: Vec::new(), after_update: false, no_extensions: false };
+    let mut args = Args {
+        path: None,
+        connect: None,
+        theme: None,
+        terminal: false,
+        search: None,
+        panel: None,
+        run: Vec::new(),
+        after_update: false,
+        no_extensions: false,
+        extension_dev: None,
+    };
     let mut it = argv;
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -715,6 +727,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
             "--theme" => args.theme = it.next(),
             "--terminal" => args.terminal = true,
             "--no-extensions" => args.no_extensions = true,
+            "--extension-dev" => args.extension_dev = it.next(),
             update_restart::FLAG => args.after_update = true,
             "--search" => args.search = it.next(),
             "--panel" => args.panel = it.next(),
@@ -733,7 +746,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
             }
             "-h" | "--help" => {
                 println!(
-                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions]"
+                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER]"
                 );
                 std::process::exit(0);
             }
@@ -769,6 +782,8 @@ mod args_tests {
         assert!(a.no_extensions);
         assert_eq!(a.path.as_deref(), Some("/work"));
         assert!(!parse(false, &["/work"]).no_extensions);
+        let dev = parse(false, &["--extension-dev", "/ext", "/work"]);
+        assert_eq!((dev.extension_dev.as_deref(), dev.path.as_deref()), (Some("/ext"), Some("/work")), "its value is not the folder to open");
     }
 }
 
@@ -940,6 +955,9 @@ fn main() {
     let args = parse_args();
     if args.no_extensions {
         ext::turn_off();
+    }
+    if let Some(dir) = &args.extension_dev {
+        ext::set_dev(Some(std::fs::canonicalize(dir).unwrap_or_else(|_| dir.into())));
     }
     // A folder or host on the command line wins; the file is consumed either way.
     let reopen = args.after_update.then(update_handover).flatten().filter(|_| args.path.is_none() && args.connect.is_none());
