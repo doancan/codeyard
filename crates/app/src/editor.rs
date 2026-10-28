@@ -205,6 +205,8 @@ mod mouse_glue;
 mod moves_glue;
 #[path = "editor_popups.rs"]
 mod popups_glue;
+#[cfg(test)]
+pub use popups_glue::HoverRow;
 #[path = "editor_render.rs"]
 mod render_glue;
 #[path = "editor_schema.rs"]
@@ -263,7 +265,7 @@ struct Completion {
 /// Info shown while the mouse hovers: diagnostics and the server's description.
 struct Hover {
     at: usize,
-    diagnostics: Vec<(u8, String)>,
+    diagnostics: Vec<crate::lsp::Diagnostic>,
     text: Option<String>,
     position: Point<Pixels>,
 }
@@ -489,6 +491,8 @@ pub struct EditorView {
     lsp_lang: &'static str,
     lsp_version: i64,
     diagnostics: Vec<crate::lsp::Diagnostic>,
+    /// Workspace root of the language server; related locations under it are shown relative to it.
+    lsp_root: Option<String>,
     /// JSON/YAML schema (completion and hover come from here when there is no language server); bound by the Workbench.
     schema: Option<Arc<SchemaBinding>>,
     /// Open color picker (if any).
@@ -980,6 +984,7 @@ impl EditorView {
             lsp_lang: "",
             lsp_version: 0,
             diagnostics: Vec::new(),
+            lsp_root: None,
             completion: None,
             completion_task: None,
             signature: None,

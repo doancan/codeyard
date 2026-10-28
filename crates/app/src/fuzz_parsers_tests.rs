@@ -444,6 +444,9 @@ fn server_value(rng: &mut Rng, depth: usize) -> serde_json::Value {
         "scopeUri",
         "a.b",
         "rust-analyzer.check",
+        "relatedInformation",
+        "rendered",
+        "code",
     ];
     let pick = |rng: &mut Rng| KEYS[(rng.next() as usize) % KEYS.len()];
     match if depth > 6 { rng.next() % 6 } else { rng.next() % 9 } {
@@ -467,8 +470,20 @@ fn language_server_and_debugger_replies_survive_any_shape() {
         let v = server_value(&mut rng, 0);
         let outcome = std::panic::catch_unwind(|| {
             use crate::lsp::*;
+            use serde_json::json;
             let _ = parse_range(&v);
-            let _ = parse_diagnostics(&v);
+            if let Some((path, diags)) = parse_diagnostics(&v) {
+                for d in &diags {
+                    assert!(d.related.len() <= MAX_RELATED && d.rendered.as_ref().is_none_or(|r| r.len() <= MAX_RENDERED + 3));
+                    let _ = (d.headline(), d.full_text(Some("/")));
+                    for r in &d.related {
+                        let _ = related_label(r, &path, None);
+                    }
+                }
+            }
+            let _ = parse_diagnostics(
+                &json!({ "uri": "file:///a.rs", "diagnostics": [v.clone(), { "relatedInformation": v.clone(), "data": v.clone(), "code": v.clone() }] }),
+            );
             let _ = parse_completions(&v);
             let _ = hover_text(&v);
             let _ = parse_locations(&v);

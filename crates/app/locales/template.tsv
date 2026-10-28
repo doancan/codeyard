@@ -506,6 +506,7 @@ Dev Container is ready. The current workspace or unsaved files changed, so it wa
 Dev Container result: {}	
 Dev Container setup failed: {}. Check Output and install the Dev Container CLI if it is missing.	
 Developer: Restart Language Servers	
+Diagnostic copied	
 Diff view side by side (off: inline)	
 Disable All Breakpoints	
 Disable Breakpoint	
@@ -1160,6 +1161,7 @@ No mounted storage
 No outgoing calls found	
 No outline for this file type.	
 No output yet. Language server logs appear here.	
+No problem at the cursor	
 No problems in this file	
 No problems.	
 No problems. Language servers start when you open a file.	
@@ -1352,6 +1354,7 @@ Previous Problem
 Previous match (⇧↵)	
 Previous result (⇧F4)	
 Problems	
+Problems: Copy Full Diagnostic	
 Process ended. Press any key to close.	
 Process exited with code {}	
 Process exited with code {}. Press any key to close.	
@@ -2193,6 +2196,7 @@ latest {} open
 left	
 light	
 limit needs a whole number	
+line {0}: {1}	
 lines {0}–{1}	
 link target differs	
 local agent, protocol test	

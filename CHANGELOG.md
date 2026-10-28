@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dotted keys allowed) and `initializationOptions`, with or without `command`. Rust developers can now turn on Clippy on save
   (`"rust-analyzer.check.command": "clippy"`) and analyse code behind Cargo features. Changing `settings` reaches a running
   server without a restart; it works the same in SSH folders.
+- Problems explain themselves: the places a language server attaches to a problem ("value moved here", "borrow later used
+  here") show under it in the hover and in Problems, and a click opens them. The problem's code comes first (`E0382: …`), and
+  *Problems: Copy Full Diagnostic* copies the compiler's complete message, as a terminal shows it.
 
 ### Changed
 

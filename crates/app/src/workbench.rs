@@ -80,6 +80,8 @@ mod nav_glue;
 mod palette_glue;
 #[path = "workbench_panels.rs"]
 mod panels_glue;
+#[cfg(test)]
+pub use panels_glue::ProblemRow;
 #[path = "workbench_ports.rs"]
 mod ports_glue;
 #[path = "workbench_projects.rs"]
@@ -336,6 +338,7 @@ actions!(
         GitPruneWorktrees,
         GitDiscardAll,
         RestartLanguageServers,
+        CopyFullDiagnostic,
         ShowSettings,
         ShowKeyboardShortcuts,
         GitFileHistory,

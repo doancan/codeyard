@@ -118,6 +118,7 @@ impl Workbench {
             }
             return;
         }
+        ed.update(cx, |e, _| e.set_lsp_root(Some(root.clone())));
         let slot = slot_key(key, &root, primary.as_deref());
         let key = slot.as_str();
         match self.lsp.servers.get_mut(key) {
@@ -393,6 +394,25 @@ impl Workbench {
                 }
             }
         }
+    }
+
+    /// *Problems: Copy Full Diagnostic*: the most severe diagnostic under the cursor, as the compiler wrote it when the
+    /// server sent that, otherwise with its code and related locations.
+    pub(super) fn copy_full_diagnostic(&mut self, cx: &mut Context<Self>) {
+        let found = self.active_editor().and_then(|ed| {
+            let e = ed.read(cx);
+            e.diagnostic_at_cursor().map(|d| (d, e.path.clone()))
+        });
+        let notice = match found {
+            Some((d, path)) => {
+                let root = self.root_of(&path, cx);
+                cx.write_to_clipboard(gpui::ClipboardItem::new_string(d.full_text(root.as_deref())));
+                t("Diagnostic copied")
+            }
+            None => t("No problem at the cursor"),
+        };
+        self.notice = Some(Notice::Info(notice.into()));
+        cx.notify();
     }
 
     /// Settings changed: set the servers up from scratch.
