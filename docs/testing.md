@@ -18,7 +18,7 @@ the 2026-10-27 local run passed 1,516 tests, with three documented manual/data-d
   Git tests use real repositories (including a local bare "remote" for pull requests); `.http` tests use a tiny TCP
   server inside the test.
 - **Fake language server.** `test_lsp.rs` writes a small Python server driven by a JSON scenario (capabilities, an answer
-  per method or none at all, messages to send when a file opens) and records every message it receives, so a test can
+  per method or none at all, messages to send when a file opens or after a given message) and records every message it receives, so a test can
   assert on what Codeyard sent: `FakeServer::received("initialize")`, `replies()`, `starts()`. Tests using it skip with a
   message when Python 3 is missing.
 - **Fuzz and hostile-input tests** (`schema/src/fuzz_tests.rs`, colour round-trips, spell tokenizer, Emmet,

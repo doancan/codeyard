@@ -1,5 +1,6 @@
 use super::*;
 use crate::globs::{is_excluded, name_matches, path_matches};
+use serde_json::json;
 
 /// A repository could fill the clipboard through the terminal and switch off the checks on what is pasted back, so a
 /// later paste would run its command: these keys come only from the user's own settings, even in a trusted folder.
@@ -332,4 +333,73 @@ mod hardening {
         assert_eq!((s.graph_limit, s.timeline_limit, s.tree_indent, s.cursor_width), (d.graph_limit, d.timeline_limit, d.tree_indent, d.cursor_width));
         assert_eq!((s.startup, s.inline_blame, s.tab_close.as_str()), (d.startup, d.inline_blame, d.tab_close.as_str()));
     }
+}
+
+fn server<'a>(s: &'a Settings, key: &str) -> Option<&'a Option<crate::lsp::ServerSpec>> {
+    s.lsp_servers.iter().rev().find(|(k, _)| k == key).map(|(_, o)| o)
+}
+
+/// `lsp.servers` entries carry `settings` (dotted keys expanded) and `initializationOptions`, with or without `command`.
+#[test]
+fn lsp_server_entries_carry_settings_and_initialization_options() {
+    let (s, w) = parse(
+        r#"{ "lsp.servers": {
+            "rust": { "settings": { "rust-analyzer": { "check": { "command": "check" } }, "rust-analyzer.check.command": "clippy" },
+                      "initializationOptions": { "cargo": { "features": ["foo"] } } },
+            "go": { "command": "gopls", "args": ["serve"], "settings": { "gopls.buildFlags": ["-tags=integration"] } },
+            "python": { "initializationOptions": "text" },
+            "c": { "command": "clangd", "initializationOptions": [1, 2] },
+            "java": null
+        } }"#,
+    );
+    assert!(w.is_empty(), "{w:?}");
+    let rust = server(&s, "rust").unwrap().as_ref().unwrap();
+    assert_eq!(rust.command, None, "no command: the default server");
+    assert_eq!(*rust.settings, json!({ "rust-analyzer": { "check": { "command": "clippy" } } }), "dotted after nested wins");
+    assert_eq!(rust.init_options, Some(json!({ "cargo": { "features": ["foo"] } })));
+    let go = server(&s, "go").unwrap().as_ref().unwrap();
+    assert_eq!((go.command.as_deref(), go.args.as_slice()), (Some("gopls"), &["serve".to_string()][..]));
+    assert_eq!(*go.settings, json!({ "gopls": { "buildFlags": ["-tags=integration"] } }));
+    let python = server(&s, "python").unwrap().as_ref().unwrap();
+    assert_eq!((&*python.settings, &python.init_options), (&Value::Null, &Some(json!("text"))), "any JSON is kept unchanged");
+    assert_eq!(server(&s, "c").unwrap().as_ref().unwrap().init_options, Some(json!([1, 2])));
+    assert_eq!(server(&s, "java"), Some(&None), "null still turns the language off");
+    // A plain command entry, as before.
+    let (s, _) = parse(r#"{ "lsp.servers": { "python": { "command": "pylsp" } } }"#);
+    let p = server(&s, "python").unwrap().as_ref().unwrap();
+    assert_eq!((p.command.as_deref(), &*p.settings, &p.init_options), (Some("pylsp"), &Value::Null, &None));
+}
+
+/// The project layer replaces the user's entry for a key (later wins), key by key.
+#[test]
+fn a_later_lsp_server_entry_wins() {
+    let project = [(".codeyard/settings.jsonc", r#"{ "lsp.servers": { "rust": { "settings": { "b": 2 } } } }"#, true)];
+    let (s, w) = parse_layers_trusted(r#"{ "lsp.servers": { "rust": { "settings": { "a": 1 } } } }"#, &project, true).unwrap();
+    assert!(w.is_empty(), "{w:?}");
+    assert_eq!(*server(&s, "rust").unwrap().as_ref().unwrap().settings, json!({ "b": 2 }));
+}
+
+/// AC7: an invalid `settings` value is named in the interface language; the rest of the entry still applies. An entry with
+/// nothing to apply is rejected with the shape it should have.
+#[test]
+fn invalid_lsp_server_settings_are_warned_about_in_the_interface_language() {
+    let text = r#"{ "lsp.servers": { "rust": { "command": "ra", "settings": 5 }, "go": { "args": ["x"] }, "c": { "command": 3 }, "lua": 7 } }"#;
+    let (s, w) = parse(text);
+    let rust = server(&s, "rust").unwrap().as_ref().unwrap();
+    assert_eq!((rust.command.as_deref(), &*rust.settings), (Some("ra"), &Value::Null));
+    assert!(server(&s, "go").is_none() && server(&s, "c").is_none() && server(&s, "lua").is_none());
+    let shape = r#"{ "command": "…", "args": [], "settings": {} }"#;
+    assert_eq!(
+        w,
+        vec![
+            "settings.jsonc: lsp.servers.rust.settings: expected an object".to_string(),
+            format!("settings.jsonc: lsp.servers.go: expected {shape} or null"),
+            format!("settings.jsonc: lsp.servers.c: expected {shape} or null"),
+            format!("settings.jsonc: lsp.servers.lua: expected {shape} or null"),
+        ]
+    );
+    let _tr = crate::i18n::LangGuard::set("tr");
+    let (_, w) = parse(text);
+    assert_eq!(w[0], "settings.jsonc: lsp.servers.rust.settings: bir nesne bekleniyordu");
+    assert_eq!(w[1], format!("settings.jsonc: lsp.servers.go: {shape} ya da null bekleniyordu"));
 }
