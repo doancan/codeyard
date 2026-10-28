@@ -7,6 +7,10 @@ use std::io::{self, Read, Write};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
+#[cfg(windows)]
+#[path = "proc_job.rs"]
+mod job;
+
 /// Cap on one command's output (a huge `git diff`).
 const MAX_OUTPUT: u64 = 32 * 1024 * 1024;
 
@@ -272,13 +276,31 @@ pub struct Proc {
     /// Queue for the thread that writes to stdin: a stopped process's full pipe buffer must not block `write` (and with it the dispatch
     /// thread, `ProcKill`).
     input: Option<std::sync::mpsc::SyncSender<Vec<u8>>>,
+    #[cfg(windows)]
+    _job: job::Job,
 }
 
 pub fn spawn(program: &str, args: &[String], cwd: Option<&str>) -> io::Result<(Proc, impl Read + Send + 'static)> {
     let mut cmd = command(program, args, cwd)?;
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        use windows_sys::Win32::System::Threading::{CREATE_NO_WINDOW, CREATE_SUSPENDED};
+        // Assign ownership before any user code can run or create descendants.
+        cmd.creation_flags(CREATE_NO_WINDOW | CREATE_SUSPENDED);
+    }
     let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn()?;
+    #[cfg(windows)]
+    let job = match job::Job::attach(&child) {
+        Ok(job) => job,
+        Err(error) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
+        }
+    };
     let stdin = child.stdin.take();
     let stdout = piped(child.stdout.take())?;
     let (tx, rx) = std::sync::mpsc::sync_channel::<Vec<u8>>(512);
@@ -291,7 +313,16 @@ pub fn spawn(program: &str, args: &[String], cwd: Option<&str>) -> io::Result<(P
         }
         // When the queue closes (`wait`/`drop`) `stdin` is dropped: the process sees EOF.
     });
-    Ok((Proc { child, waited: false, input: Some(tx) }, stdout))
+    Ok((
+        Proc {
+            child,
+            waited: false,
+            input: Some(tx),
+            #[cfg(windows)]
+            _job: job,
+        },
+        stdout,
+    ))
 }
 
 impl Proc {
