@@ -11,7 +11,7 @@
 //! Plain text only: files aren't checked for existence (costly on remote
 //! hosts); a path that won't open is reported on click.
 
-use std::sync::LazyLock;
+use std::{borrow::Cow, sync::LazyLock};
 
 use regex::Regex;
 
@@ -34,10 +34,10 @@ static STYLISH_ITEM: LazyLock<Regex> =
 
 /// Rust test panic: new format puts the location in the header, the message on the next line.
 static RUST_PANIC: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^thread '.*'(?: \(\d+\))? panicked at (?P<file>[^\s:]+):(?P<line>\d+):(?P<col>\d+):?\s*$").unwrap());
+    LazyLock::new(|| Regex::new(r"^thread '.*'(?: \(\d+\))? panicked at (?P<file>.+?):(?P<line>\d+):(?P<col>\d+):?\s*$").unwrap());
 /// Old format: `panicked at 'message', file:line:col`.
 static RUST_PANIC_OLD: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^thread '.*'(?: \(\d+\))? panicked at '(?P<msg>.*)', (?P<file>[^\s:]+):(?P<line>\d+):(?P<col>\d+)\s*$").unwrap());
+    LazyLock::new(|| Regex::new(r"^thread '.*'(?: \(\d+\))? panicked at '(?P<msg>.*)', (?P<file>.+?):(?P<line>\d+):(?P<col>\d+)\s*$").unwrap());
 /// `go test`: indented `a_test.go:12: message`.
 static GO_TEST_LINE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\s+(?P<file>[\w./-]+_test\.go):(?P<line>\d+):\s*(?P<msg>\S.*)$").unwrap());
 /// pytest trace: `file.py:12: AssertionError`.
@@ -56,6 +56,10 @@ fn severity(word: &str) -> u8 {
 /// `a/./b/../c` → `a/c`; for absolute and relative paths (joined onto the root if one is given).
 fn resolve(root: &str, file: &str) -> String {
     let file = file.trim();
+    // A Linux/SSH file may legally contain a backslash. Only Windows roots/absolute paths imply separators.
+    let windows = [root, file].iter().any(|p| p.starts_with("//") || p.starts_with(r"\\") || p.as_bytes().get(1) == Some(&b':'));
+    let root = output_path(root, windows);
+    let file = output_path(file, windows);
     let joined =
         if file.starts_with('/') || file.as_bytes().get(1) == Some(&b':') { file.to_string() } else { format!("{}/{file}", root.trim_end_matches('/')) };
     let mut parts: Vec<&str> = Vec::new();
@@ -71,6 +75,18 @@ fn resolve(root: &str, file: &str) -> String {
         }
     }
     parts.join("/")
+}
+
+fn output_path(path: &str, windows: bool) -> Cow<'_, str> {
+    if !windows {
+        return Cow::Borrowed(path);
+    }
+    let path = if let Some(unc) = path.strip_prefix(r"\\?\UNC\").or_else(|| path.strip_prefix("//?/UNC/")) {
+        format!("//{unc}")
+    } else {
+        path.strip_prefix(r"\\?\").or_else(|| path.strip_prefix("//?/")).unwrap_or(path).to_string()
+    };
+    Cow::Owned(path.replace('\\', "/"))
 }
 
 fn diagnostic(line: &str, col: Option<&str>, sev: u8, message: &str) -> Diagnostic {
@@ -160,12 +176,13 @@ fn consume(line: &str, st: &mut State, push: &mut dyn FnMut(&str, Diagnostic)) -
     if !line.contains(':') {
         return false;
     }
-    if let Some(c) = RUST_PANIC.captures(line) {
-        st.panic_at = Some((c["file"].to_string(), c["line"].to_string(), c["col"].to_string()));
-        return true;
-    }
+    // The inline-message format must win before the modern path pattern accepts its spaces and comma.
     if let Some(c) = RUST_PANIC_OLD.captures(line) {
         push(&c["file"], diagnostic(&c["line"], Some(&c["col"]), 1, &crate::i18n::tf("test panicked: {}", &[&&c["msg"]])));
+        return true;
+    }
+    if let Some(c) = RUST_PANIC.captures(line) {
+        st.panic_at = Some((c["file"].to_string(), c["line"].to_string(), c["col"].to_string()));
         return true;
     }
     if let Some(c) = GO_TEST_LINE.captures(line) {
@@ -317,6 +334,38 @@ mod tests {
     fn windows_paths_stay_absolute() {
         let (p, _) = one("C:\\proj\\main.c:3:1: error: x");
         assert!(p.ends_with("main.c") && p.starts_with("C:"), "{p}");
+    }
+
+    #[test]
+    fn windows_rust_diagnostics_match_workspace_paths_without_changing_posix_names() {
+        for (root, file, expected) in [
+            ("C:/work/demo", r"src\lib.rs", "C:/work/demo/src/lib.rs"),
+            (r"C:\work\demo", r".\src\..\src\lib.rs", "C:/work/demo/src/lib.rs"),
+            ("/unused", r"C:\work\demo\src\lib.rs", "C:/work/demo/src/lib.rs"),
+            ("/unused", r"\\?\C:\work\demo\src\lib.rs", "C:/work/demo/src/lib.rs"),
+            ("//server/share/demo", r"src\lib.rs", "//server/share/demo/src/lib.rs"),
+            (r"\\?\UNC\server\share\demo", r"src\lib.rs", "//server/share/demo/src/lib.rs"),
+            ("/srv/demo", r"src/name\literal.rs", r"/srv/demo/src/name\literal.rs"),
+        ] {
+            let found = parse_output(&format!("error[E0308]: mismatched types\n --> {file}:3:5\n"), root);
+            assert_eq!(found.len(), 1, "{root}, {file}: {found:?}");
+            assert_eq!(found[0].0, expected, "{root}, {file}");
+            assert_eq!(found[0].1.start, (2, 4));
+        }
+    }
+
+    #[test]
+    fn windows_rust_panic_locations_keep_drive_letters_and_spaces() {
+        for output in [
+            "thread 'tests::works' (123) panicked at C:\\work space\\src\\lib.rs:12:9:\nassertion failed\n",
+            "thread 'tests::works' panicked at 'assertion failed', C:\\work space\\src\\lib.rs:12:9\n",
+        ] {
+            let found = parse_output(output, "C:/work space");
+            assert_eq!(found.len(), 1, "{found:?}");
+            assert_eq!(found[0].0, "C:/work space/src/lib.rs");
+            assert_eq!(found[0].1.start, (11, 8));
+            assert_eq!(found[0].1.message, "test panicked: assertion failed");
+        }
     }
 
     #[test]

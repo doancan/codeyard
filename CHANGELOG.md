@@ -86,6 +86,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Memory checks measure and stop their own disposable agent daemon instead of looking up an unrelated running daemon.
 - Windows CI also runs Rust Cargo/debug, product and accessibility regressions; the scripted adapter fixture launches
   through Python explicitly instead of relying on executable script associations.
+- Rust build errors and test panics normalize Windows drive/UNC paths to the editor's path form, restoring matching
+  Problems entries and squiggles. Spaces and drive letters in panic locations are preserved; POSIX backslashes remain literal.
 
 - The workspace-symbol test ran with language servers turned off, so it could never pass; it now starts rust-analyzer.
 
