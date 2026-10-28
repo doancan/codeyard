@@ -1,0 +1,135 @@
+# Product quality review and development plan
+
+Review date: 2026-10-28. Platform: macOS, Apple silicon, native GPUI window at 1280 × 800 logical pixels.
+Baseline: `main` at `7fbeae2`, merged into `develop` at `94a7ae2`, preserving develop's web preview,
+container overview and SSH/Cargo artifact fixes. Main receives these changes through a pull request after its checks pass.
+
+This is an evidence-based backlog, not a claim that every workflow or platform is certified. Findings distinguish
+native-window observations, executable regressions, implementation limitations and work that still needs measurement.
+The existing interface, native conventions, semantic tokens and Turkish translation system are retained.
+
+## Scope and evidence
+
+The walkthrough uses a separate **Codeyard QA** bundle, disposable settings/state and a generated Rust repository.
+Its Git remote is another temporary directory. The user's running editor, profile, repositories and real remotes
+are not used for destructive tests. No real SSH host is contacted by the walkthrough; the suite supplies test SSH servers.
+
+| Area | Evidence collected | Remaining acceptance work |
+| --- | --- | --- |
+| Editor and navigation | Native quick open, Rust syntax, tab and text exposure; workspace editor regression suite | IME, RTL, mixed DPI and long sessions on real Windows hardware |
+| Explorer | Native keyboard navigation; expanded empty-folder regression; path-based accessibility actions | Multi-selection, bulk operations and accessibility beyond the row limit |
+| Git | Native Source Control; disposable index/commit action tests; existing branch, sync, conflict and local-remote tests | Accessible graph, repository selection and large change sets |
+| Rust IDE | Native unavailable-server recovery; scripted/real language-server and debugger tests | Virtual workspaces, selecting binary/example/test targets, Cargo feature profiles |
+| Customization | Existing settings catalog, JSONC, keybinding/import and theme tests | Full-interface scaling and a discoverable Rust configuration preset |
+| Accessibility | Real macOS AX tree; AccessKit consumer validation; focus/action regression tests | VoiceOver speech/rotor, bounds, other panels/dialogs and real Windows UI Automation |
+| Reliability/performance | Build, Clippy, architecture/docs/i18n gates and workspace tests | Release memory budgets, startup/frame timings and active-AT CPU cost |
+
+## Verified findings
+
+Severity: P0 blocks ordinary use or loses data; P1 blocks a user group or a core workflow; P2 impairs productivity
+with a workaround; P3 is cosmetic. No P0 was reproduced in this walkthrough.
+
+| ID | Priority / evidence | Finding and user impact | Location | Acceptance criterion |
+| --- | --- | --- | --- | --- |
+| Q01 | P1 · native AX + failing regression | Source Control is drawn but absent from AX. A screen-reader user cannot inspect changes, enter a message or stage/unstage files there. | `crates/app/src/a11y.rs`, `scm.rs` | Expose the visible panel, message, commit state, change groups, per-file actions, operation errors and focus. Actions reuse the existing Git operations and reject stale repository/file state. |
+| Q02 | P2 · native AX + failing regression | Switching to Source Control leaves the hidden Explorer in AX. Users encounter controls from another view. | `crates/app/src/a11y.rs` | Only expose Explorer while its sidebar is visible; stale tree actions cannot operate on a hidden sidebar. |
+| Q03 | P2 · native keyboard + failing regression | Right Arrow on an expanded empty folder selects its next sibling instead of remaining on the folder. | `crates/app/src/tree.rs` | Enter a child only when a visible child exists; empty, loading and nonempty folders retain correct keyboard behavior. |
+| Q04 | P2 · native notice + failing regression | A Rust command says “Open a Rust file first” while `main.rs` is already active and its server is unavailable. | `crates/app/src/workbench_rust.rs` | Distinguish a non-Rust file, disabled features, restricted workspace and unavailable server. Opening the nearest manifest should work without a language server. |
+| Q05 | P1 · implementation + documented limitation | AccessKit nodes lack painted bounds. Assistive cursor highlights, hit testing and magnifier tracking cannot follow controls. | `crates/app/src/a11y.rs`, `docs/accessibility.md` | Supply logical bounds and shaped text positions, then verify VoiceOver and Windows focus tracking in real windows. |
+| Q06 | P1 · implementation + documented limitation | Search, Problems, Settings, debug/testing views, context menus and most dialogs lack complete AX representations. Keyboard shortcuts do not replace screen-reader semantics. | `docs/accessibility.md`, the corresponding view modules | Cover search→result→diagnostic→fix, settings editing and every confirmation/cancellation path, with focus restoration and live errors. |
+| Q07 | P2 · implementation | Rust auto-debug detection starts from a root `[package]` name. A virtual workspace or a crate whose binary has another name needs launch configuration. Cargo artifact resolution alone does not discover targets. | `crates/app/src/debug_config.rs`, `debug_cargo.rs` | Discover workspace/package targets, offer a picker and build the selected target with the chosen features/profile; respect custom target directories locally and over SSH. |
+| Q08 | P2 · implementation + documented limitation | Zoom and font settings scale editor/terminal text while sidebar, settings and other UI text keep their size. | `crates/app/src/workbench_state.rs`, `docs/accessibility.md` | Provide a persisted interface scale with keyboard entry, no clipped controls at 100/150/200%, and a reset command. |
+| Q09 | P2 · implementation; latency unmeasured | Source Control builds every visible change row. Large generated change sets can add render work; a performance regression has not yet been measured. | `crates/app/src/scm.rs` | Benchmark 1k/10k changes, virtualize rows if the frame budget is exceeded, and preserve focus/scroll position through refresh. |
+| Q10 | P2 · implementation + documented limitation | Explorer AX stops at 5,000 rows; editor AX exposes a window around the caret. A selection outside those ranges cannot be fully navigated from the tree. | `crates/app/src/a11y.rs` | Expose a selection-centered/visible range with scroll actions and document-relative text offsets; keep snapshots bounded. |
+| Q11 | P2 · implementation / feature gap | Explorer selection is a single row. Moving or organizing many files repeats one-file operations. | `crates/app/src/tree.rs`, `workbench_fsops.rs` | Add Shift-range and modifier-toggle selection, bulk copy/move/trash with one reviewable summary and per-file failures, locally and over SSH. |
+| Q12 | P2 · implementation / feature opportunity | Rust check/features settings exist in JSONC, but users must know rust-analyzer's keys to configure common project workflows. | `crates/app/src/workbench_settings.rs`, `settings_templates.rs` | Add an optional Rust setup preset for Clippy, Cargo features, formatter and target directory; preview the exact JSONC changes, preserve unrelated comments, allow reset. |
+
+## Delivery order
+
+The first batch now implements Q01–Q04 and the target-discovery part of Q07. The additional Rust hardening request
+promoted the following work ahead of the remaining UI backlog:
+
+| Rust finding | Delivered behavior | Regression evidence |
+| --- | --- | --- |
+| A root package name was treated as a binary name | Trusted, offline Cargo metadata supplies actual workspace targets, examples, required features and library-only test harnesses | A real virtual workspace builds and runs a differently named binary in a custom output folder; its artifact also reaches a scripted DAP session |
+| Debug could compile old on-disk buffers | Open files in the active root save before discovery/build/start; a save error, conflict, Stop or workspace change cancels the pending start | The Cargo→DAP test edits an unsaved buffer; a separate conflict test preserves an external write; Stop prevents the build |
+| Stop did not invalidate pending test-build/discovery replies or late startup failures | Preparation replies carry a cancellation epoch, and ended sessions reject late attachment, errors and stopped events | A real queued Cargo test build cannot start after Stop; a cancelled pre-launch command cannot post its late failure |
+| Async attributes with parameters and raw function identifiers were missed | The planner recognizes these test declarations | The old implementation failed the discovery regression |
+| Debug Test at Cursor selected the preceding test from an unrelated helper | It uses the same cursor planner as Run Test | The old implementation failed the helper-function regression |
+| A failed test build could still have emitted executable artifacts | Exit status and Cargo's build-finished message must both allow the launch; empty/duplicate artifacts are removed | Partial-artifact, failed-exit and missing-exit regressions; an actual failing Cargo build populates Problems and starts no session |
+| Debug selectors lost manifest paths, target flags or features | Quoted test commands are decoded to literal argv and Cargo is invoked directly | Paths with spaces, quotes, shell metacharacters and Turkish text round-trip without shell evaluation |
+| Directory names were guessed as package names | Cursor/file/Testing-view commands use the nearest actual manifest and crate-relative module path | A member under packages/folder name keeps its nested test ID and manifest path |
+| Repeated test IDs could overwrite failures, or a failed build could leave an old pass visible | Failure wins for duplicate IDs with an attribution warning; missing results from failed runs replace earlier green results | Both output orders and an unreported failed-build regression; Run All uses --no-fail-fast |
+
+The Rust first-batch tests are in `rust_hardening_tests.rs` and `cargo_project_tests.rs`; the initial product tests are
+in `product_quality_tests.rs`. These are actionable boundaries, not a claim that every Rust macro/test framework is supported.
+
+### Pass 1: repair the reproduced daily-use barriers
+
+Q01–Q04, stale accessibility-row safety and stale Rust-result guards form the first implementation batch.
+Add a bounded manifest lookup for **Rust: Open Cargo.toml** when no Rust server is attached. It must stay inside
+the containing workspace, choose a member crate before the workspace manifest, use the file's host and never
+read upward through unrelated parent folders. An out-of-date reply must not open a file in a new workspace.
+
+Use meaningful regressions before fixes, retain local/SSH behavior through `Host`, add Turkish strings and document
+the changed behavior. Source Control's graph, sync controls and full keyboard traversal remain separate work;
+this pass establishes accessible change inspection, staging and committing.
+
+### Pass 2: complete the accessible task chain
+
+Q05 and Q06: introduce painted bounds, then Search, Problems and Settings, followed by input/confirmation/context
+menus. Each view needs semantic roles, state, actionable errors, predictable reading order and focus restoration.
+Test the complete task with VoiceOver on macOS and NVDA/Narrator on Windows. AX dumps alone do not certify speech.
+Include interface scaling (Q08) and bounded visible-range navigation (Q10) before claiming broad accessibility.
+
+### Pass 3: remaining Rust project workflows and developer customization
+
+Core target discovery shipped in Pass 1. Continue Q07 with a unified user-selected features/profile model shared by
+Run, Debug and Testing; cover explicit module remapping, macro-generated cases and cross-root path dependencies.
+Extend the actual Cargo/adapter acceptance matrix over a test SSH host and native Windows.
+
+Q12: expose presets through existing settings and tasks rather than adding another configuration format.
+Keep VS Code imports, folder-specific settings, custom launch files and user keybindings working.
+
+### Pass 4: Explorer and Git at project scale
+
+Q11: selection and bulk file operations first. Then Q09: measure and optimize large change sets, graph navigation,
+long paths and refresh stability. Extend the same actions to assistive technology. Include partial staging,
+renames, conflicts, dirty branch switches, an unpublished branch and a rejected push in the acceptance matrix.
+
+### Pass 5: release evidence and final polish
+
+Run the repository's strict checks, signed release build and Retina memory budgets. Record actual startup,
+frame-time and active-accessibility costs. Test native Windows SSH, IME and mixed DPI on hardware. Track Linux
+separately from the shipped macOS/Windows acceptance decision. Finish with one bounded visual polish pass across
+English/Turkish, dark/light/high-contrast appearances and narrow editor splits.
+
+## Existing strengths to preserve
+
+- File, terminal, Git and server operations share `Host`; hermetic SSH tests exercise the remote path.
+- Semantic theme tokens, built-in contrast checks, reduced-motion settings and Turkish translations already exist.
+- Settings preserve JSONC comments; VS Code settings, themes and shortcuts have import paths.
+- Rust already has completion, navigation, macro expansion, related diagnostics, LSP configuration, tasks,
+  testing and formatter-aware debugging. These are tested capabilities, not missing-feature backlog items.
+- Git already has stage/unstage, partial hunks, conflicts, branches, graph, sync, local history and pull requests.
+- Architecture, localization, dependency and documentation gates make the first batch reviewable before a main PR.
+
+## Validation log
+
+Initial merge: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and
+`cargo build --locked -p app` passed. The vendored `xattr` dependency emitted existing `uint32_t` deprecation warnings.
+
+Before fixes: `cargo test --locked -p app --bin codeyard product_` ran four new regressions; all four failed for
+the observed reasons (empty-folder selection, hidden Explorer, missing Source Control and misleading Rust notice).
+
+Final validation results are recorded here after the implementation and native confirmation pass.
+
+Intermediate evidence: eight product regressions passed, including real Git index/commit operations through AccessKit.
+Seventeen Rust hardening regressions passed, including actual Cargo builds, a scripted DAP launch, save/conflict/Stop
+boundaries and a failed real test build. The old code failed the five initial Rust regressions plus the unreported-build
+regression before those fixes were applied.
+
+The initial full application run had 1,312 passes, ten timeouts and four documented ignores. The timeouts were in
+real debugger/SSH journeys; they are being rerun separately and are not treated as a passing baseline.
+
+New Turkish strings were drafted by the coding agent; no human native-speaker review is claimed.

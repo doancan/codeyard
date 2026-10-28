@@ -346,24 +346,35 @@ impl Workbench {
         };
         let host = self.remote.host.clone();
         let pj_path = ui::join(&root, "package.json");
-        let read = cx.background_executor().spawn(async move { host.read(&pj_path).ok().map(|(d, _)| String::from_utf8_lossy(&d).into_owned()) });
+        let (lookup_root, lookup_rel) = (root.clone(), rel.clone());
+        let generation = self.lsp.generation;
+        let read = cx.background_executor().spawn(async move {
+            let package = host.read(&pj_path).ok().map(|(d, _)| String::from_utf8_lossy(&d).into_owned());
+            let context = lookup_rel.ends_with(".rs").then(|| crate::cargo_project::context_on_host(host.as_ref(), &lookup_root, &lookup_rel)).flatten();
+            (package, context)
+        });
         cx.spawn(async move |this, cx| {
-            let package_json = read.await;
+            let (package_json, context) = read.await;
             let handle = this.update(cx, |this, _| this.window_handle).ok();
             let Some(handle) = handle else { return };
             cx.update_window(handle, |_, window, cx| {
-                this.update(cx, |this, cx| match crate::testrun::plan(&rel, &text, line, whole_file, package_json.as_deref()) {
-                    Some(run) => this.run_task(Task { label: run.label, command: run.command, source: "test" }, window, cx),
-                    None => {
-                        this.notice = Some(Notice::Info(
-                            if whole_file {
-                                crate::i18n::t("No tests found for this file type.")
-                            } else {
-                                crate::i18n::t("No test at the cursor: put it inside a test function.")
-                            }
-                            .into(),
-                        ));
-                        cx.notify();
+                this.update(cx, |this, cx| {
+                    if this.active_root(cx).as_deref() != Some(root.as_str()) || this.lsp.generation != generation {
+                        return;
+                    }
+                    match crate::testrun::plan_in_crate(&rel, &text, line, whole_file, package_json.as_deref(), context.as_ref()) {
+                        Some(run) => this.run_task(Task { label: run.label, command: run.command, source: "test" }, window, cx),
+                        None => {
+                            this.notice = Some(Notice::Info(
+                                if whole_file {
+                                    crate::i18n::t("No tests found for this file type.")
+                                } else {
+                                    crate::i18n::t("No test at the cursor: put it inside a test function.")
+                                }
+                                .into(),
+                            ));
+                            cx.notify();
+                        }
                     }
                 })
                 .ok();

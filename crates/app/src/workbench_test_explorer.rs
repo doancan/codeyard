@@ -61,26 +61,13 @@ fn shell(command: &str) -> Vec<String> {
     vec!["-c".into(), format!("exec {command} 2>&1")]
 }
 
-/// Runs `command` to its end (blocking): output (capped) and exit code.
-fn run_to_end(host: &Arc<dyn Host>, root: &str, command: &str) -> Result<(Vec<u8>, Option<i32>), String> {
-    let proc = host.proc_spawn("sh", shell(command), Some(root.to_string())).map_err(|e| e.to_string())?;
-    let mut out = Vec::new();
-    for ev in proc.events.iter() {
-        match ev {
-            host::ProcEvent::Output(d) if out.len() < MAX_OUTPUT => out.extend_from_slice(&d),
-            host::ProcEvent::Output(_) => {}
-            host::ProcEvent::Exit(code) => return Ok((out, code)),
-        }
-    }
-    Ok((out, None))
-}
-
 /// Reads the candidate files and keeps those with tests.
 fn discover(host: &Arc<dyn Host>, root: &str) -> Result<(Vec<TestFile>, Option<&'static str>), String> {
     let list = host.list_files(root, LIST_LIMIT).map_err(|e| e.to_string())?;
     let read = |rel: &str| host.read(&ui::join(root, rel)).ok().map(|(d, _)| d);
     let package_json = read("package.json").map(|d| String::from_utf8_lossy(&d).into_owned());
     let pj = package_json.as_deref();
+    let manifests = list.paths.iter().filter(|p| p.as_str() == "Cargo.toml" || p.ends_with("/Cargo.toml")).cloned().collect();
     let mut files = Vec::new();
     for rel in list.paths.iter().filter(|r| testexp::is_candidate(r)).take(MAX_FILES) {
         let (Some(kind), Some(data)) = (testexp::kind_of(rel), read(rel)) else { continue };
@@ -88,12 +75,15 @@ fn discover(host: &Arc<dyn Host>, root: &str) -> Result<(Vec<TestFile>, Option<&
             continue;
         }
         let text = String::from_utf8_lossy(&data);
-        let tests: Vec<TestItem> =
-            crate::testrun::cases(rel, &text, pj).into_iter().map(|c| TestItem { name: c.name, id: c.run.id, line: c.line, command: c.run.command }).collect();
+        let context = crate::cargo_project::context_from_files(rel, &manifests);
+        let tests: Vec<TestItem> = crate::testrun::cases_in_crate(rel, &text, pj, context.as_ref())
+            .into_iter()
+            .map(|c| TestItem { name: c.name, id: c.run.id, line: c.line, command: c.run.command })
+            .collect();
         if tests.is_empty() {
             continue;
         }
-        let command = crate::testrun::plan(rel, &text, 0, true, pj).map(|r| r.command);
+        let command = crate::testrun::plan_in_crate(rel, &text, 0, true, pj, context.as_ref()).map(|r| r.command);
         files.push(TestFile { rel: rel.clone(), kind, tests, command });
     }
     Ok((files, crate::testrun::js_runner(pj)))
@@ -140,14 +130,21 @@ impl Workbench {
             return;
         };
         let host = self.remote.host.clone();
+        let generation = self.lsp.generation;
         self.jobs.tests.scanning = true;
         let r = root.clone();
         let task = cx.background_executor().spawn(async move { discover(&host, &r) });
         cx.spawn(async move |this, cx| {
             let found = task.await;
             this.update(cx, |this, cx| {
+                this.jobs.tests.scanning = false;
+                if this.root(cx).as_deref() != Some(&root) || this.lsp.generation != generation {
+                    if this.chrome.panel == Some(Panel::Testing) {
+                        this.refresh_tests(cx);
+                    }
+                    return;
+                }
                 let t = &mut this.jobs.tests;
-                t.scanning = false;
                 match found {
                     Ok((files, js)) => {
                         // Results of tests that are gone are dropped.
@@ -234,7 +231,8 @@ impl Workbench {
                             match ev {
                                 host::ProcEvent::Output(d) => {
                                     if output.len() < MAX_OUTPUT {
-                                        output.extend_from_slice(&d);
+                                        let keep = d.len().min(MAX_OUTPUT - output.len());
+                                        output.extend_from_slice(&d[..keep]);
                                     }
                                     out.update(cx, |t, cx| t.append(&d, cx)).ok();
                                 }
@@ -342,7 +340,9 @@ impl Workbench {
             .into_iter()
             .map(|c| TestItem { name: c.name, id: c.run.id, line: c.line, command: c.run.command })
             .collect();
-        let (Some(kind), Some(test)) = (testexp::kind_of(&rel), tests.iter().rfind(|t| t.line <= line).cloned()) else {
+        let at_cursor = crate::testrun::plan(&rel, &text, line, false, None);
+        let test = at_cursor.and_then(|run| tests.iter().find(|t| t.id == run.id).cloned());
+        let (Some(kind), Some(test)) = (testexp::kind_of(&rel), test) else {
             self.notice = Some(Notice::Info(crate::i18n::t("No test at the cursor: put it inside a test function.").into()));
             cx.notify();
             return;
@@ -358,6 +358,15 @@ impl Workbench {
     }
 
     fn debug_test_trusted(&mut self, file: TestFile, test: TestItem, root: String, window: &mut Window, cx: &mut Context<Self>) {
+        if self.dbg.save_task.is_some() {
+            return;
+        }
+        if !self.debug_unsaved_editors(&root, cx).is_empty() {
+            self.save_before_debug(root.clone(), cx, Box::new(move |this, window, cx| this.debug_test_trusted(file, test, root, window, cx)));
+            return;
+        }
+        self.dbg.prepare_epoch = self.dbg.prepare_epoch.wrapping_add(1);
+        let prepare_epoch = self.dbg.prepare_epoch;
         match file.kind {
             Kind::Js => {
                 self.notice =
@@ -366,20 +375,55 @@ impl Workbench {
             }
             Kind::Rust => {
                 // The test binary is built first; its path comes from cargo's messages.
-                let command = format!("cargo test {} --no-run --message-format=json", testexp::cargo_select_args(&test.command).join(" "));
                 self.notice = Some(Notice::Info(crate::i18n::t("Building the tests…").into()));
                 cx.notify();
                 let host = self.remote.host.clone();
                 let r = root.clone();
-                let build = cx.background_executor().spawn(async move { run_to_end(&host, &r, &command) });
+                let rel = file.rel.clone();
+                let source = self.all_editors().into_iter().find_map(|ed| {
+                    let ed = ed.read(cx);
+                    (ed.path == ui::join(&root, &file.rel) && ed.uses_host(&host)).then(|| ed.buffer_text())
+                });
+                let generation = self.lsp.generation;
+                let build = cx.background_executor().spawn(async move {
+                    let mut test = test;
+                    if let Some(context) = crate::cargo_project::context_on_host(host.as_ref(), &r, &rel) {
+                        let source = source.or_else(|| host.read(&ui::join(&r, &rel)).ok().map(|(d, _)| String::from_utf8_lossy(&d).into_owned()));
+                        if let Some(source) = source
+                            && let Some(run) = crate::testrun::plan_in_crate(&rel, &source, test.line, false, None, Some(&context))
+                        {
+                            test.command = run.command;
+                            test.id = run.id;
+                        }
+                    }
+                    let mut args = testexp::cargo_select_args(&test.command)?;
+                    args.insert(0, "test".into());
+                    args.extend(["--no-run".into(), "--message-format=json".into()]);
+                    let output = host.exec("cargo", &args.iter().map(String::as_str).collect::<Vec<_>>(), Some(&r), None).map_err(|e| e.to_string())?;
+                    let text = format!("{}\n{}", output.stdout_str(), output.stderr_str());
+                    testexp::built_test_executables(&text, output.code).map(|bins| (bins, test))
+                });
                 cx.spawn_in(window, async move |this, cx| {
                     let built = build.await;
                     this.update_in(cx, |this, window, cx| {
-                        let bins = built.as_ref().map(|(out, _)| testexp::test_executables(&String::from_utf8_lossy(out))).unwrap_or_default();
-                        if bins.is_empty() {
-                            this.notice = Some(Notice::Error(crate::i18n::t("The tests did not build: run the test to see the errors.").into()));
-                            return cx.notify();
+                        if this.root(cx).as_deref() != Some(&root) || this.lsp.generation != generation || this.dbg.prepare_epoch != prepare_epoch {
+                            return;
                         }
+                        let (bins, test) = match built {
+                            Ok(bins) => bins,
+                            Err(output) => {
+                                for line in output.lines() {
+                                    this.lsp.output.push_back(line.to_string());
+                                }
+                                while this.lsp.output.len() > 5000 {
+                                    this.lsp.output.pop_front();
+                                }
+                                this.set_task_problems(crate::problems::parse_output(&output, &root), cx);
+                                this.notice =
+                                    Some(Notice::Error(crate::i18n::t("Rust tests did not build. See Output and Problems for the compiler errors.").into()));
+                                return cx.notify();
+                            }
+                        };
                         this.notice = None;
                         let configs = testexp::debug_configs(&file, &test, &root, &bins);
                         this.choose_debug_config_trusted(configs, window, cx);

@@ -2351,7 +2351,6 @@ Start Debugging (F5)	Hata Ayıklamayı Başlat (F5)
 Pause (F6)	Duraklat (F6)
 Open Launch Configuration	Başlatma Yapılandırmasını Aç
 Select a configuration	Bir yapılandırma seçin
-No Configurations	Yapılandırma Yok
 To customize Run and Debug, create a launch configuration.	Çalıştır ve Hata Ayıkla'yı özelleştirmek için bir başlatma yapılandırması oluşturun.
 Create a launch configuration	Başlatma yapılandırması oluştur
 Without one, F5 finds a configuration from the project (Cargo, Go, or the open Python or JavaScript file).	Yapılandırma yoksa F5 projeden bir tane bulur (Cargo, Go ya da açık Python veya JavaScript dosyası).
@@ -2492,7 +2491,6 @@ Run Tests in File	Dosyadaki Testleri Çalıştır
 Show Only Failed Tests	Yalnızca Başarısız Testleri Göster
 Test Results	Test Sonuçları
 Tests: {0} passed, {1} failed	Testler: {0} geçti, {1} başarısız
-The tests did not build: run the test to see the errors.	Testler derlenemedi: hataları görmek için testi çalıştırın.
 {0}/{1} passed	{0}/{1} geçti
 {} failed	{} başarısız
 {} skipped	{} atlandı
@@ -2703,3 +2701,34 @@ Columns	Sütunlar
 Actions	İşlemler
 Copy container ID	Konteyner kimliğini kopyala
 {0} containers · {1} running · {2} need attention	{0} konteyner · {1} çalışıyor · {2} sorunlu
+
+# ---- Product quality and Rust workflow hardening ----
+Stage {}	{} Dosyasını Stage’e Al
+Unstage {}	{} Dosyasını Stage’den Çıkar
+Rust language features are disabled. Enable lsp.enabled in Settings.	Rust dil özellikleri kapalı. Ayarlar’da lsp.enabled seçeneğini etkinleştirin.
+Rust language server is not ready. Check Output, then run “Developer: Restart Language Servers”.	Rust dil sunucusu hazır değil. Çıktı’yı kontrol edin, ardından “Geliştirici: Dil Sunucularını Yeniden Başlat” komutunu çalıştırın.
+Debug Rust: {0} / {1}	Rust Hata Ayıklama: {0} / {1}
+Debug Rust example: {0} / {1}	Rust Örneğinde Hata Ayıklama: {0} / {1}
+Could not inspect Cargo targets: {}	Cargo hedefleri incelenemedi: {}
+Cargo reported {0} executables for target {1}	Cargo, {1} hedefi için {0} çalıştırılabilir dosya bildirdi
+Unterminated quote in the Cargo test command	Cargo test komutunda kapatılmamış tırnak var
+Expected a cargo test command	cargo test komutu bekleniyordu
+Missing value for Cargo option {}	{} Cargo seçeneğinin değeri eksik
+Cargo did not report a Rust test executable	Cargo, çalıştırılabilir bir Rust test dosyası bildirmedi
+Rust tests did not build. See Output and Problems for the compiler errors.	Rust testleri derlenemedi. Derleyici hataları için Çıktı ve Sorunlar panellerine bakın.
+Several Rust targets reported this test name. Run it individually to identify the failing target.	Birden fazla Rust hedefi bu test adını bildirdi. Başarısız olan hedefi belirlemek için testi tek başına çalıştırın.
+The test runner stopped without reporting this test. See Test Results for build or runner errors.	Test çalıştırıcısı bu testin sonucunu bildirmeden durdu. Derleme veya çalıştırıcı hataları için Test Sonuçları’na bakın.
+Cargo metadata has no workspace members	Cargo meta verisinde çalışma alanı üyeleri yok
+Cargo metadata has no packages	Cargo meta verisinde paket yok
+Cargo package has no name	Cargo paketinin adı yok
+Cargo package has no manifest path	Cargo paketinin manifest yolu yok
+Cargo package has no targets	Cargo paketinin hedefi yok
+Cargo target has no name	Cargo hedefinin adı yok
+Debug Rust library tests: {0} / {1}	Rust Kitaplık Testlerinde Hata Ayıklama: {0} / {1}
+Debug Rust integration test: {0} / {1}	Rust Entegrasyon Testinde Hata Ayıklama: {0} / {1}
+Saving files before debugging…	Hata ayıklamadan önce dosyalar kaydediliyor…
+Could not save files before debugging: {}	Hata ayıklamadan önce dosyalar kaydedilemedi: {}
+Resolve the file conflict before debugging.	Hata ayıklamadan önce dosya çakışmasını çözün.
+This file was deleted on disk. Save it explicitly before debugging.	Bu dosya diskten silinmiş. Hata ayıklamadan önce dosyayı açıkça kaydedin.
+Files are still unsaved. Resolve editor errors, then start debugging again.	Dosyalar henüz kaydedilmedi. Düzenleyici hatalarını çözün, ardından hata ayıklamayı yeniden başlatın.
+Auto-detect project	Projeyi Otomatik Algıla

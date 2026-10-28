@@ -119,6 +119,10 @@ pub struct ScmPanel {
 mod graph_ui;
 pub use graph_ui::GraphOption;
 
+#[path = "scm_access.rs"]
+mod access;
+pub(crate) use access::AccessView;
+
 impl EventEmitter<ScmEvent> for ScmPanel {}
 
 impl Focusable for ScmPanel {
@@ -728,9 +732,7 @@ impl Render for ScmPanel {
         let staged: Vec<Change> = st.staged().cloned().collect();
         // Conflicts get their own section (VS Code: "Merge Changes"); staging means "resolved".
         let (merge, unstaged): (Vec<Change>, Vec<Change>) = st.unstaged().cloned().partition(|c| c.unstaged == Some(Mark::Conflict));
-        let changed = st.unstaged().filter(|c| c.unstaged != Some(Mark::Untracked)).count();
-        let smart = cx.global::<crate::settings::Settings>().git_smart_commit;
-        let (commit_label, can_commit) = if smart || !staged.is_empty() { commit_button(staged.len(), changed) } else { commit_button(0, 0) };
+        let (commit_label, can_commit) = self.commit_state(&st, cx);
         let sync_button = self.sync_button(&st, &p, cx);
         let commit_label: SharedString = commit_label.into();
         // Latest commit in the repo: so the panel visibly shows it really read the repo.

@@ -6,7 +6,7 @@ use crate::i18n::t;
 use crate::lsp::{self, METHOD_NOT_FOUND};
 use serde_json::{Value, json};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 enum RustCommand {
     ExpandMacro,
     ParentModule,
@@ -27,12 +27,47 @@ impl Workbench {
     }
 
     fn rust_command(&mut self, cmd: RustCommand, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(editor) = self.active_editor().cloned().filter(|ed| ed.read(cx).language() == "Rust") else {
+            show_info(self, t("Open a Rust file first").into(), cx);
+            return;
+        };
         // The text sent with `didChange` is what the server answers about (`lsp_context` sends pending edits first).
-        let context =
-            self.active_editor().cloned().and_then(|ed| ed.update(cx, |e, _| e.lsp_context().map(|(client, pos, _, _)| (client, pos, e.path.clone()))));
+        let context = editor.update(cx, |e, _| e.lsp_context().map(|(client, pos, _, _)| (client, pos, e.path.clone())));
         let Some((client, (line, character), path)) = context.filter(|(client, _, _)| client.config.language == "rust") else {
-            self.notice = Some(Notice::Info(t("Open a Rust file first").into()));
-            cx.notify();
+            let path = editor.read(cx).path.clone();
+            if cmd == RustCommand::OpenCargoToml {
+                let root = editor.read(cx).uses_host(&self.remote.host).then(|| self.root_of(&path, cx)).flatten();
+                let host = editor.read(cx).host_arc();
+                let lookup_host = host.clone();
+                let generation = self.lsp.generation;
+                let task = cx.background_executor().spawn(async move { crate::cargo_project::nearest_manifest(lookup_host.as_ref(), &path, root.as_deref()) });
+                cx.spawn_in(window, async move |this, cx| {
+                    let manifest = task.await;
+                    this.update_in(cx, |this, window, cx| {
+                        if this.lsp.generation != generation || this.active_editor().is_none_or(|ed| ed != &editor) {
+                            return;
+                        }
+                        match manifest {
+                            Some(path) => this.open_file_as(host, path, false, window, cx),
+                            None => show_info(this, t("No Cargo.toml found for this file").into(), cx),
+                        }
+                    })
+                    .ok();
+                })
+                .detach();
+            } else {
+                let message = if !cx.global::<Settings>().lsp_enabled {
+                    t("Rust language features are disabled. Enable lsp.enabled in Settings.").to_string()
+                } else if let Some(root) = self.root_of(&path, cx).filter(|root| !self.is_trusted_root(root, cx)) {
+                    crate::i18n::tf(
+                        "Language servers are off in “{}” until you trust it: they can run the project's build scripts. Run “Workspace: Trust This Folder”.",
+                        &[&ui::file_name(&root)],
+                    )
+                } else {
+                    t("Rust language server is not ready. Check Output, then run “Developer: Restart Language Servers”.").to_string()
+                };
+                show_info(self, message, cx);
+            }
             return;
         };
         let document = json!({ "uri": lsp::path_to_uri(&path) });
@@ -43,16 +78,22 @@ impl Workbench {
             RustCommand::OpenCargoToml => ("experimental/openCargoToml", json!({ "textDocument": document })),
         };
         let task = cx.background_executor().spawn(async move { client.request_raw(method, params, Duration::from_secs(15)) });
+        let generation = self.lsp.generation;
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
-            this.update_in(cx, |this, window, cx| match result {
-                Ok(v) => this.on_rust_reply(cmd, &v, window, cx),
-                Err(e) => {
-                    show_info(
-                        this,
-                        if e.code == Some(METHOD_NOT_FOUND) { t("The Rust language server does not support this command").into() } else { e.message },
-                        cx,
-                    );
+            this.update_in(cx, |this, window, cx| {
+                if this.lsp.generation != generation {
+                    return;
+                }
+                match result {
+                    Ok(v) => this.on_rust_reply(cmd, &v, window, cx),
+                    Err(e) => {
+                        show_info(
+                            this,
+                            if e.code == Some(METHOD_NOT_FOUND) { t("The Rust language server does not support this command").into() } else { e.message },
+                            cx,
+                        );
+                    }
                 }
             })
             .ok();
