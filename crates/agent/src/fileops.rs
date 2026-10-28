@@ -184,28 +184,39 @@ fn check_cancel(cancel: &AtomicBool) -> io::Result<()> {
 fn remove_stage(path: &Path) -> io::Result<()> {
     let meta = fs::symlink_metadata(path)?;
     if meta.is_dir() {
-        let mut permissions = meta.permissions();
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
+            let mut permissions = meta.permissions();
             permissions.set_mode(permissions.mode() | 0o700);
+            fs::set_permissions(path, permissions)?;
         }
         #[cfg(windows)]
-        permissions.set_readonly(false);
-        fs::set_permissions(path, permissions)?;
+        make_stage_writable(path, meta.permissions())?;
         for child in fs::read_dir(path)? {
             remove_stage(&child?.path())?;
         }
         fs::remove_dir(path)
     } else {
         #[cfg(windows)]
-        if !meta.file_type().is_symlink() {
-            let mut p = meta.permissions();
-            p.set_readonly(false);
-            fs::set_permissions(path, p)?;
+        {
+            use std::os::windows::fs::FileTypeExt;
+            if meta.file_type().is_symlink_dir() {
+                return fs::remove_dir(path);
+            }
+            if !meta.file_type().is_symlink() {
+                make_stage_writable(path, meta.permissions())?;
+            }
         }
         fs::remove_file(path)
     }
+}
+
+#[cfg(windows)]
+#[allow(clippy::permissions_set_readonly_false, reason = "Windows clears the read-only attribute; Unix cleanup sets owner mode bits instead")]
+fn make_stage_writable(path: &Path, mut permissions: fs::Permissions) -> io::Result<()> {
+    permissions.set_readonly(false);
+    fs::set_permissions(path, permissions)
 }
 
 #[cfg(test)]

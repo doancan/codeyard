@@ -164,3 +164,39 @@ fn cancelled_copy_acknowledges_after_removing_its_staged_entry() {
     assert_eq!(fs::read_to_string(f.path("source")).unwrap(), "keep");
     f.no_staging();
 }
+
+#[test]
+fn cleanup_removes_readonly_staging_without_touching_the_source() {
+    let f = Fixture::new();
+    fs::create_dir(f.path("source")).unwrap();
+    fs::write(f.path("source/file"), "keep").unwrap();
+    let mut permissions = fs::metadata(f.path("source/file")).unwrap().permissions();
+    permissions.set_readonly(true);
+    fs::set_permissions(f.path("source/file"), permissions).unwrap();
+    copy(&f.path("source"), &f.path("staging")).unwrap();
+    let mut permissions = fs::metadata(f.path("staging")).unwrap().permissions();
+    permissions.set_readonly(true);
+    fs::set_permissions(f.path("staging"), permissions).unwrap();
+    remove_stage(&f.path("staging")).unwrap();
+    assert!(!f.path("staging").exists());
+    assert_eq!(fs::read_to_string(f.path("source/file")).unwrap(), "keep");
+    assert!(fs::metadata(f.path("source/file")).unwrap().permissions().readonly());
+    remove_stage(&f.path("source")).unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+fn cleanup_of_a_directory_link_preserves_its_target() {
+    let f = Fixture::new();
+    fs::create_dir(f.path("source")).unwrap();
+    fs::write(f.path("source/file"), "keep").unwrap();
+    // Creating symlinks requires Developer Mode or elevation. CI may lack both;
+    // all other errors still fail the test.
+    match std::os::windows::fs::symlink_dir(f.path("source"), f.path("link")) {
+        Err(error) if error.raw_os_error() == Some(1314) => return,
+        result => result.unwrap(),
+    }
+    remove_stage(&f.path("link")).unwrap();
+    assert!(fs::symlink_metadata(f.path("link")).is_err());
+    assert_eq!(fs::read_to_string(f.path("source/file")).unwrap(), "keep");
+}
