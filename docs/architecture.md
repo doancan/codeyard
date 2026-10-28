@@ -1,7 +1,9 @@
 # Architecture
 
 Codeyard is a native code editor written in Rust on GPUI. Design goals: low memory, fast start, one code path
-for local and SSH workspaces, no telemetry, no extension host, no embedded web view.
+for local and SSH workspaces, no telemetry, no embedded web view. The core is complete on its own; extensions are optional and
+are being built to the design in [plugin-architecture.md](plugin-architecture.md): Wasm code in a separate sandboxed
+process, never in the app. Nothing on this page describes extension code yet.
 
 ## Workspace layout
 
@@ -85,7 +87,7 @@ the start on a save error, Stop or a changed workspace. Editor saves keep their 
 | Data tools | `serde_json` (key order kept), `toml`, `yaml-rust2` through the schema crate | convert and query JSON, YAML, TOML and .env in `datalens*.rs`; pure functions on text, a query language with no I/O |
 | Spelling | `spellbook` (pure Rust Hunspell) | English built in, other languages installable |
 
-No server, no account, no plugin store. Outbound requests: SchemaStore and schema downloads (cached 7 days, can be disabled),
+No server and no account; the extension registry is not live yet. Outbound requests: SchemaStore and schema downloads (cached 7 days, can be disabled),
 dictionary installs, GitHub pull request listing, requests sent from `.http` files and update checks. The update check is the one
 the app starts by itself, and only when the user chose daily checks (`update.check`); otherwise it happens when the user asks
 for one. It downloads two small files from github.com (see [Updates](#updates) for exactly what GitHub sees).

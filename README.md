@@ -25,13 +25,16 @@
 
 ## Why Codeyard?
 
-Codeyard is for people who want one editor that works the same on a local folder and on a server, and who prefer a fixed set of
-built-in tools to a pile of extensions.
+Codeyard is for people who want one editor that works the same on a local folder and on a server, and who want the everyday
+tools built in instead of assembled from a pile of extensions.
 
 What it is not:
 
-- **No extensions.** There is no extension API and no store. Features that people usually install an extension for (schema
-  validation, spell check, a merge editor, `.http` requests, a debugger client) are built in.
+- **Complete core, optional extensions.** Features that people usually install an extension for (schema validation, spell
+  check, a merge editor, `.http` requests, a debugger client) are built in, and Codeyard is complete without any extension.
+  Extensions are in development: they will add themes, languages, commands and integrations, run sandboxed with only the
+  permissions they declare, and cost nothing until used. The current release does not load extensions yet; see the
+  [design](docs/plugin-architecture.md).
 - **No telemetry, no account.** Requests go out when you start them and, if you choose daily update checks, when Codeyard looks for
   a new version: at most one successful check a day, which downloads two small files from github.com (the checksum list of the
   latest release and its signature). GitHub sees your IP address and that the request comes from `curl`; there are no cookies, no
@@ -41,9 +44,10 @@ What it is not:
 
 How it sits next to other editors:
 
-- **VS Code** has a very large extension ecosystem and many more languages and integrations. Codeyard has none of that. In
-  exchange it is one native binary with a fixed feature set, and it imports VS Code settings, shortcuts and themes.
-- **Zed** is also a native Rust editor built on GPUI. Codeyard is smaller in scope and has no extensions, no collaboration and no
+- **VS Code** has a very large extension ecosystem and many more languages and integrations. Codeyard's extensions follow the
+  same model (one manifest, contribution points, a publish command) but run sandboxed, activate lazily and draw their UI natively
+  instead of in web views. It imports VS Code settings, shortcuts and themes.
+- **Zed** is also a native Rust editor built on GPUI. Codeyard is smaller in scope and has no collaboration and no
   AI features; its remote editing runs a small static agent on the server and uses your own `ssh`.
 - **Helix** is a modal terminal editor. Codeyard is a graphical editor with conventional keys and mouse support.
 
@@ -63,7 +67,7 @@ screen buffers are part of the number. Files over 32 MB open in a chunked read-o
 - **Search by structure.** Find and rewrite code by its syntax tree, not its text: patterns are code with `$X` and `$$$X`
   placeholders (ast-grep style), for Rust, TypeScript, JavaScript, Python, Go and more, over local and SSH folders.
 - **Git inside.** Source control with a one-click Sync button, branch graph, timeline and local history, blame, a three-way merge editor, GitHub pull requests.
-- **Everyday tools without extensions.** JSON/YAML schema validation, spell check (English built in, more on demand), colour picker,
+- **Everyday tools built in.** JSON/YAML schema validation, spell check (English built in, more on demand), colour picker,
   `.http` requests, log follow and filter, Markdown preview, hex view.
 - **Data tools.** Convert between JSON, YAML, TOML and `.env`, query a file with a jq-style language as you type, copy the path
   under the cursor, decode a JWT or a Unix timestamp. All local; see [Data tools](docs/user-guide.md#data-tools).
