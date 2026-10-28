@@ -2,7 +2,7 @@
 
 Date: 2026-10-28. Review platform: macOS on Apple silicon, native GPUI application.
 
-The delivery combines the existing main history, all develop work through `2ea3ad8`, and the product/Rust fixes in
+The delivery combines the existing main history, all develop work through `7a029e6`, and the product/Rust fixes in
 `143c747`. Integration commit `f5dcdb2` preserves both branches' accessibility work and the container refinements.
 The delivery pull request is the authoritative record of the final tree's cross-platform CI checks and merge.
 
@@ -25,6 +25,9 @@ The delivery pull request is the authoritative record of the final tree's cross-
   paths again, and Right Arrow stays on an expanded empty folder.
 - The Run and Debug selector explains automatic project detection and identifies active automatic sessions.
   Existing web preview, container overview/detail/log improvements and landmark accessibility geometry are retained.
+- Source Control's later Git Worktrees inventory/navigation commit is included, with branch/path/status display,
+  same-host navigation and protection for unsaved edits. Its focused tests cover refresh, errors, keyboard navigation,
+  narrow/light/dark/Turkish layouts and SSH-host retention; Windows CI also selects the worktree suite.
 - Memory checks measure and stop their own disposable agent daemon. The shared save coordinator avoids three copies
   of the same asynchronous state machine in the release binary. Unused translation keys were removed after integration.
 - Windows CI includes the new Rust, product and accessibility suites alongside its existing selected native regressions.
@@ -43,6 +46,7 @@ The delivery pull request is the authoritative record of the final tree's cross-
 | `cargo test --locked -p app --bin codeyard product_` | Eight passed after integration, including real Git stage/unstage/commit through AccessKit requests |
 | `cargo test --locked -p app --bin codeyard a11y` | 21 passed after integration, including layout/scale/visibility/split-editor geometry and AccessKit consumer validation |
 | `cargo test --locked -p app --bin codeyard container` | 35 passed after integration; one documented live-engine acceptance test ignored |
+| `cargo test --locked -p app --bin codeyard worktree` | 11 passed after fetching the later Git Worktrees commit |
 | `cargo test --locked -p app --bin codeyard i18n_` | 50 passed after the integration's two dead translation keys and stale template were corrected |
 | `scripts/memcheck.sh` on Retina after integration | Passed all seven memory scenes and all three size checks before the Windows diagnostic-path fix; existing budgets unchanged; the final commit is rechecked by CI |
 
