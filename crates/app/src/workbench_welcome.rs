@@ -65,6 +65,30 @@ fn brand_header(p: &Palette) -> impl IntoElement {
 }
 
 impl Workbench {
+    pub(super) fn manage_language_services(&mut self, _: &super::ManageLanguageServices, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(Page::LanguageServices(view)) = self.tabs.page.clone() {
+            self.tabs.page_active = true;
+            self.tabs.diff_active = false;
+            self.tabs.large_active = false;
+            window.focus(&view.focus_handle(cx));
+            cx.notify();
+            return;
+        }
+        let owner = self.remote.host.clone();
+        let view = cx.new(|cx| crate::language_services_page::LanguageServicesPage::new(owner.clone(), cx));
+        self.tabs._page_sub = Some(cx.subscribe(&view, move |this, _, _: &crate::language_services_page::InstalledEvent, cx| {
+            if std::sync::Arc::ptr_eq(&this.remote.host, &owner) {
+                this.restart_lsp(cx);
+            }
+        }));
+        window.focus(&view.focus_handle(cx));
+        self.tabs.page = Some(Page::LanguageServices(view));
+        self.tabs.page_active = true;
+        self.tabs.diff_active = false;
+        self.tabs.large_active = false;
+        cx.notify();
+    }
+
     pub(super) fn show_welcome(&mut self, _: &ShowWelcome, _: &mut Window, cx: &mut Context<Self>) {
         self.tabs.page = Some(Page::Welcome);
         self.tabs._page_sub = None;
@@ -276,6 +300,7 @@ impl Workbench {
                     Page::Settings(_) => "settings",
                     Page::Markdown(_) => "markdown",
                     Page::Shortcuts(_) => "shortcuts",
+                    Page::LanguageServices(_) => "language-services",
                     Page::Merge(_) => "merge",
                     Page::Compare(_) => "compare",
                 },

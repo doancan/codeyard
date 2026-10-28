@@ -216,6 +216,7 @@ impl Workbench {
                 Some(Page::Settings(view)) => view.focus_handle(cx),
                 Some(Page::Markdown(view)) => view.focus_handle(cx),
                 Some(Page::Shortcuts(view)) => view.focus_handle(cx),
+                Some(Page::LanguageServices(view)) => view.focus_handle(cx),
                 Some(Page::Merge(view)) => view.focus_handle(cx),
                 Some(Page::Compare(view)) => view.focus_handle(cx),
                 _ => self.focus_handle.clone(),

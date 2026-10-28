@@ -43,3 +43,5 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_FUZZ_SEED` | Change the seed of those tests to explore other inputs; a failure prints the seed and round to rerun. |
 | `CODEYARD_TEST_TIMEOUT_SCALE` | Multiplier for the tests' wait timeouts (default 1). `scripts/coverage.sh` sets 4 because instrumented builds are slow. |
 | `CODEYARD_TR_DICT_DIR` | Folder with a Turkish Hunspell dictionary for the manual `cargo test -p spell -- --ignored turkish` check. |
+| `CODEYARD_LANGUAGE_SERVICE_FIXTURE` | Explicit disposable managed-service installation for the opt-in real local/SSH language-service acceptance test. Ordinary tests do not read it. |
+| `CODEYARD_TEST_MANAGED_INSTALL` | With that opt-in test, `1` additionally installs packages/runtime under its owned SSH fixture; this can access the network. |
