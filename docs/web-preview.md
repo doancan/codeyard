@@ -37,6 +37,12 @@ opened alone. Dotfiles, traversal, symlinks, special files and unsupported file 
 are rejected. Files are limited to the agent's 32 MiB read limit. No directory listing
 is provided. A workspace trust check precedes startup.
 
+Each file takes one agent request, including path validation and the size check. The agent
+opens path components relative to directory handles without following symlinks, then reads
+the opened file; replacing a pathname during a request cannot redirect that read. The selected
+root itself must also be a real directory. Redirects preserve URL query parameters while
+removing the launch token once it has established the session cookie.
+
 Previewed JavaScript runs in the browser. A restrictive page Content Security Policy
 can block the injected live-refresh script; manual browser refresh still works. This
 release uses the external browser, not an embedded browser or device simulator.

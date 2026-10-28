@@ -72,6 +72,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Web Preview reads files through directory handles without following symlinks or reparse points,
+  preventing pathname replacement races. Each file now needs one agent request, reducing SSH round trips;
+  directory and session redirects preserve URL query parameters.
+
 - Run and Debug shows an automatic session's real name; without a launch file its selector says "Auto-detect project"
   instead of claiming there are no configurations.
 - Debugging saves workspace buffers before building or starting, honors format-on-save, and cancels on save errors,

@@ -37,12 +37,13 @@ passphrase-protected key stands in for a password because a non-root `sshd` cann
 ## Agent and protocol
 
 `crates/proto` defines the messages; frames are length-prefixed `postcard`, requests carry an id, so many calls and
-streams are multiplexed. Current protocol version: **11**.
+streams are multiplexed. Current protocol version: **12**.
 
 | Group | Requests | Notes |
 | --- | --- | --- |
 | handshake | `Hello`, `Ping`, `Bye` | versions, OS and architecture, session resume; `Bye` says "closing on purpose" so the daemon ends the session at once instead of waiting out the grace period |
 | files | `ReadDir`, `Stat`, `Read`, `Write`, `CreateFile`, `CreateDir`, `Rename`, `Delete`, `ListFiles` | `Write` carries the expected hash and answers `Conflict` when the disk changed; writes are temp file + fsync + rename, keeping mode, owner and symlink target; reads are streamed, whole-file limit `proto::MAX_FILE` (32 MB) |
+| preview | `ReadPreview` | Version 12 adds one bounded read beneath a root through directory handles. Symlinks, reparse points, hidden paths and special files are refused; the opened file supplies both metadata and content. No per-component SSH requests are needed. Older agents are replaced on reconnect. |
 | search | `Search`, `Cancel` | `ignore` + `regex`, results streamed in chunks, cancellable |
 | watch | `Watch` | polls the given path set once a second; change events are pushed |
 | terminals | `PtySpawn`, `PtySpawnEx`, `PtyInput`, `PtyResize`, `PtyKill`, `PtyStatus`, `ListShells` | output is a pushed event; the agent keeps 256 KB of scrollback per pty for resume. `PtySpawnEx` (version 11) takes a profile's shell, arguments and environment and turns on shell integration; `PtyStatus` names the foreground program and the shell's folder (asked before closing a busy terminal and for splits); `ListShells` reads `/etc/shells` for the profile picker |
