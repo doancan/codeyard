@@ -73,7 +73,7 @@ These are the important gaps, in rough order of how much they get in the way. Th
 - **No screen reader on Linux.**
 - **Incomplete on-screen positions.** The window, primary Explorer viewport, active editor pane and status bar have
   bounds. Individual controls, rows and characters still need geometry for precise cursor highlights and caret tracking.
-- **Some views are still silent:** search results, the Source Control graph and sync controls, debug, testing and remote
+- **Some views are still silent:** search results, the Source Control graph, worktrees and sync controls, debug, testing and remote
   views, the problems, output and ports panels, hover popups, the Settings and Keyboard Shortcuts pages, context
   menus and dialogs other than the update dialog.
 - The editor exposes about 300 lines around the caret, not the whole file. Only the primary selection is exposed, not extra

@@ -19,7 +19,7 @@ The tree, in the order a screen reader walks it:
 - While Source Control is visible, a `Group` with the branch, a writable `MultilineTextInput` for the commit message,
   a correctly labeled/enabled commit button, change groups with expand/collapse buttons, file diff buttons and
   Stage/Unstage buttons. Operation errors are assertive live regions; successful results are polite. The message
-  field's real focus is exposed. The graph and sync controls are not exposed yet.
+  field's real focus is exposed. The graph, worktrees and sync controls are not exposed yet.
 - `TabList` "Editor tabs": one `Tab` per editor tab of the focused group (file name, `(modified)`, selected for the tab
   in front, set position).
 - While the find bar is open, a `Group` "Find": a `SearchInput` with the query, a `TextInput` "Replace" while the replace
@@ -130,7 +130,7 @@ macOS. The CPU cost of the 250 ms snapshot loop has not been measured.
   file offsets in long files. Primary selection only; no multi-cursor, folding, wrapped lines, RTL or CRLF handling.
 - The terminal exposes the screen only, not the scrollback, and cannot be written to from the tree (typing goes through
   the keyboard as usual).
-- Not exposed: search, debug, testing and remote sidebars, the Source Control graph and sync controls, the bottom
+- Not exposed: search, debug, testing and remote sidebars, the Source Control graph, worktrees and sync controls, the bottom
   panel's other views (problems, output, ports), hover and signature popups, the Settings and Keyboard Shortcuts pages,
   context menus, and dialogs other than the update dialog. Only the tabs of the focused editor group are listed, and
   diff, large-file and page tabs are not.
@@ -144,7 +144,7 @@ macOS. The CPU cost of the 250 ms snapshot loop has not been measured.
 
 1. Screen-reader passes (VoiceOver, NVDA, Narrator) on real machines; fix what they find.
 2. Per-control/text-run bounds and real focus tracking, observer-driven updates.
-3. The remaining panels (search results, Source Control graph/sync, problems), the Settings page, context menus and dialogs.
+3. The remaining panels (search results, Source Control graph/worktrees/sync, problems), the Settings page, context menus and dialogs.
 4. The editor proper: visible lines only with shaped character positions, correct absolute offsets, scroll actions,
    multi-cursor policy, diagnostics announcements.
 5. Interface text scaling, the Linux adapter and regression tests against a real accessibility client.

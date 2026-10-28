@@ -4,6 +4,7 @@ Review date: 2026-10-28. Platform: macOS, Apple silicon, native GPUI window at 1
 Baseline: `main` at `7fbeae2`, merged into `develop` at `94a7ae2`, preserving develop's web preview,
 container overview and SSH/Cargo artifact fixes. Main receives these changes through a pull request after its checks pass.
 The concurrent upstream develop commit `2ea3ad8` was integrated at `f5dcdb2`, preserving its container refinements and landmark geometry.
+The later `7a029e6` Git Worktrees inventory/navigation change was fetched and retained as well; its 11 focused tests passed locally.
 
 This is an evidence-based backlog, not a claim that every workflow or platform is certified. Findings distinguish
 native-window observations, executable regressions, implementation limitations and work that still needs measurement.
@@ -74,7 +75,7 @@ the containing workspace, choose a member crate before the workspace manifest, u
 read upward through unrelated parent folders. An out-of-date reply must not open a file in a new workspace.
 
 Use meaningful regressions before fixes, retain local/SSH behavior through `Host`, add Turkish strings and document
-the changed behavior. Source Control's graph, sync controls and full keyboard traversal remain separate work;
+the changed behavior. Source Control's graph, worktree accessibility, sync controls and full keyboard traversal remain separate work;
 this pass establishes accessible change inspection, staging and committing.
 
 ### Pass 2: complete the accessible task chain
