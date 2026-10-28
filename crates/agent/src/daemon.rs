@@ -407,12 +407,14 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
         }
         let mut s = stream.expect("daemon must listen");
-        use std::os::unix::fs::PermissionsExt;
-        assert_eq!(std::fs::metadata(&sock).unwrap().permissions().mode() & 0o777, 0o600, "owner only");
         let hello = Request::Hello { client_version: proto::VERSION, session: None };
         proto::write_frame(&mut s, &Frame { id: 7, body: hello }).unwrap();
         let mut r = BufReader::new(s.try_clone().unwrap());
         let f: Frame<Response> = proto::read_frame(&mut r).unwrap().unwrap();
         assert!(matches!(f.body, Response::Hello(_)));
+        // bind() makes the socket connectable before the daemon applies its mode.
+        // The handshake is the readiness barrier; the parent is already owner-only.
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(std::fs::metadata(&sock).unwrap().permissions().mode() & 0o777, 0o600, "owner only");
     }
 }

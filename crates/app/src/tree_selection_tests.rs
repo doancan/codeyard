@@ -105,3 +105,21 @@ fn explorer_tree_late_directory_reads_cannot_replace_a_new_selection_or_root(cx:
         assert!(tree.children.is_empty() && tree.selected_paths().is_empty());
     });
 }
+
+#[gpui::test]
+fn explorer_recursive_read_errors_stop_without_scheduling_an_endless_retry(cx: &mut gpui::TestAppContext) {
+    crate::qa_workbench_tests::globals(cx);
+    let tree = cx.new(|cx| FileTree::new(Arc::new(host::local()), cx));
+    tree.update(cx, |tree, cx| {
+        tree.root = Some("/fixture".into());
+        tree.children.insert("/fixture".into(), Load::Loading);
+        tree.load_epochs.insert("/fixture".into(), 7);
+        tree.recursive.insert("/fixture".into());
+        tree.finish_load("/fixture".into(), 7, Err(host::HostError::Op(proto::Error::PermissionDenied("denied".into()))), cx);
+        assert!(matches!(tree.children.get("/fixture"), Some(Load::Failed(_))));
+        assert!(tree.load_epochs.is_empty());
+        assert!(tree.recursive.is_empty());
+    });
+    cx.run_until_parked();
+    assert!(tree.read_with(cx, |tree, _| tree.load_epochs.is_empty()));
+}
