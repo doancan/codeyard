@@ -12,6 +12,9 @@ use proto::DirEntry;
 
 use crate::ui::{self, c, icon, layout, palette};
 
+#[path = "tree_selection.rs"]
+mod selection;
+
 /// Row metrics: a little taller and roomier than the shared list row, so a deep tree stays easy to scan and to hit.
 const ROW_H: f32 = 24.;
 const ROW_PAD_L: f32 = 10.;
@@ -36,15 +39,32 @@ actions!(
         DeleteEntry,
         CopyEntry,
         CutEntry,
-        PasteEntry
+        PasteEntry,
+        ExtendPrev,
+        ExtendNext,
+        ExtendFirst,
+        ExtendLast,
+        ExtendPageUp,
+        ExtendPageDown,
+        SelectAllEntries,
+        ToggleSelection
     ]
 );
 
 /// A file or folder dragged out of the tree.
 #[derive(Clone)]
 pub struct DraggedEntry {
-    pub path: String,
+    pub paths: Arc<Vec<String>>,
     name: SharedString,
+}
+
+impl DraggedEntry {
+    fn move_to(&self, to_dir: String) -> TreeEvent {
+        match self.paths.as_slice() {
+            [from] => TreeEvent::Move { from: from.clone(), to_dir },
+            _ => TreeEvent::MoveMany { paths: self.paths.as_ref().clone(), to_dir },
+        }
+    }
 }
 
 impl Render for DraggedEntry {
@@ -97,6 +117,16 @@ pub enum TreeEvent {
     },
     /// The user expanded/collapsed a folder (expanded folders are persisted).
     ExpandedChanged,
+    SelectionChanged {
+        root: String,
+    },
+    CopyMany(Vec<String>),
+    CutMany(Vec<String>),
+    DeleteMany(Vec<String>),
+    MoveMany {
+        paths: Vec<String>,
+        to_dir: String,
+    },
 }
 
 enum Load {
@@ -184,6 +214,11 @@ pub struct FileTree {
     expanded: HashSet<String>,
     rows: Vec<Row>,
     selected: Option<usize>,
+    marked: HashSet<String>,
+    anchor: Option<String>,
+    load_epochs: HashMap<String, u64>,
+    reload_queued: HashSet<String>,
+    next_load: u64,
     focus_handle: FocusHandle,
     scroll: UniformListScrollHandle,
     /// Git markers (absolute path → marker; folders carry those of their contents).
@@ -223,6 +258,11 @@ impl FileTree {
             pending_reveal: None,
             rows: Vec::new(),
             selected: None,
+            marked: HashSet::new(),
+            anchor: None,
+            load_epochs: HashMap::new(),
+            reload_queued: HashSet::new(),
+            next_load: 0,
             focus_handle: cx.focus_handle(),
             scroll: UniformListScrollHandle::new(),
             git: Arc::default(),
@@ -296,7 +336,7 @@ impl FileTree {
         }
         self.pending_reveal = Some(path.to_string());
         self.rebuild();
-        self.try_reveal();
+        self.try_reveal(cx);
         cx.notify();
     }
 
@@ -308,16 +348,20 @@ impl FileTree {
         }
     }
 
-    fn try_reveal(&mut self) {
+    fn try_reveal(&mut self, cx: &mut Context<Self>) {
         let Some(path) = &self.pending_reveal else { return };
         // Folder in the middle of a compacted chain: select the chain's row.
         let inside = format!("{path}/");
         let found = self.rows.iter().position(|r| r.path == *path).or_else(|| self.rows.iter().position(|r| r.chain && r.path.starts_with(&inside)));
         if let Some(ix) = found {
             self.selected = Some(ix);
+            self.marked.clear();
+            self.marked.insert(self.rows[ix].path.clone());
+            self.anchor = Some(self.rows[ix].path.clone());
             self.root_selected = false;
             self.scroll.scroll_to_item(ix, ScrollStrategy::Center);
             self.pending_reveal = None;
+            self.selection_changed(cx);
         }
     }
 
@@ -337,6 +381,8 @@ impl FileTree {
     /// Clear the selection; the root folder becomes "selected".
     pub fn clear_selection(&mut self, cx: &mut Context<Self>) {
         self.selected = None;
+        self.marked.clear();
+        self.anchor = None;
         self.root_selected = true;
         cx.notify();
     }
@@ -449,7 +495,11 @@ impl FileTree {
     pub fn reload(&mut self, dir: &str, cx: &mut Context<Self>) {
         let dir = dir.trim_end_matches('/').to_string();
         if self.children.contains_key(&dir) {
-            self.load(dir, cx);
+            if self.load_epochs.contains_key(&dir) {
+                self.reload_queued.insert(dir);
+            } else {
+                self.load(dir, cx);
+            }
         }
     }
 
@@ -524,18 +574,39 @@ impl FileTree {
     }
 
     fn delete_entry(&mut self, _: &DeleteEntry, _: &mut Window, cx: &mut Context<Self>) {
+        if self.marked.is_empty() {
+            return;
+        }
+        if self.marked.len() > 1 {
+            cx.emit(TreeEvent::DeleteMany(self.selected_paths()));
+            return;
+        }
         if let Some(row) = self.selected_row() {
             cx.emit(TreeEvent::Delete(row.path.clone(), row.is_dir));
         }
     }
 
     fn copy_entry(&mut self, _: &CopyEntry, _: &mut Window, cx: &mut Context<Self>) {
+        if self.marked.is_empty() {
+            return;
+        }
+        if self.marked.len() > 1 {
+            cx.emit(TreeEvent::CopyMany(self.selected_paths()));
+            return;
+        }
         if let Some(row) = self.selected_row() {
             cx.emit(TreeEvent::Copy(row.path.clone()));
         }
     }
 
     fn cut_entry(&mut self, _: &CutEntry, _: &mut Window, cx: &mut Context<Self>) {
+        if self.marked.is_empty() {
+            return;
+        }
+        if self.marked.len() > 1 {
+            cx.emit(TreeEvent::CutMany(self.selected_paths()));
+            return;
+        }
         if let Some(row) = self.selected_row() {
             cx.emit(TreeEvent::Cut(row.path.clone()));
         }
@@ -559,6 +630,13 @@ impl FileTree {
         self.expanded.clear();
         self.rows.clear();
         self.selected = None;
+        self.marked.clear();
+        self.anchor = None;
+        self.load_epochs.clear();
+        self.reload_queued.clear();
+        self.pending_reveal = None;
+        self.recursive.clear();
+        self.root_selected = false;
         if let Some(root) = root {
             self.expanded.insert(root.clone());
             self.load(root, cx);
@@ -567,55 +645,70 @@ impl FileTree {
     }
 
     fn load(&mut self, path: String, cx: &mut Context<Self>) {
-        self.children.insert(path.clone(), Load::Loading);
+        // Keep loaded rows while refreshing: selection must not disappear between
+        // the request and reply. Per-request epochs reject old roots and old reads.
+        if !matches!(self.children.get(&path), Some(Load::Loaded(_))) {
+            self.children.insert(path.clone(), Load::Loading);
+        }
+        self.next_load = self.next_load.wrapping_add(1);
+        let epoch = self.next_load;
+        self.load_epochs.insert(path.clone(), epoch);
         self.rebuild();
         let host = self.host.clone();
         let p = path.clone();
         let task = cx.background_executor().spawn(async move { host.read_dir(&p) });
         cx.spawn(async move |this, cx| {
             let result = task.await;
-            this.update(cx, |this, cx| {
-                let load = match result {
-                    Ok(mut entries) => {
-                        let excludes = &cx.global::<crate::settings::Settings>().files_exclude;
-                        let rel_dir = this.root.as_deref().and_then(|r| path.strip_prefix(r)).unwrap_or("").trim_start_matches('/').to_string();
-                        entries.retain(|e| {
-                            let rel = if rel_dir.is_empty() { e.name.clone() } else { format!("{rel_dir}/{}", e.name) };
-                            !crate::globs::is_excluded(excludes, &rel)
-                        });
-                        sort_entries(&mut entries, this.opts.sort);
-                        Load::Loaded(entries)
-                    }
-                    Err(e) => Load::Failed(e.to_string().into()),
-                };
-                // Folder with a single subfolder: also load the child so the chain is one row;
-                // if the folder is expanded the child expands too (so the chain's row doesn't look collapsed).
-                let only_dir = match &load {
-                    Load::Loaded(es) if es.len() == 1 && es[0].is_dir() && this.opts.compact => Some(ui::join(&path, &es[0].name)),
-                    _ => None,
-                };
-                let open = this.expanded.contains(&path);
-                this.children.insert(path.clone(), load);
-                if this.recursive.remove(&path) {
-                    this.expand_rec(&path, cx);
-                    if this.recursive.is_empty() {
-                        // The last folder has loaded too: the fully expanded state is saved.
-                        cx.emit(TreeEvent::ExpandedChanged);
-                    }
-                }
-                if let Some(child) = only_dir.filter(|c| !this.children.contains_key(c)) {
-                    if open {
-                        this.expanded.insert(child.clone());
-                    }
-                    this.load(child, cx);
-                }
-                this.rebuild();
-                this.try_reveal();
-                cx.notify();
-            })
-            .ok();
+            this.update(cx, |this, cx| this.finish_load(path, epoch, result, cx)).ok();
         })
         .detach();
+    }
+
+    fn finish_load(&mut self, path: String, epoch: u64, result: host::Result<Vec<DirEntry>>, cx: &mut Context<Self>) {
+        if self.load_epochs.get(&path) != Some(&epoch) {
+            return;
+        }
+        self.load_epochs.remove(&path);
+        let load = match result {
+            Ok(mut entries) => {
+                let excludes = &cx.global::<crate::settings::Settings>().files_exclude;
+                let rel_dir = self.root.as_deref().and_then(|r| path.strip_prefix(r)).unwrap_or("").trim_start_matches('/').to_string();
+                entries.retain(|e| {
+                    let rel = if rel_dir.is_empty() { e.name.clone() } else { format!("{rel_dir}/{}", e.name) };
+                    !crate::globs::is_excluded(excludes, &rel)
+                });
+                sort_entries(&mut entries, self.opts.sort);
+                Load::Loaded(entries)
+            }
+            Err(e) => Load::Failed(e.to_string().into()),
+        };
+        // Folder with a single subfolder: also load the child so the chain is one row;
+        // if the folder is expanded the child expands too (so the chain's row doesn't look collapsed).
+        let only_dir = match &load {
+            Load::Loaded(es) if es.len() == 1 && es[0].is_dir() && self.opts.compact => Some(ui::join(&path, &es[0].name)),
+            _ => None,
+        };
+        let open = self.expanded.contains(&path);
+        self.children.insert(path.clone(), load);
+        if self.recursive.remove(&path) {
+            self.expand_rec(&path, cx);
+            if self.recursive.is_empty() {
+                // The last folder has loaded too: the fully expanded state is saved.
+                cx.emit(TreeEvent::ExpandedChanged);
+            }
+        }
+        if let Some(child) = only_dir.filter(|c| !self.children.contains_key(c)) {
+            if open {
+                self.expanded.insert(child.clone());
+            }
+            self.load(child, cx);
+        }
+        self.rebuild();
+        self.try_reveal(cx);
+        if self.reload_queued.remove(&path) {
+            self.load(path, cx);
+        }
+        cx.notify();
     }
 
     /// Rebuild the visible rows from scratch (expanded folders, depth first).
@@ -626,6 +719,7 @@ impl FileTree {
             self.push_children(&root, 0);
         }
         self.selected = selected_path.and_then(|p| self.rows.iter().position(|r| r.path == p));
+        self.reconcile_selection();
     }
 
     fn push_children(&mut self, dir: &str, depth: usize) {
@@ -676,8 +770,7 @@ impl FileTree {
 
     fn activate(&mut self, ix: usize, preview: bool, cx: &mut Context<Self>) {
         let Some(row) = self.rows.get(ix).cloned() else { return };
-        self.selected = Some(ix);
-        self.root_selected = false;
+        self.select(ix, cx);
         if row.is_dir {
             if !preview || self.selected == Some(ix) {
                 self.toggle(&row.path, cx);
@@ -693,8 +786,7 @@ impl FileTree {
             return;
         }
         let ix = ix.min(self.rows.len() - 1);
-        self.selected = Some(ix);
-        self.root_selected = false;
+        self.select_with(ix, false, false, cx);
         self.scroll.scroll_to_item(ix, ScrollStrategy::Top);
         cx.notify();
     }
@@ -815,6 +907,7 @@ impl Render for FileTree {
                 self.rows.len() + Self::SPACER_ROWS,
                 cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
                     let active = this.active_guide();
+                    let marked_paths = Arc::new(this.selected_paths());
                     range
                         .map(|ix| {
                             // Empty space below the list: clicking clears the selection (the root counts as selected).
@@ -834,7 +927,7 @@ impl Render for FileTree {
                                     .into_any_element();
                             }
                             let row = &this.rows[ix];
-                            let selected = this.selected == Some(ix);
+                            let selected = this.marked.contains(&row.path);
                             let bg = match (selected, focused) {
                                 // Selection while focused: a fill sliding toward the accent color (no border; a bright 1 px border felt harsh on every click).
                                 (true, true) => Some(crate::ui::focused_selection(&p)),
@@ -866,7 +959,9 @@ impl Render for FileTree {
                             };
                             // The dropped item goes into the folder; if dropped on a file, into that file's folder.
                             let drop_dir = if row.is_dir { row.path.clone() } else { row.path.rsplit_once('/').map_or(String::new(), |(d, _)| d.to_string()) };
-                            let drag = DraggedEntry { path: row.path.clone(), name: row.name.clone() };
+                            let paths = if selected { marked_paths.clone() } else { Arc::new(vec![row.path.clone()]) };
+                            let name = if paths.len() > 1 { crate::i18n::tn("{} entry", "{} entries", paths.len(), &[]).into() } else { row.name.clone() };
+                            let drag = DraggedEntry { paths, name };
                             div()
                                 .id(ix)
                                 .on_drag(drag, |d, _, _, cx| cx.new(|_| d.clone()))
@@ -874,7 +969,7 @@ impl Render for FileTree {
                                 .on_drop(cx.listener({
                                     let drop_dir = drop_dir.clone();
                                     move |_, d: &DraggedEntry, _, cx| {
-                                        cx.emit(TreeEvent::Move { from: d.path.clone(), to_dir: drop_dir.clone() });
+                                        cx.emit(d.move_to(drop_dir.clone()));
                                     }
                                 }))
                                 .drag_over::<gpui::ExternalPaths>(move |s, _, _, _| s.bg(c(p.surface_active)))
@@ -933,6 +1028,16 @@ impl Render for FileTree {
                                         cx.stop_propagation();
                                         this.root_selected = false;
                                         window.focus(&this.focus_handle);
+                                        let toggle = if cfg!(target_os = "macos") { ev.modifiers.platform } else { ev.modifiers.control };
+                                        if toggle || ev.modifiers.shift {
+                                            this.select_with(ix, ev.modifiers.shift, toggle, cx);
+                                            return;
+                                        }
+                                        if this.marked.len() > 1 && this.rows.get(ix).is_some_and(|r| this.marked.contains(&r.path)) {
+                                            this.selected = Some(ix);
+                                            cx.notify();
+                                            return;
+                                        }
                                         if ev.click_count >= 2 {
                                             // Double click: make the preview permanent (don't re-open and close the folder).
                                             if let Some(row) = this.rows.get(ix).filter(|r| !r.is_dir).cloned() {
@@ -948,7 +1053,11 @@ impl Render for FileTree {
                                     cx.listener(move |this, ev: &gpui::MouseDownEvent, window, cx| {
                                         cx.stop_propagation();
                                         window.focus(&this.focus_handle);
-                                        this.selected = Some(ix);
+                                        if !this.rows.get(ix).is_some_and(|r| this.marked.contains(&r.path)) {
+                                            this.select(ix, cx);
+                                        } else {
+                                            this.selected = Some(ix);
+                                        }
                                         let row = this.rows[ix].clone();
                                         cx.emit(TreeEvent::ContextMenu { path: row.path, is_dir: row.is_dir, position: ev.position });
                                         cx.notify();
@@ -974,6 +1083,14 @@ impl Render for FileTree {
             .on_action(cx.listener(Self::select_last))
             .on_action(cx.listener(Self::page_up))
             .on_action(cx.listener(Self::page_down))
+            .on_action(cx.listener(Self::extend_prev))
+            .on_action(cx.listener(Self::extend_next))
+            .on_action(cx.listener(Self::extend_first))
+            .on_action(cx.listener(Self::extend_last))
+            .on_action(cx.listener(Self::extend_page_up))
+            .on_action(cx.listener(Self::extend_page_down))
+            .on_action(cx.listener(Self::select_all_entries))
+            .on_action(cx.listener(Self::toggle_selection))
             .on_action(cx.listener(Self::expand))
             .on_action(cx.listener(Self::collapse))
             .on_action(cx.listener(|this, _: &ExpandAll, _, cx| this.expand_selected_recursive(cx)))
@@ -995,7 +1112,7 @@ impl Render for FileTree {
             // Drop on empty space: into the root folder.
             .on_drop(cx.listener(|this, d: &DraggedEntry, _, cx| {
                 if let Some(root) = this.root.clone() {
-                    cx.emit(TreeEvent::Move { from: d.path.clone(), to_dir: root });
+                    cx.emit(d.move_to(root));
                 }
             }))
             .on_drop(cx.listener(|this, d: &gpui::ExternalPaths, _, cx| {

@@ -58,7 +58,10 @@ mod encoding;
 #[cfg(test)]
 mod error_ui_tests;
 #[cfg(test)]
+mod explorer_bulk_tests;
+#[cfg(test)]
 mod features_tests;
+mod file_batch;
 mod find;
 mod folder_settings;
 mod fsutil;
@@ -433,6 +436,14 @@ fn bind_keys(cx: &mut App) {
         // File tree
         KeyBinding::new("up", t::SelectPrev, tr),
         KeyBinding::new("down", t::SelectNext, tr),
+        KeyBinding::new("shift-up", t::ExtendPrev, tr),
+        KeyBinding::new("shift-down", t::ExtendNext, tr),
+        KeyBinding::new("shift-home", t::ExtendFirst, tr),
+        KeyBinding::new("shift-end", t::ExtendLast, tr),
+        KeyBinding::new("shift-pageup", t::ExtendPageUp, tr),
+        KeyBinding::new("shift-pagedown", t::ExtendPageDown, tr),
+        KeyBinding::new("secondary-a", t::SelectAllEntries, tr),
+        KeyBinding::new("secondary-space", t::ToggleSelection, tr),
         KeyBinding::new("home", t::SelectFirst, tr),
         KeyBinding::new("end", t::SelectLast, tr),
         KeyBinding::new("pageup", t::PageUp, tr),

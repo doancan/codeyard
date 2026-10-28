@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Explorer multi-selection with modifier clicks, keyboard ranges and select-all, plus batch copy,
+  cut, drag and deletion with a single confirmation, progress/cancellation and per-entry errors.
+  Failed cuts remain available for retry; dirty buffers and successful moves retain their edits.
+- Filesystem-native recursive copies on local and SSH agents, with exclusive atomic publication,
+  symlink and executable-permission preservation, bounded traversal and no shell dependency.
+
 - Four built-in dark themes: Catppuccin Mocha, Tokyo Night, Gruvbox Dark and GitHub Dark, with complete colour roles
   and WCAG AA contrast across all 103 text and UI pairs before runtime adjustment.
 - Accessible Source Control change groups, commit message and commit state, file diffs, Stage/Unstage actions and live

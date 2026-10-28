@@ -300,14 +300,21 @@ impl Workbench {
             MenuCmd::NewFile => self.start_create(dir, false, window, cx),
             MenuCmd::NewFolder => self.start_create(dir, true, window, cx),
             MenuCmd::Rename => self.start_rename(target.path, window, cx),
-            MenuCmd::Delete => self.confirm_delete(target.path, target.is_dir, window, cx),
+            MenuCmd::Delete => {
+                let paths = self.context_file_paths(&target.path, cx);
+                if paths.len() > 1 {
+                    self.delete_file_selection(paths, window, cx);
+                } else {
+                    self.confirm_delete(target.path, target.is_dir, window, cx);
+                }
+            }
             MenuCmd::CopyPath => cx.write_to_clipboard(gpui::ClipboardItem::new_string(target.path)),
             MenuCmd::CopyRelativePath => {
                 let rel = self.rel_in_roots(&target.path, cx).unwrap_or(target.path);
                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(rel));
             }
-            MenuCmd::CutEntry => self.roots.file_clip = Some((target.path, true)),
-            MenuCmd::CopyEntry => self.roots.file_clip = Some((target.path, false)),
+            MenuCmd::CutEntry => self.set_file_clipboard(self.context_file_paths(&target.path, cx), true, cx),
+            MenuCmd::CopyEntry => self.set_file_clipboard(self.context_file_paths(&target.path, cx), false, cx),
             MenuCmd::PasteEntry => self.paste_entry(dir, window, cx),
             // sent in show_menu (the action list is there).
             MenuCmd::Dispatch(_) | MenuCmd::AppSubmenu(_) => {}
@@ -319,7 +326,8 @@ impl Workbench {
             MenuCmd::ContainerTool(command) => self.run_container_tool(command, window, cx),
             // Without touching the copy clipboard: "name copy.ext" in the same folder.
             MenuCmd::Duplicate => {
-                let previous = self.roots.file_clip.replace((target.path.clone(), false));
+                let previous = self.roots.file_clip.clone();
+                self.set_file_clipboard(self.context_file_paths(&target.path, cx), false, cx);
                 self.paste_entry(parent_of(&target.path), window, cx);
                 self.roots.file_clip = previous;
             }
