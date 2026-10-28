@@ -904,7 +904,7 @@ fn qa_debug_real_lldb_dap_session(cx: &mut TestAppContext) {
     assert!(console.contains("square 9") || console.contains("square 4"), "program output is in the console: {console}");
 }
 
-/// A Rust project with no launch.json: F5 finds it, runs `cargo build`, debugs target/debug/<name>
+/// A Rust project with no launch.json: F5 builds it, resolves its custom Cargo target directory,
 /// and shows the real values of a Rust local at the breakpoint.
 #[gpui::test]
 fn qa_debug_real_cargo_project_without_config(cx: &mut TestAppContext) {
@@ -914,6 +914,8 @@ fn qa_debug_real_cargo_project_without_config(cx: &mut TestAppContext) {
         return;
     }
     let dir = qa_dir("qa-realrust");
+    std::fs::create_dir_all(dir.join(".cargo")).unwrap();
+    std::fs::write(dir.join(".cargo/config.toml"), "[build]\ntarget-dir = \"debug artifacts\"\n").unwrap();
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"demo\"\nversion = \"0.1.0\"\nedition = \"2021\"\n").unwrap();
     let src = "fn triple(n: u32) -> u32 {\n    let result = n * 3;\n    println!(\"computed {result}\");\n    result\n}\n\nfn main() {\n    let answer = triple(14);\n    println!(\"answer = {answer}\");\n}\n";

@@ -213,7 +213,7 @@ fn mime(path: &str) -> Option<&'static str> {
     })
 }
 
-fn reply(stream: &mut TcpStream, status: u16, mime: &str, body: &[u8], head: bool, extra: &str) {
+fn reply(stream: &mut impl Write, status: u16, mime: &str, body: &[u8], head: bool, extra: &str) {
     let reason = match status {
         200 => "OK",
         302 => "Found",
@@ -232,6 +232,16 @@ fn reply(stream: &mut TcpStream, status: u16, mime: &str, body: &[u8], head: boo
     if !head {
         let _ = stream.write_all(body);
     }
+}
+
+fn reply_changes(stream: &mut impl Write, state: &Shared, since: Option<u64>, head: bool) {
+    let changes = state.changes.lock().unwrap_or_else(|e| e.into_inner());
+    let paths: Vec<_> = changes.history.iter().filter(|(rev, _)| since.is_some_and(|s| *rev > s)).map(|(_, p)| p).collect();
+    let css_only =
+        !paths.is_empty() && paths.iter().all(|p| p.ends_with(".css")) && since.is_some_and(|s| changes.history.front().is_none_or(|(rev, _)| s + 1 >= *rev));
+    let body = serde_json::json!({"revision": changes.revision, "cssOnly": css_only, "paths": paths}).to_string();
+    drop(changes);
+    reply(stream, 200, "application/json", body.as_bytes(), head, "");
 }
 
 fn serve(mut stream: TcpStream, state: &Shared) {
@@ -298,13 +308,7 @@ fn serve(mut stream: TcpStream, state: &Shared) {
     }
     if relative == "__codeyard_changes" {
         let since = query.strip_prefix("since=").and_then(|s| s.parse::<u64>().ok());
-        let changes = state.changes.lock().unwrap_or_else(|e| e.into_inner());
-        let paths: Vec<_> = changes.history.iter().filter(|(rev, _)| since.is_some_and(|s| *rev > s)).map(|(_, p)| p).collect();
-        let css_only = !paths.is_empty()
-            && paths.iter().all(|p| p.ends_with(".css"))
-            && since.is_some_and(|s| changes.history.front().is_none_or(|(rev, _)| s + 1 >= *rev));
-        let body = serde_json::json!({"revision": changes.revision, "cssOnly": css_only, "paths": paths}).to_string();
-        return reply(&mut stream, 200, "application/json", body.as_bytes(), head, "");
+        return reply_changes(&mut stream, state, since, head);
     }
     let (_, directory) = match checked_path(state, &relative) {
         Ok(p) => p,

@@ -192,6 +192,9 @@ gpui::actions!(
     ]
 );
 
+#[path = "debug_cargo.rs"]
+mod cargo;
+
 #[path = "workbench_debug_breakpoints.rs"]
 mod breakpoints;
 #[path = "workbench_debug_launch.rs"]
@@ -224,13 +227,21 @@ const CONSOLE_SHOWN: usize = 300;
 type StartError = (String, String);
 
 /// In the background: pre-build + adapter process.
-fn launch_session(host: Arc<dyn host::Host>, config: &LaunchConfig, root: &str, tx: mpsc::Sender<DapEvent>) -> Result<Arc<dap::Session>, StartError> {
+fn launch_session(
+    host: Arc<dyn host::Host>,
+    mut config: LaunchConfig,
+    root: &str,
+    tx: mpsc::Sender<DapEvent>,
+) -> Result<(Arc<dap::Session>, LaunchConfig), StartError> {
     if let Some(cmd) = &config.pre_launch {
         run_pre_launch(&host, cmd, root)?;
     }
+    if let Some(bin) = &config.cargo_bin {
+        config.args["program"] = serde_json::json!(cargo::build(host.as_ref(), bin, root)?);
+    }
     let adapter = config.adapter.clone().map_err(|e| (e, String::new()))?;
     if let Some((host_name, port)) = &adapter.connect {
-        return dap::Session::attach_socket(host, host_name, *port, tx).map_err(|e| (e, String::new()));
+        return dap::Session::attach_socket(host, host_name, *port, tx).map(|session| (session, config)).map_err(|e| (e, String::new()));
     }
     // lldb resolves a relative source path to an absolute one if the file exists in the adapter's cwd, which
     // breaks matching against debug info built with the logical path. So the adapter starts outside the project
@@ -238,6 +249,7 @@ fn launch_session(host: Arc<dyn host::Host>, config: &LaunchConfig, root: &str, 
     let neutral = if cfg!(windows) && !host.is_remote() { std::env::temp_dir().to_string_lossy().into_owned() } else { "/".to_string() };
     let adapter_cwd = if adapter.id == "lldb-dap" { neutral } else { root.to_string() };
     dap::Session::start(host, &adapter.command, adapter.args, Some(adapter_cwd), tx)
+        .map(|session| (session, config))
         .map_err(|e| (crate::i18n::tf("Could not start the debug adapter: {}", &[&e]), String::new()))
 }
 
@@ -599,11 +611,11 @@ impl Workbench {
         })
         .detach();
         let host = self.remote.host.clone();
-        let (cfg, root2, session_root) = (config.clone(), root.clone(), root.clone());
-        let start = cx.background_executor().spawn(async move { launch_session(host, &cfg, &root2, tx) });
+        let (cfg, root2, session_root) = (config, root.clone(), root.clone());
+        let start = cx.background_executor().spawn(async move { launch_session(host, cfg, &root2, tx) });
         cx.spawn(async move |this, cx| {
-            let session = match start.await {
-                Ok(s) => s,
+            let (session, config) = match start.await {
+                Ok(started) => started,
                 Err((message, output)) => {
                     this.update(cx, |this, cx| this.on_debug_failed(sid, message, output, cx)).ok();
                     return;
@@ -613,6 +625,7 @@ impl Workbench {
                 .update(cx, |this, _| {
                     let current = this.dbg.by_id(sid).is_some();
                     if let Some(d) = this.dbg.by_id_mut(sid) {
+                        d.config = config.clone();
                         d.session = Some(session.clone());
                     }
                     if current {

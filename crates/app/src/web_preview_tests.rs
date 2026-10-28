@@ -113,3 +113,24 @@ fn web_preview_module_is_user_only_and_off_by_default() {
     assert_eq!(crate::settings_page::category_of("modules.webPreview.enabled"), "Modules");
     assert!(crate::workbench::settings_ui::entry("modules.webPreview.enabled").is_some());
 }
+
+#[test]
+fn web_preview_changes_does_not_hold_the_lock_during_response_io() {
+    struct CheckWriter<'state>(&'state Shared, Vec<u8>);
+    impl Write for CheckWriter<'_> {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            assert!(self.0.changes.try_lock().is_ok(), "HTTP response I/O must not block file changes");
+            self.1.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let (server, _, _rx) = fixture("preview-lock");
+    let mut writer = CheckWriter(&server.shared, Vec::new());
+    reply_changes(&mut writer, &server.shared, Some(0), false);
+    let response = String::from_utf8(writer.1).unwrap();
+    assert!(response.starts_with("HTTP/1.1 200"), "{response}");
+    assert!(response.contains("\"revision\":0"), "{response}");
+}
