@@ -9,10 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Web Preview settings for a fixed or automatic port, IPv4/IPv6 listen address, live reload toggle and interval,
-  and a custom served folder. Options appear under Modules, belong to user settings, and restart an active preview when changed.
-  *Web Preview: Copy URL* copies the authenticated launch link for use in another browser or device.
-
+- Installable declarative extensions: themes, snippets, keymap presets and key bindings, languages, JSON and YAML schemas,
+  settings and language servers. The Extensions view installs a `.cyx` package or a folder after a consent sheet that
+  lists contributions and permissions in plain words (High-risk sets in red, with *Cancel* focused), and disables,
+  uninstalls, rolls back or verifies an extension without a restart. `--no-extensions` loads none and says so in the
+  status bar.
 - Four built-in dark themes: Catppuccin Mocha, Tokyo Night, Gruvbox Dark and GitHub Dark, with complete colour roles
   and WCAG AA contrast across all 103 text and UI pairs before runtime adjustment.
 - Accessible Source Control change groups, commit message and commit state, file diffs, Stage/Unstage actions and live
@@ -34,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   live page/CSS refresh, status-bar controls and Output logging. Local, SSH and container files share the
   same agent-backed path; no external runtime or remote listening port is required. Disabling the module
   or leaving the workspace stops its server.
+- Web Preview settings for a fixed or automatic port, IPv4/IPv6 listen address, live reload toggle and interval,
+  and a custom served folder. Options appear under Modules, belong to user settings, and restart an active preview when changed.
+  *Web Preview: Copy URL* copies the authenticated launch link for use in another browser or device.
 - File icon theme "File Glyphs" (`workbench.iconTheme: "glyphs"`, now the default): colored file glyphs and no folder icons. A
   file's glyph sits in the column of a folder's arrow, so every name in a level lines up.
 - The macOS Dock menu lists the open windows at the top, front one first, and follows as windows come forward, open, close or

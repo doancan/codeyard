@@ -273,6 +273,7 @@ impl Workbench {
                 match p {
                     Page::Welcome => "welcome",
                     Page::Containers => "containers",
+                    Page::Extension => "extension",
                     Page::Settings(_) => "settings",
                     Page::Markdown(_) => "markdown",
                     Page::Shortcuts(_) => "shortcuts",
