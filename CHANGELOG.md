@@ -104,6 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Separate SSH configuration files use separate control connections even when they define the same host alias.
 - Web Preview reads files through directory handles without following symlinks or reparse points,
   preventing pathname replacement races. Each file now needs one agent request, reducing SSH round trips;
   directory and session redirects preserve URL query parameters.

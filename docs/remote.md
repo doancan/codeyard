@@ -6,7 +6,7 @@ files, search, terminals, git and language servers goes through that one interfa
 
 ## Connection
 
-- Transport: the system `ssh` with `ControlMaster=auto` and `ControlPersist=600`. Control sockets are named `cm-<16 hex>` (a hash of the host alias) and live in
+- Transport: the system `ssh` with `ControlMaster=auto` and `ControlPersist=600`. Control sockets are named `cm-<16 hex>` (a hash of the host alias and, when set, the absolute `CODEYARD_SSH_CONFIG` path) and live in
   `~/.cache/codeyard`; when that path is too long for a Unix socket (limit 104 bytes on macOS, 108 on Linux, and ssh adds 17 while
   binding) they go to `/tmp/cy-<uid>` (mode 0700). The app refuses that directory if it is a symlink or belongs to another user,
   and then connects without sharing. Control masters opened by the app are closed on exit.
