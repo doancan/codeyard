@@ -2768,6 +2768,16 @@ unknown command “{}”	bilinmeyen komut “{}”
 “{}” ships inside the package; this version only starts language servers found on PATH	“{}” paketin içinde geliyor; bu sürüm yalnızca PATH üzerindeki dil sunucularını başlatır
 language “{0}” names grammar “{1}”, which Codeyard does not have	“{0}” dili “{1}” dil bilgisini istiyor, Codeyard’da bu yok
 keymap preset “{0}” is not installed (installed: {1})	“{0}” kısayol düzeni kurulu değil (kurulu olanlar: {1})
+Extension in development not loaded: {}	Geliştirilen eklenti yüklenemedi: {}
+DEV	GELİŞTİRME
+Extension in development: it reloads when you save a file in its folder	Geliştirilen eklenti: klasöründe bir dosyayı kaydettiğinizde yeniden yüklenir
+Extensions: Install cyx Command in PATH	Eklentiler: cyx Komutunu PATH’e Kur
+{} exists and is not a link; remove it first	{} var ve bir bağlantı değil; önce onu kaldırın
+cyx is not next to Codeyard in this build; install it with cargo install --path crates/cyx	Bu derlemede cyx Codeyard’ın yanında değil; cargo install --path crates/cyx ile kurun
+cyx is installed in {}: run cyx new theme my-theme in a terminal	cyx {} içine kuruldu: bir terminalde cyx new theme my-theme çalıştırın
+cyx is installed in {}; add that folder to PATH in your shell profile	cyx {} içine kuruldu; bu klasörü kabuk profilinizde PATH’e ekleyin
+Could not install cyx: {}	cyx kurulamadı: {}
+cyx is in {}; add that folder to PATH to use it in a terminal	cyx {} içinde; terminalde kullanmak için bu klasörü PATH’e ekleyin
 
 # ---- Extensions view ----
 Extensions	Eklentiler
@@ -2851,3 +2861,15 @@ Run Codeyard commands: {}	Codeyard komutlarını çalıştırma: {}
 {} contains code; this version of Codeyard runs data-only extensions (themes, snippets, keymaps, languages, schemas, language servers)	{} kod içeriyor; Codeyard’ın bu sürümü yalnızca veri eklentilerini çalıştırır (temalar, snippet’ler, kısayol düzenleri, diller, şemalar, dil sunucuları)
 {} contains code, which this version does not run	{} kod içeriyor; bu sürüm kodu çalıştırmaz
 Load installed extensions (off: Codeyard starts as if none were installed)	Kurulu eklentileri yükle (kapalı: Codeyard hiç eklenti kurulu değilmiş gibi açılır)
+Extensions: New Extension…	Eklentiler: Yeni Eklenti…
+Create	Oluştur
+Name of the new extension, like my-theme	Yeni eklentinin adı, örneğin my-theme
+Color theme	Renk teması
+Snippets	Snippet’ler
+Keymap preset	Kısayol düzeni
+Language	Dil
+Language server	Dil sunucusu
+What kind of extension?	Ne tür bir eklenti?
+Create Here	Buraya Oluştur
+{} is loaded as an extension in development: save a file to reload it	{} geliştirilen eklenti olarak yüklendi: yeniden yüklemek için bir dosyayı kaydedin
+Could not create the extension: {}	Eklenti oluşturulamadı: {}

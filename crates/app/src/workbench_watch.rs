@@ -106,7 +106,7 @@ impl Workbench {
         }
         let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
         if let Some((spath, kpath)) = &paths {
-            self.cfg.stamp = (mtime(spath), mtime(kpath), mtime(&spath.with_file_name(crate::ext::LOCK_FILE)));
+            self.cfg.stamp = (mtime(spath), mtime(kpath), mtime(&spath.with_file_name(crate::ext::LOCK_FILE)), crate::ext::dev_stamp());
         }
         let kpath = paths.as_ref().map(|(_, k)| k.clone());
         let file = paths.as_ref().and_then(|(s, _)| std::fs::read_to_string(s).ok());
@@ -310,7 +310,7 @@ impl Workbench {
                         let Some((spath, kpath)) = this.config_paths() else { return };
                         let lpath = spath.with_file_name(crate::ext::LOCK_FILE);
                         let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
-                        if this.cfg.dirty || (mtime(&spath), mtime(&kpath), mtime(&lpath)) != this.cfg.stamp {
+                        if this.cfg.dirty || (mtime(&spath), mtime(&kpath), mtime(&lpath), crate::ext::dev_stamp()) != this.cfg.stamp {
                             this.reload_config(window, cx);
                         }
                     })

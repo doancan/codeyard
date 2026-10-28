@@ -43,6 +43,8 @@ impl Workbench {
             Command::action("Search: Structural Replace…", crate::search::StructuralReplace),
             Command::action("View: Switch Editor…", SwitchEditor),
             Command::action("View: Toggle Zen Mode", ToggleZenMode),
+            Command::action("Extensions: Install cyx Command in PATH", InstallCyx),
+            Command::action("Extensions: New Extension…", NewExtension),
             Command::action("View: Toggle Full Screen", ToggleFullScreen),
             Command::action("Files: Open Folder…", OpenFolder),
             Command::action("Editor: Save", editor::Save),
@@ -578,6 +580,21 @@ impl Workbench {
             (OverlayKind::IconTheme { .. }, PickerEvent::Preview(Pick::Item { index, .. })) => {
                 crate::icon_theme::set(crate::icon_theme::ALL[*index]);
                 cx.notify();
+            }
+            (OverlayKind::NewExtensionKind, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let kind = super::cyx_glue::KINDS[*index];
+                self.close_overlay(window, cx);
+                self.show_input(
+                    InputPurpose::NewExtension { kind },
+                    crate::i18n::t("Create"),
+                    crate::i18n::t("Name of the new extension, like my-theme"),
+                    "",
+                    window,
+                    cx,
+                );
+            }
+            (OverlayKind::NewExtensionKind, PickerEvent::Dismiss) => {
+                self.close_overlay(window, cx);
             }
             (OverlayKind::IconTheme { .. }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let t = crate::icon_theme::ALL[*index];

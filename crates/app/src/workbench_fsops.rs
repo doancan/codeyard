@@ -208,6 +208,7 @@ impl Workbench {
             InputPurpose::EditHostField { alias, field } => self.finish_edit_host_field(alias, field, name, cx),
             InputPurpose::FilterLog { path } => self.run_filter_log(path, name, window, cx),
             InputPurpose::CloneTarget { url } => self.run_clone(url, name, cx),
+            InputPurpose::NewExtension { kind } => self.create_extension(kind, name, window, cx),
             InputPurpose::CommitBranch { hash } => self.scm.update(cx, |s, cx| s.commit_op(hash, crate::graph::CommitOp::Branch(name), window, cx)),
             InputPurpose::CommitTag { hash } => {
                 // Tag names cannot hold a space, so whatever follows the first word is the message of an annotated tag.
