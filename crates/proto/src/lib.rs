@@ -15,7 +15,7 @@ use std::io::{self, Read, Write};
 use serde::{Deserialize, Serialize};
 
 /// Compared in the handshake; on mismatch the agent is reinstalled.
-pub const VERSION: u32 = 11;
+pub const VERSION: u32 = 12;
 
 /// Max size of one frame. Larger files are read in chunks.
 pub const MAX_FRAME: usize = 64 * 1024 * 1024;
@@ -169,6 +169,12 @@ pub enum Request {
     },
     /// The shells this machine offers (`Shells`).
     ListShells,
+    /// Copy a file, directory or symlink without following links. Publishes atomically;
+    /// `AlreadyExists` if the destination is occupied. Failed copies leave no destination.
+    Copy {
+        from: String,
+        to: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -372,11 +378,13 @@ pub enum Error {
     InvalidPattern(String),
     Unsupported(String),
     Other(String),
+    Cancelled,
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Error::Cancelled => write!(f, "operation cancelled"),
             Error::NotFound(p) => write!(f, "not found: {p}"),
             Error::PermissionDenied(p) => write!(f, "permission denied: {p}"),
             Error::IsDirectory(p) => write!(f, "is a folder: {p}"),
