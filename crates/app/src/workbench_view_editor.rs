@@ -367,6 +367,7 @@ impl Workbench {
                 let (glyph, title): (&str, String) = match &page {
                     Page::Welcome => ("rocket", crate::i18n::t("Welcome").into()),
                     Page::Containers => ("server", crate::i18n::t("Container Resources").into()),
+                    Page::Extension => ("blocks", self.extension_page_title()),
                     Page::Settings(_) => ("settings", crate::i18n::t("Settings").into()),
                     Page::Markdown(v) => ("eye", v.read(cx).title(cx)),
                     Page::Shortcuts(_) => ("keyboard", crate::i18n::t("Keyboard Shortcuts").into()),
