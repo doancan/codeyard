@@ -18,6 +18,7 @@ crates/
   state/    local SQLite state (`schema.sql`)
   ext-manifest/ extension manifest (`codeyard-extension.toml`): parsing, validation with author-facing errors,
             activation, permissions and risk; shared by the app, `cyx` and the registry (see plugin-architecture.md)
+  ext-pkg/  extension packages (`.cyx`): reproducible writer, strict reader, content digest
   theme/    colour tokens -> Rust constants (`design/tokens*.json`, `build.rs`), built-in themes
   app/      GPUI views, commands, keybindings, the workbench; the only crate that depends on GPUI
 vendor/
