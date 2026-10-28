@@ -86,6 +86,7 @@ impl Workbench {
                         severity: d.severity,
                         message: d.message.clone(),
                         source: Some("schema".into()),
+                        ..Default::default()
                     })
                     .collect();
                 if diags.is_empty() {

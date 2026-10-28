@@ -107,6 +107,8 @@ mod qa_editor_tests;
 #[cfg(test)]
 mod qa_integration_tests;
 #[cfg(test)]
+mod qa_lsp_diagnostics_tests;
+#[cfg(test)]
 mod qa_lsp_settings_tests;
 #[cfg(test)]
 mod qa_workbench_tests;

@@ -790,6 +790,13 @@ A change to `settings` reaches the running servers at once, without a restart; a
 value you delete until it restarts: set the value you want instead, or run "Developer: Restart Language Servers". Each
 server reports unknown keys itself, in the Output panel.
 
+A problem can point at other places that explain it: where a value was moved, where a borrow is used later. Hovering the
+problem lists them under its message (`line 12: value moved here` in the same file, `src/lib.rs:12: …` in another one), and
+in Problems they are rows under the problem; a click opens the place. The problem's code comes first (`E0382: …`).
+*Problems: Copy Full Diagnostic* copies the problem under the cursor the way the compiler prints it in a terminal, with its
+`-->` arrows, notes and help, ready to paste into a question or a search. When a server repeats those places as hints of
+their own, Problems shows them once, under their problem.
+
 Besides errors, suggestions, hover and definition: rename (F2), references (⇧F12), symbols
 in the file (⇧⌘O), quick fixes (⌘.), format (⇧⌥F, or `"editor.formatOnSave": true`) and
 parameter hints while typing a call. `"editor.codeActionsOnSave": { "source.organizeImports":

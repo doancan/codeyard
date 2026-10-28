@@ -165,6 +165,7 @@ registry! {
     "debug.openLaunchConfiguration" => wb::OpenLaunchConfiguration,
     "debug.stopAll" => wb::StopAllDebugging,
     "workbench.showProblems" => wb::ShowProblems,
+    "problems.copyFullDiagnostic" => wb::CopyFullDiagnostic,
     "workbench.action.output.toggleOutput" => wb::ShowOutput,
     "workbench.output.action.clearOutput" => wb::ClearOutput,
     "workbench.showPorts" => wb::ShowPorts,

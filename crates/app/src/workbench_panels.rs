@@ -117,69 +117,63 @@ impl Workbench {
             };
             return div().px(px(theme::SPACE[6])).py(px(theme::SPACE[3])).text_color(c(p.text_muted)).child(msg).into_any_element();
         }
-        let root = self.root(cx).unwrap_or_default();
-        let mut rows: Vec<AnyElement> = Vec::new();
-        for (path, diags) in all.iter() {
-            let rel = path.strip_prefix(&format!("{}/", root.trim_end_matches('/'))).unwrap_or(path);
-            rows.push(
-                div()
+        let root = self.root(cx);
+        let rows: Vec<AnyElement> = problem_rows(&all, root.as_deref())
+            .into_iter()
+            .enumerate()
+            .map(|(i, row)| match row {
+                ProblemRow::File { path, dir, count } => div()
                     .h(px(layout::ROW_H))
                     .flex()
                     .items_center()
                     .gap(px(theme::SPACE[2]))
                     .px(px(theme::SPACE[4]))
-                    .child(crate::icon_theme::file_icon_el(ui::file_name(path), layout::ICON, p))
-                    .child(ui::file_name(path).to_string())
+                    .child(crate::icon_theme::file_icon_el(ui::file_name(&path), layout::ICON, p))
+                    .child(ui::file_name(&path).to_string())
+                    .child(div().text_color(c(p.text_muted)).text_size(px(text::XS.0)).child(dir))
                     .child(
-                        div().text_color(c(p.text_muted)).text_size(px(text::XS.0)).child(rel.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default()),
-                    )
-                    .child(
-                        div()
-                            .px(px(theme::SPACE[2]))
-                            .rounded(px(theme::radius::LG))
-                            .bg(c(p.surface_active))
-                            .text_size(px(text::XS.0))
-                            .child(diags.len().to_string()),
+                        div().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).text_size(px(text::XS.0)).child(count.to_string()),
                     )
                     .into_any_element(),
-            );
-            let mut sorted: Vec<&crate::lsp::Diagnostic> = diags.iter().collect();
-            sorted.sort_by_key(|d| (d.severity, d.start));
-            for (i, d) in sorted.into_iter().enumerate() {
-                let (glyph, color) = match d.severity {
-                    1 => ("circle-x", p.danger),
-                    2 => ("alert", p.warning),
-                    _ => ("info", p.info),
-                };
-                let (path, line, col) = (path.clone(), d.start.0, d.start.1);
-                let id = SharedString::from(format!("problem-{path}-{i}"));
-                rows.push(
-                    div()
-                        .id(id)
-                        .h(px(layout::ROW_H))
-                        .flex()
-                        .items_center()
-                        .gap(px(theme::SPACE[2]))
-                        .pl(px(theme::SPACE[8]))
-                        .pr(px(theme::SPACE[4]))
-                        .whitespace_nowrap()
-                        .overflow_hidden()
-                        .cursor_pointer()
-                        .hover(|s| s.bg(c(p.surface_hover)))
+                ProblemRow::Problem { severity, text, detail, .. } => {
+                    let (glyph, color) = match severity {
+                        1 => ("circle-x", p.danger),
+                        2 => ("alert", p.warning),
+                        _ => ("info", p.info),
+                    };
+                    problem_row(i, theme::SPACE[8], p, cx)
                         .child(icon(glyph, 14., color))
-                        .child(div().flex_shrink().min_w_0().overflow_hidden().child(d.message.lines().next().unwrap_or_default().to_string()))
-                        .child(div().flex_none().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(format!(
-                            "{} [{}:{}]",
-                            d.source.as_deref().map_or("", |s| if s == "task" { crate::i18n::t("task") } else { s }),
-                            line + 1,
-                            col + 1
-                        )))
-                        .on_click(cx.listener(move |this, _, window, cx| this.open_location(path.clone(), line, col, window, cx)))
-                        .into_any_element(),
-                );
-            }
-        }
+                        .child(div().flex_shrink().min_w_0().overflow_hidden().child(text))
+                        .child(div().flex_none().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(detail))
+                        .into_any_element()
+                }
+                ProblemRow::Related { text, .. } => problem_row(i, theme::SPACE[8] + 22., p, cx)
+                    .text_color(c(p.text_muted))
+                    .child(div().min_w_0().overflow_hidden().child(text))
+                    .into_any_element(),
+            })
+            .collect();
         div().id("problems").size_full().overflow_y_scroll().children(rows).into_any_element()
+    }
+
+    /// A click on Problems row `i`: a problem or a related location opens at its position.
+    pub(super) fn open_problem_row(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let root = self.root(cx);
+        if let Some(ProblemRow::Problem { path, line, col, .. } | ProblemRow::Related { path, line, col, .. }) =
+            problem_rows(&self.all_problems(), root.as_deref()).into_iter().nth(i)
+        {
+            self.open_location(path, line, col, window, cx);
+        }
+    }
+
+    #[cfg(test)]
+    pub fn problem_rows_for_test(&self, cx: &App) -> Vec<ProblemRow> {
+        problem_rows(&self.all_problems(), self.root(cx).as_deref())
+    }
+
+    #[cfg(test)]
+    pub fn click_problem_row_for_test(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_problem_row(i, window, cx);
     }
 
     /// `--panel`: which sidebar is visible at startup.
@@ -419,5 +413,108 @@ impl Workbench {
     #[cfg(test)]
     pub fn scm_panel(&self) -> Entity<crate::scm::ScmPanel> {
         self.scm.clone()
+    }
+}
+
+/// One row of the Problems panel: a file, one of its problems, or a related location of that problem.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ProblemRow {
+    File { path: String, dir: String, count: usize },
+    Problem { path: String, severity: u8, text: String, detail: String, line: u32, col: u32 },
+    Related { text: String, path: String, line: u32, col: u32 },
+}
+
+/// The Problems panel's rows: files in path order, their problems by severity and position, each followed by its related
+/// locations.
+pub fn problem_rows(all: &std::collections::BTreeMap<String, Vec<crate::lsp::Diagnostic>>, root: Option<&str>) -> Vec<ProblemRow> {
+    let mut rows = Vec::new();
+    for (path, diags) in all {
+        let rel = crate::lsp::related_path(path, root);
+        let mut sorted: Vec<&crate::lsp::Diagnostic> = diags.iter().filter(|d| !is_related_copy(d, path, diags)).collect();
+        rows.push(ProblemRow::File { path: path.clone(), dir: rel.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default(), count: sorted.len() });
+        sorted.sort_by_key(|d| (d.severity, d.start));
+        for d in sorted {
+            let source = d.source.as_deref().map_or("", |s| if s == "task" { crate::i18n::t("task") } else { s });
+            rows.push(ProblemRow::Problem {
+                path: path.clone(),
+                severity: d.severity,
+                text: d.headline().lines().next().unwrap_or_default().to_string(),
+                detail: format!("{source} [{}:{}]", d.start.0.saturating_add(1), d.start.1.saturating_add(1)),
+                line: d.start.0,
+                col: d.start.1,
+            });
+            for r in &d.related {
+                rows.push(ProblemRow::Related { text: crate::lsp::related_label(r, path, root), path: r.path.clone(), line: r.start.0, col: r.start.1 });
+            }
+        }
+    }
+    rows
+}
+
+/// Some servers (rust-analyzer) also publish each related location of a diagnostic as a hint of its own, which would show
+/// the same text twice in Problems: a hint is left out when a related row of another diagnostic in the file says the same at
+/// the same place, or when it points at another diagnostic with the same message (the copy at a macro call).
+fn is_related_copy(d: &crate::lsp::Diagnostic, path: &str, all: &[crate::lsp::Diagnostic]) -> bool {
+    d.severity == 4
+        && all.iter().filter(|o| !std::ptr::eq(*o, d)).any(|o| {
+            o.related.iter().any(|r| r.path == path && r.start == d.start && r.message == d.message)
+                || (o.severity < 4 && o.message == d.message && d.related.iter().any(|r| r.path == path && r.start == o.start))
+        })
+}
+
+/// A clickable Problems row indented by `indent`.
+fn problem_row(i: usize, indent: f32, p: &Palette, cx: &mut Context<Workbench>) -> gpui::Stateful<gpui::Div> {
+    div()
+        .id(("problem", i))
+        .h(px(layout::ROW_H))
+        .flex()
+        .items_center()
+        .gap(px(theme::SPACE[2]))
+        .pl(px(indent))
+        .pr(px(theme::SPACE[4]))
+        .whitespace_nowrap()
+        .overflow_hidden()
+        .cursor_pointer()
+        .hover(|s| s.bg(c(p.surface_hover)))
+        .on_click(cx.listener(move |this, _, window, cx| this.open_problem_row(i, window, cx)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lsp::{Diagnostic, Related};
+
+    fn rel(line: u32, col: u32, message: &str) -> Related {
+        Related { path: "/p/src/lib.rs".into(), start: (line, col), end: (line, col + 1), message: message.into() }
+    }
+
+    fn diag(severity: u8, at: (u32, u32), message: &str, related: Vec<Related>) -> Diagnostic {
+        Diagnostic { start: at, end: at, severity, message: message.into(), code: Some("E0382".into()), related, ..Default::default() }
+    }
+
+    /// The shapes rust-analyzer 1.99 publishes for a use after move: the error, its related locations again as hints, and a
+    /// hint at the macro call. Problems shows the error and its related rows once.
+    #[test]
+    fn hints_that_repeat_a_related_location_are_left_out_of_problems() {
+        let msg = "borrow of moved value: `s`\nvalue borrowed here after move";
+        let error = diag(1, (3, 15), msg, vec![rel(3, 4, "Error originated from macro call here"), rel(2, 12, "value moved here"), rel(1, 8, "move occurs")]);
+        let diags = vec![
+            diag(4, (3, 4), msg, vec![rel(3, 15, "Exact error occurred here")]),
+            error,
+            diag(4, (2, 12), "value moved here", vec![rel(3, 15, "original diagnostic")]),
+            diag(4, (1, 8), "move occurs", vec![rel(3, 15, "original diagnostic")]),
+            // A hint of its own stays.
+            diag(4, (0, 0), "unrelated hint", vec![]),
+        ];
+        let all = std::collections::BTreeMap::from([("/p/src/lib.rs".to_string(), diags)]);
+        let rows = problem_rows(&all, Some("/p"));
+        let problems: Vec<&str> = rows.iter().filter_map(|r| if let ProblemRow::Problem { text, .. } = r { Some(text.as_str()) } else { None }).collect();
+        assert_eq!(problems, ["E0382: borrow of moved value: `s`", "E0382: unrelated hint"]);
+        assert!(matches!(&rows[0], ProblemRow::File { count: 2, dir, .. } if dir == "src"));
+        assert_eq!(rows.iter().filter(|r| matches!(r, ProblemRow::Related { .. })).count(), 3);
+        // An error is never left out, even when a related row repeats it.
+        let twice = vec![diag(1, (2, 12), "value moved here", vec![]), diag(1, (3, 15), msg, vec![rel(2, 12, "value moved here")])];
+        let all = std::collections::BTreeMap::from([("/p/src/lib.rs".to_string(), twice)]);
+        assert!(matches!(&problem_rows(&all, Some("/p"))[0], ProblemRow::File { count: 2, .. }));
     }
 }
