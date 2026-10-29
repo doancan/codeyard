@@ -96,8 +96,15 @@ impl Workbench {
             }
         }
         // Search Editors of groups the restored layout does not have move to the focused group instead of closing.
-        let orphans: Vec<_> = previous_groups.into_values().flat_map(|g| g.searches).collect();
-        groups.get_mut(&grid.focused()).expect("focused group exists").searches.extend(orphans);
+        // So do terminals in the editor area: their processes keep running.
+        let (mut orphans, mut terminals) = (Vec::new(), Vec::new());
+        for g in previous_groups.into_values() {
+            orphans.extend(g.searches);
+            terminals.extend(g.terminals);
+        }
+        let focused = groups.get_mut(&grid.focused()).expect("focused group exists");
+        focused.searches.extend(orphans);
+        focused.terminals.extend(terminals);
         let current = groups.remove(&grid.focused()).expect("focused group exists");
         self.tabs = state_glue::TabsState { current, groups, layout: grid, ..Default::default() };
         self.sync_slots(cx);

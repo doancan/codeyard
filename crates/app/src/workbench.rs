@@ -161,6 +161,8 @@ mod sync_glue;
 mod task_run_glue;
 #[path = "workbench_tasks.rs"]
 pub mod tasks;
+#[path = "workbench_term_tabs.rs"]
+mod term_tabs_glue;
 #[path = "workbench_terminals.rs"]
 mod terminals_glue;
 #[cfg(test)]
@@ -336,6 +338,8 @@ actions!(
         ToggleSecondarySideBar,
         MoveTerminalIntoNewWindow,
         MoveTerminalsBackToPanel,
+        MoveTerminalIntoEditorArea,
+        MoveTerminalBackToPanelFromEditor,
         ToggleMaximizedPanel,
         GitCheckout,
         GitCreateBranch,
@@ -533,6 +537,8 @@ enum Page {
     Search(Entity<crate::search_editor::SearchEditor>),
     /// An extension view in the editor area, by its full id (workbench_ext_views.rs).
     ExtView(String),
+    /// A terminal moved into the editor area in front; every one is also listed in its group's `terminals`.
+    Terminal(Entity<crate::terminal::TerminalView>),
 }
 
 /// Floating picker on top: theme picker or palette (files / commands / line).
@@ -1098,8 +1104,11 @@ impl Workbench {
                 crate::scm::ScmEvent::Rediscover => this.rediscover(cx),
                 crate::scm::ScmEvent::RefreshInventory => this.refresh_inventory(cx),
             }),
-            // Terminals in windows of their own belong to this window: they end with it.
-            cx.on_release(|this, cx| this.close_detached_terminals(cx)),
+            // Terminals in windows of their own or in the editor area belong to this window: they end with it.
+            cx.on_release(|this, cx| {
+                this.close_detached_terminals(cx);
+                this.close_editor_terminals(cx);
+            }),
             // A download in progress is cancelled and its partial file removed before the process ends.
             cx.on_app_quit(|this, cx| {
                 this.discard_response_on_quit();
@@ -1792,6 +1801,7 @@ impl Workbench {
         self.cfg.folder_texts.clear();
         self.persist.pending_restore_workspace = None;
         self.persist.backed_up.clear();
+        self.return_all_editor_terminals();
         self.tabs = Default::default();
         self.tabs.active = None;
         self.tabs.open_error = None;
@@ -2093,6 +2103,9 @@ impl Workbench {
     fn close_editor(&mut self, _: &CloseEditor, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(Page::Search(ed)) = self.tabs.page.clone().filter(|_| self.tabs.page_active) {
             return self.close_search_editor(&ed, cx);
+        }
+        if let Some(Page::Terminal(term)) = self.tabs.page.clone().filter(|_| self.tabs.page_active) {
+            return self.return_editor_terminal(&term, window, cx);
         }
         if self.tabs.diff_active {
             return self.close_diff(window, cx);

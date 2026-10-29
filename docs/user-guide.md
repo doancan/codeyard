@@ -189,7 +189,10 @@ moves it back and "View: Toggle Secondary Side Bar" hides or shows it; the arran
 "Terminal: Move Terminal into New Window" moves the active terminal, with its running program, into a window of its own
 (the same terminal, not a copy). Closing that window puts the terminal back in the panel, still running;
 "Terminal: Move Terminals Back to Panel" does it for all of them. A detached terminal belongs to its editor window and
-ends with it, or when the connection changes.
+ends with it, or when the connection changes. "Terminal: Move Terminal into Editor Area" moves the active terminal into
+the focused editor group as a tab, next to your files; "Terminal: Move Terminal Back to Panel" returns it, and so does
+closing its tab (closing a terminal's tab never ends what runs in it). Opening another folder also returns
+it to the panel; a connection change ends it like a panel terminal.
 
 Terminal line editing works as in Terminal.app: ⌘← / ⌘→ jump to the start / end of the line, ⌥← / ⌥→ move by word,
 ⌘⌫ deletes to the start of the line, ⌘⌦ to its end and ⌥⌦ the next word (these are the shell's own keys, Ctrl+A, Ctrl+E,

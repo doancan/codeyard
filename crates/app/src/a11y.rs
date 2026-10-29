@@ -866,8 +866,9 @@ impl Workbench {
             selected: Some(selected),
             rows,
         });
-        let term = self.active_terminal().filter(|_| self.chrome.panel_open && self.chrome.bottom == Bottom::Terminal);
-        let terminal = term.as_ref().map(|term| {
+        let shown = self.a11y_terminal(window, cx);
+        let term = shown.as_ref().map(|(t, _, _)| t.clone());
+        let terminal = shown.as_ref().map(|(term, ix, count)| {
             let (rows, cursor) = term.read(cx).a11y_view();
             let mut starts = Vec::with_capacity(rows.len());
             let mut at = 0;
@@ -877,11 +878,7 @@ impl Workbench {
             }
             let total = rows.len();
             let cursor = cursor.and_then(|(row, col)| starts.get(row).map(|s| s + col.min(rows[row].chars().count())));
-            TerminalSnap {
-                label: tf("Terminal {0} of {1}", &[&(self.active_terminal + 1), &self.terminals.len()]),
-                runs: runs_for(starts.into_iter().zip(rows).collect(), total, 0),
-                cursor,
-            }
+            TerminalSnap { label: tf("Terminal {0} of {1}", &[&(ix + 1), count]), runs: runs_for(starts.into_iter().zip(rows).collect(), total, 0), cursor }
         });
         let picker_entity = self.overlay.as_ref().map(|o| o.picker.clone());
         let picker = picker_entity.as_ref().map(|p| {
@@ -1055,7 +1052,7 @@ impl Workbench {
                 e.update(cx, |e, cx| e.a11y_choose_completion(index, req.action == Action::Click, window, cx));
             }
             (Action::Focus, TERMINAL) => {
-                if let Some(term) = self.active_terminal() {
+                if let Some(term) = self.a11y_terminal(window, cx).map(|(t, _, _)| t).or_else(|| self.active_terminal()) {
                     window.focus(&term.focus_handle(cx));
                 }
             }

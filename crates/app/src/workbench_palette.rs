@@ -423,6 +423,8 @@ impl Workbench {
             Command::action("View: Toggle Secondary Side Bar", ToggleSecondarySideBar),
             Command::action("Terminal: Move Terminal into New Window", MoveTerminalIntoNewWindow),
             Command::action("Terminal: Move Terminals Back to Panel", MoveTerminalsBackToPanel),
+            Command::action("Terminal: Move Terminal into Editor Area", MoveTerminalIntoEditorArea),
+            Command::action("Terminal: Move Terminal Back to Panel", MoveTerminalBackToPanelFromEditor),
             Command::action("View: Toggle Maximized Panel", ToggleMaximizedPanel),
         ];
         for h in self.remote.ssh_hosts.iter().filter(|h| h.alias != "github.com" && h.alias != "gitlab.com") {

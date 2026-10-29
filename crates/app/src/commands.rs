@@ -234,6 +234,8 @@ registry! {
     "workbench.toggleSecondarySideBar" => wb::ToggleSecondarySideBar,
     "terminal.moveIntoNewWindow" => wb::MoveTerminalIntoNewWindow,
     "terminal.moveBackToPanel" => wb::MoveTerminalsBackToPanel,
+    "terminal.moveIntoEditorArea" => wb::MoveTerminalIntoEditorArea,
+    "terminal.moveBackToPanelFromEditor" => wb::MoveTerminalBackToPanelFromEditor,
     "workbench.toggleMaximizedPanel" => wb::ToggleMaximizedPanel,
     "tasks.build" => wb::RunBuildTask,
     "tasks.rerun" => wb::RerunLastTask,

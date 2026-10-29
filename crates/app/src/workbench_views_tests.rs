@@ -71,3 +71,96 @@ fn detached_terminals_end_with_their_connection(cx: &mut gpui::TestAppContext) {
     wb.update(vcx, |wb, cx| wb.close_all_terminals(cx));
     assert!(wb.read_with(vcx, |wb, _| wb.chrome.detached.is_empty() && !wb.terminals.contains(&term)));
 }
+
+#[gpui::test]
+fn a_terminal_moves_into_the_editor_area_and_back_with_the_same_process(cx: &mut gpui::TestAppContext) {
+    let (wb, vcx) = crate::qa_workbench_tests::setup(cx);
+    wb.update_in(vcx, |wb, window, cx| wb.new_terminal(&NewTerminal, window, cx));
+    vcx.run_until_parked();
+    let term = wb.read_with(vcx, |wb, _| wb.terminals.last().cloned()).expect("a terminal");
+    let pty = vcx.update(|_, cx| term.read(cx).pty_handle().map(|(_, id)| id));
+    assert!(pty.is_some(), "the shell runs");
+    wb.update_in(vcx, |wb, window, cx| wb.move_terminal_into_editor(window, cx));
+    vcx.run_until_parked();
+    wb.read_with(vcx, |wb, _| {
+        assert!(!wb.terminals.contains(&term), "the panel let go of it");
+        assert_eq!(wb.editor_terminals_for_test(), vec![term.clone()], "one group holds it");
+        assert_eq!(wb.front_editor_terminal(), Some(term.clone()), "in front of the focused group");
+    });
+    assert!(vcx.debug_bounds("tab-terminal-0-0").is_some(), "its tab is drawn");
+    assert!(vcx.update(|window, cx| term.read(cx).focus_handle(cx).contains_focused(window, cx)), "the keyboard is in it");
+    assert_eq!(vcx.update(|_, cx| term.read(cx).pty_handle().map(|(_, id)| id)), pty, "the same process");
+    wb.update_in(vcx, |wb, window, cx| wb.move_terminal_back_to_panel(window, cx));
+    vcx.run_until_parked();
+    wb.read_with(vcx, |wb, _| {
+        assert!(wb.terminals.contains(&term) && wb.editor_terminals_for_test().is_empty(), "back in the panel only");
+        assert!(wb.chrome.panel_open && wb.front_editor_terminal().is_none());
+    });
+    assert_eq!(vcx.update(|_, cx| term.read(cx).pty_handle().map(|(_, id)| id)), pty, "still the same process");
+    assert!(!vcx.update(|_, cx| term.read(cx).has_exited()), "and still running");
+}
+
+#[gpui::test]
+fn closing_a_terminal_tab_returns_it_to_the_panel_still_running(cx: &mut gpui::TestAppContext) {
+    let (wb, vcx) = crate::qa_workbench_tests::setup(cx);
+    wb.update_in(vcx, |wb, window, cx| wb.new_terminal(&NewTerminal, window, cx));
+    vcx.run_until_parked();
+    let term = wb.read_with(vcx, |wb, _| wb.terminals.last().cloned()).expect("a terminal");
+    let pty = vcx.update(|_, cx| term.read(cx).pty_handle().map(|(_, id)| id));
+    wb.update_in(vcx, |wb, window, cx| {
+        wb.move_terminal_into_editor(window, cx);
+        wb.close_editor(&CloseEditor, window, cx);
+    });
+    vcx.run_until_parked();
+    wb.read_with(vcx, |wb, _| {
+        assert!(wb.terminals.contains(&term), "closing the tab returns the terminal");
+        assert!(wb.editor_terminals_for_test().is_empty());
+    });
+    assert_eq!(vcx.update(|_, cx| term.read(cx).pty_handle().map(|(_, id)| id)), pty);
+    assert!(!vcx.update(|_, cx| term.read(cx).has_exited()), "it was not ended");
+    wb.update_in(vcx, |wb, window, cx| {
+        wb.move_terminal_back_to_panel(window, cx);
+        assert!(wb.notice.is_some(), "no terminal is in front: the command says so");
+    });
+}
+
+#[gpui::test]
+fn changing_or_closing_the_folder_returns_editor_area_terminals_to_the_panel(cx: &mut gpui::TestAppContext) {
+    let base = std::env::temp_dir().join(format!("codeyard-term-tabs-{}", std::process::id()));
+    let (one, two) = (base.join("one"), base.join("two"));
+    std::fs::create_dir_all(&one).unwrap();
+    std::fs::create_dir_all(&two).unwrap();
+    let (wb, vcx) = crate::qa_workbench_tests::setup(cx);
+    wb.update(vcx, |wb, cx| wb.set_root(one.to_string_lossy().into_owned(), cx));
+    vcx.run_until_parked();
+    wb.update_in(vcx, |wb, window, cx| wb.new_terminal(&NewTerminal, window, cx));
+    vcx.run_until_parked();
+    let term = wb.read_with(vcx, |wb, _| wb.terminals.last().cloned()).unwrap();
+    let back_in_panel =
+        |vcx: &mut gpui::VisualTestContext| wb.read_with(vcx, |wb, _| wb.terminals.contains(&term) && wb.editor_terminals_for_test().is_empty());
+    wb.update_in(vcx, |wb, window, cx| wb.move_terminal_into_editor(window, cx));
+    wb.update(vcx, |wb, cx| wb.set_root(two.to_string_lossy().into_owned(), cx));
+    vcx.run_until_parked();
+    assert!(back_in_panel(vcx), "another folder replaced the tabs, not the terminal");
+    wb.update_in(vcx, |wb, window, cx| wb.move_terminal_into_editor(window, cx));
+    wb.update(vcx, |wb, cx| wb.close_folder(cx));
+    vcx.run_until_parked();
+    assert!(back_in_panel(vcx), "closing the folder did not end it either");
+    assert!(!vcx.update(|_, cx| term.read(cx).has_exited()));
+    std::fs::remove_dir_all(&base).ok();
+}
+
+#[gpui::test]
+fn terminals_in_the_editor_area_end_with_their_connection(cx: &mut gpui::TestAppContext) {
+    let (wb, vcx) = crate::qa_workbench_tests::setup(cx);
+    wb.update_in(vcx, |wb, window, cx| wb.new_terminal(&NewTerminal, window, cx));
+    vcx.run_until_parked();
+    let term = wb.read_with(vcx, |wb, _| wb.terminals.last().cloned()).unwrap();
+    wb.update_in(vcx, |wb, window, cx| wb.move_terminal_into_editor(window, cx));
+    vcx.run_until_parked();
+    wb.update(vcx, |wb, cx| wb.close_all_terminals(cx));
+    wb.read_with(vcx, |wb, _| {
+        assert!(wb.editor_terminals_for_test().is_empty() && !wb.terminals.contains(&term));
+        assert!(wb.front_editor_terminal().is_none(), "no tab is left for it");
+    });
+}

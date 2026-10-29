@@ -3268,3 +3268,8 @@ There is no terminal to move.	Taşınacak bir terminal yok.
 View: Move View to Primary Side Bar	Görünüm: Görünümü Birincil Kenar Çubuğuna Taşı
 View: Move View to Secondary Side Bar	Görünüm: Görünümü İkincil Kenar Çubuğuna Taşı
 View: Toggle Secondary Side Bar	Görünüm: İkincil Kenar Çubuğunu Aç/Kapat
+
+# ---- Terminals in the editor area ----
+No terminal is in front in the editor area.	Düzenleyici alanında önde bir terminal yok.
+Terminal: Move Terminal Back to Panel	Terminal: Terminali Panele Geri Taşı
+Terminal: Move Terminal into Editor Area	Terminal: Terminali Düzenleyici Alanına Taşı

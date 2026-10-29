@@ -1395,6 +1395,7 @@ No symbols in this file
 No symbols matching “{}”	
 No task is running.	
 No tasks found. “Tasks: Configure Tasks” creates .codeyard/tasks.jsonc.	
+No terminal is in front in the editor area.	
 No terminal profiles yet: add them under terminal.profiles in settings.jsonc.	
 No test at the cursor: put it inside a test function.	
 No tests found for this file type.	
@@ -2135,6 +2136,8 @@ Terminal: Go to Next Command
 Terminal: Go to Previous Command	
 Terminal: Kill All Terminals	
 Terminal: Kill Other Terminals	
+Terminal: Move Terminal Back to Panel	
+Terminal: Move Terminal into Editor Area	
 Terminal: Move Terminal into New Window	
 Terminal: Move Terminals Back to Panel	
 Terminal: New	

@@ -111,6 +111,7 @@ impl Render for Workbench {
                 Page::Compare(view) => view.into_any_element(),
                 Page::Search(view) => view.into_any_element(),
                 Page::ExtView(id) => self.ext_view_frame(&id, &p, cx),
+                Page::Terminal(view) => self.editor_terminal_view(view, &p),
             },
             (_, None) if self.tabs.diff_active && self.tabs.diff.is_some() => self.tabs.diff.clone().unwrap().into_any_element(),
             (_, None) if self.tabs.large_active && self.tabs.large.is_some() => self.tabs.large.clone().unwrap().into_any_element(),
@@ -157,6 +158,8 @@ impl Render for Workbench {
             .on_action(cx.listener(|this, _: &ToggleSecondarySideBar, _, cx| this.toggle_secondary(cx)))
             .on_action(cx.listener(|this, _: &MoveTerminalIntoNewWindow, window, cx| this.detach_terminal(window, cx)))
             .on_action(cx.listener(|this, _: &MoveTerminalsBackToPanel, _, cx| this.return_detached_terminals(cx)))
+            .on_action(cx.listener(|this, _: &MoveTerminalIntoEditorArea, window, cx| this.move_terminal_into_editor(window, cx)))
+            .on_action(cx.listener(|this, _: &MoveTerminalBackToPanelFromEditor, window, cx| this.move_terminal_back_to_panel(window, cx)))
             .on_action(cx.listener(Self::kill_all_terminals))
             .on_action(cx.listener(Self::kill_other_terminals))
             .on_action(cx.listener(Self::focus_next_terminal))

@@ -177,7 +177,7 @@ impl Workbench {
     }
 
     /// The panel's list without `term`, without ending it.
-    fn remove_terminal_from_panel(&mut self, term: &Entity<TerminalView>, window: &mut Window) {
+    pub(super) fn remove_terminal_from_panel(&mut self, term: &Entity<TerminalView>, window: &mut Window) {
         let Some(ix) = self.terminals.iter().position(|t| t == term) else { return };
         self.terminals.remove(ix);
         if self.term_split.as_ref().is_some_and(|(l, r)| l == term || r == term) {

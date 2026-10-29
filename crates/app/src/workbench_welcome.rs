@@ -317,6 +317,7 @@ impl Workbench {
                     Page::Compare(_) => "compare",
                     Page::Search(_) => "search",
                     Page::ExtView(_) => "extension-view",
+                    Page::Terminal(_) => "terminal",
                 },
                 self.tabs.page_active,
             )
