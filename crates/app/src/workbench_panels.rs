@@ -212,7 +212,11 @@ impl Workbench {
     }
 
     pub(super) fn problems_view(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
-        let all = if self.jobs.problems.is_empty() { std::borrow::Cow::Borrowed(&self.lsp.diagnostics) } else { std::borrow::Cow::Owned(self.all_problems()) };
+        let all = if self.jobs.problems.is_empty() && self.extension_problems().next().is_none() {
+            std::borrow::Cow::Borrowed(&self.lsp.diagnostics)
+        } else {
+            std::borrow::Cow::Owned(self.all_problems())
+        };
         if all.is_empty() {
             let msg = if self.lsp.servers.is_empty() {
                 crate::i18n::t("No problems. Language servers start when you open a file.")

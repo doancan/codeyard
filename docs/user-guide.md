@@ -664,6 +664,23 @@ with your theme, so they follow theme and zoom changes, and they work with the k
 in lists and trees) and screen readers. Each view names its publisher at the top. A view stays in its place: it cannot
 cover Codeyard's install, trust or sign-in sheets, or take the keyboard while one of them waits for you. Images in its
 text are not loaded, and a link opens in your browser only after you confirm its address.
+**What extensions with code add.** Everything they put on screen names the extension.
+
+- *Commands* in the palette, in the editor's and the file tree's right-click menus (after the built-in entries, greyed
+  out when they do not apply), and on keys an extension binds (never a built-in key). A file-tree entry gets the file.
+- *Status bar items*, which run a command when clicked.
+- *Formatters.* *Format Document* and `editor.formatOnSave` use the extension that formats the file's language when
+  there is no language server for it; `editor.formatters` chooses per language, for example
+  `{ "toml": "you.taplo" }`, or `"lsp"` to keep the language server. If you type while it works, its answer is dropped,
+  and a formatter that takes more than a second is skipped: the file is saved as it is.
+- *Code actions* in *Quick Fix…* (⌘.), next to the language server's.
+- *Problems* in the Problems view and the editor, with the extension's id as their source, and *decorations*: a dot in
+  the gutter, a tinted line or a note after the line, in theme colours.
+- *Tasks* in *Tasks: Run Task…*, which the extension runs itself when you pick one.
+
+Typing never waits for an extension. When one is disabled, uninstalled or crashes, its status items, problems and
+decorations go with it. The same works in SSH windows: the extension runs on your computer and sees the remote files
+through Codeyard.
 
 **Rules that keep them predictable.** An extension key binding never takes a key a built-in shortcut uses (the
 binding is left out and the status bar says so); a keymap preset you choose with `keymap.preset` may. An extension

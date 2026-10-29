@@ -893,6 +893,7 @@ Format pasted text with the language server
 Format strings are not supported	
 Format with the language server when saving	
 Formatted	
+Formatted by {}	
 Forward	
 Forward Port	
 Forward a port:	
@@ -1844,6 +1845,7 @@ Saved a copy to {}
 Saved as {}. You kept typing while it was saving, so the original tab stays open with your latest changes.	
 Saved project “{}” (⌃R to switch)	
 Saved to ~/.ssh/config. Connecting uses your SSH keys and ssh-agent; a password prompt appears in this window if needed.	
+Saved without formatting: {0}: {1}	
 Saved {} (edit the colors in that file)	
 Saved · {}	
 Saving files before debugging…	
@@ -2515,6 +2517,7 @@ download failed
 draft	
 e.g. 3000	
 edit the file by hand	
+editor.formatters.{}: expected “lsp” or an extension id	
 empty body	
 empty variable	
 ended	
@@ -2930,6 +2933,7 @@ your words
 {}: reachable in {} ms · {} · ready	
 {}: reachable, but {} is not a supported server	
 {}: the color must be a string	
+{}: the formatter returned no edits	
 {}: the program did not start	
 {}: unknown value {} ({})	
 {}: up to date. Click to fetch.	
@@ -2970,8 +2974,8 @@ your words
 “{}” is not in the SSH config (or shares a Host line with other names: edit the file).	
 “{}” is not in the dictionary. Quick Fix shows suggestions.	
 “{}” is not supported	
+“{}” is not the command of an active extension	
 “{}” is still running in this terminal. Close it anyway?	
-“{}” needs extension code, which this version does not run	
 “{}” ships inside the package; this version only starts language servers found on PATH	
 “{}” was not found in ~/.ssh/config	
 “{}”: {} = {}	

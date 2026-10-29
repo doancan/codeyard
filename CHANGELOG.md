@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   items survive a re-render. Every element is reachable by keyboard and announced with its role and label. Each view
   names its publisher, and none can cover the consent sheet or take the keyboard from it. Images from URLs are not
   drawn yet (they wait for `net` fetching).
+- What code extensions contribute reaches the same places as the core's: commands in the editor and file-tree menus
+  (with `when` and `enablement`), on key bindings and on status bar items; formatters for *Format Document* and format
+  on save (chosen per language with `editor.formatters`); code actions in *Quick Fix…*; diagnostics in the Problems view
+  and the editor, tagged with the extension; gutter, line and after-the-line decorations in theme tones; and tasks in
+  *Tasks: Run Task…*. Providers answer within a deadline and are cancelled when you type, so they never hold up typing;
+  a late answer is dropped and noted in the extension's log. What an extension showed goes when it is disabled,
+  uninstalled or crashes. The manifest gains `[[menus]]`, `[[status-bar]]`, `[[formatters]]`, `[[code-actions]]`,
+  `[[diagnostics]]`, `[[decorations]]` and `[[tasks]]`, checked like the other contributions.
 - Code extensions run: their commands appear in the command palette, and the first one starts the extension in its
   own `codeyard-exthost` process. Every file, search and process call is checked against the extension's declared
   permissions and the folder's trust before it reaches the folder, locally and over SSH; a denial says which line to
