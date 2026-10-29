@@ -2166,11 +2166,13 @@ dependencies = [
  "ext-api",
  "ext-manifest",
  "ext-proto",
+ "landlock",
  "libc",
  "sha2 0.11.1",
  "tokio",
  "wasmtime",
  "wasmtime-wasi",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2202,6 +2204,7 @@ dependencies = [
  "ext-manifest",
  "postcard",
  "serde",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3734,6 +3737,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0de8b303297635ad57c9f5059fd9cee7a47f8e8daa09df0fcd07dd39fb22977f"
 dependencies = [
  "log",
+]
+
+[[package]]
+name = "landlock"
+version = "0.4.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4cca98e95f35b29d469dade6724c6f96cec9236640f745a0e99b0334ec320ab1"
+dependencies = [
+ "enumflags2",
+ "libc",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

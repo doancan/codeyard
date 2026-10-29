@@ -5,7 +5,7 @@ field of each crate's `Cargo.toml`. `cargo deny check` (see `deny.toml`) enforce
 allowed licence. This list covers all target platforms, including crates that a given build does not compile.
 Crates marked vendored live in `vendor/`.
 
-892 crates.
+893 crates.
 
 | Crate | Version | Licence | |
 | --- | --- | --- | --- |
@@ -344,6 +344,7 @@ Crates marked vendored live in `vendor/`.
 | khronos-egl | 6.0.0 | MIT/Apache-2.0 |  |
 | kurbo | 0.11.3 | Apache-2.0 OR MIT |  |
 | kv-log-macro | 1.0.7 | MIT OR Apache-2.0 |  |
+| landlock | 0.4.7 | MIT OR Apache-2.0 |  |
 | lazy_static | 1.5.1 | MIT OR Apache-2.0 |  |
 | leak | 0.1.2 | Apache-2.0 OR MIT |  |
 | leaky-cow | 0.1.1 | MIT / Apache-2.0 |  |
