@@ -1,2 +1,4 @@
 # Signed test fixtures: their bytes are what was signed, so no line-ending conversion on checkout.
 crates/ext-core/testdata/** -text
+# Compiled WebAssembly test fixtures.
+*.wasm binary

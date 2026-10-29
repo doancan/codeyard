@@ -5,7 +5,7 @@ field of each crate's `Cargo.toml`. `cargo deny check` (see `deny.toml`) enforce
 allowed licence. This list covers all target platforms, including crates that a given build does not compile.
 Crates marked vendored live in `vendor/`.
 
-842 crates.
+853 crates.
 
 | Crate | Version | Licence | |
 | --- | --- | --- | --- |
@@ -296,6 +296,7 @@ Crates marked vendored live in `vendor/`.
 | icu_properties | 2.4.0 | Unicode-3.0 |  |
 | icu_properties_data | 2.4.0 | Unicode-3.0 |  |
 | icu_provider | 2.4.0 | Unicode-3.0 |  |
+| id-arena | 2.3.0 | MIT/Apache-2.0 |  |
 | idna | 1.1.0 | MIT OR Apache-2.0 |  |
 | idna_adapter | 1.2.2 | Apache-2.0 OR MIT |  |
 | ignore | 0.4.33 | Unlicense OR MIT |  |
@@ -329,6 +330,7 @@ Crates marked vendored live in `vendor/`.
 | lazy_static | 1.5.1 | MIT OR Apache-2.0 |  |
 | leak | 0.1.2 | Apache-2.0 OR MIT |  |
 | leaky-cow | 0.1.1 | MIT / Apache-2.0 |  |
+| leb128fmt | 0.1.0 | MIT OR Apache-2.0 |  |
 | lebe | 0.5.3 | BSD-3-Clause |  |
 | libc | 0.2.191 | MIT OR Apache-2.0 |  |
 | libfuzzer-sys | 0.4.13 | (MIT OR Apache-2.0) AND NCSA |  |
@@ -720,7 +722,14 @@ Crates marked vendored live in `vendor/`.
 | wasm-bindgen-macro | 0.2.129 | MIT OR Apache-2.0 |  |
 | wasm-bindgen-macro-support | 0.2.129 | MIT OR Apache-2.0 |  |
 | wasm-bindgen-shared | 0.2.129 | MIT OR Apache-2.0 |  |
+| wasm-encoder | 0.261.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wasm-encoder | 0.262.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wasm-metadata | 0.261.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | wasm-streams | 0.4.2 | MIT OR Apache-2.0 |  |
+| wasmparser | 0.261.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wasmparser | 0.262.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wast | 262.0.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wat | 1.262.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | wayland-backend | 0.3.17 | MIT |  |
 | wayland-client | 0.31.15 | MIT |  |
 | wayland-cursor | 0.31.14 | MIT |  |
@@ -804,6 +813,8 @@ Crates marked vendored live in `vendor/`.
 | winx | 0.36.4 | Apache-2.0 WITH LLVM-exception |  |
 | wio | 0.2.2 | MIT/Apache-2.0 |  |
 | wit-bindgen | 0.57.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wit-component | 0.261.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wit-parser | 0.261.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | writeable | 0.6.4 | Unicode-3.0 |  |
 | x11 | 2.21.0 | MIT |  |
 | x11-clipboard | 0.9.3 | MIT |  |
