@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The extension registry's signed index: format, offline verification (a threshold of root keys, an expiring online
   key, no rollback to an older copy) and `cyx yard keygen | sign | verify` for the key ceremony and test registries
   (docs/registry.md).
+- Offline verification of publishers' keyless Sigstore signatures, pinned to the registry's Fulcio CA and Rekor key,
+  with the publisher identity (repository, owner and workflow by id) taken from the certificate.
 - Paste clipboard images into programs such as Codex in an SSH terminal: the image is transferred to a private temporary
   file on the remote host and its path is pasted into the terminal.
 - Local SSH port forwarding on Windows using a dedicated OpenSSH process for each forward.

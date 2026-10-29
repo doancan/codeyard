@@ -1,7 +1,7 @@
 # Registry
 
 Yard is the extension registry: static files on a CDN plus a small publish service. This document describes what
-exists today: the signed index format, how clients verify it, and the operator's commands. Hosting and the runbook
+exists today: the signed index format, how clients verify it and publisher signatures, and the operator's commands. Hosting and the runbook
 come with #70. The design is in [plugin-architecture.md §8](plugin-architecture.md#8-registry-and-publishing).
 
 ## Files
@@ -29,7 +29,7 @@ signature for one file never passes for the other. A `.sig` file is `{"signature
     "you.night": {
       "name": "Night", "description": "A dark theme.", "categories": ["themes"],
       "publisher": { "issuer": "https://token.actions.githubusercontent.com", "owner_id": 7, "repository_id": 42,
-                     "workflow": "you/night/.github/workflows/publish.yml" },
+                     "workflow": ".github/workflows/publish.yml" },
       "versions": [
         { "version": "1.0.0", "digest": "…", "sha256": "…", "size": 1200, "permissions": "…",
           "code": false, "published": 1800000000, "status": "ok", "downloads": 31 }
@@ -71,6 +71,43 @@ an older copy (from a cache or an attacker) is refused.
 | CY0805 | the online key has expired |
 | CY0806 | older than a copy already accepted |
 | CY0807 | the index belongs to another registry |
+| CY0810 | the Fulcio CA or Rekor key pinned in `root.json` is unusable |
+| CY0811 | the publisher signature is not a bundle this version reads |
+| CY0812 | the certificate does not chain to the pinned CA at the logged time, or names no publisher |
+| CY0813 | the transparency log evidence is missing or does not hold |
+| CY0814 | the signature is not over this package |
+
+## Publisher signatures
+
+The index proves the registry listed a version; the publisher signature proves the publisher built it, so a
+compromised registry cannot slip in a package of its own. Publishers sign keyless with Sigstore: in GitHub Actions the
+workflow's OIDC token gets a 10-minute Fulcio certificate, and the signing is logged in Rekor. Nobody holds a key.
+
+What is signed is a statement, not the package, so a signature can never be moved to another extension or version:
+
+```text
+codeyard-yard/v1/package
+you.night 1.2.0 <content digest>
+```
+
+`ext_core::publisher::verify_package` checks a Sigstore bundle (v0.1 to v0.3, a message signature logged in Rekor v1)
+offline against the Fulcio CA and Rekor key that `root.json` pins:
+
+1. Rekor's signed entry timestamp over the entry and the time it was logged.
+2. The inclusion proof up to its root hash and Rekor's signed checkpoint for that root (required from bundle v0.2).
+3. The certificate chains to the pinned Fulcio CA, for code signing, at the logged time.
+4. The logged entry names this certificate, this signature and the statement's hash; so does the bundle's message digest.
+5. The signature is the certificate key's over the statement.
+
+The publisher identity comes from the certificate: for GitHub Actions the issuer, the numeric owner and repository ids
+(they survive renames) and the workflow file without its ref; for a browser login the issuer and the account. The first
+registry install of an id pins that identity. Another identity later is a new trust decision, shown with the full
+consent sheet. A sideloaded package with the same id starts with no pin.
+
+Rekor v2 entries carry no time of their own (a timestamp authority provides it). The public-good Sigstore keeps v1 as its
+default log and announces a freeze a year ahead, so v2 support is added when that happens. SCTs are not checked: the CA is
+pinned, so they would add a second log, not a second trust decision. The tests run the relevant cases of the Sigstore
+conformance suite (`crates/ext-core/testdata/sigstore`).
 
 ## Operator commands
 
