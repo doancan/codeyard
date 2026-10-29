@@ -81,6 +81,7 @@ impl Render for Workbench {
                 Page::LanguageServices(view) => view.into_any_element(),
                 Page::Merge(view) => view.into_any_element(),
                 Page::Compare(view) => view.into_any_element(),
+                Page::Search(view) => view.into_any_element(),
             },
             (_, None) if self.tabs.diff_active && self.tabs.diff.is_some() => self.tabs.diff.clone().unwrap().into_any_element(),
             (_, None) if self.tabs.large_active && self.tabs.large.is_some() => self.tabs.large.clone().unwrap().into_any_element(),
@@ -449,10 +450,8 @@ impl Render for Workbench {
             // --- structural ---
             .on_action(cx.listener(Self::structural_search))
             .on_action(cx.listener(Self::structural_replace))
-            .on_action(cx.listener(|this, _: &OpenSearchInEditor, _, cx| {
-                let search = this.search.clone();
-                search.update(cx, |s, cx| s.open_in_editor(cx));
-            }))
+            .on_action(cx.listener(|this, _: &OpenSearchInEditor, window, cx| this.open_search_editor_from_panel(window, cx)))
+            .on_action(cx.listener(|this, _: &UndoSearchReplace, _, cx| this.undo_replace(cx)))
             .on_action(cx.listener(|this, _: &crate::search::NextResult, _, cx| this.search.update(cx, |s, cx| s.step_result(1, cx))))
             .on_action(cx.listener(|this, _: &crate::search::PrevResult, _, cx| this.search.update(cx, |s, cx| s.step_result(-1, cx))))
             .on_action(cx.listener(Self::open_settings))

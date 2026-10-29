@@ -30,37 +30,16 @@ const DEBOUNCE: Duration = Duration::from_millis(250);
 
 pub enum SearchEvent {
     /// Go to a match: absolute path, 1-based line, 0-based column, length (characters).
-    Open {
-        path: String,
-        line: u32,
-        column: u32,
-        len: u32,
-    },
-    /// Replace all matches in the found files (workbench asks for confirmation).
-    /// "Open Results in Editor": results as plain text.
-    OpenInEditor(String),
-    ReplaceAll {
-        files: Vec<String>,
-        query: SearchQuery,
-        replacement: String,
-        preserve_case: bool,
-        matches: u32,
-        truncated: bool,
-    },
+    Open { path: String, line: u32, column: u32, len: u32 },
+    /// "Open Search Editor": keep this query in an editor tab of its own.
+    OpenInEditor(crate::search_doc::SearchSpec),
+    /// Replace: review the changes in a Search Editor before anything is written. `only`: just this file (absolute path).
+    ReviewReplace { spec: crate::search_doc::SearchSpec, only: Option<String> },
     // --- structural ---
     /// A structural search wants the unsaved text of the open files of this language; answered with `run_structural`.
-    StructuralBuffers {
-        generation: u32,
-        family: &'static str,
-    },
+    StructuralBuffers { generation: u32, family: &'static str },
     /// Replace the structural matches in these files (workbench asks for confirmation).
-    StructuralReplace {
-        files: Vec<String>,
-        family: &'static str,
-        pattern: String,
-        replacement: String,
-        matches: u32,
-    },
+    StructuralReplace { files: Vec<String>, family: &'static str, pattern: String, replacement: String, matches: u32 },
 }
 
 enum Status {
@@ -328,21 +307,32 @@ impl SearchPanel {
         }
     }
 
-    /// Replace only the matches in this file (workbench asks for confirmation).
+    /// Replace only the matches in this file: reviewed in a Search Editor first.
     fn replace_in_file(&mut self, fi: usize, cx: &mut Context<Self>) {
         if self.st.on {
             return self.request_structural_replace(Some(fi), cx);
         }
-        let (Some(query), Some(f)) = (self.query(cx), self.results.get(fi)) else { return };
-        let replacement = self.replace.read(cx).text().to_string();
-        cx.emit(SearchEvent::ReplaceAll {
-            files: vec![self.abs(&f.path)],
-            query,
-            replacement,
+        let Some(f) = self.results.get(fi) else { return };
+        if self.query.read(cx).text().is_empty() {
+            return;
+        }
+        let only = Some(self.abs(&f.path));
+        cx.emit(SearchEvent::ReviewReplace { spec: self.spec(cx), only });
+    }
+
+    /// The query, its options and the replacement, as a Search Editor keeps them.
+    pub fn spec(&self, cx: &App) -> crate::search_doc::SearchSpec {
+        crate::search_doc::SearchSpec {
+            pattern: self.query.read(cx).text().to_string(),
+            regex: self.regex,
+            case_sensitive: self.case_sensitive,
+            whole_word: self.whole_word,
             preserve_case: self.preserve_case,
-            matches: f.matches.len() as u32,
-            truncated: false,
-        });
+            include: if self.show_globs { self.include.read(cx).text().to_string() } else { String::new() },
+            exclude: if self.show_globs { self.exclude.read(cx).text().to_string() } else { String::new() },
+            context: 1,
+            replacement: self.replace.read(cx).text().to_string(),
+        }
     }
 
     /// "Find in Folder…": limit the search to this folder (the file filter opens).
@@ -409,22 +399,15 @@ impl SearchPanel {
         }));
     }
 
-    /// Replace request: found files and query go to the workbench.
+    /// Replace request: the query goes to a Search Editor, which searches again and shows every change before Apply.
     pub fn request_replace_all(&mut self, cx: &mut Context<Self>) {
         if self.st.on {
             return self.request_structural_replace(None, cx);
         }
-        let Some(query) = self.query(cx) else { return };
-        let (matches, truncated) = match self.status {
-            Status::Done { matches, truncated, .. } => (matches, truncated),
-            _ => return, // no replacing before the search finishes
-        };
-        let files: Vec<String> = self.results.iter().map(|f| self.abs(&f.path)).collect();
-        if files.is_empty() {
+        if self.root.is_none() || self.query.read(cx).text().is_empty() {
             return;
         }
-        let replacement = self.replace.read(cx).text().to_string();
-        cx.emit(SearchEvent::ReplaceAll { files, query, replacement, preserve_case: self.preserve_case, matches, truncated });
+        cx.emit(SearchEvent::ReviewReplace { spec: self.spec(cx), only: None });
     }
 
     #[cfg(test)]
@@ -605,34 +588,9 @@ impl SearchPanel {
         }))
     }
 
-    /// Results as plain text: file header, below it `line: text` (like VS Code's search editor).
-    pub fn results_text(&self, cx: &App) -> String {
-        let (query, regex, case) = (self.active_query().read(cx).text().to_string(), self.regex && !self.st.on, self.case_sensitive);
-        let root = self.root.clone().unwrap_or_default();
-        let options = match (regex, case) {
-            (true, true) => crate::i18n::t("Regex, Match Case"),
-            (true, false) => crate::i18n::t("Regex, Ignore Case"),
-            (false, true) => crate::i18n::t("Match Case"),
-            (false, false) => crate::i18n::t("Ignore Case"),
-        };
-        let mut out = format!("# {}\n# {options}\n", crate::i18n::tf("Query: {}", &[&query]));
-        for f in &self.results {
-            let rel = f.path.strip_prefix(&format!("{}/", root.trim_end_matches('/'))).unwrap_or(&f.path);
-            out.push_str(&format!("\n{rel}:\n"));
-            for m in &f.matches {
-                out.push_str(&format!("  {}: {}\n", m.line, m.preview.trim_end()));
-            }
-        }
-        out
-    }
-
-    /// Open the results in an editor tab.
+    /// Keep this search in a Search Editor tab (it runs there again, in the first folder).
     pub fn open_in_editor(&mut self, cx: &mut Context<Self>) {
-        if self.results.is_empty() {
-            return;
-        }
-        let text = self.results_text(cx);
-        cx.emit(SearchEvent::OpenInEditor(text));
+        cx.emit(SearchEvent::OpenInEditor(self.spec(cx)));
     }
 
     #[cfg(test)]
@@ -777,7 +735,7 @@ impl Render for SearchPanel {
                             .when(!ready, |d| d.border_color(c(p.border)).text_color(c(p.text_muted)))
                             .child(crate::i18n::t("Replace All"))
                             .tooltip(|_, cx| {
-                                cx.new(|_| crate::workbench::Tooltip(crate::i18n::t("Replace every match in these files (↵ in the field)").into())).into()
+                                cx.new(|_| crate::workbench::Tooltip(crate::i18n::t("Review every change before replacing (↵ in the field)").into())).into()
                             })
                             .on_click(cx.listener(|this, _, _, cx| this.request_replace_all(cx)))
                     }),
@@ -832,6 +790,10 @@ impl Render for SearchPanel {
                                     .on_click(cx.listener(|this, _, _, cx| this.set_all_collapsed(true, cx)))
                             })
                         })
+                        .child(
+                            ui::icon_button("s-open-editor", "file-text", crate::i18n::t("Open in a Search Editor tab"), &p)
+                                .on_click(cx.listener(|this, _, _, cx| this.open_in_editor(cx))),
+                        )
                         .child(
                             ui::icon_button("s-rerun", "refresh-cw", crate::i18n::t("Run the search again"), &p)
                                 .on_click(cx.listener(|this, _, _, cx| this.start(cx))),
@@ -990,7 +952,7 @@ impl Render for SearchPanel {
 
 /// Start the preview about 12 characters before the first match (if remote); highlight
 /// ranges (bytes) shift too.
-fn trim_preview(preview: &str, ranges: &[(u32, u32)]) -> (String, Vec<std::ops::Range<usize>>) {
+pub(crate) fn trim_preview(preview: &str, ranges: &[(u32, u32)]) -> (String, Vec<std::ops::Range<usize>>) {
     const KEEP_BEFORE: usize = 12;
     const MAX_LEAD: usize = 40;
     let first = ranges.first().map_or(0, |r| r.0 as usize).min(preview.len());

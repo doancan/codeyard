@@ -69,7 +69,21 @@ const ROW_BASE: u64 = 0x2_0000_0000;
 const RUN_BASE: u64 = 0x4_0000_0000;
 const TERM_RUN_BASE: u64 = 0x8_0000_0000;
 const _: () = {
-    let blocks = [STATUS_ITEM, UPDATE_BUTTON, TAB_BASE, PICK_OPTION, FIND_CONTROL, COMPLETION_OPTION, EXTRA_TREE, SCM_GROUP, SCM_FILE, ABOUT_DETAIL, ROW_BASE];
+    let blocks = [
+        STATUS_ITEM,
+        UPDATE_BUTTON,
+        TAB_BASE,
+        PICK_OPTION,
+        FIND_CONTROL,
+        COMPLETION_OPTION,
+        EXTRA_TREE,
+        SCM_GROUP,
+        SCM_FILE,
+        ABOUT_DETAIL,
+        search_access::SEARCH_ED_ROW,
+        search_access::SEARCH_ED_TAB,
+        ROW_BASE,
+    ];
     let mut i = 1;
     while i < blocks.len() {
         assert!(blocks[i - 1] + BLOCK <= blocks[i]);
@@ -225,8 +239,12 @@ pub struct NoticeSnap {
 
 #[path = "a11y_scm.rs"]
 mod scm_access;
+#[path = "a11y_search_editor.rs"]
+mod search_access;
 #[path = "a11y_language_services.rs"]
 mod services_access;
+use search_access::SEARCH_ED_TAB;
+pub(crate) use search_access::{SearchEdSnap, SearchTabSnap};
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct ScmSnap {
@@ -251,6 +269,9 @@ pub struct Snapshot {
     pub terminal: Option<TerminalSnap>,
     pub(crate) scm: Option<ScmSnap>,
     pub(crate) services: Option<crate::language_services_page::AccessView>,
+    /// The Search Editor in front, and every Search Editor tab of the focused group.
+    pub(crate) search_editor: Option<SearchEdSnap>,
+    pub(crate) search_tabs: Vec<SearchTabSnap>,
     pub picker: Option<PickerSnap>,
     pub notice: Option<NoticeSnap>,
     pub status: Vec<String>,
@@ -430,7 +451,7 @@ impl Snapshot {
         }
 
         // Tabs
-        if !self.tabs.is_empty() || self.about.is_some() {
+        if !self.tabs.is_empty() || self.about.is_some() || !self.search_tabs.is_empty() {
             let mut list = Node::new(Role::TabList);
             list.set_label(t("Editor tabs"));
             let mut tab_ids = Vec::new();
@@ -440,7 +461,7 @@ impl Snapshot {
                 n.set_label(if tab.dirty { tf("{} (modified)", &[&tab.name]) } else { tab.name.clone() });
                 n.set_selected(self.active_tab == Some(i));
                 n.set_position_in_set(i + 1);
-                n.set_size_of_set(self.tabs.len() + usize::from(self.about.is_some()));
+                n.set_size_of_set(self.tabs.len() + usize::from(self.about.is_some()) + self.search_tabs.len());
                 n.add_action(Action::Click);
                 n.add_action(Action::Focus);
                 tab_ids.push(id);
@@ -451,11 +472,24 @@ impl Snapshot {
                 tab.set_label(t("About Codeyard"));
                 tab.set_selected(about.active);
                 tab.set_position_in_set(self.tabs.len() + 1);
-                tab.set_size_of_set(self.tabs.len() + 1);
+                tab.set_size_of_set(self.tabs.len() + 1 + self.search_tabs.len());
                 tab.add_action(Action::Click);
                 tab.add_action(Action::Focus);
                 tab_ids.push(ABOUT_TAB);
                 nodes.push((ABOUT_TAB, tab));
+            }
+            let before = self.tabs.len() + usize::from(self.about.is_some());
+            for (i, s) in self.search_tabs.iter().enumerate() {
+                let id = NodeId(SEARCH_ED_TAB + i as u64);
+                let mut tab = Node::new(Role::Tab);
+                tab.set_label(s.title.clone());
+                tab.set_selected(s.active);
+                tab.set_position_in_set(before + i + 1);
+                tab.set_size_of_set(before + self.search_tabs.len());
+                tab.add_action(Action::Click);
+                tab.add_action(Action::Focus);
+                tab_ids.push(id);
+                nodes.push((id, tab));
             }
             list.set_children(tab_ids);
             nodes.push((TABS, list));
@@ -484,6 +518,11 @@ impl Snapshot {
             group.set_children(children);
             nodes.push((ABOUT, group));
             kids.push(ABOUT);
+        }
+
+        if let Some(se) = &self.search_editor {
+            se.append_tree(&mut nodes);
+            kids.push(SearchEdSnap::id());
         }
 
         // Find bar (above the editor, as on screen)
@@ -664,6 +703,9 @@ impl Snapshot {
         let focus = match self.focus {
             _ if self.dialog.is_some() => self.dialog.as_ref().and_then(|d| d.focused).map_or(UPDATE_DIALOG, |i| NodeId(UPDATE_BUTTON + i as u64)),
             _ if self.services.as_ref().is_some_and(|view| view.focused) => services_access::focus_node(self.services.as_ref().expect("focused page")),
+            _ if self.search_editor.as_ref().and_then(SearchEdSnap::focus_node).is_some() => {
+                self.search_editor.as_ref().and_then(SearchEdSnap::focus_node).expect("focused search editor")
+            }
             FocusSnap::Picker if self.picker.is_some() => PICKER_INPUT,
             FocusSnap::Find(0) if self.find.is_some() => FIND_QUERY,
             FocusSnap::Find(_) if self.find.as_ref().is_some_and(|f| f.replacement.is_some()) => FIND_REPLACE,
@@ -821,6 +863,7 @@ impl Workbench {
             }
         });
 
+        let (search_editor, search_tabs) = self.a11y_search_snap(window, cx);
         let scm = (self.chrome.panel == Some(Panel::Scm)).then(|| ScmSnap { generation: self.lsp.generation, view: self.scm.read(cx).a11y_view(window, cx) });
         let focus = if self.tabs.page_active && about_view.is_some_and(|view| view.focus_handle(cx).is_focused(window)) {
             FocusSnap::AboutCopy
@@ -856,6 +899,8 @@ impl Workbench {
             completion,
             terminal,
             scm,
+            search_editor,
+            search_tabs,
             picker,
             notice,
             status,
@@ -874,6 +919,9 @@ impl Workbench {
         }
         if self.a11y_scm_action(req, last, window, cx) {
             cx.notify();
+            return;
+        }
+        if self.a11y_search_action(req, last, window, cx) {
             return;
         }
         match (req.action, req.target_node) {
@@ -1209,6 +1257,8 @@ mod tests {
             completion: None,
             terminal: None,
             scm: None,
+            search_editor: None,
+            search_tabs: Vec::new(),
             picker: None,
             status: vec!["Local".into(), "Ln 1, Col 4 (4 selected)".into()],
             dialog: None,

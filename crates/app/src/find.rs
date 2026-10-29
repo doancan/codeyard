@@ -425,9 +425,9 @@ pub fn find_all(buffer: &Buffer, re: &Regex) -> Vec<Range<usize>> {
     re.find_iter(text.as_bytes()).filter(|m| !m.is_empty()).take(MAX_MATCHES).map(|m| rope.byte_to_char(m.start())..rope.byte_to_char(m.end())).collect()
 }
 
-/// VS Code replacement syntax → the regex crate's: `$1_x` means group 1 followed by "_x" (the crate
+/// Replacement syntax → the regex crate's: `$1_x` means group 1 followed by "_x" (the crate
 /// takes it for a group named "1_x"), `$&` is the whole match; `\n`, `\t` are expanded.
-fn vscode_template(template: &str) -> String {
+pub(crate) fn regex_template(template: &str) -> String {
     let t = template.replace("\\n", "\n").replace("\\t", "\t").replace("$&", "${0}");
     let mut out = String::with_capacity(t.len() + 8);
     let mut chars = t.chars().peekable();
@@ -450,7 +450,7 @@ fn vscode_template(template: &str) -> String {
 pub fn replace_all_parts(buffer: &Buffer, re: &Regex, template: &str, regex: bool) -> Vec<(Range<usize>, String)> {
     let text = buffer.rope().to_string();
     let rope = buffer.rope();
-    let expanded = vscode_template(template);
+    let expanded = regex_template(template);
     re.captures_iter(text.as_bytes())
         .filter_map(|caps| {
             let m = caps.get(0).filter(|m| !m.is_empty())?;
@@ -475,7 +475,7 @@ pub fn replacement_for(buffer: &Buffer, re: &Regex, m: &Range<usize>, template: 
     let rope = buffer.rope();
     let (start, end) = (rope.char_to_byte(m.start), rope.char_to_byte(m.end));
     let text = rope.to_string();
-    let template = vscode_template(template);
+    let template = regex_template(template);
     let mut out = Vec::new();
     match re.captures_at(text.as_bytes(), start).filter(|c| c.get(0).is_some_and(|g| g.end() == end)) {
         Some(caps) => caps.expand(template.as_bytes(), &mut out),

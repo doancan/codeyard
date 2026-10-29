@@ -80,6 +80,7 @@ impl Workbench {
                     Some(Page::LanguageServices(view)) => view.into_any_element(),
                     Some(Page::Merge(view)) => view.into_any_element(),
                     Some(Page::Compare(view)) => view.into_any_element(),
+                    Some(Page::Search(view)) => view.into_any_element(),
                     Some(Page::Welcome) => self.welcome_view(p, cx).into_any_element(),
                     Some(Page::Containers) => self.container_dashboard_view(p, cx).into_any_element(),
                     Some(Page::Extension) => self.extension_page(p, cx),
@@ -103,7 +104,11 @@ impl Workbench {
                 .flex_col()
                 .overflow_hidden()
                 .when(
-                    (!state.editors.is_empty() && cx.global::<Settings>().show_tabs) || state.diff.is_some() || state.large.is_some() || state.page.is_some(),
+                    (!state.editors.is_empty() && cx.global::<Settings>().show_tabs)
+                        || state.diff.is_some()
+                        || state.large.is_some()
+                        || state.page.is_some()
+                        || !state.searches.is_empty(),
                     |d| d.child(self.tabs(key, p, cx)),
                 )
                 .when(focused, |d| {
@@ -439,6 +444,64 @@ impl Workbench {
                         this.activate(ix, window, cx);
                     }))
             }))
+            .children(state.searches.iter().enumerate().map(|(ix, ed)| {
+                let active = state.page_active && matches!(&state.page, Some(Page::Search(p)) if p == ed);
+                let (title, stale) = {
+                    let e = ed.read(cx);
+                    (e.title(), e.doc.stale.is_some() || !e.doc.is_current_and_complete())
+                };
+                let (show, close, middle) = (ed.clone(), ed.clone(), ed.clone());
+                div()
+                    .id(SharedString::from(format!("tab-search-{}-{ix}", key.id)))
+                    .relative()
+                    .flex()
+                    .flex_none()
+                    .items_center()
+                    .gap(px(theme::SPACE[3]))
+                    .max_w(px(260.))
+                    .pl(px(theme::SPACE[5]))
+                    .pr(px(theme::SPACE[2]))
+                    .border_r_1()
+                    .border_color(c(p.border))
+                    .cursor_pointer()
+                    .text_color(c(if active { p.text } else { p.text_muted }))
+                    .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover))))
+                    .when(active, |d| d.bg(c(p.bg)).child(div().absolute().top_0().left_0().right_0().h(px(1.)).bg(c(p.accent))))
+                    .child(icon("search", layout::ICON, if stale { p.warning } else { p.accent }))
+                    .child(div().overflow_hidden().whitespace_nowrap().child(title))
+                    .child(
+                        div()
+                            .id(SharedString::from(format!("tab-search-close-{}-{ix}", key.id)))
+                            .size(px(20.))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(px(theme::radius::SM))
+                            .hover(|d| d.bg(c(p.surface_hover)))
+                            .child(icon("x", 14., p.text_muted))
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                cx.stop_propagation();
+                                if !this.ensure_group(key) {
+                                    return;
+                                }
+                                this.close_search_editor(&close, cx);
+                            })),
+                    )
+                    .on_mouse_down(
+                        MouseButton::Middle,
+                        cx.listener(move |this, _, _, cx| {
+                            if this.ensure_group(key) {
+                                this.close_search_editor(&middle, cx);
+                            }
+                        }),
+                    )
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        if !this.ensure_group(key) {
+                            return;
+                        }
+                        this.show_search_editor(show.clone(), window, cx);
+                    }))
+            }))
             .when_some(state.large.clone(), |d, view| {
                 let active = state.large_active;
                 let name = view.read(cx).name.clone();
@@ -547,7 +610,7 @@ impl Workbench {
                         })),
                 )
             })
-            .when_some(state.page.clone(), |d, page| {
+            .when_some(state.page.clone().filter(|page| !matches!(page, Page::Search(_))), |d, page| {
                 let active = state.page_active;
                 let (glyph, title): (&str, String) = match &page {
                     Page::Welcome => ("rocket", crate::i18n::t("Welcome").into()),
@@ -560,6 +623,7 @@ impl Workbench {
                     Page::LanguageServices(_) => ("code", crate::i18n::t("Language Services").into()),
                     Page::Merge(v) => ("git-compare", v.read(cx).title(cx)),
                     Page::Compare(v) => ("git-compare", v.read(cx).title()),
+                    Page::Search(v) => ("search", v.read(cx).title()),
                 };
                 d.child(
                     div()

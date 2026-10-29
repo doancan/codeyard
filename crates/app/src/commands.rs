@@ -135,6 +135,7 @@ registry! {
     "workbench.action.openAsHex" => wb::OpenAsHex,
     "explorer.openWith" => wb::OpenWith,
     "search.action.openInEditor" => wb::OpenSearchInEditor,
+    "search.action.undoReplace" => wb::UndoSearchReplace,
     "workbench.findInFiles" => wb::FindInFiles,
     "workbench.toggleSidebar" => wb::ToggleSidebar,
     "workspace.trust" => wb::TrustWorkspace,

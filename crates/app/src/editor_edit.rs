@@ -480,6 +480,17 @@ impl EditorView {
         }
     }
 
+    /// Undo a replacement's single step, only if the text is still exactly what it left (`expected` is the version right
+    /// after it). Anything typed since makes this refuse instead of undoing the wrong step.
+    pub fn undo_replace_step(&mut self, expected: u64, cx: &mut Context<Self>) -> bool {
+        if self.buffer.version() != expected || !self.buffer.undo() {
+            return false;
+        }
+        self.buffer.set_marks(LINK_MARKS, Vec::new());
+        self.after_edit(cx);
+        true
+    }
+
     pub(super) fn redo(&mut self, _: &Redo, _: &mut Window, cx: &mut Context<Self>) {
         if self.buffer.redo() {
             self.buffer.set_marks(LINK_MARKS, Vec::new());
