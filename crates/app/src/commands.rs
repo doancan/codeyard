@@ -154,6 +154,7 @@ registry! {
     "workbench.showExtensions" => wb::ShowExtensions,
     "extensions.installFromFile" => wb::InstallExtensionFromFile,
     "extensions.installFromFolder" => wb::InstallExtensionFromFolder,
+    "extensions.installFromRegistry" => wb::InstallExtensionFromRegistry,
     "test.runAll" => wb::RunAllTests,
     "test.runFailed" => wb::RunFailedTests,
     "test.refresh" => wb::RefreshTests,

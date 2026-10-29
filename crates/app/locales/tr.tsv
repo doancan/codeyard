@@ -2925,6 +2925,18 @@ What kind of extension?	Ne tür bir eklenti?
 Create Here	Buraya Oluştur
 {} is loaded as an extension in development: save a file to reload it	{} geliştirilen eklenti olarak yüklendi: yeniden yüklemek için bir dosyayı kaydedin
 Could not create the extension: {}	Eklenti oluşturulamadı: {}
+Another publisher now: {0}. The version you have came from {1}.	Artık başka bir yayıncı: {0}. Sizdeki sürüm {1} tarafından yayımlanmıştı.
+Extension id, like publisher.name or publisher.name@1.2.0	Eklenti kimliği, örneğin yayinci.ad veya yayinci.ad@1.2.0
+Extensions: Install from Registry…	Eklentiler: Kayıttan Kur…
+From the {0} registry, published by {1}	{0} kaydından, yayımlayan: {1}
+Looking for {} in your registries…	{} kayıtlarınızda aranıyor…
+No extension registry is set up yet. Add one to extensions.registries in your settings, or install a .cyx file.	Henüz bir eklenti kaydı ayarlanmadı. Ayarlarınızda extensions.registries içine bir kayıt ekleyin ya da bir .cyx dosyası kurun.
+The {} registry's list is more than 3 days old, so a version withdrawn since may still show. Install only if you expected this.	{} kaydının listesi 3 günden eski; o zamandan beri geri çekilmiş bir sürüm hâlâ görünebilir. Yalnızca bunu bekliyorsanız kurun.
+extensions.registries[{0}]: the name “{1}” is used twice	extensions.registries[{0}]: “{1}” adı iki kez kullanılmış
+the {} registry's list is more than 3 days old; install from the Extensions view to confirm	{} kaydının listesi 3 günden eski; onaylamak için Eklentiler görünümünden kurun
+{0} is now published by {1}, not {2} as before; review it with Extensions: Install from Registry…	{0} artık eskisi gibi {2} değil, {1} tarafından yayımlanıyor; Eklentiler: Kayıttan Kur… ile inceleyin
+{} is not in any of your registries	{} kayıtlarınızın hiçbirinde yok
+{}: expected a list	{}: bir liste bekleniyordu
 Could not paste: {}	Yapıştırılamadı: {}
 
 # ---- Terminal panel toolbar, launch menu and terminal list ----

@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (docs/registry.md).
 - Offline verification of publishers' keyless Sigstore signatures, pinned to the registry's Fulcio CA and Rekor key,
   with the publisher identity (repository, owner and workflow by id) taken from the certificate.
+- Install from a registry: *Extensions: Install from Registry…* and `codeyard --install-extension publisher.name[@x.y.z]`.
+  The signed index, the package and the publisher's signature are checked before the consent sheet, which names the
+  publisher; the lock pins it, and a new publisher or an index older than 3 days is called out. Registries besides the
+  public one go in `extensions.registries`. No request is made until something is installed from a registry, then at
+  most one a day.
 - `cyx publish` signs keyless (GitHub Actions' identity, or a browser sign-in) and publishes; `--dry-run` prints the
   install sheet in the app's words. `cyx yank`, `restore` and `deprecate` change a published version. `cyx new` writes
   `.github/workflows/publish.yml` for tag-push releases through the `codeyard/publish` action. `.github` is never packaged.

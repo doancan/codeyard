@@ -396,3 +396,27 @@ fn declarative_extensions_never_run_code() {
     assert!(!t.code_runs && t.programs_start);
     assert!(!effective(&m, &Permissions::default(), Trust::Untrusted).programs_start);
 }
+
+#[test]
+fn the_lock_is_format_1_until_a_registry_source_needs_2() {
+    let locked = |source: Source| Locked {
+        version: ext_manifest::Version::parse("1.0.0").unwrap(),
+        digest: ContentDigest([1; 32]),
+        previous: None,
+        source,
+        disabled: false,
+    };
+    let mut lock = Lock { format: lock::FORMAT, ..Default::default() };
+    lock.extensions.insert(ExtId::parse("you.a").unwrap(), locked(Source::File { path: "a.cyx".into() }));
+    let text = lock.render();
+    assert!(text.contains("\"format\": 1"), "{text}");
+    assert_eq!(Lock::parse(&text).unwrap().extensions, lock.extensions);
+    let p = crate::testing::github(7, 42);
+    lock.extensions.insert(ExtId::parse("you.b").unwrap(), locked(Source::Registry { registry: "codeyard".into(), publisher: p.clone() }));
+    let text = lock.render();
+    assert!(text.contains("\"format\": 2") && text.contains("\"kind\": \"registry\""), "{text}");
+    let back = Lock::parse(&text).unwrap();
+    assert_eq!(back.extensions[&ExtId::parse("you.b").unwrap()].source.registry(), Some(("codeyard", &p)));
+    // What an older Codeyard (format 1) says about it.
+    assert_eq!(Lock::parse(&text.replace("\"format\": 2", "\"format\": 3")).unwrap_err(), LockError::Newer(3));
+}

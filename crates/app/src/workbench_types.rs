@@ -258,6 +258,8 @@ pub(super) enum InputPurpose {
     CloneTarget {
         url: String,
     },
+    /// `publisher.name[@version]` to install from a registry.
+    InstallFromRegistry,
     /// The name of a new extension of this kind (`cyx new <kind>`).
     NewExtension {
         kind: &'static str,

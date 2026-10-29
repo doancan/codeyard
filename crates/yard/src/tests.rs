@@ -294,6 +294,9 @@ fn the_http_service_end_to_end() {
     assert_eq!(request(addr, "GET", "/root.json.sig", b"").0, 200);
     let (status, pkg) = request(addr, "GET", &format!("/packages/{}.cyx", digest.hex()), b"");
     assert_eq!((status, pkg), (200, bytes));
+    let (status, served) = request(addr, "GET", &format!("/packages/{}.sigstore.json", digest.hex()), b"");
+    assert_eq!((status, served), (200, bundle.clone()), "the publisher signature, as uploaded");
+    assert_eq!(request(addr, "GET", "/packages/../yard.sigstore.json", b"").0, 404);
     assert_eq!(request(addr, "GET", "/packages/zz.cyx", b"").0, 404);
     assert_eq!(request(addr, "GET", "/yard.sqlite", b"").0, 404, "only the public files are served");
     assert_eq!(request(addr, "DELETE", "/index.json", b"").0, 405);

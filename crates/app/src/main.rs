@@ -1,6 +1,6 @@
 //! codeyard: lightweight, native code editor. Local + SSH.
 //!
-//!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx]
+//!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|ID[@VERSION]]
 
 // Normal Windows launches are GUI applications in every profile. Test harnesses keep their console.
 #![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
@@ -62,6 +62,9 @@ mod error_ui_tests;
 #[cfg(test)]
 mod explorer_bulk_tests;
 mod ext;
+mod ext_registry;
+#[cfg(test)]
+mod ext_registry_tests;
 #[cfg(test)]
 mod ext_tests;
 #[cfg(test)]
@@ -709,10 +712,16 @@ fn install_extensions(files: &[String]) -> i32 {
         return 1;
     };
     let store = ext::store(&cfg);
+    let settings =
+        std::fs::read_to_string(cfg.join("settings.jsonc")).ok().and_then(|t| settings::parse_layers(&t, &[]).ok()).map(|(s, _)| s).unwrap_or_default();
+    let registries = ext_registry::registries(&settings);
     let mut status = 0;
     for f in files {
         let path = std::fs::canonicalize(f).unwrap_or_else(|_| f.into());
-        match ext::install_file(&store, &path) {
+        // A file (or anything that looks like one) is a package; `publisher.name[@version]` comes from a registry.
+        let from_file = path.exists() || f.ends_with(".cyx") || f.contains(['/', '\\']);
+        let result = if from_file { ext::install_file(&store, &path) } else { ext_registry::install_from_command_line(&cfg, &registries, f) };
+        match result {
             Ok(m) => println!("installed {} {}", m.id, m.version),
             Err(e) => {
                 eprintln!("{f}: {e}");
@@ -800,7 +809,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
             }
             "-h" | "--help" => {
                 println!(
-                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx]"
+                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|ID[@VERSION]]"
                 );
                 std::process::exit(0);
             }

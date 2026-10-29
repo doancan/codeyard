@@ -753,6 +753,16 @@ impl Workbench {
         ext_glue::high_risk_line(m)
     }
 
+    pub fn review_registry_extension_for_test(&mut self, spec: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.review_registry_extension(spec.to_string(), window, cx);
+    }
+
+    /// The consent sheet's source line and its warnings.
+    pub fn consent_source_for_test(&self) -> Option<(String, Vec<String>)> {
+        let p = self.cfg.exts.pending.as_ref()?;
+        Some((ext_glue::source_line(&p.source), p.warnings.clone()))
+    }
+
     pub fn answer_consent_for_test(&mut self, install: bool, window: &mut Window, cx: &mut Context<Self>) {
         if install {
             self.confirm_consent(window, cx);

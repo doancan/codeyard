@@ -12,7 +12,7 @@ use gpui::{Context, Entity, FocusHandle, Window};
 use super::*;
 use crate::input::{FieldEvent, TextField};
 
-gpui::actions!(workbench, [ShowExtensions, InstallExtensionFromFile, InstallExtensionFromFolder, CancelExtensionConsent]);
+gpui::actions!(workbench, [ShowExtensions, InstallExtensionFromFile, InstallExtensionFromFolder, InstallExtensionFromRegistry, CancelExtensionConsent]);
 
 /// One installed extension as the view lists it.
 #[derive(Clone)]
@@ -30,6 +30,8 @@ pub(super) struct Pending {
     pub(super) manifest: Arc<Manifest>,
     bytes: Vec<u8>,
     pub(super) source: ExtSource,
+    /// Reasons to look twice, shown in red above the buttons (a new publisher, a stale registry); Cancel takes the keys.
+    pub(super) warnings: Vec<String>,
 }
 
 /// State of the Extensions view (kept while the window lives).
@@ -51,6 +53,7 @@ pub(super) fn source_line(s: &ExtSource) -> String {
     match s {
         ExtSource::File { path } => crate::i18n::tf("Installed from the file {}", &[path]),
         ExtSource::Folder { path } => crate::i18n::tf("Installed from the folder {}", &[path]),
+        ExtSource::Registry { registry, publisher } => crate::i18n::tf("From the {0} registry, published by {1}", &[registry, publisher]),
     }
 }
 
@@ -121,6 +124,7 @@ fn read_package(source: &ExtSource) -> Result<Pending, String> {
             let files = ext_pkg::collect_dir(std::path::Path::new(path)).map_err(|e| e.to_string())?;
             ext_pkg::write(files).map_err(|e| e.to_string())?.0
         }
+        ExtSource::Registry { .. } => return Err("a registry package is downloaded by review_registry_extension".into()),
     };
     let pkg = ext_pkg::read(&bytes).map_err(|e| e.to_string())?;
     // Commands and views need the extension host, which comes in a later version: installing one now would list
@@ -131,7 +135,27 @@ fn read_package(source: &ExtSource) -> Result<Pending, String> {
             &[&pkg.manifest.id],
         ));
     }
-    Ok(Pending { manifest: Arc::new(pkg.manifest), bytes, source: source.clone() })
+    Ok(Pending { manifest: Arc::new(pkg.manifest), bytes, source: source.clone(), warnings: Vec::new() })
+}
+
+/// A package found in a registry and checked, as the consent sheet shows it.
+fn registry_pending(found: crate::ext_registry::Found) -> Result<Pending, String> {
+    let m = found.download.manifest;
+    if m.code.is_some() {
+        return Err(crate::i18n::tf("{} contains code, which this version does not run", &[&m.id]));
+    }
+    let mut warnings = Vec::new();
+    if let ext_core::publisher::Pin::Changed { was } = &found.pin {
+        warnings.push(crate::i18n::tf("Another publisher now: {0}. The version you have came from {1}.", &[&found.download.signed.publisher, was]));
+    }
+    if found.stale {
+        warnings.push(crate::i18n::tf(
+            "The {} registry's list is more than 3 days old, so a version withdrawn since may still show. Install only if you expected this.",
+            &[&found.registry.name],
+        ));
+    }
+    let source = ExtSource::Registry { registry: found.registry.name, publisher: found.download.signed.publisher };
+    Ok(Pending { manifest: Arc::new(m), bytes: found.download.bytes, source, warnings })
 }
 
 impl Workbench {
@@ -260,6 +284,46 @@ impl Workbench {
         self.pick_extension_source(false, window, cx);
     }
 
+    pub(super) fn install_extension_from_registry(&mut self, _: &InstallExtensionFromRegistry, window: &mut Window, cx: &mut Context<Self>) {
+        if self.extension_store(cx).is_none() {
+            return;
+        }
+        self.show_input(
+            InputPurpose::InstallFromRegistry,
+            crate::i18n::t("Install"),
+            crate::i18n::t("Extension id, like publisher.name or publisher.name@1.2.0"),
+            "",
+            window,
+            cx,
+        );
+    }
+
+    /// Find, download and check the package in the background (on this computer, also in an SSH window), then the
+    /// consent sheet, which also names the publisher the registry signed it for.
+    pub(super) fn review_registry_extension(&mut self, spec: String, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(dir) = self.cfg.dir.clone() else { return };
+        let registries = crate::ext_registry::registries(cx.global::<Settings>());
+        let spec = spec.trim().to_string();
+        self.notice = Some(Notice::Info(crate::i18n::tf("Looking for {} in your registries…", &[&spec]).into()));
+        cx.notify();
+        let task = cx
+            .background_executor()
+            .spawn(async move { crate::ext_registry::find(&dir, &registries, &spec, crate::ext_registry::now()).and_then(registry_pending) });
+        cx.spawn_in(window, async move |this, cx| {
+            let found = task.await;
+            this.update_in(cx, |this, window, cx| {
+                this.notice = None;
+                match found {
+                    Ok(p) => this.show_consent(p, window, cx),
+                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Cannot install the extension: {}", &[&e]).into())),
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
     /// The system file dialog, then the consent sheet. Packages are installed on this machine, also in an SSH window.
     fn pick_extension_source(&mut self, file: bool, window: &mut Window, cx: &mut Context<Self>) {
         if self.extension_store(cx).is_none() {
@@ -301,7 +365,7 @@ impl Workbench {
     }
 
     fn show_consent(&mut self, pending: Pending, window: &mut Window, cx: &mut Context<Self>) {
-        let high = high_risk_line(&pending.manifest).is_some();
+        let high = high_risk_line(&pending.manifest).is_some() || !pending.warnings.is_empty();
         let (install, cancel) = self.cfg.exts.consent_focus.get_or_insert_with(|| (cx.focus_handle().tab_stop(true), cx.focus_handle().tab_stop(true))).clone();
         self.cfg.exts.pending = Some(pending);
         self.open_extension_page(cx);

@@ -87,6 +87,7 @@ Amended {}
 An existing file with the same name is never overwritten.	
 Anchors and aliases were expanded.	
 Another debug adapter	
+Another publisher now: {0}. The version you have came from {1}.	
 App: Quit	
 Apple Container supports connecting, starting containers and viewing logs. Dev Container project creation is not supported by this adapter yet; connect to an existing Apple container.	
 Application details	
@@ -762,6 +763,7 @@ Explorer
 Explorer (⇧⌘E)	
 Export as Text…	
 Exposed only; not published on the server.	
+Extension id, like publisher.name or publisher.name@1.2.0	
 Extension in development not loaded: {}	
 Extension in development: it reloads when you save a file in its folder	
 Extension not loaded: {}	
@@ -772,6 +774,7 @@ Extensions off
 Extensions: Install cyx Command in PATH	
 Extensions: Install from File…	
 Extensions: Install from Folder…	
+Extensions: Install from Registry…	
 Extensions: New Extension…	
 Extensions: Show Extensions	
 External image: open the link to view it.	
@@ -871,6 +874,7 @@ Forward a port:
 Forward ports opened on SSH hosts	
 Forwarded Ports	
 Friday	
+From the {0} registry, published by {1}	
 Git could not sign in to {}. Set up credentials (credential helper, SSH key or `gh auth login`) and try again	
 Git doesn't know who you are on this host. Run these in the terminal: {0} and {1}	
 Git identity is not set on this host: commits will be refused. Set user.name and user.email (git config --global …).	
@@ -1136,6 +1140,7 @@ Logical processors
 Logs	
 Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it	
 Looking for tests…	
+Looking for {} in your registries…	
 Lost the connection to {}: {}. Your open files stay here and unsaved changes are kept, but they cannot be saved until you reconnect (File: Save a Copy to This Computer… keeps one locally).	
 Lost the connection to {}: {}. Your open files stay here.	
 Manage SSH hosts	
@@ -1273,6 +1278,7 @@ No differences.
 No edits yet in this session.	
 No enclosing brackets	
 No expressions: + adds one.	
+No extension registry is set up yet. Add one to extensions.registries in your settings, or install a .cyx file.	
 No extensions installed. Install one from a .cyx file or a folder.	
 No favorites yet: right-click a file → Add to Favorites, or “Favorites: Toggle Active File”.	
 No file “{}” in this project	
@@ -2089,6 +2095,7 @@ The workspace changed. Open the source project and review its container configur
 The workspace file lists no folder that exists on this computer.	
 The workspace has no extra folders.	
 The {} dictionary is installed and on.	
+The {} registry's list is more than 3 days old, so a version withdrawn since may still show. Install only if you expected this.	
 Theme skipped: {}	
 Theme “{1}”: {0} colour pair is below WCAG AA contrast ({2} on {3}: {4}:1, needs {5}:1)|Theme “{1}”: {0} colour pairs are below WCAG AA contrast, for example {2} on {3}: {4}:1, needs {5}:1	
 Theme: Open User Themes Folder	
@@ -2396,6 +2403,7 @@ expected a list [ … ]
 expected an object with path, args, env or color	
 expected an object { … } (previous settings kept)	
 expression to watch (e.g. total * 2, items.len())	
+extensions.registries[{0}]: the name “{1}” is used twice	
 failed	
 fetches {} from {}	
 field	
@@ -2534,6 +2542,7 @@ the response body is not JSON
 the response of “{}” has no header {}	
 the token was rejected: it may be expired or revoked — renew GITHUB_TOKEN/GH_TOKEN or run `gh auth login`	
 the variable {} refers to itself	
+the {} registry's list is more than 3 days old; install from the Extensions view to confirm	
 theme {} isn't installed here: copy its .json into ~/.config/codeyard/themes to use it	
 theme “{}” not found (available: auto, {})	
 this computer	
@@ -2588,6 +2597,7 @@ your words
 {0} errors, {1} warnings	
 {0} files and {1} folders go from {2} ({3}) to {4} ({5}). Files that exist there are replaced; anything that changed since the scan is left alone.	
 {0} is back at version {1}.	
+{0} is now published by {1}, not {2} as before; review it with Extensions: Install from Registry…	
 {0} isn't available ({1}). Or set “lsp.servers” in settings.	
 {0} isn't available on {1} ({2}). Or set “lsp.servers” in settings.	
 {0} isn't available on {1}. Or set “lsp.servers” in settings.	
@@ -2686,6 +2696,7 @@ your words
 {} is not a trusted folder, so nothing is written to it. Open it as a folder and trust it first.	
 {} is not an array	
 {} is not in HEAD yet.	
+{} is not in any of your registries	
 {} is not installed	
 {} is not installed. Open the setup instructions, then try again.	
 {} is too large to be a time in seconds or milliseconds	
@@ -2727,6 +2738,7 @@ your words
 {}: TOML has no null; give it a value or remove it	
 {}: connection failed	
 {}: expected a file pattern or a list of patterns	
+{}: expected a list	
 {}: expected a list of numbers ({}–{})	
 {}: expected a list of text	
 {}: expected a number	

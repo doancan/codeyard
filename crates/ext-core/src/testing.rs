@@ -181,6 +181,152 @@ impl Authority {
     }
 }
 
+/// A whole registry in a folder, as `yard` would write it: root, signed index, packages and their publisher
+/// signatures. Serves the client's tests through [`DirFetch`] without a server or the network.
+pub struct TestRegistry {
+    pub authority: Authority,
+    pub dir: std::path::PathBuf,
+    pub name: String,
+    root_key: crate::yard::SigningKey,
+    online: crate::yard::SigningKey,
+    index: crate::yard::Index,
+}
+
+impl TestRegistry {
+    pub fn new(dir: &std::path::Path, name: &str, now: u64) -> TestRegistry {
+        use crate::yard::{self, Role};
+        let _ = std::fs::remove_dir_all(dir);
+        std::fs::create_dir_all(dir.join("packages")).unwrap();
+        let authority = Authority::new();
+        let root_key = yard::SigningKey::generate().unwrap().0;
+        let online = yard::SigningKey::generate().unwrap().0;
+        let root = yard::Root {
+            format: yard::FORMAT,
+            version: 1,
+            registry: format!("{name}.test"),
+            online: yard::OnlineKey { key: online.public(), expires: now + 90 * 86400 },
+            fulcio: authority.fulcio_pem(),
+            rekor: authority.rekor_pem(),
+        };
+        let bytes = serde_json::to_vec(&root).unwrap();
+        std::fs::write(dir.join("root.json"), &bytes).unwrap();
+        std::fs::write(dir.join("root.json.sig"), yard::add_signature("", &root_key, Role::Root, &bytes).unwrap()).unwrap();
+        let index = yard::Index { format: yard::FORMAT, registry: root.registry, version: 0, expires: 0, extensions: Default::default() };
+        let mut r = TestRegistry { authority, dir: dir.to_path_buf(), name: name.into(), root_key, online, index };
+        r.sign(now);
+        r
+    }
+
+    /// The client's view of it. [`DirFetch`] answers its address, `http://localhost/<name>`, from the folder.
+    pub fn registry(&self) -> crate::registry::Registry {
+        crate::registry::Registry {
+            name: self.name.clone(),
+            url: format!("http://localhost/{}", self.name),
+            keys: crate::yard::RootKeys { keys: vec![self.root_key.public()], threshold: 1 },
+        }
+    }
+
+    /// Publish a package signed by `publisher` at `now`, and sign a new index.
+    pub fn publish(&mut self, bytes: &[u8], publisher: &Publisher, now: u64) -> crate::yard::Release {
+        let pkg = ext_pkg::read(bytes).expect("test package");
+        let m = &pkg.manifest;
+        let bundle = self.authority.sign_package(&m.id, &m.version, &pkg.digest, publisher, now);
+        let digest = pkg.digest.hex();
+        std::fs::write(self.dir.join(format!("packages/{digest}.cyx")), bytes).unwrap();
+        std::fs::write(self.dir.join(format!("packages/{digest}.sigstore.json")), &bundle).unwrap();
+        let release = crate::yard::Release {
+            version: m.version.clone(),
+            digest,
+            sha256: hex(&Sha256::digest(bytes)),
+            size: bytes.len() as u64,
+            permissions: crate::yard::permission_digest(m),
+            code: !m.is_declarative(),
+            published: now,
+            status: crate::yard::Status::Ok,
+            downloads: 0,
+            immediate: false,
+        };
+        let entry = self.index.extensions.entry(m.id.clone()).or_insert_with(|| crate::yard::Entry {
+            name: m.name.clone(),
+            description: m.description.clone().unwrap_or_default(),
+            categories: m.categories.clone(),
+            publisher: publisher.clone(),
+            versions: Vec::new(),
+        });
+        entry.versions.push(release.clone());
+        entry.versions.sort_by(|a, b| a.version.cmp(&b.version));
+        self.sign(now);
+        release
+    }
+
+    pub fn set_status(&mut self, id: &str, version: &str, status: crate::yard::Status, now: u64) {
+        let id = ext_manifest::ExtId::parse(id).unwrap();
+        let v = ext_manifest::Version::parse(version).unwrap();
+        let r = self.index.extensions.get_mut(&id).unwrap().versions.iter_mut().find(|r| r.version == v).unwrap();
+        r.status = status;
+        self.sign(now);
+    }
+
+    /// Sign the index again (a new version, expiring 72 h after `now`).
+    pub fn sign(&mut self, now: u64) {
+        self.index.version += 1;
+        self.index.expires = now + crate::yard::INDEX_LIFETIME_SECS;
+        let bytes = serde_json::to_vec(&self.index).unwrap();
+        std::fs::write(self.dir.join("index.json.sig"), crate::yard::add_signature("", &self.online, crate::yard::Role::Index, &bytes).unwrap()).unwrap();
+        std::fs::write(self.dir.join("index.json"), bytes).unwrap();
+    }
+
+    /// The `extensions.registries` entry a user would write for it.
+    pub fn setting(&self) -> serde_json::Value {
+        let r = self.registry();
+        json!({ "name": r.name, "url": r.url, "root-keys": r.keys.keys.iter().map(|k| k.hex()).collect::<Vec<_>>(), "threshold": 1 })
+    }
+
+    /// Change a published file (for tests of what the client refuses).
+    pub fn tamper(&self, rel: &str, f: impl FnOnce(&mut Vec<u8>)) {
+        let path = self.dir.join(rel);
+        let mut bytes = std::fs::read(&path).unwrap();
+        f(&mut bytes);
+        std::fs::write(path, bytes).unwrap();
+    }
+}
+
+pub const NOT_THIS_REGISTRY: &str = "not this test registry";
+
+/// Serves a [`TestRegistry`]'s address from its folder, with ETags, and counts the requests to it. Another address is
+/// an error saying so ([`NOT_THIS_REGISTRY`]), so tests running side by side can each route to their own.
+pub struct DirFetch {
+    pub dir: std::path::PathBuf,
+    base: String,
+    pub requests: std::sync::Mutex<Vec<String>>,
+}
+
+impl DirFetch {
+    pub fn new(r: &TestRegistry) -> DirFetch {
+        DirFetch { dir: r.dir.clone(), base: format!("{}/", r.registry().url), requests: Default::default() }
+    }
+
+    pub fn count(&self) -> usize {
+        self.requests.lock().unwrap().len()
+    }
+}
+
+impl crate::registry::Fetch for DirFetch {
+    fn get(&self, url: &str, etag: Option<&str>, limit: usize) -> Result<crate::registry::Got, String> {
+        let rel = url.strip_prefix(&self.base).ok_or_else(|| format!("{url}: {NOT_THIS_REGISTRY}"))?;
+        self.requests.lock().unwrap().push(url.to_string());
+        let bytes = std::fs::read(self.dir.join(rel)).map_err(|_| format!("404: {rel}"))?;
+        if bytes.len() > limit {
+            return Err(format!("{rel} is larger than {limit} bytes"));
+        }
+        let tag = hex(&Sha256::digest(&bytes));
+        if etag == Some(tag.as_str()) {
+            return Ok(crate::registry::Got::NotModified);
+        }
+        Ok(crate::registry::Got::Body { bytes, etag: Some(tag) })
+    }
+}
+
 struct Logged {
     log_id: [u8; 32],
     set: Vec<u8>,
