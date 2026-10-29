@@ -87,7 +87,7 @@ dependencies = [
 
 [[package]]
 name = "agent"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
@@ -186,7 +186,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "app"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "accesskit",
  "accesskit_consumer",
@@ -874,7 +874,7 @@ dependencies = [
 
 [[package]]
 name = "buffer"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ropey",
  "unicode-segmentation",
@@ -1719,7 +1719,7 @@ checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 
 [[package]]
 name = "cyx"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "base64",
  "ext-core",
@@ -2135,7 +2135,7 @@ dependencies = [
 
 [[package]]
 name = "ext-api"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ext-manifest",
  "serde",
@@ -2144,7 +2144,7 @@ dependencies = [
 
 [[package]]
 name = "ext-core"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "base64",
  "ext-manifest",
@@ -2175,7 +2175,7 @@ dependencies = [
 
 [[package]]
 name = "ext-manifest"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde",
  "toml 1.1.8+spec-1.1.0",
@@ -2183,7 +2183,7 @@ dependencies = [
 
 [[package]]
 name = "ext-net"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ext-manifest",
  "http-body",
@@ -2198,7 +2198,7 @@ dependencies = [
 
 [[package]]
 name = "ext-pkg"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ext-api",
  "ext-manifest",
@@ -2211,7 +2211,7 @@ dependencies = [
 
 [[package]]
 name = "ext-proto"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ext-api",
  "ext-manifest",
@@ -2221,7 +2221,7 @@ dependencies = [
 
 [[package]]
 name = "ext-ui"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ext-manifest",
  "postcard",
@@ -3227,7 +3227,7 @@ dependencies = [
 
 [[package]]
 name = "host"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "agent",
  "dirs 7.0.0",
@@ -5073,7 +5073,7 @@ dependencies = [
 
 [[package]]
 name = "proto"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "postcard",
  "serde",
@@ -5889,7 +5889,7 @@ dependencies = [
 
 [[package]]
 name = "schema"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "jsonschema",
  "serde_json",
@@ -6320,7 +6320,7 @@ dependencies = [
 
 [[package]]
 name = "spell"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "spellbook",
 ]
@@ -6405,7 +6405,7 @@ dependencies = [
 
 [[package]]
 name = "state"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "rusqlite",
 ]
@@ -6668,7 +6668,7 @@ dependencies = [
 
 [[package]]
 name = "syntax"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "cc",
  "libc",
@@ -6783,7 +6783,7 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "task-engine"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "fancy-regex",
  "serde_json",
@@ -6825,7 +6825,7 @@ dependencies = [
 
 [[package]]
 name = "theme"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde_json",
 ]
@@ -9062,7 +9062,7 @@ dependencies = [
 
 [[package]]
 name = "yard"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ext-core",
  "ext-manifest",
