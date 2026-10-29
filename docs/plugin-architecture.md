@@ -236,7 +236,7 @@ signed package; a language server wrapper is therefore a normal High-risk extens
 - **Broker (app).** Every file, network, process, account and command call is checked against
   grants ∩ workspace trust, then the path, host or program, before `Host` is called.
 - **Processes.** The broker resolves the program to an absolute path on the target host, refuses paths under
-  a workspace root, and passes an explicit environment (proto v12 adds `Which` and `EnvSpec`).
+  a workspace root, and passes an explicit environment (proto v14 adds `Which` and `ProcSpawnEnv`).
 - **Network.** In-process hyper + rustls (already linked through GPUI). It checks the real peer address of
   every connection, so private, CGNAT, link-local, metadata, NAT64 and IPv4-mapped ranges are blocked. No IP
   literals, at most 5 re-checked redirects, environment proxies ignored. WebSockets are not offered in v1.
