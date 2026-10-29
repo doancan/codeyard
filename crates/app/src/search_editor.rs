@@ -89,7 +89,7 @@ pub struct SearchEditor {
     scroll: UniformListScrollHandle,
     focus_handle: FocusHandle,
     list_focus: FocusHandle,
-    running: Option<(u32, Task<()>)>,
+    running: Option<(Vec<u32>, Task<()>)>,
     context_task: Option<Task<()>>,
     pub busy: Option<Busy>,
     message: Option<(SharedString, bool)>,
@@ -242,26 +242,39 @@ impl SearchEditor {
         let settings = cx.global::<crate::settings::Settings>();
         let mut extra = settings.files_exclude.clone();
         extra.extend(settings.search_exclude.iter().cloned());
-        let Some(query) = self.doc.spec.query(&self.doc.provenance.root, settings.search_smart_case, &extra, settings.search_max_results) else {
+        let (smart, max) = (settings.search_smart_case, settings.search_max_results);
+        let roots: Vec<String> = self.doc.provenance.roots().map(str::to_string).collect();
+        let queries: Vec<(String, proto::SearchQuery)> =
+            roots.into_iter().filter_map(|root| Some((root.clone(), self.doc.spec.query(&root, smart, &extra, max)?))).collect();
+        if queries.is_empty() {
             self.doc.state = RunState::NotRun;
             cx.emit(SearchEditorEvent::Changed);
             cx.notify();
             return;
-        };
-        let stream = match self.host.search(query) {
-            Ok(s) => s,
-            Err(e) => {
-                self.doc.fail(e.to_string());
-                cx.emit(SearchEditorEvent::Changed);
-                cx.notify();
-                return;
+        }
+        // Every folder of the workspace is searched at once; results merge into one list with absolute paths.
+        let (mut streams, mut ids) = (Vec::new(), Vec::new());
+        for (root, q) in queries {
+            match self.host.search(q) {
+                Ok(s) => {
+                    ids.push(s.id);
+                    streams.push(ui::bridge(s.rx).map(move |r| (root.clone(), r)).boxed());
+                }
+                Err(e) => {
+                    for id in ids {
+                        self.host.cancel(id);
+                    }
+                    self.doc.fail(e.to_string());
+                    cx.emit(SearchEditorEvent::Changed);
+                    cx.notify();
+                    return;
+                }
             }
-        };
-        let id = stream.id;
-        let root = self.doc.provenance.root.clone();
+        }
         let task = cx.spawn(async move |this, cx| {
-            let mut rx = ui::bridge(stream.rx);
-            while let Some(r) = rx.next().await {
+            let mut rx = futures::stream::select_all(streams);
+            let (mut pending, mut truncated_any, mut cancelled_any) = (rx.len(), false, false);
+            while let Some((root, r)) = rx.next().await {
                 let more = this
                     .update(cx, |this, cx| {
                         if this.doc.generation != generation {
@@ -275,14 +288,23 @@ impl SearchEditor {
                                 true
                             }
                             Response::SearchDone { truncated, cancelled, .. } => {
-                                this.doc.finish(truncated, cancelled);
-                                this.running = None;
-                                this.after_run(cx);
-                                false
+                                pending -= 1;
+                                truncated_any |= truncated;
+                                cancelled_any |= cancelled;
+                                if pending == 0 {
+                                    this.doc.finish(truncated_any, cancelled_any);
+                                    this.running = None;
+                                    this.after_run(cx);
+                                }
+                                pending > 0
                             }
                             Response::Error(e) => {
                                 this.doc.fail(e.to_string());
-                                this.running = None;
+                                if let Some((ids, _)) = this.running.take() {
+                                    for id in ids {
+                                        this.host.cancel(id);
+                                    }
+                                }
                                 cx.emit(SearchEditorEvent::Changed);
                                 false
                             }
@@ -297,7 +319,7 @@ impl SearchEditor {
                     return;
                 }
             }
-            // The stream ended without a summary: the connection dropped.
+            // A stream ended without a summary: the connection dropped.
             this.update(cx, |this, cx| {
                 if this.doc.generation == generation && this.doc.state == RunState::Running {
                     this.doc.fail(crate::i18n::t("The connection was lost; the results are incomplete.").into());
@@ -308,7 +330,7 @@ impl SearchEditor {
             })
             .ok();
         });
-        self.running = Some((id, task));
+        self.running = Some((ids, task));
         cx.notify();
     }
 
@@ -322,8 +344,10 @@ impl SearchEditor {
 
     /// Stop a running search; what arrived stays, marked cancelled.
     pub fn stop_search(&mut self) {
-        if let Some((id, _task)) = self.running.take() {
-            self.host.cancel(id);
+        if let Some((ids, _task)) = self.running.take() {
+            for id in ids {
+                self.host.cancel(id);
+            }
             self.doc.cancel();
         }
         self.context_task = None;
@@ -708,7 +732,7 @@ impl SearchEditor {
 
     fn apply_label(&self) -> String {
         let (changes, files) = self.selected_counts();
-        crate::i18n::tf("Apply {} changes in {} files", &[&changes, &files])
+        apply_label(changes, files)
     }
 
     /// Status lines: (text, is a warning or error).
@@ -834,6 +858,13 @@ impl SearchSpec {
         (&self.pattern, self.regex, self.case_sensitive, self.whole_word, &self.include, &self.exclude)
             != (&other.pattern, other.regex, other.case_sensitive, other.whole_word, &other.include, &other.exclude)
     }
+}
+
+/// "Apply 3 changes in 2 files", with singular forms for one change or one file.
+pub fn apply_label(changes: usize, files: usize) -> String {
+    let changes = crate::i18n::tn("{} change", "{} changes", changes, &[]);
+    let files = crate::i18n::tn("in {} file", "in {} files", files, &[]);
+    crate::i18n::tf("Apply {0} {1}", &[&changes, &files])
 }
 
 /// Rows of a preview: each file, then each change as an old line and a new line.
@@ -1280,7 +1311,7 @@ impl SearchEditor {
             Some(Row::File(f)) => {
                 let Some(file) = self.doc.files.get(f) else { return base.into_any_element() };
                 let shown = self.doc.display_path(&file.path);
-                let (dir, name) = shown.rsplit_once('/').unwrap_or(("", shown));
+                let (dir, name) = shown.rsplit_once('/').unwrap_or(("", &shown));
                 base.child(icon(if file.collapsed { "chevron-right" } else { "chevron-down" }, layout::ICON, p.text_muted))
                     .child(crate::icon_theme::file_icon_el(name, layout::ICON, &p))
                     .child(div().flex_none().child(name.to_string()))
@@ -1341,6 +1372,14 @@ fn checkbox(id: impl Into<gpui::ElementId>, state: Tri, enabled: bool, p: &theme
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn apply_label_has_singular_and_plural_forms() {
+        assert_eq!(super::apply_label(1, 1), "Apply 1 change in 1 file");
+        assert_eq!(super::apply_label(2, 1), "Apply 2 changes in 1 file");
+        assert_eq!(super::apply_label(3, 2), "Apply 3 changes in 2 files");
+        assert_eq!(super::apply_label(0, 0), "Apply 0 changes in 0 files");
+    }
+
     #[test]
     fn diff_window_keeps_the_change_visible() {
         let line = format!("{}needle{}", "x".repeat(100), "y".repeat(400));

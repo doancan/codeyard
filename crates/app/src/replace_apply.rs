@@ -4,8 +4,8 @@
 //! read back to tell "not changed" from "changed" and from "unknown" (a lost connection). Nothing is retried.
 //!
 //! Undo writes the previous bytes back only if the file still has the hash the replacement produced: a file edited
-//! since is reported as an undo conflict and left as it is. The agent's hash check only covers a file that exists, so a
-//! file deleted since the preview (or since the replacement) is a conflict too, never recreated.
+//! since is reported as an undo conflict and left as it is. The agent refuses a write against a version when the file is
+//! gone, so a file deleted since the preview (or since the replacement) is a conflict too, never recreated.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -15,10 +15,9 @@ use host::{Host, HostError};
 /// The file operations apply and undo need (the host in the app, a fault-injecting wrapper in tests).
 pub trait Store: Send + Sync {
     fn read(&self, path: &str) -> Result<(Vec<u8>, u64), HostError>;
-    /// Write `data` if the file's current hash is `expect`; returns the new hash. (A missing file is created, so callers
-    /// check `exists` first.)
+    /// Write `data` if the file's current hash is `expect`; returns the new hash. A file missing at that moment is a
+    /// conflict (the agent refuses to recreate it).
     fn write(&self, path: &str, data: Vec<u8>, expect: Option<u64>) -> Result<u64, HostError>;
-    fn exists(&self, path: &str) -> Result<bool, HostError>;
 }
 
 impl Store for Arc<dyn Host> {
@@ -27,13 +26,6 @@ impl Store for Arc<dyn Host> {
     }
     fn write(&self, path: &str, data: Vec<u8>, expect: Option<u64>) -> Result<u64, HostError> {
         self.as_ref().write(path, data, expect)
-    }
-    fn exists(&self, path: &str) -> Result<bool, HostError> {
-        match self.as_ref().stat(path) {
-            Ok(_) => Ok(true),
-            Err(HostError::Op(proto::Error::NotFound(_))) => Ok(false),
-            Err(e) => Err(e),
-        }
     }
 }
 
@@ -82,8 +74,9 @@ pub struct UndoDisk {
 
 /// Write each job in order; stop starting new ones once `cancel` is set. Returns each file's outcome and, for the files
 /// written, what undo needs.
-pub fn write_all(store: &dyn Store, jobs: Vec<Job>, cancel: &AtomicBool) -> (Vec<(String, Outcome)>, Vec<UndoDisk>) {
-    let mut outcomes = Vec::with_capacity(jobs.len());
+/// Jobs are taken one at a time, so a caller can build each file's bytes only when it is its turn.
+pub fn write_all(store: &dyn Store, jobs: impl IntoIterator<Item = Job>, cancel: &AtomicBool) -> (Vec<(String, Outcome)>, Vec<UndoDisk>) {
+    let mut outcomes = Vec::new();
     let mut undo = Vec::new();
     for job in jobs {
         if cancel.load(Ordering::SeqCst) {
@@ -91,18 +84,6 @@ pub fn write_all(store: &dyn Store, jobs: Vec<Job>, cancel: &AtomicBool) -> (Vec
             continue;
         }
         let new_hash = proto::content_hash(&job.bytes);
-        // Nothing has been sent yet when the existence check itself fails: the file is certainly unchanged by us.
-        match store.exists(&job.path) {
-            Ok(true) => {}
-            Ok(false) => {
-                outcomes.push((job.path, Outcome::Conflict));
-                continue;
-            }
-            Err(e) => {
-                outcomes.push((job.path, Outcome::Failed(e.to_string())));
-                continue;
-            }
-        }
         let outcome = match store.write(&job.path, job.bytes, Some(job.expect)) {
             Ok(hash) => {
                 undo.push(UndoDisk { path: job.path.clone(), original: job.original.clone(), hash_after: hash });
@@ -130,17 +111,6 @@ pub fn undo_all(store: &dyn Store, entries: &[UndoDisk], cancel: &AtomicBool) ->
             continue;
         }
         let restored = proto::content_hash(&e.original);
-        match store.exists(&e.path) {
-            Ok(true) => {}
-            Ok(false) => {
-                out.push((e.path.clone(), Outcome::Conflict));
-                continue;
-            }
-            Err(err) => {
-                out.push((e.path.clone(), Outcome::Failed(err.to_string())));
-                continue;
-            }
-        }
         let outcome = match store.write(&e.path, e.original.to_vec(), Some(e.hash_after)) {
             Ok(_) => Outcome::Changed(0),
             Err(err) => settle(store, &e.path, e.hash_after, restored, err),

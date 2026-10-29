@@ -7,7 +7,10 @@ fn lm(line: u32, preview: &str, ranges: &[(u32, u32)]) -> proto::LineMatch {
 }
 
 fn doc() -> SearchDoc {
-    SearchDoc::new(SearchSpec { pattern: "needle".into(), context: 1, ..Default::default() }, Provenance { host: "Local".into(), root: "/w".into() })
+    SearchDoc::new(
+        SearchSpec { pattern: "needle".into(), context: 1, ..Default::default() },
+        Provenance { host: "Local".into(), root: "/w".into(), extra_roots: vec!["/other/web".into()] },
+    )
 }
 
 /// A small deterministic generator: the property tests below need variety, not a dependency.
@@ -217,6 +220,18 @@ fn query_carries_options_and_extra_excludes() {
     assert_eq!(q.exclude, ["target", "node_modules"]);
     assert_eq!(q.max_results as usize, MAX_MATCHES, "the agent never sends more than the editor keeps");
     assert!(SearchSpec::default().query("/w", true, &[], 10).is_none());
+}
+
+#[test]
+fn paths_show_relative_to_their_folder() {
+    let d = doc();
+    assert_eq!(d.display_path("/w/src/a.rs"), "src/a.rs");
+    assert_eq!(d.display_path("/other/web/app.ts"), format!("web{}app.ts", crate::workbench::ROOT_SEP));
+    assert_eq!(d.display_path("/elsewhere/x"), "/elsewhere/x");
+    assert_eq!(d.provenance.roots().collect::<Vec<_>>(), ["/w", "/other/web"]);
+    // Saved state from before other folders were kept still restores.
+    let old = r#"{"version":1,"docs":[{"spec":{"pattern":"x","regex":false,"case_sensitive":false,"whole_word":false,"preserve_case":false,"include":"","exclude":"","context":1,"replacement":""},"provenance":{"host":"Local","root":"/w"},"state":"complete","capped":false,"omitted":0,"files":[]}]}"#;
+    assert_eq!(restore(old)[0].provenance.extra_roots, Vec::<String>::new());
 }
 
 #[test]

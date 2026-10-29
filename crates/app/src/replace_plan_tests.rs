@@ -77,6 +77,9 @@ fn case_policy_and_turkish_i() {
     let f = disk("İSTANBUL Istanbul istanbul\n".as_bytes(), &p);
     assert_eq!(f.changes.len(), 3, "case-insensitive i/İ/ı/I match each other");
     assert_eq!(String::from_utf8(out(&f)).unwrap(), "ANKARA Ankara ankara\n", "preserve case follows each match");
+    // A replacement with i/ı under a Turkish match takes Turkish casing.
+    let p = Pattern::new(&query("istanbul", false, false, false), "izmir", true).unwrap();
+    assert_eq!(String::from_utf8(out(&disk("İSTANBUL Istanbul istanbul\n".as_bytes(), &p))).unwrap(), "İZMİR Izmir izmir\n");
     let q = query("old_name", false, false, false);
     let p = Pattern::new(&q, "new_name", true).unwrap();
     assert_eq!(out(&disk(b"Old_Name OLD_NAME\n", &p)), b"New_Name NEW_NAME\n");
@@ -171,13 +174,27 @@ fn a_byte_pattern_that_splits_a_character_is_skipped_not_a_panic() {
 }
 
 #[test]
+fn files_without_changes_keep_no_content_and_never_write() {
+    let f = disk(&b"nothing here\n".repeat(10_000), &pat("absent", false, "x"));
+    assert!(f.changes.is_empty());
+    assert!(f.original().is_empty() && f.render(&[]).is_empty(), "neither the bytes nor the text are kept");
+    assert_eq!(f.output_bytes(&[]), Err(Problem::NoChanges), "never an empty write");
+}
+
+#[test]
 fn versions_record_where_the_text_came_from() {
     let p = pat("a", false, "b");
     let f = disk(b"a\n", &p);
     assert_eq!(f.version, Version::Disk { hash: proto::content_hash(b"a\n") });
     assert_eq!(*f.original(), b"a\n");
-    let f = FilePlan::build("/w/o".into(), Source::Buffer { text: "çöş a\n".into(), version: 42, encoding: Encoding::Utf8 }, &p, Encoding::Utf8, usize::MAX);
-    assert_eq!(f.version, Version::Buffer { version: 42 });
+    let f = FilePlan::build(
+        "/w/o".into(),
+        Source::Buffer { text: "çöş a\n".into(), epoch: 7, version: 42, encoding: Encoding::Utf8 },
+        &p,
+        Encoding::Utf8,
+        usize::MAX,
+    );
+    assert_eq!(f.version, Version::Buffer { epoch: 7, version: 42, hash: proto::content_hash("çöş a\n".as_bytes()) });
     // Buffer edits are character ranges (multi-byte letters before the match).
     assert_eq!(f.buffer_edits(&all(&f)), vec![(4..5, "b".to_string())]);
 }
@@ -242,7 +259,9 @@ fn pathological_patterns_and_very_long_lines_finish_quickly() {
     for re in [r"(a+)+$", r"(a|aa)*c", r"(a*)*b", r"(?:a?){50}a{50}"] {
         let p = pat(re, true, "z");
         let f = disk(line.as_bytes(), &p);
-        let _ = f.output_bytes(&all(&f)).unwrap();
+        if !f.changes.is_empty() {
+            let _ = f.output_bytes(&all(&f)).unwrap();
+        }
     }
     // One 4 MiB line: a few matches far apart.
     let big = format!("{}needle{}needle\n", "a".repeat(2 << 20), "b".repeat(2 << 20));
@@ -254,6 +273,30 @@ fn pathological_patterns_and_very_long_lines_finish_quickly() {
     let sources = vec![("/w/m".to_string(), Ok(Source::Disk { bytes: many.into_bytes(), hash: 0 }))];
     assert_eq!(Plan::build("h".into(), "/w".into(), 1, sources, &pat("b", false, "c"), Encoding::Utf8, &LIMITS).err(), Some(PlanError::TooLarge));
     assert!(start.elapsed() < std::time::Duration::from_secs(30), "{:?}", start.elapsed());
+}
+
+/// A 5 MB minified single line with thousands of matches: each diff row costs a bounded window, not the whole line.
+#[test]
+fn diff_rows_of_a_huge_single_line_are_windowed() {
+    let unit = format!("{}needle", "x".repeat(250));
+    let line = unit.repeat(20_000);
+    assert!(line.len() > 5_000_000);
+    let f = disk(line.as_bytes(), &pat("needle", false, "pin"));
+    assert_eq!(f.changes.len(), 20_000);
+    let sel = all(&f);
+    let start = std::time::Instant::now();
+    for ch in (0..f.changes.len()).step_by(7) {
+        let (old, new, r_old, r_new) = f.line_diff(ch, &sel);
+        assert!(old.len() <= 2 * DIFF_WINDOW + 64 && new.len() <= 2 * DIFF_WINDOW + 64, "{} {}", old.len(), new.len());
+        assert_eq!((&old[r_old], &new[r_new]), ("needle", "pin"));
+    }
+    // 2857 rows; the old copy-the-line approach would move ~28 GB here.
+    assert!(start.elapsed() < std::time::Duration::from_secs(5), "{:?}", start.elapsed());
+    // The middle row shows cut markers on both sides; the first one only at the end.
+    let (old, _, _, _) = f.line_diff(10_000, &sel);
+    assert!(old.starts_with('…') && old.ends_with('…'));
+    let (old, _, _, _) = f.line_diff(0, &sel);
+    assert!(!old.starts_with('…') && old.ends_with('…'));
 }
 
 /// Property: for random text with mixed endings, a BOM or not, and a random selection, the output equals the input with
@@ -279,6 +322,10 @@ fn random_texts_keep_every_untouched_byte() {
         bytes.extend_from_slice(text.as_bytes());
         let f = disk(&bytes, &pat("foo", false, "Q"));
         assert!(f.problem.is_none());
+        if f.changes.is_empty() {
+            assert_eq!(f.output_bytes(&[]), Err(Problem::NoChanges), "a file without matches has nothing to write");
+            continue;
+        }
         let sel: Vec<bool> = f.changes.iter().map(|_| rng.below(2) == 0).collect();
         let got = f.output_bytes(&sel).unwrap();
         // Expected: splice by hand from the original bytes.

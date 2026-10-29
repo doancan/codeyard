@@ -50,9 +50,6 @@ impl Store for Faulty {
         }
         self.inner.read(path)
     }
-    fn exists(&self, path: &str) -> Result<bool, HostError> {
-        self.inner.exists(path)
-    }
     fn write(&self, path: &str, data: Vec<u8>, expect: Option<u64>) -> Result<u64, HostError> {
         let n = self.writes.fetch_add(1, Ordering::SeqCst);
         if n != self.fail_at {
@@ -136,7 +133,7 @@ fn a_refused_write_mid_batch_is_reported_and_the_rest_is_exact() {
         std::fs::write(f, format!("v0 {i}\n")).unwrap();
     }
     let store = Faulty { inner: host(), fail_at: 1, mode: Fault::Refused, writes: AtomicUsize::new(0) };
-    let jobs = files.iter().enumerate().map(|(i, f)| job(f, format!("v0 {i}\n").as_bytes(), format!("v1 {i}\n").as_bytes())).collect();
+    let jobs = files.iter().enumerate().map(|(i, f)| job(f, format!("v0 {i}\n").as_bytes(), format!("v1 {i}\n").as_bytes())).collect::<Vec<_>>();
     let (out, undo) = write_all(&store, jobs, &AtomicBool::new(false));
     assert!(out[0].1.changed() && out[2].1.changed());
     assert!(matches!(out[1].1, Outcome::Failed(_)), "{:?}", out[1].1);

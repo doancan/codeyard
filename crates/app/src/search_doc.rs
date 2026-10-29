@@ -68,11 +68,27 @@ impl SearchSpec {
     }
 }
 
-/// Where a search ran: the host's label and the folder. Results, plans and undo records are only valid there.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// Where a search ran: the host's label, the workspace's first folder and its other folders. Results, plans and undo
+/// records are only valid there.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Provenance {
     pub host: String,
     pub root: String,
+    /// The workspace's other folders, searched too (saved state from before multi-folder support has none).
+    #[serde(default)]
+    pub extra_roots: Vec<String>,
+}
+
+impl Provenance {
+    /// Every folder searched: the first one, then the others.
+    pub fn roots(&self) -> impl Iterator<Item = &str> {
+        std::iter::once(self.root.as_str()).chain(self.extra_roots.iter().map(String::as_str))
+    }
+}
+
+/// `path` inside folder `root`: its path relative to it.
+fn inside<'a>(path: &'a str, root: &str) -> Option<&'a str> {
+    path.strip_prefix(root.trim_end_matches('/')).and_then(|p| p.strip_prefix('/'))
 }
 
 /// How the last run ended.
@@ -293,10 +309,17 @@ impl SearchDoc {
         self.files.iter().enumerate().flat_map(|(fi, f)| (0..f.matches.len()).map(move |mi| (fi, mi))).collect()
     }
 
-    /// Path shown for a file: relative to the root when inside it.
-    pub fn display_path<'a>(&self, path: &'a str) -> &'a str {
-        let root = self.provenance.root.trim_end_matches('/');
-        path.strip_prefix(root).and_then(|p| p.strip_prefix('/')).unwrap_or(path)
+    /// Path shown for a file: relative to the first folder, `folder › path` in another folder, else as is.
+    pub fn display_path<'a>(&self, path: &'a str) -> std::borrow::Cow<'a, str> {
+        if let Some(rel) = inside(path, &self.provenance.root) {
+            return rel.into();
+        }
+        for extra in &self.provenance.extra_roots {
+            if let Some(rel) = inside(path, extra) {
+                return format!("{}{}{rel}", crate::ui::file_name(extra), crate::workbench::ROOT_SEP).into();
+            }
+        }
+        path.into()
     }
 
     /// The results as plain text (for the clipboard): the query and options, then each file and its matching lines.
@@ -358,7 +381,11 @@ impl SearchDoc {
     }
 
     fn from_saved(s: SavedDoc) -> Option<Self> {
-        if s.spec.pattern.len() > MAX_PATTERN || s.spec.replacement.len() > MAX_PATTERN || s.provenance.root.contains('\0') {
+        if s.spec.pattern.len() > MAX_PATTERN
+            || s.spec.replacement.len() > MAX_PATTERN
+            || s.provenance.roots().any(|r| r.contains('\0'))
+            || s.provenance.extra_roots.len() > 64
+        {
             return None;
         }
         let mut doc = SearchDoc::new(SearchSpec { context: s.spec.context.min(MAX_CONTEXT), ..s.spec }, s.provenance);

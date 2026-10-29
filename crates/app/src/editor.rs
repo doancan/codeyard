@@ -419,6 +419,20 @@ struct VisibleLine {
     text_left: Pixels,
 }
 
+/// A new buffer epoch (never repeats in this process).
+pub(crate) fn next_epoch() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+/// One exact state of an open document: which buffer object, which undo step, which text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DocIdentity {
+    pub epoch: u64,
+    pub version: u64,
+    pub hash: u64,
+}
+
 pub struct EditorView {
     host: Arc<dyn Host>,
     pub path: String,
@@ -485,6 +499,9 @@ pub struct EditorView {
     conflict_at: Option<std::time::Instant>,
     /// File was deleted from disk (re-created on save).
     deleted_on_disk: bool,
+    /// Identity of the buffer object: a new one is taken whenever the buffer is replaced (reload, revert), whose undo ids
+    /// start over. With the version and a content hash it names one exact document state (see `doc_identity`).
+    pub(crate) epoch: u64,
     /// Preview tab (italic; replaced by the next preview).
     pub preview: bool,
     /// Pinned tab (on the left, "close others" skips it).
@@ -921,6 +938,7 @@ impl EditorView {
             conflict: false,
             conflict_at: None,
             deleted_on_disk: false,
+            epoch: next_epoch(),
             preview: false,
             pinned: false,
             error: None,

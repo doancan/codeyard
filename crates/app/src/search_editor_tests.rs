@@ -340,9 +340,6 @@ impl Store for FailSecond {
         }
         self.inner.write(path, data, expect)
     }
-    fn exists(&self, path: &str) -> Result<bool, HostError> {
-        Store::exists(&self.inner, path)
-    }
 }
 
 /// AC7: a failure part way reports per-file outcomes; the files that failed keep their bytes and undo covers the rest.
@@ -423,9 +420,49 @@ fn sidebar_replace_all_opens_a_review(cx: &mut TestAppContext) {
     assert!(cx.pending_prompt().is_none(), "no blind confirmation");
     assert_eq!(std::fs::read(&a).unwrap(), b"foo\n");
     let ed = wb.read_with(cx, |wb, _| wb.active_search_editor_for_test()).unwrap();
-    assert_eq!(ed.read_with(cx, |e, _| e.apply_label_for_test()), "Apply 1 changes in 1 files");
+    assert_eq!(ed.read_with(cx, |e, _| e.apply_label_for_test()), "Apply 1 change in 1 file");
     apply(&ed, cx);
     assert_eq!(std::fs::read(&a).unwrap(), b"bar\n");
+}
+
+/// A multi-folder workspace: the sidebar's Replace All reviews and applies matches in every folder, as the sidebar
+/// itself searches them; a file in another folder can be reviewed on its own too.
+#[gpui::test]
+fn replace_all_covers_every_workspace_folder(cx: &mut TestAppContext) {
+    let api = root("se-multi-api");
+    let web = root("se-multi-web");
+    let a = write(&api, "a.txt", b"foo\n");
+    let b = write(&web, "b.txt", b"foo foo\r\n");
+    let (wb, cx) = setup(cx);
+    open(&wb, &api, cx);
+    let web_path = web.to_string_lossy().into_owned();
+    assert!(wb.update_in(cx, |wb, window, cx| wb.add_workspace_folder_now(web_path.clone(), window, cx)));
+    cx.run_until_parked();
+    let search = wb.read_with(cx, |wb, _| wb.search_panel());
+    cx.simulate_keystrokes("cmd-shift-f");
+    cx.simulate_input("foo");
+    search.update(cx, |s, cx| s.set_replacement("bar", cx));
+    wait(cx, "sidebar search", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(300));
+        search.read_with(cx, |s, _| !s.is_searching() && s.summary_for_test() == Some((3, 2)))
+    });
+    search.update(cx, |s, cx| s.request_replace_all(cx));
+    wait(cx, "review", |cx| wb.read_with(cx, |wb, cx| wb.active_search_editor_for_test().is_some_and(|e| e.read(cx).has_plan())));
+    let ed = wb.read_with(cx, |wb, _| wb.active_search_editor_for_test()).unwrap();
+    assert_eq!(ed.read_with(cx, |e, _| e.doc.provenance.extra_roots.clone()), vec![web_path.clone()]);
+    let rows = ed.read_with(cx, |e, _| e.rows_for_test());
+    assert!(rows.contains(&format!("se-multi-web{}b.txt", crate::workbench::ROOT_SEP)), "{rows:?}");
+    assert_eq!(ed.read_with(cx, |e, _| e.apply_label_for_test()), "Apply 3 changes in 2 files");
+    apply(&ed, cx);
+    assert_eq!(std::fs::read(&a).unwrap(), b"bar\n");
+    assert_eq!(std::fs::read(&b).unwrap(), b"bar bar\r\n");
+    // A single file in the other folder can be reviewed on its own.
+    emit(&ed, SearchEditorEvent::Rerun, cx);
+    wait(cx, "rerun", |cx| ed.read_with(cx, |e, _| e.doc.state == RunState::Complete && e.doc.stale.is_none()));
+    let only = Some(Review::Only(b.to_string_lossy().into_owned()));
+    let ed2 = wb.update_in(cx, |wb, window, cx| wb.open_search_editor_for_test(spec("bar", false, "baz"), only, window, cx)).unwrap();
+    wait(cx, "per-file review", |cx| ed2.read_with(cx, |e, _| e.has_plan()));
+    assert_eq!(ed2.read_with(cx, |e, _| e.apply_label_for_test()), "Apply 2 changes in 1 file");
 }
 
 /// Replace in one file from the sidebar: the review selects only that file's changes.
@@ -439,7 +476,7 @@ fn per_file_review_selects_only_that_file(cx: &mut TestAppContext) {
     let only = Some(Review::Only(b.to_string_lossy().into_owned()));
     let ed = wb.update_in(cx, |wb, window, cx| wb.open_search_editor_for_test(spec("foo", false, "bar"), only, window, cx)).unwrap();
     wait(cx, "review", |cx| ed.read_with(cx, |e, _| e.has_plan()));
-    assert_eq!(ed.read_with(cx, |e, _| e.apply_label_for_test()), "Apply 2 changes in 1 files");
+    assert_eq!(ed.read_with(cx, |e, _| e.apply_label_for_test()), "Apply 2 changes in 1 file");
     apply(&ed, cx);
     assert_eq!(std::fs::read(&a).unwrap(), b"foo\n");
     assert_eq!(std::fs::read(&b).unwrap(), b"bar bar\n");
@@ -471,6 +508,97 @@ fn search_editor_replaces_and_undoes_over_ssh(cx: &mut TestAppContext) {
     apply(&ed, cx);
     assert_eq!(std::fs::read(&a).unwrap(), b"one changed\n");
     assert!(report(&ed, cx).iter().any(|l| l == "File changed since preview: a.txt"));
+}
+
+/// Open `name` in an editor and return it.
+fn open_buffer(wb: &Entity<Workbench>, path: &Path, cx: &mut VisualTestContext) -> Entity<crate::editor::EditorView> {
+    let p = path.to_string_lossy().into_owned();
+    wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(p, window, cx));
+    cx.run_until_parked();
+    wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap()
+}
+
+/// Rewrite the file and reload its editor from disk (a new buffer whose undo ids start over).
+fn reload_with(buf: &Entity<crate::editor::EditorView>, path: &Path, bytes: &[u8], cx: &mut VisualTestContext) {
+    std::fs::write(path, bytes).unwrap();
+    buf.update(cx, |e, cx| e.reload(cx));
+    let want = String::from_utf8(bytes.to_vec()).unwrap();
+    wait(cx, "reloaded", |cx| buf.read_with(cx, |e, _| e.buffer_text()) == want);
+}
+
+fn edit(buf: &Entity<crate::editor::EditorView>, range: std::ops::Range<usize>, text: &str, cx: &mut VisualTestContext) {
+    let text = text.to_string();
+    buf.update(cx, |e, cx| {
+        e.apply_buffer_edits(|_| vec![(range, text)], cx);
+    });
+}
+
+/// AC5 regression: an open, clean file reloaded between preview and apply (its undo ids start over) is a conflict; the
+/// stale plan is never spliced into the new text.
+#[gpui::test]
+fn reload_between_preview_and_apply_is_a_conflict(cx: &mut TestAppContext) {
+    let dir = root("se-reload-apply");
+    let a = write(&dir, "a.txt", b"token\n");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    let buf = open_buffer(&wb, &a, cx);
+    let ed = open_editor(&wb, spec("token", false, "T"), cx);
+    preview(&ed, cx);
+    reload_with(&buf, &a, b"xx token\n", cx);
+    assert_eq!(buf.read_with(cx, |e, _| e.version()), 0, "the version alone matches the preview's");
+    apply(&ed, cx);
+    assert_eq!(buf.read_with(cx, |e, _| e.buffer_text()), "xx token\n");
+    assert_eq!(std::fs::read(&a).unwrap(), b"xx token\n");
+    assert!(report(&ed, cx).iter().any(|l| l == "File changed since preview: a.txt"), "{:?}", report(&ed, cx));
+}
+
+/// A reload followed by edits that bring the undo version and even the text back to the previewed state is still a
+/// different document: refused, nothing changed.
+#[gpui::test]
+fn reload_and_edits_reaching_the_same_version_are_a_conflict(cx: &mut TestAppContext) {
+    let dir = root("se-reload-collide");
+    let a = write(&dir, "a.txt", b"token\n");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    let buf = open_buffer(&wb, &a, cx);
+    edit(&buf, 0..0, "a", cx);
+    edit(&buf, 0..1, "", cx);
+    let before = buf.read_with(cx, |e, _| e.doc_identity());
+    let ed = open_editor(&wb, spec("token", false, "T"), cx);
+    preview(&ed, cx);
+    reload_with(&buf, &a, b"token\n", cx);
+    edit(&buf, 0..0, "a", cx);
+    edit(&buf, 0..1, "", cx);
+    let after = buf.read_with(cx, |e, _| e.doc_identity());
+    assert_eq!((after.version, after.hash), (before.version, before.hash), "same undo id and text");
+    assert_ne!(after.epoch, before.epoch);
+    apply(&ed, cx);
+    assert_eq!(buf.read_with(cx, |e, _| e.buffer_text()), "token\n");
+    assert!(report(&ed, cx).iter().any(|l| l == "File changed since preview: a.txt"));
+}
+
+/// AC6 regression: a reload between apply and undo, then an edit reaching the same undo id and text, is an undo
+/// conflict; the user's own step is not popped.
+#[gpui::test]
+fn reload_between_apply_and_undo_is_an_undo_conflict(cx: &mut TestAppContext) {
+    let dir = root("se-reload-undo");
+    let a = write(&dir, "a.txt", b"token\n");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    let buf = open_buffer(&wb, &a, cx);
+    let ed = open_editor(&wb, spec("token", false, "T"), cx);
+    preview(&ed, cx);
+    apply(&ed, cx);
+    assert_eq!(buf.read_with(cx, |e, _| e.buffer_text()), "T\n");
+    let applied = buf.read_with(cx, |e, _| e.doc_identity());
+    reload_with(&buf, &a, b"T\n", cx);
+    edit(&buf, 0..1, "T", cx);
+    let now = buf.read_with(cx, |e, _| e.doc_identity());
+    assert_eq!((now.version, now.hash), (applied.version, applied.hash));
+    emit(&ed, SearchEditorEvent::Undo, cx);
+    wait(cx, "undo", |cx| ed.read_with(cx, |e, _| e.busy.is_none() && e.report_lines_for_test().iter().any(|l| l.starts_with("Undo conflict"))));
+    assert_eq!(buf.read_with(cx, |e, _| e.buffer_text()), "T\n");
+    assert_eq!(buf.read_with(cx, |e, _| e.version()), now.version, "the user's step is still there");
 }
 
 /// AC6: a replaced file that was opened and edited (unsaved) before Undo is an undo conflict; the disk keeps the
@@ -521,7 +649,7 @@ fn encodings_and_line_endings_survive_apply(cx: &mut TestAppContext) {
     emit(&ed, SearchEditorEvent::Rerun, cx);
     wait(cx, "rerun", |cx| ed.read_with(cx, |e, _| e.doc.state == RunState::Complete && e.doc.stale.is_none()));
     preview(&ed, cx);
-    assert_eq!(ed.read_with(cx, |e, _| e.apply_label_for_test()), "Apply 1 changes in 1 files", "the refused file is not selectable");
+    assert_eq!(ed.read_with(cx, |e, _| e.apply_label_for_test()), "Apply 1 change in 1 file", "the refused file is not selectable");
     apply(&ed, cx);
     assert_eq!(std::fs::read(&turkish).unwrap(), b"I\xfe\xfdk mark\r\n");
     assert_eq!(std::fs::read(&mixed).unwrap(), "😀\n".as_bytes());

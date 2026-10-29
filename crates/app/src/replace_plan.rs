@@ -22,6 +22,9 @@ pub struct Limits {
 }
 pub const LIMITS: Limits = Limits { files: 1_000, changes: 20_000, bytes: 64 * 1024 * 1024 };
 
+/// Bytes of context kept on each side of a change in a diff row.
+pub const DIFF_WINDOW: usize = 400;
+
 /// The compiled search and what to replace each match with.
 pub struct Pattern {
     re: regex::bytes::Regex,
@@ -55,15 +58,24 @@ impl Pattern {
 pub enum Source {
     /// Bytes on disk and their hash (`proto::content_hash`).
     Disk { bytes: Vec<u8>, hash: u64 },
-    /// An open editor's text (`\n` line ends, no byte-order mark), its version and the encoding it saves in.
-    Buffer { text: String, version: u64, encoding: Encoding },
+    /// An open editor's text (`\n` line ends, no byte-order mark), its identity (buffer epoch and undo version) and the
+    /// encoding it saves in.
+    Buffer { text: String, epoch: u64, version: u64, encoding: Encoding },
 }
 
 /// The version a file's changes were computed from; apply and undo check it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Version {
-    Disk { hash: u64 },
-    Buffer { version: u64 },
+    Disk {
+        hash: u64,
+    },
+    /// The buffer object, its undo step and a hash of its text: undo ids restart when a buffer is reloaded, so the
+    /// version alone does not name a document state.
+    Buffer {
+        epoch: u64,
+        version: u64,
+        hash: u64,
+    },
 }
 
 /// One proposed change: a match and its replacement. Offsets are bytes into the file's decoded text.
@@ -90,6 +102,8 @@ pub enum Problem {
     },
     /// Could not be read.
     Unreadable(String),
+    /// No match in the file's current text.
+    NoChanges,
 }
 
 impl Problem {
@@ -99,6 +113,7 @@ impl Problem {
             Problem::Unsupported => crate::i18n::t("Unsupported encoding: the file would not be written back exactly, so it is not changed.").into(),
             Problem::Unencodable { ch, encoding } => crate::i18n::tf("“{0}” cannot be written in {1}: not changed.", &[ch, encoding]),
             Problem::Unreadable(e) => crate::i18n::tf("Could not read: {}", &[e]),
+            Problem::NoChanges => crate::i18n::t("No matches in this file any more.").into(),
         }
     }
 }
@@ -136,7 +151,10 @@ impl FilePlan {
     /// caller refuses such a plan).
     pub fn build(path: String, source: Source, pattern: &Pattern, fallback: Encoding, limit: usize) -> FilePlan {
         let (text, encoding, bom, version, original, eol) = match source {
-            Source::Buffer { text, version, encoding } => (text, encoding, false, Version::Buffer { version }, Arc::new(Vec::new()), "\n"),
+            Source::Buffer { text, epoch, version, encoding } => {
+                let hash = proto::content_hash(text.as_bytes());
+                (text, encoding, false, Version::Buffer { epoch, version, hash }, Arc::new(Vec::new()), "\n")
+            }
             Source::Disk { bytes, hash } => match decode(&bytes, fallback) {
                 Ok((text, encoding, bom)) => {
                     let eol = first_eol(&text);
@@ -158,6 +176,8 @@ impl FilePlan {
         };
         let changes = find_changes(&text, pattern, eol, limit);
         let problem = unencodable(&changes, encoding);
+        // Nothing can ever be written for a file without changes: its text and bytes are not kept.
+        let (text, original) = if changes.is_empty() { (String::new(), Arc::new(Vec::new())) } else { (text, original) };
         FilePlan { path, version, encoding, bom, text, original, changes, problem }
     }
 
@@ -197,6 +217,10 @@ impl FilePlan {
         if let Some(p) = &self.problem {
             return Err(p.clone());
         }
+        // Its content was not kept (see `build`): there is nothing to write, and never an empty file.
+        if self.changes.is_empty() {
+            return Err(Problem::NoChanges);
+        }
         encode(&self.render(selected), self.encoding, self.bom).map_err(|ch| Problem::Unencodable { ch, encoding: self.encoding.label() })
     }
 
@@ -219,36 +243,49 @@ impl FilePlan {
 
     /// The line a change is on, before and after the selected changes on that line: (old line, new line, the change's
     /// byte range in the old line, its range in the new line). Exactly the bytes that will be written, minus line breaks.
+    /// A long line is cut to about `DIFF_WINDOW` bytes on each side of the change (marked with "…"), so the work per
+    /// shown row stays bounded however long the line is; changes cut by the window edge show unchanged.
     pub fn line_diff(&self, change: usize, selected: &[bool]) -> (String, String, Range<usize>, Range<usize>) {
         let Some(c) = self.changes.get(change) else { return Default::default() };
-        let line_start = self.text[..c.start].rfind('\n').map_or(0, |i| i + 1);
-        let line_end = self.text[c.end..].find('\n').map_or(self.text.len(), |i| c.end + i);
-        let line_end = if self.text[..line_end].ends_with('\r') && line_end > c.end { line_end - 1 } else { line_end };
-        let old = self.text[line_start..line_end].to_string();
-        let mut new = String::new();
-        let mut done = line_start;
+        let text = &self.text;
+        let back = text.floor_char_boundary(c.start.saturating_sub(DIFF_WINDOW));
+        let (start, cut_front) = match text[back..c.start].rfind('\n') {
+            Some(i) => (back + i + 1, false),
+            None => (back, back > 0),
+        };
+        let fwd = text.ceil_char_boundary((c.end + DIFF_WINDOW).min(text.len()));
+        let (end, cut_back) = match text[c.end..fwd].find('\n') {
+            Some(i) if i > 0 && text[..c.end + i].ends_with('\r') => (c.end + i - 1, false),
+            Some(i) => (c.end + i, false),
+            None => (fwd, fwd < text.len()),
+        };
+        let (pre, suf) = (if cut_front { "…" } else { "" }, if cut_back { "…" } else { "" });
+        let old = format!("{pre}{}{suf}", &text[start..end]);
+        let mut new = String::from(pre);
+        let mut done = start;
         let mut range_new = 0..0;
-        // Changes are in text order: only those on this line are looked at.
-        let (lo, hi) = (self.changes.partition_point(|o| o.start < line_start), self.changes.partition_point(|o| o.start < line_end));
+        // Changes are in text order: only those inside the window are looked at.
+        let (lo, hi) = (self.changes.partition_point(|o| o.start < start), self.changes.partition_point(|o| o.start < end));
         for i in lo..hi.max(lo) {
             let (o, s) = (&self.changes[i], selected.get(i).copied().unwrap_or(false));
-            if o.end > line_end {
+            if o.end > end {
                 continue;
             }
             if i == change {
-                new.push_str(&self.text[done..o.start]);
+                new.push_str(&text[done..o.start]);
                 let at = new.len();
                 new.push_str(if s { &o.new } else { &o.old });
                 range_new = at..new.len();
                 done = o.end;
             } else if s {
-                new.push_str(&self.text[done..o.start]);
+                new.push_str(&text[done..o.start]);
                 new.push_str(&o.new);
                 done = o.end;
             }
         }
-        new.push_str(&self.text[done..line_end]);
-        (old, new, c.start - line_start..c.end - line_start, range_new)
+        new.push_str(&text[done..end]);
+        new.push_str(suf);
+        (old, new, c.start - start + pre.len()..c.end - start + pre.len(), range_new)
     }
 }
 

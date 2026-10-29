@@ -419,6 +419,7 @@ impl Workbench {
     fn sync_search_roots(&mut self, cx: &mut Context<Self>) {
         let roots = self.roots.extra_roots.clone();
         self.search.update(cx, |s, cx| s.set_extra_roots(roots, cx));
+        self.sync_search_editors(cx);
     }
 
     fn persist_extra_roots(&self) {

@@ -985,13 +985,6 @@ impl Workbench {
                     this.open_search_editor(spec.clone(), None, window, cx);
                 }
                 SearchEvent::ReviewReplace { spec, only } => {
-                    let root = this.root(cx).unwrap_or_default();
-                    if only.as_ref().is_some_and(|p| !p.starts_with(&format!("{}/", root.trim_end_matches('/')))) {
-                        this.notice =
-                            Some(Notice::Info(crate::i18n::t("Search Editors search the first folder of the workspace; this file is in another one.").into()));
-                        cx.notify();
-                        return;
-                    }
                     let review = match only {
                         Some(path) => crate::search_editor::Review::Only(path.clone()),
                         None => crate::search_editor::Review::All,

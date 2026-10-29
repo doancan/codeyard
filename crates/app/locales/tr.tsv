@@ -2953,7 +2953,8 @@ Terminal: Focus Next Terminal	Terminal: Sonraki Terminale Geç
 Terminal: Focus Previous Terminal	Terminal: Önceki Terminale Geç
 Terminal: Configure Terminal Settings	Terminal: Terminal Ayarlarını Yapılandır
 # ---- Search Editor and replacement review ----
-Apply {} changes in {} files	{1} dosyada {0} değişikliği uygula
+Apply {0} {1}	Uygula: {1} {0}
+in {} file|in {} files	{} dosyada
 Binary file: not changed.	İkili dosya: değiştirilmedi.
 Changed {0} in {1}	{1} içinde {0} yapıldı
 Close Preview	Önizlemeyi Kapat
@@ -3014,4 +3015,4 @@ selected	seçili
 {} change|{} changes	{} değişiklik
 {} match|{} matches	{} eşleşme
 “{0}” cannot be written in {1}: not changed.	“{0}” {1} kodlamasında yazılamaz: değiştirilmedi.
-Search Editors search the first folder of the workspace; this file is in another one.	Arama Düzenleyicileri çalışma alanının ilk klasöründe arar; bu dosya başka bir klasörde.
+No matches in this file any more.	Bu dosyada artık eşleşme yok.

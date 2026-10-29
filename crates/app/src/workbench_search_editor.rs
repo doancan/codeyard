@@ -20,7 +20,7 @@ const SAVED_KEY: &str = "search_editors";
 struct UndoBuffer {
     path: String,
     editor: WeakEntity<EditorView>,
-    version_after: u64,
+    after: crate::editor::DocIdentity,
 }
 
 /// The last applied replacement, for Undo.
@@ -67,14 +67,18 @@ impl Workbench {
 
     fn place_of(&self, ed: &SearchEditor, cx: &App) -> Place {
         let prov = &ed.doc.provenance;
-        if self.root(cx).as_deref() != Some(prov.root.as_str()) || self.remote.host.label() != prov.host {
+        // Every folder the search covered must still be in the workspace (one added since is simply not searched yet).
+        if self.root(cx).as_deref() != Some(prov.root.as_str())
+            || self.remote.host.label() != prov.host
+            || !prov.extra_roots.iter().all(|r| self.roots.extra_roots.contains(r))
+        {
             return Place::Other;
         }
         if Arc::ptr_eq(ed.host(), &self.remote.host) { Place::Same } else { Place::Reconnected }
     }
 
     fn provenance(&self, cx: &App) -> Option<Provenance> {
-        Some(Provenance { host: self.remote.host.label(), root: self.root(cx)? })
+        Some(Provenance { host: self.remote.host.label(), root: self.root(cx)?, extra_roots: self.roots.extra_roots.clone() })
     }
 
     /// Open a Search Editor for `spec` in the first folder and run it. `review`: make a replacement preview once it finishes.
@@ -256,7 +260,7 @@ impl Workbench {
             .filter_map(|p| {
                 let e = self.all_editors().into_iter().find(|e| e.read(cx).path == *p && e.read(cx).uses_host(&host))?;
                 let e = e.read(cx);
-                Some((p.clone(), Source::Buffer { text: e.buffer_text(), version: e.version(), encoding: e.encoding() }))
+                Some((p.clone(), Source::Buffer { text: e.buffer_text(), epoch: e.epoch, version: e.version(), encoding: e.encoding() }))
             })
             .collect();
         ed.update(cx, |e, cx| e.set_busy(Some(Busy::Previewing), cx));
@@ -342,7 +346,9 @@ impl Workbench {
         }
         let mut report = Report::default();
         let mut buffers = Vec::new();
-        let mut jobs = Vec::new();
+        // Disk files: (plan file index, expected hash, selected changes). Their bytes are built one at a time on the
+        // background thread, so the plan's text and the new bytes of every file are never all in memory at once.
+        let mut disk_targets: Vec<(usize, u64, usize)> = Vec::new();
         let editors = self.all_editors();
         let open_editor = |path: &str, cx: &App| editors.iter().find(|e| e.read(cx).path == path && e.read(cx).uses_host(&host)).cloned();
         for (fi, file) in plan.files.iter().enumerate() {
@@ -357,11 +363,11 @@ impl Workbench {
             }
             let open = open_editor(&file.path, cx);
             match file.version {
-                Version::Buffer { version } => match open {
-                    Some(e) if e.read(cx).version() == version => {
+                Version::Buffer { epoch, version, hash } => match open {
+                    Some(e) if e.read(cx).doc_identity() == crate::editor::DocIdentity { epoch, version, hash } => {
                         let edits = file.buffer_edits(selected);
                         e.update(cx, |e, cx| e.apply_buffer_edits(|_| edits, cx));
-                        buffers.push(UndoBuffer { path: file.path.clone(), editor: e.downgrade(), version_after: e.read(cx).version() });
+                        buffers.push(UndoBuffer { path: file.path.clone(), editor: e.downgrade(), after: e.read(cx).doc_identity() });
                         report.files.push((file.path.clone(), Outcome::Changed(n)));
                     }
                     _ => report.files.push((file.path.clone(), Outcome::Conflict)),
@@ -373,17 +379,30 @@ impl Workbench {
                         report.files.push((file.path.clone(), Outcome::Conflict));
                         continue;
                     }
-                    match file.output_bytes(selected) {
-                        Ok(bytes) => jobs.push(Job { path: file.path.clone(), bytes, expect: hash, original: file.original(), changes: n }),
-                        Err(problem) => report.files.push((file.path.clone(), Outcome::Skipped(problem.message()))),
-                    }
+                    disk_targets.push((fi, hash, n));
                 }
             }
         }
         let cancel = Arc::new(AtomicBool::new(false));
         ed.update(cx, |e, cx| e.set_busy(Some(Busy::Applying(cancel.clone())), cx));
         let store: Arc<dyn replace_apply::Store> = self.searches_store(&host);
-        let task = cx.background_executor().spawn(async move { replace_apply::write_all(store.as_ref(), jobs, &cancel) });
+        let (bg_plan, bg_selection) = (plan.clone(), selection.clone());
+        let task = cx.background_executor().spawn(async move {
+            let mut skipped = Vec::new();
+            let jobs = disk_targets.into_iter().filter_map(|(fi, expect, changes)| {
+                let file = &bg_plan.files[fi];
+                match file.output_bytes(bg_selection.file(fi)) {
+                    Ok(bytes) => Some(Job { path: file.path.clone(), bytes, expect, original: file.original(), changes }),
+                    Err(problem) => {
+                        skipped.push((file.path.clone(), Outcome::Skipped(problem.message())));
+                        None
+                    }
+                }
+            });
+            let (mut outcomes, undo) = replace_apply::write_all(store.as_ref(), jobs, &cancel);
+            outcomes.extend(skipped);
+            (outcomes, undo)
+        });
         let weak = ed.downgrade();
         let root = plan.root.clone();
         cx.spawn(async move |this, cx| {
@@ -449,7 +468,7 @@ impl Workbench {
         let mut report = Report { undo: true, files: Vec::new() };
         for b in &batch.buffers {
             let outcome = match b.editor.upgrade() {
-                Some(e) if e.update(cx, |e, cx| e.undo_replace_step(b.version_after, cx)) => Outcome::Changed(0),
+                Some(e) if e.update(cx, |e, cx| e.undo_replace_step(b.after, cx)) => Outcome::Changed(0),
                 _ => Outcome::Conflict,
             };
             report.files.push((b.path.clone(), outcome));
@@ -529,7 +548,7 @@ impl Workbench {
         let Some(here) = self.provenance(cx) else { return };
         let host = self.remote.host.clone();
         for doc in search_doc::restore(&text) {
-            if doc.provenance != here {
+            if (&doc.provenance.host, &doc.provenance.root) != (&here.host, &here.root) {
                 continue;
             }
             let ed = cx.new(|cx| SearchEditor::new(doc, host.clone(), cx));

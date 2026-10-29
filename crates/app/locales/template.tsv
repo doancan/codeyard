@@ -96,7 +96,7 @@ Apply (keep the stash)
 Apply .editorconfig files (indent, line endings, final newline…)	
 Apply Stash…	
 Apply a file operation to {} entry?|Apply a file operation to {} entries?	
-Apply {} changes in {} files	
+Apply {0} {1}	
 Apr	
 Ask before .http requests and schema downloads leave this computer: never, remote (the first request to each new host per session) or always. Your own settings only; a folder cannot change it	
 Ask before Sync pulls or pushes. Your own settings only; a folder cannot change it	
@@ -1312,6 +1312,7 @@ No log lines match the current filters.
 No log output	
 No macro at the cursor	
 No matches	
+No matches in this file any more.	
 No matching folders	
 No merge conflicts in this file	
 No merge conflicts in this file.	
@@ -1811,7 +1812,6 @@ Scroll to Top
 Search	
 Search (⇧⌘F)	
 Search Commits	
-Search Editors search the first folder of the workspace; this file is in another one.	
 Search commands or keys (e.g. “comment”, “⌘D”)	
 Search commands to bind a key	
 Search commits	
@@ -2478,6 +2478,7 @@ goes to {}, which you have not sent anything to in this session
 goto	
 image default	
 in a key binding, == and != compare editor.language with a language id	
+in {} file|in {} files	
 install Xcode or a Swift toolchain (it contains sourcekit-lsp)	
 install clangd (Xcode tools, apt install clangd)	
 installed · {}	
