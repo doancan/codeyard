@@ -52,6 +52,8 @@ mod marks;
 
 pub use marks::{Activity, Finished};
 
+#[path = "terminal_restore.rs"]
+mod restore;
 #[path = "terminal_scroll.rs"]
 mod scroll;
 
@@ -222,26 +224,6 @@ impl Focusable for TerminalView {
 }
 
 impl TerminalView {
-    /// What a restart needs to bring this terminal back as a new shell (`history_lines` 0: no history). Output-only
-    /// terminals (task and test output) have no shell and are not saved.
-    pub fn saved(&self, history_lines: usize) -> Option<crate::terminal_session::SavedTerminal> {
-        self.pty.as_ref()?;
-        let history = if history_lines > 0 { crate::terminal_session::sanitize_history(&self.scrollback_text(), history_lines) } else { None };
-        Some(crate::terminal_session::SavedTerminal {
-            cwd: self.cwd.clone(),
-            shell: self.launched.0.clone(),
-            args: self.launched.1.clone(),
-            color: self.color.clone(),
-            title: self.title_locked.then(|| self.title.to_string()),
-            history,
-        })
-    }
-
-    /// Text shown in the terminal as output (a restored history, a notice): never sent to the program.
-    pub fn show_text(&mut self, text: &str, cx: &mut Context<Self>) {
-        self.append(text.as_bytes(), cx);
-    }
-
     /// Folder the terminal was started in (a split terminal opens in the same place).
     pub fn start_dir(&self) -> Option<String> {
         self.cwd.clone()

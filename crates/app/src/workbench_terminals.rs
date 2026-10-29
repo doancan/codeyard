@@ -851,7 +851,8 @@ impl Workbench {
                         if let Some(title) = &t.title {
                             term.set_fixed_title(title.clone());
                         }
-                        term.show_text(&shown, cx);
+                        // Output only: shown in the terminal, never sent to the shell.
+                        term.append(shown.as_bytes(), cx);
                     });
                 }
                 this.active_terminal = saved.active.min(this.terminals.len().saturating_sub(1));

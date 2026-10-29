@@ -28,6 +28,21 @@ pub struct SavedTerminal {
     pub history: Option<String>,
 }
 
+impl SavedTerminal {
+    /// A terminal as it is saved; `history` is its text, kept (cleaned) only when `history_lines` is above 0.
+    pub fn of(
+        cwd: Option<String>,
+        launched: (Option<String>, Option<Vec<String>>),
+        color: Option<String>,
+        title: Option<String>,
+        history: &str,
+        history_lines: usize,
+    ) -> Self {
+        let history = (history_lines > 0).then(|| sanitize_history(history, history_lines)).flatten();
+        Self { cwd, shell: launched.0, args: launched.1, color, title, history }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct SavedTerminals {
     pub version: u32,
