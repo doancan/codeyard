@@ -14,6 +14,7 @@ impl Workbench {
                 .debug_selector(|| id.to_string())
                 .group(id)
                 .relative()
+                .flex_none()
                 .w(px(layout::ACTIVITYBAR_W))
                 .h(px(layout::ACTIVITYBAR_W))
                 .flex()
@@ -82,7 +83,9 @@ impl Workbench {
         let bottom = |id: &'static str, name: &'static str, label: &'static str, tip: bool| {
             div()
                 .id(id)
+                .debug_selector(|| id.to_string())
                 .group(id)
+                .flex_none()
                 .w(px(layout::ACTIVITYBAR_W))
                 .h(px(layout::ACTIVITYBAR_W))
                 .flex()
@@ -109,15 +112,28 @@ impl Workbench {
             .bg(c(p.surface))
             .border_r_1()
             .border_color(c(p.border))
-            .child(item("act-explorer", "files", crate::i18n::t("Explorer (⇧⌘E)"), Panel::Explorer, 0, cx))
-            .child(item("act-search", "search", crate::i18n::t("Search (⇧⌘F)"), Panel::Search, 0, cx))
-            .child(item("act-scm", "git-branch", crate::i18n::t("Source Control (⌃⇧G)"), Panel::Scm, changes, cx))
-            .child(item("act-debug", "bug-play", crate::i18n::t("Run and Debug (⌃⇧D)"), Panel::Debug, 0, cx))
-            .child(item("act-testing", "flask-conical", crate::i18n::t("Testing"), Panel::Testing, failed_tests, cx))
-            .child(item("act-remote", "screen-share", crate::i18n::t("Remote Explorer"), Panel::Remote, 0, cx))
-            .child(item("act-extensions", "blocks", crate::i18n::t("Extensions"), Panel::Extensions, 0, cx))
-            .when(cx.global::<Settings>().docker_enabled, |d| d.child(item("act-containers", "server", crate::i18n::t("Containers"), Panel::Containers, 0, cx)))
-            .child(div().flex_1())
+            // The views scroll when the window is too short for all of them (a small window, or a large interface
+            // scale); the manage button stays pinned at the bottom.
+            .child(
+                div()
+                    .id("activity-views")
+                    .debug_selector(|| "activity-views".into())
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .flex_col()
+                    .overflow_y_scroll()
+                    .child(item("act-explorer", "files", crate::i18n::t("Explorer (⇧⌘E)"), Panel::Explorer, 0, cx))
+                    .child(item("act-search", "search", crate::i18n::t("Search (⇧⌘F)"), Panel::Search, 0, cx))
+                    .child(item("act-scm", "git-branch", crate::i18n::t("Source Control (⌃⇧G)"), Panel::Scm, changes, cx))
+                    .child(item("act-debug", "bug-play", crate::i18n::t("Run and Debug (⌃⇧D)"), Panel::Debug, 0, cx))
+                    .child(item("act-testing", "flask-conical", crate::i18n::t("Testing"), Panel::Testing, failed_tests, cx))
+                    .child(item("act-remote", "screen-share", crate::i18n::t("Remote Explorer"), Panel::Remote, 0, cx))
+                    .child(item("act-extensions", "blocks", crate::i18n::t("Extensions"), Panel::Extensions, 0, cx))
+                    .when(cx.global::<Settings>().docker_enabled, |d| {
+                        d.child(item("act-containers", "server", crate::i18n::t("Containers"), Panel::Containers, 0, cx))
+                    }),
+            )
             .child(
                 // A single "manage" button: the menu opens to the right of the icon, bottom edge aligned with it (see `open_manage_menu`).
                 bottom("act-manage", "settings", crate::i18n::t("Manage: About, Settings, Color Theme…"), self.menu.is_none()).on_mouse_down(
