@@ -26,6 +26,25 @@ use super::*;
 use crate::qa_workbench_tests::{open_in, restart_with, setup_persistent};
 use gpui::{VisualTestContext, point, size};
 
+#[gpui::test]
+fn editor_grid_background_about_page_keeps_its_copy_action(cx: &mut TestAppContext) {
+    let dir = fresh("editor-grid-about");
+    let file = dir.join("notes.txt");
+    std::fs::write(&file, "hello\n").unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &file, cx);
+    run(&wb, "View: Split Editor", cx);
+    let about_group = wb.read_with(cx, |wb, _| wb.tabs.layout.focused());
+    run(&wb, "Help: About Codeyard", cx);
+    run(&wb, "View: Focus Left Editor Group", cx);
+    assert_ne!(wb.read_with(cx, |wb, _| wb.tabs.layout.focused()), about_group);
+    let copy = cx.debug_bounds("about-copy").expect("the background About page stays rendered");
+    cx.simulate_click(copy.center(), gpui::Modifiers::none());
+    cx.run_until_parked();
+    assert_eq!(wb.read_with(cx, |wb, _| wb.tabs.layout.focused()), about_group);
+    assert_eq!(cx.read_from_clipboard().and_then(|item| item.text()), Some(format!("Codeyard {}", env!("CARGO_PKG_VERSION"))));
+}
+
 fn run(wb: &Entity<Workbench>, command: &str, cx: &mut VisualTestContext) {
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test(command, window, cx));
     cx.run_until_parked();

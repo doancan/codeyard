@@ -165,7 +165,7 @@ mod watch_glue;
 #[path = "workbench_web_preview.rs"]
 mod web_preview_glue;
 #[path = "workbench_welcome.rs"]
-mod welcome_glue;
+pub(crate) mod welcome_glue;
 
 /// Project settings file (root-relative).
 const PROJECT_SETTINGS: &str = ".codeyard/settings.jsonc";
@@ -367,6 +367,7 @@ actions!(
         GitPruneWorktrees,
         GitDiscardAll,
         RestartLanguageServers,
+        ManageLanguageServices,
         CopyFullDiagnostic,
         RustExpandMacro,
         RustParentModule,
@@ -460,12 +461,14 @@ struct OutlineState {
 #[derive(Clone)]
 enum Page {
     Welcome,
+    About(Entity<crate::about_page::AboutPage>),
     Containers,
     /// The Extensions view's detail page and consent sheet (state in `ConfigState::exts`).
     Extension,
     Settings(Entity<crate::settings_page::SettingsPage>),
     Markdown(Entity<crate::markdown::MarkdownPreview>),
     Shortcuts(Entity<crate::shortcuts_page::ShortcutsPage>),
+    LanguageServices(Entity<crate::language_services_page::LanguageServicesPage>),
     Merge(Entity<crate::merge::MergeView>),
     // --- compare ---
     Compare(Entity<crate::compare_folders::CompareView>),

@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (docs/registry.md).
 - Offline verification of publishers' keyless Sigstore signatures, pinned to the registry's Fulcio CA and Rekor key,
   with the publisher identity (repository, owner and workflow by id) taken from the certificate.
+- Paste clipboard images into programs such as Codex in an SSH terminal: the image is transferred to a private temporary
+  file on the remote host and its path is pasted into the terminal.
+- Local SSH port forwarding on Windows using a dedicated OpenSSH process for each forward.
+- Explicit local/SSH setup for JavaScript/TypeScript, HTML and CSS language services, with pinned
+  packages, a checksum-verified Node.js fallback, progress, cancellation, retry and atomic activation.
+
 - Nested horizontal and vertical editor groups with directional splitting/focus, independent views of
   shared documents, tab transfers, nested divider resizing and atomic layout/session restoration.
   Up to 32 groups retain usable minimum sizes with scrolling in narrow windows.
@@ -94,6 +100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The About page groups application, platform and client protocol details, and shows the remote agent protocol when connected.
 - Releases are gated on performance instead of app size: `scripts/perf` compares startup, typing latency and memory with
   the previous release and blocks regressions beyond their budget. The app binary size limit is removed; the SSH agent keeps
   its limit.
@@ -106,6 +113,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Terminal Space sends a space, and Ctrl+C copies a selection while still interrupting the program when nothing is selected.
+- SSH connections detect an incompatible bundled agent before attaching to its daemon and explain how to rebuild or reinstall it.
+- Stopping a piped process also kills descendants when its leader has already exited. A process
+  that closes stdout remains cancellable instead of blocking the agent until its natural exit.
 - Separate SSH configuration files use separate control connections even when they define the same host alias.
 - Web Preview reads files through directory handles without following symlinks or reparse points,
   preventing pathname replacement races. Each file now needs one agent request, reducing SSH round trips;

@@ -53,9 +53,9 @@ fn selecting_about_runs_the_command_and_closes_the_menu(cx: &mut TestAppContext)
     wb.update_in(cx, |wb, _, cx| wb.select_menu_for_test("About Codeyard", cx));
     cx.run_until_parked();
     assert!(wb.read_with(cx, |wb, cx| wb.menu_labels(cx)).is_none(), "the menu closes");
-    let (title, _) = cx.pending_prompt().expect("About dialog");
-    assert_eq!(title, "Codeyard");
-    cx.simulate_prompt_answer("Close");
+    assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), Some(("about", true)));
+    cx.simulate_keystrokes("escape");
+    assert!(wb.read_with(cx, |wb, _| wb.page_for_test()).is_none());
 }
 
 #[gpui::test]

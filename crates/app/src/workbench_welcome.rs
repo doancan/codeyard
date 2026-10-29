@@ -43,7 +43,7 @@ pub fn repo_name(url: &str) -> String {
 
 /// Brand colors: separate for light and dark themes (on dark, a mint-green mark on a dark tile; on light, a dark-green
 /// mark on a light mint tile). Returns: (tile background, tile border, mark).
-pub(super) fn brand_colors(p: &Palette) -> (u32, u32, u32) {
+pub(crate) fn brand_colors(p: &Palette) -> (u32, u32, u32) {
     if ui::luminance_is_light(p.bg) { (0xe6f6ef, 0xbfe3d4, 0x137e69) } else { (0x182525, 0x2f4543, 0x67eab1) }
 }
 
@@ -65,6 +65,30 @@ fn brand_header(p: &Palette) -> impl IntoElement {
 }
 
 impl Workbench {
+    pub(super) fn manage_language_services(&mut self, _: &super::ManageLanguageServices, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(Page::LanguageServices(view)) = self.tabs.page.clone() {
+            self.tabs.page_active = true;
+            self.tabs.diff_active = false;
+            self.tabs.large_active = false;
+            window.focus(&view.focus_handle(cx));
+            cx.notify();
+            return;
+        }
+        let owner = self.remote.host.clone();
+        let view = cx.new(|cx| crate::language_services_page::LanguageServicesPage::new(owner.clone(), window, cx));
+        self.tabs._page_sub = Some(cx.subscribe(&view, move |this, _, _: &crate::language_services_page::InstalledEvent, cx| {
+            if std::sync::Arc::ptr_eq(&this.remote.host, &owner) {
+                this.restart_lsp(cx);
+            }
+        }));
+        window.focus(&view.focus_handle(cx));
+        self.tabs.page = Some(Page::LanguageServices(view));
+        self.tabs.page_active = true;
+        self.tabs.diff_active = false;
+        self.tabs.large_active = false;
+        cx.notify();
+    }
+
     pub(super) fn show_welcome(&mut self, _: &ShowWelcome, _: &mut Window, cx: &mut Context<Self>) {
         self.tabs.page = Some(Page::Welcome);
         self.tabs._page_sub = None;
@@ -76,15 +100,24 @@ impl Workbench {
 
     /// "About Codeyard": version info is here, not on the welcome screen (gear menu, app menu, palette).
     pub(super) fn show_about(&mut self, _: &ShowAbout, window: &mut Window, cx: &mut Context<Self>) {
-        let version = env!("CARGO_PKG_VERSION");
-        let detail = format!("{}\n{} · {}", crate::i18n::tf("Version {}", &[&version]), std::env::consts::OS, std::env::consts::ARCH);
-        let answer = window.prompt(gpui::PromptLevel::Info, "Codeyard", Some(&detail), &[crate::i18n::t("Close"), crate::i18n::t("Copy Version")], cx);
-        cx.spawn_in(window, async move |_, cx| {
-            if answer.await == Ok(1) {
-                cx.update(|_, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(format!("Codeyard {version}")))).ok();
-            }
-        })
-        .detach();
+        let remote = if matches!(self.remote.conn, super::Conn::Connected { .. }) && self.remote.host.is_remote() {
+            let info = self.remote.host.info();
+            Some((self.remote.host.label(), info.version))
+        } else {
+            None
+        };
+        let previous_focus = window.focused(cx);
+        let view = cx.new(|cx| crate::about_page::AboutPage::new(remote, cx));
+        self.tabs._page_sub = Some(cx.subscribe_in(&view, window, move |this, _, _: &crate::about_page::CloseAbout, window, cx| {
+            this.close_page(cx);
+            window.focus(previous_focus.as_ref().unwrap_or(&this.focus_handle));
+        }));
+        window.focus(&view.focus_handle(cx));
+        self.tabs.page = Some(Page::About(view));
+        self.tabs.page_active = true;
+        self.tabs.diff_active = false;
+        self.tabs.large_active = false;
+        cx.notify();
     }
 
     /// Palette: show the full disk access dialog on demand.
@@ -272,11 +305,13 @@ impl Workbench {
             (
                 match p {
                     Page::Welcome => "welcome",
+                    Page::About(_) => "about",
                     Page::Containers => "containers",
                     Page::Extension => "extension",
                     Page::Settings(_) => "settings",
                     Page::Markdown(_) => "markdown",
                     Page::Shortcuts(_) => "shortcuts",
+                    Page::LanguageServices(_) => "language-services",
                     Page::Merge(_) => "merge",
                     Page::Compare(_) => "compare",
                 },
