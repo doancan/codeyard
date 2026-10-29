@@ -947,8 +947,12 @@ each under its `name` if it has one. Relative paths are resolved against the fil
   notice and at the bottom of the Explorer, with **Retry** and **Remove from the workspace file**. Folder entries
   that are not local paths (other URI schemes) and network shares on a server other than the file's own are never
   opened or probed, but stay in the file.
-- **Restart:** a folder opened through a workspace file remembers it. Opening that folder again (or starting with
-  `window.startup` set to `"continue"`) reads the file again and restores its folders, order, names and settings.
+- **Recents and restart:** the workspace file gets its own Recents entry, next to its first folder's. Reopening it
+  (from Recents, or at startup with `window.startup` set to `"continue"`) reads the file again and restores its
+  folders, order, names and settings. Opening one of its folders directly opens just that folder, with its own extra
+  folders and settings, and never writes to the workspace file.
+- **More than 32 extra folders:** the ones that do not fit are listed as unavailable (and stay in the file), and the
+  notice names the limit.
 
 Over SSH, workspace files on the server are read and written on the server: open one in the editor and run
 *File: Open Active File as Workspace*. *Save Workspace As…* uses this

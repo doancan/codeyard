@@ -29,7 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   extra folder; one folder's settings no longer leak into another's files. The Settings page shows when a value
   comes from the workspace file or the folder. Tasks and debug configurations from the workspace file run in the
   active folder. Trust is asked for that folder and, when the file lives elsewhere, for the file's folder too.
-  After a restart, the workspace's folders, order, names and settings come back from the file.
+  A workspace file has its own Recents entry; reopening it (or a restart) brings back its folders, order, names and
+  settings, while opening one of its folders directly opens only that folder.
 
 - The extension registry's signed index: format, offline verification (a threshold of root keys, an expiring online
   key, no rollback to an older copy) and `cyx yard keygen | sign | verify` for the key ceremony and test registries
