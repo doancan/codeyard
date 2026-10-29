@@ -1,5 +1,5 @@
 use super::*;
-use crate::ext_inspector_ui_tests::{config_dir, install, setup};
+use crate::ext_inspector_ui_tests::{config_dir, exthost_built, install, setup};
 use gpui::{TestAppContext, VisualTestContext};
 
 /// The first node under `node` (itself included) that `pred` accepts.
@@ -18,6 +18,9 @@ fn snapshot(wb: &Entity<Workbench>, cx: &mut VisualTestContext) -> Snapshot {
 /// section and a list item per line, and **Copy fix** after a denial is a button that copies the manifest line.
 #[gpui::test]
 fn the_inspector_is_read_and_driven_by_a_screen_reader(cx: &mut TestAppContext) {
+    if !exthost_built() {
+        return;
+    }
     let cfg = config_dir("a11y");
     install(&cfg, "1.0.0");
     let (wb, cx) = setup(cx, &cfg);
