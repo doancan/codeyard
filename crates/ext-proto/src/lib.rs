@@ -32,7 +32,8 @@ pub enum ToHost {
     Complete { ticket: Ticket, completion: Completion },
     /// Streamed data for a ticket: call `guest.event`.
     Event { ticket: Ticket, event: StreamEvent },
-    /// New values of the extension's settings (JSON by key; none when unset), then `request.settings-changed`.
+    /// New values of the extension's settings (JSON by key; none when unset). The app follows it with a `Handle` of
+    /// `request.settings-changed`.
     Settings(Vec<(String, Option<String>)>),
     /// `env.info` changed (theme, language, trust).
     Env(EnvInfo),
@@ -102,6 +103,12 @@ impl ToApp {
         ToApp::Notify(Notify::Respond { id, result })
     }
 }
+
+/// The id both ends of one build share: the version plus `CODEYARD_BUILD_ID` when the release build sets it.
+pub const BUILD: &str = match option_env!("CODEYARD_BUILD_ID") {
+    Some(id) => id,
+    None => env!("CARGO_PKG_VERSION"),
+};
 
 /// The two ends compare versions and build ids.
 pub fn handshake_ok(hello: &Hello, build: &str) -> bool {
