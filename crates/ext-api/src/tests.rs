@@ -25,7 +25,7 @@ fn the_package_parses_and_matches_the_constants() {
     // The embedded copies are the files.
     for (name, text) in WIT {
         let on_disk = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("wit").join(name)).unwrap();
-        assert_eq!(on_disk, text, "{name}");
+        assert_eq!(on_disk.replace("\r\n", "\n"), text.replace("\r\n", "\n"), "{name}");
     }
 }
 
@@ -296,6 +296,7 @@ fn reference() {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, &want).unwrap();
     }
-    let have = std::fs::read_to_string(&path).unwrap_or_default();
+    // Windows checkouts may turn line ends into CRLF.
+    let have = std::fs::read_to_string(&path).unwrap_or_default().replace("\r\n", "\n");
     assert!(have == want, "docs/extensions/reference/api.md is out of date: run `UPDATE_DOCS=1 cargo test -p ext-api reference`");
 }
