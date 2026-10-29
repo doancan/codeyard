@@ -215,6 +215,22 @@ impl ContextMenu {
         self.anchor
     }
 
+    /// The items and the highlighted one, as assistive technology reads them.
+    pub fn items(&self) -> &[MenuItem] {
+        &self.items
+    }
+
+    pub fn selected(&self) -> Option<usize> {
+        self.selected
+    }
+
+    /// Chooses an item as a click on it does: a disabled one does nothing.
+    pub fn activate(&mut self, i: usize, cx: &mut Context<Self>) {
+        if self.items.get(i).is_some_and(|item| item.enabled) {
+            cx.emit(MenuEvent::Select(i));
+        }
+    }
+
     #[cfg(test)]
     pub fn labels(&self) -> Vec<String> {
         self.items.iter().map(|i| i.label.to_string()).collect()

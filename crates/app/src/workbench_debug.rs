@@ -209,6 +209,7 @@ mod testing;
 mod view;
 pub use launch::PendingLaunch;
 pub use view::DebugMenuCmd;
+pub(super) use view::{StackRow, VarRow, stack_rows, status_text, variable_rows};
 
 /// Stack frames requested at a time.
 const STACK_PAGE: usize = 20;

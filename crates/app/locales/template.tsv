@@ -365,6 +365,7 @@ Container port / protocol
 Container setup required	
 Containers	
 Containers and Service Logs…	
+Context menu	
 Context: {} line|Context: {} lines	
 Continue	
 Continue (F5)	
@@ -527,6 +528,7 @@ Debug Test
 Debug Test: {}	
 Debug session ended	
 Debug session stopped	
+Debug toolbar	
 Debug: Add Configuration…	
 Debug: Add Function Breakpoint…	
 Debug: Add Watch Expression…	
@@ -2686,6 +2688,7 @@ not declared
 not run: a dependency failed	
 not run: too many tasks in the background	
 not running	
+not run	
 not selected	
 not set	
 not signed in to {0}; call auth.session with “{1}” first	
@@ -2695,6 +2698,7 @@ only the first {} files were looked at (search.structural.maxFiles)
 operator	
 package	
 partly selected	
+passed	
 path branch (new branch is created if it does not exist)	
 pause	
 paused on {}	
@@ -2728,6 +2732,7 @@ send the request named “{}” first
 sends {} to {}	
 setting	
 size differs	
+skipped	
 source	
 split input and separator must be strings	
 starting	
@@ -3020,6 +3025,7 @@ your words
 {} supertype|{} supertypes	
 {} tab with unsaved changes stayed open.|{} tabs with unsaved changes stayed open.	
 {} terminals have programs running. Close them anyway?	
+{} test|{} tests	
 {} type definition|{} type definitions	
 {} was not installed from a registry	
 {} week ago|{} weeks ago	

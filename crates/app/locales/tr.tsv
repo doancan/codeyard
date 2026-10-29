@@ -3271,3 +3271,9 @@ No shortcut	Kısayol yok
 Not forwarded	Yönlendirilmedi
 Port {0}, {1}	Bağlantı noktası {0}, {1}
 Port {}	Bağlantı noktası {}
+Context menu	Bağlam menüsü
+Debug toolbar	Hata ayıklama araç çubuğu
+not run	çalıştırılmadı
+passed	başarılı
+skipped	atlandı
+{} test|{} tests	{} test

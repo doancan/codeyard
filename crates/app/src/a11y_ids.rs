@@ -24,6 +24,10 @@ const _: () = {
         INSPECTOR_LINE,
         super::problems_access::PAGE_ROW,
         super::problems_access::PROBLEM_ROW,
+        super::problems_access::DEBUG_ROW,
+        super::problems_access::TEST_ROW,
+        super::problems_access::REMOTE_ROW,
+        super::problems_access::MENU_ITEM,
         ROW_BASE,
     ];
     let mut i = 1;
@@ -83,7 +87,13 @@ const _: () = {
         EXT_PAGE_INSTALL,
         INSPECTOR,
     ];
-    unique(&[&fixed, &super::problems_access::FIXED, &super::problems_access::PAGE_FIXED]);
+    unique(&[
+        &fixed,
+        &super::problems_access::FIXED,
+        &super::problems_access::PAGE_FIXED,
+        &super::problems_access::DEBUG_FIXED,
+        &super::problems_access::SIDE_FIXED,
+    ]);
     // Rows are ROW_BASE | 32-bit hash; editor and terminal runs sit above them.
     assert!(ROW_BASE + 0xffff_ffff < RUN_BASE && RUN_BASE + 0xffff_ffff < TERM_RUN_BASE);
 };

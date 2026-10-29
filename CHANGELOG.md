@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The Run and Debug, Testing and Remote Explorer views and open context menus are available to screen readers:
+  configurations and Start, the session's state, variables (expandable), watches, call stack and breakpoints with
+  their enabled state, the debug toolbar's buttons; test files and tests with their outcome and Run and Debug Test;
+  hosts with their connection state and Connect and Disconnect; menu items with their shortcut and disabled state.
+  Every action goes through the pointer's path, and an action from an outdated tree does not reach another session,
+  test, host or menu.
 - The Search side bar's results, the bottom panel's tabs and the Output text are available to screen readers.
 - The Settings page, the Keyboard Shortcuts page and the Ports panel are available to screen readers: settings with
   their values, switches, options and fields (changed and checked as with the pointer), commands with their keys, and

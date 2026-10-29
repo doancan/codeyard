@@ -8,6 +8,9 @@ use crate::workbench::panels_glue::ProblemRow;
 #[path = "a11y_pages.rs"]
 mod pages;
 pub(super) use pages::{FIXED as PAGE_FIXED, PAGE_ROW};
+#[path = "a11y_side_views.rs"]
+mod side;
+pub(super) use side::{DEBUG_FIXED, DEBUG_ROW, FIXED as SIDE_FIXED, MENU_ITEM, REMOTE_ROW, TEST_ROW};
 
 const PROBLEMS: NodeId = NodeId(68);
 const PROBLEMS_EMPTY: NodeId = NodeId(69);
@@ -204,6 +207,7 @@ pub(crate) struct ViewsSnap {
     pub(crate) panel: Option<PanelSnap>,
     pub(crate) search: Option<SearchSideSnap>,
     pub(crate) pages: pages::PagesSnap,
+    pub(crate) side: side::SideSnap,
 }
 
 impl ViewsSnap {
@@ -240,11 +244,12 @@ impl ViewsSnap {
             kids.push(problems.append_tree(nodes));
         }
         self.pages.append_tree(nodes, kids);
+        self.side.append_tree(nodes, kids);
     }
 
     /// The focused field of these views, if one has focus.
     pub(super) fn focus_node(&self) -> Option<NodeId> {
-        self.pages.focus_node()
+        self.side.focus_node().or_else(|| self.pages.focus_node())
     }
 }
 
@@ -254,7 +259,7 @@ impl Workbench {
             let (status, rows, total) = self.search.read(cx).access_rows(MAX_SEARCH_ROWS);
             SearchSideSnap { status, rows, total }
         });
-        ViewsSnap { problems: self.a11y_problems(cx), panel: self.a11y_panel(), search, pages: self.a11y_pages(window, cx) }
+        ViewsSnap { problems: self.a11y_problems(cx), panel: self.a11y_panel(), search, pages: self.a11y_pages(window, cx), side: self.a11y_side(cx) }
     }
 
     pub(super) fn a11y_views_action(&mut self, req: &ActionRequest, last: &Snapshot, window: &mut Window, cx: &mut Context<Self>) -> bool {
@@ -266,7 +271,10 @@ impl Workbench {
             }
             return true;
         }
-        self.a11y_panel_action(req, last, cx) || self.a11y_problems_action(req, last, window, cx) || self.a11y_pages_action(req, &last.views.pages, window, cx)
+        self.a11y_panel_action(req, last, cx)
+            || self.a11y_problems_action(req, last, window, cx)
+            || self.a11y_pages_action(req, &last.views.pages, window, cx)
+            || self.a11y_side_action(req, &last.views.side, window, cx)
     }
 }
 
