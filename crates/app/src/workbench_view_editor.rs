@@ -86,9 +86,11 @@ impl Workbench {
                     Some(Page::Merge(view)) => view.into_any_element(),
                     Some(Page::Compare(view)) => view.into_any_element(),
                     Some(Page::Search(view)) => view.into_any_element(),
+                    Some(Page::ExtView(id)) => self.ext_view_frame(&id, p, cx),
                     Some(Page::Welcome) => self.welcome_view(p, cx).into_any_element(),
                     Some(Page::Containers) => self.container_dashboard_view(p, cx).into_any_element(),
                     Some(Page::Extension) => self.extension_page(p, cx),
+                    Some(Page::ExtensionInspector) => self.extension_inspector(p, cx),
                     None => hint(),
                 }
             } else if state.diff_active {
@@ -624,6 +626,7 @@ impl Workbench {
                     Page::About(_) => ("info", crate::i18n::t("About Codeyard").into()),
                     Page::Containers => ("server", crate::i18n::t("Container Resources").into()),
                     Page::Extension => ("blocks", self.extension_page_title()),
+                    Page::ExtensionInspector => ("bug-play", crate::i18n::t("Extension Inspector").into()),
                     Page::Settings(_) => ("settings", crate::i18n::t("Settings").into()),
                     Page::Markdown(v) => ("eye", v.read(cx).title(cx)),
                     Page::Shortcuts(_) => ("keyboard", crate::i18n::t("Keyboard Shortcuts").into()),
@@ -631,6 +634,7 @@ impl Workbench {
                     Page::Merge(v) => ("git-compare", v.read(cx).title(cx)),
                     Page::Compare(v) => ("git-compare", v.read(cx).title()),
                     Page::Search(v) => ("search", v.read(cx).title()),
+                    Page::ExtView(id) => ("plug", self.ext_view_title(id)),
                 };
                 d.child(
                     div()

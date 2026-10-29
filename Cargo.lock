@@ -202,6 +202,7 @@ dependencies = [
  "ext-manifest",
  "ext-pkg",
  "ext-proto",
+ "ext-ui",
  "futures",
  "gpui",
  "host",
@@ -2248,9 +2249,11 @@ dependencies = [
 name = "ext-ui"
 version = "0.6.0"
 dependencies = [
+ "base64",
  "ext-manifest",
  "postcard",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

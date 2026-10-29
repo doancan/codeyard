@@ -198,3 +198,35 @@ fn fuzz_decoder_never_panics() {
         }
     }
 }
+
+/// The JSON form extensions send: broken, truncated and spliced JSON never panics, and what is accepted keeps the rules
+/// and round-trips.
+#[test]
+fn fuzz_json_decoder_never_panics() {
+    const PIECES: &[&str] = &["{", "}", "[", "]", ",", ":", "\"", "\"element\"", "\"children\"", "\"key\"", "\"column\"", "null", "1e999", "-1", "\\u0000"];
+    let (mut budget, mut rng) = Budget::new(0x0150_0001, 2000);
+    while budget.next() {
+        let mut text = encode_json(&if rng.below(2) == 0 { crate::tests::every_element() } else { tree(&mut rng, 4) });
+        for _ in 0..rng.below(4) {
+            let mut at = rng.below(text.len() + 1);
+            while !text.is_char_boundary(at) {
+                at -= 1;
+            }
+            match rng.below(3) {
+                0 => text.truncate(at),
+                1 => text.insert_str(at, rng.pick(PIECES)),
+                _ => {
+                    let mut end = (at + 1 + rng.below(8)).min(text.len());
+                    while !text.is_char_boundary(end) {
+                        end += 1;
+                    }
+                    text.replace_range(at..end, "");
+                }
+            }
+        }
+        if let Ok(view) = decode_json(&text) {
+            assert!(validate(&view).is_ok());
+            assert_eq!(decode_json(&encode_json(&view)).as_ref(), Ok(&view));
+        }
+    }
+}

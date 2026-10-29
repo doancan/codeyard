@@ -18,7 +18,14 @@ fn root(name: &str) -> String {
 
 fn scope(root: &str, p: Permissions, trusted: bool) -> Scope {
     let eff = Permissions { ..p };
-    Scope { extension: "you.ext".into(), permissions: eff, roots: vec![root.to_string()], trusted, dependencies: vec!["you.lib".into()] }
+    Scope {
+        extension: "you.ext".into(),
+        permissions: eff,
+        roots: vec![root.to_string()],
+        trusted,
+        dependencies: vec!["you.lib".into()],
+        revoked: Permissions::default(),
+    }
 }
 
 fn perms(read: &[&str], write: &[&str], run: &[&str]) -> Permissions {
@@ -65,6 +72,18 @@ fn a_declared_file_is_read_and_another_is_denied() {
     assert!(denied_why(&c).is_some(), "{c:?}");
     let (c, _) = call(&s, Start::ReadFile { uri: "file:///etc/passwd".into() });
     assert!(denied_why(&c).is_some(), "{c:?}");
+}
+
+/// #108: a file whose `read` entry the user turned off is denied as `revoked-by-user`, naming that entry.
+#[test]
+fn a_permission_the_user_turned_off_is_revoked_by_user() {
+    let r = root("revoked");
+    let s = Scope { revoked: perms(&["src/**"], &[], &[]), ..scope(&r, perms(&["vercel.json"], &[], &[]), true) };
+    match call(&s, Start::ReadFile { uri: uri(&format!("{r}/src/a.rs")) }).0 {
+        Completion::Failed(v::Error::Denied(d)) => assert_eq!((d.permission.as_str(), d.why), ("read = [\"src/**\"]", v::Why::RevokedByUser)),
+        other => panic!("{other:?}"),
+    }
+    assert!(matches!(s.may_run("vercel"), Err(v::Error::Denied(v::Denied { why: v::Why::NotDeclared, .. }))));
 }
 
 #[test]
@@ -142,6 +161,7 @@ fn commands_are_own_dependencies_or_listed_core() {
         roots: vec![],
         trusted: true,
         dependencies: vec!["you.lib".into()],
+        revoked: Permissions::default(),
     };
     assert!(s.may_execute("you.ext.refresh").is_ok());
     assert!(s.may_execute("you.lib.go").is_ok());

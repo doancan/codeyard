@@ -1,7 +1,8 @@
 //! The host side of every `codeyard:api` import. Calls that reach the app become frames; a call whose permission is
 //! not granted (revoked by the user, or one that sends, writes or runs in an untrusted folder) never leaves the
-//! exthost: its ticket completes locally with `denied` once the current export returns. The app checks every call
-//! again: this is the first fence, not the only one.
+//! exthost: its ticket completes locally with `denied` once the current export returns, and the app hears only that
+//! it was refused (`ToApp::Denied`, for its denials list). The app checks every call again: this is the first fence,
+//! not the only one. The granted set changes when the user turns a permission off or on (`ToHost::Grants`).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
@@ -87,12 +88,18 @@ impl State {
         (self.untrusted && sends).then_some((need, v::Why::UntrustedWorkspace))
     }
 
+    /// The interfaces granted from now on.
+    pub fn set_granted(&mut self, granted: Vec<String>) {
+        self.granted = granted.into_iter().collect();
+    }
+
     fn start(&mut self, interface: &str, call: Start) -> Ticket {
         let ticket = self.next_ticket;
         self.next_ticket += 1;
         if let Some((need, why)) = self.refused(interface) {
-            let denied = v::Error::Denied(v::Denied { permission: need.name().to_string(), why });
-            self.local.push((ticket, Completion::Failed(denied)));
+            let denied = v::Denied { permission: need.name().to_string(), why };
+            self.send(&ToApp::Denied { call: call.wit_name().to_string(), denied: denied.clone() });
+            self.local.push((ticket, Completion::Failed(v::Error::Denied(denied))));
             return ticket;
         }
         match ext_proto::write(&mut self.out, &ToApp::Start { ticket, call }) {

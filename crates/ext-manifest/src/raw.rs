@@ -43,6 +43,20 @@ pub struct RawManifest {
     pub commands: Vec<S<RawCommand>>,
     #[serde(default)]
     pub views: Vec<S<RawView>>,
+    #[serde(default)]
+    pub menus: Vec<S<RawMenu>>,
+    #[serde(default)]
+    pub status_bar: Vec<S<RawStatusItem>>,
+    #[serde(default)]
+    pub formatters: Vec<S<RawLanguages>>,
+    #[serde(default)]
+    pub code_actions: Vec<S<RawLanguages>>,
+    #[serde(default)]
+    pub diagnostics: Vec<S<RawNamedLanguages>>,
+    #[serde(default)]
+    pub decorations: Vec<S<RawNamedLanguages>>,
+    #[serde(default)]
+    pub tasks: Vec<S<RawTasks>>,
 }
 
 #[derive(Deserialize)]
@@ -176,4 +190,42 @@ pub struct RawView {
     pub title: S<String>,
     pub location: S<String>,
     pub when: Option<S<String>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawMenu {
+    pub command: S<String>,
+    pub location: S<String>,
+    /// For `view-title`: the view (local id).
+    pub view: Option<S<String>>,
+    pub when: Option<S<String>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawStatusItem {
+    pub id: S<String>,
+    pub command: Option<S<String>>,
+}
+
+/// `[[formatters]]`, `[[code-actions]]`.
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawLanguages {
+    pub languages: Vec<S<String>>,
+}
+
+/// `[[diagnostics]]`, `[[decorations]]`.
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawNamedLanguages {
+    pub id: S<String>,
+    pub languages: Vec<S<String>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawTasks {
+    pub id: S<String>,
 }

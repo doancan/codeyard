@@ -302,24 +302,37 @@ pub fn language_context(lang: &str) -> Option<&str> {
     (!lang.is_empty() && lang.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')).then_some(lang)
 }
 
-/// One key binding contributed by an extension, ready for GPUI. `command` is a palette command id (`core:` removed).
+/// One key binding contributed by an extension, ready for GPUI. `command` is a palette command id (`core:` removed), or
+/// for an extension command its local id, with `extension` the extension that owns it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Binding {
     pub ext: String,
     pub key: String,
     pub command: String,
     pub when: Option<String>,
+    pub extension: Option<String>,
 }
 
 /// Every extension key binding, and one warning per binding that cannot apply.
 pub fn bindings() -> (Vec<Binding>, Vec<String>) {
     let (mut out, mut warnings) = (Vec::new(), Vec::new());
-    for ext in &current().active {
+    let reg = current();
+    for ext in &reg.active {
         for b in &ext.manifest.contributions.keybindings {
-            // Phase 0 extensions have no code, so only core commands can be bound.
-            let Some(command) = b.command.strip_prefix("core:") else {
-                warnings.push(format!("{}: {}", ext.id(), crate::i18n::tf("“{}” needs extension code, which this version does not run", &[&b.command])));
-                continue;
+            // A core command, or a command of this extension or a dependency (the manifest checked which): the owner must
+            // be active and have code.
+            let (command, extension) = match b.command.strip_prefix("core:") {
+                Some(command) => (command.to_string(), None),
+                None => {
+                    let owner = reg.active.iter().find(|o| b.command.strip_prefix(o.id()).is_some_and(|r| r.starts_with('.')));
+                    match owner.filter(|o| o.manifest.code.is_some() && o.manifest.contributions.commands.iter().any(|c| c.id == b.command)) {
+                        Some(o) => (b.command[o.id().len() + 1..].to_string(), Some(o.id().to_string())),
+                        None => {
+                            warnings.push(format!("{}: {}", ext.id(), crate::i18n::tf("“{}” is not the command of an active extension", &[&b.command])));
+                            continue;
+                        }
+                    }
+                }
             };
             let when = match b.when.as_deref().map(gpui_when).transpose() {
                 Ok(w) => w,
@@ -328,10 +341,29 @@ pub fn bindings() -> (Vec<Binding>, Vec<String>) {
                     continue;
                 }
             };
-            out.push(Binding { ext: ext.id().to_string(), key: b.key.clone(), command: command.to_string(), when });
+            out.push(Binding { ext: ext.id().to_string(), key: b.key.clone(), command, when, extension });
         }
     }
     (out, warnings)
+}
+
+/// `editor.formatters`: language id → `lsp` or the id of an extension that formats it. Wrong entries are warnings.
+pub fn formatters_setting(v: Option<&serde_json::Value>, warnings: &mut Vec<String>) -> Vec<(String, String)> {
+    use serde_json::Value;
+    let mut out = Vec::new();
+    match v {
+        None | Some(Value::Null) => {}
+        Some(Value::Object(m)) => {
+            for (lang, who) in m {
+                match who.as_str().map(str::trim) {
+                    Some(w) if !w.is_empty() => out.push((lang.clone(), w.to_string())),
+                    _ => warnings.push(crate::i18n::tf("editor.formatters.{}: expected “lsp” or an extension id", &[&lang])),
+                }
+            }
+        }
+        Some(_) => warnings.push(crate::i18n::tf("{0}: expected an object {1}", &[&"editor.formatters", &"{ \"toml\": \"you.formatter\" }"])),
+    }
+    out
 }
 
 /// The keymap preset chosen with `keymap.preset` (`<publisher.name>/<label>`): its file, in `keybindings.jsonc` format.

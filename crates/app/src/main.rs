@@ -65,6 +65,11 @@ mod ext;
 mod ext_broker;
 #[cfg(test)]
 mod ext_code_tests;
+mod ext_inspector;
+#[cfg(test)]
+mod ext_inspector_ui_tests;
+#[cfg(test)]
+mod ext_providers_tests;
 mod ext_registry;
 #[cfg(test)]
 mod ext_registry_tests;
@@ -76,6 +81,8 @@ mod ext_updates;
 mod ext_updates_tests;
 #[cfg(test)]
 mod ext_view_tests;
+#[cfg(test)]
+mod ext_views_tests;
 #[cfg(test)]
 mod features_tests;
 mod file_batch;
@@ -642,9 +649,15 @@ fn bind_extension_keys(cx: &mut App) -> Vec<String> {
         cx.key_bindings().borrow().bindings().map(|b| b.keystrokes().iter().map(|k| k.unparse()).collect::<Vec<_>>().join(" ")).collect();
     let mut bindings = Vec::new();
     for b in list {
-        let Some(action) = commands::action_by_id(&b.command) else {
-            warnings.push(format!("{}: {}", b.ext, i18n::tf("unknown command “{}”", &[&b.command])));
-            continue;
+        let action: Box<dyn gpui::Action> = match &b.extension {
+            Some(extension) => Box::new(workbench::RunExtensionCommand { extension: extension.clone(), command: b.command.clone(), args: "null".into() }),
+            None => match commands::action_by_id(&b.command) {
+                Some(a) => a,
+                None => {
+                    warnings.push(format!("{}: {}", b.ext, i18n::tf("unknown command “{}”", &[&b.command])));
+                    continue;
+                }
+            },
         };
         let predicate = match b.when.as_deref().map(gpui::KeyBindingContextPredicate::parse) {
             None => None,

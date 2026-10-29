@@ -12,6 +12,8 @@ pub enum Run {
         extension: String,
         command: String,
     },
+    /// Open a code extension's view, by its full id.
+    ExtensionView(String),
 }
 
 impl Clone for Run {
@@ -21,6 +23,7 @@ impl Clone for Run {
             Run::Connect(h) => Run::Connect(h.clone()),
             Run::Disconnect => Run::Disconnect,
             Run::Extension { extension, command } => Run::Extension { extension: extension.clone(), command: command.clone() },
+            Run::ExtensionView(v) => Run::ExtensionView(v.clone()),
         }
     }
 }

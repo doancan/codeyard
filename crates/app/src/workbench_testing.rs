@@ -241,6 +241,7 @@ impl Workbench {
             Panel::Remote => "remote",
             Panel::Containers => "containers",
             Panel::Extensions => "extensions",
+            Panel::ExtView => "extension-view",
         })
     }
 

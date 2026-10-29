@@ -7,14 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.6.0] - 2026-10-29
-
 ### Added
 
+- Extension views: a code extension's `[[views]]` appear in the sidebar (an activity bar button), the bottom panel (a
+  tab) or the editor area (a page), and in the palette as *Open View: …*. Codeyard draws the 22 elements itself with the
+  theme's colours and spacing, so a theme change redraws them without calling the extension; lists and tables of
+  10,000 rows draw only the rows on screen, and trees load one page at a time. The tree arrives as JSON
+  (docs/extensions/reference/ui.md), is checked, and is diffed by key so typed text, ticks, selections and expanded
+  items survive a re-render. Every element is reachable by keyboard and announced with its role and label. Each view
+  names its publisher, and none can cover the consent sheet or take the keyboard from it. Images from URLs are not
+  drawn yet (they wait for `net` fetching).
+- What code extensions contribute reaches the same places as the core's: commands in the editor and file-tree menus
+  (with `when` and `enablement`), on key bindings and on status bar items; formatters for *Format Document* and format
+  on save (chosen per language with `editor.formatters`); code actions in *Quick Fix…*; diagnostics in the Problems view
+  and the editor, tagged with the extension; gutter, line and after-the-line decorations in theme tones; and tasks in
+  *Tasks: Run Task…*. Providers answer within a deadline and are cancelled when you type, so they never hold up typing;
+  a late answer is dropped and noted in the extension's log. What an extension showed goes when it is disabled,
+  uninstalled or crashes. The manifest gains `[[menus]]`, `[[status-bar]]`, `[[formatters]]`, `[[code-actions]]`,
+  `[[diagnostics]]`, `[[decorations]]` and `[[tasks]]`, checked like the other contributions.
 - Code extensions run: their commands appear in the command palette, and the first one starts the extension in its
   own `codeyard-exthost` process. Every file, search and process call is checked against the extension's declared
   permissions and the folder's trust before it reaches the folder, locally and over SSH; a denial says which line to
   add. An extension that crashes three times in a minute is turned off until Codeyard restarts.
+- Extensions with code: a switch per declared permission on the extension's page, applied at once to a running
+  extension (its next call is refused with `revoked-by-user`) and kept per extension and publisher; a list of this
+  session's denials with *Copy fix*, which copies the manifest line that allows the call; and a crash card after three
+  crashes in a minute with *Reinstall Previous Version*, *Copy Report* (version, error and frames, no file contents or
+  outside paths) and *Report…*, which opens a filled-in issue in the extension's repository. Nothing is sent by itself.
+- *Developer: Extension Inspector*: per extension with code, when and why it started, its calls with extension, I/O
+  and overhead time, denials with *Copy fix*, its log and its last error with frames. Works by keyboard and with a
+  screen reader.
 - The extension API `codeyard:api` 0.1.0 (docs/extensions/reference/api.md) and its import check: `cyx check`, the
   registry and the installer refuse a code extension whose `extension.wasm` imports an interface its manifest has no
   permission for, with the line to add.
@@ -27,6 +49,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ts` and three examples in `examples/extensions/`.
 - `codeyard-exthost --compile --cache FILE` reuses Cranelift's compiled functions from the last compile; `cyx test`
   uses it, and a rebuilt TypeScript extension compiles in about half the time.
+
+## [0.6.0] - 2026-10-29
+
+### Added
+
 - Search Editors: "Search: Open Search Editor" keeps a query in its own tab with its options, globs, context lines and
   folders (every folder of a multi-folder workspace), for keyboard navigation and rerun. Tabs return after a restart
   with their query and up to 200 results, marked as restored until they run again; truncated, stopped and failed

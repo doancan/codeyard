@@ -213,6 +213,8 @@ steps 0–4, so themes, high contrast and screen readers work with no author eff
 URL on a `net` host.
 
 - `ui::invalidate(view)` makes the host call `render` and diff by `key`. Input state lives in the host.
+- The tree travels as JSON in `response.view` and events as JSON in `request.ui-event`
+  (docs/extensions/reference/ui.md); the host checks the tree with `ext_ui::decode_json` before diffing it.
 - Lists, tables and trees are virtualised; trees load one page at a time.
 - Every extension surface shows the publisher id. Consent, trust and sign-in dialogs are drawn in a layer
   extension UI cannot reach.

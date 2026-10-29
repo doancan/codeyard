@@ -185,6 +185,11 @@ pub fn icon(name: &str, size: f32, color: u32) -> Svg {
     svg().path(format!("icons/{name}.svg")).size(px(size)).flex_none().text_color(c(color))
 }
 
+/// Whether `name` is one of the app's icons (an extension's icon name may not be).
+pub fn has_icon(name: &str) -> bool {
+    ICONS.iter().any(|(p, _)| p.strip_prefix("icons/").and_then(|p| p.strip_suffix(".svg")) == Some(name))
+}
+
 /// Spinning "loading" icon (one turn per second; still with reduced motion). `id` must be unique among siblings.
 pub fn spinner(id: impl Into<gpui::ElementId>, size: f32, color: u32) -> gpui::AnyElement {
     use gpui::{Animation, AnimationExt as _, IntoElement as _, Transformation, percentage};

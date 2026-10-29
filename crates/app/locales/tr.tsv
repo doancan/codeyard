@@ -2819,7 +2819,6 @@ Keymap preset from an installed extension, as publisher.name/label (empty: Codey
 “{}” cannot be used in a key binding	“{}” bir kısayol koşulunda kullanılamaz
 in a key binding, == and != compare editor.language with a language id	bir kısayol koşulunda == ve != yalnızca editor.language ile bir dil kimliğini karşılaştırır
 a key binding condition needs a context, not a constant	bir kısayol koşulu sabit değil, bir bağlam ister
-“{}” needs extension code, which this version does not run	“{}” eklenti kodu gerektiriyor; bu sürüm eklenti kodu çalıştırmıyor
 keymap preset “{}” is not installed	“{}” kısayol düzeni kurulu değil
 unknown command “{}”	bilinmeyen komut “{}”
 “{}” is a built-in shortcut; an extension cannot change it	“{}” yerleşik bir kısayol; eklentiler onu değiştiremez
@@ -3128,3 +3127,57 @@ Repository discovery failed	Depolar aranamadı
 {0} failed to start: {1}	{0} başlarken hata verdi: {1}
 {} crashed three times in a minute and was turned off.	{} bir dakikada üç kez çöktü ve kapatıldı.
 denied ({0}); add to [permissions]: {1}	reddedildi ({0}); [permissions] bölümüne ekleyin: {1}
+
+# Extensions: Inspector, permission switches, denials and the crash card
+Developer: Extension Inspector	Geliştirici: Eklenti Denetçisi
+Extension Inspector	Eklenti Denetçisi
+Running code extensions in this window: why they started, how long their calls took, what was denied. Nothing here leaves this computer.	Bu penceredeki kodlu eklentiler: neden başladıkları, çağrılarının ne kadar sürdüğü, neyin reddedildiği. Buradaki hiçbir şey bu bilgisayardan çıkmaz.
+Activated {0} times, last at {1} by {2}	{0} kez etkinleştirildi, son kez {1} saatinde, nedeni {2}
+Not activated in this window yet	Bu pencerede henüz etkinleştirilmedi
+No code extension is installed and enabled.	Kurulu ve etkin kodlu eklenti yok.
+Calls	Çağrılar
+Denials	Retler
+Log	Günlük
+Last trap	Son hata yakalama
+None yet	Henüz yok
+at {}	konum: {}
+{0} {1}: guest {2}	{0} {1}: eklenti {2}
+{0} {1}: I/O {2}, overhead {3}	{0} {1}: G/Ç {2}, ek yük {3}
+not running	çalışmıyor
+turned off after three crashes	üç çökmeden sonra kapatıldı
+not declared	bildirilmemiş
+turned off on the extension page	eklenti sayfasında kapatıldı
+the folder is not trusted	klasöre güvenilmiyor
+this version was revoked	bu sürüm geri çekildi
+Copy fix	Düzeltmeyi kopyala
+Copied: {}	Kopyalandı: {}
+Permission switches	İzin anahtarları
+It declares no permissions.	Hiçbir izin bildirmiyor.
+On	Açık
+Off	Kapalı
+{0} may again: {1}	{0} yeniden izinli: {1}
+{0} may no longer: {1}	{0} artık izinli değil: {1}
+Recent denials	Son retler
+None in this session.	Bu oturumda yok.
+{} crashed three times within a minute and is turned off until Codeyard restarts. Nothing was sent anywhere.	{} bir dakika içinde üç kez çöktü ve Codeyard yeniden başlayana kadar kapalı. Hiçbir yere bir şey gönderilmedi.
+Last trap: {}	Son hata yakalama: {}
+No previous version is in the store.	Depoda önceki bir sürüm yok.
+Reinstall Previous Version	Önceki Sürümü Yeniden Kur
+Report…	Bildir…
+The crash report is on the clipboard. Nothing was sent.	Çökme raporu panoda. Hiçbir şey gönderilmedi.
+Answer the install sheet first.	Önce kurulum sayfasını yanıtlayın.
+Choose…	Seçin…
+Load more	Daha fazla yükle
+Open View: {0} ({1})	Görünümü Aç: {0} ({1})
+This view is not available.	Bu görünüm kullanılamıyor.
+by {}	yayımlayan: {}
+render must answer with response.view	render, response.view ile yanıt vermeli
+the extension stopped	eklenti durdu
+{0} could not draw this view: {1}	{0} bu görünümü çizemedi: {1}
+{0}, by {1}	{0}, yayımlayan: {1}
+{0}, from {1}	{0}, kaynak: {1}
+Formatted by {}	{} tarafından biçimlendirildi
+Saved without formatting: {0}: {1}	Biçimlendirmeden kaydedildi: {0}: {1}
+editor.formatters.{}: expected “lsp” or an extension id	editor.formatters.{}: “lsp” ya da bir eklenti kimliği bekleniyordu
+{}: the formatter returned no edits	{}: biçimlendirici hiçbir düzenleme döndürmedi
+“{}” is not the command of an active extension	“{}” etkin bir eklentinin komutu değil

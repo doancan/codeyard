@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::{Key, KeyPath, PageToken};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Event {
     /// A button was pressed (click, Enter or Space).
     Click { path: KeyPath },
@@ -23,8 +24,20 @@ pub enum Event {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Value {
     Text(String),
     Checked(bool),
     Choice(Key),
+}
+
+impl Event {
+    /// The JSON form the extension gets in `request.ui-event` (reference/ui.md): `{"click": {"path": ["deploy"]}}`.
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).expect("an event always serializes")
+    }
+
+    pub fn from_json(s: &str) -> Result<Event, String> {
+        serde_json::from_str(s).map_err(|e| e.to_string())
+    }
 }
