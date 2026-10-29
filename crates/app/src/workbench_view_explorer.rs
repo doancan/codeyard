@@ -177,7 +177,7 @@ impl Workbench {
     }
 
     pub(super) fn explorer_panel(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
-        let root = self.roots.primary.read(cx).root().map(|r| ui::file_name(r).to_uppercase());
+        let root = self.roots.primary.read(cx).root().map(|r| self.root_label(r).to_uppercase());
         let Some(root) = root else {
             // No folder: an empty state saying what to do.
             return div()
@@ -429,7 +429,7 @@ impl Workbench {
                     .flat_map(|(i, (tree, root))| {
                         let id = extra_folder_id(i);
                         let open = self.sections.is_open(id, true);
-                        let title = ui::file_name(root).to_string();
+                        let title = self.root_label(root);
                         let header = head(id, &title, None, open, cx).font_weight(gpui::FontWeight::BOLD).text_color(c(p.text)).tooltip({
                             let r = root.clone();
                             move |_, cx| cx.new(|_| Tooltip(r.clone().into())).into()
@@ -440,6 +440,7 @@ impl Workbench {
                     .flatten()
                     .collect::<Vec<_>>(),
             )
+            .children(self.unavailable_folder_rows(p, cx))
             .when(outline_open, |d| d.child(sash("outline", outline_h, -1., cx)))
             .child(head("outline", crate::i18n::t("Outline"), outline_count, outline_open, cx).when(outline_open, |d| d.border_t_0()))
             .when_some(outline_body, |d, body| {
@@ -722,5 +723,52 @@ impl Workbench {
             let _ = s.set("explorer_sections", &self.sections.encode());
         }
         cx.notify();
+    }
+
+    /// Folders the workspace file lists that are not available: shown under the open ones with Retry and Remove, so
+    /// the workspace can be repaired without editing the file.
+    fn unavailable_folder_rows(&self, p: &Palette, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let Some(ws) = self.roots.workspace.as_ref() else { return Vec::new() };
+        ws.unavailable
+            .iter()
+            .enumerate()
+            .map(|(ix, u)| {
+                let item = u.item;
+                let path = u.path.clone();
+                div()
+                    .id(("ws-missing", ix))
+                    .debug_selector(move || format!("ws-missing-{ix}"))
+                    .h(px(26.))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .gap(px(theme::SPACE[2]))
+                    .px(px(theme::SPACE[3]))
+                    .border_t_1()
+                    .border_color(c(p.border))
+                    .child(icon("alert", 14., p.warning))
+                    .child(
+                        div()
+                            .id(("ws-missing-label", ix))
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .whitespace_nowrap()
+                            .text_size(px(text::XS.0))
+                            .text_color(c(p.text_muted))
+                            .child(crate::i18n::tf("Workspace folder is unavailable: {}", &[&u.label]))
+                            .tooltip(move |_, cx| cx.new(|_| Tooltip(path.clone().into())).into()),
+                    )
+                    .child(
+                        ui::icon_button(("ws-missing-retry", ix), "refresh-cw", crate::i18n::t("Retry"), p)
+                            .on_click(cx.listener(|this, _, _, cx| this.reload_workspace(false, cx))),
+                    )
+                    .child(
+                        ui::icon_button(("ws-missing-remove", ix), "x", crate::i18n::t("Remove from the workspace file"), p)
+                            .on_click(cx.listener(move |this, _, _, cx| this.remove_unavailable_folder(item, cx))),
+                    )
+                    .into_any_element()
+            })
+            .collect()
     }
 }

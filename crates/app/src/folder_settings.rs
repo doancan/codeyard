@@ -21,9 +21,34 @@ pub struct FolderSettings {
     pub trim_trailing_whitespace: Option<bool>,
     pub insert_final_newline: Option<bool>,
     pub rulers: Option<Vec<usize>>,
+    /// Resolved from the user file and the workspace file as well (`resolve`): nothing falls back to the global
+    /// settings, which carry the first folder's own values.
+    pub isolated: bool,
 }
 
 impl FolderSettings {
+    /// The settings of a folder that is not the first one: user < workspace file < this folder's own files. Every value is
+    /// filled in, so the first folder's settings never leak into this folder's files.
+    pub fn resolve(user: &str, workspace: Option<&str>, folder: &[&str]) -> Self {
+        let mut layers = vec![user];
+        layers.extend(workspace);
+        layers.extend_from_slice(folder);
+        let mut s = FolderSettings::parse(&layers);
+        let d = crate::settings::Settings::default();
+        s.format_on_save.get_or_insert(d.format_on_save);
+        s.format_on_paste.get_or_insert(d.format_on_paste);
+        s.format_on_type.get_or_insert(d.format_on_type);
+        s.trim_trailing_whitespace.get_or_insert(d.trim_trailing_whitespace);
+        s.insert_final_newline.get_or_insert(d.insert_final_newline);
+        s.code_actions_on_save.get_or_insert(d.code_actions_on_save);
+        s.rulers.get_or_insert(d.rulers);
+        // `tab_size` / `insert_spaces` stay `None` when nobody sets them: the file's own indentation is guessed.
+        s.tab_size = s.tab_size.or(d.tab_size);
+        s.insert_spaces = s.insert_spaces.or(d.insert_spaces);
+        s.isolated = true;
+        s
+    }
+
     /// Layers in order (later overrides earlier): `.vscode/settings.json`, then `.codeyard/settings.jsonc`.
     /// A broken layer is skipped; values of the wrong type are ignored (the global setting stays).
     pub fn parse(layers: &[&str]) -> Self {

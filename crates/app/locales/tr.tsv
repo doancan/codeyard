@@ -1320,7 +1320,31 @@ Path of the folder (~ is your home folder)	Klasörün yolu (~ ev klasörünüzd�
 No matching folders	Eşleşen klasör yok
 Can't read {0}: {1}	{0} okunamıyor: {1}
 Can't open {0}: {1}	{0} açılamıyor: {1}
-Could not read the workspace file: {}	Çalışma alanı dosyası okunamadı: {}
+Workspace file could not be read: {}	Çalışma alanı dosyası okunamadı: {}
+Workspace changed on disk. Reload before saving.	Çalışma alanı diskte değişti. Kaydetmeden önce yeniden yükleyin.
+Workspace folder is unavailable: {}	Çalışma alanı klasörüne ulaşılamıyor: {}
+Could not save the workspace file: {}	Çalışma alanı dosyası kaydedilemedi: {}
+Workspace saved as {}	Çalışma alanı {} olarak kaydedildi
+No workspace file is open.	Açık bir çalışma alanı dosyası yok.
+No workspace file is open. Use File: Save Workspace As… to create one.	Açık bir çalışma alanı dosyası yok. Oluşturmak için Dosya: Çalışma Alanını Farklı Kaydet… komutunu kullanın.
+Save Workspace As… needs a folder on this computer.	Çalışma Alanını Farklı Kaydet… için bu bilgisayardaki bir klasör gerekir.
+The open folder is no longer listed in the workspace file.	Açık klasör artık çalışma alanı dosyasında listelenmiyor.
+Remove from the workspace file	Çalışma alanı dosyasından kaldır
+Set by the workspace file	Çalışma alanı dosyasında ayarlandı
+Set by this folder's settings	Bu klasörün ayarlarında ayarlandı
+the file is too large	dosya çok büyük
+expected an object { … }	{ … } biçiminde bir nesne bekleniyordu
+more than {} folders	{} klasörden fazla
+“folders” must be a list	“folders” bir liste olmalı
+its structure could not be read safely	yapısı güvenle okunamadı
+a comment is not closed	bir yorum kapatılmamış
+a string is not closed	bir dize kapatılmamış
+the file is not UTF-8 text	dosya UTF-8 metin değil
+File: Save Workspace	Dosya: Çalışma Alanını Kaydet
+File: Save Workspace As…	Dosya: Çalışma Alanını Farklı Kaydet…
+File: Reload Workspace	Dosya: Çalışma Alanını Yeniden Yükle
+File: Open Active File as Workspace	Dosya: Etkin Dosyayı Çalışma Alanı Olarak Aç
+Open a .code-workspace file in the editor first.	Önce düzenleyicide bir .code-workspace dosyası açın.
 The workspace file lists no folder that exists on this computer.	Çalışma alanı dosyasında bu bilgisayarda var olan bir klasör yok.
 Workspace: {} folder in the Explorer.|Workspace: {} folders in the Explorer.	Çalışma alanı: Gezgin'de {} klasör.
 Open	Aç

@@ -148,6 +148,15 @@ fn theme_label(id: &str) -> String {
     theme::themes::builtin().into_iter().find(|t| t.id == id).map_or_else(|| id.to_string(), |t| t.name)
 }
 
+/// Where the value in effect comes from, when it is not the user's own settings file: the workspace file or the folder.
+pub fn source_note(key: &str, cx: &App) -> Option<&'static str> {
+    match cx.try_global::<crate::settings::Sources>()?.of(key) {
+        crate::settings::Scope::User => None,
+        crate::settings::Scope::Workspace => Some(crate::i18n::t("Set by the workspace file")),
+        crate::settings::Scope::Folder => Some(crate::i18n::t("Set by this folder's settings")),
+    }
+}
+
 fn shown(v: &Value) -> String {
     match v {
         Value::Null => String::new(),
@@ -414,7 +423,10 @@ impl SettingsPage {
                                     .children(reset),
                             )
                             .child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(crate::i18n::t(about).to_string()))
-                            .child(div().font_family(ui::MONO_FONT).text_size(px(text::XXS.0)).text_color(c(p.line_number)).child(key.to_string())),
+                            .child(div().font_family(ui::MONO_FONT).text_size(px(text::XXS.0)).text_color(c(p.line_number)).child(key.to_string()))
+                            .children(source_note(key, cx).map(|note| {
+                                div().debug_selector(move || format!("setting-source-{key}")).text_size(px(text::XS.0)).text_color(c(p.accent)).child(note)
+                            })),
                     )
                     .child(div().w(px(240.)).flex_none().flex().justify_end().child(control)),
             )

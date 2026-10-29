@@ -174,6 +174,8 @@ mod watch_glue;
 mod web_preview_glue;
 #[path = "workbench_welcome.rs"]
 pub(crate) mod welcome_glue;
+#[path = "workbench_workspace.rs"]
+mod workspace_glue;
 
 /// Project settings file (root-relative).
 const PROJECT_SETTINGS: &str = ".codeyard/settings.jsonc";
@@ -289,6 +291,10 @@ actions!(
         AddDataBreakpoint,
         RemoveDataBreakpoints,
         OpenWorkspaceFile,
+        SaveWorkspace,
+        SaveWorkspaceAs,
+        ReloadWorkspace,
+        OpenActiveWorkspaceFile,
         AddFolderInNewWindow,
         AddFolderToWorkspace,
         RemoveFolderFromWorkspace,
@@ -1200,12 +1206,15 @@ impl Workbench {
                 trusted: Default::default(),
                 dirty: false,
                 folders: Default::default(),
+                folder_texts: Default::default(),
+                user_text: None,
                 exts: Default::default(),
             },
             persist: state_glue::PersistState {
                 workspace_id: None,
                 data_dir: None,
                 pending_restore: None,
+                pending_restore_workspace: None,
                 backup_task: None,
                 backed_up: Default::default(),
                 state,
@@ -1238,6 +1247,7 @@ impl Workbench {
                 compare_folder_a: None,
                 favorites: Vec::new(),
                 file_index: None,
+                workspace: None,
             },
             tabs: Default::default(),
             searches: Default::default(),
@@ -1681,7 +1691,10 @@ impl Workbench {
         self.roots.extra_roots.clear();
         self.roots.extra_trees.clear();
         self.roots.pending_extra_roots.clear();
+        self.roots.workspace = None;
         self.cfg.folders.clear();
+        self.cfg.folder_texts.clear();
+        self.persist.pending_restore_workspace = None;
         self.persist.backed_up.clear();
         self.tabs = Default::default();
         self.tabs.active = None;

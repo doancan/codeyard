@@ -35,6 +35,7 @@ impl Workbench {
         paths.extend(self.roots.extra_roots.iter().cloned());
         paths.extend(self.roots.extra_roots.iter().flat_map(|r| folder_settings_paths(r)));
         paths.extend(self.project_settings_paths(cx).into_iter().map(|(p, ..)| p));
+        paths.extend(self.workspace_watch_path());
         // Commit, checkout, `git add` from a terminal: index and HEAD change.
         if let Some(g) = &self.vcs.status {
             // In a worktree/submodule `.git` is a file: watch the real directory.
@@ -54,6 +55,10 @@ impl Workbench {
         let settings_files: Vec<String> = self.project_settings_paths(cx).into_iter().map(|(p, ..)| p).collect();
         if changes.iter().any(|(p, _)| settings_files.contains(p)) {
             self.load_project_settings(cx);
+        }
+        // Edited outside (or in an editor tab): read again; our own writes come back unchanged and are ignored.
+        if self.workspace_file_changed(&changes) {
+            self.reload_workspace(true, cx);
         }
         // If extra folders' settings files changed, only that folder's settings are re-read.
         for root in self.roots.extra_roots.clone() {
@@ -101,7 +106,9 @@ impl Workbench {
         // If there is no settings folder (tests) only project layers are applied; if there are none either,
         // don't touch anything (don't overwrite externally supplied settings with defaults).
         let paths = self.config_paths();
-        if paths.is_none() && self.cfg.project.is_empty() {
+        let workspace = self.workspace_settings();
+        if paths.is_none() && self.cfg.project.is_empty() && workspace.is_none() {
+            cx.set_global(settings::Sources::default());
             return;
         }
         let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
@@ -120,13 +127,29 @@ impl Workbench {
         if self.cfg.dir.is_some() {
             self.reload_user_themes();
         }
-        let layers: Vec<settings::Layer> = self.cfg.project.iter().map(|(n, t, w)| (n.as_str(), t.as_str(), *w)).collect();
         self.cfg.dirty = false;
+        self.cfg.user_text = paths.as_ref().map(|_| file.clone().unwrap_or_else(|| "{}".into()));
         // If the user turned the gate off in their own file (even if not applied yet), every folder is trusted.
         let gate_off = file.as_deref().is_some_and(|f| settings::parse_layers(f, &[]).is_ok_and(|(s, _)| !s.workspace_trust));
         let trusted = gate_off || self.root(cx).is_none_or(|r| self.is_trusted_root(&r, cx));
-        let (new, mut warnings) = match settings::parse_layers_trusted(file.as_deref().unwrap_or("{}"), &layers, trusted) {
-            Ok(parsed) => parsed,
+        // user < workspace file < folder; the workspace file's restricted keys need its own folder to be trusted.
+        let mut layers: Vec<settings::ScopedLayer> = Vec::new();
+        if let Some((name, text)) = &workspace {
+            let trusted = gate_off || self.workspace_settings_trusted(cx);
+            layers.push(settings::ScopedLayer { name, text, warn: false, trusted, scope: settings::Scope::Workspace });
+        }
+        layers.extend(self.cfg.project.iter().map(|(name, text, warn)| settings::ScopedLayer {
+            name,
+            text,
+            warn: *warn,
+            trusted,
+            scope: settings::Scope::Folder,
+        }));
+        let (new, mut warnings) = match settings::parse_scoped(file.as_deref().unwrap_or("{}"), &layers) {
+            Ok((s, w, sources)) => {
+                cx.set_global(sources);
+                (s, w)
+            }
             // Half-written file: the last valid settings stay, the error is shown.
             Err(e) => {
                 let mut warnings = vec![e];
@@ -266,6 +289,8 @@ impl Workbench {
         }
         self.sync_settings_page(cx);
         self.sync_extensions_view();
+        // Extra folders resolve over the user and workspace layers, which may have changed.
+        self.resolve_folder_settings(cx);
         // Registries the user installed from: updates and version status, their index at most daily (none asked
         // otherwise).
         self.check_extension_updates(window, cx);

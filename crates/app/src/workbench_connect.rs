@@ -340,6 +340,9 @@ impl Workbench {
         self.roots.extra_roots.clear();
         self.roots.extra_trees.clear();
         self.roots.pending_extra_roots.clear();
+        self.roots.workspace = None;
+        self.persist.pending_restore_workspace = None;
+        self.cfg.folder_texts.clear();
         self.roots.favorites.clear();
         self.roots.file_index = None;
         self.roots.file_clip = None;
@@ -433,7 +436,9 @@ impl Workbench {
         then: impl FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
     ) {
         let root = self.active_root(cx);
-        self.require_trust_for(root, window, cx, then);
+        // A workspace file with tasks or debug configurations is asked about too: it may sit outside every folder.
+        let workspace = self.untrusted_workspace_dir(cx).filter(|dir| Some(dir) != root.as_ref());
+        self.require_trust_for(root, window, cx, move |this, window, cx| this.require_trust_for(workspace, window, cx, then));
     }
 
     /// `require_trust` for the folder the commands will run in, when that is not the active file's folder.
