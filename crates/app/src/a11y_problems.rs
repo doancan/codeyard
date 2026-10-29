@@ -102,8 +102,8 @@ pub(crate) struct PanelSnap {
     output: Option<String>,
 }
 
-const PANEL_TABS: NodeId = NodeId(33);
-const OUTPUT_LOG: NodeId = NodeId(34);
+const PANEL_TABS: NodeId = NodeId(50);
+const OUTPUT_LOG: NodeId = NodeId(51);
 const PANEL_TAB: u64 = PROBLEM_ROW + BLOCK / 2;
 /// Output exposed at most (the panel shows the last 400 lines).
 const MAX_OUTPUT_LINES: usize = 400;
@@ -186,8 +186,8 @@ pub(crate) struct SearchSideSnap {
     total: usize,
 }
 
-const SEARCH_SIDE: NodeId = NodeId(35);
-const SEARCH_SIDE_STATUS: NodeId = NodeId(36);
+const SEARCH_SIDE: NodeId = NodeId(52);
+const SEARCH_SIDE_STATUS: NodeId = NodeId(53);
 const SEARCH_SIDE_ROW: u64 = PANEL_TAB + 16;
 const MAX_SEARCH_ROWS: usize = 500;
 
