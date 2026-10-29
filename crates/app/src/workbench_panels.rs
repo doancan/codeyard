@@ -2,6 +2,11 @@
 
 use super::*;
 
+/// How long the panel takes to maximize or restore.
+const PANEL_ANIM: std::time::Duration = std::time::Duration::from_millis(180);
+#[cfg(test)]
+pub(super) const PANEL_ANIM_FOR_TEST: std::time::Duration = PANEL_ANIM;
+
 #[cfg(test)]
 #[path = "workbench_panel_tests.rs"]
 mod panel_tests;
@@ -45,10 +50,52 @@ impl Workbench {
         cx.notify();
     }
 
+    /// Maximize or restore. An open panel grows towards the top (or the left when docked right) and shrinks back, unless
+    /// motion is reduced.
     pub(super) fn toggle_maximized_panel(&mut self, cx: &mut Context<Self>) {
+        let animate = self.chrome.panel_open && self.chrome.panel_area.is_some() && !crate::system_prefs::reduce_motion(cx);
         self.chrome.panel_max = !self.chrome.panel_max;
         self.chrome.panel_open = true;
+        self.chrome.panel_anim = animate.then(|| (std::time::Instant::now(), self.chrome.panel_max));
         cx.notify();
+    }
+
+    /// Ends a finished (or overtaken) maximize/restore animation, or asks for its next frame.
+    pub(super) fn step_panel_anim(&mut self, window: &mut Window) {
+        let Some((start, maximizing)) = self.chrome.panel_anim else {
+            return;
+        };
+        if maximizing != self.chrome.panel_max || !self.chrome.panel_open || start.elapsed() >= PANEL_ANIM {
+            self.chrome.panel_anim = None;
+        } else {
+            window.request_animation_frame();
+        }
+    }
+
+    /// The panel's size along its docking axis while it animates: from its own size to the whole area, eased.
+    pub(super) fn animated_panel_size(&self) -> Option<f32> {
+        let (start, maximizing) = self.chrome.panel_anim?;
+        let area = self.chrome.panel_area?;
+        let full = if self.chrome.panel_right { area.size.width } else { area.size.height } / px(1.);
+        let own = if self.chrome.panel_right { self.chrome.panel_w } else { self.chrome.panel_h }.min(full);
+        let t = gpui::ease_in_out((start.elapsed().as_secs_f32() / PANEL_ANIM.as_secs_f32()).min(1.));
+        let open = if maximizing { t } else { 1. - t };
+        Some(own + (full - own) * open)
+    }
+
+    /// Records the editor-and-panel area after layout, without drawing anything.
+    pub(super) fn panel_area_probe(cx: &Context<Self>) -> impl IntoElement + use<> {
+        let entity = cx.entity().downgrade();
+        gpui::canvas(
+            |bounds, _, _| bounds,
+            move |_, bounds, _, cx| {
+                entity.update(cx, |wb, _| wb.chrome.panel_area = Some(bounds)).ok();
+            },
+        )
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full()
     }
 
     /// The panel's width in a window `total` wide: its own when docked right, else the editor area's.

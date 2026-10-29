@@ -1165,6 +1165,8 @@ impl Workbench {
                 panel_right,
                 panel_w,
                 panel_max: false,
+                panel_anim: None,
+                panel_area: None,
                 resizing_panel: false,
                 term_list_w,
                 resizing_term_list: false,
@@ -1396,15 +1398,18 @@ impl Workbench {
         let resizing = self.chrome.resizing_panel;
         let (right, max) = (self.chrome.panel_right, self.chrome.panel_max);
         div()
+            .debug_selector(|| "panel".into())
             .relative()
             .flex()
             .flex_col()
             .bg(c(p.bg))
             .border_color(c(p.border))
-            .map(|d| match (max, right) {
-                (true, _) => d.flex_1().min_h_0().min_w_0(),
-                (false, true) => d.w(px(self.chrome.panel_w)).flex_none().h_full().border_l_1(),
-                (false, false) => d.h(px(self.chrome.panel_h)).flex_none().border_t_1(),
+            .map(|d| match (self.animated_panel_size(), max, right) {
+                (Some(size), _, true) => d.w(px(size)).flex_none().h_full().border_l_1(),
+                (Some(size), _, false) => d.h(px(size)).flex_none().border_t_1(),
+                (None, true, _) => d.flex_1().min_h_0().min_w_0(),
+                (None, false, true) => d.w(px(self.chrome.panel_w)).flex_none().h_full().border_l_1(),
+                (None, false, false) => d.h(px(self.chrome.panel_h)).flex_none().border_t_1(),
             })
             .child(
                 div()

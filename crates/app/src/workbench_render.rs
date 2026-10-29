@@ -41,6 +41,7 @@ impl Render for Workbench {
             self.show_containers(cx);
         }
         self.chrome.a11y_bounds = Default::default();
+        self.step_panel_anim(window);
         self.update_title(window, cx);
         self.chrome.window_bounds = Some(window.window_bounds());
         self.track_notice(cx);
@@ -593,12 +594,16 @@ impl Render for Workbench {
                             .flex_1()
                             .min_w_0()
                             .flex()
+                            .relative()
                             .when(!self.chrome.panel_right, |d| d.flex_col())
-                            // A maximized panel takes the editor's place.
-                            .when(!(self.chrome.panel_open && self.chrome.panel_max), |d| {
+                            .child(Self::panel_area_probe(cx))
+                            // A maximized panel takes the editor's place; while it grows or shrinks, the editor gives way.
+                            .when(!(self.chrome.panel_open && self.chrome.panel_max) || self.chrome.panel_anim.is_some(), |d| {
                                 d.child(
                                     div()
+                                        .debug_selector(|| "editor-area".into())
                                         .relative()
+                                        .overflow_hidden()
                                         .flex_1()
                                         .min_w_0()
                                         .min_h_0()
@@ -675,7 +680,7 @@ impl Render for Workbench {
 #[cfg(test)]
 mod resize_tests {
     use super::*;
-    use gpui::{Modifiers, TestAppContext, point};
+    use gpui::{Modifiers, TestAppContext, VisualTestContext, point};
 
     #[gpui::test]
     fn status_bar_keeps_resource_control_visible_with_long_content(cx: &mut TestAppContext) {
@@ -869,6 +874,71 @@ mod resize_tests {
         assert_eq!(wb.read_with(cx, |wb, _| wb.panel_layout_for_test()), (true, !start, false), "moved and back to its own size");
         cx.dispatch_action(ToggleMaximizedPanel);
         assert_eq!(wb.read_with(cx, |wb, _| wb.panel_layout_for_test()), (true, !start, true), "maximizing on the new side");
+    }
+
+    /// Maximize grows the open panel towards the top and restore shrinks it back, both animated; reduced motion jumps.
+    #[gpui::test]
+    fn maximize_and_restore_animate_the_panel_size(cx: &mut TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        wb.update(cx, |wb, cx| {
+            wb.chrome.panel_right = false;
+            wb.chrome.panel_open = true;
+            cx.notify();
+        });
+        cx.run_until_parked();
+        let own = cx.debug_bounds("panel").unwrap();
+        let editor = cx.debug_bounds("editor-area").unwrap();
+        let full = own.bottom() - editor.top();
+        let frame = |cx: &mut VisualTestContext| {
+            cx.update(|window, _| window.refresh());
+            cx.run_until_parked();
+        };
+
+        cx.dispatch_action(ToggleMaximizedPanel);
+        frame(cx);
+        let growing = cx.debug_bounds("panel").unwrap();
+        assert!(wb.read_with(cx, |wb, _| wb.chrome.panel_anim.is_some()), "an open panel animates");
+        assert!(growing.size.height >= own.size.height && growing.size.height < full, "it starts from its own size: {growing:?}");
+        assert_eq!(growing.bottom(), own.bottom(), "it grows towards the top, its bottom stays");
+        std::thread::sleep(crate::workbench::panels_glue::PANEL_ANIM_FOR_TEST + std::time::Duration::from_millis(60));
+        frame(cx);
+        frame(cx);
+        assert!(wb.read_with(cx, |wb, _| wb.chrome.panel_anim.is_none() && wb.chrome.panel_max));
+        assert_eq!(cx.debug_bounds("panel").unwrap().size.height, full, "maximized: the whole area");
+
+        cx.dispatch_action(ToggleMaximizedPanel);
+        frame(cx);
+        let shrinking = cx.debug_bounds("panel").unwrap();
+        assert!(shrinking.size.height > own.size.height && shrinking.size.height <= full, "restore shrinks from the top: {shrinking:?}");
+        std::thread::sleep(crate::workbench::panels_glue::PANEL_ANIM_FOR_TEST + std::time::Duration::from_millis(60));
+        frame(cx);
+        frame(cx);
+        assert_eq!(cx.debug_bounds("panel").unwrap().size.height, own.size.height, "back to its own size");
+
+        // Reduced motion: no animation at all.
+        cx.update(|_, cx| cx.global_mut::<Settings>().reduce_motion = Some(true));
+        cx.dispatch_action(ToggleMaximizedPanel);
+        assert!(wb.read_with(cx, |wb, _| wb.chrome.panel_anim.is_none() && wb.chrome.panel_max));
+    }
+
+    /// Opening a file while the panel grows ends the animation with the editor visible.
+    #[gpui::test]
+    fn an_overtaken_maximize_animation_ends_cleanly(cx: &mut TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        wb.update(cx, |wb, cx| {
+            wb.chrome.panel_open = true;
+            cx.notify();
+        });
+        cx.run_until_parked();
+        cx.dispatch_action(ToggleMaximizedPanel);
+        wb.update(cx, |wb, cx| {
+            wb.chrome.panel_max = false;
+            cx.notify();
+        });
+        cx.update(|window, _| window.refresh());
+        cx.run_until_parked();
+        assert!(wb.read_with(cx, |wb, _| wb.chrome.panel_anim.is_none()), "an animation the state no longer wants is dropped");
+        assert!(cx.debug_bounds("editor-area").is_some());
     }
 
     // The terminal list's left edge drags like the other sashes, keeps room for the terminals and is remembered.
