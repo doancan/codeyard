@@ -1,0 +1,18 @@
+# TLS for the registry's address (certificates renew by themselves), in front of yard on 127.0.0.1:8080.
+# setup.sh writes the address into /etc/caddy/yard.env as YARD_DOMAIN.
+{
+	email {$YARD_EMAIL}
+}
+
+{$YARD_DOMAIN} {
+	# A package is at most 64 MiB, plus its signature.
+	request_body {
+		max_size 66MB
+	}
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8080
+	# Nothing about who asks is kept.
+	log {
+		output discard
+	}
+}

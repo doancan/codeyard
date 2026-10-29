@@ -148,6 +148,28 @@ impl Rng {
     }
 }
 
+/// Found by the fuzz test (seed 0x32dc9a08d9468ad8): a v0.3 bundle relabelled as v0.1 or v0.2 verified, since every
+/// signature in it is genuine. A bundle must have the shape of the version it names.
+#[test]
+fn a_bundle_must_have_the_shape_of_its_version() {
+    let pins = pins_from(&fixtures().join("trusted_root.json"));
+    let artifact = std::fs::read(fixtures().join("a.txt")).unwrap();
+    let v3 = String::from_utf8(std::fs::read(fixtures().join("happy-path-v0.3/bundle.sigstore.json")).unwrap()).unwrap();
+    assert!(verify(v3.as_bytes(), &artifact, &pins, NOW).is_ok());
+    for older in ["0.1", "0.2"] {
+        let relabelled = v3.replace("bundle+json;version=0.3", &format!("bundle+json;version={older}"));
+        assert_ne!(relabelled, v3);
+        let e = verify(relabelled.as_bytes(), &artifact, &pins, NOW).unwrap_err().to_string();
+        assert!(e.contains("v0.3 field"), "{older}: {e}");
+    }
+    // And an older bundle (a chain) relabelled as v0.3.
+    let v1 = String::from_utf8(std::fs::read(fixtures().join("happy-path-v0.1/bundle.sigstore.json")).unwrap()).unwrap();
+    assert!(verify(v1.as_bytes(), &artifact, &pins, NOW).is_ok());
+    let relabelled = v1.replace("bundle+json;version=0.1", "bundle+json;version=0.3");
+    assert_ne!(relabelled, v1);
+    assert!(verify(relabelled.as_bytes(), &artifact, &pins, NOW).unwrap_err().to_string().contains("not a chain"));
+}
+
 /// Hostile bundles and certificates: changed bytes in the JSON, in the base64 fields and in the certificate never
 /// panic, and only the untouched bundle verifies. Knobs as in `ext-pkg`'s fuzz tests.
 #[test]

@@ -1,0 +1,15 @@
+#!/bin/sh
+# Forced command for the deploy workflow's SSH key (user `deploy`): the new yard binary arrives on standard input; it
+# is installed only if it runs, and the service restarts with it. The previous binary is kept as yard.previous.
+#   command="/usr/local/bin/yard-install-binary",restrict ssh-ed25519 AAAA… yard-deploy
+set -eu
+tmp=$(mktemp /tmp/yard.XXXXXX)
+trap 'rm -f "$tmp"' EXIT
+head -c 200000000 > "$tmp"
+chmod 755 "$tmp"
+"$tmp" --version
+sudo -n /usr/bin/install -m 755 /usr/local/bin/yard /usr/local/bin/yard.previous
+sudo -n /usr/bin/install -m 755 "$tmp" /usr/local/bin/yard
+sudo -n /usr/bin/systemctl restart yard
+sleep 2
+sudo -n /usr/bin/systemctl is-active yard

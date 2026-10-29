@@ -39,7 +39,7 @@ impl Test {
         let dir = std::env::temp_dir().join(format!("yard-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let authority = Authority::new();
-        let cfg = init(&dir, "yard.test", &authority.fulcio_pem(), &authority.rekor_pem(), NOW).unwrap();
+        let cfg = init(&dir, "yard.test", &authority.fulcio_pem(), &authority.rekor_pem(), None, NOW).unwrap();
         let yard = Yard::open(Config::load(&cfg).unwrap()).unwrap();
         Test { dir, authority, yard }
     }
@@ -291,7 +291,7 @@ fn the_index_never_outlives_the_online_key() {
 #[test]
 fn opening_checks_the_online_key_and_init_refuses_twice() {
     let t = Test::new("open");
-    assert!(init(&t.dir, "yard.test", &t.authority.fulcio_pem(), &t.authority.rekor_pem(), NOW).unwrap_err().contains("already has a registry"));
+    assert!(init(&t.dir, "yard.test", &t.authority.fulcio_pem(), &t.authority.rekor_pem(), None, NOW).unwrap_err().contains("already has a registry"));
     let mut cfg = t.yard.config().clone();
     cfg.online_key = t.dir.join("keys/root.key");
     assert!(Yard::open(cfg).err().unwrap().contains("is not the online key"));
@@ -300,7 +300,76 @@ fn opening_checks_the_online_key_and_init_refuses_twice() {
         use std::os::unix::fs::PermissionsExt as _;
         assert_eq!(std::fs::metadata(t.dir.join("keys/online.key")).unwrap().permissions().mode() & 0o777, 0o600);
     }
-    assert!(init(&t.dir.join("x"), "yard.test", "nope", "nope", NOW).is_err());
+    assert!(init(&t.dir.join("x"), "yard.test", "nope", "nope", None, NOW).is_err());
+}
+
+/// A raw request; the response's head (status line and headers), lower-cased header names.
+fn raw(addr: std::net::SocketAddr, request: &str) -> String {
+    let mut s = std::net::TcpStream::connect(addr).unwrap();
+    s.write_all(request.as_bytes()).unwrap();
+    let mut out = Vec::new();
+    s.read_to_end(&mut out).unwrap();
+    let end = out.windows(4).position(|w| w == b"\r\n\r\n").unwrap_or(out.len());
+    let head = String::from_utf8_lossy(&out[..end]).into_owned();
+    head.lines().map(|l| l.split_once(": ").map_or(l.to_string(), |(k, v)| format!("{}: {v}", k.to_ascii_lowercase()))).collect::<Vec<_>>().join("\n")
+}
+
+/// The production path: the root keys are made off the server, the root waits for a threshold of their signatures,
+/// and every 90 days the next online key goes live only once the holders signed the root that names it.
+#[test]
+fn the_root_key_ceremony_and_an_online_key_rotation() {
+    let dir = std::env::temp_dir().join(format!("yard-ceremony-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let authority = Authority::new();
+    let holders: Vec<SigningKey> = (0..3).map(|_| SigningKey::generate().unwrap().0).collect();
+    let trust = RootKeys { keys: holders.iter().map(SigningKey::public).collect(), threshold: 2 };
+    let cfg = init(&dir, "yard.test", &authority.fulcio_pem(), &authority.rekor_pem(), Some(trust.clone()), NOW).unwrap();
+    assert!(!dir.join("keys/root.key").exists() && !dir.join("root-key.txt").exists(), "no root key on the server");
+    assert_eq!(Config::load(&cfg).unwrap().trust(), Some(trust.clone()));
+    let sign = |file: &std::path::Path, who: &[usize]| {
+        let bytes = std::fs::read(file).unwrap();
+        let mut sig = std::fs::read_to_string(sig_path(file)).unwrap();
+        for &i in who {
+            sig = y::add_signature(&sig, &holders[i], y::Role::Root, &bytes).unwrap();
+        }
+        std::fs::write(sig_path(file), sig).unwrap();
+    };
+    let client = |at: u64| {
+        let read = |n: &str| std::fs::read(dir.join("public").join(n)).unwrap();
+        let files = [read("root.json"), read("root.json.sig"), read("index.json"), read("index.json.sig")];
+        y::verify(&trust, [&files[0], &files[1], &files[2], &files[3]], at, Seen::default())
+    };
+    // Unsigned, clients refuse it; with two of the three holders, they accept it.
+    Yard::open(Config::load(&cfg).unwrap()).unwrap().resign(NOW).unwrap();
+    assert!(matches!(client(NOW).unwrap_err(), y::Error::Signature { valid: 0, needed: 2, .. }));
+    sign(&dir.join("root.json"), &[0, 2]);
+    Yard::open(Config::load(&cfg).unwrap()).unwrap().resign(NOW).unwrap();
+    assert_eq!(client(NOW).unwrap().root.version, 1);
+
+    // 80 days later: rotate. One signature is not enough to promote; two are.
+    let later = NOW + 80 * 86400;
+    let next = rotate(&cfg, later).unwrap();
+    assert!(rotate(&cfg, later).unwrap_err().contains("rotation is under way"));
+    sign(&next, &[1]);
+    assert!(promote(&cfg, later).unwrap_err().contains("1 valid signature"), "one holder alone cannot change the root");
+    assert_eq!(client(later).unwrap().root.version, 1, "nothing changed");
+    sign(&next, &[2]);
+    assert_eq!(promote(&cfg, later).unwrap(), 2);
+    // Past the first key's 90 days the service still signs, and clients accept it.
+    let past = NOW + 95 * 86400;
+    Yard::open(Config::load(&cfg).unwrap()).unwrap().resign(past).unwrap();
+    let v = client(past).unwrap();
+    assert_eq!(v.root.version, 2);
+    assert!(!v.stale);
+    assert!(!next.exists() && !dir.join("keys/online.next.key").exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn promote_needs_the_root_keys_in_the_config() {
+    let t = Test::new("promote-dev");
+    rotate(&t.dir.join("yard.json"), NOW).unwrap();
+    assert!(promote(&t.dir.join("yard.json"), NOW).unwrap_err().contains("no root-keys"));
 }
 
 /// One HTTP/1.1 request on a fresh connection: (status, body).
@@ -341,6 +410,14 @@ fn the_http_service_end_to_end() {
     assert_eq!(status, 200);
     assert_eq!(index, std::fs::read(dir.join("public/index.json")).unwrap());
     assert_eq!(request(addr, "GET", "/root.json.sig", b"").0, 200);
+    // The daily conditional request: unchanged, nothing is sent; no cache may answer without asking.
+    let head = raw(addr, "GET /index.json HTTP/1.1\r\nHost: yard\r\nConnection: close\r\n\r\n");
+    assert!(head.contains("cache-control: no-cache"), "{head}");
+    let tag = head.lines().find_map(|l| l.strip_prefix("etag: ")).unwrap().trim().to_string();
+    let again = raw(addr, &format!("GET /index.json HTTP/1.1\r\nHost: yard\r\nIf-None-Match: {tag}\r\nConnection: close\r\n\r\n"));
+    assert!(again.starts_with("HTTP/1.1 304"), "{again}");
+    let pkg_head = raw(addr, &format!("GET /packages/{}.cyx HTTP/1.1\r\nHost: yard\r\nConnection: close\r\n\r\n", digest.hex()));
+    assert!(pkg_head.contains("cache-control: private"), "a CDN must not keep packages, or downloads go uncounted: {pkg_head}");
     let (status, pkg) = request(addr, "GET", &format!("/packages/{}.cyx", digest.hex()), b"");
     assert_eq!((status, pkg), (200, bytes));
     let (status, served) = request(addr, "GET", &format!("/packages/{}.sigstore.json", digest.hex()), b"");

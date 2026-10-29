@@ -9,6 +9,10 @@
 //!
 //! State is one SQLite file (`db.rs`). Every change runs under one lock, so version numbers and the index counter
 //! cannot race.
+//!
+//! The online key that signs the index lives on the server and is good for 90 days. [`rotate`] prepares the next one
+//! and a `root.next.json` naming it; the root key holders sign that file offline (`cyx yard sign root`), and
+//! [`promote`] checks their signatures against the root keys in `yard.json` before it goes live.
 
 mod db;
 pub mod http;
@@ -21,7 +25,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use ext_core::publisher::{self, Pins};
-use ext_core::yard::{self, Index, Publisher, Root, SigningKey, Status, StatusChange};
+use ext_core::yard::{self, Index, PublicKey, Publisher, Root, RootKeys, SigningKey, Status, StatusChange};
 use ext_manifest::{ExtId, Version};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
@@ -29,6 +33,11 @@ use sha2::{Digest as _, Sha256};
 /// The public-good Sigstore roots `yard init` pins: Fulcio's CA chain and Rekor v1's key.
 pub const SIGSTORE_FULCIO: &str = include_str!("../sigstore/fulcio.pem");
 pub const SIGSTORE_REKOR: &str = include_str!("../sigstore/rekor.pem");
+
+/// How long an online key is good for: the root key holders sign the next one before then.
+pub const ONLINE_KEY_LIFETIME_SECS: u64 = 90 * 86400;
+/// `yard serve` warns this long before the online key expires.
+pub const ROTATE_WARNING_SECS: u64 = 14 * 86400;
 
 /// How old a status statement may be: a captured one cannot be replayed later.
 pub const STATEMENT_MAX_AGE_SECS: u64 = 15 * 60;
@@ -48,6 +57,12 @@ pub struct Config {
     pub online_key: PathBuf,
     #[serde(default = "default_listen")]
     pub listen: String,
+    /// The root public keys clients trust for this registry (what the app ships), and how many must sign a root.
+    /// `promote` refuses a new root they did not sign; a development registry has none.
+    #[serde(default, rename = "root-keys", skip_serializing_if = "Vec::is_empty")]
+    pub root_keys: Vec<PublicKey>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub threshold: Option<usize>,
 }
 
 fn default_listen() -> String {
@@ -55,6 +70,11 @@ fn default_listen() -> String {
 }
 
 impl Config {
+    /// The root keys and threshold, when the registry has them.
+    pub fn trust(&self) -> Option<RootKeys> {
+        (!self.root_keys.is_empty()).then(|| RootKeys { keys: self.root_keys.clone(), threshold: self.threshold.unwrap_or(self.root_keys.len()) })
+    }
+
     pub fn load(path: &Path) -> Result<Config, String> {
         let text = std::fs::read_to_string(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
         let mut cfg: Config = serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -320,6 +340,11 @@ impl Yard {
         tx.commit().map_err(internal("database"))
     }
 
+    /// When the online key expires (Unix seconds); the index cannot be signed past it.
+    pub fn online_expires(&self) -> u64 {
+        self.root.online.expires
+    }
+
     /// Sign a new index with nothing changed: run daily so it never expires while the service is up.
     pub fn resign(&self, now: u64) -> Result<u64, Error> {
         let mut conn = self.lock();
@@ -401,41 +426,117 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// A new registry in `dir` for development or a first deployment: one root key (threshold 1; a production root is
-/// signed by its holders with `cyx yard sign`), an online key, `root.json` pinning the given Sigstore roots, and
-/// `yard.json`. Refuses a folder that already has a config.
-pub fn init(dir: &Path, registry: &str, fulcio: &str, rekor: &str, now: u64) -> Result<PathBuf, String> {
+/// A new registry in `dir`: an online key, `root.json` pinning the given Sigstore roots, and `yard.json`. Without
+/// `trust` it is a development registry whose root is signed by one key made here (`keys/root.key`). With the
+/// production root keys the root is left unsigned for their holders (`cyx yard sign root`), and no root key is ever
+/// on the server. Refuses a folder that already has a config.
+pub fn init(dir: &Path, registry: &str, fulcio: &str, rekor: &str, trust: Option<RootKeys>, now: u64) -> Result<PathBuf, String> {
     let cfg_path = dir.join("yard.json");
     if cfg_path.exists() {
         return Err(format!("{} exists; this folder already has a registry", cfg_path.display()));
     }
     Pins::from_pem(fulcio, rekor).map_err(|e| e.to_string())?;
     std::fs::create_dir_all(dir.join("keys")).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
-    let (root_key, root_text) = SigningKey::generate()?;
+    if let Some(t) = &trust
+        && (t.keys.is_empty() || t.threshold == 0 || t.threshold > t.keys.len())
+    {
+        return Err("give the root public keys and a threshold between 1 and their number".into());
+    }
     let (online_key, online_text) = SigningKey::generate()?;
-    write_private(&dir.join("keys/root.key"), &root_text)?;
     write_private(&dir.join("keys/online.key"), &online_text)?;
     let root = Root {
         format: yard::FORMAT,
         version: 1,
         registry: registry.into(),
-        online: yard::OnlineKey { key: online_key.public(), expires: now + 90 * 86400 },
+        online: yard::OnlineKey { key: online_key.public(), expires: now + ONLINE_KEY_LIFETIME_SECS },
         fulcio: fulcio.into(),
         rekor: rekor.into(),
     };
     let root_bytes = serde_json::to_vec_pretty(&root).map_err(|e| e.to_string())?;
     std::fs::write(dir.join("root.json"), &root_bytes).map_err(|e| e.to_string())?;
-    std::fs::write(dir.join("root.json.sig"), yard::add_signature("", &root_key, yard::Role::Root, &root_bytes)?).map_err(|e| e.to_string())?;
+    let sigs = match &trust {
+        Some(_) => serde_json::to_string_pretty(&yard::Signatures::default()).map_err(|e| e.to_string())? + "\n",
+        None => {
+            let (root_key, root_text) = SigningKey::generate()?;
+            write_private(&dir.join("keys/root.key"), &root_text)?;
+            std::fs::write(dir.join("root-key.txt"), format!("{}\n", root_key.public().hex())).map_err(|e| e.to_string())?;
+            yard::add_signature("", &root_key, yard::Role::Root, &root_bytes)?
+        }
+    };
+    std::fs::write(dir.join("root.json.sig"), sigs).map_err(|e| e.to_string())?;
     let cfg = Config {
         database: "yard.sqlite".into(),
         public: "public".into(),
         root: "root.json".into(),
         online_key: "keys/online.key".into(),
         listen: default_listen(),
+        root_keys: trust.as_ref().map(|t| t.keys.clone()).unwrap_or_default(),
+        threshold: trust.map(|t| t.threshold),
     };
     std::fs::write(&cfg_path, serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())? + "\n").map_err(|e| e.to_string())?;
-    std::fs::write(dir.join("root-key.txt"), format!("{}\n", root_key.public().hex())).map_err(|e| e.to_string())?;
     Ok(cfg_path)
+}
+
+/// Where the next root and online key wait for the root key holders.
+fn next_paths(cfg: &Config) -> (PathBuf, PathBuf) {
+    (cfg.root.with_file_name("root.next.json"), cfg.online_key.with_file_name("online.next.key"))
+}
+
+/// Start an online key rotation: a new online key (`online.next.key`) and `root.next.json`, the current root with a
+/// higher version naming that key for 90 days from `now`, with no signatures yet. Returns the file to sign.
+pub fn rotate(cfg_path: &Path, now: u64) -> Result<PathBuf, String> {
+    let cfg = Config::load(cfg_path)?;
+    let (next_root, next_key) = next_paths(&cfg);
+    if next_key.exists() {
+        return Err(format!("{} exists: a rotation is under way; finish it with `yard promote` or delete both next files", next_key.display()));
+    }
+    let root: Root = serde_json::from_slice(&std::fs::read(&cfg.root).map_err(|e| format!("cannot read {}: {e}", cfg.root.display()))?)
+        .map_err(|e| format!("{}: {e}", cfg.root.display()))?;
+    let (key, text) = SigningKey::generate()?;
+    // After a restore from backup there is no keys folder: the online key is never backed up.
+    if let Some(dir) = next_key.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+    }
+    write_private(&next_key, &text)?;
+    let next = Root { version: root.version + 1, online: yard::OnlineKey { key: key.public(), expires: now + ONLINE_KEY_LIFETIME_SECS }, ..root };
+    std::fs::write(&next_root, serde_json::to_vec_pretty(&next).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    std::fs::write(sig_path(&next_root), serde_json::to_string_pretty(&yard::Signatures::default()).map_err(|e| e.to_string())? + "\n")
+        .map_err(|e| e.to_string())?;
+    Ok(next_root)
+}
+
+/// Finish a rotation once the root key holders signed `root.next.json`: check their signatures against `yard.json`'s
+/// root keys, put the new root and online key in place, and sign a fresh index with the new key. A running `yard
+/// serve` keeps the old key in memory: restart it. Returns the new root version.
+pub fn promote(cfg_path: &Path, now: u64) -> Result<u64, String> {
+    let cfg = Config::load(cfg_path)?;
+    let trust = cfg.trust().ok_or_else(|| format!("{} has no root-keys: add the root public keys clients trust and the threshold", cfg_path.display()))?;
+    let (next_root, next_key) = next_paths(&cfg);
+    let read = |p: &Path| std::fs::read(p).map_err(|e| format!("cannot read {}: {e}", p.display()));
+    let (bytes, sigs) = (read(&next_root)?, read(&sig_path(&next_root))?);
+    let root = yard::verify_root(&trust, &bytes, &sigs).map_err(|e| match e {
+        yard::Error::Signature { valid, needed, .. } => format!(
+            "{} has {valid} valid signature(s) from the root keys in yard.json; {needed} needed: another holder signs it with `cyx yard sign root`",
+            sig_path(&next_root).display()
+        ),
+        e => e.to_string(),
+    })?;
+    let key = SigningKey::from_file(&String::from_utf8_lossy(&read(&next_key)?)).map_err(|e| format!("{}: {e}", next_key.display()))?;
+    if key.public() != root.online.key {
+        return Err(format!("{} is not the online key {} names", next_key.display(), next_root.display()));
+    }
+    if root.online.expires <= now {
+        return Err(format!("{} names an online key that has expired; start again with `yard rotate`", next_root.display()));
+    }
+    // The signatures first, then the root: a crash between them leaves a root that does not verify, which `promote`
+    // repairs when run again; the old key stays until the new root is in place.
+    write_atomic(&sig_path(&cfg.root), &sigs).map_err(|e| e.to_string())?;
+    write_atomic(&cfg.root, &bytes).map_err(|e| e.to_string())?;
+    std::fs::rename(&next_key, &cfg.online_key).map_err(|e| format!("cannot move {} into place: {e}", next_key.display()))?;
+    let _ = std::fs::remove_file(sig_path(&next_root));
+    let _ = std::fs::remove_file(&next_root);
+    Yard::open(cfg)?.resign(now).map_err(|e| e.to_string())?;
+    Ok(root.version)
 }
 
 fn write_private(path: &Path, text: &str) -> Result<(), String> {

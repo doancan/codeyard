@@ -252,3 +252,31 @@ fn the_publish_workflow_pins_every_action_to_a_commit() {
         assert!(line.contains(" # "), "a pin says what it is: {line}");
     }
 }
+
+/// `cyx yard check`, what the monitor and the canary run: a healthy registry passes, an index or online key about to
+/// expire fails with the fix, and `--revoked` passes only once the version is revoked in the signed index.
+#[test]
+fn yard_check_reports_what_needs_the_operator() {
+    use ext_core::testing::{TestRegistry, github};
+    let d = tmp("check");
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    let mut r = TestRegistry::new(&d, "check", now);
+    let files = ["root.json", "root.json.sig", "index.json", "index.json.sig"].map(|n| std::fs::read(r.dir.join(n)).unwrap());
+    let keys = r.registry().keys;
+    assert!(crate::yard::check(&files, &keys, now, 14, None).unwrap().contains("index expires in 7"), "72 h left");
+    assert!(crate::yard::check(&files, &keys, now + 50 * 3600, 14, None).unwrap_err().contains("index expires in 22 h"));
+    assert!(crate::yard::check(&files, &keys, now, 100, None).unwrap_err().contains("rotate it"));
+    let other = ext_core::yard::RootKeys { keys: vec![ext_core::yard::SigningKey::generate().unwrap().0.public()], threshold: 1 };
+    assert!(crate::yard::check(&files, &other, now, 14, None).unwrap_err().contains("CY0804"), "not this registry's keys");
+
+    let manifest = "[extension]\nid = \"codeyard.canary\"\nversion = \"0.0.1\"\nname = \"Canary\"\nlicense = \"MIT\"\n";
+    let pkg = ext_pkg::write(vec![ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: manifest.into(), executable: false }]).unwrap().0;
+    r.publish(&pkg, &github(1, 2), now);
+    let canary = (ext_manifest::ExtId::parse("codeyard.canary").unwrap(), ext_manifest::Version::parse("0.0.1").unwrap());
+    let dir = r.dir.clone();
+    let read = || ["root.json", "root.json.sig", "index.json", "index.json.sig"].map(|n| std::fs::read(dir.join(n)).unwrap());
+    assert!(crate::yard::check(&read(), &keys, now, 14, Some(&canary)).unwrap_err().contains("not revoked in the index yet"));
+    r.set_status("codeyard.canary", "0.0.1", ext_core::yard::Status::Revoked { reason: "Canary.".into() }, now);
+    assert!(crate::yard::check(&read(), &keys, now, 14, Some(&canary)).unwrap().contains("codeyard.canary 0.0.1 is revoked"));
+    std::fs::remove_dir_all(&d).unwrap();
+}

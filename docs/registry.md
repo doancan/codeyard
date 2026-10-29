@@ -1,8 +1,8 @@
 # Registry
 
-Yard is the extension registry: static files on a CDN plus a small publish service. This document describes what
-exists today: the signed index format, how clients verify it and publisher signatures, the publish service, and the
-operator's commands. Hosting and the runbook come with #70. The design is in [plugin-architecture.md §8](plugin-architecture.md#8-registry-and-publishing).
+Yard is the extension registry: static files on a CDN plus a small publish service. This document describes the
+signed index format, how clients verify it and publisher signatures, the publish service, the operator's commands, and
+how the public registry is run (hosting, keys, monitoring and the runbook). The design is in [plugin-architecture.md §8](plugin-architecture.md#8-registry-and-publishing).
 
 ## Files
 
@@ -95,7 +95,8 @@ you.night 1.2.0 <content digest>
 ```
 
 `ext_core::publisher::verify_package` checks a Sigstore bundle (v0.1 to v0.3, a message signature logged in Rekor v1)
-offline against the Fulcio CA and Rekor key that `root.json` pins:
+offline against the Fulcio CA and Rekor key that `root.json` pins. The bundle must have the shape of the version it
+names (v0.3 one signing certificate, v0.1 and v0.2 a chain of one), so a bundle cannot be relabelled; then:
 
 1. Rekor's signed entry timestamp over the entry and the time it was logged.
 2. The inclusion proof up to its root hash and Rekor's signed checkpoint for that root (required from bundle v0.2).
@@ -158,15 +159,21 @@ between the two sees a mismatch and fetches again). `yard serve` also signs a fr
 so it never expires while the service runs.
 
 ```text
-yard init FOLDER [--registry NAME]           a new registry: keys, root.json (pinning public-good Sigstore), yard.json
+yard init FOLDER [--registry NAME] [--root-keys HEX,… --threshold N]
+                                             a new registry: online key, root.json (pinning public-good Sigstore),
+                                             yard.json; with the production root keys, root.json waits for them
 yard serve CONFIG                            the service
+yard rotate CONFIG                           the next online key and root.next.json for the root key holders to sign
+yard promote CONFIG                          check their signatures, put the new root and key in place, sign
 yard resign CONFIG                           sign a fresh index once, for a scheduler instead of serve's timer
 yard revoke CONFIG ID VERSION REASON…        the security role: stop a version on every client, with the reason
 yard immediate CONFIG ID VERSION             the security role: let clients update to an advisory fix at once
 ```
 
-`yard init` signs the root with one development key. For production the root key holders sign `root.json` with
-`cyx yard sign root` (below). The pinned Sigstore roots are in `crates/yard/sigstore/`.
+Without `--root-keys`, `yard init` signs the root with one development key made on the spot. With them no root key is
+ever on the server: the holders sign `root.json` with `cyx yard sign root` (below), and `yard.json` records the keys
+and threshold so `yard promote` can refuse a root they did not sign. `yard serve` warns daily once the online key has
+less than 14 days left. The pinned Sigstore roots are in `crates/yard/sigstore/`.
 
 ## The client
 
@@ -220,10 +227,150 @@ when fetched, the index's ETag) are kept in `<data>/extensions/registries/<name>
 
 ```text
 cyx yard keygen FILE                              a new key, readable only by you; prints the public key
-cyx yard sign <root|index> FILE --key KEYFILE     add your signature to FILE.sig
+cyx yard sign <root|index> FILE --key KEYFILE     add your signature to FILE.sig; --key - reads the key from
+                                                  standard input (pasted from a password manager, never on disk)
 cyx yard verify FOLDER --root-key HEX… [--threshold N]
+cyx yard check URL --root-key HEX… [--threshold N] [--warn-days N] [--revoked ID@VERSION]
+                                                  a live registry as clients see it: fails when the index expires
+                                                  within a day, the online key within N days (14), or ID@VERSION
+                                                  is not revoked yet
 cyx yard fixture FOLDER --extensions N --url URL  a signed index of N made-up extensions, for the Market's perf run
 ```
 
-A root key ceremony is one `keygen` per holder, then each holder runs `sign root root.json` on the same file; signing
-again replaces that holder's signature. A test registry is the same with throwaway keys.
+A root key ceremony is one `keygen` per key, then the holders run `sign root root.json` on the same file; signing
+again replaces that key's signature. `scripts/yard-root-ceremony.sh` does it for the public registry (below). A test
+registry is the same with throwaway keys.
+
+## Running the public registry
+
+### Hosting
+
+| Part | Choice | Cost |
+|---|---|---|
+| Server | One Hetzner Cloud CX22 (2 vCPU, 4 GB, 40 GB disk, 20 TB traffic), Ubuntu 24.04 LTS | about 5 € a month |
+| TLS and address | Caddy on the server (certificates renew by themselves); Cloudflare DNS with its proxy | free |
+| Backups | Cloudflare R2: Litestream copies the database as it changes, `yard-backup.timer` the files daily | free up to 10 GB |
+| Monitoring, canary, deploy | GitHub Actions in this repository; a failed run emails the owner | free |
+| Domain | `yard.<domain>`, and `staging.yard.<domain>` for tests | about 12 $ a year |
+
+Why: `yard` is one binary with one SQLite file and one folder, so a small server holds it for a long time (an index
+of 10 000 extensions is a few MB; a 304 answers most daily requests), and nothing needs a database server, containers
+or a cloud account beyond these. Security updates install by themselves (`unattended-upgrades`, reboot at 04:00).
+
+**Moving.** Everything is `/srv/yard` (and the online key in `/srv/yard/keys`): copy it to any Linux machine, run
+`setup.sh` there and point the DNS record at it. Clients only know the URL and the root keys, so nothing changes for
+them. Moving the URL itself needs an app release with the new address.
+
+**Privacy.** `yard` logs nothing about who asks, and Caddy's access log is off. Cloudflare's proxy sees each request's
+IP address like any CDN; its logs are not enabled on this account. Every client fetches the same index, so nobody
+learns what anyone installed.
+
+**Caching.** `index.json`, `root.json` and their signatures are `no-cache` with an ETag: every request reaches the
+service (a 304 when nothing changed), so the index and its signature always match and a revocation is visible at once.
+Packages are `private`: no shared cache keeps them, so every download is counted; signatures and details files are
+immutable and may be cached anywhere.
+
+### Root key ceremony
+
+Three Ed25519 root keys, any two of which sign `root.json`. One person holds all three until a second maintainer
+takes one: **A** on an encrypted USB stick at home, **B** on another one kept somewhere else, **C** in the owner's
+password manager (a Bitwarden secure note, with two-step login on). Losing one key loses nothing; one stolen key
+cannot sign anything.
+
+1. Erase two USB sticks in Disk Utility as "APFS (Encrypted)", each with its own password, and insert both.
+2. `scripts/yard-root-ceremony.sh /Volumes/YARD-A /Volumes/YARD-B` (network off is best). It shows key C once for the
+   Bitwarden note, checks that the note holds it by reading it back from the clipboard, writes A and B to the sticks
+   and `yard-ceremony-record.txt` with the three public keys.
+3. Put the public keys in the app (`PUBLIC` in `crates/app/src/ext_registry.rs`, threshold 2) and the record in
+   SECURITY.md.
+
+Signing later (`root.json` now, `root.next.json` every 90 days), with any two:
+
+```text
+cyx yard sign root root.next.json --key /Volumes/YARD-A/yard-root-a.key
+pbpaste | cyx yard sign root root.next.json --key -        key C, copied from the Bitwarden note
+```
+
+### First setup
+
+1. Accounts: Hetzner Cloud (a CX22 with Ubuntu 24.04 and your SSH key), Cloudflare (the domain, and an R2 bucket
+   `codeyard-yard-backup` with an API token for it only).
+2. DNS: an `A` record `yard` to the server, **DNS only** (grey cloud) until Caddy has its certificate.
+3. Run the `yard-deploy` workflow with *install* off and download the `yard-linux-x86_64` artifact. Copy it and
+   `deploy/yard/` to the server, then as root: `./setup.sh yard.<domain> you@example.com`.
+4. Fill in `/etc/yard/backup.env`, then `systemctl restart litestream && systemctl start yard-backup.timer`.
+5. `sudo -u yard yard init /srv/yard --registry yard.<domain> --root-keys A,B,C --threshold 2`. Copy
+   `/srv/yard/root.json` to your computer, sign it with two keys, copy `root.json.sig` back, then
+   `systemctl start yard`.
+6. Check from your computer: `cyx yard check https://yard.<domain> --root-key A --root-key B --root-key C --threshold 2`.
+7. Cloudflare: turn the proxy on (orange cloud), SSL/TLS mode **Full (strict)**.
+8. GitHub, *Settings → Environments*: create `yard` (required reviewer: you). Variables: `YARD_URL`
+   (`https://yard.<domain>`), `YARD_ROOT_KEYS` (`A,B,C`), `YARD_THRESHOLD` (`2`), `YARD_SSH_HOST`,
+   `YARD_SSH_KNOWN_HOSTS` (`ssh-keyscan <host>`). Secrets: `YARD_CANARY_SSH_KEY`, `YARD_DEPLOY_SSH_KEY`, two new
+   ed25519 keys whose public halves go on the server with `yard-authorize canary "…"` and `yard-authorize deploy "…"`.
+   The `yard-monitor` workflow reads the variables at repository level too; set them there as well.
+9. Run `yard-canary` once by hand: it also claims the `codeyard` publisher name for this repository.
+
+A staging registry is the same on `staging.yard.<domain>`, with its own throwaway root keys (`yard init` without
+`--root-keys`): use it to try an expired index (stop `yard serve` for 72 h, or `yard init` on a test machine with its
+clock ahead) and to rehearse a rotation.
+
+### Deploy
+
+Run the `yard-deploy` workflow. It builds `yard` on Ubuntu 24.04, keeps it as an artifact, and sends it to the server,
+where `yard-install-binary` installs it only if it runs (the previous one stays as `/usr/local/bin/yard.previous`) and
+restarts the service. The deploy key can do nothing else.
+
+### Monitoring
+
+`yard-monitor` runs hourly from GitHub Actions: `cyx yard check` against the live URL with the root keys. It fails,
+and GitHub emails you, when the registry does not answer or verify, when the index expires within 24 h (`yard serve`
+is down: it signs daily) or when the online key expires within 14 days (rotate it).
+
+### The canary
+
+`yard-canary` runs weekly: it publishes `codeyard.canary` 0.0.<run> (`deploy/canary`, a snippet nobody should
+install), revokes it on the server through the canary key (which can revoke that extension and nothing else), and
+polls the signed index until the revocation is there. The run's summary records the minutes; it fails after 2 hours.
+Clients fetch the index at most once a day, so an online client stops a revoked version within 24 h of that. The
+release notes quote three runs in a row.
+
+### Runbook
+
+**Rotate the online key** (every 90 days; the monitor warns 14 days ahead):
+
+```text
+server$  sudo -u yard yard rotate /srv/yard/yard.json
+you$     scp server:/srv/yard/root.next.json .        and sign it with two keys (above)
+you$     scp root.next.json.sig server:/tmp/  then on the server: sudo -u yard cp /tmp/root.next.json.sig /srv/yard/
+server$  sudo -u yard yard promote /srv/yard/yard.json && sudo systemctl restart yard
+```
+
+`promote` refuses a root without two valid signatures; until it runs, the old key keeps signing.
+
+**Revoke a version** (malware, stolen publisher identity): `sudo -u yard yard revoke /srv/yard/yard.json ID VERSION
+REASON…`. The reason is shown to users. Clients stop it on their next index fetch, with every extension that depends
+on it. A revoked version stays revoked.
+
+**Shorten the wait for an advisory fix**: `sudo -u yard yard immediate /srv/yard/yard.json ID VERSION`. Clients update
+to it without the 48 h wait for code.
+
+**Restore from backup** (a lost or broken server): on a new server, run `setup.sh` and put the old
+`/etc/yard/backup.env` back, then as root:
+
+```text
+set -a; . /etc/yard/backup.env; set +a
+rclone copy "yardbackup:$YARD_BACKUP_BUCKET/files" /srv/yard
+litestream restore -config /etc/litestream.yml /srv/yard/yard.sqlite
+chown -R yard:yard /srv/yard
+```
+
+The online key is not backed up: run `yard rotate`, sign `root.next.json` with two root keys and `yard promote`. Then
+`systemctl start yard litestream` and point DNS at the new server. Clients accept it because the new root is signed
+by the root keys they ship with.
+
+**A root key is lost**: the other two still sign. Make a replacement with `cyx yard keygen` and ship the new set of
+public keys in an app release; until enough clients have it, keep signing with two of the old keys.
+
+**A root key is stolen**: one key cannot sign anything, but replace it as above, soon. If two are stolen, publish a
+security advisory and ship new root keys in an app release at once.

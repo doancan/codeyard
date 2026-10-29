@@ -35,8 +35,25 @@ matter most are:
   (details: [architecture](docs/architecture.md#workspace-trust-in-one-place)).
 - Extensions are in development and the current release loads none. The planned security model (WebAssembly in a sandboxed
   process, declared permissions enforced by the app, signed registry index, revocation) is in
-  [plugin-architecture.md](docs/plugin-architecture.md#6-permissions-and-security). The registry's root signing key is split
-  into three shares; the maintainer holds two and the third is an offline backup until a second holder is named.
+  [plugin-architecture.md](docs/plugin-architecture.md#6-permissions-and-security). The registry's root is signed by two of
+  three root keys, all held by the maintainer until a second maintainer takes one (see below).
+
+## Extension registry keys
+
+The public extension registry (docs/registry.md, "Running the public registry") is trusted through three Ed25519 root
+keys compiled into the app; any two of them sign its `root.json`, which names the online key that signs the index
+daily and expires after 90 days.
+
+| Key | Held by | Kept |
+|---|---|---|
+| Root A | the maintainer | an encrypted USB stick |
+| Root B | the maintainer (until a second maintainer takes it) | an encrypted USB stick in another place |
+| Root C | the maintainer | a password manager, with two-step login |
+| Online | the registry's server | `/srv/yard/keys/online.key`, readable by the service only; never backed up |
+
+No root key is ever on the server. The public keys and the date of the ceremony are recorded in
+`yard-ceremony-record.txt` with the release that ships them. A lost or stolen key is handled as in the registry's
+runbook; report a suspected compromise privately as above.
 
 ## Updates and signatures
 

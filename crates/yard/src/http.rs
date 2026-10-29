@@ -19,6 +19,7 @@ use hyper::body::{Bytes, Incoming};
 use hyper::service::service_fn;
 use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::{TokioIo, TokioTimer};
+use sha2::Digest as _;
 
 use crate::{Error, MAX_UPLOAD_BYTES, Yard};
 
@@ -42,6 +43,10 @@ pub async fn serve(yard: Arc<Yard>, listener: tokio::net::TcpListener) -> std::i
         loop {
             tick.tick().await;
             let y = y.clone();
+            let left = y.online_expires().saturating_sub(now());
+            if left < crate::ROTATE_WARNING_SECS {
+                eprintln!("yard: warning: the online key expires in {} days; rotate it now (docs/registry.md, Rotate the online key)", left / 86400);
+            }
             match tokio::task::spawn_blocking(move || y.resign(now())).await {
                 Ok(Ok(v)) => eprintln!("yard: signed index version {v}"),
                 Ok(Err(e)) => eprintln!("yard: cannot sign the index: {e}"),
@@ -105,14 +110,35 @@ async fn handle(yard: Arc<Yard>, uploads: Arc<tokio::sync::Semaphore>, req: Requ
             })
             .await
             {
-                Ok(Ok(bytes)) => file(bytes, "application/gzip", "public, max-age=31536000, immutable"),
+                // Never kept by a shared cache (a CDN): each download reaches this service and is counted. The
+                // client may keep it.
+                Ok(Ok(bytes)) => file(bytes, "application/gzip", "private, max-age=31536000, immutable"),
                 Ok(Err(e)) => error(e),
                 Err(e) => error(Error::Internal(e.to_string())),
             }
         }
         (Method::GET, "/index.json" | "/index.json.sig" | "/root.json" | "/root.json.sig") => {
+            let asked = req.headers().get(hyper::header::IF_NONE_MATCH).and_then(|v| v.to_str().ok()).map(str::to_string);
             match tokio::fs::read(yard.config().public.join(&path[1..])).await {
-                Ok(bytes) => file(bytes, "application/json", "no-cache"),
+                // Clients ask daily with the ETag they have; most days the answer is 304 and nothing is sent. No cache
+                // may answer without asking here: the index and its signature must come from the same moment, and a
+                // revocation must reach clients on their next fetch.
+                Ok(bytes) => {
+                    let tag = format!("\"{}\"", crate::hex(&sha2::Sha256::digest(&bytes)));
+                    let cache = "no-cache";
+                    if asked.as_deref() == Some(tag.as_str()) {
+                        Response::builder()
+                            .status(StatusCode::NOT_MODIFIED)
+                            .header("etag", &tag)
+                            .header("cache-control", cache)
+                            .body(Full::new(Bytes::new()))
+                            .expect("valid response")
+                    } else {
+                        let mut r = file(bytes, "application/json", cache);
+                        r.headers_mut().insert("etag", tag.parse().expect("a valid header"));
+                        r
+                    }
+                }
                 Err(_) => text(StatusCode::NOT_FOUND, "not found"),
             }
         }

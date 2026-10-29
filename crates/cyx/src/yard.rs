@@ -3,8 +3,11 @@
 //!
 //! ```text
 //! cyx yard keygen FILE                              a new signing key, readable only by you; prints the public key
-//! cyx yard sign <root|index> FILE --key KEYFILE     add your signature to FILE.sig (root holders sign one after another)
+//! cyx yard sign <root|index> FILE --key KEYFILE     add your signature to FILE.sig (root holders sign one after another);
+//!                                                   `--key -` reads the key from standard input (pasted from a vault)
 //! cyx yard verify FOLDER --root-key HEX… [--threshold N]
+//! cyx yard check URL --root-key HEX… [--threshold N] [--warn-days N] [--revoked ID@VERSION]
+//!                                                   a live registry as clients see it, for monitoring and the canary
 //! cyx yard fixture FOLDER --extensions N --url URL      a signed index of N made-up extensions, for the Market
 //! ```
 
@@ -14,9 +17,14 @@ use ext_core::yard::{self, Role, RootKeys, Seen, SigningKey};
 
 pub const HELP: &str = "registry operators:
   cyx yard keygen FILE                       write a new signing key; prints its public key
-  cyx yard sign <root|index> FILE --key KEY  add a signature to FILE.sig
+  cyx yard sign <root|index> FILE --key KEY  add a signature to FILE.sig (--key - reads the key
+                                             from standard input, e.g. pasted from a password manager)
   cyx yard verify FOLDER --root-key HEX… [--threshold N]
                                              check root.json, index.json and their signatures
+  cyx yard check URL --root-key HEX… [--threshold N] [--warn-days N] [--revoked ID@VERSION]
+                                             check a live registry as clients do; fails when the index
+                                             expires within a day or the online key within N days
+                                             (default 14), or ID@VERSION is not revoked yet
   cyx yard fixture FOLDER --extensions N --url URL
                                              a signed index of N made-up extensions (no packages) for
                                              trying the Market and its performance run; prints the
@@ -57,6 +65,19 @@ pub fn run(args: &[String]) -> Result<(), String> {
             if v.stale {
                 return Err("error: the index has expired\n   = fix: sign a new index with the online key".into());
             }
+            Ok(())
+        }
+        ("check", [url, opts @ ..]) => {
+            let (opts, warn_days, revoked) = check_options(opts)?;
+            let keys = parse_trust(&opts)?;
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+            let get = |name: &str| {
+                let u = format!("{}/{name}", url.trim_end_matches('/'));
+                let r = crate::net::request("GET", &u, &[], Vec::new())?;
+                if r.ok() { Ok(r.body) } else { Err(format!("error: {u}: the server answered {}", r.status)) }
+            };
+            let files = [get(yard::ROOT_FILE)?, get(&sig_name(yard::ROOT_FILE))?, get(yard::INDEX_FILE)?, get(&sig_name(yard::INDEX_FILE))?];
+            println!("{}", check(&files, &keys, now, warn_days, revoked.as_ref())?);
             Ok(())
         }
         ("fixture", [dir, flag, n, url_flag, url]) if flag == "--extensions" && url_flag == "--url" => {
@@ -158,10 +179,18 @@ pub fn keygen(file: &Path) -> Result<yard::PublicKey, String> {
     Ok(key.public())
 }
 
-/// Add the key's signature over `file` to `file.sig`.
+/// Add the key's signature over `file` to `file.sig`. A key of `-` is read from standard input, so a key kept only
+/// in a password manager is never written to disk.
 pub fn sign(role: Role, file: &Path, key: &Path) -> Result<(PathBuf, yard::PublicKey), String> {
     let read = |p: &Path| std::fs::read(p).map_err(|e| format!("error: cannot read {}: {e}", p.display()));
-    let key = SigningKey::from_file(&String::from_utf8_lossy(&read(key)?)).map_err(|e| format!("error: {}: {e}", key.display()))?;
+    let text = if key == Path::new("-") {
+        let mut t = String::new();
+        std::io::Read::read_to_string(&mut std::io::stdin(), &mut t).map_err(|e| format!("error: cannot read the key from standard input: {e}"))?;
+        t
+    } else {
+        String::from_utf8_lossy(&read(key)?).into_owned()
+    };
+    let key = SigningKey::from_file(&text).map_err(|e| format!("error: {}: {e}", key.display()))?;
     let bytes = read(file)?;
     let sig = sig_path(file);
     let existing = if sig.exists() { String::from_utf8_lossy(&read(&sig)?).into_owned() } else { String::new() };
@@ -174,6 +203,64 @@ pub fn verify(dir: &Path, keys: &RootKeys, now: u64) -> Result<yard::Verified, S
     let read = |name: &str| std::fs::read(dir.join(name)).map_err(|e| format!("error: cannot read {}: {e}", dir.join(name).display()));
     let files = [read(yard::ROOT_FILE)?, read(&sig_name(yard::ROOT_FILE))?, read(yard::INDEX_FILE)?, read(&sig_name(yard::INDEX_FILE))?];
     yard::verify(keys, [&files[0], &files[1], &files[2], &files[3]], now, Seen::default()).map_err(|e| e.to_string())
+}
+
+/// A version `check --revoked` waits for.
+type Spec = (ext_manifest::ExtId, ext_manifest::Version);
+
+/// `check`'s own options, and the rest for [`parse_trust`].
+fn check_options(opts: &[String]) -> Result<(Vec<String>, u64, Option<Spec>), String> {
+    let (mut rest, mut warn_days, mut revoked) = (Vec::new(), 14, None);
+    let mut it = opts.iter();
+    while let Some(o) = it.next() {
+        match o.as_str() {
+            "--warn-days" => {
+                let v = it.next().ok_or("cyx yard check: --warn-days needs a value")?;
+                warn_days = v.parse().map_err(|_| format!("cyx yard check: '{v}' is not a number"))?;
+            }
+            "--revoked" => {
+                let v = it.next().ok_or("cyx yard check: --revoked needs ID@VERSION")?;
+                let (id, version) = ext_core::registry::parse_spec(v)?;
+                revoked = Some((id, version.ok_or("cyx yard check: --revoked needs ID@VERSION")?));
+            }
+            _ => rest.push(o.clone()),
+        }
+    }
+    Ok((rest, warn_days, revoked))
+}
+
+/// What `cyx yard check` reports about a registry's four files at `now`: a line on success, the problem otherwise.
+pub fn check(files: &[Vec<u8>; 4], keys: &RootKeys, now: u64, warn_days: u64, revoked: Option<&Spec>) -> Result<String, String> {
+    let v = yard::verify(keys, [&files[0], &files[1], &files[2], &files[3]], now, Seen::default()).map_err(|e| e.to_string())?;
+    let hours = |t: u64| t.saturating_sub(now) / 3600;
+    if v.stale {
+        return Err("error: the index has expired: clients wait for the user before installing\n   = fix: is `yard serve` running? It signs daily".into());
+    }
+    if v.index.expires < now + 24 * 3600 {
+        return Err(format!("error: the index expires in {} h\n   = fix: is `yard serve` running? It signs daily", hours(v.index.expires)));
+    }
+    if v.root.online.expires < now + warn_days * 86400 {
+        return Err(format!(
+            "error: the online key expires in {} days\n   = fix: rotate it (docs/registry.md, Rotate the online key)",
+            hours(v.root.online.expires) / 24
+        ));
+    }
+    if let Some((id, version)) = revoked {
+        match v.index.release(id, version).map(|r| &r.status) {
+            Some(yard::Status::Revoked { .. }) => {}
+            Some(_) => return Err(format!("error: {id} {version} is not revoked in the index yet")),
+            None => return Err(format!("error: the index does not list {id} {version}")),
+        }
+    }
+    Ok(format!(
+        "{}: root version {}, index version {}; index expires in {} h, online key in {} days{}",
+        v.root.registry,
+        v.root.version,
+        v.index.version,
+        hours(v.index.expires),
+        hours(v.root.online.expires) / 24,
+        revoked.map(|(id, ver)| format!("; {id} {ver} is revoked")).unwrap_or_default()
+    ))
 }
 
 fn parse_trust(opts: &[String]) -> Result<RootKeys, String> {

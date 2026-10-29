@@ -345,15 +345,7 @@ pub fn verify(keys: &RootKeys, files: [&[u8]; 4], now: u64, seen: Seen) -> Resul
     limit(ROOT_SIG, root_sig, MAX_SIG_BYTES)?;
     limit(INDEX_SIG, index_sig, MAX_SIG_BYTES)?;
 
-    let needed = keys.threshold.max(1);
-    let valid = valid_signers(Role::Root, root_bytes, &parse_json(ROOT_SIG, root_sig)?, &keys.keys);
-    if valid < needed || keys.keys.len() < needed {
-        return Err(Error::Signature { file: ROOT_FILE, valid, needed });
-    }
-    let root: Root = parse_json(ROOT_FILE, root_bytes)?;
-    if root.format != FORMAT {
-        return Err(Error::Format { file: ROOT_FILE, found: root.format });
-    }
+    let root = verify_root(keys, root_bytes, root_sig)?;
     if root.version < seen.root {
         return Err(Error::Rollback { file: ROOT_FILE, seen: seen.root, found: root.version });
     }
@@ -380,6 +372,23 @@ pub fn verify(keys: &RootKeys, files: [&[u8]; 4], now: u64, seen: Seen) -> Resul
     // A signed index never outlives the key that signed it.
     let stale = now >= index.expires.min(root.online.expires);
     Ok(Verified { root, index, stale })
+}
+
+/// Check `root.json` and its signatures against the root keys: a threshold of them signed exactly these bytes, in
+/// a format this client reads. `yard promote` checks a new root with this before it goes live.
+pub fn verify_root(keys: &RootKeys, root_bytes: &[u8], root_sig: &[u8]) -> Result<Root, Error> {
+    limit(ROOT_FILE, root_bytes, MAX_ROOT_BYTES)?;
+    limit("root.json.sig", root_sig, MAX_SIG_BYTES)?;
+    let needed = keys.threshold.max(1);
+    let valid = valid_signers(Role::Root, root_bytes, &parse_json("root.json.sig", root_sig)?, &keys.keys);
+    if valid < needed || keys.keys.len() < needed {
+        return Err(Error::Signature { file: ROOT_FILE, valid, needed });
+    }
+    let root: Root = parse_json(ROOT_FILE, root_bytes)?;
+    if root.format != FORMAT {
+        return Err(Error::Format { file: ROOT_FILE, found: root.format });
+    }
+    Ok(root)
 }
 
 fn limit(file: &'static str, bytes: &[u8], limit: usize) -> Result<(), Error> {

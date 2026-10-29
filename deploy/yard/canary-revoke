@@ -1,0 +1,13 @@
+#!/bin/sh
+# Forced command for the canary workflow's SSH key (user `canary`): it can revoke a version of codeyard.canary and
+# nothing else. authorized_keys line, written by setup.sh:
+#   command="/usr/local/bin/yard-canary-revoke",restrict ssh-ed25519 AAAA… yard-canary
+set -eu
+cmd=${SSH_ORIGINAL_COMMAND:-}
+version=${cmd#revoke }
+if [ "$cmd" = "$version" ] || ! printf '%s\n' "$version" | grep -Eq '^0\.0\.[0-9]{1,9}$'; then
+	echo "only: revoke 0.0.N" >&2
+	exit 2
+fi
+exec sudo -n -u yard /usr/local/bin/yard revoke /srv/yard/yard.json codeyard.canary "$version" \
+	"Canary: a scheduled test that revocation reaches clients. Not a real problem."
