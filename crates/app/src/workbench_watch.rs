@@ -106,7 +106,8 @@ impl Workbench {
         }
         let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
         if let Some((spath, kpath)) = &paths {
-            self.cfg.stamp = (mtime(spath), mtime(kpath), mtime(&spath.with_file_name(crate::ext::LOCK_FILE)), crate::ext::dev_stamp());
+            self.cfg.stamp =
+                (mtime(spath), mtime(kpath), mtime(&spath.with_file_name(crate::ext::LOCK_FILE)), crate::ext::watch_stamp(spath.parent().unwrap_or(spath)));
         }
         let kpath = paths.as_ref().map(|(_, k)| k.clone());
         let file = paths.as_ref().and_then(|(s, _)| std::fs::read_to_string(s).ok());
@@ -146,13 +147,6 @@ impl Workbench {
         ext_problems.extend(server_warnings);
         new.lsp_servers.splice(0..0, servers);
         warnings.extend(ext_problems);
-        // Registries the user installed from: their index, at most daily, in the background (none asked otherwise).
-        if let Some(dir) = self.cfg.dir.clone().filter(|_| ext_enabled && !crate::ext::turned_off()) {
-            let registries = crate::ext_registry::registries(&new);
-            if !registries.is_empty() {
-                cx.background_executor().spawn(async move { crate::ext_registry::refresh_installed(&dir, &registries, crate::ext_registry::now()) }).detach();
-            }
-        }
         let old = cx.global::<Settings>().clone();
         // Zoom is applied on top of the sizes in the settings file.
         self.chrome.zoom_base = (new.editor_font_size, new.editor_line_height, new.terminal_font_size);
@@ -272,6 +266,9 @@ impl Workbench {
         }
         self.sync_settings_page(cx);
         self.sync_extensions_view();
+        // Registries the user installed from: updates and version status, their index at most daily (none asked
+        // otherwise).
+        self.check_extension_updates(window, cx);
         window.refresh();
         cx.notify();
     }
@@ -317,7 +314,9 @@ impl Workbench {
                         let Some((spath, kpath)) = this.config_paths() else { return };
                         let lpath = spath.with_file_name(crate::ext::LOCK_FILE);
                         let mtime = |p: &std::path::Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
-                        if this.cfg.dirty || (mtime(&spath), mtime(&kpath), mtime(&lpath), crate::ext::dev_stamp()) != this.cfg.stamp {
+                        if this.cfg.dirty
+                            || (mtime(&spath), mtime(&kpath), mtime(&lpath), crate::ext::watch_stamp(spath.parent().unwrap_or(&spath))) != this.cfg.stamp
+                        {
                             this.reload_config(window, cx);
                         }
                     })

@@ -112,6 +112,16 @@ pub fn dev_stamp() -> u64 {
     h.finish()
 }
 
+/// What the settings watcher compares besides the settings, keymap and lock files: the dev folder and the list of
+/// revoked versions (another window's update check may stop one).
+pub fn watch_stamp(cfg_dir: &Path) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    dev_stamp().hash(&mut h);
+    std::fs::metadata(store(cfg_dir).revoked_path()).and_then(|m| m.modified()).ok().hash(&mut h);
+    h.finish()
+}
+
 /// The dev folder as an extension, or the author-facing reason it cannot load (the same checks as `cyx check`).
 fn load_dev(dir: &Path) -> Result<Active, String> {
     let files = ext_pkg::collect_dir(dir).map_err(|e| e.to_string())?;
@@ -192,7 +202,13 @@ pub fn reload_with(cfg_dir: Option<&Path>, enabled: bool) -> Vec<String> {
         Ok(loaded) => {
             let mut problems = loaded.problems;
             let mut active = Vec::new();
+            // Revoked by its registry, or depending on one that is: stopped until a newer version replaces it.
+            let stopped = ext_core::stopped(&loaded.extensions, &store.revoked());
             for e in loaded.extensions.into_iter().filter(|e| !e.disabled) {
+                if let Some(why) = stopped.get(&e.manifest.id) {
+                    problems.push(stopped_line(&e.manifest.id, why));
+                    continue;
+                }
                 // Installed by a newer Codeyard or synced from one: its code would not run here, so none of it applies.
                 if e.manifest.code.is_some() {
                     problems.push(crate::i18n::tf("{} contains code, which this version does not run", &[&e.manifest.id]));
@@ -226,6 +242,14 @@ pub fn reload_with(cfg_dir: Option<&Path>, enabled: bool) -> Vec<String> {
     }
     set(Arc::new(reg));
     problems
+}
+
+/// Why an extension does not run, for the status bar and its page.
+pub fn stopped_line(id: &ext_manifest::ExtId, why: &ext_core::Stopped) -> String {
+    match why {
+        ext_core::Stopped::Revoked { reason } => crate::i18n::tf("{0} was stopped: the registry revoked this version ({1})", &[id, reason]),
+        ext_core::Stopped::Dependency { on } => crate::i18n::tf("{0} was stopped: it needs {1}, which was stopped", &[id, on]),
+    }
 }
 
 /// Install the registry directly (tests).

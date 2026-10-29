@@ -2970,6 +2970,37 @@ Permissions: none.	İzinler: yok.
 Permissions: {}	İzinler: {}
 Could not paste: {}	Yapıştırılamadı: {}
 
+# ---- Extensions: updates and version status ----
+Also get its pre-releases, at once and before others get them	Ön sürümlerini de al: hemen ve herkesten önce
+Cannot update {0}: {1}	{0} güncellenemiyor: {1}
+Get Pre-releases	Ön Sürümleri Al
+Get only releases of this extension from now on	Bundan sonra bu eklentinin yalnızca kararlı sürümlerini al
+Its publisher deprecated it and suggests {} instead.	Yayıncısı kullanımdan kaldırdı ve yerine {} öneriyor.
+Its publisher deprecated it.	Yayıncısı kullanımdan kaldırdı.
+Its publisher withdrew this version, and there is no earlier one to go back to.	Yayıncısı bu sürümü geri çekti ve dönülecek daha eski bir sürüm yok.
+Newer versions of extensions from a registry: install (by themselves; versions that run code 48 hours after they are published; a version that asks for more permissions waits for your OK), notify (shown in the Extensions view; you install them) or off (nothing is downloaded until you ask). A withdrawn version is still replaced and a revoked one still stopped. Your own settings only; a folder cannot change it	Bir kayıttan kurulan eklentilerin yeni sürümleri: install (kendiliğinden kurulur; kod çalıştıran sürümler yayımlandıktan 48 saat sonra; daha fazla izin isteyen bir sürüm onayınızı bekler), notify (Eklentiler görünümünde gösterilir; siz kurarsınız) ya da off (siz istemedikçe hiçbir şey indirilmez). Geri çekilen bir sürüm yine değiştirilir, iptal edilen yine durdurulur. Yalnızca kendi ayarlarınız; bir klasör bunu değiştiremez
+Review…	İncele…
+Stop Pre-releases	Ön Sürümleri Durdur
+Update Now	Şimdi Güncelle
+Update available	Güncelleme var
+Update needs your OK	Güncelleme onayınızı bekliyor
+Version {0} could not be installed: {1}	{0} sürümü kurulamadı: {1}
+Version {0} is published by {1}, not {2} as before.	{0} sürümünü önceki gibi {2} değil, {1} yayımladı.
+Version {0} runs code, so it installs by itself after {1}.	{0} sürümü kod çalıştırıyor; bu yüzden {1} sonrasında kendiliğinden kurulur.
+Version {} asks for more than the version you have, which keeps running until you agree:	{} sürümü, kurulu sürümünüzden fazlasını istiyor; siz onaylayana kadar kurulu sürüm çalışmaya devam eder:
+Version {} is available.	{} sürümü çıktı.
+Version {} waits: the registry's list is more than 3 days old.	{} sürümü bekliyor: kaydın listesi 3 günden eski.
+the {} registry is no longer in your settings	{} kaydı artık ayarlarınızda yok
+{0} was stopped: it needs {1}, which was stopped	{0} durduruldu: ihtiyaç duyduğu {1} durduruldu
+{0} was stopped: the registry revoked this version ({1})	{0} durduruldu: kayıt bu sürümü iptal etti ({1})
+{0} was updated to version {1}.	{0}, {1} sürümüne güncellendi.
+{0} went back to version {1}: its publisher withdrew {2}.	{0}, {1} sürümüne geri döndü: yayıncısı {2} sürümünü geri çekti.
+{0} {1} waits for your OK in the Extensions view.	{0} {1}, Eklentiler görünümünde onayınızı bekliyor.
+{} gets pre-releases from now on.	{} bundan sonra ön sürümleri alacak.
+{} gets releases only; the pre-release you have stays until a release passes it.	{} yalnızca kararlı sürümleri alacak; kurulu ön sürüm, onu geçen bir kararlı sürüm çıkana kadar kalır.
+{} has no newer version	{} için daha yeni bir sürüm yok
+{} is not in the registry	{} kayıtta yok
+{} was not installed from a registry	{} bir kayıttan kurulmadı
 # ---- Terminal panel toolbar, launch menu and terminal list ----
 Launch Profile…	Profil Başlat…
 Split Terminal	Terminali Böl

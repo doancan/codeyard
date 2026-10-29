@@ -74,6 +74,13 @@ pub const CATALOG: &[Entry] = &[
     ),
     e("workbench.fontFamily", crate::i18n::tr("UI font of the whole window (empty: system font)"), Kind::Text),
     e("extensions.enabled", crate::i18n::tr("Load installed extensions (off: Codeyard starts as if none were installed)"), Kind::Bool),
+    e(
+        "extensions.autoUpdate",
+        crate::i18n::tr(
+            "Newer versions of extensions from a registry: install (by themselves; versions that run code 48 hours after they are published; a version that asks for more permissions waits for your OK), notify (shown in the Extensions view; you install them) or off (nothing is downloaded until you ask). A withdrawn version is still replaced and a revoked one still stopped. Your own settings only; a folder cannot change it",
+        ),
+        Kind::Choice(&["install", "notify", "off"]),
+    ),
     e("keymap.preset", crate::i18n::tr("Keymap preset from an installed extension, as publisher.name/label (empty: Codeyard's own keys)"), Kind::Text),
     e("workbench.editor.showTabs", crate::i18n::tr("Show the editor tab bar"), Kind::Bool),
     e("workbench.tabs.showIcons", crate::i18n::tr("Show file icons on tabs"), Kind::Bool),
@@ -284,6 +291,11 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "workbench.fontFamily" => json!(s.ui_font.clone().unwrap_or_default()),
         "keymap.preset" => json!(s.keymap_preset),
         "extensions.enabled" => json!(s.extensions_enabled),
+        "extensions.autoUpdate" => json!(match s.extension_auto_update {
+            ext_core::update::AutoUpdate::Off => "off",
+            ext_core::update::AutoUpdate::Notify => "notify",
+            ext_core::update::AutoUpdate::Install => "install",
+        }),
         "workbench.editor.showTabs" => json!(s.show_tabs),
         "workbench.tabs.showIcons" => json!(s.tab_icons),
         "workbench.tabs.closeButton" => json!(s.tab_close),

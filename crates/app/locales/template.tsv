@@ -82,6 +82,7 @@ Already debugging: Shift+F5 stops the session.
 Already formatted	
 Already listed after an update? Remove it with − and add it again.	
 Already minified	
+Also get its pre-releases, at once and before others get them	
 Always open *.{0} as {1}	
 Amended {}	
 An existing file with the same name is never overwritten.	
@@ -163,6 +164,7 @@ Cannot open this link: {}
 Cannot parse {} as a number	
 Cannot read {0}: {1}	
 Cannot show this extension's details: {}	
+Cannot update {0}: {1}	
 Cannot use {} as an entry	
 Cannot use {} as an object key	
 Cargo did not report a Rust test executable	
@@ -890,6 +892,8 @@ Forward ports opened on SSH hosts
 Forwarded Ports	
 Friday	
 From the {0} registry, published by {1}	
+Get Pre-releases	
+Get only releases of this extension from now on	
 Git could not sign in to {}. Set up credentials (credential helper, SSH key or `gh auth login`) and try again	
 Git doesn't know who you are on this host. Run these in the terminal: {0} and {1}	
 Git identity is not set on this host: commits will be refused. Set user.name and user.email (git config --global …).	
@@ -1079,6 +1083,9 @@ Invalid string
 It can't be moved to the Trash ({}). Deleting it permanently can't be undone.	
 Its contributions are removed from every window, with the data it stored.	
 Its folder is deleted. Git refuses when the worktree has uncommitted changes; the branch stays.	
+Its publisher deprecated it and suggests {} instead.	
+Its publisher deprecated it.	
+Its publisher withdrew this version, and there is no earlier one to go back to.	
 JSON schema for {}	
 JSON: Minify Document	
 Jan	
@@ -1258,6 +1265,7 @@ New Window
 New branch name	
 New name	
 New name of the remote	
+Newer versions of extensions from a registry: install (by themselves; versions that run code 48 hours after they are published; a version that asks for more permissions waits for your OK), notify (shown in the Extensions view; you install them) or off (nothing is downloaded until you ask). A withdrawn version is still replaced and a revoked one still stopped. Your own settings only; a folder cannot change it	
 Next	
 Next Match	
 Next Problem	
@@ -1758,6 +1766,7 @@ Reverted {}
 Reverting a change is not supported in this file (non-UTF-8 or CR-only line endings)	
 Review every change before replacing (↵ in the field)	
 Review the Dev Container environment	
+Review…	
 Right is writable	
 Right-click a commit in the Source Control graph to branch, tag, cherry-pick, revert or reset.	
 Right-click a folder and choose Find in Folder… to search only inside it.	
@@ -1995,6 +2004,7 @@ Stop
 Stop (⇧F5)	
 Stop Debugging	
 Stop Forwarding	
+Stop Pre-releases	
 Stop Web Preview	
 Stop a search after this many matches	
 Stopped	
@@ -2269,9 +2279,12 @@ Unterminated quote in the Cargo test command
 Untracked files will be deleted. This can't be undone.	
 Unwrapped lines	
 Update	
+Update Now	
+Update available	
 Update failed	
 Update installed	
 Update installed. Restart Codeyard to finish.	
+Update needs your OK	
 Update {}	
 Updated the URL of {}	
 Updates paused	
@@ -2298,7 +2311,13 @@ Verifying and installing…
 Verifying installed service files…	
 Verifying the runtime checksum…	
 Version	
+Version {0} could not be installed: {1}	
+Version {0} is published by {1}, not {2} as before.	
+Version {0} runs code, so it installs by itself after {1}.	
+Version {} asks for more than the version you have, which keeps running until you agree:	
+Version {} is available.	
 Version {} is installed.	
+Version {} waits: the registry's list is more than 3 days old.	
 Versions	
 View	
 View File History	
@@ -2619,6 +2638,7 @@ the response body is not JSON
 the response of “{}” has no header {}	
 the token was rejected: it may be expired or revoked — renew GITHUB_TOKEN/GH_TOKEN or run `gh auth login`	
 the variable {} refers to itself	
+the {} registry is no longer in your settings	
 the {} registry's list is more than 3 days old; install from the Extensions view to confirm	
 theme {} isn't installed here: copy its .json into ~/.config/codeyard/themes to use it	
 theme “{}” not found (available: auto, {})	
@@ -2696,6 +2716,11 @@ your words
 {0} result in {1} files|{0} results in {1} files	
 {0} says why: “{1}”	
 {0} was left alone: {1}|{0} were left alone, the first one {1}	
+{0} was stopped: it needs {1}, which was stopped	
+{0} was stopped: the registry revoked this version ({1})	
+{0} was updated to version {1}.	
+{0} went back to version {1}: its publisher withdrew {2}.	
+{0} {1} waits for your OK in the Extensions view.	
 {0} · version {1}	
 {0} · version {1} · {2} license	
 {0}, {1} {2} {3}	
@@ -2761,11 +2786,14 @@ your words
 {} file skipped, binary or too large|{} files skipped, binary or too large	
 {} file skipped, parse errors|{} files skipped, parse errors	
 {} forwarded	
+{} gets pre-releases from now on.	
+{} gets releases only; the pre-release you have stays until a release passes it.	
 {} has more entries than compare.folders.maxFiles allows, so the result is partial.	
 {} has no changes.	
 {} has no commits yet.	
 {} has no keys	
 {} has no length	
+{} has no newer version	
 {} holds no changes to tracked files.	
 {} hour ago|{} hours ago	
 {} implementation|{} implementations	
@@ -2785,6 +2813,7 @@ your words
 {} is not an array	
 {} is not in HEAD yet.	
 {} is not in any of your registries	
+{} is not in the registry	
 {} is not installed	
 {} is not installed. Open the setup instructions, then try again.	
 {} is too large to be a time in seconds or milliseconds	
@@ -2815,6 +2844,7 @@ your words
 {} tab with unsaved changes stayed open.|{} tabs with unsaved changes stayed open.	
 {} terminals have programs running. Close them anyway?	
 {} type definition|{} type definitions	
+{} was not installed from a registry	
 {} week ago|{} weeks ago	
 {} year ago|{} years ago	
 {} · Color theme (opens the theme picker)	

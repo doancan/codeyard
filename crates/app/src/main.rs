@@ -67,6 +67,9 @@ mod ext_registry;
 mod ext_registry_tests;
 #[cfg(test)]
 mod ext_tests;
+mod ext_updates;
+#[cfg(test)]
+mod ext_updates_tests;
 #[cfg(test)]
 mod ext_view_tests;
 #[cfg(test)]

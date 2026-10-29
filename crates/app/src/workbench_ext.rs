@@ -23,6 +23,10 @@ pub(super) struct ExtEntry {
     pub(super) source: ExtSource,
     /// The version a rollback goes back to (still in the store).
     pub(super) previous: Option<String>,
+    /// Why it does not run: its version was revoked, or it needs one that was.
+    pub(super) stopped: Option<String>,
+    /// It gets the registry's pre-releases.
+    pub(super) pre_release: bool,
 }
 
 /// A package read and checked, waiting for the user's answer on the consent sheet.
@@ -48,6 +52,7 @@ pub(super) struct ExtViewState {
     pub(super) consent_focus: Option<(FocusHandle, FocusHandle)>,
     pub(super) tab: super::market_glue::ExtTab,
     pub(super) market: super::market_glue::MarketState,
+    pub(super) updates: super::updates_glue::UpdateState,
 }
 
 /// The consent sheet's text and every other plain-words line of an extension.
@@ -208,11 +213,14 @@ impl Workbench {
             let text = std::fs::read_to_string(store.store_dir(d).join(ext_manifest::FILE_NAME)).ok()?;
             ext_manifest::parse(&text).ok().map(|m| m.version.to_string())
         };
+        let stopped = ext_core::stopped(&loaded.extensions, &store.revoked());
         s.list = loaded
             .extensions
             .into_iter()
             .map(|e| ExtEntry {
                 previous: locked.get(&e.manifest.id).and_then(|l| l.previous.as_ref()).and_then(version_in_store),
+                stopped: stopped.get(&e.manifest.id).map(|why| crate::ext::stopped_line(&e.manifest.id, why)),
+                pre_release: locked.get(&e.manifest.id).is_some_and(|l| l.pre_release),
                 manifest: Arc::new(e.manifest),
                 digest: e.digest,
                 disabled: e.disabled,
@@ -414,7 +422,7 @@ impl Workbench {
     }
 
     /// Every contribution reader follows the store through the settings reload; a warning from it wins over `done`.
-    fn after_extension_change(&mut self, done: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn after_extension_change(&mut self, done: String, window: &mut Window, cx: &mut Context<Self>) {
         self.reload_config(window, cx);
         self.refresh_extension_list();
         if self.notice.is_none() {
