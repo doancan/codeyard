@@ -188,3 +188,17 @@ fn a_task_graph_runs_and_stops_on_the_ssh_host(cx: &mut gpui::TestAppContext) {
     // SAFETY: signal 0 only asks whether the process exists.
     wait_ticking(cx, "the remote child to be gone", |_| (unsafe { libc::kill(child, 0) }) != 0);
 }
+
+/// A task an extension provides is run by its extension: it never reaches the task runner, whose shell would otherwise
+/// get the extension's encoded reference as a command line.
+#[gpui::test]
+fn an_extension_task_never_reaches_the_task_runner(cx: &mut gpui::TestAppContext) {
+    let dir = project("task-run-extension", r#"{ "version": "2.0.0", "tasks": [] }"#);
+    let (wb, cx) = setup_with(cx, Settings { lsp_enabled: false, ..Settings::default() });
+    crate::qa_workbench_tests::open(&wb, &dir, cx);
+    let task = Task::from_extension("publisher.ext", "build", "Build", Some("touch should-not-exist"));
+    wb.update_in(cx, |wb, window, cx| wb.run_task(task, window, cx));
+    cx.run_until_parked();
+    assert!(wb.read_with(cx, |wb, _| wb.jobs.runs.is_empty() && wb.jobs.pending.is_none()), "no planned run");
+    assert!(!dir.join("should-not-exist").exists());
+}

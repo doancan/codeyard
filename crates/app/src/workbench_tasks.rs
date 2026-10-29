@@ -36,7 +36,7 @@ impl Task {
     /// A task a code extension provided (`request.provide-tasks`).
     pub fn from_extension(extension: &str, id: &str, label: &str, detail: Option<&str>) -> Task {
         let detail = detail.unwrap_or_default().replace('\n', " ");
-        Task { label: label.to_string(), command: format!("{extension}\n{id}\n{detail}"), source: EXTENSION_SOURCE }
+        Task { label: label.to_string(), command: format!("{extension}\n{id}\n{detail}"), source: EXTENSION_SOURCE, file: None }
     }
 
     /// (extension, task id) of a task a code extension provided.
