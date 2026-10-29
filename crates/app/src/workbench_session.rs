@@ -361,6 +361,8 @@ impl Workbench {
     /// Opens a folder from an earlier session (this computer, or an SSH host: it connects, which may ask for a password).
     pub fn reopen(&mut self, host: Option<String>, path: String, window: &mut Window, cx: &mut Context<Self>) {
         match host {
+            // A workspace file: its folders, order, names and settings come back from it.
+            None if crate::workspace_file::is_workspace_file(&path) && std::path::Path::new(&path).is_file() => self.open_path(&path, window, cx),
             None if std::path::Path::new(&path).is_dir() => self.set_root(path, cx),
             // Folder deleted or moved: stay on the welcome screen and say why.
             None => {

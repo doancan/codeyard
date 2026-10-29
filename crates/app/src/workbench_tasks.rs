@@ -20,6 +20,8 @@ pub struct Task {
 }
 
 const TASKS_FILE: &str = ".codeyard/tasks.jsonc";
+/// Source shown for the tasks of a workspace file.
+pub(crate) const WORKSPACE_SOURCE: &str = "workspace";
 /// Task file left under the old name (codeapp): read if the new one is missing.
 const LEGACY_TASKS_FILE: &str = ".codeapp/tasks.jsonc";
 const TASKS_TEMPLATE: &str = "// Tasks for this project (Tasks: Run Task, ⇧⌘B runs the first one with \"build\" in its label).\n[\n  // { \"label\": \"build\", \"command\": \"make build\" },\n]\n";
@@ -246,10 +248,15 @@ impl Workbench {
         };
         let host = self.remote.host.clone();
         let asked = root.clone();
+        // Shared tasks of the workspace file: they run in the active file's folder like the folder's own.
+        let shared = self.workspace_tasks_and_launch().0;
         let task = cx.background_executor().spawn(async move {
             let read = |rel: &str| host.read(&ui::join(&root, rel)).ok().map(|(d, _)| String::from_utf8_lossy(&d).into_owned());
             let exists = |rel: &str| host.stat(&ui::join(&root, rel)).is_ok();
             let mut tasks = Vec::new();
+            if let Some(t) = &shared {
+                tasks.extend(parse_task_file(t, WORKSPACE_SOURCE));
+            }
             if let Some(t) = read(TASKS_FILE).or_else(|| read(LEGACY_TASKS_FILE)) {
                 tasks.extend(parse_task_file(&t, "tasks.jsonc"));
             }

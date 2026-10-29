@@ -431,7 +431,10 @@ mod templates;
 pub use templates::{KEYBINDINGS_TEMPLATE, TEMPLATE};
 #[path = "settings_text.rs"]
 mod text;
-pub use text::{set_string_in, set_value_in};
+pub use text::{Seg, array_items, members, set_string_in, set_value_in, value_range};
+#[path = "settings_scope.rs"]
+mod scope;
+pub use scope::{Scope, ScopedLayer, Sources};
 
 pub fn config_dir() -> Option<PathBuf> {
     if let Some(d) = std::env::var_os("CODEYARD_CONFIG_DIR") {
@@ -523,6 +526,13 @@ pub const USER_ONLY_KEYS: &[&str] = &[
 
 /// `trusted`: the folder is trusted. If not, `RESTRICTED_KEYS` in the project layer are ignored and a warning is recorded.
 pub fn parse_layers_trusted(user: &str, project: &[Layer], trusted: bool) -> Result<(Settings, Vec<String>), String> {
+    let layers: Vec<ScopedLayer> = project.iter().map(|&(name, text, warn)| ScopedLayer { name, text, warn, trusted, scope: Scope::Folder }).collect();
+    parse_scoped(user, &layers).map(|(s, w, _)| (s, w))
+}
+
+/// User settings, then each layer in order (later over earlier, key by key), each with its own trust; also returns which
+/// layer set each key in effect.
+pub fn parse_scoped(user: &str, layers: &[ScopedLayer]) -> Result<(Settings, Vec<String>, Sources), String> {
     let mut warnings = Vec::new();
     let value: Value = serde_json::from_str(&theme::themes::strip_jsonc(user))
         .map_err(|e| format!("settings.jsonc: {}", crate::i18n::tf("{} (previous settings kept)", &[&e])))?;
@@ -531,7 +541,8 @@ pub fn parse_layers_trusted(user: &str, project: &[Layer], trusted: bool) -> Res
     };
     let mut merged = user_obj.clone();
     let mut quiet: Vec<String> = Vec::new();
-    for (name, text, warn) in project {
+    let mut sources = Sources::default();
+    for &ScopedLayer { name, text, warn, trusted, scope } in layers {
         match serde_json::from_str::<Value>(&theme::themes::strip_jsonc(text)) {
             Ok(Value::Object(o)) => {
                 for (k, v) in o {
@@ -546,6 +557,7 @@ pub fn parse_layers_trusted(user: &str, project: &[Layer], trusted: bool) -> Res
                     if !warn && !user_obj.contains_key(&k) {
                         quiet.push(k.clone());
                     }
+                    sources.0.insert(k.clone(), scope);
                     merged.insert(k, v);
                 }
             }
@@ -555,7 +567,7 @@ pub fn parse_layers_trusted(user: &str, project: &[Layer], trusted: bool) -> Res
     }
     let (s, more) = parse_object(&merged, &quiet);
     warnings.extend(more);
-    Ok((s, warnings))
+    Ok((s, warnings, sources))
 }
 
 /// One `lsp.servers` entry: `Some(None)` turns the language off, `None` is malformed. An object needs at least one of

@@ -175,6 +175,11 @@ pub(super) struct ConfigState {
     pub(super) dirty: bool,
     /// Own settings of extra folders (root -> settings): applied to that folder's files.
     pub(super) folders: std::collections::HashMap<String, Arc<crate::folder_settings::FolderSettings>>,
+    /// Texts of each extra folder's settings files (root -> layers, lowest first): re-resolved when the user file or the
+    /// workspace file changes.
+    pub(super) folder_texts: std::collections::HashMap<String, Vec<String>>,
+    /// The user settings file as last read (`None`: no settings folder, as in tests).
+    pub(super) user_text: Option<String>,
     /// The Extensions view: installed list, search, detail page and consent sheet (see workbench_ext.rs).
     pub(super) exts: super::ext_glue::ExtViewState,
 }
@@ -187,6 +192,8 @@ pub(super) struct PersistState {
     pub(super) data_dir: Option<std::path::PathBuf>,
     /// Workspace to restore on the next render (the window lives there).
     pub(super) pending_restore: Option<i64>,
+    /// Workspace whose workspace file is being read again after a restart (its extra folders follow the file).
+    pub(super) pending_restore_workspace: Option<i64>,
     pub(super) backup_task: Option<gpui::Task<()>>,
     /// Path -> backed-up version.
     pub(super) backed_up: std::collections::HashMap<String, u64>,
@@ -239,6 +246,13 @@ pub(super) struct RootsState {
     /// Favorite files/folders of the open project (relative to the root).
     pub(super) favorites: Vec<String>,
     pub(super) file_index: Option<FileIndex>,
+    /// The workspace file this window was opened through (folder names, shared settings, tasks and launch).
+    pub(super) workspace: Option<super::workspace_glue::OpenWorkspace>,
+    /// Bumped by every workspace file open and every change of folder or host (never reset): replies of older
+    /// workspace reads and writes are dropped.
+    pub(super) workspace_request: u64,
+    /// Bumped whenever a workspace file is applied again (never reset, unlike `workspace`).
+    pub(super) workspace_generation: u64,
 }
 
 /// Editor groups keep all tab-local state together when focus changes.

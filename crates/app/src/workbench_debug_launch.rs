@@ -58,15 +58,24 @@ impl Workbench {
         let (root, host) = (self.active_root(cx)?, self.remote.host.clone());
         let trusted = self.is_trusted_root(&root, cx);
         let file = self.active_editor().map(|e| e.read(cx).path.clone());
+        // The workspace file's shared tasks and configurations, resolved against the active file's folder.
+        let (shared_tasks, shared_launch) = self.workspace_tasks_and_launch();
         Some(cx.background_executor().spawn(async move {
             let read = |rel: &str| host.read(&ui::join(&root, rel)).ok().map(|(d, _)| String::from_utf8_lossy(&d).into_owned());
             let mut tasks = Vec::new();
+            if let Some(t) = &shared_tasks {
+                tasks.extend(super::super::tasks::parse_task_file(t, super::super::tasks::WORKSPACE_SOURCE));
+            }
             for (path, source) in [(".vscode/tasks.json", ".vscode/tasks.json"), (".codeyard/tasks.jsonc", "tasks.jsonc")] {
                 if let Some(t) = read(path) {
                     tasks.extend(super::super::tasks::parse_task_file(&t, source));
                 }
             }
             let (mut configs, mut compounds) = (Vec::new(), Vec::new());
+            if let Some(t) = &shared_launch {
+                configs.extend(debug_config::parse_launch_json(t, &root, file.as_deref(), &tasks));
+                compounds.extend(debug_config::parse_compounds(t, &root, file.as_deref(), &tasks));
+            }
             for path in [".codeyard/launch.jsonc", ".vscode/launch.json"] {
                 if let Some(t) = read(path) {
                     configs.extend(debug_config::parse_launch_json(&t, &root, file.as_deref(), &tasks));

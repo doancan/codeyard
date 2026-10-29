@@ -919,6 +919,46 @@ of the active file, and Source Control shows the repository of the active file. 
 and `editor.rulers`; the first folder's settings already merge into the global ones. Editing the file
 re-reads it.
 
+### Workspace files
+
+A workspace file (`*.code-workspace`, JSON with comments) names a set of folders and can share `settings`,
+`tasks` and `launch` sections between them. Opening one puts its folders in this window in the file's order,
+each under its `name` if it has one. Relative paths are resolved against the file's own folder.
+
+- **Settings precedence:** your settings < the workspace file's `settings` < each folder's own settings. This holds
+  for the first folder and for every extra folder; one folder's settings never reach another folder's files. On the
+  Settings page, a value that comes from the workspace file or the folder says so under its key. Keys that can choose
+  a program (`terminal.shell`, `lsp.servers`, …) apply from a workspace file only when the folder that holds the
+  file is trusted, and user-only keys never do.
+- **Tasks and debugging:** the file's tasks join *Tasks: Run Task* (source `workspace`) and its launch
+  configurations join Run and Debug. They run in the active file's folder, on that folder's host. If the workspace
+  file sits outside that folder, its own folder must be trusted as well, so you may be asked twice.
+- **Saving:** *Add Folder to Workspace…* and *Remove Folder from Workspace…* write the folder list back to the
+  file. Only the folder list changes: comments, unknown fields and sections Codeyard does not use stay as they
+  were. If nothing changed, nothing is written. *File: Save Workspace* writes on demand. *File: Save Workspace As…*
+  saves a copy elsewhere and rewrites relative paths so they still lead to the same folders; the window then
+  follows the new file. A window without a workspace file can save one the same way. Writes are atomic, locally and
+  over SSH.
+- **Edits elsewhere:** if the file changed on disk since it was read, saving stops with *Workspace changed on disk.
+  Reload before saving.* and the other edit is kept. *File: Reload Workspace* (also run automatically when the
+  watched file changes) applies the file's folders, order, names and settings again.
+- **Problems:** a file that cannot be read shows *Workspace file could not be read: …* and is never written over;
+  fix it and reload. A listed folder that does not exist shows *Workspace folder is unavailable: …* in the
+  notice and at the bottom of the Explorer, with **Retry** and **Remove from the workspace file**. Folder entries
+  that are not local paths (other URI schemes) and network shares on a server other than the file's own are never
+  opened or probed, but stay in the file.
+- **Recents and restart:** the workspace file gets its own Recents entry, next to its first folder's. Reopening it
+  (from Recents, or at startup with `window.startup` set to `"continue"`) reads the file again and restores its
+  folders, order, names and settings. Opening one of its folders directly opens just that folder, with its own extra
+  folders and settings, and never writes to the workspace file.
+- **More than 32 extra folders:** the ones that do not fit are listed as unavailable (and stay in the file), and the
+  notice names the limit.
+
+Over SSH, workspace files on the server are read and written on the server: open one in the editor and run
+*File: Open Active File as Workspace*. *Save Workspace As…* uses this
+computer's save dialog, so it is only available for local windows. A workspace file chosen from this computer
+while an SSH window is in front opens in a new local window.
+
 ## Language servers
 
 For JavaScript/TypeScript, HTML and CSS, run **Languages: Manage Language Services** to review the

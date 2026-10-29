@@ -156,37 +156,6 @@ impl Workbench {
 }
 
 impl Workbench {
-    /// `.code-workspace`: first folder becomes the root, the rest are added as workspace folders in this window.
-    pub(super) fn open_workspace_file(&mut self, path: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let base = std::path::Path::new(path).parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
-        let text = match std::fs::read_to_string(path) {
-            Ok(t) => t,
-            Err(e) => {
-                self.notice = Some(Notice::Error(crate::i18n::tf("Could not read the workspace file: {}", &[&e]).into()));
-                cx.notify();
-                return;
-            }
-        };
-        let folders = crate::workspace_file::folders(&text, &base, |p| std::path::Path::new(p).is_dir());
-        let Some((first, rest)) = folders.split_first() else {
-            self.notice = Some(Notice::Error(crate::i18n::t("The workspace file lists no folder that exists on this computer.").into()));
-            cx.notify();
-            return;
-        };
-        self.open_path(first, window, cx);
-        // `set_root` clears additional folders, so the file's own are added after it.
-        let canonical = |p: &str| std::fs::canonicalize(p).map(|c| c.to_string_lossy().into_owned()).unwrap_or_else(|_| p.to_string());
-        for folder in rest {
-            self.add_workspace_folder_now(canonical(folder), window, cx);
-        }
-        if !rest.is_empty() {
-            self.notice = Some(Notice::Info(
-                crate::i18n::tn("Workspace: {} folder in the Explorer.", "Workspace: {} folders in the Explorer.", folders.len(), &[]).into(),
-            ));
-        }
-        cx.notify();
-    }
-
     /// "File: Open Workspace from File…"
     pub(super) fn pick_workspace_file(&mut self, _: &super::OpenWorkspaceFile, _: &mut Window, cx: &mut Context<Self>) {
         let rx = cx.prompt_for_paths(gpui::PathPromptOptions {
@@ -203,7 +172,12 @@ impl Workbench {
                 let handle = this.update(cx, |t, _| t.window_handle).ok();
                 if let Some(h) = handle {
                     cx.update_window(h, |_, window, cx| {
-                        this.update(cx, |t, cx| t.open_path(&path, window, cx)).ok();
+                        // The dialog lists this computer's files: an SSH window hands them to a local window.
+                        this.update(
+                            cx,
+                            |t, cx| if t.remote.host.is_remote() { t.open_external_file(&path, window, cx) } else { t.open_path(&path, window, cx) },
+                        )
+                        .ok();
                     })
                     .ok();
                 }
@@ -352,6 +326,7 @@ impl Workbench {
         self.persist_extra_roots();
         self.sync_search_roots(cx);
         self.refresh_git(0, cx);
+        self.workspace_folder_added(cx);
         cx.notify();
         true
     }
@@ -365,7 +340,9 @@ impl Workbench {
             self.sync_search_roots(cx);
             self.vcs.tree_marks.remove(path);
             self.cfg.folders.remove(path);
+            self.cfg.folder_texts.remove(path);
             self.apply_folder_settings(cx);
+            self.workspace_folder_removed(path, cx);
             if self.vcs.scm_root.as_deref() == Some(path) {
                 self.vcs.scm_root = None;
                 self.refresh_git(0, cx);
@@ -388,18 +365,32 @@ impl Workbench {
                 if !this.roots.extra_roots.contains(&root) && !this.roots.pending_extra_roots.contains(&root) {
                     return;
                 }
-                let layers: Vec<&str> = texts.iter().map(String::as_str).collect();
-                let parsed = crate::folder_settings::FolderSettings::parse(&layers);
-                if parsed.is_empty() {
-                    this.cfg.folders.remove(&root);
-                } else {
-                    this.cfg.folders.insert(root, Arc::new(parsed));
-                }
-                this.apply_folder_settings(cx);
+                this.cfg.folder_texts.insert(root, texts);
+                this.resolve_folder_settings(cx);
             })
             .ok();
         })
         .detach();
+    }
+
+    /// Settings of every extra folder from its files, the workspace file and the user file (user < workspace < folder),
+    /// applied to that folder's open files.
+    pub(super) fn resolve_folder_settings(&mut self, cx: &mut Context<Self>) {
+        let workspace = self.workspace_settings().map(|(_, s)| s);
+        self.cfg.folder_texts.retain(|root, _| self.roots.extra_roots.contains(root) || self.roots.pending_extra_roots.contains(root));
+        self.cfg.folders.clear();
+        for (root, texts) in &self.cfg.folder_texts {
+            let layers: Vec<&str> = texts.iter().map(String::as_str).collect();
+            // Without a user settings file (tests), unset values fall back to the global settings as before.
+            let resolved = match (&self.cfg.user_text, self.cfg.dir.is_some()) {
+                (user, true) => crate::folder_settings::FolderSettings::resolve(user.as_deref().unwrap_or("{}"), workspace.as_deref(), &layers),
+                (_, false) => crate::folder_settings::FolderSettings::parse(&workspace.iter().map(String::as_str).chain(layers).collect::<Vec<_>>()),
+            };
+            if !resolved.is_empty() {
+                self.cfg.folders.insert(root.clone(), Arc::new(resolved));
+            }
+        }
+        self.apply_folder_settings(cx);
     }
 
     /// Give each open editor its own folder's settings (none for those in the first folder and folderless ones).
@@ -416,33 +407,45 @@ impl Workbench {
         ed.update(cx, |e, cx| e.set_folder_settings(folder, cx));
     }
 
-    fn sync_search_roots(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn sync_search_roots(&mut self, cx: &mut Context<Self>) {
         let roots = self.roots.extra_roots.clone();
         self.search.update(cx, |s, cx| s.set_extra_roots(roots, cx));
         self.sync_search_editors(cx);
     }
 
-    fn persist_extra_roots(&self) {
+    /// The folder's own list of extra folders. A workspace file's folders are not written into it: they come back from
+    /// the file, and opening the folder alone keeps its own list.
+    pub(super) fn persist_extra_roots(&self) {
+        if self.roots.workspace.is_some() {
+            return;
+        }
         if let (Some(ws), Some(s)) = (self.persist.workspace_id, &self.persist.state) {
             let _ = s.set(&format!("folders:{ws}"), &self.roots.extra_roots.join("\n"));
         }
     }
 
-    /// Restore additional folders from the previous session (deferred because it needs a window).
+    /// Restore the folder's own additional folders from the previous session (deferred because it needs a window). A
+    /// workspace file is never attached here: it comes back only when it is opened (Recents, a restart).
     pub(super) fn restore_extra_roots(&mut self, cx: &mut Context<Self>) {
         let (Some(ws), Some(s)) = (self.persist.workspace_id, &self.persist.state) else { return };
-        let Some(text) = s.get(&format!("folders:{ws}")) else { return };
-        let folders: Vec<String> = text.lines().filter(|l| !l.is_empty()).map(str::to_string).collect();
+        let folders: Vec<String> =
+            s.get(&format!("folders:{ws}")).map(|text| text.lines().filter(|l| !l.is_empty()).map(str::to_string).collect()).unwrap_or_default();
         if folders.is_empty() {
             return;
         }
         self.roots.pending_extra_roots = folders.clone();
+        self.persist.pending_restore_workspace = Some(ws);
         let (handle, host) = (self.window_handle, self.remote.host.clone());
         cx.spawn(async move |this, cx| {
             // Deleted folders are dropped silently.
             let alive = cx.background_executor().spawn(async move { folders.into_iter().filter(|f| host.stat(f).is_ok()).collect::<Vec<_>>() }).await;
             cx.update_window(handle, |_, window, cx| {
                 this.update(cx, |this, cx| {
+                    // Opening a workspace file meanwhile decides the folders instead.
+                    if this.persist.pending_restore_workspace != Some(ws) {
+                        return;
+                    }
+                    this.persist.pending_restore_workspace = None;
                     for f in alive {
                         this.add_workspace_folder_now(f, window, cx);
                     }

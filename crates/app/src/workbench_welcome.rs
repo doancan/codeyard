@@ -737,6 +737,16 @@ impl Workbench {
     /// File arriving via Finder / Dock / `open -a`: if a folder is open (local or remote) the project stays put and the file opens
     /// as a tab from this machine; with no folder, the file's folder opens like on the command line.
     pub(crate) fn open_external_file(&mut self, path: &str, window: &mut Window, cx: &mut Context<Self>) {
+        // A workspace file from this computer belongs to this computer: an SSH window opens it in a new local window.
+        if crate::workspace_file::is_workspace_file(path) && self.remote.host.is_remote() {
+            let path = path.to_string();
+            cx.defer(move |cx| {
+                if let Some(w) = crate::open_workbench_window(cx) {
+                    w.update(cx, |wb, window, cx| wb.open_path(&path, window, cx)).ok();
+                }
+            });
+            return;
+        }
         if crate::workspace_file::is_workspace_file(path) || self.root(cx).is_none() {
             return self.open_path(path, window, cx);
         }

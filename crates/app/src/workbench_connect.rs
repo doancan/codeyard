@@ -205,10 +205,16 @@ impl Workbench {
         self.shutdown_lsp(cx); // servers were running on the old host
         self.attach_ports(&alias, cx);
         let chosen = self.remote.pending_path.take();
+        // A workspace file (from Recents or a restart): the home folder first, then the file opens its own folders.
+        let workspace_file = chosen.clone().filter(|p| crate::workspace_file::is_workspace_file(p));
+        let chosen = if workspace_file.is_some() { None } else { chosen };
         // From a recent: does the folder still exist on the server? If not, offer to remove it and open the folder picker.
-        if let (Some(r), Some(path)) = (self.persist.opening_recent.take(), chosen.clone()) {
+        if let (Some(r), Some(path)) = (self.persist.opening_recent.take(), chosen.clone().or_else(|| workspace_file.clone())) {
             let host = self.remote.host.clone();
-            let check = cx.background_executor().spawn(async move { host.read_dir(&path).map(|_| ()).map_err(|e| e.to_string()) });
+            let is_file = workspace_file.is_some();
+            let check = cx
+                .background_executor()
+                .spawn(async move { if is_file { host.stat(&path).map(|_| ()) } else { host.read_dir(&path).map(|_| ()) }.map_err(|e| e.to_string()) });
             cx.spawn_in(window, async move |this, cx| {
                 if let Err(why) = check.await {
                     this.update_in(cx, |this, window, cx| {
@@ -220,10 +226,13 @@ impl Workbench {
             })
             .detach();
         }
-        let ask_folder = chosen.is_none() && alias != LOCAL_AGENT_ALIAS;
+        let ask_folder = chosen.is_none() && workspace_file.is_none() && alias != LOCAL_AGENT_ALIAS;
         self.replace_root(chosen.unwrap_or(info.home), cx);
         // If the folder could not be replaced (unsaved files), Search Editors of the old connection must say so.
         self.sync_search_editors(cx);
+        if let Some(file) = workspace_file {
+            self.open_workspace_file(&file, window, cx);
+        }
         self.chrome.panel = Some(Panel::Explorer);
         self.sync_container_monitor(cx);
         if self.remote.docker.monitor.browser.terminal_target.as_ref() == Some(&alias) {
@@ -340,6 +349,10 @@ impl Workbench {
         self.roots.extra_roots.clear();
         self.roots.extra_trees.clear();
         self.roots.pending_extra_roots.clear();
+        self.roots.workspace = None;
+        self.roots.workspace_request += 1;
+        self.persist.pending_restore_workspace = None;
+        self.cfg.folder_texts.clear();
         self.roots.favorites.clear();
         self.roots.file_index = None;
         self.roots.file_clip = None;
@@ -372,13 +385,19 @@ impl Workbench {
         cx.notify();
     }
 
-    /// The window's folder: (ssh alias, path).
+    /// What the window holds, as Recents names it: (ssh alias, folder path), or the workspace file it was opened through.
     pub(crate) fn workspace_key(&self, cx: &App) -> Option<(Option<String>, String)> {
-        let alias = match &self.remote.conn {
+        let root = self.root(cx)?;
+        let path = self.roots.workspace.as_ref().filter(|w| Arc::ptr_eq(&w.host, &self.remote.host)).map_or(root, |w| w.path.clone());
+        Some((self.host_alias(), path))
+    }
+
+    /// The SSH alias of the window's host (`None` on this computer).
+    pub(crate) fn host_alias(&self) -> Option<String> {
+        match &self.remote.conn {
             Conn::Connected { alias } | Conn::Reconnecting { alias, .. } if self.remote.host.is_remote() => Some(alias.clone()),
             _ => None,
-        };
-        Some((alias, self.root(cx)?))
+        }
     }
 
     /// Upgrade migration: language servers now start only in trusted folders. Folders opened before (servers already
@@ -433,7 +452,9 @@ impl Workbench {
         then: impl FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
     ) {
         let root = self.active_root(cx);
-        self.require_trust_for(root, window, cx, then);
+        // A workspace file with tasks or debug configurations is asked about too: it may sit outside every folder.
+        let workspace = self.untrusted_workspace_dir(cx).filter(|dir| Some(dir) != root.as_ref());
+        self.require_trust_for(root, window, cx, move |this, window, cx| this.require_trust_for(workspace, window, cx, then));
     }
 
     /// `require_trust` for the folder the commands will run in, when that is not the active file's folder.

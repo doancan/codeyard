@@ -442,7 +442,6 @@ Could not read the file: {}
 Could not read the history: {}	
 Could not read the saved copy: {}	
 Could not read the stash: {}	
-Could not read the workspace file: {}	
 Could not read {0}: {1}	
 Could not read {}	
 Could not read {}: {}	
@@ -453,6 +452,7 @@ Could not run “{}”: {}
 Could not save files before debugging: {}	
 Could not save the report: {}	
 Could not save the theme: {}	
+Could not save the workspace file: {}	
 Could not save your dictionary: {}	
 Could not save: {}	
 Could not set up key login for {}: {}	
@@ -835,13 +835,17 @@ File: New Scratch File…
 File: New Window	
 File: Open Active File With…	
 File: Open Active File as Hex	
+File: Open Active File as Workspace	
 File: Open Workspace from File…	
 File: Refresh Explorer	
+File: Reload Workspace	
 File: Remove Folder from Workspace…	
 File: Reveal Active File in Explorer	
 File: Revert File	
 File: Save All	
 File: Save As…	
+File: Save Workspace	
+File: Save Workspace As…	
 File: Save a Copy to This Computer…	
 Files	
 Files are still unsaved. Resolve editor errors, then start debugging again.	
@@ -1368,6 +1372,8 @@ No timestamp
 No type definition found	
 No unsaved changes: the file matches what is on disk.	
 No version of this extension can be installed: they were withdrawn or revoked.	
+No workspace file is open.	
+No workspace file is open. Use File: Save Workspace As… to create one.	
 No worktrees found.	
 Node.js program	
 None	
@@ -1436,6 +1442,7 @@ Open SSH Config File
 Open Settings (JSON)	
 Open Setup Instructions	
 Open System Settings	
+Open a .code-workspace file in the editor first.	
 Open a .http or .rest file to send requests.	
 Open a Markdown file (.md) to preview it.	
 Open a Rust file first	
@@ -1684,6 +1691,7 @@ Remove folder from workspace
 Remove from Favorites	
 Remove from Recent	
 Remove from recent	
+Remove from the workspace file	
 Remove it from Recent?	
 Remove remote {}?	
 Remove trailing spaces when saving	
@@ -1806,6 +1814,7 @@ Save
 Save All	
 Save As…	
 Save File	
+Save Workspace As… needs a folder on this computer.	
 Save as	
 Save copy	
 Save files automatically	
@@ -1890,6 +1899,8 @@ Set URL
 Set Up	
 Set Up Key Login…	
 Set Value…	
+Set by the workspace file	
+Set by this folder's settings	
 Set up key login	
 Set up key login (no password) for which SSH host?	
 Set up key login for “{}”?	
@@ -2117,6 +2128,7 @@ The local port is busy
 The managed installation is incomplete or belongs to another catalogue. Reinstall the services to repair it.	
 The new version couldn't be installed from here. You can download it from the release page instead.	
 The number {} cannot be written in JSON	
+The open folder is no longer listed in the workspace file.	
 The pattern does not parse: {0} (line {1}, column {2})	
 The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code.	
 The program is running: pause it first, or set a breakpoint.	
@@ -2153,6 +2165,7 @@ The update failed. Click for details.
 The version that was on disk has been kept in Local History.	
 The workspace changed. Open the source project and review its container configuration again.	
 The workspace file lists no folder that exists on this computer.	
+The workspace file no longer exists on this computer.	
 The workspace has no extra folders.	
 The {} dictionary is installed and on.	
 The {} registry's list is more than 3 days old, so a version withdrawn since may still show. Install only if you expected this.	
@@ -2397,6 +2410,10 @@ Without Full Disk Access, Desktop, Documents or external drives may look empty.
 Without one, F5 finds a configuration from the project (Cargo, Go, or the open Python or JavaScript file).	
 Word Wrap	
 Workbench	
+Workspace changed on disk. Reload before saving.	
+Workspace file could not be read: {}	
+Workspace folder is unavailable: {}	
+Workspace saved as {}	
 Workspace: Trust This Folder	
 Workspace: {} folder in the Explorer.|Workspace: {} folders in the Explorer.	
 Worktree locked: {}	
@@ -2422,8 +2439,10 @@ Zoom Out
 Zoom: {}	
 `{}` did not answer within {} seconds; check the network connection and try again	
 `{}` is not installed or not on PATH	
+a comment is not closed	
 a key binding condition needs a context, not a constant	
 a program	
+a string is not closed	
 a theme must be a JSON object	
 about {0} MB · {1}	
 approved	
@@ -2490,6 +2509,7 @@ event
 exception	
 expected a list [ … ]	
 expected an object with path, args, env or color	
+expected an object { … }	
 expected an object { … } (previous settings kept)	
 expression to watch (e.g. total * 2, items.len())	
 extensions.registries[{0}]: the name “{1}” is used twice	
@@ -2532,6 +2552,7 @@ it could not be compared
 it is a file on one side and a folder or link on the other	
 it is not a regular file or folder	
 its name differs from another entry only in letter case	
+its structure could not be read safely	
 join needs a string separator, got {}	
 just now	
 keymap preset “{0}” is not installed (installed: {1})	
@@ -2551,6 +2572,7 @@ local port, e.g. 8080
 method	
 milliseconds	
 module	
+more than {} folders	
 name url (e.g. origin https://host/repo.git)	
 namespace	
 needs a path to a program	
@@ -2627,6 +2649,8 @@ the environment variable {} is not set
 the file cannot be read right now ({})	
 the file is gone (deleted or moved); following continues if it comes back	
 the file is no longer readable (permission denied)	
+the file is not UTF-8 text	
+the file is too large	
 the folder cannot be read on the left	
 the folder cannot be read on the right	
 the header “{}” is not valid	
@@ -2891,6 +2915,7 @@ your words
 {}w	
 {}y	
 “color” must be an object	
+“folders” must be a list	
 “localhost” means {0}: for a service on your own computer set http.runOn to {1}.	
 “{0}” cannot be written in {1}: not changed.	
 “{0}” is not a valid regular expression ({1}). Escape special characters with a backslash.	
