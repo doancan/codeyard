@@ -86,6 +86,9 @@ pub(crate) fn summary(repo: &Repo) -> String {
     parts.join(" · ")
 }
 
+/// Drafts of repositories that are gone are kept up to this many.
+const MAX_DRAFTS: usize = 128;
+
 impl ScmPanel {
     /// More than one repository: the panel shows the aggregated list.
     pub(crate) fn multi(&self) -> bool {
@@ -95,10 +98,17 @@ impl ScmPanel {
     /// The workbench's inventory changed. State kept for repositories that are gone is dropped.
     pub fn set_repos(&mut self, repos: Arc<Vec<Repo>>, cx: &mut Context<Self>) {
         let keys: HashSet<RepoKey> = repos.iter().map(|r| r.id.key).collect();
-        let roots: HashSet<&str> = repos.iter().map(|r| r.id.worktree.as_str()).collect();
         self.repo_results.retain(|k, _| keys.contains(k));
         self.collapsed_repos.retain(|k| keys.contains(k));
-        self.drafts.retain(|r, _| roots.contains(r.as_str()));
+        if repos.is_empty() {
+            // Another folder or host: drafts belong to the repositories of the previous one.
+            self.drafts.clear();
+            self.draft_root = None;
+        } else if self.drafts.len() > MAX_DRAFTS {
+            // A draft of a repository that disappeared is kept (it comes back with it), within a bound.
+            let roots: HashSet<&str> = repos.iter().map(|r| r.id.worktree.as_str()).collect();
+            self.drafts.retain(|r, _| roots.contains(r.as_str()));
+        }
         self.repos = repos;
         cx.notify();
     }

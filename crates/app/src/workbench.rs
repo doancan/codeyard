@@ -79,7 +79,7 @@ mod market_view_glue;
 #[path = "workbench_ext_updates.rs"]
 mod updates_glue;
 #[path = "workbench_repos.rs"]
-mod repos_glue;
+pub(crate) mod repos_glue;
 
 use groups_glue::{Group, GroupKey, GroupResize};
 #[path = "workbench_hosts.rs"]
@@ -1061,7 +1061,8 @@ impl Workbench {
                     }
                 }
                 crate::scm::ScmEvent::RefreshRepo(key) => this.refresh_repo(*key, cx),
-                crate::scm::ScmEvent::Rediscover => this.discover_repos(cx),
+                crate::scm::ScmEvent::Rediscover => this.rediscover(cx),
+                crate::scm::ScmEvent::RefreshInventory => this.refresh_inventory(cx),
             }),
             // A download in progress is cancelled and its partial file removed before the process ends.
             cx.on_app_quit(|this, cx| {
@@ -1187,6 +1188,7 @@ impl Workbench {
                 marks_busy: Default::default(),
                 tree_marks: Default::default(),
                 repos: Default::default(),
+                menu_repo: None,
             },
             chrome: state_glue::ChromeLayout {
                 a11y_bounds: Default::default(),

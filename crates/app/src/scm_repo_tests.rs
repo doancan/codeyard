@@ -10,6 +10,7 @@ use gpui::{Entity, Modifiers, TestAppContext, VisualTestContext};
 use super::*;
 use crate::qa_integration_tests::{git_in, setup_with, wait_ticking};
 use crate::repos::OpState;
+use crate::scm::StashAction;
 use crate::settings::Settings;
 use crate::workbench::Workbench;
 
@@ -340,7 +341,6 @@ fn stale_operations_never_reach_another_or_a_replaced_repository(cx: &mut TestAp
     // Replace beta while staging in it is pending: the stage must not land in the new repository at the same path.
     scm.update(cx, |s, cx| s.stage_in(Some(b), vec!["same.txt".into()], cx));
     std::fs::remove_dir_all(&f.beta).unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(20));
     make_repo(&f.beta);
     std::fs::write(f.beta.join("same.txt"), "replacement\n").unwrap();
     wait_idle(cx, &scm, &f.beta);
@@ -420,23 +420,314 @@ fn a_deleted_picked_repository_is_let_go_of(cx: &mut TestAppContext) {
     assert!(scm.read_with(cx, |s, _| s.repos.iter().all(|r| r.id.worktree != s_(&f.nested))));
 }
 
-/// AC3/AC5: a history action for a commit of another repository (a menu left open while the selection moved) is
-/// refused instead of being tried in the selected repository; symbolic revisions still work.
+/// The graph on screen is the one of the repository whose first commit is `want`, with nothing of the other one.
+fn shows(s: &ScmPanel, want: &str, other: &str) -> bool {
+    let subjects = s.graph_subjects();
+    subjects.iter().any(|c| c == want) && !subjects.iter().any(|c| c == other)
+}
+
+fn stash_in(dir: &Path, text: &str, message: &str) {
+    std::fs::write(dir.join("same.txt"), text).unwrap();
+    git_in(dir, &["stash", "push", "-q", "-m", message]);
+}
+
+fn stash_messages(dir: &Path) -> Vec<String> {
+    git_in(dir, &["stash", "list", "--format=%s"]).lines().map(str::to_string).collect()
+}
+
+fn select(wb: &Entity<Workbench>, cx: &mut VisualTestContext, key: RepoKey) {
+    wb.update(cx, |wb, cx| {
+        wb.select_repository(key, cx);
+    });
+}
+
+/// AC3/AC5: switching while the history loads. The previous repository's commits and stashes leave the panel at the
+/// switch (nothing of them can be acted on), a load that finishes late for it is thrown away, and the panel then shows
+/// the selected repository's history and stashes only.
 #[gpui::test]
-fn a_history_action_from_another_repository_is_refused(cx: &mut TestAppContext) {
-    let f = fixture("history");
+fn a_switch_while_the_history_loads_never_shows_the_previous_history(cx: &mut TestAppContext) {
+    let f = fixture("history-switch");
+    stash_in(&f.alpha, "alpha stash\n", "alpha work");
     let (wb, scm, cx) = open(cx, &f.w, 3);
-    wait_ticking(cx, "graph", |cx| scm.read_with(cx, |s, _| s.graph_subjects().first().map(String::as_str) == Some("init alpha")));
-    let beta_head = head(&f.beta).trim().to_string();
-    wb.update_in(cx, |wb, window, cx| wb.scm_panel().update(cx, |s, cx| s.commit_op(beta_head, crate::graph::CommitOp::Tag("t9".into()), window, cx)));
+    wait_ticking(cx, "alpha history", |cx| scm.read_with(cx, |s, _| shows(s, "init alpha", "init beta") && s.stash_count() == 1));
+    let (a, b) = (key(&scm, cx, &f.alpha), key(&scm, cx, &f.beta));
+    assert_eq!(scm.read_with(cx, |s, _| s.history_target().map(|t| t.root)), Some(s(&f.alpha)));
+    // Start a history load for alpha, then switch to beta before it finishes (no parking in between).
+    scm.update(cx, |s, cx| s.load_graph(cx));
+    assert!(scm.read_with(cx, |s, _| s.graph_loading));
+    select(&wb, cx, b);
+    scm.read_with(cx, |s, _| {
+        assert!(s.graph.is_none() && s.stashes.is_empty() && s.history.is_none(), "alpha's history left at the switch");
+    });
+    wait_ticking(cx, "beta history", |cx| scm.read_with(cx, |s, _| shows(s, "init beta", "init alpha")));
     cx.run_until_parked();
-    assert_eq!(scm.read_with(cx, |s, _| s.result_text()).as_deref(), Some("Repository changed while the operation was pending."));
-    assert_eq!(git_in(&f.alpha, &["tag"]).trim(), "");
-    assert_eq!(git_in(&f.beta, &["tag"]).trim(), "");
-    wb.update_in(cx, |wb, window, cx| wb.scm_panel().update(cx, |s, cx| s.commit_op("HEAD".into(), crate::graph::CommitOp::Tag("t1".into()), window, cx)));
+    scm.read_with(cx, |s, _| {
+        assert_eq!(s.stash_count(), 0, "alpha's stash is not listed for beta");
+        assert_eq!(s.history_target().map(|t| t.root), Some(s_(&f.beta)));
+    });
+    // Back and forth quickly: whatever finishes last, only the selected repository's history stays.
+    select(&wb, cx, a);
+    select(&wb, cx, b);
+    select(&wb, cx, a);
+    wait_ticking(cx, "alpha again", |cx| scm.read_with(cx, |s, _| shows(s, "init alpha", "init beta") && s.stash_count() == 1));
+    cx.run_until_parked();
+    assert_eq!(scm.read_with(cx, |s, _| s.history_target().map(|t| t.root)), Some(s(&f.alpha)));
+}
+
+/// AC5: a stash button rendered for alpha and clicked after beta was selected acts on alpha's stash or not at all:
+/// beta's stash at the same position is never touched, and a shifted position in alpha is refused.
+#[gpui::test]
+fn a_stash_drop_after_a_switch_never_touches_the_other_repository(cx: &mut TestAppContext) {
+    let f = fixture("stash-switch");
+    stash_in(&f.alpha, "alpha stash\n", "alpha work");
+    stash_in(&f.beta, "beta stash\n", "beta work");
+    let (wb, scm, cx) = open(cx, &f.w, 3);
+    wait_ticking(cx, "alpha stashes", |cx| scm.read_with(cx, |s, _| s.stash_count() == 1 && s.history_target().is_some()));
+    // What the Drop button of alpha's row holds (see `stash_section`): the history target and the entry.
+    let (pinned, entry) = scm.read_with(cx, |s, _| (s.history_target(), s.stashes[0].clone()));
+    assert_eq!(pinned.as_ref().map(|t| t.root.clone()), Some(s(&f.alpha)));
+    let b = key(&scm, cx, &f.beta);
+    select(&wb, cx, b);
+    wait_ticking(cx, "beta stashes", |cx| scm.read_with(cx, |s, _| s.history_target().is_some_and(|t| t.root == s_(&f.beta))));
+    // Another stash in alpha meanwhile: stash@{0} is no longer the entry that was shown.
+    stash_in(&f.alpha, "alpha later\n", "alpha later");
+    scm.update(cx, |s, cx| s.stash_action_in(pinned.clone(), entry.0.clone(), Some(entry.1.clone()), StashAction::Drop, cx));
     wait_idle(cx, &scm, &f.alpha);
-    assert_eq!(git_in(&f.alpha, &["tag"]).trim(), "t1");
-    assert_eq!(git_in(&f.beta, &["tag"]).trim(), "");
+    assert_eq!(stash_messages(&f.alpha).len(), 2, "a shifted entry is not dropped");
+    assert_eq!(stash_messages(&f.beta).len(), 1, "beta untouched");
+    assert_eq!(
+        scm.read_with(cx, |s, _| s.repo_result_for_test(pinned.as_ref().unwrap().id.as_ref().unwrap().key)).as_deref(),
+        Some("Repository changed while the operation was pending.")
+    );
+    // The entry still at its position: dropped in alpha, beta's stash at the same position stays.
+    let (name, msg) = ("stash@{1}".to_string(), stash_messages(&f.alpha)[1].clone());
+    scm.update(cx, |s, cx| s.stash_action_in(pinned.clone(), name, Some(msg), StashAction::Drop, cx));
+    wait_idle(cx, &scm, &f.alpha);
+    assert_eq!(stash_messages(&f.alpha).len(), 1);
+    assert!(stash_messages(&f.alpha)[0].contains("alpha later"));
+    assert_eq!(stash_messages(&f.beta).len(), 1, "beta untouched");
+}
+
+/// AC3/AC5: a hard reset asked for alpha and confirmed after beta was selected resets alpha (the repository the
+/// question named), never beta.
+#[gpui::test]
+fn a_hard_reset_confirmed_after_the_selection_moved_stays_in_its_repository(cx: &mut TestAppContext) {
+    let f = fixture("reset-switch");
+    let first = head(&f.alpha).trim().to_string();
+    git_in(&f.alpha, &["commit", "-q", "--allow-empty", "-m", "alpha second"]);
+    git_in(&f.beta, &["commit", "-q", "--allow-empty", "-m", "beta second"]);
+    let beta_head = head(&f.beta);
+    let (wb, scm, cx) = open(cx, &f.w, 3);
+    wait_ticking(cx, "alpha history", |cx| scm.read_with(cx, |s, _| s.graph_subjects().first().map(String::as_str) == Some("alpha second")));
+    wb.update_in(cx, |wb, window, cx| {
+        wb.scm_panel().update(cx, |s, cx| s.commit_op(first.clone(), crate::graph::CommitOp::Reset(crate::graph::ResetMode::Hard), window, cx))
+    });
+    cx.run_until_parked();
+    assert!(cx.has_pending_prompt());
+    let b = key(&scm, cx, &f.beta);
+    select(&wb, cx, b);
+    cx.simulate_prompt_answer("Reset");
+    wait_idle(cx, &scm, &f.alpha);
+    assert_eq!(head(&f.alpha).trim(), first, "alpha was reset");
+    assert_eq!(head(&f.beta), beta_head, "beta untouched");
+}
+
+/// AC3/AC5: a linked worktree shares every commit with its main checkout, so a commit hash proves nothing about the
+/// repository. A history action from the main checkout's menu, picked after the linked one was selected, still runs
+/// in the main checkout.
+#[gpui::test]
+fn history_actions_of_linked_worktrees_stay_in_their_checkout(cx: &mut TestAppContext) {
+    let w = std::env::temp_dir().join(format!("codeyard-multi-linked-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&w);
+    std::fs::create_dir_all(&w).unwrap();
+    let w = std::fs::canonicalize(&w).unwrap();
+    let main = w.join("main");
+    make_repo(&main);
+    git_in(&main, &["commit", "-q", "--allow-empty", "-m", "second"]);
+    let side = main.join("side");
+    git_in(&main, &["worktree", "add", "-q", "-b", "side", side.to_str().unwrap()]);
+    std::fs::write(main.join(".git/info/exclude"), "side/\n").unwrap();
+    let (wb, scm, cx) = open(cx, &main, 2);
+    wait_ticking(cx, "main history", |cx| scm.read_with(cx, |s, _| s.graph_subjects().first().map(String::as_str) == Some("second")));
+    let commit = scm.read_with(cx, |s, _| s.graph_commit(1).unwrap());
+    // The commit menu opens on the main checkout's history.
+    scm.update(cx, |_, cx| cx.emit(ScmEvent::CommitMenu(commit, gpui::point(gpui::px(10.), gpui::px(10.)))));
+    cx.run_until_parked();
+    let linked = key(&scm, cx, &side);
+    select(&wb, cx, linked);
+    wb.update(cx, |wb, cx| wb.select_menu_item_for_test("Checkout (Detached)", cx));
+    wait_idle(cx, &scm, &main);
+    cx.run_until_parked();
+    assert_eq!(git_in(&main, &["rev-parse", "--abbrev-ref", "HEAD"]).trim(), "HEAD", "the main checkout is detached");
+    assert_eq!(git_in(&side, &["rev-parse", "--abbrev-ref", "HEAD"]).trim(), "side", "the linked checkout is untouched");
+    let _ = std::fs::remove_dir_all(w);
+}
+
+/// AC3/AC5: the branch picker, the stash picker and the named stash input, each opened on alpha and confirmed after
+/// beta was selected: nothing runs in beta (the branch checkout and the named stash are refused; the picked stash is
+/// alpha's and is applied to alpha).
+#[gpui::test]
+fn pickers_confirmed_after_a_switch_do_not_act_on_the_new_selection(cx: &mut TestAppContext) {
+    let f = fixture("pickers");
+    git_in(&f.alpha, &["branch", "alpha-only"]);
+    git_in(&f.beta, &["branch", "alpha-only"]);
+    stash_in(&f.alpha, "alpha stash\n", "alpha work");
+    stash_in(&f.beta, "beta stash\n", "beta work");
+    let (wb, scm, cx) = open(cx, &f.w, 3);
+    let b = key(&scm, cx, &f.beta);
+    let beta_status = || git_in(&f.beta, &["status", "--porcelain"]);
+    let before = beta_status();
+    // Branch picker on alpha, confirmed on beta.
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Checkout to…", window, cx));
+    wait_ticking(cx, "branch list", |cx| wb.read_with(cx, |wb, cx| wb.overlay_query(cx).is_some()));
+    select(&wb, cx, b);
+    cx.simulate_input("alpha-only");
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+    assert_eq!(wb.read_with(cx, |wb, _| wb.notice_text()).as_deref(), Some("Repository changed while the operation was pending."));
+    assert_eq!(git_in(&f.beta, &["rev-parse", "--abbrev-ref", "HEAD"]).trim(), "main", "beta stays on its branch");
+    assert_eq!(git_in(&f.alpha, &["rev-parse", "--abbrev-ref", "HEAD"]).trim(), "main");
+    // Stash picker (pop) on alpha, confirmed on beta: alpha's stash is popped in alpha, beta's stash stays.
+    let a = key(&scm, cx, &f.alpha);
+    select(&wb, cx, a);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Pop Stash…", window, cx));
+    wait_ticking(cx, "stash list", |cx| wb.read_with(cx, |wb, cx| wb.overlay_query(cx).is_some()));
+    select(&wb, cx, b);
+    cx.simulate_keystrokes("enter");
+    wait_idle(cx, &scm, &f.alpha);
+    cx.run_until_parked();
+    assert!(stash_messages(&f.alpha).is_empty(), "alpha's stash popped in alpha");
+    assert_eq!(std::fs::read_to_string(f.alpha.join("same.txt")).unwrap(), "alpha stash\n");
+    assert_eq!(stash_messages(&f.beta).len(), 1, "beta's stash untouched");
+    assert_eq!(beta_status(), before);
+    // Named stash input on beta... opened on alpha, confirmed on beta: refused.
+    select(&wb, cx, a);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Stash with Name…", window, cx));
+    cx.run_until_parked();
+    select(&wb, cx, b);
+    std::fs::write(f.beta.join("same.txt"), "beta change\n").unwrap();
+    cx.simulate_input("named");
+    cx.simulate_keystrokes("enter");
+    cx.run_until_parked();
+    assert_eq!(wb.read_with(cx, |wb, _| wb.notice_text()).as_deref(), Some("Repository changed while the operation was pending."));
+    assert_eq!(stash_messages(&f.beta).len(), 1, "no stash made in beta");
+    assert!(stash_messages(&f.alpha).is_empty(), "no stash made in alpha either");
+}
+
+/// Polling with many repositories: at most `MAX_REFRESHES` refreshes run at once, the selected repository is left
+/// to the main refresh, and a repository still waiting from the last poll is not queued twice.
+#[gpui::test]
+fn polling_many_repositories_is_bounded(cx: &mut TestAppContext) {
+    let w = std::env::temp_dir().join(format!("codeyard-multi-poll-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&w);
+    std::fs::create_dir_all(&w).unwrap();
+    let w = std::fs::canonicalize(&w).unwrap();
+    for i in 0..24 {
+        let d = w.join(format!("r{i:02}"));
+        std::fs::create_dir_all(&d).unwrap();
+        git_in(&d, &["init", "-q"]);
+    }
+    let (wb, scm, cx) = open(cx, &w, 24);
+    let (_, started, _) = wb.read_with(cx, |wb, _| wb.repo_counters_for_test());
+    // Two polls in a row, before anything finishes: 23 refreshes at most (selected excluded), 8 at a time.
+    wb.update(cx, |wb, cx| {
+        wb.refresh_repos(cx);
+        wb.refresh_repos(cx);
+    });
+    let max = crate::workbench::repos_glue::MAX_REFRESHES;
+    let (_, now, peak) = wb.read_with(cx, |wb, _| wb.repo_counters_for_test());
+    assert_eq!(now - started, max, "only a full set of slots starts at once");
+    let (running, waiting) = wb.read_with(cx, |wb, _| wb.repo_queue_for_test());
+    let selected = key(&scm, cx, &w.join("r00"));
+    assert_eq!(running.len(), max);
+    assert_eq!(running.len() + waiting.len(), 23, "every repository but the selected one, each queued once over two polls");
+    assert!(!running.contains(&selected) && !waiting.contains(&selected), "the selected repository is left to the main refresh");
+    let unique: std::collections::HashSet<_> = waiting.iter().collect();
+    assert_eq!(unique.len(), waiting.len(), "no repository waits twice");
+    cx.run_until_parked();
+    let (_, _, peak_after) = wb.read_with(cx, |wb, _| wb.repo_counters_for_test());
+    assert!(peak <= max && peak_after <= max, "never more than {max} at once ({peak_after})");
+    assert!(wb.read_with(cx, |wb, _| wb.repo_queue_for_test()).1.is_empty(), "the queue drains");
+    assert_eq!(scm.read_with(cx, |s, _| s.repos.len()), 24);
+    let _ = std::fs::remove_dir_all(w);
+}
+
+/// Discovery runs when the roots change and when an entry is gone, not on every refresh: repeated Refresh clicks list
+/// the workspace again only once the last search is old.
+#[gpui::test]
+fn repeated_refreshes_do_not_search_the_workspace_again(cx: &mut TestAppContext) {
+    let f = fixture("rediscover");
+    let (wb, scm, cx) = open(cx, &f.w, 3);
+    let (searches, ..) = wb.read_with(cx, |wb, _| wb.repo_counters_for_test());
+    let refresh = cx.debug_bounds("scm-refresh").unwrap().center();
+    wb.update(cx, |wb, _| wb.age_discovery_for_test(false));
+    for _ in 0..5 {
+        cx.simulate_click(refresh, Modifiers::none());
+        cx.run_until_parked();
+    }
+    assert_eq!(wb.read_with(cx, |wb, _| wb.repo_counters_for_test().0), searches, "no search for a plain refresh");
+    // After a while a refresh does search (a repository created in a terminal shows up).
+    make_repo(&f.w.join("gamma"));
+    wb.update(cx, |wb, _| wb.age_discovery_for_test(true));
+    cx.simulate_click(refresh, Modifiers::none());
+    wait_for_states(cx, &scm, 4);
+    assert_eq!(wb.read_with(cx, |wb, _| wb.repo_counters_for_test().0), searches + 1);
+    // A repository that is gone triggers one search (not one per refresh of it).
+    std::fs::remove_dir_all(f.beta.join(".git")).unwrap();
+    let b = key(&scm, cx, &f.beta);
+    wb.update(cx, |wb, cx| {
+        wb.refresh_repo(b, cx);
+        wb.refresh_inventory_for_test(cx);
+    });
+    wait_ticking(cx, "beta gone", |cx| scm.read_with(cx, |s, _| s.repos.len() == 3));
+    assert_eq!(wb.read_with(cx, |wb, _| wb.repo_counters_for_test().0), searches + 2);
+}
+
+/// The status bar's branch follows the selected repository, also through fast selection changes (each repository's
+/// branch comes from its own status, never from a late read for an earlier one).
+#[gpui::test]
+fn the_status_bar_branch_follows_fast_selection(cx: &mut TestAppContext) {
+    let f = fixture("branch-bar");
+    git_in(&f.beta, &["checkout", "-q", "-b", "beta-branch"]);
+    git_in(&f.nested, &["checkout", "-q", "-b", "nested-branch"]);
+    let (wb, scm, cx) = open(cx, &f.w, 3);
+    let row = cx.debug_bounds("scm-repo-row-0").unwrap();
+    cx.simulate_click(row.center(), Modifiers::none());
+    cx.run_until_parked();
+    cx.simulate_keystrokes("down down");
+    wait_ticking(cx, "nested selected", |cx| selected_root(&wb, cx) == Some(s(&f.nested)));
+    cx.run_until_parked();
+    assert_eq!(wb.read_with(cx, |wb, _| wb.status_bar_branch_for_test()).as_deref(), Some("nested-branch"));
+    cx.simulate_keystrokes("up");
+    wait_ticking(cx, "beta selected", |cx| selected_root(&wb, cx) == Some(s(&f.beta)));
+    cx.run_until_parked();
+    assert_eq!(wb.read_with(cx, |wb, _| wb.status_bar_branch_for_test()).as_deref(), Some("beta-branch"));
+    assert!(scm.read_with(cx, |s, _| s.status.as_ref().is_some_and(|st| st.branch.as_deref() == Some("beta-branch"))));
+}
+
+/// The draft typed for a repository that disappears goes with it: the repository shown instead starts with its own
+/// draft, and the text comes back when the repository does.
+#[gpui::test]
+fn a_draft_stays_with_a_repository_that_disappears(cx: &mut TestAppContext) {
+    let f = fixture("draft-gone");
+    let (wb, scm, cx) = open(cx, &f.w, 3);
+    let n = key(&scm, cx, &f.nested);
+    select(&wb, cx, n);
+    wait_ticking(cx, "nested selected", |cx| scm.read_with(cx, |s, _| s.status.as_ref().is_some_and(|st| st.root == s_(&f.nested))));
+    scm.update(cx, |s, cx| s.set_message("nested draft", cx));
+    let saved = f.w.join("nested-git");
+    std::fs::rename(f.nested.join(".git"), &saved).unwrap();
+    wb.update(cx, |wb, cx| wb.refresh_git(0, cx));
+    wait_ticking(cx, "fallback", |cx| selected_root(&wb, cx) == Some(s(&f.alpha)) && scm.read_with(cx, |s, _| s.repos.len() == 2));
+    cx.run_until_parked();
+    assert_eq!(scm.read_with(cx, |s, cx| s.message_text(cx)), "", "alpha does not get nested's draft");
+    // The repository comes back (same git directory, same identity): its draft returns with it.
+    std::fs::rename(&saved, f.nested.join(".git")).unwrap();
+    wb.update(cx, |wb, cx| wb.discover_repos(cx));
+    wait_for_states(cx, &scm, 3);
+    let n = key(&scm, cx, &f.nested);
+    select(&wb, cx, n);
+    assert_eq!(scm.read_with(cx, |s, cx| s.message_text(cx)), "nested draft");
 }
 
 /// AC6: an external change in one repository refreshes that repository only; the others keep their state (same Arc),
@@ -537,8 +828,13 @@ fn a_large_inventory_is_bounded_and_virtualized(cx: &mut TestAppContext) {
         wb.open_path(w.to_str().unwrap(), window, cx);
         wb.run_command_for_test("View: Source Control", window, cx);
     });
-    // Opening returns before any repository is found: the search is not done on the UI thread.
-    assert!(wb.read_with(cx, |wb, _| wb.repo_inventory().repos.is_empty()));
+    // The search is a task on the background executor: the UI update that starts it returns before anything is listed
+    // (in the app that executor's threads do the listing; the test executor runs it later, on its own schedule).
+    let listed_inside = wb.update(cx, |wb, cx| {
+        wb.discover_repos(cx);
+        (wb.repo_inventory().discovering, wb.repo_inventory().repos.len())
+    });
+    assert_eq!(listed_inside, (true, 0), "the update returned with the search still pending and nothing listed");
     let scm = wb.read_with(cx, |wb, _| wb.scm_panel());
     crate::qa_integration_tests::wait_secs(cx, 120, "large inventory", |cx| {
         cx.executor().advance_clock(std::time::Duration::from_millis(300));

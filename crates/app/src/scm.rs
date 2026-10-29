@@ -65,16 +65,26 @@ pub enum ScmEvent {
     RepoFileMenu(RepoKey, String, bool, gpui::Point<gpui::Pixels>),
     /// An operation on a repository that is not the selected one finished: refresh only that repository.
     RefreshRepo(RepoKey),
-    /// Search the workspace for repositories again (refresh, or a repository that disappeared).
+    /// A repository disappeared or was replaced: search the workspace for repositories again.
     Rediscover,
+    /// The Refresh button: search again if the last search is old.
+    RefreshInventory,
 }
 
 /// Where an operation runs: the repository's worktree and, when the inventory knows it, its identity. The identity is
 /// checked on the host before Git runs and again before the result is applied.
-#[derive(Clone, Debug)]
-pub(crate) struct Target {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Target {
     pub root: String,
     pub id: Option<Arc<RepoId>>,
+}
+
+/// What a stash action does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StashAction {
+    Apply,
+    Pop,
+    Drop,
 }
 
 #[derive(Clone, Copy)]
@@ -118,6 +128,10 @@ pub struct ScmPanel {
     repos: Arc<Vec<Repo>>,
     /// Commit message drafts of the repositories that are not selected (by worktree).
     drafts: HashMap<String, String>,
+    /// The repository the message box text belongs to (with several repositories).
+    draft_root: Option<String>,
+    /// The repository whose graph and stashes are on screen.
+    history: Option<Target>,
     /// The last result of an operation in a repository that was not selected when it finished.
     repo_results: HashMap<RepoKey, (SharedString, bool)>,
     /// Repositories whose changes are folded in the aggregated list.
@@ -201,6 +215,8 @@ impl ScmPanel {
             busy: HashSet::new(),
             repos: Arc::default(),
             drafts: HashMap::new(),
+            draft_root: None,
+            history: None,
             repo_results: HashMap::new(),
             collapsed_repos: HashSet::new(),
             repo_scroll: UniformListScrollHandle::new(),
@@ -239,31 +255,37 @@ impl ScmPanel {
         if !Arc::ptr_eq(&self.host, &host) || old_root != new_root {
             self.worktrees.reset();
         }
-        if !Arc::ptr_eq(&self.host, &host) {
+        let host_changed = !Arc::ptr_eq(&self.host, &host);
+        if host_changed {
             // Operations on the previous host can no longer change anything here (their results are rejected).
             self.busy.clear();
         }
+        if host_changed || (new_root.is_some() && old_root != new_root) {
+            // Another repository: the history, stashes and commit details on screen belong to the previous one and
+            // must not be acted on; they go at once, and the new repository's load replaces them.
+            self.clear_history();
+        }
         // Switching between repositories of the inventory: each keeps its own commit message draft and last result.
-        if let (Some(old), Some(new)) = (&old_root, &new_root)
-            && old != new
-            && Arc::ptr_eq(&self.host, &host)
-            && self.repo_by_root(old).is_some()
-            && self.repo_by_root(new).is_some()
-        {
-            let text = self.message.read(cx).text().to_string();
-            if text.is_empty() {
-                self.drafts.remove(old);
-            } else {
-                self.drafts.insert(old.clone(), text);
+        // The draft follows the repository it was typed for, also when that one disappeared in between (it comes back
+        // with it).
+        if let Some(new) = new_root.as_ref().filter(|n| !host_changed && self.repo_by_root(n).is_some()) {
+            if let Some(old) = self.draft_root.clone().filter(|d| d != new) {
+                let text = self.message.read(cx).text().to_string();
+                if text.is_empty() {
+                    self.drafts.remove(&old);
+                } else {
+                    self.drafts.insert(old.clone(), text);
+                }
+                let draft = self.drafts.remove(new).unwrap_or_default();
+                self.message.update(cx, |m, cx| m.set_text(&draft, cx));
+                if let Some(key) = self.repo_by_root(&old).map(|r| r.id.key)
+                    && let Some(result) = self.result.take()
+                {
+                    self.repo_results.insert(key, result);
+                }
+                self.result = self.repo_by_root(new).map(|r| r.id.key).and_then(|k| self.repo_results.remove(&k));
             }
-            let draft = self.drafts.remove(new).unwrap_or_default();
-            self.message.update(cx, |m, cx| m.set_text(&draft, cx));
-            if let Some(key) = self.repo_by_root(old).map(|r| r.id.key)
-                && let Some(result) = self.result.take()
-            {
-                self.repo_results.insert(key, result);
-            }
-            self.result = self.repo_by_root(new).map(|r| r.id.key).and_then(|k| self.repo_results.remove(&k));
+            self.draft_root = Some(new.clone());
         }
         self.host = host;
         self.status = status;
@@ -283,13 +305,35 @@ impl ScmPanel {
         }
     }
 
-    /// Load the graph in the background; the old result stays visible until the new one arrives.
+    /// The history of another repository than the selected one is never kept on screen.
+    fn clear_history(&mut self) {
+        self.graph = None;
+        self.graph_error = None;
+        self.history = None;
+        self.stashes.clear();
+        self.selected = None;
+        self.detail = None;
+        self.detail_error = None;
+        self.detail_task = None;
+        self.identity = None;
+        self.has_remote = false;
+    }
+
+    /// The repository whose history and stashes are on screen: menu and stash actions are pinned to it.
+    pub fn history_target(&self) -> Option<Target> {
+        self.history.clone()
+    }
+
+    /// Load the graph in the background; the old result stays visible until the new one arrives. A result for a
+    /// repository that is no longer the selected one is dropped (and the selected one's is loaded).
     pub fn load_graph(&mut self, cx: &mut Context<Self>) {
         let Some(root) = self.status.as_ref().map(|s| s.root.clone()) else {
             self.graph = None;
             self.graph_error = None;
+            self.history = None;
             return;
         };
+        let target = self.target(None).ok();
         if self.graph_loading {
             // The state changed while loading: it reloads when done.
             self.graph_key = None;
@@ -299,15 +343,27 @@ impl ScmPanel {
         let host = self.host.clone();
         let scope = self.scope;
         let limit = cx.global::<crate::settings::Settings>().graph_limit;
+        let dir = root.clone();
         let task = cx.background_executor().spawn(async move {
-            let log = graph::log(host.as_ref(), &root, limit, scope);
-            let has_remote = git::remotes(host.as_ref(), &root).is_ok_and(|r| !r.is_empty());
-            (log, git::identity(host.as_ref(), &root), git::stash_list(host.as_ref(), &root).unwrap_or_default(), has_remote)
+            let log = graph::log(host.as_ref(), &dir, limit, scope);
+            let has_remote = git::remotes(host.as_ref(), &dir).is_ok_and(|r| !r.is_empty());
+            (log, git::identity(host.as_ref(), &dir), git::stash_list(host.as_ref(), &dir).unwrap_or_default(), has_remote)
         });
+        let loaded_from = self.host.clone();
         cx.spawn(async move |this, cx| {
             let (result, identity, stashes, has_remote) = task.await;
             this.update(cx, |this, cx| {
+                if !Arc::ptr_eq(&this.host, &loaded_from) || this.status.as_ref().is_none_or(|s| s.root != root) {
+                    // Loaded for the repository that was selected before: thrown away, the current one is loaded.
+                    this.graph_loading = false;
+                    this.graph_key = this.status.as_deref().map(GraphKey::of);
+                    this.load_graph(cx);
+                    cx.notify();
+                    return;
+                }
+                this.history = target;
                 this.identity = Some(identity);
+
                 this.has_remote = has_remote;
                 this.stashes = stashes;
                 this.graph_loading = false;
@@ -706,18 +762,40 @@ impl ScmPanel {
         self.run(move |h, root| git::stash(h, root, untracked).map(|_| crate::i18n::t("Stashed changes").to_string()), cx);
     }
 
+    /// Apply or pop a stash of the selected repository, right now ("pop the latest stash").
     pub fn stash_apply(&mut self, stash: String, pop: bool, cx: &mut Context<Self>) {
-        self.run(
-            move |h, root| {
-                git::stash_apply(h, root, &stash, pop)
-                    .map(|_| if pop { crate::i18n::tf("Popped {}", &[&stash]) } else { crate::i18n::tf("Applied {}", &[&stash]) })
-            },
-            cx,
-        );
+        self.stash_action_in(None, stash, None, if pop { StashAction::Pop } else { StashAction::Apply }, cx);
     }
 
-    pub fn stash_drop(&mut self, stash: String, cx: &mut Context<Self>) {
-        self.run(move |h, root| git::stash_drop(h, root, &stash).map(|_| crate::i18n::tf("Dropped {}", &[&stash])), cx);
+    /// A stash action pinned to the repository the stash was listed in (`None`: the selected one, now). It runs there
+    /// or nowhere, and only on the same entry: `stash@{N}` is a position, so when `message` is given the entry at that
+    /// position must still carry it (another stash pushed or dropped meanwhile shifts the positions).
+    pub fn stash_action_in(&mut self, repo: Option<Target>, stash: String, message: Option<String>, action: StashAction, cx: &mut Context<Self>) {
+        let target = match repo.map_or_else(|| self.target(None), Ok) {
+            Ok(t) => t,
+            Err(why) => {
+                self.result = Some((why.into(), true));
+                cx.notify();
+                return;
+            }
+        };
+        self.run_in(
+            target,
+            move |h, root| {
+                if let Some(message) = &message
+                    && !git::stash_list(h, root)?.iter().any(|(n, m)| *n == stash && m == message)
+                {
+                    return Err(crate::i18n::t("Repository changed while the operation was pending.").to_string());
+                }
+                match action {
+                    StashAction::Apply => git::stash_apply(h, root, &stash, false).map(|_| crate::i18n::tf("Applied {}", &[&stash])),
+                    StashAction::Pop => git::stash_apply(h, root, &stash, true).map(|_| crate::i18n::tf("Popped {}", &[&stash])),
+                    StashAction::Drop => git::stash_drop(h, root, &stash).map(|_| crate::i18n::tf("Dropped {}", &[&stash])),
+                }
+            },
+            |_, _, _| {},
+            cx,
+        );
     }
 
     /// If nothing is staged, commit all tracked changes ("Commit All"), unless `git.enableSmartCommit` is off.
@@ -973,6 +1051,7 @@ impl Render for ScmPanel {
             .child(
                 div()
                     .id("scm-refresh")
+                    .debug_selector(|| "scm-refresh".into())
                     .size(px(22.))
                     .flex()
                     .items_center()
@@ -991,8 +1070,8 @@ impl Render for ScmPanel {
                         this.load_graph(cx);
                         this.refresh_worktrees(cx);
                         cx.emit(ScmEvent::Refresh);
-                        // Repositories created or removed in the workspace since the last search.
-                        cx.emit(ScmEvent::Rediscover);
+                        // Repositories created or removed since the last search (searched again only after a while).
+                        cx.emit(ScmEvent::RefreshInventory);
                     })),
             )
             .child(
@@ -1399,37 +1478,42 @@ impl ScmPanel {
     }
 
     /// Commit operation; irreversible ones (hard reset) ask first.
+    #[cfg(test)]
     pub fn commit_op(&mut self, hash: String, op: CommitOp, window: &mut Window, cx: &mut Context<Self>) {
+        self.commit_op_in(None, hash, op, window, cx);
+    }
+
+    /// A history action pinned to `repo`, the repository whose graph the menu or the input was opened on (`None`: the
+    /// one whose history is on screen now). It runs there, revalidated, or nowhere: a hard reset's question names the
+    /// repository and the answer applies to it even if the selection moves while the question is open.
+    pub fn commit_op_in(&mut self, repo: Option<Target>, hash: String, op: CommitOp, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(target) = repo.or_else(|| self.history.clone()).or_else(|| self.target(None).ok()) else { return };
         if op == CommitOp::Reset(graph::ResetMode::Hard) {
             let short = hash[..hash.len().min(7)].to_string();
+            let mut detail = crate::i18n::t("Commits after it leave this branch and every uncommitted change is lost. This can't be undone.").to_string();
+            if self.repos.len() > 1 {
+                detail = format!("{}\n{detail}", crate::i18n::tf("Repository: {}", &[&target.root]));
+            }
             let answer = window.prompt(
                 PromptLevel::Warning,
                 &crate::i18n::tf("Hard reset to {}?", &[&short]),
-                Some(crate::i18n::t("Commits after it leave this branch and every uncommitted change is lost. This can't be undone.")),
+                Some(&detail),
                 &[crate::i18n::t("Reset"), crate::i18n::t("Cancel")],
                 cx,
             );
             cx.spawn(async move |this, cx| {
                 if answer.await == Ok(0) {
-                    this.update(cx, |this, cx| this.run_commit_op(hash, op, cx)).ok();
+                    this.update(cx, |this, cx| this.run_commit_op(target, hash, op, cx)).ok();
                 }
             })
             .detach();
             return;
         }
-        self.run_commit_op(hash, op, cx);
+        self.run_commit_op(target, hash, op, cx);
     }
 
-    fn run_commit_op(&mut self, hash: String, op: CommitOp, cx: &mut Context<Self>) {
-        // History actions come from the selected repository's graph: a commit that is not in it (the selection changed
-        // while the menu or the question was open) is not looked for in another repository.
-        let object_id = hash.len() >= 40 && hash.bytes().all(|b| b.is_ascii_hexdigit());
-        if object_id && self.graph.as_ref().is_some_and(|g| !g.commits.iter().any(|c| c.hash == hash)) {
-            self.result = Some((crate::i18n::t("Repository changed while the operation was pending.").into(), true));
-            cx.notify();
-            return;
-        }
-        self.run(move |h, root| graph::run_op(h, root, &hash, &op), cx);
+    fn run_commit_op(&mut self, target: Target, hash: String, op: CommitOp, cx: &mut Context<Self>) {
+        self.run_in(target, move |h, root| graph::run_op(h, root, &hash, &op), |_, _, _| {}, cx);
     }
 
     fn section_height(&self, id: &str, default: f32) -> f32 {
@@ -1467,7 +1551,14 @@ impl ScmPanel {
             .iter()
             .enumerate()
             .map(|(i, (name, msg))| {
-                let (n1, n2, n3) = (name.clone(), name.clone(), name.clone());
+                // Pinned to the repository this list was read from, and to this entry (position and message).
+                let row_action = |action: StashAction| {
+                    let (pinned, name, msg) = (self.history.clone(), name.clone(), msg.clone());
+                    cx.listener(move |this: &mut Self, _: &gpui::ClickEvent, _: &mut Window, cx: &mut Context<Self>| match pinned.clone() {
+                        Some(repo) => this.stash_action_in(Some(repo), name.clone(), Some(msg.clone()), action, cx),
+                        None => this.refuse(None, crate::i18n::t("Select a repository first").to_string(), cx),
+                    })
+                };
                 let group: SharedString = format!("stash-{i}").into();
                 let btn = |id: &'static str, glyph: &'static str, tip: &'static str| {
                     ui::icon_button((id, i), glyph, tip, &p).invisible().group_hover(group.clone(), |s| s.visible())
@@ -1485,15 +1576,9 @@ impl ScmPanel {
                     .hover(|d| d.bg(c(p.surface_hover)))
                     .child(div().flex_none().font_family(ui::MONO_FONT).text_size(px(text::XXS.0)).text_color(c(p.accent)).child(name.clone()))
                     .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_size(px(text::XS.0)).child(msg.clone()))
-                    .child(
-                        btn("stash-apply", "undo-2", crate::i18n::t("Apply (keep the stash)"))
-                            .on_click(cx.listener(move |this, _, _, cx| this.stash_apply(n1.clone(), false, cx))),
-                    )
-                    .child(
-                        btn("stash-pop", "arrow-up", crate::i18n::t("Pop (apply and drop)"))
-                            .on_click(cx.listener(move |this, _, _, cx| this.stash_apply(n2.clone(), true, cx))),
-                    )
-                    .child(btn("stash-drop", "trash", crate::i18n::t("Drop")).on_click(cx.listener(move |this, _, _, cx| this.stash_drop(n3.clone(), cx))))
+                    .child(btn("stash-apply", "undo-2", crate::i18n::t("Apply (keep the stash)")).on_click(row_action(StashAction::Apply)))
+                    .child(btn("stash-pop", "arrow-up", crate::i18n::t("Pop (apply and drop)")).on_click(row_action(StashAction::Pop)))
+                    .child(btn("stash-drop", "trash", crate::i18n::t("Drop")).on_click(row_action(StashAction::Drop)))
             })
             .collect();
         Some(
