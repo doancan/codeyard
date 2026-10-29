@@ -11,11 +11,13 @@ pub(super) struct GroupKey {
     pub(super) epoch: u64,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(super) struct GroupResize {
     pub(super) split: u8,
     pub(super) axis: crate::editor_layout::Axis,
-    pub(super) bounds: gpui::Bounds<gpui::Pixels>,
+    /// The split's bounds as last painted: kept current during the drag, so a zoom or a window resize mid-drag does not
+    /// make the divider jump away from the pointer.
+    pub(super) bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
     pub(super) anchor: GroupKey,
     pub(super) revision: u64,
 }

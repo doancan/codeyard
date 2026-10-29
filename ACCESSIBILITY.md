@@ -34,8 +34,9 @@ imported. The update dialog can be used entirely with Tab, Shift+Tab, Enter, Spa
   Windows).
 - If the colours in use fall below WCAG AA (a theme you wrote, or `workbench.colorCustomizations`), a notice says which pair
   and by how much when you choose the theme or change the colours. Imported VS Code themes are repaired automatically.
-- ⌘= / ⌘- / ⌘0 (Ctrl on Windows) make the editor and terminal text larger, smaller or the default size for the session. The
-  `editor.fontSize` and `terminal.fontSize` settings (6–48) keep a size permanently.
+- ⌘= / ⌘- / ⌘0 (Ctrl on Windows) scale the whole interface from 75% to 200% (text, controls, menus, dialogs and
+  accessibility bounds together) or reset it to 100%. The value is saved as `ui.scale` and applies to every window. The
+  `editor.fontSize` and `terminal.fontSize` settings (6–48) set the editor and terminal text size within that scale.
 
 **Motion.** `workbench.reduceMotion` leaves out animations: the cursor stops blinking, spinners and the update progress bar
 stand still, and panels appear without fading. Its default, `auto`, follows the system (*Reduce motion* on macOS, *Show
