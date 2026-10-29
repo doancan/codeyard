@@ -136,7 +136,6 @@ Remote: Disconnect	Uzak: Bağlantıyı Kes
 Go: File…	Gezin: Dosya…
 Go: Line…	Gezin: Satır…
 Search: Find in Files	Arama: Dosyalarda Bul
-Search: Open Results in Editor	Arama: Sonuçları Düzenleyicide Aç
 File: Follow (Tail) Active File	Dosya: Etkin Dosyayı Takip Et (Tail)
 File: Filter Log Lines…	Dosya: Günlük Satırlarını Süz…
 File: Open Active File as Hex	Dosya: Etkin Dosyayı Hex Olarak Aç
@@ -1071,7 +1070,6 @@ Whole word	Tam sözcük
 Regular expression	Düzenli ifade
 Preserve case when replacing	Değiştirirken büyük/küçük harfi koru
 Replace All	Tümünü Değiştir
-Replace every match in these files (↵ in the field)	Bu dosyalardaki tüm eşleşmeleri değiştir (alanda ↵)
 Files to include / exclude	Dahil edilecek / hariç tutulacak dosyalar
 Previous result (⇧F4)	Önceki sonuç (⇧F4)
 Next result (F4)	Sonraki sonuç (F4)
@@ -1083,7 +1081,6 @@ Replace in this file	Bu dosyada değiştir
 Dismiss this file from the results	Bu dosyayı sonuçlardan çıkar
 Replace {0} match in 1 file with “{1}”?|Replace {0} matches in 1 file with “{1}”?	1 dosyadaki {0} eşleşme “{1}” ile değiştirilsin mi?
 Replace {0} match in {1} files with “{2}”?|Replace {0} matches in {1} files with “{2}”?	{1} dosyadaki {0} eşleşme “{2}” ile değiştirilsin mi?
-The search stopped at the result limit: only the files listed are changed. Open files can be undone; closed files are written to disk.	Arama sonuç sınırında durdu: yalnızca listelenen dosyalar değiştirilir. Açık dosyalar geri alınabilir; kapalı dosyalar diske yazılır.
 Open files can be undone with ⌘Z; closed files are written to disk.	Açık dosyalar ⌘Z ile geri alınabilir; kapalı dosyalar diske yazılır.
 
 # ---- Find and replace bar ----
@@ -2658,20 +2655,13 @@ Close window	Pencereyi kapat
 Mouse wheel and trackpad scroll speed multiplier	Fare tekerleği ve izleme dörtgeni kaydırma hızı çarpanı
 Terminal row height, as a multiple of the font size	Terminal satır yüksekliği, yazı boyutunun katı olarak
 Toggle Panel (⌘J)	Paneli Aç/Kapat (⌘J)
-Closes when the pointer leaves · pin to keep open	Fare ayrılınca kapanır · açık tutmak için sabitleyin
 Codeyard memory	Codeyard belleği
 Disk available	Kullanılabilir disk
-Includes hidden and build files; symlinks are not followed.	Gizli dosyalar ve derleme dosyaları dahildir; sembolik bağlantılar izlenmez.
-Load average (1 / 5 / 15 min)	Yük ortalaması (1 / 5 / 15 dk)
-Logical processors	Mantıksal işlemciler
+Load	Yük
+files	dosya
 Measuring…	Ölçülüyor…
 Open File	Dosyayı Aç
-Open a folder to measure its size.	Boyutunu ölçmek için bir klasör açın.
-Partial scan: a time, file or access limit was reached.	Kısmi tarama: süre, dosya veya erişim sınırına ulaşıldı.
-Pinned · click the pin to restore auto-close	Sabitlendi · otomatik kapatmak için iğneye tıklayın
 Project	Proje
-Project size	Proje boyutu
-Project size is available for local folders.	Proje boyutu yerel klasörlerde gösterilir.
 Unavailable	Kullanılamıyor
 View: Resources	Görünüm: Kaynaklar
 Web Preview	Web Önizleme
@@ -2996,3 +2986,67 @@ Terminal: Kill Other Terminals	Terminal: Diğer Terminalleri Sonlandır
 Terminal: Focus Next Terminal	Terminal: Sonraki Terminale Geç
 Terminal: Focus Previous Terminal	Terminal: Önceki Terminale Geç
 Terminal: Configure Terminal Settings	Terminal: Terminal Ayarlarını Yapılandır
+# ---- Search Editor and replacement review ----
+Apply {0} {1}	Uygula: {1} {0}
+in {} file|in {} files	{} dosyada
+Binary file: not changed.	İkili dosya: değiştirilmedi.
+Changed {0} in {1}	{1} içinde {0} yapıldı
+Close Preview	Önizlemeyi Kapat
+Context: {} line|Context: {} lines	Bağlam: {} satır
+Copy the results as text	Sonuçları metin olarak kopyala
+Could not read: {}	Okunamadı: {}
+Each file is written on its own; files that were not changed keep their contents.	Her dosya ayrı ayrı yazılır; değiştirilmeyen dosyalar içeriklerini korur.
+Fewer context lines	Daha az bağlam satırı
+File changed since preview: {}	Dosya önizlemeden sonra değişti: {}
+Files were changed by a replacement since this search ran. Rerun to refresh.	Bu arama yapıldıktan sonra dosyalar bir değiştirme ile değişti. Yenilemek için yeniden çalıştırın.
+Line {0}: {1}	Satır {0}: {1}
+Line {0}: {1} → {2}	Satır {0}: {1} → {2}
+Line {} after the change	Değişiklikten sonra satır {}
+More context lines	Daha fazla bağlam satırı
+Not changed (cancelled): {}	Değiştirilmedi (iptal edildi): {}
+Not changed: {0} ({1})	Değiştirilmedi: {0} ({1})
+Nothing to replace: the files no longer contain matches.	Değiştirilecek bir şey yok: dosyalarda artık eşleşme yok.
+Open in a Search Editor tab	Arama Düzenleyicisi sekmesinde aç
+Open this search's folder on its host to run it again.	Yeniden çalıştırmak için bu aramanın klasörünü kendi makinesinde açın.
+Preview Replace	Değiştirmeyi Önizle
+Replacement preview	Değiştirme önizlemesi
+Rerun	Yeniden Çalıştır
+Restored from the last session, only the first {} results were kept: they may be out of date. Rerun to refresh.	Son oturumdan geri yüklendi, yalnızca ilk {} sonuç saklandı: güncel olmayabilir. Yenilemek için yeniden çalıştırın.
+Restored from the last session: the results may be out of date. Rerun to refresh.	Son oturumdan geri yüklendi: sonuçlar güncel olmayabilir. Yenilemek için yeniden çalıştırın.
+Restored {} file: {}|Restored {} files: {}	{} dosya geri yüklendi: {}
+Review every change before replacing (↵ in the field)	Değiştirmeden önce her değişikliği gözden geçir (alanda ↵)
+Run this search again in the same folder	Bu aramayı aynı klasörde yeniden çalıştır
+Search results	Arama sonuçları
+Search results are incomplete; rerun before replacing.	Arama sonuçları eksik; değiştirmeden önce yeniden çalıştırın.
+Search: Open Search Editor	Arama: Arama Düzenleyicisini Aç
+Search: Undo Last Replace	Arama: Son Değiştirmeyi Geri Al
+Search: {}	Arama: {}
+Show every change before anything is written (↵ in the field)	Hiçbir şey yazılmadan önce her değişikliği göster (alanda ↵)
+The connection or folder changed since the preview. Rerun the search and preview again.	Önizlemeden sonra bağlantı ya da klasör değişti. Aramayı yeniden çalıştırıp tekrar önizleyin.
+The connection was lost; the results are incomplete.	Bağlantı koptu; sonuçlar eksik.
+The file changed during the write ({})	Dosya yazılırken değişti ({})
+The query was edited: press Enter or Rerun to search for it.	Sorgu düzenlendi: aramak için Enter'a ya da Yeniden Çalıştır'a basın.
+The search failed.	Arama başarısız oldu.
+The search or the connection changed while the preview was being made. Preview again.	Önizleme hazırlanırken arama ya da bağlantı değişti. Tekrar önizleyin.
+There is no replacement to undo.	Geri alınacak bir değiştirme yok.
+This replacement is too large to preview. Narrow the search (fewer files or matches).	Bu değiştirme önizlemek için çok büyük. Aramayı daraltın (daha az dosya ya da eşleşme).
+This search belongs to {0} on {1}, which this window does not show. Results cannot be opened or replaced here.	Bu arama {1} üzerindeki {0} klasörüne ait ve bu pencere onu göstermiyor. Sonuçlar burada açılamaz ya da değiştirilemez.
+Too many files to preview ({}). Narrow the search.	Önizlemek için çok fazla dosya var ({}). Aramayı daraltın.
+Type a query and press Enter to search.	Aramak için bir sorgu yazıp Enter'a basın.
+Undo Replace	Değiştirmeyi Geri Al
+Undo conflict: {} changed after the replacement and was left as it is.	Geri alma çakışması: {} değiştirmeden sonra değişti ve olduğu gibi bırakıldı.
+Undo is not available here: the replacement was made in another folder or connection.	Geri alma burada kullanılamaz: değiştirme başka bir klasörde ya da bağlantıda yapıldı.
+Unknown outcome, check before retrying: {0} ({1})	Sonuç bilinmiyor, yeniden denemeden önce kontrol edin: {0} ({1})
+Unsupported encoding: the file would not be written back exactly, so it is not changed.	Desteklenmeyen kodlama: dosya birebir geri yazılamayacağı için değiştirilmedi.
+context	bağlam
+not selected	seçili değil
+partly selected	kısmen seçili
+selected	seçili
+{0} of {1} changes	{1} değişiklikten {0}
+{0} of {1} changes in {2} files selected. Nothing is written before Apply.	{2} dosyada {1} değişiklikten {0} tanesi seçili. Uygula'dan önce hiçbir şey yazılmaz.
+{0}. The search stopped at the result limit, so the results are incomplete.	{0}. Arama sonuç sınırında durdu, bu yüzden sonuçlar eksik.
+{0}. The search was cancelled, so the results are incomplete.	{0}. Arama iptal edildi, bu yüzden sonuçlar eksik.
+{} change|{} changes	{} değişiklik
+{} match|{} matches	{} eşleşme
+“{0}” cannot be written in {1}: not changed.	“{0}” {1} kodlamasında yazılamaz: değiştirilmedi.
+No matches in this file any more.	Bu dosyada artık eşleşme yok.

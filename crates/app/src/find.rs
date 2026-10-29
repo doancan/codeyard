@@ -425,9 +425,9 @@ pub fn find_all(buffer: &Buffer, re: &Regex) -> Vec<Range<usize>> {
     re.find_iter(text.as_bytes()).filter(|m| !m.is_empty()).take(MAX_MATCHES).map(|m| rope.byte_to_char(m.start())..rope.byte_to_char(m.end())).collect()
 }
 
-/// VS Code replacement syntax → the regex crate's: `$1_x` means group 1 followed by "_x" (the crate
+/// Replacement syntax → the regex crate's: `$1_x` means group 1 followed by "_x" (the crate
 /// takes it for a group named "1_x"), `$&` is the whole match; `\n`, `\t` are expanded.
-fn vscode_template(template: &str) -> String {
+pub(crate) fn regex_template(template: &str) -> String {
     let t = template.replace("\\n", "\n").replace("\\t", "\t").replace("$&", "${0}");
     let mut out = String::with_capacity(t.len() + 8);
     let mut chars = t.chars().peekable();
@@ -450,7 +450,7 @@ fn vscode_template(template: &str) -> String {
 pub fn replace_all_parts(buffer: &Buffer, re: &Regex, template: &str, regex: bool) -> Vec<(Range<usize>, String)> {
     let text = buffer.rope().to_string();
     let rope = buffer.rope();
-    let expanded = vscode_template(template);
+    let expanded = regex_template(template);
     re.captures_iter(text.as_bytes())
         .filter_map(|caps| {
             let m = caps.get(0).filter(|m| !m.is_empty())?;
@@ -475,7 +475,7 @@ pub fn replacement_for(buffer: &Buffer, re: &Regex, m: &Range<usize>, template: 
     let rope = buffer.rope();
     let (start, end) = (rope.char_to_byte(m.start), rope.char_to_byte(m.end));
     let text = rope.to_string();
-    let template = vscode_template(template);
+    let template = regex_template(template);
     let mut out = Vec::new();
     match re.captures_at(text.as_bytes(), start).filter(|c| c.get(0).is_some_and(|g| g.end() == end)) {
         Some(caps) => caps.expand(template.as_bytes(), &mut out),
@@ -487,16 +487,20 @@ pub fn replacement_for(buffer: &Buffer, re: &Regex, m: &Range<usize>, template: 
 /// "Preserve case": adapt the replacement text to the matched text's letter case (VS Code rules).
 /// UPPER → UPPER, lower → lower, Capitalized → Capitalized; for matches split by `_`, `-` or `.`
 /// each part follows its own case (`Foo_Bar` → `Baz_Qux`).
+/// Turkish text (a Turkish-only letter in the match or the replacement) pairs i/İ and ı/I; other text is unchanged.
 pub fn preserve_case(matched: &str, replacement: &str) -> String {
+    use crate::textcase::{CaseLocale, lower_locale, upper};
     let has_letter = matched.chars().any(char::is_alphabetic);
     if !has_letter || replacement.is_empty() {
         return replacement.to_string();
     }
-    if matched.to_uppercase() == matched {
-        return replacement.to_uppercase();
+    let turkish = |s: &str| s.chars().any(|c| matches!(c, 'ı' | 'İ' | 'ş' | 'Ş' | 'ğ' | 'Ğ'));
+    let loc = if turkish(matched) || turkish(replacement) { CaseLocale::Turkish } else { CaseLocale::Invariant };
+    if upper(matched, loc) == matched {
+        return upper(replacement, loc);
     }
-    if matched.to_lowercase() == matched {
-        return replacement.to_lowercase();
+    if lower_locale(matched, loc) == matched {
+        return lower_locale(replacement, loc);
     }
     for sep in ['_', '-', '.'] {
         if matched.contains(sep) && replacement.contains(sep) {
@@ -514,7 +518,7 @@ pub fn preserve_case(matched: &str, replacement: &str) -> String {
     let first = matched.chars().next().unwrap_or(' ');
     if first.is_uppercase() {
         let mut it = replacement.chars();
-        return it.next().map(|f| f.to_uppercase().chain(it).collect()).unwrap_or_default();
+        return it.next().map(|f| upper(&f.to_string(), loc) + it.as_str()).unwrap_or_default();
     }
     replacement.to_string()
 }
@@ -522,6 +526,19 @@ pub fn preserve_case(matched: &str, replacement: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preserve_case_follows_turkish_letters_and_leaves_other_text_alone() {
+        assert_eq!(preserve_case("İSTANBUL", "izmir"), "İZMİR");
+        assert_eq!(preserve_case("ŞEHİR", "ılık"), "ILIK");
+        assert_eq!(preserve_case("Şehir", "izmir"), "İzmir");
+        assert_eq!(preserve_case("ılık", "IŞIK"), "ışık");
+        // No Turkish letters: the usual rules, unchanged.
+        assert_eq!(preserve_case("FILE", "item"), "ITEM");
+        assert_eq!(preserve_case("File", "item"), "Item");
+        assert_eq!(preserve_case("file", "ITEM"), "item");
+        assert_eq!(preserve_case("Old_Name", "new_name"), "New_Name");
+    }
 
     #[gpui::test]
     fn clicking_the_replacement_fields_empty_space_focuses_replacement(cx: &mut gpui::TestAppContext) {

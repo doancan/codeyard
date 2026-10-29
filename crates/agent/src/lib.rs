@@ -759,6 +759,10 @@ fn write(path: &Path, data: &[u8], expect_hash: Option<u64>) -> Result<u64, Erro
     let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let existing = fs::metadata(&target).ok();
 
+    // A write against a known version must not bring back a file that was deleted since that version was read.
+    if existing.is_none() && expect_hash.is_some() {
+        return Err(Error::Conflict { path: path.display().to_string(), current_hash: 0 });
+    }
     if let Some(m) = &existing {
         if m.is_dir() {
             return Err(Error::IsDirectory(path.display().to_string()));
@@ -1082,6 +1086,22 @@ mod tests {
         assert_eq!(hash, h2);
         // No temp file should remain.
         assert_eq!(fs::read_dir(&d).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn a_write_against_a_version_does_not_recreate_a_deleted_file() {
+        let d = tmpdir("deleted-expect");
+        let p = d.join("gone.txt");
+        fs::write(&p, "v1").unwrap();
+        let base = content_hash(b"v1");
+        fs::remove_file(&p).unwrap();
+        let r = handle(Request::Write { path: s(&p), data: b"v2".to_vec(), expect_hash: Some(base) });
+        assert!(matches!(r, Response::Error(Error::Conflict { .. })), "{r:?}");
+        assert!(!p.exists(), "not recreated");
+        // Without an expected version (a forced save, a new file) it is still written.
+        let r = handle(Request::Write { path: s(&p), data: b"v2".to_vec(), expect_hash: None });
+        assert!(matches!(r, Response::Written { .. }), "{r:?}");
+        assert_eq!(fs::read_to_string(&p).unwrap(), "v2");
     }
 
     #[test]

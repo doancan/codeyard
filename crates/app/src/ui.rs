@@ -10,6 +10,25 @@ pub struct ActiveTheme(pub Palette);
 
 impl Global for ActiveTheme {}
 
+/// Whether the last input was the keyboard. Focus rings show only then: a click lights the button it presses instead of
+/// outlining it, and Tab still shows where the focus went.
+#[derive(Default)]
+struct InputModality {
+    keyboard: bool,
+}
+
+impl Global for InputModality {}
+
+pub fn keyboard_focus(cx: &App) -> bool {
+    cx.try_global::<InputModality>().is_some_and(|m| m.keyboard)
+}
+
+pub fn set_keyboard_focus(keyboard: bool, cx: &mut App) {
+    if keyboard_focus(cx) != keyboard {
+        cx.set_global(InputModality { keyboard });
+    }
+}
+
 pub fn palette(cx: &App) -> &Palette {
     &cx.global::<ActiveTheme>().0
 }

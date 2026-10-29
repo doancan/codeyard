@@ -36,6 +36,8 @@ pub(super) struct Group {
     pub(super) page: Option<Page>,
     pub(super) page_active: bool,
     pub(super) _page_sub: Option<Subscription>,
+    /// Search Editor tabs of this group; the one in front is also `page`.
+    pub(super) searches: Vec<Entity<crate::search_editor::SearchEditor>>,
     /// Match to show in the file opened from a search result: (path, line, column, length).
     pub(super) pending_reveal: Option<(String, u32, u32, u32)>,
     /// Tab bar scroll (so the active tab stays visible).
@@ -58,6 +60,7 @@ impl Default for Group {
             page: None,
             page_active: false,
             _page_sub: None,
+            searches: Vec::new(),
             pending_reveal: None,
             tab_scroll: gpui::ScrollHandle::new(),
         }
@@ -135,7 +138,7 @@ impl state_glue::TabsState {
 
 impl Group {
     pub(super) fn is_empty(&self) -> bool {
-        self.editors.is_empty() && self.diff.is_none() && self.large.is_none() && self.page.is_none() && self.opening.is_none()
+        self.editors.is_empty() && self.diff.is_none() && self.large.is_none() && self.page.is_none() && self.opening.is_none() && self.searches.is_empty()
     }
 }
 
@@ -219,6 +222,7 @@ impl Workbench {
                 Some(Page::LanguageServices(view)) => view.focus_handle(cx),
                 Some(Page::Merge(view)) => view.focus_handle(cx),
                 Some(Page::Compare(view)) => view.focus_handle(cx),
+                Some(Page::Search(view)) => view.focus_handle(cx),
                 _ => self.focus_handle.clone(),
             };
             window.focus(&handle);

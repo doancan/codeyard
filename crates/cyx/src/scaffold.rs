@@ -52,7 +52,8 @@ const KEYMAP: &str = r#"[
 "#;
 
 /// Publishing on a tag push (`.github/workflows/publish.yml`): the identity the registry pins is this repository and
-/// this file, so it keeps one name.
+/// this file, so it keeps one name. Both actions are pinned to a commit: the job can sign releases, so a moved tag must
+/// not change the code it runs. `docs/releasing.md` says when to move the publish action's pin.
 pub const PUBLISH_WORKFLOW: &str = r#"# Publishes this extension to the Codeyard registry when you push a tag: git tag v0.2.0 && git push --tags
 # No secrets: the job's identity token signs the release (keyless), so only this repository can publish it.
 name: Publish
@@ -66,8 +67,8 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: doancan/codeyard/actions/publish@v1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: doancan/codeyard/actions/publish@efba4a1e224e81f266bbb7973bdc3ec751b0d49b # main, 2026-10-29
 "#;
 
 const README: &str = "# NAME\n\nA Codeyard extension. Run it with `cyx dev`, check it with `cyx check`, publish it with `cyx publish` or by pushing a tag (`git tag v0.1.0 && git push --tags`).\n";

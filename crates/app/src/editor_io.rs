@@ -154,6 +154,11 @@ impl EditorView {
         self.buffer.version()
     }
 
+    /// The document's exact state: buffer epoch, undo version and a hash of its text.
+    pub fn doc_identity(&self) -> super::DocIdentity {
+        super::DocIdentity { epoch: self.epoch, version: self.buffer.version(), hash: proto::content_hash(self.buffer_text().as_bytes()) }
+    }
+
     /// File was opened with mixed line endings (saving normalizes to a single style).
     pub fn has_mixed_line_endings(&self) -> bool {
         self.buffer.has_mixed_line_endings()
@@ -303,6 +308,7 @@ impl EditorView {
         self.saved_version = buffer.version();
         self.saved_line_ending = buffer.line_ending();
         self.buffer = buffer;
+        self.epoch = super::next_epoch();
         self.syntax = syntax;
         self.encoding = encoding;
         self.rules = rules;
@@ -402,7 +408,8 @@ impl EditorView {
         self.error = None;
         let version = self.buffer.version();
         let line_ending = self.buffer.line_ending();
-        let expect = (!force).then_some(self.disk_hash);
+        // A file known to be deleted is saved back as new; otherwise the agent refuses to recreate a vanished file.
+        let expect = (!force && !self.deleted_on_disk).then_some(self.disk_hash);
         let (known, fallback) = (self.disk_hash, cx.global::<Settings>().fallback_encoding);
         let host = self.host.clone();
         let path = self.path.clone();
@@ -481,6 +488,7 @@ impl EditorView {
                         this.saved_version = buffer.version();
                         this.saved_line_ending = buffer.line_ending();
                         this.buffer = buffer;
+                        this.epoch = super::next_epoch();
                         this.syntax = syntax;
                         this.encoding = encoding;
                         this.rules = rules;

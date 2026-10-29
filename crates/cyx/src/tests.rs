@@ -241,3 +241,14 @@ fn yard_fixture_is_a_signed_index_of_made_up_extensions() {
     assert_eq!(read.extensions.values().map(|e| e.name.clone()).collect::<Vec<_>>(), names, "the same extensions");
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+#[test]
+fn the_publish_workflow_pins_every_action_to_a_commit() {
+    let uses: Vec<&str> = scaffold::PUBLISH_WORKFLOW.lines().filter_map(|l| l.trim().strip_prefix("- uses: ")).collect();
+    assert_eq!(uses.len(), 2, "{uses:?}");
+    for line in uses {
+        let rev = line.split_once('@').map(|(_, r)| r.split_whitespace().next().unwrap_or("")).unwrap_or("");
+        assert!(rev.len() == 40 && rev.bytes().all(|b| b.is_ascii_hexdigit()), "not pinned to a commit: {line}");
+        assert!(line.contains(" # "), "a pin says what it is: {line}");
+    }
+}

@@ -95,6 +95,9 @@ impl Workbench {
                 group.active = Some(0);
             }
         }
+        // Search Editors of groups the restored layout does not have move to the focused group instead of closing.
+        let orphans: Vec<_> = previous_groups.into_values().flat_map(|g| g.searches).collect();
+        groups.get_mut(&grid.focused()).expect("focused group exists").searches.extend(orphans);
         let current = groups.remove(&grid.focused()).expect("focused group exists");
         self.tabs = state_glue::TabsState { current, groups, layout: grid, ..Default::default() };
         self.sync_slots(cx);
@@ -132,6 +135,7 @@ impl Workbench {
         if let Ok(json) = serde_json::to_string(&session) {
             let _ = s.save_tabs_with_layout(ws, &tabs, Some(&json));
         }
+        self.persist_search_editors(cx);
     }
 
     pub(super) fn restore_group_views(&self, saved: SavedEditorSession, cx: &mut App) {
@@ -233,10 +237,12 @@ impl Workbench {
     /// Coalesce an explicit open with its saved document read, including any unsaved backup.
     /// Returns whether the open will be completed by the restore task.
     pub(super) fn restore_tabs_for_open(&mut self, ws: i64, request: Option<(String, bool)>, window: &mut Window, cx: &mut Context<Self>) -> bool {
-        let (Some(s), Some(root)) = (&self.persist.state, self.root(cx)) else { return false };
+        let (Some(_), Some(root)) = (&self.persist.state, self.root(cx)) else { return false };
         if !cx.global::<Settings>().restore_session {
             return false;
         }
+        self.restore_search_editors(ws, window, cx);
+        let Some(s) = &self.persist.state else { return false };
         let mut tabs = s.tabs(ws).unwrap_or_default();
         let saved = s.tab_layout(ws).as_deref().and_then(SavedEditorSession::parse);
         let focus_left = s.get(&format!("focus_left:{ws}")).is_none_or(|v| v != "0");

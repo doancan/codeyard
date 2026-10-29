@@ -96,6 +96,7 @@ Apply (keep the stash)
 Apply .editorconfig files (indent, line endings, final newline…)	
 Apply Stash…	
 Apply a file operation to {} entry?|Apply a file operation to {} entries?	
+Apply {0} {1}	
 Apr	
 Ask before .http requests and schema downloads leave this computer: never, remote (the first request to each new host per session) or always. Your own settings only; a folder cannot change it	
 Ask before Sync pulls or pushes. Your own settings only; a folder cannot change it	
@@ -115,6 +116,7 @@ Back to SSH workspace and container details
 Back to the default (removes the value from settings.jsonc)	
 Back to this computer; files with unsaved changes must be saved or closed first	
 Bare repository	
+Binary file: not changed.	
 Blame Line	
 Bookmarks: Clear in File	
 Bookmarks: Jump to Next	
@@ -180,6 +182,7 @@ Change the URL of which remote?
 Change {}	
 Changed	
 Changed {0} file ({1} file operations skipped)|Changed {0} files ({1} file operations skipped)	
+Changed {0} in {1}	
 Changed {} file|Changed {} files	
 Changes	
 Check Daily	
@@ -230,6 +233,7 @@ Close
 Close (Esc)	
 Close Editor	
 Close Others	
+Close Preview	
 Close Saved	
 Close a terminal first: at most {} can be open.	
 Close details	
@@ -237,7 +241,6 @@ Close the terminal?
 Close to the Right	
 Close window	
 Close without saving	
-Closes when the pointer leaves · pin to keep open	
 Closing a terminal ends the programs running in it.	
 Closing the window loses everything since the last save.	
 Code	
@@ -348,6 +351,7 @@ Container port / protocol
 Container setup required	
 Containers	
 Containers and Service Logs…	
+Context: {} line|Context: {} lines	
 Continue	
 Continue (F5)	
 Continuing rebase…	
@@ -383,6 +387,7 @@ Copy link
 Copy the files again on the current host before pasting.	
 Copy the full hash	
 Copy the path at the cursor	
+Copy the results as text	
 Copy to the left	
 Copy to the right	
 Copy visible logs	
@@ -439,6 +444,7 @@ Could not read the workspace file: {}
 Could not read {0}: {1}	
 Could not read {}	
 Could not read {}: {}	
+Could not read: {}	
 Could not refresh container data: {}. Check Docker access on the SSH host and retry.	
 Could not resolve “{}”: check the spelling and the network (the request ran on {}).	
 Could not run “{}”: {}	
@@ -634,6 +640,7 @@ Dropped {}
 Duplicate	
 Duplicate key	
 Duplicate key “{}”	
+Each file is written on its own; files that were not changed keep their contents.	
 Edit	
 Edit Condition…	
 Edit Host…	
@@ -797,11 +804,13 @@ Fetch removes remote branches that were deleted on the server
 Fetched	
 Fetching in the background: try again in a moment.	
 Fetching…	
+Fewer context lines	
 File	
 File Glyphs (Default)	
 File Icon Theme	
 File Icon Theme…	
 File and folder icons	
+File changed since preview: {}	
 File glyphs tinted by language, accent folders	
 File icon theme…	
 File name (a path like src/new.rs works too)	
@@ -838,6 +847,7 @@ Files of {0} that are missing or changed: {1}. Reinstall it.
 Files to exclude	
 Files to include (e.g. *.rs, src/**)	
 Files to include / exclude	
+Files were changed by a replacement since this search ran. Rerun to refresh.	
 Files with the same name are overwritten; other files in the folder are kept.	
 Files: Collapse Folders in Explorer	
 Files: Open Folder…	
@@ -1025,7 +1035,6 @@ Import VS Code Settings and Shortcuts
 Imported {0} settings and {1} shortcuts from VS Code ({2} settings and {3} shortcuts have no equivalent here)	
 In Privacy & Security, press + and add Codeyard, then turn it on.	
 In the file tree, type to jump to a name; ⇧→ opens everything inside a folder, ⇧← closes it.	
-Includes hidden and build files; symlinks are not followed.	
 Incoming	
 Indent of each folder level in the explorer (px)	
 Indent using 2 spaces	
@@ -1122,6 +1131,9 @@ Lightweight editing, on this machine or over SSH.
 Line endings for this file (applied on save)	
 Line height in pixels	
 Line numbers in the gutter	
+Line {0}: {1}	
+Line {0}: {1} → {2}	
+Line {} after the change	
 Line {}: not committed yet	
 Line {}: {} · {}, {} · {}	
 Lines kept in terminal history	
@@ -1132,8 +1144,8 @@ Listing worktrees timed out. Refresh to try again.
 Live updates	
 Ln {}, Col {}	
 Ln {}, Col {} ({} selected)	
+Load	
 Load More Stack Frames	
-Load average (1 / 5 / 15 min)	
 Load installed extensions (off: Codeyard starts as if none were installed)	
 Loading container details…	
 Loading image…	
@@ -1143,7 +1155,6 @@ Local
 Local history	
 Local port {} is busy	
 Local time is not available on this system	
-Logical processors	
 Logs	
 Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it	
 Looking for tests…	
@@ -1200,6 +1211,7 @@ Modified
 Modules	
 Monday	
 More Actions…	
+More context lines	
 More…	
 Most files a structural search reads and parses	
 Mount paths are shown as reported by the engine. Volume and bind-mount sizes are not included in container disk usage.	
@@ -1307,6 +1319,7 @@ No log lines match the current filters.
 No log output	
 No macro at the cursor	
 No matches	
+No matches in this file any more.	
 No matching folders	
 No merge conflicts in this file	
 No merge conflicts in this file.	
@@ -1355,6 +1368,8 @@ None of this repository's remotes is on github.com.
 None: it only adds data to Codeyard.	
 Not Now	
 Not breaking on exceptions.	
+Not changed (cancelled): {}	
+Not changed: {0} ({1})	
 Not compared	
 Not connected yet	
 Not deleted: {}	
@@ -1375,6 +1390,7 @@ Nothing left to resolve
 Nothing to choose from.	
 Nothing to commit	
 Nothing to rename here	
+Nothing to replace: the files no longer contain matches.	
 Nothing to run: select some text or put the cursor on a line.	
 Nothing was installed. This release isn't signed, so Codeyard can't verify it.	
 Nothing was installed. What the update server sent didn't match the signed checksums, so Codeyard discarded it.	
@@ -1431,7 +1447,6 @@ Open a folder in a Linux distribution
 Open a folder on {}	
 Open a folder to debug it.	
 Open a folder to find its tests.	
-Open a folder to measure its size.	
 Open a folder to search in it.	
 Open a project, connect to a host, or switch workspace	
 Open a terminal with…	
@@ -1442,6 +1457,7 @@ Open files can be undone with ⌘Z; closed files are written to disk.
 Open in Browser	
 Open in Integrated Terminal	
 Open in New Window	
+Open in a Search Editor tab	
 Open on GitHub	
 Open recent, or connect to a host… (⌃R)	
 Open settings.jsonc	
@@ -1449,6 +1465,7 @@ Open the active file with…
 Open the source folder on this computer to create a Dev Container. Remote Docker contexts support attaching to existing containers.	
 Open this link in your browser?	
 Open this project with Docker: Open Project in Dev Container first.	
+Open this search's folder on its host to run it again.	
 Open to the Side	
 Open which worktree?	
 Open worktree in this window	
@@ -1461,7 +1478,6 @@ Output
 Output: Clear	
 Overview	
 Overwrite	
-Partial scan: a time, file or access limit was reached.	
 Passphrase	
 Password	
 Paste	
@@ -1491,7 +1507,6 @@ Pick a stash to show
 Pin	
 Pin the enclosing function or class line while scrolling	
 Pin to the top	
-Pinned · click the pin to restore auto-close	
 Plain Text	
 Platform	
 Pop (apply and drop)	
@@ -1518,6 +1533,7 @@ Preserve case (⌥P)
 Preserve case when replacing	
 Preview	
 Preview HTML in your browser	
+Preview Replace	
 Preview URL copied.	
 Preview of {}	
 Preview port (0: choose a free port automatically)	
@@ -1537,8 +1553,6 @@ Progress
 Project	
 Project lifecycle commands will run. Rebuild replaces the container; persistent volumes are kept.	
 Project name	
-Project size	
-Project size is available for local folders.	
 Projects: Add Folder to Projects…	
 Projects: Edit Projects	
 Projects: Remove from Recent…	
@@ -1696,7 +1710,6 @@ Replace (↵)
 Replace All	
 Replace Anyway	
 Replace all (⌥⌘↵)	
-Replace every match in these files (↵ in the field)	
 Replace in this file	
 Replace the text with {}	
 Replace {0} match in 1 file with “{1}”?|Replace {0} matches in 1 file with “{1}”?	
@@ -1704,9 +1717,11 @@ Replace {0} match in {1} files with “{2}”?|Replace {0} matches in {1} files 
 Replaced {0}; could not change {1}	
 Replaced {}	
 Replaced {} match|Replaced {} matches	
+Replacement preview	
 Report copied	
 Report saved to {}	
 Repository URL (https://… or git@host:owner/repo)	
+Rerun	
 Reset	
 Reset Hard to Here…	
 Reset Mixed to Here	
@@ -1729,6 +1744,9 @@ Restarting language servers…
 Restarting loses everything since the last save.	
 Restore Panel Size	
 Restore window	
+Restored from the last session, only the first {} results were kept: they may be out of date. Rerun to refresh.	
+Restored from the last session: the results may be out of date. Rerun to refresh.	
+Restored {} file: {}|Restored {} files: {}	
 Result	
 Resume updates	
 Retry	
@@ -1738,6 +1756,7 @@ Revert File
 Revert stopped and was undone: {}	
 Reverted {}	
 Reverting a change is not supported in this file (non-UTF-8 or CR-only line endings)	
+Review every change before replacing (↵ in the field)	
 Review the Dev Container environment	
 Right is writable	
 Right-click a commit in the Source Control graph to branch, tag, cherry-pick, revert or reset.	
@@ -1755,6 +1774,7 @@ Run and Debug
 Run and Debug (⌃⇧D)	
 Run task	
 Run the search again	
+Run this search again in the same folder	
 Run to Cursor	
 Run {} with any arguments	
 Running	
@@ -1810,14 +1830,18 @@ Search files by name
 Search files by name (> for commands, : for line, # for symbols)	
 Search installed extensions	
 Search log messages or timestamps…	
+Search results	
+Search results are incomplete; rerun before replacing.	
 Search settings	
 Search the Market	
 Search {}	
 Search: Find TODO Comments	
 Search: Find in Files	
-Search: Open Results in Editor	
+Search: Open Search Editor	
 Search: Structural Replace…	
 Search: Structural Search…	
+Search: Undo Last Replace	
+Search: {}	
 Searching…	
 Seconds between background fetches	
 Select All	
@@ -1878,6 +1902,7 @@ Show Stash…
 Show a color swatch next to #rrggbb values	
 Show a tooltip when the mouse rests on a word	
 Show code lenses (reference counts, run/debug) above symbols	
+Show every change before anything is written (↵ in the field)	
 Show file icons on tabs	
 Show fold arrows in the gutter	
 Show folders that only hold one folder as one row	
@@ -2052,9 +2077,11 @@ The clipboard has no text.
 The complete file list is available in Output.	
 The connection dropped; trying to reconnect. Unsaved changes are kept.	
 The connection is down, so files with unsaved changes cannot be saved. Use File: Save a Copy to This Computer… to keep them, or close them, then reconnect.	
+The connection or folder changed since the preview. Rerun the search and preview again.	
 The connection to {} dropped while the data was being exchanged.	
 The connection to {} dropped. Reconnecting…	
 The connection to {} was lost during the scan, so the result is partial. Scan again once it is back.	
+The connection was lost; the results are incomplete.	
 The debug adapter did not accept a connection	
 The debug adapter did not start listening	
 The debug adapter exited before connecting	
@@ -2064,6 +2091,7 @@ The debug adapter stopped (exit code {})
 The debugger could not bind this breakpoint.	
 The download finished but js-debug was not found in it.	
 The element can't be renamed.	
+The file changed during the write ({})	
 The file changed on disk while you were editing. Nothing was saved.	
 The file could not be read.	
 The file is empty.	
@@ -2086,6 +2114,7 @@ The query ends too early
 The query is nested too deeply	
 The query is too long	
 The query needs more work than allowed; narrow it down	
+The query was edited: press Enter or Rerun to search for it.	
 The quoted value is not closed	
 The release notes are longer: read the rest at {}	
 The release notes are longer: read the rest on GitHub.	
@@ -2096,7 +2125,8 @@ The response could not be saved (curl write error).
 The response is larger than {} and was not downloaded.	
 The result would not parse in {0} file: {1}|The result would not parse in {0} files: {1}	
 The runtime checksum did not match. Nothing was activated. Check the connection and retry.	
-The search stopped at the result limit: only the files listed are changed. Open files can be undone; closed files are written to disk.	
+The search failed.	
+The search or the connection changed while the preview was being made. Preview again.	
 The selection is neither a JWT nor a Unix timestamp	
 The server did not answer within 60 seconds.	
 The server wants credentials: run the command once in the terminal (or set up an SSH key).	
@@ -2130,6 +2160,7 @@ There are no staged changes to stash
 There are no stashes.	
 There is no breakpoint on this line (F9 adds one).	
 There is no commit to undo	
+There is no replacement to undo.	
 There is no request here. Write METHOD URL on a line, separate requests with ###.	
 There is nothing to copy.	
 There is nothing to ignore here	
@@ -2171,7 +2202,9 @@ This pulls and pushes commits from and to “{}”.
 This pulls commits from “{}”.	
 This pushes commits to “{}”.	
 This release has no installer for this system. Download it from the release page.	
+This replacement is too large to preview. Narrow the search (fewer files or matches).	
 This repository has no remote. Add one with Git: Add Remote…	
+This search belongs to {0} on {1}, which this window does not show. Results cannot be opened or replaced here.	
 This window is installing an update. You can close it in a few seconds.	
 Thursday	
 Timeline	
@@ -2185,6 +2218,7 @@ Toggle Sidebar
 Toggle Terminal	
 Toggle a break-on-exception filter	
 Toggle inline view	
+Too many files to preview ({}). Narrow the search.	
 Track which remote branch?	
 Transfer cancelled.	
 Transfer failed: {}	
@@ -2199,6 +2233,7 @@ Type a commit message first
 Type a line number between 1 and {}	
 Type a name	
 Type a name from ~/.ssh/config or user@host	
+Type a query and press Enter to search.	
 Type a query. Esc closes the bar.	
 Type into terminals	
 Type the shortcut for {} (e.g. cmd-shift-d), then save	
@@ -2209,6 +2244,9 @@ Underline misspelled words in prose files and in code comments
 Undid commit “{}”	
 Undo	
 Undo Last Commit	
+Undo Replace	
+Undo conflict: {} changed after the replacement and was left as it is.	
+Undo is not available here: the replacement was made in another folder or connection.	
 Unexpected text after the closing quote	
 Unexpected “{}”	
 Unfold	
@@ -2219,12 +2257,14 @@ Uninstall {}?
 Uninstall…	
 Unknown configuration “{}” in compound “{}”	
 Unknown input “{0}” in “{1}”	
+Unknown outcome, check before retrying: {0} ({1})	
 Unknown theme '{0}'. Available: {1}	
 Unpin	
 Unsaved changes stay open in their tabs; saving recreates the file.	
 Unstage	
 Unstage all	
 Unstage {}	
+Unsupported encoding: the file would not be written back exactly, so it is not changed.	
 Unterminated quote in the Cargo test command	
 Untracked files will be deleted. This can't be undone.	
 Unwrapped lines	
@@ -2389,6 +2429,7 @@ connecting
 constant	
 constructor	
 content differs	
+context	
 copy your public key so no password is needed	
 could not list	
 could not load pull requests	
@@ -2437,6 +2478,7 @@ failed
 fetches {} from {}	
 field	
 file	
+files	
 files not found in the toolchain	
 files.associations.{}: expected a language name or extension	
 files.autoSave: unknown value {} (off, afterDelay, onFocusChange)	
@@ -2458,6 +2500,7 @@ goes to {}, which you have not sent anything to in this session
 goto	
 image default	
 in a key binding, == and != compare editor.language with a language id	
+in {} file|in {} files	
 install Xcode or a Swift toolchain (it contains sourcekit-lsp)	
 install clangd (Xcode tools, apt install clangd)	
 installed · {}	
@@ -2499,12 +2542,14 @@ no item {} in the response
 no “{}” in the response	
 not UTF-8	
 not available	
+not selected	
 not set	
 now	
 of {}	
 only the first {} files were looked at (search.structural.maxFiles)	
 operator	
 package	
+partly selected	
 path branch (new branch is created if it does not exist)	
 pause	
 paused on {}	
@@ -2530,6 +2575,7 @@ right
 running	
 rustc not found	
 seconds	
+selected	
 send the request named “{}” first	
 sends {} to {}	
 setting	
@@ -2642,6 +2688,8 @@ your words
 {0} needs strings, got {1} and {2}	
 {0} now tracks {1}	
 {0} of {1} MB	
+{0} of {1} changes	
+{0} of {1} changes in {2} files selected. Nothing is written before Apply.	
 {0} of {1}{2}	
 {0} on {1} is deleted for good, with everything in it. It is not moved to the Trash.	
 {0} only on the left, {1} only on the right, {2} changed, {3} identical, {4} errors	
@@ -2651,6 +2699,8 @@ your words
 {0} · version {1}	
 {0} · version {1} · {2} license	
 {0}, {1} {2} {3}	
+{0}. The search stopped at the result limit, so the results are incomplete.	
+{0}. The search was cancelled, so the results are incomplete.	
 {0}/{1} passed	
 {0}: a TOML array holds one kind of value, but this one has {1} and {2}	
 {0}: each entry needs {1} and {2}	
@@ -2690,6 +2740,7 @@ your words
 {} cannot be parsed as a number	
 {} cannot be rounded	
 {} changed no files (merge or empty commit).	
+{} change|{} changes	
 {} command|{} commands	
 {} conflict left|{} conflicts left	
 {} conflict|{} conflicts	
@@ -2743,6 +2794,7 @@ your words
 {} item|{} items	
 {} keeps crashing; restart the folder to try again.	
 {} license	
+{} match|{} matches	
 {} minute ago|{} minutes ago	
 {} minutes ago	
 {} month ago|{} months ago	
@@ -2810,6 +2862,7 @@ your words
 {}y	
 “color” must be an object	
 “localhost” means {0}: for a service on your own computer set http.runOn to {1}.	
+“{0}” cannot be written in {1}: not changed.	
 “{0}” is not a valid regular expression ({1}). Escape special characters with a backslash.	
 “{}” already exists. Replace it?	
 “{}” asks for inputs, which a compound cannot ask for: start it on its own.	

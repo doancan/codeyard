@@ -145,12 +145,18 @@ mod qa_lsp_settings_tests;
 mod qa_workbench_tests;
 #[cfg(test)]
 mod reliability_data_tests;
+mod replace_apply;
+mod replace_plan;
 mod resource_monitor;
 mod resources;
 #[cfg(test)]
 mod rust_hardening_tests;
 mod scm;
 mod search;
+mod search_doc;
+mod search_editor;
+#[cfg(test)]
+mod search_editor_tests;
 mod sections;
 mod settings;
 #[cfg(test)]
@@ -250,6 +256,11 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("down", search::HistoryNext, Some("SearchPanel")),
         KeyBinding::new("f4", search::NextResult, None),
         KeyBinding::new("shift-f4", search::PrevResult, None),
+        KeyBinding::new("down", search_editor::SelectNextRow, Some("SearchEditorList")),
+        KeyBinding::new("up", search_editor::SelectPrevRow, Some("SearchEditorList")),
+        KeyBinding::new("enter", search_editor::ActivateRow, Some("SearchEditorList")),
+        KeyBinding::new("space", search_editor::ToggleRow, Some("SearchEditorList")),
+        KeyBinding::new("secondary-shift-r", search_editor::RerunSearch, Some("SearchEditor")),
         KeyBinding::new("ctrl-shift-g", ShowScm, None),
         // Ctrl+Shift+D duplicates the selection in the editor on Windows and Linux.
         KeyBinding::new(if cfg!(target_os = "macos") { "ctrl-shift-d" } else { "alt-shift-d" }, ShowRunAndDebug, None),

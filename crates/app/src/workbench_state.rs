@@ -125,6 +125,10 @@ pub(super) struct ChromeLayout {
     pub(super) panel_right: bool,
     pub(super) panel_w: f32,
     pub(super) panel_max: bool,
+    /// A running maximize/restore animation: when it started and whether it maximizes.
+    pub(super) panel_anim: Option<(std::time::Instant, bool)>,
+    /// The editor-and-panel area at the last draw: a maximizing panel grows to it.
+    pub(super) panel_area: Option<gpui::Bounds<gpui::Pixels>>,
     pub(super) resizing_panel: bool,
     /// Width of the terminal list beside the terminals (when there are several), and whether its edge is being dragged.
     pub(super) term_list_w: f32,

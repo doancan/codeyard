@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Search Editors: "Search: Open Search Editor" keeps a query in its own tab with its options, globs, context lines and
+  folders (every folder of a multi-folder workspace), for keyboard navigation and rerun. Tabs return after a restart
+  with their query and up to 200 results, marked as restored until they run again; truncated, stopped and failed
+  searches say their results are incomplete.
+- Replacement review: Replace in the Search panel opens a preview of every change, selectable per change and per file,
+  made from open editors' unsaved text where there is one. Apply writes each file atomically only if it is unchanged
+  since the preview, keeps encodings, byte-order marks and line endings, refuses incomplete results, and reports per
+  file what changed, what did not and what is uncertain. One "Undo Replace" takes the batch back and reports files
+  edited since as undo conflicts.
+
 - The extension registry's signed index: format, offline verification (a threshold of root keys, an expiring online
   key, no rollback to an older copy) and `cyx yard keygen | sign | verify` for the key ceremony and test registries
   (docs/registry.md).
@@ -70,7 +80,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Terminal panel toolbar: New Terminal with a launch menu (profiles and installed shells, Split Terminal, tasks, default
   profile and *Configure Terminal Settings*), Split and Kill buttons, shown only while the Terminal tab is active. Its icons
-  share one optical size, and the maximize button shows when the panel is maximized.
+  share one optical size, and the maximize button shows when the panel is maximized. Maximize grows the panel towards
+  the top (the left when docked right) and restore shrinks it back, animated unless motion is reduced.
 - Terminal list: resizable by its left edge (remembered), larger rows, animated activity bars while a command runs, dots
   for a failed last command or a long command that finished out of sight, tooltips with folder and command,
   double-click to rename and middle-click to close.
@@ -125,6 +136,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The status-bar resources open as a strip inside the status bar, sliding left from their icon, instead of a card above it.
+  The most important figures sit next to the icon, so a narrow window cuts the others first.
+- Focus rings show only after the keyboard was used: a click lights the button it presses instead of outlining it.
+- Replace All and "replace in this file" in the Search panel open the replacement review instead of a confirmation that
+  wrote at once. Saving against a known version no longer recreates a file deleted since (it is a conflict); a file the
+  editor knows was deleted is still saved back. "Search: Open Results in Editor" is now "Search: Open Search Editor" and opens a Search Editor tab instead
+  of a plain-text file.
 - The About page groups application, platform and client protocol details, and shows the remote agent protocol when connected.
 - Releases are gated on performance instead of app size: `scripts/perf` compares startup, typing latency and memory with
   the previous release and blocks regressions beyond their budget. The app binary size limit is removed; the SSH agent keeps
@@ -138,6 +156,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The publish workflow that `cyx new` writes pins `actions/checkout` and the Codeyard publish action to commit SHAs. It
+  referred to a `v1` tag that did not exist, and a tag can be moved to code that would then run with the job's signing
+  identity.
 - Terminal Space sends a space, and Ctrl+C copies a selection while still interrupting the program when nothing is selected.
 - SSH connections detect an incompatible bundled agent before attaching to its daemon and explain how to rebuild or reinstall it.
 - Stopping a piped process also kills descendants when its leader has already exited. A process

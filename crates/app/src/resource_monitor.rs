@@ -1,4 +1,4 @@
-//! Status-bar resource popover: explicit open, pointer dismissal, optional pinning.
+//! Status-bar resources: a strip that opens leftwards inside the status bar, closes when the pointer leaves, can be pinned.
 
 use std::path::PathBuf;
 use std::sync::{
@@ -7,11 +7,11 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 
-use gpui::{Animation, AnimationExt as _, Context, FocusHandle, Render, Task, Window, deferred, div, prelude::*, px};
+use gpui::{Animation, AnimationExt as _, Context, FocusHandle, Render, Task, Window, div, prelude::*, px};
 
 use crate::i18n::t;
 use crate::resources::{self, CpuTicks, ProjectSize, SystemSample};
-use crate::ui::{self, c, icon, layout, palette, text};
+use crate::ui::{self, c, icon, palette, text};
 
 gpui::actions!(resources, [ToggleResources]);
 
@@ -196,146 +196,116 @@ impl ResourceMonitor {
         }));
     }
 
-    fn card(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    /// The figures, laid out in one row of the status bar. The most important ones sit next to the icon, so a narrow window
+    /// cuts the least important ones on the left first.
+    fn strip(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let p = *palette(cx);
+        let keyboard = ui::keyboard_focus(cx);
         let unavailable = || t("Unavailable").to_string();
         let bytes = |n: Option<u64>| n.map(crate::compare_logic::human_size).unwrap_or_else(unavailable);
-        let row = |label: &str, value: String| {
+        let stat = |label: &str, value: String, color: u32| {
             div()
+                .flex_none()
                 .flex()
-                .justify_between()
                 .items_center()
-                .gap(px(16.))
-                .py(px(5.))
+                .gap(px(5.))
                 .child(div().text_color(c(p.text_muted)).child(label.to_string()))
-                .child(div().text_color(c(p.text)).child(value))
+                .child(div().text_color(c(color)).child(value))
         };
+        let meter = |fraction: Option<f32>| {
+            div().flex_none().w(px(28.)).h(px(3.)).rounded_full().bg(c(p.surface_active)).when_some(fraction, |d, value| {
+                d.child(div().h_full().w(gpui::relative(value.clamp(0., 1.))).rounded_full().bg(c(if value > 0.9 { p.warning } else { p.accent })))
+            })
+        };
+        let divider = || div().flex_none().w(px(1.)).h(px(12.)).bg(c(p.border));
         let sample = self.sample.as_ref();
         let cpu = self.cpu.map(|n| format!("{n:.0}%")).unwrap_or_else(|| t("Measuring…").to_string());
         let memory = sample
             .and_then(|s| s.memory)
             .map(|(used, total)| format!("{} / {}", crate::compare_logic::human_size(used), crate::compare_logic::human_size(total)))
             .unwrap_or_else(unavailable);
-        let meter = |fraction: Option<f32>| {
-            div().h(px(3.)).w_full().rounded_full().bg(c(p.surface_active)).when_some(fraction, |d, value| {
-                d.child(div().h_full().w(gpui::relative(value.clamp(0., 1.))).rounded_full().bg(c(if value > 0.9 { p.warning } else { p.accent })))
-            })
+        let project = (!self.remote && self.project.is_some()).then(|| match &self.size {
+            Some(size) => {
+                let at_least = if size.partial { "≥ " } else { "" };
+                let value = format!("{at_least}{} · {at_least}{} {}", crate::compare_logic::human_size(size.bytes), size.files, t("files"));
+                (value, if size.partial { p.warning } else { p.text })
+            }
+            None => (t("Measuring…").to_string(), p.text_muted),
+        });
+        let button = |id: &'static str, glyph: &'static str, tip: &'static str, on: bool, focus: &FocusHandle| {
+            div()
+                .id(id)
+                .debug_selector(move || id.into())
+                .flex_none()
+                .size(px(20.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded(px(theme::radius::SM))
+                .cursor_pointer()
+                .border_1()
+                .border_color(ui::ca(p.focus_ring, 0.))
+                .when(keyboard, |d| d.focus(|d| d.border_color(c(p.focus_ring))))
+                .when(on, |d| d.bg(c(p.surface_active)))
+                .hover(|d| d.bg(c(p.surface_hover)))
+                .active(|d| d.bg(c(p.surface_active)))
+                .track_focus(focus)
+                .tab_index(0)
+                .child(icon(glyph, 13., if on { p.accent } else { p.text_muted }))
+                .tooltip(move |_, cx| cx.new(|_| crate::workbench::Tooltip(tip.into())).into())
         };
         div()
-            .id("resource-card")
-            .debug_selector(|| "resource-card".into())
-            .occlude()
-            .w(px(336.))
-            .max_w((window.viewport_size().width - px(24.)).max(px(160.)))
-            .max_h((window.viewport_size().height - px(layout::STATUSBAR_H + layout::TITLEBAR_H + 16.)).max(px(100.)))
-            .overflow_y_scroll()
+            .flex_none()
+            .h_full()
             .flex()
-            .flex_col()
-            .p(px(14.))
-            .rounded(px(theme::radius::LG))
-            .bg(c(p.surface_raised))
-            .border_1()
-            .border_color(c(p.border))
-            .shadow_lg()
+            .items_center()
+            .gap(px(10.))
+            .pl(px(10.))
+            .pr(px(4.))
             .text_size(px(text::XS.0))
-            .on_hover(cx.listener(|this, hovered, _, cx| this.hover(true, *hovered, cx)))
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .mb(px(2.))
-                    .child(icon("activity", 16., p.accent))
-                    .child(div().flex_1().text_size(px(text::SM.0)).font_weight(gpui::FontWeight::SEMIBOLD).child(t("Resources")))
-                    .child(
-                        ui::icon_button("resources-pin", "pin", if self.pinned { t("Unpin") } else { t("Pin") }, &p)
-                            .size(px(26.))
-                            .border_1()
-                            .border_color(ui::ca(p.focus_ring, 0.))
-                            .focus(|d| d.border_color(c(p.focus_ring)))
-                            .track_focus(&self.pin_focus)
-                            .tab_index(0)
-                            .debug_selector(|| "resources-pin".into())
-                            .when(self.pinned, |d| d.bg(c(p.surface_active)))
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.pinned = !this.pinned;
-                                this.dismiss = None;
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        ui::icon_button("resources-close", "x", t("Close"), &p)
-                            .size(px(26.))
-                            .border_1()
-                            .border_color(ui::ca(p.focus_ring, 0.))
-                            .focus(|d| d.border_color(c(p.focus_ring)))
-                            .track_focus(&self.close_focus)
-                            .tab_index(0)
-                            .on_click(cx.listener(|this, _, _, cx| this.close(cx))),
-                    ),
-            )
-            .child(row(t("CPU"), cpu))
-            .child(meter(self.cpu.map(|n| n / 100.)))
-            .child(row(t("Memory"), memory))
-            .child(meter(sample.and_then(|s| s.memory).map(|(used, total)| used as f32 / total.max(1) as f32)))
+            .whitespace_nowrap()
+            .when_some(project, |d, (value, color)| d.child(stat(t("Project"), value, color)).child(divider()))
+            .child(stat(t("Disk available"), bytes(sample.and_then(|s| s.disk_free)), p.text))
+            .child(divider())
+            .child(stat(t("Codeyard memory"), bytes(sample.and_then(|s| s.app_memory)), p.text))
             .when_some(sample.and_then(|s| s.load), |d, load| {
-                d.child(row(t("Load average (1 / 5 / 15 min)"), format!("{:.2} / {:.2} / {:.2}", load[0], load[1], load[2])))
+                d.child(divider()).child(stat(t("Load"), format!("{:.2} / {:.2} / {:.2}", load[0], load[1], load[2]), p.text))
             })
-            .when_some(sample, |d, sample| d.child(row(t("Logical processors"), sample.cores.to_string())))
-            .child(row(t("Codeyard memory"), bytes(sample.and_then(|s| s.app_memory))))
-            .child(row(t("Disk available"), bytes(sample.and_then(|s| s.disk_free))))
-            .child(
-                div()
-                    .border_t_1()
-                    .border_color(c(p.border))
-                    .mt(px(8.))
-                    .pt(px(10.))
-                    .child(div().font_weight(gpui::FontWeight::SEMIBOLD).child(t("Project")))
-                    .when_some(self.project.as_ref(), |d, root| {
-                        d.child(div().text_color(c(p.text_muted)).truncate().child(root.to_string_lossy().into_owned()))
-                    })
-                    .when(self.remote, |d| d.child(div().py(px(8.)).text_color(c(p.text_muted)).child(t("Project size is available for local folders."))))
-                    .when(!self.remote && self.project.is_none(), |d| {
-                        d.child(div().py(px(8.)).text_color(c(p.text_muted)).child(t("Open a folder to measure its size.")))
-                    })
-                    .when(!self.remote && self.project.is_some(), |d| {
-                        d.child(row(
-                            t("Project size"),
-                            self.size
-                                .as_ref()
-                                .map(|s| format!("{}{}", if s.partial { "≥ " } else { "" }, crate::compare_logic::human_size(s.bytes)))
-                                .unwrap_or_else(|| t("Measuring…").to_string()),
-                        ))
-                        .child(row(
-                            t("Files"),
-                            self.size.as_ref().map(|s| format!("{}{}", if s.partial { "≥ " } else { "" }, s.files)).unwrap_or_else(|| "—".into()),
-                        ))
-                        .child(div().text_color(c(p.text_muted)).child(t("Includes hidden and build files; symlinks are not followed.")))
-                        .when(self.size.as_ref().is_some_and(|s| s.partial), |d| {
-                            d.child(div().mt(px(4.)).text_color(c(p.warning)).child(t("Partial scan: a time, file or access limit was reached.")))
-                        })
-                    }),
-            )
-            .child(div().mt(px(12.)).text_color(c(p.text_muted)).child(if self.pinned {
-                t("Pinned · click the pin to restore auto-close")
-            } else {
-                t("Closes when the pointer leaves · pin to keep open")
-            }))
+            .child(divider())
+            .child(stat(t("Memory"), memory, p.text))
+            .child(meter(sample.and_then(|s| s.memory).map(|(used, total)| used as f32 / total.max(1) as f32)))
+            .child(divider())
+            .child(stat(t("CPU"), cpu, p.text))
+            .child(meter(self.cpu.map(|n| n / 100.)))
+            .child(button("resources-pin", "pin", if self.pinned { t("Unpin") } else { t("Pin") }, self.pinned, &self.pin_focus).ml(px(2.)).on_click(
+                cx.listener(|this, _, _, cx| {
+                    this.pinned = !this.pinned;
+                    this.dismiss = None;
+                    cx.notify();
+                }),
+            ))
+            .child(button("resources-close", "x", t("Close"), false, &self.close_focus).on_click(cx.listener(|this, _, _, cx| this.close(cx))))
     }
 }
+
+/// Width the strip may open to: wide enough for every figure; a narrower status bar cuts it from the left.
+const STRIP_W: f32 = 900.;
 
 impl Render for ResourceMonitor {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = *palette(cx);
         let shown = self.shown;
         let closing = self.closing;
+        let keyboard = ui::keyboard_focus(cx);
         if closing && (self.pin_focus.is_focused(window) || self.close_focus.is_focused(window)) {
             window.focus(&self.focus);
         }
         div()
-            .relative()
             .h_full()
-            .flex_none()
+            .min_w_0()
+            .flex_shrink()
+            .flex()
+            .items_center()
             .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
                 if event.keystroke.key == "escape" && this.shown {
                     this.close(cx);
@@ -353,38 +323,57 @@ impl Render for ResourceMonitor {
                     cx.stop_propagation();
                 }
             }))
+            .when(shown, |d| {
+                // Opens leftwards inside the status bar: the row is right-aligned in a box whose width grows from the icon.
+                let strip = div()
+                    .id("resource-strip")
+                    .debug_selector(|| "resource-strip".into())
+                    .h_full()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .flex()
+                    .justify_end()
+                    .items_center()
+                    .bg(c(p.surface_raised))
+                    .border_l_1()
+                    .border_color(c(p.border))
+                    .on_hover(cx.listener(|this, hovered, _, cx| this.hover(true, *hovered, cx)))
+                    .child(self.strip(cx));
+                if crate::system_prefs::reduce_motion(cx) {
+                    return d.child(strip.when(closing, |d| d.opacity(0.)).max_w(px(STRIP_W)));
+                }
+                d.child(strip.with_animation(
+                    if closing { "resources-exit" } else { "resources-enter" },
+                    Animation::new(Duration::from_millis(if closing { 120 } else { 200 })).with_easing(gpui::ease_out_quint()),
+                    move |d, delta| {
+                        let open = if closing { 1. - delta } else { delta };
+                        d.max_w(px(STRIP_W * open)).opacity(open.min(1.))
+                    },
+                ))
+            })
             .child(
                 div()
                     .id("sb-resources")
                     .debug_selector(|| "sb-resources".into())
                     .track_focus(&self.focus)
                     .tab_index(0)
+                    .flex_none()
                     .h_full()
                     .w(px(32.))
                     .border_1()
                     .border_color(ui::ca(p.focus_ring, 0.))
-                    .focus(|d| d.border_color(c(p.focus_ring)))
+                    .when(keyboard, |d| d.focus(|d| d.border_color(c(p.focus_ring))))
                     .flex()
                     .items_center()
                     .justify_center()
                     .cursor_pointer()
                     .when(shown && !closing, |d| d.bg(c(p.surface_active)))
                     .hover(|d| d.bg(c(p.surface_hover)))
-                    .child(icon("activity", 16., if shown { p.accent } else { p.text_muted }))
+                    .active(|d| d.bg(c(p.surface_active)))
+                    .child(icon("activity", 16., if shown && !closing { p.accent } else { p.text_muted }))
                     .on_hover(cx.listener(|this, hovered, _, cx| this.hover(false, *hovered, cx)))
                     .on_click(cx.listener(|this, _, window, cx| this.toggle(window, cx))),
             )
-            .when(shown, |d| {
-                let card = div().absolute().bottom(px(layout::STATUSBAR_H + 6.)).right_0().child(self.card(window, cx));
-                if crate::system_prefs::reduce_motion(cx) {
-                    return d.child(deferred(card));
-                }
-                d.child(deferred(card.with_animation(
-                    if closing { "resources-exit" } else { "resources-enter" },
-                    Animation::new(Duration::from_millis(if closing { 120 } else { 160 })),
-                    move |d, delta| d.opacity(if closing { 1. - delta } else { delta }),
-                )))
-            })
     }
 }
 
@@ -397,6 +386,7 @@ impl Drop for ResourceMonitor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ui::layout;
     use gpui::TestAppContext;
 
     struct BarFixture(gpui::Entity<ResourceMonitor>);
@@ -417,7 +407,7 @@ mod tests {
         cx.simulate_mouse_move(trigger, None, gpui::Modifiers::none());
         cx.simulate_click(trigger, gpui::Modifiers::none());
         cx.run_until_parked();
-        let card = cx.debug_bounds("resource-card").unwrap();
+        let card = cx.debug_bounds("resource-strip").unwrap();
         cx.simulate_mouse_move(card.center(), None, gpui::Modifiers::none());
         cx.run_until_parked();
         cx.executor().advance_clock(Duration::from_millis(300));
@@ -430,6 +420,43 @@ mod tests {
         cx.executor().advance_clock(Duration::from_millis(130));
         cx.run_until_parked();
         assert!(monitor.read_with(cx, |m, _| !m.shown && m.poll.is_none()), "real hit testing must dismiss the panel and stop sampling");
+    }
+
+    #[gpui::test]
+    fn the_strip_opens_leftwards_inside_the_status_bar(cx: &mut TestAppContext) {
+        crate::qa_workbench_tests::globals(cx);
+        // The final layout: with reduced motion the strip is drawn fully open at once.
+        cx.update(|cx| cx.global_mut::<crate::settings::Settings>().reduce_motion = Some(true));
+        let monitor = cx.new(ResourceMonitor::new);
+        let (_fixture, cx) = cx.add_window_view(|_, _| BarFixture(monitor.clone()));
+        cx.run_until_parked();
+        let icon = cx.debug_bounds("sb-resources").unwrap();
+        cx.simulate_click(icon.center(), gpui::Modifiers::none());
+        cx.run_until_parked();
+        let (strip, icon) = (cx.debug_bounds("resource-strip").unwrap(), cx.debug_bounds("sb-resources").unwrap());
+        assert_eq!((strip.top(), strip.bottom()), (icon.top(), icon.bottom()), "the strip is a part of the status bar row, not a card above it");
+        assert!((strip.right() - icon.left()).abs() < px(1.), "it grows from the icon: {strip:?} {icon:?}");
+        assert!(strip.size.width > px(200.), "the figures are shown: {strip:?}");
+        let (pin, close) = (cx.debug_bounds("resources-pin").unwrap(), cx.debug_bounds("resources-close").unwrap());
+        assert!(strip.contains(&pin.center()) && strip.contains(&close.center()), "pin and close sit inside the strip");
+    }
+
+    #[gpui::test]
+    fn a_narrow_status_bar_cuts_the_strip_on_the_left(cx: &mut TestAppContext) {
+        crate::qa_workbench_tests::globals(cx);
+        // The final layout: with reduced motion the strip is drawn fully open at once.
+        cx.update(|cx| cx.global_mut::<crate::settings::Settings>().reduce_motion = Some(true));
+        let monitor = cx.new(ResourceMonitor::new);
+        let (_fixture, cx) = cx.add_window_view(|_, _| BarFixture(monitor.clone()));
+        cx.simulate_resize(gpui::size(px(300.), px(200.)));
+        cx.run_until_parked();
+        let at = cx.debug_bounds("sb-resources").unwrap().center();
+        cx.simulate_click(at, gpui::Modifiers::none());
+        cx.run_until_parked();
+        let (strip, icon) = (cx.debug_bounds("resource-strip").unwrap(), cx.debug_bounds("sb-resources").unwrap());
+        assert!(strip.left() >= px(0.) && icon.right() <= px(300.), "nothing leaves the window: {strip:?} {icon:?}");
+        let close = cx.debug_bounds("resources-close").unwrap();
+        assert!(close.left() >= strip.left() && close.right() <= icon.left() + px(1.), "the controls next to the icon stay visible: {close:?}");
     }
 
     #[gpui::test]

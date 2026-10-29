@@ -149,7 +149,10 @@ fn find_in_files_status_and_results_document(cx: &mut TestAppContext) {
         cx.simulate_input("needle");
         cx.simulate_keystrokes("enter");
         wait_ticking(cx, "search", |cx| search.read_with(cx, |s, _| !s.is_searching()));
-        let text = search.read_with(cx, |s, cx| s.results_text(cx));
+        wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Search: Open Search Editor", window, cx));
+        let ed = wb.read_with(cx, |wb, _| wb.active_search_editor_for_test()).expect("a Search Editor opened");
+        wait_ticking(cx, "search editor", |cx| ed.read_with(cx, |e, _| e.doc.state == crate::search_doc::RunState::Complete));
+        let text = ed.read_with(cx, |e, _| e.doc.as_text());
         assert!(text.starts_with(&format!("{query_line}\n{options}\n")), "{lang}: {text}");
         let _ = none;
     }
