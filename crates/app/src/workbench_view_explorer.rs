@@ -266,7 +266,7 @@ impl Workbench {
                     let e = ed.read(cx);
                     let (name, path, dirty) = (e.name.to_string(), e.path.clone(), e.is_dirty());
                     let mark = self.git_mark_of(&path);
-                    let active = self.tabs.active == Some(ix) && self.tabs.focused_left;
+                    let active = self.tabs.active == Some(ix);
                     let group: SharedString = format!("open-editor-{ix}").into();
                     div()
                         .id(("open-editor", ix))
@@ -317,7 +317,6 @@ impl Workbench {
                                 .into_any_element()
                         })
                         .on_click(cx.listener(move |this, _, window, cx| {
-                            this.tabs.focused_left = true;
                             this.activate(ix, window, cx);
                         }))
                         .into_any_element()

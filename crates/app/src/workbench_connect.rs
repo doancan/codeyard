@@ -354,9 +354,7 @@ impl Workbench {
         self.scm.update(cx, |s, cx| s.set_status(self.remote.host.clone(), None, cx));
         let h = self.remote.host.clone();
         self.search.update(cx, |s, cx| s.set_context(h, None, cx));
-        self.tabs.editors.clear();
-        self.tabs.other = None;
-        self.tabs.focused_left = true;
+        self.tabs = Default::default();
         self.tabs.active = None;
         self.tabs.opening = None;
         self.tabs.open_error = None;

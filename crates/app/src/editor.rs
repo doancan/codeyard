@@ -535,6 +535,7 @@ pub struct EditorView {
     surface_origin: Point<Pixels>,
     /// First minimap line at the last paint (to convert a click to a line).
     minimap_start: usize,
+    minimap_hidden: bool,
     /// Height of the editor surface (scrollbar computation) and where the dragged thumb
     /// was grabbed (relative to the top of the thumb).
     surface_h: Pixels,
@@ -545,7 +546,7 @@ pub struct EditorView {
     /// scroll, focus, find bar, popups); the document (text, undo, syntax,
     /// LSP, git) is single. `slot`: the view currently in the fields; the others are in `parked`.
     slot: usize,
-    parked: [Option<ViewState>; 2],
+    parked: Vec<Option<ViewState>>,
     /// Drag started by a double click: the selection grows word by word (the starting word).
     word_drag: Option<Range<usize>>,
     /// Current state of the blinking cursor and the signature that resets the cycle (version, cursor, focus).
@@ -601,8 +602,8 @@ type DisplayKey = (u64, usize, Option<usize>, Vec<usize>);
 const SNIPPET_MARKS: usize = 97;
 /// Linked tag editing: [start of the typed name, start of its counterpart].
 const LINK_MARKS: usize = 95;
-/// Find-in-selection scope (start, end), per view slot: 90 + slot.
-const FIND_SCOPE_MARKS: usize = 90;
+/// View-specific marks have disjoint namespaces, separate from document marks.
+const FIND_SCOPE_MARKS: usize = 0x1000;
 
 /// Key of line bookmarks in buffer marks (tied to line starts, they shift).
 const BOOKMARK_MARKS: usize = 98;
@@ -613,7 +614,7 @@ pub use crate::debug_model::BpMeta;
 const BREAKPOINT_MARKS: usize = 96;
 
 /// Key of fold headers in buffer marks (+ view slot).
-const FOLD_MARKS: usize = 100;
+const FOLD_MARKS: usize = 0x2000;
 
 /// Fields belonging to a view (swapped with the same-named fields in EditorView).
 #[derive(Default)]
@@ -635,6 +636,7 @@ struct ViewState {
     hover_task: Option<gpui::Task<()>>,
     surface_origin: Point<Pixels>,
     minimap_start: usize,
+    minimap_hidden: bool,
     hscroll: Pixels,
     surface_h: Pixels,
     scrollbar_drag: Option<Pixels>,
@@ -649,6 +651,24 @@ thread_local! {
     /// View being painted: listeners set up during painting switch to this view
     /// first when an event arrives (two groups paint the same editor with different views).
     static RENDER_SLOT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    #[cfg(test)]
+    static SLOT_PAINTS: std::cell::RefCell<std::collections::HashMap<(gpui::EntityId, usize), usize>> = std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+#[cfg(test)]
+pub fn slot_paint_count(editor: &Entity<EditorView>, slot: usize) -> usize {
+    SLOT_PAINTS.with(|counts| counts.borrow().get(&(editor.entity_id(), slot)).copied().unwrap_or(0))
+}
+
+#[cfg(test)]
+pub fn slot_text_width(editor: &Entity<EditorView>, slot: usize, cx: &mut App) -> Pixels {
+    editor.update(cx, |e, _| {
+        let previous = e.slot;
+        e.enter(slot);
+        let width = e.text_width;
+        e.enter(previous);
+        width
+    })
 }
 
 /// The view-aware version of `cx.listener`: runs in the view it was painted in.
@@ -674,94 +694,9 @@ impl SlotListener for Context<'_, EditorView> {
     }
 }
 
-/// Element that paints the editor with a given view (one per group).
-pub struct SlotView {
-    editor: Entity<EditorView>,
-    slot: usize,
-}
-
-pub fn slot_view(editor: Entity<EditorView>, slot: usize) -> SlotView {
-    SlotView { editor, slot }
-}
-
-impl SlotView {
-    /// While `f` runs the editor is in this view; afterwards it returns to its old view.
-    fn within<R>(&self, cx: &mut App, f: impl FnOnce(&mut App) -> R) -> R {
-        let slot = self.slot;
-        let prev = self.editor.update(cx, |e, _| {
-            let prev = e.slot;
-            e.enter(slot);
-            prev
-        });
-        let r = f(cx);
-        self.editor.update(cx, |e, _| e.enter(prev));
-        r
-    }
-}
-
-impl IntoElement for SlotView {
-    type Element = Self;
-    fn into_element(self) -> Self {
-        self
-    }
-}
-
-impl Element for SlotView {
-    type RequestLayoutState = gpui::AnyElement;
-    type PrepaintState = ();
-
-    fn id(&self) -> Option<ElementId> {
-        None
-    }
-
-    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
-        None
-    }
-
-    fn request_layout(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> (LayoutId, gpui::AnyElement) {
-        let editor = self.editor.clone();
-        let slot = self.slot;
-        let mut el = self.within(cx, |cx| {
-            editor.update(cx, |e, cx| {
-                e.enter(slot);
-                e.render(window, cx).into_any_element()
-            })
-        });
-        let id = self.within(cx, |cx| el.request_layout(window, cx));
-        (id, el)
-    }
-
-    fn prepaint(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        _: Bounds<Pixels>,
-        el: &mut gpui::AnyElement,
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        self.within(cx, |cx| el.prepaint(window, cx));
-    }
-
-    fn paint(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&gpui::InspectorElementId>,
-        _: Bounds<Pixels>,
-        el: &mut gpui::AnyElement,
-        _: &mut (),
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        self.within(cx, |cx| el.paint(window, cx));
-    }
-}
+#[path = "editor_slots.rs"]
+mod slots;
+pub use slots::slot_view;
 
 impl Drop for EditorView {
     fn drop(&mut self) {
@@ -1018,11 +953,12 @@ impl EditorView {
             http_lines: Default::default(),
             surface_origin: Point::default(),
             minimap_start: 0,
+            minimap_hidden: false,
             surface_h: px(0.),
             scrollbar_drag: None,
             hscroll: px(0.),
             slot: 0,
-            parked: [None, None],
+            parked: vec![None, None],
             snippet_stop: None,
             word_drag: None,
             cursor_on: true,
@@ -1072,6 +1008,7 @@ impl EditorView {
         swap(&mut self.hover_task, &mut v.hover_task);
         swap(&mut self.surface_origin, &mut v.surface_origin);
         swap(&mut self.minimap_start, &mut v.minimap_start);
+        swap(&mut self.minimap_hidden, &mut v.minimap_hidden);
         swap(&mut self.surface_h, &mut v.surface_h);
         swap(&mut self.scrollbar_drag, &mut v.scrollbar_drag);
         swap(&mut self.hscroll, &mut v.hscroll);
@@ -1115,11 +1052,12 @@ impl EditorView {
         self.slot == slot || self.parked.get(slot).is_some_and(Option::is_some)
     }
 
-    /// Also opened in the second group: that group's view (cursor and scroll same as the current one).
+    /// Opened in another group: that group's view (cursor and scroll same as the current one).
     pub fn open_slot(&mut self, slot: usize, cx: &mut Context<Self>) {
-        if self.has_slot(slot) || slot >= self.parked.len() {
+        if self.has_slot(slot) || slot >= crate::editor_layout::MAX_GROUPS {
             return;
         }
+        self.parked.resize_with(self.parked.len().max(slot + 1), || None);
         let line = self.buffer.char_to_line(self.buffer.cursor());
         let scroll = UniformListScrollHandle::new();
         scroll.scroll_to_item(line, ScrollStrategy::Center);

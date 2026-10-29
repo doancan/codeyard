@@ -126,8 +126,6 @@ pub(super) struct ChromeLayout {
     pub(super) panel_w: f32,
     pub(super) panel_max: bool,
     pub(super) resizing_panel: bool,
-    /// Width ratio of the left group while split.
-    pub(super) split_ratio: f32,
     pub(super) resizing_split: bool,
     /// Zoom delta (pt) and the base sizes from settings (editor, line, terminal).
     pub(super) zoom: f32,
@@ -236,31 +234,29 @@ pub(super) struct RootsState {
     pub(super) file_index: Option<FileIndex>,
 }
 
-/// Editor groups: tabs, separate tab views (diff, large file, page) and startup state.
+/// Editor groups keep all tab-local state together when focus changes.
+#[derive(Default)]
 pub(super) struct TabsState {
-    /// Tabs of the focused editor group (when split, the other lives in `other`;
-    /// they swap when focus changes, so the tab code only knows a single group).
-    pub(super) editors: Vec<Entity<EditorView>>,
-    pub(super) other: Option<Group>,
-    /// Whether the focused group is the left one.
-    pub(super) focused_left: bool,
-    pub(super) active: Option<usize>,
-    pub(super) opening: Option<String>,
-    pub(super) open_error: Option<(String, SharedString)>,
-    /// Single diff tab (a new diff replaces the previous one); `diff_active`: that tab is in front.
-    pub(super) diff: Option<Entity<crate::diff::DiffView>>,
-    pub(super) diff_active: bool,
-    /// Single large-file view (read-only; a separate tab like diff).
-    pub(super) large: Option<Entity<crate::large::LargeFileView>>,
-    pub(super) large_active: bool,
-    /// Welcome or Settings page (single tab, like diff); `page_active`: that tab is in front.
-    pub(super) page: Option<Page>,
-    pub(super) page_active: bool,
-    pub(super) _page_sub: Option<Subscription>,
-    /// Match to show in the file opened from a search result: (path, line, column, length).
-    pub(super) pending_reveal: Option<(String, u32, u32, u32)>,
-    /// Tab bar scroll (so the active tab stays visible).
-    pub(super) tab_scroll: gpui::ScrollHandle,
+    pub(super) current: Group,
+    pub(super) groups: std::collections::BTreeMap<crate::editor_layout::GroupId, Group>,
+    pub(super) layout: crate::editor_layout::Layout,
+    pub(super) resizing: Option<GroupResize>,
+    pub(super) revision: u64,
+    pub(super) grid_scroll: gpui::ScrollHandle,
+    pub(super) grid_viewport: std::rc::Rc<std::cell::Cell<gpui::Size<gpui::Pixels>>>,
+    pub(super) reveal_group: std::rc::Rc<std::cell::Cell<Option<GroupKey>>>,
+}
+
+impl std::ops::Deref for TabsState {
+    type Target = Group;
+    fn deref(&self) -> &Group {
+        &self.current
+    }
+}
+impl std::ops::DerefMut for TabsState {
+    fn deref_mut(&mut self) -> &mut Group {
+        &mut self.current
+    }
 }
 
 /// In-app updates: what the updater is doing, the dialog, and the worker thread (see workbench_update.rs).

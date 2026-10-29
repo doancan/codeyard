@@ -27,8 +27,8 @@ passing their checks. Do not mark a feature complete from unit tests alone.
 
 | ID | Feature / proposed PR | Required behavior and hardening | Completion evidence |
 | --- | --- | --- | --- |
-| F01 | Select and manage multiple Explorer entries | Modifier-toggle and Shift-range mouse selection; keyboard range/select-all; stable path selection through refresh, sorting and collapse; selected-row semantics. Copy, cut, drag, paste and delete operate on the selection with one reviewable summary, parent/child deduplication, root protection, no overwrites, per-entry failures, retryable failed cuts, preserved dirty tabs and stale-host guards. File copying works through the agent without shell-specific commands. | Pending: selection, filesystem, GPUI and SSH regressions; native interaction; required PR checks. |
-| F02 | Arrange editors in a persistent grid | Arbitrary nested horizontal/vertical groups; split in each direction; resize, move/reorder tabs, focus/navigation and close empty groups; shared document/independent views. Persist and validate layouts across restart, workspace changes, narrow windows and many groups; migrate existing two-group sessions. | Pending: layout model/property cases, GPUI editing/restore tests, native layout and memory measurements. |
+| F01 | Select and manage multiple Explorer entries | Modifier-toggle and Shift-range mouse selection; keyboard range/select-all; stable path selection through refresh, sorting and collapse; selected-row semantics. Copy, cut, drag, paste and delete operate on the selection with one reviewable summary, parent/child deduplication, root protection, no overwrites, per-entry failures, retryable failed cuts, preserved dirty tabs and stale-host guards. File copying works through the agent without shell-specific commands. | Local strict checks, filesystem/GPUI/SSH coverage, native macOS copy walkthrough and Retina memory/size gates pass. PR #48 is ready for review; all required platform CI checks pass on `0293d1a`. The same-machine performance comparison remains pending. |
+| F02 | Arrange editors in a persistent grid | Arbitrary nested horizontal/vertical groups; split in each direction; resize, move/reorder tabs, focus/navigation and close empty groups; shared document/independent views. Persist and validate layouts across restart, workspace changes, narrow windows and many groups; migrate existing two-group sessions. | Validated layout model, atomic session storage and GPUI workflows; 1,850 workspace tests and Retina memory budgets pass. Native restart/shared-edit/narrow-window flows are verified. Final native minimap confirmation, required CI on the latest fixes and performance comparison remain pending. |
 | F03 | Set up language services from the editor | Discover bundled/installed JS/TS, HTML and CSS services; an explicit, discoverable install/retry flow with progress, cancellation, exact destination, offline errors and version/integrity controls. Install on the file's host; respect workspace trust and explicit user commands. Verify completion, diagnostics, formatting and restart without a terminal setup step. | Pending: fake installer/server failure matrix, local/SSH language interactions and native first-run flow. |
 | F04 | Execute dependency-aware tasks | Typed shell/process tasks, cwd/env/platform options, variable/input expansion, parallel/sequence dependencies and cycle validation; background/watch readiness and custom problem matchers; pre/post-debug integration. Bounded output, cancellation of the process tree, concurrency policy, clear diagnostics and correct failed dependency behavior. | Pending: actual child-process DAG/watch/input/problem tests, local/SSH cancellation, debug integration. |
 | F05 | Complete accessible application workflows | Search/results, Problems/fixes, Settings/shortcuts, debug/testing/remote views, SCM graph/worktrees/sync, output/ports, menus and dialogs expose roles, states, actions, errors and focus restoration. Row/control/text geometry, document-relative text selection, scroll actions and terminal scrollback work with bounded snapshots and stale-action rejection. | Pending: AccessKit consumer/geometry/action regressions, native VoiceOver task transcripts and Windows UI Automation evidence. |
@@ -76,8 +76,7 @@ Cross-platform validation found musl has no exported `renameat2` wrapper. Static
 the same exclusive kernel operation directly; local x64/ARM64 builds and Linux CI pass. Native Windows
 packaging passed. Expanded Windows Explorer coverage exposed non-normalized fixture paths and an
 unbounded recursive-read retry after errors. Fixtures now use native-path normalization, read errors
-stop recursion, and a regression asserts no replacement read is scheduled. Windows UI checks are
-being rerun. The daemon permission assertion now waits for its handshake readiness barrier.
+stop recursion, and a regression asserts no replacement read is scheduled. Windows UI checks pass on `0293d1a`; macOS and Linux checks also pass. The complete required workflow is successful: Actions run `40766240680`. The daemon permission assertion now waits for its handshake readiness barrier.
 
 Cancellation interrupts staged copies and stops before the next move/delete. A connection loss or
 missing cancellation acknowledgement stops the batch with an explicit uncertain outcome; it never
@@ -89,3 +88,60 @@ runs and five samples per memory scene. Startup p95 changed 238.3 → 236.8 ms (
 typing p95 24.9 → 25.6 ms (+2.6%), and welcome/syntax/terminal memory medians changed
 69 → 69 / 114 → 113 / 73 → 74 MB. Every comparison gate passes. The branch subsequently
 integrates main's declarative-extension delivery; its integration head requires its own CI.
+
+### F02: implementation in progress
+
+- The storage regression initially reassigned groups 2/7/31 to group 1. Stable IDs now round-trip,
+  and a rejecting SQLite trigger proves that layout-write failure rolls back the tab update too.
+- Nine layout tests cover splitting in all directions, spatial neighbors, stable identities,
+  bounded/corrupt input, ratio validation and 500 mixed operations preserving a complete partition.
+- GPUI coverage exercises three views of one shared document, independent cursors and undo,
+  nested geometry and resizing, stale drag/drop and late file completion, background-load focus,
+  restart restoration, empty groups and group-local settings pages. A 32-group workload exercises
+  minimum dimensions, focus scrolling and the unchanged group limit after another split request.
+- The first integration tests found an empty-session restore could cancel a command-line file
+  opening. Empty legacy sessions now leave that request intact. Group lifetime tokens prevent a
+  late completion from populating a newly created group with a reused slot number.
+- Full regression, native-window acceptance, memory/size and required PR checks remain pending.
+
+The 32-group navigation regression initially skipped siblings after group 25 because normalized
+coordinates rounded together. Directional navigation now uses minimum-extent geometry. Native pane
+placement is calculated once and each visible pane is laid out independently; fully clipped panes
+keep their views without being rendered. This also removes repeated intrinsic-size measurement
+through deeply nested flex regions. The debug workload that creates 32 highlighted 10k-line views
+and focuses left 31 times improved from 75.4 seconds to 9.1 seconds without relaxing its 15-second
+local budget (CI's existing timeout scale applies). The related random-command torture test passes.
+PR: https://github.com/doancan/codeyard/pull/56. Native acceptance and final gates remain pending.
+
+The latest F02 hardening pass adds three baseline-failing regressions: resizing a window must
+keep the focused document visible, opening a saved file from the command line must preserve all
+groups and its unsaved hot-exit backup, and narrow groups must retain room for text. The latter
+initially left only 7.5 px for text with the minimap enabled. Each group now hides its minimap
+below 320 px and restores it when widened. The 32-view highlighted workload took 3.4 seconds
+in the focused run, within the existing 15-second local limit.
+
+`CODEYARD_REQUIRE_SSHD=1 scripts/check.sh --strict` passes on these changes: 1,850 tests,
+zero failures and five existing opt-in ignores. Prior Retina measurements on the flat renderer
+passed at 73/73/93/83/114/79 MB for terminal/welcome/small Rust/plain 10k/highlighted 10k/first-run;
+the idle agent used 1 MB. Static x64/ARM64 agents were 1,576/1,372 KiB.
+
+An isolated native QA bundle created a four-group grid through the menu and command palette.
+Typing in two groups and saving produced both edits in the same file. Restarting with that file
+retained the four-group topology, focus and per-group views. Native Turkish narrow-window and
+wide-window captures were inspected; the final minimap correction is confirmed in a native 480 px Turkish/light window and restores the minimap after widening.
+All CI checks on the earlier `326612b` candidate pass (Actions run `40766365499`); the final
+hardening commit must pass its own workflow before merge. No real VoiceOver speech or
+human translation review is claimed.
+
+The final pre-integration F02 Retina budget rerun passes at 72/69/93/83/113/69 MB (terminal/welcome/small Rust/plain 10k/highlighted 10k/first-run), with a 1 MB idle agent and unchanged static-agent sizes. Main integration preserves the new language key context and the per-group minimap behavior; its head requires fresh regression and CI checks.
+
+The integrated editor-grid source passes `CODEYARD_REQUIRE_SSHD=1 scripts/check.sh --strict`:
+1,885 tests, zero failures, five existing opt-in ignores. A locale-merge error joined four comment
+headers to following rows; restoring their line boundaries fixes all 31 localization regressions.
+
+The pre-integration grid candidate `27951f3` also passes the same-machine interleaved comparison
+against Explorer `0293d1a` (20 startup/typing runs, five memory samples per scene): startup p95
+236.5 → 233.1 ms (−1.4%), typing p95 26.0 → 25.7 ms (−1.0%), and welcome/syntax/terminal
+medians 69 → 69 / 114 → 114 / 74 → 73 MB. The current integrated sources are receiving a
+separate comparison against the updated shared main reference. Required CI on the integration
+head remains a merge condition.

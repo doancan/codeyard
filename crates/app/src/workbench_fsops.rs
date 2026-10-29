@@ -546,14 +546,14 @@ impl Workbench {
                 });
             }
         }
-        if let Some(g) = &mut self.tabs.other {
-            let active = g.active.and_then(|a| g.editors.get(a)).cloned();
-            g.editors.retain(|e| !gone(e, cx) || e.read(cx).is_dirty());
-            g.active = active.and_then(|a| g.editors.iter().position(|e| *e == a)).or((!g.editors.is_empty()).then_some(0));
-            if g.editors.is_empty() {
-                self.tabs.other = None;
-                self.tabs.focused_left = true; // a single group is always "left"
-            }
+        for group in self.tabs.groups.values_mut() {
+            let active = group.active.and_then(|index| group.editors.get(index)).cloned();
+            group.editors.retain(|ed| !gone(ed, cx) || ed.read(cx).is_dirty());
+            group.active = active.and_then(|ed| group.editors.iter().position(|e| *e == ed)).or((!group.editors.is_empty()).then_some(0));
+        }
+        let empty: Vec<_> = self.tabs.groups.keys().copied().filter_map(|id| self.tabs.key(id)).collect();
+        for key in empty {
+            self.tabs.remove_empty(key);
         }
         while let Some(ix) = self.tabs.editors.iter().position(|e| gone(e, cx) && !e.read(cx).is_dirty()) {
             self.remove_editor(ix, window, cx);

@@ -50,7 +50,7 @@ is the complete list and always matches your key bindings; every setting is in [
 | Find in selection / select all matches (find bar) | ⌥⌘L / ⌥↵ | Ctrl+Alt+L / Alt+Enter |
 | Find in files | ⇧⌘F | Ctrl+Shift+F |
 | Structural search (replace: from the palette) | ⌥⇧⌘F | Ctrl+Alt+Shift+F |
-| Split editor (same file in the other group) | ⌘\ | Ctrl+\ |
+| Split editor (same file in a new group) | ⌘\ | Ctrl+\ |
 | Move tab to the other group | ⌃⌘→ / ⌃⌘← | Ctrl+Ctrl+→ (rebind) |
 | Focus left / right group | ⌘1 / ⌘2 | Ctrl+1 / Ctrl+2 |
 | Source control | ⌃⇧G | Ctrl+Shift+G |
@@ -193,10 +193,27 @@ scroll sideways (trackpad or ⇧+wheel). The minimap on the right is on by defau
 (`"editor.minimap.enabled": false` hides it); click or drag it to jump.
 
 **Folding** is by indentation (works in every language): hover the gutter for the arrows.
-Folds belong to the view, so the two groups of a split can fold differently. **Word wrap**
+Folds belong to the view, so groups displaying the same document can fold differently. **Word wrap**
 breaks at spaces at the window edge; ↑↓ move by screen row. Sort lines, upper/lower case,
 change line endings and indentation (click them in the status bar) are in the palette.
-With the same file open in both groups, each group has its own cursors, scroll and find bar.
+With the same file open in several groups, each group has its own cursors, scroll and find bar.
+Edits and undo belong to the shared document.
+
+**Editor groups** form a nested grid. ⌘\ (Ctrl+\ on Windows/Linux) adds a group to the right;
+use **View: Split Editor Left**, **Up**, or **Down** in the command palette for the other directions.
+Drag a divider to resize its two regions. Drag a tab within a group to reorder it, or onto another
+group to move it; closing a group's last document removes the empty group. **View: Close Empty
+Editor Group** also closes an explicitly opened empty group and cancels its pending file opening.
+The final group remains available for opening files.
+
+⌘1/⌘2 (Ctrl+1/Ctrl+2) focus the neighboring left/right group. The palette also provides **View:
+Focus Upper Editor Group** and **View: Focus Lower Editor Group**; all commands can be rebound
+in Keyboard Shortcuts. A window supports up to 32 groups. Minimum pane dimensions keep tabs and
+text usable; the grid scrolls when it cannot fit, and focusing a group brings it into view.
+With session restoration enabled, the grid, ratios, focused group, tab order, primary cursors and
+scroll positions return when the workspace reopens, including empty groups. Existing two-group
+sessions migrate automatically. Welcome/settings/diff/preview tabs stay in their owning group
+while switching focus; session restoration currently saves text-document tabs and empty groups.
 
 **Images** (png, jpg, gif, webp, svg, bmp) open in a preview tab.
 

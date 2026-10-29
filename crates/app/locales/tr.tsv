@@ -2749,6 +2749,13 @@ Cancel file operation	Dosya işlemini iptal et
 File: Cancel File Operation	Dosya: Dosya İşlemini İptal Et
 {} entry|{} entries	{} öğe
 Can't move a folder into itself.	Bir klasör kendi içine taşınamaz.
+View: Split Editor Left	Görünüm: Düzenleyiciyi Sola Böl
+View: Split Editor Up	Görünüm: Düzenleyiciyi Yukarı Böl
+View: Split Editor Down	Görünüm: Düzenleyiciyi Aşağı Böl
+View: Close Empty Editor Group	Görünüm: Boş Düzenleyici Grubunu Kapat
+View: Focus Upper Editor Group	Görünüm: Üstteki Düzenleyici Grubuna Odaklan
+View: Focus Lower Editor Group	Görünüm: Alttaki Düzenleyici Grubuna Odaklan
+A window supports up to {} editor groups.	Bir pencerede en fazla {} düzenleyici grubu açılabilir.
 
 # ---- Web Preview options ----
 Preview port (0: choose a free port automatically)	Önizleme portu (0: boş bir portu otomatik seç)

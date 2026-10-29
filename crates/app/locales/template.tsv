@@ -23,6 +23,7 @@ A rebase is already in progress: use Git: Continue Rebase or Git: Abort Rebase
 A request is still being sent; wait for its answer first.	
 A sync is already running.	
 A transfer is already running. Wait for it to finish or click it in the status bar to cancel.	
+A window supports up to {} editor groups.	
 Abort Merge	
 Abort Rebase	
 Abort the merge?	
@@ -2179,12 +2180,15 @@ Version {}
 View	
 View File History	
 View: Close All Editors	
+View: Close Empty Editor Group	
 View: Close Other Editors	
 View: Close Saved Editors	
 View: Containers	
 View: Files	
 View: Focus Left Editor Group	
+View: Focus Lower Editor Group	
 View: Focus Right Editor Group	
+View: Focus Upper Editor Group	
 View: Keep Editor	
 View: Move Editor into Other Group	
 View: Move Panel (bottom ⇄ right)	
@@ -2200,6 +2204,9 @@ View: Resources
 View: Run and Debug	
 View: Source Control	
 View: Split Editor	
+View: Split Editor Down	
+View: Split Editor Left	
+View: Split Editor Up	
 View: Switch Editor…	
 View: Testing	
 View: Toggle Full Screen	

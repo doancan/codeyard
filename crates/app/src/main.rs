@@ -49,6 +49,7 @@ mod docker_tests;
 mod docs_tests;
 mod editor;
 mod editor_decor;
+mod editor_layout;
 mod editor_overlay;
 #[cfg(test)]
 mod editor_title_tests;
