@@ -163,6 +163,8 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::format_document))
             .on_action(cx.listener(Self::format_selection))
             .on_action(cx.listener(Self::save_all))
+            .capture_key_down(|_, _, cx| ui::set_keyboard_focus(true, cx))
+            .capture_any_mouse_down(|_, _, cx| ui::set_keyboard_focus(false, cx))
             .on_action(cx.listener(Self::zoom_in))
             .on_action(cx.listener(Self::zoom_out))
             .on_action(cx.listener(Self::zoom_reset))

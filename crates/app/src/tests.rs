@@ -4823,3 +4823,14 @@ fn git_add_to_gitignore_and_named_stash_through_the_palette(cx: &mut TestAppCont
     assert_eq!(std::fs::read_to_string(dir.join("README.md")).unwrap(), "# proje\n");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Focus rings follow the last input: a key shows them, a click hides them again.
+#[gpui::test]
+fn focus_rings_show_after_keys_and_hide_after_clicks(cx: &mut TestAppContext) {
+    let (_wb, cx) = setup(cx);
+    assert!(!cx.update(|_, cx| crate::ui::keyboard_focus(cx)));
+    cx.simulate_keystrokes("tab");
+    assert!(cx.update(|_, cx| crate::ui::keyboard_focus(cx)), "a key press switches to keyboard focus");
+    cx.simulate_click(gpui::point(gpui::px(400.), gpui::px(300.)), gpui::Modifiers::none());
+    assert!(!cx.update(|_, cx| crate::ui::keyboard_focus(cx)), "a click switches back");
+}

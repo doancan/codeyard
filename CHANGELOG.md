@@ -130,6 +130,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The status-bar resources open as a strip inside the status bar, sliding left from their icon, instead of a card above it.
+  The most important figures sit next to the icon, so a narrow window cuts the others first.
+- Focus rings show only after the keyboard was used: a click lights the button it presses instead of outlining it.
 - Replace All and "replace in this file" in the Search panel open the replacement review instead of a confirmation that
   wrote at once. Saving against a known version no longer recreates a file deleted since (it is a conflict); a file the
   editor knows was deleted is still saved back. "Search: Open Results in Editor" is now "Search: Open Search Editor" and opens a Search Editor tab instead

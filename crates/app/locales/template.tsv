@@ -240,7 +240,6 @@ Close the terminal?
 Close to the Right	
 Close window	
 Close without saving	
-Closes when the pointer leaves · pin to keep open	
 Closing a terminal ends the programs running in it.	
 Closing the window loses everything since the last save.	
 Code	
@@ -1030,7 +1029,6 @@ Import VS Code Settings and Shortcuts
 Imported {0} settings and {1} shortcuts from VS Code ({2} settings and {3} shortcuts have no equivalent here)	
 In Privacy & Security, press + and add Codeyard, then turn it on.	
 In the file tree, type to jump to a name; ⇧→ opens everything inside a folder, ⇧← closes it.	
-Includes hidden and build files; symlinks are not followed.	
 Incoming	
 Indent of each folder level in the explorer (px)	
 Indent using 2 spaces	
@@ -1139,8 +1137,8 @@ Listing worktrees timed out. Refresh to try again.
 Live updates	
 Ln {}, Col {}	
 Ln {}, Col {} ({} selected)	
+Load	
 Load More Stack Frames	
-Load average (1 / 5 / 15 min)	
 Load installed extensions (off: Codeyard starts as if none were installed)	
 Loading container details…	
 Loading image…	
@@ -1150,7 +1148,6 @@ Local
 Local history	
 Local port {} is busy	
 Local time is not available on this system	
-Logical processors	
 Logs	
 Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it	
 Looking for tests…	
@@ -1439,7 +1436,6 @@ Open a folder in a Linux distribution
 Open a folder on {}	
 Open a folder to debug it.	
 Open a folder to find its tests.	
-Open a folder to measure its size.	
 Open a folder to search in it.	
 Open a project, connect to a host, or switch workspace	
 Open a terminal with…	
@@ -1470,7 +1466,6 @@ Output
 Output: Clear	
 Overview	
 Overwrite	
-Partial scan: a time, file or access limit was reached.	
 Passphrase	
 Password	
 Paste	
@@ -1498,7 +1493,6 @@ Pick a stash to show
 Pin	
 Pin the enclosing function or class line while scrolling	
 Pin to the top	
-Pinned · click the pin to restore auto-close	
 Plain Text	
 Platform	
 Pop (apply and drop)	
@@ -1545,8 +1539,6 @@ Progress
 Project	
 Project lifecycle commands will run. Rebuild replaces the container; persistent volumes are kept.	
 Project name	
-Project size	
-Project size is available for local folders.	
 Projects: Add Folder to Projects…	
 Projects: Edit Projects	
 Projects: Remove from Recent…	
@@ -2457,6 +2449,7 @@ failed
 fetches {} from {}	
 field	
 file	
+files	
 files not found in the toolchain	
 files.associations.{}: expected a language name or extension	
 files.autoSave: unknown value {} (off, afterDelay, onFocusChange)	

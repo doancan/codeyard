@@ -193,7 +193,8 @@ impl ScmPanel {
             .border_1()
             .border_color(ui::ca(p.focus_ring, 0.))
             .when(current, |d| d.bg(c(p.surface_active)))
-            .when(available, |d| d.tab_index(0).cursor_pointer().hover(|d| d.bg(c(p.surface_hover))).focus(|d| d.border_color(c(p.focus_ring))))
+            .when(available, |d| d.tab_index(0).cursor_pointer().hover(|d| d.bg(c(p.surface_hover))).active(|d| d.bg(c(p.surface_active))))
+            .when(available && ui::keyboard_focus(cx), |d| d.focus(|d| d.border_color(c(p.focus_ring))))
             .child(icon(if entry.locked.is_some() { "lock" } else { "git-branch" }, 14., p.text_muted))
             .child(
                 div()
