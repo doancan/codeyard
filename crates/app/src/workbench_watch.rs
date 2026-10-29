@@ -186,7 +186,7 @@ impl Workbench {
                 self.tabs.page_active = false;
                 self.chrome.panel = Some(Panel::Explorer);
             }
-            if self.chrome.panel == Some(Panel::Containers) {
+            if self.view_shown(Panel::Containers) {
                 self.chrome.panel = Some(Panel::Explorer);
             }
             if matches!(&self.remote.conn, Conn::Connecting { alias, .. } if crate::docker::is_target(alias)) {

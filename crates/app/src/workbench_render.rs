@@ -3,6 +3,27 @@
 use super::*;
 
 impl Workbench {
+    /// A side view's content, for whichever side bar shows it.
+    fn side_view(&mut self, panel: Panel, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
+        match panel {
+            Panel::Explorer => self.explorer_panel(p, cx),
+            Panel::Search => div()
+                .flex()
+                .flex_col()
+                .size_full()
+                .child(self.view_header(crate::i18n::upper(crate::i18n::t("Search")), p))
+                .child(div().flex_1().min_h_0().child(self.search.clone()))
+                .into_any_element(),
+            Panel::Scm => self.scm.clone().into_any_element(),
+            Panel::Debug => self.run_debug_view(p, cx),
+            Panel::Testing => self.testing_view(p, cx),
+            Panel::Remote => self.remote_view(p, cx),
+            Panel::Containers => self.explorer_panel(p, cx),
+            Panel::Extensions => self.extensions_view(p, cx),
+            Panel::ExtView => self.ext_view_in(ext_manifest::ViewLocation::Sidebar, p, cx),
+        }
+    }
+
     fn finish_resize(&mut self, cx: &mut Context<Self>) {
         if self.sections.end_drag() {
             self.persist_sections(cx);
@@ -37,7 +58,7 @@ impl Workbench {
 impl Render for Workbench {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Accept restored legacy sidebar routes, but keep a single inventory surface.
-        if self.chrome.panel == Some(Panel::Containers) && cx.global::<Settings>().docker_enabled {
+        if self.view_shown(Panel::Containers) && cx.global::<Settings>().docker_enabled {
             self.show_containers(cx);
         }
         self.chrome.a11y_bounds = Default::default();
@@ -96,23 +117,10 @@ impl Render for Workbench {
             (Some(ed), None) => editor::slot_view(ed.clone(), self.focused_slot()).into_any_element(),
             (None, None) => self.empty_state(&p, cx),
         };
-        let sidebar = self.chrome.panel.map(|panel| match panel {
-            Panel::Explorer => self.explorer_panel(&p, cx),
-            Panel::Search => div()
-                .flex()
-                .flex_col()
-                .size_full()
-                .child(self.view_header(crate::i18n::upper(crate::i18n::t("Search")), &p))
-                .child(div().flex_1().min_h_0().child(self.search.clone()))
-                .into_any_element(),
-            Panel::Scm => self.scm.clone().into_any_element(),
-            Panel::Debug => self.run_debug_view(&p, cx),
-            Panel::Testing => self.testing_view(&p, cx),
-            Panel::Remote => self.remote_view(&p, cx),
-            Panel::Containers => self.explorer_panel(&p, cx),
-            Panel::Extensions => self.extensions_view(&p, cx),
-            Panel::ExtView => self.ext_view_in(ext_manifest::ViewLocation::Sidebar, &p, cx),
-        });
+        // A view asked for in the primary side bar that lives in the secondary one opens there.
+        self.place_views();
+        let sidebar = self.chrome.panel.map(|panel| self.side_view(panel, &p, cx));
+        let secondary = self.chrome.secondary.map(|panel| self.side_view(panel, &p, cx));
 
         div()
             .id("workbench")
@@ -144,6 +152,11 @@ impl Render for Workbench {
             .on_action(cx.listener(|this, _: &RefreshTests, _, cx| this.refresh_tests(cx)))
             .on_action(cx.listener(|this, _: &StopTests, _, cx| this.stop_tests(cx)))
             .on_action(cx.listener(|this, _: &DebugTestAtCursor, w, cx| this.debug_test_at_cursor(w, cx)))
+            .on_action(cx.listener(|this, _: &MoveViewToSecondarySideBar, _, cx| this.move_view_to_secondary(cx)))
+            .on_action(cx.listener(|this, _: &MoveViewToPrimarySideBar, _, cx| this.move_view_to_primary(cx)))
+            .on_action(cx.listener(|this, _: &ToggleSecondarySideBar, _, cx| this.toggle_secondary(cx)))
+            .on_action(cx.listener(|this, _: &MoveTerminalIntoNewWindow, window, cx| this.detach_terminal(window, cx)))
+            .on_action(cx.listener(|this, _: &MoveTerminalsBackToPanel, _, cx| this.return_detached_terminals(cx)))
             .on_action(cx.listener(Self::kill_all_terminals))
             .on_action(cx.listener(Self::kill_other_terminals))
             .on_action(cx.listener(Self::focus_next_terminal))
@@ -634,7 +647,20 @@ impl Render for Workbench {
                                 )
                             })
                             .when(self.chrome.panel_open, |d| d.child(self.panel(&p, cx))),
-                    ),
+                    )
+                    // The secondary side bar: views moved to the right of the editor.
+                    .when_some(secondary.filter(|_| self.chrome.zen.is_none()), |d, s| {
+                        d.child(
+                            div()
+                                .debug_selector(|| "secondary-side-bar".into())
+                                .w(px(self.chrome.sidebar_w))
+                                .flex_none()
+                                .bg(c(p.surface))
+                                .border_l_1()
+                                .border_color(c(p.border))
+                                .child(s),
+                        )
+                    }),
             )
             .when(self.chrome.zen.is_none() && cx.global::<Settings>().status_bar, |d| d.child(self.status_bar(&p, window.viewport_size().width / px(1.), cx)))
             .children(self.error_toast(&p, cx))

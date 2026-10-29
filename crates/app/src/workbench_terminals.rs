@@ -640,6 +640,7 @@ impl Workbench {
     /// Connection changed: the terminals belong to the old machine, close them.
     pub(super) fn close_all_terminals(&mut self, cx: &mut Context<Self>) {
         self.stop_all_task_runs(cx);
+        self.close_detached_terminals(cx);
         self.term_split = None;
         for t in self.terminals.drain(..) {
             t.read(cx).kill();

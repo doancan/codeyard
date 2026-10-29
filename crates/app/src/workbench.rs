@@ -168,6 +168,8 @@ mod terminals_glue;
 mod testing_glue;
 #[path = "workbench_test_explorer.rs"]
 mod tests_glue;
+#[path = "workbench_views.rs"]
+mod views_glue;
 #[cfg(test)]
 pub(crate) use testing_glue::DialogView;
 #[path = "workbench_theme.rs"]
@@ -329,6 +331,11 @@ actions!(
         ShowDebugPanel,
         ConfigureTasks,
         TogglePanelPosition,
+        MoveViewToSecondarySideBar,
+        MoveViewToPrimarySideBar,
+        ToggleSecondarySideBar,
+        MoveTerminalIntoNewWindow,
+        MoveTerminalsBackToPanel,
         ToggleMaximizedPanel,
         GitCheckout,
         GitCreateBranch,
@@ -677,7 +684,7 @@ pub fn user_theme_dir() -> Option<std::path::PathBuf> {
 /// Dev only: fake host name that exercises the remote code path without ssh.
 pub const LOCAL_AGENT_ALIAS: &str = "agent-stdio";
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Panel {
     Explorer,
     Search,
@@ -1091,6 +1098,8 @@ impl Workbench {
                 crate::scm::ScmEvent::Rediscover => this.rediscover(cx),
                 crate::scm::ScmEvent::RefreshInventory => this.refresh_inventory(cx),
             }),
+            // Terminals in windows of their own belong to this window: they end with it.
+            cx.on_release(|this, cx| this.close_detached_terminals(cx)),
             // A download in progress is cancelled and its partial file removed before the process ends.
             cx.on_app_quit(|this, cx| {
                 this.discard_response_on_quit();
@@ -1140,6 +1149,12 @@ impl Workbench {
             .clamp(layout::SIDEBAR_MIN, layout::SIDEBAR_MAX);
         let panel_h = state.as_ref().and_then(|s| s.get("panel_h")).and_then(|v| v.parse::<f32>().ok()).unwrap_or(layout::PANEL_H).max(PANEL_MIN);
         let panel_right = state.as_ref().and_then(|s| s.get("panel_right")).is_some_and(|v| v == "1");
+        let in_secondary = state.as_ref().and_then(|s| s.get("secondary_views")).map(|v| views_glue::parse_secondary(&v)).unwrap_or_default();
+        let secondary = state
+            .as_ref()
+            .and_then(|s| s.get("secondary_open"))
+            .and_then(|v| views_glue::parse_secondary(&v).first().copied())
+            .filter(|v| in_secondary.contains(v));
         let panel_w = state.as_ref().and_then(|s| s.get("panel_w")).and_then(|v| v.parse::<f32>().ok()).unwrap_or(480.).max(PANEL_MIN * 2.);
         let term_list_w = state
             .as_ref()
@@ -1240,6 +1255,11 @@ impl Workbench {
                 resizing_sidebar: false,
                 panel_open: false,
                 panel_h,
+                in_secondary,
+                secondary,
+                secondary_last: secondary,
+                last_primary: Some(Panel::Explorer),
+                detached: Vec::new(),
                 panel_right,
                 panel_w,
                 panel_max: false,

@@ -65,6 +65,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A side view (Explorer, Search, Source Control, Run and Debug, Testing, Remote, Extensions) can move to a secondary side
+  bar on the right of the editor and back ("View: Move View to Secondary Side Bar"); its icon and commands then open
+  it there, and the arrangement is restored at the next start.
+- "Terminal: Move Terminal into New Window" moves the active terminal, with its running process, into a window of its
+  own; closing that window returns it to the panel instead of ending it.
 - Search Editors: "Search: Open Search Editor" keeps a query in its own tab with its options, globs, context lines and
   folders (every folder of a multi-folder workspace), for keyboard navigation and rerun. Tabs return after a restart
   with their query and up to 200 results, marked as restored until they run again; truncated, stopped and failed

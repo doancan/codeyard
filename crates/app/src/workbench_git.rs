@@ -70,7 +70,7 @@ impl Workbench {
     /// Refresh TIMELINE in the background when the active file or HEAD changes (while visible).
     pub(super) fn sync_timeline(&mut self, cx: &mut Context<Self>) {
         use super::Panel;
-        if self.chrome.panel != Some(Panel::Explorer) || !self.sections.is_open("timeline", true) {
+        if !self.view_shown(Panel::Explorer) || !self.sections.is_open("timeline", true) {
             return;
         }
         let active_path = self

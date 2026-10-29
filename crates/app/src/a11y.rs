@@ -755,7 +755,7 @@ impl Snapshot {
 impl Workbench {
     /// Flat summary of the current view (the tree is only built while AT is active).
     pub(crate) fn a11y_snapshot(&self, window: &Window, cx: &App) -> Snapshot {
-        let trees = if self.chrome.panel == Some(Panel::Explorer) { self.all_trees() } else { Vec::new() };
+        let trees = if self.view_shown(Panel::Explorer) { self.all_trees() } else { Vec::new() };
         let explorers = trees
             .iter()
             .map(|tree| {
@@ -896,7 +896,7 @@ impl Workbench {
         });
 
         let (search_editor, search_tabs) = self.a11y_search_snap(window, cx);
-        let scm = (self.chrome.panel == Some(Panel::Scm)).then(|| ScmSnap { generation: self.lsp.generation, view: self.scm.read(cx).a11y_view(window, cx) });
+        let scm = (self.view_shown(Panel::Scm)).then(|| ScmSnap { generation: self.lsp.generation, view: self.scm.read(cx).a11y_view(window, cx) });
         let exts = self.a11y_extensions(window, cx);
         let focus = if self.tabs.page_active && about_view.is_some_and(|view| view.focus_handle(cx).is_focused(window)) {
             FocusSnap::AboutCopy
@@ -993,7 +993,7 @@ impl Workbench {
                 }
             }
             (Action::Focus, id) if id == EXPLORER || (id.0 >= EXTRA_TREE && id.0 < EXTRA_TREE + BLOCK) => {
-                if self.chrome.panel != Some(Panel::Explorer) {
+                if !self.view_shown(Panel::Explorer) {
                     return;
                 }
                 let k = if id == EXPLORER { 0 } else { (id.0 - EXTRA_TREE) as usize };
@@ -1002,7 +1002,7 @@ impl Workbench {
                 }
             }
             (Action::Focus | Action::Click, id) if id.0 & !0xffff_ffff == ROW_BASE => {
-                if self.chrome.panel != Some(Panel::Explorer) {
+                if !self.view_shown(Panel::Explorer) {
                     return;
                 }
                 let Some((k, ix)) = last.explorers.iter().enumerate().find_map(|(k, ex)| ex.rows.iter().position(|r| r.id == id.0).map(|ix| (k, ix))) else {

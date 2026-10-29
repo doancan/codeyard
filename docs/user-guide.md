@@ -182,6 +182,15 @@ use ⌘J or bind `terminal.toggle` yourself (below).
 
 Opening a file from Explorer or Quick Open restores a maximized terminal panel to its previous size and shows the editor.
 
+**Arranging views.** "View: Move View to Secondary Side Bar" moves the open side view (Explorer, Search, Source
+Control, Run and Debug, Testing, Remote, Extensions) to a second side bar on the right of the editor; its activity bar
+icon and commands then open it there, next to whatever the left side bar shows. "View: Move View to Primary Side Bar"
+moves it back and "View: Toggle Secondary Side Bar" hides or shows it; the arrangement comes back at the next start.
+"Terminal: Move Terminal into New Window" moves the active terminal, with its running program, into a window of its own
+(the same terminal, not a copy). Closing that window puts the terminal back in the panel, still running;
+"Terminal: Move Terminals Back to Panel" does it for all of them. A detached terminal belongs to its editor window and
+ends with it, or when the connection changes.
+
 Terminal line editing works as in Terminal.app: ⌘← / ⌘→ jump to the start / end of the line, ⌥← / ⌥→ move by word,
 ⌘⌫ deletes to the start of the line, ⌘⌦ to its end and ⌥⌦ the next word (these are the shell's own keys, Ctrl+A, Ctrl+E,
 Esc b…, so they work in bash, zsh and fish; full-screen programs such as vim get the plain keys). ⌘F finds in the output and

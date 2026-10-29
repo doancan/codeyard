@@ -141,7 +141,7 @@ impl Workbench {
             cx.background_executor().timer(Duration::from_secs(3)).await;
             this.update(cx, |this, cx| {
                 if this.remote.docker.monitor.generation == generation
-                    && (this.chrome.panel == Some(Panel::Containers) || (this.tabs.page_active && matches!(this.tabs.page, Some(Page::Containers))))
+                    && (this.view_shown(Panel::Containers) || (this.tabs.page_active && matches!(this.tabs.page, Some(Page::Containers))))
                 {
                     this.refresh_container_monitor(cx);
                 }

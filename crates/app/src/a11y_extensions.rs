@@ -100,7 +100,7 @@ pub(super) fn append_page(page: &ExtPageSnap, nodes: &mut Vec<(NodeId, Node)>) {
 impl Workbench {
     /// The view while it is on screen (not with `--no-extensions`).
     pub(in crate::workbench) fn a11y_extensions(&self, window: &Window, cx: &App) -> Option<ExtSnap> {
-        if self.chrome.panel != Some(Panel::Extensions) || crate::ext::turned_off() {
+        if !self.view_shown(Panel::Extensions) || crate::ext::turned_off() {
             return None;
         }
         let s = &self.cfg.exts;
@@ -202,7 +202,7 @@ impl Workbench {
                     self.install_from_market(window, cx);
                 }
             }
-            _ if last.exts.is_none() || self.chrome.panel != Some(Panel::Extensions) => {}
+            _ if last.exts.is_none() || !self.view_shown(Panel::Extensions) => {}
             (Action::Click, EXT_TAB_INSTALLED) => self.set_extensions_tab(ExtTab::Installed, window, cx),
             (Action::Click, EXT_TAB_MARKET) => self.set_extensions_tab(ExtTab::Market, window, cx),
             (Action::Focus, EXT_SEARCH) => {
