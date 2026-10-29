@@ -277,8 +277,7 @@ pub struct Snapshot {
     pub completion: Option<ListSnap>,
     pub terminal: Option<TerminalSnap>,
     pub(crate) scm: Option<ScmSnap>,
-    pub(crate) problems: Option<problems_access::ProblemsSnap>,
-    pub(crate) panel: Option<problems_access::PanelSnap>,
+    pub(crate) views: problems_access::ViewsSnap,
     pub(crate) services: Option<crate::language_services_page::AccessView>,
     pub(crate) exts: Option<ext_access::ExtSnap>,
     pub(crate) ext_page: Option<ext_access::ExtPageSnap>,
@@ -464,12 +463,7 @@ impl Snapshot {
             scm.append_tree(&mut nodes);
             kids.push(SCM);
         }
-        if let Some(panel) = &self.panel {
-            kids.extend(panel.append_tree(&mut nodes));
-        }
-        if let Some(problems) = &self.problems {
-            kids.push(problems.append_tree(&mut nodes));
-        }
+        self.views.append_tree(&mut nodes, &mut kids);
 
         if let Some(view) = &self.exts {
             ext_access::append_tree(view, &mut nodes);
@@ -946,8 +940,7 @@ impl Workbench {
             completion,
             terminal,
             scm,
-            problems: self.a11y_problems(cx),
-            panel: self.a11y_panel(),
+            views: self.a11y_views(cx),
             exts,
             ext_page: self.a11y_extension_page(),
             inspector: self.a11y_inspector(),
@@ -974,10 +967,7 @@ impl Workbench {
             cx.notify();
             return;
         }
-        if self.a11y_panel_action(req, last, cx) {
-            return;
-        }
-        if self.a11y_problems_action(req, last, window, cx) {
+        if self.a11y_views_action(req, last, window, cx) {
             cx.notify();
             return;
         }
@@ -1325,8 +1315,7 @@ mod tests {
             completion: None,
             terminal: None,
             scm: None,
-            problems: None,
-            panel: None,
+            views: Default::default(),
             search_editor: None,
             search_tabs: Vec::new(),
             picker: None,

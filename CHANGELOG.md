@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The Search side bar's results, the bottom panel's tabs and the Output text are available to screen readers.
 - The Problems panel is available to screen readers: each problem with its severity, file, line and column, opened by
   activating it, and a spoken "No problems." when there are none.
 

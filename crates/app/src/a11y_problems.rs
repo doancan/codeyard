@@ -85,7 +85,7 @@ impl Workbench {
             return false;
         }
         let index = (id - PROBLEM_ROW) as usize;
-        let (Some(old), Some(current)) = (last.problems.as_ref(), self.a11y_problems(cx)) else { return true };
+        let (Some(old), Some(current)) = (last.views.problems.as_ref(), self.a11y_problems(cx)) else { return true };
         if req.action == Action::Click && old.rows.get(index).is_some_and(|row| current.rows.get(index) == Some(row)) {
             self.open_problem_row(index, window, cx);
         }
@@ -166,7 +166,7 @@ impl Workbench {
             return false;
         }
         let index = (id - PANEL_TAB) as usize;
-        let (Some(old), Some(current)) = (last.panel.as_ref(), self.a11y_panel()) else { return true };
+        let (Some(old), Some(current)) = (last.views.panel.as_ref(), self.a11y_panel()) else { return true };
         if req.action == Action::Click
             && let Some((tab, ..)) = old.tabs.get(index)
             && current.tabs.iter().any(|(t, ..)| t == tab)
@@ -175,6 +175,85 @@ impl Workbench {
             cx.notify();
         }
         true
+    }
+}
+
+/// The search side panel: status, then its rows (at most `MAX_SEARCH_ROWS`).
+#[derive(Clone, PartialEq, Debug)]
+pub(crate) struct SearchSideSnap {
+    status: String,
+    rows: Vec<(String, Option<(String, u32, u32)>)>,
+    total: usize,
+}
+
+const SEARCH_SIDE: NodeId = NodeId(35);
+const SEARCH_SIDE_STATUS: NodeId = NodeId(36);
+const SEARCH_SIDE_ROW: u64 = PANEL_TAB + 16;
+const MAX_SEARCH_ROWS: usize = 500;
+
+/// The views exposed by this module, gathered so the main tree has one field and one action path for them.
+#[derive(Clone, PartialEq, Debug, Default)]
+pub(crate) struct ViewsSnap {
+    pub(crate) problems: Option<ProblemsSnap>,
+    pub(crate) panel: Option<PanelSnap>,
+    pub(crate) search: Option<SearchSideSnap>,
+}
+
+impl ViewsSnap {
+    pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>, kids: &mut Vec<NodeId>) {
+        if let Some(s) = &self.search {
+            let mut status = Node::new(Role::Status);
+            status.set_label(s.status.clone());
+            status.set_live(Live::Polite);
+            nodes.push((SEARCH_SIDE_STATUS, status));
+            let mut list = Node::new(Role::List);
+            list.set_label(t("Search results"));
+            list.set_size_of_set(s.total);
+            let mut ids = vec![SEARCH_SIDE_STATUS];
+            for (i, (label, key)) in s.rows.iter().enumerate() {
+                let id = NodeId(SEARCH_SIDE_ROW + i as u64);
+                let mut n = Node::new(if key.is_some() { Role::ListItem } else { Role::Heading });
+                n.set_label(label.clone());
+                n.set_position_in_set(i + 1);
+                n.set_size_of_set(s.total);
+                if key.is_some() {
+                    n.add_action(Action::Click);
+                }
+                nodes.push((id, n));
+                ids.push(id);
+            }
+            list.set_children(ids);
+            nodes.push((SEARCH_SIDE, list));
+            kids.push(SEARCH_SIDE);
+        }
+        if let Some(panel) = &self.panel {
+            kids.extend(panel.append_tree(nodes));
+        }
+        if let Some(problems) = &self.problems {
+            kids.push(problems.append_tree(nodes));
+        }
+    }
+}
+
+impl Workbench {
+    pub(super) fn a11y_views(&self, cx: &App) -> ViewsSnap {
+        let search = (self.chrome.panel == Some(Panel::Search)).then(|| {
+            let (status, rows, total) = self.search.read(cx).access_rows(MAX_SEARCH_ROWS);
+            SearchSideSnap { status, rows, total }
+        });
+        ViewsSnap { problems: self.a11y_problems(cx), panel: self.a11y_panel(), search }
+    }
+
+    pub(super) fn a11y_views_action(&mut self, req: &ActionRequest, last: &Snapshot, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let id = req.target_node.0;
+        if (SEARCH_SIDE_ROW..SEARCH_SIDE_ROW + MAX_SEARCH_ROWS as u64).contains(&id) {
+            let key = last.views.search.as_ref().and_then(|s| s.rows.get((id - SEARCH_SIDE_ROW) as usize)).and_then(|(_, k)| k.clone());
+            if let (Action::Click, Some(key)) = (req.action, key) {
+                self.search.update(cx, |s, cx| s.open_access_row(&key, cx));
+            }
+            return true;
+        }
+        self.a11y_panel_action(req, last, cx) || self.a11y_problems_action(req, last, window, cx)
     }
 }
 
@@ -262,5 +341,33 @@ mod tests {
         let (_, log) = nodes.iter().find(|(_, n)| n.role() == Role::Log).expect("the Output text");
         assert_eq!(log.value(), Some("rust-analyzer: indexing done"));
         assert!(nodes.iter().any(|(_, n)| n.role() == Role::Tab && n.label() == Some("Output") && n.is_selected() == Some(true)));
+    }
+
+    #[gpui::test]
+    fn search_results_in_the_side_panel_are_listed_and_open_their_match(cx: &mut gpui::TestAppContext) {
+        let dir = crate::qa_workbench_tests::project("a11y-search-side");
+        std::fs::write(dir.join("src/main.rs"), "fn main() {\n    let needle = 1;\n}\n").unwrap();
+        let file = dir.join("src/main.rs").to_string_lossy().into_owned();
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        crate::qa_workbench_tests::open(&wb, &dir, cx);
+        wb.update_in(cx, |wb, window, cx| wb.search_for("needle", window, cx));
+        cx.simulate_keystrokes("enter");
+        crate::qa_integration_tests::wait_ticking(cx, "the search to finish", |cx| {
+            wb.read_with(cx, |wb, cx| wb.search_summary_for_test(cx)).is_some_and(|s| s.0 == 1)
+        });
+        let snap = wb.update_in(cx, |wb, window, cx| wb.a11y_snapshot(window, cx));
+        let nodes = snap.to_tree().nodes;
+        let statuses: Vec<_> = nodes.iter().filter(|(_, n)| n.role() == Role::Status).map(|(_, n)| n.label().map(str::to_string)).collect();
+        // The same words as the panel's own status line.
+        assert!(statuses.iter().any(|l| l.as_deref().is_some_and(|l| l.starts_with("1 result in "))), "status is announced: {statuses:?}");
+        let (row, _) = nodes.iter().find(|(_, n)| n.role() == Role::ListItem && n.label() == Some("2: let needle = 1;")).expect("the match row");
+        let req = ActionRequest { action: Action::Click, target_tree: TreeId::ROOT, target_node: *row, data: None };
+        wb.update_in(cx, |wb, window, cx| wb.a11y_action_for_test(&req, &snap, window, cx));
+        crate::qa_integration_tests::wait_ticking(cx, "the match to open", |cx| wb.read_with(cx, |wb, _| wb.active_editor().is_some()));
+        let (path, line) = wb.read_with(cx, |wb, cx| {
+            let e = wb.active_editor().unwrap().read(cx);
+            (e.path.clone(), e.cursor_position().0)
+        });
+        assert_eq!((path.as_str(), line), (file.as_str(), 2));
     }
 }

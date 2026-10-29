@@ -27,6 +27,9 @@ The tree, in the order a screen reader walks it:
 - While the bottom panel is open, a `TabList` with its tabs (Problems, Output, Debug Console while debugging, Ports,
   Terminal), the selected one marked and counts as descriptions; `Click` switches tabs. While Output is shown, a polite
   `Log` holds its last 400 lines.
+- While the Search side bar is visible, a polite `Status` with its result line (the same words as on screen) and a `List`
+  of up to 500 rows: a `Heading` per file and a `ListItem` per match (`line: text`). `Click` opens the match; it is
+  found by file, line and column, so an activation after the results changed opens it only if it is still a result.
 - While Extensions is visible, a `Group` with a `TabList` (Installed, Market), a `SearchInput` that controls the list
   and points at the highlighted row as its active descendant, a polite live `Status` that says how many extensions
   match (an `Alert` when the list cannot be read), and a `ListBox` of the rows (name; version, id and description).
@@ -148,7 +151,7 @@ macOS. The CPU cost of the 250 ms snapshot loop has not been measured.
   file offsets in long files. Primary selection only; no multi-cursor, folding, wrapped lines, RTL or CRLF handling.
 - The terminal exposes the screen only, not the scrollback, and cannot be written to from the tree (typing goes through
   the keyboard as usual).
-- Not exposed: the search sidebar (its results can be opened in a Search Editor), debug, testing and remote sidebars, an installed extension's page and the consent sheet, the Source Control graph, worktrees and sync controls, the bottom
+- Not exposed: debug, testing and remote sidebars, an installed extension's page and the consent sheet, the Source Control graph, worktrees and sync controls, the bottom
   panel's Ports list, hover and signature popups, the Settings and Keyboard Shortcuts pages,
   context menus, and dialogs other than the update dialog. Only the tabs of the focused editor group are listed, and
   diff, large-file and page tabs are not.
