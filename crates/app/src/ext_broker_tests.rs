@@ -130,6 +130,15 @@ fn programs_come_from_run_and_never_from_the_workspace() {
     let r = root("run");
     let s = scope(&r, perms(&[], &[], &["echo"]), true);
     let cmd = |program: &str| v::Command { program: program.into(), args: vec!["hi".into()], cwd: None, env: vec![], stdin: None };
+    // The user's environment does not reach the program; what the extension passes does.
+    let s_env = scope(&r, perms(&[], &[], &["env"]), true);
+    let probe = v::Command { program: "env".into(), args: vec![], cwd: None, env: vec![("DEPLOY".into(), "yes".into())], stdin: None };
+    let (c, out) = call(&s_env, Start::Spawn { command: probe });
+    assert_eq!(c, Completion::Exit(Some(0)));
+    let text: Vec<u8> = out.into_iter().flat_map(|e| if let StreamEvent::Stdout(b) = e { b } else { vec![] }).collect();
+    let text = String::from_utf8_lossy(&text);
+    assert!(text.contains("DEPLOY=yes"), "{text}");
+    assert!(!text.contains("CARGO") && !text.contains("RUST"), "the test runner's environment leaked: {text}");
     let (c, out) = call(&s, Start::Spawn { command: cmd("echo") });
     assert_eq!(c, Completion::Exit(Some(0)));
     let text: Vec<u8> = out.into_iter().flat_map(|e| if let StreamEvent::Stdout(b) = e { b } else { vec![] }).collect();

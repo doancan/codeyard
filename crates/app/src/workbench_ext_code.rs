@@ -38,6 +38,8 @@ pub(super) struct CodeState {
     pump: Option<gpui::Task<()>>,
     /// `timers.every`: dropping a task stops its timer.
     timers: HashMap<(String, u64), gpui::Task<()>>,
+    /// `workspace-contains` checks already made, per extension and workspace roots, so a reload does not repeat them.
+    checked_workspace: HashSet<(String, Vec<String>)>,
     /// The setting values each running exthost has, to send only changes.
     sent_settings: HashMap<String, Vec<(String, Option<String>)>>,
     /// Progress shown for each extension: id → (title, message, percent).
@@ -57,7 +59,6 @@ impl CodeState {
     }
 
     /// Started, or starting.
-    #[cfg(test)]
     pub(super) fn running(&self, id: &str) -> bool {
         self.procs.contains_key(id) || self.queued.contains_key(id)
     }
@@ -82,6 +83,7 @@ impl Default for CodeState {
             pump: None,
             timers: HashMap::new(),
             sent_settings: HashMap::new(),
+            checked_workspace: HashSet::new(),
             progress: HashMap::new(),
             record: Arc::default(),
         }
@@ -146,7 +148,7 @@ impl Workbench {
         self.cfg.exts.code.user_action.insert(extension.to_string(), id);
         self.cfg.exts.code.record().request_sent(extension, id, &format!("command:{command}"));
         let msg = ToHost::Handle { id, deadline_ms: 0, request: ext_runtime::command(command, "null") };
-        self.send_to_extension(&active, &format!("command:{command}"), msg, window, cx);
+        self.send_to_extension(&active, &format!("command:{command}"), Some(msg), window, cx);
         let ext = extension.to_string();
         let answer = crate::ui::bridge(answer);
         cx.spawn_in(window, async move |this, cx| {
@@ -170,18 +172,21 @@ impl Workbench {
     }
 
     /// Send `msg` to the extension's exthost, starting it first (compile and handshake run in the background).
-    fn send_to_extension(&mut self, active: &crate::ext::Active, reason: &str, msg: ToHost, window: &mut Window, cx: &mut Context<Self>) {
+    /// `msg` is `None` to only activate it (`workspace-contains`).
+    fn send_to_extension(&mut self, active: &crate::ext::Active, reason: &str, msg: Option<ToHost>, window: &mut Window, cx: &mut Context<Self>) {
         self.ensure_extension_pump(window, cx);
         let id = active.id().to_string();
-        if let Some(p) = self.cfg.exts.code.procs.get(&id)
-            && p.send(&msg).is_ok()
-        {
-            return;
+        if let Some(p) = self.cfg.exts.code.procs.get(&id) {
+            match &msg {
+                None => return,
+                Some(m) if p.send(m).is_ok() => return,
+                Some(_) => {}
+            }
         }
-        let queue = self.cfg.exts.code.queued.entry(id.clone()).or_default();
-        queue.push(msg);
-        if queue.len() > 1 {
-            return; // already starting
+        let starting = self.cfg.exts.code.queued.contains_key(&id);
+        self.cfg.exts.code.queued.entry(id.clone()).or_default().extend(msg);
+        if starting {
+            return;
         }
         let Some(exthost) = ext_runtime::exthost_path() else {
             self.cfg.exts.code.queued.remove(&id);
@@ -496,7 +501,7 @@ impl Workbench {
         let caller = caller.to_string();
         let (id, answer) = self.cfg.exts.code.pending.lock().unwrap_or_else(|p| p.into_inner()).add(target.id());
         let msg = ToHost::Handle { id, deadline_ms: 0, request: ext_runtime::command(&local, args_json) };
-        self.send_to_extension(&target, &format!("command:{local}"), msg, window, cx);
+        self.send_to_extension(&target, &format!("command:{local}"), Some(msg), window, cx);
         let answer = crate::ui::bridge(answer);
         cx.background_executor()
             .spawn(async move {
@@ -515,7 +520,7 @@ impl Workbench {
 
     /// After a settings reload: stop the exthosts of extensions that were uninstalled or turned off, and tell the
     /// others about their settings that changed (`request.settings-changed`).
-    pub(super) fn sync_running_extensions(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn sync_running_extensions(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let reg = crate::ext::current();
         for e in reg.active.iter() {
             let id = e.id().to_string();
@@ -534,6 +539,52 @@ impl Workbench {
         self.stop_removed_extensions();
         // Another window may have changed a permission switch.
         self.refresh_extension_grants(cx);
+        self.activate_for_workspace(window, cx);
+    }
+
+    /// `[activation] workspace-contains`: start an extension when a workspace folder has a matching file. The check
+    /// runs once per extension and set of folders, in the background, on the window's host.
+    fn activate_for_workspace(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let roots = self.all_roots(cx);
+        if roots.is_empty() {
+            return;
+        }
+        let reg = crate::ext::current();
+        for e in reg.active.iter().filter(|e| e.manifest.code.is_some()) {
+            let globs: Vec<String> = e
+                .manifest
+                .activation
+                .iter()
+                .filter_map(|a| match a {
+                    ext_manifest::Activation::WorkspaceContains(g) => Some(g.clone()),
+                    _ => None,
+                })
+                .collect();
+            let key = (e.id().to_string(), roots.clone());
+            if globs.is_empty() || self.cfg.exts.code.running(e.id()) || !self.cfg.exts.code.checked_workspace.insert(key) {
+                continue;
+            }
+            let host = self.remote.host.clone();
+            let roots = roots.clone();
+            let id = e.id().to_string();
+            let found = cx.background_executor().spawn(async move {
+                roots
+                    .iter()
+                    .any(|root| host.list_files(root, 20_000).is_ok_and(|l| l.paths.iter().any(|p| globs.iter().any(|g| crate::globs::path_matches(g, p)))))
+            });
+            cx.spawn_in(window, async move |this, cx| {
+                if !found.await {
+                    return;
+                }
+                let _ = this.update_in(cx, |this, window, cx| {
+                    let reg = crate::ext::current();
+                    if let Some(active) = reg.active.iter().find(|e| e.id() == id) {
+                        this.send_to_extension(active, "workspace-contains", None, window, cx);
+                    }
+                });
+            })
+            .detach();
+        }
     }
 
     /// Stop the exthosts of extensions that were uninstalled, turned off or replaced since they started.

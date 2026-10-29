@@ -2,6 +2,8 @@
 
 use gpui::Global;
 
+use super::USER_ONLY_KEYS;
+
 /// Where an effective setting comes from. Precedence: user < workspace file < folder.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Scope {
@@ -34,4 +36,11 @@ pub struct ScopedLayer<'a> {
     /// Whoever wrote this layer is trusted: only then may it set `RESTRICTED_KEYS`.
     pub trusted: bool,
     pub scope: Scope,
+}
+
+/// Whether `key` may only come from the user's own settings file. Every layer that is not the user's file (project
+/// settings, a workspace file, any layer added later) is merged by `parse_scoped`, which drops these keys; a new kind of
+/// layer goes through it instead of being merged on its own.
+pub fn is_user_only(key: &str) -> bool {
+    USER_ONLY_KEYS.contains(&key)
 }

@@ -22,6 +22,8 @@ crates/
   ext-manifest/ extension manifest (`codeyard-extension.toml`): parsing, validation with author-facing errors,
             activation, permissions and risk; shared by the app, `cyx` and the registry (see plugin-architecture.md)
   ext-pkg/  extension packages (`.cyx`): reproducible writer, strict reader, content digest
+  ext-ui/   extension views: the 22-element tree and its wire form, validation and caps, keyed diff, input state kept
+            by the host, accessibility roles, events; the GPUI renderer is in `app`
   ext-core/ installed extensions: content-addressed store, `extensions.lock.jsonc`, install / update / rollback /
             uninstall as crash-safe transactions, the startup index, permissions ∩ Workspace Trust; the registry's
             signed index (`yard.rs`) and publisher signatures (`publisher.rs`), verified offline

@@ -244,6 +244,7 @@ const ICONS: &[(&str, &[u8])] = icons![
     "check",
     "chevron-down",
     "chevron-right",
+    "chevron-up",
     "circle-x",
     "file",
     "file-code",

@@ -148,8 +148,9 @@ macOS. The CPU cost of the 250 ms snapshot loop has not been measured.
 - No scroll actions, no `Blur`, no explicit expand/collapse action (Click toggles).
 - The update window on macOS has no adapter of its own.
 - Linux (AT-SPI) is not implemented: it needs bounds, window events and an async D-Bus runtime.
-- `editor.fontSize`, `terminal.fontSize` and zoom scale the editor and terminal only; the rest of the interface keeps
-  its size.
+- Interface scale (`ui.scale`, zoom) is applied by GPUI at the window: the bounds reported to AccessKit are logical
+  bounds × display scale × interface scale, so they match what is painted at every zoom level
+  (`accessibility_bounds_follow_the_interface_scale`). Not yet checked with VoiceOver, NVDA or Narrator at 150/200%.
 
 ## Order of work
 
@@ -158,7 +159,7 @@ macOS. The CPU cost of the 250 ms snapshot loop has not been measured.
 3. The remaining panels (search results, Source Control graph/worktrees/sync, problems), the Settings page, context menus and dialogs.
 4. The editor proper: visible lines only with shaped character positions, correct absolute offsets, scroll actions,
    multi-cursor policy, diagnostics announcements.
-5. Interface text scaling, the Linux adapter and regression tests against a real accessibility client.
+5. The Linux adapter and regression tests against a real accessibility client.
 
 ## Landmark geometry verification
 

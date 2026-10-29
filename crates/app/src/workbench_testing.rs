@@ -214,6 +214,11 @@ impl Workbench {
         }
     }
 
+    /// Whether the activity bar showed its "more above" and "more below" hints in the last frame.
+    pub fn activity_hints_for_test(&self) -> (bool, bool) {
+        self.chrome.activity_hints.get()
+    }
+
     pub fn sidebar_width_for_test(&self) -> f32 {
         self.chrome.sidebar_w
     }

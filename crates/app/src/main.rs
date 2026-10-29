@@ -178,6 +178,8 @@ mod shortcuts_page;
 mod snippets;
 #[cfg(test)]
 mod text_scale_tests;
+#[cfg(test)]
+mod ui_scale_tests;
 mod web_preview;
 mod web_preview_config;
 // --- structural ---
