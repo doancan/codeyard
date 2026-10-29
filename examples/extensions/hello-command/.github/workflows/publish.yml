@@ -1,0 +1,15 @@
+# Publishes this extension to the Codeyard registry when you push a tag: git tag v0.2.0 && git push --tags
+# No secrets: the job's identity token signs the release (keyless), so only this repository can publish it.
+name: Publish
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: doancan/codeyard/actions/publish@efba4a1e224e81f266bbb7973bdc3ec751b0d49b # main, 2026-10-29

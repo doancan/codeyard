@@ -174,7 +174,7 @@ jobs:
           if-no-files-found: error
 
   # The crates that do not depend on GPUI, plus the musl agent and its size limit
-  # (the agent runs on Linux servers).
+  # (the agent runs on Linux servers), and the Rust extension examples (the only job with the wasm32-wasip2 target).
   linux:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -183,12 +183,18 @@ jobs:
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
         with:
           toolchain: stable
-          targets: x86_64-unknown-linux-musl
+          targets: x86_64-unknown-linux-musl, wasm32-wasip2
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
         with:
           shared-key: ci-linux
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
-      - run: cargo test --locked -p proto -p agent -p host -p buffer -p state -p syntax -p theme -p ext-manifest -p ext-pkg -p ext-core -p ext-proto -p ext-host -p ext-net -p cyx -p yard
+      # ext-host builds codeyard-exthost, which cyx's tests use to run examples/extensions (`cyx test`); with
+      # CODEYARD_REQUIRE_WASM a missing target or exthost fails those tests instead of skipping them.
+      - run: cargo test --locked -p proto -p agent -p host -p buffer -p state -p syntax -p theme -p ext-manifest -p ext-pkg -p ext-core -p ext-proto -p ext-host -p ext-net -p cyx -p yard -p codeyard-extension -p codeyard-extension-test
+        env:
+          CODEYARD_REQUIRE_WASM: "1"
+      - name: Example extensions (unit tests against the mock host)
+        run: for d in examples/extensions/*/; do cargo test --locked --manifest-path "$d/Cargo.toml" --target-dir target/examples; done
       # The shipped Linux agents are built with cargo-zigbuild (release.yml, docs/releasing.md), so the size gate builds
       # the same way. A plain `cargo build` with the system linker produces a static-PIE (+170 KB of relocations) and
       # measures ~1.7 MB: not the artifact users get. pip installs cargo-zigbuild together with zig.
