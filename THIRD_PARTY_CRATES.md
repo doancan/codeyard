@@ -5,7 +5,7 @@ field of each crate's `Cargo.toml`. `cargo deny check` (see `deny.toml`) enforce
 allowed licence. This list covers all target platforms, including crates that a given build does not compile.
 Crates marked vendored live in `vendor/`.
 
-893 crates.
+901 crates.
 
 | Crate | Version | Licence | |
 | --- | --- | --- | --- |
@@ -473,6 +473,7 @@ Crates marked vendored live in `vendor/`.
 | potential_utf | 0.1.6 | Unicode-3.0 |  |
 | ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 |  |
 | prettyplease | 0.2.37 | MIT OR Apache-2.0 |  |
+| prettyplease | 0.3.0 | MIT OR Apache-2.0 |  |
 | proc-macro-crate | 3.5.0 | MIT OR Apache-2.0 |  |
 | proc-macro-error-attr2 | 2.0.0 | MIT OR Apache-2.0 |  |
 | proc-macro-error2 | 2.0.1 | MIT OR Apache-2.0 |  |
@@ -750,6 +751,7 @@ Crates marked vendored live in `vendor/`.
 | wasm-encoder | 0.261.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | wasm-encoder | 0.262.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | wasm-metadata | 0.261.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wasm-metadata | 0.262.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | wasm-streams | 0.4.2 | MIT OR Apache-2.0 |  |
 | wasmparser | 0.261.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | wasmparser | 0.262.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
@@ -853,8 +855,14 @@ Crates marked vendored live in `vendor/`.
 | winx | 0.36.4 | Apache-2.0 WITH LLVM-exception |  |
 | wio | 0.2.2 | MIT/Apache-2.0 |  |
 | wit-bindgen | 0.57.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wit-bindgen | 0.63.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wit-bindgen-core | 0.63.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wit-bindgen-rust | 0.63.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wit-bindgen-rust-macro | 0.63.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | wit-component | 0.261.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wit-component | 0.262.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | wit-parser | 0.261.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
+| wit-parser | 0.262.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | writeable | 0.6.4 | Unicode-3.0 |  |
 | x11 | 2.21.0 | MIT |  |
 | x11-clipboard | 0.9.3 | MIT |  |

@@ -1,0 +1,13 @@
+[extension]
+id          = "codeyard.hello-command"
+version     = "0.1.0"
+name        = "Hello Command"
+license     = "MIT"
+description = "A command."
+
+[code]
+entry = "Cargo.toml"
+
+[[commands]]
+id    = "hello"
+title = "Hello Command: Say Hello"

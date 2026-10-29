@@ -40,6 +40,7 @@ jobs:
         run: |
           export CODEYARD_FUZZ_SECS=$((MINUTES * 60))
           echo "fuzz: ${MINUTES} min per test, seed ${CODEYARD_FUZZ_SEED}"
-          crates=$(ls -d crates/ext-*/ | xargs -n1 basename | sed 's/^/-p /')
+          # Package names, not folder names: crates/ext-sdk is the codeyard-extension package.
+          crates=$(for d in crates/ext-*/; do sed -n 's/^name = "\(.*\)"$/-p \1/p' "$d/Cargo.toml" | head -n 1; done)
           # The tests of each crate run in parallel, so the wall time is about MINUTES per crate.
           cargo test --locked --release $crates fuzz

@@ -1,11 +1,11 @@
 # Writing Codeyard extensions
 
-Themes, snippets, keymaps, languages, schemas and language servers today; commands and views with code extensions next. If you have built a VS Code extension, most of this will feel familiar. Parts marked **(draft)** may still change before API 1.0, and sections marked **(coming)** describe code extensions, which this version does not run yet.
+Themes, snippets, keymaps, languages, schemas and language servers without code; commands, views and providers in Rust with code extensions. If you have built a VS Code extension, most of this will feel familiar. Parts marked **(draft)** may still change before API 1.0, and parts marked **(coming)** are not in this version yet.
 
 <!-- toc -->
 - [Quick start](#quick-start)
 - [A theme or snippet pack](#a-theme-or-snippet-pack)
-- [Your first command (coming)](#your-first-command-coming)
+- [Your first command](#your-first-command)
 - [The manifest](#the-manifest)
 - [Permissions](#permissions)
 - [Recipes](#recipes)
@@ -81,75 +81,48 @@ The same goes for other no-code contributions: `keymap-preset`, `keybindings`, `
 - A language server is a program on `PATH` where the files are, so it works over SSH too.
 - Start Codeyard with `--no-extensions` to rule your extension out when something looks wrong.
 
-## Your first command (coming)
+## Your first command
 
-Commands, views and other code arrive with code extensions; this section shows what they will look like. You will need Rust or Node installed.
-
-### TypeScript
+Commands, views, formatters and code actions need code: a Rust crate that `cyx` builds into a WebAssembly component. You need Rust and its WebAssembly target (`rustup target add wasm32-wasip2`). The Rust SDK is pre-release; TypeScript comes later. The full guide is [commands.md](commands.md).
 
 ```sh
-cyx new command hello --lang ts   # (draft) flag
-```
-
-```toml
-[extension]
-id      = "you.hello"
-version = "0.1.0"
-name    = "Hello"
-license = "MIT"
-
-[code]
-entry = "src/main.ts"
-
-[[commands]]
-id    = "greet"              # becomes you.hello.greet
-title = "Hello: Greet"
-```
-
-```ts
-// src/main.ts   (draft) API shape
-import { Context } from "@codeyard/extension";
-
-export function activate(ctx: Context) {
-  ctx.commands.register("greet", async () => {
-    const name = await ctx.ui.input({ prompt: "Your name?" });
-    if (name) await ctx.ui.notice(`Hello, ${name}!`);
-  });
-}
-```
-
-Every call returns a Promise. Global `fetch` works, and so do pure-JS npm packages like Octokit or zod. Node built-ins such as `fs`, `child_process` and `net` do **not**.
-
-### Rust
-
-```sh
-cyx new command hello --lang rust   # (draft) flag
+cyx new command hello     # or: cyx new view hello
+cd hello
+cargo test                # unit tests against a mock Codeyard
+cyx test                  # the built extension in the real extension host
 ```
 
 ```toml
 [code]
 entry = "Cargo.toml"
+
+[[commands]]
+id    = "hello"              # becomes you.hello.hello
+title = "Hello: Say Hello"
 ```
 
 ```rust
-// src/lib.rs   (draft) API shape
+// src/lib.rs
 use codeyard_extension::prelude::*;
 
-#[extension]
-fn activate(ctx: &Context) -> Result<()> {
-    ctx.commands().register("greet", |ctx| {
-        if let Some(name) = ctx.ui().input("Your name?")? {
-            ctx.ui().notice(&format!("Hello, {name}!"));
-        }
+struct Hello;
+
+impl Extension for Hello {
+    fn activate(ctx: Context) -> Result<()> {
+        ctx.command("hello", async |ctx, _args| {
+            if let Some(name) = ctx.input(InputOptions::prompt("Your name?")).await? {
+                ctx.notice(format!("Hello, {name}!"));
+            }
+            Ok(())
+        });
         Ok(())
-    });
-    Ok(())
+    }
 }
+
+codeyard_extension::export!(Hello);
 ```
 
-The build uses plain cargo with the `wasm32-wasip2` target, and `cyx dev` runs it for you.
-
-Run `cyx dev`, open the palette and pick **Hello: Greet**.
+Calls that reach Codeyard are `async`; the SDK runs them without blocking the extension. The build uses plain cargo with the `wasm32-wasip2` target, and `cyx package` does it for you. Running code extensions in the `cyx dev` window, with reload on save, arrives with the app side of code extensions **(coming)**.
 
 You don't have to write any activation code. The extension starts the first time someone uses one of its commands, views or languages.
 
@@ -246,7 +219,7 @@ If an update **removes** a permission, it installs silently. If it **adds** one,
 
 ## Recipes
 
-Each recipe is a working extension in `examples/extensions/`. The code below is TypeScript. The Rust SDK has the same names in snake_case. All API shapes are (draft).
+The recipes below show the planned TypeScript API **(coming)**; [commands.md](commands.md) shows the same things in Rust, and `examples/extensions/` has working Rust extensions. All API shapes are (draft).
 
 ### Status bar item
 
@@ -402,23 +375,23 @@ await ctx.ui.progress("Building…", async () => {
 
 ## Test and debug
 
-**Unit tests** run natively against a mock host with fake files, recorded processes, fixture HTTP and a virtual clock.
+**Unit tests** run natively against a mock host with fake files, recorded processes, fixture HTTP and a virtual clock. The whole story is in [testing.md](testing.md).
 
-```ts
-// main.test.ts   (draft) API shape
-import { mockHost } from "@codeyard/extension/testing";
-
-test("greets", async () => {
-  const host = mockHost({ input: "Ada" });
-  await host.run("greet");
-  expect(host.notices).toEqual(["Hello, Ada!"]);
-});
+```rust
+#[test]
+fn greets() {
+    let host = MockHost::new();          // codeyard_extension_test::MockHost
+    host.activate::<Hello>().unwrap();
+    host.answer_input("Ada");
+    host.command("hello", Value::Null).unwrap();
+    assert_eq!(host.notices(), ["Hello, Ada!"]);
+}
 ```
 
 ```sh
-npm test       # TypeScript
-cargo test     # Rust
-cyx test       # runs the real built extension
+cargo test     # Rust unit tests
+cyx test       # the real built extension in the extension host; fails on any refused call, with its fix
+npm test       # TypeScript (coming)
 ```
 
 **Debug.** Open the palette and run **Developer: Extension Inspector**. It shows:

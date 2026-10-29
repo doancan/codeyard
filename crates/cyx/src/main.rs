@@ -1,10 +1,11 @@
 //! `cyx`: the one command extension authors need.
 //!
 //! ```text
-//! cyx new <theme|snippets|keymap|language|language-server> <name> [--publisher NAME]
+//! cyx new <theme|snippets|keymap|language|language-server|command|view> <name> [--publisher NAME] [--sdk PATH]
 //! cyx dev [FOLDER] [-- CODEYARD ARGS…]   run Codeyard with the extension loaded from FOLDER; it reloads on save
 //! cyx check [FOLDER]                     every problem with its file, line and fix
-//! cyx package [FOLDER] [-o FILE]         a reproducible .cyx
+//! cyx package [FOLDER] [-o FILE]         build the code (build.rs), then a reproducible .cyx
+//! cyx test [FOLDER]                      the built extension in codeyard-exthost against a scripted app (harness.rs)
 //! cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]
 //! cyx publish [FOLDER] [--dry-run] [--pre-release] [--registry URL]
 //! cyx yank | restore VERSION [FOLDER]    hide a version from installs, or bring it back
@@ -15,6 +16,8 @@
 //! Everything it checks is checked by `ext-manifest` and `ext-pkg`, the same code the app and the registry run, so a
 //! folder `cyx check` accepts installs. Only publishing and status changes use the network (`publish.rs`).
 
+mod build;
+mod harness;
 mod net;
 mod oidc;
 mod publish;
@@ -24,6 +27,8 @@ mod vscode;
 mod yard;
 
 #[cfg(test)]
+mod code_tests;
+#[cfg(test)]
 mod tests;
 
 use std::path::{Path, PathBuf};
@@ -32,10 +37,13 @@ use std::process::ExitCode;
 const HELP: &str = "cyx: build Codeyard extensions
 
 usage:
-  cyx new <kind> <name> [--publisher NAME]   start an extension (kind: theme, snippets, keymap, language, language-server)
+  cyx new <kind> <name> [--publisher NAME]   start an extension (kind: theme, snippets, keymap, language,
+                                             language-server, command, view; --sdk PATH takes the Rust SDK from a
+                                             Codeyard checkout)
   cyx dev [FOLDER] [-- CODEYARD ARGS…]       run Codeyard with it loaded; it reloads when you save
   cyx check [FOLDER]                         list every problem with its file, line and fix
-  cyx package [FOLDER] [-o FILE]             write a .cyx to install or publish
+  cyx package [FOLDER] [-o FILE]             build the code, then write a .cyx to install or publish
+  cyx test [FOLDER]                          build the code and run each command and view in the extension host
   cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]
                                              convert a VS Code theme, snippets, keymap or language
   cyx publish [FOLDER] [--dry-run] [--pre-release] [--registry URL]
@@ -73,11 +81,16 @@ fn run(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         "new" => {
-            let (kind, name, publisher) = parse_new(rest)?;
+            let (kind, name, publisher, sdk) = parse_new(rest)?;
             let dir = PathBuf::from(&name);
-            scaffold::create(&dir, kind, &name, &publisher)?;
-            println!("Created {}/ ({} extension, id {publisher}.{name}).\n\nNext:\n  cd {name}\n  cyx dev", name, kind.word());
+            scaffold::create_with(&dir, kind, &name, &publisher, sdk.as_deref())?;
+            let next = if kind.is_code() { "cargo test\n  cyx test\n  cyx dev" } else { "cyx dev" };
+            println!("Created {}/ ({} extension, id {publisher}.{name}).\n\nNext:\n  cd {name}\n  {next}", name, kind.word());
             Ok(())
+        }
+        "test" => {
+            let dir = folder(rest.first())?;
+            test(&dir)
         }
         "check" => {
             let dir = folder(rest.first())?;
@@ -101,6 +114,8 @@ fn run(args: &[String]) -> Result<(), String> {
             };
             let dir = folder(folder_arg)?;
             // Start only something that loads: the window would otherwise open with an error the terminal explains better.
+            // Code is built once here; rebuilding on save needs the app's side of hot reload (#101).
+            build::build(&dir)?;
             let report = check_dev(&dir)?;
             for w in &report.warnings {
                 eprintln!("{w}");
@@ -219,6 +234,9 @@ pub enum Kind {
     Keymap,
     Language,
     LanguageServer,
+    /// Rust code extensions.
+    Command,
+    View,
 }
 
 impl Kind {
@@ -229,6 +247,8 @@ impl Kind {
             "keymap" => Kind::Keymap,
             "language" => Kind::Language,
             "language-server" | "lsp" => Kind::LanguageServer,
+            "command" => Kind::Command,
+            "view" => Kind::View,
             _ => return None,
         })
     }
@@ -240,25 +260,30 @@ impl Kind {
             Kind::Keymap => "keymap",
             Kind::Language => "language",
             Kind::LanguageServer => "language server",
+            Kind::Command => "Rust command",
+            Kind::View => "Rust view",
         }
+    }
+
+    pub fn is_code(self) -> bool {
+        matches!(self, Kind::Command | Kind::View)
     }
 }
 
-fn parse_new(rest: &[String]) -> Result<(Kind, String, String), String> {
-    let usage = "usage: cyx new <theme|snippets|keymap|language|language-server> <name> [--publisher NAME]";
+fn parse_new(rest: &[String]) -> Result<(Kind, String, String, Option<String>), String> {
+    let usage = "usage: cyx new <theme|snippets|keymap|language|language-server|command|view> <name> [--publisher NAME] [--sdk PATH]";
     let mut positional = Vec::new();
-    let mut publisher = None;
+    let (mut publisher, mut sdk) = (None, None);
     let mut it = rest.iter();
     while let Some(a) = it.next() {
-        if a == "--publisher" {
-            publisher = Some(it.next().ok_or(usage)?.clone());
-        } else {
-            positional.push(a.clone());
+        match a.as_str() {
+            "--publisher" => publisher = Some(it.next().ok_or(usage)?.clone()),
+            "--sdk" => sdk = Some(it.next().ok_or(usage)?.clone()),
+            _ => positional.push(a.clone()),
         }
     }
     let [kind, name] = positional.as_slice() else { return Err(usage.into()) };
-    let kind = Kind::parse(kind)
-        .ok_or_else(|| format!("cyx: unknown kind '{kind}'\n{usage}\n(commands, views and other code come with code extensions in a later version)"))?;
+    let kind = Kind::parse(kind).ok_or_else(|| format!("cyx: unknown kind '{kind}'\n{usage}"))?;
     ext_manifest::check_id_part(name).map_err(|e| format!("error: the name '{name}' {e}\n   = fix: use lowercase letters, digits and -, like my-theme"))?;
     let publisher = publisher.unwrap_or_else(default_publisher);
     ext_manifest::check_id_part(&publisher)
@@ -266,7 +291,7 @@ fn parse_new(rest: &[String]) -> Result<(Kind, String, String), String> {
     if Path::new(name).exists() {
         return Err(format!("error: {name}/ already exists\n   = fix: pick another name or remove the folder"));
     }
-    Ok((kind, name.clone(), publisher))
+    Ok((kind, name.clone(), publisher, sdk))
 }
 
 /// The publisher part of new ids: `git config user.name` made into an id, or `me`.
@@ -387,14 +412,39 @@ fn parse_package(rest: &[String]) -> Result<(PathBuf, Option<PathBuf>), String> 
     Ok((folder(dir.as_ref())?, out))
 }
 
-/// Check, then write `<id>-<version>.cyx` (or `out`).
+/// Build the code if there is any, check, then write `<id>-<version>.cyx` (or `out`).
 pub fn package(dir: &Path, out: Option<&Path>) -> Result<(PathBuf, ext_pkg::ContentDigest), String> {
+    build::build(dir)?;
     let report = check(dir)?;
     let files = ext_pkg::collect_dir(dir).map_err(|e| format!("error: {e}"))?;
     let (bytes, digest) = ext_pkg::write(files).map_err(|e| format!("error: {e}"))?;
     let path = out.map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from(format!("{}-{}.cyx", report.id, report.version)));
     std::fs::write(&path, bytes).map_err(|e| format!("error: cannot write {}: {e}", path.display()))?;
     Ok((path, digest))
+}
+
+/// `cyx test`: build, check, then run the component in the extension host. Fails on any refused call.
+fn test(dir: &Path) -> Result<(), String> {
+    if build::build(dir)?.is_none() {
+        check_dev(dir)?;
+        return Err("error: this extension has no code to test\n   = fix: `cyx check` covers themes, snippets and other no-code extensions".into());
+    }
+    check_dev(dir)?;
+    let exthost = harness::exthost().ok_or(
+        "error: codeyard-exthost was not found\n   = fix: install Codeyard (cyx finds the extension host beside itself), or set CODEYARD_EXTHOST to its path",
+    )?;
+    let manifest = build::manifest(dir)?;
+    let report = harness::run(dir, &manifest, &exthost)?;
+    println!("{} {}", manifest.id, manifest.version);
+    for line in &report.lines {
+        println!("{line}");
+    }
+    if report.failures.is_empty() {
+        println!("ok");
+        Ok(())
+    } else {
+        Err(format!("\n{} problem{} found", report.failures.len(), if report.failures.len() == 1 { "" } else { "s" }))
+    }
 }
 
 fn parse_import(rest: &[String]) -> Result<(PathBuf, Option<PathBuf>), String> {

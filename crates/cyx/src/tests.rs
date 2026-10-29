@@ -106,7 +106,7 @@ fn new_refuses_bad_names_and_existing_folders() {
     assert!(parse_new(&s(&["theme", "My Theme"])).unwrap_err().contains("lowercase"));
     assert!(parse_new(&s(&["widget", "x"])).unwrap_err().contains("unknown kind"));
     assert!(parse_new(&s(&["theme", "x", "--publisher", "Bad Name"])).unwrap_err().contains("publisher"));
-    let (kind, name, publisher) = parse_new(&s(&["theme", "zzz-not-here", "--publisher", "acme"])).unwrap();
+    let (kind, name, publisher, _) = parse_new(&s(&["theme", "zzz-not-here", "--publisher", "acme"])).unwrap();
     assert_eq!((kind, name.as_str(), publisher.as_str()), (Kind::Theme, "zzz-not-here", "acme"));
 }
 
