@@ -334,6 +334,11 @@ impl Workbench {
         welcome_glue::tip_of_the_day(day)
     }
 
+    /// Whether the extension's exthost is running in this window.
+    pub fn extension_running_for_test(&self, id: &str) -> bool {
+        self.cfg.exts.code.running(id)
+    }
+
     pub fn run_command_for_test(&mut self, label: &str, window: &mut Window, cx: &mut Context<Self>) {
         let run = self.commands().into_iter().find(|c| c.label == label).unwrap_or_else(|| panic!("no such command: {label}")).run;
         self.run_command(run, window, cx);

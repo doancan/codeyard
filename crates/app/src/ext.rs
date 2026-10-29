@@ -1,8 +1,8 @@
 //! Installed extensions as the app sees them: the set `ext_core` loads from the store and the lock file, minus the ones
 //! the user turned off, or nothing at all with `--no-extensions`. Every contribution reader (themes, snippets, keymaps,
 //! languages, schemas, settings, language servers) takes its entries from `current()`, so turning one off or installing
-//! one in another window changes all of them on the next settings reload. No extension code runs: Phase 0 extensions only
-//! contribute data (docs/plugin-architecture.md §5.1).
+//! one in another window changes all of them on the next settings reload. Extension code runs in `codeyard-exthost`
+//! (ext_runtime.rs); its contributions that need code are wired in workbench_ext_code.rs.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -209,9 +209,9 @@ pub fn reload_with(cfg_dir: Option<&Path>, enabled: bool) -> Vec<String> {
                     problems.push(stopped_line(&e.manifest.id, why));
                     continue;
                 }
-                // Installed by a newer Codeyard or synced from one: its code would not run here, so none of it applies.
-                if e.manifest.code.is_some() {
-                    problems.push(crate::i18n::tf("{} contains code, which this version does not run", &[&e.manifest.id]));
+                // Code runs in codeyard-exthost, which ships beside the app; without it none of the extension applies.
+                if let Some(Err(why)) = e.manifest.code.as_ref().map(|_| crate::ext_runtime::code_runs_here(&e.manifest.id)) {
+                    problems.push(why);
                     continue;
                 }
                 active.push(Active { dir: store.store_dir(&e.digest), manifest: Arc::new(e.manifest) });
@@ -476,13 +476,13 @@ pub fn check_setting(key: &str, value: &serde_json::Value) -> Result<(), String>
     Err(crate::i18n::tf("{0}: expected {1}", &[&format!("\"{key}\""), &kind]))
 }
 
-/// Install a package file (`codeyard --install-extension`): the checks of the Extensions view, without its sheet.
-/// Data-only packages, as everywhere in this version.
+/// Install a package file (`codeyard --install-extension`): the checks of the Extensions view, without its sheet. A
+/// package with code installs only when it asks for no permissions: anything more needs the consent sheet.
 pub fn install_file(store: &ext_core::Store, path: &Path) -> Result<Manifest, String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     let pkg = ext_pkg::read(&bytes).map_err(|e| e.to_string())?;
-    if pkg.manifest.code.is_some() {
-        return Err(crate::i18n::tf("{} contains code, which this version does not run", &[&pkg.manifest.id]));
+    if pkg.manifest.code.is_some() && !pkg.manifest.permissions.is_empty() {
+        return Err(crate::i18n::tf("{} asks for permissions: install it from the Extensions view to review them", &[&pkg.manifest.id]));
     }
     let installed = store.install(&bytes, ext_core::Source::File { path: path.display().to_string() }).map_err(|e| e.to_string())?;
     Ok(installed.manifest)

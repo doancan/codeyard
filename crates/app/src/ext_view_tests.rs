@@ -276,7 +276,11 @@ fn escape_cancels_the_consent_sheet(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-fn a_package_with_code_is_refused_with_the_reason(cx: &mut TestAppContext) {
+fn a_package_with_code_shows_the_consent_sheet(cx: &mut TestAppContext) {
+    if crate::ext_runtime::exthost_path().is_none() {
+        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+        return;
+    }
     let cfg = config_dir("code");
     let src = cfg.join("code");
     write_folder(
@@ -290,9 +294,7 @@ fn a_package_with_code_is_refused_with_the_reason(cx: &mut TestAppContext) {
     let (wb, cx) = setup(cx, &cfg);
     wb.update_in(cx, |wb, window, cx| wb.review_extension_for_test(&src.to_string_lossy(), false, window, cx));
     cx.run_until_parked();
-    let (error, text) = wb.read_with(cx, |wb, _| wb.notice_for_test()).unwrap();
-    assert!(error && text.contains("you.code contains code"), "{text}");
-    assert!(wb.update_in(cx, |wb, window, _| wb.consent_for_test(window)).is_none());
+    assert!(wb.update_in(cx, |wb, window, _| wb.consent_for_test(window)).is_some(), "{:?}", wb.read_with(cx, |wb, _| wb.notice_for_test()));
 }
 
 #[gpui::test]

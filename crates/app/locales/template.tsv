@@ -2198,7 +2198,7 @@ This debug adapter cannot change values.
 This debug adapter does not support data breakpoints.	
 This debug adapter has no exception breakpoints.	
 This engine runs Windows containers. Editing requires a Linux container; Windows container editing needs a separate Windows agent. Container logs remain available.	
-This extension contains code, which this version of Codeyard does not run.	
+This extension contains code, and codeyard-exthost, which runs it, is missing beside Codeyard.	
 This extension has no README.	
 This extension is no longer in the registry.	
 This file has merge conflicts: resolve them first (Source Control marks it resolved when staged)	
@@ -2485,6 +2485,7 @@ data breakpoint
 debug output was dropped: the debugger could not keep up	
 decoded as {}	
 default	
+denied ({0}); add to [permissions]: {1}	
 deprecated	
 deprecated, use {}	
 destination	
@@ -2717,7 +2718,9 @@ your words
 {0} commit{1} only exist on this branch and will be lost (the reflog keeps them for a while).	
 {0} containers · {1} running · {2} need attention	
 {0} could not be read ({1})	
+{0} could not start: {1}	
 {0} errors, {1} warnings	
+{0} failed to start: {1}	
 {0} files and {1} folders go from {2} ({3}) to {4} ({5}). Files that exist there are replaced; anything that changed since the scan is left alone.	
 {0} is back at version {1}.	
 {0} is now published by {1}, not {2} as before; review it with Extensions: Install from Registry…	
@@ -2783,19 +2786,22 @@ your words
 {} YAML documents became one list.	
 {} accepted the connection but sent no reply.	
 {} already exists. Choose another name.	
+{} asks for permissions: install it from the Extensions view to review them	
 {} bookmark|{} bookmarks	
 {} cannot be negated	
 {} cannot be parsed as JSON	
 {} cannot be parsed as a number	
 {} cannot be rounded	
+{} cannot run: codeyard-exthost is missing beside Codeyard.	
 {} changed no files (merge or empty commit).	
 {} change|{} changes	
 {} command|{} commands	
 {} conflict left|{} conflicts left	
 {} conflict|{} conflicts	
 {} contains a request that:	
-{} contains code, which this version does not run	
-{} contains code; this version of Codeyard runs data-only extensions (themes, snippets, keymaps, languages, schemas, language servers)	
+{} contains code, but codeyard-exthost is missing beside Codeyard	
+{} crashed three times and is turned off until Codeyard restarts.	
+{} crashed three times in a minute and was turned off.	
 {} cursor|{} cursors	
 {} day ago|{} days ago	
 {} definition|{} definitions	

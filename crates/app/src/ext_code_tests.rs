@@ -1,0 +1,125 @@
+//! Code extensions in a window, end to end: a package with a real component (crates/ext-host/testdata/probe.wasm)
+//! is installed, its commands join the palette, running one starts codeyard-exthost, and what the extension asks
+//! for reaches the window. Skipped when codeyard-exthost is not built (`cargo test --workspace` always builds it).
+
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+
+use gpui::{Entity, TestAppContext, VisualTestContext};
+
+use crate::ui::ActiveTheme;
+use crate::workbench::Workbench;
+
+const PROBE: &[u8] = include_bytes!("../../ext-host/testdata/probe.wasm");
+
+fn config_dir(name: &str) -> PathBuf {
+    let d = std::env::temp_dir().join(format!("codeyard-extcode-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    d
+}
+
+const MANIFEST: &str = r#"[extension]
+id = "you.probe"
+version = "1.0.0"
+name = "Probe"
+license = "MIT"
+
+[code]
+entry = "Cargo.toml"
+
+[permissions]
+read = ["a.txt"]
+net = ["api.example.com"]
+
+[[commands]]
+id = "notice"
+title = "Probe: Notice"
+
+[[commands]]
+id = "trap"
+title = "Probe: Trap"
+
+[[commands]]
+id = "nope"
+title = "Probe: Unknown"
+"#;
+
+fn install(cfg: &Path) {
+    let entries = vec![
+        ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: MANIFEST.as_bytes().to_vec(), executable: false },
+        ext_pkg::Entry { path: "Cargo.toml".into(), data: Vec::new(), executable: false },
+        ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: PROBE.to_vec(), executable: false },
+    ];
+    let (bytes, _) = ext_pkg::write(entries).expect("the probe passes the import check");
+    crate::ext::store(cfg).install(&bytes, ext_core::Source::File { path: "/downloads/probe.cyx".into() }).expect("installs");
+}
+
+fn setup<'a>(cx: &'a mut TestAppContext, cfg: &Path) -> (Entity<Workbench>, &'a mut VisualTestContext) {
+    cx.update(|cx| {
+        crate::bind_keys(cx);
+        cx.set_global(ActiveTheme(theme::DARK));
+        cx.set_global(crate::settings::Settings { lsp_enabled: false, ..Default::default() });
+    });
+    let dir = cfg.to_path_buf();
+    let (wb, cx) = cx.add_window_view(move |window, cx| Workbench::with_state(state::State::in_memory().ok(), Some(dir), window, cx));
+    wb.update_in(cx, |wb, window, cx| wb.reload_config_for_test(window, cx));
+    cx.run_until_parked();
+    (wb, cx)
+}
+
+/// Let the exthost (a real process) answer: run the window's tasks until `done` or 20 s.
+fn wait_for(cx: &mut VisualTestContext, wb: &Entity<Workbench>, done: impl Fn(&Workbench) -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while Instant::now() < deadline {
+        cx.run_until_parked();
+        if wb.read_with(cx, |wb, _| done(wb)) {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    panic!("timed out; notice: {:?}", wb.read_with(cx, |wb, _| wb.notice_for_test()));
+}
+
+fn notice_has(wb: &Workbench, text: &str) -> bool {
+    wb.notice_for_test().is_some_and(|(_, t)| t.contains(text))
+}
+
+#[gpui::test]
+fn a_code_extension_command_runs_in_its_exthost(cx: &mut TestAppContext) {
+    if crate::ext_runtime::exthost_path().is_none() {
+        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+        return;
+    }
+    let cfg = config_dir("run");
+    install(&cfg);
+    let (wb, cx) = setup(cx, &cfg);
+    let labels = wb.read_with(cx, |wb, _| wb.command_labels_for_test());
+    assert!(labels.iter().any(|l| l == "Probe: Notice"), "{labels:?}");
+    // The command asks the window for a notice; the extension's id comes first, so it cannot pose as Codeyard.
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Notice", window, cx));
+    wait_for(cx, &wb, |wb| notice_has(wb, "you.probe: Pick"));
+    // An unknown command comes back as an error with the extension's name.
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Unknown", window, cx));
+    wait_for(cx, &wb, |wb| notice_has(wb, "you.probe: invalid: unknown command nope"));
+}
+
+#[gpui::test]
+fn three_crashes_turn_an_extension_off(cx: &mut TestAppContext) {
+    if crate::ext_runtime::exthost_path().is_none() {
+        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+        return;
+    }
+    let cfg = config_dir("crash");
+    install(&cfg);
+    let (wb, cx) = setup(cx, &cfg);
+    for _ in 0..3 {
+        wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Trap", window, cx));
+        // Each trap ends the process; the next command starts a new one.
+        wait_for(cx, &wb, |wb| !wb.extension_running_for_test("you.probe"));
+    }
+    wait_for(cx, &wb, |wb| notice_has(wb, "crashed three times in a minute"));
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Notice", window, cx));
+    cx.run_until_parked();
+    assert!(wb.read_with(cx, |wb, _| notice_has(wb, "turned off until Codeyard restarts")));
+}

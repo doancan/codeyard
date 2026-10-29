@@ -423,6 +423,7 @@ impl Workbench {
         if matches!(self.remote.conn, Conn::Connected { .. }) {
             cmds.push(Command { label: "Remote: Disconnect".into(), run: Run::Disconnect });
         }
+        cmds.extend(self.extension_commands());
         cmds.push(Command::action("App: Quit", Quit));
         cmds
     }

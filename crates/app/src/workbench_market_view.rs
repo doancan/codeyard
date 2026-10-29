@@ -220,7 +220,7 @@ impl Workbench {
                 )));
         }
         // Install, Reinstall or Update; nothing when no version can be installed or it runs code.
-        let action: Option<&'static str> = match (&installed, installable && !release.code) {
+        let action: Option<&'static str> = match (&installed, installable && (!release.code || crate::ext_runtime::exthost_path().is_some())) {
             (_, false) => None,
             (Some(v), true) if *v == release.version.to_string() => Some(crate::i18n::t("Reinstall")),
             (Some(_), true) => Some(crate::i18n::t("Update")),
@@ -240,8 +240,8 @@ impl Workbench {
         }
         let why_not = if !installable {
             Some(crate::i18n::t("No version of this extension can be installed: they were withdrawn or revoked."))
-        } else if release.code {
-            Some(crate::i18n::t("This extension contains code, which this version of Codeyard does not run."))
+        } else if release.code && crate::ext_runtime::exthost_path().is_none() {
+            Some(crate::i18n::t("This extension contains code, and codeyard-exthost, which runs it, is missing beside Codeyard."))
         } else {
             None
         };

@@ -53,6 +53,8 @@ pub(super) struct ExtViewState {
     pub(super) tab: super::market_glue::ExtTab,
     pub(super) market: super::market_glue::MarketState,
     pub(super) updates: super::updates_glue::UpdateState,
+    /// Running code extensions (workbench_ext_code.rs).
+    pub(super) code: super::code_glue::CodeState,
 }
 
 /// The consent sheet's text and every other plain-words line of an extension.
@@ -134,13 +136,8 @@ fn read_package(source: &ExtSource) -> Result<Pending, String> {
         ExtSource::Registry { .. } => return Err("a registry package is downloaded by review_registry_extension".into()),
     };
     let pkg = ext_pkg::read(&bytes).map_err(|e| e.to_string())?;
-    // Commands and views need the extension host, which comes in a later version: installing one now would list
-    // features that do nothing.
     if pkg.manifest.code.is_some() {
-        return Err(crate::i18n::tf(
-            "{} contains code; this version of Codeyard runs data-only extensions (themes, snippets, keymaps, languages, schemas, language servers)",
-            &[&pkg.manifest.id],
-        ));
+        crate::ext_runtime::code_runs_here(&pkg.manifest.id)?;
     }
     Ok(Pending { manifest: Arc::new(pkg.manifest), bytes, source: source.clone(), warnings: Vec::new() })
 }
@@ -149,7 +146,7 @@ fn read_package(source: &ExtSource) -> Result<Pending, String> {
 fn registry_pending(found: crate::ext_registry::Found) -> Result<Pending, String> {
     let m = found.download.manifest;
     if m.code.is_some() {
-        return Err(crate::i18n::tf("{} contains code, which this version does not run", &[&m.id]));
+        crate::ext_runtime::code_runs_here(&m.id)?;
     }
     let mut warnings = Vec::new();
     if let ext_core::publisher::Pin::Changed { was } = &found.pin {

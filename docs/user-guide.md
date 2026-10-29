@@ -614,7 +614,7 @@ to the editor's roles; comments and trailing commas are fine.
 ## Extensions
 
 Extensions add themes, snippets, keymap presets, key bindings, languages, JSON and YAML schemas, settings and language
-servers. They contain data only: this version runs no extension code. *Extensions: Show Extensions* in the command
+servers, and extensions with code add commands. *Extensions: Show Extensions* in the command
 palette (or the blocks icon in the activity bar, or *View › Extensions*) lists what is installed, turned-off ones
 included, with a search field. What comes with Codeyard is built in and always on.
 
@@ -624,9 +624,16 @@ in an SSH window. Before anything is installed, a consent sheet shows the extens
 contributes and what it may reach, in plain words ("Run taplo with any arguments"), with the author's reason quoted.
 A red line marks a **High risk** set: one that can run programs as you, or read private data and send it somewhere.
 For those, the keyboard starts on *Cancel*, so Enter never installs by accident; Escape cancels any sheet. A package
-that is not valid is not installed; the error says what is wrong, as the packaging tool would. A package with code
-(commands, views) is refused with that reason: this version runs data-only extensions. A new extension applies at
-once, in every open window, without a restart.
+that is not valid is not installed; the error says what is wrong, as the packaging tool would. A new extension
+applies at once, in every open window, without a restart.
+
+**Extensions with code.** Their commands appear in the command palette. The first one you run starts the extension in
+its own process (`codeyard-exthost`, beside Codeyard): it reaches only the files, programs
+and commands its sheet listed, and only through Codeyard, which checks every call, the same way for local and SSH
+folders. In a folder you have not trusted it may read what it declared and show messages, but not change files or run
+programs. When a call is refused, the message names the permission the extension would need. An extension that crashes
+three times within a minute is turned off until Codeyard restarts; one nobody used for five minutes is stopped and
+starts again on its next command.
 
 **Rules that keep them predictable.** An extension key binding never takes a key a built-in shortcut uses (the
 binding is left out and the status bar says so); a keymap preset you choose with `keymap.preset` may. An extension
