@@ -421,6 +421,7 @@ Could not look for tests: {}
 Could not minify: {}	
 Could not open the debug session: {}	
 Could not open the state database: {}. Tabs, recent folders and backups will not be remembered this session.	
+Could not paste: {}	
 Could not reach {}: check the network connection and try again	
 Could not read Docker environments: {}	
 Could not read containers: {}	

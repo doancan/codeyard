@@ -88,6 +88,62 @@ fn ctrl_v_transfers_a_remote_clipboard_image_as_bracketed_path(cx: &mut TestAppC
     assert_eq!(*host.inputs.lock().unwrap(), vec![b"\x1b[200~/tmp/codeyard-paste-Abc123XY.png\x1b[201~".to_vec()]);
 }
 
+#[cfg(unix)]
+#[gpui::test]
+fn clipboard_image_reaches_a_real_ssh_terminal_program(cx: &mut TestAppContext) {
+    use std::time::{Duration, Instant};
+
+    let Some(sshd) = crate::test_sshd::start("terminal-image-paste") else { return };
+    let host: Arc<dyn Host> = Arc::new(host::ssh::connect(crate::test_sshd::ALIAS, &crate::bundled_agents::discover(), |_| {}).unwrap());
+    let destination = sshd.dir.join("pasted-image.png");
+    let script = "stty -echo; printf '__IMAGE_READY__\\n'; IFS= read -r image; \
+        case \"$image\" in /tmp/codeyard-paste-????????.png) ;; *) exit 17;; esac; \
+        trap 'rm -f -- \"$image\"' EXIT; cat -- \"$image\" > \"$1\" && printf '__IMAGE_SAVED__\\n'";
+    let pty = host
+        .pty_spawn_ex(host::PtySpec {
+            cols: 80,
+            rows: 24,
+            cwd: Some(crate::ui::local_path(&sshd.dir)),
+            shell: Some("/bin/sh".into()),
+            args: Some(vec!["-c".into(), script.into(), "codeyard-image-fixture".into(), crate::ui::local_path(&destination)]),
+            ..Default::default()
+        })
+        .unwrap();
+    let wait_for = |marker: &[u8]| {
+        let deadline = Instant::now() + Duration::from_secs(10 * crate::test_sshd::timeout_scale());
+        let mut output = Vec::new();
+        while !output.windows(marker.len()).any(|part| part == marker) {
+            assert!(Instant::now() < deadline, "remote image fixture did not report {}", String::from_utf8_lossy(marker));
+            match pty.events.recv_timeout(Duration::from_millis(100)) {
+                Ok(PtyEvent::Output(data)) => output.extend(data),
+                Ok(PtyEvent::Exit(code)) => panic!("remote image fixture exited early: {code:?}: {}", String::from_utf8_lossy(&output)),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                Err(error) => panic!("remote image fixture disconnected: {error}"),
+            }
+        }
+    };
+    wait_for(b"__IMAGE_READY__");
+    crate::qa_workbench_tests::globals(cx);
+    let (term, cx) = cx.add_window_view(|_, cx| TerminalView::output_only(host.clone(), "owned SSH image fixture".into(), cx));
+    term.update_in(cx, |term, window, _| {
+        term.pty = Some(pty.id);
+        term.focus_handle.focus(window);
+    });
+    let data = b"\x89PNG\r\n\x1a\nowned image payload".to_vec();
+    let image = gpui::Image::from_bytes(gpui::ImageFormat::Png, data.clone());
+    cx.write_to_clipboard(ClipboardItem::new_image(&image));
+    cx.run_until_parked();
+    cx.simulate_keystrokes("ctrl-v");
+    cx.run_until_parked();
+    cx.simulate_keystrokes("enter");
+    wait_for(b"__IMAGE_SAVED__");
+    let saved = host.exec("cat", &["--", &crate::ui::local_path(&destination)], None, None).unwrap();
+    assert!(saved.ok());
+    assert_eq!(saved.stdout, data);
+    term.update(cx, |term, _| term.pty = None);
+    host.pty_kill(pty.id);
+}
+
 #[gpui::test]
 fn remote_image_transfer_failure_reports_error_without_pasting_a_path(cx: &mut TestAppContext) {
     crate::qa_workbench_tests::globals(cx);

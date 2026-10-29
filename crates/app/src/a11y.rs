@@ -878,7 +878,7 @@ impl Workbench {
         }
         match (req.action, req.target_node) {
             (Action::Focus | Action::Click, ABOUT_TAB) if last.about.is_some() => {
-                if let Some(Page::About(view)) = &self.tabs.page {
+                if let Some(Page::About(view)) = self.tabs.page.clone() {
                     self.tabs.page_active = true;
                     self.tabs.diff_active = false;
                     self.tabs.large_active = false;
