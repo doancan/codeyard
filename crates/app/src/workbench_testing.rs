@@ -749,6 +749,10 @@ impl Workbench {
         ext_glue::permission_lines(p)
     }
 
+    pub fn high_risk_line_for_test(m: &ext_manifest::Manifest) -> Option<String> {
+        ext_glue::high_risk_line(m)
+    }
+
     pub fn answer_consent_for_test(&mut self, install: bool, window: &mut Window, cx: &mut Context<Self>) {
         if install {
             self.confirm_consent(window, cx);

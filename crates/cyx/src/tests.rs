@@ -22,6 +22,9 @@ fn every_template_passes_check_and_packages() {
         let (file, _) = package(&dir, Some(&root.join(format!("{name}.cyx")))).unwrap();
         let pkg = ext_pkg::read(&std::fs::read(file).unwrap()).unwrap();
         assert_eq!(pkg.manifest.id.as_str(), format!("you.{name}"));
+        // The publish workflow is written but never packaged.
+        assert!(dir.join(".github/workflows/publish.yml").is_file());
+        assert!(pkg.files.keys().all(|p| !p.starts_with(".github")), "{:?}", pkg.files.keys());
     }
     std::fs::remove_dir_all(&root).unwrap();
 }

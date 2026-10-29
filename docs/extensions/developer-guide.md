@@ -10,7 +10,7 @@ Themes, snippets, keymaps, languages, schemas and language servers today; comman
 - [Permissions](#permissions)
 - [Recipes](#recipes)
 - [Test and debug](#test-and-debug)
-- [Publish (coming)](#publish-coming)
+- [Publish](#publish)
 - [Coming from VS Code](#coming-from-vs-code)
 - [Troubleshooting](#troubleshooting)
 <!-- /toc -->
@@ -370,26 +370,27 @@ cyx test       # runs the real built extension
 
 While a debugger is attached, nothing times out. `storage` keeps data across sessions, and in `cyx dev` hot reload also keeps your in-memory state.
 
-## Publish (coming)
-
-The registry opens in the next phase. Until then, `cyx package` writes a `.cyx` that anyone can install from the Extensions view.
+## Publish
 
 ```sh
-cyx publish --dry-run   # check everything and show the consent sheet
+cyx publish --dry-run   # check everything and show the install sheet; nothing is signed or sent
 cyx publish
 ```
 
-The first `cyx publish` opens a browser to log in to GitHub. You don't create or store any keys. `cyx new` already wrote `.github/workflows/release.yml`, so after the first publish you release by pushing a tag:
+There are no keys or tokens to create. The first `cyx publish` on your computer opens a browser to sign in with GitHub, and the release is signed for that one upload. `cyx new` already wrote `.github/workflows/publish.yml`, so you can also release by pushing a tag; the workflow signs with its own identity:
 
 ```sh
 git tag v0.2.0 && git push --tags
 ```
 
+The first publish claims your publisher name (the part of the id before the dot) for your GitHub account: any of your repositories can publish under it, nobody else can. After that, an extension is always published from the same repository and workflow it was first published from, so a stolen or forked copy cannot publish an update. Names that look like someone else's (`rnicrosoft`, `micros0ft`) are refused.
+
 Good to know:
 - **Themes, snippets and other no-code packs** reach users immediately.
 - **Updates with code** reach users after **48 hours**, and `cyx publish` tells you when. Users can press **Update now**.
-- **`cyx publish --pre-release`** goes out at once to users who opted in to pre-releases.
-- If a release is broken, **yank** it and users roll back right away. Version numbers are never reused.
+- **Pre-releases** are versions with a suffix (`1.2.0-beta.1`). They go out at once, only to users who opted in for your extension. `cyx publish --pre-release` makes sure the version has one.
+- If a release is broken, `cyx yank 1.2.0` hides it from installs and users on it roll back right away; `cyx restore 1.2.0` brings it back. `cyx deprecate 1.2.0 --replacement you.other` points users elsewhere. Version numbers are never reused, so publish the fix as `1.2.1`.
+- `--registry URL` (or `CODEYARD_REGISTRY`) publishes to another registry, such as a local one from `yard init`.
 
 ## Coming from VS Code
 
@@ -400,6 +401,7 @@ Good to know:
 | `engines.vscode` | Not needed |
 | `yo code` / `vsce package` | `cyx new` / `cyx package` |
 | `vsce publish` + PAT | `cyx publish` or a tag push. No token |
+| `vsce unpublish` | `cyx yank VERSION` (users roll back; the number stays used) |
 | F5 Extension Development Host | `cyx dev` |
 | `vscode.commands.registerCommand` | `ctx.commands.register` (draft) |
 | `window.showQuickPick` / `showInputBox` | `ctx.ui.quickPick` / `ctx.ui.input` (draft) |

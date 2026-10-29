@@ -29,7 +29,7 @@ pub use tar::Entry;
 pub const CONTENTS: &str = "CONTENTS.sha256";
 
 /// Folder and file names `pack_dir` leaves out: version control, build output, dependencies, OS litter.
-pub const EXCLUDED: &[&str] = &[".git", ".hg", ".svn", "target", "node_modules", ".DS_Store", "Thumbs.db", "desktop.ini"];
+pub const EXCLUDED: &[&str] = &[".git", ".github", ".hg", ".svn", "target", "node_modules", ".DS_Store", "Thumbs.db", "desktop.ini"];
 
 #[derive(Debug)]
 pub enum Error {

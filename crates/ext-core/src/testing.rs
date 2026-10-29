@@ -95,38 +95,22 @@ impl Authority {
     pub fn sign(&self, artifact: &[u8], publisher: &Publisher, at: u64) -> Vec<u8> {
         let doc = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, &self.rng).expect("key");
         let key = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_ASN1_SIGNING, doc.as_ref(), &self.rng).expect("key");
-        let cert = self.certificate(&key, publisher, at);
+        let cert = self.certificate_for(key.public_key().as_ref(), publisher, at);
         let signature = key.sign(&self.rng, artifact).expect("sign").as_ref().to_vec();
         let hash = Sha256::digest(artifact);
-        let body = serde_json::to_vec(&json!({
-            "apiVersion": "0.0.1", "kind": "hashedrekord",
-            "spec": { "data": { "hash": { "algorithm": "sha256", "value": hex(&hash) } },
-                      "signature": { "content": B64.encode(&signature), "publicKey": { "content": B64.encode(pem("CERTIFICATE", &cert)) } } },
-        }))
-        .unwrap();
-        let body_b64 = B64.encode(&body);
-        let log_id: [u8; 32] = Sha256::digest(&self.rekor_spki).into();
-        let set_payload = format!(r#"{{"body":"{body_b64}","integratedTime":{at},"logID":"{}","logIndex":0}}"#, hex(&log_id));
-        let set = self.rekor.sign(&self.rng, set_payload.as_bytes()).expect("sign");
-        let mut leaf = Sha256::new();
-        leaf.update([0]);
-        leaf.update(&body);
-        let root = B64.encode(leaf.finalize());
-        let note = format!("{LOG} - 1\n1\n{root}\n");
-        let mut hinted = log_id[..4].to_vec();
-        hinted.extend_from_slice(self.rekor.sign(&self.rng, note.as_bytes()).expect("sign").as_ref());
-        let envelope = format!("{note}\n\u{2014} {LOG} {}\n", B64.encode(hinted));
+        let body = hashedrekord(&hash, &signature, &cert);
+        let e = self.log(&body, at);
         serde_json::to_vec(&json!({
             "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
             "verificationMaterial": {
                 "certificate": { "rawBytes": B64.encode(&cert) },
                 "tlogEntries": [{
-                    "logIndex": "0", "logId": { "keyId": B64.encode(log_id) },
+                    "logIndex": "0", "logId": { "keyId": B64.encode(e.log_id) },
                     "kindVersion": { "kind": "hashedrekord", "version": "0.0.1" },
                     "integratedTime": at.to_string(),
-                    "inclusionPromise": { "signedEntryTimestamp": B64.encode(set.as_ref()) },
-                    "inclusionProof": { "logIndex": "0", "rootHash": root, "treeSize": "1", "hashes": [], "checkpoint": { "envelope": envelope } },
-                    "canonicalizedBody": body_b64,
+                    "inclusionPromise": { "signedEntryTimestamp": B64.encode(&e.set) },
+                    "inclusionProof": { "logIndex": "0", "rootHash": B64.encode(e.root), "treeSize": "1", "hashes": [], "checkpoint": { "envelope": e.checkpoint } },
+                    "canonicalizedBody": B64.encode(&body),
                 }],
             },
             "messageSignature": { "messageDigest": { "algorithm": "SHA2_256", "digest": B64.encode(hash) }, "signature": B64.encode(&signature) },
@@ -134,8 +118,39 @@ impl Authority {
         .unwrap()
     }
 
-    /// What Fulcio would issue for this publisher: code signing, valid from a minute before `at` for ten minutes.
-    fn certificate(&self, key: &EcdsaKeyPair, p: &Publisher, at: u64) -> Vec<u8> {
+    /// What Rekor's `POST /api/v1/log/entries` answers for this entry body, in its own format (hex hashes and log id,
+    /// numbers as numbers), so a client's conversion into a bundle is tested too.
+    pub fn rekor_response(&self, body: &[u8], at: u64) -> serde_json::Value {
+        let e = self.log(body, at);
+        json!({ hex(&Sha256::digest(body)): {
+            "body": B64.encode(body), "integratedTime": at, "logID": hex(&e.log_id), "logIndex": 0,
+            "verification": {
+                "signedEntryTimestamp": B64.encode(&e.set),
+                "inclusionProof": { "logIndex": 0, "rootHash": hex(&e.root), "treeSize": 1, "hashes": [], "checkpoint": e.checkpoint },
+            },
+        }})
+    }
+
+    /// Log `body` at `at` as entry 0 of a one-leaf tree.
+    fn log(&self, body: &[u8], at: u64) -> Logged {
+        let body_b64 = B64.encode(body);
+        let log_id: [u8; 32] = Sha256::digest(&self.rekor_spki).into();
+        let set_payload = format!(r#"{{"body":"{body_b64}","integratedTime":{at},"logID":"{}","logIndex":0}}"#, hex(&log_id));
+        let set = self.rekor.sign(&self.rng, set_payload.as_bytes()).expect("sign").as_ref().to_vec();
+        let mut leaf = Sha256::new();
+        leaf.update([0]);
+        leaf.update(body);
+        let root: [u8; 32] = leaf.finalize().into();
+        let note = format!("{LOG} - 1\n1\n{}\n", B64.encode(root));
+        let mut hinted = log_id[..4].to_vec();
+        hinted.extend_from_slice(self.rekor.sign(&self.rng, note.as_bytes()).expect("sign").as_ref());
+        let checkpoint = format!("{note}\n\u{2014} {LOG} {}\n", B64.encode(hinted));
+        Logged { log_id, set, root, checkpoint }
+    }
+
+    /// What Fulcio would issue to this public key (an uncompressed P-256 point) for this publisher: code signing, valid
+    /// from a minute before `at` for ten minutes.
+    pub fn certificate_for(&self, point: &[u8], p: &Publisher, at: u64) -> Vec<u8> {
         let fulcio = |n: u8, value: &str| {
             let mut oid = vec![0x2b, 0x06, 0x01, 0x04, 0x01, 0x83, 0xbf, 0x30, 0x01, n];
             oid.shrink_to_fit();
@@ -161,9 +176,33 @@ impl Authority {
         if let Some(id) = p.owner_id {
             exts.push(fulcio(17, &id.to_string()));
         }
-        let tbs = tbs(&name("sigstore-test"), &seq(&[]), at, (at - 60, at + 540), &spki(key.public_key().as_ref()), &exts);
+        let tbs = tbs(&name("sigstore-test"), &seq(&[]), at, (at - 60, at + 540), &spki(point), &exts);
         sign_cert(&self.ca, &self.rng, tbs)
     }
+}
+
+struct Logged {
+    log_id: [u8; 32],
+    set: Vec<u8>,
+    root: [u8; 32],
+    checkpoint: String,
+}
+
+/// A Rekor `hashedrekord` 0.0.1 entry body.
+pub fn hashedrekord(hash: &[u8], signature: &[u8], cert: &[u8]) -> Vec<u8> {
+    serde_json::to_vec(&json!({
+        "apiVersion": "0.0.1", "kind": "hashedrekord",
+        "spec": { "data": { "hash": { "algorithm": "sha256", "value": hex(hash) } },
+                  "signature": { "content": B64.encode(signature), "publicKey": { "content": B64.encode(pem("CERTIFICATE", cert)) } } },
+    }))
+    .unwrap()
+}
+
+/// PEM text of one DER block.
+pub fn pem(label: &str, der: &[u8]) -> String {
+    let b64 = B64.encode(der);
+    let lines: Vec<&str> = b64.as_bytes().chunks(64).map(|c| std::str::from_utf8(c).unwrap()).collect();
+    format!("-----BEGIN {label}-----\n{}\n-----END {label}-----\n", lines.join("\n"))
 }
 
 fn sign_cert(ca: &EcdsaKeyPair, rng: &SystemRandom, tbs: Vec<u8>) -> Vec<u8> {
@@ -241,12 +280,6 @@ fn tlv(tag: u8, value: &[u8]) -> Vec<u8> {
     }
     out.extend_from_slice(value);
     out
-}
-
-fn pem(label: &str, der: &[u8]) -> String {
-    let b64 = B64.encode(der);
-    let lines: Vec<&str> = b64.as_bytes().chunks(64).map(|c| std::str::from_utf8(c).unwrap()).collect();
-    format!("-----BEGIN {label}-----\n{}\n-----END {label}-----\n", lines.join("\n"))
 }
 
 fn hex(bytes: &[u8]) -> String {

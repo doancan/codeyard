@@ -256,6 +256,8 @@ fn permission_lines_are_the_consent_sheet_words() {
     for perms in sets {
         let m = ext_manifest::parse(&manifest("you.p", "1.0.0", &format!("[permissions]\n{perms}\n"))).unwrap_or_else(|e| panic!("{perms}: {e:?}"));
         assert_eq!(Workbench::permission_lines_for_test(&m.permissions), m.permissions.describe(), "{perms}");
+        // `cyx publish --dry-run` prints the same red line.
+        assert_eq!(Workbench::high_risk_line_for_test(&m).as_deref(), m.risk().headline(), "{perms}");
     }
 }
 
