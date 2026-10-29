@@ -5,7 +5,7 @@ field of each crate's `Cargo.toml`. `cargo deny check` (see `deny.toml`) enforce
 allowed licence. This list covers all target platforms, including crates that a given build does not compile.
 Crates marked vendored live in `vendor/`.
 
-841 crates.
+842 crates.
 
 | Crate | Version | Licence | |
 | --- | --- | --- | --- |
@@ -284,6 +284,7 @@ Crates marked vendored live in `vendor/`.
 | http-body | 1.1.0 | MIT |  |
 | http-body-util | 0.1.5 | MIT |  |
 | httparse | 1.10.1 | MIT OR Apache-2.0 |  |
+| httpdate | 1.0.3 | MIT OR Apache-2.0 |  |
 | hybrid-array | 0.4.15 | MIT OR Apache-2.0 |  |
 | hyper | 1.12.0 | MIT |  |
 | hyper-rustls | 0.27.10 | Apache-2.0 OR ISC OR MIT |  |
