@@ -117,7 +117,7 @@ impl Workbench {
     }
 
     /// What a new terminal runs: the default profile, else `terminal.shell`, else the user's shell.
-    fn default_launch(&self, cx: &App) -> Launch {
+    pub(super) fn default_launch(&self, cx: &App) -> Launch {
         let settings = cx.global::<Settings>();
         if let Some(p) = settings.terminal_default_profile.as_deref().and_then(|name| self.terminal_profiles(cx).into_iter().find(|p| p.name == name)) {
             return launch_of(&p);
@@ -170,11 +170,21 @@ impl Workbench {
 
     /// New terminal in the given folder running `launch`.
     pub(super) fn new_terminal_launch(&mut self, cwd: Option<String>, launch: Launch, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(term) = self.spawn_terminal(cwd, launch, window, cx) else { return };
+        self.terminals.push(term);
+        self.active_terminal = self.terminals.len() - 1;
+        self.chrome.panel_open = true;
+        self.focus_terminal(window, cx);
+    }
+
+    /// Start a shell running `launch` in `cwd`, listened to by this workbench; the caller gives it a place. `None` (and a
+    /// notice) when as many terminals as allowed are open.
+    pub(super) fn spawn_terminal(&mut self, cwd: Option<String>, launch: Launch, window: &mut Window, cx: &mut Context<Self>) -> Option<Entity<TerminalView>> {
         // The number of processes is limited: after eight terminals (wherever they are shown) no new one is opened.
         if self.terminals.len() + self.chrome.detached.len() + self.editor_terminal_count() >= MAX_TERMINALS {
             self.notice = Some(Notice::Info(crate::i18n::tf("Close a terminal first: at most {} can be open.", &[&MAX_TERMINALS]).into()));
             cx.notify();
-            return;
+            return None;
         }
         let host = self.remote.host.clone();
         let term = cx.new(|cx| TerminalView::new_with(host, cwd, launch, cx));
@@ -208,10 +218,7 @@ impl Workbench {
                 this.open_terminal_menu(*position, window, cx);
             }
         }));
-        self.terminals.push(term);
-        self.active_terminal = self.terminals.len() - 1;
-        self.chrome.panel_open = true;
-        self.focus_terminal(window, cx);
+        Some(term)
     }
 
     /// Split the active terminal: a new terminal in the folder its shell is in now goes next to it.

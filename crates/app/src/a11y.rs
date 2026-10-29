@@ -250,8 +250,11 @@ mod search_access;
 mod services_access;
 #[cfg(test)]
 pub(crate) use ext_views_access::Act as ExtViewAct;
+#[path = "a11y_term_tabs.rs"]
+mod term_tab_access;
 use search_access::SEARCH_ED_TAB;
 pub(crate) use search_access::{SearchEdSnap, SearchTabSnap};
+pub(crate) use term_tab_access::TermTabSnap;
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct ScmSnap {
@@ -283,6 +286,8 @@ pub struct Snapshot {
     /// The Search Editor in front, and every Search Editor tab of the focused group.
     pub(crate) search_editor: Option<SearchEdSnap>,
     pub(crate) search_tabs: Vec<SearchTabSnap>,
+    /// The terminal tabs of the focused group.
+    pub(crate) term_tabs: Vec<TermTabSnap>,
     pub picker: Option<PickerSnap>,
     pub notice: Option<NoticeSnap>,
     pub status: Vec<String>,
@@ -478,7 +483,8 @@ impl Snapshot {
         }
 
         // Tabs
-        if !self.tabs.is_empty() || self.about.is_some() || !self.search_tabs.is_empty() {
+        if !self.tabs.is_empty() || self.about.is_some() || !self.search_tabs.is_empty() || !self.term_tabs.is_empty() {
+            let total = self.tabs.len() + usize::from(self.about.is_some()) + self.search_tabs.len() + self.term_tabs.len();
             let mut list = Node::new(Role::TabList);
             list.set_label(t("Editor tabs"));
             let mut tab_ids = Vec::new();
@@ -488,7 +494,7 @@ impl Snapshot {
                 n.set_label(if tab.dirty { tf("{} (modified)", &[&tab.name]) } else { tab.name.clone() });
                 n.set_selected(self.active_tab == Some(i));
                 n.set_position_in_set(i + 1);
-                n.set_size_of_set(self.tabs.len() + usize::from(self.about.is_some()) + self.search_tabs.len());
+                n.set_size_of_set(total);
                 n.add_action(Action::Click);
                 n.add_action(Action::Focus);
                 tab_ids.push(id);
@@ -499,7 +505,7 @@ impl Snapshot {
                 tab.set_label(t("About Codeyard"));
                 tab.set_selected(about.active);
                 tab.set_position_in_set(self.tabs.len() + 1);
-                tab.set_size_of_set(self.tabs.len() + 1 + self.search_tabs.len());
+                tab.set_size_of_set(total);
                 tab.add_action(Action::Click);
                 tab.add_action(Action::Focus);
                 tab_ids.push(ABOUT_TAB);
@@ -512,12 +518,13 @@ impl Snapshot {
                 tab.set_label(s.title.clone());
                 tab.set_selected(s.active);
                 tab.set_position_in_set(before + i + 1);
-                tab.set_size_of_set(before + self.search_tabs.len());
+                tab.set_size_of_set(total);
                 tab.add_action(Action::Click);
                 tab.add_action(Action::Focus);
                 tab_ids.push(id);
                 nodes.push((id, tab));
             }
+            term_tab_access::append_tabs(&self.term_tabs, before + self.search_tabs.len(), total, &mut tab_ids, &mut nodes);
             list.set_children(tab_ids);
             nodes.push((TABS, list));
             kids.push(TABS);
@@ -939,6 +946,7 @@ impl Workbench {
             ext_views: self.a11y_ext_views(window),
             search_editor,
             search_tabs,
+            term_tabs: self.a11y_term_tabs(cx),
             picker,
             notice,
             status,
@@ -963,7 +971,7 @@ impl Workbench {
             cx.notify();
             return;
         }
-        if self.a11y_search_action(req, last, window, cx) {
+        if self.a11y_search_action(req, last, window, cx) || self.a11y_term_tab_action(req, last, window, cx) {
             return;
         }
         match (req.action, req.target_node) {
@@ -1305,6 +1313,7 @@ mod tests {
             scm: None,
             search_editor: None,
             search_tabs: Vec::new(),
+            term_tabs: Vec::new(),
             picker: None,
             status: vec!["Local".into(), "Ln 1, Col 4 (4 selected)".into()],
             dialog: None,

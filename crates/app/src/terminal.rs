@@ -52,6 +52,8 @@ mod marks;
 
 pub use marks::{Activity, Finished};
 
+#[path = "terminal_restore.rs"]
+mod restore;
 #[path = "terminal_scroll.rs"]
 mod scroll;
 

@@ -297,6 +297,9 @@ impl Workbench {
             .on_drop(cx.listener(move |this, d: &DraggedTab, window, cx| {
                 this.drop_tab(d.editor.clone(), d.from, key, None, window, cx);
             }))
+            .on_drop(cx.listener(move |this, d: &term_tabs_glue::DraggedTerminalTab, window, cx| {
+                this.drop_terminal_tab(d.term.clone(), d.from, key, window, cx);
+            }))
             .bg(c(p.surface))
             .border_b_1()
             .border_color(c(p.border))

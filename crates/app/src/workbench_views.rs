@@ -14,6 +14,9 @@ pub(super) struct Detached {
     pub(super) window: gpui::WindowHandle<DetachedTerminal>,
 }
 
+/// The size a terminal's own window opens at.
+pub(super) const DETACHED_SIZE: gpui::Size<gpui::Pixels> = gpui::size(px(720.), px(440.));
+
 /// The root view of a detached terminal's window.
 pub(super) struct DetachedTerminal {
     term: Entity<TerminalView>,
@@ -140,18 +143,36 @@ impl Workbench {
             self.notice = Some(Notice::Info(crate::i18n::t("There is no terminal to move.").into()));
             return cx.notify();
         };
-        let title = term.read(cx).title.clone();
         let at = window.bounds();
-        let size = gpui::size(px(720.), px(440.));
-        let bounds = Bounds::new(at.origin + gpui::point(px(40.), px(40.)), size);
+        let bounds = Bounds::new(at.origin + gpui::point(px(40.), px(40.)), DETACHED_SIZE);
+        match self.open_detached(term.clone(), bounds, cx) {
+            Ok(handle) => {
+                // One owner: the panel lets go of the terminal only once its window exists.
+                self.remove_terminal_from_panel(&term, window);
+                self.chrome.detached.push(Detached { term, window: handle });
+                self.persist_session(cx);
+            }
+            Err(e) => self.notice = Some(Notice::Error(crate::i18n::tf("The terminal could not move to a new window: {}", &[&e]).into())),
+        }
+        cx.notify();
+    }
+
+    /// A window of its own for `term` at `bounds`; closing it returns the terminal to this workbench.
+    pub(super) fn open_detached(
+        &mut self,
+        term: Entity<TerminalView>,
+        bounds: Bounds<gpui::Pixels>,
+        cx: &mut Context<Self>,
+    ) -> gpui::Result<gpui::WindowHandle<DetachedTerminal>> {
+        let title = term.read(cx).title.clone();
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: Some(gpui::TitlebarOptions { title: Some(title), appears_transparent: false, traffic_light_position: None }),
             ..Default::default()
         };
         let home = cx.entity().downgrade();
-        let t = term.clone();
-        let opened = cx.open_window(options, move |window, cx| {
+        let t = term;
+        cx.open_window(options, move |window, cx| {
             let view = cx.new(|_| DetachedTerminal { term: t.clone() });
             let focus = t.read(cx).focus_handle(cx);
             window.focus(&focus);
@@ -164,16 +185,7 @@ impl Workbench {
                 true
             });
             view
-        });
-        match opened {
-            Ok(handle) => {
-                // One owner: the panel lets go of the terminal only once its window exists.
-                self.remove_terminal_from_panel(&term, window);
-                self.chrome.detached.push(Detached { term, window: handle });
-            }
-            Err(e) => self.notice = Some(Notice::Error(crate::i18n::tf("The terminal could not move to a new window: {}", &[&e]).into())),
-        }
-        cx.notify();
+        })
     }
 
     /// The panel's list without `term`, without ending it.
@@ -205,6 +217,7 @@ impl Workbench {
         self.active_terminal = self.terminals.len() - 1;
         self.chrome.bottom = Bottom::Terminal;
         self.chrome.panel_open = true;
+        self.persist_session(cx);
         cx.notify();
     }
 
@@ -221,6 +234,7 @@ impl Workbench {
             self.chrome.bottom = Bottom::Terminal;
             self.chrome.panel_open = true;
         }
+        self.persist_session(cx);
         cx.notify();
     }
 

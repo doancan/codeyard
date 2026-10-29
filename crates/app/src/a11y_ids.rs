@@ -22,6 +22,7 @@ const _: () = {
         SCM_REPO,
         EXT_VIEW_NODE,
         INSPECTOR_LINE,
+        super::term_tab_access::TERM_TAB,
         ROW_BASE,
     ];
     let mut i = 1;

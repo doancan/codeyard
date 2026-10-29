@@ -3273,3 +3273,5 @@ View: Toggle Secondary Side Bar	Görünüm: İkincil Kenar Çubuğunu Aç/Kapat
 No terminal is in front in the editor area.	Düzenleyici alanında önde bir terminal yok.
 Terminal: Move Terminal Back to Panel	Terminal: Terminali Panele Geri Taşı
 Terminal: Move Terminal into Editor Area	Terminal: Terminali Düzenleyici Alanına Taşı
+Previous session ended; started a new shell	Önceki oturum sona erdi; yeni bir kabuk başlatıldı
+{} (terminal)	{} (uçbirim)

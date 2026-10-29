@@ -142,6 +142,7 @@ impl Workbench {
         if let Ok(json) = serde_json::to_string(&session) {
             let _ = s.save_tabs_with_layout(ws, &tabs, Some(&json));
         }
+        self.persist_moved_terminals(cx);
         self.persist_search_editors(cx);
     }
 
@@ -249,6 +250,8 @@ impl Workbench {
             return false;
         }
         self.restore_search_editors(ws, window, cx);
+        // Terminals that were in the editor area or in windows of their own: new shells, once the groups exist.
+        let moved = self.saved_moved_terminals(ws);
         let Some(s) = &self.persist.state else { return false };
         let mut tabs = s.tabs(ws).unwrap_or_default();
         let saved = s.tab_layout(ws).as_deref().and_then(SavedEditorSession::parse);
@@ -265,6 +268,7 @@ impl Workbench {
             if saved.is_some() && self.tabs.opening.is_none() {
                 self.restore_layout(&[], saved, focus_left, window, cx);
             }
+            self.restore_moved_terminals(moved, window, cx);
             return false;
         }
         // Don't load a file that's being opened from the command line (or is already open)
@@ -276,6 +280,7 @@ impl Workbench {
         };
         tabs.retain(|t| !busy(&t.rel_path));
         if tabs.is_empty() {
+            self.restore_moved_terminals(moved, window, cx);
             return false;
         }
         let request = request.filter(|(path, _)| tabs.iter().any(|tab| ui::join(&root, &tab.rel_path) == *path));
@@ -345,6 +350,7 @@ impl Workbench {
                     }
                 }
                 this.restore_layout(&layout, saved, focus_left, window, cx);
+                this.restore_moved_terminals(moved, window, cx);
                 if let Some((path, preview)) = request {
                     this.open_file_as(restore_host, path, preview, window, cx);
                 }

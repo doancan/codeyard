@@ -1599,6 +1599,7 @@ Previous Match
 Previous Problem	
 Previous match (⇧↵)	
 Previous result (⇧F4)	
+Previous session ended; started a new shell	
 Problems	
 Problems: Copy Full Diagnostic	
 Process ended. Press any key to close.	
@@ -2928,6 +2929,7 @@ your words
 {} (not verified by a registry)	
 {} (previous settings kept)	
 {} (saved {}) ↔ editor	
+{} (terminal)	
 {} (“{}” failed; {} of {} items were transferred before it)	
 {} KB · image preview	
 {} MB · image preview	

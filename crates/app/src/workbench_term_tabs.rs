@@ -7,7 +7,58 @@ use super::*;
 
 use crate::terminal::TerminalView;
 
+#[path = "workbench_term_restore.rs"]
+pub(super) mod restore;
+
+/// A terminal tab being dragged to another editor group.
+#[derive(Clone)]
+pub(super) struct DraggedTerminalTab {
+    pub(super) term: Entity<TerminalView>,
+    /// The group it was in when the drag started.
+    pub(super) from: GroupKey,
+    title: SharedString,
+}
+
+impl Render for DraggedTerminalTab {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let p = *palette(cx);
+        div()
+            .px(px(theme::SPACE[4]))
+            .py(px(theme::SPACE[1]))
+            .rounded(px(theme::radius::SM))
+            .bg(c(p.bg))
+            .border_1()
+            .border_color(c(p.accent))
+            .text_size(px(text::SM.0))
+            .text_color(c(p.text))
+            .child(self.title.clone())
+    }
+}
+
 impl Workbench {
+    /// A terminal tab dropped on the tab bar of group `to`: it moves there (the same terminal, the same process) and
+    /// comes to the front. A drop from a group that no longer exists or no longer holds it changes nothing.
+    pub(super) fn drop_terminal_tab(&mut self, term: Entity<TerminalView>, from: GroupKey, to: GroupKey, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.tabs.contains_key(from) || !self.tabs.contains_key(to) || !self.tabs.group(from.id).is_some_and(|g| g.terminals.contains(&term)) {
+            return;
+        }
+        if from != to {
+            let source = self.tabs.group_mut(from.id).expect("validated group");
+            source.terminals.retain(|t| *t != term);
+            if matches!(&source.page, Some(Page::Terminal(t)) if *t == term) {
+                source.page = None;
+                source.page_active = false;
+            }
+            self.tabs.group_mut(to.id).expect("validated group").terminals.push(term.clone());
+            self.tabs.remove_empty(from);
+        }
+        if self.tabs.focus(to) {
+            self.sync_slots(cx);
+            self.show_editor_terminal(term, window, cx);
+        }
+        self.persist_session(cx);
+    }
+
     /// The terminal in front of the focused group, if any.
     pub(super) fn front_editor_terminal(&self) -> Option<Entity<TerminalView>> {
         match &self.tabs.page {
@@ -38,6 +89,7 @@ impl Workbench {
         }
         self.remove_terminal_from_panel(&term, window);
         self.show_editor_terminal(term, window, cx);
+        self.persist_session(cx);
     }
 
     /// Bring a terminal tab of the focused group to the front, with the keyboard in it.
@@ -91,6 +143,7 @@ impl Workbench {
         self.chrome.panel_open = true;
         self.refresh_active_flags(cx);
         self.focus_terminal(window, cx);
+        self.persist_session(cx);
     }
 
     /// The editor groups are about to be replaced (another folder opens, the folder closes): their terminals return to
@@ -170,9 +223,13 @@ impl Workbench {
                 (t.title.clone(), t.has_exited())
             };
             let (show, close, middle) = (term.clone(), term.clone(), term.clone());
+            let dragged = DraggedTerminalTab { term: term.clone(), from: key, title: title.clone() };
+            let accent = p.accent;
             let tab = div()
                 .id(SharedString::from(format!("tab-terminal-{}-{ix}", key.id)))
                 .debug_selector(move || format!("tab-terminal-{}-{ix}", key.id))
+                .on_drag(dragged, |d, _, _, cx| cx.new(|_| d.clone()))
+                .drag_over::<DraggedTerminalTab>(move |s, _, _, _| s.border_l_2().border_color(c(accent)))
                 .relative()
                 .flex()
                 .flex_none()
