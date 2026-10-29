@@ -157,6 +157,8 @@ mod state_glue;
 mod structural_glue;
 #[path = "workbench_sync.rs"]
 mod sync_glue;
+#[path = "workbench_task_run.rs"]
+mod task_run_glue;
 #[path = "workbench_tasks.rs"]
 pub mod tasks;
 #[path = "workbench_terminals.rs"]
@@ -296,6 +298,8 @@ actions!(
         RunTask,
         RunBuildTask,
         RerunLastTask,
+        TerminateTask,
+        RestartRunningTask,
         RunTestAtCursor,
         RunFileTests,
         StartDebugging,
@@ -1171,7 +1175,18 @@ impl Workbench {
             active_terminal: 0,
             shell: None,
             dbg: Default::default(),
-            jobs: state_glue::TaskState { last: None, terminal: None, root: None, problems: Vec::new(), scan_pending: false, tests: Default::default() },
+            jobs: state_glue::TaskState {
+                pending: None,
+                asking: 0,
+                runs: Vec::new(),
+                next_token: 0,
+                last: None,
+                terminal: None,
+                root: None,
+                problems: Vec::new(),
+                scan_pending: false,
+                tests: Default::default(),
+            },
             lsp: state_glue::LspState {
                 restricted_notified: Default::default(),
                 servers: Default::default(),
@@ -1429,6 +1444,9 @@ impl Workbench {
     /// Close the overlay, give focus back to where it was before it opened.
     fn close_overlay(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<Overlay> {
         let ov = self.overlay.take()?;
+        if matches!(ov.kind, OverlayKind::TaskInput(_) | OverlayKind::Input(InputPurpose::TaskInput)) {
+            self.task_input_closed(window, cx);
+        }
         match &ov.return_focus {
             Some(f) => window.focus(f),
             None => window.focus(&self.focus_handle),

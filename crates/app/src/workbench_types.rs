@@ -55,6 +55,8 @@ pub(super) enum OverlayKind {
     DebugConfigs(Vec<crate::debug_config::LaunchConfig>),
     /// A `pickString` input of a starting configuration: its options.
     LaunchInput(Vec<String>),
+    /// A `pickString` input of a task: the value of each row.
+    TaskInput(Vec<String>),
     /// "Debug: Add Configuration…": the snippets offered.
     LaunchTemplates(Vec<serde_json::Value>),
     /// "Terminal: New Terminal with Profile…": what each row opens.
@@ -246,6 +248,8 @@ pub(super) enum InputPurpose {
     FunctionBreakpoint,
     /// Debugger: the answer to a `promptString` input of a starting configuration.
     LaunchInput,
+    /// The answer to a `promptString` input of a task.
+    TaskInput,
     /// New name of the active terminal.
     RenameTerminal,
     /// Debugger: new value of a variable of the scope or object `parent`.

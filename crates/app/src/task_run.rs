@@ -160,6 +160,83 @@ fn quote(value: &str, quoting: Option<Quoting>, family: Family) -> String {
     }
 }
 
+/// Where a variable lands in a shell line, as that shell reads it.
+fn position(prefix: &str, family: Family) -> crate::workbench::tasks::Quote {
+    use crate::workbench::tasks::Quote;
+    match family {
+        Family::Posix => crate::workbench::tasks::quote_at_end(prefix),
+        Family::Cmd => {
+            if prefix.chars().filter(|c| *c == '"').count() % 2 == 1 {
+                Quote::Double
+            } else {
+                Quote::Bare
+            }
+        }
+        Family::PowerShell => {
+            let (mut state, mut escaped) = (Quote::Bare, false);
+            for c in prefix.chars() {
+                match (state, c, escaped) {
+                    (_, _, true) => escaped = false,
+                    (Quote::Single, '\'', _) => state = Quote::Bare,
+                    (Quote::Single, _, _) => {}
+                    (_, '`', _) => escaped = true,
+                    (Quote::Bare, '\'', _) => state = Quote::Single,
+                    (Quote::Bare, '"', _) => state = Quote::Double,
+                    (Quote::Double, '"', _) => state = Quote::Bare,
+                    _ => {}
+                }
+            }
+            state
+        }
+    }
+}
+
+/// `value` written where `position` says, so it stays one word whatever it contains.
+fn place(value: &str, at: crate::workbench::tasks::Quote, family: Family) -> String {
+    use crate::workbench::tasks::Quote;
+    match (family, at) {
+        (Family::Posix, at) => crate::workbench::tasks::for_shell(value, at),
+        (_, Quote::Bare) if !needs_quotes(value, family) => value.to_string(),
+        (_, Quote::Bare) => quote(value, Some(Quoting::Strong), family),
+        (Family::Cmd, _) => value.replace('"', "\"\""),
+        (Family::PowerShell, Quote::Single) => value.replace('\'', "''"),
+        (Family::PowerShell, Quote::Double) => value.chars().fold(String::new(), |mut out, c| {
+            if matches!(c, '`' | '"' | '$') {
+                out.push('`');
+            }
+            out.push(c);
+            out
+        }),
+    }
+}
+
+/// A shell task's own command line with its variables expanded: each value is quoted for the place it lands in, so a
+/// file called `a;rm -rf ~;.txt` (or an input answer) is always one argument and never more shell code.
+fn expand_line(template: &str, context: &Context<'_>, family: Family) -> Result<String, variables::Error> {
+    const MAX: usize = 256 * 1024;
+    let mut out = String::new();
+    let mut offset = 0;
+    while let Some(found) = template[offset..].find("${") {
+        let start = offset + found;
+        let Some(len) = template[start + 2..].find('}') else { break };
+        let end = start + 2 + len + 1;
+        let piece = &template[start..end];
+        let value = variables::expand(piece, context)?;
+        out.push_str(&template[offset..start]);
+        if value == piece {
+            out.push_str(piece);
+        } else {
+            out.push_str(&place(&value, position(&template[..start], family), family));
+        }
+        if out.len() > MAX {
+            return Err(variables::Error::Limit);
+        }
+        offset = end;
+    }
+    out.push_str(&template[offset..]);
+    Ok(out)
+}
+
 /// What the host runs for one task.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Spawn {
@@ -182,16 +259,23 @@ pub fn spawn_for(task: &Task, context: &Context<'_>) -> Result<Spawn, String> {
     let Some(command) = task.command.as_ref() else {
         return Err(crate::i18n::tf("Task “{}” has no command.", &[&task.label]));
     };
-    let command = argument(command)?;
-    let args = task.args.iter().map(argument).collect::<Result<Vec<_>, _>>()?;
     let shell = match &task.options.shell {
         Some((exe, args)) => Some((expand(exe)?, args.iter().map(|a| expand(a)).collect::<Result<Vec<_>, _>>()?)),
         None => None,
     };
+    let family = family(shell.as_ref().map(|(exe, _)| exe.as_str()), context.platform);
+    let command = match (task.kind, command.quoting) {
+        (Kind::Shell, None) => Argument {
+            value: expand_line(&command.value, context, family)
+                .map_err(|_| crate::i18n::tf("Task “{}” has a variable that cannot be expanded.", &[&task.label]))?,
+            quoting: None,
+        },
+        _ => argument(command)?,
+    };
+    let args = task.args.iter().map(argument).collect::<Result<Vec<_>, _>>()?;
     let command = match task.kind {
         Kind::Process => proto::TaskCommand::Process { program: command.value, args: args.into_iter().map(|a| a.value).collect() },
         Kind::Shell => {
-            let family = family(shell.as_ref().map(|(exe, _)| exe.as_str()), context.platform);
             // The command is the user's shell text unless they asked for it to be quoted.
             let mut line = match command.quoting {
                 Some(q) => quote(&command.value, Some(q), family),
@@ -220,7 +304,6 @@ pub fn spawn_for(task: &Task, context: &Context<'_>) -> Result<Spawn, String> {
 /// late event from a replaced run changes nothing.
 pub struct Run {
     pub token: u64,
-    pub label: String,
     pub prepared: Prepared,
     scheduler: Scheduler,
     /// Host process of each started node.
@@ -245,7 +328,7 @@ pub struct Effects {
 
 impl Run {
     /// Compile every matcher before anything runs: a malformed pattern fails the whole run with a clear message.
-    pub fn new(token: u64, label: String, prepared: Prepared) -> Result<Self, String> {
+    pub fn new(token: u64, prepared: Prepared) -> Result<Self, String> {
         let mut matchers = BTreeMap::new();
         let mut limits = Limits::default();
         for &node in &prepared.plan.order {
@@ -261,7 +344,6 @@ impl Run {
         let scheduler = Scheduler::new(&prepared.registry, clone_plan(&prepared.plan), PARALLELISM);
         Ok(Self {
             token,
-            label,
             prepared,
             scheduler,
             procs: BTreeMap::new(),
@@ -400,11 +482,6 @@ impl Run {
     /// How a node's problem paths are resolved (its first matcher's rule).
     pub fn location(&self, node: usize) -> Option<&task_engine::matchers::FileLocation> {
         self.matchers.get(&node)?.first().map(|m| &m.location)
-    }
-
-    /// Node and host process of a live run.
-    pub fn node_of(&self, proc: u32) -> Option<usize> {
-        self.procs.iter().find(|(_, p)| **p == proc).map(|(n, _)| *n)
     }
 }
 

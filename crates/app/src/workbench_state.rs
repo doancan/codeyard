@@ -45,6 +45,12 @@ pub(super) struct TaskState {
     pub(super) scan_pending: bool,
     /// The Testing view: tests found, their results and the running test command.
     pub(super) tests: super::tests_glue::TestingState,
+    /// A run waiting for answers to its inputs, and a counter of questions asked (a dismissed one cancels the run).
+    pub(super) pending: Option<super::task_run_glue::PendingRun>,
+    pub(super) asking: u64,
+    /// Task runs: in progress, and finished ones until the next run starts.
+    pub(super) runs: Vec<super::task_run_glue::LiveRun>,
+    pub(super) next_token: u64,
 }
 
 /// Language servers, diagnostics, progress and log (see workbench_lsp.rs).

@@ -115,6 +115,23 @@ fn inputs_are_listed_once_and_unknown_or_command_inputs_are_refused() {
 }
 
 #[test]
+fn values_in_a_shell_line_stay_one_word_wherever_they_land() {
+    let text = r#"{ "version": "2.0.0", "tasks": [ { "label": "a", "type": "shell", "command": "cat ${input:f} '${input:f}' \"${input:f}\"" } ],
+        "inputs": [ { "id": "f", "type": "promptString", "description": "f" } ] }"#;
+    let evil = "a;rm -rf ~;$(id)'x\".txt";
+    let s = spawn(text, "a", Platform::Linux, &[("input:f", evil)]).unwrap();
+    let proto::TaskCommand::Shell { line, .. } = s.command else { panic!() };
+    if !cfg!(windows) {
+        let out = std::process::Command::new("/bin/sh").args(["-c", &line.replacen("cat", "printf '%s\\n'", 1)]).output().unwrap();
+        assert_eq!(String::from_utf8_lossy(&out.stdout), format!("{evil}\n{evil}\n{evil}\n"), "{line}");
+    }
+    let s = spawn(text, "a", Platform::Windows, &[("input:f", "x\" & del y")]).unwrap();
+    let proto::TaskCommand::Shell { line, .. } = s.command else { panic!() };
+    // cmd.exe has no single quotes: the value between them is quoted on its own.
+    assert_eq!(line, r#"cat "x"" & del y" '"x"" & del y"' "x"" & del y""#);
+}
+
+#[test]
 fn a_value_is_expanded_once() {
     let text = r#"{ "version": "2.0.0", "tasks": [ { "label": "a", "type": "process", "command": "echo", "args": ["${input:x}"] } ],
         "inputs": [ { "id": "x", "type": "promptString", "description": "x" } ] }"#;
@@ -143,7 +160,7 @@ fn node(run: &Run, label: &str) -> usize {
 
 #[test]
 fn a_shared_prerequisite_runs_once_and_sequence_order_is_kept() {
-    let mut run = Run::new(1, "all".into(), prepare(GRAPH, Platform::Linux, "all").unwrap()).unwrap();
+    let mut run = Run::new(1, prepare(GRAPH, Platform::Linux, "all").unwrap()).unwrap();
     let (shared, one, two) = (node(&run, "shared"), node(&run, "one"), node(&run, "two"));
     assert_eq!(run.advance().start, vec![shared]);
     assert!(run.advance().start.is_empty(), "nothing starts twice");
@@ -159,7 +176,7 @@ fn a_shared_prerequisite_runs_once_and_sequence_order_is_kept() {
 
 #[test]
 fn a_failure_stops_the_dependents_and_a_late_event_changes_nothing() {
-    let mut run = Run::new(1, "all".into(), prepare(GRAPH, Platform::Linux, "all").unwrap()).unwrap();
+    let mut run = Run::new(1, prepare(GRAPH, Platform::Linux, "all").unwrap()).unwrap();
     let shared = node(&run, "shared");
     run.advance();
     run.started(shared, 10);
@@ -173,7 +190,7 @@ fn a_failure_stops_the_dependents_and_a_late_event_changes_nothing() {
 
 #[test]
 fn a_spawn_failure_fails_the_task_like_a_missing_command() {
-    let mut run = Run::new(1, "all".into(), prepare(GRAPH, Platform::Linux, "all").unwrap()).unwrap();
+    let mut run = Run::new(1, prepare(GRAPH, Platform::Linux, "all").unwrap()).unwrap();
     let shared = node(&run, "shared");
     run.advance();
     run.spawn_failed(shared);
@@ -190,7 +207,7 @@ const WATCH: &str = r#"{ "version": "2.0.0", "tasks": [
 
 #[test]
 fn a_background_task_releases_its_dependents_only_on_its_end_pattern() {
-    let mut run = Run::new(1, "serve".into(), prepare(WATCH, Platform::Linux, "serve").unwrap()).unwrap();
+    let mut run = Run::new(1, prepare(WATCH, Platform::Linux, "serve").unwrap()).unwrap();
     let (watch, serve) = (node(&run, "watch"), node(&run, "serve"));
     assert_eq!(run.advance().start, vec![watch]);
     run.started(watch, 5);
@@ -210,7 +227,7 @@ fn a_background_task_releases_its_dependents_only_on_its_end_pattern() {
 
 #[test]
 fn a_background_task_that_ends_before_it_is_ready_cannot_release_anything() {
-    let mut run = Run::new(1, "serve".into(), prepare(WATCH, Platform::Linux, "serve").unwrap()).unwrap();
+    let mut run = Run::new(1, prepare(WATCH, Platform::Linux, "serve").unwrap()).unwrap();
     let watch = node(&run, "watch");
     run.advance();
     run.started(watch, 5);
@@ -221,7 +238,7 @@ fn a_background_task_that_ends_before_it_is_ready_cannot_release_anything() {
 
 #[test]
 fn cancel_stops_each_live_process_once_and_nothing_starts_after_it() {
-    let mut run = Run::new(1, "serve".into(), prepare(WATCH, Platform::Linux, "serve").unwrap()).unwrap();
+    let mut run = Run::new(1, prepare(WATCH, Platform::Linux, "serve").unwrap()).unwrap();
     let watch = node(&run, "watch");
     run.advance();
     run.started(watch, 5);
@@ -238,5 +255,5 @@ fn cancel_stops_each_live_process_once_and_nothing_starts_after_it() {
 #[test]
 fn a_malformed_matcher_fails_before_anything_runs() {
     let text = r#"{ "version": "2.0.0", "tasks": [ { "label": "a", "command": "x", "problemMatcher": { "pattern": { "regexp": "(", "file": 1 } } } ] }"#;
-    assert!(Run::new(1, "a".into(), prepare(text, Platform::Linux, "a").unwrap()).is_err());
+    assert!(Run::new(1, prepare(text, Platform::Linux, "a").unwrap()).is_err());
 }

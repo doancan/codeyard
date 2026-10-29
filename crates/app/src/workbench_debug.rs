@@ -537,8 +537,14 @@ impl Workbench {
         }
     }
 
-    pub(super) fn start_debug(&mut self, config: LaunchConfig, cx: &mut Context<Self>) {
+    pub(super) fn start_debug(&mut self, mut config: LaunchConfig, cx: &mut Context<Self>) {
         let Some(root) = self.active_root(cx) else { return };
+        // A preLaunchTask from a task file runs as a planned task; the adapter starts when it succeeds or becomes ready.
+        if let Some(label) = config.pre_launch_task.take() {
+            let after = super::task_run_glue::After::Debug(Box::new(config));
+            cx.spawn(async move |this, cx| with_window(&this, cx, move |this, window, cx| this.run_task_named(label, None, after, window, cx))).detach();
+            return;
+        }
         if self.dbg.save_task.is_some() {
             return;
         }
