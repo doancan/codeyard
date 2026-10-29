@@ -5,14 +5,20 @@
 
 pub mod bigfile;
 pub mod daemon;
+mod file_identity;
 mod fileops;
 pub mod hashtree;
+mod new_file;
 mod preview;
 pub mod proc;
 pub mod pty;
 pub mod search;
 mod shell_integration;
 pub mod watch;
+mod write_locks;
+
+#[cfg(test)]
+mod write_tests;
 
 use std::collections::HashMap;
 use std::fs;
@@ -41,18 +47,15 @@ pub fn handle(req: Request) -> Response {
         Request::Hello { client_version, .. } => hello(client_version, false),
         Request::ReadDir { path } => read_dir(&expand(&path)).map(Response::Entries),
         Request::Stat { path } => stat(&expand(&path)).map(Response::Stat),
+        Request::Lstat { path } => {
+            fs::symlink_metadata(expand(&path)).map(|metadata| Response::Stat(file_meta(metadata))).map_err(|error| map_err(&expand(&path), error))
+        }
         Request::Read { path } => read(&expand(&path)),
         Request::ReadPreview { root, path } => preview::read(&expand(&root), &path),
         Request::Write { path, data, expect_hash } => write(&expand(&path), &data, expect_hash).map(|hash| Response::Written { hash }),
+        Request::WriteNew { path, data } => new_file::write(&expand(&path), &data).map(|hash| Response::Written { hash }),
         Request::CreateFile { path } => create_file(&expand(&path)).map(|_| Response::Done),
-        Request::CreateDir { path } => {
-            let p = expand(&path);
-            // An existing directory is an error; missing parent directories are created ("a/b/c").
-            if fs::symlink_metadata(&p).is_ok() {
-                return Response::Error(Error::AlreadyExists(p.display().to_string()));
-            }
-            fs::create_dir_all(&p).map(|_| Response::Done).map_err(|e| map_err(&p, e))
-        }
+        Request::CreateDir { path } => create_dir(&expand(&path)).map(|_| Response::Done),
         Request::Rename { from, to } => rename(&expand(&from), &expand(&to)).map(|_| Response::Done),
         Request::Copy { from, to } => fileops::copy(&expand(&from), &expand(&to)).map(|_| Response::Done),
         Request::Delete { path } => delete(&expand(&path)).map(|_| Response::Done),
@@ -652,8 +655,12 @@ fn read_dir(path: &Path) -> Result<Vec<DirEntry>, Error> {
 
 fn stat(path: &Path) -> Result<Meta, Error> {
     let m = fs::metadata(path).map_err(|e| map_err(path, e))?;
+    Ok(file_meta(m))
+}
+
+fn file_meta(m: fs::Metadata) -> Meta {
     let mtime_ms = m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_millis() as i64);
-    Ok(Meta { kind: kind_of(m.file_type()), size: m.len(), mtime_ms, readonly: m.permissions().readonly() })
+    Meta { kind: kind_of(m.file_type()), size: m.len(), mtime_ms, readonly: m.permissions().readonly() }
 }
 
 fn read(path: &Path) -> Result<Response, Error> {
@@ -713,6 +720,14 @@ fn list_files(root: &Path, limit: usize) -> Result<(Vec<String>, bool), Error> {
     Ok((out, false))
 }
 
+/// The final mkdir must be exclusive even when concurrent requests create its parents.
+fn create_dir(path: &Path) -> Result<(), Error> {
+    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        fs::create_dir_all(parent).map_err(|error| map_err(parent, error))?;
+    }
+    fs::create_dir(path).map_err(|error| map_err(path, error))
+}
+
 /// New file; for paths like "a/b/c.txt" missing directories are created too (like VS Code).
 fn create_file(path: &Path) -> Result<(), Error> {
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
@@ -738,14 +753,34 @@ fn delete(path: &Path) -> Result<(), Error> {
 }
 
 fn delete_guarded(path: &Path, home: &Path) -> Result<(), Error> {
+    let meta = fs::symlink_metadata(path).map_err(|e| map_err(path, e))?;
+    if meta.file_type().is_symlink() {
+        // Resolve only the parent: a dangling link has no canonical target, and
+        // deleting a link to a protected directory does not delete that directory.
+        let entry = |p: &Path| {
+            let parent = p.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+            Some(fs::canonicalize(parent).ok()?.join(p.file_name()?))
+        };
+        let is_home_entry = entry(path).zip(entry(home)).is_some_and(|(path, home)| path == home);
+        let home_uses_link = std::path::absolute(home).ok().zip(std::path::absolute(path).ok()).is_some_and(|(home, path)| home.starts_with(path));
+        if is_home_entry || home_uses_link {
+            return Err(Error::PermissionDenied(format!("{} (the home directory and its parents are never deleted)", path.display())));
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::FileTypeExt;
+            if meta.file_type().is_symlink_dir() {
+                return fs::remove_dir(path).map_err(|e| map_err(path, e));
+            }
+        }
+        return fs::remove_file(path).map_err(|e| map_err(path, e));
+    }
     let canon = fs::canonicalize(path).map_err(|e| map_err(path, e))?;
     // The root, the home directory and its parents (/home, /Users) are never deleted.
     let home_dir = fs::canonicalize(home).unwrap_or_default();
     if canon.parent().is_none() || home_dir.starts_with(&canon) {
         return Err(Error::PermissionDenied(format!("{} (the root, the home directory and its parents are never deleted)", path.display())));
     }
-    // The symlink itself is deleted, not what it points to.
-    let meta = fs::symlink_metadata(path).map_err(|e| map_err(path, e))?;
     let result = if meta.is_dir() { fs::remove_dir_all(path) } else { fs::remove_file(path) };
     result.map_err(|e| map_err(path, e))
 }
@@ -757,6 +792,8 @@ static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 fn write(path: &Path, data: &[u8], expect_hash: Option<u64>) -> Result<u64, Error> {
     // Update the file the symlink points to, not the symlink itself.
     let target = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let target_lock = write_locks::for_path(&target).map_err(|error| map_err(path, error))?;
+    let _write_guard = target_lock.locked();
     let existing = fs::metadata(&target).ok();
 
     if let Some(m) = &existing {
@@ -772,7 +809,7 @@ fn write(path: &Path, data: &[u8], expect_hash: Option<u64>) -> Result<u64, Erro
         }
     }
 
-    if existing.as_ref().is_some_and(must_write_in_place) {
+    if existing.as_ref().map(|metadata| must_write_in_place(&target, metadata)).transpose()?.unwrap_or(false) {
         // Kept in memory so a failed write can put the original back; there is no room for a sibling copy in a directory we may not own.
         let backup = match existing.as_ref().filter(|m| m.is_file()) {
             Some(_) => Some(read_capped(&target)?.0),
@@ -858,16 +895,21 @@ fn create_private(path: &Path, _new_file: bool) -> io::Result<fs::File> {
 }
 
 #[cfg(unix)]
-fn must_write_in_place(m: &fs::Metadata) -> bool {
+fn must_write_in_place(_: &Path, m: &fs::Metadata) -> Result<bool, Error> {
     use std::os::unix::fs::MetadataExt;
     // SAFETY: geteuid takes no arguments, touches no memory and cannot fail; it is `unsafe` only as a foreign function.
     let euid = unsafe { libc::geteuid() };
-    m.nlink() > 1 || m.uid() != euid
+    Ok(m.nlink() > 1 || m.uid() != euid)
 }
 
-#[cfg(not(unix))]
-fn must_write_in_place(_: &fs::Metadata) -> bool {
-    false
+#[cfg(windows)]
+fn must_write_in_place(path: &Path, _: &fs::Metadata) -> Result<bool, Error> {
+    file_identity::hard_link(path).map(|identity| identity.is_some()).map_err(|error| map_err(path, error))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn must_write_in_place(_: &Path, _: &fs::Metadata) -> Result<bool, Error> {
+    Ok(false)
 }
 
 #[cfg(test)]
@@ -986,6 +1028,74 @@ mod tests {
         assert!(home.join("project").exists());
         delete_guarded(&home.join("project"), &home).expect("inside home is fine");
         assert!(!home.join("project").exists());
+    }
+
+    #[cfg(any(unix, windows))]
+    fn directory_link(target: &Path, link: &Path) {
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(target, link).unwrap();
+        #[cfg(windows)]
+        {
+            // Directory junctions work without Developer Mode or elevation.
+            let output = std::process::Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(link).arg(target).output().unwrap();
+            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        }
+        assert!(fs::symlink_metadata(link).unwrap().file_type().is_symlink());
+    }
+
+    #[cfg(any(unix, windows))]
+    #[test]
+    fn deleting_a_link_to_home_preserves_the_home_directory() {
+        let d = tmpdir("delete-home-link");
+        let home = d.join("home");
+        fs::create_dir(&home).unwrap();
+        fs::write(home.join("keep.txt"), "keep").unwrap();
+        let link = d.join("link");
+        directory_link(&home, &link);
+        delete_guarded(&link, &home).unwrap();
+        assert!(fs::symlink_metadata(&link).is_err());
+        assert_eq!(fs::read_to_string(home.join("keep.txt")).unwrap(), "keep");
+    }
+
+    #[cfg(any(unix, windows))]
+    #[test]
+    fn deleting_a_dangling_directory_link_does_not_require_its_target() {
+        let d = tmpdir("delete-dangling-link");
+        let target = d.join("target");
+        fs::create_dir(&target).unwrap();
+        let link = d.join("link");
+        directory_link(&target, &link);
+        fs::remove_dir(&target).unwrap();
+        delete_guarded(&link, &d.join("home")).unwrap();
+        assert!(fs::symlink_metadata(&link).is_err());
+    }
+
+    #[cfg(any(unix, windows))]
+    #[test]
+    fn deleting_a_directory_link_preserves_its_target_contents() {
+        let d = tmpdir("delete-directory-link");
+        let target = d.join("target");
+        fs::create_dir(&target).unwrap();
+        fs::write(target.join("keep.txt"), "keep").unwrap();
+        let link = d.join("link");
+        directory_link(&target, &link);
+        delete_guarded(&link, &d.join("home")).unwrap();
+        assert!(fs::symlink_metadata(&link).is_err());
+        assert_eq!(fs::read_to_string(target.join("keep.txt")).unwrap(), "keep");
+    }
+
+    #[cfg(any(unix, windows))]
+    #[test]
+    fn configured_home_link_and_its_linked_parent_remain_protected() {
+        let d = tmpdir("delete-configured-home-link");
+        let target = d.join("target");
+        fs::create_dir_all(target.join("home")).unwrap();
+        let link = d.join("link");
+        directory_link(&target, &link);
+        assert!(matches!(delete_guarded(&link, &link), Err(Error::PermissionDenied(_))));
+        assert!(matches!(delete_guarded(&link, &link.join("home")), Err(Error::PermissionDenied(_))));
+        assert!(fs::symlink_metadata(&link).is_ok());
+        assert!(target.join("home").exists());
     }
 
     /// A writer that remembers what was written.
@@ -1205,6 +1315,29 @@ mod tests {
         let Response::Files { paths, truncated } = handle(Request::ListFiles { root: s(&d), limit: 2 }) else { panic!() };
         assert!(truncated);
         assert_eq!(paths.len(), 2);
+    }
+
+    #[test]
+    fn only_one_concurrent_directory_creator_can_succeed() {
+        let root = tmpdir("concurrent-mkdir");
+        for attempt in 0..8 {
+            let path = root.join(format!("parent-{attempt}/new-directory"));
+            let barrier = Arc::new(std::sync::Barrier::new(24));
+            let threads: Vec<_> = (0..24)
+                .map(|_| {
+                    let path = s(&path);
+                    let barrier = barrier.clone();
+                    std::thread::spawn(move || {
+                        barrier.wait();
+                        handle(Request::CreateDir { path })
+                    })
+                })
+                .collect();
+            let replies: Vec<_> = threads.into_iter().map(|thread| thread.join().unwrap()).collect();
+            assert_eq!(replies.iter().filter(|reply| matches!(reply, Response::Done)).count(), 1, "exactly one caller owns the new directory: {replies:?}");
+            assert_eq!(replies.iter().filter(|reply| matches!(reply, Response::Error(Error::AlreadyExists(_)))).count(), 23, "{replies:?}");
+        }
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

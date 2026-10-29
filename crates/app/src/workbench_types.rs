@@ -26,7 +26,10 @@ pub(super) enum OverlayKind {
         compare: bool,
     },
     /// Name entry (new file/folder, rename).
-    Input(InputPurpose),
+    Input {
+        purpose: InputPurpose,
+        context: Option<InputContext>,
+    },
     /// Language server results: locations (references), symbols, code actions.
     Locations(Vec<(String, u32, u32)>),
     Symbols(Vec<(u32, u32)>),
@@ -51,11 +54,19 @@ pub(super) enum OverlayKind {
     /// "Debug: Add Configuration…": the snippets offered.
     LaunchTemplates(Vec<serde_json::Value>),
     /// "Terminal: New Terminal with Profile…": what each row opens.
-    TerminalLaunch(Vec<crate::terminal::Launch>),
+    TerminalLaunch {
+        context: InputContext,
+        launches: Vec<crate::terminal::Launch>,
+    },
     /// "Terminal: Select Default Profile…": profile names.
-    TerminalDefaultProfile(Vec<String>),
+    TerminalDefaultProfile {
+        context: InputContext,
+        names: Vec<String>,
+    },
     /// "Terminal: Change Color…".
-    TerminalColor,
+    TerminalColor {
+        terminal: gpui::EntityId,
+    },
     Stashes {
         refs: Vec<String>,
         op: git_glue::StashOp,
@@ -94,18 +105,24 @@ pub(super) enum OverlayKind {
     EditorOption(Vec<EditorOpt>),
     /// Git branch picker (repo root, rows).
     Branches {
+        host: Arc<dyn Host>,
         root: String,
         choices: Vec<git_glue::BranchChoice>,
     },
     /// Merge / Delete / Rename Branch, Remove Remote: act on the selected name.
     BranchOp {
+        host: Arc<dyn Host>,
         root: String,
         op: git_glue::BranchOp,
         names: Vec<String>,
     },
     // --- git-sync ---
     /// "Pull from…" / "Push to…": the step to run for each row.
-    SyncTarget(Vec<crate::git::SyncOp>),
+    SyncTarget {
+        host: Arc<dyn host::Host>,
+        root: String,
+        ops: Vec<crate::git::SyncOp>,
+    },
     /// "Connect to Dev Container / WSL": alias of the selected target (`docker:name`, `wsl:name`).
     RemoteTargets(Vec<String>),
     ContainerEngines {
@@ -129,11 +146,15 @@ pub(super) enum OverlayKind {
     /// "Remove SSH Host…" / "Test Connection…": host aliases.
     /// "GitHub: Pull Requests…": open requests and actions for the selected request.
     PullRequests {
-        remote: String,
+        host: Arc<dyn Host>,
+        root: String,
+        remote: pulls_glue::PullRemote,
         pulls: Vec<crate::github::Pull>,
     },
     PullRequestActions {
-        remote: String,
+        host: Arc<dyn Host>,
+        root: String,
+        remote: pulls_glue::PullRemote,
         pull: crate::github::Pull,
         choices: Vec<pulls_glue::PullAction>,
     },
@@ -167,6 +188,26 @@ pub(super) enum OverlayKind {
     DataConvert(Box<data_glue::ConvertJob>),
     /// "Data: Decode Selection…": read-only lines.
     DataDecode,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct TabTarget {
+    pub group: GroupKey,
+    pub editor: gpui::EntityId,
+}
+
+pub(super) enum InputContext {
+    Git { host: Arc<dyn Host>, root: String },
+    Workspace { host: Arc<dyn Host>, root: Option<String> },
+}
+
+impl InputContext {
+    pub(super) fn matches(&self, workbench: &Workbench, cx: &gpui::App) -> bool {
+        match self {
+            Self::Git { host, root } => workbench.git_context_matches(host, root),
+            Self::Workspace { host, root } => Arc::ptr_eq(host, &workbench.remote.host) && workbench.root(cx) == *root,
+        }
+    }
 }
 
 pub(super) enum InputPurpose {
@@ -230,7 +271,9 @@ pub(super) enum InputPurpose {
     /// Debugger: the answer to a `promptString` input of a starting configuration.
     LaunchInput,
     /// New name of the active terminal.
-    RenameTerminal,
+    RenameTerminal {
+        terminal: gpui::EntityId,
+    },
     /// Debugger: new value of a variable of the scope or object `parent`.
     SetVariable {
         parent: i64,
@@ -284,6 +327,7 @@ pub(super) enum InputPurpose {
     SetRemoteUrl {
         root: String,
         name: String,
+        original: String,
     },
     /// Description of a new stash.
     StashNamed,

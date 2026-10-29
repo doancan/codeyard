@@ -1,5 +1,5 @@
-//! Shell-integration sequences in terminal output: OSC 7 (the shell's folder) and OSC 133 (prompt, command start and
-//! end with its exit code). The scanner only watches the bytes, which all still go to the terminal parser; it reports
+//! Shell-integration sequences in terminal output: OSC 7 (the shell's folder), OSC 133 (prompt, command start and
+//! end with its exit code) and the notifications programs send (OSC 9 and OSC 777;notify). The scanner only watches the bytes, which all still go to the terminal parser; it reports
 //! where in the stream each sequence ended, so the caller can note the cursor's line at that moment. Sequences may be
 //! split across chunks. Payloads are capped, and anything else (other OSC numbers, broken sequences) is ignored.
 
@@ -16,6 +16,9 @@ pub enum OscEvent {
     CommandStart,
     /// OSC 133;D[;code]: it finished.
     CommandEnd(Option<i32>),
+    /// OSC 9;text (iTerm2, Windows Terminal) or OSC 777;notify;title;body (urxvt, kitty): a program wants the user,
+    /// like Claude Code or Codex waiting for an answer. Control characters are removed.
+    Notify { title: Option<String>, body: String },
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -102,9 +105,39 @@ impl Scanner {
                 Some("D") => Some(OscEvent::CommandEnd(rest.split(';').nth(1).and_then(|c| c.trim().parse().ok()))),
                 _ => None,
             },
+            "9" => parse_osc9(rest),
+            "777" => {
+                let mut parts = rest.splitn(3, ';');
+                if parts.next() != Some("notify") {
+                    return None;
+                }
+                let title = clean(parts.next().unwrap_or(""));
+                let body = clean(parts.next().unwrap_or(""));
+                (!title.is_empty() || !body.is_empty()).then(|| OscEvent::Notify { title: (!title.is_empty()).then_some(title), body })
+            }
             _ => None,
         }
     }
+}
+
+/// Longest notification text kept.
+const MAX_NOTIFY: usize = 300;
+
+/// OSC 9 is also ConEmu's command family (`9;4;state;percent` is the progress bar Windows Terminal shows): a number
+/// followed by `;` or nothing is one of those, not a message.
+fn parse_osc9(rest: &str) -> Option<OscEvent> {
+    let (head, _) = rest.split_once(';').unwrap_or((rest, ""));
+    if !head.is_empty() && head.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let body = clean(rest);
+    (!body.is_empty()).then_some(OscEvent::Notify { title: None, body })
+}
+
+/// Control characters become spaces, runs of white space one space, and the text is capped.
+fn clean(text: &str) -> String {
+    let words: Vec<&str> = text.split(|c: char| c.is_control() || c.is_whitespace()).filter(|w| !w.is_empty()).collect();
+    words.join(" ").chars().take(MAX_NOTIFY).collect()
 }
 
 fn memchr(needle: u8, haystack: &[u8]) -> Option<usize> {
@@ -173,5 +206,18 @@ mod tests {
         assert_eq!(parse_cwd("file://host"), None);
         assert_eq!(parse_cwd("file:///a%0Ab"), None, "no control characters");
         assert_eq!(parse_cwd("file:///a%zzb").as_deref(), Some("/a%zzb"), "a bad escape stays as it is");
+    }
+
+    #[test]
+    fn programs_ask_for_the_user_with_osc_9_and_777() {
+        let mut s = Scanner::default();
+        let notify = |title: Option<&str>, body: &str| OscEvent::Notify { title: title.map(Into::into), body: body.into() };
+        let ev: Vec<OscEvent> = s
+            .scan(b"\x1b]9;\n\nClaude needs your permission\x07\x1b]777;notify;Codex;Approve\tthe edit?\x1b\\\x1b]9;\x07")
+            .into_iter()
+            .map(|(_, e)| e)
+            .collect();
+        assert_eq!(ev, [notify(None, "Claude needs your permission"), notify(Some("Codex"), "Approve the edit?")], "an empty OSC 9 says nothing");
+        assert!(s.scan(b"\x1b]9;4;1;50\x07\x1b]9;9;C:\\\x07\x1b]777;preexec\x07").is_empty(), "progress, ConEmu commands");
     }
 }

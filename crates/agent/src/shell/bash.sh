@@ -9,8 +9,9 @@ if [[ $- == *i* && -z "$__cy_loaded" && "$TERM_PROGRAM" == codeyard ]]; then
   # The editor counts a command as finished (133;D) only after it saw it start (133;C).
   __cy_prompt() {
     local ret=$?
+    local __cy_pwd=${PWD//%/%25}
     printf '\e]133;D;%s\a' "$ret"
-    printf '\e]7;file://%s%s\a' "$HOSTNAME" "$PWD"
+    printf '\e]7;file://%s%s\a' "$HOSTNAME" "$__cy_pwd"
     printf '\e]133;A\a'
     return $ret
   }

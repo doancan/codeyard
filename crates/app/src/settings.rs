@@ -98,6 +98,10 @@ pub struct Settings {
     pub terminal_allow_clipboard_write: bool,
     /// zsh, bash and fish mark prompts, commands and their folder (`terminal.shellIntegration`).
     pub terminal_shell_integration: bool,
+    /// The bell and program notifications (OSC 9/777) flag the terminal and the taskbar (`terminal.notifications`).
+    pub terminal_notifications: bool,
+    /// When a finished mouse selection goes to the clipboard: "agents" (Claude Code or Codex runs), "always", "off".
+    pub terminal_copy_on_selection: String,
     /// Closing a terminal asks first: "running" (a program is in the foreground), "always" or "never".
     pub terminal_confirm_close: String,
     /// Terminal profiles per operating system of the machine (`terminal.profiles.macos` / `.linux` / `.windows`).
@@ -323,6 +327,8 @@ impl Default for Settings {
             terminal_scroll_sensitivity: 2.,
             terminal_allow_clipboard_write: false,
             terminal_shell_integration: true,
+            terminal_notifications: true,
+            terminal_copy_on_selection: "agents".into(),
             terminal_confirm_close: "running".into(),
             terminal_profiles: Default::default(),
             terminal_default_profile: None,
@@ -689,6 +695,12 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.bool("terminal.shellIntegration") {
         s.terminal_shell_integration = v;
+    }
+    if let Some(v) = r.bool("terminal.notifications") {
+        s.terminal_notifications = v;
+    }
+    if let Some(v) = r.choice("terminal.copyOnSelection", &["agents", "always", "off"]) {
+        s.terminal_copy_on_selection = v;
     }
     if let Some(v) = r.choice("terminal.confirmOnClose", &["running", "always", "never"]) {
         s.terminal_confirm_close = v;
@@ -1192,6 +1204,8 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "terminal.warnMultilinePaste",
         "terminal.confirmOnClose",
         "terminal.shellIntegration",
+        "terminal.notifications",
+        "terminal.copyOnSelection",
         "terminal.defaultProfile",
         "terminal.profiles.macos",
         "terminal.profiles.linux",

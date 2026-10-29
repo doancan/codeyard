@@ -33,6 +33,14 @@ pub(super) enum Done {
 pub(super) struct Fail {
     reason: String,
     partial: Option<(String, usize, usize)>,
+    cancelled: bool,
+}
+
+impl From<host::HostError> for Fail {
+    fn from(error: host::HostError) -> Self {
+        let cancelled = matches!(error, host::HostError::Op(proto::Error::Cancelled));
+        Self { reason: error.to_string().trim_start_matches("disconnected: ").to_string(), partial: None, cancelled }
+    }
 }
 
 impl TransferRun {
@@ -82,6 +90,14 @@ impl Job {
     }
 }
 
+fn probe_local_destination(path: &std::path::Path) -> Result<Option<bool>, String> {
+    match std::fs::metadata(path) {
+        Ok(meta) => Ok(Some(meta.is_dir())),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("{}: {error}", path.display())),
+    }
+}
+
 impl Workbench {
     fn remote_alias(&self) -> Option<String> {
         match &self.remote.conn {
@@ -123,6 +139,7 @@ impl Workbench {
             cx.notify();
             return;
         };
+        let source_host = self.remote.host.clone();
         let rx = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: false,
             directories: true,
@@ -133,7 +150,12 @@ impl Workbench {
             if let Ok(Ok(Some(paths))) = rx.await
                 && let Some(local_dir) = paths.into_iter().next()
             {
-                this.update_in(cx, |this, window, cx| this.begin(Job::Download { alias, remote, is_dir, local_dir }, window, cx)).ok();
+                this.update_in(cx, |this, window, cx| {
+                    if Arc::ptr_eq(&this.remote.host, &source_host) {
+                        this.begin(Job::Download { alias, remote, is_dir, local_dir }, window, cx);
+                    }
+                })
+                .ok();
             }
         })
         .detach();
@@ -146,12 +168,18 @@ impl Workbench {
             cx.notify();
             return;
         };
+        let source_host = self.remote.host.clone();
         let rx = cx.prompt_for_paths(gpui::PathPromptOptions { files: true, directories: true, multiple: true, prompt: Some(crate::i18n::t("Upload").into()) });
         cx.spawn_in(window, async move |this, cx| {
             if let Ok(Ok(Some(items))) = rx.await
                 && !items.is_empty()
             {
-                this.update_in(cx, |this, window, cx| this.begin(Job::Upload { alias, items, remote_dir }, window, cx)).ok();
+                this.update_in(cx, |this, window, cx| {
+                    if Arc::ptr_eq(&this.remote.host, &source_host) {
+                        this.begin(Job::Upload { alias, items, remote_dir }, window, cx);
+                    }
+                })
+                .ok();
             }
         })
         .detach();
@@ -207,6 +235,7 @@ impl Workbench {
             return;
         }
         let host = self.remote.host.clone();
+        let source_host = host.clone();
         let probe = job.clone();
         // Entries at the target with the same name, and their kinds: for the conflict prompt and to flag file/folder mismatches up front.
         let task = cx.background_executor().spawn(async move {
@@ -220,10 +249,14 @@ impl Workbench {
             let mut mismatch = None;
             for (name, is_dir) in items {
                 let there_is_dir = match &probe {
-                    Job::Upload { remote_dir, .. } => host.stat(&ui::join(remote_dir, &name)).ok().map(|m| m.kind == proto::Kind::Dir),
-                    Job::Download { local_dir, .. } => std::fs::metadata(local_dir.join(&name)).ok().map(|m| m.is_dir()),
-                    Job::CopyIn { dest_dir, .. } => std::fs::metadata(ui::join(dest_dir, &name)).ok().map(|m| m.is_dir()),
-                };
+                    Job::Upload { remote_dir, .. } => match host.stat(&ui::join(remote_dir, &name)) {
+                        Ok(meta) => Ok(Some(meta.kind == proto::Kind::Dir)),
+                        Err(host::HostError::Op(proto::Error::NotFound(_))) => Ok(None),
+                        Err(error) => Err(error.to_string()),
+                    },
+                    Job::Download { local_dir, .. } => probe_local_destination(&local_dir.join(&name)),
+                    Job::CopyIn { dest_dir, .. } => probe_local_destination(&PathBuf::from(ui::join(dest_dir, &name))),
+                }?;
                 match there_is_dir {
                     Some(d) if d != is_dir => {
                         mismatch.get_or_insert((name, d));
@@ -232,11 +265,22 @@ impl Workbench {
                     None => {}
                 }
             }
-            (existing, mismatch)
+            Ok::<_, String>((existing, mismatch))
         });
         cx.spawn_in(window, async move |this, cx| {
-            let (existing, mismatch) = task.await;
+            let result = task.await;
             this.update_in(cx, |this, window, cx| {
+                if !Arc::ptr_eq(&this.remote.host, &source_host) {
+                    return;
+                }
+                let (existing, mismatch) = match result {
+                    Ok(probe) => probe,
+                    Err(error) => {
+                        this.notice = Some(Notice::Error(crate::i18n::tf("Cannot inspect the transfer destination: {}", &[&error]).into()));
+                        cx.notify();
+                        return;
+                    }
+                };
                 if let Some((name, there_is_dir)) = mismatch {
                     let m = if there_is_dir {
                         crate::i18n::tf("A folder named “{}” is already there; a file cannot replace it. Rename or remove it first.", &[&name])
@@ -248,7 +292,7 @@ impl Workbench {
                     return;
                 }
                 if existing.is_empty() {
-                    this.run_job(job, cx);
+                    this.run_job(job, &source_host, cx);
                     return;
                 }
                 let title = match existing.as_slice() {
@@ -264,7 +308,7 @@ impl Workbench {
                 );
                 cx.spawn(async move |this, cx| {
                     if answer.await == Ok(0) {
-                        this.update(cx, |this, cx| this.run_job(job, cx)).ok();
+                        this.update(cx, |this, cx| this.run_job(job, &source_host, cx)).ok();
                     }
                 })
                 .detach();
@@ -274,11 +318,23 @@ impl Workbench {
         .detach();
     }
 
-    fn run_job(&mut self, job: Job, cx: &mut Context<Self>) {
+    fn run_job(&mut self, job: Job, source_host: &Arc<dyn Host>, cx: &mut Context<Self>) {
+        // Conflict checks and prompts yield to other UI work. Revalidate both
+        // ownership and exclusivity immediately before starting the mutation.
+        if !Arc::ptr_eq(&self.remote.host, source_host) {
+            return;
+        }
+        if self.remote.transfer.is_some() {
+            self.notice =
+                Some(Notice::Info(crate::i18n::t("A transfer is already running. Wait for it to finish or click it in the status bar to cancel.").into()));
+            cx.notify();
+            return;
+        }
         let up = !matches!(job, Job::Download { .. });
         let run = TransferRun::new(job.label(), up);
         self.remote.transfer = Some(run.clone());
         let host = self.remote.host.clone();
+        let monitor_host = host.clone();
         let thread_run = run.clone();
         let thread_job = job.clone();
         std::thread::spawn(move || {
@@ -292,6 +348,15 @@ impl Workbench {
                 let finished = run.result.lock().unwrap_or_else(|e| e.into_inner()).take();
                 let alive = this
                     .update(cx, |this, cx| {
+                        let owns_run = this.remote.transfer.as_ref().is_some_and(|active| Arc::ptr_eq(active, &run));
+                        if !owns_run || !Arc::ptr_eq(&this.remote.host, &monitor_host) {
+                            run.cancel.store(true, Ordering::Relaxed);
+                            if owns_run {
+                                this.remote.transfer = None;
+                                cx.notify();
+                            }
+                            return false;
+                        }
                         if let Some(result) = finished.clone() {
                             this.remote.transfer = None;
                             this.finish_transfer(&job, result, cx);
@@ -301,6 +366,9 @@ impl Workbench {
                     })
                     .unwrap_or(false);
                 if !alive {
+                    if finished.is_none() {
+                        run.cancel.store(true, Ordering::Relaxed);
+                    }
                     break;
                 }
             }
@@ -328,7 +396,7 @@ impl Workbench {
                 }
                 self.notice = Some(Notice::Info(msg.into()));
             }
-            Err(e) if e.reason.contains("cancelled") => self.notice = Some(Notice::Info(crate::i18n::t("Transfer cancelled.").into())),
+            Err(e) if e.cancelled => self.notice = Some(Notice::Info(crate::i18n::t("Transfer cancelled.").into())),
             Err(e) => {
                 let reason = match e.partial {
                     Some((name, done, total)) => {
@@ -347,9 +415,7 @@ impl Workbench {
         let answer = window.prompt(
             gpui::PromptLevel::Warning,
             &crate::i18n::tf("Cancel “{}”?", &[&run.label]),
-            Some(crate::i18n::t(
-                "A file that is only partly transferred is removed, and so is a new folder. A folder you merge into keeps what was already copied.",
-            )),
+            Some(crate::i18n::t("Temporary transfer data is removed. Changes already made at the destination may remain.")),
             &[crate::i18n::t("Cancel Transfer"), crate::i18n::t("Keep Going")],
             cx,
         );
@@ -372,13 +438,12 @@ fn execute(job: &Job, host: Arc<dyn Host>, run: &TransferRun) -> Result<Done, Fa
     let step = |n: u64| {
         run.bytes.fetch_add(n, Ordering::Relaxed);
     };
-    let err = |e: host::HostError| e.to_string().trim_start_matches("disconnected: ").to_string();
     match job {
         Job::Upload { alias, items, remote_dir } => {
             run.total.store(items.iter().map(|p| host::transfer::local_size(p)).sum(), Ordering::Relaxed);
             let shell = host::transfer::shell_for(alias);
             for (done, item) in items.iter().enumerate() {
-                host::transfer::upload(&shell, item, remote_dir, &run.cancel, step).map_err(|e| partial(done, items.len(), item, err(e)))?;
+                host::transfer::upload(&shell, item, remote_dir, &run.cancel, step).map_err(|e| partial(done, items.len(), item, e.into()))?;
             }
             Ok(Done::Uploaded { count: items.len(), label: run.label.clone(), size: human_bytes(run.bytes.load(Ordering::Relaxed)), dir: remote_dir.clone() })
         }
@@ -387,13 +452,13 @@ fn execute(job: &Job, host: Arc<dyn Host>, run: &TransferRun) -> Result<Done, Fa
                 run.total.store(meta.size, Ordering::Relaxed);
             }
             let shell = host::transfer::shell_for(alias);
-            let dest = host::transfer::download(&shell, remote, *is_dir, local_dir, &run.cancel, step).map_err(|e| Fail { reason: err(e), partial: None })?;
+            let dest = host::transfer::download(&shell, remote, *is_dir, local_dir, &run.cancel, step).map_err(Fail::from)?;
             Ok(Done::Downloaded { dest: dest.display().to_string(), size: human_bytes(run.bytes.load(Ordering::Relaxed)) })
         }
         Job::CopyIn { items, dest_dir } => {
             run.total.store(items.iter().map(|p| host::transfer::local_size(p)).sum(), Ordering::Relaxed);
             for (done, item) in items.iter().enumerate() {
-                host::transfer::copy_local(item, std::path::Path::new(dest_dir), &run.cancel, step).map_err(|e| partial(done, items.len(), item, err(e)))?;
+                host::transfer::copy_local(item, std::path::Path::new(dest_dir), &run.cancel, step).map_err(|e| partial(done, items.len(), item, e.into()))?;
             }
             Ok(Done::Copied { count: items.len(), label: run.label.clone(), size: human_bytes(run.bytes.load(Ordering::Relaxed)), dir: dest_dir.clone() })
         }
@@ -401,10 +466,15 @@ fn execute(job: &Job, host: Arc<dyn Host>, run: &TransferRun) -> Result<Done, Fa
 }
 
 /// If one of several items fails, say how many completed and which one got stuck (a cancel message stays as is).
-fn partial(done: usize, total: usize, item: &std::path::Path, reason: String) -> Fail {
-    if reason.contains("cancelled") || total == 1 {
-        return Fail { reason, partial: None };
+fn partial(done: usize, total: usize, item: &std::path::Path, mut error: Fail) -> Fail {
+    if error.cancelled || total == 1 {
+        return error;
     }
     let name = item.file_name().map_or_else(|| item.display().to_string(), |n| n.to_string_lossy().into_owned());
-    Fail { reason, partial: Some((name, done, total)) }
+    error.partial = Some((name, done, total));
+    error
 }
+
+#[cfg(test)]
+#[path = "workbench_transfer_tests.rs"]
+mod tests;

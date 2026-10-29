@@ -628,11 +628,15 @@ impl Workbench {
     pub(super) fn show_branch_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.repo_root(cx) else { return };
         let host = self.remote.host.clone();
+        let source_host = host.clone();
         let r = root.clone();
         let task = cx.background_executor().spawn(async move { git::branch_infos(host.as_ref(), &r) });
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
             this.update_in(cx, |this, window, cx| {
+                if !this.git_context_matches(&source_host, &root) {
+                    return;
+                }
                 let infos = match result {
                     Ok(b) => b,
                     Err(e) => {
@@ -660,7 +664,7 @@ impl Workbench {
                 }
                 let picker =
                     cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Select a branch to check out"), "", None, cx));
-                this.show_overlay(picker, OverlayKind::Branches { root, choices }, window, cx);
+                this.show_overlay(picker, OverlayKind::Branches { host: source_host, root, choices }, window, cx);
             })
             .ok();
         })
@@ -696,11 +700,16 @@ impl Workbench {
 
     pub(super) fn git_checkout(&mut self, root: String, branch: String, remote: bool, create: bool, cx: &mut Context<Self>) {
         let host = self.remote.host.clone();
+        let source_host = host.clone();
+        let source_root = root.clone();
         let b = branch.clone();
         let task = cx.background_executor().spawn(async move { git::checkout(host.as_ref(), &root, &b, remote, create) });
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
+                if !this.git_context_matches(&source_host, &source_root) {
+                    return;
+                }
                 this.notice = Some(match result {
                     Ok(()) => Notice::Info(crate::i18n::tf("Switched to {}", &[&branch]).into()),
                     Err(e) => Notice::Error(crate::i18n::tf("Could not switch to {0}: {1}", &[&branch, &first_line(&e)]).into()),
@@ -713,11 +722,17 @@ impl Workbench {
         .detach();
     }
 
+    /// Delayed Git UI must still belong to the host and repository that produced it.
+    pub(super) fn git_context_matches(&self, host: &std::sync::Arc<dyn host::Host>, root: &str) -> bool {
+        std::sync::Arc::ptr_eq(&self.remote.host, host) && self.git_status().is_some_and(|status| status.root == root)
+    }
+
     /// Ask for a branch or remote name (list depends on `op`), then run the operation.
     pub(super) fn show_branch_op_picker(&mut self, op: BranchOp, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.repo_root(cx) else { return };
         let current = self.git_status().and_then(|s| s.branch.clone());
         let host = self.remote.host.clone();
+        let source_host = host.clone();
         let r = root.clone();
         let task = cx.background_executor().spawn(async move {
             match op {
@@ -731,6 +746,9 @@ impl Workbench {
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
             this.update_in(cx, |this, window, cx| {
+                if !this.git_context_matches(&source_host, &root) {
+                    return;
+                }
                 let entries = match result {
                     Ok(v) => v,
                     Err(e) => {
@@ -762,7 +780,7 @@ impl Workbench {
                 let items = entries.iter().map(|(n, d)| PickItem { label: n.clone().into(), detail: d.clone().map(Into::into), keys: None }).collect();
                 let names = entries.into_iter().map(|(n, _)| n).collect();
                 let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], &title, "", None, cx));
-                this.show_overlay(picker, OverlayKind::BranchOp { root, op, names }, window, cx);
+                this.show_overlay(picker, OverlayKind::BranchOp { host: source_host, root, op, names }, window, cx);
             })
             .ok();
         })
@@ -785,7 +803,7 @@ impl Workbench {
             }
             BranchOp::Merge => {
                 let into = self.git_status().and_then(|s| s.branch.clone()).unwrap_or_else(|| "HEAD".into());
-                self.confirm(
+                self.confirm_git(
                     window,
                     &crate::i18n::tf("Merge {} into {}?", &[&name, &into]),
                     crate::i18n::t("A merge commit is created unless it can fast-forward. Conflicts are resolved in Source Control."),
@@ -802,7 +820,7 @@ impl Workbench {
             }
             BranchOp::Rebase => {
                 let cur = self.git_status().and_then(|s| s.branch.clone()).unwrap_or_else(|| "HEAD".into());
-                self.confirm(window, &crate::i18n::tf("Rebase {} onto {}?", &[&cur, &name]), crate::i18n::t("Your commits on this branch are rewritten on top of it (their hashes change). Conflicts stop the rebase; resolve them and use Git: Continue Rebase, or Git: Abort Rebase."), crate::i18n::t("Rebase"), cx, move |this, cx| {
+                self.confirm_git(window, &crate::i18n::tf("Rebase {} onto {}?", &[&cur, &name]), crate::i18n::t("Your commits on this branch are rewritten on top of it (their hashes change). Conflicts stop the rebase; resolve them and use Git: Continue Rebase, or Git: Abort Rebase."), crate::i18n::t("Rebase"), cx, move |this, cx| {
                     this.git_task(&crate::i18n::tf("Rebasing onto {}…", &[&name]), cx, move |h| match git::rebase(h, &root, &name) {
                         Ok(false) => Ok(crate::i18n::tf("Rebased onto {}", &[&name])),
                         Ok(true) => Ok(crate::i18n::t("Rebase stopped on conflicts: resolve them, then Git: Continue Rebase (or Abort Rebase)").to_string()),
@@ -814,11 +832,15 @@ impl Workbench {
             BranchOp::Delete => {
                 // First count how many commits remain only on this branch, so the confirm text can say it.
                 let host = self.remote.host.clone();
+                let source_host = host.clone();
                 let (r, n) = (root.clone(), name.clone());
                 let task = cx.background_executor().spawn(async move { git::unmerged_commits(host.as_ref(), &r, &n) });
                 cx.spawn_in(window, async move |this, cx| {
                     let unmerged = task.await;
                     this.update_in(cx, |this, window, cx| {
+                        if !this.git_context_matches(&source_host, &root) {
+                            return;
+                        }
                         // If counting fails, never force delete: let git decide with its own check (-d).
                         let (detail, force) = match unmerged {
                             Ok(0) => (crate::i18n::t("The branch is fully merged into the current branch.").to_string(), true),
@@ -834,7 +856,7 @@ impl Workbench {
                                 false,
                             ),
                         };
-                        this.confirm(window, &crate::i18n::tf("Delete branch {}?", &[&name]), &detail, crate::i18n::t("Delete"), cx, move |this, cx| {
+                        this.confirm_git(window, &crate::i18n::tf("Delete branch {}?", &[&name]), &detail, crate::i18n::t("Delete"), cx, move |this, cx| {
                             this.git_task(&crate::i18n::tf("Deleting {}…", &[&name]), cx, move |h| {
                                 git::delete_branch(h, &root, &name, force).map(|_| crate::i18n::tf("Deleted {}", &[&name]))
                             });
@@ -845,7 +867,7 @@ impl Workbench {
                 .detach();
             }
             BranchOp::RemoveRemote => {
-                self.confirm(
+                self.confirm_git(
                     window,
                     &crate::i18n::tf("Remove remote {}?", &[&name]),
                     crate::i18n::t("Only the connection is removed; the remote repository itself is untouched."),
@@ -861,6 +883,25 @@ impl Workbench {
             // --- git-refs ---
             op => self.run_ref_op(root, op, name, window, cx),
         }
+    }
+
+    /// A Git confirmation is valid only for the repository and host named when it opened.
+    pub(super) fn confirm_git(
+        &mut self,
+        window: &mut Window,
+        title: &str,
+        detail: &str,
+        verb: &str,
+        cx: &mut Context<Self>,
+        then: impl FnOnce(&mut Self, &mut Context<Self>) + 'static,
+    ) {
+        let Some(root) = self.git_status().map(|status| status.root.clone()) else { return };
+        let host = self.remote.host.clone();
+        self.confirm(window, title, detail, verb, cx, move |this, cx| {
+            if this.git_context_matches(&host, &root) {
+                then(this, cx);
+            }
+        });
     }
 
     /// Local confirm sheet; `then` runs if anything but "Cancel" is picked.
@@ -899,10 +940,15 @@ impl Workbench {
         self.notice = Some(Notice::Info(working.to_string().into()));
         cx.notify();
         let host = self.remote.host.clone();
+        let source_host = host.clone();
+        let source_root = self.git_status().map(|status| status.root.clone());
         let task = cx.background_executor().spawn(async move { f(host.as_ref()) });
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
+                if !std::sync::Arc::ptr_eq(&this.remote.host, &source_host) || this.git_status().map(|status| status.root.clone()) != source_root {
+                    return;
+                }
                 match result {
                     Ok(m) => this.notice = Some(Notice::Info(m.into())),
                     Err(e) => this.notice = Some(Notice::Error(first_line(&e).to_string().into())),
@@ -918,7 +964,7 @@ impl Workbench {
 
     pub(super) fn git_abort_merge(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.repo_root(cx) else { return };
-        self.confirm(
+        self.confirm_git(
             window,
             crate::i18n::t("Abort the merge?"),
             crate::i18n::t("Everything resolved so far in this merge is discarded."),
@@ -943,7 +989,7 @@ impl Workbench {
 
     pub(super) fn git_abort_rebase(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.repo_root(cx) else { return };
-        self.confirm(
+        self.confirm_git(
             window,
             crate::i18n::t("Abort the rebase?"),
             crate::i18n::t("The branch goes back to how it was before the rebase started."),
@@ -1000,3 +1046,7 @@ impl Workbench {
 pub(super) fn first_line(e: &str) -> &str {
     e.lines().find(|l| !l.trim().is_empty()).unwrap_or(e).trim()
 }
+
+#[cfg(test)]
+#[path = "workbench_git_context_tests.rs"]
+mod context_tests;

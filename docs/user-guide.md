@@ -1142,6 +1142,12 @@ server** (so `localhost` services work); `"http.runOn": "local"` sends it from y
 private temporary file on the remote host and pastes its path, so programs such as Codex can attach it. Images are
 limited to 32 MiB. The file remains available in the remote `/tmp` directory until the host cleans it up.
 
+**Selecting and copying.** Drag to select, double-click for a word, triple-click for a line. The selection stays on its
+text while a program such as Claude Code or Codex redraws or adds lines below it. While Claude Code or Codex runs, a
+finished selection is copied right away, because those programs keep Ctrl+C for themselves
+(`terminal.copyOnSelection`: `agents`, `always` or `off`). When a program reads the mouse, a drag goes to it. Hold Shift
+to select instead; the terminal reminds you the first time.
+
 **Shell integration.** zsh, bash and fish mark each prompt and command, with no setup:
 
 - A dot beside each command shows how it ended: green for success, red for failure.
@@ -1174,7 +1180,12 @@ the bottom or the right restores its size.
 - Drag its left edge to resize it; the width is remembered.
 - Bars beside a terminal's glyph move while a command runs in it. A red dot means its last command failed.
 - A command that ran for three seconds or more and finished while its terminal was out of sight leaves a green (success)
-  or red (failure) dot until you open that terminal.
+  or red (failure) dot until you open that terminal. One that ran for ten seconds or more also shows a notice with the
+  command and its result, and flashes the taskbar button when the window is in the background.
+- A program that rings the bell or asks for you (OSC 9 or OSC 777, as Claude Code and Codex do when they wait for an
+  answer) leaves a yellow dot, and the Terminal tab counts such terminals while they are out of sight. A message it sent
+  shows as a notice. When the Codeyard window is in the background its taskbar button flashes (Windows). Turn this off
+  with `terminal.notifications`.
 - Hover a row for its folder and what it runs. Double-click renames it, middle-click closes it.
 - Split terminals stay together: picking either one shows both, and picking another terminal and coming back brings the
   pair back. ⇧⌘] / ⇧⌘[ (Ctrl+Shift+] / [) go to the next / previous terminal.
@@ -1268,7 +1279,8 @@ reaches the same targets from the keyboard.
 - **Download / upload** over the open ssh connection: right-click a file or folder in the explorer and choose *Download…*;
   choose *Upload Files Here…* on a folder, run **Remote: Upload Files to This Folder…**, or just drag files from Finder onto the explorer
   (in a local workspace the same drop copies them in). Transfers stream (no size limit), folders travel as `tar`, progress shows in the
-  status bar (click it to cancel; a cancelled or failed upload leaves no partial file). Existing names ask before being replaced.
+  status bar. Click it to cancel: temporary transfer data is removed, while changes already applied at the destination may remain.
+  Existing names ask before being replaced.
 - **Follow (Tail)**: *File: Follow (Tail) Active File*, or *Follow (Tail)* in the explorer and tab menus, opens the file in a read-only
   view that sticks to the end while the file grows (`tail -f`). It works for any size, survives log rotation, colours `ERROR`/`WARN`/`DEBUG`
   lines, and starts on its own for `.log` files (and `/var/log`) that are too large to edit. Scrolling up pauses it and a

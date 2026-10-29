@@ -4,6 +4,10 @@ use super::*;
 use crate::terminal::Launch;
 use crate::terminal_profiles::{COLORS, Profile};
 
+#[cfg(test)]
+#[path = "workbench_terminal_context_tests.rs"]
+mod context_tests;
+
 gpui::actions!(
     workbench,
     [
@@ -70,6 +74,7 @@ impl TermRow {
         let dot = |color: u32| div().size(px(7.)).flex_none().rounded_full().bg(c(color)).into_any_element();
         match (&self.activity, self.unseen) {
             (Activity::Running(_), _) => Some(ui::activity_bars(("term-activity", i), 12., p.accent)),
+            (_, Some(Finished::Attention)) => Some(dot(p.warning)),
             (_, Some(Finished::Failed)) => Some(dot(p.danger)),
             (_, Some(Finished::Succeeded)) => Some(dot(p.success)),
             (Activity::Failed(_), None) => Some(dot(p.danger)),
@@ -91,6 +96,29 @@ impl TermRow {
         }
         lines.join("\n")
     }
+}
+
+/// The window is in the background: flash its taskbar button until it is brought forward (Windows). Elsewhere GPUI has
+/// no way to ask yet; the terminal list and the Terminal tab still show it. Test windows have no platform window.
+fn request_attention(window: &Window) {
+    #[cfg(all(windows, not(test)))]
+    {
+        use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::{FLASHW_TIMERNOFG, FLASHW_TRAY, FLASHWINFO, FlashWindowEx};
+        let Some(RawWindowHandle::Win32(h)) = HasWindowHandle::window_handle(window).ok().map(|h| h.as_raw()) else { return };
+        let info = FLASHWINFO {
+            cbSize: std::mem::size_of::<FLASHWINFO>() as u32,
+            hwnd: HWND(h.hwnd.get() as *mut std::ffi::c_void),
+            dwFlags: FLASHW_TRAY | FLASHW_TIMERNOFG,
+            uCount: 0,
+            dwTimeout: 0,
+        };
+        // SAFETY: the HWND is the live window GPUI holds while `window` is borrowed.
+        let _ = unsafe { FlashWindowEx(&info) };
+    }
+    #[cfg(any(not(windows), test))]
+    let _ = window;
 }
 
 /// A terminal's mark colour.
@@ -187,6 +215,8 @@ impl Workbench {
                 }
             }
             TerminalEvent::TitleChanged | TerminalEvent::Exited | TerminalEvent::ActivityChanged => cx.notify(),
+            TerminalEvent::Attention(message) => this.terminal_wants_attention(source, message.clone(), window, cx),
+            TerminalEvent::LongCommandFinished { command, code } => this.long_command_finished(source, command, *code, window, cx),
             TerminalEvent::ImagePasteFailed(error) => {
                 this.notice = Some(Notice::Error(crate::i18n::tf("Could not paste: {}", &[error]).into()));
                 cx.notify();
@@ -300,10 +330,14 @@ impl Workbench {
     pub(super) fn new_terminal_with_profile(&mut self, _: &NewTerminalWithProfile, window: &mut Window, cx: &mut Context<Self>) {
         let profiles = self.terminal_profiles(cx);
         let host = self.remote.host.clone();
+        let context = super::types::InputContext::Workspace { host: host.clone(), root: self.root(cx) };
         let shells = cx.background_executor().spawn(async move { host.list_shells() });
         cx.spawn_in(window, async move |this, cx| {
             let shells = shells.await;
             this.update_in(cx, |this, window, cx| {
+                if !context.matches(this, cx) {
+                    return;
+                }
                 let mut items: Vec<PickItem> =
                     profiles.iter().map(|p| PickItem { label: p.name.clone().into(), detail: Some(p.path.clone().into()), keys: None }).collect();
                 let mut launches: Vec<Launch> = profiles.iter().map(launch_of).collect();
@@ -319,7 +353,7 @@ impl Workbench {
                     this.close_overlay(window, cx);
                 }
                 let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Open a terminal with…"), "", None, cx));
-                this.show_overlay(picker, OverlayKind::TerminalLaunch(launches), window, cx);
+                this.show_overlay(picker, OverlayKind::TerminalLaunch { context, launches }, window, cx);
             })
             .ok();
         })
@@ -342,19 +376,21 @@ impl Workbench {
             .map(|n| PickItem { label: n.clone().into(), detail: (current.as_ref() == Some(n)).then(|| crate::i18n::t("default").into()), keys: None })
             .collect();
         let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Default terminal profile"), "", None, cx));
-        self.show_overlay(picker, OverlayKind::TerminalDefaultProfile(names), window, cx);
+        let context = super::types::InputContext::Workspace { host: self.remote.host.clone(), root: self.root(cx) };
+        self.show_overlay(picker, OverlayKind::TerminalDefaultProfile { context, names }, window, cx);
     }
 
     /// "Terminal: Rename…".
     pub(super) fn rename_terminal(&mut self, _: &RenameTerminal, window: &mut Window, cx: &mut Context<Self>) {
         let Some(t) = self.terminals.get(self.active_terminal) else { return };
         let title = t.read(cx).title.to_string();
-        self.show_input(InputPurpose::RenameTerminal, crate::i18n::t("Rename"), crate::i18n::t("terminal name"), &title, window, cx);
+        let terminal = t.entity_id();
+        self.show_input(InputPurpose::RenameTerminal { terminal }, crate::i18n::t("Rename"), crate::i18n::t("terminal name"), &title, window, cx);
     }
 
-    pub(super) fn finish_rename_terminal(&mut self, name: String, cx: &mut Context<Self>) {
+    pub(super) fn finish_rename_terminal(&mut self, terminal: gpui::EntityId, name: String, cx: &mut Context<Self>) {
         let name: String = name.chars().filter(|c| !c.is_control()).take(80).collect();
-        if let (Some(t), false) = (self.terminals.get(self.active_terminal), name.trim().is_empty()) {
+        if let (Some(t), false) = (self.terminals.iter().find(|t| t.entity_id() == terminal), name.trim().is_empty()) {
             t.update(cx, |t, cx| {
                 t.set_fixed_title(name.trim().to_string());
                 cx.notify();
@@ -364,19 +400,17 @@ impl Workbench {
 
     /// "Terminal: Change Color…".
     pub(super) fn change_terminal_color(&mut self, _: &ChangeTerminalColor, window: &mut Window, cx: &mut Context<Self>) {
-        if self.terminals.is_empty() {
-            return;
-        }
+        let Some(terminal) = self.terminals.get(self.active_terminal).map(|t| t.entity_id()) else { return };
         if self.overlay.is_some() {
             self.close_overlay(window, cx);
         }
         let items = COLORS.iter().map(|c| PickItem { label: (*c).into(), detail: None, keys: None }).collect();
         let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Terminal colour"), "", None, cx));
-        self.show_overlay(picker, OverlayKind::TerminalColor, window, cx);
+        self.show_overlay(picker, OverlayKind::TerminalColor { terminal }, window, cx);
     }
 
-    pub(super) fn set_terminal_color(&mut self, color: &str, cx: &mut Context<Self>) {
-        if let Some(t) = self.terminals.get(self.active_terminal) {
+    pub(super) fn set_terminal_color(&mut self, terminal: gpui::EntityId, color: &str, cx: &mut Context<Self>) {
+        if let Some(t) = self.terminals.iter().find(|t| t.entity_id() == terminal) {
             t.update(cx, |t, _| t.color = (color != "muted").then(|| color.to_string()));
             cx.notify();
         }
@@ -568,10 +602,14 @@ impl Workbench {
         let profiles = self.terminal_profiles(cx);
         let default = cx.global::<Settings>().terminal_default_profile.clone();
         let host = self.remote.host.clone();
+        let context = super::types::InputContext::Workspace { host: host.clone(), root: self.root(cx) };
         let shells = cx.background_executor().spawn(async move { host.list_shells() });
         cx.spawn_in(window, async move |this, cx| {
             let shells = shells.await;
             this.update_in(cx, |this, window, cx| {
+                if !context.matches(this, cx) {
+                    return;
+                }
                 use crate::menu::MenuItem;
                 let (items, launches) = launch_menu_entries(&profiles, &shells, default.as_deref());
                 let mut items: Vec<MenuItem> = items;
@@ -596,7 +634,8 @@ impl Workbench {
                 this.term_launches = launches;
                 let target = MenuTarget { path: String::new(), is_dir: false, tab: None };
                 this.show_menu(items, commands, actions, target, position, window, cx);
-                if let Some(state) = &this.menu {
+                if let Some(state) = &mut this.menu {
+                    state.context = Some(context);
                     state.menu.update(cx, |menu, _| menu.set_anchor(gpui::Corner::TopRight));
                 }
             })
@@ -649,6 +688,62 @@ impl Workbench {
         self.chrome.bottom = Bottom::Terminal;
         if let Some(t) = self.terminals.get(self.active_terminal) {
             window.focus(&t.focus_handle(cx));
+        }
+        self.mark_visible_terminals_seen(cx);
+        cx.notify();
+    }
+
+    /// Whether terminal `t` is on screen now: the panel shows the terminals and it is the active one or beside it.
+    fn terminal_on_screen(&self, t: &Entity<TerminalView>) -> bool {
+        self.chrome.panel_open
+            && self.chrome.bottom == Bottom::Terminal
+            && (self.terminals.get(self.active_terminal) == Some(t) || self.shown_split().is_some_and(|(l, r)| &l == t || &r == t))
+    }
+
+    /// The Terminal tab's badge: terminals out of sight whose program asked for the user.
+    pub(crate) fn terminals_asking(&self, cx: &App) -> usize {
+        self.terminals.iter().filter(|t| !self.terminal_on_screen(t) && t.read(cx).unseen_finish() == Some(crate::terminal::Finished::Attention)).count()
+    }
+
+    /// A long command ended. Nothing to say when its terminal is on screen in the active window; otherwise a notice (when
+    /// it is out of sight) and the taskbar (when the window is in the background). The list's dot comes from the terminal.
+    fn long_command_finished(&mut self, t: &Entity<TerminalView>, command: &str, code: Option<i32>, window: &mut Window, cx: &mut Context<Self>) {
+        let active = window.is_window_active();
+        let on_screen = self.terminal_on_screen(t);
+        if active && on_screen {
+            return;
+        }
+        if !on_screen {
+            let what = match code {
+                Some(code) if code != 0 && command.is_empty() => crate::i18n::tf("A command failed with code {}", &[&code]),
+                Some(code) if code != 0 => crate::i18n::tf("Failed with code {}: {}", &[&code, &command]),
+                _ if command.is_empty() => crate::i18n::t("A command finished").to_string(),
+                _ => crate::i18n::tf("Finished: {}", &[&command]),
+            };
+            let title = t.read(cx).title.to_string();
+            self.notice = Some(Notice::Info(crate::i18n::tf("{}: {}", &[&title, &what]).into()));
+        }
+        if !active {
+            request_attention(window);
+        }
+        cx.notify();
+    }
+
+    /// The bell or a notification (Claude Code, Codex waiting for an answer). Seen at once when its terminal is on screen
+    /// in the active window; otherwise the list and the tab are flagged, a message shows as a notice, and an inactive
+    /// window asks for the user from the taskbar.
+    fn terminal_wants_attention(&mut self, t: &Entity<TerminalView>, message: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
+        let active = window.is_window_active();
+        if active && self.terminal_on_screen(t) {
+            t.update(cx, |t, _| t.mark_seen());
+            return cx.notify();
+        }
+        if let Some(message) = message.filter(|_| !self.terminal_on_screen(t)) {
+            let title = t.read(cx).title.to_string();
+            self.notice = Some(Notice::Info(crate::i18n::tf("{}: {}", &[&title, &message]).into()));
+        }
+        if !active {
+            request_attention(window);
         }
         cx.notify();
     }

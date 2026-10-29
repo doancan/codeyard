@@ -175,7 +175,8 @@ impl Workbench {
             _ => MenuCmd::CloseTab,
         };
         let path = self.tabs.editors[ix].read(cx).path.clone();
-        self.run_menu_cmd(cmd, MenuTarget { path, is_dir: false, tab: Some(ix) }, window, cx);
+        let tab = super::types::TabTarget { group: self.tabs.current_key(), editor: self.tabs.editors[ix].entity_id() };
+        self.run_menu_cmd(cmd, MenuTarget { path, is_dir: false, tab: Some(tab) }, window, cx);
     }
 
     /// The language server diagnostics of a file (task problems not included).
@@ -465,7 +466,7 @@ impl Workbench {
             super::pulls_glue::PullAction::CopyLink,
             super::pulls_glue::PullAction::CopyBranch,
         ][action as usize];
-        self.run_pull_action(remote.to_string(), pull, action, cx);
+        self.run_pull_action(self.pull_remote_for_test(remote.to_string()), pull, action, cx);
     }
 
     pub fn open_large_for_test(&mut self, path: &str, window: &mut Window, cx: &mut Context<Self>) {

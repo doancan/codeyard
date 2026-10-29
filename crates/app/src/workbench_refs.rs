@@ -123,7 +123,7 @@ impl Workbench {
 
     pub(super) fn run_ref_op(&mut self, root: String, op: BranchOp, name: String, window: &mut Window, cx: &mut Context<Self>) {
         match op {
-            BranchOp::DeleteTag => self.confirm(
+            BranchOp::DeleteTag => self.confirm_git(
                 window,
                 &crate::i18n::tf("Delete tag {}?", &[&name]),
                 crate::i18n::t("Only the local tag is removed. A copy on a remote stays until you delete it there (Git: Delete Remote Tag…)."),
@@ -135,7 +135,7 @@ impl Workbench {
                     });
                 },
             ),
-            BranchOp::DeleteRemoteTag => self.confirm(
+            BranchOp::DeleteRemoteTag => self.confirm_git(
                 window,
                 &crate::i18n::tf("Delete tag {} on the remote?", &[&name]),
                 crate::i18n::t("The tag disappears from the remote repository for everyone. Your local copy is kept."),
@@ -168,7 +168,7 @@ impl Workbench {
                     cx,
                 );
             }
-            BranchOp::DeleteRemoteBranch => self.confirm(
+            BranchOp::DeleteRemoteBranch => self.confirm_git(
                 window,
                 &crate::i18n::tf("Delete branch {} on the remote?", &[&name]),
                 crate::i18n::t("The branch is removed from the remote repository for everyone. Local branches are not touched."),
@@ -200,14 +200,30 @@ impl Workbench {
             BranchOp::SetRemoteUrl => {
                 // The current URL is the starting text; it is read first so the field is not empty.
                 let host = self.remote.host.clone();
+                let source_host = host.clone();
                 let (r, n) = (root.clone(), name.clone());
                 let task = cx.background_executor().spawn(async move { git::remotes(host.as_ref(), &r) });
                 cx.spawn_in(window, async move |this, cx| {
-                    let list = task.await.unwrap_or_default();
+                    let result = task.await;
                     this.update_in(cx, |this, window, cx| {
-                        let url = list.into_iter().find(|(x, _)| *x == n).map(|(_, u)| u).unwrap_or_default();
+                        if !this.git_context_matches(&source_host, &root) {
+                            return;
+                        }
+                        let list = match result {
+                            Ok(list) => list,
+                            Err(error) => {
+                                this.notice = Some(Notice::Error(crate::i18n::tf("Could not read the remote URL: {}", &[&first_line(&error)]).into()));
+                                cx.notify();
+                                return;
+                            }
+                        };
+                        let Some((_, url)) = list.into_iter().find(|(name, _)| *name == n) else {
+                            this.notice = Some(Notice::Error(crate::i18n::tf("Remote {} no longer exists.", &[&n]).into()));
+                            cx.notify();
+                            return;
+                        };
                         this.show_input(
-                            InputPurpose::SetRemoteUrl { root, name: n.clone() },
+                            InputPurpose::SetRemoteUrl { root, name: n.clone(), original: url.clone() },
                             crate::i18n::t("Set URL"),
                             &crate::i18n::tf("New URL of {}", &[&n]),
                             &url,
@@ -219,7 +235,7 @@ impl Workbench {
                 })
                 .detach();
             }
-            BranchOp::RemoveWorktree => self.confirm(
+            BranchOp::RemoveWorktree => self.confirm_git(
                 window,
                 &crate::i18n::tf("Remove worktree {}?", &[&name]),
                 crate::i18n::t("Its folder is deleted. Git refuses when the worktree has uncommitted changes; the branch stays."),
@@ -248,7 +264,7 @@ impl Workbench {
 
     /// Answers of the text fields opened by `run_ref_op` and the stash command.
     pub(super) fn finish_ref_input(&mut self, purpose: InputPurpose, name: String, cx: &mut Context<Self>) {
-        let name = name.trim().to_string();
+        let name = if matches!(&purpose, InputPurpose::SetRemoteUrl { .. }) { name } else { name.trim().to_string() };
         match purpose {
             InputPurpose::CreateBranchFrom { root, start } => {
                 self.git_task(&crate::i18n::tf("Creating {}…", &[&name]), cx, move |h| {
@@ -260,7 +276,10 @@ impl Workbench {
                     git::rename_remote(h, &root, &old, &name).map(|_| crate::i18n::tf("Renamed remote {0} to {1}", &[&old, &name]))
                 });
             }
-            InputPurpose::SetRemoteUrl { root, name: remote } => {
+            InputPurpose::SetRemoteUrl { root, name: remote, original } => {
+                if name == original {
+                    return;
+                }
                 self.git_task(&crate::i18n::tf("Updating {}…", &[&remote]), cx, move |h| {
                     git::set_remote_url(h, &root, &remote, &name).map(|_| crate::i18n::tf("Updated the URL of {}", &[&remote]))
                 });
@@ -412,32 +431,38 @@ impl Workbench {
     pub(super) fn show_compare_commit_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some((root, rel)) = self.active_in_repo(cx) else { return };
         let host = self.remote.host.clone();
+        let source_host = host.clone();
         let (r, f) = (root.clone(), rel.clone());
         let task = cx.background_executor().spawn(async move { git::file_log(host.as_ref(), &r, &f, 300) });
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
-            this.update_in(cx, |this, window, cx| match result {
-                Ok(log) if log.is_empty() => {
-                    this.notice = Some(Notice::Info(crate::i18n::tf("{} has no commits yet.", &[&crate::ui::file_name(&rel)]).into()));
-                    cx.notify();
+            this.update_in(cx, |this, window, cx| {
+                if !this.git_context_matches(&source_host, &root) {
+                    return;
                 }
-                Ok(log) => {
-                    let items = log
-                        .iter()
-                        .map(|e| PickItem {
-                            label: e.subject.clone().into(),
-                            detail: Some(format!("{} · {} · {}", e.short, e.author, e.when).into()),
-                            keys: None,
-                        })
-                        .collect();
-                    let names = log.into_iter().map(|e| format!("{}\t{}", e.hash, e.path)).collect();
-                    let title = crate::i18n::tf("Compare {} with a commit", &[&crate::ui::file_name(&rel)]);
-                    let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], &title, "", None, cx));
-                    this.show_overlay(picker, OverlayKind::BranchOp { root, op: BranchOp::CompareCommit, names }, window, cx);
-                }
-                Err(e) => {
-                    this.notice = Some(Notice::Error(crate::i18n::tf("Could not read the history: {}", &[&first_line(&e)]).into()));
-                    cx.notify();
+                match result {
+                    Ok(log) if log.is_empty() => {
+                        this.notice = Some(Notice::Info(crate::i18n::tf("{} has no commits yet.", &[&crate::ui::file_name(&rel)]).into()));
+                        cx.notify();
+                    }
+                    Ok(log) => {
+                        let items = log
+                            .iter()
+                            .map(|e| PickItem {
+                                label: e.subject.clone().into(),
+                                detail: Some(format!("{} · {} · {}", e.short, e.author, e.when).into()),
+                                keys: None,
+                            })
+                            .collect();
+                        let names = log.into_iter().map(|e| format!("{}\t{}", e.hash, e.path)).collect();
+                        let title = crate::i18n::tf("Compare {} with a commit", &[&crate::ui::file_name(&rel)]);
+                        let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], &title, "", None, cx));
+                        this.show_overlay(picker, OverlayKind::BranchOp { host: source_host, root, op: BranchOp::CompareCommit, names }, window, cx);
+                    }
+                    Err(e) => {
+                        this.notice = Some(Notice::Error(crate::i18n::tf("Could not read the history: {}", &[&first_line(&e)]).into()));
+                        cx.notify();
+                    }
                 }
             })
             .ok();

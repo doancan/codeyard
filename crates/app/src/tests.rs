@@ -2530,6 +2530,60 @@ fn terminal_activity_follows_the_shell_integration_sequences(cx: &mut TestAppCon
     assert_eq!(state(cx), (Activity::Idle, None));
 }
 
+/// Claude Code and Codex ask for the user with OSC 9 or the bell: a terminal out of sight is flagged in the list and on
+/// the Terminal tab and its message shows, until it is looked at; the terminal on screen is seen at once.
+#[gpui::test]
+fn a_program_asking_for_the_user_flags_its_terminal(cx: &mut TestAppContext) {
+    use crate::terminal::Finished;
+    let dir = single_file_dir("attention");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    wb.update(cx, |wb, _| wb.set_shell("/bin/cat"));
+    cx.simulate_keystrokes("ctrl-`");
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: New", window, cx));
+    wait_for(cx, "two terminals", |cx| wb.read_with(cx, |wb, _| wb.terminal_count()) == 2);
+    wb.update_in(cx, |_, window, _| window.activate_window());
+    cx.run_until_parked();
+    let all = wb.read_with(cx, |wb, _| wb.terminals_for_test());
+    let feed = |cx: &mut VisualTestContext, ix: usize, s: &str| all[ix].update(cx, |t, cx| t.feed_and_report_for_test(s.as_bytes(), cx));
+    let unseen = |cx: &mut VisualTestContext, ix: usize| all[ix].read_with(cx, |t, _| t.unseen_finish());
+    let asking = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, cx| wb.terminals_asking(cx));
+    feed(cx, 1, "\x07");
+    assert_eq!(unseen(cx, 1), None, "the bell of the terminal on screen is heard at once");
+    feed(cx, 0, "\x1b]9;Claude needs your permission\x07");
+    assert_eq!(unseen(cx, 0), Some(Finished::Attention));
+    assert_eq!(asking(cx), 1, "the Terminal tab counts it");
+    assert!(crate::qa_integration_tests::notice(&wb, cx).contains("Claude needs your permission"));
+    wb.update_in(cx, |wb, window, cx| wb.select_terminal_for_test(0, window, cx));
+    assert_eq!((unseen(cx, 0), asking(cx)), (None, 0), "looked at");
+}
+
+/// A command that ran for ten seconds says when it ends out of sight; on screen in the active window it says nothing.
+#[gpui::test]
+fn a_long_command_ending_out_of_sight_shows_a_notice(cx: &mut TestAppContext) {
+    let dir = single_file_dir("long-finish");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    wb.update(cx, |wb, _| wb.set_shell("/bin/cat"));
+    cx.simulate_keystrokes("ctrl-`");
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: New", window, cx));
+    wait_for(cx, "two terminals", |cx| wb.read_with(cx, |wb, _| wb.terminal_count()) == 2);
+    wb.update_in(cx, |_, window, _| window.activate_window());
+    cx.run_until_parked();
+    let all = wb.read_with(cx, |wb, _| wb.terminals_for_test());
+    let run = |cx: &mut VisualTestContext, ix: usize, typed: &str, code: i32| {
+        all[ix].update(cx, |t, cx| {
+            t.feed_and_report_for_test(format!("\x1b]133;A\x07{typed}\r\n\x1b]133;C\x07").as_bytes(), cx);
+            t.backdate_command_for_test(12);
+            t.feed_and_report_for_test(format!("\x1b]133;D;{code}\x07").as_bytes(), cx);
+        })
+    };
+    run(cx, 1, "$ cargo test", 0);
+    assert!(!crate::qa_integration_tests::notice(&wb, cx).contains("cargo test"), "watched on screen");
+    run(cx, 0, "$ cargo build", 101);
+    assert!(crate::qa_integration_tests::notice(&wb, cx).contains("Failed with code 101: $ cargo build"));
+}
+
 /// Several terminals: the split pair stays together whichever of the two is active and comes back after visiting another
 /// terminal; next and previous go round the list; closing one before the active terminal keeps the active one.
 #[gpui::test]
@@ -3516,9 +3570,7 @@ fn wait_ticking(cx: &mut VisualTestContext, what: &str, mut done: impl FnMut(&mu
 
 /// Git command in a temp directory (identity and default branch fixed for tests).
 fn git_in(dir: &std::path::Path, args: &[&str]) -> String {
-    let out = crate::test_git::git().args(args).current_dir(dir).output().unwrap();
-    assert!(out.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&out.stderr));
-    String::from_utf8_lossy(&out.stdout).into_owned()
+    crate::qa_integration_tests::git_in(dir, args)
 }
 
 #[gpui::test]

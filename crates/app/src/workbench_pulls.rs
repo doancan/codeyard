@@ -5,12 +5,22 @@ use super::*;
 use crate::git;
 use crate::github::{self, Pull};
 
+#[cfg(test)]
+#[path = "workbench_pull_race_tests.rs"]
+mod race_tests;
+
 #[derive(Clone, Copy, Debug)]
 pub(super) enum PullAction {
     Checkout,
     Open,
     CopyLink,
     CopyBranch,
+}
+
+#[derive(Clone)]
+pub(super) struct PullRemote {
+    pub name: String,
+    pub url: String,
 }
 
 fn token() -> Option<String> {
@@ -23,49 +33,67 @@ impl Workbench {
         self.notice = Some(Notice::Info(crate::i18n::t("Loading pull requests…").into()));
         cx.notify();
         let host = self.remote.host.clone();
+        let source_host = host.clone();
+        let source_root = root.clone();
         let task = cx.background_executor().spawn(async move {
             let remotes = git::remotes(host.as_ref(), &root)?;
             // `origin` first, then the first GitHub remote.
-            let found = remotes.iter().filter(|(n, _)| n == "origin").chain(remotes.iter()).find_map(|(n, u)| github::parse_remote(u).map(|r| (n.clone(), r)));
+            let mut found = None;
+            for (name, stored_url) in remotes.iter().filter(|(name, _)| name == "origin").chain(remotes.iter().filter(|(name, _)| name != "origin")) {
+                if stored_url.is_empty() {
+                    continue;
+                }
+                let url = git::resolved_remote_url(host.as_ref(), &root, name)?;
+                if let Some(repo) = github::parse_remote(&url) {
+                    found = Some((PullRemote { name: name.clone(), url }, repo));
+                    break;
+                }
+            }
             let (remote, repo) = found.ok_or_else(|| crate::i18n::t("None of this repository's remotes is on github.com.").to_string())?;
             let (pulls, source) = github::list_pulls(&github::SystemRunner, &repo, token().as_deref())?;
             Ok::<_, String>((remote, repo, pulls, source))
         });
         cx.spawn_in(window, async move |this, cx| {
             let result = task.await;
-            this.update_in(cx, |this, window, cx| match result {
-                Ok((remote, repo, pulls, source)) => {
-                    this.notice = None;
-                    if pulls.is_empty() {
-                        this.notice = Some(Notice::Info(crate::i18n::tf("{}: no open pull requests.", &[&repo.slug()]).into()));
-                        cx.notify();
-                        return;
-                    }
-                    let now = now_secs();
-                    let items: Vec<PickItem> = pulls
-                        .iter()
-                        .map(|p| PickItem { label: format!("#{} {}", p.number, p.title).into(), detail: Some(github::detail(p, now).into()), keys: None })
-                        .collect();
-                    let via = match source {
-                        github::Source::Cli => crate::i18n::t("via the gh CLI"),
-                        github::Source::Api { authenticated: true } => crate::i18n::t("via the GitHub API"),
-                        github::Source::Api { authenticated: false } => {
-                            crate::i18n::t("via the public GitHub API (set GITHUB_TOKEN or use gh for private repositories and check results)")
-                        }
-                    };
-                    let shown = if pulls.len() >= github::PAGE {
-                        crate::i18n::tf("latest {} open", &[&pulls.len()])
-                    } else {
-                        crate::i18n::tf("{} open", &[&pulls.len()])
-                    };
-                    let title = format!("{} · {shown} · {via}", repo.slug());
-                    let picker = cx
-                        .new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Pull requests"), "", None, cx).with_message(title));
-                    this.show_overlay(picker, OverlayKind::PullRequests { remote, pulls }, window, cx);
+            this.update_in(cx, |this, window, cx| {
+                if !this.git_context_matches(&source_host, &source_root) {
+                    return;
                 }
-                Err(e) => {
-                    this.notice = Some(Notice::Error(e.lines().next().unwrap_or(crate::i18n::t("could not load pull requests")).to_string().into()));
-                    cx.notify();
+                match result {
+                    Ok((remote, repo, pulls, source)) => {
+                        this.notice = None;
+                        if pulls.is_empty() {
+                            this.notice = Some(Notice::Info(crate::i18n::tf("{}: no open pull requests.", &[&repo.slug()]).into()));
+                            cx.notify();
+                            return;
+                        }
+                        let now = now_secs();
+                        let items: Vec<PickItem> = pulls
+                            .iter()
+                            .map(|p| PickItem { label: format!("#{} {}", p.number, p.title).into(), detail: Some(github::detail(p, now).into()), keys: None })
+                            .collect();
+                        let via = match source {
+                            github::Source::Cli => crate::i18n::t("via the gh CLI"),
+                            github::Source::Api { authenticated: true } => crate::i18n::t("via the GitHub API"),
+                            github::Source::Api { authenticated: false } => {
+                                crate::i18n::t("via the public GitHub API (set GITHUB_TOKEN or use gh for private repositories and check results)")
+                            }
+                        };
+                        let shown = if pulls.len() >= github::PAGE {
+                            crate::i18n::tf("latest {} open", &[&pulls.len()])
+                        } else {
+                            crate::i18n::tf("{} open", &[&pulls.len()])
+                        };
+                        let title = format!("{} · {shown} · {via}", repo.slug());
+                        let picker = cx.new(|cx| {
+                            Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Pull requests"), "", None, cx).with_message(title)
+                        });
+                        this.show_overlay(picker, OverlayKind::PullRequests { host: source_host, root: source_root, remote, pulls }, window, cx);
+                    }
+                    Err(e) => {
+                        this.notice = Some(Notice::Error(e.lines().next().unwrap_or(crate::i18n::t("could not load pull requests")).to_string().into()));
+                        cx.notify();
+                    }
                 }
             })
             .ok();
@@ -73,12 +101,15 @@ impl Workbench {
         .detach();
     }
 
-    pub(super) fn pick_pull_request(&mut self, remote: String, pull: Pull, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn pick_pull_request(&mut self, host: Arc<dyn Host>, root: String, remote: PullRemote, pull: Pull, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.git_context_matches(&host, &root) {
+            return;
+        }
         let choices = vec![PullAction::Checkout, PullAction::Open, PullAction::CopyLink, PullAction::CopyBranch];
         let items = vec![
             PickItem {
                 label: crate::i18n::tf("Check out #{} as pr-{}", &[&pull.number, &pull.number]).into(),
-                detail: Some(crate::i18n::tf("fetches {} from {}", &[&pull.head, &remote]).into()),
+                detail: Some(crate::i18n::tf("fetches {} from {}", &[&pull.head, &remote.name]).into()),
                 keys: None,
             },
             PickItem { label: crate::i18n::t("Open on GitHub").into(), detail: None, keys: None },
@@ -88,10 +119,10 @@ impl Workbench {
         let title = format!("#{} {}", pull.number, pull.title);
         let picker =
             cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Choose an action"), "", None, cx).with_message(title));
-        self.show_overlay(picker, OverlayKind::PullRequestActions { remote, pull, choices }, window, cx);
+        self.show_overlay(picker, OverlayKind::PullRequestActions { host, root, remote, pull, choices }, window, cx);
     }
 
-    pub(super) fn run_pull_action(&mut self, remote: String, pull: Pull, action: PullAction, cx: &mut Context<Self>) {
+    pub(super) fn run_pull_action(&mut self, remote: PullRemote, pull: Pull, action: PullAction, cx: &mut Context<Self>) {
         match action {
             PullAction::Open => cx.open_url(&pull.url),
             PullAction::CopyLink => {
@@ -108,9 +139,13 @@ impl Workbench {
                 let Some(root) = self.repo_root(cx) else { return };
                 let n = pull.number;
                 self.git_task(&crate::i18n::tf("Checking out pull request #{}…", &[&n]), cx, move |h| {
-                    // `-B`: if the branch exists it is reset to the PR's current tip (in case the PR was updated); git refuses if a dirty tree conflicts.
-                    git::fetch_pull(h, &root, &remote, n).map_err(|e| github::explain_checkout(&e, n, &remote))?;
-                    git::git_ok(h, &root, &["checkout", "-q", "-B", &format!("pr-{n}"), "FETCH_HEAD"]).map_err(|e| github::explain_checkout(&e, n, &remote))?;
+                    if git::resolved_remote_url(h, &root, &remote.name)? != remote.url {
+                        return Err(crate::i18n::tf(
+                            "Remote {} changed since this pull request list was loaded. Reopen the list and try again.",
+                            &[&remote.name],
+                        ));
+                    }
+                    git::checkout_pull(h, &root, &remote.url, n).map_err(|e| github::explain_checkout(&e, n, &remote.name))?;
                     Ok(crate::i18n::tf("Checked out #{} as pr-{}", &[&n, &n]))
                 });
             }
@@ -131,6 +166,13 @@ impl Workbench {
             review: None,
             checks: None,
         };
+        let remote = self.pull_remote_for_test(remote);
         self.run_pull_action(remote, pull, PullAction::Checkout, cx);
+    }
+
+    #[cfg(test)]
+    pub(super) fn pull_remote_for_test(&self, name: String) -> PullRemote {
+        let url = self.git_status().and_then(|status| git::resolved_remote_url(self.remote.host.as_ref(), &status.root, &name).ok()).unwrap_or_default();
+        PullRemote { name, url }
     }
 }

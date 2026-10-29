@@ -686,7 +686,7 @@ fn a_pull_request_branch_can_be_checked_out_and_refreshed(cx: &mut TestAppContex
     git_in(&other, &["commit", "-q", "-m", "feature v1"]);
     git_in(&other, &["push", "-q", "origin", "HEAD:refs/pull/7/head"]);
     // The workspace's remote looks like GitHub but resolves to the local bare repository.
-    git_in(&dir, &["config", &format!("url.{}.insteadOf", bare.display()), "https://github.com/o/r.git"]);
+    git_in(&dir, &["config", &format!("url.{}.insteadOf", crate::ui::local_path(&bare)), "https://github.com/o/r.git"]);
     git_in(&dir, &["remote", "set-url", "origin", "https://github.com/o/r.git"]);
     let (wb, cx) = setup(cx);
     crate::qa_workbench_tests::open(&wb, &dir, cx);
@@ -698,7 +698,11 @@ fn a_pull_request_branch_can_be_checked_out_and_refreshed(cx: &mut TestAppContex
             .trim()
             .to_string()
     };
-    wait_ticking(cx, "pr-7 checked out", |_| head() == "pr-7");
+    wait_ticking(cx, "pr-7 checked out", |cx| {
+        let notice = wb.read_with(cx, |wb, _| wb.notice_for_test());
+        assert!(!matches!(&notice, Some((true, _))), "checkout failed: {notice:?}");
+        head() == "pr-7"
+    });
     assert_eq!(std::fs::read_to_string(dir.join("feature.txt")).unwrap(), "v1\n");
     wait_ticking(cx, "notice", |cx| crate::qa_integration_tests::notice(&wb, cx).starts_with("Checked out #7"));
 

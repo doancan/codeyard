@@ -2,6 +2,10 @@
 
 use super::*;
 
+#[cfg(test)]
+#[path = "workbench_tab_menu_tests.rs"]
+mod tab_tests;
+
 impl Workbench {
     /// Run the action immediately (from buttons; regardless of where focus is).
     pub(super) fn dispatch_now(&mut self, action: &dyn gpui::Action, window: &mut Window, cx: &mut Context<Self>) {
@@ -11,6 +15,7 @@ impl Workbench {
     // --- File operations (tree context menu) ---
 
     pub(super) fn open_context_menu(&mut self, target: MenuTarget, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+        let context = super::types::InputContext::Workspace { host: self.remote.host.clone(), root: self.root(cx) };
         let is_root = self.all_roots(cx).contains(&target.path);
         let local_mac = !self.remote.host.is_remote() && cfg!(target_os = "macos");
         let remote = matches!(self.remote.conn, Conn::Connected { .. }) && self.remote.host.is_remote();
@@ -89,11 +94,16 @@ impl Workbench {
             commands.push(MenuCmd::Reveal);
         }
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);
+        if let Some(menu) = &mut self.menu {
+            menu.context = Some(context);
+        }
     }
 
     /// The tab's right-click menu.
     pub(super) fn open_tab_menu(&mut self, ix: usize, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
         let Some(ed) = self.tabs.editors.get(ix) else { return };
+        let tab = super::types::TabTarget { group: self.tabs.current_key(), editor: ed.entity_id() };
+        let context = super::types::InputContext::Workspace { host: self.remote.host.clone(), root: self.root(cx) };
         let (path, pinned) = {
             let e = ed.read(cx);
             (e.path.clone(), e.pinned)
@@ -139,8 +149,11 @@ impl Workbench {
             items.push(MenuItem::new(crate::i18n::t("Reveal in Finder")).separator());
             commands.push(MenuCmd::Reveal);
         }
-        let target = MenuTarget { path, is_dir: false, tab: Some(ix) };
+        let target = MenuTarget { path, is_dir: false, tab: Some(tab) };
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);
+        if let Some(menu) = &mut self.menu {
+            menu.context = Some(context);
+        }
     }
 
     /// The editor's right-click menu (VS Code order: navigation, replace, clipboard, palette).
@@ -261,6 +274,9 @@ impl Workbench {
                 return;
             }
             let Some(state) = this.close_menu(window, cx) else { return };
+            if state.context.as_ref().is_some_and(|context| !context.matches(this, cx)) {
+                return;
+            }
             if let MenuEvent::Select(i) = event {
                 match state.commands[*i] {
                     // Focus returned from the menu (editor): the action goes there.
@@ -278,7 +294,7 @@ impl Workbench {
         let return_focus = window.focused(cx);
         window.focus(&menu.focus_handle(cx));
         self.scm.update(cx, |scm, cx| scm.set_menu_open(true, cx));
-        self.menu = Some(MenuState { menu, position, target, commands, actions, return_focus, app_path: None, _sub: sub });
+        self.menu = Some(MenuState { menu, position, target, commands, actions, return_focus, app_path: None, context: None, _sub: sub });
         cx.notify();
     }
 
@@ -293,7 +309,22 @@ impl Workbench {
         Some(state)
     }
 
-    pub(super) fn run_menu_cmd(&mut self, cmd: MenuCmd, target: MenuTarget, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn run_menu_cmd(&mut self, cmd: MenuCmd, mut target: MenuTarget, window: &mut Window, cx: &mut Context<Self>) {
+        let tab_index = if let Some(tab) = target.tab {
+            if !self.tabs.contains_key(tab.group) {
+                return;
+            }
+            let Some((index, editor)) =
+                self.tabs.group(tab.group.id).and_then(|group| group.editors.iter().enumerate().find(|(_, editor)| editor.entity_id() == tab.editor))
+            else {
+                return;
+            };
+            target.path = editor.read(cx).path.clone();
+            self.focus_group_key(tab.group, window, cx);
+            Some(index)
+        } else {
+            None
+        };
         // If it isn't a folder, the new item goes into the same folder.
         let dir = if target.is_dir { target.path.clone() } else { parent_of(&target.path) };
         match cmd {
@@ -409,17 +440,17 @@ impl Workbench {
                 let _ = std::process::Command::new("open").arg("-R").arg(&target.path).spawn();
             }
             MenuCmd::CloseTab => {
-                if let Some(ix) = target.tab {
+                if let Some(ix) = tab_index {
                     self.close_editor_at(ix, window, cx);
                 }
             }
             MenuCmd::CloseOthers => {
-                let keep = target.tab;
+                let keep = tab_index;
                 let ix: Vec<usize> = (0..self.tabs.editors.len()).filter(|i| Some(*i) != keep).collect();
                 self.close_tabs(ix, window, cx);
             }
             MenuCmd::CloseRight => {
-                let from = target.tab.map_or(self.tabs.editors.len(), |t| t + 1);
+                let from = tab_index.map_or(self.tabs.editors.len(), |t| t + 1);
                 self.close_tabs((from..self.tabs.editors.len()).collect(), window, cx);
             }
             MenuCmd::CloseSaved => {
@@ -428,7 +459,7 @@ impl Workbench {
             }
             MenuCmd::Favorite => self.toggle_favorite(&target.path, cx),
             MenuCmd::TogglePin => {
-                if let Some(ix) = target.tab {
+                if let Some(ix) = tab_index {
                     self.toggle_pin(ix, cx);
                 }
             }

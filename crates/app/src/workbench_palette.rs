@@ -739,21 +739,30 @@ impl Workbench {
                 self.close_overlay(window, cx);
                 self.answer_launch_input(value, window, cx);
             }
-            (OverlayKind::TerminalLaunch(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
-                let launch = list[*index].clone();
+            (OverlayKind::TerminalLaunch { context, launches }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                if !context.matches(self, cx) {
+                    self.close_overlay(window, cx);
+                    return;
+                }
+                let launch = launches[*index].clone();
                 self.close_overlay(window, cx);
                 let cwd = self.active_root(cx);
                 self.new_terminal_launch(cwd, launch, window, cx);
             }
-            (OverlayKind::TerminalDefaultProfile(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
-                let name = list[*index].clone();
+            (OverlayKind::TerminalDefaultProfile { context, names }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                if !context.matches(self, cx) {
+                    self.close_overlay(window, cx);
+                    return;
+                }
+                let name = names[*index].clone();
                 self.close_overlay(window, cx);
                 self.write_setting("terminal.defaultProfile", serde_json::json!(name), window, cx);
             }
-            (OverlayKind::TerminalColor, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+            (OverlayKind::TerminalColor { terminal }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let terminal = *terminal;
                 let color = crate::terminal_profiles::COLORS[*index];
                 self.close_overlay(window, cx);
-                self.set_terminal_color(color, cx);
+                self.set_terminal_color(terminal, color, cx);
             }
             (OverlayKind::LaunchTemplates(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let snippet = list[*index].clone();
@@ -790,7 +799,11 @@ impl Workbench {
                     });
                 }
             }
-            (OverlayKind::Branches { root, choices }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+            (OverlayKind::Branches { host, root, choices }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                if !self.git_context_matches(host, root) {
+                    self.close_overlay(window, cx);
+                    return;
+                }
                 let (root, choice) = (root.clone(), choices[*index].clone());
                 self.close_overlay(window, cx);
                 self.pick_branch(root, choice, window, cx);
@@ -827,12 +840,20 @@ impl Workbench {
                 self.close_overlay(window, cx);
                 self.apply_spell_choice(editor, range, word, choice, cx);
             }
-            (OverlayKind::PullRequests { remote, pulls }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
-                let (remote, pull) = (remote.clone(), pulls[*index].clone());
+            (OverlayKind::PullRequests { host, root, remote, pulls }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                if !self.git_context_matches(host, root) {
+                    self.close_overlay(window, cx);
+                    return;
+                }
+                let (host, root, remote, pull) = (host.clone(), root.clone(), remote.clone(), pulls[*index].clone());
                 self.close_overlay(window, cx);
-                self.pick_pull_request(remote, pull, window, cx);
+                self.pick_pull_request(host, root, remote, pull, window, cx);
             }
-            (OverlayKind::PullRequestActions { remote, pull, choices, .. }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+            (OverlayKind::PullRequestActions { host, root, remote, pull, choices }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                if !self.git_context_matches(host, root) {
+                    self.close_overlay(window, cx);
+                    return;
+                }
                 let (remote, pull, action) = (remote.clone(), pull.clone(), choices[*index]);
                 self.close_overlay(window, cx);
                 self.run_pull_action(remote, pull, action, cx);
@@ -858,12 +879,20 @@ impl Workbench {
                 self.run_host_op(op, alias, window, cx);
             }
             // --- git-sync ---
-            (OverlayKind::SyncTarget(ops), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+            (OverlayKind::SyncTarget { host, root, ops }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                if !self.git_context_matches(host, root) {
+                    self.close_overlay(window, cx);
+                    return;
+                }
                 let op = ops[*index].clone();
                 self.close_overlay(window, cx);
                 self.git_sync(vec![op], cx);
             }
-            (OverlayKind::BranchOp { root, op, names }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+            (OverlayKind::BranchOp { host, root, op, names }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                if !self.git_context_matches(host, root) {
+                    self.close_overlay(window, cx);
+                    return;
+                }
                 let (root, op, name) = (root.clone(), *op, names[*index].clone());
                 self.close_overlay(window, cx);
                 self.run_branch_op(root, op, name, window, cx);
@@ -874,7 +903,7 @@ impl Workbench {
                 | OverlayKind::CodeActions { .. }
                 | OverlayKind::Branches { .. }
                 | OverlayKind::BranchOp { .. }
-                | OverlayKind::SyncTarget(_)
+                | OverlayKind::SyncTarget { .. }
                 | OverlayKind::RemoteTargets(_)
                 | OverlayKind::DockerContexts { .. }
                 | OverlayKind::ContainerEngines { .. }
@@ -895,9 +924,9 @@ impl Workbench {
                 | OverlayKind::DebugConfigs(_)
                 | OverlayKind::LaunchInput(_)
                 | OverlayKind::LaunchTemplates(_)
-                | OverlayKind::TerminalLaunch(_)
-                | OverlayKind::TerminalDefaultProfile(_)
-                | OverlayKind::TerminalColor
+                | OverlayKind::TerminalLaunch { .. }
+                | OverlayKind::TerminalDefaultProfile { .. }
+                | OverlayKind::TerminalColor { .. }
                 | OverlayKind::RemoveFolder(_)
                 | OverlayKind::CompareFolder { .. }
                 | OverlayKind::ExceptionFilters(_)
@@ -913,7 +942,7 @@ impl Workbench {
             ) => {
                 self.close_overlay(window, cx);
             }
-            (OverlayKind::Palette { .. } | OverlayKind::Input(_), PickerEvent::Dismiss) => {
+            (OverlayKind::Palette { .. } | OverlayKind::Input { .. }, PickerEvent::Dismiss) => {
                 self.close_overlay(window, cx);
             }
             // --- compare ---
@@ -921,9 +950,17 @@ impl Workbench {
                 let index = *index;
                 self.on_compare_pick(index, window, cx);
             }
-            (OverlayKind::Input(_), PickerEvent::Confirm(Pick::Input)) => {
-                let name = ov.picker.read(cx).query().trim().to_string();
-                if let Some(Overlay { kind: OverlayKind::Input(purpose), .. }) = self.close_overlay(window, cx) {
+            (OverlayKind::Input { .. }, PickerEvent::Confirm(Pick::Input)) => {
+                let query = ov.picker.read(cx).query();
+                let name = if matches!(&ov.kind, OverlayKind::Input { purpose: InputPurpose::SetRemoteUrl { .. }, .. }) {
+                    query.to_string()
+                } else {
+                    query.trim().to_string()
+                };
+                if let Some(Overlay { kind: OverlayKind::Input { purpose, context }, .. }) = self.close_overlay(window, cx) {
+                    if context.is_some_and(|context| !context.matches(self, cx)) {
+                        return;
+                    }
                     self.finish_input(purpose, name, window, cx);
                 }
             }

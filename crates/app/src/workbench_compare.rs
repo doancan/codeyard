@@ -268,7 +268,8 @@ impl Workbench {
                     v.end_op(cx);
                     v.rescan(cx);
                 });
-                this.notify_compare(Notice::Info(outcome.summary().into()), cx);
+                let message = outcome.summary().into();
+                this.notify_compare(if outcome.refused.is_empty() { Notice::Info(message) } else { Notice::Error(message) }, cx);
             })
             .ok();
         })
@@ -373,7 +374,7 @@ impl Workbench {
 #[derive(Debug, Default, PartialEq)]
 pub(super) struct CopyOutcome {
     pub copied: usize,
-    /// Entries left alone, each with the reason.
+    /// Entries whose copy was not confirmed, each with the reason. The destination may have changed.
     pub refused: Vec<(String, String)>,
     pub cancelled: bool,
 }
@@ -385,8 +386,8 @@ impl CopyOutcome {
             let (path, why) = &self.refused[0];
             text.push(' ');
             text.push_str(&crate::i18n::tn(
-                "{0} was left alone: {1}",
-                "{0} were left alone, the first one {1}",
+                "Copying {0} item was not confirmed: {1}",
+                "Copying {0} items was not confirmed; first: {1}",
                 self.refused.len(),
                 &[&format!("{path}: {why}")],
             ));
@@ -396,6 +397,36 @@ impl CopyOutcome {
             text.push_str(crate::i18n::t("Stopped."));
         }
         text
+    }
+}
+
+#[derive(Debug)]
+enum CopyFailure {
+    Cancelled,
+    Failed(String),
+}
+
+impl CopyFailure {
+    fn at(self, side: &str) -> Self {
+        match self {
+            Self::Cancelled => Self::Cancelled,
+            Self::Failed(message) => Self::Failed(format!("{side} ({message})")),
+        }
+    }
+}
+
+impl From<String> for CopyFailure {
+    fn from(message: String) -> Self {
+        Self::Failed(message)
+    }
+}
+
+impl From<HostError> for CopyFailure {
+    fn from(error: HostError) -> Self {
+        match error {
+            HostError::Op(proto::Error::Cancelled) => Self::Cancelled,
+            other => Self::Failed(other.to_string()),
+        }
     }
 }
 
@@ -410,140 +441,240 @@ fn op_err(e: HostError) -> String {
 }
 
 /// The content hash the agent computes for one file (`None` if it does not exist).
-fn hash_of(host: &dyn Host, root: &str, rel: &str) -> Result<Option<u64>, String> {
-    let stream = host.hash_tree(root, Vec::new(), false, 1, Some(vec![rel.to_string()])).map_err(op_err)?;
+fn hash_of(host: &dyn Host, root: &str, rel: &str) -> Result<Option<u64>, CopyFailure> {
+    let stream = host.hash_tree(root, Vec::new(), false, 1, Some(vec![rel.to_string()])).map_err(CopyFailure::from)?;
     let mut hash = None;
     loop {
         match stream.next() {
             Some(HashEvent::Records(records)) => {
                 for rec in records {
                     if let Some(e) = rec.error {
-                        return Err(e);
+                        return Err(e.into());
                     }
                     hash = rec.hash;
                 }
             }
             Some(HashEvent::Done { .. }) => return Ok(hash),
-            Some(HashEvent::Failed(e)) => return Err(e.to_string()),
-            None => return Err(crate::i18n::t("the connection was lost").to_string()),
+            Some(HashEvent::Failed(e)) => return Err(HostError::Op(e).into()),
+            None => return Err(crate::i18n::t("the connection was lost").to_string().into()),
         }
     }
 }
 
 /// Is the entry still what the scan saw?
-fn check(host: &dyn Host, root: &str, rel: &str, expect: &Expect) -> Result<(), String> {
+fn check(host: &dyn Host, root: &str, rel: &str, expect: &Expect) -> Result<(), CopyFailure> {
     let full = ui::join(root, rel);
     match expect {
         Expect::Absent => match host.stat(&full) {
             Err(HostError::Op(proto::Error::NotFound(_))) => Ok(()),
-            Ok(_) => Err(crate::i18n::t("it appeared after the scan").to_string()),
-            Err(e) => Err(op_err(e)),
+            Ok(_) => Err(crate::i18n::t("it appeared after the scan").to_string().into()),
+            Err(e) => Err(e.into()),
         },
         Expect::Hash(h) => match hash_of(host, root, rel)? {
             Some(now) if now == *h => Ok(()),
-            _ => Err(changed()),
+            _ => Err(changed().into()),
         },
         Expect::Stat { size, mtime_ms } => {
-            let m = host.stat(&full).map_err(op_err)?;
-            if m.size == *size && m.mtime_ms == *mtime_ms { Ok(()) } else { Err(changed()) }
+            let m = host.stat(&full).map_err(CopyFailure::from)?;
+            if m.size == *size && m.mtime_ms == *mtime_ms { Ok(()) } else { Err(changed().into()) }
         }
     }
 }
 
-fn stage_dir() -> PathBuf {
-    std::env::temp_dir().join(format!("codeyard-compare-{}-{}", std::process::id(), STAGE_COUNTER.fetch_add(1, Ordering::Relaxed)))
+fn stage_dir_at(parent: &Path, counter: &AtomicU64) -> std::io::Result<PathBuf> {
+    for _ in 0..100 {
+        let path = parent.join(format!("codeyard-compare-{}-{}", std::process::id(), counter.fetch_add(1, Ordering::Relaxed)));
+        let builder = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        let builder = {
+            use std::os::unix::fs::DirBuilderExt;
+            let mut builder = builder;
+            builder.mode(0o700);
+            builder
+        };
+        match builder.create(&path) {
+            Ok(()) => return Ok(path),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+    Err(std::io::Error::new(std::io::ErrorKind::AlreadyExists, crate::i18n::t("Could not reserve a temporary file for comparison.")))
+}
+
+fn stage_dir() -> std::io::Result<PathBuf> {
+    stage_dir_at(&std::env::temp_dir(), &STAGE_COUNTER)
 }
 
 /// Copy the files and folders of `jobs` from one side to the other. A file that is not what the scan saw, at either end, is
 /// left alone and named; the rest carries on.
 pub(super) fn copy_jobs(from: &End, to: &End, alias: Option<&str>, jobs: &[CopyJob], cancel: &AtomicBool) -> CopyOutcome {
     let mut outcome = CopyOutcome::default();
+    let mut blocked_folders: Vec<(String, String)> = Vec::new();
     for job in jobs {
         if cancel.load(Ordering::Relaxed) {
             outcome.cancelled = true;
             break;
         }
-        let result = if job.is_dir {
-            match to.host.create_dir(&ui::join(&to.path, &job.path)) {
-                Ok(()) | Err(HostError::Op(proto::Error::AlreadyExists(_))) => Ok(()),
-                Err(e) => Err(op_err(e)),
-            }
-        } else {
-            copy_file(from, to, alias, job, cancel)
-        };
+        if let Some((folder, why)) = blocked_folders.iter().find(|(folder, _)| job.path.strip_prefix(folder).is_some_and(|suffix| suffix.starts_with('/'))) {
+            outcome.refused.push((job.path.clone(), format!("{folder}: {why}")));
+            continue;
+        }
+        let result = (|| {
+            check_copy_path(from, job, false, cancel).map_err(|error| error.at(crate::i18n::t("source")))?;
+            check_copy_path(to, job, true, cancel).map_err(|error| error.at(crate::i18n::t("destination")))?;
+            if job.is_dir { copy_directory(to, job, cancel) } else { copy_file(from, to, alias, job, cancel) }
+        })();
         match result {
             Ok(()) => outcome.copied += 1,
-            Err(_) if cancel.load(Ordering::Relaxed) => outcome.cancelled = true,
-            Err(why) => outcome.refused.push((job.path.clone(), why)),
+            Err(CopyFailure::Cancelled) => {
+                outcome.cancelled = true;
+                break;
+            }
+            Err(CopyFailure::Failed(why)) => {
+                if job.is_dir {
+                    blocked_folders.push((job.path.clone(), why.clone()));
+                }
+                outcome.refused.push((job.path.clone(), why));
+                if cancel.load(Ordering::Relaxed) {
+                    outcome.cancelled = true;
+                    break;
+                }
+            }
         }
     }
     outcome
 }
 
-fn copy_file(from: &End, to: &End, alias: Option<&str>, job: &CopyJob, cancel: &AtomicBool) -> Result<(), String> {
+fn check_copy_path(end: &End, job: &CopyJob, allow_missing: bool, cancel: &AtomicBool) -> Result<(), CopyFailure> {
+    let mut path = end.path.clone();
+    let mut components = job.path.split('/').peekable();
+    while let Some(component) = components.next() {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(CopyFailure::Cancelled);
+        }
+        if component.is_empty() || matches!(component, "." | "..") {
+            return Err(changed().into());
+        }
+        path = ui::join(&path, component);
+        let expected = if components.peek().is_some() || job.is_dir { Kind::Dir } else { Kind::File };
+        match end.host.lstat(&path) {
+            Ok(meta) if meta.kind == expected => {}
+            Ok(_) => return Err(changed().into()),
+            Err(HostError::Op(proto::Error::NotFound(_))) if allow_missing => return Ok(()),
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
+}
+
+fn copy_directory(to: &End, job: &CopyJob, cancel: &AtomicBool) -> Result<(), CopyFailure> {
+    if cancel.load(Ordering::Relaxed) {
+        return Err(CopyFailure::Cancelled);
+    }
+    to.host.create_dir(&ui::join(&to.path, &job.path)).map_err(|error| match error {
+        HostError::Op(proto::Error::AlreadyExists(_)) => {
+            CopyFailure::Failed(format!("{} ({})", crate::i18n::t("destination"), crate::i18n::t("it appeared after the scan")))
+        }
+        other => CopyFailure::from(other).at(crate::i18n::t("destination")),
+    })
+}
+
+fn copy_file(from: &End, to: &End, alias: Option<&str>, job: &CopyJob, cancel: &AtomicBool) -> Result<(), CopyFailure> {
     let (src, dst) = (ui::join(&from.path, &job.path), ui::join(&to.path, &job.path));
-    check(from.host.as_ref(), &from.path, &job.path, &job.source).map_err(|why| format!("{} ({})", crate::i18n::t("source"), why))?;
-    check(to.host.as_ref(), &to.path, &job.path, &job.dest).map_err(|why| format!("{} ({})", crate::i18n::t("destination"), why))?;
-    let size = from.host.stat(&src).map_err(op_err)?.size;
+    check(from.host.as_ref(), &from.path, &job.path, &job.source).map_err(|error| error.at(crate::i18n::t("source")))?;
+    check(to.host.as_ref(), &to.path, &job.path, &job.dest).map_err(|error| error.at(crate::i18n::t("destination")))?;
+    let size = from.host.stat(&src).map_err(CopyFailure::from)?.size;
     if size > proto::MAX_FILE {
         return copy_big_file(from, to, alias, job, cancel);
     }
-    let (data, hash) = from.host.read(&src).map_err(op_err)?;
+    let (data, hash) = from.host.read(&src).map_err(CopyFailure::from)?;
+    if cancel.load(Ordering::Relaxed) {
+        return Err(CopyFailure::Cancelled);
+    }
     if let Expect::Hash(h) = job.source
         && hash != h
     {
-        return Err(format!("{} ({})", crate::i18n::t("source"), changed()));
+        return Err(format!("{} ({})", crate::i18n::t("source"), changed()).into());
     }
     let conflict = |e: HostError| match e {
-        HostError::Op(proto::Error::Conflict { .. }) => format!("{} ({})", crate::i18n::t("destination"), changed()),
-        other => op_err(other),
+        HostError::Op(proto::Error::Conflict { .. }) => CopyFailure::Failed(format!("{} ({})", crate::i18n::t("destination"), changed())),
+        HostError::Op(proto::Error::AlreadyExists(_)) => {
+            CopyFailure::Failed(format!("{} ({})", crate::i18n::t("destination"), crate::i18n::t("it appeared after the scan")))
+        }
+        other => CopyFailure::from(other),
     };
     match &job.dest {
-        // Created empty first: `create_file` never overwrites, and the write below then only succeeds on that empty file.
-        Expect::Absent => {
-            to.host.create_file(&dst).map_err(|e| match e {
-                HostError::Op(proto::Error::AlreadyExists(_)) => {
-                    format!("{} ({})", crate::i18n::t("destination"), crate::i18n::t("it appeared after the scan"))
-                }
-                other => op_err(other),
-            })?;
-            to.host.write(&dst, data, Some(proto::content_hash(&[]))).map(|_| ()).map_err(|e| {
-                let _ = to.host.delete(&dst);
-                conflict(e)
-            })
-        }
+        Expect::Absent => copy_new_file(to.host.as_ref(), &dst, data, cancel).map_err(conflict),
         Expect::Hash(h) => to.host.write(&dst, data, Some(*h)).map(|_| ()).map_err(conflict),
         Expect::Stat { .. } => {
-            let (_, now) = to.host.read(&dst).map_err(op_err)?;
+            let (_, now) = to.host.read(&dst).map_err(CopyFailure::from)?;
+            if cancel.load(Ordering::Relaxed) {
+                return Err(CopyFailure::Cancelled);
+            }
             to.host.write(&dst, data, Some(now)).map(|_| ()).map_err(conflict)
         }
     }
 }
 
+/// Keep the requested destination absent until publication. A failed write or
+/// exclusive rename may remove only the staging entry we reserved ourselves.
+fn copy_new_file(host: &dyn Host, destination: &str, data: Vec<u8>, cancel: &AtomicBool) -> Result<(), HostError> {
+    if cancel.load(Ordering::Relaxed) {
+        return Err(HostError::Op(proto::Error::Cancelled));
+    }
+    let parent = destination.rsplit_once('/').map_or(".", |(parent, _)| if parent.is_empty() { "/" } else { parent });
+    for _ in 0..100 {
+        let stage = ui::join(parent, &format!(".codeyard-compare-new-{}-{}", std::process::id(), STAGE_COUNTER.fetch_add(1, Ordering::Relaxed)));
+        if ui::file_name(&stage).eq_ignore_ascii_case(ui::file_name(destination)) {
+            continue;
+        }
+        match host.create_file(&stage) {
+            Err(HostError::Op(proto::Error::AlreadyExists(_))) => continue,
+            Err(error) => return Err(error),
+            Ok(()) => {}
+        }
+        if cancel.load(Ordering::Relaxed) {
+            let _ = host.delete(&stage);
+            return Err(HostError::Op(proto::Error::Cancelled));
+        }
+        let result = host.write(&stage, data, Some(proto::content_hash(&[]))).and_then(|_| {
+            if cancel.load(Ordering::Relaxed) {
+                return Err(HostError::Op(proto::Error::Cancelled));
+            }
+            host.rename(&stage, destination)
+        });
+        if result.is_err() {
+            let _ = host.delete(&stage);
+        }
+        return result;
+    }
+    Err(HostError::Op(proto::Error::Other(crate::i18n::t("Could not reserve a temporary file for comparison.").into())))
+}
+
 /// Files over the agent's size limit go through a temporary copy with the transfer code (streamed, no memory spike).
-fn copy_big_file(from: &End, to: &End, alias: Option<&str>, job: &CopyJob, cancel: &AtomicBool) -> Result<(), String> {
+fn copy_big_file(from: &End, to: &End, alias: Option<&str>, job: &CopyJob, cancel: &AtomicBool) -> Result<(), CopyFailure> {
     let (src, dst) = (ui::join(&from.path, &job.path), ui::join(&to.path, &job.path));
-    let stage = stage_dir();
+    let stage = stage_dir().map_err(|error| error.to_string())?;
     let result = (|| {
         let shell = alias.map(host::transfer::shell_for);
         let need_shell = || shell.as_ref().ok_or_else(|| crate::i18n::t("the connection was lost").to_string());
         let tmp_dir = stage.join("in");
         let staged = if from.host.is_remote() {
-            host::transfer::download(need_shell()?, &src, false, &tmp_dir, cancel, |_| {}).map_err(|e| e.to_string())?
+            host::transfer::download(need_shell()?, &src, false, &tmp_dir, cancel, |_| {}).map_err(CopyFailure::from)?
         } else {
-            host::transfer::copy_local(Path::new(&src), &tmp_dir, cancel, |_| {}).map_err(|e| e.to_string())?
+            host::transfer::copy_local(Path::new(&src), &tmp_dir, cancel, |_| {}).map_err(CopyFailure::from)?
         };
         if let Expect::Hash(h) = job.source {
             let now = std::fs::File::open(&staged).and_then(|mut f| proto::content_hash_reader(&mut f)).map_err(|e| e.to_string())?;
             if now != h {
-                return Err(format!("{} ({})", crate::i18n::t("source"), changed()));
+                return Err(format!("{} ({})", crate::i18n::t("source"), changed()).into());
             }
         }
         let parent = dst.rsplit_once('/').map_or("/", |(p, _)| if p.is_empty() { "/" } else { p }).to_string();
         if to.host.is_remote() {
-            host::transfer::upload(need_shell()?, &staged, &parent, cancel, |_| {}).map(|_| ()).map_err(|e| e.to_string())
+            host::transfer::upload(need_shell()?, &staged, &parent, cancel, |_| {}).map(|_| ()).map_err(CopyFailure::from)
         } else {
-            host::transfer::copy_local(&staged, Path::new(&parent), cancel, |_| {}).map(|_| ()).map_err(|e| e.to_string())
+            host::transfer::copy_local(&staged, Path::new(&parent), cancel, |_| {}).map(|_| ()).map_err(CopyFailure::from)
         }
     })();
     let _ = std::fs::remove_dir_all(&stage);
@@ -598,13 +729,25 @@ mod tests {
     }
 
     fn end(path: &Path) -> End {
-        End {
-            host: std::sync::Arc::new(host::local()),
-            path: path.to_string_lossy().into_owned(),
-            label: "This computer".into(),
-            machine: "local".into(),
-            local: true,
-        }
+        End { host: std::sync::Arc::new(host::local()), path: ui::local_path(path), label: "This computer".into(), machine: "local".into(), local: true }
+    }
+
+    fn hooked_host(mut hook: impl FnMut(&proto::Request) -> Option<proto::Response> + Send + 'static) -> std::sync::Arc<dyn Host> {
+        let (req_r, req_w) = std::io::pipe().unwrap();
+        let (resp_r, mut resp_w) = std::io::pipe().unwrap();
+        std::thread::spawn(move || {
+            let mut requests = std::io::BufReader::new(req_r);
+            while let Ok(Some(proto::Frame { id, body })) = proto::read_frame::<proto::Request>(&mut requests) {
+                if matches!(body, proto::Request::Bye) {
+                    break;
+                }
+                let response = hook(&body).unwrap_or_else(|| agent::handle(body));
+                if proto::write_frame(&mut resp_w, &proto::Frame { id, body: response }).is_err() {
+                    break;
+                }
+            }
+        });
+        std::sync::Arc::new(host::RemoteHost::from_streams(Box::new(resp_r), Box::new(req_w), "copy fixture").unwrap())
     }
 
     /// Classify two real folders through the agent, the way the view does (listing, then hashes of equal-sized files).
@@ -626,6 +769,434 @@ mod tests {
             }
         }
         logic::classify(&trees[0], &trees[1], [true, true], &HashMap::new())
+    }
+
+    #[test]
+    fn comparison_staging_is_reserved_before_any_contents_are_written() {
+        let root = tmp("stage-reservation");
+        let stage = stage_dir_at(&root, &AtomicU64::new(0)).unwrap();
+        assert!(stage.is_dir(), "a stage must be exclusively reserved before callers can clean it up");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(std::fs::metadata(&stage).unwrap().permissions().mode() & 0o777, 0o700);
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn comparison_staging_skips_preexisting_files_and_directories() {
+        let root = tmp("stage-preexisting");
+        let counter = AtomicU64::new(0);
+        let name = |index| root.join(format!("codeyard-compare-{}-{index}", std::process::id()));
+        std::fs::write(name(0), "keep file").unwrap();
+        std::fs::create_dir(name(1)).unwrap();
+        std::fs::write(name(1).join("precious.txt"), "keep contents").unwrap();
+        let stage = stage_dir_at(&root, &counter).unwrap();
+        assert_ne!(stage, name(0), "a preexisting file cannot become our stage");
+        assert_ne!(stage, name(1), "a preexisting directory cannot become our stage");
+        assert!(stage.is_dir());
+        std::fs::write(stage.join("ours.txt"), "new contents").unwrap();
+        std::fs::remove_dir_all(stage).unwrap();
+        assert_eq!(std::fs::read_to_string(name(0)).unwrap(), "keep file");
+        assert_eq!(std::fs::read_to_string(name(1).join("precious.txt")).unwrap(), "keep contents");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[cfg(any(unix, windows))]
+    fn comparison_staging_never_reuses_directory_links() {
+        for dangling in [false, true] {
+            let root = tmp(if dangling { "stage-dangling-link" } else { "stage-directory-link" });
+            let target = root.join("target");
+            if !dangling {
+                std::fs::create_dir(&target).unwrap();
+                std::fs::write(target.join("precious.txt"), "keep contents").unwrap();
+            }
+            let link = root.join(format!("codeyard-compare-{}-0", std::process::id()));
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(&target, &link).unwrap();
+            #[cfg(windows)]
+            {
+                let output = std::process::Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(&link).arg(&target).output().unwrap();
+                assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+            }
+            let stage = stage_dir_at(&root, &AtomicU64::new(0)).unwrap();
+            assert_ne!(stage, link);
+            std::fs::write(stage.join("ours.txt"), "new contents").unwrap();
+            std::fs::remove_dir_all(stage).unwrap();
+            assert!(std::fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+            if !dangling {
+                assert_eq!(std::fs::read_to_string(target.join("precious.txt")).unwrap(), "keep contents");
+                assert_eq!(std::fs::read_dir(&target).unwrap().count(), 1);
+            } else {
+                assert!(!target.exists());
+            }
+            std::fs::remove_dir_all(root).unwrap();
+        }
+    }
+
+    #[test]
+    fn comparison_staging_reports_creation_errors_without_touching_existing_data() {
+        let root = tmp("stage-create-error");
+        let parent = root.join("file.txt");
+        std::fs::write(&parent, "keep file").unwrap();
+        assert!(stage_dir_at(&parent, &AtomicU64::new(0)).is_err());
+        assert_eq!(std::fs::read_to_string(parent).unwrap(), "keep file");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[cfg(any(unix, windows))]
+    fn copying_a_nested_file_refuses_source_and_destination_parent_links() {
+        for source_link in [false, true] {
+            let (left, right, outside) = (
+                tmp(&format!("parent-link-{source_link}-left")),
+                tmp(&format!("parent-link-{source_link}-right")),
+                tmp(&format!("parent-link-{source_link}-outside")),
+            );
+            std::fs::create_dir_all(left.join("pack/inner")).unwrap();
+            std::fs::create_dir_all(right.join("pack/inner")).unwrap();
+            std::fs::write(left.join("pack/inner/file.txt"), "source content").unwrap();
+            std::fs::write(right.join("pack/inner/file.txt"), "original").unwrap();
+            let jobs = logic::plan_copy(&rows_of(&left, &right), "pack/inner/file.txt", Direction::LeftToRight).jobs;
+            let link = if source_link { left.join("pack") } else { right.join("pack") };
+            let target = outside.join("moved-pack");
+            std::fs::rename(&link, &target).unwrap();
+            #[cfg(unix)]
+            std::os::unix::fs::symlink(&target, &link).unwrap();
+            #[cfg(windows)]
+            {
+                let output = std::process::Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(&link).arg(&target).output().unwrap();
+                assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+            }
+            let outcome = copy_jobs(&end(&left), &end(&right), None, &jobs, &AtomicBool::new(false));
+            assert_eq!(outcome.copied, 0, "source link: {source_link}; {outcome:?}");
+            assert_eq!(outcome.refused.len(), 1, "{outcome:?}");
+            assert_eq!(std::fs::read_to_string(target.join("inner/file.txt")).unwrap(), if source_link { "source content" } else { "original" });
+            assert_eq!(std::fs::read_to_string(right.join("pack/inner/file.txt")).unwrap(), "original");
+        }
+    }
+
+    #[test]
+    fn copying_one_nested_file_still_creates_missing_destination_parents() {
+        let (left, right) = (tmp("missing-copy-parents-left"), tmp("missing-copy-parents-right"));
+        std::fs::create_dir_all(left.join("pack/inner")).unwrap();
+        std::fs::write(left.join("pack/inner/file.txt"), "source content").unwrap();
+        let jobs = logic::plan_copy(&rows_of(&left, &right), "pack/inner/file.txt", Direction::LeftToRight).jobs;
+        let outcome = copy_jobs(&end(&left), &end(&right), None, &jobs, &AtomicBool::new(false));
+        assert_eq!(outcome, CopyOutcome { copied: 1, ..Default::default() });
+        assert_eq!(std::fs::read_to_string(right.join("pack/inner/file.txt")).unwrap(), "source content");
+    }
+
+    #[test]
+    fn new_folder_collisions_are_errors_and_block_their_descendants() {
+        for is_file in [false, true] {
+            let (left, right) = (tmp(&format!("folder-clash-{is_file}-left")), tmp(&format!("folder-clash-{is_file}-right")));
+            std::fs::create_dir(left.join("pack")).unwrap();
+            std::fs::write(left.join("pack/new.txt"), "source content").unwrap();
+            std::fs::write(left.join("package.txt"), "unrelated sibling").unwrap();
+            let rows = rows_of(&left, &right);
+            let mut jobs = logic::plan_copy(&rows, "pack", Direction::LeftToRight).jobs;
+            jobs.extend(logic::plan_copy(&rows, "package.txt", Direction::LeftToRight).jobs);
+            if is_file {
+                std::fs::write(right.join("pack"), "keep file").unwrap();
+            } else {
+                std::fs::create_dir(right.join("pack")).unwrap();
+                std::fs::write(right.join("pack/precious.txt"), "keep contents").unwrap();
+            }
+            let outcome = copy_jobs(&end(&left), &end(&right), None, &jobs, &AtomicBool::new(false));
+            assert_eq!(outcome.copied, 1, "{outcome:?}");
+            assert_eq!(outcome.refused.len(), jobs.len() - 1, "the conflicting folder and its subtree must be refused: {outcome:?}");
+            assert_eq!(std::fs::read_to_string(right.join("package.txt")).unwrap(), "unrelated sibling", "a matching basename prefix is not a descendant");
+            if is_file {
+                assert_eq!(std::fs::read_to_string(right.join("pack")).unwrap(), "keep file");
+            } else {
+                assert_eq!(std::fs::read_to_string(right.join("pack/precious.txt")).unwrap(), "keep contents");
+                assert!(!right.join("pack/new.txt").exists());
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(any(unix, windows))]
+    fn a_source_folder_removed_or_replaced_since_the_scan_cannot_create_a_destination() {
+        for replacement in ["missing", "file", "link"] {
+            let (left, right) = (tmp(&format!("changed-folder-{replacement}-left")), tmp(&format!("changed-folder-{replacement}-right")));
+            std::fs::create_dir(left.join("empty")).unwrap();
+            let jobs = logic::plan_copy(&rows_of(&left, &right), "empty", Direction::LeftToRight).jobs;
+            std::fs::remove_dir(left.join("empty")).unwrap();
+            if replacement == "file" {
+                std::fs::write(left.join("empty"), "now a file").unwrap();
+            } else if replacement == "link" {
+                let target = left.join("other");
+                std::fs::create_dir(&target).unwrap();
+                #[cfg(unix)]
+                std::os::unix::fs::symlink(target, left.join("empty")).unwrap();
+                #[cfg(windows)]
+                {
+                    let output = std::process::Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(left.join("empty")).arg(target).output().unwrap();
+                    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+                }
+            }
+            let outcome = copy_jobs(&end(&left), &end(&right), None, &jobs, &AtomicBool::new(false));
+            assert_eq!(outcome.copied, 0, "{outcome:?}");
+            assert_eq!(outcome.refused.len(), 1, "{outcome:?}");
+            assert!(!right.join("empty").exists());
+        }
+    }
+
+    #[test]
+    #[cfg(any(unix, windows))]
+    fn a_folder_link_appearing_during_creation_cannot_receive_child_copies() {
+        let (left, right, outside) = (tmp("folder-link-left"), tmp("folder-link-right"), tmp("folder-link-outside"));
+        std::fs::create_dir(left.join("pack")).unwrap();
+        std::fs::write(left.join("pack/new.txt"), "source content").unwrap();
+        std::fs::write(outside.join("precious.txt"), "keep contents").unwrap();
+        let jobs = logic::plan_copy(&rows_of(&left, &right), "pack", Direction::LeftToRight).jobs;
+        let target = outside.clone();
+        let linked = std::sync::Arc::new(AtomicBool::new(false));
+        let observed = linked.clone();
+        let mut destination = end(&right);
+        destination.host = hooked_host(move |request| {
+            if let proto::Request::CreateDir { path } = request {
+                #[cfg(unix)]
+                std::os::unix::fs::symlink(&target, path).unwrap();
+                #[cfg(windows)]
+                {
+                    let output =
+                        std::process::Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(path.replace('/', "\\")).arg(&target).output().unwrap();
+                    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+                }
+                observed.store(true, Ordering::Relaxed);
+            }
+            None
+        });
+        let outcome = copy_jobs(&end(&left), &destination, None, &jobs, &AtomicBool::new(false));
+        assert!(linked.load(Ordering::Relaxed), "the test must create the concurrent directory link");
+        assert_eq!(outcome.copied, 0, "{outcome:?}");
+        assert_eq!(outcome.refused.len(), jobs.len(), "{outcome:?}");
+        assert!(!outside.join("new.txt").exists(), "copying cannot escape through a newly appeared link");
+        assert_eq!(std::fs::read_to_string(outside.join("precious.txt")).unwrap(), "keep contents");
+    }
+
+    #[test]
+    fn a_typed_cancellation_stops_copies_without_becoming_an_error() {
+        for phase in ["stat", "read", "write"] {
+            let (left, right) = (tmp(&format!("typed-cancel-{phase}-left")), tmp(&format!("typed-cancel-{phase}-right")));
+            std::fs::write(left.join("file.txt"), "source content").unwrap();
+            std::fs::write(left.join("next.txt"), "next file").unwrap();
+            std::fs::write(right.join("file.txt"), "original").unwrap();
+            let rows = rows_of(&left, &right);
+            let mut jobs = logic::plan_copy(&rows, "file.txt", Direction::LeftToRight).jobs;
+            jobs.extend(logic::plan_copy(&rows, "next.txt", Direction::LeftToRight).jobs);
+            let peer = hooked_host(move |request| {
+                let cancel = matches!(
+                    (phase, request),
+                    ("stat", proto::Request::Stat { .. }) | ("read", proto::Request::Read { .. }) | ("write", proto::Request::Write { .. })
+                );
+                cancel.then_some(proto::Response::Error(proto::Error::Cancelled))
+            });
+            let (mut from, mut to) = (end(&left), end(&right));
+            if phase == "write" {
+                to.host = peer;
+            } else {
+                from.host = peer;
+            }
+            let outcome = copy_jobs(&from, &to, None, &jobs, &AtomicBool::new(false));
+            assert_eq!(outcome, CopyOutcome { cancelled: true, ..Default::default() }, "phase: {phase}");
+            assert_eq!(std::fs::read_to_string(right.join("file.txt")).unwrap(), "original");
+            assert!(!right.join("next.txt").exists(), "no later job runs after a typed cancellation");
+        }
+    }
+
+    #[test]
+    fn a_concurrent_cancel_request_cannot_hide_a_copy_error() {
+        let (left, right) = (tmp("cancel-error-left"), tmp("cancel-error-right"));
+        std::fs::write(left.join("file.txt"), "source content").unwrap();
+        std::fs::write(right.join("file.txt"), "original").unwrap();
+        let jobs = logic::plan_copy(&rows_of(&left, &right), "file.txt", Direction::LeftToRight).jobs;
+        let cancel = std::sync::Arc::new(AtomicBool::new(false));
+        let on_write = cancel.clone();
+        let mut destination = end(&right);
+        destination.host = hooked_host(move |request| {
+            if let proto::Request::Write { path, .. } = request {
+                on_write.store(true, Ordering::Relaxed);
+                return Some(proto::Response::Error(proto::Error::PermissionDenied(path.clone())));
+            }
+            None
+        });
+        let outcome = copy_jobs(&end(&left), &destination, None, &jobs, &cancel);
+        assert!(outcome.cancelled);
+        assert_eq!(outcome.refused.len(), 1, "the operation error must remain visible: {outcome:?}");
+        assert!(outcome.summary().contains("permission denied"), "{}", outcome.summary());
+        assert_eq!(std::fs::read_to_string(right.join("file.txt")).unwrap(), "original");
+    }
+
+    #[test]
+    fn a_lost_write_reply_is_reported_even_when_cancellation_is_requested() {
+        let (left, right) = (tmp("lost-write-left"), tmp("lost-write-right"));
+        std::fs::write(left.join("file.txt"), "source content").unwrap();
+        std::fs::write(right.join("file.txt"), "original").unwrap();
+        let jobs = logic::plan_copy(&rows_of(&left, &right), "file.txt", Direction::LeftToRight).jobs;
+        let cancel = std::sync::Arc::new(AtomicBool::new(false));
+        let on_write = cancel.clone();
+        let (req_r, req_w) = std::io::pipe().unwrap();
+        let (resp_r, mut resp_w) = std::io::pipe().unwrap();
+        std::thread::spawn(move || {
+            let mut requests = std::io::BufReader::new(req_r);
+            while let Ok(Some(proto::Frame { id, body })) = proto::read_frame::<proto::Request>(&mut requests) {
+                if matches!(body, proto::Request::Bye) {
+                    break;
+                }
+                let is_write = matches!(body, proto::Request::Write { .. });
+                let response = agent::handle(body);
+                if is_write {
+                    assert!(matches!(response, proto::Response::Written { .. }));
+                    on_write.store(true, Ordering::Relaxed);
+                    break; // The write completed, but its acknowledgement never reaches the client.
+                }
+                if proto::write_frame(&mut resp_w, &proto::Frame { id, body: response }).is_err() {
+                    break;
+                }
+            }
+        });
+        let mut destination = end(&right);
+        destination.host = std::sync::Arc::new(host::RemoteHost::from_streams(Box::new(resp_r), Box::new(req_w), "lost write").unwrap());
+        let outcome = copy_jobs(&end(&left), &destination, None, &jobs, &cancel);
+        assert_eq!(std::fs::read_to_string(right.join("file.txt")).unwrap(), "source content", "the server really wrote the destination");
+        assert!(outcome.cancelled);
+        assert_eq!(outcome.refused.len(), 1, "a lost reply must not become a clean cancellation: {outcome:?}");
+        assert!(!outcome.summary().contains("left alone"), "the destination was changed: {}", outcome.summary());
+    }
+
+    #[test]
+    fn a_large_comparison_copy_streams_the_complete_file() {
+        let (left, right) = (tmp("large-copy-left"), tmp("large-copy-right"));
+        let source = left.join("large.bin");
+        std::fs::File::create(&source).unwrap().set_len(proto::MAX_FILE + 1).unwrap();
+        let from = end(&left);
+        let to = end(&right);
+        let metadata = from.host.stat(&ui::join(&from.path, "large.bin")).unwrap();
+        let job = CopyJob {
+            path: "large.bin".into(),
+            is_dir: false,
+            source: Expect::Stat { size: metadata.size, mtime_ms: metadata.mtime_ms },
+            dest: Expect::Absent,
+        };
+        let outcome = copy_jobs(&from, &to, None, &[job], &AtomicBool::new(false));
+        assert_eq!(outcome, CopyOutcome { copied: 1, ..Default::default() });
+        let destination = right.join("large.bin");
+        assert_eq!(std::fs::metadata(&destination).unwrap().len(), proto::MAX_FILE + 1);
+        let hash = |path: &Path| proto::content_hash_reader(&mut std::fs::File::open(path).unwrap()).unwrap();
+        assert_eq!(hash(&source), hash(&destination));
+        std::fs::remove_dir_all(left).unwrap();
+        std::fs::remove_dir_all(right).unwrap();
+    }
+
+    #[test]
+    fn a_destination_edited_during_a_new_copy_is_never_deleted_on_conflict() {
+        let (left, right) = (tmp("copy-race-left"), tmp("copy-race-right"));
+        std::fs::write(left.join("file.txt"), "source").unwrap();
+        let job = logic::plan_copy(&rows_of(&left, &right), "file.txt", Direction::LeftToRight).jobs;
+        let target = right.join("file.txt");
+        let concurrent = target.clone();
+        let edited = std::sync::Arc::new(AtomicBool::new(false));
+        let observed = edited.clone();
+        let mut destination = end(&right);
+        destination.host = hooked_host(move |request| {
+            if matches!(request, proto::Request::Write { .. }) {
+                std::fs::write(&concurrent, "concurrent edit").unwrap();
+                observed.store(true, Ordering::Relaxed);
+            }
+            None
+        });
+        let outcome = copy_jobs(&end(&left), &destination, None, &job, &AtomicBool::new(false));
+        assert!(edited.load(Ordering::Relaxed), "the test must reach the concurrent edit");
+        assert_eq!(outcome.copied, 0, "{outcome:?}");
+        assert_eq!(outcome.refused.len(), 1, "{outcome:?}");
+        assert_eq!(std::fs::read_to_string(target).unwrap(), "concurrent edit");
+        assert_eq!(std::fs::read_dir(&right).unwrap().count(), 1, "only the destination remains");
+    }
+
+    #[test]
+    fn new_copy_staging_collisions_and_write_failures_preserve_other_files() {
+        for reject_write in [false, true] {
+            let root = tmp(if reject_write { "stage-failure" } else { "stage-collision" });
+            let planted = std::sync::Arc::new(std::sync::Mutex::new(None::<PathBuf>));
+            let observed = planted.clone();
+            let peer = hooked_host(move |request| {
+                if let proto::Request::CreateFile { path } = request {
+                    let mut planted = observed.lock().unwrap();
+                    if planted.is_none() {
+                        std::fs::write(path, "unrelated file").unwrap();
+                        *planted = Some(PathBuf::from(path));
+                    }
+                }
+                if reject_write && let proto::Request::Write { path, .. } = request {
+                    return Some(proto::Response::Error(proto::Error::PermissionDenied(path.clone())));
+                }
+                None
+            });
+            let target = ui::join(&ui::local_path(&root), "file.txt");
+            let result = copy_new_file(peer.as_ref(), &target, b"new contents".to_vec(), &AtomicBool::new(false));
+            if reject_write {
+                assert!(matches!(result, Err(HostError::Op(proto::Error::PermissionDenied(_)))), "{result:?}");
+                assert!(!root.join("file.txt").exists(), "failed writes leave no destination placeholder");
+            } else {
+                result.unwrap();
+                assert_eq!(std::fs::read_to_string(root.join("file.txt")).unwrap(), "new contents");
+            }
+            assert_eq!(std::fs::read_to_string(planted.lock().unwrap().as_ref().unwrap()).unwrap(), "unrelated file");
+            assert_eq!(std::fs::read_dir(&root).unwrap().count(), if reject_write { 1 } else { 2 });
+        }
+    }
+
+    #[test]
+    fn cancellation_after_staging_a_new_file_removes_only_the_stage() {
+        let root = tmp("stage-cancelled");
+        let cancel = std::sync::Arc::new(AtomicBool::new(false));
+        let on_write = cancel.clone();
+        let peer = hooked_host(move |request| {
+            if matches!(request, proto::Request::Write { .. }) {
+                on_write.store(true, Ordering::Relaxed);
+            }
+            None
+        });
+        let result = copy_new_file(peer.as_ref(), &ui::join(&ui::local_path(&root), "file.txt"), b"contents".to_vec(), &cancel);
+        assert!(matches!(result, Err(HostError::Op(proto::Error::Cancelled))), "{result:?}");
+        assert_eq!(std::fs::read_dir(root).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn cancellation_during_source_or_destination_read_cannot_overwrite_the_destination() {
+        for source_side in [true, false] {
+            let (left, right) =
+                if source_side { (tmp("read-cancel-left"), tmp("read-cancel-right")) } else { (tmp("dest-read-cancel-left"), tmp("dest-read-cancel-right")) };
+            std::fs::write(left.join("file.txt"), "source content").unwrap();
+            std::fs::write(right.join("file.txt"), "original").unwrap();
+            let jobs = logic::plan_copy(&rows_of(&left, &right), "file.txt", Direction::LeftToRight).jobs;
+            let cancel = std::sync::Arc::new(AtomicBool::new(false));
+            let on_read = cancel.clone();
+            let mut source = end(&left);
+            let peer = hooked_host(move |request| {
+                if matches!(request, proto::Request::Read { .. }) {
+                    on_read.store(true, Ordering::Relaxed);
+                }
+                None
+            });
+            let mut destination = end(&right);
+            if source_side {
+                source.host = peer;
+            } else {
+                destination.host = peer;
+            }
+            let outcome = copy_jobs(&source, &destination, None, &jobs, &cancel);
+            assert!(cancel.load(Ordering::Relaxed), "the test must reach the read");
+            assert_eq!(outcome.copied, 0, "{outcome:?}");
+            assert!(outcome.cancelled, "{outcome:?}");
+            assert_eq!(std::fs::read_to_string(right.join("file.txt")).unwrap(), "original");
+        }
     }
 
     #[test]

@@ -148,23 +148,45 @@ pub fn rename_branch(host: &dyn Host, root: &str, old: &str, new: &str) -> Resul
 
 /// Remotes: (name, URL).
 pub fn remotes(host: &dyn Host, root: &str) -> Result<Vec<(String, String)>, String> {
-    let out = git_ok(host, root, &["remote", "-v"])?;
-    Ok(parse_remotes(&out))
+    let out = git(host, root, &["config", "--null", "--get-regexp", r"^remote\..*\."])?;
+    // No matching configuration is a normal empty inventory (exit 1).
+    if out.ok() || out.code == Some(1) && out.stdout.is_empty() && out.stderr.is_empty() {
+        Ok(parse_remotes(&out.stdout_str()))
+    } else {
+        Err(failure_text(&out))
+    }
 }
 
-/// A repository can hold a remote named `--upload-pack=<cmd>`; such names are left out, so nothing offers them and no command line gets one.
+/// Effective fetch URL after Git applies `url.*.insteadOf` rules. Keep the stored
+/// value from `remotes` for editing; use this one when identifying the hosting service.
+pub fn resolved_remote_url(host: &dyn Host, root: &str, name: &str) -> Result<String, String> {
+    plain_name(name)?;
+    let url = git_ok(host, root, &["remote", "get-url", "--", name])?;
+    Ok(url.strip_suffix('\n').unwrap_or(&url).to_string())
+}
+
+/// Parse NUL-delimited `git config` records (`key\nvalue\0`). The value may contain
+/// whitespace, including newlines. Keep the first configured fetch URL verbatim.
 pub fn parse_remotes(out: &str) -> Vec<(String, String)> {
-    let mut v: Vec<(String, String)> = Vec::new();
-    for line in out.lines() {
-        let mut p = line.split_whitespace();
-        if let (Some(n), Some(u)) = (p.next(), p.next())
-            && plain_name(n).is_ok()
-            && !v.iter().any(|(x, _)| x == n)
-        {
-            v.push((n.to_string(), u.to_string()));
+    let mut entries: Vec<(String, Option<String>)> = Vec::new();
+    for record in out.split('\0') {
+        let Some((key, value)) = record.split_once('\n') else { continue };
+        let Some((name, field)) = key.strip_prefix("remote.").and_then(|key| key.rsplit_once('.')) else { continue };
+        // Never offer option-shaped names to callers that will pass them to Git.
+        if plain_name(name).is_err() {
+            continue;
+        }
+        let index = entries.iter().position(|(entry, _)| entry == name).unwrap_or_else(|| {
+            entries.push((name.to_string(), None));
+            entries.len() - 1
+        });
+        if field == "url" && entries[index].1.is_none() {
+            entries[index].1 = Some(value.to_string());
         }
     }
-    v
+    let mut entries: Vec<_> = entries.into_iter().map(|(name, url)| (name, url.unwrap_or_default())).collect();
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    entries
 }
 
 pub fn add_remote(host: &dyn Host, root: &str, name: &str, url: &str) -> Result<(), String> {
@@ -247,6 +269,44 @@ mod tests {
     }
 
     #[test]
+    fn remote_config_parsing_keeps_fetch_urls_and_safe_names_in_sorted_order() {
+        let config = "remote.z.fetch\n+refs/heads/*:refs/remotes/z/*\0remote.origin.pushurl\n/push only\0remote.origin.url\n/fetch with spaces\0remote.origin.url\n/second fetch\0remote.team.name.url\n/repo (fetch)\0remote.--upload-pack=command.url\nignored\0remote.empty.url\n\0remote.empty.url\nnot the first URL\0remote.pushdefault\norigin\0malformed\0";
+        assert_eq!(
+            parse_remotes(config),
+            vec![
+                ("empty".into(), "".into()),
+                ("origin".into(), "/fetch with spaces".into()),
+                ("team.name".into(), "/repo (fetch)".into()),
+                ("z".into(), "".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn remotes_preserve_complete_configured_urls() {
+        let Some((dir, _)) = repo("remote-url-values") else { return };
+        let host = host::local();
+        let root = crate::ui::local_path(&dir);
+        for url in ["C:/team repos/çalışma.git", "/srv/repo (fetch) (push)", " /srv/repo\twith tab.git ", "/srv/first\nsecond.git", ""] {
+            git_ok(&host, &root, &["config", "remote.origin.url", url]).unwrap();
+            assert_eq!(
+                remotes(&host, &root).unwrap(),
+                vec![("origin".into(), url.into())],
+                "URL contents must not be split or interpreted as Git's display suffix"
+            );
+        }
+        git_ok(&host, &root, &["config", "url.https://example.invalid/.insteadOf", "shortcut:"]).unwrap();
+        git_ok(&host, &root, &["config", "remote.origin.url", "shortcut:project with spaces"]).unwrap();
+        assert_eq!(resolved_remote_url(&host, &root, "origin").unwrap(), "https://example.invalid/project with spaces");
+        assert_eq!(
+            remotes(&host, &root).unwrap(),
+            vec![("origin".into(), "shortcut:project with spaces".into())],
+            "editing must show the stored URL rather than replacing its insteadOf shorthand"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn remotes_add_remove_publish() {
         let Some((dir, run)) = repo("remotes") else { return };
         let bare = std::env::temp_dir().join(format!("codeyard-bare-{}", std::process::id()));
@@ -261,7 +321,7 @@ mod tests {
         assert!(run(&["rev-parse", "--abbrev-ref", "main@{upstream}"]).is_some(), "tracking was set up");
         assert_eq!(remove_remote(&host, &root, "origin"), Ok(()));
         assert!(remotes(&host, &root).unwrap().is_empty());
-        assert_eq!(parse_remotes("o\tgit@x:a.git (fetch)\no\tgit@x:a.git (push)\nu\thttps://h/u (fetch)\n").len(), 2);
+        assert_eq!(parse_remotes("remote.o.url\ngit@x:a.git\0remote.o.pushurl\ngit@x:push.git\0remote.u.url\nhttps://h/u\0").len(), 2);
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::remove_dir_all(&bare);
     }

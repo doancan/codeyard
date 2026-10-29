@@ -572,6 +572,7 @@ struct MenuState {
     actions: Vec<Box<dyn gpui::Action>>,
     return_focus: Option<FocusHandle>,
     app_path: Option<Vec<usize>>,
+    context: Option<types::InputContext>,
     _sub: Subscription,
 }
 
@@ -579,8 +580,8 @@ struct MenuState {
 struct MenuTarget {
     path: String,
     is_dir: bool,
-    /// Tab index if this is a tab menu.
-    tab: Option<usize>,
+    /// Stable editor view and group lifetime if this is a tab menu.
+    tab: Option<types::TabTarget>,
 }
 
 /// Layout to restore when leaving zen mode.
@@ -1457,15 +1458,16 @@ impl Workbench {
                             cx.notify();
                         }),
                     ))
-                    .child(panel_tab("terminal-tab", crate::i18n::t("Terminal").into(), self.chrome.bottom == Bottom::Terminal, 0, p).on_click(cx.listener(
-                        |this, _, window, cx| {
-                            if this.terminals.is_empty() {
-                                this.new_terminal(&NewTerminal, window, cx);
-                            } else {
-                                this.focus_terminal(window, cx);
-                            }
-                        },
-                    )))
+                    .child(
+                        panel_tab("terminal-tab", crate::i18n::t("Terminal").into(), self.chrome.bottom == Bottom::Terminal, self.terminals_asking(cx), p)
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                if this.terminals.is_empty() {
+                                    this.new_terminal(&NewTerminal, window, cx);
+                                } else {
+                                    this.focus_terminal(window, cx);
+                                }
+                            })),
+                    )
                     .child(div().flex_1())
                     // The terminal's own actions only while the terminal is the panel's view.
                     .when(self.chrome.bottom == Bottom::Terminal, |d| {

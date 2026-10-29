@@ -35,7 +35,7 @@ fn pair(name: &str) -> (PathBuf, PathBuf) {
 }
 
 fn open_pair(wb: &Entity<Workbench>, l: &Path, r: &Path, cx: &mut VisualTestContext) -> Entity<CompareView> {
-    let (l, r) = (l.to_string_lossy().into_owned(), r.to_string_lossy().into_owned());
+    let (l, r) = (crate::ui::local_path(l), crate::ui::local_path(r));
     wb.update_in(cx, |wb, window, cx| wb.open_folder_compare_for_test((true, &l), (true, &r), window, cx));
     let view = wb.read_with(cx, |wb, _| wb.compare_view_for_test()).expect("the compare tab is open");
     wait_secs(cx, 20, "the comparison finishes", |cx| !view.read_with(cx, |v, _| v.scanning()));
@@ -160,7 +160,7 @@ fn copying_asks_first_and_writes_only_what_the_scan_saw(cx: &mut TestAppContext)
     cx.run_until_parked();
     write(&r, "edited.txt", "edited by someone else\n");
     cx.simulate_prompt_answer("Copy");
-    wait_ticking(cx, "the copy ended", |cx| notice(&wb, cx).contains("left alone"));
+    wait_ticking(cx, "the copy ended", |cx| notice(&wb, cx).contains("not confirmed"));
     assert_eq!(std::fs::read_to_string(r.join("edited.txt")).unwrap(), "edited by someone else\n");
     let message = notice(&wb, cx);
     assert!(message.contains("edited.txt") && message.contains("changed after the scan"), "{message}");
