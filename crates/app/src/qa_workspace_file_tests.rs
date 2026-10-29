@@ -282,30 +282,312 @@ fn external_edits_and_malformed_files_are_never_overwritten(cx: &mut TestAppCont
     }
 }
 
-/// An edit racing the save: whichever lands first, the other side's edit is never lost silently.
+/// Their edit lands before our write: the write is refused, their text stays, and the window follows it once read.
+/// (The test dispatcher runs background work only when the test yields, so each step below happens in this order.)
 #[gpui::test]
-fn an_external_edit_racing_a_save_is_never_lost(cx: &mut TestAppContext) {
-    for round in 0..4 {
-        let (base, file) = mono(&format!("race-{round}"));
-        std::fs::create_dir_all(base.join("docs")).unwrap();
-        let (wb, cx) = setup(cx);
-        open(&wb, &file, cx);
-        wait(cx, "open", |cx| labels(&wb, cx).len() == 2);
-        let theirs = format!("{MONO}// edited elsewhere {round}\n");
-        let docs = s(&base.join("docs"));
-        let f = file.clone();
-        let t = theirs.clone();
-        wb.update_in(cx, |wb, window, cx| {
-            wb.add_workspace_folder_now(docs.clone(), window, cx);
-            std::thread::sleep(Duration::from_millis(round * 3));
-            std::fs::write(&f, &t).unwrap();
-        });
-        settle(&wb, cx);
-        let on_disk = read(&file);
-        // Either their write came last (and ours was refused or overwritten by theirs), or ours was refused: never a mix.
-        assert_eq!(on_disk, theirs, "round {round}");
-        cx.update(|window, _| window.remove_window());
+fn an_external_edit_before_our_write_is_kept_and_read(cx: &mut TestAppContext) {
+    let (base, file) = mono("race-theirs-first");
+    std::fs::create_dir_all(base.join("docs")).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &file, cx);
+    wait(cx, "open", |cx| labels(&wb, cx).len() == 2);
+    let theirs = MONO.replace("/* the site */ { \"path\": \"web\" },", "");
+    let (f, t, docs) = (file.clone(), theirs.clone(), s(&base.join("docs")));
+    wb.update_in(cx, |wb, window, cx| {
+        std::fs::write(&f, &t).unwrap();
+        // Our write is queued now, with the hash we read before their edit.
+        wb.add_workspace_folder_now(docs, window, cx);
+        assert!(wb.workspace_saving_for_test());
+    });
+    settle(&wb, cx);
+    assert_eq!(read(&file), theirs, "their edit is kept");
+    assert!(notice(&wb, cx).contains("Workspace changed on disk. Reload before saving."), "{}", notice(&wb, cx));
+    wb.update(cx, |wb, cx| wb.reload_workspace_for_test(cx));
+    wait(cx, "follows their file", |cx| labels(&wb, cx) == ["Backend"]);
+    assert_eq!(read(&file), theirs);
+}
+
+/// Our write lands first, their edit follows: the watcher's reload brings the window to their version, and our own
+/// write coming back through the watcher changes nothing.
+#[gpui::test]
+fn an_external_edit_after_our_write_is_followed(cx: &mut TestAppContext) {
+    let (base, file) = mono("race-ours-first");
+    std::fs::create_dir_all(base.join("docs")).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &file, cx);
+    wait(cx, "open", |cx| labels(&wb, cx).len() == 2);
+    let docs = s(&base.join("docs"));
+    wb.update_in(cx, |wb, window, cx| {
+        wb.add_workspace_folder_now(docs, window, cx);
+        // The watcher reporting our own write while it runs: recognized, nothing reapplied.
+        wb.quiet_reload_workspace_for_test(cx);
+    });
+    settle(&wb, cx);
+    let ours = read(&file);
+    assert!(ours.contains(r#"{ "path": "docs" }"#), "{ours}");
+    assert_eq!(labels(&wb, cx), ["Backend", "web", "docs"]);
+    assert!(notice(&wb, cx).is_empty() || !notice(&wb, cx).contains("changed on disk"), "{}", notice(&wb, cx));
+
+    let theirs = ours.replace("\"name\": \"Backend\"", "\"name\": \"Server\"");
+    std::fs::write(&file, &theirs).unwrap();
+    wb.update(cx, |wb, cx| wb.quiet_reload_workspace_for_test(cx));
+    wait(cx, "follows their edit", |cx| labels(&wb, cx) == ["Server", "web", "docs"]);
+    assert_eq!(read(&file), theirs, "reading never writes");
+    // And the next save builds on their version without a false conflict.
+    std::fs::create_dir_all(base.join("lib")).unwrap();
+    let lib = s(&base.join("lib"));
+    wb.update_in(cx, |wb, window, cx| wb.add_workspace_folder_now(lib, window, cx));
+    settle(&wb, cx);
+    let after = read(&file);
+    assert!(after.contains("\"Server\"") && after.contains(r#"{ "path": "lib" }"#), "{after}");
+    assert!(!notice(&wb, cx).contains("changed on disk"), "{}", notice(&wb, cx));
+}
+
+/// An edit made while our write runs is not missed: the watcher event is no longer dropped during a save.
+#[gpui::test]
+fn an_external_edit_during_our_write_is_not_missed(cx: &mut TestAppContext) {
+    let (base, file) = mono("race-during");
+    std::fs::create_dir_all(base.join("docs")).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &file, cx);
+    wait(cx, "open", |cx| labels(&wb, cx).len() == 2);
+    let theirs = MONO.replace("\"name\": \"Backend\"", "\"name\": \"Elsewhere\"");
+    let (f, t, docs) = (file.clone(), theirs.clone(), s(&base.join("docs")));
+    wb.update_in(cx, |wb, window, cx| {
+        wb.add_workspace_folder_now(docs, window, cx);
+        std::fs::write(&f, &t).unwrap();
+        assert!(wb.workspace_file_changed_for_test(), "the change is reported although a write runs");
+        wb.quiet_reload_workspace_for_test(cx);
+    });
+    settle(&wb, cx);
+    wait(cx, "their version applied", |cx| labels(&wb, cx).first().map(String::as_str) == Some("Elsewhere"));
+    assert_eq!(read(&file), theirs);
+}
+
+/// A save whose reply arrives after the file was applied again re-reads the disk, so the next save does not report a
+/// conflict with this window's own write.
+#[gpui::test]
+fn a_save_crossing_a_reload_leaves_no_false_conflict(cx: &mut TestAppContext) {
+    let (base, file) = mono("save-reload");
+    for d in ["docs", "lib"] {
+        std::fs::create_dir_all(base.join(d)).unwrap();
     }
+    let (wb, cx) = setup(cx);
+    open(&wb, &file, cx);
+    wait(cx, "open", |cx| labels(&wb, cx).len() == 2);
+    let docs = s(&base.join("docs"));
+    wb.update_in(cx, |wb, window, cx| {
+        wb.add_workspace_folder_now(docs, window, cx);
+        wb.reload_workspace_for_test(cx);
+    });
+    settle(&wb, cx);
+    wait(cx, "settled", |cx| labels(&wb, cx) == ["Backend", "web", "docs"]);
+    settle(&wb, cx);
+    let lib = s(&base.join("lib"));
+    wb.update_in(cx, |wb, window, cx| wb.add_workspace_folder_now(lib, window, cx));
+    settle(&wb, cx);
+    let text = read(&file);
+    assert!(text.contains(r#"{ "path": "docs" }"#) && text.contains(r#"{ "path": "lib" }"#), "{text}");
+    assert!(!notice(&wb, cx).contains("changed on disk"), "{}", notice(&wb, cx));
+}
+
+/// Opening one of the workspace's folders directly opens just that folder: no workspace file, settings or writes.
+/// The workspace file has a Recents entry of its own, and a deleted file does not stop the folder from opening.
+#[gpui::test]
+fn opening_a_folder_directly_does_not_attach_its_workspace(cx: &mut TestAppContext) {
+    let (base, file) = mono("direct");
+    std::fs::create_dir_all(base.join("docs")).unwrap();
+    // A real settings folder, so the settings are read again when the workspace file's layer goes away.
+    let config = dir("direct-config");
+    std::fs::write(config.join("settings.jsonc"), "{}").unwrap();
+    cx.update(|cx| {
+        crate::bind_keys(cx);
+        cx.set_global(ActiveTheme(theme::DARK));
+        cx.set_global(Settings { lsp_enabled: false, ..Settings::default() });
+    });
+    let (wb, cx) = cx.add_window_view(move |window, cx| Workbench::with_state(state::State::in_memory().ok(), Some(config), window, cx));
+    open(&wb, &file, cx);
+    wait(cx, "open", |cx| labels(&wb, cx).len() == 2);
+    let recent: Vec<String> = wb.read_with(cx, |wb, _| wb.recent_for_test()).into_iter().map(|(_, p, _)| p).collect();
+    assert_eq!(recent[..2], [s(&file), s(&base.join("api"))], "the workspace file leads Recents, its folder follows");
+
+    open(&wb, &base.join("api"), cx);
+    cx.run_until_parked();
+    assert!(snap(&wb, cx).is_none(), "no workspace attached");
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.all_roots(cx)), [s(&base.join("api"))], "its folders do not follow it");
+    assert_eq!(cx.update(|_, cx| cx.global::<Settings>().tab_size), None, "nor its settings");
+    let docs = s(&base.join("docs"));
+    wb.update_in(cx, |wb, window, cx| wb.add_workspace_folder_now(docs, window, cx));
+    cx.run_until_parked();
+    assert_eq!(read(&file), MONO, "adding a folder does not write the workspace file");
+
+    std::fs::remove_file(&file).unwrap();
+    open(&wb, &base.join("web"), cx);
+    cx.run_until_parked();
+    open(&wb, &base.join("api"), cx);
+    cx.run_until_parked();
+    assert!(snap(&wb, cx).is_none());
+    assert!(!notice(&wb, cx).contains("could not be read"), "{}", notice(&wb, cx));
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.root_for_test(cx)), Some(s(&base.join("api"))));
+}
+
+/// Two opens finishing out of order, and an open whose reply arrives after another folder was opened: only the latest
+/// request applies.
+#[gpui::test]
+fn stale_workspace_open_replies_are_dropped(cx: &mut TestAppContext) {
+    let (base, first) = mono("stale-open");
+    let second = base.join("second.code-workspace");
+    std::fs::write(&second, r#"{ "folders": [ { "path": "web", "name": "Second" } ] }"#).unwrap();
+    std::fs::create_dir_all(base.join("other")).unwrap();
+    let (wb, cx) = setup(cx);
+    let (a, b) = (s(&first), s(&second));
+    wb.update_in(cx, |wb, window, cx| {
+        wb.open_path(&a, window, cx);
+        wb.open_path(&b, window, cx);
+    });
+    wait(cx, "the latest open applied", |cx| snap(&wb, cx).is_some());
+    settle(&wb, cx);
+    assert_eq!(snap(&wb, cx).map(|s| (s.0, s.1)), Some((b.clone(), vec!["Second".to_string()])));
+
+    let other = s(&base.join("other"));
+    wb.update_in(cx, |wb, window, cx| {
+        wb.open_path(&a, window, cx);
+        // Before its reply: the user opens another folder.
+        wb.open_path(&other, window, cx);
+    });
+    cx.run_until_parked();
+    settle(&wb, cx);
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.root_for_test(cx)), Some(other.clone()), "the late reply does not pull the window back");
+    assert!(snap(&wb, cx).is_none());
+}
+
+/// Save As whose write ends after the window switched folders: the file is written but not attached to the new folder.
+#[gpui::test]
+fn save_as_reply_after_a_folder_switch_is_not_attached(cx: &mut TestAppContext) {
+    let (base, file) = mono("save-as-switch");
+    std::fs::create_dir_all(base.join("other")).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &file, cx);
+    wait(cx, "open", |cx| labels(&wb, cx).len() == 2);
+    let (target, other) = (s(&base.join("copy.code-workspace")), s(&base.join("other")));
+    wb.update_in(cx, |wb, window, cx| {
+        wb.save_workspace_as_for_test(target.clone(), cx);
+        wb.open_path(&other, window, cx);
+    });
+    cx.run_until_parked();
+    wait(cx, "written", |_| std::path::Path::new(&target).exists());
+    cx.run_until_parked();
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.root_for_test(cx)), Some(other));
+    assert!(snap(&wb, cx).is_none(), "the other folder is not linked to the copy");
+    assert!(read(Path::new(&target)).contains("\"api\""));
+}
+
+/// The first folder dropped from the file by a reload stays open but is not written back by the next save.
+#[gpui::test]
+fn a_first_folder_dropped_by_the_file_is_not_added_back(cx: &mut TestAppContext) {
+    let (base, file) = mono("drop-primary");
+    std::fs::create_dir_all(base.join("docs")).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &file, cx);
+    wait(cx, "open", |cx| labels(&wb, cx).len() == 2);
+    let without_api = MONO.replace("{ \"path\": \"api\", \"name\": \"Backend\", \"x-owner\": \"ada\" }, // the service\n", "");
+    std::fs::write(&file, &without_api).unwrap();
+    wb.update(cx, |wb, cx| wb.reload_workspace_for_test(cx));
+    wait(cx, "reloaded", |cx| notice(&wb, cx).contains("no longer listed"));
+    let docs = s(&base.join("docs"));
+    wb.update_in(cx, |wb, window, cx| wb.add_workspace_folder_now(docs, window, cx));
+    settle(&wb, cx);
+    let text = read(&file);
+    assert!(text.contains(r#"{ "path": "docs" }"#) && !text.contains("\"api\""), "{text}");
+}
+
+/// More folders than fit: the rest are listed as unavailable (and stay in the file) with the limit in the notice.
+#[gpui::test]
+fn folders_beyond_the_limit_are_reported(cx: &mut TestAppContext) {
+    let base = dir("limit");
+    let names: Vec<String> = (0..35).map(|i| format!("f{i:02}")).collect();
+    for n in &names {
+        std::fs::create_dir_all(base.join(n)).unwrap();
+    }
+    let list: Vec<String> = names.iter().map(|n| format!("{{ \"path\": \"{n}\" }}")).collect();
+    let file = base.join("big.code-workspace");
+    let text = format!("{{ \"folders\": [ {} ] }}", list.join(", "));
+    std::fs::write(&file, &text).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &file, cx);
+    wait(cx, "open", |cx| snap(&wb, cx).is_some());
+    let (_, open_labels, missing, _) = snap(&wb, cx).unwrap();
+    assert_eq!(open_labels.len(), 33, "the first folder and 32 extra");
+    assert_eq!(missing, ["f33", "f34"]);
+    let message = notice(&wb, cx);
+    assert!(message.contains("At most 32 extra folders fit in one workspace.") && message.contains("f33"), "{message}");
+    wb.update(cx, |wb, cx| wb.save_workspace_for_test(cx));
+    settle(&wb, cx);
+    assert_eq!(read(&file), text, "nothing is dropped from the file");
+}
+
+/// AC3: a debug configuration from the workspace file starts in the active folder (scripted adapter; needs python3).
+#[gpui::test]
+fn shared_launch_configuration_starts_in_the_active_folder(cx: &mut TestAppContext) {
+    if std::process::Command::new("python3").arg("-V").output().is_err() {
+        crate::test_sshd::skip_missing("python3");
+        return;
+    }
+    let base = dir("launch");
+    let app = base.join("app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(app.join("main.c"), (1..=12).map(|i| format!("int line{i};\n")).collect::<String>()).unwrap();
+    let script = crate::dap::tests::write_fake_adapter(&base);
+    let log = base.join("dap.log");
+    let file = base.join("w.code-workspace");
+    std::fs::write(
+        &file,
+        format!(
+            r#"{{ "folders": [ {{ "path": "app" }} ], "launch": {{ "configurations": [ {{ "name": "WS Fake", "type": "custom", "request": "launch",
+                "program": "/bin/true", "source": "${{workspaceFolder}}/main.c", "debugAdapter": {{ "command": "{}", "args": ["{}"] }} }} ] }} }}"#,
+            script.display(),
+            log.display()
+        ),
+    )
+    .unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &file, cx);
+    wait(cx, "open", |cx| labels(&wb, cx) == ["app"]);
+    let main = s(&app.join("main.c"));
+    wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(main.clone(), window, cx));
+    cx.run_until_parked();
+    wb.update_in(cx, |wb, window, cx| wb.start_named_for_test("WS Fake", window, cx));
+    let snapshot = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.debug_snapshot());
+    wait_secs(cx, 20, "the shared configuration ran", |cx| snapshot(cx).is_some_and(|s| s.0 == "ended" || s.0 == "running" || s.0.starts_with("stopped")));
+    let launch = std::fs::read_to_string(&log).unwrap_or_default();
+    let line = launch.lines().find(|l| l.starts_with("launch")).unwrap_or_default().to_string();
+    assert!(line.contains(&main), "${{workspaceFolder}} is the active folder: {line}");
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Debug: Stop", window, cx));
+    cx.run_until_parked();
+}
+
+/// A half-written user settings file keeps the last good one for extra folders too (they do not fall back to defaults).
+#[gpui::test]
+fn a_broken_user_settings_file_keeps_extra_folders_settings(cx: &mut TestAppContext) {
+    let (_, file) = mono("user-broken");
+    let config = dir("user-broken-config");
+    std::fs::write(config.join("settings.jsonc"), r#"{ "files.insertFinalNewline": true }"#).unwrap();
+    cx.update(|cx| {
+        crate::bind_keys(cx);
+        cx.set_global(ActiveTheme(theme::DARK));
+        cx.set_global(Settings { lsp_enabled: false, ..Settings::default() });
+    });
+    let cfg = config.clone();
+    let (wb, cx) = cx.add_window_view(move |window, cx| Workbench::with_state(state::State::in_memory().ok(), Some(cfg), window, cx));
+    open(&wb, &file, cx);
+    wait(cx, "open", |cx| labels(&wb, cx).len() == 2);
+    let web = wb.read_with(cx, |wb, cx| wb.all_roots(cx))[1].clone();
+    let final_newline = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.folder_settings_for_test(&web).and_then(|f| f.insert_final_newline));
+    wait(cx, "extra folder resolved over the user file", |cx| final_newline(cx) == Some(true));
+    std::fs::write(config.join("settings.jsonc"), r#"{ "files.insertFinalNewline": tr"#).unwrap();
+    wb.update_in(cx, |wb, window, cx| wb.reload_config_for_test(window, cx));
+    cx.run_until_parked();
+    assert_eq!(final_newline(cx), Some(true), "the last good user settings still apply");
 }
 
 /// A write that fails part way (read-only folder) leaves the original intact and says so.
@@ -528,6 +810,8 @@ fn symlinked_folders_open_and_broken_links_are_unavailable(cx: &mut TestAppConte
 /// conflict check.
 #[gpui::test]
 fn workspace_file_over_ssh(cx: &mut TestAppContext) {
+    // The repository's convention: `start` prints "SKIPPED …" when there is no sshd or agent binary, and fails the test
+    // instead when `CODEYARD_REQUIRE_SSHD` is set (as in `scripts/check.sh --strict`).
     let Some(_sshd) = crate::test_sshd::start("ws-file-ssh") else { return };
     let (base, file) = mono("ssh");
     std::fs::create_dir_all(base.join("docs")).unwrap();

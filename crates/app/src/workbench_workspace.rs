@@ -2,7 +2,8 @@
 //! under their display names; its shared settings sit between the user's settings and each folder's own; its tasks and
 //! launch configurations join the folder's. Adding or removing a folder writes the file back through the host
 //! (atomically, refusing when someone else changed it meanwhile) and only the folder list changes in the text. A file
-//! that cannot be read is never written. The association survives a restart.
+//! that cannot be read is never written. The file is a Recents entry of its own: restarting (or reopening it from
+//! Recents) reads it again, while opening one of its folders directly opens just that folder.
 
 use std::sync::Arc;
 
@@ -12,9 +13,6 @@ use host::Host;
 use super::{Notice, Workbench};
 use crate::ui;
 use crate::workspace_file::{Document, Edit, Target};
-
-/// State key prefix: the workspace file the folder (`{workspace id}`) was opened through.
-const STATE_KEY: &str = "workspace_file";
 
 /// A folder listed in the file that is not open.
 #[derive(Clone, Debug, PartialEq)]
@@ -39,13 +37,17 @@ pub(super) struct OpenWorkspace {
     /// Open root for each folder entry (`Folder::item`), as the Explorer has it.
     pub(super) opened: Vec<(usize, String)>,
     pub(super) unavailable: Vec<Unavailable>,
+    /// Open roots the file does not list (the first folder after the file dropped it): saving does not add them back.
+    unlisted: Vec<String>,
     /// Entries removed in this window, written out by the next save.
     removed: Vec<usize>,
-    /// Bumped by every read: replies from before it are dropped.
+    /// Bumped whenever the file is applied again (open, reload, Save As): older reload and save replies are dropped.
     generation: u64,
     /// A write is running; another change waits for it.
     saving: bool,
     save_again: bool,
+    /// The text of the running write: when the watcher reports it, it is our own and changes nothing.
+    writing: Option<String>,
     /// The file's own folders are being opened: not an edit to save.
     applying: bool,
 }
@@ -68,12 +70,22 @@ fn parent_dir(path: &str) -> String {
     }
 }
 
+fn unavailable(f: &crate::workspace_file::Folder) -> Unavailable {
+    Unavailable {
+        item: f.item,
+        label: f.label(),
+        path: f.path().map(str::to_string).unwrap_or_else(|| match &f.source {
+            crate::workspace_file::Source::Path(s) | crate::workspace_file::Source::Uri(s) => s.clone(),
+        }),
+    }
+}
+
 /// Read and resolve the file on `host` (run in the background). `Err`: the reason for "Workspace file could not be read: {}".
 fn load(host: &dyn Host, path: &str) -> Result<Loaded, String> {
     let (bytes, hash) = host.read(path).map_err(|e| e.to_string())?;
     let text = String::from_utf8(bytes).map_err(|_| crate::i18n::t("the file is not UTF-8 text").to_string())?;
     let doc = Document::parse(&text, &parent_dir(path))?;
-    let (mut available, mut unavailable) = (Vec::new(), Vec::new());
+    let (mut available, mut missing) = (Vec::new(), Vec::new());
     for f in doc.folders() {
         let open = match &f.target {
             // A directory, or a link to one (`read_dir` follows it); a file or a broken link is unavailable.
@@ -87,21 +99,22 @@ fn load(host: &dyn Host, path: &str) -> Result<Loaded, String> {
             Some(p) if !available.iter().any(|(_, q)| *q == p) => available.push((f.item, p)),
             // The same folder twice: the first entry opens it, the second stays in the file.
             Some(_) => {}
-            None => unavailable.push(Unavailable {
-                item: f.item,
-                label: f.label(),
-                path: f.path().map(str::to_string).unwrap_or_else(|| match &f.source {
-                    crate::workspace_file::Source::Path(s) | crate::workspace_file::Source::Uri(s) => s.clone(),
-                }),
-            }),
+            None => missing.push(unavailable(f)),
         }
     }
-    Ok(Loaded { doc, hash, available, unavailable })
+    Ok(Loaded { doc, hash, available, unavailable: missing })
 }
 
 impl Workbench {
+    /// A new request that replaces whatever workspace was being opened: replies of older ones are dropped.
+    fn next_workspace_request(&mut self) -> u64 {
+        self.roots.workspace_request += 1;
+        self.roots.workspace_request
+    }
+
     /// Open a workspace file on the window's host: its first folder that exists becomes the root, the others join it.
     pub(super) fn open_workspace_file(&mut self, path: &str, _: &mut Window, cx: &mut Context<Self>) {
+        let request = self.next_workspace_request();
         let host = self.remote.host.clone();
         let (h, p) = (host.clone(), path.to_string());
         let task = cx.background_executor().spawn(async move { load(h.as_ref(), &p) });
@@ -109,7 +122,8 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let loaded = task.await;
             with_window(&this, cx, move |this, window, cx| {
-                if !Arc::ptr_eq(&this.remote.host, &host) {
+                // Another open, another folder or another host since: this reply is stale.
+                if this.roots.workspace_request != request || !Arc::ptr_eq(&this.remote.host, &host) {
                     return;
                 }
                 match loaded {
@@ -138,15 +152,17 @@ impl Workbench {
         if self.root(cx).as_deref() != Some(first.as_str()) {
             return; // Refused (unsaved files).
         }
-        // `set_root` restored the folder's last extra folders: the file decides instead.
+        // `set_root` started restoring the folder's own extra folders: the file decides instead.
         self.persist.pending_restore_workspace = None;
         self.attach_workspace(path, host, loaded, true, window, cx);
+        self.remember_workspace_file(cx);
     }
 
     /// Make `loaded` the window's workspace: the root is already open; extra folders follow the file.
     fn attach_workspace(&mut self, path: String, host: Arc<dyn Host>, loaded: Loaded, report: bool, window: &mut Window, cx: &mut Context<Self>) {
-        let generation = self.roots.workspace.as_ref().map_or(0, |w| w.generation + 1);
-        let Loaded { doc, hash, available, unavailable } = loaded;
+        self.roots.workspace_generation += 1;
+        let generation = self.roots.workspace_generation;
+        let Loaded { doc, hash, available, unavailable: mut missing } = loaded;
         self.roots.workspace = Some(OpenWorkspace {
             path,
             host,
@@ -154,11 +170,13 @@ impl Workbench {
             hash,
             error: None,
             opened: Vec::new(),
-            unavailable,
+            unavailable: Vec::new(),
+            unlisted: Vec::new(),
             removed: Vec::new(),
             generation,
             saving: false,
             save_again: false,
+            writing: None,
             applying: true,
         });
         self.roots.pending_extra_roots.clear();
@@ -171,7 +189,12 @@ impl Workbench {
         }
         let mut skipped = Vec::new();
         for p in &wanted {
-            if !self.roots.extra_roots.contains(p) && !self.add_workspace_folder_now(p.clone(), window, cx) {
+            if self.roots.extra_roots.contains(p) {
+                continue;
+            }
+            // Past the limit nothing is tried (no refusal notice per folder); the rest are reported together below.
+            let full = self.roots.extra_roots.len() >= super::folder_glue::MAX_EXTRA_ROOTS;
+            if full || !self.add_workspace_folder_now(p.clone(), window, cx) {
                 skipped.push(p.clone());
             }
         }
@@ -181,14 +204,27 @@ impl Workbench {
         pairs.sort_by_key(|(r, _)| order(r));
         (self.roots.extra_roots, self.roots.extra_trees) = pairs.into_iter().unzip();
         self.roots.file_index = None;
-        self.persist_extra_roots();
         let open_roots = self.all_roots(cx);
+        let mut over_limit = false;
         if let Some(ws) = self.roots.workspace.as_mut() {
+            // Folders that did not fit stay listed as unavailable, so they are visible and stay in the file.
+            for (item, p) in available.iter().filter(|(_, p)| skipped.contains(p)) {
+                if let Some(f) = ws.doc.folders().iter().find(|f| f.item == *item) {
+                    missing.push(Unavailable { path: p.clone(), ..unavailable(f) });
+                    over_limit = true;
+                }
+            }
+            missing.sort_by_key(|u| u.item);
+            ws.unavailable = missing;
+            ws.unlisted = open_roots.iter().filter(|r| !available.iter().any(|(_, p)| p == *r)).cloned().collect();
             ws.opened = available.into_iter().filter(|(_, p)| open_roots.contains(p) && !skipped.contains(p)).collect();
             ws.applying = false;
         }
-        self.remember_workspace_file();
         self.after_workspace_change(report, window, cx);
+        if over_limit {
+            let limit = crate::i18n::tf("At most {} extra folders fit in one workspace.", &[&super::folder_glue::MAX_EXTRA_ROOTS]);
+            self.notice = Some(Notice::Error(format!("{limit} {}", self.notice_text().unwrap_or_default()).trim().to_string().into()));
+        }
     }
 
     /// Settings, folder settings, search roots and the notice after the folders or the file changed.
@@ -215,62 +251,25 @@ impl Workbench {
         cx.notify();
     }
 
-    fn remember_workspace_file(&self) {
-        if let (Some(id), Some(s), Some(ws)) = (self.persist.workspace_id, &self.persist.state, &self.roots.workspace) {
-            let _ = s.set(&format!("{STATE_KEY}:{id}"), &ws.path);
+    /// The workspace file goes to Recents as an entry of its own (after its first folder, so it leads the list): a
+    /// restart or "continue" reopens the workspace, while opening one of its folders opens only that folder.
+    fn remember_workspace_file(&mut self, cx: &mut Context<Self>) {
+        let alias = self.host_alias();
+        if alias.as_deref() == Some(super::LOCAL_AGENT_ALIAS) {
+            return;
+        }
+        if let (Some(s), Some(ws)) = (&self.persist.state, &self.roots.workspace) {
+            let _ = s.record_workspace(alias.as_deref(), &ws.path);
+            self.reload_recent(cx);
         }
     }
 
-    /// The workspace file this folder was last opened through, if any (restart restores it).
-    pub(super) fn remembered_workspace_file(&self) -> Option<String> {
-        let (id, s) = (self.persist.workspace_id?, self.persist.state.as_ref()?);
-        s.get(&format!("{STATE_KEY}:{id}")).filter(|p| !p.is_empty())
-    }
-
-    /// After a restart (or returning to the folder): read the workspace file again and open its folders, in its order
-    /// and under its names. If it cannot be read, the folders from last time open instead and the error is shown.
-    pub(super) fn restore_workspace_file(&mut self, path: String, fallback: Vec<String>, cx: &mut Context<Self>) {
-        let host = self.remote.host.clone();
-        let (h, p) = (host.clone(), path.clone());
-        let ws_id = self.persist.workspace_id;
-        self.persist.pending_restore_workspace = ws_id;
-        let task = cx.background_executor().spawn(async move {
-            let loaded = load(h.as_ref(), &p);
-            let alive: Vec<String> = fallback.into_iter().filter(|f| h.stat(f).is_ok()).collect();
-            (loaded, alive)
-        });
-        cx.spawn(async move |this, cx| {
-            let (loaded, alive) = task.await;
-            with_window(&this, cx, move |this, window, cx| {
-                // Another folder or host since: this reply is stale.
-                if !Arc::ptr_eq(&this.remote.host, &host) || this.persist.workspace_id != ws_id || this.persist.pending_restore_workspace != ws_id {
-                    return;
-                }
-                this.persist.pending_restore_workspace = None;
-                let primary = this.root(cx);
-                match loaded {
-                    Ok(loaded) if loaded.available.iter().any(|(_, p)| Some(p) == primary.as_ref()) => {
-                        this.attach_workspace(path, host, loaded, false, window, cx);
-                    }
-                    other => {
-                        if let Err(e) = other {
-                            this.notice = Some(Notice::Error(crate::i18n::tf("Workspace file could not be read: {}", &[&e]).into()));
-                        }
-                        for f in alive {
-                            this.add_workspace_folder_now(f, window, cx);
-                        }
-                        this.roots.pending_extra_roots.clear();
-                        cx.notify();
-                    }
-                }
-            });
-        })
-        .detach();
-    }
-
-    /// "File: Reload Workspace": read the file again and apply its folders, names and settings. A file that cannot be
-    /// read leaves the window as it is and blocks saving until it can be read.
+    /// "File: Reload Workspace" (`quiet`: the watcher saw the file change): read the file again and apply its folders,
+    /// names and settings. A file that cannot be read leaves the window as it is and blocks saving until it can be read.
     pub(super) fn reload_workspace(&mut self, quiet: bool, cx: &mut Context<Self>) {
+        let request = self.roots.workspace_request;
+        // An explicit reload supersedes earlier reads and writes; the watcher's own check does not.
+        let bumped = self.roots.workspace_generation + 1;
         let Some(ws) = self.roots.workspace.as_mut() else {
             if !quiet {
                 self.notice = Some(Notice::Info(crate::i18n::t("No workspace file is open.").into()));
@@ -278,13 +277,19 @@ impl Workbench {
             }
             return;
         };
-        ws.generation += 1;
+        if !quiet {
+            ws.generation = bumped;
+            self.roots.workspace_generation = bumped;
+        }
         let (generation, host, path) = (ws.generation, ws.host.clone(), ws.path.clone());
         let (h, p) = (host.clone(), path.clone());
         let task = cx.background_executor().spawn(async move { load(h.as_ref(), &p) });
         cx.spawn(async move |this, cx| {
             let loaded = task.await;
             with_window(&this, cx, move |this, window, cx| {
+                if this.roots.workspace_request != request {
+                    return;
+                }
                 let Some(ws) = this.roots.workspace.as_mut().filter(|w| w.generation == generation && w.path == path && Arc::ptr_eq(&w.host, &host)) else {
                     return;
                 };
@@ -294,15 +299,17 @@ impl Workbench {
                         this.notice = Some(Notice::Error(crate::i18n::tf("Workspace file could not be read: {}", &[&e]).into()));
                         cx.notify();
                     }
-                    // Our own write coming back: nothing changed.
+                    // What this window wrote, or is writing: nothing changed.
                     Ok(loaded) if quiet && ws.error.is_none() && loaded.doc.text() == ws.doc.text() => ws.hash = loaded.hash,
+                    Ok(loaded) if quiet && ws.writing.as_deref() == Some(loaded.doc.text()) => {}
                     Ok(loaded) => {
                         let primary = this.root(cx);
-                        if !loaded.available.iter().any(|(_, p)| Some(p) == primary.as_ref()) {
-                            // The first folder left the file: it stays open (closing it closes the editors), and saving adds it back.
+                        let dropped_primary = !loaded.available.iter().any(|(_, p)| Some(p) == primary.as_ref());
+                        this.attach_workspace(path, host, loaded, !quiet, window, cx);
+                        if dropped_primary {
+                            // It stays open (closing it closes the editors); saving does not add it back.
                             this.notice = Some(Notice::Info(crate::i18n::t("The open folder is no longer listed in the workspace file.").into()));
                         }
-                        this.attach_workspace(path, host, loaded, !quiet, window, cx);
                     }
                 }
             });
@@ -316,7 +323,7 @@ impl Workbench {
         let ws = self.roots.workspace.as_ref()?;
         let mut edits: Vec<Edit> = ws.doc.folders().iter().filter(|f| !ws.removed.contains(&f.item)).map(|f| Edit::Keep(f.item)).collect();
         for r in self.all_roots(cx) {
-            if !ws.opened.iter().any(|(_, p)| *p == r) {
+            if !ws.opened.iter().any(|(_, p)| *p == r) && !ws.unlisted.contains(&r) {
                 edits.push(Edit::Add { path: r, name: None });
             }
         }
@@ -326,6 +333,7 @@ impl Workbench {
     /// Write the folder list back to the workspace file (after Add/Remove Folder, or "File: Save Workspace"). Nothing is
     /// written when the text would not change, when the file could not be read, or when it changed on disk meanwhile.
     pub(super) fn save_workspace(&mut self, cx: &mut Context<Self>) {
+        let request = self.roots.workspace_request;
         let Some(edits) = self.workspace_edits(cx) else { return };
         let Some(ws) = self.roots.workspace.as_mut() else { return };
         if ws.applying {
@@ -352,6 +360,7 @@ impl Workbench {
             return;
         }
         ws.saving = true;
+        ws.writing = Some(next.text().to_string());
         let (generation, host, path, hash) = (ws.generation, ws.host.clone(), ws.path.clone(), ws.hash);
         let bytes = next.text().as_bytes().to_vec();
         let h = host.clone();
@@ -360,16 +369,22 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
+                // Another workspace or folder since: nothing here belongs to it.
+                if this.roots.workspace_request != request {
+                    return;
+                }
                 let current = this.roots.workspace.as_mut().filter(|w| w.path == path && Arc::ptr_eq(&w.host, &host));
                 let again = current.as_ref().is_some_and(|w| w.save_again);
+                let same_generation = current.as_ref().is_some_and(|w| w.generation == generation);
                 if let Some(w) = current {
                     w.saving = false;
                     w.save_again = false;
+                    w.writing = None;
                 }
                 let open_now = this.all_roots(cx);
                 match result {
-                    Ok(new_hash) => {
-                        if let Some(w) = this.roots.workspace.as_mut().filter(|w| w.generation == generation && w.path == path) {
+                    Ok(new_hash) if same_generation => {
+                        if let Some(w) = this.roots.workspace.as_mut() {
                             let remapped = remap(&edits, &w.opened, |e| match e {
                                 Edit::Add { path, .. } => Some(path.clone()),
                                 Edit::Keep(_) => None,
@@ -389,6 +404,9 @@ impl Workbench {
                             w.removed = removed;
                         }
                     }
+                    // The file was applied again while this write ran: read what is on disk now, so the next save
+                    // expects the right content instead of reporting a conflict with itself.
+                    Ok(_) => this.reload_workspace(true, cx),
                     Err(host::HostError::Op(proto::Error::Conflict { .. })) => {
                         this.notice = Some(Notice::Error(crate::i18n::t("Workspace changed on disk. Reload before saving.").into()));
                     }
@@ -475,14 +493,19 @@ impl Workbench {
         let host = self.remote.host.clone();
         // Saving over the open file itself still refuses to replace someone else's edit.
         let expect = self.roots.workspace.as_ref().filter(|w| w.path == target && Arc::ptr_eq(&w.host, &host)).map(|w| w.hash);
+        let unlisted = self.roots.workspace.as_ref().map(|w| w.unlisted.clone()).unwrap_or_default();
+        // The window this file describes: if the folder or workspace changes before the write ends, it is not attached.
+        let (request, root) = (self.roots.workspace_request, self.root(cx));
         let (h, t, bytes) = (host.clone(), target.clone(), doc.text().as_bytes().to_vec());
         let task = cx.background_executor().spawn(async move { h.write(&t, bytes, expect) });
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, move |this, cx| {
+                let same_window = this.roots.workspace_request == request && this.root(cx) == root && Arc::ptr_eq(&this.remote.host, &host);
                 match result {
-                    Ok(hash) if Arc::ptr_eq(&this.remote.host, &host) => {
-                        let generation = this.roots.workspace.as_ref().map_or(0, |w| w.generation + 1);
+                    Ok(hash) if same_window => {
+                        this.roots.workspace_generation += 1;
+                        let generation = this.roots.workspace_generation;
                         this.roots.workspace = Some(OpenWorkspace {
                             path: target.clone(),
                             host,
@@ -491,15 +514,18 @@ impl Workbench {
                             error: None,
                             opened,
                             unavailable,
+                            unlisted,
                             removed: Vec::new(),
                             generation,
                             saving: false,
                             save_again: false,
+                            writing: None,
                             applying: false,
                         });
-                        this.remember_workspace_file();
+                        this.remember_workspace_file(cx);
                         this.notice = Some(Notice::Info(crate::i18n::tf("Workspace saved as {}", &[&ui::file_name(&target)]).into()));
                     }
+                    // Written, but the window shows something else now: the new file is left as written, not attached.
                     Ok(_) => {}
                     Err(host::HostError::Op(proto::Error::Conflict { .. })) => {
                         this.notice = Some(Notice::Error(crate::i18n::t("Workspace changed on disk. Reload before saving.").into()));
@@ -618,7 +644,8 @@ impl Workbench {
 
     /// The workspace file's path when this change event touches it.
     pub(super) fn workspace_file_changed(&self, changes: &host::FsChanges) -> bool {
-        self.roots.workspace.as_ref().is_some_and(|ws| !ws.saving && changes.iter().any(|(p, _)| *p == ws.path))
+        // Also while a write runs: our own write is recognized by its text, anyone else's is not missed.
+        self.roots.workspace.as_ref().is_some_and(|ws| changes.iter().any(|(p, _)| *p == ws.path))
     }
 
     pub(super) fn workspace_watch_path(&self) -> Option<String> {
@@ -656,6 +683,18 @@ impl Workbench {
     #[cfg(test)]
     pub fn remove_unavailable_for_test(&mut self, item: usize, cx: &mut Context<Self>) {
         self.remove_unavailable_folder(item, cx);
+    }
+
+    #[cfg(test)]
+    pub fn quiet_reload_workspace_for_test(&mut self, cx: &mut Context<Self>) {
+        self.reload_workspace(true, cx);
+    }
+
+    /// Whether a watcher event for the workspace file would be acted on now.
+    #[cfg(test)]
+    pub fn workspace_file_changed_for_test(&self) -> bool {
+        let Some(path) = self.roots.workspace.as_ref().map(|w| w.path.clone()) else { return false };
+        self.workspace_file_changed(&vec![(path, proto::ChangeKind::Modified)])
     }
 
     #[cfg(test)]

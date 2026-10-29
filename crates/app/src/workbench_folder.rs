@@ -413,25 +413,27 @@ impl Workbench {
         self.sync_search_editors(cx);
     }
 
+    /// The folder's own list of extra folders. A workspace file's folders are not written into it: they come back from
+    /// the file, and opening the folder alone keeps its own list.
     pub(super) fn persist_extra_roots(&self) {
+        if self.roots.workspace.is_some() {
+            return;
+        }
         if let (Some(ws), Some(s)) = (self.persist.workspace_id, &self.persist.state) {
             let _ = s.set(&format!("folders:{ws}"), &self.roots.extra_roots.join("\n"));
         }
     }
 
-    /// Restore additional folders from the previous session (deferred because it needs a window). A folder opened through a
-    /// workspace file reads that file again: its folders, order and names come back from it.
+    /// Restore the folder's own additional folders from the previous session (deferred because it needs a window). A
+    /// workspace file is never attached here: it comes back only when it is opened (Recents, a restart).
     pub(super) fn restore_extra_roots(&mut self, cx: &mut Context<Self>) {
         let (Some(ws), Some(s)) = (self.persist.workspace_id, &self.persist.state) else { return };
         let folders: Vec<String> =
             s.get(&format!("folders:{ws}")).map(|text| text.lines().filter(|l| !l.is_empty()).map(str::to_string).collect()).unwrap_or_default();
-        self.roots.pending_extra_roots = folders.clone();
-        if let Some(file) = self.remembered_workspace_file() {
-            return self.restore_workspace_file(file, folders, cx);
-        }
         if folders.is_empty() {
             return;
         }
+        self.roots.pending_extra_roots = folders.clone();
         self.persist.pending_restore_workspace = Some(ws);
         let (handle, host) = (self.window_handle, self.remote.host.clone());
         cx.spawn(async move |this, cx| {

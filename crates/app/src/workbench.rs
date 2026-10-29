@@ -1248,6 +1248,8 @@ impl Workbench {
                 favorites: Vec::new(),
                 file_index: None,
                 workspace: None,
+                workspace_request: 0,
+                workspace_generation: 0,
             },
             tabs: Default::default(),
             searches: Default::default(),
@@ -1667,8 +1669,8 @@ impl Workbench {
     /// Change the root folder (same host).
     pub fn set_root(&mut self, path: String, cx: &mut Context<Self>) {
         let path = if self.remote.host.is_remote() { path } else { ui::local_path(std::path::Path::new(&path)) };
-        // Same folder: keep tabs in place.
-        if self.root(cx).as_deref() == Some(path.as_str()) {
+        // Same folder: keep tabs in place. Opened through a workspace file, the folder opens on its own instead.
+        if self.root(cx).as_deref() == Some(path.as_str()) && self.roots.workspace.is_none() {
             self.cancel_pending_connection();
             cx.notify();
             return;
@@ -1691,7 +1693,9 @@ impl Workbench {
         self.roots.extra_roots.clear();
         self.roots.extra_trees.clear();
         self.roots.pending_extra_roots.clear();
-        self.roots.workspace = None;
+        // The workspace file's settings layer goes with it: the settings are read again.
+        self.cfg.dirty |= self.roots.workspace.take().is_some_and(|w| w.doc.settings_json().is_some());
+        self.roots.workspace_request += 1;
         self.cfg.folders.clear();
         self.cfg.folder_texts.clear();
         self.persist.pending_restore_workspace = None;
@@ -1768,7 +1772,7 @@ impl Workbench {
                     if this.lsp.generation != generation || !Arc::ptr_eq(&this.remote.host, &source) {
                         return None;
                     }
-                    let changed = loaded != this.cfg.project;
+                    let changed = loaded != this.cfg.project || this.cfg.dirty;
                     this.cfg.project = loaded;
                     changed.then_some(this.window_handle)
                 })
@@ -2217,8 +2221,12 @@ impl Workbench {
         }
         match r.host.clone() {
             None => {
-                // If the folder was deleted or moved, don't open it; ask whether to remove it from the list.
-                if !std::path::Path::new(&r.path).is_dir() {
+                let workspace_file = crate::workspace_file::is_workspace_file(&r.path);
+                // If the folder (or workspace file) was deleted or moved, don't open it; ask whether to remove it from the list.
+                if workspace_file && !std::path::Path::new(&r.path).is_file() {
+                    return self.ask_forget_unreachable(r, crate::i18n::t("The workspace file no longer exists on this computer.").into(), window, cx);
+                }
+                if !workspace_file && !std::path::Path::new(&r.path).is_dir() {
                     return self.ask_forget_unreachable(r, "The folder no longer exists on this computer.".into(), window, cx);
                 }
                 if self.remote.host.is_remote() {
@@ -2226,6 +2234,9 @@ impl Workbench {
                     if self.remote.host.is_remote() {
                         return;
                     }
+                }
+                if workspace_file {
+                    return self.open_path(&r.path, window, cx);
                 }
                 self.set_root(r.path, cx);
             }

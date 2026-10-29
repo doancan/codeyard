@@ -248,6 +248,11 @@ pub(super) struct RootsState {
     pub(super) file_index: Option<FileIndex>,
     /// The workspace file this window was opened through (folder names, shared settings, tasks and launch).
     pub(super) workspace: Option<super::workspace_glue::OpenWorkspace>,
+    /// Bumped by every workspace file open and every change of folder or host (never reset): replies of older
+    /// workspace reads and writes are dropped.
+    pub(super) workspace_request: u64,
+    /// Bumped whenever a workspace file is applied again (never reset, unlike `workspace`).
+    pub(super) workspace_generation: u64,
 }
 
 /// Editor groups keep all tab-local state together when focus changes.

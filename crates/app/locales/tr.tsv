@@ -1344,6 +1344,7 @@ File: Save Workspace	Dosya: Çalışma Alanını Kaydet
 File: Save Workspace As…	Dosya: Çalışma Alanını Farklı Kaydet…
 File: Reload Workspace	Dosya: Çalışma Alanını Yeniden Yükle
 File: Open Active File as Workspace	Dosya: Etkin Dosyayı Çalışma Alanı Olarak Aç
+The workspace file no longer exists on this computer.	Çalışma alanı dosyası artık bu bilgisayarda yok.
 Open a .code-workspace file in the editor first.	Önce düzenleyicide bir .code-workspace dosyası açın.
 The workspace file lists no folder that exists on this computer.	Çalışma alanı dosyasında bu bilgisayarda var olan bir klasör yok.
 Workspace: {} folder in the Explorer.|Workspace: {} folders in the Explorer.	Çalışma alanı: Gezgin'de {} klasör.

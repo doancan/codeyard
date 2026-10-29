@@ -2165,6 +2165,7 @@ The update failed. Click for details.
 The version that was on disk has been kept in Local History.	
 The workspace changed. Open the source project and review its container configuration again.	
 The workspace file lists no folder that exists on this computer.	
+The workspace file no longer exists on this computer.	
 The workspace has no extra folders.	
 The {} dictionary is installed and on.	
 The {} registry's list is more than 3 days old, so a version withdrawn since may still show. Install only if you expected this.	

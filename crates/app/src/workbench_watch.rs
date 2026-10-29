@@ -128,7 +128,8 @@ impl Workbench {
             self.reload_user_themes();
         }
         self.cfg.dirty = false;
-        self.cfg.user_text = paths.as_ref().map(|_| file.clone().unwrap_or_else(|| "{}".into()));
+        // The user file as extra folders resolve over it: kept from the last reading that parsed (below).
+        let user_text = paths.as_ref().map(|_| file.clone().unwrap_or_else(|| "{}".into()));
         // If the user turned the gate off in their own file (even if not applied yet), every folder is trusted.
         let gate_off = file.as_deref().is_some_and(|f| settings::parse_layers(f, &[]).is_ok_and(|(s, _)| !s.workspace_trust));
         let trusted = gate_off || self.root(cx).is_none_or(|r| self.is_trusted_root(&r, cx));
@@ -148,6 +149,7 @@ impl Workbench {
         let (new, mut warnings) = match settings::parse_scoped(file.as_deref().unwrap_or("{}"), &layers) {
             Ok((s, w, sources)) => {
                 cx.set_global(sources);
+                self.cfg.user_text = user_text;
                 (s, w)
             }
             // Half-written file: the last valid settings stay, the error is shown.
