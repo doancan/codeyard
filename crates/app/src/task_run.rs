@@ -338,7 +338,7 @@ impl Run {
                 .iter()
                 .map(|spec| Matcher::compile(spec, &mut limits))
                 .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| crate::i18n::tf("Task “{0}” has an invalid problem matcher: {1}", &[&task.label, &format!("{e:?}")]))?;
+                .map_err(|e| crate::i18n::tf("Task “{0}” has an invalid problem matcher: {1}", &[&task.label, &matcher_error(&e)]))?;
             matchers.insert(node, compiled);
         }
         let scheduler = Scheduler::new(&prepared.registry, clone_plan(&prepared.plan), PARALLELISM);
@@ -482,6 +482,20 @@ impl Run {
     /// How a node's problem paths are resolved (its first matcher's rule).
     pub fn location(&self, node: usize) -> Option<&task_engine::matchers::FileLocation> {
         self.matchers.get(&node)?.first().map(|m| &m.location)
+    }
+}
+
+/// A matcher compile error in words.
+fn matcher_error(error: &task_engine::matchers::Error) -> String {
+    use task_engine::matchers::Error as E;
+    match error {
+        E::Limit => crate::i18n::t("too many or too large patterns").into(),
+        E::Invalid("capture index") => crate::i18n::t("a field refers to a group the regular expression does not have").into(),
+        E::Invalid("required capture") => crate::i18n::t("its pattern must capture at least file, line (or location) and message").into(),
+        E::Invalid(field) => crate::i18n::tf("invalid “{}”", &[field]),
+        E::Unknown(name) => crate::i18n::tf("there is no built-in matcher called “{}”", &[name]),
+        E::Regex(detail) => crate::i18n::tf("the regular expression is invalid ({})", &[detail]),
+        E::Runtime => crate::i18n::t("the pattern cannot be evaluated").into(),
     }
 }
 

@@ -3250,3 +3250,10 @@ queued	sırada
 ready	hazır
 stopped	durduruldu
 succeeded	başarılı
+a field refers to a group the regular expression does not have	bir alan, düzenli ifadede olmayan bir gruba başvuruyor
+invalid “{}”	geçersiz “{}”
+its pattern must capture at least file, line (or location) and message	deseni en az dosya, satır (ya da konum) ve mesajı yakalamalı
+the pattern cannot be evaluated	desen değerlendirilemiyor
+the regular expression is invalid ({})	düzenli ifade geçersiz ({})
+there is no built-in matcher called “{}”	“{}” adında yerleşik bir eşleştirici yok
+too many or too large patterns	çok fazla ya da çok büyük desen

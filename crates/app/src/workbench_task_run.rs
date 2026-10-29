@@ -443,6 +443,18 @@ impl Workbench {
         }
     }
 
+    /// The app is quitting: every task process is stopped before it returns, since the process ends right after and
+    /// nothing would be left to stop them.
+    pub(super) fn stop_task_runs_for_quit(&mut self) {
+        self.jobs.pending = None;
+        for live in &mut self.jobs.runs {
+            live.after = None;
+            for proc in live.run.cancel() {
+                let _ = live.host.call(proto::Request::ProcKill { proc });
+            }
+        }
+    }
+
     /// The connection changed: the runs' processes belong to the old host.
     pub(super) fn stop_all_task_runs(&mut self, cx: &mut Context<Self>) {
         self.jobs.pending = None;

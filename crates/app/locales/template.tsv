@@ -2520,6 +2520,7 @@ Zoom Out
 `{}` is not installed or not on PATH	
 a comment is not closed	
 a host of the {0} account ({1}), not {2}	
+a field refers to a group the regular expression does not have	
 a key binding condition needs a context, not a constant	
 a program	
 a string is not closed	
@@ -2633,12 +2634,14 @@ installed · {}
 instruction breakpoint	
 interface	
 invalid JSON: {}	
+invalid “{}”	
 it appeared after the scan	
 it changed after the scan	
 it could not be compared	
 it is a file on one side and a folder or link on the other	
 it is not a regular file or folder	
 its name differs from another entry only in letter case	
+its pattern must capture at least file, line (or location) and message	
 its structure could not be read safely	
 join needs a string separator, got {}	
 just now	
@@ -2759,6 +2762,8 @@ the keychain refused the account: {}
 the launch file is not an object	
 the launch file is not valid JSON: {}	
 the path is now a folder, not a file	
+the pattern cannot be evaluated	
+the regular expression is invalid ({})	
 the repository may be private: sign in with `gh auth login` or set GITHUB_TOKEN	
 the response body is not JSON	
 the response of “{}” has no header {}	
@@ -2775,12 +2780,14 @@ the {} registry is no longer in your settings
 the {} registry's list is more than 3 days old; install from the Extensions view to confirm	
 theme {} isn't installed here: copy its .json into ~/.config/codeyard/themes to use it	
 theme “{}” not found (available: auto, {})	
+there is no built-in matcher called “{}”	
 this computer	
 this value cannot be watched	
 this version was revoked	
 too many copies	
 turned off after three crashes	
 turned off on the extension page	
+too many or too large patterns	
 type parameter	
 unclosed [ in the path	
 undefined variable {}	

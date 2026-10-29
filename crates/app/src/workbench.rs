@@ -1094,6 +1094,8 @@ impl Workbench {
             // A download in progress is cancelled and its partial file removed before the process ends.
             cx.on_app_quit(|this, cx| {
                 this.discard_response_on_quit();
+                // Tasks lead their own process groups: they would outlive the app if they were not stopped here.
+                this.stop_task_runs_for_quit();
                 let wait = this.cancel_update_for_quit().map(|exited| Workbench::wait_for_update_thread(exited, cx));
                 async move {
                     if let Some(wait) = wait {

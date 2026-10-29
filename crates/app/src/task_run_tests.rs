@@ -255,5 +255,8 @@ fn cancel_stops_each_live_process_once_and_nothing_starts_after_it() {
 #[test]
 fn a_malformed_matcher_fails_before_anything_runs() {
     let text = r#"{ "version": "2.0.0", "tasks": [ { "label": "a", "command": "x", "problemMatcher": { "pattern": { "regexp": "(", "file": 1 } } } ] }"#;
-    assert!(Run::new(1, prepare(text, Platform::Linux, "a").unwrap()).is_err());
+    assert!(Run::new(1, prepare(text, Platform::Linux, "a").unwrap()).err().unwrap().contains("regular expression is invalid"));
+    let group = r#"{ "version": "2.0.0", "tasks": [ { "label": "a", "command": "x", "problemMatcher": { "pattern": { "regexp": "^x$", "file": 1 } } } ] }"#;
+    let message = Run::new(1, prepare(group, Platform::Linux, "a").unwrap()).err().unwrap();
+    assert!(message.ends_with("a field refers to a group the regular expression does not have"), "{message}");
 }

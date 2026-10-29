@@ -147,3 +147,20 @@ fn debugging_waits_for_the_pre_launch_task_and_never_starts_after_it_fails(cx: &
     let notice = notice(&wb, cx);
     assert!(notice.starts_with("error: ") && notice.contains("debugging was not started"), "{notice}");
 }
+
+#[gpui::test]
+fn quitting_stops_running_tasks_before_the_app_ends(cx: &mut gpui::TestAppContext) {
+    let dir = project("task-run-quit", r#"{ "version": "2.0.0", "tasks": [ { "label": "serve", "command": "echo $$ > leader.pid; exec sleep 300" } ] }"#);
+    let (wb, cx) = setup_with(cx, Settings { lsp_enabled: false, ..Settings::default() });
+    start(&wb, cx, &dir, "serve");
+    wait_ticking(cx, "the task to run", |_| std::fs::read_to_string(dir.join("leader.pid")).is_ok_and(|s| s.ends_with('\n')));
+    let leader: i32 = std::fs::read_to_string(dir.join("leader.pid")).unwrap().trim().parse().unwrap();
+    wb.update(cx, |wb, _| wb.stop_task_runs_for_quit());
+    // Synchronous: the process is gone before the quit handler returns, without running the executor.
+    let gone = (0..100).any(|_| {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        // SAFETY: signal 0 only asks whether the process exists (a reaped leader is gone).
+        (unsafe { libc::kill(leader, 0) }) != 0
+    });
+    assert!(gone, "the task outlived the quit");
+}
