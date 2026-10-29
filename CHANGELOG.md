@@ -133,6 +133,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The publish workflow that `cyx new` writes pins `actions/checkout` and the Codeyard publish action to commit SHAs. It
+  referred to a `v1` tag that did not exist, and a tag can be moved to code that would then run with the job's signing
+  identity.
 - Terminal Space sends a space, and Ctrl+C copies a selection while still interrupting the program when nothing is selected.
 - SSH connections detect an incompatible bundled agent before attaching to its daemon and explain how to rebuild or reinstall it.
 - Stopping a piped process also kills descendants when its leader has already exited. A process
