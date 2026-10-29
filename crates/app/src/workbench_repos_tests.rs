@@ -112,3 +112,26 @@ fn an_operation_on_a_repository_that_went_away_does_nothing(cx: &mut gpui::TestA
     cx.run_until_parked();
     assert_eq!(staged(&outer), "", "nothing ran in the enclosing repository instead");
 }
+
+/// Over SSH the list is found on the server and an operation in the picked repository stays there.
+#[gpui::test]
+fn repositories_are_listed_and_picked_on_the_ssh_host(cx: &mut gpui::TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("repos-ssh") else { return };
+    let (outer, inner) = workspace("repos-ssh");
+    let (wb, cx) = crate::qa_integration_tests::ssh_workbench(cx, &outer);
+    assert!(wb.read_with(cx, |wb, _| wb.remote.host.is_remote()));
+    wb.update(cx, |wb, cx| {
+        wb.chrome.panel = Some(Panel::Scm);
+        wb.refresh_git(0, cx);
+    });
+    wait_ticking(cx, "both repositories listed", |cx| {
+        let r = rows(&wb, cx);
+        r.len() == 2 && r.iter().all(|r| !r.loading)
+    });
+    let inner_root = rows(&wb, cx).into_iter().find(|r| r.location.as_deref() == Some("lib")).unwrap().root;
+    wb.update(cx, |wb, cx| wb.select_repo(inner_root.clone(), cx));
+    wait_ticking(cx, "the nested repository shown", |cx| shown_root(&wb, cx).as_deref() == Some(inner_root.as_str()));
+    wb.update(cx, |wb, cx| wb.scm.update(cx, |s, cx| s.stage(vec!["same.txt".into()], cx)));
+    wait_ticking(cx, "the file staged on the server", |_| staged(&inner).contains("same.txt"));
+    assert_eq!(staged(&outer), "");
+}
