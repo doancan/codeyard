@@ -10,7 +10,7 @@ use std::io;
 #[cfg(unix)]
 use std::path::{Path, PathBuf};
 
-#[cfg(unix)]
+#[cfg(any(unix, test))]
 const FILES: &[(&str, &str)] = &[
     ("zsh/.zshenv", include_str!("shell/zsh/.zshenv")),
     ("zsh/.zprofile", include_str!("shell/zsh/.zprofile")),
@@ -19,6 +19,29 @@ const FILES: &[(&str, &str)] = &[
     ("bash.sh", include_str!("shell/bash.sh")),
     ("fishdata/fish/vendor_conf.d/codeyard.fish", include_str!("shell/fish/codeyard.fish")),
 ];
+
+#[cfg(any(unix, test))]
+fn script_files() -> Vec<(&'static str, String)> {
+    // Cross builds may embed a Windows checkout. Hash and write the same LF
+    // bytes so shell syntax and the cache key do not depend on the build host.
+    FILES.iter().map(|(name, text)| (*name, unix_script(text))).collect()
+}
+
+#[cfg(any(unix, test))]
+fn unix_script(text: &str) -> String {
+    text.replace("\r\n", "\n")
+}
+
+#[cfg(test)]
+mod line_ending_tests {
+    #[test]
+    fn installed_scripts_use_unix_line_endings() {
+        assert_eq!(super::unix_script("for f in a; do\r\n  echo \"$f\"\r\ndone\r\n"), "for f in a; do\n  echo \"$f\"\ndone\n");
+        for (name, text) in super::script_files() {
+            assert!(!text.contains('\r'), "{name} contains Windows line endings");
+        }
+    }
+}
 
 #[cfg(unix)]
 fn cache_root() -> Option<PathBuf> {
@@ -50,14 +73,15 @@ fn private_dir(path: &Path) -> io::Result<()> {
 #[cfg(unix)]
 pub fn install_in(root: &Path) -> io::Result<PathBuf> {
     use std::os::unix::fs::PermissionsExt;
-    let all: String = FILES.iter().map(|(n, t)| format!("{n}\n{t}")).collect();
+    let files = script_files();
+    let all: String = files.iter().map(|(n, t)| format!("{n}\n{t}")).collect();
     let base = root.join("codeyard").join("shell-integration");
     let dir = base.join(format!("{:016x}", proto::content_hash(all.as_bytes())));
     std::fs::create_dir_all(root)?;
     for d in [root.join("codeyard"), base, dir.clone()] {
         private_dir(&d)?;
     }
-    for (name, text) in FILES {
+    for (name, text) in &files {
         let path = dir.join(name);
         if let Some(parent) = path.parent() {
             let mut p = dir.clone();
