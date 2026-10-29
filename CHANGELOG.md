@@ -13,6 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   own `codeyard-exthost` process. Every file, search and process call is checked against the extension's declared
   permissions and the folder's trust before it reaches the folder, locally and over SSH; a denial says which line to
   add. An extension that crashes three times in a minute is turned off until Codeyard restarts.
+- Extensions with code: a switch per declared permission on the extension's page, applied at once to a running
+  extension (its next call is refused with `revoked-by-user`) and kept per extension and publisher; a list of this
+  session's denials with *Copy fix*, which copies the manifest line that allows the call; and a crash card after three
+  crashes in a minute with *Reinstall Previous Version*, *Copy Report* (version, error and frames, no file contents or
+  outside paths) and *Report…*, which opens a filled-in issue in the extension's repository. Nothing is sent by itself.
+- *Developer: Extension Inspector*: per extension with code, when and why it started, its calls with extension, I/O
+  and overhead time, denials with *Copy fix*, its log and its last error with frames. Works by keyboard and with a
+  screen reader.
 - The extension API `codeyard:api` 0.1.0 (docs/extensions/reference/api.md) and its import check: `cyx check`, the
   registry and the installer refuse a code extension whose `extension.wasm` imports an interface its manifest has no
   permission for, with the line to add.

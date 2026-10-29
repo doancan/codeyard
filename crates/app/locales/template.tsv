@@ -45,6 +45,7 @@ Accept Incoming Change
 Act as your {} account	
 Actions	
 Activate Breakpoints	
+Activated {0} times, last at {1} by {2}	
 Activating the completed installation…	
 Add	
 Add Configuration…	
@@ -141,6 +142,7 @@ CPU
 CPU usage	
 CPU: {}. 100% equals one CPU core.	
 Call Stack	
+Calls	
 Can't copy a folder into itself.	
 Can't move a folder into itself.	
 Can't open {0}: {1}	
@@ -368,6 +370,7 @@ Copied {} item ({}) to {}|Copied {} items ({}) to {}
 Copied {} item.|Copied {} items.	
 Copied {}.	
 Copied “{}” ({}) to {}	
+Copied: {}	
 Copy	
 Copy Address	
 Copy Call Stack	
@@ -385,6 +388,7 @@ Copy as Expression
 Copy branch name	
 Copy code	
 Copy container ID	
+Copy fix	
 Copy link	
 Copy the files again on the current host before pasting.	
 Copy the full hash	
@@ -566,6 +570,7 @@ Deleted {}
 Deleted “{0}” from {1}	
 Deleting {}…	
 Deleting…	
+Denials	
 Deny	
 Deprecated	
 Deprecated by its publisher.	
@@ -576,6 +581,7 @@ Dev Container configuration: {}
 Dev Container is ready. The current workspace or unsaved files changed, so it was not switched automatically. Connect through the Docker picker.	
 Dev Container result: {}	
 Dev Container setup failed: {}. Check Output and install the Dev Container CLI if it is missing.	
+Developer: Extension Inspector	
 Developer: Restart Language Servers	
 Diagnostic copied	
 Diff view side by side (off: inline)	
@@ -776,6 +782,7 @@ Explorer
 Explorer (⇧⌘E)	
 Export as Text…	
 Exposed only; not published on the server.	
+Extension Inspector	
 Extension id, like publisher.name or publisher.name@1.2.0	
 Extension in development not loaded: {}	
 Extension in development: it reloads when you save a file in its folder	
@@ -1085,6 +1092,7 @@ Into a folder on this computer or the connected host
 Invalid pattern	
 Invalid string	
 It can't be moved to the Trash ({}). Deleting it permanently can't be undone.	
+It declares no permissions.	
 Its contributions are removed from every window, with the data it stored.	
 Its folder is deleted. Git refuses when the worktree has uncommitted changes; the branch stays.	
 Its publisher deprecated it and suggests {} instead.	
@@ -1128,6 +1136,8 @@ Language service setup failed: {}. Check the log and connection, then retry.
 Language services are ready with Node.js {}.	
 Language: {0} ({1})	
 Languages: Manage Language Services	
+Last trap	
+Last trap: {}	
 Later	
 Latest 300 lines; refreshed with resource snapshots.	
 Launch Profile…	
@@ -1166,6 +1176,7 @@ Local
 Local history	
 Local port {} is busy	
 Local time is not available on this system	
+Log	
 Logs	
 Look for new Codeyard versions: ask (not decided yet; nothing is checked), daily (once a day, downloads two small files from github.com, the checksum list of the latest release and its signature; GitHub sees your IP address and that the request comes from curl, nothing about your files) or manual (only when you choose Check for Updates). Your own settings only; a folder cannot change it	
 Looking for tests…	
@@ -1292,6 +1303,7 @@ No changes
 No changes in this file	
 No changes to discard	
 No changes.	
+No code extension is installed and enabled.	
 No code lens on this line	
 No comment syntax for this file type	
 No commit matches.	
@@ -1342,6 +1354,7 @@ No outgoing calls found
 No outline for this file type.	
 No output yet. Language server logs appear here.	
 No parent module found	
+No previous version is in the store.	
 No problem at the cursor	
 No problems in this file	
 No problems.	
@@ -1377,10 +1390,13 @@ No workspace file is open. Use File: Save Workspace As… to create one.
 No worktrees found.	
 Node.js program	
 None	
+None in this session.	
 None of these commits is yours.	
 None of this repository's remotes is on github.com.	
+None yet	
 None: it only adds data to Codeyard.	
 Not Now	
+Not activated in this window yet	
 Not breaking on exceptions.	
 Not changed (cancelled): {}	
 Not changed: {0} ({1})	
@@ -1416,6 +1432,8 @@ Numbers and booleans were written as text.
 OK	
 Object keys must be strings, not {}	
 Oct	
+Off	
+On	
 On this computer	
 One quiet color, outline glyphs	
 Only My Commits	
@@ -1511,6 +1529,7 @@ Pause updates
 Paused	
 Paused on exception: {}	
 Payload	
+Permission switches	
 Permissions	
 Permissions: none.	
 Permissions: {}	
@@ -1641,6 +1660,7 @@ Rebasing onto {}…
 Rebuild Dev Container…	
 Rebuild and Open	
 Recent	
+Recent denials	
 Reconnect	
 Reconnect to {}	
 Reconnected, but the server session had expired: terminals were closed.	
@@ -1659,6 +1679,7 @@ Regular expression
 Regular expression (⌥R)	
 Reinstall	
 Reinstall Language Services	
+Reinstall Previous Version	
 Release Page	
 Reload history	
 Remote & Languages	
@@ -1736,6 +1757,7 @@ Replaced {} match|Replaced {} matches
 Replacement preview	
 Report copied	
 Report saved to {}	
+Report…	
 Repository URL (https://… or git@host:owner/repo)	
 Rerun	
 Reset	
@@ -1795,6 +1817,7 @@ Run this search again in the same folder
 Run to Cursor	
 Run {} with any arguments	
 Running	
+Running code extensions in this window: why they started, how long their calls took, what was denied. Nothing here leaves this computer.	
 Running the program in a terminal is not supported on Windows yet: use {} in the configuration.	
 Running: {}	
 Running…	
@@ -2103,6 +2126,7 @@ The connection to {} dropped while the data was being exchanged.
 The connection to {} dropped. Reconnecting…	
 The connection to {} was lost during the scan, so the result is partial. Scan again once it is back.	
 The connection was lost; the results are incomplete.	
+The crash report is on the clipboard. Nothing was sent.	
 The debug adapter did not accept a connection	
 The debug adapter did not start listening	
 The debug adapter exited before connecting	
@@ -2447,6 +2471,7 @@ a theme must be a JSON object
 about {0} MB · {1}	
 approved	
 args must be a list of texts	
+at {}	
 auto	
 bad array index	
 binary	
@@ -2584,6 +2609,8 @@ no item {} in the response
 no “{}” in the response	
 not UTF-8	
 not available	
+not declared	
+not running	
 not selected	
 not set	
 now	
@@ -2654,6 +2681,7 @@ the file is not UTF-8 text
 the file is too large	
 the folder cannot be read on the left	
 the folder cannot be read on the right	
+the folder is not trusted	
 the header “{}” is not valid	
 the launch file is not an object	
 the launch file is not valid JSON: {}	
@@ -2669,7 +2697,10 @@ theme {} isn't installed here: copy its .json into ~/.config/codeyard/themes to 
 theme “{}” not found (available: auto, {})	
 this computer	
 this value cannot be watched	
+this version was revoked	
 too many copies	
+turned off after three crashes	
+turned off on the extension page	
 type parameter	
 unclosed [ in the path	
 undefined variable {}	
@@ -2732,6 +2763,8 @@ your words
 {0} lines · {1}	
 {0} lines · {1} MB · read-only	
 {0} lines, showing from line {1}	
+{0} may again: {1}	
+{0} may no longer: {1}	
 {0} needs strings, got {1} and {2}	
 {0} now tracks {1}	
 {0} of {1} MB	
@@ -2748,6 +2781,8 @@ your words
 {0} was updated to version {1}.	
 {0} went back to version {1}: its publisher withdrew {2}.	
 {0} {1} waits for your OK in the Extensions view.	
+{0} {1}: I/O {2}, overhead {3}	
+{0} {1}: guest {2}	
 {0} · version {1}	
 {0} · version {1} · {2} license	
 {0}, {1} {2} {3}	
@@ -2802,6 +2837,7 @@ your words
 {} contains code, but codeyard-exthost is missing beside Codeyard	
 {} crashed three times and is turned off until Codeyard restarts.	
 {} crashed three times in a minute and was turned off.	
+{} crashed three times within a minute and is turned off until Codeyard restarts. Nothing was sent anywhere.	
 {} cursor|{} cursors	
 {} day ago|{} days ago	
 {} definition|{} definitions	

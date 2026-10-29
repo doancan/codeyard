@@ -76,6 +76,7 @@ impl Render for Workbench {
                 Page::About(view) => view.into_any_element(),
                 Page::Containers => self.container_dashboard_view(&p, cx),
                 Page::Extension => self.extension_page(&p, cx),
+                Page::ExtensionInspector => self.extension_inspector(&p, cx),
                 Page::Settings(view) => view.into_any_element(),
                 Page::Markdown(view) => view.into_any_element(),
                 Page::Shortcuts(view) => view.into_any_element(),
@@ -126,6 +127,7 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::show_run_debug))
             .on_action(cx.listener(Self::show_testing))
             .on_action(cx.listener(Self::show_extensions))
+            .on_action(cx.listener(Self::show_extension_inspector))
             .on_action(cx.listener(Self::show_market))
             .on_action(cx.listener(Self::install_extension_from_file))
             .on_action(cx.listener(Self::install_extension_from_registry))

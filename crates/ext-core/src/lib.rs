@@ -9,6 +9,7 @@
 //! <data>/extensions/data/<id>/        each extension's own storage
 //! <data>/extensions/index.json        derived from the lock and the store; rebuilt when the lock changes
 //! <data>/extensions/revoked.json      versions a registry revoked, by content digest: they stay stopped offline too
+//! <data>/extensions/permissions.json  permissions the user turned off, per extension and publisher (grants.rs)
 //! <data>/extensions/.lock             held while a transaction runs, so two windows cannot interleave
 //! ```
 //!
@@ -18,6 +19,7 @@
 //! rebuilds. The lock is never ahead of the store.
 
 mod der;
+pub mod grants;
 pub mod lock;
 pub mod market;
 pub mod publisher;
@@ -360,6 +362,7 @@ impl Store {
         lock.extensions.remove(id).ok_or_else(|| Error::NotInstalled(id.clone()))?;
         self.commit_lock(&lock)?;
         let _ = remove_tree(&self.data_dir(id));
+        self.forget_permissions(id);
         Ok(())
     }
 

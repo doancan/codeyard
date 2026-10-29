@@ -631,9 +631,32 @@ applies at once, in every open window, without a restart.
 its own process (`codeyard-exthost`, beside Codeyard): it reaches only the files, programs
 and commands its sheet listed, and only through Codeyard, which checks every call, the same way for local and SSH
 folders. In a folder you have not trusted it may read what it declared and show messages, but not change files or run
-programs. When a call is refused, the message names the permission the extension would need. An extension that crashes
-three times within a minute is turned off until Codeyard restarts; one nobody used for five minutes is stopped and
-starts again on its next command.
+programs. When a call is refused, the message names the permission the extension would need. One nobody used for
+five minutes is stopped and starts again on its next command.
+
+On the page of an extension with code:
+
+- **Permission switches.** Each entry it declared (a file pattern, a host, a program, the clipboard …) has its own
+  *On*/*Off* switch. Turning one off applies at once, also to a running extension: its next call of that kind is
+  refused with `revoked-by-user`. Switches are kept for that extension *and* its publisher, in
+  `permissions.json` next to the installed packages; the same id from another publisher, or installed from a file,
+  starts without them. Uninstalling forgets them.
+- **Recent denials.** The calls refused in this session (kept in memory only), with what was refused and why.
+  *Copy fix* copies the manifest line that allows it, such as `net = ["api.example.com"]`: for an author, the line to
+  add to `[permissions]`; for a switch you turned off, the entry to turn back on.
+- **The crash card.** An extension that crashes three times within a minute is turned off until Codeyard restarts,
+  and its page says so. *Reinstall Previous Version* goes back to the version this one replaced (when it is still
+  kept) and lets it run again. *Copy Report* copies its version, the error and where in its code it happened; file
+  contents, logs and paths outside the extension are left out. *Report…* opens a new issue in the extension's
+  repository, filled in with that report, after you confirm the address. Nothing is sent by itself.
+
+**Extension Inspector.** *Developer: Extension Inspector* in the command palette (release builds too) opens a page
+with every enabled extension with code in this window: whether it runs, when and why it last started, its recent
+calls (for a command, the time spent in the extension; for a call to Codeyard, the time the work took and the
+overhead around it), its denials with *Copy fix*, its log with levels, and its last error with the place in its code.
+Every line is a tab stop, and a screen reader reads a heading per extension and section and the *Copy fix* buttons.
+It shows only this computer's data and sends nothing. The extension's own UI, highlighted live, comes with extension
+views.
 
 **Rules that keep them predictable.** An extension key binding never takes a key a built-in shortcut uses (the
 binding is left out and the status bar says so); a keymap preset you choose with `keymap.preset` may. An extension

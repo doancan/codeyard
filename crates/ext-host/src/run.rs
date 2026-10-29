@@ -111,6 +111,7 @@ pub fn run(input: impl Read, output: impl Write + Send + 'static) -> Result<(), 
             }
             ToHost::Settings(values) => guest.store.data_mut().settings.extend(values),
             ToHost::Env(env) => guest.store.data_mut().env = env,
+            ToHost::Grants(granted) => guest.store.data_mut().set_granted(granted),
             ToHost::Shutdown => {
                 guest.call(limits::GUEST_CALL_MILLIS, |s, x| x.expect("instantiated").codeyard_api_guest().call_deactivate(s))?;
                 return Ok(());

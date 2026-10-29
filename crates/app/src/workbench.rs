@@ -74,6 +74,8 @@ mod fsops_glue;
 mod git_glue;
 #[path = "workbench_groups.rs"]
 mod groups_glue;
+#[path = "workbench_ext_inspector.rs"]
+mod inspector_glue;
 #[path = "workbench_market.rs"]
 mod market_glue;
 #[path = "workbench_market_view.rs"]
@@ -493,6 +495,8 @@ enum Page {
     Containers,
     /// The Extensions view's detail page and consent sheet (state in `ConfigState::exts`).
     Extension,
+    /// **Developer: Extension Inspector** (workbench_ext_inspector.rs).
+    ExtensionInspector,
     Settings(Entity<crate::settings_page::SettingsPage>),
     Markdown(Entity<crate::markdown::MarkdownPreview>),
     Shortcuts(Entity<crate::shortcuts_page::ShortcutsPage>),
@@ -518,6 +522,7 @@ pub use debug::{
 };
 pub use ext_glue::{CancelExtensionConsent, InstallExtensionFromFile, InstallExtensionFromFolder, InstallExtensionFromRegistry, ShowExtensions};
 pub use host::askpass::{AskKind, AskRequest};
+pub use inspector_glue::ShowExtensionInspector;
 pub use market_glue::{MarketNext, MarketPrevious, ShowMarket};
 pub use remote_glue::ShowRemoteExplorer;
 pub use terminals_glue::{

@@ -37,6 +37,9 @@ pub enum ToHost {
     Settings(Vec<(String, Option<String>)>),
     /// `env.info` changed (theme, language, trust).
     Env(EnvInfo),
+    /// The interfaces granted now (`Hello::granted`), after the user turned a permission off or on: the next call to
+    /// one no longer granted fails with `denied { why: revoked-by-user }`, without a restart.
+    Grants(Vec<String>),
     /// Call `guest.deactivate` and exit.
     Shutdown,
 }
@@ -86,6 +89,12 @@ pub enum ToApp {
         call: Start,
     },
     Notify(Notify),
+    /// A call the exthost refused itself (its interface is not granted), so the app can list the denial; the call
+    /// itself never leaves the exthost. `call` is its WIT name, `interface/function`.
+    Denied {
+        call: String,
+        denied: ext_api::value::Denied,
+    },
     /// The guest trapped or ran out of memory; the exthost exits after sending this.
     Trap(Trap),
 }

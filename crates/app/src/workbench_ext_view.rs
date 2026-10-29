@@ -273,6 +273,7 @@ impl Workbench {
                 .children(m.description.clone().map(|d| div().child(d)))
                 .child(actions)
                 .children(self.extension_update_card(e, p, cx))
+                .children(self.extension_code_cards(e, p, cx))
                 .child(section_title(crate::i18n::t("Contributes"), p))
                 .child(line_list(contribution_lines(&m), crate::i18n::t("Nothing"), p))
                 .child(self.extension_permissions(&m, high_risk_line(&m), p)),

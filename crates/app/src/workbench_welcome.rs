@@ -308,6 +308,7 @@ impl Workbench {
                     Page::About(_) => "about",
                     Page::Containers => "containers",
                     Page::Extension => "extension",
+                    Page::ExtensionInspector => "extension-inspector",
                     Page::Settings(_) => "settings",
                     Page::Markdown(_) => "markdown",
                     Page::Shortcuts(_) => "shortcuts",
