@@ -21,6 +21,12 @@ need vendor/gpui/src/platform/windows/clipboard.rs 'fn dib_to_png\(' "bounded Wi
 need vendor/gpui/src/platform/mac/metal_renderer.rs 'set_maximum_drawable_count\(2\)' "drawable count 2"
 absent vendor/gpui/src/platform/mac/metal_renderer.rs 'set_maximum_drawable_count\(3\)' "drawable count 3"
 need vendor/gpui/src/window.rs '^pub struct DispatchEventResult' "pub DispatchEventResult"
+need vendor/gpui/src/ui_scale.rs 'pub fn to_logical\(self, ui_scale: f32\)' "interface scale input conversion"
+need vendor/gpui/src/app.rs 'pub fn set_ui_scale\(&mut self, scale: f32\)' "App::set_ui_scale"
+need vendor/gpui/src/window.rs 'let event = event.to_logical\(window.ui_scale\);' "platform input converted to logical pixels"
+need vendor/gpui/src/window.rs 'self.sync_ui_scale\(cx\);' "interface scale applied before each frame"
+need vendor/gpui/src/window.rs 'platform_window.scale_factor\(\) \* self.ui_scale' "display scale combined with interface scale"
+need vendor/gpui/src/platform.rs 'ui_bounds_to_platform\(bounds, window.ui_scale\(\)\)' "IME bounds in platform points"
 absent vendor/gpui/src/window.rs '^pub\(crate\) struct DispatchEventResult' "pub(crate) DispatchEventResult"
 need vendor/xattr/src/sys/mod.rs 'libc::ENODATA' "Linux ENODATA instead of ENOATTR (xattr)"
 # The root Cargo.toml uses the patches, and the version is pinned.

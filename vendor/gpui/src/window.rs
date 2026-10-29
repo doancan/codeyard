@@ -856,6 +856,8 @@ pub struct Window {
     modifiers: Modifiers,
     capslock: Capslock,
     scale_factor: f32,
+    /// The interface scale this window last rendered with (`App::ui_scale`, applied in `draw`).
+    ui_scale: f32,
     pub(crate) bounds_observers: SubscriberSet<(), AnyObserver>,
     appearance: WindowAppearance,
     pub(crate) appearance_observers: SubscriberSet<(), AnyObserver>,
@@ -979,11 +981,12 @@ impl Window {
 
         let display_id = platform_window.display().map(|display| display.id());
         let sprite_atlas = platform_window.sprite_atlas();
-        let mouse_position = platform_window.mouse_position();
+        let ui_scale = cx.ui_scale;
+        let mouse_position = crate::ui_point_to_logical(platform_window.mouse_position(), ui_scale);
         let modifiers = platform_window.modifiers();
         let capslock = platform_window.capslock();
-        let content_size = platform_window.content_size();
-        let scale_factor = platform_window.scale_factor();
+        let content_size = crate::ui_size_to_logical(platform_window.content_size(), ui_scale);
+        let scale_factor = platform_window.scale_factor() * ui_scale;
         let appearance = platform_window.appearance();
         let text_system = Arc::new(WindowTextSystem::new(cx.text_system().clone()));
         let invalidator = WindowInvalidator::new();
@@ -1125,7 +1128,11 @@ impl Window {
             let mut cx = cx.to_async();
             Box::new(move |event| {
                 handle
-                    .update(&mut cx, |_, window, cx| window.dispatch_event(event, cx))
+                    .update(&mut cx, |_, window, cx| {
+                        // Platform points become logical pixels here, once, for every input path.
+                        let event = event.to_logical(window.ui_scale);
+                        window.dispatch_event(event, cx)
+                    })
                     .log_err()
                     .unwrap_or(DispatchEventResult::default())
             })
@@ -1239,6 +1246,7 @@ impl Window {
             modifiers,
             capslock,
             scale_factor,
+            ui_scale,
             bounds_observers: SubscriberSet::new(),
             appearance,
             appearance_observers: SubscriberSet::new(),
@@ -1676,8 +1684,7 @@ impl Window {
     }
 
     fn bounds_changed(&mut self, cx: &mut App) {
-        self.scale_factor = self.platform_window.scale_factor();
-        self.viewport_size = self.platform_window.content_size();
+        self.update_scaled_metrics();
         self.display_id = self.platform_window.display().map(|display| display.id());
 
         self.refresh();
@@ -1692,9 +1699,38 @@ impl Window {
         self.platform_window.bounds()
     }
 
-    /// Set the content size of the window.
+    /// Set the content size of the window, in logical pixels (multiplied by the interface scale for the platform).
     pub fn resize(&mut self, size: Size<Pixels>) {
-        self.platform_window.resize(size);
+        self.platform_window
+            .resize(crate::ui_size_to_platform(size, self.ui_scale));
+    }
+
+    /// Display scale and viewport from the platform, combined with this window's interface scale. Applying a display
+    /// change (another monitor) and an interface-scale change both go through here, so neither compounds the other.
+    fn update_scaled_metrics(&mut self) {
+        self.scale_factor = self.platform_window.scale_factor() * self.ui_scale;
+        self.viewport_size =
+            crate::ui_size_to_logical(self.platform_window.content_size(), self.ui_scale);
+    }
+
+    /// Adopt `App::ui_scale` if it changed since the last frame. The mouse keeps its place on screen, and the IME is
+    /// told where the caret moved to.
+    fn sync_ui_scale(&mut self, cx: &App) {
+        let scale = cx.ui_scale;
+        if scale == self.ui_scale {
+            return;
+        }
+        let on_screen = crate::ui_point_to_platform(self.mouse_position, self.ui_scale);
+        self.ui_scale = scale;
+        self.mouse_position = crate::ui_point_to_logical(on_screen, scale);
+        self.update_scaled_metrics();
+        self.invalidate_character_coordinates();
+    }
+
+    /// The interface scale this window renders with (see [`App::set_ui_scale`]). [`Self::scale_factor`] already
+    /// includes it.
+    pub fn ui_scale(&self) -> f32 {
+        self.ui_scale
     }
 
     /// Returns whether or not the window is currently fullscreen
@@ -1747,7 +1783,8 @@ impl Window {
 
     /// Opens the native title bar context menu, useful when implementing client side decorations (Wayland and X11)
     pub fn show_window_menu(&self, position: Point<Pixels>) {
-        self.platform_window.show_window_menu(position)
+        self.platform_window
+            .show_window_menu(crate::ui_point_to_platform(position, self.ui_scale))
     }
 
     /// Tells the compositor to take control of window movement (Wayland and X11)
@@ -1760,7 +1797,8 @@ impl Window {
     /// When using client side decorations, set this to the width of the invisible decorations (Wayland and X11)
     pub fn set_client_inset(&mut self, inset: Pixels) {
         self.client_inset = Some(inset);
-        self.platform_window.set_client_inset(inset);
+        self.platform_window
+            .set_client_inset(crate::ui_to_platform(inset, self.ui_scale));
     }
 
     /// Returns the client_inset value by [`Self::set_client_inset`].
@@ -1814,7 +1852,8 @@ impl Window {
 
     /// The scale factor of the display associated with the window. For example, it could
     /// return 2.0 for a "retina" display, indicating that each logical pixel should actually
-    /// be rendered as two pixels on screen.
+    /// be rendered as two pixels on screen. Multiplied by the interface scale ([`Self::ui_scale`]):
+    /// logical pixels times this value are device pixels.
     pub fn scale_factor(&self) -> f32 {
         self.scale_factor
     }
@@ -1892,7 +1931,7 @@ impl Window {
             .is_action_available(action, node_id)
     }
 
-    /// The position of the mouse relative to the window.
+    /// The position of the mouse relative to the window, in logical pixels.
     pub fn mouse_position(&self) -> Point<Pixels> {
         self.mouse_position
     }
@@ -1915,6 +1954,7 @@ impl Window {
     /// the contents of the new [`Scene`], use [`Self::present`].
     #[profiling::function]
     pub fn draw(&mut self, cx: &mut App) -> ArenaClearNeeded {
+        self.sync_ui_scale(cx);
         self.invalidate_entities();
         cx.entities.clear_accessed();
         debug_assert!(self.rendered_entity_stack.is_empty());
@@ -4131,7 +4171,9 @@ impl Window {
         self.on_next_frame(|window, cx| {
             if let Some(mut input_handler) = window.platform_window.take_input_handler() {
                 if let Some(bounds) = input_handler.selected_bounds(window, cx) {
-                    window.platform_window.update_ime_position(bounds);
+                    window
+                        .platform_window
+                        .update_ime_position(crate::ui_bounds_to_platform(bounds, window.ui_scale));
                 }
                 window.platform_window.set_input_handler(input_handler);
             }

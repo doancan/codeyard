@@ -805,6 +805,35 @@ impl VisualTestContext {
         self.simulate_window_resize(self.window, size)
     }
 
+    /// Move the window to a display with another scale factor (Retina 2.0 by default).
+    pub fn simulate_display_scale(&mut self, scale_factor: f32) {
+        self.test_window(self.window)
+            .simulate_display_scale(scale_factor);
+        self.background_executor.run_until_parked();
+    }
+
+    /// What the platform gets when it asks the focused input handler of the last frame where the text in
+    /// `range_utf16` is (to place IME candidates): bounds in platform points, after the interface scale.
+    pub fn platform_bounds_for_range(
+        &mut self,
+        range_utf16: std::ops::Range<usize>,
+    ) -> Option<Bounds<Pixels>> {
+        let window = self.test_window(self.window);
+        let mut handler = window.0.lock().input_handler.take()?;
+        let bounds = handler.bounds_for_range(range_utf16);
+        window.0.lock().input_handler = Some(handler);
+        bounds
+    }
+
+    /// What the platform gets when it asks the focused input handler which character is at `point` (platform points).
+    pub fn platform_character_index_for_point(&mut self, point: Point<Pixels>) -> Option<usize> {
+        let window = self.test_window(self.window);
+        let mut handler = window.0.lock().input_handler.take()?;
+        let index = handler.character_index_for_point(point);
+        window.0.lock().input_handler = Some(handler);
+        index
+    }
+
     /// debug_bounds returns the bounds of the element with the given selector.
     pub fn debug_bounds(&mut self, selector: &'static str) -> Option<Bounds<Pixels>> {
         self.update(|window, _| window.rendered_frame.debug_bounds.get(selector).copied())

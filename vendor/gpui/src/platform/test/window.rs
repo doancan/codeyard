@@ -27,8 +27,10 @@ pub(crate) struct TestWindowState {
     hover_status_change_callback: Option<Box<dyn FnMut(bool)>>,
     resize_callback: Option<Box<dyn FnMut(Size<Pixels>, f32)>>,
     moved_callback: Option<Box<dyn FnMut()>>,
-    input_handler: Option<PlatformInputHandler>,
+    pub(crate) input_handler: Option<PlatformInputHandler>,
     is_fullscreen: bool,
+    /// The display scale factor (2.0 unless a test moves the window to another display).
+    scale_factor: f32,
 }
 
 #[derive(Clone)]
@@ -74,6 +76,7 @@ impl TestWindow {
             moved_callback: None,
             input_handler: None,
             is_fullscreen: false,
+            scale_factor: 2.0,
         })))
     }
 
@@ -84,6 +87,19 @@ impl TestWindow {
             return;
         };
         lock.bounds.size = size;
+        drop(lock);
+        callback(size, scale_factor);
+        self.0.lock().resize_callback = Some(callback);
+    }
+
+    /// The window moved to a display with another scale factor; platforms report that through the resize callback.
+    pub fn simulate_display_scale(&mut self, scale_factor: f32) {
+        let mut lock = self.0.lock();
+        lock.scale_factor = scale_factor;
+        let size = lock.bounds.size;
+        let Some(mut callback) = lock.resize_callback.take() else {
+            return;
+        };
         drop(lock);
         callback(size, scale_factor);
         self.0.lock().resize_callback = Some(callback);
@@ -134,7 +150,7 @@ impl PlatformWindow for TestWindow {
     }
 
     fn scale_factor(&self) -> f32 {
-        2.0
+        self.0.lock().scale_factor
     }
 
     fn appearance(&self) -> WindowAppearance {

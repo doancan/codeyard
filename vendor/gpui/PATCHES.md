@@ -13,6 +13,7 @@ It is used through `[patch.crates-io]` in the root `Cargo.toml`. The patches bel
 | src/platform.rs | Convert SVG image pixels from premultiplied RGBA to straight BGRA | SVG file/Markdown previews otherwise swap red and blue and darken translucent pixels. Matches the existing SVG resource decoder. |
 | src/elements/text.rs | Register both link click handlers per frame, accept only left clicks, clear cancelled presses | Right-clicks followed links and a release before the next paint could be lost. A cancelled press must not survive to a later release. |
 | src/platform/windows/clipboard.rs | Read CF_DIB and CF_DIBV5 clipboard images and convert them to PNG, with size limits | Windows screenshots may provide DIB data without a PNG clipboard format; terminal image paste needs portable encoded bytes. |
+| src/ui_scale.rs, src/app.rs, src/window.rs, src/platform.rs | Logical interface scale: `App::set_ui_scale`, `Window::ui_scale`; the window renders with display scale × interface scale, its viewport and incoming mouse/scroll/drop/IME positions are divided by it, and IME bounds, `Window::resize`, the window menu and client insets are multiplied by it | Interface zoom (`ui.scale`) at one boundary: layout, hit testing, text, accessibility geometry and the IME stay in one logical coordinate space, and the display's own DPI stays separate. Scale 1.0 is a no-op. The app's `ui_scale_tests.rs` covers the transforms, input, hit testing and IME bounds. |
 
 `vendor/xattr` is patched the same way (`libc::ENOATTR` does not exist on Linux, `ENODATA` is used); it has nothing to do with
 GPUI, but the same script checks it. Update the table and `scripts/check-gpui-patches.sh` together; the script runs from
@@ -35,6 +36,7 @@ GPUI, but the same script checks it. Update the table and `scripts/check-gpui-pa
    - `src/platform.rs`: preserve the SVG image pixel conversion; the app's `svg_pixels_use_the_same_bgra_channels_and_straight_alpha_as_raster_images` test checks it.
    - `src/elements/text.rs`: retain same-frame link press/release handlers and cancellation; `markdown_links_open_local_files_with_one_fast_left_click` covers them.
    - `src/platform/windows/clipboard.rs`: retain bounded CF_DIB and CF_DIBV5 conversion to PNG for Windows clipboard images.
+   - Interface scale: keep `src/ui_scale.rs`, `App::set_ui_scale`, `Window::sync_ui_scale` (called first in `Window::draw`), `PlatformInput::to_logical` in the `on_input` callback, and the conversions in `Window::resize`, `show_window_menu`, `set_client_inset`, `invalidate_character_coordinates` and `PlatformInputHandler::{bounds_for_range, character_index_for_point}`. Check any new platform → window coordinate path; `ui_scale_tests.rs` in the app must pass.
    - Run `scripts/check-gpui-patches.sh`: everything must say `ok`. If upstream now contains a patch itself or moved the code,
      update the pattern in the script and this table.
 4. **Build and check** (merge only when all are green): `cargo build -p app`, `cargo clippy --workspace --all-targets -- -D warnings`,
