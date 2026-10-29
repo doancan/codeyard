@@ -18,6 +18,7 @@
 
 pub mod lock;
 pub mod trust;
+pub mod yard;
 
 #[cfg(test)]
 mod tests;
