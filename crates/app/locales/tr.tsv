@@ -2925,3 +2925,4 @@ What kind of extension?	Ne tür bir eklenti?
 Create Here	Buraya Oluştur
 {} is loaded as an extension in development: save a file to reload it	{} geliştirilen eklenti olarak yüklendi: yeniden yüklemek için bir dosyayı kaydedin
 Could not create the extension: {}	Eklenti oluşturulamadı: {}
+Could not paste: {}	Yapıştırılamadı: {}
