@@ -2654,20 +2654,13 @@ Close window	Pencereyi kapat
 Mouse wheel and trackpad scroll speed multiplier	Fare tekerleği ve izleme dörtgeni kaydırma hızı çarpanı
 Terminal row height, as a multiple of the font size	Terminal satır yüksekliği, yazı boyutunun katı olarak
 Toggle Panel (⌘J)	Paneli Aç/Kapat (⌘J)
-Closes when the pointer leaves · pin to keep open	Fare ayrılınca kapanır · açık tutmak için sabitleyin
 Codeyard memory	Codeyard belleği
 Disk available	Kullanılabilir disk
-Includes hidden and build files; symlinks are not followed.	Gizli dosyalar ve derleme dosyaları dahildir; sembolik bağlantılar izlenmez.
-Load average (1 / 5 / 15 min)	Yük ortalaması (1 / 5 / 15 dk)
-Logical processors	Mantıksal işlemciler
+Load	Yük
+files	dosya
 Measuring…	Ölçülüyor…
 Open File	Dosyayı Aç
-Open a folder to measure its size.	Boyutunu ölçmek için bir klasör açın.
-Partial scan: a time, file or access limit was reached.	Kısmi tarama: süre, dosya veya erişim sınırına ulaşıldı.
-Pinned · click the pin to restore auto-close	Sabitlendi · otomatik kapatmak için iğneye tıklayın
 Project	Proje
-Project size	Proje boyutu
-Project size is available for local folders.	Proje boyutu yerel klasörlerde gösterilir.
 Unavailable	Kullanılamıyor
 View: Resources	Görünüm: Kaynaklar
 Web Preview	Web Önizleme

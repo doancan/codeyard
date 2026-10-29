@@ -106,7 +106,7 @@ impl Workbench {
         )
         .child(header)
         .child(update_body(self, &model, p, &send, false))
-        .child(update_footer(self, &model, p, &send, false, false));
+        .child(update_footer(self, &model, p, &send, false, ui::keyboard_focus(cx)));
         Some(deferred(
             div()
                 .id("update-backdrop")
@@ -333,7 +333,7 @@ fn update_body(wb: &Workbench, model: &DialogModel, p: &Palette, send: &Dispatch
     }
 }
 
-/// `ring`: draw the keyboard focus ring (the dialog's own window shows it only after the keyboard was used).
+/// `ring`: draw the keyboard focus ring (shown only after the keyboard was used, in the dialog's own window and in the workbench).
 fn update_footer(wb: &Workbench, model: &DialogModel, p: &Palette, send: &Dispatch, native: bool, ring: bool) -> impl IntoElement + use<> {
     let draw = |ix: usize, b: &DialogButton| {
         let (action, send) = (b.action, send.clone());
@@ -421,7 +421,7 @@ fn update_button(ix: usize, b: &DialogButton, handle: Option<&FocusHandle>, p: &
         .border_2()
         .border_color(gpui::transparent_black());
     let slot = match handle {
-        Some(h) if !native || ring => slot.track_focus(h).focus(|s| s.border_color(c(p.focus_ring))),
+        Some(h) if ring => slot.track_focus(h).focus(|s| s.border_color(c(p.focus_ring))),
         Some(h) => slot.track_focus(h),
         None => slot,
     };

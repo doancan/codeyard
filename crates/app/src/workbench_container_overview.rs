@@ -448,7 +448,8 @@ impl Workbench {
                 .overflow_scroll()
                 .track_scroll(&b.overview.scroll)
                 .when_some(b.overview.focus.as_ref(), |d, focus| {
-                    d.track_focus(focus).border_1().border_color(c(p.border)).focus(|s| s.border_color(c(p.focus_ring)))
+                    let keyboard = ui::keyboard_focus(cx);
+                    d.track_focus(focus).border_1().border_color(c(p.border)).when(keyboard, |d| d.focus(|s| s.border_color(c(p.focus_ring))))
                 })
                 .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, _, cx| {
                     let key = event.keystroke.key.as_str();
