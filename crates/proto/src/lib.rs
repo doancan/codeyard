@@ -15,7 +15,7 @@ use std::io::{self, Read, Write};
 use serde::{Deserialize, Serialize};
 
 /// Compared in the handshake; on mismatch the agent is reinstalled.
-pub const VERSION: u32 = 14;
+pub const VERSION: u32 = 15;
 
 /// Max size of one frame. Larger files are read in chunks.
 pub const MAX_FRAME: usize = 64 * 1024 * 1024;

@@ -40,7 +40,7 @@ passphrase-protected key stands in for a password because a non-root `sshd` cann
 ## Agent and protocol
 
 `crates/proto` defines the messages; frames are length-prefixed `postcard`, requests carry an id, so many calls and
-streams are multiplexed. Current protocol version: **14**.
+streams are multiplexed. Current protocol version: **15**.
 
 | Group | Requests | Notes |
 | --- | --- | --- |
