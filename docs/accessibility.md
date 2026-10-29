@@ -22,6 +22,12 @@ The tree, in the order a screen reader walks it:
   field's real focus is exposed. The graph, worktrees and sync controls are not exposed yet.
 - `TabList` "Editor tabs": one `Tab` per editor tab of the focused group (file name, `(modified)`, selected for the tab
   in front, set position).
+- Search Editor tabs are listed in the same `TabList`. The Search Editor in front is a `Group` with its title: a
+  `SearchInput` with the query, a polite `Status` (result counts, incomplete or restored results), a `ListBox` "Search
+  results" or "Replacement preview" whose options are a window of at most 200 rows around the keyboard row (set size
+  and position give the full count; Click opens a match or toggles a file, Focus moves the keyboard row), and the
+  "Apply N changes in M files" and "Undo Replace" buttons. Apply is disabled while the results are incomplete; row and
+  Apply actions are refused if the row's label or the Apply label changed since the tree was read.
 - While the find bar is open, a `Group` "Find": a `SearchInput` with the query, a `TextInput` "Replace" while the replace
   row shows, a `Status` with "3 of 12" (a polite live region, so it is spoken while typing and moving between matches),
   then the options as `CheckBox` (with their state) and the buttons, in the order they are drawn. Labels are the tooltips,
@@ -130,7 +136,7 @@ macOS. The CPU cost of the 250 ms snapshot loop has not been measured.
   file offsets in long files. Primary selection only; no multi-cursor, folding, wrapped lines, RTL or CRLF handling.
 - The terminal exposes the screen only, not the scrollback, and cannot be written to from the tree (typing goes through
   the keyboard as usual).
-- Not exposed: search, debug, testing, remote and extensions sidebars (the extension page too), the Source Control graph, worktrees and sync controls, the bottom
+- Not exposed: the search sidebar (its results can be opened in a Search Editor), debug, testing, remote and extensions sidebars (the extension page too), the Source Control graph, worktrees and sync controls, the bottom
   panel's other views (problems, output, ports), hover and signature popups, the Settings and Keyboard Shortcuts pages,
   context menus, and dialogs other than the update dialog. Only the tabs of the focused editor group are listed, and
   diff, large-file and page tabs are not.
