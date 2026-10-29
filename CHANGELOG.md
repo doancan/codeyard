@@ -45,7 +45,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repository, which keeps its own draft and result. Operations carry the repository's identity and are checked again
   before Git runs, so a repository removed or re-created while one is pending is never acted on, and its result is not
   shown for another. Keyboard (↑/↓, Home/End, ←/→) and screen reader access to the repository list. Works locally and
-  over SSH.
+  over SSH. History, stash, branch-picker and named-stash actions stay with the repository they were opened on.
+  Repositories refresh a few at a time, and the workspace is searched again only when folders change, a repository
+  disappears, or on Refresh after a minute. The agent protocol is version 14: `Stat` also reports a file's identity and
+  creation time, which identify a repository's git directory.
 - The extension registry's signed index: format, offline verification (a threshold of root keys, an expiring online
   key, no rollback to an older copy) and `cyx yard keygen | sign | verify` for the key ceremony and test registries
   (docs/registry.md).

@@ -761,10 +761,15 @@ and discard on a file row or a group act on that row's repository, even when two
 path; clicking a file opens its repository's diff and selects that repository. The message box, Commit, Sync, the
 graph and the "…" menu act on the selected repository, named next to its branch; each repository keeps its own draft
 message and last result, and confirmations name the repository. Click a repository row to select it, or focus the list
-with Tab and use ↑/↓, Home and End to move between repositories and ←/→ (or Enter) to fold one. **Refresh** searches
-again. A repository that is removed or created again at the same path while an operation is pending gets nothing from
-it: the result says "Repository is no longer available" or "Repository changed while the operation was pending", and
-the operation never moves to another repository. With a single repository the panel looks as before.
+with Tab and use ↑/↓, Home and End to move between repositories and ←/→ (or Enter) to fold one. The workspace is
+searched again when folders are added or removed, when a repository disappears, and on **Refresh** once the last
+search is more than a minute old; while Source Control is visible the other repositories refresh a few at a time. A
+graph or stash action, the branch and stash pickers and the named stash belong to the repository they were opened
+on: picked after another repository was selected, they act on the one they were opened for or not at all, never on
+the new selection. A repository that is removed or created again at the same path while an operation is pending gets
+nothing from it: the result says "Repository is no longer available" or "Repository changed while the operation was
+pending", and the operation never moves to another repository. A draft typed for a repository that disappears stays
+with it. With a single repository the panel looks as before.
 
 **Stash.** Besides stash and stash with untracked files there are "Stash Staged Changes" (only what is staged;
 needs git 2.35 or newer), "Stash with Name…" and "Show Stash…", which lists the files a stash changed and opens one
