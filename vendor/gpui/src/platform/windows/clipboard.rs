@@ -12,7 +12,7 @@ use windows::Win32::{
             RegisterClipboardFormatW, SetClipboardData,
         },
         Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock},
-        Ole::{CF_HDROP, CF_UNICODETEXT},
+        Ole::{CF_DIB, CF_DIBV5, CF_HDROP, CF_UNICODETEXT},
     },
     UI::Shell::{DragQueryFileW, HDROP},
 };
@@ -45,6 +45,8 @@ static FORMATS_MAP: LazyLock<FxHashMap<u32, ClipboardFormatType>> = LazyLock::ne
     formats_map.insert(*CLIPBOARD_GIF_FORMAT, ClipboardFormatType::Image);
     formats_map.insert(*CLIPBOARD_JPG_FORMAT, ClipboardFormatType::Image);
     formats_map.insert(*CLIPBOARD_SVG_FORMAT, ClipboardFormatType::Image);
+    formats_map.insert(CF_DIB.0 as u32, ClipboardFormatType::Image);
+    formats_map.insert(CF_DIBV5.0 as u32, ClipboardFormatType::Image);
     formats_map.insert(CF_HDROP.0 as u32, ClipboardFormatType::Files);
     formats_map
 });
@@ -55,6 +57,8 @@ static FORMATS_SET: LazyLock<FxHashSet<u32>> = LazyLock::new(|| {
     formats_map.insert(*CLIPBOARD_GIF_FORMAT);
     formats_map.insert(*CLIPBOARD_JPG_FORMAT);
     formats_map.insert(*CLIPBOARD_SVG_FORMAT);
+    formats_map.insert(CF_DIB.0 as u32);
+    formats_map.insert(CF_DIBV5.0 as u32);
     formats_map.insert(CF_HDROP.0 as u32);
     formats_map
 });
@@ -327,8 +331,90 @@ fn read_metadata_from_clipboard() -> Option<String> {
 }
 
 fn read_image_from_clipboard(format: u32) -> Option<ClipboardEntry> {
+    if format == CF_DIB.0 as u32 || format == CF_DIBV5.0 as u32 {
+        return with_clipboard_data(format, |data_ptr, size| {
+            // Clipboard memory is controlled by another process. Bound it before decoding.
+            if size > 128 * 1024 * 1024 {
+                return None;
+            }
+            let bytes = unsafe { std::slice::from_raw_parts(data_ptr.cast::<u8>(), size) };
+            let png = dib_to_png(bytes).ok()?;
+            Some(ClipboardEntry::Image(Image::from_bytes(ImageFormat::Png, png)))
+        })?;
+    }
     let image_format = format_number_to_image_format(format)?;
     read_image_for_type(format, *image_format)
+}
+
+// DIB clipboard data is a BMP without its file header. Convert it to PNG so
+// consumers receive a normal, portable image rather than Windows-only bytes.
+fn dib_to_png(bytes: &[u8]) -> Result<Vec<u8>> {
+    use image::ImageDecoder;
+    // image's BMP decoder skips 12 bytes after V4/V5 bitfield headers even
+    // though their masks are part of the header. Compensate for that skip.
+    let mut padded = Vec::new();
+    let header = bytes.get(..4).and_then(|b| b.try_into().ok()).map(u32::from_le_bytes).unwrap_or(0);
+    let compression = bytes.get(16..20).and_then(|b| b.try_into().ok()).map(u32::from_le_bytes).unwrap_or(0);
+    let bytes = if matches!(header, 108 | 124) && compression == 3 && bytes.len() >= header as usize {
+        let header = header as usize;
+        padded.extend_from_slice(&bytes[..header]);
+        padded.extend_from_slice(&[0; 12]);
+        padded.extend_from_slice(&bytes[header..]);
+        padded.as_slice()
+    } else {
+        bytes
+    };
+    let decoder = image::codecs::bmp::BmpDecoder::new_without_file_header(std::io::Cursor::new(bytes))?;
+    let (width, height) = decoder.dimensions();
+    anyhow::ensure!(width <= 16384 && height <= 16384 && u64::from(width) * u64::from(height) <= 32_000_000, "clipboard image is too large");
+    let image = image::DynamicImage::from_decoder(decoder)?;
+    let mut png = std::io::Cursor::new(Vec::new());
+    image.write_to(&mut png, image::ImageFormat::Png)?;
+    Ok(png.into_inner())
+}
+
+#[cfg(test)]
+mod dib_tests {
+    use super::dib_to_png;
+
+    #[test]
+    fn clipboard_dib_and_dibv5_decode_as_png() {
+        let source = image::DynamicImage::ImageRgb8(image::RgbImage::from_pixel(2, 1, image::Rgb([17, 83, 241])));
+        let mut bmp = std::io::Cursor::new(Vec::new());
+        source.write_to(&mut bmp, image::ImageFormat::Bmp).unwrap();
+        let bmp = bmp.into_inner();
+        let dib = &bmp[14..];
+        let mut v5 = dib[..40].to_vec();
+        v5[0..4].copy_from_slice(&124u32.to_le_bytes());
+        v5.resize(124, 0);
+        v5.extend_from_slice(&dib[40..]);
+        for data in [dib, v5.as_slice()] {
+            let png = dib_to_png(data).unwrap();
+            let decoded = image::load_from_memory_with_format(&png, image::ImageFormat::Png).unwrap();
+            assert_eq!(decoded.to_rgb8(), source.to_rgb8());
+        }
+    }
+
+    #[test]
+    fn invalid_dib_is_rejected() {
+        assert!(dib_to_png(&[0; 16]).is_err());
+    }
+
+    #[test]
+    fn clipboard_dibv5_preserves_alpha() {
+        let source = image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(1, 1, image::Rgba([10, 20, 30, 128])));
+        let mut bmp = std::io::Cursor::new(Vec::new());
+        source.write_to(&mut bmp, image::ImageFormat::Bmp).unwrap();
+        let bmp = bmp.into_inner();
+        let dib = &bmp[14..];
+        assert_eq!(u32::from_le_bytes(dib[..4].try_into().unwrap()), 108);
+        let mut v5 = dib[..108].to_vec();
+        v5[..4].copy_from_slice(&124u32.to_le_bytes());
+        v5.resize(124, 0);
+        v5.extend_from_slice(&dib[108..]);
+        let png = dib_to_png(&v5).unwrap();
+        assert_eq!(image::load_from_memory(&png).unwrap().to_rgba8(), source.to_rgba8());
+    }
 }
 
 #[inline]

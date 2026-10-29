@@ -1783,7 +1783,6 @@ Staging changes inside a symlink or submodule is not supported	Sembolik bağ ya 
 Staging changes needs a UTF-8 file (this one is stored in another encoding)	Değişiklikleri stage'e almak için UTF-8 bir dosya gerekir (bu dosya başka bir kodlamayla saklanıyor)
 Staging changes is not supported in files with old-Mac (CR only) line endings	Değişiklikleri stage'e almak, eski Mac (yalnızca CR) satır sonlarına sahip dosyalarda desteklenmiyor
 # ---- About dialog and macOS Full Disk Access prompt ----
-Version {}	Sürüm {}
 Copy Version	Sürümü Kopyala
 Allow file access	Dosya erişimine izin verin
 Without Full Disk Access, Desktop, Documents or external drives may look empty.	Tam Disk Erişimi olmadan Masaüstü, Belgeler ya da harici sürücüler boş görünebilir.
@@ -2907,6 +2906,13 @@ Run Codeyard commands: {}	Codeyard komutlarını çalıştırma: {}
 {} contains code; this version of Codeyard runs data-only extensions (themes, snippets, keymaps, languages, schemas, language servers)	{} kod içeriyor; Codeyard’ın bu sürümü yalnızca veri eklentilerini çalıştırır (temalar, snippet’ler, kısayol düzenleri, diller, şemalar, dil sunucuları)
 {} contains code, which this version does not run	{} kod içeriyor; bu sürüm kodu çalıştırmaz
 Load installed extensions (off: Codeyard starts as if none were installed)	Kurulu eklentileri yükle (kapalı: Codeyard hiç eklenti kurulu değilmiş gibi açılır)
+Application details	Uygulama bilgileri
+Client protocol	İstemci protokolü
+Remote connection	Uzak bağlantı
+Remote agent protocol	Uzak ajan protokolü
+Version	Sürüm
+Platform	Çalışma platformu
+Copied	Kopyalandı
 Extensions: New Extension…	Eklentiler: Yeni Eklenti…
 Create	Oluştur
 Name of the new extension, like my-theme	Yeni eklentinin adı, örneğin my-theme
@@ -2919,3 +2925,4 @@ What kind of extension?	Ne tür bir eklenti?
 Create Here	Buraya Oluştur
 {} is loaded as an extension in development: save a file to reload it	{} geliştirilen eklenti olarak yüklendi: yeniden yüklemek için bir dosyayı kaydedin
 Could not create the extension: {}	Eklenti oluşturulamadı: {}
+Could not paste: {}	Yapıştırılamadı: {}

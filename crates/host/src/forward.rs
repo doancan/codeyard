@@ -9,6 +9,28 @@ use std::process::Stdio;
 
 use crate::ssh::{Target, check_target, ssh_base, target_of};
 
+#[cfg(windows)]
+#[path = "windows_forward.rs"]
+mod windows;
+
+/// Stop all standalone forwards when the owning connection closes.
+#[cfg(windows)]
+pub(crate) fn close_windows_forwards(alias: &str) {
+    windows::close_alias(alias);
+}
+
+/// Stop all standalone forwards on application exit.
+#[cfg(windows)]
+pub(crate) fn close_all_windows_forwards() {
+    windows::close_all();
+}
+
+/// Whether a Windows standalone forwarding process still owns its tunnel.
+#[cfg(windows)]
+pub fn is_alive(alias: &str, spec: &str) -> bool {
+    windows::alive(alias, spec)
+}
+
 /// Where the server side of a forward connects.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RemoteTarget {
@@ -153,12 +175,8 @@ fn unsupported(message: &str) -> ForwardError {
 
 /// Checks shared by every forward: ControlMaster exists here, the target is an SSH host, the name is safe.
 fn guard(alias: &str, reverse: bool) -> Result<(), ForwardError> {
-    if cfg!(windows) {
-        return Err(unsupported(if reverse {
-            "In-app reverse SSH forwarding requires ControlMaster, which Windows OpenSSH does not support. Use ssh -R in a terminal."
-        } else {
-            "In-app SSH port forwarding requires ControlMaster, which Windows OpenSSH does not support. Use ssh -L in a terminal."
-        }));
+    if cfg!(windows) && reverse {
+        return Err(unsupported("In-app reverse SSH forwarding requires ControlMaster, which Windows OpenSSH does not support. Use ssh -R in a terminal."));
     }
     if !matches!(target_of(alias), Target::Ssh(_)) {
         return Err(unsupported("Port forwarding needs an SSH host: containers and WSL share the local network"));
@@ -179,6 +197,12 @@ fn mux(alias: &str, flag: &str, spec: &str, cancel: bool, local: u16) -> Result<
 
 /// Opens `-L spec` (or cancels it).
 pub(crate) fn local_spec(alias: &str, spec: &str, cancel: bool) -> Result<(), ForwardError> {
+    #[cfg(windows)]
+    {
+        guard(alias, false)?;
+        if cancel { windows::cancel(alias, spec) } else { windows::open(alias, spec, 0) }
+    }
+    #[cfg(not(windows))]
     mux(alias, "-L", spec, cancel, 0)
 }
 
@@ -237,7 +261,11 @@ pub fn open(req: &OpenRequest) -> Result<Opened, ForwardError> {
             continue;
         }
         let spec = spec(req.bind, local, &req.target, req.remote);
-        match mux(&req.alias, "-L", &spec, false, local) {
+        #[cfg(windows)]
+        let result = windows::open(&req.alias, &spec, local);
+        #[cfg(not(windows))]
+        let result = mux(&req.alias, "-L", &spec, false, local);
+        match result {
             Ok(()) => return Ok(Opened { local, spec }),
             Err(mut e) => {
                 // Through the shared connection ssh only reports "forwarding request failed"; a port nobody else can

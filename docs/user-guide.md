@@ -66,7 +66,7 @@ is the complete list and always matches your key bindings; every setting is in [
 | Select next occurrence | ⌘D | Ctrl+D |
 | Back to one cursor | Esc | Esc |
 | Terminal / new terminal | ⌃\` / ⌃⇧\` | Ctrl+\` / Ctrl+Shift+\` |
-| Terminal copy / paste | ⌘C / ⌘V | Ctrl+Shift+C / Ctrl+Shift+V (Ctrl+C stays SIGINT) |
+| Terminal copy / paste | ⌘C / ⌘V | Ctrl+Shift+C / Ctrl+Shift+V; Ctrl+C copies a selection or sends SIGINT |
 | Terminal find / clear / select all | ⌘F / ⌘K / ⌘A | Ctrl+Shift+F / Ctrl+Shift+K / Ctrl+Shift+A |
 | Toggle bottom panel (opens a terminal if none) | ⌘J | Ctrl+J |
 | Rename / delete (file tree) | F2 / ⌘⌫ | F2 / Ctrl+Backspace |
@@ -1123,6 +1123,10 @@ Variables: `@name = value`, `{{$guid}}`, `{{$timestamp}}`, `{{$randomInt min max
 server** (so `localhost` services work); `"http.runOn": "local"` sends it from your computer instead.
 
 ## Terminal
+
+**Images over SSH.** Copy an image and press Ctrl+V in a remote terminal (⌘V on macOS). Codeyard saves it as a
+private temporary file on the remote host and pastes its path, so programs such as Codex can attach it. Images are
+limited to 32 MiB. The file remains available in the remote `/tmp` directory until the host cleans it up.
 
 **Shell integration.** zsh, bash and fish mark each prompt and command, with no setup:
 

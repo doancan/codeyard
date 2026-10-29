@@ -73,6 +73,7 @@ impl Workbench {
                 center(p).child(ui::file_name(path).to_string()).child(message.clone()).into_any_element()
             } else if state.page_active {
                 match state.page.clone() {
+                    Some(Page::About(view)) => view.into_any_element(),
                     Some(Page::Settings(view)) => view.into_any_element(),
                     Some(Page::Markdown(view)) => view.into_any_element(),
                     Some(Page::Shortcuts(view)) => view.into_any_element(),
@@ -550,6 +551,7 @@ impl Workbench {
                 let active = state.page_active;
                 let (glyph, title): (&str, String) = match &page {
                     Page::Welcome => ("rocket", crate::i18n::t("Welcome").into()),
+                    Page::About(_) => ("info", crate::i18n::t("About Codeyard").into()),
                     Page::Containers => ("server", crate::i18n::t("Container Resources").into()),
                     Page::Extension => ("blocks", self.extension_page_title()),
                     Page::Settings(_) => ("settings", crate::i18n::t("Settings").into()),
@@ -604,6 +606,9 @@ impl Workbench {
                             this.tabs.large_active = false;
                             if let Some(Page::Settings(v)) = &this.tabs.page {
                                 v.read(cx).focus_search(window, cx);
+                            }
+                            if let Some(Page::About(v)) = &this.tabs.page {
+                                window.focus(&v.focus_handle(cx));
                             }
                             cx.notify();
                         })),

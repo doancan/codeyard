@@ -88,6 +88,7 @@ Anchors and aliases were expanded.
 Another debug adapter	
 App: Quit	
 Apple Container supports connecting, starting containers and viewing logs. Dev Container project creation is not supported by this adapter yet; connect to an existing Apple container.	
+Application details	
 Applied {}	
 Apply (keep the stash)	
 Apply .editorconfig files (indent, line endings, final newline…)	
@@ -215,6 +216,7 @@ Clear the search field
 Click to remove this filter	
 Click to sort using current values. Order stays fixed during live updates.	
 Click: details · Double-click: open · Right-click: actions	
+Client protocol	
 Clone	
 Clone Git Repository…	
 Clone Repository…	
@@ -349,6 +351,7 @@ Convert indentation to spaces
 Convert indentation to tabs	
 Convert to…	
 Converted to {}	
+Copied	
 Copied {}	
 Copied {} item ({}) to {}|Copied {} items ({}) to {}	
 Copied {} item.|Copied {} items.	
@@ -418,6 +421,7 @@ Could not look for tests: {}
 Could not minify: {}	
 Could not open the debug session: {}	
 Could not open the state database: {}. Tabs, recent folders and backups will not be remembered this session.	
+Could not paste: {}	
 Could not reach {}: check the network connection and try again	
 Could not read Docker environments: {}	
 Could not read containers: {}	
@@ -1463,6 +1467,7 @@ Pin the enclosing function or class line while scrolling
 Pin to the top	
 Pinned · click the pin to restore auto-close	
 Plain Text	
+Platform	
 Pop (apply and drop)	
 Pop Latest Stash	
 Pop Stash…	
@@ -1601,6 +1606,8 @@ Reload history
 Remote & Languages	
 Remote Docker environments currently support attaching to existing containers. Create Dev Containers with a local Docker engine.	
 Remote Explorer	
+Remote agent protocol	
+Remote connection	
 Remote: Add SSH Host…	
 Remote: Connect to Dev Container…	
 Remote: Connect to Host or Switch Workspace…	
@@ -2203,7 +2210,7 @@ Verify Files
 Verifying and installing…	
 Verifying installed service files…	
 Verifying the runtime checksum…	
-Version {}	
+Version	
 View	
 View File History	
 View: Close All Editors	
