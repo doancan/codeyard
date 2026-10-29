@@ -863,6 +863,7 @@ fn cycling_through_the_zoom_steps_does_not_grow_the_glyph_and_icon_caches(cx: &m
 }
 
 #[gpui::test]
+#[cfg(unix)] // a read-only folder through Unix permissions
 fn an_unsaved_zoom_survives_settings_reloads_until_the_file_changes(cx: &mut TestAppContext) {
     use std::os::unix::fs::PermissionsExt;
     let (wb, cx, cfg) = rig(cx, "unsaved");
