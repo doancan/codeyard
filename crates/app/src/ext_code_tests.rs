@@ -116,8 +116,8 @@ fn notice_has(wb: &Workbench, text: &str) -> bool {
 
 #[gpui::test]
 fn a_code_extension_command_runs_in_its_exthost(cx: &mut TestAppContext) {
-    if crate::ext_runtime::exthost_path().is_none() {
-        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+    if let Err(why) = crate::ext_runtime::code_runs_here(&"tests") {
+        eprintln!("skipped: {why}");
         return;
     }
     let cfg = config_dir("run");
@@ -135,8 +135,8 @@ fn a_code_extension_command_runs_in_its_exthost(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn three_crashes_turn_an_extension_off(cx: &mut TestAppContext) {
-    if crate::ext_runtime::exthost_path().is_none() {
-        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+    if let Err(why) = crate::ext_runtime::code_runs_here(&"tests") {
+        eprintln!("skipped: {why}");
         return;
     }
     let cfg = config_dir("crash");
@@ -159,8 +159,8 @@ fn answer_is(wb: &Workbench, want: &str) -> bool {
 
 #[gpui::test]
 fn picks_and_inputs_answer_through_the_window(cx: &mut TestAppContext) {
-    if crate::ext_runtime::exthost_path().is_none() {
-        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+    if let Err(why) = crate::ext_runtime::code_runs_here(&"tests") {
+        eprintln!("skipped: {why}");
         return;
     }
     let cfg = config_dir("pick");
@@ -185,8 +185,8 @@ fn picks_and_inputs_answer_through_the_window(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn a_command_reads_the_active_document(cx: &mut TestAppContext) {
-    if crate::ext_runtime::exthost_path().is_none() {
-        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+    if let Err(why) = crate::ext_runtime::code_runs_here(&"tests") {
+        eprintln!("skipped: {why}");
         return;
     }
     let cfg = config_dir("doc");
@@ -205,8 +205,8 @@ fn a_command_reads_the_active_document(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn a_workspace_with_a_matching_file_starts_the_extension(cx: &mut TestAppContext) {
-    if crate::ext_runtime::exthost_path().is_none() {
-        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+    if let Err(why) = crate::ext_runtime::code_runs_here(&"tests") {
+        eprintln!("skipped: {why}");
         return;
     }
     let cfg = config_dir("contains");

@@ -1,13 +1,15 @@
 //! A test extension for codeyard-exthost's tests: each command exercises one part of the host, including the
-//! hostile ones (spin, grow, trap).
+//! hostile ones (spin, grow, trap, escape).
 
 wit_bindgen::generate!({ path: "../../../../ext-api/wit", world: "extension" });
+
+mod providers;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 
 use codeyard::api::types::{Completion, Error, HttpRequest, StreamEvent, Ticket};
-use codeyard::api::{documents, env, log, requests, settings, storage, timers, window, workspace};
+use codeyard::api::{documents, env, log, requests, settings, storage, timers, ui, window, workspace};
 use exports::codeyard::api::guest::{Activation, Guest};
 use codeyard::api::host_requests::Request;
 use codeyard::api::responses::Response;
@@ -59,15 +61,40 @@ impl Guest for Probe {
     }
 
     fn handle(id: u64, request: Request) {
+        // A view (`counter`): a button and how often it was clicked; a click redraws it through `ui.invalidate`.
+        if let Request::Render(view) = &request {
+            let clicks = storage::get("clicks").map_or(0, |b| b.len());
+            let tree = format!(
+                r#"{{"element": {{"column": {{"gap": 2}}}}, "children": [
+                    {{"element": {{"heading": {{"text": "Counter", "level": 2}}}}}},
+                    {{"key": "add", "element": {{"button": {{"label": "Add one", "tone": "accent"}}}}}},
+                    {{"key": "count", "element": {{"text": {{"text": "{view}: {clicks} clicks"}}}}}}
+                ]}}"#
+            );
+            requests::respond(id, Ok(&Response::View(tree)));
+            return;
+        }
+        if let Request::UiEvent((view, event)) = &request {
+            if event.contains(r#""click""#) && event.contains(r#""add""#) {
+                let n = storage::get("clicks").map_or(0, |b| b.len()) + 1;
+                let _ = storage::set("clicks", &vec![1u8; n]);
+                ui::invalidate(view);
+            }
+            requests::respond(id, Ok(&Response::None));
+            return;
+        }
         let Request::Command((command, args)) = request else {
             // Timers and settings changes are counted, so tests can see them arrive.
             if let Request::Timer(_) | Request::SettingsChanged(_) = &request {
                 let n = storage::get("events").map_or(0, |b| b.len()) + 1;
                 let _ = storage::set("events", &vec![1u8; n]);
             }
-            requests::respond(id, Ok(&Response::None));
+            providers::handle(id, request);
             return;
         };
+        if providers::command(id, &command).is_some() {
+            return;
+        }
         match command.as_str() {
             "echo" => reply(id, args),
             "env" => reply(id, env::info().api_version),
@@ -122,11 +149,28 @@ impl Guest for Probe {
             "secret-set" => wait(codeyard::api::secrets::set("api-key", "s3cr3t"), id),
             "secret-get" => wait(codeyard::api::secrets::get("api-key"), id),
             "every" => reply(id, format!("{}", timers::every(30))),
+            // What an extension can try from inside Wasm: WASI files, sockets and processes. Every line must fail.
+            // Only in probe-escape.wasm: its socket imports would fail the package import check, by design.
+            #[cfg(feature = "escape")]
+            "escape" => {
+                let tries = [
+                    ("read", std::fs::read(&args).map(drop)),
+                    ("list", std::fs::read_dir("/").map(drop)),
+                    ("write", std::fs::write("/tmp/codeyard-escape", b"x")),
+                    ("connect", std::net::TcpStream::connect("1.1.1.1:443").map(drop)),
+                    ("bind", std::net::TcpListener::bind("127.0.0.1:0").map(drop)),
+                    ("exec", std::process::Command::new("/bin/sh").status().map(drop)),
+                ];
+                let lines: Vec<String> = tries.iter().map(|(what, r)| format!("{what}: {}", if r.is_ok() { "ok" } else { "refused" })).collect();
+                reply(id, lines.join("\n"))
+            }
             _ => requests::respond(id, Err(&Error::Invalid(format!("unknown command {command}")))),
         }
     }
 
-    fn cancel(_id: u64) {}
+    fn cancel(id: u64) {
+        providers::cancel(id);
+    }
 
     fn complete(ticket: Ticket, result: Completion) {
         let body = BODIES.with(|b| b.borrow_mut().remove(&ticket));

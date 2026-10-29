@@ -241,6 +241,7 @@ impl Workbench {
             Panel::Remote => "remote",
             Panel::Containers => "containers",
             Panel::Extensions => "extensions",
+            Panel::ExtView => "extension-view",
         })
     }
 
@@ -337,6 +338,11 @@ impl Workbench {
 
     pub fn tip_for_test(day: u64) -> &'static str {
         welcome_glue::tip_of_the_day(day)
+    }
+
+    /// Replace the network for extensions (`net.fetch`, `auth.fetch`) in this window.
+    pub fn set_ext_transport_for_test(&mut self, transport: std::sync::Arc<dyn crate::ext_fetch::Transport>) {
+        self.cfg.exts.accounts.transport = transport;
     }
 
     pub fn has_overlay_for_test(&self) -> bool {

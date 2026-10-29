@@ -59,8 +59,9 @@ extension.
 Processes:
 - **`codeyard` (app).** Holds the contribution index, the broker and every permission decision. Never runs Wasm.
 - **`codeyard-exthost`.** One process per **active** code extension, running wasmtime inside an OS sandbox: no
-  network, no exec, read access only to that extension's package and data directory. It exits 5 minutes after
-  its last call or timer. An escape gets one extension's permissions, and crash blame needs no logic.
+  network, no exec, read access only to that extension's package and read/write access only to its data directory.
+  It exits 5 minutes after its last call or timer. An escape gets one extension's permissions, and crash blame needs
+  no logic.
 - **`codeyard-exthost --compile`.** Short-lived. Reads one `.wasm` on stdin, writes compiled code to stdout.
   The app stores it as `<wasm-sha>.cwasm` with a `.sha256` sidecar; the exthost checks the hash before loading,
   so one extension cannot plant compiled code for another.
@@ -74,23 +75,36 @@ Resource limits, all from one `limits` table in `ext-manifest` (author docs and 
   (`limits::GUEST_CALL_MILLIS`, `ACTIVATE_MILLIS`), which counts as a crash. An instance cannot be re-entered while
   a call is suspended, so yielding would not let providers run meanwhile; the budget is what keeps them answered;
 - a provider reply that misses its deadline is dropped, not punished;
-- `StoreLimits` caps each instance's linear memory (`limits::GUEST_MEMORY_BYTES`; growing past it traps); an OS cap (a Job Object commit limit on Windows, resident
-  size elsewhere) caps the process. wasmtime's guard regions reserve hundreds of GB of address space, so
-  `RLIMIT_AS` works only with smaller reservations;
+- `StoreLimits` caps each instance's linear memory (`limits::GUEST_MEMORY_BYTES`; growing past it traps); an OS cap of `limits::EXTHOST_MEMORY_BYTES` caps the
+  process: a Job Object commit limit on Windows; on macOS and Linux the app checks the exthost's resident size.
+  wasmtime's guard regions reserve hundreds of GB of address space, so `RLIMIT_AS` is not used;
 - guest code is interrupted only while it runs, so an idle exthost causes no wakeups;
 - going over a memory cap, the IPC frame cap or the IPC byte rate kills the process.
 
 The app and exthost must share a build id. When the app updates in place, running exthosts are stopped and
 respawn on the next event.
 
-Sandboxes:
-- **macOS:** Seatbelt (`sandbox_init`).
-- **Windows:** AppContainer (LPAC) without `internetClient`, plus a Job Object. A Low-IL token alone still
-  reads the user's files, so it is not enough.
-- **Linux:** landlock, seccomp and an unshared network namespace.
-- Installed code extensions run only where the sandbox works; elsewhere only declarative extensions run.
-  `cyx dev` is the one exception: it runs the author's own local folder without the OS sandbox, still behind
-  Wasm and the broker, with a DEV badge. Otherwise authors on that platform could not build anything.
+Sandboxes (`ext-host/src/sandbox.rs`). The exthost enters its sandbox after the handshake and before it reads the
+extension's code; the policy is the same everywhere: no network, no new processes, read-only access to the package and
+the compiled file, read/write access to `data/<id>/`, nothing else of the disk.
+- **macOS:** Seatbelt (`sandbox_init`) with a deny-default profile (`ext-host/src/sandbox.sb`) plus one rule per
+  path. It adds about 6 ms to a cold start.
+- **Linux:** an unshared network namespace (when the system allows unprivileged user namespaces), landlock (ABI 1 or
+  later; without it no code runs) and a seccomp filter that refuses sockets, `execve`, `fork` and non-thread
+  `clone`, `ptrace` and access to other processes, namespaces and mounts, io_uring, BPF and terminal input injection.
+- **Windows:** the app starts the exthost in an AppContainer (LPAC) without `internetClient` and a Job Object with
+  the memory cap, one process and kill-on-close (`ext_proto::appcontainer::spawn`); the exthost refuses to run code
+  outside one. A Low-IL token alone still reads the user's files, so it is not enough. Off until
+  `scripts/check-exthost-sandbox-windows.ps1` passes on physical hardware (§15 decision 1).
+- `codeyard-exthost --check-sandbox` tells the app whether code can run here: one line, `ok: <what is enforced>`
+  with exit code 0, or `unavailable: <why>` with exit code 1. The app runs it once per session.
+- Installed code extensions run only where the sandbox works; elsewhere only declarative extensions run
+  ("Needs a sandbox this system does not provide"). `cyx dev` is the one exception: it runs the author's own local
+  folder without the OS sandbox (`Hello.sandbox = false`), still behind Wasm and the broker, with a DEV badge.
+  Otherwise authors on that platform could not build anything.
+- The escape probes (`codeyard-exthost --sandbox-selftest`, a test hook) run on macOS and Linux CI: reading the
+  home folder or files outside the policy, writing outside `data/<id>/`, TCP and Unix sockets and `exec` must all
+  fail with the OS's refusal.
 
 ## 4. The manifest
 
@@ -196,6 +210,8 @@ steps 0–4, so themes, high contrast and screen readers work with no author eff
 URL on a `net` host.
 
 - `ui::invalidate(view)` makes the host call `render` and diff by `key`. Input state lives in the host.
+- The tree travels as JSON in `response.view` and events as JSON in `request.ui-event`
+  (docs/extensions/reference/ui.md); the host checks the tree with `ext_ui::decode_json` before diffing it.
 - Lists, tables and trees are virtualised; trees load one page at a time.
 - Every extension surface shows the publisher id. Consent, trust and sign-in dialogs are drawn in a layer
   extension UI cannot reach.
@@ -236,7 +252,8 @@ signed package; a language server wrapper is therefore a normal High-risk extens
 - **Broker (app).** Every file, network, process, account and command call is checked against
   grants ∩ workspace trust, then the path, host or program, before `Host` is called.
 - **Processes.** The broker resolves the program to an absolute path on the target host, refuses paths under
-  a workspace root, and passes an explicit environment (proto v14 adds `Which` and `ProcSpawnEnv`).
+  a workspace root, and passes an explicit environment (on Unix hosts the program runs under `env -i` with only
+  the variables the extension passed and a minimal PATH, HOME and LANG; the agent needs nothing new).
 - **Network.** In-process hyper + rustls (already linked through GPUI), in `ext-net`. It checks the real peer address of
   every connection, so private, CGNAT, link-local, metadata, NAT64 and IPv4-mapped ranges are blocked. No IP
   literals, at most 5 re-checked redirects, environment proxies ignored. WebSockets are not offered in v1.
@@ -442,7 +459,7 @@ nightly with no new crash; the scripted "new theme → visible" check passes in 
 | `ext-core` | install transaction, store, lock, contribution index, grants ∩ trust, index and signature verification |
 | `ext-net` | the `net` client: declared HTTPS hosts only, peer address checks, re-checked redirects, budgets |
 | `ext-ui` | view element tree, validation and caps, keyed diff, host-side input state, accessibility roles, events |
-| `ext-proto`, `ext-api` | app ↔ exthost frames; WIT and generated docs |
+| `ext-proto`, `ext-api` | app ↔ exthost frames and the Windows AppContainer launch; WIT and generated docs |
 | `ext-host` | the `codeyard-exthost` binary: engine, sandbox, `--compile`. The only crate that links wasmtime |
 | `cyx`, `ext-sdk`, `ext-test` | CLI, Rust SDK, mock host |
 | `yard` | the registry's publish service; runs on the registry's server, never with the app |

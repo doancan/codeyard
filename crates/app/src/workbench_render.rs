@@ -81,6 +81,7 @@ impl Render for Workbench {
                 Page::About(view) => view.into_any_element(),
                 Page::Containers => self.container_dashboard_view(&p, cx),
                 Page::Extension => self.extension_page(&p, cx),
+                Page::ExtensionInspector => self.extension_inspector(&p, cx),
                 Page::Settings(view) => view.into_any_element(),
                 Page::Markdown(view) => view.into_any_element(),
                 Page::Shortcuts(view) => view.into_any_element(),
@@ -88,6 +89,7 @@ impl Render for Workbench {
                 Page::Merge(view) => view.into_any_element(),
                 Page::Compare(view) => view.into_any_element(),
                 Page::Search(view) => view.into_any_element(),
+                Page::ExtView(id) => self.ext_view_frame(&id, &p, cx),
             },
             (_, None) if self.tabs.diff_active && self.tabs.diff.is_some() => self.tabs.diff.clone().unwrap().into_any_element(),
             (_, None) if self.tabs.large_active && self.tabs.large.is_some() => self.tabs.large.clone().unwrap().into_any_element(),
@@ -109,6 +111,7 @@ impl Render for Workbench {
             Panel::Remote => self.remote_view(&p, cx),
             Panel::Containers => self.explorer_panel(&p, cx),
             Panel::Extensions => self.extensions_view(&p, cx),
+            Panel::ExtView => self.ext_view_in(ext_manifest::ViewLocation::Sidebar, &p, cx),
         });
 
         div()
@@ -131,6 +134,7 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::show_run_debug))
             .on_action(cx.listener(Self::show_testing))
             .on_action(cx.listener(Self::show_extensions))
+            .on_action(cx.listener(Self::show_extension_inspector))
             .on_action(cx.listener(Self::show_market))
             .on_action(cx.listener(Self::install_extension_from_file))
             .on_action(cx.listener(Self::install_extension_from_registry))
@@ -167,6 +171,7 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::go_to_symbol))
             .on_action(cx.listener(Self::go_to_workspace_symbol))
             .on_action(cx.listener(Self::code_actions))
+            .on_action(cx.listener(Self::on_run_extension_command))
             .on_action(cx.listener(Self::format_document))
             .on_action(cx.listener(Self::format_selection))
             .on_action(cx.listener(Self::save_all))

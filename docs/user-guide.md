@@ -654,9 +654,56 @@ applies at once, in every open window, without a restart.
 its own process (`codeyard-exthost`, beside Codeyard): it reaches only the files, programs
 and commands its sheet listed, and only through Codeyard, which checks every call, the same way for local and SSH
 folders. In a folder you have not trusted it may read what it declared and show messages, but not change files or run
-programs. When a call is refused, the message names the permission the extension would need. An extension that crashes
-three times within a minute is turned off until Codeyard restarts; one nobody used for five minutes is stopped and
-starts again on its next command.
+programs. When a call is refused, the message names the permission the extension would need. One nobody used for
+five minutes is stopped and starts again on its next command.
+
+On the page of an extension with code:
+
+- **Permission switches.** Each entry it declared (a file pattern, a host, a program, the clipboard …) has its own
+  *On*/*Off* switch. Turning one off applies at once, also to a running extension: its next call of that kind is
+  refused with `revoked-by-user`. Switches are kept for that extension *and* its publisher, in
+  `permissions.json` next to the installed packages; the same id from another publisher, or installed from a file,
+  starts without them. Uninstalling forgets them.
+- **Recent denials.** The calls refused in this session (kept in memory only), with what was refused and why.
+  *Copy fix* copies the manifest line that allows it, such as `net = ["api.example.com"]`: for an author, the line to
+  add to `[permissions]`; for a switch you turned off, the entry to turn back on.
+- **The crash card.** An extension that crashes three times within a minute is turned off until Codeyard restarts,
+  and its page says so. *Reinstall Previous Version* goes back to the version this one replaced (when it is still
+  kept) and lets it run again. *Copy Report* copies its version, the error and where in its code it happened; file
+  contents, logs and paths outside the extension are left out. *Report…* opens a new issue in the extension's
+  repository, filled in with that report, after you confirm the address. Nothing is sent by itself.
+
+**Extension Inspector.** *Developer: Extension Inspector* in the command palette (release builds too) opens a page
+with every enabled extension with code in this window: whether it runs, when and why it last started, its recent
+calls (for a command, the time spent in the extension; for a call to Codeyard, the time the work took and the
+overhead around it), its denials with *Copy fix*, its log with levels, and its last error with the place in its code.
+Every line is a tab stop, and a screen reader reads a heading per extension and section and the *Copy fix* buttons.
+It shows only this computer's data and sends nothing. The extension's own UI, highlighted live, comes with extension
+views.
+
+**Extension views.** An extension with code can add views: a button in the activity bar for a sidebar view, a tab
+in the bottom panel, or a page in the editor area (also *Open View: …* in the command palette). Codeyard draws them
+with your theme, so they follow theme and zoom changes, and they work with the keyboard (Tab between controls, arrows
+in lists and trees) and screen readers. Each view names its publisher at the top. A view stays in its place: it cannot
+cover Codeyard's install, trust or sign-in sheets, or take the keyboard while one of them waits for you. Images in its
+text are not loaded, and a link opens in your browser only after you confirm its address.
+**What extensions with code add.** Everything they put on screen names the extension.
+
+- *Commands* in the palette, in the editor's and the file tree's right-click menus (after the built-in entries, greyed
+  out when they do not apply), and on keys an extension binds (never a built-in key). A file-tree entry gets the file.
+- *Status bar items*, which run a command when clicked.
+- *Formatters.* *Format Document* and `editor.formatOnSave` use the extension that formats the file's language when
+  there is no language server for it; `editor.formatters` chooses per language, for example
+  `{ "toml": "you.taplo" }`, or `"lsp"` to keep the language server. If you type while it works, its answer is dropped,
+  and a formatter that takes more than a second is skipped: the file is saved as it is.
+- *Code actions* in *Quick Fix…* (⌘.), next to the language server's.
+- *Problems* in the Problems view and the editor, with the extension's id as their source, and *decorations*: a dot in
+  the gutter, a tinted line or a note after the line, in theme colours.
+- *Tasks* in *Tasks: Run Task…*, which the extension runs itself when you pick one.
+
+Typing never waits for an extension. When one is disabled, uninstalled or crashes, its status items, problems and
+decorations go with it. The same works in SSH windows: the extension runs on your computer and sees the remote files
+through Codeyard.
 
 **Accounts.** An extension that declares `auth` can act as your GitHub account, or as an account at a service it
 names. The first time it asks, Codeyard shows a system dialog with the extension, its publisher and the account; nothing

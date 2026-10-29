@@ -7,6 +7,9 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
+#[cfg(windows)]
+pub mod appcontainer;
+
 use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
 
@@ -37,6 +40,9 @@ pub enum ToHost {
     Settings(Vec<(String, Option<String>)>),
     /// `env.info` changed (theme, language, trust).
     Env(EnvInfo),
+    /// The interfaces granted now (`Hello::granted`), after the user turned a permission off or on: the next call to
+    /// one no longer granted fails with `denied { why: revoked-by-user }`, without a restart.
+    Grants(Vec<String>),
     /// Call `guest.deactivate` and exit.
     Shutdown,
 }
@@ -64,6 +70,9 @@ pub struct Hello {
     pub folders: Vec<String>,
     /// Why it starts, passed to `guest.activate`.
     pub reason: String,
+    /// Enter the OS sandbox before loading the code. True for everything installed; false only for `cyx dev`, which
+    /// runs the author's own folder behind Wasm and the broker alone (docs/plugin-architecture.md §3).
+    pub sandbox: bool,
 }
 
 /// Exthost → app.
@@ -86,6 +95,12 @@ pub enum ToApp {
         call: Start,
     },
     Notify(Notify),
+    /// A call the exthost refused itself (its interface is not granted), so the app can list the denial; the call
+    /// itself never leaves the exthost. `call` is its WIT name, `interface/function`.
+    Denied {
+        call: String,
+        denied: ext_api::value::Denied,
+    },
     /// The guest trapped or ran out of memory; the exthost exits after sending this.
     Trap(Trap),
 }

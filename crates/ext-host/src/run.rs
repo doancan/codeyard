@@ -67,6 +67,10 @@ pub fn run(input: impl Read, output: impl Write + Send + 'static) -> Result<(), 
         let _ = ext_proto::write(&mut output, &ToApp::Mismatch { version: ext_proto::VERSION, build: ext_proto::BUILD.into() });
         return Err(format!("the app is build {} and this exthost {}", hello.build, ext_proto::BUILD));
     }
+    // Sandboxed before anything of the extension's is read: from here on the process reaches only its own files.
+    if hello.sandbox {
+        crate::sandbox::enter(&crate::sandbox::Policy::for_hello(&hello)?)?;
+    }
     ext_proto::write(&mut output, &ToApp::Ready { version: ext_proto::VERSION, build: ext_proto::BUILD.into() }).map_err(|e| e.to_string())?;
 
     let engine = crate::engine::engine().map_err(|e| e.to_string())?;
@@ -111,6 +115,7 @@ pub fn run(input: impl Read, output: impl Write + Send + 'static) -> Result<(), 
             }
             ToHost::Settings(values) => guest.store.data_mut().settings.extend(values),
             ToHost::Env(env) => guest.store.data_mut().env = env,
+            ToHost::Grants(granted) => guest.store.data_mut().set_granted(granted),
             ToHost::Shutdown => {
                 guest.call(limits::GUEST_CALL_MILLIS, |s, x| x.expect("instantiated").codeyard_api_guest().call_deactivate(s))?;
                 return Ok(());

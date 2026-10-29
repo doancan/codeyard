@@ -173,6 +173,44 @@ You don't have to write any activation code. The extension starts the first time
 
 Never write an engine version, an API version, `*` or `startup`. `cyx` works out the minimum Codeyard version from what you use.
 
+### Contributions that run your code
+
+```toml
+[[menus]]
+command  = "refresh"            # one of your commands, or a dependency's full id
+location = "editor-context"     # editor-context | file-tree | view-title (with view = "<your view>")
+when     = "editor.language == 'toml'"   # hides the entry; a command's `enablement` greys it out
+
+[[status-bar]]
+id      = "deploy"              # set its text at run time with this id; an undeclared id is not shown
+command = "refresh"             # run on click, unless the item names another
+
+[[formatters]]
+languages = ["toml"]            # request.format; `editor.formatters` lets users choose per language
+
+[[code-actions]]
+languages = ["toml"]            # request.code-actions; shown in Quick Fix next to the language server's
+
+[[diagnostics]]
+id        = "todos"
+languages = ["rust"]            # you push them with languages.set-diagnostics
+
+[[decorations]]
+id        = "coverage"
+languages = ["rust"]            # languages.set-decorations: gutter, line or after, in tones
+
+[[tasks]]
+id = "deployments"              # request.provide-tasks lists them, request.run-task runs one
+```
+
+A file-tree menu entry passes the file's URI to the command as its argument. A code action's edits are applied when
+the user picks it, then its `command` runs; an action with neither gets `request.run-code-action`. Your extension
+starts when a file of one of these languages opens or a provider is first asked. Providers have one second
+(`PROVIDER_DEADLINE_MILLIS`) to answer, plus the start-up time on the first request; a later
+answer is dropped and noted in your log, and a request about a document is cancelled as soon as the user types in it.
+A task runs in your extension: start processes with `process.spawn` and show progress. Everything you showed goes when
+the user disables or uninstalls the extension, or when it crashes.
+
 ## Permissions
 
 An extension can only do what its manifest declares. If it tries anything else, the call is **denied** and the user is not asked. You don't have to guess which permissions you need, because `cyx` tells you:
@@ -291,7 +329,7 @@ Register `codeyard://ext/<your extension id>/callback` as the redirect URI with 
 
 ### Tree view
 
-Views are built from built-in elements such as `tree`, `list`, `table`, `button`, `text` and `badge`. Codeyard draws them with the user's theme and screen-reader support. You don't choose colours or fonts, only tones (`accent`, `success`, `warning`, `danger`, `muted`).
+Views are built from built-in elements such as `tree`, `list`, `table`, `button`, `text` and `badge`. Codeyard draws them with the user's theme and screen-reader support. You don't choose colours or fonts, only tones (`accent`, `success`, `warning`, `danger`, `muted`). The guide is [Views](views.md); every element and event is in the [views reference](reference/ui.md).
 
 ```toml
 [[views]]
@@ -316,7 +354,7 @@ ctx.views.register("deployments", async () =>
 ui.invalidate("deployments");
 ```
 
-There are no webviews, so you can't build HTML previews or charts in v1.
+The SDK turns this into the JSON tree Codeyard draws (`response.view`) and loads tree levels one page at a time. There are no webviews, so you can't build HTML previews or charts in v1.
 
 ### Diagnostics
 
@@ -385,10 +423,12 @@ cyx test       # runs the real built extension
 
 **Debug.** Open the palette and run **Developer: Extension Inspector**. It shows:
 - why and when your extension activated
-- every call, with how long it took
-- every denied call, with a **Copy fix** button
-- the live view tree (hover to highlight)
-- logs and crashes with file:line (source maps are applied for TypeScript)
+- every call, with how long it took: for a command, the time in your code; for a call to Codeyard, the time the work
+  took (I/O) and the time around it (overhead)
+- every denied call, with a **Copy fix** button that copies the `[permissions]` line to add
+- logs with their level, and the last crash with its frames (file:line as far as your build's debug info allows)
+
+The live view tree with highlighting and source maps for TypeScript are not there yet; they come with extension views.
 
 While a debugger is attached, nothing times out. `storage` keeps data across sessions, and in `cyx dev` hot reload also keeps your in-memory state.
 

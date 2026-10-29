@@ -226,6 +226,7 @@ impl Workbench {
                     .when_some(notice, |d, (m, color)| d.child(div().px(px(SB_PAD)).text_color(c(color)).truncate().child(m))),
             )
             .children(self.web_preview_status(p, cx))
+            .children(self.extension_status_items(p, cx))
             .child(self.chrome.resources.clone())
             .child(
                 item()

@@ -57,6 +57,12 @@ pub(super) struct ExtViewState {
     pub(super) code: super::code_glue::CodeState,
     /// Their accounts, secrets and sign-ins (workbench_ext_accounts.rs).
     pub(super) accounts: super::accounts_glue::AccountsState,
+    /// Permission switches and the Inspector (workbench_ext_inspector.rs).
+    pub(super) inspector: super::inspector_glue::InspectorState,
+    /// Views of code extensions (workbench_ext_views.rs).
+    pub(super) views: super::ext_views_glue::ViewsState,
+    /// What code extensions show: status items, diagnostics, decorations (workbench_ext_providers.rs).
+    pub(super) providers: super::providers_glue::ProviderState,
 }
 
 /// The consent sheet's text and every other plain-words line of an extension.

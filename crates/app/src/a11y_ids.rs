@@ -20,6 +20,8 @@ const _: () = {
         EXT_ROW,
         EXT_PAGE_LINE,
         SCM_REPO,
+        EXT_VIEW_NODE,
+        INSPECTOR_LINE,
         ROW_BASE,
     ];
     let mut i = 1;
@@ -77,6 +79,7 @@ const _: () = {
         EXT_LIST,
         EXT_PAGE,
         EXT_PAGE_INSTALL,
+        INSPECTOR,
     ];
     let mut i = 0;
     while i < fixed.len() {

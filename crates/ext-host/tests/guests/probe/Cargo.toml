@@ -9,6 +9,10 @@ publish = false
 crate-type = ["cdylib"]
 path = "src/lib.rs"
 
+[features]
+# The `escape` command (tests/sandbox.rs, tests/exthost.rs): imports wasi:sockets.
+escape = []
+
 [dependencies]
 wit-bindgen = "0.63"
 

@@ -15,6 +15,8 @@ mod wire;
 #[cfg(test)]
 mod fuzz_tests;
 #[cfg(test)]
+mod json_tests;
+#[cfg(test)]
 mod tests;
 
 use std::fmt;
@@ -114,6 +116,7 @@ impl HttpsUrl {
 
 /// The meaning of an element's colour. The theme decides the colour, so high contrast works without author effort.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Tone {
     #[default]
     Neutral,
@@ -135,6 +138,7 @@ impl Space {
 
 /// How many rows of a list, table or tree the user can select.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Selection {
     #[default]
     None,
@@ -144,6 +148,7 @@ pub enum Selection {
 
 /// One option of a `select`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Choice {
     pub key: Key,
     pub label: String,
@@ -151,33 +156,42 @@ pub struct Choice {
 
 /// One line of a `key-value` element.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Pair {
     pub name: String,
     pub value: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum ImageSource {
-    /// PNG, JPEG, GIF, WebP or SVG bytes, at most `limits::UI_IMAGE_BYTES`.
-    Bytes(Vec<u8>),
+    /// PNG, JPEG, GIF, WebP or SVG bytes, at most `limits::UI_IMAGE_BYTES`. Base64 in JSON.
+    Bytes(#[serde(with = "wire::bytes")] Vec<u8>),
     /// Fetched by the host through the broker, only from a host the extension declared under `net`.
     Url(HttpsUrl),
 }
 
 /// The 22 elements and their properties. Children are on `Node`; only column, row, list, tree, table and empty-state
-/// take them.
+/// take them. In JSON an element is `{"<kind>": {properties}}` with the kind's name (`text-input`); properties marked
+/// `#[serde(default)]` may be left out.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Element {
     Column {
+        #[serde(default)]
         gap: Space,
+        #[serde(default)]
         pad: Space,
     },
     Row {
+        #[serde(default)]
         gap: Space,
+        #[serde(default)]
         pad: Space,
     },
     Text {
         text: String,
+        #[serde(default)]
         tone: Tone,
     },
     /// `level` 1 to 3.
@@ -188,7 +202,9 @@ pub enum Element {
     /// Without a label the icon is decorative and hidden from screen readers.
     Icon {
         icon: IconName,
+        #[serde(default)]
         tone: Tone,
+        #[serde(default)]
         label: Option<String>,
     },
     Image {
@@ -198,32 +214,44 @@ pub enum Element {
     /// `tone` accent marks the primary action.
     Button {
         label: String,
+        #[serde(default)]
         icon: Option<IconName>,
+        #[serde(default)]
         tone: Tone,
+        #[serde(default)]
         disabled: bool,
     },
     /// `value` is the starting value; after that the host keeps what the user types (see `State`).
     TextInput {
         label: String,
+        #[serde(default)]
         placeholder: String,
+        #[serde(default)]
         value: String,
+        #[serde(default)]
         multiline: bool,
+        #[serde(default)]
         disabled: bool,
     },
     Checkbox {
         label: String,
+        #[serde(default)]
         checked: bool,
+        #[serde(default)]
         disabled: bool,
     },
     Select {
         label: String,
         options: Vec<Choice>,
+        #[serde(default)]
         selected: Option<Key>,
+        #[serde(default)]
         disabled: bool,
     },
     /// Each child is a row, with a key. Virtualised by the renderer.
     List {
         label: String,
+        #[serde(default)]
         selection: Selection,
     },
     /// A tree, or, inside a tree, one of its items. Children are the items of the level loaded so far; `more` asks
@@ -231,24 +259,31 @@ pub enum Element {
     /// and loads its first page when expanded. `selection` counts only on the outermost tree.
     Tree {
         label: String,
+        #[serde(default)]
         description: Option<String>,
+        #[serde(default)]
         icon: Option<IconName>,
+        #[serde(default)]
         more: Option<PageToken>,
+        #[serde(default)]
         selection: Selection,
     },
     /// Each child is a `row` with a key and one child per column.
     Table {
         label: String,
         columns: Vec<String>,
+        #[serde(default)]
         selection: Selection,
     },
     Badge {
         text: String,
+        #[serde(default)]
         tone: Tone,
     },
     /// `percent` 0 to 100; none means the end is unknown.
     Progress {
         label: String,
+        #[serde(default)]
         percent: Option<u8>,
     },
     /// CommonMark, rendered natively. Remote images are not loaded; links open only on a user click.
@@ -257,6 +292,7 @@ pub enum Element {
     },
     Code {
         source: String,
+        #[serde(default)]
         language: Option<String>,
     },
     KeyValue {
@@ -264,11 +300,13 @@ pub enum Element {
     },
     Banner {
         text: String,
+        #[serde(default)]
         tone: Tone,
     },
     /// With `url` Codeyard opens it in the browser after the click; without, the extension gets `Event::Link`.
     Link {
         label: String,
+        #[serde(default)]
         url: Option<HttpsUrl>,
     },
     Divider,
@@ -276,6 +314,7 @@ pub enum Element {
     EmptyState {
         title: String,
         text: String,
+        #[serde(default)]
         icon: Option<IconName>,
     },
 }
@@ -512,6 +551,21 @@ pub fn decode(bytes: &[u8]) -> Result<Node, DecodeError> {
         return Err(DecodeError::TooLarge(bytes.len()));
     }
     let view = wire::decode(bytes).map_err(DecodeError::Malformed)?;
+    validate(&view).map_err(DecodeError::Invalid)?;
+    Ok(view)
+}
+
+/// The JSON form of a view, as extensions send it in `response.view` (docs/extensions/reference/ui.md).
+pub fn encode_json(view: &Node) -> String {
+    serde_json::to_string(view).expect("a view always serializes")
+}
+
+/// Read the JSON a view's `render` answered: size cap, JSON form, then `validate`.
+pub fn decode_json(text: &str) -> Result<Node, DecodeError> {
+    if text.len() > limits::UI_VIEW_BYTES {
+        return Err(DecodeError::TooLarge(text.len()));
+    }
+    let view: Node = serde_json::from_str(text).map_err(|e| DecodeError::Malformed(e.to_string()))?;
     validate(&view).map_err(DecodeError::Invalid)?;
     Ok(view)
 }

@@ -31,6 +31,7 @@ fn hello() -> Hello {
         settings: vec![("interval".into(), Some("60".into()))],
         folders: vec!["file:///work".into()],
         reason: "command:refresh".into(),
+        sandbox: true,
     }
 }
 
@@ -52,6 +53,11 @@ fn every_frame_kind_round_trips() {
     round_trip(ToHost::Settings(vec![("interval".into(), None)]));
     round_trip(ToHost::Env(env()));
     round_trip(ToHost::Shutdown);
+    round_trip(ToHost::Grants(vec!["net".into()]));
+    round_trip(ToApp::Denied {
+        call: "net/fetch".into(),
+        denied: ext_api::value::Denied { permission: "net".into(), why: ext_api::value::Why::RevokedByUser },
+    });
     round_trip(ToApp::Ready { version: VERSION, build: "abc123".into() });
     round_trip(ToApp::Mismatch { version: VERSION, build: "old".into() });
     round_trip(ToApp::Activated(Err("no config".into())));

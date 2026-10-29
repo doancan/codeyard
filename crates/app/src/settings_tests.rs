@@ -286,6 +286,15 @@ mod code_actions_on_save {
         let (s, w) = parse(r#"{ "editor.codeActionsOnSave": 3 }"#);
         assert!(s.code_actions_on_save.is_empty() && w.len() == 1, "{w:?}");
     }
+
+    #[test]
+    fn formatters_are_chosen_per_language() {
+        let (s, w) = parse(r#"{ "editor.formatters": { "toml": "you.taplo", "rust": "lsp", "go": 3 } }"#);
+        assert_eq!(s.formatters, [("toml".to_string(), "you.taplo".to_string()), ("rust".to_string(), "lsp".to_string())]);
+        assert_eq!(w.len(), 1, "the wrong entry is named: {w:?}");
+        let (s, w) = parse(r#"{ "editor.formatters": "you.taplo" }"#);
+        assert!(s.formatters.is_empty() && w.len() == 1, "{w:?}");
+    }
 }
 
 mod hardening {

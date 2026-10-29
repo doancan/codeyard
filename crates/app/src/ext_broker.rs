@@ -23,6 +23,8 @@ pub struct Scope {
     pub trusted: bool,
     /// The extension's own dependencies, whose commands it may run.
     pub dependencies: Vec<String>,
+    /// What the user turned off on the extension page, so a denial says `revoked-by-user` and names the entry.
+    pub revoked: Permissions,
 }
 
 fn denied(permission: String, why: v::Why) -> v::Error {
@@ -51,12 +53,21 @@ impl Scope {
         globs.iter().any(|g| crate::globs::path_matches(g, rel) && (!hidden || g.split('/').any(|p| p.starts_with(".env") || p == ".git")))
     }
 
+    /// The denial for `kind` (`read`, `net` …) of `target`: the user's switch when one they turned off matches it, else
+    /// the line to add to the manifest.
+    fn refuse(&self, kind: &str, target: &str, revoked: &[String], matches: impl Fn(&str) -> bool, why: v::Why) -> v::Error {
+        match revoked.iter().find(|r| matches(r)) {
+            Some(r) => denied(format!("{kind} = [{r:?}]"), v::Why::RevokedByUser),
+            None => denied(format!("{kind} = [{target:?}]"), why),
+        }
+    }
+
     pub fn may_read(&self, path: &str) -> Result<String, v::Error> {
         let rel = self.relative(path).ok_or_else(|| outside(path))?;
         if Self::allowed(&self.permissions.read, &rel) {
             Ok(normalize(path).unwrap_or_default())
         } else {
-            Err(denied(format!("read = [\"{rel}\"]"), v::Why::NotDeclared))
+            Err(self.refuse("read", &rel, &self.revoked.read, |g| Self::allowed(&[g.to_string()], &rel), v::Why::NotDeclared))
         }
     }
 
@@ -65,19 +76,23 @@ impl Scope {
         if Self::allowed(&self.permissions.write, &rel) {
             Ok(normalize(path).unwrap_or_default())
         } else {
-            Err(denied(format!("write = [\"{rel}\"]"), self.why(true)))
+            Err(self.refuse("write", &rel, &self.revoked.write, |g| Self::allowed(&[g.to_string()], &rel), self.why(true)))
         }
     }
 
     pub fn may_run(&self, program: &str) -> Result<(), v::Error> {
-        if self.permissions.run.iter().any(|p| p == program) { Ok(()) } else { Err(denied(format!("run = [\"{program}\"]"), self.why(true))) }
+        if self.permissions.run.iter().any(|p| p == program) {
+            Ok(())
+        } else {
+            Err(self.refuse("run", program, &self.revoked.run, |p| p == program, self.why(true)))
+        }
     }
 
     /// A command the extension may run: its own, a dependency's, or a core command its manifest lists.
     pub fn may_execute(&self, command: &str) -> Result<(), v::Error> {
         if let Some(core) = command.strip_prefix("core:") {
             let listed = self.permissions.commands.iter().any(|c| c == command || c == core);
-            return if listed { Ok(()) } else { Err(denied(format!("commands = [\"{command}\"]"), self.why(true))) };
+            return if listed { Ok(()) } else { Err(self.refuse("commands", command, &self.revoked.commands, |c| c == command || c == core, self.why(true))) };
         }
         let owner_ok = |owner: &str| command.strip_prefix(owner).is_some_and(|r| r.starts_with('.'));
         if owner_ok(&self.extension) || self.dependencies.iter().any(|d| owner_ok(d)) {
@@ -268,7 +283,7 @@ fn spawn(host: &dyn Host, scope: &Scope, c: &v::Command, sink: &dyn Sink, cancel
         None => scope.roots.first().cloned(),
     };
     // Only what the extension passes reaches the program, never the user's environment (tokens live there).
-    let proc = host.proc_spawn_env(&program, c.args.clone(), cwd, c.env.clone()).map_err(host_error)?;
+    let proc = spawn_clean(host, &program, &c.args, cwd, &c.env).map_err(host_error)?;
     if let Some(input) = &c.stdin {
         host.proc_input(proc.id, input.clone());
     }
@@ -286,16 +301,54 @@ fn spawn(host: &dyn Host, scope: &Scope, c: &v::Command, sink: &dyn Sink, cancel
     }
 }
 
-/// `vercel` → `/usr/local/bin/vercel` on the workspace's host: an executable on the login shell's PATH (`Which`),
-/// never a builtin or a function.
+/// `vercel` → `/usr/local/bin/vercel` on the workspace's host: an executable on the login shell's PATH, never a builtin
+/// or a function.
 fn resolve(host: &dyn Host, program: &str) -> Result<String, v::Error> {
     if program.contains('/') || program.contains('\\') {
         return normalize(program).ok_or_else(|| v::Error::NotFound(program.to_string()));
     }
-    match host.which(program).map_err(host_error)? {
-        Some(path) => normalize(&path).ok_or_else(|| v::Error::NotFound(program.to_string())),
-        None => Err(v::Error::NotFound(format!("{program} was not found on {}", host.label()))),
+    let out = if windows(host) {
+        host.exec("where", &[program], None, None)
+    } else {
+        // The login shell's PATH, but only executables on it; the name is an argument, never part of the script.
+        let script = r#"IFS=:; for d in $PATH; do [ -f "$d/$1" ] && [ -x "$d/$1" ] && { echo "$d/$1"; exit 0; }; done; exit 1"#;
+        host.exec("sh", &["-lc", script, "sh", program], None, None)
+    };
+    let out = out.map_err(host_error)?;
+    let path = out.stdout_str().lines().next().unwrap_or_default().trim().to_string();
+    if out.ok() && !path.is_empty() {
+        normalize(&path).ok_or_else(|| v::Error::NotFound(program.to_string()))
+    } else {
+        Err(v::Error::NotFound(format!("{program} was not found on {}", host.label())))
     }
+}
+
+fn windows(host: &dyn Host) -> bool {
+    host.info().os == "windows"
+}
+
+/// Start `program` with only `env` on top of a minimal environment: the user's variables, where tokens live, never
+/// reach it. On Unix hosts through `env -i` (the agent's own spawn is unchanged); Windows hosts run code extensions
+/// only once AppContainer is verified, and pass the environment as it is until then.
+fn spawn_clean(host: &dyn Host, program: &str, args: &[String], cwd: Option<String>, env: &[(String, String)]) -> host::Result<host::Proc> {
+    if windows(host) {
+        return host.proc_spawn(program, args.to_vec(), cwd);
+    }
+    let dir = program.rsplit_once('/').map_or("", |(d, _)| d);
+    let home = host.info().home.clone();
+    let mut argv = vec!["-i".to_string(), format!("PATH={dir}:/usr/local/bin:/usr/bin:/bin"), format!("HOME={home}"), "LANG=C.UTF-8".into()];
+    // A name with `=` would split into another variable, one starting with `-` would be an option of `env`.
+    for (k, v) in env.iter().filter(|(k, _)| !k.is_empty() && !k.contains('=') && !k.starts_with('-')) {
+        argv.push(format!("{k}={v}"));
+    }
+    // No `--`: BSD `env` would run it. The program is an absolute path, so it is never taken for an option, and one
+    // with `=` in it, which `env` would take for a variable, is refused.
+    if program.contains('=') || !program.starts_with('/') {
+        return Err(host::HostError::Op(proto::Error::NotFound(format!("{program} cannot be run as an extension program"))));
+    }
+    argv.push(program.to_string());
+    argv.extend(args.iter().cloned());
+    host.proc_spawn("/usr/bin/env", argv, cwd)
 }
 
 #[cfg(test)]

@@ -248,6 +248,10 @@ pub enum Activation {
     Command(String),
     View(String),
     WorkspaceContains(String),
+    /// A file of this language opens, or a provider for it is asked (`[[formatters]]`, `[[diagnostics]]`, …).
+    Language(String),
+    /// The user lists tasks (`[[tasks]]`).
+    Tasks,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -339,6 +343,51 @@ pub struct View {
     pub when: Option<String>,
 }
 
+/// Where a `[[menus]]` entry appears.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MenuLocation {
+    /// The editor's right-click menu.
+    EditorContext,
+    /// The right-click menu of a file or folder in the file tree.
+    FileTree,
+    /// The "…" menu in the title of one of the extension's views.
+    ViewTitle,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Menu {
+    /// Full id: the extension's own command or a dependency's.
+    pub command: String,
+    pub location: MenuLocation,
+    /// For `ViewTitle`: the view's full id.
+    pub view: Option<String>,
+    pub when: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StatusItem {
+    /// Full id: `publisher.name.local`. The extension sets the text at run time with this local id.
+    pub id: String,
+    /// Full id of the command a click runs, unless the extension sets another.
+    pub command: Option<String>,
+}
+
+/// A provider for some languages: `[[formatters]]`, `[[code-actions]]`, and with an id `[[diagnostics]]`,
+/// `[[decorations]]`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Provider {
+    /// Full id, or empty for formatters and code actions.
+    pub id: String,
+    /// Language ids as Codeyard names them (`rust`, `toml`, `typescriptreact`, or a language an extension adds).
+    pub languages: Vec<String>,
+}
+
+impl Provider {
+    pub fn handles(&self, language: &str) -> bool {
+        self.languages.iter().any(|l| l == language)
+    }
+}
+
 /// Everything an extension adds to Codeyard.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Contributions {
@@ -353,12 +402,40 @@ pub struct Contributions {
     pub language_servers: Vec<LanguageServer>,
     pub commands: Vec<Command>,
     pub views: Vec<View>,
+    pub menus: Vec<Menu>,
+    pub status_items: Vec<StatusItem>,
+    pub formatters: Vec<Provider>,
+    pub code_actions: Vec<Provider>,
+    pub diagnostics: Vec<Provider>,
+    pub decorations: Vec<Provider>,
+    /// Ids (full) of the extension's task providers.
+    pub tasks: Vec<String>,
 }
 
 impl Contributions {
     /// Contributions that need extension code to do anything.
     pub fn needs_code(&self) -> bool {
-        !self.commands.is_empty() || !self.views.is_empty()
+        !self.commands.is_empty()
+            || !self.views.is_empty()
+            || !self.status_items.is_empty()
+            || !self.formatters.is_empty()
+            || !self.code_actions.is_empty()
+            || !self.diagnostics.is_empty()
+            || !self.decorations.is_empty()
+            || !self.tasks.is_empty()
+    }
+
+    /// Languages a provider of this extension handles, each once.
+    pub fn provider_languages(&self) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for p in self.formatters.iter().chain(&self.code_actions).chain(&self.diagnostics).chain(&self.decorations) {
+            for l in &p.languages {
+                if !out.contains(l) {
+                    out.push(l.clone());
+                }
+            }
+        }
+        out
     }
 }
 
@@ -399,8 +476,8 @@ pub struct Manifest {
     pub icon: Option<String>,
     pub code: Option<CodeEntry>,
     pub permissions: Permissions,
-    /// Inferred from commands and views plus `activation.workspace-contains`; empty for declarative extensions.
-    /// (Language, URI-handler and account activation arrive with those contribution points in Phase 2.)
+    /// Inferred from commands, views, providers and tasks plus `activation.workspace-contains`; empty for declarative
+    /// extensions. (URI-handler and account activation arrive with those contribution points.)
     pub activation: Vec<Activation>,
     pub dependencies: Vec<(ExtId, Version)>,
     /// Runs in untrusted folders (with no outbound permissions there). Default true.

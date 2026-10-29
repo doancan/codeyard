@@ -627,3 +627,64 @@ fn oauth_urls_are_https_with_a_host_name() {
     let typo = ACME.replace("client-id", "client_id");
     assert_eq!(codes(&with(&format!("[permissions]\nauth = [\"acme\"]\n{typo}"))), vec![Code::Syntax]);
 }
+
+const CODE: &str = "[code]\nentry = \"Cargo.toml\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n[[views]]\nid = \"list\"\ntitle = \"List\"\nlocation = \"sidebar\"\n[dependencies]\n\"other.ext\" = \"1\"\n";
+
+#[test]
+fn menus_name_a_command_a_place_and_for_view_titles_a_view() {
+    let base = with(CODE);
+    let m = parse(&format!(
+        "{base}[[menus]]\ncommand = \"go\"\nlocation = \"editor-context\"\nwhen = \"editor.language == 'rust'\"\n\
+         [[menus]]\ncommand = \"other.ext.open\"\nlocation = \"file-tree\"\n\
+         [[menus]]\ncommand = \"go\"\nlocation = \"view-title\"\nview = \"list\"\n"
+    ))
+    .unwrap();
+    let menus = &m.contributions.menus;
+    assert_eq!(
+        menus.iter().map(|m| (m.command.as_str(), m.location)).collect::<Vec<_>>(),
+        [("a.b.go", MenuLocation::EditorContext), ("other.ext.open", MenuLocation::FileTree), ("a.b.go", MenuLocation::ViewTitle)]
+    );
+    assert_eq!(menus[2].view.as_deref(), Some("a.b.list"));
+    assert_eq!(menus[0].when.as_deref(), Some("editor.language == 'rust'"));
+    for bad in [
+        "[[menus]]\ncommand = \"stranger.ext.x\"\nlocation = \"file-tree\"\n",
+        "[[menus]]\ncommand = \"go\"\nlocation = \"toolbar\"\n",
+        "[[menus]]\ncommand = \"go\"\nlocation = \"view-title\"\n",
+        "[[menus]]\ncommand = \"go\"\nlocation = \"view-title\"\nview = \"nope\"\n",
+        "[[menus]]\ncommand = \"go\"\nlocation = \"file-tree\"\nview = \"list\"\n",
+    ] {
+        assert_eq!(codes(&format!("{base}{bad}")), vec![Code::BadContribution], "{bad}");
+    }
+    assert_eq!(codes(&format!("{base}[[menus]]\ncommand = \"go\"\nlocation = \"file-tree\"\nwhen = \"editor &&\"\n")), vec![Code::BadWhen]);
+}
+
+#[test]
+fn status_items_have_local_ids_and_their_own_commands() {
+    let base = with(CODE);
+    let m = parse(&format!("{base}[[status-bar]]\nid = \"deploy\"\ncommand = \"go\"\n[[status-bar]]\nid = \"count\"\n")).unwrap();
+    let items: Vec<_> = m.contributions.status_items.iter().map(|s| (s.id.as_str(), s.command.as_deref())).collect();
+    assert_eq!(items, [("a.b.deploy", Some("a.b.go")), ("a.b.count", None)]);
+    assert_eq!(codes(&format!("{base}[[status-bar]]\nid = \"x\"\n[[status-bar]]\nid = \"x\"\n")), vec![Code::DuplicateId]);
+    assert_eq!(codes(&format!("{base}[[status-bar]]\nid = \"x\"\ncommand = \"nope\"\n")), vec![Code::BadContribution]);
+}
+
+#[test]
+fn providers_declare_languages_and_start_the_extension_for_them() {
+    let m = parse(&with(
+        "[code]\nentry = \"Cargo.toml\"\n[[formatters]]\nlanguages = [\"toml\"]\n[[code-actions]]\nlanguages = [\"toml\", \"rust\"]\n\
+         [[diagnostics]]\nid = \"todos\"\nlanguages = [\"rust\"]\n[[decorations]]\nid = \"coverage\"\nlanguages = [\"rust\", \"rust\"]\n[[tasks]]\nid = \"deploys\"\n",
+    ))
+    .unwrap();
+    let c = &m.contributions;
+    assert!(c.formatters[0].handles("toml") && !c.formatters[0].handles("rust"));
+    assert_eq!(c.diagnostics[0].id, "a.b.todos");
+    assert_eq!(c.decorations[0].languages, ["rust"], "a language named twice counts once");
+    assert_eq!(c.tasks, ["a.b.deploys"]);
+    assert_eq!(m.activation, [Activation::Language("toml".into()), Activation::Language("rust".into()), Activation::Tasks]);
+    // Providers run code, so they need [code]; and they need a language that looks like one.
+    assert_eq!(codes(&with("[[formatters]]\nlanguages = [\"toml\"]\n")), vec![Code::NeedsCode]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[formatters]]\nlanguages = []\n")), vec![Code::BadContribution, Code::NeverActivates]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[code-actions]]\nlanguages = [\"rust\", \"C++\"]\n")), vec![Code::BadContribution]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[diagnostics]]\nid = \"Bad\"\nlanguages = [\"rust\"]\n")), vec![Code::BadContribution]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[formatters]]\nlanguage = \"toml\"\n")), vec![Code::Syntax]);
+}

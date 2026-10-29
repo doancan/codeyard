@@ -313,6 +313,7 @@ pub struct Task {
 pub enum Response {
     None,
     Json(String),
+    /// The element tree as JSON (`ext_ui::decode_json`).
     View(String),
     Edits(Vec<TextEdit>),
     CodeActions(Vec<CodeAction>),

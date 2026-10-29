@@ -33,7 +33,7 @@ pub(super) struct AccountsState {
     /// Keychain requests from background threads, answered in this window (`ensure_keychain_pump`).
     keychain_rx: Option<mpsc::Receiver<KeychainOp>>,
     keychain_pump: Option<gpui::Task<()>>,
-    transport: Arc<dyn Transport>,
+    pub(super) transport: Arc<dyn Transport>,
     /// The token of the GitHub sign-in Codeyard already has.
     github_token: GithubToken,
     flows: acc::Flows,
@@ -167,7 +167,10 @@ impl Workbench {
         let transport = self.cfg.exts.accounts.transport.clone();
         let keychain = self.cfg.exts.accounts.keychain.clone();
         let publisher = self.extension_publisher(active);
+        // Timed like every other call, for the Inspector (#108).
+        let (record, who) = (self.cfg.exts.code.record.clone(), id.clone());
         let complete = move |proc: &Arc<Process>, completion: Completion| {
+            record.lock().unwrap_or_else(|p| p.into_inner()).ticket_done(&who, ticket, &completion, None);
             let _ = proc.send(&ToHost::Complete { ticket, completion });
         };
         match call {
@@ -242,7 +245,9 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let (record, who) = (self.cfg.exts.code.record.clone(), active.id().to_string());
         let complete = move |c: Completion| {
+            record.lock().unwrap_or_else(|p| p.into_inner()).ticket_done(&who, ticket, &c, None);
             let _ = proc.send(&ToHost::Complete { ticket, completion: c });
         };
         let Some(p) = acc::provider(&active.manifest, provider).filter(|_| scope.permissions.auth.iter().any(|a| a == provider)) else {
@@ -421,7 +426,9 @@ impl Workbench {
     /// Answers `ticket` of `extension`'s exthost, if it still runs.
     fn ticket_completer(&self, extension: &str, ticket: u64) -> Complete {
         let proc = self.cfg.exts.code.procs.get(extension).cloned();
+        let (record, who) = (self.cfg.exts.code.record.clone(), extension.to_string());
         Box::new(move |completion| {
+            record.lock().unwrap_or_else(|p| p.into_inner()).ticket_done(&who, ticket, &completion, None);
             if let Some(p) = &proc {
                 let _ = p.send(&ToHost::Complete { ticket, completion });
             }

@@ -256,6 +256,7 @@ status bar reports it.
 | `workbench.startupEditor` | string | `welcome` | VS Code compatible alias of `window.startup`. |
 | `editor.codeActionsOnSave` | object | `{}` | Code actions to run on save before formatting, e.g. `{ "source.organizeImports": "explicit" }`; each gives up after 2 s. |
 | `files.associations` | object of glob → language | `{}` | Force a language mode for matching files, e.g. `{ "*.tpl": "html" }`. |
+| `editor.formatters` | object of language → formatter | `{}` | Who formats a language: `"lsp"` or the id of an extension that formats it, e.g. `{ "toml": "you.taplo" }`. Without an entry the language server formats, or else the only extension that formats the language. |
 | `terminal.profiles.macos` | object of name → profile | `{}` | Profiles for terminals on macOS: `{ "zsh": { "path": "/bin/zsh", "args": ["-l"], "env": { … }, "color": "info" } }`; `args` replace the login flag, `color` is accent, success, warning, danger, info or muted. Needs a trusted folder in a project file. |
 | `terminal.profiles.linux` | object of name → profile | `{}` | Profiles for terminals on Linux (also SSH hosts), like `terminal.profiles.macos`. |
 | `terminal.profiles.windows` | object of name → profile | `{}` | Profiles for terminals on Windows, like `terminal.profiles.macos`. |

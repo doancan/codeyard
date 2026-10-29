@@ -63,8 +63,12 @@ mod editor_grid_tests;
 mod editors_glue;
 #[path = "workbench_ext.rs"]
 mod ext_glue;
+#[path = "ext_ui_render.rs"]
+mod ext_ui_glue;
 #[path = "workbench_ext_view.rs"]
 mod ext_view_glue;
+#[path = "workbench_ext_views.rs"]
+mod ext_views_glue;
 #[path = "workbench_extras.rs"]
 mod extras_glue;
 #[path = "workbench_file_batch.rs"]
@@ -77,10 +81,14 @@ mod fsops_glue;
 mod git_glue;
 #[path = "workbench_groups.rs"]
 mod groups_glue;
+#[path = "workbench_ext_inspector.rs"]
+mod inspector_glue;
 #[path = "workbench_market.rs"]
 mod market_glue;
 #[path = "workbench_market_view.rs"]
 mod market_view_glue;
+#[path = "workbench_ext_providers.rs"]
+mod providers_glue;
 #[path = "workbench_repos.rs"]
 pub(crate) mod repos_glue;
 #[path = "workbench_ext_updates.rs"]
@@ -501,6 +509,8 @@ enum Page {
     Containers,
     /// The Extensions view's detail page and consent sheet (state in `ConfigState::exts`).
     Extension,
+    /// **Developer: Extension Inspector** (workbench_ext_inspector.rs).
+    ExtensionInspector,
     Settings(Entity<crate::settings_page::SettingsPage>),
     Markdown(Entity<crate::markdown::MarkdownPreview>),
     Shortcuts(Entity<crate::shortcuts_page::ShortcutsPage>),
@@ -510,6 +520,8 @@ enum Page {
     Compare(Entity<crate::compare_folders::CompareView>),
     /// The Search Editor in front; every open one is also listed in its group's `searches`.
     Search(Entity<crate::search_editor::SearchEditor>),
+    /// An extension view in the editor area, by its full id (workbench_ext_views.rs).
+    ExtView(String),
 }
 
 /// Floating picker on top: theme picker or palette (files / commands / line).
@@ -526,7 +538,9 @@ pub use debug::{
 };
 pub use ext_glue::{CancelExtensionConsent, InstallExtensionFromFile, InstallExtensionFromFolder, InstallExtensionFromRegistry, ShowExtensions};
 pub use host::askpass::{AskKind, AskRequest};
+pub use inspector_glue::ShowExtensionInspector;
 pub use market_glue::{MarketNext, MarketPrevious, ShowMarket};
+pub use providers_glue::RunExtensionCommand;
 pub use remote_glue::ShowRemoteExplorer;
 pub use terminals_glue::{
     ChangeTerminalColor, ConfigureTerminalSettings, FocusNextTerminal, FocusPreviousTerminal, KillAllTerminals, KillOtherTerminals, NewTerminalWithProfile,
@@ -575,6 +589,8 @@ enum Bottom {
     Ports,
     /// Debug: call stack, variables, console.
     Debug,
+    /// The extension view in `cfg.exts.views.bottom`.
+    ExtView,
 }
 
 /// Settings files of a folder (lowest to highest priority).
@@ -667,6 +683,8 @@ enum Panel {
     Remote,
     Containers,
     Extensions,
+    /// The extension view in `cfg.exts.views.sidebar`.
+    ExtView,
 }
 
 enum Conn {
@@ -1533,6 +1551,7 @@ impl Workbench {
                             }
                         },
                     )))
+                    .children(self.ext_view_panel_tabs(p, cx))
                     .child(div().flex_1())
                     // The terminal's own actions only while the terminal is the panel's view.
                     .when(self.chrome.bottom == Bottom::Terminal, |d| {
@@ -1593,6 +1612,7 @@ impl Workbench {
                     Bottom::Output => d.child(self.output_view(p)),
                     Bottom::Debug => d.child(self.debug_view(p, cx)),
                     Bottom::Ports => d.child(self.ports_view(p, cx)),
+                    Bottom::ExtView => d.child(self.ext_view_in(ext_manifest::ViewLocation::Bottom, p, cx)),
                     Bottom::Terminal => {
                         // Several terminals: their list on the right.
                         let list = self.terminal_list(p, cx);
@@ -1648,6 +1668,7 @@ impl Workbench {
             Run::Connect(alias) => self.connect(alias, window, cx),
             Run::Disconnect => self.disconnect(cx),
             Run::Extension { extension, command } => self.run_extension_command(&extension, &command, window, cx),
+            Run::ExtensionView(view) => self.open_ext_view(&view, window, cx),
         }
     }
 
@@ -1882,6 +1903,7 @@ impl Workbench {
         self.tabs.editors.push(ed.clone());
         self.attach_lsp(&ed, cx);
         self.apply_task_problems(&ed, cx);
+        self.attach_extensions(&ed, window, cx);
         self.schedule_schema(&ed, Duration::ZERO, cx);
         self.attach_speller(&ed, cx);
         self.apply_breakpoints_to(&ed, cx);
@@ -2459,6 +2481,8 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
             EditorEvent::OpenMergeEditor => return this.open_merge_editor(&OpenMergeEditor, window, cx),
             EditorEvent::SendRequest(line) => return this.send_request_at(Some(*line), window, cx),
             EditorEvent::Changed => {
+                // The user moved on: what extensions were asked about the old text is cancelled.
+                this.cancel_providers_about(&ed.read(cx).path.clone());
                 // Breakpoints shift with edits: keep the store (used on close and saved) current.
                 this.sync_breakpoints_from(ed, cx);
                 this.note_edit(ed, cx);

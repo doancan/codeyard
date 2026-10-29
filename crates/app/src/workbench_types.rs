@@ -39,6 +39,8 @@ pub(super) enum OverlayKind {
         actions: Vec<crate::lsp::CodeAction>,
         client: Arc<crate::lsp::Client>,
     },
+    /// Quick fixes from the language server and code extensions together.
+    QuickFixes(Vec<super::providers_glue::QuickFix>),
     /// Project switcher (⌃R), remove from recents, favorites.
     Projects(Vec<projects::SwitchChoice>),
     ForgetRecent(Vec<RecentWorkspace>),
@@ -389,4 +391,6 @@ pub(super) enum MenuCmd {
     Remote(remote_glue::RemoteMenuCmd),
     /// The Run and Debug view: configuration selector, breakpoint rows (`MenuTarget::path` = "path\tline").
     Debug(debug::DebugMenuCmd),
+    /// An option of an extension view's select (`ViewsState::choosing`).
+    ExtViewChoice(usize),
 }

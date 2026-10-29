@@ -3,12 +3,24 @@ name = "ext-proto"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Frames between the Codeyard app and an extension host process"
+description = "Frames between the Codeyard app and an extension host process, and its Windows sandbox launch"
 repository.workspace = true
 publish = false
 
 [dependencies]
-ext-api = { version = "0.5.0", path = "../ext-api" }
-ext-manifest = { version = "0.5.0", path = "../ext-manifest" }
+ext-api = { version = "0.6.0", path = "../ext-api" }
+ext-manifest = { version = "0.6.0", path = "../ext-manifest" }
 postcard = { version = "1.1.3", features = ["use-std"] }
 serde = { version = "1.0.229", features = ["derive"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Security_Isolation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_JobObjects",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+] }

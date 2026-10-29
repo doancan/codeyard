@@ -11,7 +11,8 @@ use ext_proto::{Hello, Reader, ToApp, ToHost};
 use sha2::{Digest, Sha256};
 
 const EXE: &str = env!("CARGO_BIN_EXE_codeyard-exthost");
-const PROBE: &[u8] = include_bytes!("../testdata/probe.wasm");
+// The probe with its sandbox escape attempts (a superset of testdata/probe.wasm).
+const PROBE: &[u8] = include_bytes!("../testdata/probe-escape.wasm");
 
 fn dir(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("exthost-{name}-{}", std::process::id()));
@@ -54,6 +55,8 @@ fn hello(dir: &Path, compiled: &Path, sha: [u8; 32], granted: &[&str], untrusted
         settings: vec![("interval".into(), Some("60".into()))],
         folders: vec!["file:///work".into()],
         reason: "command:echo".into(),
+        // Windows sandboxes the exthost from the parent (an AppContainer), which these tests do not do.
+        sandbox: cfg!(unix),
     }
 }
 
@@ -172,6 +175,29 @@ fn a_permission_not_granted_is_refused_without_leaving_the_exthost() {
 }
 
 #[test]
+fn a_permission_turned_off_is_refused_from_the_next_call() {
+    let d = dir("grants");
+    let (c, sha) = compile(&d);
+    let mut h = Host::start(hello(&d, &c, sha, &["net"], false)).ready();
+    h.command("fetch", "https://api.example.com/x");
+    assert!(matches!(h.next(), ToApp::Start { call: Start::Fetch { .. }, .. }));
+    // The user turns `net` off on the extension page: no restart, the next call is refused and the app is told.
+    h.send(&ToHost::Grants(Vec::new()));
+    let id = h.command("fetch", "https://api.example.com/x");
+    let (answer, other) = h.answer(id);
+    assert_eq!(answer, Ok(Response::Json("denied net Why::RevokedByUser".into())));
+    let reported = other.iter().find_map(|m| match m {
+        ToApp::Denied { call, denied } => Some((call.as_str(), denied.permission.as_str(), denied.why)),
+        _ => None,
+    });
+    assert_eq!(reported, Some(("net/fetch", "net", ext_api::value::Why::RevokedByUser)));
+    // And on again.
+    h.send(&ToHost::Grants(vec!["net".into()]));
+    h.command("fetch", "https://api.example.com/x");
+    assert!(matches!(h.next(), ToApp::Start { call: Start::Fetch { .. }, .. }));
+}
+
+#[test]
 fn an_untrusted_folder_refuses_sending() {
     let d = dir("untrusted");
     let (c, sha) = compile(&d);
@@ -263,4 +289,45 @@ fn another_build_is_turned_away() {
     let mut h = Host::start(Hello { build: "other".into(), ..hello(&d, &c, sha, &[], false) });
     assert!(matches!(h.next(), ToApp::Mismatch { .. }));
     assert!(!h.exit().success());
+}
+
+#[test]
+fn a_guest_cannot_reach_files_sockets_or_processes() {
+    let d = dir("escape");
+    let (c, sha) = compile(&d);
+    let mut h = Host::start(hello(&d, &c, sha, &[], false)).ready();
+    // Even a file the exthost process itself may read is out of the guest's reach: WASI has no folders here.
+    let answer = h.json("escape", &c.to_string_lossy());
+    assert_eq!(answer.lines().count(), 6, "{answer}");
+    assert!(answer.lines().all(|l| l.ends_with(": refused")), "{answer}");
+}
+
+#[test]
+fn cyx_dev_runs_without_the_os_sandbox() {
+    let d = dir("dev");
+    let (c, sha) = compile(&d);
+    let mut h = Host::start(Hello { sandbox: false, ..hello(&d, &c, sha, &[], false) }).ready();
+    assert_eq!(h.json("echo", "dev"), "dev");
+}
+
+/// Spawn to `Activated`, with and without the sandbox: the "Activation, cold (spawn + sandbox + load)" perf row.
+///   cargo test --release -p ext-host --test exthost cold_start -- --ignored --nocapture
+#[test]
+#[ignore = "a measurement, not a check"]
+fn cold_start() {
+    let d = dir("cold");
+    let (c, sha) = compile(&d);
+    for sandbox in [false, true, false, true] {
+        let mut times: Vec<Duration> = (0..20)
+            .map(|_| {
+                let t = Instant::now();
+                let h = Host::start(Hello { sandbox, ..hello(&d, &c, sha, &[], false) }).ready();
+                let took = t.elapsed();
+                drop(h);
+                took
+            })
+            .collect();
+        times.sort();
+        println!("sandbox {sandbox:5}: median {:?}, p95 {:?}", times[10], times[18]);
+    }
 }

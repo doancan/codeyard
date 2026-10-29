@@ -95,7 +95,7 @@ interface responses {
     none,
     /// A command's result.
     json(string),
-    /// A view's element tree (reference/ui.md), JSON-encoded.
+    /// A view: its element tree as JSON, nested `{key, element, children}` nodes (reference/ui.md). The host checks it.
     view(string),
     edits(list<text-edit>),
     code-actions(list<code-action>),

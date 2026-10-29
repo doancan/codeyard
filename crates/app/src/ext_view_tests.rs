@@ -277,8 +277,8 @@ fn escape_cancels_the_consent_sheet(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn a_package_with_code_shows_the_consent_sheet(cx: &mut TestAppContext) {
-    if crate::ext_runtime::exthost_path().is_none() {
-        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+    if let Err(why) = crate::ext_runtime::code_runs_here(&"tests") {
+        eprintln!("skipped: {why}");
         return;
     }
     let cfg = config_dir("code");
