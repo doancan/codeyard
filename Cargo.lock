@@ -6431,6 +6431,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "task-engine"
+version = "0.5.0"
+dependencies = [
+ "fancy-regex",
+ "serde_json",
+ "theme",
+]
+
+[[package]]
 name = "tempfile"
 version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

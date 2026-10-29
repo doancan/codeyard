@@ -67,6 +67,8 @@ pub enum TerminalEvent {
         data: Vec<u8>,
         lines: usize,
     },
+    /// An image could not be transferred to the terminal's host.
+    ImagePasteFailed(String),
     /// ⌘-click: URL or file location.
     OpenLink(crate::links::Link),
     /// Right click (window coordinates): copy, paste, select all, find, clear.
@@ -546,6 +548,37 @@ impl TerminalView {
             }
             return;
         }
+        // On Windows and Linux, Ctrl+C copies selected terminal text. Without a
+        // selection it must still reach the program as the interrupt character.
+        let k = &ev.keystroke;
+        if !cfg!(target_os = "macos")
+            && k.key == "c"
+            && k.modifiers.control
+            && !k.modifiers.shift
+            && !k.modifiers.alt
+            && !k.modifiers.platform
+            && let Some(text) = self.term.selection_to_string().filter(|s| !s.is_empty())
+        {
+            cx.write_to_clipboard(ClipboardItem::new_string(text));
+            self.term.selection = None;
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
+        // A remote program cannot read the local image clipboard itself.
+        // Preserve Ctrl+V for programs when there is no image on the clipboard.
+        if k.key == "v"
+            && k.modifiers.control
+            && !k.modifiers.shift
+            && !k.modifiers.alt
+            && !k.modifiers.platform
+            && self.host.is_remote()
+            && let Some(image) = cx.read_from_clipboard().and_then(Self::clipboard_image)
+        {
+            cx.stop_propagation();
+            self.paste_image(image, cx);
+            return;
+        }
         let Some(bytes) = key_to_bytes(&ev.keystroke, *self.term.mode()) else { return };
         cx.stop_propagation();
         self.term.selection = None;
@@ -734,8 +767,46 @@ impl TerminalView {
         cx.notify();
     }
 
+    fn clipboard_image(item: ClipboardItem) -> Option<gpui::Image> {
+        item.into_entries().find_map(|entry| match entry {
+            gpui::ClipboardEntry::Image(image) => Some(image),
+            _ => None,
+        })
+    }
+
+    fn paste_image(&mut self, image: gpui::Image, cx: &mut Context<Self>) {
+        let host = self.host.clone();
+        let pty = self.pty;
+        let task = cx.background_executor().spawn(async move { crate::terminal_image_paste::save_remote_image(host.as_ref(), image) });
+        cx.spawn(async move |this, cx| {
+            let result = task.await;
+            this.update(cx, |this, cx| {
+                if this.pty != pty || this.exit.is_some() {
+                    return;
+                }
+                match result {
+                    Ok(path) => {
+                        let bracketed = this.term.mode().contains(TermMode::BRACKETED_PASTE);
+                        let data = crate::terminal_paste::prepare(&path, bracketed, crate::terminal_paste::Sanitize::Auto).data;
+                        this.paste_confirmed(data);
+                    }
+                    Err(error) => cx.emit(TerminalEvent::ImagePasteFailed(error)),
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
     fn paste(&mut self, _: &TermPaste, _: &mut Window, cx: &mut Context<Self>) {
-        let Some(text) = cx.read_from_clipboard().and_then(|i| i.text()) else { return };
+        let Some(item) = cx.read_from_clipboard() else { return };
+        if self.host.is_remote()
+            && let Some(image) = Self::clipboard_image(item.clone())
+        {
+            self.paste_image(image, cx);
+            return;
+        }
+        let Some(text) = item.text() else { return };
         let bracketed = self.term.mode().contains(TermMode::BRACKETED_PASTE);
         let settings = cx.global::<crate::settings::Settings>();
         let (policy, warn) = (settings.terminal_sanitize_paste, settings.terminal_warn_multiline);
@@ -873,6 +944,7 @@ pub fn key_to_bytes(k: &gpui::Keystroke, mode: TermMode) -> Option<Vec<u8>> {
         "f11" => tilde(23),
         "f12" => tilde(24),
         "space" if m.control => vec![0],
+        "space" => b" ".to_vec(),
         key if m.control && key.chars().count() == 1 => {
             let ch = key.chars().next()?.to_ascii_lowercase();
             match ch {
@@ -888,7 +960,7 @@ pub fn key_to_bytes(k: &gpui::Keystroke, mode: TermMode) -> Option<Vec<u8>> {
         _ => {
             // Typed character (ğ, ş... on a Turkish keyboard; includes ones produced with ⌥ on macOS).
             let typed = k.key_char.clone().or_else(|| (k.key.chars().count() == 1).then(|| k.key.clone()))?;
-            if k.key == "space" { b" ".to_vec() } else { typed.into_bytes() }
+            typed.into_bytes()
         }
     };
     Some(bytes)
@@ -1374,6 +1446,14 @@ mod tests {
         assert_eq!(bytes("ctrl-delete", m).unwrap(), b"\x1b[3;5~");
         assert_eq!(bytes("alt-backspace", m).unwrap(), b"\x1b\x7f");
         assert!(bytes("cmd-v", m).is_none(), "⌘ keys are left to the app");
+    }
+
+    #[test]
+    fn space_keys_are_sent_to_the_terminal() {
+        let m = TermMode::empty();
+        assert_eq!(bytes("space", m), Some(b" ".to_vec()));
+        assert_eq!(bytes("shift-space", m), Some(b" ".to_vec()));
+        assert_eq!(bytes("ctrl-space", m), Some(vec![0]));
     }
 
     #[test]

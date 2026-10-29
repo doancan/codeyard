@@ -100,6 +100,10 @@ impl Workbench {
                 }
             }
             TerminalEvent::TitleChanged | TerminalEvent::Exited => cx.notify(),
+            TerminalEvent::ImagePasteFailed(error) => {
+                this.notice = Some(Notice::Error(crate::i18n::tf("Could not paste: {}", &[error]).into()));
+                cx.notify();
+            }
             TerminalEvent::ConfirmPaste { data, lines } => {
                 let (term, data) = (source.clone(), data.clone());
                 let title = crate::i18n::tn("Paste {} line into the terminal?", "Paste {} lines into the terminal?", *lines, &[]);

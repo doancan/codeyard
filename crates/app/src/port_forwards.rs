@@ -431,6 +431,18 @@ impl ForwardSet {
         }
     }
 
+    /// An independently managed SSH forward exited while the main connection stayed up.
+    #[cfg(windows)]
+    pub fn process_exited(&mut self, id: ForwardId, spec: &str) {
+        if let Some(f) = self.get_mut(id)
+            && f.state == ForwardState::Active
+            && f.spec.as_deref() == Some(spec)
+        {
+            f.spec = None;
+            f.state = ForwardState::Failed(ForwardError { kind: host::forward::FailKind::Other, message: "SSH forwarding process exited".into() });
+        }
+    }
+
     /// The connection is back: waiting forwards open again, on the local port they had when possible.
     pub fn on_reconnected(&mut self) -> Vec<Effect> {
         let waiting: Vec<ForwardId> = self.items.iter().filter(|f| f.state == ForwardState::Interrupted).map(|f| f.id).collect();

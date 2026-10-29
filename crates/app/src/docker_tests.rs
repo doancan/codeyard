@@ -150,13 +150,8 @@ fn docker_cancellation_prevents_process_launch() {
 fn docker_process_runner_drains_both_pipes_and_times_out() {
     let mut cmd = Command {
         ssh: None,
-        program: "powershell.exe".into(),
-        args: vec![
-            "-NoProfile".into(),
-            "-NonInteractive".into(),
-            "-Command".into(),
-            "[Console]::Out.WriteLine('result'); [Console]::Error.WriteLine('progress')".into(),
-        ],
+        program: std::env::current_exe().unwrap().to_string_lossy().into_owned(),
+        args: vec!["--exact".into(), "docker_tests::docker_process_fixture_stdio".into(), "--ignored".into(), "--nocapture".into()],
         context: None,
         cwd: None,
         timeout: Duration::from_secs(10),
@@ -164,11 +159,41 @@ fn docker_process_runner_drains_both_pipes_and_times_out() {
     let mut logs = Vec::new();
     assert!(run(&cmd, &AtomicBool::new(false), |l| logs.push(l)).unwrap().contains("result"));
     assert!(logs.iter().any(|l| l.contains("progress")));
-    cmd.args[3] = "[Console]::Out.WriteLine('setup failed'); exit 7".into();
+    cmd.args[1] = "docker_tests::docker_process_fixture_failure".into();
     assert!(run(&cmd, &AtomicBool::new(false), |_| {}).unwrap_err().contains("setup failed"));
-    cmd.args[3] = "Start-Sleep -Seconds 20".into();
+    cmd.args[1] = "docker_tests::docker_process_fixture_sleep".into();
     cmd.timeout = Duration::from_millis(100);
     assert_eq!(run(&cmd, &AtomicBool::new(false), |_| {}).unwrap_err(), "Operation timed out");
+}
+
+// Owned child-process fixtures avoid depending on a cold PowerShell startup. The runner's
+// success deadline and its 100 ms timeout assertion remain unchanged.
+#[cfg(windows)]
+#[test]
+#[ignore = "child process fixture for docker_process_runner_drains_both_pipes_and_times_out"]
+fn docker_process_fixture_stdio() {
+    use std::io::Write;
+    std::io::stdout().write_all(b"result\n").unwrap();
+    std::io::stdout().flush().unwrap();
+    std::io::stderr().write_all(b"progress\n").unwrap();
+    std::io::stderr().flush().unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+#[ignore = "child process fixture for docker_process_runner_drains_both_pipes_and_times_out"]
+fn docker_process_fixture_failure() {
+    use std::io::Write;
+    std::io::stdout().write_all(b"setup failed\n").unwrap();
+    std::io::stdout().flush().unwrap();
+    std::process::exit(7);
+}
+
+#[cfg(windows)]
+#[test]
+#[ignore = "child process fixture for docker_process_runner_drains_both_pipes_and_times_out"]
+fn docker_process_fixture_sleep() {
+    std::thread::sleep(Duration::from_secs(20));
 }
 
 #[gpui::test]
