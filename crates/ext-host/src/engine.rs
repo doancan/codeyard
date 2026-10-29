@@ -11,30 +11,51 @@ use sha2::{Digest, Sha256};
 use wasmtime::component::Component;
 use wasmtime::{Config, Engine, Result, WasmBacktraceDetails, format_err};
 
-pub fn engine() -> Result<Engine> {
+fn config() -> Config {
     let mut c = Config::new();
     c.wasm_component_model(true);
     c.epoch_interruption(true);
     c.wasm_backtrace_details(WasmBacktraceDetails::Enable);
     #[cfg(unix)]
     c.with_custom_code_memory(Some(std::sync::Arc::new(CopyText)));
-    Engine::new(&c)
+    c
 }
 
-/// `.wasm` → compiled code, for the app's cache.
-pub fn compile(engine: &Engine, wasm: &[u8]) -> Result<Vec<u8>> {
-    engine.precompile_component(wasm)
+pub fn engine() -> Result<Engine> {
+    Engine::new(&config())
+}
+
+/// `.wasm` → compiled code, for the app's cache. With `cache`, Cranelift reuses the functions it compiled last time
+/// (`incremental.rs`); the result is the same code, and loads in an engine without the cache.
+pub fn compile(wasm: &[u8], cache: Option<&Path>) -> Result<Vec<u8>> {
+    let Some(path) = cache else { return engine()?.precompile_component(wasm) };
+    let store = std::sync::Arc::new(crate::incremental::FileCache::open(path));
+    let mut c = config();
+    c.enable_incremental_compilation(store.clone())?;
+    let code = Engine::new(&c)?.precompile_component(wasm)?;
+    store.save();
+    Ok(code)
 }
 
 /// Load compiled code after checking it is the file the app compiled for this extension: the cache is shared, so a
 /// mismatch must not run another extension's code.
 pub fn load(engine: &Engine, path: &Path, sha256: &[u8; 32]) -> Result<Component> {
-    let bytes = std::fs::read(path).map_err(|e| format_err!("cannot read {}: {e}", path.display()))?;
-    let have: [u8; 32] = Sha256::digest(&bytes).into();
+    // Hashed in pieces: a whole TypeScript .cwasm read at once is 33 MB that the allocator keeps, dirty, after it is
+    // freed, which macOS counts as the process's memory.
+    let mut file = std::fs::File::open(path).map_err(|e| format_err!("cannot read {}: {e}", path.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 64 * 1024];
+    loop {
+        let n = std::io::Read::read(&mut file, &mut buf).map_err(|e| format_err!("cannot read {}: {e}", path.display()))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    let have: [u8; 32] = hasher.finalize().into();
     if &have != sha256 {
         return Err(format_err!("{} does not match its recorded hash", path.display()));
     }
-    drop(bytes);
     // Safety: the file is the one the app compiled with this engine (checked above); `deserialize_file` maps it and
     // checks the engine configuration and version.
     unsafe { Component::deserialize_file(engine, path) }
@@ -58,16 +79,24 @@ impl wasmtime::CustomCodeMemory for CopyText {
     fn publish_executable(&self, ptr: *const u8, len: usize) -> Result<()> {
         let len = len.div_ceil(page()) * page();
         // Safety: wasmtime hands over a page-aligned range it owns and that no code runs from yet. The copy is
-        // taken before the range is replaced.
+        // taken before the range is replaced, in its own mapping that is unmapped right after: a heap copy (32 MB for
+        // TypeScript) would stay with the allocator, dirty, after it is freed.
         unsafe {
-            let copy = std::slice::from_raw_parts(ptr, len).to_vec();
-            let at = ptr as *mut libc::c_void;
-            let flags = libc::MAP_FIXED | libc::MAP_PRIVATE | libc::MAP_ANON;
-            let p = libc::mmap(at, len, libc::PROT_READ | libc::PROT_WRITE, flags, -1, 0);
-            if p != at {
+            let rw = libc::PROT_READ | libc::PROT_WRITE;
+            let copy = libc::mmap(std::ptr::null_mut(), len, rw, libc::MAP_PRIVATE | libc::MAP_ANON, -1, 0);
+            if copy == libc::MAP_FAILED {
                 return Err(format_err!("mmap: {}", std::io::Error::last_os_error()));
             }
-            std::ptr::copy_nonoverlapping(copy.as_ptr(), p as *mut u8, len);
+            std::ptr::copy_nonoverlapping(ptr, copy as *mut u8, len);
+            let at = ptr as *mut libc::c_void;
+            let flags = libc::MAP_FIXED | libc::MAP_PRIVATE | libc::MAP_ANON;
+            let p = libc::mmap(at, len, rw, flags, -1, 0);
+            if p != at {
+                libc::munmap(copy, len);
+                return Err(format_err!("mmap: {}", std::io::Error::last_os_error()));
+            }
+            std::ptr::copy_nonoverlapping(copy as *const u8, p as *mut u8, len);
+            libc::munmap(copy, len);
             if libc::mprotect(p, len, libc::PROT_READ | libc::PROT_EXEC) != 0 {
                 return Err(format_err!("mprotect: {}", std::io::Error::last_os_error()));
             }
