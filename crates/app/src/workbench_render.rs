@@ -217,19 +217,8 @@ impl Render for Workbench {
             .on_action(cx.listener(|this, _: &RunTestAtCursor, _, cx| this.run_test(false, cx)))
             .on_action(cx.listener(|this, _: &RunFileTests, _, cx| this.run_test(true, cx)))
             .on_action(cx.listener(|this, _: &ConfigureTasks, window, cx| this.configure_tasks(window, cx)))
-            .on_action(cx.listener(|this, _: &TogglePanelPosition, _, cx| {
-                this.chrome.panel_right = !this.chrome.panel_right;
-                this.chrome.panel_open = true;
-                if let Some(s) = &this.persist.state {
-                    let _ = s.set("panel_right", if this.chrome.panel_right { "1" } else { "0" });
-                }
-                cx.notify();
-            }))
-            .on_action(cx.listener(|this, _: &ToggleMaximizedPanel, _, cx| {
-                this.chrome.panel_max = !this.chrome.panel_max;
-                this.chrome.panel_open = true;
-                cx.notify();
-            }))
+            .on_action(cx.listener(|this, _: &TogglePanelPosition, _, cx| this.toggle_panel_position(cx)))
+            .on_action(cx.listener(|this, _: &ToggleMaximizedPanel, _, cx| this.toggle_maximized_panel(cx)))
             .on_action(cx.listener(|this, _: &CloseFolder, _, cx| this.close_folder(cx)))
             .on_action(cx.listener(|this, _: &ClearTerminal, _, cx| {
                 if let Some(t) = this.terminals.get(this.active_terminal).cloned() {
@@ -851,5 +840,18 @@ mod resize_tests {
             assert!(wb.read_with(cx, |wb, _| !wb.chrome.resizing_sidebar && !wb.chrome.resizing_panel && !wb.chrome.resizing_split));
             assert_eq!(wb.read_with(cx, |wb, _| (wb.chrome.sidebar_w, wb.chrome.panel_h, wb.chrome.panel_w)), sizes);
         }
+    }
+
+    // Moving a maximized panel used to flip only the docking side, which a maximized panel ignores: nothing moved.
+    #[gpui::test]
+    fn moving_a_maximized_panel_restores_its_size(cx: &mut TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        let start = wb.read_with(cx, |wb, _| wb.panel_layout_for_test().1);
+        cx.dispatch_action(ToggleMaximizedPanel);
+        assert_eq!(wb.read_with(cx, |wb, _| wb.panel_layout_for_test()), (true, start, true));
+        cx.dispatch_action(TogglePanelPosition);
+        assert_eq!(wb.read_with(cx, |wb, _| wb.panel_layout_for_test()), (true, !start, false), "moved and back to its own size");
+        cx.dispatch_action(ToggleMaximizedPanel);
+        assert_eq!(wb.read_with(cx, |wb, _| wb.panel_layout_for_test()), (true, !start, true), "maximizing on the new side");
     }
 }
