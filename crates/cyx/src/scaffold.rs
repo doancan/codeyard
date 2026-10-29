@@ -51,7 +51,26 @@ const KEYMAP: &str = r#"[
 ]
 "#;
 
-const README: &str = "# NAME\n\nA Codeyard extension. Run it with `cyx dev`, check it with `cyx check`, package it with `cyx package`.\n";
+/// Publishing on a tag push (`.github/workflows/publish.yml`): the identity the registry pins is this repository and
+/// this file, so it keeps one name.
+pub const PUBLISH_WORKFLOW: &str = r#"# Publishes this extension to the Codeyard registry when you push a tag: git tag v0.2.0 && git push --tags
+# No secrets: the job's identity token signs the release (keyless), so only this repository can publish it.
+name: Publish
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: doancan/codeyard/actions/publish@v1
+"#;
+
+const README: &str = "# NAME\n\nA Codeyard extension. Run it with `cyx dev`, check it with `cyx check`, publish it with `cyx publish` or by pushing a tag (`git tag v0.1.0 && git push --tags`).\n";
 
 /// Write the template for `kind` into a new folder `dir`.
 pub fn create(dir: &Path, kind: Kind, name: &str, publisher: &str) -> Result<(), String> {
@@ -88,7 +107,11 @@ pub fn create(dir: &Path, kind: Kind, name: &str, publisher: &str) -> Result<(),
         ),
     };
     std::fs::create_dir_all(dir).map_err(|e| format!("error: cannot create {}: {e}", dir.display()))?;
-    let mut all = vec![(ext_manifest::FILE_NAME.to_string(), manifest), ("README.md".to_string(), README.replace("NAME", &t))];
+    let mut all = vec![
+        (ext_manifest::FILE_NAME.to_string(), manifest),
+        ("README.md".to_string(), README.replace("NAME", &t)),
+        (".github/workflows/publish.yml".to_string(), PUBLISH_WORKFLOW.to_string()),
+    ];
     all.extend(files);
     for (rel, text) in all {
         let path = dir.join(&rel);

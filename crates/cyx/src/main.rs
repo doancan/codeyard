@@ -6,13 +6,20 @@
 //! cyx check [FOLDER]                     every problem with its file, line and fix
 //! cyx package [FOLDER] [-o FILE]         a reproducible .cyx
 //! cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]
+//! cyx publish [FOLDER] [--dry-run] [--pre-release] [--registry URL]
+//! cyx yank | restore VERSION [FOLDER]    hide a version from installs, or bring it back
+//! cyx deprecate VERSION [FOLDER] [--replacement ID]
 //! cyx yard <keygen|sign|verify> …        the registry operator's commands (yard.rs)
 //! ```
 //!
 //! Everything it checks is checked by `ext-manifest` and `ext-pkg`, the same code the app and the registry run, so a
-//! folder `cyx check` accepts installs. No network.
+//! folder `cyx check` accepts installs. Only publishing and status changes use the network (`publish.rs`).
 
+mod net;
+mod oidc;
+mod publish;
 mod scaffold;
+mod sigstore;
 mod vscode;
 mod yard;
 
@@ -31,6 +38,10 @@ usage:
   cyx package [FOLDER] [-o FILE]             write a .cyx to install or publish
   cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]
                                              convert a VS Code theme, snippets, keymap or language
+  cyx publish [FOLDER] [--dry-run] [--pre-release] [--registry URL]
+                                             sign it (no keys: GitHub Actions or a browser sign-in) and publish
+  cyx yank | restore VERSION [FOLDER]        hide a published version from installs, or bring it back
+  cyx deprecate VERSION [FOLDER] [--replacement ID]
   cyx yard <keygen|sign|verify> …           the registry operator's commands (cyx yard help)
   cyx --version
 
@@ -109,6 +120,26 @@ fn run(args: &[String]) -> Result<(), String> {
             println!("\nNext:\n  cd {}\n  cyx dev", report.out.display());
             Ok(())
         }
+        "publish" => {
+            let (dir, registry, dry_run, pre_release) = parse_publish(rest)?;
+            let p = publish::Publish { dir: &dir, registry: &registry, dry_run, pre_release };
+            let ep = sigstore::Endpoints::from_env();
+            let oidc = ep.oidc.clone();
+            println!("{}", publish::publish(&p, &ep, || oidc::token(&oidc), now())?);
+            Ok(())
+        }
+        "yank" | "restore" | "deprecate" => {
+            let (version, dir, registry, replacement) = parse_status(cmd, rest)?;
+            let change = match cmd.as_str() {
+                "yank" => ext_core::yard::StatusChange::Yank,
+                "restore" => ext_core::yard::StatusChange::Restore,
+                _ => ext_core::yard::StatusChange::Deprecate { replacement },
+            };
+            let ep = sigstore::Endpoints::from_env();
+            let oidc = ep.oidc.clone();
+            println!("{}", publish::change_status(&dir, &registry, &version, change, &ep, || oidc::token(&oidc), now())?);
+            Ok(())
+        }
         "yard" => match rest.first().map(String::as_str) {
             None | Some("help" | "-h" | "--help") => {
                 println!("{}", yard::HELP);
@@ -118,6 +149,55 @@ fn run(args: &[String]) -> Result<(), String> {
         },
         other => Err(format!("cyx: unknown command '{other}'\n\n{HELP}")),
     }
+}
+
+fn now() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs())
+}
+
+fn parse_publish(rest: &[String]) -> Result<(PathBuf, String, bool, bool), String> {
+    let usage = "usage: cyx publish [FOLDER] [--dry-run] [--pre-release] [--registry URL]";
+    let (mut dir, mut registry, mut dry_run, mut pre_release) = (None, None, false, false);
+    let mut it = rest.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--dry-run" => dry_run = true,
+            "--pre-release" => pre_release = true,
+            "--registry" => registry = Some(it.next().ok_or(usage)?.as_str()),
+            s if s.starts_with('-') => {
+                return Err(format!(
+                    "cyx publish: unknown option {s}
+{usage}"
+                ));
+            }
+            _ => dir = Some(a.clone()),
+        }
+    }
+    Ok((folder(dir.as_ref())?, publish::registry_url(registry), dry_run, pre_release))
+}
+
+fn parse_status(cmd: &str, rest: &[String]) -> Result<(ext_manifest::Version, PathBuf, String, Option<ext_manifest::ExtId>), String> {
+    let usage = format!("usage: cyx {cmd} VERSION [FOLDER] [--registry URL]{}", if cmd == "deprecate" { " [--replacement ID]" } else { "" });
+    let (mut version, mut dir, mut registry, mut replacement) = (None, None, None, None);
+    let mut it = rest.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--registry" => registry = Some(it.next().ok_or(&usage)?.as_str()),
+            "--replacement" if cmd == "deprecate" => {
+                let r = it.next().ok_or(&usage)?;
+                replacement = Some(ext_manifest::ExtId::parse(r).map_err(|e| format!("cyx {cmd}: replacement {e}"))?);
+            }
+            s if s.starts_with('-') => {
+                return Err(format!(
+                    "cyx {cmd}: unknown option {s}
+{usage}"
+                ));
+            }
+            _ if version.is_none() => version = Some(ext_manifest::Version::parse(a).map_err(|e| format!("cyx {cmd}: version {e}"))?),
+            _ => dir = Some(a.clone()),
+        }
+    }
+    Ok((version.ok_or(usage)?, folder(dir.as_ref())?, publish::registry_url(registry), replacement))
 }
 
 fn folder(arg: Option<&String>) -> Result<PathBuf, String> {

@@ -1,0 +1,32 @@
+# Publishes a Codeyard extension from GitHub Actions (docs/extensions/developer-guide.md, "Publish").
+# The job's own identity token signs the release keyless: no secret to store, and only this repository's workflow can
+# publish the extension. The job needs `permissions: id-token: write`.
+name: Publish a Codeyard extension
+description: Check, sign (keyless, with Sigstore) and publish a Codeyard extension to the registry.
+branding:
+  icon: package
+  color: blue
+inputs:
+  folder:
+    description: The extension's folder (the one with codeyard-extension.toml).
+    default: "."
+  registry:
+    description: The registry's address; empty for the public registry.
+    default: ""
+  dry-run:
+    description: "true to check and show the install sheet without publishing."
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Install cyx (the version of this action)
+      shell: bash
+      run: cargo install --locked --quiet --path "$GITHUB_ACTION_PATH/../../crates/cyx"
+    - name: Publish
+      shell: bash
+      env:
+        FOLDER: ${{ inputs.folder }}
+        CODEYARD_REGISTRY: ${{ inputs.registry }}
+        DRY_RUN: ${{ inputs.dry-run }}
+      run: |
+        if [ "$DRY_RUN" = "true" ]; then cyx publish "$FOLDER" --dry-run; else cyx publish "$FOLDER"; fi

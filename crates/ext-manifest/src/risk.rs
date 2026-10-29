@@ -358,6 +358,15 @@ impl Risk {
     pub fn needs_why(&self) -> bool {
         self.level == Level::High
     }
+
+    /// The red line of the consent sheet for a High-risk set, in English (the app translates the same words).
+    pub fn headline(&self) -> Option<&'static str> {
+        match (self.level, self.runs_code) {
+            (Level::High, true) => Some("High risk: this extension can run programs as you."),
+            (Level::High, false) => Some("High risk: this extension can read private data and send it elsewhere."),
+            _ => None,
+        }
+    }
 }
 
 /// The one judgement of a permission set. Reading private data together with any way to send it is High; anything that

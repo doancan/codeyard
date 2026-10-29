@@ -1553,10 +1553,20 @@ checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 name = "cyx"
 version = "0.5.0"
 dependencies = [
+ "base64",
  "ext-core",
  "ext-manifest",
  "ext-pkg",
+ "http-body-util",
+ "hyper",
+ "hyper-rustls",
+ "hyper-util",
+ "ring",
+ "rustls",
  "serde_json",
+ "sha2 0.11.1",
+ "tokio",
+ "yard",
 ]
 
 [[package]]

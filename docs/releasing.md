@@ -77,7 +77,9 @@ warnings in `shaders` and `agents`; all release jobs also had zero such warnings
    `sed -i '' 's/version = "OLD", path/version = "NEW", path/' crates/*/Cargo.toml` (macOS `sed`; GNU `sed` takes `-i` without
    the `''`).
 3. Add a `## [x.y.z] - date` section to `CHANGELOG.md` (move the "Unreleased" entries into it).
-4. Commit, tag `vX.Y.Z` (annotated), push `main` and the tag.
+4. Commit, tag `vX.Y.Z` (annotated), push `main` and the tag. Then move the publish action's major tag to it, which every
+   extension's `.github/workflows/publish.yml` uses (`doancan/codeyard/actions/publish@v1`):
+   `git tag -f v1 vX.Y.Z && git push -f origin v1`.
 5. Build the agents: `rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl`, then for each of the two targets
    `CARGO_TARGET_<TRIPLE>_LINKER="$(dirname "$(rustc --print target-libdir)")/bin/rust-lld" cargo build --locked --profile release-agent -p agent --target <triple>`
    (the variable name is the triple in capitals with `_` for `-`; no zig needed), plus

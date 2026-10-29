@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (docs/registry.md).
 - Offline verification of publishers' keyless Sigstore signatures, pinned to the registry's Fulcio CA and Rekor key,
   with the publisher identity (repository, owner and workflow by id) taken from the certificate.
+- `cyx publish` signs keyless (GitHub Actions' identity, or a browser sign-in) and publishes; `--dry-run` prints the
+  install sheet in the app's words. `cyx yank`, `restore` and `deprecate` change a published version. `cyx new` writes
+  `.github/workflows/publish.yml` for tag-push releases through the `codeyard/publish` action. `.github` is never packaged.
 - `yard`, the registry's publish service: signed uploads with no accounts, the same checks as `cyx check`, publisher
   names that belong to their first owner, confusable names refused, versions never reused, yank/restore/deprecate as
   signed statements, revoke and advisory fixes for the security role, and a static index signed daily.
