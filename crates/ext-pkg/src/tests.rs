@@ -304,3 +304,17 @@ fn folders_are_collected_without_litter_or_links() {
     }
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// One set of files, one digest: an executable `CONTENTS.sha256` (its mode is in the digest, in no hash list) would
+/// give the same files a second digest. Found by the fuzz job (seed 40801622814).
+#[test]
+fn an_executable_contents_list_is_refused() {
+    let mut entries = with_contents(theme_files());
+    for e in entries.iter_mut().filter(|e| e.path == CONTENTS) {
+        e.executable = true;
+    }
+    assert!(err(&raw_package(&entries)).contains("must not be executable"));
+    // The same files, canonical, are accepted with the digest `write` gives.
+    let (bytes, digest) = write(theme_files()).unwrap();
+    assert_eq!(read(&bytes).unwrap().digest, digest);
+}
