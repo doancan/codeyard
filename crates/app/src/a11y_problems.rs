@@ -14,7 +14,7 @@ pub(super) use side::{DEBUG_FIXED, DEBUG_ROW, FIXED as SIDE_FIXED, MENU_ITEM, RE
 
 const PROBLEMS: NodeId = NodeId(68);
 const PROBLEMS_EMPTY: NodeId = NodeId(69);
-pub(super) const PROBLEM_ROW: u64 = 0x110_0000;
+pub(super) const PROBLEM_ROW: u64 = 0x170_0000;
 /// Rows exposed at most (the panel can hold thousands; the count says how many there are).
 const MAX_ROWS: usize = 2_000;
 

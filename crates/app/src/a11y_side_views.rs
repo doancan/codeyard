@@ -27,12 +27,12 @@ pub(in crate::workbench) const FIXED: [NodeId; 9] =
     [TESTING, TESTS_RUN, TESTS_RUN_FAILED, TESTS_ONLY_FAILED, TESTS_REFRESH, TESTS_STATUS, TESTS_TREE, REMOTE, MENU];
 
 /// Test rows: `TEST_IDS` ids each (the row, Run, Debug).
-pub(in crate::workbench) const TEST_ROW: u64 = 0x130_0000;
+pub(in crate::workbench) const TEST_ROW: u64 = 0x190_0000;
 const TEST_IDS: u64 = 4;
 /// Remote rows: `REMOTE_IDS` ids each (the row, Connect or Open Folder, Connect in New Window, Disconnect).
-pub(in crate::workbench) const REMOTE_ROW: u64 = 0x140_0000;
+pub(in crate::workbench) const REMOTE_ROW: u64 = 0x1a0_0000;
 const REMOTE_IDS: u64 = 4;
-pub(in crate::workbench) const MENU_ITEM: u64 = 0x150_0000;
+pub(in crate::workbench) const MENU_ITEM: u64 = 0x1b0_0000;
 const MAX_TESTS: usize = 5_000;
 const MAX_REMOTE: usize = 2_000;
 const MAX_MENU: usize = 1_000;

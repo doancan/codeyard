@@ -42,7 +42,7 @@ pub(in crate::workbench) const FIXED: [NodeId; 14] = [
 
 /// The block of this module's rows; inside it: categories, settings (`ROW_IDS` ids each: the control, Reset, then one
 /// per option), shortcuts, ports (`PORT_IDS` ids each: the row, then its buttons).
-pub(in crate::workbench) const PAGE_ROW: u64 = 0x100_0000;
+pub(in crate::workbench) const PAGE_ROW: u64 = 0x160_0000;
 const SET_CATEGORY: u64 = PAGE_ROW;
 const SET_ROW: u64 = PAGE_ROW + 0x100;
 const ROW_IDS: u64 = 16;

@@ -52,7 +52,7 @@ pub(in crate::workbench) const FIXED: [NodeId; 19] = [
 
 /// The block of this module's rows; inside it: configurations, variables, watches (row and Remove), call stack rows,
 /// breakpoints (check box and Remove).
-pub(in crate::workbench) const DEBUG_ROW: u64 = 0x120_0000;
+pub(in crate::workbench) const DEBUG_ROW: u64 = 0x180_0000;
 const CONFIG_ROW: u64 = DEBUG_ROW;
 const VAR_ROW: u64 = DEBUG_ROW + 0x1000;
 const WATCH_ROW: u64 = DEBUG_ROW + 0x2000;
