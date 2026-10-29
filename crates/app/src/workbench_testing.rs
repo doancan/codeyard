@@ -815,6 +815,35 @@ impl Workbench {
         self.install_from_market(window, cx);
     }
 
+    // --- Updates ---
+
+    /// What the last update check found for `id`.
+    pub fn extension_update_for_test(&self, id: &str) -> Option<crate::ext_updates::Status> {
+        self.cfg.exts.updates.status.get(&ext_manifest::ExtId::parse(id).ok()?).cloned()
+    }
+
+    /// The list row's badge and the page's stop line of an installed extension.
+    pub fn extension_state_for_test(&self, id: &str) -> Option<(&'static str, Option<String>)> {
+        let e = self.cfg.exts.list.iter().find(|e| e.manifest.id.as_str() == id)?;
+        Some((self.extension_badge(e), e.stopped.clone()))
+    }
+
+    pub fn check_extension_updates_for_test(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.check_extension_updates(window, cx);
+    }
+
+    pub fn update_extension_now_for_test(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.update_extension_now(ext_manifest::ExtId::parse(id).unwrap(), window, cx);
+    }
+
+    pub fn accept_extension_update_for_test(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.accept_extension_update(ext_manifest::ExtId::parse(id).unwrap(), window, cx);
+    }
+
+    pub fn set_extension_pre_release_for_test(&mut self, id: &str, on: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.set_extension_pre_release(ext_manifest::ExtId::parse(id).unwrap(), on, window, cx);
+    }
+
     /// The detail page's extension: (id, version, contribution lines, permission lines, version a rollback goes to).
     pub fn extension_detail_for_test(&self) -> Option<(String, String, Vec<String>, Vec<String>, Option<String>)> {
         let e = self.selected_extension()?;

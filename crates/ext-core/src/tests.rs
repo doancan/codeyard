@@ -398,13 +398,14 @@ fn declarative_extensions_never_run_code() {
 }
 
 #[test]
-fn the_lock_is_format_1_until_a_registry_source_needs_2() {
+fn the_lock_is_format_1_until_a_registry_source_needs_2_and_a_pre_release_channel_3() {
     let locked = |source: Source| Locked {
         version: ext_manifest::Version::parse("1.0.0").unwrap(),
         digest: ContentDigest([1; 32]),
         previous: None,
         source,
         disabled: false,
+        pre_release: false,
     };
     let mut lock = Lock { format: lock::FORMAT, ..Default::default() };
     lock.extensions.insert(ExtId::parse("you.a").unwrap(), locked(Source::File { path: "a.cyx".into() }));
@@ -417,6 +418,37 @@ fn the_lock_is_format_1_until_a_registry_source_needs_2() {
     assert!(text.contains("\"format\": 2") && text.contains("\"kind\": \"registry\""), "{text}");
     let back = Lock::parse(&text).unwrap();
     assert_eq!(back.extensions[&ExtId::parse("you.b").unwrap()].source.registry(), Some(("codeyard", &p)));
-    // What an older Codeyard (format 1) says about it.
-    assert_eq!(Lock::parse(&text.replace("\"format\": 2", "\"format\": 3")).unwrap_err(), LockError::Newer(3));
+    lock.extensions.get_mut(&ExtId::parse("you.b").unwrap()).unwrap().pre_release = true;
+    let text = lock.render();
+    assert!(text.contains("\"format\": 3") && text.contains("\"pre-release\": true"), "{text}");
+    assert!(Lock::parse(&text).unwrap().extensions[&ExtId::parse("you.b").unwrap()].pre_release);
+    // What an older Codeyard says about a newer format.
+    assert_eq!(Lock::parse(&text.replace("\"format\": 3", "\"format\": 4")).unwrap_err(), LockError::Newer(4));
+}
+
+#[test]
+fn revocations_and_the_pre_release_channel_are_kept_and_follow_the_lock() {
+    let d = Dir::new("revoked");
+    let s = d.store();
+    let a1 = s.install(&theme("you.a", "1.0.0"), src()).unwrap();
+    let mark = |r: &str| Some(Revoked { id: id("you.a"), version: a1.manifest.version.clone(), reason: r.into() });
+    assert!(s.revoked().is_empty());
+    assert!(s.set_revoked(&[(a1.digest, mark("Malware."))]).unwrap());
+    assert!(!s.set_revoked(&[(a1.digest, mark("Malware."))]).unwrap(), "unchanged: not written again");
+    assert_eq!(s.revoked()[&a1.digest.hex()].reason, "Malware.");
+    // Kept while the version is in the store (current or previous), dropped with it.
+    let a2 = s.install(&theme("you.a", "2.0.0"), src()).unwrap();
+    s.set_revoked(&[]).unwrap();
+    assert!(s.revoked().contains_key(&a1.digest.hex()), "the previous version stays revoked for a rollback");
+    s.install(&theme("you.a", "3.0.0"), src()).unwrap();
+    s.set_revoked(&[(a2.digest, None)]).unwrap();
+    assert!(s.revoked().is_empty());
+
+    s.set_pre_release(&id("you.a"), true).unwrap();
+    assert!(s.locked().unwrap()[&id("you.a")].pre_release);
+    s.install(&theme("you.a", "4.0.0"), src()).unwrap();
+    assert!(s.locked().unwrap()[&id("you.a")].pre_release, "an update keeps the channel");
+    s.rollback(&id("you.a")).unwrap();
+    assert!(s.locked().unwrap()[&id("you.a")].pre_release, "and so does a rollback");
+    assert!(matches!(s.set_pre_release(&id("you.zz"), true), Err(Error::NotInstalled(_))));
 }

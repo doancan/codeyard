@@ -8,6 +8,7 @@
 //! <data>/extensions/store/<digest>/   unpacked packages, read-only, named by content digest
 //! <data>/extensions/data/<id>/        each extension's own storage
 //! <data>/extensions/index.json        derived from the lock and the store; rebuilt when the lock changes
+//! <data>/extensions/revoked.json      versions a registry revoked, by content digest: they stay stopped offline too
 //! <data>/extensions/.lock             held while a transaction runs, so two windows cannot interleave
 //! ```
 //!
@@ -24,6 +25,7 @@ pub mod registry;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 pub mod trust;
+pub mod update;
 pub mod yard;
 
 #[cfg(test)]
@@ -81,6 +83,44 @@ pub struct Installed {
     pub digest: ContentDigest,
     pub disabled: bool,
     pub source: Source,
+}
+
+/// A version the registry revoked, as `revoked.json` keeps it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Revoked {
+    pub id: ExtId,
+    pub version: ext_manifest::Version,
+    /// The registry's reason, shown to the user.
+    pub reason: String,
+}
+
+/// Why an installed extension does not run.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Stopped {
+    /// Its version was revoked by the registry.
+    Revoked { reason: String },
+    /// It depends on an extension that is stopped (revoked, or stopped itself).
+    Dependency { on: ExtId },
+}
+
+/// Which installed extensions stop: those whose version is revoked, then everything that depends on one of them,
+/// however indirectly.
+pub fn stopped(installed: &[Installed], revoked: &BTreeMap<String, Revoked>) -> BTreeMap<ExtId, Stopped> {
+    let mut out: BTreeMap<ExtId, Stopped> =
+        installed.iter().filter_map(|e| revoked.get(&e.digest.hex()).map(|r| (e.manifest.id.clone(), Stopped::Revoked { reason: r.reason.clone() }))).collect();
+    loop {
+        let more: Vec<(ExtId, Stopped)> = installed
+            .iter()
+            .filter(|e| !out.contains_key(&e.manifest.id))
+            .filter_map(|e| {
+                e.manifest.dependencies.iter().find(|(d, _)| out.contains_key(d)).map(|(d, _)| (e.manifest.id.clone(), Stopped::Dependency { on: d.clone() }))
+            })
+            .collect();
+        if more.is_empty() {
+            return out;
+        }
+        out.extend(more);
+    }
 }
 
 /// What `load` returns: the installed extensions in id order, and anything that could not be loaded.
@@ -246,8 +286,14 @@ impl Store {
             Some(o) => o.previous,
             None => None,
         };
-        let entry =
-            Locked { version: pkg.manifest.version.clone(), digest: pkg.digest, previous, source: source.clone(), disabled: old.is_some_and(|o| o.disabled) };
+        let entry = Locked {
+            version: pkg.manifest.version.clone(),
+            digest: pkg.digest,
+            previous,
+            source: source.clone(),
+            disabled: old.is_some_and(|o| o.disabled),
+            pre_release: old.is_some_and(|o| o.pre_release),
+        };
         lock.extensions.insert(id.clone(), entry.clone());
         self.commit_lock(&lock)?;
         let _ = std::fs::create_dir_all(self.data_dir(&id));
@@ -325,10 +371,54 @@ impl Store {
         let prev = cur.previous.ok_or_else(|| Error::NoPrevious(id.clone()))?;
         let text = std::fs::read_to_string(self.store_dir(&prev).join(ext_manifest::FILE_NAME)).map_err(|_| Error::NoPrevious(id.clone()))?;
         let m = ext_manifest::parse(&text).map_err(|_| Error::NoPrevious(id.clone()))?;
-        let entry = Locked { version: m.version.clone(), digest: prev, previous: Some(cur.digest), source: cur.source.clone(), disabled: cur.disabled };
+        let entry = Locked { version: m.version.clone(), digest: prev, previous: Some(cur.digest), source: cur.source.clone(), ..cur.clone() };
         lock.extensions.insert(id.clone(), entry);
         self.commit_lock(&lock)?;
         Ok(Installed { manifest: m, digest: prev, disabled: cur.disabled, source: cur.source })
+    }
+
+    /// Opt an extension into its registry's pre-releases, or out again (its page).
+    pub fn set_pre_release(&self, id: &ExtId, on: bool) -> Result<(), Error> {
+        let _guard = self.guard()?;
+        let (mut lock, _) = self.read_lock()?;
+        let entry = lock.extensions.get_mut(id).ok_or_else(|| Error::NotInstalled(id.clone()))?;
+        if entry.pre_release == on {
+            return Ok(());
+        }
+        entry.pre_release = on;
+        self.commit_lock(&lock)
+    }
+
+    /// `revoked.json`, which the app watches: a change stops or starts extensions in every window.
+    pub fn revoked_path(&self) -> PathBuf {
+        self.root.join("revoked.json")
+    }
+
+    /// Installed versions a registry revoked, by content digest. A missing or unreadable file is none.
+    pub fn revoked(&self) -> BTreeMap<String, Revoked> {
+        std::fs::read(self.revoked_path()).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+    }
+
+    /// Record what the indexes say: `Some` marks a digest revoked, `None` clears it. Digests no version in the lock
+    /// refers to any more are dropped. Returns whether the file changed.
+    pub fn set_revoked(&self, changes: &[(ContentDigest, Option<Revoked>)]) -> Result<bool, Error> {
+        let _guard = self.guard()?;
+        let (lock, _) = self.read_lock()?;
+        let before = self.revoked();
+        let mut map = before.clone();
+        for (d, r) in changes {
+            match r {
+                Some(r) => map.insert(d.hex(), r.clone()),
+                None => map.remove(&d.hex()),
+            };
+        }
+        let keep: BTreeSet<String> = lock.digests().map(|d| d.hex()).collect();
+        map.retain(|d, _| keep.contains(d));
+        if map == before {
+            return Ok(false);
+        }
+        write_atomic(&self.revoked_path(), &serde_json::to_vec_pretty(&map).expect("revoked serializes"))?;
+        Ok(true)
     }
 
     /// Turn an extension off or on without removing it.

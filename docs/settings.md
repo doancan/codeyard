@@ -82,6 +82,7 @@ status bar reports it.
 
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
+| `extensions.autoUpdate` | `install`, `notify`, `off` | `install` | Newer versions of extensions from a registry: install (by themselves; versions that run code 48 hours after they are published; a version that asks for more permissions waits for your OK), notify (shown in the Extensions view; you install them) or off (nothing is downloaded until you ask). A withdrawn version is still replaced and a revoked one still stopped. Your own settings only; a folder cannot change it |
 | `extensions.enabled` | `true` / `false` | `true` | Load installed extensions (off: Codeyard starts as if none were installed) |
 
 ## `files`

@@ -4,8 +4,12 @@
 
 use gpui::{AnyElement, Context, SharedString, div, px};
 
+use ext_core::update::Standing;
+use ext_manifest::ExtId;
+
 use super::ext_glue::{ExtEntry, contribution_lines, high_risk_line, permission_lines, source_line};
 use super::*;
+use crate::ext_updates::Offer;
 
 /// A text button that takes keyboard focus.
 pub(super) fn action_button(id: &'static str, label: &'static str, p: &Palette) -> gpui::Stateful<gpui::Div> {
@@ -130,7 +134,7 @@ impl Workbench {
     fn extension_row(&self, ix: usize, e: &ExtEntry, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
         let id = e.manifest.id.to_string();
         let selected = self.cfg.exts.selected.as_deref() == Some(id.as_str()) && matches!(self.tabs.page, Some(Page::Extension));
-        let state = if e.disabled { crate::i18n::t("Disabled") } else { "" };
+        let state = self.extension_badge(e);
         div()
             .id(("ext-row", ix))
             .debug_selector(move || format!("ext-row-{ix}"))
@@ -241,6 +245,22 @@ impl Workbench {
                     action_button("ext-verify", crate::i18n::t("Verify Files"), p)
                         .on_click(cx.listener(move |this, _, _, cx| this.verify_extension(&verify_id, cx))),
                 )
+                .when(e.source.registry().is_some(), |d| {
+                    let (pre_id, on) = (id.clone(), e.pre_release);
+                    let label = if on { crate::i18n::t("Stop Pre-releases") } else { crate::i18n::t("Get Pre-releases") };
+                    d.child(
+                        action_button("ext-pre-release", label, p)
+                            .tooltip(move |_, cx| {
+                                let tip = if on {
+                                    crate::i18n::t("Get only releases of this extension from now on")
+                                } else {
+                                    crate::i18n::t("Also get its pre-releases, at once and before others get them")
+                                };
+                                cx.new(|_| Tooltip(tip.into())).into()
+                            })
+                            .on_click(cx.listener(move |this, _, w, cx| this.set_extension_pre_release(pre_id.clone(), !on, w, cx))),
+                    )
+                })
         };
         let state: SharedString =
             if e.disabled { crate::i18n::t("Disabled: nothing it contributes applies.").into() } else { crate::i18n::t("Enabled").into() };
@@ -249,13 +269,103 @@ impl Workbench {
                 .child(self.extension_heading(&m.name, &m, p))
                 .child(div().text_color(c(p.text_muted)).child(source_line(&e.source)))
                 .child(div().text_color(c(if e.disabled { p.warning } else { p.text_muted })).child(state))
+                .children(e.stopped.clone().map(|s| div().debug_selector(|| "ext-stopped".into()).text_color(c(p.danger)).child(s)))
                 .children(m.description.clone().map(|d| div().child(d)))
                 .child(actions)
+                .children(self.extension_update_card(e, p, cx))
                 .child(section_title(crate::i18n::t("Contributes"), p))
                 .child(line_list(contribution_lines(&m), crate::i18n::t("Nothing"), p))
                 .child(self.extension_permissions(&m, high_risk_line(&m), p)),
         )
         .into_any_element()
+    }
+
+    /// The short state at the end of a list row.
+    pub(super) fn extension_badge(&self, e: &ExtEntry) -> &'static str {
+        let offer = self.cfg.exts.updates.status.get(&e.manifest.id).and_then(|s| s.offer.as_ref());
+        match offer {
+            _ if e.stopped.is_some() => crate::i18n::t("Stopped"),
+            _ if e.disabled => crate::i18n::t("Disabled"),
+            Some(o) if o.needs_sheet() || matches!(o, Offer::MorePermissions { .. }) => crate::i18n::t("Update needs your OK"),
+            Some(Offer::Waiting { .. } | Offer::Available { .. }) => crate::i18n::t("Update available"),
+            _ => "",
+        }
+    }
+
+    /// What the registry says about the installed version and what the user can do about a newer one.
+    fn extension_update_card(&self, e: &ExtEntry, p: &Palette, cx: &mut Context<Self>) -> Option<gpui::Div> {
+        let s = self.cfg.exts.updates.status.get(&e.manifest.id)?;
+        let id = e.manifest.id.clone();
+        let mut lines = Vec::new();
+        match &s.standing {
+            Standing::Deprecated { replacement: Some(r) } => lines.push(crate::i18n::tf("Its publisher deprecated it and suggests {} instead.", &[r])),
+            Standing::Deprecated { replacement: None } => lines.push(crate::i18n::t("Its publisher deprecated it.").to_string()),
+            Standing::Yanked => lines.push(crate::i18n::t("Its publisher withdrew this version, and there is no earlier one to go back to.").to_string()),
+            _ => {}
+        }
+        let busy = self.cfg.exts.updates.busy.is_some();
+        let button = |key: &'static str, label: &'static str, run: fn(&mut Workbench, ExtId, &mut Window, &mut Context<Workbench>)| {
+            let id = id.clone();
+            action_button(key, label, p).when(busy, |b| b.opacity(0.5)).on_click(cx.listener(move |this, _, w, cx| run(this, id.clone(), w, cx)))
+        };
+        let review = |this: &mut Workbench, id: ExtId, w: &mut Window, cx: &mut Context<Workbench>| {
+            let Some(s) = this.cfg.exts.updates.status.get(&id) else { return };
+            let Some(o) = &s.offer else { return };
+            let spec = format!("{id}@{}", o.version());
+            this.review_registry_extension(spec, Some(s.registry.clone()), w, cx);
+        };
+        let (text, added, button) = match &s.offer {
+            None => (None, None, None),
+            Some(Offer::Waiting { version, ready_at }) => (
+                Some(crate::i18n::tf("Version {0} runs code, so it installs by itself after {1}.", &[version, &crate::texttools::iso_datetime(*ready_at)])),
+                None,
+                Some(button("ext-update-now", crate::i18n::t("Update Now"), Workbench::update_extension_now)),
+            ),
+            Some(Offer::Available { version }) => (
+                Some(crate::i18n::tf("Version {} is available.", &[version])),
+                None,
+                Some(button("ext-update-now", crate::i18n::t("Update Now"), Workbench::update_extension_now)),
+            ),
+            Some(Offer::MorePermissions { version, added }) => (
+                Some(crate::i18n::tf("Version {} asks for more than the version you have, which keeps running until you agree:", &[version])),
+                Some(added),
+                Some(button("ext-update-accept", crate::i18n::t("Update"), Workbench::accept_extension_update)),
+            ),
+            Some(Offer::NewPublisher { version, publisher, was }) => (
+                Some(crate::i18n::tf("Version {0} is published by {1}, not {2} as before.", &[version, publisher, was])),
+                None,
+                Some(button("ext-update-review", crate::i18n::t("Review…"), review)),
+            ),
+            Some(Offer::Stale { version }) => (
+                Some(crate::i18n::tf("Version {} waits: the registry's list is more than 3 days old.", &[version])),
+                None,
+                Some(button("ext-update-review", crate::i18n::t("Review…"), review)),
+            ),
+            Some(Offer::Failed { version, error }) => (
+                Some(crate::i18n::tf("Version {0} could not be installed: {1}", &[version, error])),
+                None,
+                Some(button("ext-update-now", crate::i18n::t("Try Again"), Workbench::update_extension_now)),
+            ),
+        };
+        if lines.is_empty() && text.is_none() {
+            return None;
+        }
+        Some(
+            div()
+                .debug_selector(|| "ext-update-card".into())
+                .mt(px(theme::SPACE[2]))
+                .p(px(theme::SPACE[3]))
+                .flex()
+                .flex_col()
+                .gap(px(theme::SPACE[1]))
+                .rounded(px(theme::radius::SM))
+                .border_1()
+                .border_color(c(p.border))
+                .children(lines.into_iter().map(|l| div().text_color(c(p.warning)).child(l)))
+                .children(text.map(|t| div().child(t)))
+                .children(added.map(|a| line_list(permission_lines(a), "", p)))
+                .children(button.map(|b| div().pt(px(theme::SPACE[1])).flex().child(b))),
+        )
     }
 
     fn extension_heading(&self, title: &str, m: &ext_manifest::Manifest, p: &Palette) -> gpui::Div {

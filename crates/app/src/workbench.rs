@@ -76,6 +76,8 @@ mod groups_glue;
 mod market_glue;
 #[path = "workbench_market_view.rs"]
 mod market_view_glue;
+#[path = "workbench_ext_updates.rs"]
+mod updates_glue;
 use groups_glue::{Group, GroupKey, GroupResize};
 #[path = "workbench_hosts.rs"]
 mod hosts;
@@ -1248,6 +1250,7 @@ impl Workbench {
         wb.reload_config(window, cx);
         wb.watch_config(window, cx);
         wb.poll_git(window, cx);
+        wb.poll_extension_updates(window, cx);
         wb.poll_autofetch(window, cx);
         wb.listen_fs(cx);
         wb

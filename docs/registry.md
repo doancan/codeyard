@@ -197,8 +197,28 @@ when fetched, the index's ETag) are kept in `<data>/extensions/registries/<name>
   that the signer is the publisher the index lists. Any failure installs nothing.
 - **Pinning.** The lock records `{ "kind": "registry", "registry": name, "publisher": … }`. A later install signed by
   another identity shows the full sheet with that called out; `--install-extension` refuses it. A lock with a
-  registry entry is format 2; one without stays format 1, so an older Codeyard still reads it.
-- **Stale index.** Past its 72 h, installs wait for the user to confirm on the sheet; `--install-extension` refuses.
+  registry entry is format 2, one with a pre-release opt-in (`"pre-release": true`) format 3; a lock is written in the
+  lowest format that holds it, so an older Codeyard still reads it.
+- **Stale index.** Past its 72 h, installs and updates wait for the user to confirm on the sheet;
+  `--install-extension` refuses. Installed extensions keep running.
+- **Updates and version status** (`ext_core::update` decides, `app/src/ext_updates.rs` acts). Each time the index is
+  read for an installed extension (when settings load, and hourly in a long session; the registry is still asked at
+  most once a day), every extension from that registry is checked:
+  - The installed version's `status`: `revoked` is written to `<data>/extensions/revoked.json` by content digest
+    (also for the previous version a rollback would go to), and `ext::reload` stops it and, transitively, every
+    extension that depends on it, offline and after a restart too, until a newer version replaces it. The file is
+    watched, so every window follows. `yanked` goes back to the newest earlier installable version at once (from the
+    store when it is the previous version, else downloaded with every check), unless a newer version may install now.
+    `deprecated` is shown with its replacement.
+  - A newer version (`latest`, with pre-releases when the lock opts in): `extensions.autoUpdate: install` installs it
+    when it is ready, data-only at once and code at `published + 48 h` (at once with `immediate`, or for a
+    pre-release on the channel). The permission digest says "the same" with no download; otherwise the version's
+    details file gives its manifest, and `Permissions::added_since` what it asks beyond the installed version. Nothing
+    new installs silently; more keeps the installed version and offers a card with only the added lines; a publisher
+    other than the pinned one, or a stale index, offers the full sheet. The downloaded package's own manifest decides
+    again before anything is written. `notify` and `off` download nothing (not even the details file) and show the
+    version. **Update Now** is the same without the wait; the card's **Update** accepts exactly the lines it showed.
+  - One check runs at a time per process, so two windows do not download the same update.
 - **Registries.** The public registry (its root keys arrive with the key ceremony, #70) and `extensions.registries`
   in the user's settings (never a project's): `{ "name", "url", "root-keys", "threshold" }`.
 

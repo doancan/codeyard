@@ -167,7 +167,8 @@ fn no_request_without_an_extension_from_a_registry(cx: &mut TestAppContext) {
     }
     assert_eq!(fetch.count(), after_install);
     // A day later, one conditional request for the index, and nothing else since it did not change.
-    crate::ext_registry::refresh_installed(&cfg, &regs, crate::ext_registry::now() + ext_core::registry::REFRESH_SECS);
+    let auto = ext_core::update::AutoUpdate::Install;
+    crate::ext_updates::check(&cfg, &regs, auto, crate::ext_registry::now() + ext_core::registry::REFRESH_SECS);
     assert_eq!(fetch.count(), after_install + 1);
 }
 

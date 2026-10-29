@@ -3,7 +3,7 @@
 //! one call each for the command line and the Extensions view.
 //!
 //! Privacy: nothing here runs unless the user asks for an install or opens the Market, or an extension from a registry
-//! is installed (then that registry's index is fetched at most once a day). A user with no registry extension who never
+//! is installed (then that registry's index is fetched at most once a day, by the update check in `ext_updates`). A user with no registry extension who never
 //! opens the Market makes no request. Searching the Market asks nothing; opening an extension's page fetches its
 //! details file once (cached after).
 
@@ -126,7 +126,7 @@ impl Fetch for TestRoute {
     }
 }
 
-fn with_fetch<T>(f: impl FnOnce(&dyn Fetch) -> T) -> T {
+pub(crate) fn with_fetch<T>(f: impl FnOnce(&dyn Fetch) -> T) -> T {
     #[cfg(test)]
     return f(&TestRoute);
     #[cfg(not(test))]
@@ -227,18 +227,6 @@ pub fn install_from_command_line(cfg_dir: &Path, registries: &[Registry], spec: 
         return Err(crate::i18n::tf("the {} registry's list is more than 3 days old; install from the Extensions view to confirm", &[&found.registry.name]));
     }
     install(cfg_dir, &found).map(|i| i.manifest)
-}
-
-/// Keep the indexes of the registries the user installed from fresh (daily). Nothing is asked of a registry that no
-/// installed extension came from. Errors wait for the next day.
-pub fn refresh_installed(cfg_dir: &Path, registries: &[Registry], now: u64) {
-    let locked = crate::ext::store(cfg_dir).locked().unwrap_or_default();
-    for reg in registries {
-        if locked.values().any(|l| l.source.registry().is_some_and(|(r, _)| r == reg.name)) {
-            let dir = registry::cache_dir(&cache_root(cfg_dir), reg);
-            let _ = with_fetch(|f| registry::index(reg, &dir, f, now, false));
-        }
-    }
 }
 
 #[cfg(test)]
