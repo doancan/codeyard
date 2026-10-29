@@ -26,6 +26,8 @@ need vendor/gpui/src/window.rs 'pub fn set_interface_scale' "interface scale on 
 need vendor/gpui/src/window.rs 'let event = window.event_from_platform\(event\);' "platform input converted to interface scale"
 need vendor/gpui/src/window.rs 'platform_window.scale_factor\(\) \* self.interface_scale' "scale factor includes interface scale"
 need vendor/gpui/src/platform.rs 'window.interface_scale\(\)' "IME geometry converted to interface scale"
+need vendor/gpui/src/window.rs 'update_ime_position\(bounds.map' "Linux IME position converted to interface scale"
+need vendor/gpui/src/platform/mac/window.rs 'fn set_traffic_light_position' "macOS window buttons follow the interface scale"
 need vendor/xattr/src/sys/mod.rs 'libc::ENODATA' "Linux ENODATA instead of ENOATTR (xattr)"
 absent vendor/xattr/src/sys/linux_macos/macos.rs 'uint32_t' "deprecated libc::uint32_t (xattr)"
 # The root Cargo.toml uses the patches, and the version is pinned.

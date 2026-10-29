@@ -1756,6 +1756,12 @@ impl Window {
         self.platform_window.show_window_menu(position.map(|v| v * self.interface_scale))
     }
 
+    /// Codeyard patch: move the macOS window buttons of a transparent title bar (window points, from the top left).
+    /// Other platforms ignore it.
+    pub fn set_traffic_light_position(&self, position: Point<Pixels>) {
+        self.platform_window.set_traffic_light_position(position);
+    }
+
     /// Tells the compositor to take control of window movement (Wayland and X11)
     ///
     /// Events may not be received during a move operation.
@@ -4207,7 +4213,10 @@ impl Window {
         self.on_next_frame(|window, cx| {
             if let Some(mut input_handler) = window.platform_window.take_input_handler() {
                 if let Some(bounds) = input_handler.selected_bounds(window, cx) {
-                    window.platform_window.update_ime_position(bounds);
+                    let scale = window.interface_scale;
+                    window
+                        .platform_window
+                        .update_ime_position(bounds.map(|v| v * scale));
                 }
                 window.platform_window.set_input_handler(input_handler);
             }

@@ -546,6 +546,8 @@ pub(crate) trait PlatformWindow: HasWindowHandle + HasDisplayHandle {
         WindowControls::default()
     }
     fn set_client_inset(&self, _inset: Pixels) {}
+    /// Codeyard patch: macOS only; windows opened without a traffic light position ignore it.
+    fn set_traffic_light_position(&self, _position: Point<Pixels>) {}
     fn gpu_specs(&self) -> Option<GpuSpecs>;
 
     fn update_ime_position(&self, _bounds: Bounds<Pixels>);

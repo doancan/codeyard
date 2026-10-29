@@ -1321,6 +1321,14 @@ impl PlatformWindow for MacWindow {
         self.0.lock().move_traffic_light();
     }
 
+    fn set_traffic_light_position(&self, position: Point<Pixels>) {
+        let mut this = self.0.lock();
+        if this.traffic_light_position.is_some() {
+            this.traffic_light_position = Some(position);
+            this.move_traffic_light();
+        }
+    }
+
     fn show_character_palette(&self) {
         let this = self.0.lock();
         let window = this.native_window;

@@ -12,7 +12,7 @@ It is used through `[patch.crates-io]` in the root `Cargo.toml`. The patches bel
 | src/window.rs | `DispatchEventResult` `pub(crate)` → `pub` | `Window::dispatch_event` is already pub, but its return type could not be named. Needed to send mouse events to a real window from inside the app (`--do drag:…`) |
 | src/platform.rs | Convert SVG image pixels from premultiplied RGBA to straight BGRA | SVG file/Markdown previews otherwise swap red and blue and darken translucent pixels. Matches the existing SVG resource decoder. |
 | src/elements/text.rs | Register both link click handlers per frame, accept only left clicks, clear cancelled presses | Right-clicks followed links and a release before the next paint could be lost. A cancelled press must not survive to a later release. |
-| src/window.rs, src/platform.rs | `Window::interface_scale` / `set_interface_scale`: `scale_factor()` is the display's factor × the interface scale, the viewport and platform mouse/scroll/file-drop positions are divided by it, window menu and client inset positions multiplied; IME `bounds_for_range` / `character_index_for_point` converted the same way | `ui.scale` zooms the whole interface through one transformation, so layout, hit testing, text rasterization and accessibility bounds agree (`crates/app/src/interface_scale.rs`) |
+| src/window.rs, src/platform.rs | `Window::interface_scale` / `set_interface_scale`: `scale_factor()` is the display's factor × the interface scale, the viewport and platform mouse/scroll/file-drop positions are divided by it, window menu and client inset positions multiplied; IME `bounds_for_range` / `character_index_for_point` and the Linux `update_ime_position` converted the same way; `Window::set_traffic_light_position` (macOS, `PlatformWindow::set_traffic_light_position`) re-centres the window buttons in a taller title bar | `ui.scale` zooms the whole interface through one transformation, so layout, hit testing, text rasterization and accessibility bounds agree (`crates/app/src/interface_scale.rs`) |
 | src/platform/windows/clipboard.rs | Read CF_DIB and CF_DIBV5 clipboard images and convert them to PNG, with size limits | Windows screenshots may provide DIB data without a PNG clipboard format; terminal image paste needs portable encoded bytes. |
 
 `vendor/xattr` is patched the same way (`libc::ENOATTR` does not exist on Linux, `ENODATA` is used; the deprecated
@@ -38,7 +38,8 @@ GPUI, but the same script checks it. Update the table and `scripts/check-gpui-pa
    - `src/elements/text.rs`: retain same-frame link press/release handlers and cancellation; `markdown_links_open_local_files_with_one_fast_left_click` covers them.
    - `src/platform/windows/clipboard.rs`: retain bounded CF_DIB and CF_DIBV5 conversion to PNG for Windows clipboard images.
    - `src/window.rs`, `src/platform.rs`: retain the interface scale (field, `set_interface_scale`, `event_from_platform` in
-     `on_input`, `bounds_changed`, window menu/client inset, IME conversions); the `interface_scale` tests cover it.
+     `on_input`, `bounds_changed`, window menu/client inset, IME conversions including `invalidate_character_coordinates`, and
+     `set_traffic_light_position` in `platform.rs` and `platform/mac/window.rs`); the `interface_scale` tests cover it.
    - Run `scripts/check-gpui-patches.sh`: everything must say `ok`. If upstream now contains a patch itself or moved the code,
      update the pattern in the script and this table.
 4. **Build and check** (merge only when all are green): `cargo build -p app`, `cargo clippy --workspace --all-targets -- -D warnings`,

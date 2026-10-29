@@ -11,6 +11,19 @@ pub fn apply(window: &mut Window, cx: &App) {
     window.set_interface_scale(cx.global::<Settings>().ui_scale);
 }
 
+/// Where the macOS window buttons sit at the top left of a workbench window: centred in the title bar at any scale.
+pub fn traffic_lights(scale: f32) -> gpui::Point<gpui::Pixels> {
+    // The native buttons are 14 points tall and do not scale; at 100% this is the long-standing (12, 10).
+    const BUTTON_H: f32 = 14.;
+    gpui::point(gpui::px(12. * scale), gpui::px(((crate::ui::layout::TITLEBAR_H * scale - BUTTON_H) / 2.).floor().max(0.) - 1.))
+}
+
+/// `apply`, plus the window buttons of a workbench window, which draws its own title bar.
+pub fn apply_workbench(window: &mut Window, cx: &App) {
+    apply(window, cx);
+    window.set_traffic_light_position(traffic_lights(window.interface_scale()));
+}
+
 /// The scale after one Zoom In (`direction` > 0) or Zoom Out (`direction` < 0) from `current`, within
 /// `UI_SCALE_MIN..=UI_SCALE_MAX`. `current` may be any value from the settings file, not only one this returns.
 pub fn step(current: f32, direction: i8) -> f32 {
@@ -96,6 +109,17 @@ mod tests {
         for bad in [f32::NAN, f32::INFINITY, 0., -1.] {
             cx.update(|window, _| window.set_interface_scale(bad));
             assert_eq!(cx.update(|window, _| (window.interface_scale(), window.scale_factor())), (1., device));
+        }
+    }
+
+    #[test]
+    fn window_buttons_stay_centred_in_the_title_bar() {
+        assert_eq!(traffic_lights(1.), gpui::point(gpui::px(12.), gpui::px(10.)), "100% keeps the old place");
+        for scale in [0.75, 1.5, 2.] {
+            let at = traffic_lights(scale);
+            let top = f32::from(at.y);
+            let below = crate::ui::layout::TITLEBAR_H * scale - top - 14.;
+            assert!((below - top).abs() <= 3., "{scale}: {at:?}");
         }
     }
 
