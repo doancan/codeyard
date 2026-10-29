@@ -549,6 +549,7 @@ fn folders_beyond_the_limit_are_reported(cx: &mut TestAppContext) {
 
 /// AC3: a debug configuration from the workspace file starts in the active folder (scripted adapter; needs python3).
 #[gpui::test]
+#[cfg(unix)] // `/bin/true` and a script adapter
 fn shared_launch_configuration_starts_in_the_active_folder(cx: &mut TestAppContext) {
     if std::process::Command::new("python3").arg("-V").output().is_err() {
         crate::test_sshd::skip_missing("python3");
@@ -727,6 +728,7 @@ fn reload_follows_the_files_folders_order_and_settings(cx: &mut TestAppContext) 
 /// AC3: the workspace file's tasks are found for the active folder and run there, after the folder and the workspace
 /// file's own folder are trusted.
 #[gpui::test]
+#[cfg(unix)] // `/bin/sh` and `touch`
 fn shared_tasks_run_in_the_active_folder_behind_trust(cx: &mut TestAppContext) {
     let base = dir("tasks");
     std::fs::create_dir_all(base.join("app")).unwrap();
