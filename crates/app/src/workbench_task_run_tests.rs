@@ -164,3 +164,27 @@ fn quitting_stops_running_tasks_before_the_app_ends(cx: &mut gpui::TestAppContex
     });
     assert!(gone, "the task outlived the quit");
 }
+
+/// Over SSH the graph runs on the server: literal arguments, a dependency first, and Stop ends the remote process tree.
+#[gpui::test]
+fn a_task_graph_runs_and_stops_on_the_ssh_host(cx: &mut gpui::TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("task-run-ssh") else { return };
+    let dir = project(
+        "task-run-ssh",
+        r#"{ "version": "2.0.0", "tasks": [
+            { "label": "prep", "type": "process", "command": "/bin/sh", "args": ["-c", "printf '%s' \"$1\" > arg.txt", "sh", "two words; $HOME"] },
+            { "label": "serve", "command": "sleep 300 & echo $! > child.pid; wait", "dependsOn": "prep" } ] }"#,
+    );
+    let (wb, cx) = crate::qa_integration_tests::ssh_workbench(cx, &dir);
+    assert!(wb.read_with(cx, |wb, _| wb.remote.host.is_remote()));
+    let task = find(&wb, cx, "serve");
+    wb.update_in(cx, |wb, window, cx| wb.start_task_run(task, After::Nothing, window, cx));
+    wait_ticking(cx, "the remote child process", |_| std::fs::read_to_string(dir.join("child.pid")).is_ok_and(|s| s.ends_with('\n')));
+    assert_eq!(std::fs::read_to_string(dir.join("arg.txt")).unwrap(), "two words; $HOME", "the argument arrived literally on the server");
+    let child: i32 = std::fs::read_to_string(dir.join("child.pid")).unwrap().trim().parse().unwrap();
+    wb.update(cx, |wb, cx| wb.terminate_tasks(cx));
+    wait_ticking(cx, "the run to stop", |cx| last_run_finished(&wb, cx));
+    assert_eq!(wb.read_with(cx, |wb, _| wb.jobs.runs.last().unwrap().run.outcome().clone()), State::Cancelled);
+    // SAFETY: signal 0 only asks whether the process exists.
+    wait_ticking(cx, "the remote child to be gone", |_| (unsafe { libc::kill(child, 0) }) != 0);
+}
