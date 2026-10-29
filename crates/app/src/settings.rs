@@ -128,6 +128,8 @@ pub struct Settings {
     pub format_on_save: bool,
     /// Code actions run on save (`editor.codeActionsOnSave`), e.g. `source.organizeImports`.
     pub code_actions_on_save: Vec<String>,
+    /// `editor.formatters`: (language id, `lsp` or the id of an extension that formats it).
+    pub formatters: Vec<(String, String)>,
     /// Format pasted text with the language server (`editor.formatOnPaste`).
     pub format_on_paste: bool,
     /// Ask the server to format on triggers like `}` `;` Enter (`editor.formatOnType`).
@@ -337,6 +339,7 @@ impl Default for Settings {
             auto_close_brackets: true,
             format_on_save: false,
             code_actions_on_save: Vec::new(),
+            formatters: Vec::new(),
             format_on_paste: false,
             format_on_type: false,
             editorconfig: true,
@@ -972,6 +975,18 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.strings("search.exclude") {
         s.search_exclude = v;
     }
+    match obj.get("editor.formatters") {
+        None | Some(Value::Null) => {}
+        Some(Value::Object(m)) => {
+            for (lang, who) in m {
+                match who.as_str().map(str::trim) {
+                    Some(w) if !w.is_empty() => s.formatters.push((lang.clone(), w.to_string())),
+                    _ => cw.push(crate::i18n::tf("editor.formatters.{}: expected “lsp” or an extension id", &[&lang])),
+                }
+            }
+        }
+        Some(_) => cw.push(crate::i18n::tf("{0}: expected an object {1}", &[&"editor.formatters", &"{ \"toml\": \"you.formatter\" }"])),
+    }
     match obj.get("files.associations") {
         None | Some(Value::Null) => {}
         Some(Value::Object(m)) => {
@@ -1284,6 +1299,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "editor.quickSuggestions",
         "search.exclude",
         "files.associations",
+        "editor.formatters",
         "workbench.colorCustomizations",
         "security.workspaceTrust.enabled",
         "explorer.confirmDelete",

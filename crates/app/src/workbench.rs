@@ -78,6 +78,8 @@ mod groups_glue;
 mod market_glue;
 #[path = "workbench_market_view.rs"]
 mod market_view_glue;
+#[path = "workbench_ext_providers.rs"]
+mod providers_glue;
 #[path = "workbench_ext_updates.rs"]
 mod updates_glue;
 use groups_glue::{Group, GroupKey, GroupResize};
@@ -519,6 +521,7 @@ pub use debug::{
 pub use ext_glue::{CancelExtensionConsent, InstallExtensionFromFile, InstallExtensionFromFolder, InstallExtensionFromRegistry, ShowExtensions};
 pub use host::askpass::{AskKind, AskRequest};
 pub use market_glue::{MarketNext, MarketPrevious, ShowMarket};
+pub use providers_glue::RunExtensionCommand;
 pub use remote_glue::ShowRemoteExplorer;
 pub use terminals_glue::{
     ChangeTerminalColor, ConfigureTerminalSettings, FocusNextTerminal, FocusPreviousTerminal, KillAllTerminals, KillOtherTerminals, NewTerminalWithProfile,
@@ -1852,6 +1855,7 @@ impl Workbench {
         self.tabs.editors.push(ed.clone());
         self.attach_lsp(&ed, cx);
         self.apply_task_problems(&ed, cx);
+        self.attach_extensions(&ed, window, cx);
         self.schedule_schema(&ed, Duration::ZERO, cx);
         self.attach_speller(&ed, cx);
         self.apply_breakpoints_to(&ed, cx);
@@ -2429,6 +2433,8 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
             EditorEvent::OpenMergeEditor => return this.open_merge_editor(&OpenMergeEditor, window, cx),
             EditorEvent::SendRequest(line) => return this.send_request_at(Some(*line), window, cx),
             EditorEvent::Changed => {
+                // The user moved on: what extensions were asked about the old text is cancelled.
+                this.cancel_providers_about(&ed.read(cx).path.clone());
                 // Breakpoints shift with edits: keep the store (used on close and saved) current.
                 this.sync_breakpoints_from(ed, cx);
                 this.note_edit(ed, cx);

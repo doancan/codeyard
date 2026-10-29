@@ -162,6 +162,7 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::go_to_symbol))
             .on_action(cx.listener(Self::go_to_workspace_symbol))
             .on_action(cx.listener(Self::code_actions))
+            .on_action(cx.listener(Self::on_run_extension_command))
             .on_action(cx.listener(Self::format_document))
             .on_action(cx.listener(Self::format_selection))
             .on_action(cx.listener(Self::save_all))

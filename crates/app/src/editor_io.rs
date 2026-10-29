@@ -11,8 +11,9 @@ impl EditorView {
     }
 
     /// Save. With a language server, first the `editor.codeActionsOnSave` actions (one request per
-    /// kind, syncing the document in between), then `editor.formatOnSave` runs. Each step is
-    /// skipped if it does not answer within 2 s: the file is saved in every case.
+    /// kind, syncing the document in between), then `editor.formatOnSave` runs: with the extension chosen to format
+    /// the file (`editor.formatters`), else with the language server. Each step is skipped if it does not answer in
+    /// time (2 s for a server, the provider deadline for an extension): the file is saved in every case.
     pub fn save_now(&mut self, cx: &mut Context<Self>) {
         // The watcher can raise the banner an instant before a habitual Cmd+S lands; only a press after the user had time to read it overwrites.
         if self.conflict && self.conflict_at.is_some_and(|at| at.elapsed() < CONFLICT_GRACE) {
@@ -27,7 +28,8 @@ impl EditorView {
                 self.scoped(|f| f.format_on_save, s.format_on_save),
             )
         };
-        if self.lsp.is_none() || (kinds.is_empty() && !format_on_save) {
+        let ext_format = self.ext.save_formatter.clone().filter(|_| format_on_save);
+        if (self.lsp.is_none() && ext_format.is_none()) || (kinds.is_empty() && !format_on_save) {
             return self.write_to_disk(force, cx);
         }
         cx.spawn(async move |this, cx| {
@@ -48,7 +50,18 @@ impl EditorView {
                 })
                 .ok();
             }
-            if format_on_save {
+            let asked = match &ext_format {
+                Some(f) => this.update(cx, |e, _| e.format_job()).ok().and_then(|job| {
+                    let version = job.version;
+                    f(job, cx).map(|answer| (version, answer))
+                }),
+                None => None,
+            };
+            if let Some((version, answer)) = asked {
+                if let Ok(edits) = answer.await {
+                    this.update(cx, |e, cx| e.apply_lsp_edits_if_unchanged(version, &edits, cx)).ok();
+                }
+            } else if format_on_save {
                 let format = this.update(cx, |e, _| e.format_request().map(|(c, p)| (c, p, e.lsp_buffer_version()))).ok().flatten();
                 if let Some((client, params, version)) = format {
                     let result = cx

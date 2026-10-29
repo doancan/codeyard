@@ -6,8 +6,8 @@ use std::ops::Range;
 use crate::raw::{RawManifest, RawPermissions, S};
 use crate::risk::{self, Clipboard, Permissions};
 use crate::{
-    Activation, CodeEntry, CodeLanguage, Command, Contributions, ExtId, FileEntry, Keybinding, Language, LanguageServer, Manifest, SchemaAssociation, Setting,
-    SettingKind, Snippets, Version, View, ViewLocation, check_id_part, limits, when,
+    Activation, CodeEntry, CodeLanguage, Command, Contributions, ExtId, FileEntry, Keybinding, Language, LanguageServer, Manifest, Menu, MenuLocation,
+    Provider, SchemaAssociation, Setting, SettingKind, Snippets, StatusItem, Version, View, ViewLocation, check_id_part, limits, when,
 };
 use crate::{Code as C, Diagnostic};
 
@@ -221,6 +221,10 @@ fn build(cx: &mut Ctx, raw: RawManifest) -> Manifest {
     if code.is_some() {
         activation.extend(contributions.commands.iter().map(|c| Activation::Command(c.id.clone())));
         activation.extend(contributions.views.iter().map(|v| Activation::View(v.id.clone())));
+        activation.extend(contributions.provider_languages().into_iter().map(Activation::Language));
+        if !contributions.tasks.is_empty() {
+            activation.push(Activation::Tasks);
+        }
     }
     if let (Some(a), None) = (&raw.activation, &raw.code)
         && let Some(first) = a.workspace_contains.first()
@@ -238,12 +242,12 @@ fn build(cx: &mut Ctx, raw: RawManifest) -> Manifest {
         && activation.is_empty()
     {
         cx.err(C::NeverActivates, c.span(), "this extension has code but nothing ever starts it").fix =
-            Some("add a [[commands]] or [[views]] entry, or [activation] workspace-contains = [\"some-file\"]".into());
+            Some("add a [[commands]], [[views]], [[formatters]] or [[tasks]] entry, or [activation] workspace-contains = [\"some-file\"]".into());
     }
     if code.is_none() && contributions.needs_code() {
         let span = raw.commands.first().map(|c| c.span()).or_else(|| raw.views.first().map(|v| v.span()));
         cx.errors.push(
-            Diagnostic::new(C::NeedsCode, "commands and views need extension code, but there is no [code] table")
+            Diagnostic::new(C::NeedsCode, "commands, views, status items and providers need extension code, but there is no [code] table")
                 .at(span)
                 .fix("add [code] entry = \"src/main.ts\" (or \"Cargo.toml\"), or run `cyx new command` to start from a template"),
         );
@@ -642,5 +646,114 @@ fn contributions(cx: &mut Ctx, raw: &RawManifest, id: &ExtId, perms: &Permission
         }
         out.language_servers.push(LanguageServer { command, args: s.args.clone(), languages: s.languages.iter().map(|l| l.get_ref().clone()).collect() });
     }
+    code_contributions(cx, raw, id, &command_ids, &view_ids, &deps, &mut out);
     out
+}
+
+/// The command of a menu or status item: one of the extension's own commands (local id) or a dependency's (full id).
+fn own_or_dependency(cx: &mut Ctx, what: &str, v: &S<String>, id: &ExtId, commands: &HashSet<String>, deps: &HashSet<&str>) -> String {
+    let cmd = v.get_ref();
+    if commands.contains(cmd) {
+        id.qualify(cmd)
+    } else if cmd.rsplit_once('.').is_some_and(|(owner, _)| deps.contains(owner)) {
+        cmd.clone()
+    } else {
+        cx.err(C::BadContribution, v.span(), format!("{what} command '{cmd}' is not one of your [[commands]] or a dependency's command"));
+        cmd.clone()
+    }
+}
+
+/// Language ids of a provider: at least one, each like a language id (`rust`, `typescriptreact`, `my-lang`).
+fn languages(cx: &mut Ctx, what: &str, items: &[S<String>], span: Range<usize>) -> Vec<String> {
+    if items.is_empty() {
+        cx.err(C::BadContribution, span, format!("{what} needs at least one language")).fix = Some("add languages = [\"rust\"]".into());
+    }
+    let mut out: Vec<String> = Vec::new();
+    for l in items {
+        if let Err(e) = check_id_part(l.get_ref()) {
+            cx.err(C::BadContribution, l.span(), format!("{what} language '{}' {e}", l.get_ref()));
+        } else if !out.contains(l.get_ref()) {
+            out.push(l.get_ref().clone());
+        }
+    }
+    out
+}
+
+/// Menus, status items, providers and tasks: contributions that run the extension's code (§5.1).
+fn code_contributions(
+    cx: &mut Ctx,
+    raw: &RawManifest,
+    id: &ExtId,
+    commands: &HashSet<String>,
+    views: &HashSet<String>,
+    deps: &HashSet<&str>,
+    out: &mut Contributions,
+) {
+    cx.count("menus", &raw.menus);
+    for m in &raw.menus {
+        let m = m.get_ref();
+        let command = own_or_dependency(cx, "menu", &m.command, id, commands, deps);
+        let location = match m.location.get_ref().as_str() {
+            "editor-context" => MenuLocation::EditorContext,
+            "file-tree" => MenuLocation::FileTree,
+            "view-title" => MenuLocation::ViewTitle,
+            other => {
+                cx.err(C::BadContribution, m.location.span(), format!("menu location '{other}' must be \"editor-context\", \"file-tree\" or \"view-title\""));
+                MenuLocation::EditorContext
+            }
+        };
+        let view = match (&m.view, location) {
+            (Some(v), MenuLocation::ViewTitle) => {
+                if !views.contains(v.get_ref()) {
+                    cx.err(C::BadContribution, v.span(), format!("menu view '{}' is not one of your [[views]]", v.get_ref()));
+                }
+                Some(id.qualify(v.get_ref()))
+            }
+            (None, MenuLocation::ViewTitle) => {
+                cx.err(C::BadContribution, m.location.span(), "a view-title menu needs view = \"<one of your views>\"");
+                None
+            }
+            (Some(v), _) => {
+                cx.err(C::BadContribution, v.span(), "only a view-title menu names a view");
+                None
+            }
+            (None, _) => None,
+        };
+        let when = cx.when("menu when", &m.when);
+        out.menus.push(Menu { command, location, view, when });
+    }
+
+    cx.count("status-bar", &raw.status_bar);
+    let mut item_ids = HashSet::new();
+    for s in &raw.status_bar {
+        let s = s.get_ref();
+        let local = local_id(cx, "status-bar", &s.id, &mut item_ids);
+        let command = s.command.as_ref().map(|c| own_or_dependency(cx, "status-bar", c, id, commands, deps));
+        out.status_items.push(StatusItem { id: id.qualify(&local), command });
+    }
+
+    for (what, items, formatters) in [("formatters", &raw.formatters, true), ("code-actions", &raw.code_actions, false)] {
+        cx.count(what, items);
+        for p in items {
+            let p = Provider { id: String::new(), languages: languages(cx, what, &p.get_ref().languages, p.span()) };
+            if formatters { out.formatters.push(p) } else { out.code_actions.push(p) }
+        }
+    }
+    for (what, items, diagnostics) in [("diagnostics", &raw.diagnostics, true), ("decorations", &raw.decorations, false)] {
+        cx.count(what, items);
+        let mut seen = HashSet::new();
+        for p in items {
+            let p = p.get_ref();
+            let local = local_id(cx, what, &p.id, &mut seen);
+            let p = Provider { id: id.qualify(&local), languages: languages(cx, what, &p.languages, p.id.span()) };
+            if diagnostics { out.diagnostics.push(p) } else { out.decorations.push(p) }
+        }
+    }
+
+    cx.count("tasks", &raw.tasks);
+    let mut task_ids = HashSet::new();
+    for t in &raw.tasks {
+        let local = local_id(cx, "tasks", &t.get_ref().id, &mut task_ids);
+        out.tasks.push(id.qualify(&local));
+    }
 }

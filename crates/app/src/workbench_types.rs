@@ -34,6 +34,8 @@ pub(super) enum OverlayKind {
         actions: Vec<crate::lsp::CodeAction>,
         client: Arc<crate::lsp::Client>,
     },
+    /// Quick fixes from the language server and code extensions together.
+    QuickFixes(Vec<super::providers_glue::QuickFix>),
     /// Project switcher (⌃R), remove from recents, favorites.
     Projects(Vec<projects::SwitchChoice>),
     ForgetRecent(Vec<RecentWorkspace>),

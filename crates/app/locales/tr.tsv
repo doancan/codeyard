@@ -2820,7 +2820,6 @@ Keymap preset from an installed extension, as publisher.name/label (empty: Codey
 “{}” cannot be used in a key binding	“{}” bir kısayol koşulunda kullanılamaz
 in a key binding, == and != compare editor.language with a language id	bir kısayol koşulunda == ve != yalnızca editor.language ile bir dil kimliğini karşılaştırır
 a key binding condition needs a context, not a constant	bir kısayol koşulu sabit değil, bir bağlam ister
-“{}” needs extension code, which this version does not run	“{}” eklenti kodu gerektiriyor; bu sürüm eklenti kodu çalıştırmıyor
 keymap preset “{}” is not installed	“{}” kısayol düzeni kurulu değil
 unknown command “{}”	bilinmeyen komut “{}”
 “{}” is a built-in shortcut; an extension cannot change it	“{}” yerleşik bir kısayol; eklentiler onu değiştiremez
@@ -3114,3 +3113,8 @@ This extension contains code, and codeyard-exthost, which runs it, is missing be
 {0} failed to start: {1}	{0} başlarken hata verdi: {1}
 {} crashed three times in a minute and was turned off.	{} bir dakikada üç kez çöktü ve kapatıldı.
 denied ({0}); add to [permissions]: {1}	reddedildi ({0}); [permissions] bölümüne ekleyin: {1}
+Formatted by {}	{} tarafından biçimlendirildi
+Saved without formatting: {0}: {1}	Biçimlendirmeden kaydedildi: {0}: {1}
+editor.formatters.{}: expected “lsp” or an extension id	editor.formatters.{}: “lsp” ya da bir eklenti kimliği bekleniyordu
+{}: the formatter returned no edits	{}: biçimlendirici hiçbir düzenleme döndürmedi
+“{}” is not the command of an active extension	“{}” etkin bir eklentinin komutu değil

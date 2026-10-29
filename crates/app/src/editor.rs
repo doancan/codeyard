@@ -187,6 +187,9 @@ pub use data_glue::DataSource;
 mod display_glue;
 #[path = "editor_edit.rs"]
 mod edit_glue;
+#[path = "editor_ext.rs"]
+mod ext_glue;
+pub use ext_glue::{FormatJob, LineDecoration, SaveFormatter, tone_color};
 #[path = "editor_find.rs"]
 mod find_glue;
 #[path = "editor_git.rs"]
@@ -526,6 +529,8 @@ pub struct EditorView {
     lsp_lang: &'static str,
     lsp_version: i64,
     diagnostics: Vec<crate::lsp::Diagnostic>,
+    /// Decorations of code extensions and the formatter that runs on save (editor_ext.rs).
+    ext: ext_glue::ExtMarks,
     /// Workspace root of the language server; related locations under it are shown relative to it.
     lsp_root: Option<String>,
     /// JSON/YAML schema (completion and hover come from here when there is no language server); bound by the Workbench.
@@ -955,6 +960,7 @@ impl EditorView {
             lsp_lang: "",
             lsp_version: 0,
             diagnostics: Vec::new(),
+            ext: ext_glue::ExtMarks::default(),
             lsp_root: None,
             completion: None,
             completion_task: None,
