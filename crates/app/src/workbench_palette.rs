@@ -707,20 +707,25 @@ impl Workbench {
                 self.close_overlay(window, cx);
                 self.bind_shortcut(index, window, cx);
             }
-            (OverlayKind::Stashes { refs, op }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
-                let (stash, op) = (refs[*index].clone(), *op);
+            (OverlayKind::Stashes { refs, msgs, op, repo }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let (stash, msg, op, repo) = (refs[*index].clone(), msgs.get(*index).cloned(), *op, repo.clone());
                 self.close_overlay(window, cx);
                 // --- git-refs ---
                 if matches!(op, git_glue::StashOp::Show) {
-                    self.show_stash_files(stash, window, cx);
+                    if self.repo_unchanged(&repo, cx) {
+                        self.show_stash_files(stash, window, cx);
+                    }
                     return;
                 }
-                self.with_scm(cx, |s, cx| match op {
-                    git_glue::StashOp::Pop => s.stash_apply(stash, true, cx),
-                    git_glue::StashOp::Apply => s.stash_apply(stash, false, cx),
-                    git_glue::StashOp::Drop => s.stash_drop(stash, cx),
-                    git_glue::StashOp::Show => {}
-                });
+                // Pinned to the repository the list was read from, and to the entry picked (position and message).
+                let Some(repo) = repo else { return };
+                let action = match op {
+                    git_glue::StashOp::Pop => crate::scm::StashAction::Pop,
+                    git_glue::StashOp::Apply => crate::scm::StashAction::Apply,
+                    git_glue::StashOp::Drop => crate::scm::StashAction::Drop,
+                    git_glue::StashOp::Show => return,
+                };
+                self.with_scm(cx, |s, cx| s.stash_action_in(Some(repo), stash, msg, action, cx));
             }
             (OverlayKind::Tasks(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let task = list[*index].clone();
@@ -798,11 +803,15 @@ impl Workbench {
                     });
                 }
             }
-            (OverlayKind::Branches { root, choices }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
-                let (root, choice) = (root.clone(), choices[*index].clone());
+            (OverlayKind::Branches { root, choices, repo }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let (root, choice, repo) = (root.clone(), choices[*index].clone(), repo.clone());
                 self.close_overlay(window, cx);
-                self.pick_branch(root, choice, window, cx);
+                // The branches listed are this repository's: picked after another one was selected, nothing runs.
+                if self.repo_unchanged(&repo, cx) {
+                    self.pick_branch(root, choice, window, cx);
+                }
             }
+
             (OverlayKind::RemoteTargets(aliases), PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let alias = aliases[*index].clone();
                 self.close_overlay(window, cx);

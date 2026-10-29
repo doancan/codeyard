@@ -3,9 +3,9 @@
 //! is launched from the Dock or an ssh command, PATH does not include
 //! directories like ~/.cargo/bin.
 
-use std::io::{self, Write};
 #[cfg(windows)]
 use std::io::Read;
+use std::io::{self, Write};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 

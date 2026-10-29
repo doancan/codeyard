@@ -159,6 +159,7 @@ mod qa_workspace_file_tests;
 mod reliability_data_tests;
 mod replace_apply;
 mod replace_plan;
+mod repos;
 mod resource_monitor;
 mod resources;
 #[cfg(test)]
