@@ -334,6 +334,15 @@ impl Workbench {
         welcome_glue::tip_of_the_day(day)
     }
 
+    pub fn has_overlay_for_test(&self) -> bool {
+        self.overlay.is_some()
+    }
+
+    /// The last JSON a command of the extension answered.
+    pub fn extension_answer_for_test(&self, id: &str) -> Option<String> {
+        self.cfg.exts.code.last_answer.get(id).cloned()
+    }
+
     /// Whether the extension's exthost is running in this window.
     pub fn extension_running_for_test(&self, id: &str) -> bool {
         self.cfg.exts.code.running(id)

@@ -32,8 +32,16 @@ pub(super) struct CodeState {
     /// The request that is a user action right now, per extension (`activeTab`, `open-external`).
     user_action: HashMap<String, u64>,
     pub(super) logs: HashMap<String, VecDeque<(LogLevel, String)>>,
+    /// The last command answer of each extension, for the Inspector (#108) and tests.
+    pub(super) last_answer: HashMap<String, String>,
     pub(super) last_trap: HashMap<String, ext_proto::Trap>,
     pump: Option<gpui::Task<()>>,
+    /// `timers.every`: dropping a task stops its timer.
+    timers: HashMap<(String, u64), gpui::Task<()>>,
+    /// The setting values each running exthost has, to send only changes.
+    sent_settings: HashMap<String, Vec<(String, Option<String>)>>,
+    /// Progress shown for each extension: id → (title, message, percent).
+    pub(super) progress: HashMap<(String, u64), (String, Option<String>, Option<u8>)>,
 }
 
 impl CodeState {
@@ -58,8 +66,12 @@ impl Default for CodeState {
             cancels: HashMap::new(),
             user_action: HashMap::new(),
             logs: HashMap::new(),
+            last_answer: HashMap::new(),
             last_trap: HashMap::new(),
             pump: None,
+            timers: HashMap::new(),
+            sent_settings: HashMap::new(),
+            progress: HashMap::new(),
         }
     }
 }
@@ -129,6 +141,9 @@ impl Workbench {
                 if this.cfg.exts.code.user_action.get(&ext) == Some(&id) {
                     this.cfg.exts.code.user_action.remove(&ext);
                 }
+                if let Some(Ok(v::Response::Json(j))) = &result {
+                    this.cfg.exts.code.last_answer.insert(ext.clone(), j.clone());
+                }
                 // Turned off by this very crash: that notice says more than the failed command.
                 if let Some(Err(e)) = result.filter(|_| !this.cfg.exts.code.disabled.contains(&ext)) {
                     this.notice = Some(Notice::Error(format!("{ext}: {}", explain(&e)).into()));
@@ -182,6 +197,8 @@ impl Workbench {
             workspace_trusted: scope.trusted,
         };
         let folders: Vec<String> = scope.roots.iter().map(|r| ext_broker::uri(r)).collect();
+        let settings_now = extension_settings(active, cx);
+        self.cfg.exts.code.sent_settings.insert(id.clone(), settings_now.clone());
         let package_dir = active.dir.clone();
         let wasm_path = active.file(ext_pkg::COMPONENT);
         let granted = ext_runtime::granted_interfaces(&scope.permissions);
@@ -201,7 +218,7 @@ impl Workbench {
                 granted,
                 untrusted,
                 env,
-                settings: Vec::new(),
+                settings: settings_now,
                 folders,
                 reason,
             };
@@ -269,7 +286,7 @@ impl Workbench {
     fn on_extension_event(&mut self, id: &str, event: Event, window: &mut Window, cx: &mut Context<Self>) {
         match event {
             Event::Message(ToApp::Start { ticket, call }) => self.on_extension_call(id, ticket, call, window, cx),
-            Event::Message(ToApp::Notify(n)) => self.on_extension_notify(id, n, cx),
+            Event::Message(ToApp::Notify(n)) => self.on_extension_notify(id, n, window, cx),
             Event::Message(ToApp::Activated(Err(e))) => {
                 self.notice = Some(Notice::Error(crate::i18n::tf("{0} failed to start: {1}", &[&id, &e]).into()));
                 cx.notify();
@@ -305,7 +322,7 @@ impl Workbench {
         log.push_back((level, line));
     }
 
-    fn on_extension_notify(&mut self, id: &str, n: Notify, cx: &mut Context<Self>) {
+    fn on_extension_notify(&mut self, id: &str, n: Notify, window: &mut Window, cx: &mut Context<Self>) {
         match n {
             Notify::Log { level, message } => self.log_extension(id, level, message),
             Notify::Respond { id: req, result } => {
@@ -316,12 +333,32 @@ impl Workbench {
                     c.store(true, std::sync::atomic::Ordering::Relaxed);
                 }
             }
-            // Progress, status items, timers, views, diagnostics and decorations land with their surfaces
-            // (#103, #104); until then they are logged so an author sees them arrive.
-            other => {
-                self.log_extension(id, LogLevel::Debug, format!("{} (not shown in this version)", other.wit_name()));
-                let _ = cx;
+            Notify::StartProgress { id: p, title, .. } => {
+                self.cfg.exts.code.progress.insert((id.to_string(), p), (title, None, None));
+                self.show_extension_progress(id, p, cx);
             }
+            Notify::ReportProgress { id: p, message, percent } => {
+                if let Some(entry) = self.cfg.exts.code.progress.get_mut(&(id.to_string(), p)) {
+                    entry.1 = message;
+                    entry.2 = percent;
+                }
+                self.show_extension_progress(id, p, cx);
+            }
+            Notify::EndProgress { id: p } => {
+                if self.cfg.exts.code.progress.remove(&(id.to_string(), p)).is_some()
+                    && matches!(&self.notice, Some(Notice::Info(t)) if t.starts_with(&format!("{id}: ")))
+                {
+                    self.notice = None;
+                    cx.notify();
+                }
+            }
+            Notify::Every { id: t, seconds } => self.start_extension_timer(id, t, seconds, window, cx),
+            Notify::ClearTimer { id: t } => {
+                self.cfg.exts.code.timers.remove(&(id.to_string(), t));
+            }
+            // Status items, views, diagnostics and decorations land with their surfaces (#103, #104); until then
+            // they are logged so an author sees them arrive.
+            other => self.log_extension(id, LogLevel::Debug, format!("{} (not shown in this version)", other.wit_name())),
         }
     }
 
@@ -340,6 +377,21 @@ impl Workbench {
                 self.notice = Some(if *severity == v::Severity::Error { Notice::Error(text.into()) } else { Notice::Info(text.into()) });
                 cx.notify();
                 complete(&proc, Completion::Chosen(Vec::new()));
+            }
+            Start::QuickPick { items, options } => self.extension_quick_pick(id, ticket, items, options, window, cx),
+            Start::InputBox { options } => {
+                if options.password {
+                    let msg = "password input is not available; accounts go through `auth`, which never shows the extension a token";
+                    complete(&proc, Completion::Failed(v::Error::Invalid(msg.into())));
+                } else {
+                    let placeholder = format!("{id}: {}", options.prompt.clone().or(options.title.clone()).unwrap_or_default());
+                    let purpose = InputPurpose::ExtInput { extension: id.to_string(), ticket };
+                    self.show_input(purpose, "OK", &placeholder, options.value.as_deref().unwrap_or(""), window, cx);
+                }
+            }
+            Start::ActiveDocument | Start::Selections | Start::ReadDocument { .. } | Start::ApplyEdits { .. } | Start::SetSelections { .. } => {
+                let c = self.extension_document_call(id, &scope, &call, cx);
+                complete(&proc, c);
             }
             Start::OpenExternal { url } => {
                 let user = self.cfg.exts.code.user_action.contains_key(id);
@@ -431,8 +483,29 @@ impl Workbench {
             .detach();
     }
 
+    /// After a settings reload: stop the exthosts of extensions that were uninstalled or turned off, and tell the
+    /// others about their settings that changed (`request.settings-changed`).
+    pub(super) fn sync_running_extensions(&mut self, cx: &mut Context<Self>) {
+        let reg = crate::ext::current();
+        for e in reg.active.iter() {
+            let id = e.id().to_string();
+            let Some(p) = self.cfg.exts.code.procs.get(&id).cloned() else { continue };
+            let now = extension_settings(e, cx);
+            let before = self.cfg.exts.code.sent_settings.get(&id).cloned().unwrap_or_default();
+            if now == before {
+                continue;
+            }
+            let keys: Vec<String> = now.iter().filter(|kv| !before.contains(kv)).map(|(k, _)| k.clone()).collect();
+            let _ = p.send(&ToHost::Settings(now.clone()));
+            let (req, _answer) = self.cfg.exts.code.pending.lock().unwrap_or_else(|e| e.into_inner()).add(&id);
+            let _ = p.send(&ToHost::Handle { id: req, deadline_ms: 0, request: v::Request::SettingsChanged { keys } });
+            self.cfg.exts.code.sent_settings.insert(id, now);
+        }
+        self.stop_removed_extensions();
+    }
+
     /// Stop the exthosts of extensions that were uninstalled, turned off or replaced since they started.
-    pub(super) fn stop_removed_extensions(&mut self) {
+    fn stop_removed_extensions(&mut self) {
         let reg = crate::ext::current();
         let gone: Vec<String> = self.cfg.exts.code.procs.keys().filter(|id| !reg.active.iter().any(|e| e.id() == id.as_str())).cloned().collect();
         for id in gone {
@@ -441,6 +514,182 @@ impl Workbench {
             }
         }
     }
+}
+
+impl Workbench {
+    /// Complete a ticket of `extension` from the window (a pick, an input).
+    fn complete_extension_ticket(&mut self, extension: &str, ticket: u64, completion: Completion) {
+        if let Some(p) = self.cfg.exts.code.procs.get(extension) {
+            let _ = p.send(&ToHost::Complete { ticket, completion });
+        }
+    }
+
+    fn extension_quick_pick(&mut self, id: &str, ticket: u64, items: &[v::PickItem], options: &v::PickOptions, window: &mut Window, cx: &mut Context<Self>) {
+        if self.overlay.is_some() {
+            self.close_overlay(window, cx);
+        }
+        let rows =
+            items.iter().take(10_000).map(|i| PickItem { label: i.label.clone().into(), detail: i.detail.clone().map(Into::into), keys: None }).collect();
+        // The publisher is named in the prompt, so an extension cannot pose as Codeyard.
+        let prompt = format!("{id}: {}", options.placeholder.clone().or(options.title.clone()).unwrap_or_default());
+        let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items: rows }], &prompt, "", None, cx));
+        self.show_overlay(picker, OverlayKind::ExtPick { extension: id.to_string(), ticket }, window, cx);
+    }
+
+    /// Picks and inputs of extensions: the answer completes their ticket; Escape answers "nothing".
+    pub(super) fn on_extension_overlay_event(&mut self, event: &PickerEvent, window: &mut Window, cx: &mut Context<Self>) {
+        let answer = match event {
+            PickerEvent::Confirm(Pick::Item { index, .. }) => Some(Completion::Chosen(vec![*index as u32])),
+            PickerEvent::Confirm(Pick::Input) => {
+                let text = self.overlay.as_ref().map(|o| o.picker.read(cx).query().to_string());
+                Some(Completion::Text(text))
+            }
+            PickerEvent::Dismiss => None,
+            _ => return,
+        };
+        let Some(ov) = self.close_overlay(window, cx) else { return };
+        let (ext, ticket, nothing) = match ov.kind {
+            OverlayKind::ExtPick { extension, ticket } => (extension, ticket, Completion::Chosen(Vec::new())),
+            OverlayKind::Input(InputPurpose::ExtInput { extension, ticket }) => (extension, ticket, Completion::Text(None)),
+            _ => return,
+        };
+        self.complete_extension_ticket(&ext, ticket, answer.unwrap_or(nothing));
+    }
+
+    fn show_extension_progress(&mut self, id: &str, p: u64, cx: &mut Context<Self>) {
+        let Some((title, message, percent)) = self.cfg.exts.code.progress.get(&(id.to_string(), p)) else { return };
+        let mut text = format!("{id}: {title}");
+        if let Some(m) = message {
+            text.push_str(&format!(" — {m}"));
+        }
+        if let Some(pc) = percent {
+            text.push_str(&format!(" ({pc}%)"));
+        }
+        self.notice = Some(Notice::Info(text.into()));
+        cx.notify();
+    }
+
+    /// `timers.every`: a request every `seconds` (at least `limits::TIMER_MIN_SECONDS`), skipped while the window is
+    /// not focused. An active timer keeps the exthost from being stopped as idle.
+    fn start_extension_timer(&mut self, id: &str, timer: u64, seconds: u32, window: &mut Window, cx: &mut Context<Self>) {
+        let every = std::time::Duration::from_secs(seconds.max(ext_manifest::limits::TIMER_MIN_SECONDS) as u64);
+        let ext = id.to_string();
+        let task = cx.spawn_in(window, async move |this, cx| {
+            loop {
+                cx.background_executor().timer(every).await;
+                let alive = this.update_in(cx, |this, window, _| {
+                    if !window.is_window_active() && !cfg!(test) {
+                        return;
+                    }
+                    let Some(p) = this.cfg.exts.code.procs.get(&ext).cloned() else { return };
+                    let (req, _answer) = this.cfg.exts.code.pending.lock().unwrap_or_else(|e| e.into_inner()).add(&ext);
+                    let _ = p.send(&ToHost::Handle { id: req, deadline_ms: 0, request: v::Request::Timer { id: timer } });
+                });
+                if alive.is_err() {
+                    break;
+                }
+            }
+        });
+        self.cfg.exts.code.timers.insert((id.to_string(), timer), task);
+    }
+
+    /// Documents: the active editor's, or an open one. A command the user started may read and edit the active
+    /// document and set its selections (Chrome's `activeTab`); anything else needs `read` (and `write` to edit) on the
+    /// document's path.
+    fn extension_document_call(&mut self, id: &str, scope: &Scope, call: &Start, cx: &mut Context<Self>) -> Completion {
+        let user = self.cfg.exts.code.user_action.contains_key(id);
+        let active = self.active_editor().cloned();
+        let active_path = active.as_ref().map(|e| e.read(cx).path.clone());
+        let editor_for = |this: &Self, uri: &str| -> Option<(Entity<crate::editor::EditorView>, String)> {
+            let path = ext_broker::normalize(uri)?;
+            this.tabs.editors.iter().find(|e| ext_broker::normalize(&e.read(cx).path).as_deref() == Some(path.as_str())).map(|e| (e.clone(), path))
+        };
+        let may = |path: &str, write: bool| -> Result<(), v::Error> {
+            if user && active_path.as_deref().and_then(ext_broker::normalize).as_deref() == Some(path) {
+                return Ok(());
+            }
+            if write { scope.may_write(path).map(|_| ()) } else { scope.may_read(path).map(|_| ()) }
+        };
+        let document = |e: &Entity<crate::editor::EditorView>| {
+            let ed = e.read(cx);
+            // The language id authors match on (`rust`, `python`), as language servers get it; else the lowercase name.
+            let language = crate::lsp::language_of(&ed.path).map_or_else(|| ed.language().to_ascii_lowercase(), |(id, _)| id.to_string());
+            v::Document { uri: ext_broker::uri(&ed.path), language, version: ed.lsp_buffer_version() as u32, text: ed.text() }
+        };
+        let range16 =
+            |r: crate::lsp::Range16| v::Range { start: v::Position { line: r.0.0, character: r.0.1 }, end: v::Position { line: r.1.0, character: r.1.1 } };
+        let to16 = |r: &v::Range| -> crate::lsp::Range16 { ((r.start.line, r.start.character), (r.end.line, r.end.character)) };
+        match call {
+            Start::ActiveDocument => match &active {
+                None => Completion::Document(None),
+                Some(e) => match may(&ext_broker::normalize(&e.read(cx).path).unwrap_or_default(), false) {
+                    Ok(()) => Completion::Document(Some(document(e))),
+                    Err(err) => Completion::Failed(err),
+                },
+            },
+            Start::Selections => match &active {
+                None => Completion::Ranges(Vec::new()),
+                Some(e) => match may(&ext_broker::normalize(&e.read(cx).path).unwrap_or_default(), false) {
+                    Ok(()) => Completion::Ranges(vec![range16(e.read(cx).lsp_selection())]),
+                    Err(err) => Completion::Failed(err),
+                },
+            },
+            Start::ReadDocument { uri } => match editor_for(self, uri) {
+                None => Completion::Document(None),
+                Some((e, path)) => match may(&path, false) {
+                    Ok(()) => Completion::Document(Some(document(&e))),
+                    Err(err) => Completion::Failed(err),
+                },
+            },
+            Start::ApplyEdits { uri, version, edits } => match editor_for(self, uri) {
+                None => Completion::Failed(v::Error::NotFound(format!("{uri} is not open"))),
+                Some((e, path)) => match may(&path, true) {
+                    Err(err) => Completion::Failed(err),
+                    Ok(()) => {
+                        let edits: Vec<_> = edits.iter().map(|t| (to16(&t.range), t.new_text.clone())).collect();
+                        let current = e.read(cx).lsp_buffer_version();
+                        let applied = (current as u32 == *version) && e.update(cx, |ed, cx| ed.apply_lsp_edits_if_unchanged(current, &edits, cx));
+                        if applied {
+                            Completion::Done
+                        } else {
+                            Completion::Failed(v::Error::Invalid("the document changed since that version; read it again".into()))
+                        }
+                    }
+                },
+            },
+            Start::SetSelections { uri, selections } => match editor_for(self, uri) {
+                None => Completion::Failed(v::Error::NotFound(format!("{uri} is not open"))),
+                Some((e, path)) => match may(&path, false) {
+                    Err(err) => Completion::Failed(err),
+                    Ok(()) => {
+                        if let Some(r) = selections.first() {
+                            e.update(cx, |ed, cx| ed.set_lsp_selection(to16(r), cx));
+                        }
+                        Completion::Done
+                    }
+                },
+            },
+            _ => Completion::Failed(v::Error::Invalid("not a document call".into())),
+        }
+    }
+}
+
+/// The extension's own settings, as JSON: the user's value (`ext.<id>.<key>` in settings.jsonc) or the default.
+fn extension_settings(active: &crate::ext::Active, cx: &App) -> Vec<(String, Option<String>)> {
+    let user = &cx.global::<Settings>().ext_settings;
+    active
+        .manifest
+        .contributions
+        .settings
+        .iter()
+        .map(|s| {
+            let value = user
+                .get(&format!("ext.{}.{}", active.id(), s.key))
+                .map(|v| v.to_string())
+                .or_else(|| s.default.as_ref().and_then(|d| serde_json::to_string(d).ok()));
+            (s.key.clone(), value)
+        })
+        .collect()
 }
 
 /// An API error in plain words, with its fix when it is a denial.

@@ -920,6 +920,9 @@ impl Workbench {
             ) => {
                 self.close_overlay(window, cx);
             }
+            (OverlayKind::ExtPick { .. } | OverlayKind::Input(InputPurpose::ExtInput { .. }), _) => {
+                self.on_extension_overlay_event(event, window, cx);
+            }
             (OverlayKind::Palette { .. } | OverlayKind::Input(_), PickerEvent::Dismiss) => {
                 self.close_overlay(window, cx);
             }

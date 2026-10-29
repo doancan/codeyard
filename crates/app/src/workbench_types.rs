@@ -27,6 +27,11 @@ pub(super) enum OverlayKind {
     },
     /// Name entry (new file/folder, rename).
     Input(InputPurpose),
+    /// `window.quick-pick` of a code extension: its ticket completes with the chosen row.
+    ExtPick {
+        extension: String,
+        ticket: u64,
+    },
     /// Language server results: locations (references), symbols, code actions.
     Locations(Vec<(String, u32, u32)>),
     Symbols(Vec<(u32, u32)>),
@@ -170,6 +175,11 @@ pub(super) enum OverlayKind {
 }
 
 pub(super) enum InputPurpose {
+    /// `window.input-box` of a code extension: its ticket completes with the text.
+    ExtInput {
+        extension: String,
+        ticket: u64,
+    },
     Create {
         dir: String,
         is_dir: bool,
