@@ -50,6 +50,8 @@ mod find;
 #[path = "terminal_marks.rs"]
 mod marks;
 
+pub use marks::{Activity, Finished};
+
 #[path = "terminal_scroll.rs"]
 mod scroll;
 
@@ -59,6 +61,8 @@ mod scroll_tests;
 
 pub enum TerminalEvent {
     TitleChanged,
+    /// A command started or finished (shell integration): the terminal list shows it.
+    ActivityChanged,
     Exited,
     /// A key was pressed after the shell exited.
     CloseRequested,
@@ -407,6 +411,9 @@ impl TerminalView {
     }
 
     fn drain_events(&mut self, cx: &mut Context<Self>) {
+        if std::mem::take(&mut self.marks.activity_changed) {
+            cx.emit(TerminalEvent::ActivityChanged);
+        }
         let events: Vec<TermEvent> = std::mem::take(&mut *self.events.0.borrow_mut());
         for ev in events {
             match ev.clone() {

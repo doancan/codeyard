@@ -11,6 +11,7 @@
 1 minute	
 15 minutes	
 5 minutes	
+A command is running	
 A compatible Node.js runtime could not be used on this host. Install Node.js 22.22.2 or newer with npm, then retry.	
 A container operation is running. Use Docker: Cancel Operation before starting another.	
 A file named “{}” is already there; a folder cannot replace it. Rename or remove it first.	
@@ -308,6 +309,8 @@ Compare: {0} ↔ {1}
 Comparing contents… {0} of {1}	
 Compose project	
 Compound “{}” has no configurations	
+Configure Tasks…	
+Configure Terminal Settings	
 Conflict	
 Conflict {0} of {1}	
 Connect	
@@ -843,6 +846,8 @@ Find in file (searched on the host)
 Find in files	
 Find in selection (⌥⌘L)	
 Focus Left Editor Group	
+Focus Next Terminal	
+Focus Previous Terminal	
 Focus Right Editor Group	
 Fold	
 Fold All	
@@ -1094,6 +1099,7 @@ Language: {0} ({1})
 Languages: Manage Language Services	
 Later	
 Latest 300 lines; refreshed with resource snapshots.	
+Launch Profile…	
 Learn	
 Leave out animations: the blinking cursor, spinners and sliding panels (auto: follow the system setting)	
 Left is writable	
@@ -1718,6 +1724,7 @@ Run
 Run All Tests	
 Run Codeyard commands: {}	
 Run Failed Tests	
+Run Task…	
 Run Test	
 Run Tests in File	
 Run Without Debugging	
@@ -1729,6 +1736,7 @@ Run to Cursor
 Run {} with any arguments	
 Running	
 Running the program in a terminal is not supported on Windows yet: use {} in the configuration.	
+Running: {}	
 Running…	
 Rust formatters not loaded: {}	
 Rust language features are disabled. Enable lsp.enabled in Settings.	
@@ -1790,6 +1798,7 @@ Searching…
 Seconds between background fetches	
 Select All	
 Select All Occurrences	
+Select Default Profile…	
 Select Folder for Compare	
 Select Language Mode	
 Select a JWT or a Unix timestamp first	
@@ -1891,6 +1900,7 @@ Spelling: Toggle Spell Check
 Spelling: {}. Run “Spelling: Install Dictionary…”.	
 Spelling: “{}”	
 Split Editor	
+Split Terminal	
 Stage	
 Stage all	
 Stage {}	
@@ -1972,10 +1982,14 @@ Terminal {0} of {1}
 Terminal: Change Color…	
 Terminal: Clear	
 Terminal: Close	
+Terminal: Configure Terminal Settings	
 Terminal: Copy Last Command Output	
+Terminal: Focus Next Terminal	
+Terminal: Focus Previous Terminal	
 Terminal: Go to Next Command	
 Terminal: Go to Previous Command	
 Terminal: Kill All Terminals	
+Terminal: Kill Other Terminals	
 Terminal: New	
 Terminal: New Terminal with Profile…	
 Terminal: Rename…	
@@ -2034,6 +2048,7 @@ The folder could not be read on the server: {}
 The host stopped responding. Installation files were retained because a process may still be running. Reconnect and inspect the destination before retrying.	
 The input “{0}” is of type “{1}”, which would run a command; use promptString or pickString.	
 The last background fetch failed: {}	
+The last command exited with code {}	
 The local port is busy	
 The managed installation is incomplete or belongs to another catalogue. Reinstall the services to repair it.	
 The new version couldn't be installed from here. You can download it from the release page instead.	

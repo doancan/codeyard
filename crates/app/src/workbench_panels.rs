@@ -33,6 +33,38 @@ impl Workbench {
         self.apply_zoom(0., window, cx);
     }
 
+    /// Bottom ↔ right. A maximized panel covers the editor wherever it is docked, so moving it also restores its size:
+    /// otherwise the move would not show.
+    pub(super) fn toggle_panel_position(&mut self, cx: &mut Context<Self>) {
+        self.chrome.panel_right = !self.chrome.panel_right;
+        self.chrome.panel_max = false;
+        self.chrome.panel_open = true;
+        if let Some(s) = &self.persist.state {
+            let _ = s.set("panel_right", if self.chrome.panel_right { "1" } else { "0" });
+        }
+        cx.notify();
+    }
+
+    pub(super) fn toggle_maximized_panel(&mut self, cx: &mut Context<Self>) {
+        self.chrome.panel_max = !self.chrome.panel_max;
+        self.chrome.panel_open = true;
+        cx.notify();
+    }
+
+    /// The panel's width in a window `total` wide: its own when docked right, else the editor area's.
+    pub(super) fn panel_width(&self, total: f32) -> f32 {
+        if self.chrome.panel_right && !self.chrome.panel_max {
+            return self.chrome.panel_w;
+        }
+        let sidebar = if self.chrome.panel.is_some() && self.chrome.zen.is_none() { self.chrome.sidebar_w } else { 0. };
+        total - layout::ACTIVITYBAR_W - sidebar
+    }
+
+    #[cfg(test)]
+    pub fn panel_layout_for_test(&self) -> (bool, bool, bool) {
+        (self.chrome.panel_open, self.chrome.panel_right, self.chrome.panel_max)
+    }
+
     pub(super) fn show_ports(&mut self, _: &ShowPorts, _: &mut Window, cx: &mut Context<Self>) {
         if self.chrome.panel_open && self.chrome.bottom == Bottom::Ports {
             self.chrome.panel_open = false;

@@ -126,6 +126,9 @@ pub(super) struct ChromeLayout {
     pub(super) panel_w: f32,
     pub(super) panel_max: bool,
     pub(super) resizing_panel: bool,
+    /// Width of the terminal list beside the terminals (when there are several), and whether its edge is being dragged.
+    pub(super) term_list_w: f32,
+    pub(super) resizing_term_list: bool,
     pub(super) resizing_split: bool,
     /// Zoom delta (pt) and the base sizes from settings (editor, line, terminal).
     pub(super) zoom: f32,

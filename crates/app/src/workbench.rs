@@ -440,6 +440,17 @@ const SYMBOL_HINT: &str = "Type to search symbols in the workspace";
 /// Minimum height of the bottom panel.
 const PANEL_MIN: f32 = 120.;
 
+/// Terminal list: default, narrowest and widest width, and the room always left to the terminals beside it.
+const TERM_LIST_W: f32 = 220.;
+const TERM_LIST_MIN: f32 = 120.;
+const TERM_LIST_MAX: f32 = 480.;
+const TERM_LIST_ROOM: f32 = 200.;
+
+/// Width of the terminal list for a drag that asks for `want` in a panel `panel` wide.
+fn term_list_width(want: f32, panel: f32) -> f32 {
+    want.clamp(TERM_LIST_MIN, TERM_LIST_MAX.min(panel - TERM_LIST_ROOM).max(TERM_LIST_MIN))
+}
+
 /// Quick open lists at most this many files.
 const FILE_LIMIT: u32 = 100_000;
 
@@ -489,7 +500,10 @@ pub use debug::{
 pub use ext_glue::{CancelExtensionConsent, InstallExtensionFromFile, InstallExtensionFromFolder, ShowExtensions};
 pub use host::askpass::{AskKind, AskRequest};
 pub use remote_glue::ShowRemoteExplorer;
-pub use terminals_glue::{ChangeTerminalColor, KillAllTerminals, NewTerminalWithProfile, RenameTerminal, SelectDefaultTerminalProfile};
+pub use terminals_glue::{
+    ChangeTerminalColor, ConfigureTerminalSettings, FocusNextTerminal, FocusPreviousTerminal, KillAllTerminals, KillOtherTerminals, NewTerminalWithProfile,
+    RenameTerminal, SelectDefaultTerminalProfile,
+};
 pub use tests_glue::{DebugTestAtCursor, RefreshTests, RunAllTests, RunFailedTests, ShowTesting, StopTests};
 pub type AskReply = std::sync::mpsc::Sender<Option<String>>;
 
@@ -670,8 +684,10 @@ pub struct Workbench {
     /// This workbench's window (for calling window-requiring work from the background).
     window_handle: gpui::AnyWindowHandle,
     terminals: Vec<Entity<TerminalView>>,
-    /// "Terminal: Split": the peer shown next to the active terminal.
-    term_split: Option<Entity<TerminalView>>,
+    /// "Terminal: Split": two terminals side by side (left, right): shown together whenever one of them is the active terminal.
+    term_split: Option<(Entity<TerminalView>, Entity<TerminalView>)>,
+    /// What the entries of the open "launch profile" menu start.
+    term_launches: Vec<crate::terminal::Launch>,
     active_terminal: usize,
     /// A specific shell in tests; the user's shell otherwise.
     shell: Option<String>,
@@ -1049,6 +1065,12 @@ impl Workbench {
         let panel_h = state.as_ref().and_then(|s| s.get("panel_h")).and_then(|v| v.parse::<f32>().ok()).unwrap_or(layout::PANEL_H).max(PANEL_MIN);
         let panel_right = state.as_ref().and_then(|s| s.get("panel_right")).is_some_and(|v| v == "1");
         let panel_w = state.as_ref().and_then(|s| s.get("panel_w")).and_then(|v| v.parse::<f32>().ok()).unwrap_or(480.).max(PANEL_MIN * 2.);
+        let term_list_w = state
+            .as_ref()
+            .and_then(|s| s.get("terminal_list_w"))
+            .and_then(|v| v.parse::<f32>().ok())
+            .unwrap_or(TERM_LIST_W)
+            .clamp(TERM_LIST_MIN, TERM_LIST_MAX);
         let mut wb = Workbench {
             watched: Vec::new(),
             fs_task: None,
@@ -1074,6 +1096,7 @@ impl Workbench {
             #[cfg(test)]
             git_status_hangs: false,
             terminals: Vec::new(),
+            term_launches: Vec::new(),
             term_split: None,
             active_terminal: 0,
             shell: None,
@@ -1132,6 +1155,8 @@ impl Workbench {
                 panel_w,
                 panel_max: false,
                 resizing_panel: false,
+                term_list_w,
+                resizing_term_list: false,
                 resizing_split: false,
                 zoom: 0.,
                 zoom_base: (theme::text::CODE.0, theme::text::CODE.1, theme::text::CODE.0),
@@ -1442,34 +1467,56 @@ impl Workbench {
                         },
                     )))
                     .child(div().flex_1())
-                    .child(
-                        ui::icon_button("panel-new", "plus", crate::i18n::t("New Terminal (⌃⇧`)"), p)
-                            .on_click(cx.listener(|this, _, w, cx| this.new_terminal(&NewTerminal, w, cx))),
-                    )
-                    .child(
-                        ui::icon_button("panel-kill", "trash", crate::i18n::t("Kill Terminal"), p)
-                            .on_click(cx.listener(|this, _, w, cx| this.kill_terminal(&KillTerminal, w, cx))),
-                    )
+                    // The terminal's own actions only while the terminal is the panel's view.
+                    .when(self.chrome.bottom == Bottom::Terminal, |d| {
+                        d.child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .child(
+                                    ui::icon_button("panel-new", "tb-plus", crate::i18n::t("New Terminal (⌃⇧`)"), p)
+                                        .on_click(cx.listener(|this, _, w, cx| this.new_terminal(&NewTerminal, w, cx))),
+                                )
+                                .child(ui::icon_button("panel-launch", "tb-dropdown", crate::i18n::t("Launch Profile…"), p).w(px(16.)).on_click(cx.listener(
+                                    |this, ev: &gpui::ClickEvent, w, cx| {
+                                        // Below the button, right-aligned with it (a keyboard press has no position: under the pointer then).
+                                        let at = ev.position();
+                                        let at = gpui::point(at.x + px(8.), at.y + px(14.));
+                                        this.open_terminal_launch_menu(at, w, cx);
+                                    },
+                                ))),
+                        )
+                        .child(
+                            ui::icon_button("panel-split", "tb-split", crate::i18n::t("Split Terminal"), p)
+                                .on_click(cx.listener(|this, _, w, cx| this.split_terminal(&SplitTerminal, w, cx))),
+                        )
+                        .child(
+                            ui::icon_button("panel-kill", "tb-trash", crate::i18n::t("Kill Terminal"), p)
+                                .on_click(cx.listener(|this, _, w, cx| this.kill_terminal(&KillTerminal, w, cx))),
+                        )
+                        .child(div().w(px(1.)).h(px(16.)).mx(px(theme::SPACE[2])).bg(c(p.border)))
+                    })
                     .child(
                         ui::icon_button(
                             "panel-move",
-                            if self.chrome.panel_right { "panel-bottom" } else { "panel-right" },
+                            if self.chrome.panel_right { "tb-panel-bottom" } else { "tb-panel-right" },
                             if self.chrome.panel_right { crate::i18n::t("Move Panel to Bottom") } else { crate::i18n::t("Move Panel Right") },
                             p,
                         )
                         .on_click(cx.listener(|this, _, w, cx| this.dispatch_now(&TogglePanelPosition, w, cx))),
                     )
                     .child(
-                        ui::icon_button(
+                        ui::toggle_button(
                             "panel-max",
-                            if self.chrome.panel_max { "minimize-2" } else { "maximize-2" },
+                            if self.chrome.panel_max { "tb-restore" } else { "tb-maximize" },
                             if self.chrome.panel_max { crate::i18n::t("Restore Panel Size") } else { crate::i18n::t("Maximize Panel") },
+                            self.chrome.panel_max,
                             p,
                         )
                         .on_click(cx.listener(|this, _, w, cx| this.dispatch_now(&ToggleMaximizedPanel, w, cx))),
                     )
                     .child(
-                        ui::icon_button("panel-close", "x", crate::i18n::t("Hide Panel (⌘J)"), p)
+                        ui::icon_button("panel-close", "tb-close", crate::i18n::t("Hide Panel (⌘J)"), p)
                             .on_click(cx.listener(|this, _, w, cx| this.toggle_panel(&TogglePanel, w, cx))),
                     ),
             )
@@ -1482,19 +1529,19 @@ impl Workbench {
                     Bottom::Terminal => {
                         // Several terminals: their list on the right.
                         let list = self.terminal_list(p, cx);
-                        let active = self.terminals.get(self.active_terminal).cloned();
-                        let other = self.term_split.clone().filter(|o| Some(o) != active.as_ref() && self.terminals.contains(o));
-                        d.child(
+                        let panes = match (self.shown_split(), self.terminals.get(self.active_terminal).cloned()) {
+                            (Some((left, right)), _) => vec![left, right],
+                            (None, active) => active.into_iter().collect(),
+                        };
+                        d.child(div().flex_1().min_w_0().min_h_0().flex().children(panes.into_iter().enumerate().map(|(i, t)| {
                             div()
                                 .flex_1()
                                 .min_w_0()
                                 .min_h_0()
                                 .flex()
-                                .when_some(other, |d, o| {
-                                    d.child(div().flex_1().min_w_0().min_h_0().child(o)).child(div().w(px(1.)).h_full().flex_none().bg(c(p.border)))
-                                })
-                                .child(div().flex_1().min_w_0().min_h_0().children(active)),
-                        )
+                                .when(i > 0, |d| d.child(div().w(px(1.)).h_full().flex_none().bg(c(p.border))))
+                                .child(div().flex_1().min_w_0().min_h_0().child(t))
+                        })))
                         .children(list)
                     }
                 }
