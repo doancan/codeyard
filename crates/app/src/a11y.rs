@@ -61,7 +61,9 @@ const EXT_PAGE_INSTALL: NodeId = NodeId(49);
 const EXT_ROW: u64 = 0xd0_0000;
 const EXT_PAGE_LINE: u64 = 0xe0_0000;
 const INSPECTOR: NodeId = NodeId(39);
-const INSPECTOR_LINE: u64 = 0x100_0000;
+const INSPECTOR_LINE: u64 = 0x110_0000;
+/// Elements of extension views (a11y_ext_views.rs).
+const EXT_VIEW_NODE: u64 = 0x100_0000;
 const SERVICES: NodeId = NodeId(24);
 const SERVICES_INFO: NodeId = NodeId(25);
 const SERVICES_STATUS: NodeId = NodeId(26);
@@ -234,6 +236,8 @@ pub struct NoticeSnap {
 
 #[path = "a11y_extensions.rs"]
 mod ext_access;
+#[path = "a11y_ext_views.rs"]
+mod ext_views_access;
 #[path = "a11y_ids.rs"]
 mod ids;
 #[path = "a11y_inspector.rs"]
@@ -244,6 +248,8 @@ mod scm_access;
 mod search_access;
 #[path = "a11y_language_services.rs"]
 mod services_access;
+#[cfg(test)]
+pub(crate) use ext_views_access::Act as ExtViewAct;
 use search_access::SEARCH_ED_TAB;
 pub(crate) use search_access::{SearchEdSnap, SearchTabSnap};
 
@@ -273,6 +279,7 @@ pub struct Snapshot {
     pub(crate) exts: Option<ext_access::ExtSnap>,
     pub(crate) ext_page: Option<ext_access::ExtPageSnap>,
     pub(crate) inspector: Option<inspector_access::InspectorSnap>,
+    pub(crate) ext_views: Vec<ext_views_access::ViewSnap>,
     /// The Search Editor in front, and every Search Editor tab of the focused group.
     pub(crate) search_editor: Option<SearchEdSnap>,
     pub(crate) search_tabs: Vec<SearchTabSnap>,
@@ -465,6 +472,9 @@ impl Snapshot {
         if let Some(snap) = &self.inspector {
             inspector_access::append_tree(snap, &mut nodes);
             kids.push(INSPECTOR);
+        }
+        for (slot, view) in self.ext_views.iter().enumerate() {
+            kids.push(view.append(slot, &mut nodes));
         }
 
         // Tabs
@@ -929,6 +939,7 @@ impl Workbench {
             exts,
             ext_page: self.a11y_extension_page(),
             inspector: self.a11y_inspector(),
+            ext_views: self.a11y_ext_views(window),
             search_editor,
             search_tabs,
             picker,
@@ -951,7 +962,7 @@ impl Workbench {
             cx.notify();
             return;
         }
-        if self.a11y_ext_action(req, last, window, cx) || self.a11y_inspector_action(req, last, cx) {
+        if self.a11y_ext_action(req, last, window, cx) || self.a11y_ext_view_action(req, last, window, cx) || self.a11y_inspector_action(req, last, cx) {
             cx.notify();
             return;
         }
@@ -1266,6 +1277,7 @@ mod tests {
             exts: None,
             ext_page: None,
             inspector: None,
+            ext_views: Vec::new(),
             geometry: Geometry::default(),
             title: "Codeyard \u{2014} demo".into(),
             explorers: vec![ExplorerSnap {

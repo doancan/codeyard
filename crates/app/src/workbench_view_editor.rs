@@ -86,6 +86,7 @@ impl Workbench {
                     Some(Page::Merge(view)) => view.into_any_element(),
                     Some(Page::Compare(view)) => view.into_any_element(),
                     Some(Page::Search(view)) => view.into_any_element(),
+                    Some(Page::ExtView(id)) => self.ext_view_frame(&id, p, cx),
                     Some(Page::Welcome) => self.welcome_view(p, cx).into_any_element(),
                     Some(Page::Containers) => self.container_dashboard_view(p, cx).into_any_element(),
                     Some(Page::Extension) => self.extension_page(p, cx),
@@ -633,6 +634,7 @@ impl Workbench {
                     Page::Merge(v) => ("git-compare", v.read(cx).title(cx)),
                     Page::Compare(v) => ("git-compare", v.read(cx).title()),
                     Page::Search(v) => ("search", v.read(cx).title()),
+                    Page::ExtView(id) => ("plug", self.ext_view_title(id)),
                 };
                 d.child(
                     div()

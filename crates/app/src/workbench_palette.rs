@@ -653,6 +653,11 @@ impl Workbench {
                     ed.update(cx, |e, cx| e.reveal_lsp(line, col, window, cx));
                 }
             }
+            (OverlayKind::QuickFixes(fixes), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let fix = fixes[*index].clone();
+                self.close_overlay(window, cx);
+                self.run_quick_fix(fix, window, cx);
+            }
             (OverlayKind::CodeActions { actions, client }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let (action, client) = (actions[*index].clone(), client.clone());
                 self.close_overlay(window, cx);
@@ -889,6 +894,7 @@ impl Workbench {
                 OverlayKind::Locations(_)
                 | OverlayKind::Symbols(_)
                 | OverlayKind::CodeActions { .. }
+                | OverlayKind::QuickFixes(_)
                 | OverlayKind::Branches { .. }
                 | OverlayKind::BranchOp { .. }
                 | OverlayKind::SyncTarget(_)

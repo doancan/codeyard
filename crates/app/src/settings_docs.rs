@@ -31,6 +31,12 @@ pub const FILE_ONLY: &[(&str, &str, &str, &str)] = &[
     ),
     ("files.associations", "object of glob → language", "`{}`", "Force a language mode for matching files, e.g. `{ \"*.tpl\": \"html\" }`."),
     (
+        "editor.formatters",
+        "object of language → formatter",
+        "`{}`",
+        "Who formats a language: `\"lsp\"` or the id of an extension that formats it, e.g. `{ \"toml\": \"you.taplo\" }`. Without an entry the language server formats, or else the only extension that formats the language.",
+    ),
+    (
         "terminal.profiles.macos",
         "object of name → profile",
         "`{}`",
@@ -197,6 +203,7 @@ mod tests {
         );
         for k in [
             "files.associations",
+            "editor.formatters",
             "workbench.colorCustomizations",
             "lsp.servers",
             "extensions.registries",

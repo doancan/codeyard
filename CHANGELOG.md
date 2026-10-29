@@ -7,8 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-29
+
 ### Added
 
+- Extension views: a code extension's `[[views]]` appear in the sidebar (an activity bar button), the bottom panel (a
+  tab) or the editor area (a page), and in the palette as *Open View: …*. Codeyard draws the 22 elements itself with the
+  theme's colours and spacing, so a theme change redraws them without calling the extension; lists and tables of
+  10,000 rows draw only the rows on screen, and trees load one page at a time. The tree arrives as JSON
+  (docs/extensions/reference/ui.md), is checked, and is diffed by key so typed text, ticks, selections and expanded
+  items survive a re-render. Every element is reachable by keyboard and announced with its role and label. Each view
+  names its publisher, and none can cover the consent sheet or take the keyboard from it. Images from URLs are not
+  drawn yet (they wait for `net` fetching).
+- What code extensions contribute reaches the same places as the core's: commands in the editor and file-tree menus
+  (with `when` and `enablement`), on key bindings and on status bar items; formatters for *Format Document* and format
+  on save (chosen per language with `editor.formatters`); code actions in *Quick Fix…*; diagnostics in the Problems view
+  and the editor, tagged with the extension; gutter, line and after-the-line decorations in theme tones; and tasks in
+  *Tasks: Run Task…*. Providers answer within a deadline and are cancelled when you type, so they never hold up typing;
+  a late answer is dropped and noted in the extension's log. What an extension showed goes when it is disabled,
+  uninstalled or crashes. The manifest gains `[[menus]]`, `[[status-bar]]`, `[[formatters]]`, `[[code-actions]]`,
+  `[[diagnostics]]`, `[[decorations]]` and `[[tasks]]`, checked like the other contributions.
 - Code extensions run: their commands appear in the command palette, and the first one starts the extension in its
   own `codeyard-exthost` process. Every file, search and process call is checked against the extension's declared
   permissions and the folder's trust before it reaches the folder, locally and over SSH; a denial says which line to
@@ -216,6 +234,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rows are 1.2 × the font size instead of the editor's looser 1.5 ×.
 - File tree rows are a little taller and roomier (24 px rows, wider side padding and icon gap).
 
+- Port mappings and mounted storage use responsive inspection cards with copyable addresses and paths.
+  Log entries place timestamp and severity above full-width messages, with a full-width search and console footer.
+
+- Container details promote the selected name and file/terminal actions into the header. Responsive CPU/memory
+  cards show current readings above charts, disk/network activity shares the available width, and log search has a visible field frame.
+
+- Container Overview fills the available width when resizing or hiding columns. Name and Image expand while
+  metrics stay aligned with larger table text; header actions and search/filters wrap in narrow windows. Sorting moves to the
+  Name/CPU/Memory column headers, and Clear filters appears only for an active query or filter.
+- The Container Overview header combines connection, update state and fleet counts, with grouped filters
+  and a framed search field. Redundant initial navigation and duplicate count rows are removed.
+
 ### Fixed
 
 - The divider between editor groups no longer jumps away from the pointer when the interface scale or the window size
@@ -263,19 +293,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The workspace-symbol test ran with language servers turned off, so it could never pass; it now starts rust-analyzer.
 
-### Changed
+### Security
 
-- Port mappings and mounted storage use responsive inspection cards with copyable addresses and paths.
-  Log entries place timestamp and severity above full-width messages, with a full-width search and console footer.
-
-- Container details promote the selected name and file/terminal actions into the header. Responsive CPU/memory
-  cards show current readings above charts, disk/network activity shares the available width, and log search has a visible field frame.
-
-- Container Overview fills the available width when resizing or hiding columns. Name and Image expand while
-  metrics stay aligned with larger table text; header actions and search/filters wrap in narrow windows. Sorting moves to the
-  Name/CPU/Memory column headers, and Clear filters appears only for an active query or filter.
-- The Container Overview header combines connection, update state and fleet counts, with grouped filters
-  and a framed search field. Redundant initial navigation and duplicate count rows are removed.
+- `libz-sys` 1.1.31 (RUSTSEC-2026-0418): its build script no longer writes the build's environment under `target/`. No
+  release or CI build had secrets in that environment.
 
 ## [0.5.0] - 2026-10-27
 
@@ -780,7 +801,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/doancan/codeyard/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/doancan/codeyard/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/doancan/codeyard/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/doancan/codeyard/compare/v0.3.2...v0.4.0

@@ -53,6 +53,13 @@ pub const EXTHOST_MEMORY_BYTES: u64 = 512 * 1024 * 1024;
 pub const GUEST_CALL_MILLIS: u64 = 2_000;
 /// `activate` may take longer: language runtimes start there.
 pub const ACTIVATE_MILLIS: u64 = 10_000;
+/// How long the app waits for a provider (formatter, code actions, tasks) to answer a request. A later answer is dropped
+/// and noted in the extension's log; the user's typing never waits for it.
+pub const PROVIDER_DEADLINE_MILLIS: u64 = 1_000;
+/// Text of a status bar item.
+pub const STATUS_TEXT_LEN: usize = 64;
+/// Diagnostics or decorations one extension may set on one file; the rest are dropped.
+pub const MARKS_PER_FILE: usize = 1_000;
 /// One `net` request, from the first connection to the last byte of the response, redirects included.
 pub const NET_TIMEOUT_SECS: u64 = 60;
 /// Redirects one `net` request follows; each is checked against `net` and the peer address rules again.

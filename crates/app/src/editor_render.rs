@@ -330,7 +330,7 @@ impl Render for EditorView {
                                                 let (start, end) = (line_start + r.start, line_start + r.end);
                                                 let (b0, b1) = (byte_of(full, r.start), byte_of(full, r.end));
                                                 let text = full[b0..b1].to_string();
-                                                let annotation = |id: &'static str, hint: SharedString, opacity| {
+                                                let annotation = |id: &'static str, hint: SharedString, color: u32, opacity| {
                                                     let run = TextRun {
                                                         len: text.len(),
                                                         font: gpui::font(font_family.clone()),
@@ -355,7 +355,7 @@ impl Render for EditorView {
                                                         .items_center()
                                                         .justify_end()
                                                         .text_size(px(font_size * 0.85))
-                                                        .text_color(ui::ca(p.text_muted, opacity))
+                                                        .text_color(ui::ca(color, opacity))
                                                         .child(div().min_w_0().max_w(px(480.)).truncate().child(hint.clone()))
                                                         .tooltip(move |_, cx| cx.new(|_| crate::workbench::Tooltip(hint.clone())).into())
                                                 };
@@ -463,6 +463,9 @@ impl Render for EditorView {
                                                         None if debug_line == Some(ix) => d.bg(ui::ca(p.warning, 0.22)),
                                                         None => d.when(current && line_hl_on, |d| d.bg(c(p.current_line))),
                                                     })
+                                                    .when_some(this.ext_tone(ix, ext_api::value::DecorationPlace::Line), |d, tone| {
+                                                        d.bg(ui::ca(super::tone_color(&p, tone), 0.14))
+                                                    })
                                                     .child(
                                                         div()
                                                             .id(("gutter", row))
@@ -478,6 +481,21 @@ impl Render for EditorView {
                                                             .when_some(
                                                                 editor_decor::line_number(&numbers_mode, ix, cursor_line).filter(|_| seg == 0),
                                                                 |d, n| d.child(n),
+                                                            )
+                                                            // An extension's gutter decoration: a dot in its tone.
+                                                            .when_some(
+                                                                this.ext_tone(ix, ext_api::value::DecorationPlace::Gutter).filter(|_| seg == 0),
+                                                                |d, tone| {
+                                                                    d.child(
+                                                                        div()
+                                                                            .absolute()
+                                                                            .left(px(theme::SPACE[4]))
+                                                                            .top(px(line_h / 2. - 3.))
+                                                                            .size(px(6.))
+                                                                            .rounded_full()
+                                                                            .bg(c(super::tone_color(&p, tone))),
+                                                                    )
+                                                                },
                                                             )
                                                             // Breakpoint: red dot; on an empty gutter a dim preview on hover, toggled on click.
                                                             .when(seg == 0, |d| {
@@ -586,11 +604,24 @@ impl Render for EditorView {
                                                     )
                                                     .when_some(
                                                         this.eol_hint(ix).filter(|_| seg == 0 && inline_blame.as_ref().is_none_or(|(l, ..)| *l != ix)),
-                                                        |d, hint| d.child(annotation("line-end-hint", hint.into(), 0.65)),
+                                                        |d, hint| d.child(annotation("line-end-hint", hint.into(), p.text_muted, 0.65)),
+                                                    )
+                                                    // Extension text after the line, when nothing of the editor's own is there.
+                                                    .when_some(
+                                                        this.ext_after(ix).filter(|_| {
+                                                            last_seg && this.eol_hint(ix).is_none() && inline_blame.as_ref().is_none_or(|(l, ..)| *l != ix)
+                                                        }),
+                                                        |d, (text, tone, hover)| {
+                                                            let shown = match hover {
+                                                                Some(h) => format!("{text} · {h}"),
+                                                                None => text,
+                                                            };
+                                                            d.child(annotation("extension-decoration", shown.into(), super::tone_color(&p, tone), 0.8))
+                                                        },
                                                     )
                                                     // Right-aligned inside the space left after the shaped code.
                                                     .when_some(inline_blame.as_ref().filter(|(l, _, _)| *l == ix && seg == 0), |d, (_, _, text)| {
-                                                        d.child(annotation("inline-blame", text.clone(), 0.8))
+                                                        d.child(annotation("inline-blame", text.clone(), p.text_muted, 0.8))
                                                     })
                                                     .child(LineElement {
                                                         editor: entity.clone(),

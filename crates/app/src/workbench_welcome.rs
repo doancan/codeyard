@@ -316,6 +316,7 @@ impl Workbench {
                     Page::Merge(_) => "merge",
                     Page::Compare(_) => "compare",
                     Page::Search(_) => "search",
+                    Page::ExtView(_) => "extension-view",
                 },
                 self.tabs.page_active,
             )
