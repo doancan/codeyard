@@ -182,20 +182,6 @@ pub enum Request {
         from: String,
         to: String,
     },
-    // Version 14 (appended: earlier variants keep their wire tags).
-    /// Where `program` is: an executable file on the login shell's PATH (never a builtin or a function), as an
-    /// absolute path. `Path(None)` when there is none. Extensions resolve their programs with it.
-    Which {
-        program: String,
-    },
-    /// `ProcSpawn` with an explicit environment, for extensions: `program` must be an absolute path, and the process
-    /// gets only `env` on top of a minimal PATH, HOME, LANG and TMPDIR, never the user's or the agent's environment.
-    ProcSpawnEnv {
-        program: String,
-        args: Vec<String>,
-        cwd: Option<String>,
-        env: Vec<(String, String)>,
-    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -332,9 +318,6 @@ pub enum Response {
         cwd: Option<String>,
     },
     Shells(Vec<String>),
-    // Version 14 (appended: earlier variants keep their wire tags).
-    /// Answer to `Which`.
-    Path(Option<String>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
