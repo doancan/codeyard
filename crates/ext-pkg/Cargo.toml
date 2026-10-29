@@ -12,8 +12,8 @@ publish = false
 testing = []
 
 [dependencies]
-ext-api = { version = "0.5.0", path = "../ext-api" }
-ext-manifest = { version = "0.5.0", path = "../ext-manifest" }
+ext-api = { version = "0.6.0", path = "../ext-api" }
+ext-manifest = { version = "0.6.0", path = "../ext-manifest" }
 flate2 = "1.1.10"
 sha2 = "0.11.1"
 # Reads a component's imports; a parser only, no compiler or runtime (those live in codeyard-exthost).
