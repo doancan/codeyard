@@ -44,12 +44,12 @@ impl Registry {
         let Some(Frame { id, body }) = proto::read_frame::<Request>(&mut input)? else { return Ok(()) };
         let Request::Hello { client_version, session } = body else {
             let err = Response::Error(Error::Other("expected a hello first".into()));
-            return proto::write_frame(&mut output, &Frame { id, body: err });
+            return proto::write_frame(&mut output, &Frame { id, body: &err });
         };
         let mut info = match hello(client_version, false) {
             Ok(Response::Hello(info)) => info,
-            Ok(other) => return proto::write_frame(&mut output, &Frame { id, body: other }),
-            Err(e) => return proto::write_frame(&mut output, &Frame { id, body: Response::Error(e) }),
+            Ok(other) => return proto::write_frame(&mut output, &Frame { id, body: &other }),
+            Err(e) => return proto::write_frame(&mut output, &Frame { id, body: &Response::Error(e) }),
         };
         let key = session.unwrap_or_else(new_session_id);
         let (sess, resumed) = {
