@@ -175,6 +175,29 @@ fn a_permission_not_granted_is_refused_without_leaving_the_exthost() {
 }
 
 #[test]
+fn a_permission_turned_off_is_refused_from_the_next_call() {
+    let d = dir("grants");
+    let (c, sha) = compile(&d);
+    let mut h = Host::start(hello(&d, &c, sha, &["net"], false)).ready();
+    h.command("fetch", "https://api.example.com/x");
+    assert!(matches!(h.next(), ToApp::Start { call: Start::Fetch { .. }, .. }));
+    // The user turns `net` off on the extension page: no restart, the next call is refused and the app is told.
+    h.send(&ToHost::Grants(Vec::new()));
+    let id = h.command("fetch", "https://api.example.com/x");
+    let (answer, other) = h.answer(id);
+    assert_eq!(answer, Ok(Response::Json("denied net Why::RevokedByUser".into())));
+    let reported = other.iter().find_map(|m| match m {
+        ToApp::Denied { call, denied } => Some((call.as_str(), denied.permission.as_str(), denied.why)),
+        _ => None,
+    });
+    assert_eq!(reported, Some(("net/fetch", "net", ext_api::value::Why::RevokedByUser)));
+    // And on again.
+    h.send(&ToHost::Grants(vec!["net".into()]));
+    h.command("fetch", "https://api.example.com/x");
+    assert!(matches!(h.next(), ToApp::Start { call: Start::Fetch { .. }, .. }));
+}
+
+#[test]
 fn an_untrusted_folder_refuses_sending() {
     let d = dir("untrusted");
     let (c, sha) = compile(&d);

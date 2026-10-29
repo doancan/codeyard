@@ -374,10 +374,12 @@ npm test       # TypeScript (coming)
 
 **Debug.** Open the palette and run **Developer: Extension Inspector**. It shows:
 - why and when your extension activated
-- every call, with how long it took
-- every denied call, with a **Copy fix** button
-- the live view tree (hover to highlight)
-- logs and crashes with file:line (source maps are applied for TypeScript)
+- every call, with how long it took: for a command, the time in your code; for a call to Codeyard, the time the work
+  took (I/O) and the time around it (overhead)
+- every denied call, with a **Copy fix** button that copies the `[permissions]` line to add
+- logs with their level, and the last crash with its frames (file:line as far as your build's debug info allows)
+
+The live view tree with highlighting and source maps for TypeScript are not there yet; they come with extension views.
 
 While a debugger is attached, nothing times out. `storage` keeps data across sessions, and in `cyx dev` hot reload also keeps your in-memory state.
 

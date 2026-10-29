@@ -44,9 +44,20 @@ pub(super) struct CodeState {
     sent_settings: HashMap<String, Vec<(String, Option<String>)>>,
     /// Progress shown for each extension: id → (title, message, percent).
     pub(super) progress: HashMap<(String, u64), (String, Option<String>, Option<u8>)>,
+    /// Activations, call times and denials for the Inspector and the extension page (#108).
+    pub(super) record: Arc<Mutex<crate::ext_inspector::Record>>,
 }
 
 impl CodeState {
+    /// The running exthost of `id`.
+    pub(super) fn process(&self, id: &str) -> Option<Arc<Process>> {
+        self.procs.get(id).cloned()
+    }
+
+    pub(super) fn record(&self) -> std::sync::MutexGuard<'_, crate::ext_inspector::Record> {
+        self.record.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
     /// Started, or starting.
     pub(super) fn running(&self, id: &str) -> bool {
         self.procs.contains_key(id) || self.queued.contains_key(id)
@@ -74,6 +85,7 @@ impl Default for CodeState {
             sent_settings: HashMap::new(),
             checked_workspace: HashSet::new(),
             progress: HashMap::new(),
+            record: Arc::default(),
         }
     }
 }
@@ -106,18 +118,20 @@ impl Workbench {
         out
     }
 
-    /// What `extension` may do in this window.
-    fn extension_scope(&self, active: &crate::ext::Active, cx: &App) -> Scope {
+    /// What `extension` may do in this window: declared, minus the user's switches, masked by trust.
+    pub(super) fn extension_scope(&self, active: &crate::ext::Active, cx: &App) -> Scope {
         let roots = self.all_roots(cx);
         let trusted = roots.iter().all(|r| self.is_trusted_root(r, cx));
         let trust = if trusted { ext_core::trust::Trust::Trusted } else { ext_core::trust::Trust::Untrusted };
-        let eff = ext_core::trust::effective(&active.manifest, &ext_manifest::Permissions::default(), trust);
+        let revoked = self.extension_revoked(active.id());
+        let eff = ext_core::trust::effective(&active.manifest, &revoked, trust);
         Scope {
             extension: active.id().to_string(),
             permissions: eff.permissions,
             roots,
             trusted,
             dependencies: active.manifest.dependencies.iter().map(|(d, _)| d.to_string()).collect(),
+            revoked,
         }
     }
 
@@ -133,6 +147,7 @@ impl Workbench {
         }
         let (id, answer) = self.cfg.exts.code.pending.lock().unwrap_or_else(|p| p.into_inner()).add(extension);
         self.cfg.exts.code.user_action.insert(extension.to_string(), id);
+        self.cfg.exts.code.record().request_sent(extension, id, &format!("command:{command}"));
         let msg = ToHost::Handle { id, deadline_ms: 0, request: ext_runtime::command(command, "null") };
         self.send_to_extension(&active, &format!("command:{command}"), Some(msg), window, cx);
         let ext = extension.to_string();
@@ -211,6 +226,7 @@ impl Workbench {
         let untrusted = !scope.trusted;
         let tx = self.cfg.exts.code.tx.clone();
         let reason = reason.to_string();
+        let why = reason.clone();
         // The extension in development runs without the OS sandbox (its author's folder); everything installed runs in it.
         let sandbox = crate::ext::dev_dir().is_none_or(|d| d != active.dir);
         let task = cx.background_executor().spawn(async move {
@@ -244,6 +260,7 @@ impl Workbench {
                 let queued = code.queued.remove(&ext).unwrap_or_default();
                 match started {
                     Ok((id, p)) => {
+                        code.record().activated(&id, &why);
                         let p = Arc::new(p);
                         for m in &queued {
                             let _ = p.send(m);
@@ -302,6 +319,7 @@ impl Workbench {
                 self.notice = Some(Notice::Error(crate::i18n::tf("{0} failed to start: {1}", &[&id, &e]).into()));
                 cx.notify();
             }
+            Event::Message(ToApp::Denied { call, denied }) => self.cfg.exts.code.record().denied(id, &call, &denied),
             Event::Message(ToApp::Trap(t)) => {
                 self.log_extension(id, LogLevel::Error, format!("trap: {} {}", t.message, t.frames.join(" ← ")));
                 self.cfg.exts.code.last_trap.insert(id.to_string(), t);
@@ -311,6 +329,7 @@ impl Workbench {
                 self.on_extension_exited(id, crashed, cx);
                 let code = &mut self.cfg.exts.code;
                 code.procs.remove(id);
+                code.record().exited(id);
                 code.pending.lock().unwrap_or_else(|p| p.into_inner()).fail_all(id, &reason);
                 if crashed {
                     if code.crashes.record(id, std::time::Instant::now()) {
@@ -338,6 +357,7 @@ impl Workbench {
         match n {
             Notify::Log { level, message } => self.log_extension(id, level, message),
             Notify::Respond { id: req, result } => {
+                self.cfg.exts.code.record().request_answered(id, req, result.is_err());
                 self.cfg.exts.code.pending.lock().unwrap_or_else(|p| p.into_inner()).answer(id, req, result);
             }
             Notify::Cancel { ticket } => {
@@ -380,11 +400,15 @@ impl Workbench {
 
     /// A host call that returns a ticket: checked, then run on a background thread or answered from the window.
     fn on_extension_call(&mut self, id: &str, ticket: u64, call: Start, window: &mut Window, cx: &mut Context<Self>) {
+        let arrived = std::time::Instant::now();
         let Some(proc) = self.cfg.exts.code.procs.get(id).cloned() else { return };
         let reg = crate::ext::current();
         let Some(active) = reg.active.iter().find(|e| e.id() == id).cloned() else { return };
         let scope = self.extension_scope(&active, cx);
+        let record = self.cfg.exts.code.record.clone();
+        record.lock().unwrap_or_else(|p| p.into_inner()).ticket_started(id, ticket, call.wit_name(), arrived);
         let complete = |p: &Arc<Process>, c: Completion| {
+            record.lock().unwrap_or_else(|p| p.into_inner()).ticket_done(id, ticket, &c, None);
             let _ = p.send(&ToHost::Complete { ticket, completion: c });
         };
         match &call {
@@ -447,11 +471,14 @@ impl Workbench {
                 let cancel = Arc::new(AtomicBool::new(false));
                 self.cfg.exts.code.cancels.insert((id.to_string(), ticket), cancel.clone());
                 let p = proc.clone();
+                let ext = id.to_string();
                 cx.background_executor()
                     .spawn(async move {
                         let sink = ToExthost { proc: p.clone(), ticket };
+                        let started = std::time::Instant::now();
                         let c = ext_broker::run(host.as_ref(), &scope, &call, &sink, &cancel)
                             .unwrap_or_else(|| Completion::Failed(v::Error::Other(format!("{} is not available in this version", call.wit_name()))));
+                        record.lock().unwrap_or_else(|p| p.into_inner()).ticket_done(&ext, ticket, &c, Some(started.elapsed()));
                         let _ = p.send(&ToHost::Complete { ticket, completion: c });
                     })
                     .detach();
@@ -476,14 +503,16 @@ impl Workbench {
         let target = reg.active.iter().find(|e| command.strip_prefix(e.id()).is_some_and(|r| r.starts_with('.'))).cloned();
         let Some(target) = target else {
             let c = Completion::Failed(v::Error::NotFound(format!("{command} is not available")));
+            self.cfg.exts.code.record().ticket_done(caller, ticket, &c, None);
             let _ = proc.send(&ToHost::Complete { ticket, completion: c });
             return;
         };
         let local = command[target.id().len() + 1..].to_string();
+        let record = self.cfg.exts.code.record.clone();
+        let caller = caller.to_string();
         let (id, answer) = self.cfg.exts.code.pending.lock().unwrap_or_else(|p| p.into_inner()).add(target.id());
         let msg = ToHost::Handle { id, deadline_ms: 0, request: ext_runtime::command(&local, args_json) };
         self.send_to_extension(&target, &format!("command:{local}"), Some(msg), window, cx);
-        let _ = caller;
         let answer = crate::ui::bridge(answer);
         cx.background_executor()
             .spawn(async move {
@@ -494,6 +523,7 @@ impl Workbench {
                     Some(Err(e)) => Completion::Failed(e),
                     None => Completion::Failed(v::Error::Cancelled),
                 };
+                record.lock().unwrap_or_else(|p| p.into_inner()).ticket_done(&caller, ticket, &c, None);
                 let _ = proc.send(&ToHost::Complete { ticket, completion: c });
             })
             .detach();
@@ -518,6 +548,8 @@ impl Workbench {
             self.cfg.exts.code.sent_settings.insert(id, now);
         }
         self.stop_removed_extensions();
+        // Another window may have changed a permission switch.
+        self.refresh_extension_grants(cx);
         self.activate_for_workspace(window, cx);
     }
 
@@ -581,6 +613,7 @@ impl Workbench {
 impl Workbench {
     /// Complete a ticket of `extension` from the window (a pick, an input).
     fn complete_extension_ticket(&mut self, extension: &str, ticket: u64, completion: Completion) {
+        self.cfg.exts.code.record().ticket_done(extension, ticket, &completion, None);
         if let Some(p) = self.cfg.exts.code.procs.get(extension) {
             let _ = p.send(&ToHost::Complete { ticket, completion });
         }

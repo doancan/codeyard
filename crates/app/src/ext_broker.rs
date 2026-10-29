@@ -23,6 +23,8 @@ pub struct Scope {
     pub trusted: bool,
     /// The extension's own dependencies, whose commands it may run.
     pub dependencies: Vec<String>,
+    /// What the user turned off on the extension page, so a denial says `revoked-by-user` and names the entry.
+    pub revoked: Permissions,
 }
 
 fn denied(permission: String, why: v::Why) -> v::Error {
@@ -51,12 +53,21 @@ impl Scope {
         globs.iter().any(|g| crate::globs::path_matches(g, rel) && (!hidden || g.split('/').any(|p| p.starts_with(".env") || p == ".git")))
     }
 
+    /// The denial for `kind` (`read`, `net` …) of `target`: the user's switch when one they turned off matches it, else
+    /// the line to add to the manifest.
+    fn refuse(&self, kind: &str, target: &str, revoked: &[String], matches: impl Fn(&str) -> bool, why: v::Why) -> v::Error {
+        match revoked.iter().find(|r| matches(r)) {
+            Some(r) => denied(format!("{kind} = [{r:?}]"), v::Why::RevokedByUser),
+            None => denied(format!("{kind} = [{target:?}]"), why),
+        }
+    }
+
     pub fn may_read(&self, path: &str) -> Result<String, v::Error> {
         let rel = self.relative(path).ok_or_else(|| outside(path))?;
         if Self::allowed(&self.permissions.read, &rel) {
             Ok(normalize(path).unwrap_or_default())
         } else {
-            Err(denied(format!("read = [\"{rel}\"]"), v::Why::NotDeclared))
+            Err(self.refuse("read", &rel, &self.revoked.read, |g| Self::allowed(&[g.to_string()], &rel), v::Why::NotDeclared))
         }
     }
 
@@ -65,19 +76,23 @@ impl Scope {
         if Self::allowed(&self.permissions.write, &rel) {
             Ok(normalize(path).unwrap_or_default())
         } else {
-            Err(denied(format!("write = [\"{rel}\"]"), self.why(true)))
+            Err(self.refuse("write", &rel, &self.revoked.write, |g| Self::allowed(&[g.to_string()], &rel), self.why(true)))
         }
     }
 
     pub fn may_run(&self, program: &str) -> Result<(), v::Error> {
-        if self.permissions.run.iter().any(|p| p == program) { Ok(()) } else { Err(denied(format!("run = [\"{program}\"]"), self.why(true))) }
+        if self.permissions.run.iter().any(|p| p == program) {
+            Ok(())
+        } else {
+            Err(self.refuse("run", program, &self.revoked.run, |p| p == program, self.why(true)))
+        }
     }
 
     /// A command the extension may run: its own, a dependency's, or a core command its manifest lists.
     pub fn may_execute(&self, command: &str) -> Result<(), v::Error> {
         if let Some(core) = command.strip_prefix("core:") {
             let listed = self.permissions.commands.iter().any(|c| c == command || c == core);
-            return if listed { Ok(()) } else { Err(denied(format!("commands = [\"{command}\"]"), self.why(true))) };
+            return if listed { Ok(()) } else { Err(self.refuse("commands", command, &self.revoked.commands, |c| c == command || c == core, self.why(true))) };
         }
         let owner_ok = |owner: &str| command.strip_prefix(owner).is_some_and(|r| r.starts_with('.'));
         if owner_ok(&self.extension) || self.dependencies.iter().any(|d| owner_ok(d)) {

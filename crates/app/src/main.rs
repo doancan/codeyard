@@ -65,6 +65,9 @@ mod ext;
 mod ext_broker;
 #[cfg(test)]
 mod ext_code_tests;
+mod ext_inspector;
+#[cfg(test)]
+mod ext_inspector_ui_tests;
 #[cfg(test)]
 mod ext_providers_tests;
 mod ext_registry;
