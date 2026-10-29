@@ -1,0 +1,11 @@
+package codeyard:spike@0.1.0;
+
+interface host {
+  log: func(msg: string);
+}
+
+world ext {
+  import host;
+  export activate: func();
+  export call: func(input: string) -> string;
+}

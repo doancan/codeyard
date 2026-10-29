@@ -1,0 +1,27 @@
+[package]
+name = "spike-exthost"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "spike-exthost"
+path = "src/main.rs"
+
+[[bin]]
+name = "spike-measure"
+path = "src/measure.rs"
+
+[dependencies]
+wasmtime = { version = "50", default-features = false, features = ["cranelift", "component-model", "runtime", "parallel-compilation", "addr2line", "demangle", "std"] }
+wasmtime-wasi = { version = "50", default-features = false }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = true
+
+[workspace]

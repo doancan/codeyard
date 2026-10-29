@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@bytecodealliance/componentize-js": "0.23.0",
+    "@octokit/core": "7.0.8",
+    "zod": "4.6.7",
+    "esbuild": "0.28.2"
+  }
+}
