@@ -131,6 +131,7 @@ Bookmarks: List…
 Bookmarks: Toggle	
 Both sides are the same folder.	
 Both, Incoming First	
+Bottom panel	
 Box invisible and look-alike Unicode characters (zero-width spaces, bidi controls, Cyrillic letters inside Latin words)	
 Branch {}	
 Breaking on: {}	
@@ -1532,7 +1533,6 @@ Output
 Output: Clear	
 Overview	
 Overwrite	
-Panel	
 Passphrase	
 Password	
 Paste	

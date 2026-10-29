@@ -111,7 +111,7 @@ const MAX_OUTPUT_LINES: usize = 400;
 impl PanelSnap {
     pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>) -> Vec<NodeId> {
         let mut list = Node::new(Role::TabList);
-        list.set_label(t("Panel"));
+        list.set_label(t("Bottom panel"));
         let mut kids = Vec::new();
         for (i, (tab, label, count)) in self.tabs.iter().enumerate() {
             let id = NodeId(PANEL_TAB + i as u64);

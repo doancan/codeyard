@@ -3263,4 +3263,4 @@ Problems: {}	Sorunlar: {}
 {0}, line {1}	{0}, satır {1}
 {0}, line {1}, column {2}	{0}, satır {1}, sütun {2}
 {0}, problems: {1}	{0}, sorun: {1}
-Panel	Panel
+Bottom panel	Alt panel
