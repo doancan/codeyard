@@ -667,7 +667,21 @@ fn read_dir(path: &Path) -> Result<Vec<DirEntry>, Error> {
 fn stat(path: &Path) -> Result<Meta, Error> {
     let m = fs::metadata(path).map_err(|e| map_err(path, e))?;
     let mtime_ms = m.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_millis() as i64);
-    Ok(Meta { kind: kind_of(m.file_type()), size: m.len(), mtime_ms, readonly: m.permissions().readonly() })
+    let created_ms = m.created().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_millis() as i64);
+    Ok(Meta { kind: kind_of(m.file_type()), size: m.len(), mtime_ms, readonly: m.permissions().readonly(), file_id: file_id(&m), created_ms })
+}
+
+/// Device and inode in one value (a path deleted and created again gets a new one, writes keep it).
+#[cfg(unix)]
+fn file_id(m: &fs::Metadata) -> u64 {
+    use std::os::unix::fs::MetadataExt;
+    m.ino() ^ m.dev().rotate_left(32)
+}
+
+/// Windows has no stable file index in the standard library; the creation time stands in for it.
+#[cfg(not(unix))]
+fn file_id(_: &fs::Metadata) -> u64 {
+    0
 }
 
 fn read(path: &Path) -> Result<Response, Error> {

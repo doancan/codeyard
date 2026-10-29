@@ -3105,6 +3105,18 @@ No matches in this file any more.	Bu dosyada artık eşleşme yok.
 Interface scale must be between 75% and 200%.	Arayüz ölçeği %75 ile %200 arasında olmalıdır.
 Interface scale: {}%	Arayüz ölçeği: %{}
 Interface scale of every window, from 0.75 (75%) to 2 (200%); View: Zoom In and Zoom Out step through 75%, 80% and every 10% from 90% to 200%. Editor and terminal font sizes are scaled with it. Your own settings only; a folder cannot change it	Tüm pencerelerin arayüz ölçeği, 0.75 (%75) ile 2 (%200) arasında; Görünüm: Büyüt ve Küçült %75, %80 ve %90 ile %200 arasında %10 adımlarla ilerler. Düzenleyici ve terminal yazı tipi boyutları da onunla ölçeklenir. Yalnızca kendi ayarlarınızda; bir klasör bunu değiştiremez
+Merge in progress	Birleştirme sürüyor
+Rebase in progress	Rebase sürüyor
+Cherry-pick in progress	Cherry-pick sürüyor
+Revert in progress	Geri alma sürüyor
+Bisect in progress	Bisect sürüyor
+Repository is no longer available: {}	Depo artık kullanılamıyor: {}
+Repository changed while the operation was pending.	İşlem beklerken depo değişti.
+Select a repository first	Önce bir depo seçin
+Repository: {}	Depo: {}
+no upstream	takip edilen dal yok
+Repositories	Depolar
+Repository discovery failed	Depolar aranamadı
 
 # Extensions: running code
 {} contains code, but codeyard-exthost is missing beside Codeyard	{} kod içeriyor, ancak Codeyard'ın yanında codeyard-exthost yok

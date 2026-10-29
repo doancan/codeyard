@@ -53,6 +53,14 @@ pub const EXTHOST_MEMORY_BYTES: u64 = 512 * 1024 * 1024;
 pub const GUEST_CALL_MILLIS: u64 = 2_000;
 /// `activate` may take longer: language runtimes start there.
 pub const ACTIVATE_MILLIS: u64 = 10_000;
+/// One `net` request, from the first connection to the last byte of the response, redirects included.
+pub const NET_TIMEOUT_SECS: u64 = 60;
+/// Redirects one `net` request follows; each is checked against `net` and the peer address rules again.
+pub const NET_REDIRECTS: usize = 5;
+/// The body one `net` request sends.
+pub const NET_REQUEST_BYTES: u64 = 16 * 1024 * 1024;
+/// The body one `net` request receives.
+pub const NET_RESPONSE_BYTES: u64 = 64 * 1024 * 1024;
 
 /// An encoded view (`ext-ui`), refused before it is decoded.
 pub const UI_VIEW_BYTES: usize = 8 * 1024 * 1024;

@@ -43,6 +43,7 @@ impl Workbench {
             paths.push(format!("{dir}/index"));
             paths.push(format!("{dir}/HEAD"));
         }
+        paths.extend(self.repo_watch_paths());
         paths.sort();
         paths.dedup();
         if paths != self.watched {
@@ -66,6 +67,8 @@ impl Workbench {
                 self.load_folder_settings(root, cx);
             }
         }
+        let changed: Vec<String> = changes.iter().map(|(p, _)| p.clone()).collect();
+        self.refresh_repos_for(&changed, cx);
         if let Some(g) = &self.vcs.status {
             let prefix = format!("{}/", g.root.trim_end_matches('/'));
             let git_dir = g.git_dir.as_ref().map(|d| format!("{}/", d.trim_end_matches('/')));
@@ -313,6 +316,10 @@ impl Workbench {
                         let active = window.is_window_active() || cfg!(test);
                         if active && this.vcs.status.is_some() && this.git_refresh_idle() {
                             this.refresh_git(0, cx);
+                        }
+                        // The other repositories' rows are only on screen while Source Control is.
+                        if active && this.chrome.panel == Some(Panel::Scm) {
+                            this.refresh_repos(cx);
                         }
                     })
                     .is_ok();
