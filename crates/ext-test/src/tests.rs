@@ -1,0 +1,200 @@
+//! The SDK and the mock host together: one test extension, each command using one part of the API.
+
+use std::cell::Cell;
+use std::rc::Rc;
+use std::time::Duration;
+
+use codeyard_extension::native::{Call, Note};
+use codeyard_extension::prelude::*;
+
+use crate::{MockHost, ProcessFixture};
+
+const MANIFEST: &str = r#"
+[extension]
+id      = "you.probe"
+version = "0.1.0"
+name    = "Probe"
+license = "MIT"
+
+[code]
+entry = "Cargo.toml"
+
+[permissions]
+read = ["*.json"]
+net  = ["api.example.com"]
+run  = ["git"]
+why  = "Tests."
+
+[[commands]]
+id    = "greet"
+title = "Greet"
+
+[[views]]
+id       = "counter"
+title    = "Counter"
+location = "sidebar"
+
+[settings.interval]
+type        = "number"
+default     = 60
+description = "Seconds."
+"#;
+
+struct Probe;
+
+thread_local! {
+    static TICKS: Rc<Cell<u32>> = Rc::new(Cell::new(0));
+}
+
+impl Extension for Probe {
+    fn activate(ctx: Context) -> Result<()> {
+        ctx.command("greet", async |ctx, _args| {
+            match ctx.input(InputOptions::prompt("Your name?")).await? {
+                Some(name) => ctx.notice(format!("Hello, {name}!")),
+                None => ctx.notice("Hello, stranger."),
+            }
+            Ok(())
+        });
+        ctx.command("echo", async |_ctx, args| Ok(args));
+        ctx.command("pick", async |ctx, _args| ctx.quick_pick(["a", "b", "c"], PickOptions::default()).await);
+        ctx.command("fetch", async |ctx, args| {
+            let url = args.as_str().unwrap_or_default().to_string();
+            let r = ctx.fetch(Request::get(url)).await?.error_for_status()?;
+            r.json::<Value>()
+        });
+        ctx.command("read", async |ctx, args| ctx.read_text(&format!("file:///work/{}", args.as_str().unwrap_or_default())).await);
+        ctx.command("git", async |ctx, _args| {
+            let mut p = ctx.spawn(Command::new("git").args(["log", "--oneline"]));
+            let mut lines = 0;
+            while let Some(chunk) = p.next().await {
+                if let Chunk::Stdout(b) = chunk {
+                    lines += b.iter().filter(|&&c| c == b'\n').count();
+                }
+            }
+            Ok(json!({ "lines": lines, "code": p.wait().await? }))
+        });
+        ctx.command("abandon", async |ctx, _args| {
+            drop(ctx.spawn(Command::new("git").arg("status")));
+            Ok(())
+        });
+        ctx.command("count", async |ctx, _args| {
+            let n: u32 = ctx.storage().get_json("n")?.unwrap_or(0) + 1;
+            ctx.storage().set_json("n", &n)?;
+            Ok(n)
+        });
+        ctx.command("interval", async |ctx, _args| ctx.setting::<u32>("interval"));
+        ctx.command("words", async |ctx, _args| {
+            let doc = ctx.active_document().await?.ok_or("no document")?;
+            ctx.set_diagnostics(&doc.uri, &[Diagnostic::new(Range::line(0, 0, 1), DiagnosticSeverity::Hint, "first")]);
+            Ok(doc.text.split_whitespace().count())
+        });
+        ctx.command("fail", async |_ctx, _args| -> Result<()> { Err(Error::other("on purpose")) });
+        ctx.view("counter", async |ctx| Ok(json!({ "type": "text", "text": ctx.storage().get_json::<u32>("n")?.unwrap_or(0).to_string() })));
+        ctx.on_view_event("counter", async |ctx, _event| {
+            ctx.invalidate("counter");
+            Ok(())
+        });
+        ctx.formatter(async |_ctx, doc, _range, _options| Ok(vec![TextEdit::replace(Range::line(0, 0, doc.text.len() as u32), doc.text.trim())]));
+        let ticks = TICKS.with(Rc::clone);
+        ctx.every(60, async move |_ctx| ticks.set(ticks.get() + 1));
+        Ok(())
+    }
+}
+
+fn host() -> MockHost {
+    let h = MockHost::allow_all();
+    h.manifest(MANIFEST);
+    h.activate::<Probe>().unwrap();
+    h
+}
+
+#[test]
+fn a_command_waits_for_input_and_shows_a_notice() {
+    let h = host();
+    h.answer_input("Ada");
+    h.command("greet", Value::Null).unwrap();
+    h.dismiss_input();
+    h.command("greet", Value::Null).unwrap();
+    assert_eq!(h.notices(), ["Hello, Ada!", "Hello, stranger."]);
+    assert_eq!(h.command("echo", json!([1, 2])).unwrap(), json!([1, 2]));
+    h.answer_pick(&[2]);
+    assert_eq!(h.command("pick", Value::Null).unwrap(), json!(2));
+    assert_eq!(h.command("pick", Value::Null).unwrap(), Value::Null);
+}
+
+#[test]
+fn fetch_uses_fixtures_and_undeclared_hosts_are_denied_with_the_fix() {
+    let h = host();
+    h.http("GET", "https://api.example.com/v1", 200, r#"{"ok":true}"#);
+    assert_eq!(h.command("fetch", json!("https://api.example.com/v1")).unwrap(), json!({"ok": true}));
+    assert_eq!(h.fetched()[0].url, "https://api.example.com/v1");
+    // No fixture: a clear error, not a hang.
+    let e = h.command("fetch", json!("https://api.example.com/missing")).unwrap_err();
+    assert!(e.to_string().contains("host.http"), "{e}");
+    let e = h.command("fetch", json!("https://evil.example.org/x")).unwrap_err();
+    let d = e.denied().expect("denied");
+    assert_eq!(d.why, Why::NotDeclared);
+    assert!(e.to_string().contains(r#"= fix: add to [permissions]:  net = ["evil.example.org"]"#), "{e}");
+    assert_eq!(h.denied().len(), 1);
+}
+
+#[test]
+fn reads_follow_the_read_globs() {
+    let h = host();
+    h.file("package.json", "{}").file("secret.txt", "x");
+    assert_eq!(h.command("read", json!("package.json")).unwrap(), json!("{}"));
+    let e = h.command("read", json!("secret.txt")).unwrap_err();
+    assert!(e.to_string().contains(r#"read = ["secret.txt"]"#), "{e}");
+}
+
+#[test]
+fn processes_stream_and_dropping_one_cancels_it() {
+    let h = host();
+    h.process("git", &["log", "--oneline"], ProcessFixture::ok("a\nb\nc\n"));
+    assert_eq!(h.command("git", Value::Null).unwrap(), json!({"lines": 3, "code": 0}));
+    assert_eq!(h.ran()[0].program, "git");
+    h.process("git", &["status"], ProcessFixture::ok(""));
+    h.command("abandon", Value::Null).unwrap();
+    assert!(h.notes().iter().any(|n| matches!(n, Note::CancelTicket(_))), "{:?}", h.notes());
+}
+
+#[test]
+fn storage_settings_and_documents() {
+    let h = host();
+    assert_eq!(h.command("count", Value::Null).unwrap(), json!(1));
+    assert_eq!(h.command("count", Value::Null).unwrap(), json!(2));
+    assert_eq!(h.storage()["n"], b"2");
+    assert_eq!(h.command("interval", Value::Null).unwrap(), json!(60));
+    h.setting("interval", Some("90"));
+    assert_eq!(h.command("interval", Value::Null).unwrap(), json!(90));
+    h.active_document("notes.md", "markdown", "one two three");
+    assert_eq!(h.command("words", Value::Null).unwrap(), json!(3));
+    assert_eq!(h.diagnostics("notes.md")[0].message, "first");
+    assert!(matches!(h.calls().last(), Some(Call::ActiveDocument)));
+}
+
+#[test]
+fn errors_views_formatters_and_timers() {
+    let h = host();
+    assert_eq!(h.command("fail", Value::Null).unwrap_err(), Error::Other("on purpose".into()));
+    let e = h.command("nope", Value::Null).unwrap_err();
+    assert!(e.to_string().contains("no command 'nope'"), "{e}");
+    h.command("count", Value::Null).unwrap();
+    assert_eq!(h.render("counter").unwrap(), json!({"type": "text", "text": "1"}));
+    h.view_event("counter", json!({"click": "inc"})).unwrap();
+    assert_eq!(h.invalidated(), ["counter"]);
+    let doc = Document { uri: h.uri("a.txt"), language: "text".into(), version: 1, text: "  x  ".into() };
+    let edits = h.format(doc, None, FormatOptions { tab_size: 4, insert_spaces: true }).unwrap();
+    assert_eq!(edits[0].new_text, "x");
+    // The virtual clock fires the 60 s timer twice in 150 s.
+    h.advance(Duration::from_secs(150));
+    assert_eq!(TICKS.with(|t| t.get()), 2);
+}
+
+#[test]
+fn an_untrusted_folder_refuses_sending() {
+    let h = host();
+    h.untrusted();
+    let e = h.command("fetch", json!("https://api.example.com/v1")).unwrap_err();
+    assert_eq!(e.denied().map(|d| d.why), Some(Why::UntrustedWorkspace));
+}

@@ -1,0 +1,13 @@
+[package]
+name = "codeyard-extension-test"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "A mock Codeyard for extension unit tests: fake files, fixture HTTP, recorded processes, a virtual clock"
+repository.workspace = true
+publish = false
+
+[dependencies]
+codeyard-extension = { version = "0.5.0", path = "../ext-sdk" }
+ext-manifest = { version = "0.5.0", path = "../ext-manifest" }
+serde_json = "1.0.154"

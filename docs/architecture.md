@@ -29,8 +29,11 @@ crates/
   ext-proto/ frames between the app and an extension host process: handshake, size cap, byte-rate budget
   ext-host/ `codeyard-exthost`, which runs one code extension's WebAssembly component; the only binary with wasmtime;
             ships beside the app
-  cyx/      the extension authors' command: new, dev (`--extension-dev`, hot reload), check, package, import-vscode;
-            ships beside the app
+  ext-sdk/  `codeyard-extension`, the Rust SDK extension authors depend on: async calls over tickets, built for
+            wasm32-wasip2 (wit-bindgen) or, on the host target, against the mock host (not in the app)
+  ext-test/ `codeyard-extension-test`, the mock host for extensions' native unit tests (not in the app)
+  cyx/      the extension authors' command: new, dev (`--extension-dev`, hot reload), check, package (builds Rust
+            extensions), test (runs one in `codeyard-exthost`), import-vscode; ships beside the app
   yard/     the extension registry's publish service (`yard` binary, hyper + SQLite): signed uploads, registry checks,
             the static signed index; runs on the registry's server, not with the app (see registry.md)
   theme/    colour tokens -> Rust constants (`design/tokens*.json`, `build.rs`), built-in themes

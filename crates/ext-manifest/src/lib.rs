@@ -4,6 +4,7 @@
 //!
 //! Design: docs/plugin-architecture.md §4–§6.
 
+mod allow;
 pub mod diagnostics;
 pub mod limits;
 mod raw;
@@ -27,6 +28,7 @@ pub use risk::{Clipboard, Level, Line, Permissions, Risk, risk};
 /// The file name of the manifest at the root of an extension.
 pub const FILE_NAME: &str = "codeyard-extension.toml";
 
+pub use allow::glob_match;
 pub use validate::{Options, check_package_path, is_deceptive};
 
 /// Parse and validate a manifest, as install and publish do. Every problem is reported, not just the first.
