@@ -751,6 +751,21 @@ ones show a lock, and stale or bare entries cannot be opened from the list. Hove
 The header offers **Add worktree** and **Refresh**. The list also refreshes with Git while Source Control and this section are
 visible, including checkouts added or removed in a terminal. Collapsing the section is remembered and pauses its refreshes.
 
+**Several repositories.** Source Control finds the repositories in the workspace folders and inside them (nested
+repositories, linked worktrees and submodules each count once). The search runs in the background, follows no
+symbolic links, skips hidden folders and dependency or build folders (`node_modules`, `target`, `dist`, `build`, …),
+goes at most four folders deep and stops at 64 repositories. With more than one, the changes list groups them by
+repository: each repository row shows its branch, ahead/behind counts, a missing upstream, a merge, rebase,
+cherry-pick, revert or bisect in progress, conflicts and the number of changes (hover for its path). Stage, unstage
+and discard on a file row or a group act on that row's repository, even when two repositories have files with the same
+path; clicking a file opens its repository's diff and selects that repository. The message box, Commit, Sync, the
+graph and the "…" menu act on the selected repository, named next to its branch; each repository keeps its own draft
+message and last result, and confirmations name the repository. Click a repository row to select it, or focus the list
+with Tab and use ↑/↓, Home and End to move between repositories and ←/→ (or Enter) to fold one. **Refresh** searches
+again. A repository that is removed or created again at the same path while an operation is pending gets nothing from
+it: the result says "Repository is no longer available" or "Repository changed while the operation was pending", and
+the operation never moves to another repository. With a single repository the panel looks as before.
+
 **Stash.** Besides stash and stash with untracked files there are "Stash Staged Changes" (only what is staged;
 needs git 2.35 or newer), "Stash with Name…" and "Show Stash…", which lists the files a stash changed and opens one
 as a diff (untracked files kept by a stash are not shown).
@@ -935,7 +950,8 @@ test individually for precise attribution.
 palette or `File: Open Workspace from File…`) adds all its folders. The folder list is remembered per
 project. Go to file lists `folder › path` for the extra folders, Find in Files searches all of them,
 every folder gets its own language server, tasks / tests / debugging / new terminals use the folder
-of the active file, and Source Control shows the repository of the active file. Each extra folder's own settings
+of the active file, and Source Control shows the repository of the active file (unless a repository inside that folder
+was picked in Source Control; see **Several repositories** under Git). Each extra folder's own settings
 (`.vscode/settings.json`, `.codeyard/settings.jsonc`) apply to its files: indentation (`editor.tabSize`,
 `editor.insertSpaces`), saving (`editor.formatOnSave`, `editor.codeActionsOnSave`,
 `files.trimTrailingWhitespace`, `files.insertFinalNewline`), `editor.formatOnPaste` / `formatOnType`
