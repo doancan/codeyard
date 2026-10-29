@@ -25,12 +25,16 @@ impl Workbench {
         let scale = if (settings::UI_SCALE_MIN..=settings::UI_SCALE_MAX).contains(&scale) { scale } else { 1. };
         let current = cx.global::<Settings>().ui_scale;
         if scale != current {
+            let session = cx.try_global::<settings::SessionScale>().copied().unwrap_or_default();
+            let file_before = session.file_value(current);
+            cx.set_global(settings::SessionScale(None));
             if self.config_paths().is_some() {
                 self.write_setting("ui.scale", settings::ui_scale_value(scale), window, cx);
             }
-            // Without a settings folder (tests, a broken folder), or if the file could not be written, the scale
-            // still applies for this session.
+            // Without a settings folder, or if the file could not be written, the scale still applies for this session
+            // and survives settings reloads until the file's own value changes.
             if cx.global::<Settings>().ui_scale != scale {
+                cx.set_global(settings::SessionScale(Some(settings::UnsavedScale { scale, file: file_before })));
                 cx.global_mut::<Settings>().ui_scale = scale;
             }
             cx.set_ui_scale(scale);

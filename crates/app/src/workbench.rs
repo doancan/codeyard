@@ -592,6 +592,8 @@ struct MenuState {
     actions: Vec<Box<dyn gpui::Action>>,
     return_focus: Option<FocusHandle>,
     app_path: Option<Vec<usize>>,
+    /// The Manage menu: re-anchored to the gear button whenever the viewport changes (zoom, resize).
+    follows_manage: bool,
     _sub: Subscription,
 }
 
@@ -1186,6 +1188,8 @@ impl Workbench {
                 term_list_w,
                 resizing_term_list: false,
                 resizing_split: false,
+                activity_scroll: gpui::ScrollHandle::new(),
+                activity_hints: Default::default(),
                 zen: None,
                 window_bounds: None,
             },

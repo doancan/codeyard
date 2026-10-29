@@ -8,9 +8,9 @@
 use std::path::{Path, PathBuf};
 
 use gpui::{
-    Bounds, Entity, EntityInputHandler, FileDropEvent, Focusable, KeyDownEvent, Keystroke, Modifiers, MouseButton, MouseDownEvent, MouseExitEvent,
-    MouseMoveEvent, MouseUpEvent, Pixels, PlatformInput, Point, ScrollDelta, ScrollWheelEvent, Size, TestAppContext, TouchPhase, VisualTestContext,
-    WindowHandle, point, px, size,
+    Bounds, Entity, EntityInputHandler, ExternalPaths, FileDropEvent, Focusable, KeyDownEvent, Keystroke, Modifiers, MouseButton, MouseDownEvent,
+    MouseExitEvent, MouseMoveEvent, MouseUpEvent, Pixels, PlatformInput, Point, ScrollDelta, ScrollWheelEvent, Size, TestAppContext, TouchPhase,
+    VisualTestContext, WindowHandle, point, px, size,
 };
 use serde_json::{Value, json};
 
@@ -43,6 +43,30 @@ fn ui_scale_accepts_both_ends_of_the_range_and_values_between_steps() {
 }
 
 #[test]
+fn hand_typed_scales_are_rounded_to_whole_percent() {
+    // Each distinct scale rasterises its own glyphs and icons, so the number of distinct scales must stay small.
+    for (text, want) in [("1.234", 1.23), ("1.2349999", 1.23), ("1.235", 1.24), ("0.7500001", 0.75), ("1.999999", 2.), ("1.0000001", 1.)] {
+        assert_eq!(parsed(&format!(r#"{{ "ui.scale": {text} }}"#)), (want, vec![]), "ui.scale {text}");
+    }
+    let distinct: std::collections::BTreeSet<u32> =
+        (0..=12_500).map(|i| 0.75 + f64::from(i) / 10_000.).filter_map(|n| settings::parse_ui_scale(&json!(n))).map(f32::to_bits).collect();
+    assert_eq!(distinct.len(), 126, "75% to 200% in whole percent");
+}
+
+#[test]
+fn an_unsaved_zoom_wins_until_the_file_says_something_else() {
+    let mut session = settings::SessionScale::default();
+    assert_eq!(session.resolve(1.25), 1.25, "nothing unsaved: the file decides");
+    session = settings::SessionScale(Some(settings::UnsavedScale { scale: 1.5, file: 1. }));
+    assert_eq!(session.file_value(1.5), 1.);
+    assert_eq!(session.resolve(1.), 1.5, "a reload of the unchanged file keeps the unsaved zoom");
+    assert_eq!(session.resolve(1.), 1.5);
+    assert_eq!(session.resolve(1.2), 1.2, "the file changed: it wins");
+    assert_eq!(session, settings::SessionScale(None), "and the unsaved zoom is forgotten");
+    assert_eq!(session.resolve(1.), 1.);
+}
+
+#[test]
 fn invalid_ui_scale_falls_back_to_100_percent_and_says_why() {
     for bad in [r#""1.5""#, r#""NaN""#, r#""Infinity""#, "-1", "0", "0.7499", "2.0001", "1e308", "-1e308", "true", "[]", "{}", r#""""#] {
         let (scale, warnings) = parsed(&format!(r#"{{ "ui.scale": {bad} }}"#));
@@ -63,6 +87,25 @@ fn non_json_numbers_keep_the_previous_settings_instead_of_zooming() {
     // JSON has no NaN or Infinity: such a file is unreadable as a whole, and the last valid settings stay.
     for bad in ["NaN", "Infinity", "-Infinity"] {
         assert!(settings::parse_checked(&format!(r#"{{ "ui.scale": {bad} }}"#)).is_err(), "{bad}");
+    }
+}
+
+#[test]
+fn no_layer_but_the_users_own_file_can_set_the_interface_scale() {
+    // The rule is central: every layer that is not the user's file (project settings, a workspace file, whatever layer
+    // is added later) is merged by `parse_layers_trusted`, which drops user-only keys whatever the layer is called.
+    assert!(settings::is_user_only("ui.scale"));
+    for name in [".codeyard/settings.jsonc", "team.code-workspace", "a-future-layer.jsonc", ""] {
+        for trusted in [false, true] {
+            let layers = [(name, r#"{ "ui.scale": 2, "editor.tabSize": 3 }"#, true), (name, r#"{ "ui.scale": 0.75 }"#, false)];
+            let (s, warnings) = settings::parse_layers_trusted(r#"{ "ui.scale": 1.1 }"#, &layers, trusted).unwrap();
+            assert_eq!(s.ui_scale, 1.1, "layer {name:?}, trusted {trusted}");
+            assert_eq!(s.tab_size, Some(3), "other keys of the layer still apply");
+            assert_eq!(warnings.iter().filter(|w| w.contains("“ui.scale” can only be set in your own settings.jsonc")).count(), 2, "{warnings:?}");
+        }
+    }
+    for key in settings::USER_ONLY_KEYS {
+        assert!(settings::is_user_only(key), "{key}");
     }
 }
 
@@ -159,6 +202,7 @@ fn every_input(at: Point<Pixels>) -> Vec<PlatformInput> {
         PlatformInput::MouseMove(MouseMoveEvent { position: at, pressed_button: None, modifiers: m }),
         PlatformInput::MouseExited(MouseExitEvent { position: at, pressed_button: None, modifiers: m }),
         PlatformInput::ScrollWheel(ScrollWheelEvent { position: at, delta: ScrollDelta::Pixels(at), modifiers: m, touch_phase: TouchPhase::Moved }),
+        PlatformInput::FileDrop(FileDropEvent::Entered { position: at, paths: ExternalPaths::default() }),
         PlatformInput::FileDrop(FileDropEvent::Pending { position: at }),
         PlatformInput::FileDrop(FileDropEvent::Submit { position: at }),
     ]
@@ -493,37 +537,40 @@ fn editor_and_terminal_font_preferences_are_kept_and_scaled_once(cx: &mut TestAp
     let project = crate::qa_workbench_tests::project("ui-scale-fonts");
     open(&wb, &project, cx);
     open_in(&wb, &project.join("src/lib.rs"), cx);
+    let editor = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
+    wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    cx.simulate_keystrokes("ctrl-`");
     cx.run_until_parked();
-    let fonts = |cx: &mut VisualTestContext| {
-        cx.update(|_, cx| {
-            let s = cx.global::<Settings>();
-            (s.editor_font_size, s.editor_line_height, s.terminal_font_size)
-        })
+    let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
+    // Logical sizes as painted: the editor's line pitch and shaped font size, the terminal's row height.
+    let measure = |cx: &mut VisualTestContext| {
+        let (line, font) = editor.read_with(cx, |e, _| e.painted_line_metrics()).expect("the editor painted two lines");
+        let row = term.read_with(cx, |t, _| t.cell_center(1, 0).y - t.cell_center(0, 0).y);
+        (f32::from(line), f32::from(font), f32::from(row))
     };
-    // Chrome, tree, tabs, editor text and status bar: their logical layout in a window of the same logical size.
-    let selectors = ["act-explorer", "act-search", "act-manage", "editor-group-0"];
-    let layout = |cx: &mut VisualTestContext| selectors.map(|s| cx.debug_bounds(s).unwrap_or_else(|| panic!("{s}")));
-    let base = (fonts(cx), layout(cx));
-    for (steps, scale) in [(5, 1.5), (5, 2.)] {
+    let base = measure(cx);
+    assert_eq!((base.0, base.1), (22., 15.), "the preferences as set, at 100%");
+    assert!(base.2 > 13., "terminal rows are taller than the 13 pt font: {}", base.2);
+    for (steps, scale) in [(5, 1.5_f32), (5, 2.)] {
         for _ in 0..steps {
             run(&wb, cx, "View: Zoom In");
         }
-        // A window `scale` times larger in points has the same logical size as the 100% window.
+        // A window `scale` times larger in points has the same logical size, so the layout is comparable.
         cx.simulate_resize(size(px(1280. * scale), px(800. * scale)));
         cx.run_until_parked();
-        let (_, _, _, factor, viewport) = state(cx);
+        let (.., factor, _) = state(cx);
         assert!(close(factor, 2. * scale), "{factor}");
-        assert_eq!(viewport, size(px(1280.), px(800.)));
-        // The preferences are what the user set and the logical layout is the 100% layout, so the window's single
-        // scale is the only multiplication: 15 pt editor text is drawn at 15 × scale points, never 15 × scale².
-        assert_eq!(fonts(cx), base.0, "at {scale}");
-        for (now, before) in layout(cx).into_iter().zip(base.1) {
-            assert!(same_place(now, before, factor), "no component scales itself again at {scale}: {now:?} vs {before:?}");
-        }
-        assert!(settings_text(&cfg).contains("\"editor.fontSize\": 15"));
+        // Logical line pitch, font size and row height equal the 100% values: the window's scale factor is the only
+        // multiplication, so 15 pt text is drawn at 15 × scale points (× the display scale), never 15 × scale².
+        assert_eq!(measure(cx), base, "at {scale}");
+        let physical_line = base.0 * factor;
+        assert!(close(physical_line, 22. * 2. * scale), "{physical_line} device pixels per editor line at {scale}");
+        assert!(settings_text(&cfg).contains("\"editor.fontSize\": 15") && settings_text(&cfg).contains("\"terminal.fontSize\": 13"));
     }
     run(&wb, cx, "View: Reset Zoom");
-    assert_eq!(fonts(cx), base.0);
+    cx.simulate_resize(size(px(1280.), px(800.)));
+    cx.run_until_parked();
+    assert_eq!(measure(cx), base);
 }
 
 #[gpui::test]
@@ -543,10 +590,16 @@ fn a_click_at_the_scaled_position_hits_the_target_at_150_percent(cx: &mut TestAp
         let at = cx.update(|window, _| window.mouse_position());
         assert!(close(f32::from(at.x), f32::from(b.center().x)) && close(f32::from(at.y), f32::from(b.center().y)), "{at:?} vs {b:?}");
     }
-    // Scroll wheel positions are converted too: a scroll over the scaled target does not panic and keeps the panel.
-    let b = cx.debug_bounds("act-explorer").unwrap();
-    cx.simulate_event(ScrollWheelEvent { position: scaled(b.center(), 1.5), delta: ScrollDelta::Pixels(point(px(0.), px(30.))), ..Default::default() });
-    assert_eq!(wb.read_with(cx, |wb, _| wb.panel_for_test()), Some("explorer"));
+    // Scrolling: in a window too short for every activity button, a 30-point trackpad scroll over the buttons moves them by
+    // 20 logical pixels (30 / 1.5), so content follows the finger on screen.
+    cx.simulate_resize(size(px(1280.), px(300.)));
+    cx.run_until_parked();
+    let views = cx.debug_bounds("activity-views").unwrap();
+    let before = cx.debug_bounds("act-explorer").unwrap();
+    cx.simulate_event(ScrollWheelEvent { position: scaled(views.center(), 1.5), delta: ScrollDelta::Pixels(point(px(0.), px(-30.))), ..Default::default() });
+    cx.run_until_parked();
+    let after = cx.debug_bounds("act-explorer").unwrap();
+    assert!(close(f32::from(before.top() - after.top()), 20.), "scrolled {:?} logical px", before.top() - after.top());
 }
 
 #[gpui::test]
@@ -572,14 +625,30 @@ fn dragging_a_divider_moves_it_by_the_logical_distance_at_150_percent_even_when_
     let grown = cx.debug_bounds("editor-group-0").unwrap().size.width - left;
     assert!((f32::from(grown) - 60.).abs() < 3., "moved {grown:?} logical px for a 60 px drag");
 
-    // Zoom while the divider is held: the drag continues in the new coordinate space without panicking.
+    // Zoom while the divider is held. The split keeps its proportion when the zoom lands (the divider does not jump), and
+    // the next move puts the divider back under the pointer in the new coordinate space.
     let sash = cx.debug_bounds(sash_id).unwrap();
     cx.simulate_mouse_down(scaled(sash.center(), s), MouseButton::Left, Modifiers::none());
-    cx.simulate_mouse_move(scaled(point(sash.center().x - px(20.), sash.center().y), s), Some(MouseButton::Left), Modifiers::none());
+    let held = point(sash.center().x - px(20.), sash.center().y);
+    cx.simulate_mouse_move(scaled(held, s), Some(MouseButton::Left), Modifiers::none());
+    cx.run_until_parked();
+    let ratio = |cx: &mut VisualTestContext| {
+        let (a, b) = (cx.debug_bounds("editor-group-0").unwrap(), cx.debug_bounds("editor-group-1").unwrap());
+        f32::from(a.size.width) / f32::from(a.size.width + b.size.width)
+    };
+    let before_zoom = ratio(cx);
+    let at = cx.debug_bounds(sash_id).unwrap().center().x;
+    assert!((f32::from(at) - f32::from(held.x)).abs() < 1., "the divider follows the pointer: {at:?} vs {:?}", held.x);
     cx.simulate_keystrokes("cmd-=");
     assert_eq!(state(cx).2, 1.6);
-    let end = point(sash.center().x - px(40.), sash.center().y);
+    assert!((ratio(cx) - before_zoom).abs() < 0.005, "split {before_zoom} jumped to {} when the zoom landed", ratio(cx));
+    let pointer = cx.update(|window, _| window.mouse_position());
+    assert!(close(f32::from(pointer.x), f32::from(held.x) * s / 1.6), "the pointer keeps its screen position: {pointer:?}");
+    let end = point(pointer.x - px(30.), pointer.y);
     cx.simulate_mouse_move(scaled(end, 1.6), Some(MouseButton::Left), Modifiers::none());
+    cx.run_until_parked();
+    let now = cx.debug_bounds(sash_id).unwrap().center().x;
+    assert!((f32::from(now) - f32::from(end.x)).abs() < 1., "divider at {now:?}, pointer at {:?}", end.x);
     cx.simulate_mouse_up(scaled(end, 1.6), MouseButton::Left, Modifiers::none());
     cx.run_until_parked();
     let viewport = state(cx).4;
@@ -603,17 +672,34 @@ fn zoom_keeps_an_open_picker_and_its_keyboard_focus(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-fn zoom_keeps_an_open_menu_inside_the_window(cx: &mut TestAppContext) {
+fn zoom_keeps_the_manage_menu_inside_the_window_and_at_its_button(cx: &mut TestAppContext) {
     let (wb, cx, _cfg) = rig(cx, "menu");
     wb.update_in(cx, |wb, window, cx| wb.open_manage_menu_for_test(window, cx));
     cx.run_until_parked();
-    assert!(wb.read_with(cx, |wb, _| wb.menu_position_for_test()).is_some());
-    for _ in 0..10 {
-        wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("View: Zoom In", window, cx));
-        cx.run_until_parked();
-        assert!(wb.read_with(cx, |wb, _| wb.menu_position_for_test()).is_some(), "the menu stays open at {}", state(cx).0);
+    for step in 0..=10 {
+        if step > 0 {
+            wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("View: Zoom In", window, cx));
+            cx.run_until_parked();
+        }
+        let scale = state(cx).0;
+        let viewport = state(cx).4;
+        let menu = cx.debug_bounds("context-menu").unwrap_or_else(|| panic!("the menu stays open at {scale}"));
+        let gear = cx.debug_bounds("act-manage").unwrap();
+        let window = Bounds::new(point(px(0.), px(0.)), viewport);
+        assert!(
+            menu.left() >= px(0.) && menu.top() >= px(0.) && menu.right() <= viewport.width + px(0.5) && menu.bottom() <= viewport.height + px(0.5),
+            "menu {menu:?} inside {window:?} at {scale}"
+        );
+        // Anchored to the gear: bottom edges level, menu just right of the activity bar.
+        assert!((f32::from(menu.bottom() - gear.bottom())).abs() < 1., "menu {menu:?} vs gear {gear:?} at {scale}");
+        assert!(menu.left() >= gear.right() && menu.left() <= gear.right() + px(4.), "menu {menu:?} vs gear {gear:?} at {scale}");
     }
     assert_eq!(state(cx).0, 2.);
+    // A window resize while it is open keeps it there too.
+    cx.simulate_resize(size(px(1280.), px(1000.)));
+    cx.run_until_parked();
+    let (menu, gear) = (cx.debug_bounds("context-menu").unwrap(), cx.debug_bounds("act-manage").unwrap());
+    assert!((f32::from(menu.bottom() - gear.bottom())).abs() < 1., "menu {menu:?} vs gear {gear:?} after a resize");
 }
 
 #[gpui::test]
@@ -716,4 +802,140 @@ fn narrow_window_at_200_percent(cx: &mut TestAppContext, language: &str, notice_
         cx.run_until_parked();
         assert_eq!(wb.read_with(cx, |wb, _| wb.panel_for_test()), Some(panel), "{w}×{h}: {target} {b:?} in {viewport:?}");
     }
+}
+
+#[gpui::test]
+fn cycling_through_the_zoom_steps_does_not_grow_the_glyph_and_icon_caches(cx: &mut TestAppContext) {
+    let (wb, cx, cfg) = rig(cx, "caches");
+    let project = crate::qa_workbench_tests::project("ui-scale-caches");
+    open(&wb, &project, cx);
+    open_in(&wb, &project.join("src/lib.rs"), cx);
+    // 100% → 200% → 75% → 100%: every step once.
+    let cycle = |cx: &mut VisualTestContext| {
+        for command in std::iter::repeat_n("View: Zoom In", 10).chain(std::iter::repeat_n("View: Zoom Out", 13)).chain(std::iter::repeat_n("View: Zoom In", 3))
+        {
+            run(&wb, cx, command);
+        }
+        assert_eq!(state(cx).0, 1.);
+    };
+    // Glyph raster bounds and sprite-atlas tiles (the test platform rasterises no icon assets, so the atlas count only
+    // guards against growth from anything else painted).
+    let counts = |cx: &mut VisualTestContext| (cx.atlas_tile_count(), cx.raster_bounds_count());
+    cycle(cx);
+    let first = counts(cx);
+    assert!(first.1 > 0, "glyphs were cached: {first:?}");
+    for round in 0..3 {
+        cycle(cx);
+        assert_eq!(counts(cx), first, "round {round}: the same scales reuse their cache entries");
+    }
+    assert!(first.1 <= gpui::MAX_RASTER_BOUNDS);
+    // A hand-typed scale lands on a whole percent, so it can only add one of the 126 possible sets.
+    std::fs::write(cfg.join("settings.jsonc"), "{ \"ui.scale\": 1.2000001 }").unwrap();
+    wb.update_in(cx, |wb, window, cx| wb.reload_config_for_test(window, cx));
+    cx.run_until_parked();
+    assert_eq!(state(cx).0, 1.2);
+    assert_eq!(counts(cx), first, "1.2000001 reuses the 120% entries");
+}
+
+#[gpui::test]
+fn an_unsaved_zoom_survives_settings_reloads_until_the_file_changes(cx: &mut TestAppContext) {
+    use std::os::unix::fs::PermissionsExt;
+    let (wb, cx, cfg) = rig(cx, "unsaved");
+    std::fs::write(cfg.join("settings.jsonc"), "{ \"editor.tabSize\": 4 }").unwrap();
+    wb.update_in(cx, |wb, window, cx| wb.reload_config_for_test(window, cx));
+    let set_mode = |mode: u32| std::fs::set_permissions(&cfg, std::fs::Permissions::from_mode(mode)).unwrap();
+    // A folder the settings cannot be written to.
+    set_mode(0o555);
+    run(&wb, cx, "View: Zoom In");
+    let unsaved_notice = notice(&wb, cx);
+    set_mode(0o755);
+    assert_eq!(state(cx).0, 1.1, "applied for the session");
+    assert!(unsaved_notice.contains("Could not write"), "the failure is reported: {unsaved_notice}");
+    assert!(!settings_text(&cfg).contains("ui.scale"));
+    for _ in 0..3 {
+        wb.update_in(cx, |wb, window, cx| wb.reload_config_for_test(window, cx));
+        cx.run_until_parked();
+        assert_eq!(state(cx).0, 1.1, "a reload of the unchanged file does not undo the zoom");
+    }
+    // A second window opened now uses it too.
+    // The user's file changes ui.scale: the file wins from then on.
+    std::fs::write(cfg.join("settings.jsonc"), "{ \"editor.tabSize\": 4, \"ui.scale\": 1.3 }").unwrap();
+    wb.update_in(cx, |wb, window, cx| wb.reload_config_for_test(window, cx));
+    cx.run_until_parked();
+    assert_eq!(state(cx).0, 1.3);
+    wb.update_in(cx, |wb, window, cx| wb.reload_config_for_test(window, cx));
+    assert_eq!(state(cx).0, 1.3);
+    // And zooming saves normally again.
+    run(&wb, cx, "View: Zoom In");
+    assert_eq!(state(cx).0, 1.4);
+    assert!(settings_text(&cfg).contains("\"ui.scale\": 1.4"), "{}", settings_text(&cfg));
+}
+
+#[gpui::test]
+fn an_unsaved_zoom_without_a_settings_folder_survives_opening_a_project(cx: &mut TestAppContext) {
+    let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+    run(&wb, cx, "View: Zoom In");
+    assert_eq!(state(cx).0, 1.1);
+    // A project settings file makes the workbench re-read its settings.
+    let project = fresh("ui-scale-unsaved-project");
+    std::fs::create_dir_all(project.join(".codeyard")).unwrap();
+    std::fs::write(project.join(".codeyard/settings.jsonc"), "{ \"editor.tabSize\": 3 }").unwrap();
+    open(&wb, &project, cx);
+    wb.update_in(cx, |wb, window, cx| wb.reload_config_for_test(window, cx));
+    cx.run_until_parked();
+    assert_eq!(cx.update(|_, cx| cx.global::<Settings>().tab_size), Some(3), "the project layer was applied");
+    assert_eq!(state(cx).0, 1.1, "and the session zoom kept");
+}
+
+#[gpui::test]
+fn the_client_inset_is_sent_again_in_platform_points_when_the_scale_changes(cx: &mut TestAppContext) {
+    let (_wb, cx, _cfg) = rig(cx, "inset");
+    cx.update(|window, _| window.set_client_inset(px(10.)));
+    assert_eq!(cx.platform_client_inset(), Some(px(10.)));
+    for (scale, want) in [(1.5, 15.), (2., 20.), (1., 10.)] {
+        cx.update(|_, cx| cx.set_ui_scale(scale));
+        cx.run_until_parked();
+        assert_eq!(cx.platform_client_inset(), Some(px(want)), "at {scale}");
+        assert_eq!(cx.update(|window, _| window.client_inset()), Some(px(10.)), "the logical inset is unchanged");
+    }
+}
+
+#[gpui::test]
+fn hidden_activity_buttons_are_signalled_at_the_clipped_edge(cx: &mut TestAppContext) {
+    let (wb, cx, _cfg) = rig(cx, "hint");
+    let hints = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.activity_hints_for_test());
+    assert_eq!(hints(cx), (false, false), "everything fits");
+    for _ in 0..10 {
+        run(&wb, cx, "View: Zoom In");
+    }
+    cx.simulate_resize(size(px(480.), px(320.)));
+    cx.run_until_parked();
+    assert_eq!(hints(cx), (false, true), "a chevron says more buttons are below");
+    let views = cx.debug_bounds("activity-views").unwrap();
+    let below = cx.debug_bounds("activity-more-below").unwrap();
+    assert!(
+        close(f32::from(below.bottom()), f32::from(views.bottom())) && below.size.height <= px(12.5) && below.size.width <= views.size.width,
+        "a thin strip at the bottom edge: {below:?} in {views:?}"
+    );
+    // Scrolled to the end: the hint moves to the top edge.
+    for _ in 0..20 {
+        cx.simulate_event(ScrollWheelEvent { position: scaled(views.center(), 2.), delta: ScrollDelta::Pixels(point(px(0.), px(-80.))), ..Default::default() });
+    }
+    cx.run_until_parked();
+    assert_eq!(hints(cx), (true, false), "a chevron says more buttons are above, and the last button is visible");
+    let above = cx.debug_bounds("activity-more-above").unwrap();
+    assert!(close(f32::from(above.top()), f32::from(views.top())), "{above:?} at the top of {views:?}");
+    // The strip takes no clicks: a click on it reaches the button underneath, whichever that is.
+    let panel_before = wb.read_with(cx, |wb, _| wb.panel_for_test());
+    cx.simulate_click(scaled(point(above.center().x, above.bottom() - px(1.)), 2.), Modifiers::none());
+    cx.run_until_parked();
+    assert_ne!(wb.read_with(cx, |wb, _| wb.panel_for_test()), panel_before, "the button under the strip was clicked");
+    // Back in the middle: both hints.
+    cx.simulate_event(ScrollWheelEvent { position: scaled(views.center(), 2.), delta: ScrollDelta::Pixels(point(px(0.), px(60.))), ..Default::default() });
+    cx.run_until_parked();
+    assert_eq!(hints(cx), (true, true));
+    // A tall window again: no hint. The scroll range is only known after layout, so the bar draws itself once more.
+    cx.simulate_resize(size(px(1280.), px(1600.)));
+    cx.run_until_parked();
+    assert_eq!(hints(cx), (false, false));
 }

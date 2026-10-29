@@ -163,10 +163,12 @@ impl Workbench {
         let revision = self.tabs.revision;
         let mut sashes = std::collections::BTreeMap::new();
         for (id, axis) in splits {
-            let bounds = std::rc::Rc::new(std::cell::Cell::new(gpui::Bounds::<gpui::Pixels>::default()));
+            // The split being dragged keeps its cell, so every frame of the drag updates the bounds the drag reads.
+            let held = self.tabs.resizing.as_ref().filter(|r| r.split == id).map(|r| r.bounds.clone());
+            let resizing = held.is_some();
+            let bounds = held.unwrap_or_else(|| std::rc::Rc::new(std::cell::Cell::new(gpui::Bounds::<gpui::Pixels>::default())));
             let captured = bounds.clone();
             let horizontal = axis == Axis::Horizontal;
-            let resizing = self.tabs.resizing.is_some_and(|r| r.split == id);
             let sash = div()
                 .id(("group-sash", usize::from(id)))
                 .debug_selector(move || format!("group-sash-{id}"))
@@ -182,7 +184,7 @@ impl Workbench {
                             return;
                         }
                         this.chrome.resizing_split = true;
-                        this.tabs.resizing = Some(GroupResize { split: id, axis, bounds: captured.get(), anchor, revision });
+                        this.tabs.resizing = Some(GroupResize { split: id, axis, bounds: captured.clone(), anchor, revision });
                         cx.notify();
                     }),
                 )

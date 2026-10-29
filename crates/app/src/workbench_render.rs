@@ -44,6 +44,7 @@ impl Render for Workbench {
         self.step_panel_anim(window);
         self.update_title(window, cx);
         self.chrome.window_bounds = Some(window.window_bounds());
+        self.sync_manage_menu(window, cx);
         self.track_notice(cx);
         self.sync_watches(cx);
         self.sync_slots(cx);
@@ -495,11 +496,12 @@ impl Render for Workbench {
                     this.chrome.sidebar_w = x.clamp(layout::SIDEBAR_MIN, layout::SIDEBAR_MAX);
                     cx.notify();
                 }
-                if let Some(resize) = this.tabs.resizing {
+                if let Some(resize) = this.tabs.resizing.clone() {
                     if this.tabs.contains_key(resize.anchor) && this.tabs.revision == resize.revision {
+                        let bounds = resize.bounds.get();
                         let (position, start, size) = match resize.axis {
-                            crate::editor_layout::Axis::Horizontal => (ev.position.x, resize.bounds.origin.x, resize.bounds.size.width),
-                            crate::editor_layout::Axis::Vertical => (ev.position.y, resize.bounds.origin.y, resize.bounds.size.height),
+                            crate::editor_layout::Axis::Horizontal => (ev.position.x, bounds.origin.x, bounds.size.width),
+                            crate::editor_layout::Axis::Vertical => (ev.position.y, bounds.origin.y, bounds.size.height),
                         };
                         let ratio = (position - start) / size.max(px(1.));
                         if this.tabs.layout.set_ratio(resize.split, ratio) {

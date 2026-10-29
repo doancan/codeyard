@@ -1,3 +1,4 @@
+use super::geometry::Landmark;
 use super::*;
 use accesskit::{Point, Rect};
 use gpui::{TestAppContext, VisualTestContext, size};
@@ -103,6 +104,16 @@ fn accessibility_bounds_follow_the_interface_scale(cx: &mut TestAppContext) {
             (explorer.x0 - explorer_100.x0 * scale).abs() < 1. && (explorer.width() - explorer_100.width() * scale).abs() < 1.,
             "{explorer:?} = {explorer_100:?} × {scale}"
         );
+        // Against the layout: each reported rectangle is the element's painted logical bounds × display scale ×
+        // interface scale, so assistive technology points at what is on screen.
+        for (id, which) in [(EXPLORER, Landmark::Explorer), (EDITOR, Landmark::Editor), (STATUS, Landmark::Status)] {
+            let painted = wb.read_with(cx, |wb, _| wb.chrome.a11y_bounds.get(which)).unwrap_or_else(|| panic!("{id:?} painted at {scale}"));
+            let rect = bounds(&snapshot, id).unwrap();
+            let want = [painted.left(), painted.top(), painted.right(), painted.bottom()].map(|v| f64::from(v / px(1.)) * factor);
+            for (got, want) in [rect.x0, rect.y0, rect.x1, rect.y1].into_iter().zip(want) {
+                assert!((got - want).abs() < 0.01, "{id:?}: {rect:?} vs painted {painted:?} × {factor}");
+            }
+        }
         let tree = accesskit_consumer::Tree::new(snapshot.to_tree(), true);
         for (id, role) in [(EXPLORER, Role::Tree), (EDITOR, Role::MultilineTextInput), (STATUS, Role::Status)] {
             let rect = bounds(&snapshot, id).unwrap_or_else(|| panic!("landmark {id:?} at {scale}"));

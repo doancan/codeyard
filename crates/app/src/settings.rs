@@ -438,12 +438,12 @@ mod text;
 pub use text::{Seg, array_items, members, set_string_in, set_value_in, value_range};
 #[path = "settings_scope.rs"]
 mod scope;
-pub use scope::{Scope, ScopedLayer, Sources};
+pub use scope::{Scope, ScopedLayer, Sources, is_user_only};
 #[path = "settings_scale.rs"]
 mod scale;
 #[cfg(test)]
 pub use scale::UI_SCALE_STEPS;
-pub use scale::{UI_SCALE_ERROR, UI_SCALE_MAX, UI_SCALE_MIN, parse_ui_scale, step_ui_scale, ui_scale_percent, ui_scale_value};
+pub use scale::{SessionScale, UI_SCALE_ERROR, UI_SCALE_MAX, UI_SCALE_MIN, UnsavedScale, parse_ui_scale, step_ui_scale, ui_scale_percent, ui_scale_value};
 
 pub fn config_dir() -> Option<PathBuf> {
     if let Some(d) = std::env::var_os("CODEYARD_CONFIG_DIR") {
@@ -499,8 +499,8 @@ pub const RESTRICTED_KEYS: &[&str] = &[
     "yaml.schemas",
 ];
 
-/// Not read from the project file even in a trusted folder: the gate is global, so one
-/// repo touching it would open it for every folder.
+/// Not read from any layer but the user's own file, even in a trusted folder: the gate is global, so one
+/// repo touching it would open it for every folder. `is_user_only` applies it to every non-user layer.
 pub const USER_ONLY_KEYS: &[&str] = &[
     "modules.containers.enabled",
     "modules.webPreview.enabled",
@@ -557,7 +557,7 @@ pub fn parse_scoped(user: &str, layers: &[ScopedLayer]) -> Result<(Settings, Vec
         match serde_json::from_str::<Value>(&theme::themes::strip_jsonc(text)) {
             Ok(Value::Object(o)) => {
                 for (k, v) in o {
-                    if USER_ONLY_KEYS.contains(&k.as_str()) {
+                    if is_user_only(&k) {
                         warnings.push(crate::i18n::tf("{}: “{}” can only be set in your own settings.jsonc", &[&name, &k]));
                         continue;
                     }

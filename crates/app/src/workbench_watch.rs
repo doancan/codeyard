@@ -201,8 +201,12 @@ impl Workbench {
                 self.close_overlay(window, cx);
             }
         }
+        // Interface scale: user settings only, the same for every window; an unchanged value does nothing. A zoom that
+        // could not be saved stays until the file's own value changes.
+        let mut session = cx.try_global::<settings::SessionScale>().copied().unwrap_or_default();
+        new.ui_scale = session.resolve(new.ui_scale);
+        cx.set_global(session);
         cx.set_global(new.clone());
-        // Interface scale: user settings only, the same for every window; an unchanged value does nothing.
         cx.set_ui_scale(new.ui_scale);
         if !new.web_preview_enabled {
             self.stop_web_preview(cx);

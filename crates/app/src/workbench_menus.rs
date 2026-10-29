@@ -242,6 +242,18 @@ impl Workbench {
         let status_bar = self.chrome.zen.is_none() && cx.global::<Settings>().status_bar;
         let origin = Self::manage_menu_origin(window.viewport_size().height, status_bar);
         self.show_action_menu_at(Self::manage_menu_entries(), origin, gpui::Corner::BottomLeft, window, cx);
+        if let Some(state) = &mut self.menu {
+            state.follows_manage = true;
+        }
+    }
+
+    /// Keep an open Manage menu at the gear button: the button sits at the bottom of the viewport, which changes when the
+    /// window is resized or the interface scale changes.
+    pub(super) fn sync_manage_menu(&mut self, window: &Window, cx: &App) {
+        let status_bar = self.chrome.zen.is_none() && cx.global::<Settings>().status_bar;
+        if let Some(state) = self.menu.as_mut().filter(|m| m.follows_manage) {
+            state.position = Self::manage_menu_origin(window.viewport_size().height, status_bar);
+        }
     }
 
     pub(super) fn show_menu(
@@ -278,7 +290,7 @@ impl Workbench {
         let return_focus = window.focused(cx);
         window.focus(&menu.focus_handle(cx));
         self.scm.update(cx, |scm, cx| scm.set_menu_open(true, cx));
-        self.menu = Some(MenuState { menu, position, target, commands, actions, return_focus, app_path: None, _sub: sub });
+        self.menu = Some(MenuState { menu, position, target, commands, actions, return_focus, app_path: None, follows_manage: false, _sub: sub });
         cx.notify();
     }
 
