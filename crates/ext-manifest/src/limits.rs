@@ -33,3 +33,12 @@ pub const PACKAGE_FILES: usize = 10_000;
 pub const PACKAGE_FILE_BYTES: u64 = 64 * 1024 * 1024;
 /// An extension's own data directory (`storage`).
 pub const DATA_DIR_BYTES: u64 = 50 * 1024 * 1024;
+
+/// One `net` request, from the first connection to the last byte of the response, redirects included.
+pub const NET_TIMEOUT_SECS: u64 = 60;
+/// Redirects one `net` request follows; each is checked against `net` and the peer address rules again.
+pub const NET_REDIRECTS: usize = 5;
+/// The body one `net` request sends.
+pub const NET_REQUEST_BYTES: u64 = 16 * 1024 * 1024;
+/// The body one `net` request receives.
+pub const NET_RESPONSE_BYTES: u64 = 64 * 1024 * 1024;

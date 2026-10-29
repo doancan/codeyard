@@ -526,6 +526,33 @@ fn more_shared_suffixes_are_any_host() {
 }
 
 #[test]
+fn net_allows_exact_hosts_and_names_under_a_wildcard() {
+    let net: Vec<String> = vec!["api.vercel.com".into(), "*.example.com".into(), "*.co.uk".into()];
+    for h in ["api.vercel.com", "a.example.com", "a.b.example.com", "anything.co.uk"] {
+        assert!(net_allows(&net, h), "{h}");
+    }
+    for h in [
+        "vercel.com",
+        "x.api.vercel.com",
+        "api.vercel.com.evil.test",
+        "example.com",
+        "badexample.com",
+        ".example.com",
+        "a..example.com",
+        "a.example.com.",
+        "",
+        "co.uk",
+    ] {
+        assert!(!net_allows(&net, h), "{h}");
+    }
+    // `*` is refused by validation; even if it got through, it matches nothing.
+    assert!(!net_allows(&["*".into()], "api.x.com"));
+    assert!(!net_allows(&["*.".into()], "a."));
+    let p = Permissions { net: vec!["*.example.com".into()], ..Default::default() };
+    assert!(p.allows_host("api.example.com") && !p.allows_host("api.example.org"));
+}
+
+#[test]
 fn an_update_asks_only_for_what_is_new() {
     let old = Permissions {
         read: vec!["*.toml".into()],

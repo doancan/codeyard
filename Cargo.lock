@@ -1989,6 +1989,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ext-net"
+version = "0.5.0"
+dependencies = [
+ "ext-manifest",
+ "http-body",
+ "http-body-util",
+ "hyper",
+ "hyper-rustls",
+ "hyper-util",
+ "rustls",
+ "tokio",
+ "tokio-rustls",
+]
+
+[[package]]
 name = "ext-pkg"
 version = "0.5.0"
 dependencies = [

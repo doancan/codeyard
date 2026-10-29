@@ -25,6 +25,8 @@ crates/
   ext-core/ installed extensions: content-addressed store, `extensions.lock.jsonc`, install / update / rollback /
             uninstall as crash-safe transactions, the startup index, permissions ∩ Workspace Trust; the registry's
             signed index (`yard.rs`) and publisher signatures (`publisher.rs`), verified offline
+  ext-net/  network for extensions: HTTPS to the hosts in `net` only, every connection's peer address checked,
+            re-checked redirects, byte budgets, timeout and cancellation (hyper + rustls)
   cyx/      the extension authors' command: new, dev (`--extension-dev`, hot reload), check, package, import-vscode;
             ships beside the app
   yard/     the extension registry's publish service (`yard` binary, hyper + SQLite): signed uploads, registry checks,
