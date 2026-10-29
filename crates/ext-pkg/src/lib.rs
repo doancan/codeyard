@@ -8,10 +8,15 @@
 //!
 //! Design: docs/plugin-architecture.md §4, §8.
 
+mod component;
 mod tar;
 
 #[cfg(test)]
+mod component_tests;
+#[cfg(test)]
 mod fuzz_tests;
+#[cfg(any(test, feature = "testing"))]
+pub mod testing;
 #[cfg(test)]
 mod tests;
 
@@ -23,6 +28,7 @@ use std::path::Path;
 use ext_manifest::{Diagnostic, Manifest, limits};
 use sha2::{Digest as _, Sha256};
 
+pub use component::{COMPONENT, Component, check_component};
 pub use tar::Entry;
 
 /// The list of file hashes inside every package.
@@ -46,6 +52,8 @@ pub enum Error {
     Contents(String),
     /// The manifest is missing or invalid.
     Manifest(Vec<Diagnostic>),
+    /// A code extension's `extension.wasm` is missing or fails the import check.
+    Component(Vec<Diagnostic>),
     /// The manifest refers to a file the package does not have.
     MissingFile {
         field: String,
@@ -61,6 +69,13 @@ impl fmt::Display for Error {
             Error::Path { path, reason } => write!(f, "'{path}' {reason}"),
             Error::Manifest(d) => {
                 write!(f, "{} is invalid", ext_manifest::FILE_NAME)?;
+                for e in d {
+                    write!(f, "\n{e}")?;
+                }
+                Ok(())
+            }
+            Error::Component(d) => {
+                write!(f, "{COMPONENT} cannot run")?;
                 for e in d {
                     write!(f, "\n{e}")?;
                 }
@@ -122,6 +137,8 @@ pub struct Package {
     /// Every file, `CONTENTS.sha256` and the manifest included, by path.
     pub files: BTreeMap<String, Entry>,
     pub digest: ContentDigest,
+    /// What a code extension's component imports; none for declarative extensions.
+    pub component: Option<Component>,
 }
 
 /// A path allowed inside a package: the manifest's portable-path rules, printable ASCII only (one spelling per name,
@@ -224,6 +241,7 @@ pub fn write(entries: Vec<Entry>) -> Result<(Vec<u8>, ContentDigest), Error> {
     let files: BTreeMap<String, Entry> = entries.iter().map(|e| (e.path.clone(), e.clone())).collect();
     let manifest = manifest_of(&files)?;
     check_references(&manifest, &files)?;
+    component_of(&manifest, &files)?;
     let tar = canonical_tar(&entries)?;
     let digest = ContentDigest(sha256(&tar));
     let mut gz = flate2::GzBuilder::new().mtime(0).operating_system(255).write(Vec::new(), flate2::Compression::best());
@@ -233,6 +251,18 @@ pub fn write(entries: Vec<Entry>) -> Result<(Vec<u8>, ContentDigest), Error> {
         return Err(Error::TooLarge(format!("the package is larger than {} MiB compressed", limits::PACKAGE_BYTES >> 20)));
     }
     Ok((bytes, digest))
+}
+
+/// A code extension's component, checked against its manifest (the import check).
+fn component_of(manifest: &Manifest, files: &BTreeMap<String, Entry>) -> Result<Option<Component>, Error> {
+    match (&manifest.code, files.get(COMPONENT)) {
+        (Some(_), Some(wasm)) => check_component(&wasm.data, manifest).map(Some).map_err(Error::Component),
+        (Some(_), None) => Err(Error::Component(vec![
+            Diagnostic::new(ext_manifest::Code::BadComponent, format!("the manifest has [code] but there is no {COMPONENT}"))
+                .fix("build the extension with its SDK, which writes extension.wasm"),
+        ])),
+        (None, _) => Ok(None),
+    }
 }
 
 fn manifest_of(files: &BTreeMap<String, Entry>) -> Result<Manifest, Error> {
@@ -293,8 +323,9 @@ pub fn read(bytes: &[u8]) -> Result<Package, Error> {
     }
     let manifest = manifest_of(&files)?;
     check_references(&manifest, &files)?;
+    let component = component_of(&manifest, &files)?;
     let digest = ContentDigest(sha256(&canonical_tar(&entries)?));
-    Ok(Package { manifest, files, digest })
+    Ok(Package { manifest, files, digest, component })
 }
 
 /// Collect an extension folder for `write`: every regular file except `EXCLUDED` names, with its executable bit.

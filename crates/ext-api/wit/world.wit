@@ -1,0 +1,93 @@
+package codeyard:api@0.1.0;
+
+/// What the host asks the extension.
+@since(version = 0.1.0)
+interface host-requests {
+  use types.{document, range, diagnostic};
+
+  record format-options {
+    tab-size: u32,
+    insert-spaces: bool,
+  }
+
+  variant request {
+    /// A command from the manifest: its local id and JSON arguments.
+    command(tuple<string, string>),
+    /// Draw a view (by local id); answer with `response.view`.
+    render(string),
+    /// Something happened in a view: its id and the event, JSON-encoded (reference/ui.md).
+    ui-event(tuple<string, string>),
+    /// Format a document, or a range of it; answer with `response.edits`.
+    format(tuple<document, option<range>, format-options>),
+    /// Offer code actions for a range; answer with `response.code-actions`.
+    code-actions(tuple<document, range, list<diagnostic>>),
+    /// The user chose a code action that has a command.
+    run-code-action(string),
+    /// List tasks; answer with `response.tasks`.
+    provide-tasks,
+    /// Run a task the extension provided, by id.
+    run-task(string),
+    /// These settings of the extension changed.
+    settings-changed(list<string>),
+    /// A timer from `timers.every` fired.
+    timer(u64),
+    /// The user cancelled progress started with `window.start-progress`.
+    cancel-progress(u64),
+    /// A `codeyard://ext/<id>/…` link was opened: its path and query.
+    open-uri(string),
+  }
+}
+
+/// What the extension exports. The SDKs implement it; authors never see it.
+@since(version = 0.1.0)
+interface guest {
+  use types.{ticket, completion, stream-event};
+  use host-requests.{request};
+
+  record activation {
+    /// Why the extension started: `command:<id>`, `view:<id>`, `language:<id>`, `workspace-contains`, `uri`, `auth`.
+    reason: string,
+  }
+
+  /// Called once, before anything else.
+  activate: func(activation: activation) -> result<_, string>;
+  /// Called before the exthost stops. Keep it short: the process exits after a deadline.
+  deactivate: func();
+  /// A request; answer it now or later with `requests.respond(id, …)`. Must return quickly.
+  handle: func(id: u64, request: request);
+  /// The host no longer waits for request `id` (the user moved on).
+  cancel: func(id: u64);
+  /// A ticket finished.
+  complete: func(ticket: ticket, %result: completion);
+  /// Streamed data for a ticket that has not finished.
+  event: func(ticket: ticket, event: stream-event);
+}
+
+/// Everything an extension may import. Each interface outside `types`, `log`, `env`, `tickets`, `requests`,
+/// `responses`, `window`, `commands`, `storage`, `settings`, `timers`, `ui`, `documents`, `languages` and
+/// `host-requests` needs its permission in the manifest.
+world extension {
+  import log;
+  import env;
+  import tickets;
+  import requests;
+  import window;
+  import commands;
+  import storage;
+  import settings;
+  import timers;
+  import ui;
+  import documents;
+  import languages;
+  import workspace;
+  import workspace-write;
+  import net;
+  import auth;
+  import secrets;
+  import process;
+  import clipboard-read;
+  import clipboard-write;
+  import terminal;
+
+  export guest;
+}

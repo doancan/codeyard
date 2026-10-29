@@ -7,7 +7,18 @@ description = "Extension packages (.cyx): reproducible writer, strict reader, co
 repository.workspace = true
 publish = false
 
+[features]
+# `ext_pkg::testing`: a minimal component, for other crates' tests of code extensions.
+testing = []
+
 [dependencies]
+ext-api = { version = "0.5.0", path = "../ext-api" }
 ext-manifest = { version = "0.5.0", path = "../ext-manifest" }
 flate2 = "1.1.10"
 sha2 = "0.11.1"
+# Reads a component's imports; a parser only, no compiler or runtime (those live in codeyard-exthost).
+wasmparser = { version = "0.261.0", default-features = false, features = ["std", "validate", "component-model", "features"] }
+
+[dev-dependencies]
+wit-component = { version = "0.261.0", features = ["dummy-module"] }
+wit-parser = "0.261.0"

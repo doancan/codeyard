@@ -342,8 +342,16 @@ fn install_file_checks_like_the_view() {
     assert_eq!(m.id.as_str(), "you.night");
     assert!(store.locked().unwrap().contains_key(&m.id));
     let code = cfg.join("code.cyx");
-    std::fs::write(&code, pkg(manifest("you.code", "[code]\nentry = \"main.ts\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n"), vec![("main.ts", "")]))
-        .unwrap();
+    let mut code_pkg = vec![
+        ext_pkg::Entry {
+            path: "codeyard-extension.toml".into(),
+            data: manifest("you.code", "[code]\nentry = \"main.ts\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n").into_bytes(),
+            executable: false,
+        },
+        ext_pkg::Entry { path: "main.ts".into(), data: vec![], executable: false },
+    ];
+    code_pkg.push(ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: ext_pkg::testing::COMPONENT.to_vec(), executable: false });
+    std::fs::write(&code, ext_pkg::write(code_pkg).unwrap().0).unwrap();
     assert!(crate::ext::install_file(&store, &code).unwrap_err().contains("contains code"));
     let junk = cfg.join("junk.cyx");
     std::fs::write(&junk, b"not a package").unwrap();

@@ -42,6 +42,23 @@ fn packaging_twice_gives_the_same_bytes() {
 }
 
 #[test]
+fn check_runs_the_import_check_on_the_component() {
+    let dir = tmp("component");
+    let manifest = "[extension]\nid = \"you.code\"\nversion = \"0.1.0\"\nname = \"Code\"\nlicense = \"MIT\"\n[code]\nentry = \"Cargo.toml\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n";
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), manifest).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "").unwrap();
+    let e = check(&dir).unwrap_err();
+    assert!(e.contains("error[CY0700]: the manifest has [code] but there is no extension.wasm"), "{e}");
+    std::fs::write(dir.join(ext_pkg::COMPONENT), ext_pkg::testing::COMPONENT).unwrap();
+    check(&dir).unwrap();
+    std::fs::write(dir.join(ext_pkg::COMPONENT), b"\0asm\x01\0\0\0").unwrap();
+    let e = check(&dir).unwrap_err();
+    assert!(e.contains("error[CY0700]: extension.wasm is a core WebAssembly module, not a component"), "{e}");
+    assert!(e.contains("= fix: build for the wasm32-wasip2 target"), "{e}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
 fn check_errors_name_the_line_and_the_fix() {
     let root = tmp("errors");
     let dir = root.join("lsp");

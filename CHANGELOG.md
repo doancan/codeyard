@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The extension API `codeyard:api` 0.1.0 (docs/extensions/reference/api.md) and its import check: `cyx check`, the
+  registry and the installer refuse a code extension whose `extension.wasm` imports an interface its manifest has no
+  permission for, with the line to add.
 - Search Editors: "Search: Open Search Editor" keeps a query in its own tab with its options, globs, context lines and
   folders (every folder of a multi-folder workspace), for keyboard navigation and rerun. Tabs return after a restart
   with their query and up to 200 results, marked as restored until they run again; truncated, stopped and failed

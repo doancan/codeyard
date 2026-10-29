@@ -1,0 +1,158 @@
+package codeyard:api@0.1.0;
+
+/// Types shared by every interface. Importing it needs no permission.
+@since(version = 0.1.0)
+interface types {
+  /// Why a call was refused.
+  enum why {
+    /// The manifest does not declare the permission.
+    not-declared,
+    /// The user turned the permission off on the extension page.
+    revoked-by-user,
+    /// The folder is not trusted: code may read what it declared and show UI, but not send, write or run.
+    untrusted-workspace,
+    /// The registry revoked this version.
+    revoked-extension,
+  }
+
+  record denied {
+    /// The permission that would allow the call, as written in the manifest (`net = ["api.example.com"]`).
+    permission: string,
+    why: why,
+  }
+
+  variant error {
+    denied(denied),
+    not-found(string),
+    /// The user moved on, or the extension cancelled the call.
+    cancelled,
+    timeout,
+    /// The call's arguments are wrong; the message says which.
+    invalid(string),
+    other(string),
+  }
+
+  /// A host call that finishes later. Its result arrives at `guest.complete`, streamed data before that at
+  /// `guest.event`.
+  type ticket = u64;
+
+  /// Zero-based line and UTF-16 column, as in JavaScript strings and the Language Server Protocol.
+  record position {
+    line: u32,
+    character: u32,
+  }
+
+  record range {
+    start: position,
+    end: position,
+  }
+
+  record text-edit {
+    range: range,
+    new-text: string,
+  }
+
+  /// A file or folder. Opaque to extensions: the same code works on local and SSH folders.
+  type uri = string;
+
+  enum tone {
+    neutral,
+    accent,
+    success,
+    warning,
+    danger,
+    muted,
+  }
+
+  /// An HTTPS request (`net.fetch`, `auth.fetch`). The body is sent in one piece, up to the call limit.
+  record http-request {
+    method: string,
+    url: string,
+    headers: list<tuple<string, string>>,
+    body: list<u8>,
+    timeout-ms: option<u32>,
+  }
+
+  /// Arrives as `stream-event.http-head` before the body's `data` events.
+  record http-head {
+    status: u16,
+    headers: list<tuple<string, string>>,
+  }
+
+  enum diagnostic-severity {
+    error,
+    warning,
+    information,
+    hint,
+  }
+
+  record diagnostic {
+    range: range,
+    severity: diagnostic-severity,
+    message: string,
+    code: option<string>,
+  }
+
+  record document {
+    uri: uri,
+    language: string,
+    /// Increases with every change; edits made against an older version are refused.
+    version: u32,
+    text: string,
+  }
+
+  record file-stat {
+    is-dir: bool,
+    size: u64,
+    /// Unix milliseconds.
+    modified: u64,
+  }
+
+  record search-match {
+    uri: uri,
+    range: range,
+    /// The matching line, for display.
+    line: string,
+  }
+
+  /// A file read by `workspace.read-many`: its bytes, or why it could not be read.
+  record file-result {
+    uri: uri,
+    contents: result<list<u8>, error>,
+  }
+
+  record account {
+    provider: string,
+    /// What the user sees, such as the account name.
+    label: string,
+  }
+
+  /// The result of a ticket.
+  variant completion {
+    /// Finished with nothing to return.
+    done,
+    failed(error),
+    bytes(list<u8>),
+    text(option<string>),
+    json(string),
+    /// A choice from a notice or a pick: indices into the offered list (empty when dismissed).
+    chosen(list<u32>),
+    files(list<file-result>),
+    uris(list<uri>),
+    stat(file-stat),
+    document(option<document>),
+    ranges(list<range>),
+    /// A process ended with this exit code (none when killed by a signal).
+    exit(option<s32>),
+    account(account),
+  }
+
+  /// Streamed data for a ticket, before its completion.
+  variant stream-event {
+    http-head(http-head),
+    data(list<u8>),
+    stdout(list<u8>),
+    stderr(list<u8>),
+    search-match(search-match),
+  }
+}

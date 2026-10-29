@@ -37,6 +37,10 @@ pub enum Code {
     BadWhen,
     /// A dependency is malformed or names the extension itself.
     BadDependency,
+    /// `extension.wasm` is missing, not a component, or imports or exports something it may not.
+    BadComponent,
+    /// The component uses an API version newer than this Codeyard.
+    NeedsNewerCodeyard,
 }
 
 impl Code {
@@ -57,10 +61,12 @@ impl Code {
             Code::NeverActivates => "CY0400",
             Code::BadWhen => "CY0500",
             Code::BadDependency => "CY0600",
+            Code::BadComponent => "CY0700",
+            Code::NeedsNewerCodeyard => "CY0701",
         }
     }
 
-    pub const ALL: [Code; 15] = [
+    pub const ALL: [Code; 17] = [
         Code::Syntax,
         Code::TooLarge,
         Code::BadId,
@@ -76,6 +82,8 @@ impl Code {
         Code::NeverActivates,
         Code::BadWhen,
         Code::BadDependency,
+        Code::BadComponent,
+        Code::NeedsNewerCodeyard,
     ];
 }
 

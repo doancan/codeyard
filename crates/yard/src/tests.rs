@@ -210,8 +210,13 @@ fn what_is_signed_must_be_what_is_uploaded() {
 #[test]
 fn code_waits_for_phase_2() {
     let t = Test::new("code");
-    let pkg =
-        package_with(&manifest("you.code", "1.0.0", "Code", "[code]\nentry = \"main.ts\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n"), &[("main.ts", "")]);
+    let manifest = manifest("you.code", "1.0.0", "Code", "[code]\nentry = \"main.ts\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n");
+    let pkg = ext_pkg::write(vec![
+        ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: manifest.into_bytes(), executable: false },
+        ext_pkg::Entry { path: "main.ts".into(), data: vec![], executable: false },
+        ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: ext_pkg::testing::COMPONENT.to_vec(), executable: false },
+    ])
+    .unwrap();
     let e = t.publish(&pkg, &github(7, 42)).unwrap_err();
     assert!(matches!(&e, Error::Invalid(m) if m.contains("data-only")), "{e:?}");
 }

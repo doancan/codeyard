@@ -1,0 +1,119 @@
+package codeyard:api@0.1.0;
+
+/// Reading workspace files. Needs `read` on the paths.
+@since(version = 0.1.0)
+interface workspace {
+  use types.{ticket, uri};
+
+  /// The workspace's folders.
+  folders: func() -> list<uri>;
+  /// Completes with `bytes`.
+  read-file: func(uri: uri) -> ticket;
+  /// Completes with `files`, one per uri, in one round trip.
+  read-many: func(uris: list<uri>) -> ticket;
+  /// Completes with `stat`.
+  stat: func(uri: uri) -> ticket;
+  /// Completes with `uris`: files matching `glob` under the workspace folders, at most `max`.
+  find-files: func(glob: string, max: u32) -> ticket;
+
+  record search-query {
+    pattern: string,
+    regex: bool,
+    case-sensitive: bool,
+    whole-word: bool,
+    /// Only files matching these globs; empty means all the extension may read.
+    %include: list<string>,
+    max: u32,
+  }
+
+  /// Streams `search-match` events, then completes with `done`.
+  search: func(query: search-query) -> ticket;
+}
+
+/// Changing workspace files. Needs `write` on the paths.
+@since(version = 0.1.0)
+interface workspace-write {
+  use types.{ticket, uri};
+
+  write-file: func(uri: uri, contents: list<u8>) -> ticket;
+  delete: func(uri: uri) -> ticket;
+  rename: func(%from: uri, to: uri) -> ticket;
+  create-directory: func(uri: uri) -> ticket;
+}
+
+/// HTTPS to the hosts listed in `net`. Requests leave from the machine Codeyard runs on.
+@since(version = 0.1.0)
+interface net {
+  use types.{ticket, http-request};
+
+  /// Streams `http-head`, then the body as `data`, then completes with `done`.
+  fetch: func(request: http-request) -> ticket;
+}
+
+/// Requests signed with an account listed in `auth`. The extension never sees the token.
+@since(version = 0.1.0)
+interface auth {
+  use types.{ticket, http-request};
+
+  /// Signs in if needed (the first use asks the user). Completes with `account`.
+  session: func(provider: string, scopes: list<string>) -> ticket;
+  /// Like `net.fetch`, signed for `provider`, to that provider's declared hosts.
+  fetch: func(provider: string, request: http-request) -> ticket;
+}
+
+/// The extension's own entries in the system keychain. Needs `secrets`.
+@since(version = 0.1.0)
+interface secrets {
+  use types.{ticket};
+
+  /// Completes with `text`.
+  get: func(key: string) -> ticket;
+  set: func(key: string, value: string) -> ticket;
+  delete: func(key: string) -> ticket;
+}
+
+/// Programs listed in `run`, on the workspace's host.
+@since(version = 0.1.0)
+interface process {
+  use types.{ticket, uri};
+
+  record command {
+    /// A name from `run`, or a path inside the package.
+    program: string,
+    args: list<string>,
+    /// Defaults to the first workspace folder.
+    cwd: option<uri>,
+    /// Added to a minimal environment; the user's environment is not passed.
+    env: list<tuple<string, string>>,
+    stdin: option<list<u8>>,
+  }
+
+  /// Streams `stdout` and `stderr`, then completes with `exit`. `tickets.cancel` kills it.
+  spawn: func(command: command) -> ticket;
+}
+
+/// Reading the clipboard. Needs `clipboard = "read"` (or `"read-write"`); the first read per session asks.
+@since(version = 0.1.0)
+interface clipboard-read {
+  use types.{ticket};
+
+  /// Completes with `text`.
+  read-text: func() -> ticket;
+}
+
+/// Writing the clipboard. Needs `clipboard = "write"` (or `"read-write"`).
+@since(version = 0.1.0)
+interface clipboard-write {
+  use types.{ticket};
+
+  write-text: func(text: string) -> ticket;
+}
+
+/// Typing into a terminal. Needs `terminal`.
+@since(version = 0.1.0)
+interface terminal {
+  use types.{ticket};
+
+  /// Types `text` into the active terminal. Completes with `failed(not-found)` when there is none.
+  send-text: func(text: string) -> ticket;
+}

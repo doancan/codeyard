@@ -353,6 +353,7 @@ fn check_with(dir: &Path, options: ext_manifest::Options) -> Result<CheckReport,
     match ext_pkg::write(check_files) {
         Ok(_) => Ok(CheckReport { id: m.id.to_string(), version: m.version.to_string(), warnings }),
         Err(ext_pkg::Error::Manifest(errors)) => Err(render(&errors, &text)),
+        Err(ext_pkg::Error::Component(errors)) => Err(errors.iter().map(|d| d.render(ext_pkg::COMPONENT, "")).collect::<Vec<_>>().join("\n")),
         Err(e) => Err(format!("error: {e}")),
     }
 }
