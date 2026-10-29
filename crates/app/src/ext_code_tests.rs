@@ -189,3 +189,30 @@ fn a_command_reads_the_active_document(cx: &mut TestAppContext) {
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Document", window, cx));
     wait_for(cx, &wb, |wb| answer_is(wb, "document rust 13"));
 }
+
+#[gpui::test]
+fn a_workspace_with_a_matching_file_starts_the_extension(cx: &mut TestAppContext) {
+    if crate::ext_runtime::exthost_path().is_none() {
+        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+        return;
+    }
+    let cfg = config_dir("contains");
+    let manifest = MANIFEST.replace("[permissions]", "[activation]\nworkspace-contains = [\"vercel.json\"]\n\n[permissions]");
+    let entries = vec![
+        ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: manifest.into_bytes(), executable: false },
+        ext_pkg::Entry { path: "Cargo.toml".into(), data: Vec::new(), executable: false },
+        ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: PROBE.to_vec(), executable: false },
+    ];
+    let (bytes, _) = ext_pkg::write(entries).unwrap();
+    crate::ext::store(&cfg).install(&bytes, ext_core::Source::File { path: "/downloads/probe.cyx".into() }).unwrap();
+    let (wb, cx) = setup(cx, &cfg);
+    assert!(!wb.read_with(cx, |wb, _| wb.extension_running_for_test("you.probe")), "nothing starts without the file");
+    let folder = cfg.join("site");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join("vercel.json"), "{}").unwrap();
+    wb.update_in(cx, |wb, window, cx| {
+        wb.set_root(folder.to_string_lossy().into_owned(), cx);
+        wb.reload_config_for_test(window, cx);
+    });
+    wait_for(cx, &wb, |wb| wb.extension_running_for_test("you.probe"));
+}

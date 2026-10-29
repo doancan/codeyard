@@ -267,7 +267,8 @@ fn spawn(host: &dyn Host, scope: &Scope, c: &v::Command, sink: &dyn Sink, cancel
         Some(u) => Some(scope.may_read(u).or_else(|_| normalize(u).filter(|p| scope.relative(p).is_some()).ok_or_else(|| outside(u)))?),
         None => scope.roots.first().cloned(),
     };
-    let proc = host.proc_spawn(&program, c.args.clone(), cwd).map_err(host_error)?;
+    // Only what the extension passes reaches the program, never the user's environment (tokens live there).
+    let proc = host.proc_spawn_env(&program, c.args.clone(), cwd, c.env.clone()).map_err(host_error)?;
     if let Some(input) = &c.stdin {
         host.proc_input(proc.id, input.clone());
     }
@@ -285,25 +286,15 @@ fn spawn(host: &dyn Host, scope: &Scope, c: &v::Command, sink: &dyn Sink, cancel
     }
 }
 
-/// `vercel` → `/usr/local/bin/vercel` on the workspace's host, found the way the user's shell would.
+/// `vercel` → `/usr/local/bin/vercel` on the workspace's host: an executable on the login shell's PATH (`Which`),
+/// never a builtin or a function.
 fn resolve(host: &dyn Host, program: &str) -> Result<String, v::Error> {
     if program.contains('/') || program.contains('\\') {
         return normalize(program).ok_or_else(|| v::Error::NotFound(program.to_string()));
     }
-    let out = if host.info().os == "windows" {
-        host.exec("where", &[program], None, None)
-    } else {
-        // The login shell's PATH, but only executables on it (no builtins, no functions); the name is an argument,
-        // never part of the script.
-        let script = r#"IFS=:; for d in $PATH; do [ -f "$d/$1" ] && [ -x "$d/$1" ] && { echo "$d/$1"; exit 0; }; done; exit 1"#;
-        host.exec("sh", &["-lc", script, "sh", program], None, None)
-    };
-    let out = out.map_err(host_error)?;
-    let path = out.stdout_str().lines().next().unwrap_or_default().trim().to_string();
-    if out.ok() && !path.is_empty() {
-        normalize(&path).ok_or_else(|| v::Error::NotFound(program.to_string()))
-    } else {
-        Err(v::Error::NotFound(format!("{program} was not found on {}", host.label())))
+    match host.which(program).map_err(host_error)? {
+        Some(path) => normalize(&path).ok_or_else(|| v::Error::NotFound(program.to_string())),
+        None => Err(v::Error::NotFound(format!("{program} was not found on {}", host.label()))),
     }
 }
 

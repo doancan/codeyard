@@ -50,6 +50,7 @@ pub const GUEST_MEMORY_BYTES: usize = 256 * 1024 * 1024;
 pub const GUEST_CALL_MILLIS: u64 = 2_000;
 /// `activate` may take longer: language runtimes start there.
 pub const ACTIVATE_MILLIS: u64 = 10_000;
+
 /// An encoded view (`ext-ui`), refused before it is decoded.
 pub const UI_VIEW_BYTES: usize = 8 * 1024 * 1024;
 /// Elements in one view, counting every row and cell.

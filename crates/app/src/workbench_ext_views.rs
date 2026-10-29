@@ -256,7 +256,7 @@ impl Workbench {
         }
         let (req, answer) = self.cfg.exts.code.pending.lock().unwrap_or_else(|p| p.into_inner()).add(&decl.extension);
         let msg = ToHost::Handle { id: req, deadline_ms: 0, request: v::Request::Render { view: decl.local.clone() } };
-        self.send_to_extension(&active, &format!("view:{}", decl.local), msg, window, cx);
+        self.send_to_extension(&active, &format!("view:{}", decl.local), Some(msg), window, cx);
         let answer = crate::ui::bridge(answer);
         let view = id.to_string();
         cx.spawn_in(window, async move |this, cx| {
@@ -439,7 +439,7 @@ impl Workbench {
         let (req, answer) = self.cfg.exts.code.pending.lock().unwrap_or_else(|p| p.into_inner()).add(&decl.extension);
         self.cfg.exts.code.user_action.insert(decl.extension.clone(), req);
         let msg = ToHost::Handle { id: req, deadline_ms: 0, request: v::Request::UiEvent { view: decl.local.clone(), event_json: json } };
-        self.send_to_extension(&active, &format!("view:{}", decl.local), msg, window, cx);
+        self.send_to_extension(&active, &format!("view:{}", decl.local), Some(msg), window, cx);
         let answer = crate::ui::bridge(answer);
         cx.spawn_in(window, async move |this, cx| {
             let mut answer = answer;

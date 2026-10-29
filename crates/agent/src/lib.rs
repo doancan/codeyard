@@ -71,12 +71,14 @@ pub fn handle(req: Request) -> Response {
         | Request::Ping
         | Request::Exec { .. }
         | Request::ProcSpawn { .. }
+        | Request::ProcSpawnEnv { .. }
         | Request::ProcInput { .. }
         | Request::ProcKill { .. }
         | Request::LineIndex { .. }
         | Request::ReadLines { .. } => Err(Error::Unsupported("streaming request outside a session".into())),
         Request::ListFiles { root, limit } => list_files(&expand(&root), limit as usize).map(|(paths, truncated)| Response::Files { paths, truncated }),
         Request::ListShells => Ok(Response::Shells(pty::shells())),
+        Request::Which { program } => Ok(Response::Path(proc::which(&program))),
     };
     result.unwrap_or_else(Response::Error)
 }
@@ -463,9 +465,21 @@ impl Session {
                 });
                 Ok(())
             }
-            Request::ProcSpawn { program, args, cwd } => {
-                let cwd = cwd.map(|c| expand(&c).to_string_lossy().into_owned());
-                match proc::spawn(&program, &args, cwd.as_deref()) {
+            req @ (Request::ProcSpawn { .. } | Request::ProcSpawnEnv { .. }) => {
+                let (program, spawned) = match req {
+                    Request::ProcSpawn { program, args, cwd } => {
+                        let cwd = cwd.map(|c| expand(&c).to_string_lossy().into_owned());
+                        let r = proc::spawn(&program, &args, cwd.as_deref()).map(|(p, rd)| (p, Box::new(rd) as Box<dyn Read + Send>));
+                        (program, r)
+                    }
+                    Request::ProcSpawnEnv { program, args, cwd, env } => {
+                        let cwd = cwd.map(|c| expand(&c).to_string_lossy().into_owned());
+                        let r = proc::spawn_env(&program, &args, cwd.as_deref(), &env).map(|(p, rd)| (p, Box::new(rd) as Box<dyn Read + Send>));
+                        (program, r)
+                    }
+                    _ => unreachable!("matched above"),
+                };
+                match spawned {
                     Err(e) => reply(Response::Error(Error::NotFound(format!("{program}: {e}")))),
                     Ok((p, mut reader)) => {
                         let pid = self.next_pty.fetch_add(1, Ordering::Relaxed);
