@@ -67,12 +67,10 @@ pub fn run(input: impl Read, output: impl Write + Send + 'static) -> Result<(), 
         let _ = ext_proto::write(&mut output, &ToApp::Mismatch { version: ext_proto::VERSION, build: ext_proto::BUILD.into() });
         return Err(format!("the app is build {} and this exthost {}", hello.build, ext_proto::BUILD));
     }
-    ext_proto::write(&mut output, &ToApp::Ready { version: ext_proto::VERSION, build: ext_proto::BUILD.into() })
-        .map_err(|e| e.to_string())?;
+    ext_proto::write(&mut output, &ToApp::Ready { version: ext_proto::VERSION, build: ext_proto::BUILD.into() }).map_err(|e| e.to_string())?;
 
     let engine = crate::engine::engine().map_err(|e| e.to_string())?;
-    let component = crate::engine::load(&engine, std::path::Path::new(&hello.compiled), &hello.compiled_sha256)
-        .map_err(|e| format!("{e:#}"))?;
+    let component = crate::engine::load(&engine, std::path::Path::new(&hello.compiled), &hello.compiled_sha256).map_err(|e| format!("{e:#}"))?;
     let mut linker = Linker::new(&engine);
     wasmtime_wasi::p2::add_to_linker_sync(&mut linker).map_err(|e| e.to_string())?;
     Extension::add_to_linker::<State, HasSelf<State>>(&mut linker, |s| s).map_err(|e| e.to_string())?;
@@ -131,11 +129,7 @@ struct Guest {
 impl Guest {
     /// One call into the guest with a CPU budget. A trap (or the budget running out) is reported to the app as a
     /// `Trap` frame and ends the exthost.
-    fn call<R>(
-        &mut self,
-        budget_ms: u64,
-        f: impl FnOnce(&mut Store<State>, Option<&Extension>) -> wasmtime::Result<R>,
-    ) -> Result<R, String> {
+    fn call<R>(&mut self, budget_ms: u64, f: impl FnOnce(&mut Store<State>, Option<&Extension>) -> wasmtime::Result<R>) -> Result<R, String> {
         let started = Instant::now();
         let budget = Duration::from_millis(budget_ms);
         self.store.set_epoch_deadline(1);

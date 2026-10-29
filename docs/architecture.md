@@ -25,6 +25,10 @@ crates/
   ext-core/ installed extensions: content-addressed store, `extensions.lock.jsonc`, install / update / rollback /
             uninstall as crash-safe transactions, the startup index, permissions ∩ Workspace Trust; the registry's
             signed index (`yard.rs`) and publisher signatures (`publisher.rs`), verified offline
+  ext-api/  the extension API: the `codeyard:api` WIT package, the permission each interface needs, its values in Rust
+  ext-proto/ frames between the app and an extension host process: handshake, size cap, byte-rate budget
+  ext-host/ `codeyard-exthost`, which runs one code extension's WebAssembly component; the only binary with wasmtime;
+            ships beside the app
   cyx/      the extension authors' command: new, dev (`--extension-dev`, hot reload), check, package, import-vscode;
             ships beside the app
   yard/     the extension registry's publish service (`yard` binary, hyper + SQLite): signed uploads, registry checks,

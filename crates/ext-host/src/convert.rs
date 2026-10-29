@@ -151,14 +151,7 @@ impl From<g::languages::Decoration> for v::Decoration {
 
 impl From<g::workspace::SearchQuery> for v::SearchQuery {
     fn from(q: g::workspace::SearchQuery) -> Self {
-        v::SearchQuery {
-            pattern: q.pattern,
-            regex: q.regex,
-            case_sensitive: q.case_sensitive,
-            whole_word: q.whole_word,
-            include: q.include,
-            max: q.max,
-        }
+        v::SearchQuery { pattern: q.pattern, regex: q.regex, case_sensitive: q.case_sensitive, whole_word: q.whole_word, include: q.include, max: q.max }
     }
 }
 
@@ -188,9 +181,7 @@ impl From<g::responses::Response> for v::Response {
                     })
                     .collect(),
             ),
-            R::Tasks(t) => v::Response::Tasks(
-                t.into_iter().map(|t| v::Task { id: t.id, label: t.label, detail: t.detail, group: t.group }).collect(),
-            ),
+            R::Tasks(t) => v::Response::Tasks(t.into_iter().map(|t| v::Task { id: t.id, label: t.label, detail: t.detail, group: t.group }).collect()),
             R::Ranges(r) => v::Response::Ranges(r.into_iter().map(Into::into).collect()),
         }
     }
@@ -270,11 +261,7 @@ impl From<v::Completion> for g::types::Completion {
             v::Completion::Text(t) => C::Text(t),
             v::Completion::Json(j) => C::Json(j),
             v::Completion::Chosen(c) => C::Chosen(c),
-            v::Completion::Files(f) => C::Files(
-                f.into_iter()
-                    .map(|f| g::types::FileResult { uri: f.uri, contents: f.contents.map_err(Into::into) })
-                    .collect(),
-            ),
+            v::Completion::Files(f) => C::Files(f.into_iter().map(|f| g::types::FileResult { uri: f.uri, contents: f.contents.map_err(Into::into) }).collect()),
             v::Completion::Uris(u) => C::Uris(u),
             v::Completion::Stat(s) => C::Stat(g::types::FileStat { is_dir: s.is_dir, size: s.size, modified: s.modified }),
             v::Completion::Document(d) => C::Document(d.map(Into::into)),
@@ -293,9 +280,7 @@ impl From<v::StreamEvent> for g::types::StreamEvent {
             v::StreamEvent::Data(d) => E::Data(d),
             v::StreamEvent::Stdout(d) => E::Stdout(d),
             v::StreamEvent::Stderr(d) => E::Stderr(d),
-            v::StreamEvent::SearchMatch(m) => {
-                E::SearchMatch(g::types::SearchMatch { uri: m.uri, range: m.range.into(), line: m.line })
-            }
+            v::StreamEvent::SearchMatch(m) => E::SearchMatch(g::types::SearchMatch { uri: m.uri, range: m.range.into(), line: m.line }),
         }
     }
 }

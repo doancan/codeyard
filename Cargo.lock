@@ -198,7 +198,6 @@ dependencies = [
  "dirs 7.0.0",
  "embed-resource",
  "ext-core",
- "ext-host",
  "ext-manifest",
  "ext-pkg",
  "futures",

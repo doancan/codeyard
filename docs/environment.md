@@ -29,6 +29,7 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_REGISTRY` | The registry `cyx publish`, `yank`, `restore` and `deprecate` talk to (default: the public registry); `--registry` wins. |
 | `CODEYARD_FULCIO_URL`, `CODEYARD_REKOR_URL`, `CODEYARD_OIDC_URL` | Where `cyx publish` gets its certificate, logs its signature and signs in (default: public-good Sigstore). For a private Sigstore; the registry must pin the same roots. |
 | `CODEYARD_BIN` | The Codeyard binary `cyx dev` starts (default: `codeyard` on `PATH`, then the one beside `cyx`, then `/Applications/Codeyard.app` on macOS). |
+| `CODEYARD_BUILD_ID` | Build time: the id the app and `codeyard-exthost` compare when one starts the other (default: the crate version). A release build sets one per build so an app updated in place restarts its extension hosts. |
 | `CODEYARD_PERF` | Append performance samples (one JSON line each) to this file; used by `scripts/perf/run.sh`. |
 | `CODEYARD_PERF_TYPING` | With `CODEYARD_PERF`: after startup, type this many characters into the focused editor, record key press to drawn frame for each, then save. |
 | `CODEYARD_PERF_MARKET` | With `CODEYARD_PERF`: after startup, open the Market, wait for its list, then press this many keys in its search (a word typed and erased), recording key press to the results in the view and to the frame that shows them. |

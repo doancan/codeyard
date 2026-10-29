@@ -167,9 +167,8 @@ fn a_permission_not_granted_is_refused_without_leaving_the_exthost() {
     assert_eq!(answer, Ok(Response::Json("denied read Why::RevokedByUser".into())));
     assert!(!other.iter().any(|m| matches!(m, ToApp::Start { .. })), "nothing reached the app: {other:?}");
     // A granted one does leave.
-    let id = h.command("fetch", "https://api.example.com/x");
+    h.command("fetch", "https://api.example.com/x");
     assert!(matches!(h.next(), ToApp::Start { call: Start::Fetch { .. }, .. }));
-    drop(id);
 }
 
 #[test]
@@ -179,9 +178,8 @@ fn an_untrusted_folder_refuses_sending() {
     let mut h = Host::start(hello(&d, &c, sha, &["net", "workspace"], true)).ready();
     assert_eq!(h.json("fetch", "https://api.example.com/x"), "denied net Why::UntrustedWorkspace");
     // Reading what it declared is still allowed there.
-    let id = h.command("read", "");
+    h.command("read", "");
     assert!(matches!(h.next(), ToApp::Start { call: Start::ReadFile { .. }, .. }));
-    drop(id);
 }
 
 #[test]
@@ -191,7 +189,7 @@ fn storage_persists_and_prints_reach_the_log() {
     let mut h = Host::start(hello(&d, &c, sha, &[], false)).ready();
     assert_eq!(h.json("store", "v1"), "Ok(()) [\"k\"]");
     let id = h.command("print", "");
-    h.answer(id);
+    assert_eq!(h.answer(id).0, Ok(Response::None));
     // What it printed is sent when the call returns, before the next call's frames.
     let id = h.command("echo", "");
     let (_, frames) = h.answer(id);

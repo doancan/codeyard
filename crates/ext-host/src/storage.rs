@@ -65,7 +65,7 @@ fn hex(key: &str) -> String {
 }
 
 fn unhex(name: &str) -> Option<String> {
-    if name.len() % 2 != 0 {
+    if !name.len().is_multiple_of(2) {
         return None;
     }
     let bytes: Option<Vec<u8>> = (0..name.len()).step_by(2).map(|i| u8::from_str_radix(name.get(i..i + 2)?, 16).ok()).collect();
