@@ -32,6 +32,7 @@ mod debug_model;
 // --- data ---
 #[cfg(test)]
 mod a11y_ui_tests;
+mod about_page;
 mod datalens;
 mod datalens_decode;
 mod datalens_query;
@@ -98,6 +99,11 @@ mod icon_theme;
 mod image_size;
 mod input;
 mod jsonfmt;
+mod language_service_install;
+mod language_services;
+mod language_services_page;
+#[cfg(all(test, unix))]
+mod language_services_real_tests;
 mod large;
 mod linked_tag;
 mod links;
@@ -161,6 +167,7 @@ mod structural_tests;
 mod sysopen;
 mod system_prefs;
 mod terminal;
+mod terminal_image_paste;
 mod terminal_osc;
 mod terminal_paste;
 mod terminal_profiles;
@@ -529,8 +536,8 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("alt-t", menus::TerminalMenu, None),
         KeyBinding::new("alt-w", menus::WindowMenu, None),
         KeyBinding::new("alt-h", menus::HelpMenu, None),
-        // In the terminal Ctrl+C interrupts the program (SIGINT) and Ctrl+V is the shell's "literal" key: copy / paste
-        // are Ctrl+Shift+C / Ctrl+Shift+V as in Linux and Windows terminals.
+        // Ctrl+C copies a terminal selection or interrupts the program when nothing is selected.
+        // Ctrl+V is the shell's "literal" key, so paste uses Ctrl+Shift+V.
         KeyBinding::new("ctrl-shift-c", terminal::TermCopy, Some("Terminal")),
         KeyBinding::new("ctrl-shift-v", terminal::TermPaste, Some("Terminal")),
         // Ctrl+K, Ctrl+A and Ctrl+F belong to the shell (kill line, line start, forward); the terminal's own commands take Shift.

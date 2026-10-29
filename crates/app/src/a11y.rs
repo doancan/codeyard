@@ -44,6 +44,15 @@ const SCM_COMMIT: NodeId = NodeId(20);
 const SCM_BRANCH: NodeId = NodeId(21);
 const SCM_RESULT: NodeId = NodeId(22);
 const SCM_EMPTY: NodeId = NodeId(23);
+const ABOUT_TAB: NodeId = NodeId(29);
+const ABOUT: NodeId = NodeId(30);
+const ABOUT_COPY: NodeId = NodeId(31);
+const ABOUT_DETAIL: u64 = 0xa0_0000;
+const SERVICES: NodeId = NodeId(24);
+const SERVICES_INFO: NodeId = NodeId(25);
+const SERVICES_STATUS: NodeId = NodeId(26);
+const SERVICES_INSTALL: NodeId = NodeId(27);
+const SERVICES_CANCEL: NodeId = NodeId(28);
 const STATUS_ITEM: u64 = 0x10_0000;
 const UPDATE_BUTTON: u64 = 0x20_0000;
 const TAB_BASE: u64 = 0x30_0000;
@@ -60,7 +69,7 @@ const ROW_BASE: u64 = 0x2_0000_0000;
 const RUN_BASE: u64 = 0x4_0000_0000;
 const TERM_RUN_BASE: u64 = 0x8_0000_0000;
 const _: () = {
-    let blocks = [STATUS_ITEM, UPDATE_BUTTON, TAB_BASE, PICK_OPTION, FIND_CONTROL, COMPLETION_OPTION, EXTRA_TREE, SCM_GROUP, SCM_FILE, ROW_BASE];
+    let blocks = [STATUS_ITEM, UPDATE_BUTTON, TAB_BASE, PICK_OPTION, FIND_CONTROL, COMPLETION_OPTION, EXTRA_TREE, SCM_GROUP, SCM_FILE, ABOUT_DETAIL, ROW_BASE];
     let mut i = 1;
     while i < blocks.len() {
         assert!(blocks[i - 1] + BLOCK <= blocks[i]);
@@ -178,6 +187,7 @@ pub enum FocusSnap {
     Picker,
     Terminal,
     ScmMessage,
+    AboutCopy,
 }
 
 /// The update dialog (or the first-run question) while it is open.
@@ -199,6 +209,13 @@ pub struct TabSnap {
     pub dirty: bool,
 }
 
+/// The About tab and its visible contents.
+#[derive(Clone, PartialEq, Debug)]
+pub struct AboutSnap {
+    pub active: bool,
+    pub details: Vec<(String, String)>,
+}
+
 /// The notice shown in the status bar; errors interrupt the screen reader, info waits its turn.
 #[derive(Clone, PartialEq, Debug)]
 pub struct NoticeSnap {
@@ -208,6 +225,8 @@ pub struct NoticeSnap {
 
 #[path = "a11y_scm.rs"]
 mod scm_access;
+#[path = "a11y_language_services.rs"]
+mod services_access;
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct ScmSnap {
@@ -225,11 +244,13 @@ pub struct Snapshot {
     pub tabs: Vec<TabSnap>,
     /// Index into `tabs` of the tab in front (`None` while a diff, large file or page tab is in front).
     pub active_tab: Option<usize>,
+    pub about: Option<AboutSnap>,
     pub editor: Option<EditorSnap>,
     pub find: Option<FindSnap>,
     pub completion: Option<ListSnap>,
     pub terminal: Option<TerminalSnap>,
     pub(crate) scm: Option<ScmSnap>,
+    pub(crate) services: Option<crate::language_services_page::AccessView>,
     pub picker: Option<PickerSnap>,
     pub notice: Option<NoticeSnap>,
     pub status: Vec<String>,
@@ -368,6 +389,10 @@ impl Snapshot {
         self.geometry.apply(ROOT, &mut root);
         root.set_label(self.title.clone());
         let mut kids = Vec::new();
+        if let Some(view) = &self.services {
+            services_access::append_tree(view, &mut nodes);
+            kids.push(SERVICES);
+        }
 
         // Explorer: one tree per folder of the workspace.
         for (k, ex) in self.explorers.iter().enumerate() {
@@ -405,7 +430,7 @@ impl Snapshot {
         }
 
         // Tabs
-        if !self.tabs.is_empty() {
+        if !self.tabs.is_empty() || self.about.is_some() {
             let mut list = Node::new(Role::TabList);
             list.set_label(t("Editor tabs"));
             let mut tab_ids = Vec::new();
@@ -415,15 +440,50 @@ impl Snapshot {
                 n.set_label(if tab.dirty { tf("{} (modified)", &[&tab.name]) } else { tab.name.clone() });
                 n.set_selected(self.active_tab == Some(i));
                 n.set_position_in_set(i + 1);
-                n.set_size_of_set(self.tabs.len());
+                n.set_size_of_set(self.tabs.len() + usize::from(self.about.is_some()));
                 n.add_action(Action::Click);
                 n.add_action(Action::Focus);
                 tab_ids.push(id);
                 nodes.push((id, n));
             }
+            if let Some(about) = &self.about {
+                let mut tab = Node::new(Role::Tab);
+                tab.set_label(t("About Codeyard"));
+                tab.set_selected(about.active);
+                tab.set_position_in_set(self.tabs.len() + 1);
+                tab.set_size_of_set(self.tabs.len() + 1);
+                tab.add_action(Action::Click);
+                tab.add_action(Action::Focus);
+                tab_ids.push(ABOUT_TAB);
+                nodes.push((ABOUT_TAB, tab));
+            }
             list.set_children(tab_ids);
             nodes.push((TABS, list));
             kids.push(TABS);
+        }
+
+        if let Some(about) = &self.about
+            && about.active
+        {
+            let mut group = Node::new(Role::Group);
+            group.set_label(t("About Codeyard"));
+            let mut children = Vec::new();
+            for (i, (label, value)) in about.details.iter().enumerate() {
+                let id = NodeId(ABOUT_DETAIL + i as u64);
+                let mut detail = Node::new(Role::Label);
+                detail.set_label(format!("{label}: {value}"));
+                children.push(id);
+                nodes.push((id, detail));
+            }
+            let mut copy = Node::new(Role::Button);
+            copy.set_label(t("Copy Version"));
+            copy.add_action(Action::Click);
+            copy.add_action(Action::Focus);
+            children.push(ABOUT_COPY);
+            nodes.push((ABOUT_COPY, copy));
+            group.set_children(children);
+            nodes.push((ABOUT, group));
+            kids.push(ABOUT);
         }
 
         // Find bar (above the editor, as on screen)
@@ -603,12 +663,14 @@ impl Snapshot {
 
         let focus = match self.focus {
             _ if self.dialog.is_some() => self.dialog.as_ref().and_then(|d| d.focused).map_or(UPDATE_DIALOG, |i| NodeId(UPDATE_BUTTON + i as u64)),
+            _ if self.services.as_ref().is_some_and(|view| view.focused) => services_access::focus_node(self.services.as_ref().expect("focused page")),
             FocusSnap::Picker if self.picker.is_some() => PICKER_INPUT,
             FocusSnap::Find(0) if self.find.is_some() => FIND_QUERY,
             FocusSnap::Find(_) if self.find.as_ref().is_some_and(|f| f.replacement.is_some()) => FIND_REPLACE,
             FocusSnap::Editor if self.editor.is_some() => EDITOR,
             FocusSnap::Terminal if self.terminal.is_some() => TERMINAL,
             FocusSnap::ScmMessage if self.scm.as_ref().is_some_and(|s| s.view.root.is_some()) => SCM_MESSAGE,
+            FocusSnap::AboutCopy if self.about.as_ref().is_some_and(|a| a.active) => ABOUT_COPY,
             FocusSnap::Explorer(k) if k < self.explorers.len() => self.explorers[k].focused.map_or(explorer_id(k), NodeId),
             _ => ROOT,
         };
@@ -698,6 +760,11 @@ impl Workbench {
         };
         let tabs = self.tabs.editors.iter().map(|e| e.read(cx)).map(|e| TabSnap { name: e.name.to_string(), dirty: e.is_dirty() }).collect();
         let active_tab = self.tabs.active.filter(|_| editor_visible);
+        let about_view = match &self.tabs.page {
+            Some(Page::About(view)) => Some(view),
+            _ => None,
+        };
+        let about = about_view.map(|view| AboutSnap { active: self.tabs.page_active, details: view.read(cx).a11y_details() });
         let dialog = self.dialog_model(cx).map(|model| DialogSnap {
             description: model.text().split_once('\n').map_or(String::new(), |(_, rest)| rest.to_string()),
             progress: match &model.body {
@@ -755,7 +822,9 @@ impl Workbench {
         });
 
         let scm = (self.chrome.panel == Some(Panel::Scm)).then(|| ScmSnap { generation: self.lsp.generation, view: self.scm.read(cx).a11y_view(window, cx) });
-        let focus = if let Some(k) = trees.iter().position(|t| t.read(cx).focus_handle(cx).is_focused(window)) {
+        let focus = if self.tabs.page_active && about_view.is_some_and(|view| view.focus_handle(cx).is_focused(window)) {
+            FocusSnap::AboutCopy
+        } else if let Some(k) = trees.iter().position(|t| t.read(cx).focus_handle(cx).is_focused(window)) {
             FocusSnap::Explorer(k)
         } else if scm.as_ref().is_some_and(|s| s.view.message_focused) {
             FocusSnap::ScmMessage
@@ -772,11 +841,16 @@ impl Workbench {
         };
         Snapshot {
             generation: self.lsp.generation,
+            services: self.tabs.page.as_ref().filter(|_| self.tabs.page_active).and_then(|page| match page {
+                Page::LanguageServices(page) => Some(page.read(cx).access_view(window, cx)),
+                _ => None,
+            }),
             geometry: Geometry::new(&self.chrome.a11y_bounds, window),
             title,
             explorers,
             tabs,
             active_tab,
+            about,
             editor,
             find,
             completion,
@@ -795,11 +869,31 @@ impl Workbench {
         if last.generation != self.lsp.generation {
             return;
         }
+        if self.a11y_services_action(req, last, window, cx) {
+            return;
+        }
         if self.a11y_scm_action(req, last, window, cx) {
             cx.notify();
             return;
         }
         match (req.action, req.target_node) {
+            (Action::Focus | Action::Click, ABOUT_TAB) if last.about.is_some() => {
+                if let Some(Page::About(view)) = self.tabs.page.clone() {
+                    self.tabs.page_active = true;
+                    self.tabs.diff_active = false;
+                    self.tabs.large_active = false;
+                    window.focus(&view.focus_handle(cx));
+                    cx.notify();
+                }
+            }
+            (Action::Focus | Action::Click, ABOUT_COPY) if last.about.as_ref().is_some_and(|a| a.active) && self.tabs.page_active => {
+                if let Some(Page::About(view)) = &self.tabs.page {
+                    window.focus(&view.focus_handle(cx));
+                    if req.action == Action::Click {
+                        view.update(cx, |view, cx| view.copy_version(cx));
+                    }
+                }
+            }
             (Action::Focus, EDITOR) => {
                 if let Some(e) = self.active_editor() {
                     window.focus(&e.read(cx).focus_handle(cx));
@@ -1086,6 +1180,7 @@ mod tests {
         let runs = runs_for(lines, 3, 0);
         Snapshot {
             generation: 0,
+            services: None,
             geometry: Geometry::default(),
             title: "Codeyard \u{2014} demo".into(),
             explorers: vec![ExplorerSnap {
@@ -1107,6 +1202,7 @@ mod tests {
             }],
             tabs: vec![TabSnap { name: "lib.rs".into(), dirty: true }, TabSnap { name: "main.rs".into(), dirty: false }],
             active_tab: Some(1),
+            about: None,
             notice: None,
             editor: Some(EditorSnap { name: "main.rs".into(), dirty: false, runs, selection: (3, 7), total_lines: 3, first_line: 0 }),
             find: None,
@@ -1135,6 +1231,19 @@ mod tests {
         assert_eq!(sel.start().to_global_utf16_index(), 3);
         assert_eq!(sel.end().to_global_utf16_index(), 7);
         assert_eq!(sel.text(), "main");
+    }
+
+    #[test]
+    fn about_tree_has_a_valid_focused_copy_button() {
+        let mut snapshot = snap();
+        snapshot.editor = None;
+        snapshot.active_tab = None;
+        snapshot.about = Some(AboutSnap { active: true, details: vec![("Version".into(), "0.5.0".into())] });
+        snapshot.focus = FocusSnap::AboutCopy;
+        let tree = accesskit_consumer::Tree::new(snapshot.to_tree(), true);
+        let focused = tree.state().focus().unwrap();
+        assert_eq!(focused.role(), Role::Button);
+        assert_eq!(focused.label().as_deref(), Some("Copy Version"));
     }
 
     #[test]
