@@ -18,6 +18,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   since the preview, keeps encodings, byte-order marks and line endings, refuses incomplete results, and reports per
   file what changed, what did not and what is uncertain. One "Undo Replace" takes the batch back and reports files
   edited since as undo conflicts.
+- Workspace files are kept whole. Folder names, relative and absolute paths, and the shared `settings`, `tasks`
+  and `launch` sections are read. Adding or removing a folder rewrites only the folder list, so comments, unknown
+  fields and other sections stay as written; nothing is written when nothing changed. *File: Save Workspace*,
+  *Save Workspace As…* (relative paths are rewritten for the new place), *Reload Workspace* and *Open Active File
+  as Workspace* (for files on an SSH server) are new. Writes are atomic through the host, locally and over SSH. A
+  file changed elsewhere is not overwritten (*Workspace changed on disk. Reload before saving.*). An unreadable file
+  is reported and never replaced. Missing folders stay listed in the Explorer with Retry and Remove.
+- Settings precedence across a workspace is now user < workspace file < folder, for the first folder and for every
+  extra folder; one folder's settings no longer leak into another's files. The Settings page shows when a value
+  comes from the workspace file or the folder. Tasks and debug configurations from the workspace file run in the
+  active folder. Trust is asked for that folder and, when the file lives elsewhere, for the file's folder too.
+  After a restart, the workspace's folders, order, names and settings come back from the file.
 
 - The extension registry's signed index: format, offline verification (a threshold of root keys, an expiring online
   key, no rollback to an older copy) and `cyx yard keygen | sign | verify` for the key ceremony and test registries
