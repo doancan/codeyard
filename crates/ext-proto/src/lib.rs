@@ -7,6 +7,9 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
+#[cfg(windows)]
+pub mod appcontainer;
+
 use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
 
@@ -64,6 +67,9 @@ pub struct Hello {
     pub folders: Vec<String>,
     /// Why it starts, passed to `guest.activate`.
     pub reason: String,
+    /// Enter the OS sandbox before loading the code. True for everything installed; false only for `cyx dev`, which
+    /// runs the author's own folder behind Wasm and the broker alone (docs/plugin-architecture.md §3).
+    pub sandbox: bool,
 }
 
 /// Exthost → app.

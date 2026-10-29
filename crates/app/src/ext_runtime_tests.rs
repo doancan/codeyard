@@ -13,6 +13,11 @@ fn exthost() -> Option<PathBuf> {
     let p = exthost_path();
     if p.is_none() {
         eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+        return None;
+    }
+    if let Err(why) = sandbox() {
+        eprintln!("skipped: no sandbox here ({why})");
+        return None;
     }
     p
 }
@@ -47,6 +52,7 @@ fn start(name: &str) -> Option<(Process, mpsc::Receiver<(String, Event)>, PathBu
         settings: vec![],
         folders: vec![],
         reason: "command:echo".into(),
+        sandbox: true,
     };
     let p = Process::start(&exe, s.hello(), tx).unwrap();
     Some((p, rx, dir))

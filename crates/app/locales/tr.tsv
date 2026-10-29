@@ -3109,7 +3109,7 @@ Interface scale of every window, from 0.75 (75%) to 2 (200%); View: Zoom In and 
 # Extensions: running code
 {} contains code, but codeyard-exthost is missing beside Codeyard	{} kod içeriyor, ancak Codeyard'ın yanında codeyard-exthost yok
 {} asks for permissions: install it from the Extensions view to review them	{} izin istiyor: izinleri görmek için Eklentiler görünümünden kurun
-This extension contains code, and codeyard-exthost, which runs it, is missing beside Codeyard.	Bu eklenti kod içeriyor ve onu çalıştıran codeyard-exthost, Codeyard'ın yanında yok.
+{0} contains code, which needs a sandbox this system does not provide: {1}	{0} kod içeriyor; bu sistemin sağlamadığı bir sandbox gerektiriyor: {1}
 {} crashed three times and is turned off until Codeyard restarts.	{} üç kez çöktü; Codeyard yeniden başlayana kadar kapalı.
 {} cannot run: codeyard-exthost is missing beside Codeyard.	{} çalışamıyor: Codeyard'ın yanında codeyard-exthost yok.
 {0} could not start: {1}	{0} başlatılamadı: {1}

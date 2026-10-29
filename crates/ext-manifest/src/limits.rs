@@ -46,11 +46,13 @@ pub const IPC_BURST_BYTES: u64 = 64 * 1024 * 1024;
 pub const TIMER_MIN_SECONDS: u32 = 30;
 /// Linear memory of one extension instance; growing past it traps.
 pub const GUEST_MEMORY_BYTES: usize = 256 * 1024 * 1024;
+/// The whole exthost process: the guest's linear memory plus the engine and compiled code. A Job Object commit limit
+/// on Windows; elsewhere the app checks the process's resident size.
+pub const EXTHOST_MEMORY_BYTES: u64 = 512 * 1024 * 1024;
 /// CPU time one call into an extension may take (exports must return quickly; long work waits on tickets).
 pub const GUEST_CALL_MILLIS: u64 = 2_000;
 /// `activate` may take longer: language runtimes start there.
 pub const ACTIVATE_MILLIS: u64 = 10_000;
-
 
 /// An encoded view (`ext-ui`), refused before it is decoded.
 pub const UI_VIEW_BYTES: usize = 8 * 1024 * 1024;
