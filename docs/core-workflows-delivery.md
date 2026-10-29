@@ -158,24 +158,27 @@ propagates failures to running dependents and bounds concurrent startup/live pro
 Variable resolution uses the file host's supplied environment, named workspace roots and one pass
 over the original template. Input/command results are resolved by the caller once and never parsed
 again as variable templates. These planning components pass 20 hermetic tests and strict Clippy.
-Process transport, custom matchers, input UI, task/debug integration and native acceptance remain
+Process transport, input UI, matcher/task/debug integration and native acceptance remain
 unfinished; this foundation is not a completed task-execution delivery.
 
 Two real-process regressions fail before their fixes: a descendant survives cancellation after its
 leader exits, and a process that closes stdout makes cancellation wait 4.9 seconds for natural exit.
 Cancellation now kills the owned group before reaping its leader, and output EOF polls exit without
 removing a still-running process from its session. The regressions pass; 182 agent/host/task-engine
-tests and strict Clippy pass. Windows process-tree ownership and the remaining F04 acceptance are pending.
+tests and strict Clippy pass. The latest integrated acceptance remains pending.
 
 Windows piped processes now start suspended, enter a private job with kill-on-close ownership,
-and resume only after assignment. Native Windows fixtures cover live and already-exited leaders;
-their actual execution remains a CI condition. Windows GNU cross-target all-target Clippy passes,
-and the existing 182 macOS agent/host/engine regressions still pass.
+and resume only after assignment. Both live/exited-leader cases pass on native Windows in Actions
+run `40785549555` (`2e19486`), along with that head's complete required platform workflow.
+Windows GNU cross-target all-target Clippy also passes. The latest integration head needs its own CI.
 
 The matcher core supports custom consecutive-line patterns, repeating final lines, file/range
 captures, built-in templates and overrides, and file-scoped watch readiness. It validates capture
 indices and required fields before execution, shares a regex compilation budget across a plan,
 and bounds regex size, delegated automata and backtracking. Lookarounds/backreferences reuse the
 already-locked regex implementation. An explicit empty matcher list disables automatic detection.
-The engine's 28 tests and strict Clippy pass. Byte-stream decoding, workbench diagnostics and
-runtime readiness integration remain pending.
+The engine's 34 tests and strict Clippy pass. Its bounded byte decoder preserves UTF-8 across
+chunks, strips ANSI/OSC controls, handles progress rewrites and reports gaps, oversized lines and
+invalid text without matching a truncated suffix. A baseline-failing regression also proves that
+virtual background groups inherit dependency readiness without needing their own output matcher.
+Workbench diagnostics, process transport and runtime readiness integration remain pending.
