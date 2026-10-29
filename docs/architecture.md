@@ -29,6 +29,8 @@ crates/
   ext-proto/ frames between the app and an extension host process: handshake, size cap, byte-rate budget
   ext-host/ `codeyard-exthost`, which runs one code extension's WebAssembly component; the only binary with wasmtime;
             ships beside the app
+  ext-net/  network for extensions: HTTPS to the hosts in `net` only, every connection's peer address checked,
+            re-checked redirects, byte budgets, timeout and cancellation (hyper + rustls)
   cyx/      the extension authors' command: new, dev (`--extension-dev`, hot reload), check, package, import-vscode;
             ships beside the app
   yard/     the extension registry's publish service (`yard` binary, hyper + SQLite): signed uploads, registry checks,
