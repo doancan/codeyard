@@ -88,7 +88,9 @@ impl Workbench {
             items.push(MenuItem::new(crate::i18n::t("Reveal in Finder")).separator());
             commands.push(MenuCmd::Reveal);
         }
-        self.show_menu(items, commands, Vec::new(), target, position, window, cx);
+        let mut actions = Vec::new();
+        self.add_extension_items(ext_manifest::MenuLocation::FileTree, Some(&target.path), &mut items, &mut commands, &mut actions, cx);
+        self.show_menu(items, commands, actions, target, position, window, cx);
     }
 
     /// The tab's right-click menu.
@@ -174,7 +176,7 @@ impl Workbench {
             (crate::i18n::t("Compare with Commit…"), Box::new(GitCompareCommit), false),
             (crate::i18n::t("Command Palette…"), Box::new(CommandPalette), true),
         ];
-        self.show_action_menu(entries, position, window, cx);
+        self.show_action_menu_with_extensions(entries, ext_manifest::MenuLocation::EditorContext, position, window, cx);
     }
 
     /// Context menu from an action list: (label, action, separator before). Shortcuts

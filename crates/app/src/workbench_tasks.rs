@@ -19,6 +19,36 @@ pub struct Task {
     pub source: &'static str,
 }
 
+/// `Task::source` of a task a code extension provides; its `command` is `<extension>\n<task id>\n<detail>`.
+const EXTENSION_SOURCE: &str = "extension";
+
+impl Task {
+    /// A task a code extension provided (`request.provide-tasks`).
+    pub fn from_extension(extension: &str, id: &str, label: &str, detail: Option<&str>) -> Task {
+        let detail = detail.unwrap_or_default().replace('\n', " ");
+        Task { label: label.to_string(), command: format!("{extension}\n{id}\n{detail}"), source: EXTENSION_SOURCE }
+    }
+
+    /// (extension, task id) of a task a code extension provided.
+    pub fn extension(&self) -> Option<(&str, &str)> {
+        let mut parts = self.command.splitn(3, '\n');
+        match (self.source == EXTENSION_SOURCE, parts.next(), parts.next()) {
+            (true, Some(extension), Some(id)) => Some((extension, id)),
+            _ => None,
+        }
+    }
+
+    /// The line under the label in the task list: the command and where it came from, or the extension's detail and
+    /// its id (every extension surface names the extension).
+    pub fn detail(&self) -> String {
+        match (self.extension(), self.command.splitn(3, '\n').nth(2).filter(|d| !d.is_empty())) {
+            (Some((extension, _)), Some(detail)) => format!("{detail} · {extension}"),
+            (Some((extension, _)), None) => extension.to_string(),
+            (None, _) => format!("{} · {}", self.command, self.source),
+        }
+    }
+}
+
 const TASKS_FILE: &str = ".codeyard/tasks.jsonc";
 /// Source shown for the tasks of a workspace file.
 pub(crate) const WORKSPACE_SOURCE: &str = "workspace";
@@ -308,22 +338,22 @@ impl Workbench {
 
     /// "Tasks: Run Task…"
     pub(super) fn show_tasks(&mut self, cx: &mut Context<Self>) {
-        self.detect_tasks(cx, |this, tasks, window, cx| {
-            if tasks.is_empty() {
-                this.notice = Some(Notice::Info(crate::i18n::t("No tasks found. “Tasks: Configure Tasks” creates .codeyard/tasks.jsonc.").into()));
-                cx.notify();
-                return;
-            }
-            if this.overlay.is_some() {
-                this.close_overlay(window, cx);
-            }
-            let items = tasks
-                .iter()
-                .map(|t| PickItem { label: t.label.clone().into(), detail: Some(format!("{} · {}", t.command, t.source).into()), keys: None })
-                .collect();
-            let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Run task"), "", None, cx));
-            this.show_overlay(picker, OverlayKind::Tasks(tasks), window, cx);
-        });
+        self.detect_tasks(cx, |this, tasks, window, cx| this.with_extension_tasks(tasks, window, cx, Self::pick_task));
+    }
+
+    /// The task list: the folder's tasks and those code extensions provide.
+    fn pick_task(&mut self, tasks: Vec<Task>, window: &mut Window, cx: &mut Context<Self>) {
+        if tasks.is_empty() {
+            self.notice = Some(Notice::Info(crate::i18n::t("No tasks found. “Tasks: Configure Tasks” creates .codeyard/tasks.jsonc.").into()));
+            cx.notify();
+            return;
+        }
+        if self.overlay.is_some() {
+            self.close_overlay(window, cx);
+        }
+        let items = tasks.iter().map(|t| PickItem { label: t.label.clone().into(), detail: Some(t.detail().into()), keys: None }).collect();
+        let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Run task"), "", None, cx));
+        self.show_overlay(picker, OverlayKind::Tasks(tasks), window, cx);
     }
 
     /// ⇧⌘B: the first task with "build" in its name (open the list if none).
@@ -400,6 +430,10 @@ impl Workbench {
 
     /// Run the task in a new terminal (tab name is the task's name).
     pub(super) fn run_task(&mut self, task: Task, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some((extension, id)) = task.extension() {
+            self.jobs.last = Some(task.clone());
+            return self.run_extension_task(extension, id, window, cx);
+        }
         self.require_trust(window, cx, move |this, window, cx| this.run_task_trusted(task, window, cx));
     }
 
@@ -489,12 +523,17 @@ impl Workbench {
         for (p, d) in &self.jobs.problems {
             all.entry(p.clone()).or_default().push(d.clone());
         }
+        for (p, d) in self.extension_problems() {
+            all.entry(p.clone()).or_default().extend(d);
+        }
         all
     }
 
+    /// Language server, task and extension diagnostics of one file.
     pub(super) fn diagnostics_for(&self, path: &str) -> Vec<crate::lsp::Diagnostic> {
         let mut d = self.lsp.diagnostics.get(path).cloned().unwrap_or_default();
         d.extend(self.jobs.problems.iter().filter(|(p, _)| p == path).map(|(_, x)| x.clone()));
+        d.extend(self.extension_diagnostics_for(path));
         d
     }
 

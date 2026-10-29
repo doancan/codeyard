@@ -858,6 +858,10 @@ impl Workbench {
         if self.try_spell_fix(window, cx) {
             return;
         }
+        // Extensions with code actions for this file: their actions next to the language server's.
+        if self.quick_fix_with_extensions(window, cx) {
+            return;
+        }
         let Some((ed, client, path, _, range, _)) = self.active_lsp(cx) else { return };
         let diagnostics = ed.read(cx).diagnostics_at_cursor();
         let params = json!({
@@ -928,6 +932,10 @@ impl Workbench {
 
     fn format(&mut self, selection: bool, window: &mut Window, cx: &mut Context<Self>) {
         let Some(ed) = self.active_editor().cloned() else { return };
+        // The extension chosen to format this file (`editor.formatters`) formats the whole document.
+        if !selection && self.format_with_extension(&ed, window, cx) {
+            return;
+        }
         let request = ed.update(cx, |e, _| if selection { e.format_selection_request() } else { e.format_request() });
         let Some((client, params)) = request else {
             if selection {

@@ -3,6 +3,8 @@
 
 wit_bindgen::generate!({ path: "../../../../ext-api/wit", world: "extension" });
 
+mod providers;
+
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -58,9 +60,12 @@ impl Guest for Probe {
                 let n = storage::get("events").map_or(0, |b| b.len()) + 1;
                 let _ = storage::set("events", &vec![1u8; n]);
             }
-            requests::respond(id, Ok(&Response::None));
+            providers::handle(id, request);
             return;
         };
+        if providers::command(id, &command).is_some() {
+            return;
+        }
         match command.as_str() {
             "echo" => reply(id, args),
             "env" => reply(id, env::info().api_version),
@@ -126,7 +131,9 @@ impl Guest for Probe {
         }
     }
 
-    fn cancel(_id: u64) {}
+    fn cancel(id: u64) {
+        providers::cancel(id);
+    }
 
     fn complete(ticket: Ticket, result: Completion) {
         if let Some(id) = WAITING.with(|w| w.borrow_mut().remove(&ticket)) {
