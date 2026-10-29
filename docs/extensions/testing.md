@@ -2,7 +2,7 @@
 
 There are two kinds of test, and a new extension from `cyx new command` or `cyx new view` comes with both set up:
 
-- **Unit tests** with `cargo test`. They run natively, in milliseconds, against a mock Codeyard: fake files, fixture HTTP responses, recorded processes, scripted answers and a virtual clock.
+- **Unit tests** with `cargo test` (Rust) or `npm test` (TypeScript, [below](#typescript)). They run on your computer, in milliseconds, against a mock Codeyard: fake files, fixture HTTP responses, recorded processes, scripted answers and a virtual clock.
 - **`cyx test`** builds the real component and runs it in Codeyard's extension host: it activates the extension, runs every command and draws every view.
 
 <!-- toc -->
@@ -11,6 +11,7 @@ There are two kinds of test, and a new extension from `cyx new command` or `cyx 
 - [What the test can check](#what-the-test-can-check)
 - [Permissions in tests](#permissions-in-tests)
 - [cyx test](#cyx-test)
+- [TypeScript](#typescript)
 - [In CI](#in-ci)
 <!-- /toc -->
 
@@ -128,6 +129,40 @@ error[CY0201]: net/fetch needs a permission the manifest does not declare
 
 `cyx test` finds `codeyard-exthost` next to `cyx` (both ship with Codeyard), or uses `CODEYARD_EXTHOST`.
 
+For a TypeScript extension, a thrown error's stack trace shows the TypeScript file and line, from the bundle's source map:
+
+```
+  ✓ command boom answers (with an error: it broke
+    at explode (src/extension.ts:4:9)
+    at activate/< (src/extension.ts:18:5))
+```
+
+A call to an interface the manifest grants nothing for (a file read without `read`) never reaches the extension host, because the component does not import it ([typescript.md](typescript.md#building-and-packaging)); the SDK refuses it with the same fix, and `cyx test` fails on it too.
+
+## TypeScript
+
+`@codeyard/extension/testing` is the same mock for `npm test`, which runs `test/*.test.ts` with Node's test runner. The extension runs through the same SDK code as in Codeyard.
+
+```ts
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import { MockHost } from "@codeyard/extension/testing";
+import * as extension from "../src/extension.ts";
+
+test("says hello", async () => {
+  const host = new MockHost();
+  await host.activate(extension);
+  host.answerInput("Ada");
+  assert.equal(await host.command("hello"), 1);
+  assert.deepEqual(host.notices(), ["Hello, Ada! (1 so far)"]);
+});
+```
+
+Everything is the Rust mock's, in camelCase, and the calls that drive the extension return Promises: `await host.command(id, args)`, `await host.render(view)`, `await host.viewEvent(view, event)`, `await host.changeSetting(key, value)`, `await host.advance(seconds)`. Fixtures take plain values: `host.http("GET", url, 200, { deployments: [] })` sends an object as JSON, `host.setting("interval", 120)`, `host.process("vercel", ["ls"], { stdout: "web  ready\n" })`. The checks are `host.notices()`, `host.fetched()`, `host.ran()`, `host.readText(path)`, `host.storage()`, `host.denied()` and the rest of the list above.
+
+`new MockHost()` reads `codeyard-extension.toml` from the folder `npm test` runs in; `new MockHost({ manifest })` takes the text, and `MockHost.allowAll()` allows everything. While a mock is active it is the global `fetch`, so npm packages such as Octokit reach its fixtures and never the network; `host.dispose()` gives `fetch` back.
+
 ## In CI
 
-`cyx new` writes a publish workflow; to also test on every push, add a job that installs Rust and runs `cargo test` (unit tests need no WebAssembly target). `cyx test` needs the `wasm32-wasip2` target and Codeyard's extension host, so run it where Codeyard (or `codeyard/setup-cyx`) is installed.
+`cyx new` writes a publish workflow; to also test on every push, add a job that runs the unit tests: `cargo test` for Rust (no WebAssembly target needed), or `npm ci && npm test` for TypeScript (Node.js 22.18 or newer). `cyx test` needs Codeyard's extension host, and for Rust the `wasm32-wasip2` target, so run it where Codeyard (or `codeyard/setup-cyx`) is installed.

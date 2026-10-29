@@ -29,6 +29,17 @@ each crate package (confirmed for `nucleo-matcher` and `spellbook`; the `license
 - [dwrote](https://github.com/servo/dwrote-rs), [option-ext](https://github.com/soc/option-ext) and
   [cbindgen](https://github.com/mozilla/cbindgen).
 
+## npm packages for TypeScript extensions
+
+No npm package ships with Codeyard, and `@codeyard/extension` (`sdk/typescript`) has no runtime dependencies. To build
+a TypeScript extension, `cyx` installs pinned build tools with `npm ci` into its cache folder on the author's machine:
+esbuild (MIT) and ComponentizeJS (Apache-2.0 WITH LLVM-exception), from `sdk/typescript/toolchain/package-lock.json`.
+ComponentizeJS embeds its JavaScript engine, [StarlingMonkey](https://github.com/bytecodealliance/StarlingMonkey)
+(Apache-2.0 WITH LLVM-exception, built on SpiderMonkey, MPL-2.0), in every TypeScript extension's `extension.wasm`;
+the extension's author distributes it with their package. Every package in the SDK's lock files, with its version and
+licence, is in `THIRD_PARTY_NPM.md`; regenerate it with `scripts/npm-licenses.py` after a change, and CI fails when
+it is out of date or a licence is not one `deny.toml` allows (plus BlueOak-1.0.0).
+
 ## Icons
 
 `crates/app/assets/icons/*.svg` (79 files).

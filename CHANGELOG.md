@@ -12,6 +12,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The extension API `codeyard:api` 0.1.0 (docs/extensions/reference/api.md) and its import check: `cyx check`, the
   registry and the installer refuse a code extension whose `extension.wasm` imports an interface its manifest has no
   permission for, with the line to add.
+- TypeScript code extensions (docs/extensions/typescript.md): `@codeyard/extension` (`sdk/typescript`) with the same
+  API as the Rust SDK, every call returning a Promise, and a global `fetch` mapped to the host's `net` with streamed
+  bodies, so npm packages such as Octokit and zod work once bundled. `cyx package`, `cyx test` and `cyx dev` build a
+  `.ts`/`.js` entry with esbuild and ComponentizeJS, which `cyx` installs at pinned versions in its cache; Node.js is
+  the only requirement. A Node.js built-in import fails the build at its line. `cyx test` shows TypeScript files and
+  lines in stack traces. `@codeyard/extension/testing` is the mock host for `npm test`. `cyx new command|view --lang
+  ts` and three examples in `examples/extensions/`.
+- `codeyard-exthost --compile --cache FILE` reuses Cranelift's compiled functions from the last compile; `cyx test`
+  uses it, and a rebuilt TypeScript extension compiles in about half the time.
 - Search Editors: "Search: Open Search Editor" keeps a query in its own tab with its options, globs, context lines and
   folders (every folder of a multi-folder workspace), for keyboard navigation and rerun. Tabs return after a restart
   with their query and up to 200 results, marked as restored until they run again; truncated, stopped and failed
@@ -183,6 +192,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The extension host's idle memory for a TypeScript extension drops from 54 MB to 22 MB on macOS: it hashes the
+  compiled code in pieces and copies the code to executable memory without a heap buffer, so 32 MB of freed memory no
+  longer stays with the allocator.
 - The publish workflow that `cyx new` writes pins `actions/checkout` and the Codeyard publish action to commit SHAs. It
   referred to a `v1` tag that did not exist, and a tag can be moved to code that would then run with the job's signing
   identity.

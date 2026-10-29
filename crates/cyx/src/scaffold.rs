@@ -1,5 +1,5 @@
-//! `cyx new`: a working extension of each kind. Every template passes `cyx check` as written, the Rust ones once built
-//! (tests make sure; examples/extensions holds the Rust ones), so the first `cyx dev` shows something.
+//! `cyx new`: a working extension of each kind. Every template passes `cyx check` as written, the code ones once built
+//! (tests make sure; examples/extensions holds them, in Rust and TypeScript), so the first `cyx dev` shows something.
 
 use std::path::Path;
 
@@ -104,6 +104,78 @@ const GITIGNORE: &str = "target/\nextension.wasm\n";
 const COMMAND_RS: &str = include_str!("../templates/command.rs");
 const VIEW_RS: &str = include_str!("../templates/view.rs");
 
+const TS_README: &str = "# NAME\n\nA Codeyard extension in TypeScript. You need Node.js 22.18 or newer; `cyx` installs its build tools (esbuild, ComponentizeJS) itself.\n\n```sh\nnpm install    # the SDK, its types and TypeScript\nnpm test       # unit tests, against a mock Codeyard\nnpm run check  # type-check\ncyx test       # the built extension, in the real extension host\ncyx dev        # run it in Codeyard\ncyx package    # build extension.wasm and write the .cyx\n```\n\nPublish it with `cyx publish` or by pushing a tag (`git tag v0.1.0 && git push --tags`).\n";
+
+/// The npm project of a TypeScript extension. `npm test` runs the tests with Node's type stripping: no compile step.
+const PACKAGE_JSON: &str = r#"{
+  "name": "NAME",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"test/*.test.ts\"",
+    "check": "tsc"
+  },
+  "devDependencies": {
+    "@codeyard/extension": "SDK",
+    "@types/node": "24.19.2",
+    "typescript": "6.0.3"
+  }
+}
+"#;
+
+const TSCONFIG: &str = r#"{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "nodenext",
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "skipLibCheck": true
+  },
+  "include": ["src", "test"]
+}
+"#;
+
+const TS_GITIGNORE: &str = "node_modules/\nextension.wasm\nextension.js.map\n";
+const COMMAND_TS: &str = include_str!("../templates/command.ts");
+const COMMAND_TEST_TS: &str = include_str!("../templates/command.test.ts");
+const VIEW_TS: &str = include_str!("../templates/view.ts");
+const VIEW_TEST_TS: &str = include_str!("../templates/view.test.ts");
+
+/// The language of a code extension's template.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Lang {
+    Rust,
+    TypeScript,
+}
+
+impl Lang {
+    pub fn parse(s: &str) -> Option<Lang> {
+        match s {
+            "rust" | "rs" => Some(Lang::Rust),
+            "ts" | "typescript" => Some(Lang::TypeScript),
+            _ => None,
+        }
+    }
+}
+
+/// Where a TypeScript extension gets `@codeyard/extension`: npm, or the SDK folder of a Codeyard checkout. `cyx`
+/// builds with the copy it ships either way; npm's is for `npm test` and the editor's types.
+fn npm_sdk(sdk: Option<&str>) -> String {
+    match sdk {
+        Some(root) => format!("file:{}/sdk/typescript", root.trim_end_matches('/')),
+        None => NPM_SDK_VERSION.to_string(),
+    }
+}
+
+/// The `@codeyard/extension` version a new TypeScript extension asks npm for.
+pub const NPM_SDK_VERSION: &str = "0.1.0";
+
 /// Where a generated code extension gets the SDK: the Codeyard repository (the SDK is pre-release and not on
 /// crates.io yet), or a local checkout of it.
 fn sdk_dependency(package: &str, folder: &str, sdk: Option<&str>) -> String {
@@ -127,9 +199,26 @@ pub fn create(dir: &Path, kind: Kind, name: &str, publisher: &str) -> Result<(),
 }
 
 /// Like `create`; a code extension takes the SDK from the Codeyard checkout `sdk` when given.
+#[cfg(test)]
 pub fn create_with(dir: &Path, kind: Kind, name: &str, publisher: &str, sdk: Option<&str>) -> Result<(), String> {
+    create_in(dir, kind, name, publisher, sdk, Lang::Rust)
+}
+
+/// Like `create_with`, with the code in `lang`.
+pub fn create_in(dir: &Path, kind: Kind, name: &str, publisher: &str, sdk: Option<&str>, lang: Lang) -> Result<(), String> {
     let t = title(name);
-    let code = |rs: &str| {
+    let rust = lang == Lang::Rust;
+    let entry = if rust { "Cargo.toml" } else { "src/extension.ts" };
+    let code = |rs: &str, ts: &str, test: &str| {
+        if !rust {
+            return vec![
+                ("package.json".to_string(), PACKAGE_JSON.replace("NAME", name).replace("SDK", &npm_sdk(sdk))),
+                ("tsconfig.json".to_string(), TSCONFIG.to_string()),
+                ("src/extension.ts".to_string(), ts.replace("TITLE", &t)),
+                ("test/extension.test.ts".to_string(), test.to_string()),
+                (".gitignore".to_string(), TS_GITIGNORE.to_string()),
+            ];
+        }
         let cargo = CARGO_TOML
             .replace("NAME", name)
             .replace("SDK", &sdk_dependency("codeyard-extension", "ext-sdk", sdk))
@@ -172,20 +261,24 @@ pub fn create_with(dir: &Path, kind: Kind, name: &str, publisher: &str, sdk: Opt
         ),
         Kind::Command => (
             format!(
-                "{}\n[code]\nentry = \"Cargo.toml\"\n\n[[commands]]\nid    = \"hello\"\ntitle = \"{t}: Say Hello\"\n",
+                "{}\n[code]\nentry = \"{entry}\"\n\n[[commands]]\nid    = \"hello\"\ntitle = \"{t}: Say Hello\"\n",
                 header(publisher, name, &t, "A command.")
             ),
-            code(COMMAND_RS),
+            code(COMMAND_RS, COMMAND_TS, COMMAND_TEST_TS),
         ),
         Kind::View => (
             format!(
-                "{}\n[code]\nentry = \"Cargo.toml\"\n\n[[views]]\nid       = \"main\"\ntitle    = \"{t}\"\nlocation = \"sidebar\"\n\n[[commands]]\nid    = \"reset\"\ntitle = \"{t}: Reset\"\n",
+                "{}\n[code]\nentry = \"{entry}\"\n\n[[views]]\nid       = \"main\"\ntitle    = \"{t}\"\nlocation = \"sidebar\"\n\n[[commands]]\nid    = \"reset\"\ntitle = \"{t}: Reset\"\n",
                 header(publisher, name, &t, "A view.")
             ),
-            code(VIEW_RS),
+            code(VIEW_RS, VIEW_TS, VIEW_TEST_TS),
         ),
     };
-    let readme = if kind.is_code() { CODE_README } else { README };
+    let readme = match (kind.is_code(), rust) {
+        (false, _) => README,
+        (true, true) => CODE_README,
+        (true, false) => TS_README,
+    };
     std::fs::create_dir_all(dir).map_err(|e| format!("error: cannot create {}: {e}", dir.display()))?;
     let mut all = vec![
         (ext_manifest::FILE_NAME.to_string(), manifest),

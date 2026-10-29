@@ -1,5 +1,5 @@
-//! Building a code extension's component: plain cargo for `wasm32-wasip2`, the result copied to `extension.wasm` in the
-//! extension's folder, where packaging, `cyx test` and `cyx dev` find it.
+//! Building a code extension's component: plain cargo for `wasm32-wasip2` (TypeScript and JavaScript: typescript.rs),
+//! the result written to `extension.wasm` in the extension's folder, where packaging, `cyx test` and `cyx dev` find it.
 
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -48,10 +48,7 @@ pub fn build_in(dir: &Path, target_dir: Option<&Path>) -> Result<Option<PathBuf>
     let Ok(m) = manifest(dir) else { return Ok(None) };
     let Some(code) = &m.code else { return Ok(None) };
     if code.language != CodeLanguage::Rust {
-        return Err(
-            "error: TypeScript and JavaScript extensions cannot be built yet\n   = fix: write the extension in Rust for now (code.entry = \"Cargo.toml\")"
-                .into(),
-        );
+        return crate::typescript::build(dir, &m, &code.entry).map(Some);
     }
     if !target_installed() {
         return Err(format!(

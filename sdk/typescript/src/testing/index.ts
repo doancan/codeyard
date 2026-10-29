@@ -1,0 +1,754 @@
+// `@codeyard/extension/testing`: a mock Codeyard for an extension's unit tests under Node (`npm test`), the same as
+// `codeyard-extension-test` for Rust (docs/extensions/testing.md). Fake files, fixture HTTP responses, recorded
+// processes, scripted answers to pickers and inputs, and a virtual clock for timers. Calls are checked against the
+// extension's `codeyard-extension.toml`, so a test fails where Codeyard would refuse the call, with the same fix.
+//
+//   const host = new MockHost();
+//   await host.activate(extension);
+//   host.answerInput("Ada");
+//   assert.equal(await host.command("greet"), 1);
+//   assert.deepEqual(host.notices(), ["Hello, Ada!"]);
+//
+// The extension runs through the same SDK code as in Codeyard: the mock implements the host's interfaces, delivers
+// each result after the call returns (as the extension host does), and is the global `fetch` while it is active.
+
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { CodeyardError, DeniedError, fromWit } from "../errors.ts";
+import { installGlobals, start, type ExtensionModule } from "../guest.ts";
+import { hostOf } from "../fetch.ts";
+import type { CodeAction, Diagnostic, Document, FormatOptions, LogLevel, Range, Severity, StatusItem, TextEdit } from "../types.ts";
+import { fromWitDiagnostic, toWitDiagnostic } from "../types.ts";
+import type * as W from "../wit.ts";
+import { allowsNet, allowsRead, allowsWrite, globMatch, permissionsOf, type Permissions } from "./permissions.ts";
+import { parseToml, type Table } from "./toml.ts";
+
+/** The workspace folder of every mock. */
+export const FOLDER = "file:///work";
+
+/** A recorded or scripted run of a program. */
+export interface ProcessFixture {
+  stdout?: string | Uint8Array;
+  stderr?: string | Uint8Array;
+  /** Undefined: killed by a signal. Defaults to 0. */
+  code?: number | undefined;
+}
+
+/** A call that returned a ticket, by its WIT name (`net/fetch`), with its arguments. */
+export interface Call {
+  name: string;
+  args: unknown[];
+}
+
+export interface FetchedRequest {
+  method: string;
+  url: string;
+  headers: [string, string][];
+  body: string;
+  /** The `auth` provider that signed it, if any. */
+  auth?: string;
+}
+
+interface HttpFixture {
+  method: string;
+  url: string;
+  status: number;
+  headers: [string, string][];
+  body: Uint8Array;
+}
+
+type Delivery = { ticket: bigint; event: W.StreamEvent } | { ticket: bigint; complete: W.Completion };
+
+const bytes = (v: string | Uint8Array): Uint8Array => (typeof v === "string" ? new TextEncoder().encode(v) : v);
+const text = (v: Uint8Array): string => new TextDecoder().decode(v);
+const tick = () => new Promise<void>((r) => setImmediate(r));
+
+/** The workspace-relative path of a uri, for `read` and `write` globs. */
+function relative(uri: string): string {
+  if (uri.startsWith(FOLDER)) return uri.slice(FOLDER.length).replace(/^\/+/, "");
+  const at = uri.indexOf("://");
+  return (at >= 0 ? uri.slice(at + 3) : uri).replace(/^\/+/, "");
+}
+
+/** A mock Codeyard for one extension. Set it up and inspect it in any order. */
+export class MockHost {
+  #permissions: Permissions | undefined;
+  #untrusted = false;
+  #nextTicket = 0n;
+  #nextId = 0n;
+  #nextRequest = 0n;
+  #queue: Delivery[] = [];
+  #responses = new Map<bigint, { tag: "ok"; val: W.Response } | { tag: "err"; val: W.WitError }>();
+  #guest: W.Guest | undefined;
+  #restore: (() => void) | undefined;
+  #clock = 0;
+
+  #files = new Map<string, Uint8Array>();
+  #http: HttpFixture[] = [];
+  #processes: { program: string; args: string[]; fixture: ProcessFixture }[] = [];
+  #active: Document | undefined;
+  #selections: Range[] = [];
+  #settings = new Map<string, string | undefined>();
+  #storage = new Map<string, Uint8Array>();
+  #commandResults = new Map<string, string>();
+  #secrets = new Map<string, string>();
+  #clipboard: string | undefined;
+  #inputs: (string | undefined)[] = [];
+  #picks: number[][] = [];
+  #noticeAnswers: number[] = [];
+  #timers = new Map<bigint, { period: number; next: number }>();
+  #progress = new Map<bigint, string>();
+  #statusItems = new Map<string, StatusItem>();
+  #diagnostics = new Map<string, Diagnostic[]>();
+
+  #calls: Call[] = [];
+  #logs: [LogLevel, string][] = [];
+  #notices: [Severity, string][] = [];
+  #denied: DeniedError[] = [];
+  #fetched: FetchedRequest[] = [];
+  #ran: { program: string; args: string[]; cwd?: string; env: [string, string][] }[] = [];
+  #applied: [string, number, TextEdit[]][] = [];
+  #invalidated: string[] = [];
+  #terminal: string[] = [];
+
+  /**
+   * A mock with the permissions and setting defaults of `codeyard-extension.toml` in the current folder (where
+   * `npm test` runs), or of `manifest` when given. Without a manifest, every call is allowed.
+   */
+  constructor(options: { manifest?: string } = {}) {
+    const path = join(process.cwd(), "codeyard-extension.toml");
+    const manifest = options.manifest ?? (existsSync(path) ? readFileSync(path, "utf8") : undefined);
+    if (manifest !== undefined) this.manifest(manifest);
+  }
+
+  /** A mock that allows every call. */
+  static allowAll(): MockHost {
+    return new MockHost({ manifest: "" }).#allowAll();
+  }
+
+  #allowAll(): MockHost {
+    this.#permissions = undefined;
+    return this;
+  }
+
+  /** Check calls against this manifest's permissions, and use its setting defaults. */
+  manifest(toml: string): this {
+    const m: Table = parseToml(toml);
+    this.#permissions = permissionsOf(m);
+    for (const [key, s] of Object.entries((m.settings ?? {}) as Table)) {
+      const def = (s as Table).default;
+      if (!this.#settings.has(key)) this.#settings.set(key, def === undefined ? undefined : JSON.stringify(def));
+    }
+    return this;
+  }
+
+  /** Refuse sending, writing and running, as in an untrusted folder. */
+  untrusted(): this {
+    this.#untrusted = true;
+    return this;
+  }
+
+  // ---- fixtures ----------------------------------------------------------------------------------------------------
+
+  /** A workspace file. A path without a scheme is relative to the workspace folder. */
+  file(path: string, contents: string | Uint8Array): this {
+    this.#files.set(this.uri(path), bytes(contents));
+    return this;
+  }
+
+  /** The uri the mock uses for a workspace-relative path. */
+  uri(path: string): string {
+    return path.includes("://") ? path : `${FOLDER}/${path.replace(/^\/+/, "")}`;
+  }
+
+  /**
+   * The response to `method url` (any method when `method` is `*`). A body that is not a string or bytes is sent as
+   * JSON.
+   */
+  http(method: string, url: string, status: number, body: unknown = "", headers: Record<string, string> = {}): this {
+    const h = Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v] as [string, string]);
+    let b: Uint8Array;
+    if (typeof body === "string" || body instanceof Uint8Array) b = bytes(body);
+    else {
+      b = bytes(JSON.stringify(body));
+      if (!h.some(([k]) => k === "content-type")) h.push(["content-type", "application/json; charset=utf-8"]);
+    }
+    this.#http.push({ method, url, status, headers: h, body: b });
+    return this;
+  }
+
+  /** What running `program` with these exact `args` prints and returns. */
+  process(program: string, args: string[], fixture: ProcessFixture): this {
+    this.#processes.push({ program, args, fixture });
+    return this;
+  }
+
+  /** The active editor's document. */
+  activeDocument(path: string, language: string, text: string): this {
+    this.#active = { uri: this.uri(path), language, version: 1, text };
+    return this;
+  }
+
+  selections(ranges: Range[]): this {
+    this.#selections = ranges;
+    return this;
+  }
+
+  /** A setting's value, or unset with `undefined`. */
+  setting(key: string, value: unknown): this {
+    this.#settings.set(key, value === undefined ? undefined : JSON.stringify(value));
+    return this;
+  }
+
+  /** The result of `ctx.execute(command, …)`. */
+  commandResult(command: string, value: unknown): this {
+    this.#commandResults.set(command, JSON.stringify(value ?? null));
+    return this;
+  }
+
+  secret(key: string, value: string): this {
+    this.#secrets.set(key, value);
+    return this;
+  }
+
+  clipboardText(text: string): this {
+    this.#clipboard = text;
+    return this;
+  }
+
+  // ---- scripted answers (the next input box, pick or notice gets the next answer; none means dismissed) ------------
+
+  answerInput(text: string): this {
+    this.#inputs.push(text);
+    return this;
+  }
+
+  dismissInput(): this {
+    this.#inputs.push(undefined);
+    return this;
+  }
+
+  /** The indices picked in the next quick pick. */
+  answerPick(indices: number[]): this {
+    this.#picks.push(indices);
+    return this;
+  }
+
+  /** The button clicked on the next notice that has buttons. */
+  answerNotice(index: number): this {
+    this.#noticeAnswers.push(index);
+    return this;
+  }
+
+  // ---- driving the extension ---------------------------------------------------------------------------------------
+
+  /** Call the extension's `activate`, then deliver what it waits on. Rejects with activate's error. */
+  async activate(extension: ExtensionModule, reason = "command"): Promise<void> {
+    this.#restore?.();
+    this.#guest = start(extension, this.#bindings());
+    this.#restore = installGlobals();
+    try {
+      this.#guest.activate({ reason });
+    } catch (e) {
+      throw new Error(String(e));
+    }
+    await this.#pump();
+  }
+
+  async deactivate(): Promise<void> {
+    this.#need().deactivate();
+    await this.#pump();
+  }
+
+  /** Stop being the global `fetch`. */
+  dispose(): void {
+    this.#restore?.();
+    this.#restore = undefined;
+  }
+
+  /** Run the manifest's command `id` (its local id) and return its result. */
+  async command(id: string, args?: unknown): Promise<any> {
+    const r = await this.request({ tag: "command", val: [id, args === undefined ? "" : JSON.stringify(args)] });
+    if (r.tag !== "json") throw CodeyardError.other(`command ${id} answered ${r.tag}`);
+    return r.val ? JSON.parse(r.val) : null;
+  }
+
+  /** Draw view `id`: its element tree. */
+  async render(id: string): Promise<any> {
+    const r = await this.request({ tag: "render", val: id });
+    if (r.tag !== "view") throw CodeyardError.other(`view ${id} answered ${r.tag}`);
+    return JSON.parse(r.val);
+  }
+
+  /** Send an event to view `id`. */
+  async viewEvent(id: string, event: unknown): Promise<void> {
+    await this.request({ tag: "ui-event", val: [id, JSON.stringify(event)] });
+  }
+
+  async format(document: Document, range: Range | undefined, options: FormatOptions): Promise<TextEdit[]> {
+    const r = await this.request({ tag: "format", val: [document, range, options] });
+    if (r.tag !== "edits") throw CodeyardError.other(`the formatter answered ${r.tag}`);
+    return r.val;
+  }
+
+  async codeActions(document: Document, range: Range, diagnostics: Diagnostic[]): Promise<CodeAction[]> {
+    const r = await this.request({ tag: "code-actions", val: [document, range, diagnostics.map(toWitDiagnostic)] });
+    if (r.tag !== "code-actions") throw CodeyardError.other(`the code action provider answered ${r.tag}`);
+    return r.val.map((a) => ({
+      id: a.id,
+      title: a.title,
+      edits: Object.fromEntries(a.edits),
+      ...(a.command === undefined ? {} : { command: a.command }),
+      preferred: a.preferred,
+      fixes: a.fixes.map(fromWitDiagnostic),
+    }));
+  }
+
+  async runCodeAction(id: string): Promise<void> {
+    await this.request({ tag: "run-code-action", val: id });
+  }
+
+  async openUri(uri: string): Promise<void> {
+    await this.request({ tag: "open-uri", val: uri });
+  }
+
+  /** Change a setting and tell the extension. */
+  async changeSetting(key: string, value: unknown): Promise<void> {
+    this.setting(key, value);
+    await this.request({ tag: "settings-changed", val: [key] });
+  }
+
+  /** The user cancels progress `id` (from `progress()`). */
+  async cancelProgress(id: number): Promise<void> {
+    await this.request({ tag: "cancel-progress", val: BigInt(id) });
+  }
+
+  /** Move the virtual clock forward, firing each timer once per period that ends in that time. */
+  async advance(seconds: number): Promise<void> {
+    const end = this.#clock + seconds;
+    for (;;) {
+      let due: [bigint, number] | undefined;
+      for (const [id, t] of this.#timers) {
+        if (t.next <= end && (!due || t.next < due[1] || (t.next === due[1] && id < due[0]))) due = [id, t.next];
+      }
+      if (!due) break;
+      const [id, at] = due;
+      this.#clock = at;
+      const t = this.#timers.get(id);
+      if (t) t.next += t.period;
+      await this.request({ tag: "timer", val: id });
+    }
+    this.#clock = end;
+  }
+
+  /** Send any request and wait for its answer. */
+  async request(request: W.Request): Promise<W.Response> {
+    const id = ++this.#nextRequest;
+    this.#need().handle(id, request);
+    await this.#pump();
+    const r = this.#responses.get(id);
+    this.#responses.delete(id);
+    if (!r) throw CodeyardError.other("the extension did not answer: it waits on something the mock host never finishes");
+    if (r.tag === "err") throw fromWit(r.val);
+    return r.val;
+  }
+
+  #need(): W.Guest {
+    if (!this.#guest) throw new Error("call `await host.activate(extension)` first");
+    return this.#guest;
+  }
+
+  /** Deliver every completion and event the mock has queued, until the extension stops making calls. */
+  async #pump(): Promise<void> {
+    for (;;) {
+      await tick();
+      const d = this.#queue.shift();
+      if (!d) {
+        await tick();
+        if (this.#queue.length === 0) return;
+        continue;
+      }
+      if ("event" in d) this.#guest?.event(d.ticket, d.event);
+      else this.#guest?.complete(d.ticket, d.complete);
+    }
+  }
+
+  // ---- what happened -----------------------------------------------------------------------------------------------
+
+  /** The text of every notice shown, in order. */
+  notices(): string[] {
+    return this.#notices.map(([, m]) => m);
+  }
+
+  noticesWithSeverity(): [Severity, string][] {
+    return [...this.#notices];
+  }
+
+  /** Every call that was refused, with the manifest line that would allow it (`.permission`, `.fix`). */
+  denied(): DeniedError[] {
+    return [...this.#denied];
+  }
+
+  /** Every request the extension sent, fixture or not. */
+  fetched(): FetchedRequest[] {
+    return [...this.#fetched];
+  }
+
+  /** Every program the extension started. */
+  ran(): { program: string; args: string[]; cwd?: string; env: [string, string][] }[] {
+    return [...this.#ran];
+  }
+
+  /** Every call that returned a ticket, in order. */
+  calls(): Call[] {
+    return [...this.#calls];
+  }
+
+  logs(): [LogLevel, string][] {
+    return [...this.#logs];
+  }
+
+  /** A workspace file as it is now (after the extension's writes). */
+  read(path: string): Uint8Array | undefined {
+    return this.#files.get(this.uri(path));
+  }
+
+  readText(path: string): string | undefined {
+    const b = this.read(path);
+    return b === undefined ? undefined : text(b);
+  }
+
+  /** The extension's storage, values as text. */
+  storage(): Record<string, string> {
+    return Object.fromEntries([...this.#storage].map(([k, v]) => [k, text(v)]));
+  }
+
+  statusItems(): Record<string, StatusItem> {
+    return Object.fromEntries(this.#statusItems);
+  }
+
+  diagnostics(path: string): Diagnostic[] {
+    return this.#diagnostics.get(this.uri(path)) ?? [];
+  }
+
+  /** Views the extension asked to draw again. */
+  invalidated(): string[] {
+    return [...this.#invalidated];
+  }
+
+  /** Edits applied to documents: uri, the version they were made against, the edits. */
+  appliedEdits(): [string, number, TextEdit[]][] {
+    return [...this.#applied];
+  }
+
+  /** Timers that are running: id and period in seconds. */
+  timers(): [number, number][] {
+    return [...this.#timers].map(([id, t]) => [Number(id), t.period]);
+  }
+
+  /** Progress that has not ended: id and title. */
+  progress(): [number, string][] {
+    return [...this.#progress].map(([id, t]) => [Number(id), t]);
+  }
+
+  clipboard(): string | undefined {
+    return this.#clipboard;
+  }
+
+  /** Text typed into the terminal. */
+  terminal(): string[] {
+    return [...this.#terminal];
+  }
+
+  // ---- the host's side of every call -------------------------------------------------------------------------------
+
+  /** Whether the broker refuses this call: the manifest line that would allow it. */
+  #refusal(name: string, args: unknown[]): DeniedError | undefined {
+    const p = this.#permissions;
+    const check = (ok: (p: Permissions) => boolean, line: string, sends: boolean) => {
+      if (p && !ok(p)) return new DeniedError(line, "not-declared");
+      return sends && this.#untrusted ? new DeniedError(line, "untrusted-workspace") : undefined;
+    };
+    const pathLine = (perm: string, uri: string) => `${perm} = ["${relative(uri)}"]`;
+    const uri = args[0] as string;
+    const active = this.#active?.uri;
+    switch (name) {
+      case "workspace/read-file":
+      case "workspace/stat":
+        return check((p) => allowsRead(p, relative(uri)), pathLine("read", uri), false);
+      case "documents/read":
+        return uri === active ? undefined : check((p) => allowsRead(p, relative(uri)), pathLine("read", uri), false);
+      case "workspace/find-files":
+        return check((p) => p.read.length > 0, `read = ["${uri}"]`, false);
+      case "workspace-write/write-file":
+      case "workspace-write/delete":
+        return check((p) => allowsWrite(p, relative(uri)), pathLine("write", uri), true);
+      // A command may edit the active document without `write` (docs/plugin-architecture.md §5.2).
+      case "documents/apply-edits":
+        return uri === active ? undefined : check((p) => allowsWrite(p, relative(uri)), pathLine("write", uri), true);
+      case "net/fetch": {
+        const host = hostOf((args[0] as W.HttpRequest).url);
+        return check((p) => allowsNet(p, host), `net = ["${host}"]`, true);
+      }
+      case "auth/session":
+      case "auth/fetch":
+        return check((p) => p.auth.includes(uri), `auth = ["${uri}"]`, true);
+      case "process/spawn": {
+        const program = (args[0] as W.ProcessCommand).program;
+        return check((p) => p.run.includes(program), `run = ["${program}"]`, true);
+      }
+      case "secrets/get":
+      case "secrets/set":
+      case "secrets/delete":
+        return check((p) => p.secrets, "secrets = true", false);
+      case "clipboard-read/read-text":
+        return check((p) => p.clipboard === "read" || p.clipboard === "read-write", `clipboard = "read"`, false);
+      case "clipboard-write/write-text":
+        return check((p) => p.clipboard === "write" || p.clipboard === "read-write", `clipboard = "write"`, true);
+      case "terminal/send-text":
+        return check((p) => p.terminal, "terminal = true", true);
+      case "commands/execute":
+        return uri.startsWith("core:") ? check((p) => p.commands.includes(uri), `commands = ["${uri}"]`, false) : undefined;
+      default:
+        return undefined;
+    }
+  }
+
+  /** Start a call: record it, refuse it or answer it, and queue the answer for after the call returns. */
+  #start(name: string, args: unknown[], answer: () => [W.StreamEvent[], W.Completion]): bigint {
+    const ticket = ++this.#nextTicket;
+    this.#calls.push({ name, args });
+    const refused = this.#refusal(name, args);
+    if (refused) {
+      this.#denied.push(refused);
+      this.#queue.push({ ticket, complete: { tag: "failed", val: { tag: "denied", val: { permission: refused.permission, why: refused.why } } } });
+      return ticket;
+    }
+    const [events, completion] = answer();
+    for (const event of events) this.#queue.push({ ticket, event });
+    this.#queue.push({ ticket, complete: completion });
+    return ticket;
+  }
+
+  #fetch(name: string, provider: string | undefined, r: W.HttpRequest): bigint {
+    return this.#start(name, provider === undefined ? [r] : [provider, r], () => {
+      this.#fetched.push({ method: r.method, url: r.url, headers: r.headers, body: text(r.body), ...(provider ? { auth: provider } : {}) });
+      const f = this.#http.find((f) => (f.method === "*" || f.method.toUpperCase() === r.method.toUpperCase()) && f.url === r.url);
+      if (!f) {
+        const msg = `the mock host has no response for ${r.method} ${r.url}; add one with host.http(…)`;
+        return [[], { tag: "failed", val: { tag: "other", val: msg } }];
+      }
+      return [
+        [
+          { tag: "http-head", val: { status: f.status, headers: f.headers } },
+          { tag: "data", val: f.body },
+        ],
+        { tag: "done" },
+      ];
+    });
+  }
+
+  #bindings(): W.Bindings {
+    const done: W.Completion = { tag: "done" };
+    const notFound = (what: string): W.Completion => ({ tag: "failed", val: { tag: "not-found", val: what } });
+    const id = () => ++this.#nextId;
+    return {
+      log: { log: (level, message) => void this.#logs.push([level, message]) },
+      env: {
+        info: () => ({
+          codeyardVersion: "0.5.0",
+          apiVersion: "0.1.0",
+          language: "en",
+          theme: "dark",
+          platform: process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux",
+          remote: false,
+          workspaceTrusted: !this.#untrusted,
+        }),
+      },
+      tickets: { cancel: () => {} },
+      requests: { respond: (rid, result) => void this.#responses.set(rid, result) },
+      window: {
+        showNotice: (severity, message, actions) =>
+          this.#start("window/show-notice", [severity, message, actions], () => {
+            this.#notices.push([severity, message]);
+            const chosen = actions.length ? this.#noticeAnswers.shift() : undefined;
+            return [[], { tag: "chosen", val: chosen === undefined ? [] : [chosen] }];
+          }),
+        quickPick: (items, options) => this.#start("window/quick-pick", [items, options], () => [[], { tag: "chosen", val: this.#picks.shift() ?? [] }]),
+        inputBox: (options) => this.#start("window/input-box", [options], () => [[], { tag: "text", val: this.#inputs.shift() }]),
+        startProgress: (title) => {
+          const p = id();
+          this.#progress.set(p, title);
+          return p;
+        },
+        reportProgress: () => {},
+        endProgress: (p) => void this.#progress.delete(p),
+        setStatusItem: (item) => {
+          if (!item.id) throw { payload: { tag: "invalid", val: "a status item needs an id" } };
+          this.#statusItems.set(item.id, Object.fromEntries(Object.entries(item).filter(([, v]) => v !== undefined)) as unknown as StatusItem);
+        },
+        removeStatusItem: (sid) => void this.#statusItems.delete(sid),
+        openExternal: (url) => this.#start("window/open-external", [url], () => [[], done]),
+      },
+      commands: {
+        execute: (command, argsJson) => this.#start("commands/execute", [command, argsJson], () => [[], { tag: "json", val: this.#commandResults.get(command) ?? "null" }]),
+      },
+      storage: {
+        get: (key) => this.#storage.get(key),
+        set: (key, value) => {
+          let total = key.length + value.length;
+          for (const [k, v] of this.#storage) if (k !== key) total += k.length + v.length;
+          if (total > 50 * 1024 * 1024) throw { payload: { tag: "invalid", val: "the store would grow past its 50 MiB limit" } };
+          this.#storage.set(key, value);
+        },
+        delete: (key) => void this.#storage.delete(key),
+        keys: () => [...this.#storage.keys()].sort(),
+      },
+      settings: { get: (key) => this.#settings.get(key) },
+      timers: {
+        every: (seconds) => {
+          const t = id();
+          const period = Math.max(seconds, 30);
+          this.#timers.set(t, { period, next: this.#clock + period });
+          return t;
+        },
+        clear: (t) => void this.#timers.delete(t),
+      },
+      ui: { invalidate: (view) => void this.#invalidated.push(view) },
+      documents: {
+        active: () => this.#start("documents/active", [], () => [[], { tag: "document", val: this.#active }]),
+        selections: () => this.#start("documents/selections", [], () => [[], { tag: "ranges", val: this.#selections }]),
+        read: (uri) => this.#start("documents/read", [uri], () => [[], { tag: "document", val: this.#active?.uri === uri ? this.#active : undefined }]),
+        applyEdits: (uri, version, edits) =>
+          this.#start("documents/apply-edits", [uri, version, edits], () => {
+            const d = this.#active;
+            if (d && d.uri === uri) {
+              if (d.version !== version) return [[], { tag: "failed", val: { tag: "invalid", val: `the document is at version ${d.version}, not ${version}` } }];
+              d.version += 1;
+            }
+            this.#applied.push([uri, version, edits]);
+            return [[], done];
+          }),
+        setSelections: (uri, selections) => this.#start("documents/set-selections", [uri, selections], () => [[], done]),
+      },
+      languages: {
+        setDiagnostics: (uri, diagnostics) => void this.#diagnostics.set(uri, diagnostics.map(fromWitDiagnostic)),
+        clearDiagnostics: (uri) => (uri === undefined ? this.#diagnostics.clear() : void this.#diagnostics.delete(uri)),
+        setDecorations: () => {},
+      },
+      workspace: {
+        folders: () => (this.#permissions && this.#permissions.read.length === 0 ? [] : [FOLDER]),
+        readFile: (uri) =>
+          this.#start("workspace/read-file", [uri], () => {
+            const b = this.#files.get(uri);
+            return [[], b ? { tag: "bytes", val: b } : notFound(uri)];
+          }),
+        readMany: (uris) =>
+          this.#start("workspace/read-many", [uris], () => [
+            [],
+            {
+              tag: "files",
+              val: uris.map((u) => {
+                const b = this.#files.get(u);
+                return { uri: u, contents: b ? { tag: "ok", val: b } : { tag: "err", val: { tag: "not-found", val: u } } };
+              }),
+            },
+          ]),
+        stat: (uri) =>
+          this.#start("workspace/stat", [uri], () => {
+            const b = this.#files.get(uri);
+            return [[], b ? { tag: "stat", val: { isDir: false, size: BigInt(b.length), modified: 0n } } : notFound(uri)];
+          }),
+        findFiles: (glob, max) =>
+          this.#start("workspace/find-files", [glob, max], () => {
+            const found = [...this.#files.keys()].filter((u) => globMatch(glob, relative(u))).slice(0, max);
+            return [[], { tag: "uris", val: found }];
+          }),
+        search: (query) =>
+          this.#start("workspace/search", [query], () => {
+            const events: W.StreamEvent[] = [];
+            for (const [uri, b] of this.#files) {
+              text(b)
+                .split("\n")
+                .forEach((line, n) => {
+                  const at = query.caseSensitive ? line.indexOf(query.pattern) : line.toLowerCase().indexOf(query.pattern.toLowerCase());
+                  if (at >= 0 && events.length < query.max) {
+                    const range = { start: { line: n, character: at }, end: { line: n, character: at + query.pattern.length } };
+                    events.push({ tag: "search-match", val: { uri, range, line } });
+                  }
+                });
+            }
+            return [events, done];
+          }),
+      },
+      workspaceWrite: {
+        writeFile: (uri, contents) =>
+          this.#start("workspace-write/write-file", [uri, contents], () => {
+            this.#files.set(uri, contents);
+            return [[], done];
+          }),
+        delete: (uri) => this.#start("workspace-write/delete", [uri], () => [[], this.#files.delete(uri) ? done : notFound(uri)]),
+        rename: (from, to) =>
+          this.#start("workspace-write/rename", [from, to], () => {
+            const b = this.#files.get(from);
+            if (!b) return [[], notFound(from)];
+            this.#files.delete(from);
+            this.#files.set(to, b);
+            return [[], done];
+          }),
+        createDirectory: (uri) => this.#start("workspace-write/create-directory", [uri], () => [[], done]),
+      },
+      net: { fetch: (r) => this.#fetch("net/fetch", undefined, r) },
+      auth: {
+        session: (provider, scopes) => this.#start("auth/session", [provider, scopes], () => [[], { tag: "account", val: { provider, label: "test-user" } }]),
+        fetch: (provider, r) => this.#fetch("auth/fetch", provider, r),
+      },
+      secrets: {
+        get: (key) => this.#start("secrets/get", [key], () => [[], { tag: "text", val: this.#secrets.get(key) }]),
+        set: (key, value) =>
+          this.#start("secrets/set", [key], () => {
+            this.#secrets.set(key, value);
+            return [[], done];
+          }),
+        delete: (key) =>
+          this.#start("secrets/delete", [key], () => {
+            this.#secrets.delete(key);
+            return [[], done];
+          }),
+      },
+      process: {
+        spawn: (c) =>
+          this.#start("process/spawn", [c], () => {
+            this.#ran.push({ program: c.program, args: c.args, ...(c.cwd === undefined ? {} : { cwd: c.cwd }), env: c.env });
+            const f = this.#processes.find((p) => p.program === c.program && p.args.length === c.args.length && p.args.every((a, n) => a === c.args[n]));
+            if (!f) {
+              const msg = `the mock host has no result for \`${[c.program, ...c.args].join(" ")}\`; add one with host.process(…)`;
+              return [[], { tag: "failed", val: { tag: "other", val: msg } }];
+            }
+            const events: W.StreamEvent[] = [];
+            if (f.fixture.stdout !== undefined && f.fixture.stdout.length) events.push({ tag: "stdout", val: bytes(f.fixture.stdout) });
+            if (f.fixture.stderr !== undefined && f.fixture.stderr.length) events.push({ tag: "stderr", val: bytes(f.fixture.stderr) });
+            return [events, { tag: "exit", val: "code" in f.fixture ? f.fixture.code : 0 }];
+          }),
+      },
+      clipboardRead: { readText: () => this.#start("clipboard-read/read-text", [], () => [[], { tag: "text", val: this.#clipboard }]) },
+      clipboardWrite: {
+        writeText: (t) =>
+          this.#start("clipboard-write/write-text", [t], () => {
+            this.#clipboard = t;
+            return [[], done];
+          }),
+      },
+      terminal: {
+        sendText: (t) =>
+          this.#start("terminal/send-text", [t], () => {
+            this.#terminal.push(t);
+            return [[], done];
+          }),
+      },
+    };
+  }
+}
+
+export { CodeyardError, DeniedError };

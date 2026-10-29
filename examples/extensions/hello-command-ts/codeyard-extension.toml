@@ -1,0 +1,13 @@
+[extension]
+id          = "codeyard.hello-command-ts"
+version     = "0.1.0"
+name        = "Hello Command Ts"
+license     = "MIT"
+description = "A command."
+
+[code]
+entry = "src/extension.ts"
+
+[[commands]]
+id    = "hello"
+title = "Hello Command Ts: Say Hello"

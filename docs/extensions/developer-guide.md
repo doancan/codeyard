@@ -1,6 +1,6 @@
 # Writing Codeyard extensions
 
-Themes, snippets, keymaps, languages, schemas and language servers without code; commands, views and providers in Rust with code extensions. If you have built a VS Code extension, most of this will feel familiar. Parts marked **(draft)** may still change before API 1.0, and parts marked **(coming)** are not in this version yet.
+Themes, snippets, keymaps, languages, schemas and language servers without code; commands, views and providers in TypeScript or Rust with code extensions. If you have built a VS Code extension, most of this will feel familiar. Parts marked **(draft)** may still change before API 1.0, and parts marked **(coming)** are not in this version yet.
 
 <!-- toc -->
 - [Quick start](#quick-start)
@@ -83,23 +83,37 @@ The same goes for other no-code contributions: `keymap-preset`, `keybindings`, `
 
 ## Your first command
 
-Commands, views, formatters and code actions need code: a Rust crate that `cyx` builds into a WebAssembly component. You need Rust and its WebAssembly target (`rustup target add wasm32-wasip2`). The Rust SDK is pre-release; TypeScript comes later. The full guide is [commands.md](commands.md).
+Commands, views, formatters and code actions need code, which `cyx` builds into a WebAssembly component. Write it in TypeScript (you need Node.js 22.18 or newer) or in Rust (you need Rust and `rustup target add wasm32-wasip2`). Both SDKs are pre-release and have the same API; the full guides are [typescript.md](typescript.md) and [commands.md](commands.md).
 
 ```sh
-cyx new command hello     # or: cyx new view hello
+cyx new command hello --lang ts   # or: cyx new view hello --lang ts; leave out --lang ts for Rust
 cd hello
-cargo test                # unit tests against a mock Codeyard
-cyx test                  # the built extension in the real extension host
+npm install && npm test           # unit tests against a mock Codeyard (Rust: cargo test)
+cyx test                          # the built extension in the real extension host
 ```
 
 ```toml
 [code]
-entry = "Cargo.toml"
+entry = "src/extension.ts"      # Rust: "Cargo.toml"
 
 [[commands]]
-id    = "hello"              # becomes you.hello.hello
+id    = "hello"                 # becomes you.hello.hello
 title = "Hello: Say Hello"
 ```
+
+```ts
+// src/extension.ts
+import type { Context } from "@codeyard/extension";
+
+export function activate(ctx: Context) {
+  ctx.command("hello", async (ctx) => {
+    const name = await ctx.input({ prompt: "Your name?" });
+    if (name) ctx.notice(`Hello, ${name}!`);
+  });
+}
+```
+
+The same in Rust:
 
 ```rust
 // src/lib.rs
@@ -122,7 +136,7 @@ impl Extension for Hello {
 codeyard_extension::export!(Hello);
 ```
 
-Calls that reach Codeyard are `async`; the SDK runs them without blocking the extension. The build uses plain cargo with the `wasm32-wasip2` target, and `cyx package` does it for you. Running code extensions in the `cyx dev` window, with reload on save, arrives with the app side of code extensions **(coming)**.
+Calls that reach Codeyard return Promises (Rust: they are `async`); the SDK runs them without blocking the extension. `cyx package` builds the component for you: esbuild and ComponentizeJS for TypeScript (installed by `cyx` itself), plain cargo for Rust. Running code extensions in the `cyx dev` window, with reload on save, arrives with the app side of code extensions **(coming)**.
 
 You don't have to write any activation code. The extension starts the first time someone uses one of its commands, views or languages.
 
@@ -180,7 +194,7 @@ If an update **removes** a permission, it installs silently. If it **adds** one,
 
 ## Recipes
 
-The recipes below show the planned TypeScript API **(coming)**; [commands.md](commands.md) shows the same things in Rust, and `examples/extensions/` has working Rust extensions. All API shapes are (draft).
+The recipes use the TypeScript SDK; [commands.md](commands.md) shows the same things in Rust, and `examples/extensions/` has working extensions in both. `ctx` is the `Context` that `activate` receives.
 
 ### Status bar item
 
@@ -192,35 +206,37 @@ command = "refresh"
 
 ```ts
 export function activate(ctx: Context) {
-  const item = ctx.statusBar.get("deploy");
-  item.set({ text: "Deploy: ready", tone: "success" });
-  ctx.every(60, () => item.set({ text: "Deploy: checking…" }));   // minimum 30 s, pauses when unfocused
+  ctx.setStatusItem({ id: "deploy", text: "Deploy: ready", tone: "success" });
+  ctx.every(60, async (ctx) => {                                    // minimum 30 s, pauses when unfocused
+    ctx.setStatusItem({ id: "deploy", text: "Deploy: checking…" });
+  });
 }
 ```
 
 ### Quick pick
 
 ```ts
-ctx.commands.register("pick-env", async () => {
-  const env = await ctx.ui.quickPick(["production", "preview", "development"], {
-    placeholder: "Environment",
-  });
-  if (env) await ctx.storage.set("env", env);
+ctx.command("pick-env", async (ctx) => {
+  const envs = ["production", "preview", "development"];
+  const i = await ctx.quickPick(envs, { placeholder: "Environment" });   // the index, or undefined
+  if (i !== undefined) ctx.storage.setJson("env", envs[i]);
 });
 ```
 
 ### Settings
 
 ```toml
-[settings.interval]                # shown under Settings › Extensions › Deploy Status (draft) shape
+[settings.interval]                # shown under Settings › Extensions › Deploy Status
 type        = "number"
 default     = 60
 description = "Seconds between refreshes."
 ```
 
 ```ts
-const seconds = await ctx.settings.get<number>("interval");
-ctx.settings.onChange("interval", (v) => restartTimer(v));
+const seconds = ctx.setting<number>("interval") ?? 60;
+ctx.onSettingsChanged(async (ctx, keys) => {
+  if (keys.includes("interval")) restartTimer(ctx.setting<number>("interval") ?? 60);
+});
 ```
 
 ### Call an API with the user's GitHub login
@@ -230,15 +246,15 @@ The user signs in once, and Codeyard keeps the token. Your extension never sees 
 ```toml
 [permissions]
 auth = ["github"]
-net  = ["api.github.com"]
+why  = "Lists your GitHub repositories."
 ```
 
 ```ts
-const res = await fetch("https://api.github.com/user/repos", { auth: "github" });   // (draft) option
+const res = await fetch("https://api.github.com/user/repos", { auth: "github" });
 const repos = await res.json();
 ```
 
-You can also use another OAuth 2 provider. Declare its authorize and token URLs in the manifest (draft), and Codeyard runs the browser sign-in.
+npm clients work too: `new Octokit({ request: { fetch: ctx.authFetch("github") } })` ([examples/extensions/octokit-repos-ts](../../examples/extensions/octokit-repos-ts)). You can also use another OAuth 2 provider. Declare its authorize and token URLs in the manifest (draft), and Codeyard runs the browser sign-in.
 
 ### Tree view
 
@@ -252,41 +268,39 @@ location = "sidebar"          # sidebar | bottom | editor
 ```
 
 ```ts
-import { ui } from "@codeyard/extension";
-
-ctx.views.register("deployments", async () =>
-  ui.tree(deployments.map((d) => ({
+ctx.view("deployments", async (ctx) => ({
+  type: "list",
+  children: deployments.map((d) => ({
+    type: "text",
     key: d.id,
-    label: d.name,
+    text: d.name,
     badge: { text: d.state, tone: d.state === "ready" ? "success" : "warning" },
-    children: () => loadBuilds(d.id),          // loaded when expanded
-  })))
-);
+  })),
+}));
 
 // When data changes:
-ui.invalidate("deployments");
+ctx.invalidate("deployments");
 ```
 
-There are no webviews, so you can't build HTML previews or charts in v1.
+The element format is being finalised with the view renderer **(draft)**. There are no webviews, so you can't build HTML previews or charts in v1.
 
 ### Diagnostics
 
-```toml
-[[diagnostics]]
-id        = "todos"
-languages = ["rust", "typescript"]
-```
-
 ```ts
-ctx.diagnostics.register("todos", async (doc) =>
-  doc.lines()
-    .map((text, line) => ({ line, col: text.indexOf("TODO") }))
-    .filter((m) => m.col >= 0)
-    .map((m) => ({ range: [m.line, m.col, m.line, m.col + 4], severity: "info", message: "TODO left here" }))
-);
+ctx.command("find-todos", async (ctx) => {
+  const doc = await ctx.activeDocument();          // a command the user started may read it without `read`
+  if (!doc) return;
+  const diagnostics = doc.text.split("\n").flatMap((text, line) => {
+    const col = text.indexOf("TODO");
+    if (col < 0) return [];
+    const range = { start: { line, character: col }, end: { line, character: col + 4 } };
+    return [{ range, severity: "information" as const, message: "TODO left here" }];
+  });
+  ctx.setDiagnostics(doc.uri, diagnostics);
+});
 ```
 
-A provider receives its document, so it needs no `read` permission. Answer quickly, because the call is cancelled once the user moves on.
+A `[[diagnostics]]` provider that Codeyard calls on its own, as you type, is **(coming)**.
 
 ### A language server
 
@@ -308,30 +322,31 @@ The server runs on the workspace machine, so it also works over SSH. It only sta
 ### Long work and processes
 
 ```ts
-await ctx.ui.progress("Building…", async () => {
-  for await (const line of ctx.spawn("vercel", ["build"])) ctx.log(line);   // needs run = ["vercel"]
+await ctx.withProgress("Building…", async () => {
+  const build = ctx.spawn({ program: "vercel", args: ["build"] });        // needs run = ["vercel"]
+  for await (const chunk of build) if ("stdout" in chunk) ctx.log("info", new TextDecoder().decode(chunk.stdout));
+  await build.wait();
 });
 ```
 
 ## Test and debug
 
-**Unit tests** run natively against a mock host with fake files, recorded processes, fixture HTTP and a virtual clock. The whole story is in [testing.md](testing.md).
+**Unit tests** run on your computer against a mock host with fake files, recorded processes, fixture HTTP and a virtual clock. The whole story is in [testing.md](testing.md).
 
-```rust
-#[test]
-fn greets() {
-    let host = MockHost::new();          // codeyard_extension_test::MockHost
-    host.activate::<Hello>().unwrap();
-    host.answer_input("Ada");
-    host.command("hello", Value::Null).unwrap();
-    assert_eq!(host.notices(), ["Hello, Ada!"]);
-}
+```ts
+test("greets", async () => {
+  const host = new MockHost();           // from @codeyard/extension/testing
+  await host.activate(extension);
+  host.answerInput("Ada");
+  await host.command("hello");
+  assert.deepEqual(host.notices(), ["Hello, Ada!"]);
+});
 ```
 
 ```sh
-cargo test     # Rust unit tests
+npm test       # TypeScript unit tests
+cargo test     # Rust unit tests (codeyard_extension_test::MockHost)
 cyx test       # the real built extension in the extension host; fails on any refused call, with its fix
-npm test       # TypeScript (coming)
 ```
 
 **Debug.** Open the palette and run **Developer: Extension Inspector**. It shows:
@@ -376,16 +391,16 @@ Good to know:
 | `vsce publish` + PAT | `cyx publish` or a tag push. No token |
 | `vsce unpublish` | `cyx yank VERSION` (users roll back; the number stays used) |
 | F5 Extension Development Host | `cyx dev` |
-| `vscode.commands.registerCommand` | `ctx.commands.register` (draft) |
-| `window.showQuickPick` / `showInputBox` | `ctx.ui.quickPick` / `ctx.ui.input` (draft) |
-| `createStatusBarItem` | `[[status-bar]]` + `ctx.statusBar` (draft) |
-| `TreeDataProvider` | `[[views]]` + `ui.tree` |
+| `vscode.commands.registerCommand` | `ctx.command` |
+| `window.showQuickPick` / `showInputBox` | `ctx.quickPick` / `ctx.input` |
+| `createStatusBarItem` | `[[status-bar]]` + `ctx.setStatusItem` |
+| `TreeDataProvider` | `[[views]]` + `ctx.view` |
 | Webview | Not available. Use built-in elements |
 | `globalState` / `workspaceState` | `ctx.storage` |
 | `SecretStorage` | `secrets` permission. For sign-in, prefer `auth` |
 | `authentication.getSession` | `auth = ["github"]` |
 | `DiagnosticCollection` | `[[diagnostics]]` provider |
-| `fs`, `child_process` | `read`/`write` permissions, `ctx.spawn` |
+| `fs`, `child_process` | `read`/`write` permissions with `ctx.readFile` / `ctx.writeFile`, `run` with `ctx.spawn` |
 | `extensionKind` | Not needed. The same extension works locally and over SSH |
 | Colour themes, snippets, language config | Work unchanged, or use `cyx import-vscode` |
 | Hover, completion, code lens, inlay hints | Coming with API 1.0 |
@@ -401,7 +416,7 @@ Every error message shows a fix line. `cyx explain <CODE>` prints the full expla
 | `denied … untrusted-workspace` | Trust the folder, or set `untrusted = false` if the extension is useless without trust |
 | `denied … revoked-by-user` | The user turned this permission off on the extension page. Show a helpful message |
 | `why is required` warning on first build | Your permissions are high risk. Add one honest `why` sentence |
-| `Cannot find module 'fs'` (TypeScript) | Node built-ins are not available. Use `ctx` file APIs, or `fetch` for HTTP |
+| `"fs" is a Node.js built-in module` (TypeScript build) | Node built-ins are not available. Use `ctx` file APIs, or `fetch` for HTTP, or a package that works in browsers |
 | Command missing from the palette | Check the id. Commands are shown as `Title`, but the full id is `you.ext.id` |
 | Provider never shows results | It answered too late. Return quickly and move slow work into `progress` |
 | Language server does not start | Add the program to `run`, trust the folder, and check that the program is on the workspace machine's PATH |
