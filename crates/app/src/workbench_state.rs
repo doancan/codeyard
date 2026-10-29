@@ -224,7 +224,8 @@ pub(super) struct RootsState {
     /// the language server root resolve correctly).
     pub(super) pending_extra_roots: Vec<String>,
     /// Path taken in the tree with ⌘C / ⌘X (`true` if cut).
-    pub(super) file_clip: Option<(String, bool)>,
+    pub(super) file_clip: Option<Arc<crate::file_batch::Clipboard>>,
+    pub(super) file_operation: Option<Arc<crate::file_batch::Progress>>,
     /// File marked with "Select for Compare".
     pub(super) compare_a: Option<String>,
     // --- compare ---

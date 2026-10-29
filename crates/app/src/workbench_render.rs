@@ -99,6 +99,7 @@ impl Render for Workbench {
             .key_context("Workbench")
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::open_folder))
+            .on_action(cx.listener(Self::cancel_file_operation))
             .on_action(cx.listener(Self::toggle_sidebar))
             .on_action(cx.listener(Self::trust_this_folder))
             .on_action(cx.listener(Self::show_explorer))

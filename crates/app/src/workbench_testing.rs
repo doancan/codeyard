@@ -3,6 +3,13 @@
 use super::*;
 
 impl Workbench {
+    pub fn file_operation_active_for_test(&self) -> bool {
+        self.roots.file_operation.is_some()
+    }
+
+    pub fn file_clipboard_paths_for_test(&self) -> Vec<String> {
+        self.roots.file_clip.as_ref().map_or_else(Vec::new, |c| c.paths.clone())
+    }
     /// Recents in display order: (host, path, pinned).
     pub fn recent_for_test(&self) -> Vec<(Option<String>, String, bool)> {
         super::projects::ordered_recent(&self.persist.recent, &self.persist.pinned).into_iter().map(|(r, pinned)| (r.host, r.path, pinned)).collect()

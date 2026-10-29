@@ -1275,7 +1275,7 @@ fn qa_multi_root_explorer_open_persist_remove(cx: &mut TestAppContext) {
     std::fs::write(other.join("o.txt"), "o\n").unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &api, cx);
-    let (w, a) = (web.to_string_lossy().into_owned(), api.to_string_lossy().into_owned());
+    let (w, a) = (crate::ui::local_path(&web), crate::ui::local_path(&api));
     assert!(wb.update_in(cx, |wb, window, cx| wb.add_workspace_folder_now(w.clone(), window, cx)));
     cx.run_until_parked();
     assert_eq!(wb.read_with(cx, |wb, cx| wb.all_roots(cx)), [a.clone(), w.clone()]);
@@ -1287,7 +1287,7 @@ fn qa_multi_root_explorer_open_persist_remove(cx: &mut TestAppContext) {
     assert!(notice(&wb, cx).contains("already in the workspace"), "{}", notice(&wb, cx));
 
     // A file in the extra folder opens; its root and relative path resolve correctly.
-    let ts = web.join("src/app.ts").to_string_lossy().into_owned();
+    let ts = crate::ui::local_path(&web.join("src/app.ts"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(ts.clone(), window, cx));
     cx.run_until_parked();
     assert_eq!(wb.read_with(cx, |wb, cx| wb.root_of(&ts, cx)), Some(w.clone()));

@@ -89,6 +89,16 @@ fn connect_upload_use_and_forward_over_real_ssh() {
         std::fs::write(dir.join("merhaba.txt"), "ğüş\n").unwrap();
         let (data, _) = host.read(&dir.join("merhaba.txt").to_string_lossy()).unwrap();
         assert_eq!(data, "ğüş\n".as_bytes());
+        let source = dir.join("merhaba.txt").to_string_lossy().into_owned();
+        let copied = dir.join("copy with ' quotes; İstanbul.txt").to_string_lossy().into_owned();
+        host.copy_path(&source, &copied).expect("native copy through the SSH agent");
+        assert_eq!(host.read(&copied).unwrap().0, data);
+        assert!(matches!(host.copy_path(&source, &copied), Err(host::HostError::Op(proto::Error::AlreadyExists(_)))));
+        let moved = dir.join("moved.txt").to_string_lossy().into_owned();
+        host.rename(&copied, &moved).unwrap();
+        assert!(host.stat(&copied).is_err());
+        assert_eq!(host.read(&moved).unwrap().0, data);
+        host.delete(&moved).unwrap();
         let out = host.exec("echo", &["uzak"], None, None).unwrap();
         assert_eq!(out.stdout_str().trim(), "uzak");
         let pty = host.pty_spawn(80, 24, None, Some("/bin/sh".into())).unwrap();

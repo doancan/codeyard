@@ -140,6 +140,7 @@ impl Workbench {
             return;
         }
         self.persist_session(cx);
+        self.invalidate_file_operation();
         self.shutdown_lsp(cx);
         self.persist.backed_up.clear();
         self.tabs.editors.clear();

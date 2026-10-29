@@ -809,7 +809,6 @@ Move “{0}” into “{1}”?	“{0}”, “{1}” içine taşınsın mı?
 An existing file with the same name is never overwritten.	Aynı adlı mevcut bir dosyanın üzerine hiçbir zaman yazılmaz.
 Move	Taşı
 Can't copy a folder into itself.	Bir klasör kendi içine kopyalanamaz.
-Could not paste: {}	Yapıştırılamadı: {}
 Move “{}” to the Trash?	“{}” Çöp Kutusu'na taşınsın mı?
 You can restore it from the Trash.	Çöp Kutusu'ndan geri yükleyebilirsiniz.
 Unsaved changes stay open in their tabs; saving recreates the file.	Kaydedilmemiş değişiklikler sekmelerinde açık kalır; kaydedince dosya yeniden oluşturulur.
@@ -2739,6 +2738,17 @@ Resolve the file conflict before debugging.	Hata ayıklamadan önce dosya çakı
 This file was deleted on disk. Save it explicitly before debugging.	Bu dosya diskten silinmiş. Hata ayıklamadan önce dosyayı açıkça kaydedin.
 Files are still unsaved. Resolve editor errors, then start debugging again.	Dosyalar henüz kaydedilmedi. Düzenleyici hatalarını çözün, ardından hata ayıklamayı yeniden başlatın.
 Auto-detect project	Projeyi Otomatik Algıla
+Copy the files again on the current host before pasting.	Yapıştırmadan önce dosyaları geçerli makinede yeniden kopyalayın.
+Wait for the file operation to finish, or cancel it from the status bar.	Dosya işleminin bitmesini bekleyin veya durum çubuğundan iptal edin.
+Apply a file operation to {} entry?|Apply a file operation to {} entries?	{} öğeye dosya işlemi uygulansın mı?
+Destination: {0} on {1}. Existing files are never overwritten.	Hedef: {1} üzerindeki {0}. Mevcut dosyaların üzerine yazılmaz.
+The complete file list is available in Output.	Dosyaların tam listesi Çıktı bölümünde bulunur.
+File operation: {0} completed, {1} failed, {2} not processed.	Dosya işlemi: {0} tamamlandı, {1} başarısız, {2} işlenmedi.
+Files: {0}/{1}	Dosyalar: {0}/{1}
+Cancel file operation	Dosya işlemini iptal et
+File: Cancel File Operation	Dosya: Dosya İşlemini İptal Et
+{} entry|{} entries	{} öğe
+Can't move a folder into itself.	Bir klasör kendi içine taşınamaz.
 
 # ---- Web Preview options ----
 Preview port (0: choose a free port automatically)	Önizleme portu (0: boş bir portu otomatik seç)

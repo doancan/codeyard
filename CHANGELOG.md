@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Explorer multi-selection with modifier clicks, keyboard ranges and select-all, plus batch copy,
+  cut, drag and deletion with a single confirmation, progress/cancellation and per-entry errors.
+  Failed cuts remain available for retry; dirty buffers and successful moves retain their edits.
+- Filesystem-native recursive copies on local and SSH agents, with exclusive atomic publication,
+  symlink and executable-permission preservation, bounded traversal and no shell dependency.
+
 - `codeyard --install-extension FILE.cyx` installs an extension without opening a window (repeat the flag for several).
   The performance gate now measures loading 100 installed extensions at startup (ceiling 5 ms).
 - `cyx`, the extension authors' command, ships beside Codeyard: `cyx new` (theme, snippets, keymap, language, language

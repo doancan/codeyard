@@ -523,6 +523,8 @@ registry! {
     "tree.copy" => tree::CopyEntry,
     "tree.cut" => tree::CutEntry,
     "tree.paste" => tree::PasteEntry,
+    "tree.selectAll" => tree::SelectAllEntries,
+    "tree.cancelOperation" => wb::CancelFileOperation,
     "list.up" => picker::PickPrev,
     "list.down" => picker::PickNext,
     "list.accept" => picker::PickConfirm,
