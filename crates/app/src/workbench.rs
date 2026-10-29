@@ -76,10 +76,10 @@ mod groups_glue;
 mod market_glue;
 #[path = "workbench_market_view.rs"]
 mod market_view_glue;
-#[path = "workbench_ext_updates.rs"]
-mod updates_glue;
 #[path = "workbench_repos.rs"]
 pub(crate) mod repos_glue;
+#[path = "workbench_ext_updates.rs"]
+mod updates_glue;
 
 use groups_glue::{Group, GroupKey, GroupResize};
 #[path = "workbench_hosts.rs"]
