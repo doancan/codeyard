@@ -2,6 +2,12 @@
 
 use super::*;
 
+/// Whether the activity bar's view buttons continue above and below what is visible.
+fn activity_hints(scroll: &gpui::ScrollHandle) -> (bool, bool) {
+    let (offset, max) = (scroll.offset().y, scroll.max_offset().height);
+    (offset < px(-0.5), max > px(0.5) && offset > -max + px(0.5))
+}
+
 impl Workbench {
     pub(super) fn activity_bar(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
         let changes = self.vcs.status.as_ref().map_or(0, |g| g.changes.len());
@@ -14,6 +20,7 @@ impl Workbench {
                 .debug_selector(|| id.to_string())
                 .group(id)
                 .relative()
+                .flex_none()
                 .w(px(layout::ACTIVITYBAR_W))
                 .h(px(layout::ACTIVITYBAR_W))
                 .flex()
@@ -82,7 +89,9 @@ impl Workbench {
         let bottom = |id: &'static str, name: &'static str, label: &'static str, tip: bool| {
             div()
                 .id(id)
+                .debug_selector(|| id.to_string())
                 .group(id)
+                .flex_none()
                 .w(px(layout::ACTIVITYBAR_W))
                 .h(px(layout::ACTIVITYBAR_W))
                 .flex()
@@ -101,6 +110,66 @@ impl Workbench {
                 )
                 .when(tip, |d| d.tooltip(move |_, cx| cx.new(|_| Tooltip(label.into())).into()))
         };
+        let scroll = &self.chrome.activity_scroll;
+        let (more_above, more_below) = activity_hints(scroll);
+        self.chrome.activity_hints.set((more_above, more_below));
+        // The scroll range is only known after layout: when a resize or zoom changed it, draw the hints again.
+        let recheck = {
+            let (scroll, entity) = (scroll.clone(), cx.entity().downgrade());
+            gpui::canvas(
+                move |_, _, _| activity_hints(&scroll),
+                move |_, hints, _, cx| {
+                    // A view cannot be invalidated while it is being drawn: ask right after this frame.
+                    let entity = entity.clone();
+                    cx.defer(move |cx| {
+                        entity
+                            .update(cx, |wb, cx| {
+                                if wb.chrome.activity_hints.get() != hints {
+                                    cx.notify();
+                                }
+                            })
+                            .ok();
+                    });
+                },
+            )
+            .absolute()
+            .size_0()
+        };
+        // A faint strip with a chevron at the clipped edge; it takes no clicks, so the button under it still works.
+        let more_hint = |id: &'static str, glyph: &'static str, top: bool| {
+            div()
+                .debug_selector(move || id.to_string())
+                .absolute()
+                .left_0()
+                .right_0()
+                .when(top, |d| d.top_0().border_b_1())
+                .when(!top, |d| d.bottom_0().border_t_1())
+                .h(px(12.))
+                .flex()
+                .items_center()
+                .justify_center()
+                .bg(c(p.surface))
+                .border_color(c(p.border))
+                .child(icon(glyph, 10., p.text_muted))
+        };
+        let views = div()
+            .id("activity-views")
+            .debug_selector(|| "activity-views".into())
+            .size_full()
+            .flex()
+            .flex_col()
+            .overflow_y_scroll()
+            .track_scroll(scroll)
+            .child(item("act-explorer", "files", crate::i18n::t("Explorer (⇧⌘E)"), Panel::Explorer, 0, cx))
+            .child(item("act-search", "search", crate::i18n::t("Search (⇧⌘F)"), Panel::Search, 0, cx))
+            .child(item("act-scm", "git-branch", crate::i18n::t("Source Control (⌃⇧G)"), Panel::Scm, changes, cx))
+            .child(item("act-debug", "bug-play", crate::i18n::t("Run and Debug (⌃⇧D)"), Panel::Debug, 0, cx))
+            .child(item("act-testing", "flask-conical", crate::i18n::t("Testing"), Panel::Testing, failed_tests, cx))
+            .child(item("act-remote", "screen-share", crate::i18n::t("Remote Explorer"), Panel::Remote, 0, cx))
+            .child(item("act-extensions", "blocks", crate::i18n::t("Extensions"), Panel::Extensions, 0, cx))
+            .when(cx.global::<Settings>().docker_enabled, |d| {
+                d.child(item("act-containers", "server", crate::i18n::t("Containers"), Panel::Containers, 0, cx))
+            });
         div()
             .w(px(layout::ACTIVITYBAR_W))
             .flex_none()
@@ -109,15 +178,20 @@ impl Workbench {
             .bg(c(p.surface))
             .border_r_1()
             .border_color(c(p.border))
-            .child(item("act-explorer", "files", crate::i18n::t("Explorer (⇧⌘E)"), Panel::Explorer, 0, cx))
-            .child(item("act-search", "search", crate::i18n::t("Search (⇧⌘F)"), Panel::Search, 0, cx))
-            .child(item("act-scm", "git-branch", crate::i18n::t("Source Control (⌃⇧G)"), Panel::Scm, changes, cx))
-            .child(item("act-debug", "bug-play", crate::i18n::t("Run and Debug (⌃⇧D)"), Panel::Debug, 0, cx))
-            .child(item("act-testing", "flask-conical", crate::i18n::t("Testing"), Panel::Testing, failed_tests, cx))
-            .child(item("act-remote", "screen-share", crate::i18n::t("Remote Explorer"), Panel::Remote, 0, cx))
-            .child(item("act-extensions", "blocks", crate::i18n::t("Extensions"), Panel::Extensions, 0, cx))
-            .when(cx.global::<Settings>().docker_enabled, |d| d.child(item("act-containers", "server", crate::i18n::t("Containers"), Panel::Containers, 0, cx)))
-            .child(div().flex_1())
+            // The views scroll when the window is too short for all of them (a small window, or a large interface
+            // scale); the manage button stays pinned at the bottom. A chevron at the clipped edge says more are there.
+            .child(
+                div()
+                    .relative()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .flex_col()
+                    .child(views)
+                    .child(recheck)
+                    .when(more_above, |d| d.child(more_hint("activity-more-above", "chevron-up", true)))
+                    .when(more_below, |d| d.child(more_hint("activity-more-below", "chevron-down", false))),
+            )
             .child(
                 // A single "manage" button: the menu opens to the right of the icon, bottom edge aligned with it (see `open_manage_menu`).
                 bottom("act-manage", "settings", crate::i18n::t("Manage: About, Settings, Color Theme…"), self.menu.is_none()).on_mouse_down(

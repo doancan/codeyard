@@ -43,6 +43,18 @@ title = "Probe: Trap"
 [[commands]]
 id = "nope"
 title = "Probe: Unknown"
+
+[[commands]]
+id = "pick"
+title = "Probe: Pick"
+
+[[commands]]
+id = "ask"
+title = "Probe: Ask"
+
+[[commands]]
+id = "doc"
+title = "Probe: Document"
 "#;
 
 fn install(cfg: &Path) {
@@ -78,7 +90,11 @@ fn wait_for(cx: &mut VisualTestContext, wb: &Entity<Workbench>, done: impl Fn(&W
         }
         std::thread::sleep(Duration::from_millis(20));
     }
-    panic!("timed out; notice: {:?}", wb.read_with(cx, |wb, _| wb.notice_for_test()));
+    panic!(
+        "timed out; notice: {:?}; answer: {:?}",
+        wb.read_with(cx, |wb, _| wb.notice_for_test()),
+        wb.read_with(cx, |wb, _| wb.extension_answer_for_test("you.probe"))
+    );
 }
 
 fn notice_has(wb: &Workbench, text: &str) -> bool {
@@ -122,4 +138,81 @@ fn three_crashes_turn_an_extension_off(cx: &mut TestAppContext) {
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Notice", window, cx));
     cx.run_until_parked();
     assert!(wb.read_with(cx, |wb, _| notice_has(wb, "turned off until Codeyard restarts")));
+}
+
+fn answer_is(wb: &Workbench, want: &str) -> bool {
+    wb.extension_answer_for_test("you.probe").as_deref() == Some(want)
+}
+
+#[gpui::test]
+fn picks_and_inputs_answer_through_the_window(cx: &mut TestAppContext) {
+    if crate::ext_runtime::exthost_path().is_none() {
+        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+        return;
+    }
+    let cfg = config_dir("pick");
+    install(&cfg);
+    let (wb, cx) = setup(cx, &cfg);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Pick", window, cx));
+    wait_for(cx, &wb, |wb| wb.has_overlay_for_test());
+    cx.simulate_keystrokes("down enter");
+    wait_for(cx, &wb, |wb| answer_is(wb, "chosen [1]"));
+    // Escape answers "nothing chosen".
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Pick", window, cx));
+    wait_for(cx, &wb, |wb| wb.has_overlay_for_test());
+    cx.simulate_keystrokes("escape");
+    wait_for(cx, &wb, |wb| answer_is(wb, "chosen []"));
+    // An input box starts with the extension's value; Enter sends what was typed.
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Ask", window, cx));
+    wait_for(cx, &wb, |wb| wb.has_overlay_for_test());
+    wb.update_in(cx, |wb, _, cx| wb.set_overlay_query_for_test("Ada".into(), cx));
+    cx.simulate_keystrokes("enter");
+    wait_for(cx, &wb, |wb| answer_is(wb, "text Some(\"Ada\")"));
+}
+
+#[gpui::test]
+fn a_command_reads_the_active_document(cx: &mut TestAppContext) {
+    if crate::ext_runtime::exthost_path().is_none() {
+        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+        return;
+    }
+    let cfg = config_dir("doc");
+    install(&cfg);
+    let (wb, cx) = setup(cx, &cfg);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Document", window, cx));
+    wait_for(cx, &wb, |wb| answer_is(wb, "no document"));
+    // A command the user ran may read the active document even without `read` on it (activeTab).
+    let file = cfg.join("notes.rs");
+    std::fs::write(&file, "fn main() {}\n").unwrap();
+    wb.update_in(cx, |wb, window, cx| wb.open_path(&file.to_string_lossy(), window, cx));
+    cx.run_until_parked();
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Document", window, cx));
+    wait_for(cx, &wb, |wb| answer_is(wb, "document rust 13"));
+}
+
+#[gpui::test]
+fn a_workspace_with_a_matching_file_starts_the_extension(cx: &mut TestAppContext) {
+    if crate::ext_runtime::exthost_path().is_none() {
+        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+        return;
+    }
+    let cfg = config_dir("contains");
+    let manifest = MANIFEST.replace("[permissions]", "[activation]\nworkspace-contains = [\"vercel.json\"]\n\n[permissions]");
+    let entries = vec![
+        ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: manifest.into_bytes(), executable: false },
+        ext_pkg::Entry { path: "Cargo.toml".into(), data: Vec::new(), executable: false },
+        ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: PROBE.to_vec(), executable: false },
+    ];
+    let (bytes, _) = ext_pkg::write(entries).unwrap();
+    crate::ext::store(&cfg).install(&bytes, ext_core::Source::File { path: "/downloads/probe.cyx".into() }).unwrap();
+    let (wb, cx) = setup(cx, &cfg);
+    assert!(!wb.read_with(cx, |wb, _| wb.extension_running_for_test("you.probe")), "nothing starts without the file");
+    let folder = cfg.join("site");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join("vercel.json"), "{}").unwrap();
+    wb.update_in(cx, |wb, window, cx| {
+        wb.set_root(folder.to_string_lossy().into_owned(), cx);
+        wb.reload_config_for_test(window, cx);
+    });
+    wait_for(cx, &wb, |wb| wb.extension_running_for_test("you.probe"));
 }

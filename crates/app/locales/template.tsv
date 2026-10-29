@@ -1082,6 +1082,9 @@ Installing the locked language service packages…
 Installing — Codeyard will restart.	
 Installing…	
 Installs JavaScript/TypeScript, HTML and CSS services from the locked npm catalogue. A pinned Node.js runtime is downloaded from nodejs.org when a compatible runtime with npm is unavailable. Package scripts are disabled.	
+Interface scale must be between 75% and 200%.	
+Interface scale of every window, from 0.75 (75%) to 2 (200%); View: Zoom In and Zoom Out step through 75%, 80% and every 10% from 90% to 200%. Editor and terminal font sizes are scaled with it. Your own settings only; a folder cannot change it	
+Interface scale: {}%	
 Into a folder on this computer or the connected host	
 Invalid pattern	
 Invalid string	
@@ -2438,7 +2441,6 @@ Your public key (~/.ssh/id_ed25519.pub; created if you have none) is added to th
 Zoom	
 Zoom In	
 Zoom Out	
-Zoom: {}	
 `{}` did not answer within {} seconds; check the network connection and try again	
 `{}` is not installed or not on PATH	
 a comment is not closed	

@@ -347,6 +347,25 @@ pub fn bindings() -> (Vec<Binding>, Vec<String>) {
     (out, warnings)
 }
 
+/// `editor.formatters`: language id → `lsp` or the id of an extension that formats it. Wrong entries are warnings.
+pub fn formatters_setting(v: Option<&serde_json::Value>, warnings: &mut Vec<String>) -> Vec<(String, String)> {
+    use serde_json::Value;
+    let mut out = Vec::new();
+    match v {
+        None | Some(Value::Null) => {}
+        Some(Value::Object(m)) => {
+            for (lang, who) in m {
+                match who.as_str().map(str::trim) {
+                    Some(w) if !w.is_empty() => out.push((lang.clone(), w.to_string())),
+                    _ => warnings.push(crate::i18n::tf("editor.formatters.{}: expected “lsp” or an extension id", &[&lang])),
+                }
+            }
+        }
+        Some(_) => warnings.push(crate::i18n::tf("{0}: expected an object {1}", &[&"editor.formatters", &"{ \"toml\": \"you.formatter\" }"])),
+    }
+    out
+}
+
 /// The keymap preset chosen with `keymap.preset` (`<publisher.name>/<label>`): its file, in `keybindings.jsonc` format.
 pub fn preset(choice: &str) -> Option<Result<(String, PathBuf), String>> {
     if choice.is_empty() {

@@ -277,6 +277,19 @@ pub trait Host: Send + Sync + 'static {
     fn status_events(&self) -> mpsc::Receiver<ConnStatus>;
     /// Start a long-running process (language server). `Exit(None)` arrives if the connection drops.
     fn proc_spawn(&self, program: &str, args: Vec<String>, cwd: Option<String>) -> Result<Proc>;
+    /// An extension's process: absolute `program`, only `env` on top of a minimal environment (`ProcSpawnEnv`).
+    fn proc_spawn_env(&self, program: &str, args: Vec<String>, cwd: Option<String>, env: Vec<(String, String)>) -> Result<Proc> {
+        let _ = (program, args, cwd, env);
+        Err(HostError::Op(proto::Error::Unsupported("processes with an explicit environment".into())))
+    }
+
+    /// Where `program` is on the login shell's PATH (`Which`).
+    fn which(&self, program: &str) -> Result<Option<String>> {
+        match self.call(Request::Which { program: program.into() })? {
+            Response::Path(p) => Ok(p),
+            other => Err(unexpected(other)),
+        }
+    }
     /// No reply expected.
     fn proc_input(&self, proc: u32, data: Vec<u8>);
     fn proc_kill(&self, proc: u32);
@@ -1065,6 +1078,16 @@ impl Host for RemoteHost {
         let (tx, rx) = mpsc::channel();
         let (ev_tx, ev_rx) = mpsc::channel();
         self.start(Request::ProcSpawn { program: program.into(), args, cwd }, Waiter::ProcSpawn(tx, ev_tx))?;
+        match rx.recv().map_err(|_| self.disconnected())? {
+            Response::ProcSpawned { proc } => Ok(Proc { id: proc, events: ev_rx }),
+            other => Err(unexpected(other)),
+        }
+    }
+
+    fn proc_spawn_env(&self, program: &str, args: Vec<String>, cwd: Option<String>, env: Vec<(String, String)>) -> Result<Proc> {
+        let (tx, rx) = mpsc::channel();
+        let (ev_tx, ev_rx) = mpsc::channel();
+        self.start(Request::ProcSpawnEnv { program: program.into(), args, cwd, env }, Waiter::ProcSpawn(tx, ev_tx))?;
         match rx.recv().map_err(|_| self.disconnected())? {
             Response::ProcSpawned { proc } => Ok(Proc { id: proc, events: ev_rx }),
             other => Err(unexpected(other)),

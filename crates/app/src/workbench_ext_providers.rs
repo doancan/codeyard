@@ -138,7 +138,7 @@ impl Workbench {
         let deadline = Duration::from_millis(limits::PROVIDER_DEADLINE_MILLIS + if running { 0 } else { limits::ACTIVATE_MILLIS });
         let (id, answer) = self.cfg.exts.code.pending.lock().unwrap_or_else(|p| p.into_inner()).add(&ext);
         let msg = ToHost::Handle { id, deadline_ms: deadline.as_millis() as u32, request };
-        self.send_to_extension(active, reason, msg, window, cx);
+        self.send_to_extension(active, reason, Some(msg), window, cx);
         if let Some(path) = about {
             self.cfg.exts.providers.waiting.push((path, ext.clone(), id));
         }
@@ -445,7 +445,7 @@ impl Workbench {
         }
         let (id, answer) = self.cfg.exts.code.pending.lock().unwrap_or_else(|p| p.into_inner()).add(extension);
         self.cfg.exts.code.user_action.insert(extension.to_string(), id);
-        self.send_to_extension(&active, reason, ToHost::Handle { id, deadline_ms: 0, request }, window, cx);
+        self.send_to_extension(&active, reason, Some(ToHost::Handle { id, deadline_ms: 0, request }), window, cx);
         let ext = extension.to_string();
         let mut answer = crate::ui::bridge(answer);
         cx.spawn(async move |this, cx| {
@@ -815,16 +815,15 @@ impl Workbench {
             let d = self.diagnostics_for(&path);
             ed.update(cx, |e, cx| e.set_diagnostics(d, cx));
         }
-        // Diagnostics and decorations providers start with a file of their language (`language:<id>`). Nothing is
-        // asked: an empty `settings-changed` only wakes the extension, which then reads what it needs.
+        // Diagnostics and decorations providers start with a file of their language (`language:<id>`); nothing is asked,
+        // the extension reads what it needs.
         let language = language_id(&path);
         let mut wake = self.providers_for(&language, |c| &c.diagnostics);
         wake.extend(self.providers_for(&language, |c| &c.decorations));
         wake.dedup_by(|a, b| a.id() == b.id());
         for active in wake {
             if !self.cfg.exts.code.running(active.id()) {
-                let msg = ToHost::Handle { id: 0, deadline_ms: 0, request: Request::SettingsChanged { keys: Vec::new() } };
-                self.send_to_extension(&active, &format!("language:{language}"), msg, window, cx);
+                self.send_to_extension(&active, &format!("language:{language}"), None, window, cx);
             }
         }
     }

@@ -214,6 +214,11 @@ impl Workbench {
         }
     }
 
+    /// Whether the activity bar showed its "more above" and "more below" hints in the last frame.
+    pub fn activity_hints_for_test(&self) -> (bool, bool) {
+        self.chrome.activity_hints.get()
+    }
+
     pub fn sidebar_width_for_test(&self) -> f32 {
         self.chrome.sidebar_w
     }
@@ -332,6 +337,15 @@ impl Workbench {
 
     pub fn tip_for_test(day: u64) -> &'static str {
         welcome_glue::tip_of_the_day(day)
+    }
+
+    pub fn has_overlay_for_test(&self) -> bool {
+        self.overlay.is_some()
+    }
+
+    /// The last JSON a command of the extension answered.
+    pub fn extension_answer_for_test(&self, id: &str) -> Option<String> {
+        self.cfg.exts.code.last_answer.get(id).cloned()
     }
 
     /// Whether the extension's exthost is running in this window.

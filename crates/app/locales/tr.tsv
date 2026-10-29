@@ -980,7 +980,6 @@ Start	Başlangıç
 Nothing yet.	Henüz yok.
 
 # ---- Problems, Output panel, Log filter, Zoom ----
-Zoom: {}	Yakınlaştırma: {}
 No output yet. Language server logs appear here.	Henüz çıktı yok. Dil sunucusu günlükleri burada görünür.
 No problems. Language servers start when you open a file.	Sorun yok. Dil sunucuları bir dosya açtığınızda başlar.
 No problems.	Sorun yok.
@@ -3102,6 +3101,9 @@ selected	seçili
 {} match|{} matches	{} eşleşme
 “{0}” cannot be written in {1}: not changed.	“{0}” {1} kodlamasında yazılamaz: değiştirilmedi.
 No matches in this file any more.	Bu dosyada artık eşleşme yok.
+Interface scale must be between 75% and 200%.	Arayüz ölçeği %75 ile %200 arasında olmalıdır.
+Interface scale: {}%	Arayüz ölçeği: %{}
+Interface scale of every window, from 0.75 (75%) to 2 (200%); View: Zoom In and Zoom Out step through 75%, 80% and every 10% from 90% to 200%. Editor and terminal font sizes are scaled with it. Your own settings only; a folder cannot change it	Tüm pencerelerin arayüz ölçeği, 0.75 (%75) ile 2 (%200) arasında; Görünüm: Büyüt ve Küçült %75, %80 ve %90 ile %200 arasında %10 adımlarla ilerler. Düzenleyici ve terminal yazı tipi boyutları da onunla ölçeklenir. Yalnızca kendi ayarlarınızda; bir klasör bunu değiştiremez
 
 # Extensions: running code
 {} contains code, but codeyard-exthost is missing beside Codeyard	{} kod içeriyor, ancak Codeyard'ın yanında codeyard-exthost yok

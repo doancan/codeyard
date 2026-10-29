@@ -236,7 +236,7 @@ signed package; a language server wrapper is therefore a normal High-risk extens
 - **Broker (app).** Every file, network, process, account and command call is checked against
   grants ∩ workspace trust, then the path, host or program, before `Host` is called.
 - **Processes.** The broker resolves the program to an absolute path on the target host, refuses paths under
-  a workspace root, and passes an explicit environment (proto v12 adds `Which` and `EnvSpec`).
+  a workspace root, and passes an explicit environment (proto v14 adds `Which` and `ProcSpawnEnv`).
 - **Network.** In-process hyper + rustls (already linked through GPUI). It checks the real peer address of
   every connection, so private, CGNAT, link-local, metadata, NAT64 and IPv4-mapped ranges are blocked. No IP
   literals, at most 5 re-checked redirects, environment proxies ignored. WebSockets are not offered in v1.
@@ -413,7 +413,8 @@ nightly with no new crash; the scripted "new theme → visible" check passes in 
 | `ext-manifest` | manifest types, validation, `risk()`, `limits`, `when` parser, error catalogue |
 | `ext-pkg` | `.cyx` reader/writer, content digest, path safety, import check |
 | `ext-core` | install transaction, store, lock, contribution index, grants ∩ trust, index and signature verification |
-| `ext-proto`, `ext-ui`, `ext-api` | app ↔ exthost frames; UI tree model and diff; WIT and generated docs |
+| `ext-ui` | view element tree, validation and caps, keyed diff, host-side input state, accessibility roles, events |
+| `ext-proto`, `ext-api` | app ↔ exthost frames; WIT and generated docs |
 | `ext-host` | the `codeyard-exthost` binary: engine, sandbox, `--compile`. The only crate that links wasmtime |
 | `cyx`, `ext-sdk`, `ext-test` | CLI, Rust SDK, mock host |
 | `yard` | the registry's publish service; runs on the registry's server, never with the app |

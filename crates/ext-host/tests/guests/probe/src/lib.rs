@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use codeyard::api::types::{Completion, Error, HttpRequest, StreamEvent, Ticket};
-use codeyard::api::{env, log, requests, settings, storage, window, workspace};
+use codeyard::api::{documents, env, log, requests, settings, storage, timers, window, workspace};
 use exports::codeyard::api::guest::{Activation, Guest};
 use codeyard::api::host_requests::Request;
 use codeyard::api::responses::Response;
@@ -37,6 +37,8 @@ fn describe(c: &Completion) -> String {
         Completion::Bytes(b) => format!("bytes {}", b.len()),
         Completion::Chosen(c) => format!("chosen {c:?}"),
         Completion::Text(t) => format!("text {t:?}"),
+        Completion::Document(Some(d)) => format!("document {} {}", d.language, d.text.len()),
+        Completion::Document(None) => "no document".into(),
         other => format!("{other:?}"),
     }
 }
@@ -53,6 +55,11 @@ impl Guest for Probe {
 
     fn handle(id: u64, request: Request) {
         let Request::Command((command, args)) = request else {
+            // Timers and settings changes are counted, so tests can see them arrive.
+            if let Request::Timer(_) | Request::SettingsChanged(_) = &request {
+                let n = storage::get("events").map_or(0, |b| b.len()) + 1;
+                let _ = storage::set("events", &vec![1u8; n]);
+            }
             providers::handle(id, request);
             return;
         };
@@ -74,6 +81,7 @@ impl Guest for Probe {
                 reply(id, format!("{r:?} {:?}", storage::keys()))
             }
             "load" => reply(id, format!("{:?}", storage::get("k").map(String::from_utf8))),
+            "events" => reply(id, format!("{}", storage::get("events").map_or(0, |b| b.len()))),
             "print" => {
                 println!("hello from stdout");
                 eprintln!("hello from stderr");
@@ -93,6 +101,17 @@ impl Guest for Probe {
                 }
             }
             "trap" => panic!("asked to trap"),
+            "pick" => {
+                let items = [window::PickItem { label: "One".into(), detail: None, picked: false }, window::PickItem { label: "Two".into(), detail: None, picked: false }];
+                let options = window::PickOptions { title: None, placeholder: Some("Pick one".into()), many: false };
+                wait(window::quick_pick(&items, &options), id)
+            }
+            "ask" => {
+                let options = window::InputOptions { title: None, prompt: Some("Name?".into()), value: Some("x".into()), placeholder: None, password: false };
+                wait(window::input_box(&options), id)
+            }
+            "doc" => wait(documents::active(), id),
+            "every" => reply(id, format!("{}", timers::every(30))),
             _ => requests::respond(id, Err(&Error::Invalid(format!("unknown command {command}")))),
         }
     }
