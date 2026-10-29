@@ -1553,6 +1553,7 @@ checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 name = "cyx"
 version = "0.5.0"
 dependencies = [
+ "ext-core",
  "ext-manifest",
  "ext-pkg",
  "serde_json",
@@ -1960,6 +1961,7 @@ version = "0.5.0"
 dependencies = [
  "ext-manifest",
  "ext-pkg",
+ "ring",
  "serde",
  "serde_json",
  "sha2 0.11.1",

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The extension registry's signed index: format, offline verification (a threshold of root keys, an expiring online
+  key, no rollback to an older copy) and `cyx yard keygen | sign | verify` for the key ceremony and test registries
+  (docs/registry.md).
 - `codeyard --install-extension FILE.cyx` installs an extension without opening a window (repeat the flag for several).
   The performance gate now measures loading 100 installed extensions at startup (ceiling 5 ms).
 - `cyx`, the extension authors' command, ships beside Codeyard: `cyx new` (theme, snippets, keymap, language, language

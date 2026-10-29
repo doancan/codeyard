@@ -23,6 +23,7 @@ code they describe.
 | [product-quality-plan.md](product-quality-plan.md) | 2026-10-28 native product findings, prioritized development batches and acceptance criteria |
 | [product-quality-report.md](product-quality-report.md) | delivered Rust/product fixes, integration scope, native walkthrough and validation evidence |
 | [plugin-architecture.md](plugin-architecture.md) | **planned:** the extension platform design (runtime, permissions, registry, performance targets, roadmap) |
+| [registry.md](registry.md) | the extension registry: signed index format, client verification, operator commands |
 | [extensions/developer-guide.md](extensions/developer-guide.md) | **draft:** how to write, test and publish an extension |
 | [translating.md](translating.md) | adding a language, the translation file format, plurals, quality bar, adding UI text |
 | [releasing.md](releasing.md) | the manual release procedure |

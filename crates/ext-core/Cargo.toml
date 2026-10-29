@@ -3,7 +3,7 @@ name = "ext-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Installed extensions: content-addressed store, lock file, install transactions, contribution index, trust"
+description = "Installed extensions: content-addressed store, lock file, install transactions, contribution index, trust, registry index verification"
 repository.workspace = true
 publish = false
 
@@ -13,3 +13,4 @@ ext-pkg = { version = "0.5.0", path = "../ext-pkg" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"
+ring = { version = "0.17.14", default-features = false, features = ["alloc"] }

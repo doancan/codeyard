@@ -174,3 +174,48 @@ fn a_vsix_is_unpacked() {
     assert!(r.converted.contains(&"theme “Night Owl”".to_string()));
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+/// A test registry from the command line: keys, a root signed by two of three holders, an index signed online.
+#[test]
+fn yard_keygen_sign_and_verify() {
+    let d = tmp("yard");
+    let s = |p: PathBuf| p.to_string_lossy().into_owned();
+    let run_yard = |args: &[String]| crate::yard::run(args);
+    let mut roots = Vec::new();
+    for name in ["a", "b", "c"] {
+        roots.push(crate::yard::keygen(&d.join(format!("{name}.key"))).unwrap());
+    }
+    let online = crate::yard::keygen(&d.join("online.key")).unwrap();
+    assert!(crate::yard::keygen(&d.join("a.key")).unwrap_err().contains("cannot create"), "never overwrites a key");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        assert_eq!(std::fs::metadata(d.join("a.key")).unwrap().permissions().mode() & 0o777, 0o600);
+    }
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    let root = serde_json::json!({ "format": 1, "version": 1, "registry": "yard.test", "online": { "key": online.hex(), "expires": now + 86400 },
+                                   "fulcio": "pem", "rekor": "pem" });
+    std::fs::write(d.join("root.json"), serde_json::to_vec_pretty(&root).unwrap()).unwrap();
+    let index = serde_json::json!({ "format": 1, "registry": "yard.test", "version": 1, "expires": now + 3600, "extensions": {} });
+    std::fs::write(d.join("index.json"), serde_json::to_vec_pretty(&index).unwrap()).unwrap();
+    for (role, file, key) in [("root", "root.json", "a.key"), ("root", "root.json", "c.key"), ("index", "index.json", "online.key")] {
+        run_yard(&["sign".into(), role.into(), s(d.join(file)), "--key".into(), s(d.join(key))]).unwrap();
+    }
+    let trust = |threshold: &str| -> Vec<String> {
+        let mut a = vec!["verify".to_string(), s(d.clone())];
+        for k in &roots {
+            a.extend(["--root-key".into(), k.hex()]);
+        }
+        a.extend(["--threshold".into(), threshold.into()]);
+        a
+    };
+    run_yard(&trust("2")).unwrap();
+    let err = run_yard(&trust("3")).unwrap_err();
+    assert!(err.starts_with("error[CY0804]: root.json has 2 valid signature(s) from trusted keys; 3 needed"), "{err}");
+    // Signing again with the same key replaces its signature; then the third holder makes it 3 of 3.
+    run_yard(&["sign".into(), "root".into(), s(d.join("root.json")), "--key".into(), s(d.join("a.key"))]).unwrap();
+    run_yard(&["sign".into(), "root".into(), s(d.join("root.json")), "--key".into(), s(d.join("b.key"))]).unwrap();
+    run_yard(&trust("3")).unwrap();
+    assert!(run_yard(&["sign".into(), "nope".into(), s(d.join("root.json")), "--key".into(), s(d.join("a.key"))]).is_err());
+    std::fs::remove_dir_all(&d).unwrap();
+}

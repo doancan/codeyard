@@ -6,6 +6,7 @@
 //! cyx check [FOLDER]                     every problem with its file, line and fix
 //! cyx package [FOLDER] [-o FILE]         a reproducible .cyx
 //! cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]
+//! cyx yard <keygen|sign|verify> …        the registry operator's commands (yard.rs)
 //! ```
 //!
 //! Everything it checks is checked by `ext-manifest` and `ext-pkg`, the same code the app and the registry run, so a
@@ -13,6 +14,7 @@
 
 mod scaffold;
 mod vscode;
+mod yard;
 
 #[cfg(test)]
 mod tests;
@@ -29,6 +31,7 @@ usage:
   cyx package [FOLDER] [-o FILE]             write a .cyx to install or publish
   cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]
                                              convert a VS Code theme, snippets, keymap or language
+  cyx yard <keygen|sign|verify> …           the registry operator's commands (cyx yard help)
   cyx --version
 
 FOLDER defaults to the current folder. Docs: docs/extensions/developer-guide.md";
@@ -106,6 +109,13 @@ fn run(args: &[String]) -> Result<(), String> {
             println!("\nNext:\n  cd {}\n  cyx dev", report.out.display());
             Ok(())
         }
+        "yard" => match rest.first().map(String::as_str) {
+            None | Some("help" | "-h" | "--help") => {
+                println!("{}", yard::HELP);
+                Ok(())
+            }
+            _ => yard::run(rest),
+        },
         other => Err(format!("cyx: unknown command '{other}'\n\n{HELP}")),
     }
 }
