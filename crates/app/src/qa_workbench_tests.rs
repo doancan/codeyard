@@ -746,11 +746,13 @@ fn qa_about_is_reachable_and_shows_the_version(cx: &mut TestAppContext) {
     assert!(wb.read_with(cx, |wb, _| wb.command_labels_for_test()).iter().any(|l| l == "Help: About Codeyard"));
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Help: About Codeyard", window, cx));
     cx.run_until_parked();
-    assert!(cx.has_pending_prompt(), "About opens an alert");
+    assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), Some(("about", true)));
     assert!(wb.read_with(cx, |wb, _| wb.command_labels_for_test()).len() > 50);
-    cx.simulate_prompt_answer("Close");
+    cx.simulate_keystrokes("enter");
+    assert_eq!(cx.read_from_clipboard().and_then(|c| c.text()), Some(format!("Codeyard {}", env!("CARGO_PKG_VERSION"))));
+    cx.simulate_keystrokes("escape");
     cx.run_until_parked();
-    assert!(!cx.has_pending_prompt());
+    assert!(wb.read_with(cx, |wb, _| wb.page_for_test()).is_none());
 }
 
 /// The setting is a normal choice in the settings page and in settings.jsonc.
