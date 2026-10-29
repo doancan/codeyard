@@ -10,8 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Search Editors: "Search: Open Search Editor" keeps a query in its own tab with its options, globs, context lines and
-  folder, for keyboard navigation and rerun. Tabs return after a restart with their query and up to 200 results, marked
-  as restored until they run again; truncated, stopped and failed searches say their results are incomplete.
+  folders (every folder of a multi-folder workspace), for keyboard navigation and rerun. Tabs return after a restart
+  with their query and up to 200 results, marked as restored until they run again; truncated, stopped and failed
+  searches say their results are incomplete.
 - Replacement review: Replace in the Search panel opens a preview of every change, selectable per change and per file,
   made from open editors' unsaved text where there is one. Apply writes each file atomically only if it is unchanged
   since the preview, keeps encodings, byte-order marks and line endings, refuses incomplete results, and reports per
@@ -130,7 +131,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Replace All and "replace in this file" in the Search panel open the replacement review instead of a confirmation that
-  wrote at once. "Search: Open Results in Editor" is now "Search: Open Search Editor" and opens a Search Editor tab instead
+  wrote at once. Saving against a known version no longer recreates a file deleted since (it is a conflict); a file the
+  editor knows was deleted is still saved back. "Search: Open Results in Editor" is now "Search: Open Search Editor" and opens a Search Editor tab instead
   of a plain-text file.
 - The About page groups application, platform and client protocol details, and shows the remote agent protocol when connected.
 - Releases are gated on performance instead of app size: `scripts/perf` compares startup, typing latency and memory with

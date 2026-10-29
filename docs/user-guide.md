@@ -230,12 +230,14 @@ preview, described below.
 "Search: Open Search Editor" (or the page icon in the Search panel's results bar) keeps the current
 query in an editor tab of its own. Each tab remembers its query, the match case / whole word /
 regex options, the include and exclude globs, the replacement, how many context lines to show
-(the − / + buttons, 0–5) and the host and folder it searched. Several Search Editors can be open
+(the − / + buttons, 0–5) and the host and folders it searched. Several Search Editors can be open
 at once; the Search panel stays free for other queries.
 
 - **Navigate.** Click a match, or focus the list and use ↑ / ↓ and ↵; F4 / ⇧F4 step through the
   matches. Context lines are read for the first 2000 matches. "Rerun" (⇧⌘R) searches again in
-  the same tab; a Search Editor searches its own folder only, not the other workspace folders.
+  the same tab. In a workspace with several folders every folder is searched, as in the Search
+  panel; files of other folders show as `folder › path`. A tab whose folders are no longer all in
+  the workspace is marked stale.
 - **Bounded.** A tab keeps at most 20000 matches in 5000 files. When the search stops at the
   result limit (`"search.maxResults"`), is stopped or fails, the tab says the results are
   incomplete.
@@ -246,7 +248,8 @@ at once; the Search panel stays free for other queries.
 - **Preview.** "Preview Replace" (or ↵ in the replacement field) lists every change as the line
   before and after, with a checkbox per change and per file (Space toggles the focused row).
   The plan is made from the current text of each file: an open editor's unsaved text wins over
-  the disk. Nothing is written before "Apply N changes in M files".
+  the disk. Nothing is written before "Apply 3 changes in 2 files" (the button counts the selected
+  changes and files).
 - **Apply.** Apply is refused while the results are incomplete or out of date ("Search results
   are incomplete; rerun before replacing."). Open files change in their editors, one undo step
   each, and are not saved. Closed files are written one at a time, each atomically and only if it
