@@ -76,6 +76,7 @@ impl Workbench {
                     Some(Page::Settings(view)) => view.into_any_element(),
                     Some(Page::Markdown(view)) => view.into_any_element(),
                     Some(Page::Shortcuts(view)) => view.into_any_element(),
+                    Some(Page::LanguageServices(view)) => view.into_any_element(),
                     Some(Page::Merge(view)) => view.into_any_element(),
                     Some(Page::Compare(view)) => view.into_any_element(),
                     Some(Page::Welcome) => self.welcome_view(p, cx).into_any_element(),
@@ -554,6 +555,7 @@ impl Workbench {
                     Page::Settings(_) => ("settings", crate::i18n::t("Settings").into()),
                     Page::Markdown(v) => ("eye", v.read(cx).title(cx)),
                     Page::Shortcuts(_) => ("keyboard", crate::i18n::t("Keyboard Shortcuts").into()),
+                    Page::LanguageServices(_) => ("code", crate::i18n::t("Language Services").into()),
                     Page::Merge(v) => ("git-compare", v.read(cx).title(cx)),
                     Page::Compare(v) => ("git-compare", v.read(cx).title()),
                 };
