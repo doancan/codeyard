@@ -30,7 +30,7 @@ passing their checks. Do not mark a feature complete from unit tests alone.
 | F01 | Select and manage multiple Explorer entries | Modifier-toggle and Shift-range mouse selection; keyboard range/select-all; stable path selection through refresh, sorting and collapse; selected-row semantics. Copy, cut, drag, paste and delete operate on the selection with one reviewable summary, parent/child deduplication, root protection, no overwrites, per-entry failures, retryable failed cuts, preserved dirty tabs and stale-host guards. File copying works through the agent without shell-specific commands. | Accepted for delivery in [PR #48](https://github.com/doancan/codeyard/pull/48). Final product `9d19214`; required platform CI run `40792799645` passes. Filesystem/protocol/GPUI/SSH tests, native batch-copy acceptance and final performance/size gates pass; see the recorded evidence below. |
 | F02 | Arrange editors in a persistent grid | Arbitrary nested horizontal/vertical groups; split in each direction; resize, move/reorder tabs, focus/navigation and close empty groups; shared document/independent views. Persist and validate layouts across restart, workspace changes, narrow windows and many groups; migrate existing two-group sessions. | Accepted for delivery in [PR #56](https://github.com/doancan/codeyard/pull/56). Final product `0b39890`; required platform CI run `40793024519` passes. Native shared-edit/restart/narrow-window acceptance, layout/storage/GPUI tests and final performance/size gates pass. |
 | F03 | Set up language services from the editor | Discover bundled/installed JS/TS, HTML and CSS services; an explicit, discoverable install/retry flow with progress, cancellation, exact destination, offline errors and version/integrity controls. Install on the file's host; respect workspace trust and explicit user commands. Verify completion, diagnostics, formatting and restart without a terminal setup step. | Accepted for delivery in [PR #60](https://github.com/doancan/codeyard/pull/60). Final product `7bfff5c`; required platform CI run `40793025924` passes. Actual local/SSH installation and language interactions, native install/cancel/reinstall/restart, failure/geometry/action tests and final Retina/performance gates pass. |
-| F04 | Execute dependency-aware tasks | Typed shell/process tasks, cwd/env/platform options, variable/input expansion, parallel/sequence dependencies and cycle validation; background/watch readiness and custom problem matchers; pre/post-debug integration. Bounded output, cancellation of the process tree, concurrency policy, clear diagnostics and correct failed dependency behavior. | Paused before acceptance at the user's request. [Draft PR #61](https://github.com/doancan/codeyard/pull/61) retains an engine/process foundation. End-to-end task execution, inputs, local/SSH UI, cancellation and debug integration remain unfinished; the draft is not part of F01–F03 delivery. |
+| F04 | Execute dependency-aware tasks | Typed shell/process tasks, cwd/env/platform options, variable/input expansion, parallel/sequence dependencies and cycle validation; background/watch readiness and custom problem matchers; pre/post-debug integration. Bounded output, cancellation of the process tree, concurrency policy, clear diagnostics and correct failed dependency behavior. | The engine/process foundation is delivered separately in [PR #61](https://github.com/doancan/codeyard/pull/61). The user has authorized merging that foundation after its checks pass. End-to-end task execution, inputs, local/SSH UI, cancellation and debug integration remain unfinished; F04 is not accepted as a complete feature. |
 | F05 | Complete accessible application workflows | Search/results, Problems/fixes, Settings/shortcuts, debug/testing/remote views, SCM graph/worktrees/sync, output/ports, menus and dialogs expose roles, states, actions, errors and focus restoration. Row/control/text geometry, document-relative text selection, scroll actions and terminal scrollback work with bounded snapshots and stale-action rejection. | Pending: AccessKit consumer/geometry/action regressions, native VoiceOver task transcripts and Windows UI Automation evidence. |
 | F06 | Scale the entire interface | Persisted user interface scale with keyboard commands and reset; all chrome, menus, dialogs, controls, trees and text scale consistently without double-scaling editor/terminal fonts. Maintain interaction geometry, accessibility bounds and usable layouts at 100/150/200 percent in English/Turkish, light/dark/contrast themes. | Pending: sizing/layout regressions, native theme/scale inspection and persistence checks. |
 | F07 | Place views and terminals across windows | Primary/secondary sidebars with movable views, panel docking, terminals in editor groups, detached editors/terminal/view windows and transfer back. Shared documents and process ownership remain correct; focus, close/dirty prompts, persistence and multi-monitor geometry are safe. | Pending: ownership/window/restore tests and native multi-window interaction. |
@@ -41,8 +41,9 @@ passing their checks. Do not mark a feature complete from unit tests alone.
 
 ## Delivery evidence
 
-F01–F03 satisfy the acceptance gates below. F04–F11 remain incomplete and work is paused
-before F04 at the user's request. The three explicitly excluded areas remain outside scope.
+F01–F03 satisfy the acceptance gates below. F04–F11 remain incomplete. The user has
+authorized merging the validated task foundation while the remaining workflows receive
+separate feature specifications. The three explicitly excluded areas remain outside scope.
 Product sources were measured at the exact commits in the table; subsequent changes to this
 ledger and the benchmark archive contain evidence only.
 
@@ -166,7 +167,16 @@ tests used the actual services. Windows/Linux required CI passes, but a real Win
 installation walkthrough, real VoiceOver speech and human translation review were not performed.
 The managed Linux download needs glibc; musl hosts must supply compatible Node/npm as documented.
 
-F04's draft foundation remains unmerged and incomplete. F05 accessibility across the whole app,
+F04's foundation is reviewed and validated separately from its unfinished user workflow. F05 accessibility across the whole app,
 F06 interface scale, F07 movable/multi-window views, F08 complete workspace configurations,
 F09 multiple repositories, F10 terminal session restoration and F11 retained search/replacement
-review remain pending. Continue only after the user's pause ends.
+review remain pending. Their feature issues must remain open until their complete acceptance criteria pass.
+
+### F04 foundation scope
+
+The task-engine crate provides bounded JSONC/variable/DAG planning, scheduling, watch readiness,
+custom matcher models and chunked output decoding, with 34 component tests. Process ownership
+keeps cancellation available after output closes and kills Unix groups or owned Windows jobs.
+The workbench still uses its existing task workflow; no task UI or transport wiring is implied.
+Windows container-runner tests use owned child fixtures instead of depending on cold PowerShell
+startup. Their 10-second success deadline and 100 ms timeout assertion remain unchanged.
