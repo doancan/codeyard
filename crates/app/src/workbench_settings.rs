@@ -136,6 +136,11 @@ pub const CATALOG: &[Entry] = &[
     e("terminal.fontSize", crate::i18n::tr("Font size of the terminal"), Kind::Number { min: 6., max: 48. }),
     e("terminal.lineHeight", crate::i18n::tr("Terminal row height, as a multiple of the font size"), Kind::Number { min: 1., max: 2. }),
     e("terminal.scrollback", crate::i18n::tr("Lines kept in terminal history"), Kind::Number { min: 0., max: 50_000. }),
+    e(
+        "terminal.persistentScrollback",
+        crate::i18n::tr("Lines of each terminal's history kept for the next start, as plain text on this computer (0: none)"),
+        Kind::Number { min: 0., max: 10_000. },
+    ),
     e("terminal.scrollSensitivity", crate::i18n::tr("Mouse wheel and trackpad scroll speed multiplier"), Kind::Number { min: 0.1, max: 10. }),
     e("terminal.shellIntegration", crate::i18n::tr("Mark prompts, commands and the folder in zsh, bash and fish"), Kind::Bool),
     e("terminal.confirmOnClose", crate::i18n::tr("Ask before closing a terminal"), Kind::Choice(&["running", "always", "never"])),
@@ -364,6 +369,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         // Through f64 an f32 1.2 would read 1.2000000476837158: two decimals are all the setting means.
         "terminal.lineHeight" => json!((f64::from(s.terminal_line_height) * 100.).round() / 100.),
         "terminal.scrollback" => json!(s.terminal_scrollback),
+        "terminal.persistentScrollback" => json!(s.terminal_persistent_scrollback),
         "terminal.scrollSensitivity" => json!(s.terminal_scroll_sensitivity),
         "terminal.sanitizePaste" => json!(s.terminal_sanitize_paste.as_str()),
         "terminal.confirmOnClose" => json!(s.terminal_confirm_close),

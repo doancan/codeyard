@@ -93,6 +93,8 @@ pub struct Settings {
     /// Row height as a multiple of the terminal's font size.
     pub terminal_line_height: f32,
     pub terminal_scrollback: usize,
+    /// Lines of each terminal's history saved for the next start (`terminal.persistentScrollback`; 0: none).
+    pub terminal_persistent_scrollback: usize,
     pub terminal_scroll_sensitivity: f32,
     /// Whether a program in the terminal may put text on the clipboard (OSC 52).
     pub terminal_allow_clipboard_write: bool,
@@ -328,6 +330,7 @@ impl Default for Settings {
             terminal_font_size: theme::text::CODE.0,
             terminal_line_height: crate::terminal::LINE_HEIGHT,
             terminal_scrollback: 2000,
+            terminal_persistent_scrollback: 0,
             terminal_scroll_sensitivity: 2.,
             terminal_allow_clipboard_write: false,
             terminal_shell_integration: true,
@@ -709,6 +712,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.number("terminal.lineHeight", 1., 2.) {
         s.terminal_line_height = v as f32;
+    }
+    if let Some(v) = r.integer("terminal.persistentScrollback", 0, crate::terminal_session::MAX_HISTORY_LINES as u64) {
+        s.terminal_persistent_scrollback = v as usize;
     }
     if let Some(v) = r.number("terminal.scrollback", 0., crate::terminal::SCROLLBACK_MAX as f64) {
         s.terminal_scrollback = v as usize;
@@ -1227,6 +1233,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "terminal.fontSize",
         "terminal.lineHeight",
         "terminal.scrollback",
+        "terminal.persistentScrollback",
         "terminal.scrollSensitivity",
         "terminal.sanitizePaste",
         "terminal.warnMultilinePaste",

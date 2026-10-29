@@ -1174,6 +1174,7 @@ Line {} after the change
 Line {}: not committed yet	
 Line {}: {} · {}, {} · {}	
 Lines kept in terminal history	
+Lines of each terminal's history kept for the next start, as plain text on this computer (0: none)	
 Link copied.	
 List	
 Listen address (local: 127.0.0.1 or ::1; network: 0.0.0.0 or ::)	
@@ -1596,6 +1597,7 @@ Previous Match
 Previous Problem	
 Previous match (⇧↵)	
 Previous result (⇧F4)	
+Previous session ended; started a new shell	
 Problems	
 Problems: Copy Full Diagnostic	
 Process ended. Press any key to close.	
@@ -1877,6 +1879,7 @@ Save user@host to ~/.ssh/config and connect
 Saved a copy to {}	
 Saved as {}. You kept typing while it was saving, so the original tab stays open with your latest changes.	
 Saved project “{}” (⌃R to switch)	
+Saved terminal history cleared	
 Saved to ~/.ssh/config. Connecting uses your SSH keys and ssh-agent; a password prompt appears in this window if needed.	
 Saved without formatting: {0}: {1}	
 Saved {} (edit the colors in that file)	
@@ -2121,9 +2124,11 @@ Tasks: Terminate Task
 Terminal	
 Terminal colour	
 Terminal row height, as a multiple of the font size	
+Terminal session could not be restored: {}	
 Terminal {0} of {1}	
 Terminal: Change Color…	
 Terminal: Clear	
+Terminal: Clear Saved Terminal History	
 Terminal: Close	
 Terminal: Configure Terminal Settings	
 Terminal: Copy Last Command Output	
@@ -2756,6 +2761,7 @@ the file is too large
 the folder cannot be read on the left	
 the folder cannot be read on the right	
 the folder is not trusted	
+the folder {} no longer exists; started a new shell in the workspace folder	
 the header “{}” is not valid	
 the keychain did not answer	
 the keychain refused the account: {}	
@@ -2773,6 +2779,7 @@ the sign-in was refused ({})
 the token endpoint answered {}	
 the token endpoint sent a {} token; only bearer tokens can sign requests	
 the token endpoint sent no access_token	
+the saved state is damaged	
 the token was rejected: it may be expired or revoked — renew GITHUB_TOKEN/GH_TOKEN or run `gh auth login`	
 the variable {} refers to itself	
 the window closed	

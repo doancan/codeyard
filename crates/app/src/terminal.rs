@@ -184,6 +184,8 @@ pub struct TerminalView {
     pending_input: Vec<u8>,
     /// Fixed title (task name): the shell's title updates don't change it.
     title_locked: bool,
+    /// Program and arguments it was started with (`None`: the user's shell), kept so a restart can start the same.
+    launched: (Option<String>, Option<Vec<String>>),
     term: Term<Listener>,
     parser: Processor<StdSyncHandler>,
     events: Listener,
@@ -220,6 +222,26 @@ impl Focusable for TerminalView {
 }
 
 impl TerminalView {
+    /// What a restart needs to bring this terminal back as a new shell (`history_lines` 0: no history). Output-only
+    /// terminals (task and test output) have no shell and are not saved.
+    pub fn saved(&self, history_lines: usize) -> Option<crate::terminal_session::SavedTerminal> {
+        self.pty.as_ref()?;
+        let history = if history_lines > 0 { crate::terminal_session::sanitize_history(&self.scrollback_text(), history_lines) } else { None };
+        Some(crate::terminal_session::SavedTerminal {
+            cwd: self.cwd.clone(),
+            shell: self.launched.0.clone(),
+            args: self.launched.1.clone(),
+            color: self.color.clone(),
+            title: self.title_locked.then(|| self.title.to_string()),
+            history,
+        })
+    }
+
+    /// Text shown in the terminal as output (a restored history, a notice): never sent to the program.
+    pub fn show_text(&mut self, text: &str, cx: &mut Context<Self>) {
+        self.append(text.as_bytes(), cx);
+    }
+
     /// Folder the terminal was started in (a split terminal opens in the same place).
     pub fn start_dir(&self) -> Option<String> {
         self.cwd.clone()
@@ -237,7 +259,8 @@ impl TerminalView {
     /// A terminal running `launch` (a profile or a picked shell).
     pub fn new_with(host: Arc<dyn Host>, cwd: Option<String>, launch: Launch, cx: &mut Context<Self>) -> Self {
         let Launch { shell, args, env, color } = launch;
-        let view = Self::blank(host.clone(), cwd.clone(), color, cx);
+        let mut view = Self::blank(host.clone(), cwd.clone(), color, cx);
+        view.launched = (shell.clone(), args.clone());
         let (cols, rows) = (view.size.cols as u16, view.size.rows as u16);
         let integration = cx.global::<crate::settings::Settings>().terminal_shell_integration;
         let spawn = cx.background_executor().spawn(async move {
@@ -366,6 +389,7 @@ impl TerminalView {
             pty: None,
             pending_input: Vec::new(),
             title_locked: false,
+            launched: (None, None),
             term,
             parser: Processor::new(),
             events,

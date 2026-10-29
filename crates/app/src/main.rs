@@ -206,6 +206,7 @@ mod terminal_image_paste;
 mod terminal_osc;
 mod terminal_paste;
 mod terminal_profiles;
+mod terminal_session;
 #[cfg(all(test, unix))]
 mod test_files;
 #[cfg(test)]

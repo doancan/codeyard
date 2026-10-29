@@ -65,6 +65,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Terminals come back after a restart as new shells in their folders, with their titles, colors and programs, and say
+  so; nothing runs again. `terminal.persistentScrollback` (off by default) also keeps the last lines of their history as
+  plain text; "Terminal: Clear Saved Terminal History" removes it.
 - Search Editors: "Search: Open Search Editor" keeps a query in its own tab with its options, globs, context lines and
   folders (every folder of a multi-folder workspace), for keyboard navigation and rerun. Tabs return after a restart
   with their query and up to 200 results, marked as restored until they run again; truncated, stopped and failed
