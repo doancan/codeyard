@@ -2,8 +2,10 @@
 //! network (curl, like the app updater, so proxies and the system's certificates apply), the list of registries, and
 //! one call each for the command line and the Extensions view.
 //!
-//! Privacy: nothing here runs unless the user asks for an install, or an extension from a registry is installed (then
-//! that registry's index is fetched at most once a day). A user with no registry extension makes no request.
+//! Privacy: nothing here runs unless the user asks for an install or opens the Market, or an extension from a registry
+//! is installed (then that registry's index is fetched at most once a day). A user with no registry extension who never
+//! opens the Market makes no request. Searching the Market asks nothing; opening an extension's page fetches its
+//! details file once (cached after).
 
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
@@ -102,6 +104,10 @@ pub fn add_fetch_for_test(f: std::sync::Arc<dyn Fetch + Send + Sync>) {
     TEST_FETCH.lock().unwrap_or_else(|e| e.into_inner()).push(f);
 }
 
+/// Addresses asked for that no test registry serves (an image in a README, say): tests check theirs are not here.
+#[cfg(test)]
+pub static UNROUTED_FOR_TEST: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
 #[cfg(test)]
 struct TestRoute;
 
@@ -115,6 +121,7 @@ impl Fetch for TestRoute {
                 r => return r,
             }
         }
+        UNROUTED_FOR_TEST.lock().unwrap_or_else(|e| e.into_inner()).push(url.to_string());
         Err(format!("{url}: no test registry answers it"))
     }
 }
@@ -175,6 +182,26 @@ pub fn find(cfg_dir: &Path, registries: &[Registry], spec: &str, now: u64) -> Re
         true => crate::i18n::tf("{} is not in any of your registries", &[&id]),
         false => errors.join("\n"),
     })
+}
+
+/// Every registry's index for the Market: the cached copy when fetched within the day, else fetched now. A registry
+/// that cannot be read is reported and the others are listed.
+pub fn market(cfg_dir: &Path, registries: &[Registry], now: u64) -> (Vec<(Registry, ext_core::yard::Verified)>, Vec<String>) {
+    let (mut listed, mut errors) = (Vec::new(), Vec::new());
+    for reg in registries {
+        let dir = registry::cache_dir(&cache_root(cfg_dir), reg);
+        match with_fetch(|f| registry::index(reg, &dir, f, now, false)) {
+            Ok(v) => listed.push((reg.clone(), v)),
+            Err(e) => errors.push(format!("{}: {e}", reg.name)),
+        }
+    }
+    (listed, errors)
+}
+
+/// The Market page of one version of `id` in `reg` (manifest and README), checked against its index.
+pub fn page(cfg_dir: &Path, reg: &Registry, id: &ext_manifest::ExtId, release: &ext_core::yard::Release) -> Result<registry::Page, String> {
+    let dir = registry::cache_dir(&cache_root(cfg_dir), reg);
+    with_fetch(|f| registry::page(reg, &dir, id, release, f)).map_err(|e| e.to_string())
 }
 
 /// Install what [`find`] returned (after the user's consent), pinning its publisher.

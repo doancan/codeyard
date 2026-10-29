@@ -8,6 +8,10 @@
 //! index.json.sig  signature by the online key
 //! ```
 //!
+//! Beside each package the registry serves `packages/<digest>.details.json` ([`Details`]): its manifest and README, so
+//! the Market can show a page without downloading the package. The index carries its sha256, so it is as trusted as
+//! the index.
+//!
 //! The signed bytes are the files exactly as served, after a context line that says which file it is, so there is no
 //! canonical JSON to agree on and a signature over one file can never pass for the other. The root keys are not in
 //! any file: the app ships them, and `extensions.registries` adds another registry with its own.
@@ -30,6 +34,10 @@ pub const MAX_ROOT_BYTES: usize = 64 << 10;
 /// About 200 000 versions; the compressed transfer is a fraction of it. Index deltas come when it passes 5 MB (§13).
 pub const MAX_INDEX_BYTES: usize = 64 << 20;
 pub const MAX_SIG_BYTES: usize = 16 << 10;
+/// A README is cut to this for the details file; the full one stays in the package.
+pub const MAX_README_BYTES: usize = 256 << 10;
+/// A details file: the manifest, the README and the JSON around them.
+pub const MAX_DETAILS_BYTES: usize = ext_manifest::limits::MANIFEST_BYTES * 2 + MAX_README_BYTES * 2 + 1024;
 /// How long an index is good for after it is signed (the registry re-signs daily).
 pub const INDEX_LIFETIME_SECS: u64 = 72 * 3600;
 
@@ -214,6 +222,9 @@ pub struct Release {
     /// The registry's security role cleared it to update at once (an advisory fix), skipping the 48 h wait for code.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub immediate: bool,
+    /// sha256 of `packages/<digest>.details.json`, for the Market's extension page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub details: Option<String>,
 }
 
 impl Release {
@@ -426,6 +437,9 @@ fn check_index(index: &Index) -> Result<(), Error> {
                     return Err(bad(format!("{id} {}: {field} is not 64 lowercase hex digits", r.version)));
                 }
             }
+            if r.details.as_deref().is_some_and(|d| parse_hex::<32>(d).is_none()) {
+                return Err(bad(format!("{id} {}: details is not 64 lowercase hex digits", r.version)));
+            }
             if let Status::Revoked { reason } = &r.status {
                 check_text(INDEX_FILE, &format!("{id} {}: revoked reason", r.version), reason, 500)?;
             }
@@ -450,6 +464,50 @@ impl Index {
 pub fn permission_digest(manifest: &ext_manifest::Manifest) -> String {
     use sha2::Digest as _;
     hex(&sha2::Sha256::digest(serde_json::to_vec(&manifest.permissions).expect("permissions serialize")))
+}
+
+/// `packages/<digest>.details.json`: what the Market's extension page shows, taken from the package by the registry.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Details {
+    /// `codeyard-extension.toml` as published.
+    pub manifest: String,
+    /// `README.md` at the package's root, cut at a line to [`MAX_README_BYTES`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub readme: Option<String>,
+    /// The README was cut.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub readme_cut: bool,
+}
+
+impl Details {
+    /// The details of a package that passed `ext_pkg::read`.
+    pub fn of(pkg: &ext_pkg::Package) -> Details {
+        let manifest = pkg.files.get(ext_manifest::FILE_NAME).map(|e| String::from_utf8_lossy(&e.data).into_owned()).unwrap_or_default();
+        // One spelling per name in a package (ext-pkg), so at most one file matches.
+        let readme = pkg.files.iter().find(|(p, _)| p.eq_ignore_ascii_case("README.md")).map(|(_, e)| String::from_utf8_lossy(&e.data).into_owned());
+        let (readme, readme_cut) = match readme {
+            Some(r) if r.len() > MAX_README_BYTES => {
+                let mut end = MAX_README_BYTES;
+                while !r.is_char_boundary(end) {
+                    end -= 1;
+                }
+                let end = r[..end].rfind('\n').map_or(end, |i| i + 1);
+                (Some(r[..end].to_string()), true)
+            }
+            r => (r, false),
+        };
+        Details { manifest, readme, readme_cut }
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        serde_json::to_vec(self).expect("details serialize")
+    }
+
+    /// sha256 of the bytes, as [`Release::details`] lists it.
+    pub fn digest(bytes: &[u8]) -> String {
+        use sha2::Digest as _;
+        hex(&sha2::Sha256::digest(bytes))
+    }
 }
 
 /// What a publisher can do to a version they published, signed like a package (a Sigstore bundle over

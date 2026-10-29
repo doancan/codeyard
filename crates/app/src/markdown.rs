@@ -589,6 +589,16 @@ pub(crate) fn document_view(blocks: &[Block], id: &str, p: &Palette) -> Vec<gpui
     blocks.iter().enumerate().map(|(i, b)| block_view(b, &format!("{id}{i}"), p, 0, false, None)).collect()
 }
 
+/// A document from someone else (an extension's README in the Market): no image is loaded, so none is requested (each
+/// shows its text), and every link goes to `link`, which asks before opening it.
+pub(crate) fn untrusted_document_view(blocks: &[Block], id: &str, p: &Palette, link: impl Fn(&str, &mut Window, &mut App) + 'static) -> Vec<gpui::AnyElement> {
+    let mut urls = Vec::new();
+    collect_images(blocks, &mut urls);
+    let images = urls.into_iter().map(|u| (u, Err(crate::i18n::t("Images are not shown here.").to_string()))).collect();
+    let document = DocumentContext { link: Rc::new(link), images, anchors: HashMap::new(), code: HashMap::new() };
+    blocks.iter().enumerate().map(|(i, b)| block_view(b, &format!("{id}{i}"), p, 0, false, Some(&document))).collect()
+}
+
 /// The same, set small and tight: headings only a little larger than the text, no rules under them, list items one line apart.
 /// For a document that is read in a small window (the release notes).
 pub(crate) fn compact_document_view(blocks: &[Block], id: &str, p: &Palette) -> Vec<gpui::AnyElement> {
@@ -650,7 +660,11 @@ fn block_view(b: &Block, id: &str, p: &Palette, depth: usize, compact: bool, doc
                         .id(SharedString::from(format!("{id}-image-{index}")))
                         .when(is_safe_link(url), |d| {
                             let url = url.clone();
-                            d.cursor_pointer().on_click(move |_, _, cx| cx.open_url(&url))
+                            let handler = document.map(|d| d.link.clone());
+                            d.cursor_pointer().on_click(move |_, window, cx| match &handler {
+                                Some(h) => h(&url, window, cx),
+                                None => cx.open_url(&url),
+                            })
                         })
                         .text_color(c(p.text_muted))
                         .child(format!(

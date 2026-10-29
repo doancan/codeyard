@@ -46,6 +46,8 @@ pub(super) struct ExtViewState {
     pub(super) pending: Option<Pending>,
     /// Install and Cancel on the consent sheet, so the safe answer can take the keyboard first.
     pub(super) consent_focus: Option<(FocusHandle, FocusHandle)>,
+    pub(super) tab: super::market_glue::ExtTab,
+    pub(super) market: super::market_glue::MarketState,
 }
 
 /// The consent sheet's text and every other plain-words line of an extension.
@@ -162,10 +164,8 @@ impl Workbench {
     pub(super) fn show_extensions(&mut self, _: &ShowExtensions, window: &mut Window, cx: &mut Context<Self>) {
         self.chrome.panel = Some(Panel::Extensions);
         self.extensions_opened(window, cx);
-        if let Some(f) = &self.cfg.exts.filter {
-            window.focus(&f.focus_handle(cx));
-        }
-        cx.notify();
+        // The list on screen keeps its tab; its search field takes the keyboard.
+        self.set_extensions_tab(self.cfg.exts.tab, window, cx);
     }
 
     /// The view was opened: the filter field exists and the list is read again.
@@ -244,11 +244,12 @@ impl Workbench {
     /// Show one extension's page (a pending consent sheet is dropped).
     pub(super) fn select_extension(&mut self, id: &str, cx: &mut Context<Self>) {
         self.cfg.exts.pending = None;
+        self.cfg.exts.market.page = None;
         self.cfg.exts.selected = Some(id.to_string());
         self.open_extension_page(cx);
     }
 
-    fn open_extension_page(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn open_extension_page(&mut self, cx: &mut Context<Self>) {
         self.tabs.page = Some(Page::Extension);
         self.tabs._page_sub = None;
         self.tabs.page_active = true;
@@ -259,10 +260,15 @@ impl Workbench {
 
     /// The page's tab title: the extension on it.
     pub(super) fn extension_page_title(&self) -> String {
-        match (&self.cfg.exts.pending, self.selected_extension()) {
-            (Some(p), _) => crate::i18n::tf("Install {}", &[&p.manifest.name]),
-            (None, Some(e)) => e.manifest.name.clone(),
-            (None, None) => crate::i18n::t("Extensions").to_string(),
+        if let Some(p) = &self.cfg.exts.pending {
+            return crate::i18n::tf("Install {}", &[&p.manifest.name]);
+        }
+        if let Some((_, e)) = self.cfg.exts.market.page_entry() {
+            return e.name.clone();
+        }
+        match self.selected_extension() {
+            Some(e) => e.manifest.name.clone(),
+            None => crate::i18n::t("Extensions").to_string(),
         }
     }
 
@@ -299,10 +305,14 @@ impl Workbench {
     }
 
     /// Find, download and check the package in the background (on this computer, also in an SSH window), then the
-    /// consent sheet, which also names the publisher the registry signed it for.
-    pub(super) fn review_registry_extension(&mut self, spec: String, window: &mut Window, cx: &mut Context<Self>) {
+    /// consent sheet, which also names the publisher the registry signed it for. `only` limits the search to one
+    /// registry (Install on a Market page).
+    pub(super) fn review_registry_extension(&mut self, spec: String, only: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         let Some(dir) = self.cfg.dir.clone() else { return };
-        let registries = crate::ext_registry::registries(cx.global::<Settings>());
+        let mut registries = crate::ext_registry::registries(cx.global::<Settings>());
+        if let Some(only) = only {
+            registries.retain(|r| r.name == only);
+        }
         let spec = spec.trim().to_string();
         self.notice = Some(Notice::Info(crate::i18n::tf("Looking for {} in your registries…", &[&spec]).into()));
         cx.notify();
@@ -379,7 +389,7 @@ impl Workbench {
 
     pub(super) fn cancel_consent(&mut self, cx: &mut Context<Self>) {
         self.cfg.exts.pending = None;
-        if self.cfg.exts.selected.is_none() {
+        if self.cfg.exts.selected.is_none() && self.cfg.exts.market.page.is_none() {
             self.close_page(cx);
         }
         cx.notify();
@@ -392,6 +402,7 @@ impl Workbench {
         match store.install(&p.bytes, p.source) {
             Ok(i) => {
                 self.cfg.exts.selected = Some(i.manifest.id.to_string());
+                self.cfg.exts.market.page = None;
                 let done = crate::i18n::tf("Installed {0} {1}.", &[&i.manifest.name, &i.manifest.version]);
                 self.after_extension_change(done, window, cx);
             }

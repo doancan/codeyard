@@ -317,7 +317,9 @@ Updates and privacy:
 - `extensions.lock.jsonc` (config dir) is the only record of what is installed: requested version, resolved
   version, content digest, per-triple digests. It can be synced with dotfiles.
 - Version numbers are never reused. Stats are download counts kept as `(id, version, day)` with no logs,
-  labelled "including updates". No ratings or reviews. READMEs render natively without remote images.
+  labelled "including updates". No ratings or reviews. READMEs render natively without remote images; each version's
+  manifest and README are served as a details file whose sha256 is in the signed index, so a Market page needs no
+  package download.
 - Limits are registry policy: `.wasm` 64 MiB, package 64 MiB, per-triple package 128 MiB.
 
 ## 9. Developer experience

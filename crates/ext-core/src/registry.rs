@@ -5,6 +5,7 @@
 //! ```text
 //! <data>/extensions/registries/<name>/root.json, root.json.sig, index.json, index.json.sig   the last accepted copy
 //! <data>/extensions/registries/<name>/state.json   versions seen (no rollback), when fetched, the index's ETag
+//! <data>/extensions/registries/<name>/details/<sha256>.json   Market pages opened before, checked against the index
 //! ```
 //!
 //! Every client fetches the same bytes (the whole index), at most once a day and only when it has something from the
@@ -257,6 +258,45 @@ pub fn download(
         )));
     }
     Ok(Download { bytes, manifest: pkg.manifest, release: release.clone(), signed })
+}
+
+/// What the Market's page shows of one version, checked against the index.
+#[derive(Clone, Debug)]
+pub struct Page {
+    pub manifest: Manifest,
+    pub readme: Option<String>,
+    /// The README was cut by the registry; the full one is in the package.
+    pub readme_cut: bool,
+}
+
+/// The page of one version: from the cache folder `dir` when it was opened before, else downloaded (one request, not
+/// counted as a download). Its sha256 is in the signed index, and its manifest must be the version's.
+pub fn page(reg: &Registry, dir: &Path, id: &ExtId, release: &Release, fetch: &dyn Fetch) -> Result<Page, Error> {
+    let sha = release.details.as_deref().ok_or_else(|| Error::NotFound(format!("the {} registry has no page for {id} {}", reg.name, release.version)))?;
+    let cache = dir.join("details").join(format!("{sha}.json"));
+    let bytes = match std::fs::read(&cache) {
+        Ok(b) if hex(&Sha256::digest(&b)) == sha => b,
+        _ => {
+            let bytes =
+                match fetch.get(&reg.file_url(&format!("packages/{}.details.json", release.digest)), None, yard::MAX_DETAILS_BYTES).map_err(Error::Network)? {
+                    Got::Body { bytes, .. } => bytes,
+                    Got::NotModified => return Err(Error::Network("details: unexpected “not modified”".into())),
+                };
+            if hex(&Sha256::digest(&bytes)) != sha {
+                return Err(Error::Package(format!("{id} {}: the page does not match the registry's index", release.version)));
+            }
+            std::fs::create_dir_all(cache.parent().expect("has a parent")).map_err(|e| Error::Cache(format!("cannot create {}: {e}", dir.display())))?;
+            write_atomic(&cache, &bytes)?;
+            bytes
+        }
+    };
+    let bad = |what: String| Error::Package(format!("{id} {}: the registry's page {what}", release.version));
+    let d: yard::Details = serde_json::from_slice(&bytes).map_err(|e| bad(format!("is not valid: {e}")))?;
+    let manifest = ext_manifest::parse(&d.manifest).map_err(|e| bad(format!("has a manifest that does not parse ({} errors)", e.len())))?;
+    if &manifest.id != id || manifest.version != release.version || yard::permission_digest(&manifest) != release.permissions {
+        return Err(bad("is for another package".into()));
+    }
+    Ok(Page { manifest, readme: d.readme, readme_cut: d.readme_cut })
 }
 
 /// The publisher an install from this registry pins, and what that means against the lock's pin.

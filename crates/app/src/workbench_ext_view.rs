@@ -1,5 +1,6 @@
 //! Workbench: drawing the Extensions view (sidebar list) and the extension page (details, actions, consent sheet).
-//! Every control is a tab stop and answers Enter and Space like a click.
+//! Every control is a tab stop and answers Enter and Space like a click. The Market tab and its pages are drawn in
+//! `workbench_market_view.rs`.
 
 use gpui::{AnyElement, Context, SharedString, div, px};
 
@@ -7,7 +8,7 @@ use super::ext_glue::{ExtEntry, contribution_lines, high_risk_line, permission_l
 use super::*;
 
 /// A text button that takes keyboard focus.
-fn action_button(id: &'static str, label: &'static str, p: &Palette) -> gpui::Stateful<gpui::Div> {
+pub(super) fn action_button(id: &'static str, label: &'static str, p: &Palette) -> gpui::Stateful<gpui::Div> {
     super::container_monitor_glue::button(id, label, p)
         .tab_index(0)
         .border_1()
@@ -15,7 +16,7 @@ fn action_button(id: &'static str, label: &'static str, p: &Palette) -> gpui::St
         .focus(|d| d.border_color(c(p.focus_ring)))
 }
 
-fn section_title(title: &str, p: &Palette) -> gpui::Div {
+pub(super) fn section_title(title: &str, p: &Palette) -> gpui::Div {
     div()
         .pt(px(theme::SPACE[4]))
         .pb(px(theme::SPACE[1]))
@@ -26,7 +27,7 @@ fn section_title(title: &str, p: &Palette) -> gpui::Div {
 }
 
 /// A bulleted list of plain lines, or `empty` in muted text.
-fn line_list(lines: Vec<String>, empty: &str, p: &Palette) -> gpui::Div {
+pub(super) fn line_list(lines: Vec<String>, empty: &str, p: &Palette) -> gpui::Div {
     let mut d = div().flex().flex_col().gap(px(theme::SPACE[1]));
     if lines.is_empty() {
         return d.child(div().text_color(c(p.text_muted)).child(empty.to_string()));
@@ -75,12 +76,13 @@ impl Workbench {
                         }))),
                 )
             });
+        let market = !off && self.cfg.exts.tab == super::market_glue::ExtTab::Market;
         let muted = |s: String| div().px(px(theme::SPACE[6])).py(px(theme::SPACE[2])).text_color(c(p.text_muted)).child(s);
         let mut body = div().id("ext-list").flex().flex_col().flex_1().min_h_0().overflow_y_scroll();
         if off {
             body = body
                 .child(muted(crate::i18n::t("Extensions are turned off for this session (--no-extensions). Start Codeyard without it to load them.").into()));
-        } else {
+        } else if !market {
             let s = &self.cfg.exts;
             let rows = self.visible_extensions(cx);
             body = body.child(div().px(px(theme::SPACE[6])).child(section_title(&crate::i18n::tf("Installed ({})", &[&s.list.len()]), p)));
@@ -105,7 +107,9 @@ impl Workbench {
             .size_full()
             .text_size(px(text::SM.0))
             .child(header)
-            .when(!off, |d| {
+            .when(!off, |d| d.child(self.extension_tabs(p, cx)))
+            .when(market, |d| d.child(self.market_list(p, cx)))
+            .when(!off && !market, |d| {
                 d.children(self.cfg.exts.filter.clone().map(|f| {
                     div()
                         .mx(px(theme::SPACE[3]))
@@ -119,7 +123,7 @@ impl Workbench {
                         .child(f)
                 }))
             })
-            .child(body)
+            .when(!market, |d| d.child(body))
             .into_any_element()
     }
 
@@ -198,6 +202,9 @@ impl Workbench {
                         .child(buttons),
                 )
                 .into_any_element();
+        }
+        if self.cfg.exts.market.page.is_some() {
+            return self.market_page(page, column, p, cx);
         }
         let Some(e) = self.selected_extension() else {
             return page

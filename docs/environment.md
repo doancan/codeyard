@@ -31,6 +31,7 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_BIN` | The Codeyard binary `cyx dev` starts (default: `codeyard` on `PATH`, then the one beside `cyx`, then `/Applications/Codeyard.app` on macOS). |
 | `CODEYARD_PERF` | Append performance samples (one JSON line each) to this file; used by `scripts/perf/run.sh`. |
 | `CODEYARD_PERF_TYPING` | With `CODEYARD_PERF`: after startup, type this many characters into the focused editor, record key press to drawn frame for each, then save. |
+| `CODEYARD_PERF_MARKET` | With `CODEYARD_PERF`: after startup, open the Market, wait for its list, then press this many keys in its search (a word typed and erased), recording key press to the results in the view and to the frame that shows them. |
 | `CODEYARD_PERF_EXIT` | With `CODEYARD_PERF`: quit when the scripted scenario is done. |
 | `CODEYARD_DO_DELAY_MS` | Delay before `--do "Command;Command"` runs its commands. |
 | `CODEYARD_DUMP_DOCK` | Print the Dock menu to stderr a few seconds after start; with a number, click that row. |

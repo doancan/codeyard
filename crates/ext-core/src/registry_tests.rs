@@ -214,3 +214,46 @@ fn a_registry_that_moved_on_without_us_is_still_read_through_the_retry() {
     assert!(matches!(e, Error::Index(_)), "{e}");
     assert_eq!(s.fetch.count(), 8, "two attempts, four files each");
 }
+
+#[test]
+fn a_page_is_fetched_once_checked_against_the_index_and_cached() {
+    let s = setup("page");
+    let reg = s.yard.registry();
+    let v = index(&reg, &s.cache, &s.fetch, NOW, true).unwrap();
+    let r = v.index.latest(&id("you.night"), false).unwrap();
+    let dir = cache_dir(&s.cache, &reg);
+    let before = s.fetch.count();
+    let p = page(&reg, &dir, &id("you.night"), r, &s.fetch).unwrap();
+    assert_eq!((p.manifest.name.as_str(), p.manifest.version.to_string().as_str()), ("Night", "1.1.0"));
+    assert_eq!(s.fetch.count(), before + 1, "one request, and not for the package");
+    assert!(s.fetch.requests.lock().unwrap().last().unwrap().ends_with(".details.json"));
+    page(&reg, &dir, &id("you.night"), r, &s.fetch).unwrap();
+    assert_eq!(s.fetch.count(), before + 1, "opened again: from the cache");
+}
+
+#[test]
+fn a_changed_page_or_one_for_another_package_is_refused() {
+    let s = setup("page-tamper");
+    let reg = s.yard.registry();
+    let v = index(&reg, &s.cache, &s.fetch, NOW, true).unwrap();
+    let dir = cache_dir(&s.cache, &reg);
+    let new = v.index.latest(&id("you.night"), false).unwrap();
+    let old = v.index.release(&id("you.night"), &Version::parse("1.0.0").unwrap()).unwrap();
+    s.yard.tamper(&format!("packages/{}.details.json", new.digest), |b| b.extend_from_slice(b" "));
+    let e = page(&reg, &dir, &id("you.night"), new, &s.fetch).unwrap_err();
+    assert!(e.to_string().contains("does not match the registry's index"), "{e}");
+    // The page of 1.0.0 served for 1.1.0, with the index saying so: the manifest gives it away.
+    let mut lying = new.clone();
+    lying.details = old.details.clone();
+    lying.digest = old.digest.clone();
+    let e = page(&reg, &dir, &id("you.night"), &lying, &s.fetch).unwrap_err();
+    assert!(e.to_string().contains("is for another package"), "{e}");
+    // A damaged cache copy is fetched again, not believed.
+    page(&reg, &dir, &id("you.night"), old, &s.fetch).unwrap();
+    let cached = dir.join("details").join(format!("{}.json", old.details.as_deref().unwrap()));
+    std::fs::write(&cached, b"{}").unwrap();
+    assert_eq!(page(&reg, &dir, &id("you.night"), old, &s.fetch).unwrap().manifest.version.to_string(), "1.0.0");
+    let mut none = old.clone();
+    none.details = None;
+    assert!(matches!(page(&reg, &dir, &id("you.night"), &none, &s.fetch), Err(Error::NotFound(_))));
+}

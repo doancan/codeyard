@@ -160,6 +160,7 @@ Cannot join {}
 Cannot open this link: {}	
 Cannot parse {} as a number	
 Cannot read {0}: {1}	
+Cannot show this extension's details: {}	
 Cannot use {} as an entry	
 Cannot use {} as an object key	
 Cargo did not report a Rust test executable	
@@ -558,6 +559,9 @@ Deleted “{0}” from {1}
 Deleting {}…	
 Deleting…	
 Deny	
+Deprecated	
+Deprecated by its publisher.	
+Deprecated by its publisher: use {} instead.	
 Destination: {0} on {1}. Existing files are never overwritten.	
 Destination: {}	
 Dev Container configuration: {}	
@@ -776,6 +780,7 @@ Extensions: Install from File…
 Extensions: Install from Folder…	
 Extensions: Install from Registry…	
 Extensions: New Extension…	
+Extensions: Open Market	
 Extensions: Show Extensions	
 External image: open the link to view it.	
 F4 steps through the search results, ⇧F4 goes back.	
@@ -1015,6 +1020,7 @@ Image
 Image exceeds 20 MB.	
 Image unavailable	
 Image: {}	
+Images are not shown here.	
 Import VS Code Settings and Shortcuts	
 Imported {0} settings and {1} shortcuts from VS Code ({2} settings and {3} shortcuts have no equivalent here)	
 In Privacy & Security, press + and add Codeyard, then turn it on.	
@@ -1046,6 +1052,7 @@ Install which dictionary? (English is built in)
 Install {}	
 Install {}?	
 Installation cancelled. The previous language services are unchanged.	
+Installed	
 Installed ({})	
 Installed from the file {}	
 Installed from the folder {}	
@@ -1153,6 +1160,7 @@ Mark as resolved (stage)
 Mark prompts, commands and the folder in zsh, bash and fish	
 Markdown preview	
 Markdown: Open Preview	
+Market	
 Match Case	
 Match case	
 Match case (⌥C)	
@@ -1278,7 +1286,9 @@ No differences.
 No edits yet in this session.	
 No enclosing brackets	
 No expressions: + adds one.	
+No extension matches the search.	
 No extension registry is set up yet. Add one to extensions.registries in your settings, or install a .cyx file.	
+No extension registry is set up yet. Add one to extensions.registries in your settings.	
 No extensions installed. Install one from a .cyx file or a folder.	
 No favorites yet: right-click a file → Add to Favorites, or “Favorites: Toggle Active File”.	
 No file “{}” in this project	
@@ -1336,6 +1346,7 @@ No tests to run.
 No timestamp	
 No type definition found	
 No unsaved changes: the file matches what is on disk.	
+No version of this extension can be installed: they were withdrawn or revoked.	
 No worktrees found.	
 Node.js program	
 None	
@@ -1436,6 +1447,7 @@ Open recent, or connect to a host… (⌃R)
 Open settings.jsonc	
 Open the active file with…	
 Open the source folder on this computer to create a Dev Container. Remote Docker contexts support attaching to existing containers.	
+Open this link in your browser?	
 Open this project with Docker: Open Project in Dev Container first.	
 Open to the Side	
 Open which worktree?	
@@ -1469,6 +1481,8 @@ Paused
 Paused on exception: {}	
 Payload	
 Permissions	
+Permissions: none.	
+Permissions: {}	
 Pick a file from the tree, or:	
 Pick a stash to apply	
 Pick a stash to drop	
@@ -1574,6 +1588,7 @@ Quit codeyard
 Quit without saving	
 Quitting loses everything since the last save.	
 Quitting now can leave the installation unfinished. It takes a few seconds.	
+README	
 Read	
 Read all files in the workspace	
 Read and write	
@@ -1584,6 +1599,7 @@ Read the clipboard
 Read {}	
 Reading folders… {0} and {1} entries	
 Reading the file…	
+Reading the registries…	
 Rebase	
 Rebase aborted	
 Rebase finished	
@@ -1612,6 +1628,7 @@ Regex, Ignore Case
 Regex, Match Case	
 Regular expression	
 Regular expression (⌥R)	
+Reinstall	
 Reinstall Language Services	
 Release Page	
 Reload history	
@@ -1794,6 +1811,7 @@ Search files by name (> for commands, : for line, # for symbols)
 Search installed extensions	
 Search log messages or timestamps…	
 Search settings	
+Search the Market	
 Search {}	
 Search: Find TODO Comments	
 Search: Find in Files	
@@ -1853,6 +1871,7 @@ Shell for new terminals (empty: login shell)
 Show All	
 Show Changed Files…	
 Show Codeyard in Finder	
+Show Installed	
 Show Only Failed Tests	
 Show Output	
 Show Stash…	
@@ -2019,6 +2038,7 @@ Testing {}…
 Tests: {0} passed, {1} failed	
 That does not look like a repository address.	
 The JavaScript debugger is already installed.	
+The README is shortened here; the full one is in the package.	
 The Rust language server does not support this command	
 The SSH connection is gone: reconnect to forward again	
 The TLS/SSL handshake with {} failed (certificate or protocol problem): {}	
@@ -2096,6 +2116,7 @@ The workspace file lists no folder that exists on this computer.
 The workspace has no extra folders.	
 The {} dictionary is installed and on.	
 The {} registry's list is more than 3 days old, so a version withdrawn since may still show. Install only if you expected this.	
+The {} registry's list is more than 3 days old; versions withdrawn since may still show.	
 Theme skipped: {}	
 Theme “{1}”: {0} colour pair is below WCAG AA contrast ({2} on {3}: {4}:1, needs {5}:1)|Theme “{1}”: {0} colour pairs are below WCAG AA contrast, for example {2} on {3}: {4}:1, needs {5}:1	
 Theme: Open User Themes Folder	
@@ -2123,6 +2144,9 @@ This debug adapter cannot change values.
 This debug adapter does not support data breakpoints.	
 This debug adapter has no exception breakpoints.	
 This engine runs Windows containers. Editing requires a Linux container; Windows container editing needs a separate Windows agent. Container logs remain available.	
+This extension contains code, which this version of Codeyard does not run.	
+This extension has no README.	
+This extension is no longer in the registry.	
 This file has merge conflicts: resolve them first (Source Control marks it resolved when staged)	
 This file has no commits or saved copies yet.	
 This file is already on this computer. Use Save As instead.	
@@ -2204,6 +2228,7 @@ Unstage {}
 Unterminated quote in the Cargo test command	
 Untracked files will be deleted. This can't be undone.	
 Unwrapped lines	
+Update	
 Update failed	
 Update installed	
 Update installed. Restart Codeyard to finish.	
@@ -2233,6 +2258,8 @@ Verifying and installing…
 Verifying installed service files…	
 Verifying the runtime checksum…	
 Version	
+Version {} is installed.	
+Versions	
 View	
 View File History	
 View: Close All Editors	
@@ -2379,6 +2406,8 @@ data breakpoint
 debug output was dropped: the debugger could not keep up	
 decoded as {}	
 default	
+deprecated	
+deprecated, use {}	
 destination	
 detached HEAD	
 diff	
@@ -2484,6 +2513,7 @@ port, user, key file, jump host
 ports.rules.{}.{}: unexpected value	
 ports.rules.{}: expected a port or a range such as 3000-3010	
 ports.rules.{}: expected an object with label, onForward or protocol	
+pre-release	
 preview	
 property	
 reachable? architecture? agent ready?	
@@ -2495,6 +2525,7 @@ redirects to {}; not followed, send a request to that address to continue
 remote	
 request failed	
 review needed	
+revoked: {}	
 right	
 running	
 rustc not found	
@@ -2576,6 +2607,8 @@ via the gh CLI
 via the public GitHub API (set GITHUB_TOKEN or use gh for private repositories and check results)	
 waiting for the connection	
 whole file	
+withdrawn	
+withdrawn by its publisher	
 workbench.colorCustomizations: unknown color role {0} (see crates/theme/design/tokens.json: {1})	
 your words	
 {0} (line {1}, column {2})	
@@ -2615,6 +2648,7 @@ your words
 {0} result in {1} files|{0} results in {1} files	
 {0} says why: “{1}”	
 {0} was left alone: {1}|{0} were left alone, the first one {1}	
+{0} · version {1}	
 {0} · version {1} · {2} license	
 {0}, {1} {2} {3}	
 {0}/{1} passed	
@@ -2665,10 +2699,13 @@ your words
 {} cursor|{} cursors	
 {} day ago|{} days ago	
 {} definition|{} definitions	
+{} download, including updates|{} downloads, including updates	
+{} download|{} downloads	
 {} entry is left out.|{} entries are left out.	
 {} entry|{} entries	
 {} exists and is not a link; remove it first	
 {} exited with {}	
+{} extension|{} extensions	
 {} failed	
 {} file skipped, binary or too large|{} files skipped, binary or too large	
 {} file skipped, parse errors|{} files skipped, parse errors	
@@ -2705,6 +2742,7 @@ your words
 {} item already exists. Replace it?|{} items already exist. Replace them?	
 {} item|{} items	
 {} keeps crashing; restart the folder to try again.	
+{} license	
 {} minute ago|{} minutes ago	
 {} minutes ago	
 {} month ago|{} months ago	
