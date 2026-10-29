@@ -120,6 +120,7 @@ Back to the default (removes the value from settings.jsonc)
 Back to this computer; files with unsaved changes must be saved or closed first	
 Bare repository	
 Binary file: not changed.	
+Bisect in progress	
 Blame Line	
 Bookmarks: Clear in File	
 Bookmarks: Jump to Next	
@@ -209,6 +210,7 @@ Checking…
 Checkout (Detached)	
 Checkout to…	
 Cherry-pick	
+Cherry-pick in progress	
 Cherry-pick stopped and was undone: {}	
 Cherry-picked {}	
 Choose	
@@ -1215,6 +1217,7 @@ Merge Conflict: Next Conflict
 Merge Conflict: Open Merge Editor	
 Merge Conflict: Previous Conflict	
 Merge aborted	
+Merge in progress	
 Merge into {}	
 Merge of {} has conflicts: resolve them in Source Control (or Git: Abort Merge)	
 Merge {}	
@@ -1643,6 +1646,7 @@ Reading the registries…
 Rebase	
 Rebase aborted	
 Rebase finished	
+Rebase in progress	
 Rebase stopped again on conflicts: resolve and stage them, then Git: Continue Rebase	
 Rebase stopped on conflicts: resolve them, then Git: Continue Rebase (or Abort Rebase)	
 Rebase {} onto {}?	
@@ -1747,7 +1751,12 @@ Replaced {} match|Replaced {} matches
 Replacement preview	
 Report copied	
 Report saved to {}	
+Repositories	
 Repository URL (https://… or git@host:owner/repo)	
+Repository changed while the operation was pending.	
+Repository discovery failed	
+Repository is no longer available: {}	
+Repository: {}	
 Rerun	
 Reset	
 Reset Hard to Here…	
@@ -1780,6 +1789,7 @@ Retry
 Reveal in Finder	
 Revert	
 Revert File	
+Revert in progress	
 Revert stopped and was undone: {}	
 Reverted {}	
 Reverting a change is not supported in this file (non-UTF-8 or CR-only line endings)	
@@ -1885,6 +1895,7 @@ Select a configuration
 Select a container to inspect resource history, logs, ports and storage.	
 Select a debug configuration	
 Select a file icon theme	
+Select a repository first	
 Select a row to open its details.	
 Select a word and press ⌘D to add the next match as another cursor.	
 Select all matches (⌥↵)	
@@ -2594,6 +2605,7 @@ new value
 no configuration directory	
 no file name	
 no item {} in the response	
+no upstream	
 no “{}” in the response	
 not UTF-8	
 not available	

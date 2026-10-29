@@ -3147,3 +3147,15 @@ the window closed	pencere kapandı
 {0}: signed in as {1}	{0}: {1} olarak oturum açık
 {} (not verified by a registry)	{} (bir kayıt tarafından doğrulanmadı)
 {}: not signed in	{}: oturum açılmamış
+Merge in progress	Birleştirme sürüyor
+Rebase in progress	Rebase sürüyor
+Cherry-pick in progress	Cherry-pick sürüyor
+Revert in progress	Geri alma sürüyor
+Bisect in progress	Bisect sürüyor
+Repository is no longer available: {}	Depo artık kullanılamıyor: {}
+Repository changed while the operation was pending.	İşlem beklerken depo değişti.
+Select a repository first	Önce bir depo seçin
+Repository: {}	Depo: {}
+no upstream	takip edilen dal yok
+Repositories	Depolar
+Repository discovery failed	Depolar aranamadı

@@ -51,6 +51,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shown as a localized percentage. Invalid values fall back to 100% with "Interface scale must be between 75% and
   200%."; a project settings file cannot set it. The display's own scale stays separate. Typed values are rounded
   to whole percent; a zoom that cannot be saved stays for the session.
+- Source Control manages several repositories in one workspace. A bounded background search finds the repositories in
+  the workspace folders and nested inside them; the changes list groups them by repository with each one's branch,
+  ahead/behind, upstream, operation in progress, conflicts and change count. File and group actions act on their own
+  repository (identical relative paths stay apart); commit, sync, history and the "…" menu act on the selected
+  repository, which keeps its own draft and result. Operations carry the repository's identity and are checked again
+  before Git runs, so a repository removed or re-created while one is pending is never acted on, and its result is not
+  shown for another. Keyboard (↑/↓, Home/End, ←/→) and screen reader access to the repository list. Works locally and
+  over SSH. History, stash, branch-picker and named-stash actions stay with the repository they were opened on.
+  Repositories refresh a few at a time, and the workspace is searched again only when folders change, a repository
+  disappears, or on Refresh after a minute. The agent protocol is version 14: `Stat` also reports a file's identity and
+  creation time, which identify a repository's git directory.
 - The extension registry's signed index: format, offline verification (a threshold of root keys, an expiring online
   key, no rollback to an older copy) and `cyx yard keygen | sign | verify` for the key ceremony and test registries
   (docs/registry.md).

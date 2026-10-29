@@ -47,6 +47,7 @@ const SCM_EMPTY: NodeId = NodeId(23);
 const ABOUT_TAB: NodeId = NodeId(29);
 const ABOUT: NodeId = NodeId(30);
 const ABOUT_COPY: NodeId = NodeId(31);
+const SCM_REPOS: NodeId = NodeId(38);
 const ABOUT_DETAIL: u64 = 0xa0_0000;
 const EXT: NodeId = NodeId(41);
 const EXT_TABS: NodeId = NodeId(42);
@@ -74,37 +75,13 @@ const COMPLETION_OPTION: u64 = 0x60_0000;
 const EXTRA_TREE: u64 = 0x70_0000;
 const SCM_GROUP: u64 = 0x80_0000;
 const SCM_FILE: u64 = 0x90_0000;
+/// Repositories of the Source Control inventory.
+const SCM_REPO: u64 = 0xf0_0000;
 /// Ids per block (status items, update buttons, tabs, ...).
 const BLOCK: u64 = 0x10_0000;
 const ROW_BASE: u64 = 0x2_0000_0000;
 const RUN_BASE: u64 = 0x4_0000_0000;
 const TERM_RUN_BASE: u64 = 0x8_0000_0000;
-const _: () = {
-    let blocks = [
-        STATUS_ITEM,
-        UPDATE_BUTTON,
-        TAB_BASE,
-        PICK_OPTION,
-        FIND_CONTROL,
-        COMPLETION_OPTION,
-        EXTRA_TREE,
-        SCM_GROUP,
-        SCM_FILE,
-        ABOUT_DETAIL,
-        search_access::SEARCH_ED_ROW,
-        search_access::SEARCH_ED_TAB,
-        EXT_ROW,
-        EXT_PAGE_LINE,
-        ROW_BASE,
-    ];
-    let mut i = 1;
-    while i < blocks.len() {
-        assert!(blocks[i - 1] + BLOCK <= blocks[i]);
-        i += 1;
-    }
-    // Rows are ROW_BASE | 32-bit hash; editor and terminal runs sit above them.
-    assert!(ROW_BASE + 0xffff_ffff < RUN_BASE && RUN_BASE + 0xffff_ffff < TERM_RUN_BASE);
-};
 /// Window shown to AT in the editor: this many lines before/after the cursor line.
 const WINDOW_BEFORE: usize = 100;
 const WINDOW_AFTER: usize = 200;
@@ -214,6 +191,8 @@ pub enum FocusSnap {
     Picker,
     Terminal,
     ScmMessage,
+    /// The repository list of Source Control (the selected repository is the focused option).
+    ScmRepos,
     AboutCopy,
     ExtSearch,
 }
@@ -253,6 +232,8 @@ pub struct NoticeSnap {
 
 #[path = "a11y_extensions.rs"]
 mod ext_access;
+#[path = "a11y_ids.rs"]
+mod ids;
 #[path = "a11y_scm.rs"]
 mod scm_access;
 #[path = "a11y_search_editor.rs"]
@@ -739,6 +720,10 @@ impl Snapshot {
             FocusSnap::Editor if self.editor.is_some() => EDITOR,
             FocusSnap::Terminal if self.terminal.is_some() => TERMINAL,
             FocusSnap::ScmMessage if self.scm.as_ref().is_some_and(|s| s.view.root.is_some()) => SCM_MESSAGE,
+            FocusSnap::ScmRepos => match self.scm.as_ref().map(|s| &s.view.repos).filter(|r| !r.is_empty()) {
+                Some(repos) => repos.iter().position(|r| r.selected).map_or(SCM_REPOS, |i| NodeId(SCM_REPO + i as u64)),
+                None => ROOT,
+            },
             FocusSnap::AboutCopy if self.about.as_ref().is_some_and(|a| a.active) => ABOUT_COPY,
             FocusSnap::ExtSearch if self.exts.is_some() => EXT_SEARCH,
             FocusSnap::Explorer(k) if k < self.explorers.len() => self.explorers[k].focused.map_or(explorer_id(k), NodeId),
@@ -902,6 +887,8 @@ impl Workbench {
             FocusSnap::ScmMessage
         } else if exts.as_ref().is_some_and(|e| e.search_focused) {
             FocusSnap::ExtSearch
+        } else if scm.as_ref().is_some_and(|s| s.view.repos_focused) {
+            FocusSnap::ScmRepos
         } else if picker_entity.as_ref().is_some_and(|p| p.focus_handle(cx).is_focused(window)) {
             FocusSnap::Picker
         } else if let Some(field) = find_bar.as_ref().and_then(|b| b.read(cx).a11y_focus(window, cx)) {
