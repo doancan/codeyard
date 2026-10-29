@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Explicit local/SSH setup for JavaScript/TypeScript, HTML and CSS language services, with pinned
+  packages, a checksum-verified Node.js fallback, progress, cancellation, retry and atomic activation.
+
 - Nested horizontal and vertical editor groups with directional splitting/focus, independent views of
   shared documents, tab transfers, nested divider resizing and atomic layout/session restoration.
   Up to 32 groups retain usable minimum sizes with scrolling in narrow windows.

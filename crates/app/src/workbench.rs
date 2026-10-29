@@ -367,6 +367,7 @@ actions!(
         GitPruneWorktrees,
         GitDiscardAll,
         RestartLanguageServers,
+        ManageLanguageServices,
         CopyFullDiagnostic,
         RustExpandMacro,
         RustParentModule,
@@ -466,6 +467,7 @@ enum Page {
     Settings(Entity<crate::settings_page::SettingsPage>),
     Markdown(Entity<crate::markdown::MarkdownPreview>),
     Shortcuts(Entity<crate::shortcuts_page::ShortcutsPage>),
+    LanguageServices(Entity<crate::language_services_page::LanguageServicesPage>),
     Merge(Entity<crate::merge::MergeView>),
     // --- compare ---
     Compare(Entity<crate::compare_folders::CompareView>),

@@ -98,6 +98,11 @@ mod icon_theme;
 mod image_size;
 mod input;
 mod jsonfmt;
+mod language_service_install;
+mod language_services;
+mod language_services_page;
+#[cfg(all(test, unix))]
+mod language_services_real_tests;
 mod large;
 mod linked_tag;
 mod links;
