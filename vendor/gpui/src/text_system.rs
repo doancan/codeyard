@@ -50,6 +50,9 @@ pub(crate) const SUBPIXEL_VARIANTS_Y: u8 =
         SUBPIXEL_VARIANTS_X
     };
 
+/// Most glyph raster bounds [`TextSystem`] keeps before starting over (Codeyard patch).
+pub const MAX_RASTER_BOUNDS: usize = 16_384;
+
 /// The GPUI text rendering sub system.
 pub struct TextSystem {
     platform_text_system: Arc<dyn PlatformTextSystem>,
@@ -313,9 +316,20 @@ impl TextSystem {
         } else {
             let mut raster_bounds = RwLockUpgradableReadGuard::upgrade(raster_bounds);
             let bounds = self.platform_text_system.glyph_raster_bounds(params)?;
+            // Glyphs are keyed by their scale factor, so every interface or display scale adds a set: the cache is
+            // bounded and simply starts over when full (the bounds are cheap to recompute). Codeyard patch.
+            if raster_bounds.len() >= MAX_RASTER_BOUNDS {
+                raster_bounds.clear();
+            }
             raster_bounds.insert(params.clone(), bounds);
             Ok(bounds)
         }
+    }
+
+    /// Number of cached glyph raster bounds (tests).
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn raster_bounds_len(&self) -> usize {
+        self.raster_bounds.read().len()
     }
 
     pub(crate) fn rasterize_glyph(
