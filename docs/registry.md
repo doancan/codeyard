@@ -119,6 +119,7 @@ lives in its public folder, which a CDN serves: `root.json`, `index.json`, their
 POST /v1/publish                 a Sigstore bundle and a package          → what was published, or why not
 POST /v1/status                  a Sigstore bundle and a status statement → yank, restore, deprecate
 GET  /packages/<digest>.cyx      the package; counts one download for the day (nothing about who asked is kept)
+GET  /packages/<digest>.sigstore.json   its publisher signature; clients verify it themselves
 GET  /index.json  /root.json …   the static files, for a registry without a CDN
 ```
 
@@ -157,6 +158,26 @@ yard immediate CONFIG ID VERSION             the security role: let clients upda
 
 `yard init` signs the root with one development key. For production the root key holders sign `root.json` with
 `cyx yard sign root` (below). The pinned Sigstore roots are in `crates/yard/sigstore/`.
+
+## The client
+
+`ext_core::registry` is the client's side, without a network of its own; the app hands it `curl` (as the updater does,
+so proxies and the system's certificates apply). Each registry's last accepted copy and its state (versions seen,
+when fetched, the index's ETag) are kept in `<data>/extensions/registries/<name>/`.
+
+- **When it asks.** Only for a registry an installed extension came from, at most once a day (a conditional request:
+  a 304 reads nothing), or when the user asks for an install. A user with no extension from a registry makes no
+  request; a test fails on any.
+- **What it checks before the consent sheet**, in order: the index (above); the version may be installed (not yanked
+  or revoked); the package's size and sha256 against the index, its content digest, id, version and permission
+  digest; the publisher's bundle (`packages/<digest>.sigstore.json`) against the root's pinned Sigstore roots; and
+  that the signer is the publisher the index lists. Any failure installs nothing.
+- **Pinning.** The lock records `{ "kind": "registry", "registry": name, "publisher": … }`. A later install signed by
+  another identity shows the full sheet with that called out; `--install-extension` refuses it. A lock with a
+  registry entry is format 2; one without stays format 1, so an older Codeyard still reads it.
+- **Stale index.** Past its 72 h, installs wait for the user to confirm on the sheet; `--install-extension` refuses.
+- **Registries.** The public registry (its root keys arrive with the key ceremony, #70) and `extensions.registries`
+  in the user's settings (never a project's): `{ "name", "url", "root-keys", "threshold" }`.
 
 ## Root key commands
 

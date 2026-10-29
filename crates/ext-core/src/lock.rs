@@ -8,8 +8,9 @@ use ext_manifest::{ExtId, Version};
 use ext_pkg::ContentDigest;
 use serde::{Deserialize, Serialize};
 
-/// The format of the lock file. A newer format is refused rather than rewritten, as the state database does.
-pub const FORMAT: u32 = 1;
+/// The format of the lock file. A newer format is refused rather than rewritten, as the state database does. Format 2
+/// adds registry sources; a lock without one is still written as format 1, so an older Codeyard keeps reading it.
+pub const FORMAT: u32 = 2;
 
 const HEADER: &str = "// Installed extensions. Written by Codeyard; change it with the Extensions view or `codeyard ext`.\n";
 
@@ -35,6 +36,18 @@ pub enum Source {
     File { path: String },
     /// A folder packaged on install (`codeyard ext install ./folder`).
     Folder { path: String },
+    /// A registry, by its name in `extensions.registries`, with the publisher identity pinned at the first install from
+    /// it: a later version signed by anyone else is a new trust decision.
+    Registry { registry: String, publisher: crate::yard::Publisher },
+}
+
+impl Source {
+    pub fn registry(&self) -> Option<(&str, &crate::yard::Publisher)> {
+        match self {
+            Source::Registry { registry, publisher } => Some((registry, publisher)),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,7 +92,9 @@ impl Lock {
 
     pub fn render(&self) -> String {
         let mut out = String::from(HEADER);
-        out.push_str(&serde_json::to_string_pretty(self).expect("lock serializes"));
+        let needs = if self.extensions.values().any(|l| l.source.registry().is_some()) { FORMAT } else { 1 };
+        let lock = Lock { format: needs, extensions: self.extensions.clone() };
+        out.push_str(&serde_json::to_string_pretty(&lock).expect("lock serializes"));
         out.push('\n');
         out
     }

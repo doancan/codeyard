@@ -19,6 +19,7 @@
 mod der;
 pub mod lock;
 pub mod publisher;
+pub mod registry;
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
 pub mod trust;

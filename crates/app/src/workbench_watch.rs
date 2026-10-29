@@ -146,6 +146,13 @@ impl Workbench {
         ext_problems.extend(server_warnings);
         new.lsp_servers.splice(0..0, servers);
         warnings.extend(ext_problems);
+        // Registries the user installed from: their index, at most daily, in the background (none asked otherwise).
+        if let Some(dir) = self.cfg.dir.clone().filter(|_| ext_enabled && !crate::ext::turned_off()) {
+            let registries = crate::ext_registry::registries(&new);
+            if !registries.is_empty() {
+                cx.background_executor().spawn(async move { crate::ext_registry::refresh_installed(&dir, &registries, crate::ext_registry::now()) }).detach();
+            }
+        }
         let old = cx.global::<Settings>().clone();
         // Zoom is applied on top of the sizes in the settings file.
         self.chrome.zoom_base = (new.editor_font_size, new.editor_line_height, new.terminal_font_size);

@@ -220,6 +220,8 @@ impl Yard {
         // The package lands before the index that lists it; a failure after this leaves an unlisted file, never a
         // listed one that is missing.
         write_atomic(&self.cfg.public.join("packages").join(format!("{digest}.cyx")), bytes)?;
+        // Clients check the publisher's signature themselves; the registry only passes it on.
+        write_atomic(&self.cfg.public.join("packages").join(format!("{digest}.sigstore.json")), bundle)?;
         self.sign_index(&tx, now)?;
         tx.commit().map_err(internal("database"))?;
         let available = if release.code { now + CODE_WAIT_SECS } else { now };
@@ -300,6 +302,15 @@ impl Yard {
         let version = self.sign_index(&tx, now)?;
         tx.commit().map_err(internal("database"))?;
         Ok(version)
+    }
+
+    /// The publisher signature of a package, for clients to check themselves (not counted as a download).
+    pub fn bundle(&self, digest: &str) -> Result<PathBuf, Error> {
+        if ext_pkg::ContentDigest::parse(digest).is_none() {
+            return Err(Error::NotFound("no such package".into()));
+        }
+        let path = self.cfg.public.join("packages").join(format!("{digest}.sigstore.json"));
+        if path.is_file() { Ok(path) } else { Err(Error::NotFound("no such package".into())) }
     }
 
     /// Count one download of a package by its digest, for the day; the path to serve. Nothing about who asked is kept.

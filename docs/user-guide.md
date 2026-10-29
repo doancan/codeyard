@@ -582,8 +582,20 @@ binding is left out and the status bar says so); a keymap preset you choose with
 language only applies to files no built-in language claims. Extension language servers start in trusted folders only,
 and your own `lsp.servers` entry for the same language wins.
 
-From a terminal or a script, `codeyard --install-extension FILE.cyx` (repeat the flag for several) installs without
-opening a window; running it is your consent, and the same checks apply.
+**From a registry.** *Extensions: Install from Registry…* takes an id (`publisher.name`, or `publisher.name@1.2.0` for
+one version) and finds it in your registries: the public one, and any in `extensions.registries` (a company's own,
+for example). Before the sheet opens, Codeyard checks the registry's signed list, the package against it and the
+publisher's signature; any failure installs nothing and says which check failed. The sheet names the publisher, and
+the first install pins it: if a later version comes from someone else, the sheet says so in red and the keyboard
+starts on *Cancel*. It does the same when the registry's list is more than 3 days old. Packages are installed on this
+computer, also in an SSH window.
+
+Codeyard asks a registry nothing until you install from it. After that it fetches the registry's whole list at most
+once a day, the same file for everyone, so the registry never learns what you have installed.
+
+From a terminal or a script, `codeyard --install-extension FILE.cyx` or `--install-extension publisher.name[@1.2.0]`
+(repeat the flag for several) installs without opening a window; running it is your consent, and the same checks
+apply. A changed publisher or an old registry list is refused there, with the reason: use the Extensions view.
 
 **Manage.** Choose an extension in the list to open its page: contributions, permissions and these actions:
 

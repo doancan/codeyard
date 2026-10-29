@@ -194,6 +194,7 @@ impl Workbench {
                         .child(self.extension_permissions(m, risk, p))
                         .child(section_title(crate::i18n::t("Contributes"), p))
                         .child(line_list(contribution_lines(m), crate::i18n::t("Nothing"), p))
+                        .children(pending.warnings.iter().map(|w| div().pt(px(theme::SPACE[2])).text_color(c(p.danger)).child(w.clone())))
                         .child(buttons),
                 )
                 .into_any_element();

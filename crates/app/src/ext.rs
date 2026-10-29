@@ -159,12 +159,16 @@ fn set(r: Arc<Registry>) {
 /// The store for a settings folder. Packages live next to the state database (`CODEYARD_STATE_DIR` in scripts); in
 /// tests, inside the test's own settings folder so no test ever reads the user's extensions.
 pub fn store(cfg_dir: &Path) -> ext_core::Store {
-    let lock = cfg_dir.join(LOCK_FILE);
+    ext_core::Store::new(data_root(cfg_dir), cfg_dir.join(LOCK_FILE))
+}
+
+/// `<data>/extensions`: the store, and the registries' cached indexes in `registries/`.
+pub fn data_root(cfg_dir: &Path) -> PathBuf {
     #[cfg(test)]
     let root = cfg_dir.join("extension-store");
     #[cfg(not(test))]
     let root = crate::workbench::state_path().and_then(|p| p.parent().map(|d| d.join("extensions"))).unwrap_or_else(|| cfg_dir.join("extension-store"));
-    ext_core::Store::new(root, lock)
+    root
 }
 
 /// Load the installed set again (at startup and whenever settings are reloaded, which includes a change of the lock file).

@@ -194,6 +194,8 @@ pub struct Settings {
     pub keymap_preset: String,
     /// `extensions.enabled`: false loads no extension, like `--no-extensions` but kept across sessions.
     pub extensions_enabled: bool,
+    /// `extensions.registries`: registries besides the public one (user settings only).
+    pub extension_registries: Vec<ext_core::registry::Registry>,
     /// Values of settings that installed extensions declare (`ext.<publisher.name>.<key>`), checked against their type.
     pub ext_settings: std::collections::BTreeMap<String, Value>,
     pub status_bar: bool,
@@ -371,6 +373,7 @@ impl Default for Settings {
             icon_theme: crate::icon_theme::ALL[0].id().into(),
             keymap_preset: String::new(),
             extensions_enabled: true,
+            extension_registries: Vec::new(),
             ext_settings: std::collections::BTreeMap::new(),
             status_bar: true,
             activity_bar: true,
@@ -497,6 +500,8 @@ pub const USER_ONLY_KEYS: &[&str] = &[
     // A repository must not switch extensions on or off for the user, or swap their keys for a preset.
     "extensions.enabled",
     "keymap.preset",
+    // A repository must not add a registry to install from.
+    "extensions.registries",
     // --- git-sync ---
     // A repository must not turn the question before a sync off, or make every commit push by itself.
     "git.confirmSync",
@@ -1037,6 +1042,20 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.bool("lsp.enabled") {
         s.lsp_enabled = v;
     }
+    match obj.get("extensions.registries") {
+        None | Some(Value::Null) => {}
+        Some(Value::Array(list)) => {
+            for (i, v) in list.iter().enumerate() {
+                match ext_core::registry::Registry::from_setting(v) {
+                    Ok(r) if s.extension_registries.iter().any(|o| o.name == r.name) => warnings
+                        .push(format!("settings.jsonc: {}", crate::i18n::tf("extensions.registries[{0}]: the name “{1}” is used twice", &[&i, &r.name]))),
+                    Ok(r) => s.extension_registries.push(r),
+                    Err(e) => warnings.push(format!("settings.jsonc: extensions.registries[{i}]: {e}")),
+                }
+            }
+        }
+        Some(_) => warnings.push(format!("settings.jsonc: {}", crate::i18n::tf("{}: expected a list", &[&"extensions.registries"]))),
+    }
     match obj.get("lsp.servers") {
         None | Some(Value::Null) => {}
         Some(Value::Object(m)) => {
@@ -1232,6 +1251,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "workbench.fontFamily",
         "keymap.preset",
         "extensions.enabled",
+        "extensions.registries",
         "workbench.editor.showTabs",
         "workbench.tabs.showIcons",
         "workbench.tabs.closeButton",
