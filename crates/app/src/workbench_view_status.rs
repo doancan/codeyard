@@ -66,6 +66,19 @@ impl Workbench {
             .text_size(px(text::XS.0))
             .text_color(c(p.text_muted))
             .child(a11y::landmark(a11y::Landmark::Status, cx))
+            .when_some(self.roots.file_operation.clone(), |d, progress| {
+                let processed = progress.completed.load(std::sync::atomic::Ordering::Acquire);
+                let label = crate::i18n::tf("Files: {0}/{1}", &[&processed, &progress.total]);
+                d.child(
+                    item()
+                        .id("file-operation-progress")
+                        .cursor_pointer()
+                        .child(ui::spinner("file-operation-spinner", SB_ICON, p.text_muted))
+                        .child(label)
+                        .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Cancel file operation").into())).into())
+                        .on_click(cx.listener(|this, _, window, cx| this.cancel_file_operation(&CancelFileOperation, window, cx))),
+                )
+            })
             .child(
                 item()
                     .id("remote-indicator")

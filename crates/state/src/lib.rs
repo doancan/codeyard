@@ -95,7 +95,7 @@ pub struct Tab {
     pub rel_path: String,
     pub active: bool,
     pub pinned: bool,
-    /// Editor group: 0 left, 1 right (split layout).
+    /// Stable editor group identifier within the saved layout.
     pub group: u8,
 }
 
@@ -430,6 +430,12 @@ impl State {
 
     /// Replace a workspace's tabs (order is preserved).
     pub fn save_tabs(&self, workspace: i64, tabs: &[Tab]) -> Result<(), Error> {
+        self.save_tabs_with_layout(workspace, tabs, None)
+    }
+
+    /// Commit tabs and their layout in one transaction. A legacy save clears the
+    /// layout so it cannot refer to tabs from an earlier session.
+    pub fn save_tabs_with_layout(&self, workspace: i64, tabs: &[Tab], layout: Option<&str>) -> Result<(), Error> {
         let tx = self.db.unchecked_transaction()?;
         tx.execute("delete from open_editors where workspace_id = ?1", [workspace])?;
         for (i, t) in tabs.iter().enumerate() {
@@ -439,16 +445,31 @@ impl State {
                 params![workspace, i as i64, t.rel_path, t.active as i64, t.pinned as i64, t.group as i64],
             )?;
         }
+        let key = format!("editor_layout:{workspace}");
+        match layout {
+            Some(layout) => {
+                tx.execute(
+                    "insert into kv (key, value, updated_at) values (?1, ?2, ?3)
+                     on conflict (key) do update set value = excluded.value, updated_at = excluded.updated_at",
+                    params![key, layout, now_ms()],
+                )?;
+            }
+            None => {
+                tx.execute("delete from kv where key = ?1", [key])?;
+            }
+        }
         tx.commit()
+    }
+
+    pub fn tab_layout(&self, workspace: i64) -> Option<String> {
+        self.get(&format!("editor_layout:{workspace}"))
     }
 
     pub fn tabs(&self, workspace: i64) -> Result<Vec<Tab>, Error> {
         let mut stmt =
             self.db.prepare("select rel_path, is_active, is_pinned, group_index from open_editors where workspace_id = ?1 order by group_index, position")?;
-        stmt.query_map([workspace], |r| {
-            Ok(Tab { rel_path: r.get(0)?, active: r.get::<_, i64>(1)? != 0, pinned: r.get::<_, i64>(2)? != 0, group: r.get::<_, i64>(3)?.clamp(0, 1) as u8 })
-        })?
-        .collect()
+        stmt.query_map([workspace], |r| Ok(Tab { rel_path: r.get(0)?, active: r.get::<_, i64>(1)? != 0, pinned: r.get::<_, i64>(2)? != 0, group: r.get(3)? }))?
+            .collect()
     }
 
     pub fn save_view(&self, workspace: i64, rel_path: &str, v: View) -> Result<(), Error> {
@@ -885,6 +906,53 @@ mod tests {
         assert_eq!(s.tabs(ws).unwrap(), tabs);
         s.forget_workspace(None, "/p").unwrap();
         assert!(s.recent_workspaces(10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn editor_groups_above_two_round_trip_without_losing_tab_identity() {
+        let s = State::in_memory().unwrap();
+        let ws = s.record_workspace(None, "/group-fixture").unwrap();
+        let tabs: Vec<_> = [0, 1, 2, 7, 31].into_iter().map(|group| Tab { rel_path: "shared.txt".into(), active: true, pinned: group == 7, group }).collect();
+        s.save_tabs(ws, &tabs).unwrap();
+        assert_eq!(s.tabs(ws).unwrap(), tabs);
+    }
+
+    #[test]
+    fn editor_session_failure_rolls_back_tabs_and_layout_together() {
+        let s = State::in_memory().unwrap();
+        let ws = s.record_workspace(None, "/atomic-session").unwrap();
+        let original = vec![Tab { rel_path: "original.txt".into(), active: true, pinned: true, group: 7 }];
+        s.save_tabs_with_layout(ws, &original, Some("original-layout")).unwrap();
+        s.db.execute_batch("create trigger reject_layout before update on kv begin select raise(abort, 'layout write rejected'); end;").unwrap();
+        let replacement = vec![Tab { rel_path: "replacement.txt".into(), active: true, pinned: false, group: 2 }];
+        assert!(s.save_tabs_with_layout(ws, &replacement, Some("replacement-layout")).is_err());
+        assert_eq!(s.tabs(ws).unwrap(), original);
+        assert_eq!(s.tab_layout(ws).as_deref(), Some("original-layout"));
+        s.db.execute_batch("drop trigger reject_layout;").unwrap();
+        s.save_tabs_with_layout(ws, &replacement, Some("replacement-layout")).unwrap();
+        assert_eq!(s.tabs(ws).unwrap(), replacement);
+        assert_eq!(s.tab_layout(ws).as_deref(), Some("replacement-layout"));
+    }
+
+    #[test]
+    fn empty_editor_groups_survive_without_tabs_and_legacy_saves_clear_layout() {
+        let s = State::in_memory().unwrap();
+        let ws = s.record_workspace(None, "/empty-session").unwrap();
+        s.save_tabs_with_layout(ws, &[], Some("empty-grid")).unwrap();
+        assert!(s.tabs(ws).unwrap().is_empty());
+        assert_eq!(s.tab_layout(ws).as_deref(), Some("empty-grid"));
+        s.save_tabs(ws, &[]).unwrap();
+        assert!(s.tab_layout(ws).is_none());
+    }
+
+    #[test]
+    fn corrupt_editor_group_ids_are_rejected_instead_of_reassigned() {
+        let s = State::in_memory().unwrap();
+        let ws = s.record_workspace(None, "/invalid-session").unwrap();
+        let tabs = vec![Tab { rel_path: "file.txt".into(), active: true, pinned: false, group: 0 }];
+        s.save_tabs(ws, &tabs).unwrap();
+        s.db.execute("update open_editors set group_index = 256 where workspace_id = ?1", [ws]).unwrap();
+        assert!(s.tabs(ws).is_err());
     }
 
     #[test]

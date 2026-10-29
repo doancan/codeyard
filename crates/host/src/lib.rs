@@ -65,7 +65,7 @@ pub fn process_command(program: &str, args: &[String], cwd: Option<&str>) -> std
 use std::collections::HashMap;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 
 use proto::{ChangeKind, DirEntry, Frame, HostInfo, Meta, Request, Response, SearchQuery};
@@ -112,6 +112,8 @@ pub enum HostError {
     Op(proto::Error),
     /// The connection dropped or could never be established.
     Disconnected(String),
+    /// A mutating request may still be running; the caller must inspect before retrying.
+    Uncertain(String),
 }
 
 impl std::fmt::Display for HostError {
@@ -119,6 +121,7 @@ impl std::fmt::Display for HostError {
         match self {
             HostError::Op(e) => e.fmt(f),
             HostError::Disconnected(m) => write!(f, "not connected: {m}"),
+            HostError::Uncertain(m) => write!(f, "{m}"),
         }
     }
 }
@@ -353,6 +356,17 @@ pub trait Host: Send + Sync + 'static {
 
     fn rename(&self, from: &str, to: &str) -> Result<()> {
         self.done(Request::Rename { from: from.into(), to: to.into() })
+    }
+
+    fn copy_path(&self, from: &str, to: &str) -> Result<()> {
+        self.done(Request::Copy { from: from.into(), to: to.into() })
+    }
+
+    fn copy_path_cancellable(&self, from: &str, to: &str, cancel: &AtomicBool) -> Result<()> {
+        if cancel.load(Ordering::Acquire) {
+            return Err(HostError::Op(proto::Error::Cancelled));
+        }
+        self.copy_path(from, to)
     }
 
     fn delete(&self, path: &str) -> Result<()> {
@@ -728,6 +742,36 @@ pub fn spawn_transport(mut cmd: Command) -> Result<Transport> {
 }
 
 impl RemoteHost {
+    /// Copies are cancellable mutations: after stopping, wait for the agent to
+    /// remove its staging entry instead of reporting a completed cancellation early.
+    fn copy_call(&self, req: Request, cancel: Option<&AtomicBool>) -> Result<Response> {
+        if cancel.is_some_and(|c| c.load(Ordering::Acquire)) {
+            return Err(HostError::Op(proto::Error::Cancelled));
+        }
+        let limit = call_timeout(&req, self.shared.call_limit_secs.load(Ordering::Relaxed));
+        let started = std::time::Instant::now();
+        let (tx, rx) = mpsc::channel();
+        let id = self.start(req, Waiter::Once(tx))?;
+        let mut stopping = None;
+        loop {
+            if stopping.is_none() && (started.elapsed() >= limit || cancel.is_some_and(|c| c.load(Ordering::Acquire))) {
+                self.cancel(id);
+                stopping = Some(std::time::Instant::now());
+            }
+            match rx.recv_timeout(std::time::Duration::from_millis(50)) {
+                Ok(response) => return Ok(response),
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    return Err(HostError::Uncertain("the connection was lost during the copy; inspect the source and destination before retrying".into()));
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+            }
+            if stopping.is_some_and(|at| at.elapsed() >= std::time::Duration::from_secs(5)) {
+                self.shared.waiters.locked().remove(&id);
+                return Err(HostError::Uncertain("the copy has not confirmed cancellation; inspect the source and destination before retrying".into()));
+            }
+        }
+    }
+
     /// Connect over any reader/writer pair (no reconnect).
     pub fn from_streams(r: Box<dyn Read + Send>, w: Box<dyn Write + Send>, label: impl Into<String>) -> Result<Self> {
         Self::open(Transport::pipes(r, w), None, None, label)
@@ -942,6 +986,9 @@ impl Host for RemoteHost {
     }
 
     fn call(&self, req: Request) -> Result<Response> {
+        if matches!(req, Request::Copy { .. }) {
+            return self.copy_call(req, None);
+        }
         let limit = call_timeout(&req, self.shared.call_limit_secs.load(Ordering::Relaxed));
         let (tx, rx) = mpsc::channel();
         let id = self.start(req, Waiter::Once(tx))?;
@@ -954,6 +1001,14 @@ impl Host for RemoteHost {
                 self.shared.waiters.locked().remove(&id);
                 Err(HostError::Op(proto::Error::Other(format!("the agent did not answer within {} seconds", limit.as_secs()))))
             }
+        }
+    }
+
+    fn copy_path_cancellable(&self, from: &str, to: &str, cancel: &AtomicBool) -> Result<()> {
+        match self.copy_call(Request::Copy { from: from.into(), to: to.into() }, Some(cancel))? {
+            Response::Done => Ok(()),
+            Response::Error(e) => Err(HostError::Op(e)),
+            other => Err(unexpected(other)),
         }
     }
 
@@ -1047,7 +1102,7 @@ fn call_timeout(req: &Request, override_secs: u32) -> std::time::Duration {
         return std::time::Duration::from_secs(u64::from(override_secs));
     }
     match req {
-        Request::Exec { .. } | Request::LineIndex { .. } | Request::ReadLines { .. } => std::time::Duration::from_secs(15 * 60),
+        Request::Exec { .. } | Request::LineIndex { .. } | Request::ReadLines { .. } | Request::Copy { .. } => std::time::Duration::from_secs(15 * 60),
         _ => std::time::Duration::from_secs(120),
     }
 }
@@ -1071,5 +1126,7 @@ impl Drop for RemoteHost {
     }
 }
 
+#[cfg(test)]
+mod copy_tests;
 #[cfg(test)]
 mod tests;

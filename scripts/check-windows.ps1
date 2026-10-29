@@ -28,8 +28,8 @@ Invoke-Cargo -CargoArgs @(
     'windows_', 'resize_', 'qa_sidebar_sash_drag', 'links::tests', 'terminal::tests', 'ui::path_tests',
     'sysopen::tests', 'workspace_file::tests', 'vscode::tests', 'trash::', 'terminal_web_links',
     'files_from_the_system', 'qa_workspace_file', 'markdown', 'docker', 'web_preview',
-    'rust_hardening', 'product_', 'a11y', 'worktree',
-    '--test-threads=1'
+    'rust_hardening', 'product_', 'a11y', 'worktree', 'explorer_', 'editor_grid',
+    '--test-threads=1', '--nocapture'
 )
 if (-not $SkipStandalone) {
     Invoke-Cargo -CargoArgs @('build', '--release', '--locked', '-p', 'app')
