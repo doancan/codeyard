@@ -55,7 +55,12 @@ impl Workbench {
             return;
         }
         let Some(root) = self.active_root(cx) else { return };
-        if self.vcs.scm_root.as_deref().or(self.root(cx).as_deref()) == Some(root.as_str()) {
+        let current = self.vcs.scm_root.clone().or_else(|| self.root(cx));
+        if current.as_deref() == Some(root.as_str()) {
+            return;
+        }
+        // A repository picked in Source Control inside the active file's folder stays picked.
+        if current.as_deref().is_some_and(|c| c.starts_with(&format!("{}/", root.trim_end_matches('/'))) && self.vcs.repos.inventory.by_worktree(c).is_some()) {
             return;
         }
         self.vcs.scm_root = Some(root.clone());
@@ -98,12 +103,26 @@ impl Workbench {
                 if std::mem::take(&mut this.vcs.refresh_again) {
                     this.refresh_git(0, cx);
                 }
-                if !this.all_roots(cx).contains(&dir) {
+                // A repository picked in Source Control is not a workspace root but an entry of the inventory.
+                let picked = !this.all_roots(cx).contains(&dir);
+                if picked && this.vcs.repos.inventory.by_worktree(&dir).is_none() {
                     return; // another folder was opened meanwhile
                 }
                 if this.vcs.scm_root.clone().or_else(|| this.root(cx)).as_deref() != Some(dir.as_str()) {
                     this.refresh_git(0, cx); // the active file's root changed meanwhile
                     return;
+                }
+                if picked && let Ok(st) = &result {
+                    let same = st.as_ref().is_some_and(|s| s.root.trim_end_matches('/') == dir.trim_end_matches('/'));
+                    if !same {
+                        // The picked repository was deleted (or is now part of the enclosing one): Source Control does
+                        // not silently show another repository in its place.
+                        this.vcs.scm_root = None;
+                        this.notice = Some(Notice::Error(crate::i18n::tf("Repository is no longer available: {}", &[&dir]).into()));
+                        this.discover_repos(cx);
+                        this.refresh_git(0, cx);
+                        return;
+                    }
                 }
                 match result {
                     // No change (most polls): no redraw. Every frame makes Metal allocate ~110 MB of
@@ -165,6 +184,11 @@ impl Workbench {
                     ed.update(cx, |e, cx| e.set_git_root(root, changed, cx));
                 }
             }
+        }
+        if let Some(s) = &st
+            && self.vcs.repos.inventory.set_selected_status(s)
+        {
+            self.push_repos(cx);
         }
         let host = self.remote.host.clone();
         self.scm.update(cx, |s, cx| s.set_status(host, st.clone(), cx));

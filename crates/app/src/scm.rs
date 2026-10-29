@@ -1,6 +1,7 @@
 //! Source control panel (S06): staged / unstaged changes,
 //! stage, unstage, discard change, commit. Commands go through `git/` on the agent.
 
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use gpui::{
@@ -12,6 +13,7 @@ use host::Host;
 use crate::git::{self, Change, Mark, Status};
 use crate::graph::{self, CommitDetail, CommitOp, FileChange, GraphCommit, GraphRow, RefKind};
 use crate::input::{FieldEvent, TextField};
+use crate::repos::{Repo, RepoId, RepoKey};
 use crate::sections::{self, Sections};
 use crate::ui::{self, c, icon, layout, palette, text};
 
@@ -50,6 +52,29 @@ pub enum ScmEvent {
     Publish,
     /// A commit went through and `git.postCommitCommand` (or "Commit & Push/Sync") asks for this next.
     PostCommit(git::PostCommit),
+    // --- repositories of the workspace ---
+    /// Show and act on this repository of the inventory.
+    SelectRepository(RepoKey),
+    /// Open a changed file of a repository as a diff (the repository becomes the selected one).
+    OpenRepoDiff {
+        repo: RepoKey,
+        path: String,
+        staged: bool,
+    },
+    /// Right click on a changed file of a repository (the repository becomes the selected one).
+    RepoFileMenu(RepoKey, String, bool, gpui::Point<gpui::Pixels>),
+    /// An operation on a repository that is not the selected one finished: refresh only that repository.
+    RefreshRepo(RepoKey),
+    /// Search the workspace for repositories again (refresh, or a repository that disappeared).
+    Rediscover,
+}
+
+/// Where an operation runs: the repository's worktree and, when the inventory knows it, its identity. The identity is
+/// checked on the host before Git runs and again before the result is applied.
+#[derive(Clone, Debug)]
+pub(crate) struct Target {
+    pub root: String,
+    pub id: Option<Arc<RepoId>>,
 }
 
 #[derive(Clone, Copy)]
@@ -87,7 +112,18 @@ pub struct ScmPanel {
     host: Arc<dyn Host>,
     status: Option<Arc<Status>>,
     message: Entity<TextField>,
-    busy: bool,
+    /// Worktrees with an operation running: one at a time per repository, repositories run independently.
+    busy: HashSet<String>,
+    /// The repositories of the workspace (from the workbench's inventory).
+    repos: Arc<Vec<Repo>>,
+    /// Commit message drafts of the repositories that are not selected (by worktree).
+    drafts: HashMap<String, String>,
+    /// The last result of an operation in a repository that was not selected when it finished.
+    repo_results: HashMap<RepoKey, (SharedString, bool)>,
+    /// Repositories whose changes are folded in the aggregated list.
+    collapsed_repos: HashSet<RepoKey>,
+    repo_scroll: UniformListScrollHandle,
+    repo_focus: FocusHandle,
     /// Result of the last operation: (text, is error).
     result: Option<(SharedString, bool)>,
     focus_handle: FocusHandle,
@@ -133,6 +169,9 @@ pub use graph_ui::GraphOption;
 mod access;
 pub(crate) use access::AccessView;
 
+#[path = "scm_repos.rs"]
+mod repos_ui;
+
 #[path = "scm_worktrees.rs"]
 mod worktree_ui;
 
@@ -159,7 +198,13 @@ impl ScmPanel {
             host,
             status: None,
             message,
-            busy: false,
+            busy: HashSet::new(),
+            repos: Arc::default(),
+            drafts: HashMap::new(),
+            repo_results: HashMap::new(),
+            collapsed_repos: HashSet::new(),
+            repo_scroll: UniformListScrollHandle::new(),
+            repo_focus: cx.focus_handle(),
             result: None,
             focus_handle: cx.focus_handle(),
             graph: None,
@@ -189,8 +234,36 @@ impl ScmPanel {
     }
 
     pub fn set_status(&mut self, host: Arc<dyn Host>, status: Option<Arc<Status>>, cx: &mut Context<Self>) {
-        if !Arc::ptr_eq(&self.host, &host) || self.status.as_ref().map(|s| &s.root) != status.as_ref().map(|s| &s.root) {
+        let old_root = self.status.as_ref().map(|s| s.root.clone());
+        let new_root = status.as_ref().map(|s| s.root.clone());
+        if !Arc::ptr_eq(&self.host, &host) || old_root != new_root {
             self.worktrees.reset();
+        }
+        if !Arc::ptr_eq(&self.host, &host) {
+            // Operations on the previous host can no longer change anything here (their results are rejected).
+            self.busy.clear();
+        }
+        // Switching between repositories of the inventory: each keeps its own commit message draft and last result.
+        if let (Some(old), Some(new)) = (&old_root, &new_root)
+            && old != new
+            && Arc::ptr_eq(&self.host, &host)
+            && self.repo_by_root(old).is_some()
+            && self.repo_by_root(new).is_some()
+        {
+            let text = self.message.read(cx).text().to_string();
+            if text.is_empty() {
+                self.drafts.remove(old);
+            } else {
+                self.drafts.insert(old.clone(), text);
+            }
+            let draft = self.drafts.remove(new).unwrap_or_default();
+            self.message.update(cx, |m, cx| m.set_text(&draft, cx));
+            if let Some(key) = self.repo_by_root(old).map(|r| r.id.key)
+                && let Some(result) = self.result.take()
+            {
+                self.repo_results.insert(key, result);
+            }
+            self.result = self.repo_by_root(new).map(|r| r.id.key).and_then(|k| self.repo_results.remove(&k));
         }
         self.host = host;
         self.status = status;
@@ -301,60 +374,189 @@ impl ScmPanel {
 
     #[cfg(test)]
     pub fn is_busy(&self) -> bool {
-        self.busy
+        self.busy()
     }
 
-    /// A git operation in the background; when done the result is written and the state refreshed.
+    /// An operation is running in the selected repository.
+    fn busy(&self) -> bool {
+        self.status.as_ref().is_some_and(|s| self.busy.contains(&s.root))
+    }
+
+    /// The inventory entry of a worktree.
+    fn repo_by_root(&self, root: &str) -> Option<&Repo> {
+        let root = root.trim_end_matches('/');
+        self.repos.iter().find(|r| r.id.worktree == root)
+    }
+
+    /// The identity is still in the inventory: a result for it may change what the panel shows.
+    fn repo_current(&self, id: &RepoId) -> bool {
+        self.repos.iter().any(|r| *r.id == *id)
+    }
+
+    /// The selected repository's inventory key.
+    pub(crate) fn selected_repo_key(&self) -> Option<RepoKey> {
+        self.status.as_ref().and_then(|s| self.repo_by_root(&s.root)).map(|r| r.id.key)
+    }
+
+    /// Where an operation goes: `None` is the selected repository, `Some` a row's repository. Never another one.
+    pub(crate) fn target(&self, repo: Option<RepoKey>) -> Result<Target, String> {
+        match repo {
+            None => {
+                let root = self.status.as_ref().map(|s| s.root.clone()).ok_or_else(|| crate::i18n::t("Select a repository first").to_string())?;
+                let id = self.repo_by_root(&root).map(|r| r.id.clone());
+                Ok(Target { root, id })
+            }
+            Some(key) => match self.repos.iter().find(|r| r.id.key == key) {
+                Some(r) if r.status.is_some() => Ok(Target { root: r.id.worktree.clone(), id: Some(r.id.clone()) }),
+                Some(r) => Err(crate::i18n::tf("Repository is no longer available: {}", &[&r.id.worktree])),
+                None => Err(crate::i18n::t("Repository changed while the operation was pending.").to_string()),
+            },
+        }
+    }
+
+    /// Show a refused operation where its repository's results go.
+    fn refuse(&mut self, repo: Option<RepoKey>, why: String, cx: &mut Context<Self>) {
+        match repo.filter(|k| Some(*k) != self.selected_repo_key()) {
+            Some(key) if self.repos.iter().any(|r| r.id.key == key) => {
+                self.repo_results.insert(key, (why.into(), true));
+            }
+            _ => self.result = Some((why.into(), true)),
+        }
+        cx.notify();
+    }
+
+    /// A git operation in the background in the selected repository; when done the result is written and the state refreshed.
     fn run(&mut self, op: impl FnOnce(&dyn Host, &str) -> Result<String, String> + Send + 'static, cx: &mut Context<Self>) {
-        self.run_then(op, |_, _| {}, cx);
+        self.run_then(op, |_, _, _| {}, cx);
     }
 
-    /// `on_ok`: if the operation succeeded (e.g. clear the message after a commit).
+    /// `on_ok`: if the operation succeeded (e.g. clear the message after a commit); its flag says whether the repository
+    /// is still the selected one.
     fn run_then(
         &mut self,
         op: impl FnOnce(&dyn Host, &str) -> Result<String, String> + Send + 'static,
-        on_ok: impl FnOnce(&mut Self, &mut Context<Self>) + 'static,
+        on_ok: impl FnOnce(&mut Self, bool, &mut Context<Self>) + 'static,
         cx: &mut Context<Self>,
     ) {
-        let Some(root) = self.status.as_ref().map(|s| s.root.clone()) else { return };
-        if self.busy {
+        let Ok(target) = self.target(None) else { return };
+        self.run_in(target, op, on_ok, cx);
+    }
+
+    /// Run `op` in `target`, one operation at a time per repository. On the host the target is checked first (still
+    /// there, still the same repository). When it finishes, a result for a repository that was removed, replaced or
+    /// reconnected meanwhile is rejected, and the result for a repository that is no longer selected is kept for it
+    /// instead of being shown for another one.
+    pub(crate) fn run_in(
+        &mut self,
+        target: Target,
+        op: impl FnOnce(&dyn Host, &str) -> Result<String, String> + Send + 'static,
+        on_ok: impl FnOnce(&mut Self, bool, &mut Context<Self>) + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.busy.insert(target.root.clone()) {
             return;
         }
-        self.busy = true;
-        self.result = None;
+        if self.status.as_ref().is_some_and(|s| s.root == target.root) {
+            self.result = None;
+        } else if let Some(id) = &target.id {
+            self.repo_results.remove(&id.key);
+        }
         let host = self.host.clone();
-        let task = cx.background_executor().spawn(async move { op(host.as_ref(), &root) });
+        let (root, id) = (target.root.clone(), target.id.clone());
+        let task = cx.background_executor().spawn(async move {
+            if let Some(id) = &id {
+                crate::repos::revalidate(host.as_ref(), id).map_err(|e| (true, e))?;
+            }
+            op(host.as_ref(), &root).map_err(|e| (false, e))
+        });
+        let host = self.host.clone();
         cx.spawn(async move |this, cx| {
             let result = task.await;
-            this.update(cx, |this, cx| {
-                this.busy = false;
-                if result.is_ok() {
-                    on_ok(this, cx);
-                }
-                this.result = match result {
-                    Ok(msg) if msg.is_empty() => None,
-                    Ok(msg) => Some((msg.into(), false)),
-                    Err(e) => Some((e.into(), true)),
-                };
-                // Operations that don't change HEAD, like fetch/pull, can still move the branch tip.
-                this.load_graph(cx);
-                cx.emit(ScmEvent::Refresh);
-                cx.notify();
-            })
-            .ok();
+            this.update(cx, |this, cx| this.finish(target, host, result, on_ok, cx)).ok();
         })
         .detach();
         cx.notify();
     }
 
+    fn finish(
+        &mut self,
+        target: Target,
+        host: Arc<dyn Host>,
+        result: Result<String, (bool, String)>,
+        on_ok: impl FnOnce(&mut Self, bool, &mut Context<Self>),
+        cx: &mut Context<Self>,
+    ) {
+        if Arc::ptr_eq(&self.host, &host) {
+            self.busy.remove(&target.root);
+        }
+        let stale = !Arc::ptr_eq(&self.host, &host) || target.id.as_ref().is_some_and(|id| !self.repo_current(id));
+        if stale || matches!(result, Err((true, _))) {
+            // Removed, replaced or reconnected while the operation was pending: nothing is applied to the repositories
+            // the panel shows now, and the inventory is searched again.
+            let why = match result {
+                Err((true, e)) => e,
+                _ => crate::i18n::t("Repository changed while the operation was pending.").to_string(),
+            };
+            self.result = Some((why.into(), true));
+            cx.emit(ScmEvent::Rediscover);
+            cx.notify();
+            return;
+        }
+        let selected = self.status.as_ref().is_some_and(|s| s.root == target.root);
+        if result.is_ok() {
+            on_ok(self, selected, cx);
+        }
+        let shown = match result {
+            Ok(msg) if msg.is_empty() => None,
+            Ok(msg) => Some((msg.into(), false)),
+            Err((_, e)) => Some((e.into(), true)),
+        };
+        match (&target.id, selected) {
+            (Some(id), false) => {
+                match shown {
+                    Some(r) => self.repo_results.insert(id.key, r),
+                    None => self.repo_results.remove(&id.key),
+                };
+                cx.emit(ScmEvent::RefreshRepo(id.key));
+            }
+            _ => {
+                if selected {
+                    self.result = shown;
+                    // Operations that don't change HEAD, like fetch/pull, can still move the branch tip.
+                    self.load_graph(cx);
+                }
+                cx.emit(ScmEvent::Refresh);
+            }
+        }
+        cx.notify();
+    }
+
+    /// The status of an operation's repository: the selected one's (`None`) or a row's.
+    fn status_of(&self, repo: Option<RepoKey>) -> Option<Arc<Status>> {
+        match repo {
+            None => self.status.clone(),
+            Some(key) => self.repos.iter().find(|r| r.id.key == key).and_then(|r| r.status.clone()),
+        }
+    }
+
     /// Staging also means marking a conflict "resolved": refuse if markers are still inside.
     pub fn stage(&mut self, paths: Vec<String>, cx: &mut Context<Self>) {
+        self.stage_in(None, paths, cx);
+    }
+
+    /// Stage in the selected repository (`None`) or in a row's repository.
+    pub fn stage_in(&mut self, repo: Option<RepoKey>, paths: Vec<String>, cx: &mut Context<Self>) {
+        let target = match self.target(repo) {
+            Ok(t) => t,
+            Err(why) if repo.is_some() => return self.refuse(repo, why, cx),
+            Err(_) => return,
+        };
         let conflicted: Vec<String> = self
-            .status
-            .as_ref()
+            .status_of(repo)
             .map(|st| st.changes.iter().filter(|c| c.unstaged == Some(Mark::Conflict) && paths.contains(&c.path)).map(|c| c.path.clone()).collect())
             .unwrap_or_default();
-        self.run(
+        self.run_in(
+            target,
             move |h, root| {
                 for rel in &conflicted {
                     let abs = format!("{}/{rel}", root.trim_end_matches('/'));
@@ -368,57 +570,97 @@ impl ScmPanel {
                 }
                 git::stage(h, root, &paths).map(|_| String::new())
             },
+            |_, _, _| {},
             cx,
         );
     }
 
-    pub fn unstage(&mut self, mut paths: Vec<String>, cx: &mut Context<Self>) {
+    pub fn unstage(&mut self, paths: Vec<String>, cx: &mut Context<Self>) {
+        self.unstage_in(None, paths, cx);
+    }
+
+    pub fn unstage_in(&mut self, repo: Option<RepoKey>, mut paths: Vec<String>, cx: &mut Context<Self>) {
+        let target = match self.target(repo) {
+            Ok(t) => t,
+            Err(why) if repo.is_some() => return self.refuse(repo, why, cx),
+            Err(_) => return,
+        };
         // Rename: the old path is also unstaged (as deleted).
-        if let Some(st) = &self.status {
+        if let Some(st) = self.status_of(repo) {
             let origs: Vec<String> = st.changes.iter().filter(|c| paths.contains(&c.path)).filter_map(|c| c.orig.clone()).collect();
             paths.extend(origs);
         }
-        self.run(move |h, root| git::unstage(h, root, &paths).map(|_| String::new()), cx);
+        self.run_in(target, move |h, root| git::unstage(h, root, &paths).map(|_| String::new()), |_, _, _| {}, cx);
     }
 
     /// Irreversible: ask first (untracked files are deleted).
     pub fn confirm_discard(&mut self, changes: Vec<Change>, window: &mut Window, cx: &mut Context<Self>) {
+        self.confirm_discard_in(None, changes, window, cx);
+    }
+
+    /// The target is fixed when the question is asked: the answer applies to that repository even if the selection
+    /// changes while the dialog is open, and to nothing if it was removed or replaced meanwhile.
+    pub fn confirm_discard_in(&mut self, repo: Option<RepoKey>, changes: Vec<Change>, window: &mut Window, cx: &mut Context<Self>) {
+        let target = match self.target(repo) {
+            Ok(t) => Some(t),
+            Err(why) if repo.is_some() => return self.refuse(repo, why, cx),
+            Err(_) => None,
+        };
         let deletes = changes.iter().any(|c| c.unstaged == Some(Mark::Untracked));
         let title = match changes.as_slice() {
             [one] => crate::i18n::tf("Discard changes in {}?", &[&format!("“{}”", ui::file_name(&one.path))]),
             many => crate::i18n::tf("Discard changes in {} files?", &[&many.len()]),
         };
-        let detail = if deletes { crate::i18n::t("Untracked files will be deleted. This can't be undone.") } else { crate::i18n::t("This can't be undone.") };
+        let mut detail =
+            if deletes { crate::i18n::t("Untracked files will be deleted. This can't be undone.") } else { crate::i18n::t("This can't be undone.") }
+                .to_string();
+        if let Some(t) = target.as_ref().filter(|_| self.repos.len() > 1) {
+            // Several repositories: the question names the one it applies to.
+            detail = format!("{}\n{detail}", crate::i18n::tf("Repository: {}", &[&t.root]));
+        }
         let answer = window.prompt(
             PromptLevel::Warning,
             &title,
-            Some(detail),
+            Some(&detail),
             &[gpui::PromptButton::cancel(crate::i18n::t("Cancel")), gpui::PromptButton::new(crate::i18n::t("Discard"))],
             cx,
         );
         cx.spawn(async move |this, cx| {
-            if answer.await == Ok(1) {
-                this.update(cx, |this, cx| this.discard(changes, cx)).ok();
+            if answer.await == Ok(1)
+                && let Some(target) = target
+            {
+                this.update(cx, |this, cx| this.discard_target(target, changes, cx)).ok();
             }
         })
         .detach();
     }
 
+    #[cfg(test)]
     pub fn discard(&mut self, changes: Vec<Change>, cx: &mut Context<Self>) {
-        self.run(move |h, root| git::discard(h, root, &changes).map(|_| String::new()), cx);
+        if let Ok(target) = self.target(None) {
+            self.discard_target(target, changes, cx);
+        }
+    }
+
+    fn discard_target(&mut self, target: Target, changes: Vec<Change>, cx: &mut Context<Self>) {
+        self.run_in(target, move |h, root| git::discard(h, root, &changes).map(|_| String::new()), |_, _, _| {}, cx);
     }
 
     /// "Discard All Changes": everything not staged (asks first).
     pub fn confirm_discard_all(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.confirm_discard_all_in(None, window, cx);
+    }
+
+    fn confirm_discard_all_in(&mut self, repo: Option<RepoKey>, window: &mut Window, cx: &mut Context<Self>) {
         // Conflicted files are not discarded (checkout fails on an unmerged file and the resolution would be lost).
         let changes: Vec<Change> =
-            self.status.as_ref().map(|s| s.unstaged().filter(|c| c.unstaged != Some(Mark::Conflict)).cloned().collect()).unwrap_or_default();
+            self.status_of(repo).map(|s| s.unstaged().filter(|c| c.unstaged != Some(Mark::Conflict)).cloned().collect()).unwrap_or_default();
         if changes.is_empty() {
             self.result = Some((crate::i18n::t("No changes to discard").to_string().into(), false));
             cx.notify();
             return;
         }
-        self.confirm_discard(changes, window, cx);
+        self.confirm_discard_in(repo, changes, window, cx);
     }
 
     /// Amend the last commit: staged changes are added; if the box is empty the message stays the same.
@@ -429,7 +671,11 @@ impl ScmPanel {
                 git::commit(h, root, &message, git::CommitOptions { amend: true, ..Default::default() })
                     .map(|summary| crate::i18n::tf("Amended {}", &[&summary]))
             },
-            |this, cx| this.message.update(cx, |m, cx| m.set_text("", cx)),
+            |this, selected, cx| {
+                if selected {
+                    this.message.update(cx, |m, cx| m.set_text("", cx));
+                }
+            },
             cx,
         );
     }
@@ -446,9 +692,11 @@ impl ScmPanel {
                 *out.lock().unwrap_or_else(|e| e.into_inner()) = m;
                 Ok(summary)
             },
-            move |this, cx| {
+            move |this, selected, cx| {
                 let m = std::mem::take(&mut *message.lock().unwrap_or_else(|e| e.into_inner()));
-                this.message.update(cx, |f, cx| f.set_text(&m, cx));
+                if selected {
+                    this.message.update(cx, |f, cx| f.set_text(&m, cx));
+                }
             },
             cx,
         );
@@ -513,13 +761,23 @@ impl ScmPanel {
         }
         let then = then.or_else(|| git::PostCommit::from_setting(&cx.global::<crate::settings::Settings>().git_post_commit));
         let opts = git::CommitOptions { all: nothing_staged, ..flags };
+        let root = st.root.clone();
         // The message is cleared only when the commit succeeds (if a hook rejects, the user fixes it and retries).
         self.run_then(
             move |h, root| git::commit(h, root, &message, opts).map(|summary| crate::i18n::tf("Committed {}", &[&summary])),
-            move |this, cx| {
-                this.message.update(cx, |m, cx| m.set_text("", cx));
-                if let Some(then) = then {
-                    cx.emit(ScmEvent::PostCommit(then));
+            move |this, selected, cx| {
+                if selected {
+                    this.message.update(cx, |m, cx| m.set_text("", cx));
+                    if let Some(then) = then {
+                        cx.emit(ScmEvent::PostCommit(then));
+                    }
+                } else {
+                    // The committed draft is gone. A push or sync meant to follow would now reach the selected
+                    // repository instead, so it does not run.
+                    this.drafts.remove(&root);
+                    if then.is_some() {
+                        this.result = Some((crate::i18n::t("Repository changed while the operation was pending.").into(), true));
+                    }
                 }
             },
             cx,
@@ -534,7 +792,8 @@ impl ScmPanel {
         }
     }
 
-    fn row(&self, ix: usize, change: &Change, staged: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    /// A changed file. `repo`: the row belongs to that repository of the aggregated list (every action goes there).
+    fn row(&self, ix: usize, change: &Change, staged: bool, repo: Option<RepoKey>, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let p = *palette(cx);
         let mark = if staged { change.staged } else { change.unstaged }.unwrap_or(Mark::Modified);
         let name = ui::file_name(&change.path).to_string();
@@ -559,7 +818,7 @@ impl ScmPanel {
             let path = path.clone();
             div().child(action(format!("unstage-{ix}"), "minus", crate::i18n::t("Unstage")).on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
-                this.unstage(vec![path.clone()], cx);
+                this.unstage_in(repo, vec![path.clone()], cx);
             })))
         } else {
             let (p1, ch) = (path.clone(), change.clone());
@@ -569,7 +828,7 @@ impl ScmPanel {
                 .when(!conflict, |d| {
                     d.child(action(format!("discard-{ix}"), "undo-2", crate::i18n::t("Discard changes")).on_click(cx.listener(move |this, _, window, cx| {
                         cx.stop_propagation();
-                        this.confirm_discard(vec![ch.clone()], window, cx);
+                        this.confirm_discard_in(repo, vec![ch.clone()], window, cx);
                     })))
                 })
                 .child(
@@ -580,7 +839,7 @@ impl ScmPanel {
                     )
                     .on_click(cx.listener(move |this, _, _, cx| {
                         cx.stop_propagation();
-                        this.stage(vec![p1.clone()], cx);
+                        this.stage_in(repo, vec![p1.clone()], cx);
                     })),
                 )
         };
@@ -609,16 +868,27 @@ impl ScmPanel {
                     move |_, cx| cx.new(|_| crate::workbench::Tooltip(tip.clone().into())).into()
                 })
             })
-            .on_click(cx.listener(move |_, _, _, cx| cx.emit(ScmEvent::OpenDiff { path: path.clone(), staged })))
+            .on_click(cx.listener(move |_, _, _, cx| match repo {
+                Some(repo) => cx.emit(ScmEvent::OpenRepoDiff { repo, path: path.clone(), staged }),
+                None => cx.emit(ScmEvent::OpenDiff { path: path.clone(), staged }),
+            }))
             .on_mouse_down(
                 MouseButton::Right,
-                cx.listener(move |_, ev: &MouseDownEvent, _, cx| cx.emit(ScmEvent::FileMenu(menu_path.clone(), staged, ev.position))),
+                cx.listener(move |_, ev: &MouseDownEvent, _, cx| match repo {
+                    Some(repo) => cx.emit(ScmEvent::RepoFileMenu(repo, menu_path.clone(), staged, ev.position)),
+                    None => cx.emit(ScmEvent::FileMenu(menu_path.clone(), staged, ev.position)),
+                }),
             )
     }
 
-    fn group_header(&self, id: &'static str, title: &str, n: usize, staged: bool, cx: &mut Context<Self>) -> impl IntoElement + use<> {
+    /// A group of changes (Merge Changes, Staged Changes, Changes); `repo` as in `row`.
+    fn group_header(&self, id: &'static str, title: &str, n: usize, staged: bool, repo: Option<RepoKey>, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let p = *palette(cx);
-        let paths: Vec<String> = match &self.status {
+        let el: SharedString = match repo {
+            Some(key) => format!("{id}-{key}").into(),
+            None => id.into(),
+        };
+        let paths: Vec<String> = match &self.status_of(repo) {
             Some(st) if staged => st.staged().map(|c| c.path.clone()).collect(),
             Some(st) => {
                 let merge = id == "scm-merge";
@@ -635,7 +905,7 @@ impl ScmPanel {
             div()
                 .id(SharedString::from(bid))
                 .invisible()
-                .group_hover(id, |s| s.visible())
+                .group_hover(el.clone(), |s| s.visible())
                 .size(px(20.))
                 .flex()
                 .items_center()
@@ -647,8 +917,8 @@ impl ScmPanel {
                 .tooltip(move |_, cx| cx.new(|_| crate::workbench::Tooltip(tip.into())).into())
         };
         div()
-            .id(id)
-            .group(id)
+            .id(el.clone())
+            .group(el.clone())
             .w_full()
             .h(px(layout::ROW_H))
             .flex()
@@ -663,17 +933,19 @@ impl ScmPanel {
             .child(div().flex_1().child(title.to_string()))
             .on_click(cx.listener(move |this, _, _, cx| this.toggle_section(id, cx)))
             .when(!staged && n > 0 && id != "scm-merge", |d| {
-                d.child(hover_button(format!("{id}-discard"), "undo-2", crate::i18n::t("Discard all changes")).on_click(cx.listener(|this, _, window, cx| {
-                    cx.stop_propagation();
-                    this.confirm_discard_all(window, cx);
-                })))
+                d.child(hover_button(format!("{el}-discard"), "undo-2", crate::i18n::t("Discard all changes")).on_click(cx.listener(
+                    move |this, _, window, cx| {
+                        cx.stop_propagation();
+                        this.confirm_discard_all_in(repo, window, cx);
+                    },
+                )))
             })
-            .child(hover_button(format!("{id}-all"), glyph, tip).on_click(cx.listener(move |this, _, _, cx| {
+            .child(hover_button(format!("{el}-all"), glyph, tip).on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
                 if staged {
-                    this.unstage(paths.clone(), cx);
+                    this.unstage_in(repo, paths.clone(), cx);
                 } else {
-                    this.stage(paths.clone(), cx);
+                    this.stage_in(repo, paths.clone(), cx);
                 }
             })))
             .when(n > 0, |d| {
@@ -708,7 +980,7 @@ impl Render for ScmPanel {
                     .rounded(px(theme::radius::SM))
                     .cursor_pointer()
                     .hover(|d| d.bg(c(p.surface_hover)))
-                    .child(if self.busy {
+                    .child(if self.busy() {
                         ui::spinner("scm-busy", 14., p.text_muted).into_any_element()
                     } else {
                         icon("refresh-cw", 14., p.text_muted).into_any_element()
@@ -719,6 +991,8 @@ impl Render for ScmPanel {
                         this.load_graph(cx);
                         this.refresh_worktrees(cx);
                         cx.emit(ScmEvent::Refresh);
+                        // Repositories created or removed in the workspace since the last search.
+                        cx.emit(ScmEvent::Rediscover);
                     })),
             )
             .child(
@@ -742,13 +1016,20 @@ impl Render for ScmPanel {
                     ),
             );
         let Some(st) = self.status.clone() else {
-            return div().key_context("ScmPanel").track_focus(&self.focus_handle).size_full().flex().flex_col().child(header).child(
-                div()
-                    .px(px(theme::SPACE[6]))
-                    .text_size(px(text::SM.0))
-                    .text_color(c(p.text_muted))
-                    .child(crate::i18n::t("This folder is not a git repository.")),
-            );
+            // Several repositories but none to act on (the selected one cannot be read): the list stays, to pick another.
+            let multi = self.multi();
+            let note = if multi { crate::i18n::t("Select a repository first") } else { crate::i18n::t("This folder is not a git repository.") };
+            return div()
+                .key_context("ScmPanel")
+                .track_focus(&self.focus_handle)
+                .size_full()
+                .flex()
+                .flex_col()
+                .child(header)
+                .child(
+                    div().px(px(theme::SPACE[6])).when(multi, |d| d.pb(px(theme::SPACE[3]))).text_size(px(text::SM.0)).text_color(c(p.text_muted)).child(note),
+                )
+                .when(multi, |d| d.child(self.repo_list(self.repo_focus.is_focused(window), cx)));
         };
         let staged: Vec<Change> = st.staged().cloned().collect();
         // Conflicts get their own section (VS Code: "Merge Changes"); staging means "resolved".
@@ -763,8 +1044,17 @@ impl Render for ScmPanel {
             (Some(b), a, d) => format!("{b}  {}", git::counts_label(a, d)),
             (None, ..) => crate::i18n::t("detached HEAD").into(),
         };
-        let graph_fills =
-            staged.is_empty() && merge.is_empty() && unstaged.is_empty() && self.sections.is_open("graph", true) && !self.sections.has_height("graph");
+        // Several repositories: the line names the one the message box, Commit, Sync and the graph act on.
+        let branch = match self.repo_by_root(&st.root).filter(|_| self.multi()) {
+            Some(r) => format!("{} · {branch}", r.label),
+            None => branch,
+        };
+        let graph_fills = !self.multi()
+            && staged.is_empty()
+            && merge.is_empty()
+            && unstaged.is_empty()
+            && self.sections.is_open("graph", true)
+            && !self.sections.has_height("graph");
         let field_box = ui::input_box("scm-message-box", &p, p.bg, self.message.focus_handle(cx).is_focused(window)).child(self.message.clone());
         div()
             .key_context("ScmPanel")
@@ -888,7 +1178,9 @@ impl Render for ScmPanel {
                         d.child(div().text_size(px(text::XS.0)).text_color(c(if err { p.danger } else { p.text_muted })).child(msg))
                     }),
             )
-            .child(
+            .child(if self.multi() {
+                self.repo_list(self.repo_focus.is_focused(window), cx).into_any_element()
+            } else {
                 div()
                     .id("scm-list")
                     // Nothing to commit: the list takes only its line and the graph gets the room (until its height is set by hand).
@@ -896,19 +1188,21 @@ impl Render for ScmPanel {
                     .min_h(px(if graph_fills { 0. } else { 72. }))
                     .overflow_y_scroll()
                     .when(!merge.is_empty(), |d| {
-                        let rows: Vec<_> = if self.sections.is_open("scm-merge", true) { merge.iter().enumerate().map(|(i, ch)| self.row(1000 + i, ch, false, cx).into_any_element()).collect() } else { Vec::new() };
-                        d.child(self.group_header("scm-merge", crate::i18n::t("Merge Changes"), merge.len(), false, cx)).children(rows)
+                        let rows: Vec<_> = if self.sections.is_open("scm-merge", true) { merge.iter().enumerate().map(|(i, ch)| self.row(1000 + i, ch, false, None, cx).into_any_element()).collect() } else { Vec::new() };
+                        d.child(self.group_header("scm-merge", crate::i18n::t("Merge Changes"), merge.len(), false, None, cx)).children(rows)
                     })
                     .when(!staged.is_empty(), |d| {
-                        let rows: Vec<_> = if self.sections.is_open("scm-staged", true) { staged.iter().enumerate().map(|(i, ch)| self.row(i, ch, true, cx).into_any_element()).collect() } else { Vec::new() };
-                        d.child(self.group_header("scm-staged", crate::i18n::t("Staged Changes"), staged.len(), true, cx)).children(rows)
+                        let rows: Vec<_> = if self.sections.is_open("scm-staged", true) { staged.iter().enumerate().map(|(i, ch)| self.row(i, ch, true, None, cx).into_any_element()).collect() } else { Vec::new() };
+                        d.child(self.group_header("scm-staged", crate::i18n::t("Staged Changes"), staged.len(), true, None, cx)).children(rows)
                     })
-                    .child(self.group_header("scm-changes", crate::i18n::t("Changes"), unstaged.len(), false, cx))
-                    .children(if self.sections.is_open("scm-changes", true) { unstaged.iter().enumerate().map(|(i, ch)| self.row(i, ch, false, cx).into_any_element()).collect::<Vec<_>>() } else { Vec::new() })
+                    .child(self.group_header("scm-changes", crate::i18n::t("Changes"), unstaged.len(), false, None, cx))
+                    .children(if self.sections.is_open("scm-changes", true) { unstaged.iter().enumerate().map(|(i, ch)| self.row(i, ch, false, None, cx).into_any_element()).collect::<Vec<_>>() } else { Vec::new() })
                     .when(staged.is_empty() && unstaged.is_empty() && merge.is_empty(), |d| {
                         d.child(div().px(px(theme::SPACE[6])).py(px(theme::SPACE[3])).text_color(c(p.text_muted)).child(crate::i18n::t("No changes.")))
-                    }),
-            )
+                    })
+                    .into_any_element()
+            })
+
             .children(self.stash_section(cx))
             .child(self.worktree_section(cx))
             .child(self.graph_section(self.query.focus_handle(cx).is_focused(window), graph_fills, cx))
@@ -1127,6 +1421,14 @@ impl ScmPanel {
     }
 
     fn run_commit_op(&mut self, hash: String, op: CommitOp, cx: &mut Context<Self>) {
+        // History actions come from the selected repository's graph: a commit that is not in it (the selection changed
+        // while the menu or the question was open) is not looked for in another repository.
+        let object_id = hash.len() >= 40 && hash.bytes().all(|b| b.is_ascii_hexdigit());
+        if object_id && self.graph.as_ref().is_some_and(|g| !g.commits.iter().any(|c| c.hash == hash)) {
+            self.result = Some((crate::i18n::t("Repository changed while the operation was pending.").into(), true));
+            cx.notify();
+            return;
+        }
         self.run(move |h, root| graph::run_op(h, root, &hash, &op), cx);
     }
 
