@@ -153,3 +153,14 @@ fn task_matcher_omission_keeps_automatic_detection_but_an_explicit_empty_list_di
     assert!(!parsed.tasks[1].auto_match);
     assert!(!parsed.tasks[2].auto_match);
 }
+
+#[test]
+fn task_plan_virtual_background_groups_inherit_readiness_from_their_dependencies() {
+    let parsed = registry(json!([
+        {"label":"watch","command":"watch","isBackground":true,"problemMatcher":"$tsc-watch"},
+        {"label":"group","dependsOn":"watch","isBackground":true},
+        {"label":"debug","command":"debug","dependsOn":"group"}
+    ]));
+    let plan = parsed.plan("debug", true).unwrap();
+    assert_eq!(plan.readiness, BTreeSet::from([0]));
+}

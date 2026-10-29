@@ -407,7 +407,7 @@ impl Registry {
         let mut readiness = BTreeSet::new();
         for &id in waits.keys() {
             let task = &self.tasks[id];
-            if task.background && (id != root || require_root_ready) {
+            if task.command.is_some() && task.background && (id != root || require_root_ready) {
                 if !task.matchers.iter().any(has_readiness) {
                     return Err(Error::Readiness(task.label.clone()));
                 }

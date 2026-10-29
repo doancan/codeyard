@@ -6,4 +6,5 @@
 pub mod matchers;
 pub mod model;
 pub mod schedule;
+pub mod text_stream;
 pub mod variables;
