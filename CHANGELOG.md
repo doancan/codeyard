@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (docs/registry.md).
 - Offline verification of publishers' keyless Sigstore signatures, pinned to the registry's Fulcio CA and Rekor key,
   with the publisher identity (repository, owner and workflow by id) taken from the certificate.
+- `yard`, the registry's publish service: signed uploads with no accounts, the same checks as `cyx check`, publisher
+  names that belong to their first owner, confusable names refused, versions never reused, yank/restore/deprecate as
+  signed statements, revoke and advisory fixes for the security role, and a static index signed daily.
 - `codeyard --install-extension FILE.cyx` installs an extension without opening a window (repeat the flag for several).
   The performance gate now measures loading 100 installed extensions at startup (ceiling 5 ms).
 - `cyx`, the extension authors' command, ships beside Codeyard: `cyx new` (theme, snippets, keymap, language, language

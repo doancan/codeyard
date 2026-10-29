@@ -278,8 +278,9 @@ hosts. The extension never sees the token. Pasting a raw token into `secrets` st
 
 ## 8. Registry and publishing
 
-**Yard** is static files on a CDN plus a small publish API (axum + Postgres) holding publishers and
-trusted-publisher records.
+**Yard** is static files on a CDN plus a small publish service (`crates/yard`: hyper + SQLite, one file to back
+up) holding publisher names and the versions they published. Publishers prove who they are with the Sigstore bundle
+itself, so the service has no accounts or tokens; yank and deprecate are signed statements the same way.
 
 `cyx publish`, or a tag push with the scaffolded workflow:
 1. `cyx` checks, builds and packages a deterministic `.cyx` (ustar + gzip, sorted, mtime 0). The content
@@ -398,6 +399,7 @@ nightly with no new crash; the scripted "new theme → visible" check passes in 
 | `ext-proto`, `ext-ui`, `ext-api` | app ↔ exthost frames; UI tree model and diff; WIT and generated docs |
 | `ext-host` | the `codeyard-exthost` binary: engine, sandbox, `--compile`. The only crate that links wasmtime |
 | `cyx`, `ext-sdk`, `ext-test` | CLI, Rust SDK, mock host |
+| `yard` | the registry's publish service; runs on the registry's server, never with the app |
 
 App code lives in `ext_*.rs` topic files (broker, Extensions view, consent sheet, UI renderer, Inspector) and
 `perf.rs`. The workbench gets one `ext` field. `theme`, `snippets.rs`, `syntax`, `schema`, `lsp.servers` and

@@ -350,3 +350,34 @@ fn fuzz_verify_never_panics() {
         }
     }
 }
+
+#[test]
+fn status_statements_round_trip_exactly() {
+    let id = ExtId::parse("you.night").unwrap();
+    let v = Version::parse("1.2.0").unwrap();
+    for change in [
+        StatusChange::Yank,
+        StatusChange::Restore,
+        StatusChange::Deprecate { replacement: None },
+        StatusChange::Deprecate { replacement: Some(ExtId::parse("you.day").unwrap()) },
+    ] {
+        let s = change.statement(&id, &v);
+        assert_eq!(StatusChange::parse(&s), Some((id.clone(), v.clone(), change)));
+    }
+    for bad in [
+        "codeyard-yard/v1/status\nyou.night 1.2.0 revoke\n",
+        "codeyard-yard/v1/status\nyou.night 1.2.0 yank",
+        "codeyard-yard/v1/status\nyou.night  1.2.0 yank\n",
+        "codeyard-yard/v1/package\nyou.night 1.2.0 yank\n",
+    ] {
+        assert_eq!(StatusChange::parse(bad.as_bytes()), None, "{bad:?}");
+    }
+}
+
+#[test]
+fn frames_split_where_they_were_joined() {
+    let body = frame(b"bundle", b"payload");
+    assert_eq!(unframe(&body), Some((&b"bundle"[..], &b"payload"[..])));
+    assert_eq!(unframe(&[0, 0, 0, 9, 1]), None);
+    assert_eq!(unframe(&[0, 0]), None);
+}

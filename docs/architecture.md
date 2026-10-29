@@ -22,9 +22,12 @@ crates/
             activation, permissions and risk; shared by the app, `cyx` and the registry (see plugin-architecture.md)
   ext-pkg/  extension packages (`.cyx`): reproducible writer, strict reader, content digest
   ext-core/ installed extensions: content-addressed store, `extensions.lock.jsonc`, install / update / rollback /
-            uninstall as crash-safe transactions, the startup index, permissions ∩ Workspace Trust
+            uninstall as crash-safe transactions, the startup index, permissions ∩ Workspace Trust; the registry's
+            signed index (`yard.rs`) and publisher signatures (`publisher.rs`), verified offline
   cyx/      the extension authors' command: new, dev (`--extension-dev`, hot reload), check, package, import-vscode;
             ships beside the app
+  yard/     the extension registry's publish service (`yard` binary, hyper + SQLite): signed uploads, registry checks,
+            the static signed index; runs on the registry's server, not with the app (see registry.md)
   theme/    colour tokens -> Rust constants (`design/tokens*.json`, `build.rs`), built-in themes
   app/      GPUI views, commands, keybindings, the workbench; the only crate that depends on GPUI
 vendor/
