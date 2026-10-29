@@ -4,7 +4,7 @@
 use super::*;
 
 /// Terminal tabs (`TERM_TAB + i`).
-pub(super) const TERM_TAB: u64 = 0x100_0000;
+pub(super) const TERM_TAB: u64 = 0x1f0_0000;
 
 /// A terminal tab of the focused group.
 #[derive(Clone, PartialEq, Debug)]
