@@ -1135,6 +1135,13 @@ impl EditorView {
         Some(point(right - px(6.), self.surface_origin.y + self.surface_h * frac))
     }
 
+    /// Logical distance between the first two painted lines and the font size they were shaped at (tests).
+    #[cfg(test)]
+    pub fn painted_line_metrics(&self) -> Option<(Pixels, Pixels)> {
+        let (a, b) = (self.visible.first()?, self.visible.get(1)?);
+        Some((b.bounds.origin.y - a.bounds.origin.y, a.layout.font_size))
+    }
+
     /// First visible screen line (tests).
     #[cfg(test)]
     pub fn first_visible_line(&self) -> Option<usize> {
