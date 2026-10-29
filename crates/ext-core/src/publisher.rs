@@ -162,9 +162,14 @@ pub fn verify(bundle: &[u8], artifact: &[u8], pins: &Pins, now: u64) -> Result<S
     let sig = b.message_signature.as_ref().ok_or_else(|| bundle_err("only message signatures are accepted (no DSSE envelopes)"))?;
     let signature = b64(&sig.signature).ok_or_else(|| bundle_err("the signature is not base64"))?;
     let m = &b.verification_material;
+    // v0.3 carries the signing certificate alone; v0.1 and v0.2 a chain. A bundle must have the shape of the version
+    // it names, so the same signature cannot be passed off under another format.
+    let v3 = version >= 2;
     let leaf = match (&m.certificate, &m.x509_certificate_chain) {
-        (Some(c), None) => b64(&c.raw_bytes),
-        // Older bundles carry a chain; only the signing certificate counts, and a CA in it means a confused signer.
+        (Some(c), None) if v3 => b64(&c.raw_bytes),
+        (Some(_), None) => return Err(bundle_err("a single certificate is a v0.3 field, but the bundle says it is older")),
+        (None, Some(_)) if v3 => return Err(bundle_err("a v0.3 bundle carries the signing certificate, not a chain")),
+        // Only the signing certificate counts, and a CA in the chain means a confused signer.
         (None, Some(chain)) if chain.certificates.len() == 1 => b64(&chain.certificates[0].raw_bytes),
         (None, Some(chain)) if chain.certificates.is_empty() => return Err(bundle_err("the certificate chain is empty")),
         (None, Some(_)) => return Err(bundle_err("the certificate chain holds more than the signing certificate")),

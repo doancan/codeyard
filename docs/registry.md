@@ -95,7 +95,8 @@ you.night 1.2.0 <content digest>
 ```
 
 `ext_core::publisher::verify_package` checks a Sigstore bundle (v0.1 to v0.3, a message signature logged in Rekor v1)
-offline against the Fulcio CA and Rekor key that `root.json` pins:
+offline against the Fulcio CA and Rekor key that `root.json` pins. The bundle must have the shape of the version it
+names (v0.3 one signing certificate, v0.1 and v0.2 a chain of one), so a bundle cannot be relabelled; then:
 
 1. Rekor's signed entry timestamp over the entry and the time it was logged.
 2. The inclusion proof up to its root hash and Rekor's signed checkpoint for that root (required from bundle v0.2).
