@@ -50,3 +50,29 @@ pub const GUEST_MEMORY_BYTES: usize = 256 * 1024 * 1024;
 pub const GUEST_CALL_MILLIS: u64 = 2_000;
 /// `activate` may take longer: language runtimes start there.
 pub const ACTIVATE_MILLIS: u64 = 10_000;
+
+
+/// An encoded view (`ext-ui`), refused before it is decoded.
+pub const UI_VIEW_BYTES: usize = 8 * 1024 * 1024;
+/// Elements in one view, counting every row and cell.
+pub const UI_NODES: usize = 50_000;
+/// Nesting depth of a view; the root is depth 1.
+pub const UI_DEPTH: usize = 32;
+/// Rows of a list or table, and items in one page of a tree level.
+pub const UI_ROWS_PER_PAGE: usize = 10_000;
+/// A label, heading, badge, option or column header.
+pub const UI_LABEL_LEN: usize = 256;
+/// Body text: `text`, `banner`, a key-value value, an input's value or placeholder.
+pub const UI_TEXT_LEN: usize = 4096;
+/// The source of one `markdown` or `code` element, in bytes.
+pub const UI_DOCUMENT_BYTES: usize = 64 * 1024;
+/// An element key or a tree page token.
+pub const UI_KEY_LEN: usize = 128;
+/// An `image` given as bytes.
+pub const UI_IMAGE_BYTES: usize = 1024 * 1024;
+/// Options of a `select`, pairs of a `key-value`.
+pub const UI_CHOICES: usize = 256;
+/// Columns of a `table`.
+pub const UI_COLUMNS: usize = 32;
+/// An `https:` URL of an image or link.
+pub const UI_URL_LEN: usize = 2048;

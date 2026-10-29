@@ -27,8 +27,13 @@ pub(crate) struct TestWindowState {
     hover_status_change_callback: Option<Box<dyn FnMut(bool)>>,
     resize_callback: Option<Box<dyn FnMut(Size<Pixels>, f32)>>,
     moved_callback: Option<Box<dyn FnMut()>>,
-    input_handler: Option<PlatformInputHandler>,
+    pub(crate) input_handler: Option<PlatformInputHandler>,
     is_fullscreen: bool,
+    /// The display scale factor (2.0 unless a test moves the window to another display).
+    scale_factor: f32,
+    /// The last client inset the window was given, in platform points.
+    pub(crate) client_inset: Option<Pixels>,
+    pub(crate) test_atlas: Arc<TestAtlas>,
 }
 
 #[derive(Clone)]
@@ -57,12 +62,14 @@ impl TestWindow {
         platform: Weak<TestPlatform>,
         display: Rc<dyn PlatformDisplay>,
     ) -> Self {
+        let test_atlas = Arc::new(TestAtlas::new());
         Self(Rc::new(Mutex::new(TestWindowState {
             bounds: params.bounds,
             display,
             platform,
             handle,
-            sprite_atlas: Arc::new(TestAtlas::new()),
+            sprite_atlas: test_atlas.clone(),
+            test_atlas,
             title: Default::default(),
             edited: false,
             should_close_handler: None,
@@ -74,6 +81,8 @@ impl TestWindow {
             moved_callback: None,
             input_handler: None,
             is_fullscreen: false,
+            scale_factor: 2.0,
+            client_inset: None,
         })))
     }
 
@@ -84,6 +93,19 @@ impl TestWindow {
             return;
         };
         lock.bounds.size = size;
+        drop(lock);
+        callback(size, scale_factor);
+        self.0.lock().resize_callback = Some(callback);
+    }
+
+    /// The window moved to a display with another scale factor; platforms report that through the resize callback.
+    pub fn simulate_display_scale(&mut self, scale_factor: f32) {
+        let mut lock = self.0.lock();
+        lock.scale_factor = scale_factor;
+        let size = lock.bounds.size;
+        let Some(mut callback) = lock.resize_callback.take() else {
+            return;
+        };
         drop(lock);
         callback(size, scale_factor);
         self.0.lock().resize_callback = Some(callback);
@@ -134,7 +156,7 @@ impl PlatformWindow for TestWindow {
     }
 
     fn scale_factor(&self) -> f32 {
-        2.0
+        self.0.lock().scale_factor
     }
 
     fn appearance(&self) -> WindowAppearance {
@@ -291,6 +313,10 @@ impl PlatformWindow for TestWindow {
 
     fn update_ime_position(&self, _bounds: Bounds<Pixels>) {}
 
+    fn set_client_inset(&self, inset: Pixels) {
+        self.0.lock().client_inset = Some(inset);
+    }
+
     fn gpu_specs(&self) -> Option<GpuSpecs> {
         None
     }
@@ -309,6 +335,11 @@ impl TestAtlas {
             next_id: 0,
             tiles: HashMap::default(),
         }))
+    }
+
+    /// Number of tiles (glyphs, icons, images) in the atlas.
+    pub fn len(&self) -> usize {
+        self.0.lock().tiles.len()
     }
 }
 

@@ -2205,6 +2205,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ext-ui"
+version = "0.5.0"
+dependencies = [
+ "ext-manifest",
+ "postcard",
+ "serde",
+]
+
+[[package]]
 name = "fallible-iterator"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
