@@ -2338,7 +2338,7 @@ impl Workbench {
     fn update_title(&mut self, window: &mut Window, cx: &mut App) {
         let remote = self.remote.host.is_remote().then(|| self.remote.host.label());
         let parts: Vec<String> = [self.title_text(cx), remote].into_iter().flatten().collect();
-        let title = if parts.is_empty() { "codeyard".to_string() } else { parts.join(" — ") };
+        let title = if parts.is_empty() { "Codeyard".to_string() } else { parts.join(" — ") };
         if title != self.title {
             window.set_window_title(&title);
             self.title = title;

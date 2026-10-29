@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <title>Codeyard — Windows app icon</title>
+  <desc>The macOS icon fitted to Windows: the tile fills the frame and the mark is larger, since the taskbar shows icons small and on a dark bar. codeyard.ico is built from it by scripts/windows-icon.py.</desc>
+  <defs>
+    <linearGradient id="tile" x1="120" y1="16" x2="900" y2="1008" gradientUnits="userSpaceOnUse"><stop stop-color="#303B3B"/><stop offset=".5" stop-color="#182525"/><stop offset="1" stop-color="#0C1718"/></linearGradient>
+    <linearGradient id="edge" x1="512" y1="16" x2="512" y2="1008" gradientUnits="userSpaceOnUse"><stop stop-color="#718583" stop-opacity=".8"/><stop offset=".5" stop-color="#344846" stop-opacity=".35"/><stop offset="1" stop-color="#56736D" stop-opacity=".5"/></linearGradient>
+    <linearGradient id="mint" x1="280" y1="264" x2="704" y2="744" gradientUnits="userSpaceOnUse"><stop stop-color="#B6FFD7"/><stop offset=".5" stop-color="#67EAB1"/><stop offset="1" stop-color="#28BD91"/></linearGradient>
+  </defs>
+  <rect x="16" y="16" width="992" height="992" rx="200" fill="url(#tile)"/>
+  <rect x="22" y="22" width="980" height="980" rx="194" stroke="url(#edge)" stroke-width="12"/>
+  <g transform="translate(512 512) scale(1.38) translate(-529 -512)">
+    <path d="M514 244 282 378Q268 386 268 402V622Q268 638 282 646L514 780 594 734 366 602V422L514 336 612 393 692 347 514 244Z" fill="url(#mint)"/>
+    <path d="M470 428 550 382 630 428 710 382 790 428 676 494V644L584 697V494L470 428Z" fill="url(#mint)"/>
+    <path d="M630 520 676 494V644L630 671V520Z" fill="#137E69" opacity=".36"/>
+  </g>
+</svg>

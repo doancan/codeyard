@@ -34,7 +34,6 @@ Abort the rebase?
 Aborting merge…	
 Aborting rebase…	
 About Codeyard	
-About codeyard	
 Accept All Current	
 Accept All Incoming	
 Accept Both	
@@ -1001,10 +1000,10 @@ Help: Keyboard Shortcuts Reference
 Help: Welcome	
 Hex dump (read-only copy)	
 Hide	
+Hide Codeyard	
 Hide Merge Commits	
 Hide Others	
 Hide Panel (⌘J)	
-Hide codeyard	
 High risk: this extension can read private data and send it elsewhere.	
 High risk: this extension can run programs as you.	
 Highlight other uses of the word under the cursor	
@@ -1581,7 +1580,7 @@ Query: {}
 Quick Fix…	
 Quick fix	
 Quit Anyway	
-Quit codeyard	
+Quit Codeyard	
 Quit without saving	
 Quitting loses everything since the last save.	
 Quitting now can leave the installation unfinished. It takes a few seconds.	

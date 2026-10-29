@@ -126,6 +126,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The Windows app icon fills its frame and has a larger mark, so it no longer looks small on the taskbar
+  (`crates/app/assets/windows/codeyard.svg`, built into the `.ico` by `scripts/windows-icon.py`).
+- The app is called "Codeyard" in the window title, the title bar, the welcome page and the app menu.
 - The About page groups application, platform and client protocol details, and shows the remote agent protocol when connected.
 - Releases are gated on performance instead of app size: `scripts/perf` compares startup, typing latency and memory with
   the previous release and blocks regressions beyond their budget. The app binary size limit is removed; the SSH agent keeps

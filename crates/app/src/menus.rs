@@ -311,9 +311,9 @@ pub(crate) fn menus(recent: &[state::RecentWorkspace]) -> Vec<Menu> {
     }
     vec![
         Menu {
-            name: "codeyard".into(),
+            name: "Codeyard".into(),
             items: vec![
-                I::action(tr("About codeyard"), wb::ShowAbout),
+                I::action(tr("About Codeyard"), wb::ShowAbout),
                 I::action(tr("Check for Updates…"), wb::CheckForUpdates),
                 sep(),
                 I::action(tr("Settings…"), wb::OpenSettingsPage),
@@ -324,11 +324,11 @@ pub(crate) fn menus(recent: &[state::RecentWorkspace]) -> Vec<Menu> {
                 sep(),
                 I::os_submenu(tr("Services"), SystemMenuType::Services),
                 sep(),
-                I::action(tr("Hide codeyard"), HideApp),
+                I::action(tr("Hide Codeyard"), HideApp),
                 I::action(tr("Hide Others"), HideOtherApps),
                 I::action(tr("Show All"), ShowAllApps),
                 sep(),
-                I::action(tr("Quit codeyard"), wb::Quit),
+                I::action(tr("Quit Codeyard"), wb::Quit),
             ],
         },
         Menu {
@@ -551,7 +551,7 @@ pub(crate) mod tests {
         let windows = [
             DockWindow { title: "main.rs — front".into(), workspace: Some((None, "/p/front".into())) },
             DockWindow { title: "back".into(), workspace: Some((None, "/p/back".into())) },
-            DockWindow { title: "codeyard".into(), workspace: None },
+            DockWindow { title: "Codeyard".into(), workspace: None },
         ];
         let rows: Vec<(String, Option<String>)> = dock_items(&windows, &recents)
             .into_iter()
@@ -561,7 +561,7 @@ pub(crate) mod tests {
             })
             .collect();
         let names: Vec<&str> = rows.iter().map(|(n, _)| n.as_str()).collect();
-        assert_eq!(names[..7], ["main.rs — front", "back", "codeyard", "---", "old", "api  (ssh://box)", "---"]);
+        assert_eq!(names[..7], ["main.rs — front", "back", "Codeyard", "---", "old", "api  (ssh://box)", "---"]);
         assert_eq!(rows[4].1.as_deref(), Some("app::OpenRecent1"), "a skipped row keeps the others' numbers");
         assert_eq!(rows[5].1.as_deref(), Some("app::OpenRecent2"));
         assert_eq!(rows[0].1.as_deref(), Some("app::ShowWindow0"));

@@ -960,7 +960,7 @@ pub fn open_workbench_window(cx: &mut App) -> Option<gpui::WindowHandle<Workbenc
                 window_bounds: Some(saved.unwrap_or(WindowBounds::Windowed(bounds))),
                 // macOS and Windows use themed title bars; Windows controls keep native hit testing.
                 titlebar: Some(TitlebarOptions {
-                    title: Some("codeyard".into()),
+                    title: Some("Codeyard".into()),
                     appears_transparent: cfg!(any(target_os = "macos", target_os = "windows")),
                     traffic_light_position: Some(gpui::point(px(12.), px(10.))),
                 }),

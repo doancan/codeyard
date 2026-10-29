@@ -26,12 +26,11 @@ Window	Pencere
 Help	Yardım
 
 # ---- Menu bar: application menu (macOS) ----
-About codeyard	codeyard Hakkında
 Services	Servisler
-Hide codeyard	codeyard'ı Gizle
+Hide Codeyard	Codeyard'ı Gizle
 Hide Others	Diğerlerini Gizle
 Show All	Tümünü Göster
-Quit codeyard	codeyard'dan Çık
+Quit Codeyard	Codeyard'dan Çık
 Settings…	Ayarlar…
 Open Settings (JSON)	Ayarları Aç (JSON)
 Keyboard Shortcuts	Klavye Kısayolları
