@@ -107,6 +107,10 @@ pub(super) struct GitState {
     /// Whether the marks of inactive roots are being refreshed right now.
     pub(super) marks_busy: std::collections::HashSet<String>,
     pub(super) tree_marks: std::collections::HashMap<String, Arc<std::collections::HashMap<String, crate::git::Mark>>>,
+    /// The repositories of the workspace (see workbench_repos.rs).
+    pub(super) repos: super::repos_glue::RepoState,
+    /// The repository the open commit menu belongs to (its actions are pinned to it).
+    pub(super) menu_repo: Option<crate::scm::Target>,
 }
 
 /// Layout: side panel, bottom panel, split editor, zoom, zen mode, window bounds.
@@ -134,9 +138,10 @@ pub(super) struct ChromeLayout {
     pub(super) term_list_w: f32,
     pub(super) resizing_term_list: bool,
     pub(super) resizing_split: bool,
-    /// Zoom delta (pt) and the base sizes from settings (editor, line, terminal).
-    pub(super) zoom: f32,
-    pub(super) zoom_base: (f32, f32, f32),
+    /// Scroll position of the activity bar's view buttons (they scroll when the window is too short for all of them).
+    pub(super) activity_scroll: gpui::ScrollHandle,
+    /// Whether the last frame showed the "more above" and "more below" hints of the activity bar.
+    pub(super) activity_hints: std::cell::Cell<(bool, bool)>,
     /// Zen mode: the previous layout is kept here while it is on.
     pub(super) zen: Option<ZenSaved>,
     /// Window bounds at the last draw (saved on exit, used at the next launch).

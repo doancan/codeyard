@@ -265,7 +265,9 @@ impl Workbench {
                     git::set_remote_url(h, &root, &remote, &name).map(|_| crate::i18n::tf("Updated the URL of {}", &[&remote]))
                 });
             }
-            InputPurpose::StashNamed => self.git_stash_with(git::StashOptions { message: Some(name), ..Default::default() }, cx),
+            InputPurpose::StashNamed { repo } if self.repo_unchanged(&repo, cx) => {
+                self.git_stash_with(git::StashOptions { message: Some(name), ..Default::default() }, cx);
+            }
             _ => {}
         }
     }
@@ -300,7 +302,7 @@ impl Workbench {
     pub(super) fn git_stash_named(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.repo_root(cx).is_some() {
             self.show_input(
-                InputPurpose::StashNamed,
+                InputPurpose::StashNamed { repo: self.scm.read(cx).target(None).ok() },
                 // A git term, left as it is in every language (like the Stash entries of the "…" menu).
                 "Stash",
                 crate::i18n::t("Name of the stash (shown in the stash list)"),

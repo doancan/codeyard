@@ -204,7 +204,7 @@ jobs:
       # ext-host builds codeyard-exthost, which cyx's tests use to run examples/extensions (`cyx test`, Rust and
       # TypeScript); with CODEYARD_REQUIRE_WASM a missing target, exthost or Node.js fails those tests instead of skipping
       # them.
-      - run: cargo test --locked -p proto -p agent -p host -p buffer -p state -p syntax -p theme -p ext-manifest -p ext-pkg -p ext-core -p cyx -p yard -p ext-host -p codeyard-extension -p codeyard-extension-test
+      - run: cargo test --locked -p proto -p agent -p host -p buffer -p state -p syntax -p theme -p ext-manifest -p ext-pkg -p ext-core -p ext-proto -p ext-host -p ext-net -p cyx -p yard -p codeyard-extension -p codeyard-extension-test
         env:
           CODEYARD_REQUIRE_WASM: "1"
       - name: Example extensions (unit tests against the mock host)

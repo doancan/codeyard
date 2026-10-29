@@ -62,9 +62,13 @@ mod error_ui_tests;
 #[cfg(test)]
 mod explorer_bulk_tests;
 mod ext;
+mod ext_broker;
+#[cfg(test)]
+mod ext_code_tests;
 mod ext_registry;
 #[cfg(test)]
 mod ext_registry_tests;
+mod ext_runtime;
 #[cfg(test)]
 mod ext_tests;
 mod ext_updates;
@@ -152,6 +156,7 @@ mod qa_workspace_file_tests;
 mod reliability_data_tests;
 mod replace_apply;
 mod replace_plan;
+mod repos;
 mod resource_monitor;
 mod resources;
 #[cfg(test)]
@@ -171,6 +176,8 @@ mod shortcuts_page;
 mod snippets;
 #[cfg(test)]
 mod text_scale_tests;
+#[cfg(test)]
+mod ui_scale_tests;
 mod web_preview;
 mod web_preview_config;
 // --- structural ---

@@ -1,0 +1,13 @@
+[package]
+name = "ext-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Extension views: the declarative element tree, validation, keyed diff, host-side input state and accessibility roles"
+repository.workspace = true
+publish = false
+
+[dependencies]
+ext-manifest = { version = "0.6.0", path = "../ext-manifest" }
+postcard = { version = "1.1.3", features = ["use-std"] }
+serde = { version = "1.0.229", features = ["derive"] }

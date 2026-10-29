@@ -8,6 +8,6 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-codeyard-extension = { version = "0.5.0", path = "../ext-sdk" }
-ext-manifest = { version = "0.5.0", path = "../ext-manifest" }
+codeyard-extension = { version = "0.6.0", path = "../ext-sdk" }
+ext-manifest = { version = "0.6.0", path = "../ext-manifest" }
 serde_json = "1.0.154"

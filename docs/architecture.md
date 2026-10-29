@@ -22,6 +22,8 @@ crates/
   ext-manifest/ extension manifest (`codeyard-extension.toml`): parsing, validation with author-facing errors,
             activation, permissions and risk; shared by the app, `cyx` and the registry (see plugin-architecture.md)
   ext-pkg/  extension packages (`.cyx`): reproducible writer, strict reader, content digest
+  ext-ui/   extension views: the 22-element tree and its wire form, validation and caps, keyed diff, input state kept
+            by the host, accessibility roles, events; the GPUI renderer is in `app`
   ext-core/ installed extensions: content-addressed store, `extensions.lock.jsonc`, install / update / rollback /
             uninstall as crash-safe transactions, the startup index, permissions ∩ Workspace Trust; the registry's
             signed index (`yard.rs`) and publisher signatures (`publisher.rs`), verified offline
@@ -29,6 +31,8 @@ crates/
   ext-proto/ frames between the app and an extension host process: handshake, size cap, byte-rate budget
   ext-host/ `codeyard-exthost`, which runs one code extension's WebAssembly component; the only binary with wasmtime;
             ships beside the app
+  ext-net/  network for extensions: HTTPS to the hosts in `net` only, every connection's peer address checked,
+            re-checked redirects, byte budgets, timeout and cancellation (hyper + rustls)
   ext-sdk/  `codeyard-extension`, the Rust SDK extension authors depend on: async calls over tickets, built for
             wasm32-wasip2 (wit-bindgen) or, on the host target, against the mock host (not in the app)
   ext-test/ `codeyard-extension-test`, the mock host for extensions' native unit tests (not in the app)

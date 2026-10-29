@@ -30,11 +30,26 @@ pub(crate) struct AccessView {
     pub branch: String,
     pub message: String,
     pub message_focused: bool,
+    pub repos_focused: bool,
     pub busy: bool,
     pub commit_label: String,
     pub can_commit: bool,
     pub result: Option<(String, bool)>,
     pub groups: Vec<AccessGroup>,
+    /// The repositories of the workspace (empty with a single repository, as the panel shows none then).
+    pub repos: Vec<AccessRepo>,
+}
+
+/// A repository of the inventory: what it is, where it stands, whether it is the one Source Control acts on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct AccessRepo {
+    pub key: RepoKey,
+    pub label: String,
+    pub path: String,
+    pub summary: String,
+    pub selected: bool,
+    pub busy: bool,
+    pub result: Option<(String, bool)>,
 }
 
 impl ScmPanel {
@@ -68,22 +83,46 @@ impl ScmPanel {
             }
         }
         let (commit_label, can_commit) = self.status.as_ref().map_or_else(|| commit_button(0, 0), |s| self.commit_state(s, cx));
+        let selected = self.selected_repo_key();
+        let repos = if self.multi() {
+            self.repos
+                .iter()
+                .map(|r| AccessRepo {
+                    key: r.id.key,
+                    label: r.label.clone(),
+                    path: r.id.worktree.clone(),
+                    summary: repos_ui::summary(r),
+                    selected: selected == Some(r.id.key),
+                    busy: self.busy.contains(&r.id.worktree),
+                    result: self.repo_results.get(&r.id.key).map(|(s, e)| (s.to_string(), *e)),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let mut branch = self.status.as_ref().and_then(|s| s.branch.clone()).unwrap_or_else(|| crate::i18n::t("detached HEAD").into());
+        if let Some(repo) = repos.iter().find(|r| r.selected) {
+            branch = format!("{} · {branch}", repo.label);
+        }
         AccessView {
             revision: self.status.clone(),
             root: self.status.as_ref().map(|s| s.root.clone()),
-            branch: self.status.as_ref().and_then(|s| s.branch.clone()).unwrap_or_else(|| crate::i18n::t("detached HEAD").into()),
+            branch,
+            repos,
+
             message: self.message.read(cx).text().to_string(),
             message_focused: self.message.focus_handle(cx).is_focused(window),
-            busy: self.busy,
+            repos_focused: self.multi() && self.repo_focus.is_focused(window),
+            busy: self.busy(),
             commit_label,
-            can_commit: can_commit && !self.busy,
+            can_commit: can_commit && !self.busy(),
             result: self.result.as_ref().map(|(s, error)| (s.to_string(), *error)),
             groups,
         }
     }
 
     pub(crate) fn a11y_set_message(&mut self, text: &str, cx: &mut Context<Self>) {
-        if !self.busy {
+        if !self.busy() {
             self.message.update(cx, |m, cx| m.set_text(text, cx));
         }
     }

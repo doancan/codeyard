@@ -43,6 +43,7 @@ impl Workbench {
             paths.push(format!("{dir}/index"));
             paths.push(format!("{dir}/HEAD"));
         }
+        paths.extend(self.repo_watch_paths());
         paths.sort();
         paths.dedup();
         if paths != self.watched {
@@ -66,6 +67,8 @@ impl Workbench {
                 self.load_folder_settings(root, cx);
             }
         }
+        let changed: Vec<String> = changes.iter().map(|(p, _)| p.clone()).collect();
+        self.refresh_repos_for(&changed, cx);
         if let Some(g) = &self.vcs.status {
             let prefix = format!("{}/", g.root.trim_end_matches('/'));
             let git_dir = g.git_dir.as_ref().map(|d| format!("{}/", d.trim_end_matches('/')));
@@ -173,8 +176,6 @@ impl Workbench {
         new.lsp_servers.splice(0..0, servers);
         warnings.extend(ext_problems);
         let old = cx.global::<Settings>().clone();
-        // Zoom is applied on top of the sizes in the settings file.
-        self.chrome.zoom_base = (new.editor_font_size, new.editor_line_height, new.terminal_font_size);
         if !new.docker_enabled && self.any_container_connected(cx) {
             new.docker_enabled = true;
             warnings.push(crate::i18n::t("Disconnect the container before disabling the container module. Your open files are kept.").into());
@@ -203,12 +204,13 @@ impl Workbench {
                 self.close_overlay(window, cx);
             }
         }
-        if self.chrome.zoom != 0. {
-            new.editor_font_size = (new.editor_font_size + self.chrome.zoom).max(6.);
-            new.editor_line_height = (new.editor_line_height + self.chrome.zoom * 1.5).max(10.);
-            new.terminal_font_size = (new.terminal_font_size + self.chrome.zoom).max(6.);
-        }
+        // Interface scale: user settings only, the same for every window; an unchanged value does nothing. A zoom that
+        // could not be saved stays until the file's own value changes.
+        let mut session = cx.try_global::<settings::SessionScale>().copied().unwrap_or_default();
+        new.ui_scale = session.resolve(new.ui_scale);
+        cx.set_global(session);
         cx.set_global(new.clone());
+        cx.set_ui_scale(new.ui_scale);
         if !new.web_preview_enabled {
             self.stop_web_preview(cx);
         } else if self.web_preview_needs_restart(&new.web_preview) {
@@ -291,6 +293,7 @@ impl Workbench {
         }
         self.sync_settings_page(cx);
         self.sync_extensions_view();
+        self.sync_running_extensions(window, cx);
         // Extra folders resolve over the user and workspace layers, which may have changed.
         self.resolve_folder_settings(cx);
         // Registries the user installed from: updates and version status, their index at most daily (none asked
@@ -313,6 +316,10 @@ impl Workbench {
                         let active = window.is_window_active() || cfg!(test);
                         if active && this.vcs.status.is_some() && this.git_refresh_idle() {
                             this.refresh_git(0, cx);
+                        }
+                        // The other repositories' rows are only on screen while Source Control is.
+                        if active && this.chrome.panel == Some(Panel::Scm) {
+                            this.refresh_repos(cx);
                         }
                     })
                     .is_ok();

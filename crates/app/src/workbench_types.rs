@@ -27,6 +27,11 @@ pub(super) enum OverlayKind {
     },
     /// Name entry (new file/folder, rename).
     Input(InputPurpose),
+    /// `window.quick-pick` of a code extension: its ticket completes with the chosen row.
+    ExtPick {
+        extension: String,
+        ticket: u64,
+    },
     /// Language server results: locations (references), symbols, code actions.
     Locations(Vec<(String, u32, u32)>),
     Symbols(Vec<(u32, u32)>),
@@ -58,7 +63,10 @@ pub(super) enum OverlayKind {
     TerminalColor,
     Stashes {
         refs: Vec<String>,
+        /// Each stash's message (its position alone may shift) and the repository the list was read from.
+        msgs: Vec<String>,
         op: git_glue::StashOp,
+        repo: Option<crate::scm::Target>,
     },
     FileHistory {
         root: String,
@@ -96,6 +104,8 @@ pub(super) enum OverlayKind {
     Branches {
         root: String,
         choices: Vec<git_glue::BranchChoice>,
+        /// The repository the list was read from: a pick confirmed after another one was selected does nothing.
+        repo: Option<crate::scm::Target>,
     },
     /// Merge / Delete / Rename Branch, Remove Remote: act on the selected name.
     BranchOp {
@@ -170,6 +180,11 @@ pub(super) enum OverlayKind {
 }
 
 pub(super) enum InputPurpose {
+    /// `window.input-box` of a code extension: its ticket completes with the text.
+    ExtInput {
+        extension: String,
+        ticket: u64,
+    },
     Create {
         dir: String,
         is_dir: bool,
@@ -267,9 +282,11 @@ pub(super) enum InputPurpose {
     /// New branch / tag from a commit in the graph.
     CommitBranch {
         hash: String,
+        repo: Option<crate::scm::Target>,
     },
     CommitTag {
         hash: String,
+        repo: Option<crate::scm::Target>,
     },
     // --- git-refs ---
     /// Name of a new branch that starts at `start`.
@@ -286,7 +303,10 @@ pub(super) enum InputPurpose {
         name: String,
     },
     /// Description of a new stash.
-    StashNamed,
+    StashNamed {
+        repo: Option<crate::scm::Target>,
+    },
+
     /// Add the open folder to the saved projects under its name.
     SaveProject {
         path: String,
