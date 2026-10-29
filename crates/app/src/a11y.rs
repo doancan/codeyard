@@ -242,6 +242,8 @@ mod ext_views_access;
 mod ids;
 #[path = "a11y_inspector.rs"]
 mod inspector_access;
+#[path = "a11y_problems.rs"]
+mod problems_access;
 #[path = "a11y_scm.rs"]
 mod scm_access;
 #[path = "a11y_search_editor.rs"]
@@ -275,6 +277,7 @@ pub struct Snapshot {
     pub completion: Option<ListSnap>,
     pub terminal: Option<TerminalSnap>,
     pub(crate) scm: Option<ScmSnap>,
+    pub(crate) problems: Option<problems_access::ProblemsSnap>,
     pub(crate) services: Option<crate::language_services_page::AccessView>,
     pub(crate) exts: Option<ext_access::ExtSnap>,
     pub(crate) ext_page: Option<ext_access::ExtPageSnap>,
@@ -459,6 +462,9 @@ impl Snapshot {
         if let Some(scm) = &self.scm {
             scm.append_tree(&mut nodes);
             kids.push(SCM);
+        }
+        if let Some(problems) = &self.problems {
+            kids.push(problems.append_tree(&mut nodes));
         }
 
         if let Some(view) = &self.exts {
@@ -936,6 +942,7 @@ impl Workbench {
             completion,
             terminal,
             scm,
+            problems: self.a11y_problems(cx),
             exts,
             ext_page: self.a11y_extension_page(),
             inspector: self.a11y_inspector(),
@@ -959,6 +966,10 @@ impl Workbench {
             return;
         }
         if self.a11y_scm_action(req, last, window, cx) {
+            cx.notify();
+            return;
+        }
+        if self.a11y_problems_action(req, last, window, cx) {
             cx.notify();
             return;
         }
@@ -1306,6 +1317,7 @@ mod tests {
             completion: None,
             terminal: None,
             scm: None,
+            problems: None,
             search_editor: None,
             search_tabs: Vec::new(),
             picker: None,

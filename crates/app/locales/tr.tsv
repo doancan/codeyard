@@ -3257,3 +3257,9 @@ the pattern cannot be evaluated	desen değerlendirilemiyor
 the regular expression is invalid ({})	düzenli ifade geçersiz ({})
 there is no built-in matcher called “{}”	“{}” adında yerleşik bir eşleştirici yok
 too many or too large patterns	çok fazla ya da çok büyük desen
+# ---- Problems accessibility ----
+Information	Bilgi
+Problems: {}	Sorunlar: {}
+{0}, line {1}	{0}, satır {1}
+{0}, line {1}, column {2}	{0}, satır {1}, sütun {2}
+{0}, problems: {1}	{0}, sorun: {1}

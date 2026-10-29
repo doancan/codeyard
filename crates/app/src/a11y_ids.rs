@@ -22,6 +22,7 @@ const _: () = {
         SCM_REPO,
         EXT_VIEW_NODE,
         INSPECTOR_LINE,
+        super::problems_access::PROBLEM_ROW,
         ROW_BASE,
     ];
     let mut i = 1;
@@ -80,6 +81,8 @@ const _: () = {
         EXT_PAGE,
         EXT_PAGE_INSTALL,
         INSPECTOR,
+        super::problems_access::PROBLEMS,
+        super::problems_access::PROBLEMS_EMPTY,
     ];
     let mut i = 0;
     while i < fixed.len() {

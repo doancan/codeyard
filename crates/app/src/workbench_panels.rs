@@ -211,12 +211,17 @@ impl Workbench {
         self.all_problems().iter().map(|(p, d)| (p.clone(), d.len())).collect()
     }
 
-    pub(super) fn problems_view(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
-        let all = if self.jobs.problems.is_empty() && self.extension_problems().next().is_none() {
+    /// What the Problems panel lists: language server diagnostics, with task and extension problems when there are any.
+    pub(super) fn problems_shown(&self) -> std::borrow::Cow<'_, std::collections::BTreeMap<String, Vec<crate::lsp::Diagnostic>>> {
+        if self.jobs.problems.is_empty() && self.extension_problems().next().is_none() {
             std::borrow::Cow::Borrowed(&self.lsp.diagnostics)
         } else {
             std::borrow::Cow::Owned(self.all_problems())
-        };
+        }
+    }
+
+    pub(super) fn problems_view(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
+        let all = self.problems_shown();
         if all.is_empty() {
             let msg = if self.lsp.servers.is_empty() {
                 crate::i18n::t("No problems. Language servers start when you open a file.")

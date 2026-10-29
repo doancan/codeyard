@@ -1073,6 +1073,7 @@ Index ↔ Working Tree
 Indexing files…	
 Indexing lines…	
 Info	
+Information	
 Inline	
 Insert a snippet (or type its prefix in the editor and press Tab)	
 Insert the closing bracket or quote	
@@ -1598,6 +1599,7 @@ Previous match (⇧↵)
 Previous result (⇧F4)	
 Problems	
 Problems: Copy Full Diagnostic	
+Problems: {}	
 Process ended. Press any key to close.	
 Process exited with code {}	
 Process exited with code {}. Press any key to close.	
@@ -2882,6 +2884,9 @@ your words
 {0}, in development from {1}	
 {0}, installed from {1} (not verified by a registry)	
 {0}, signed by {1} in the {2} registry	
+{0}, line {1}	
+{0}, line {1}, column {2}	
+{0}, problems: {1}	
 {0}, {1} {2} {3}	
 {0}. The search stopped at the result limit, so the results are incomplete.	
 {0}. The search was cancelled, so the results are incomplete.	
