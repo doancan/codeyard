@@ -67,7 +67,7 @@ location = "file-tree"
 when = "editor"
 
 [[keybindings]]
-key = "cmd-shift-alt-y"
+key = "ctrl-alt-f9"
 command = "notice"
 
 [[status-bar]]
@@ -207,7 +207,7 @@ fn extension_commands_run_from_menus_keys_and_status_items(cx: &mut TestAppConte
 
     // The key binding: the key is bound, and pressing it runs the command.
     wb.update_in(cx, |wb, _, _| wb.clear_notice_for_test());
-    cx.simulate_keystrokes("cmd-shift-alt-y");
+    cx.simulate_keystrokes("ctrl-alt-f9");
     wait_for(cx, "the key binding's command", |cx| notice(&wb, cx).contains("you.probe: Pick"));
 
     // The palette.
