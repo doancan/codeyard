@@ -1,0 +1,24 @@
+[package]
+name = "yard"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The extension registry's publish service: signed uploads, registry checks, the static signed index"
+repository.workspace = true
+publish = false
+
+[dependencies]
+ext-core = { version = "0.5.0", path = "../ext-core" }
+ext-manifest = { version = "0.5.0", path = "../ext-manifest" }
+ext-pkg = { version = "0.5.0", path = "../ext-pkg" }
+http-body-util = "0.1.5"
+hyper = { version = "1.12.0", features = ["http1", "server"] }
+hyper-util = { version = "0.1.21", features = ["tokio"] }
+rusqlite = { version = "0.41.0", features = ["bundled"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+tokio = { version = "1.54.1", features = ["fs", "net", "rt", "sync", "time"] }
+
+[dev-dependencies]
+ext-core = { version = "0.5.0", path = "../ext-core", features = ["testing"] }

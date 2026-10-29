@@ -211,6 +211,9 @@ pub struct Release {
     /// Downloads including updates, counted per day without logs.
     #[serde(default)]
     pub downloads: u64,
+    /// The registry's security role cleared it to update at once (an advisory fix), skipping the 48 h wait for code.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub immediate: bool,
 }
 
 impl Release {
@@ -441,6 +444,68 @@ impl Index {
     pub fn release(&self, id: &ExtId, version: &Version) -> Option<&Release> {
         self.extensions.get(id)?.versions.iter().find(|r| &r.version == version)
     }
+}
+
+/// sha256 of a manifest's permission set, as the index lists it: an update with the same digest asks nothing.
+pub fn permission_digest(manifest: &ext_manifest::Manifest) -> String {
+    use sha2::Digest as _;
+    hex(&sha2::Sha256::digest(serde_json::to_vec(&manifest.permissions).expect("permissions serialize")))
+}
+
+/// What a publisher can do to a version they published, signed like a package (a Sigstore bundle over
+/// [`StatusChange::statement`]), so the registry needs no accounts or tokens.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StatusChange {
+    Yank,
+    /// Back to `ok` after a yank.
+    Restore,
+    Deprecate {
+        replacement: Option<ExtId>,
+    },
+}
+
+impl StatusChange {
+    pub fn statement(&self, id: &ExtId, version: &Version) -> Vec<u8> {
+        let what = match self {
+            StatusChange::Yank => "yank".to_string(),
+            StatusChange::Restore => "restore".to_string(),
+            StatusChange::Deprecate { replacement: None } => "deprecate".to_string(),
+            StatusChange::Deprecate { replacement: Some(r) } => format!("deprecate {r}"),
+        };
+        format!("codeyard-yard/v1/status\n{id} {version} {what}\n").into_bytes()
+    }
+
+    /// Read a statement back: the id, version and change it names.
+    pub fn parse(statement: &[u8]) -> Option<(ExtId, Version, StatusChange)> {
+        let text = std::str::from_utf8(statement).ok()?;
+        let line = text.strip_prefix("codeyard-yard/v1/status\n")?.strip_suffix('\n')?;
+        let mut parts = line.split(' ');
+        let (id, version, what) = (ExtId::parse(parts.next()?).ok()?, Version::parse(parts.next()?).ok()?, parts.next()?);
+        let change = match (what, parts.next(), parts.next()) {
+            ("yank", None, _) => StatusChange::Yank,
+            ("restore", None, _) => StatusChange::Restore,
+            ("deprecate", None, _) => StatusChange::Deprecate { replacement: None },
+            ("deprecate", Some(r), None) => StatusChange::Deprecate { replacement: Some(ExtId::parse(r).ok()?) },
+            _ => return None,
+        };
+        (change.statement(&id, &version) == statement).then_some((id, version, change))
+    }
+}
+
+/// The body of an upload to the publish service: the Sigstore bundle, then what it signs (a package, or a status
+/// statement). A four-byte big-endian length keeps both binary-safe without multipart.
+pub fn frame(bundle: &[u8], payload: &[u8]) -> Vec<u8> {
+    let mut out = (bundle.len() as u32).to_be_bytes().to_vec();
+    out.extend_from_slice(bundle);
+    out.extend_from_slice(payload);
+    out
+}
+
+/// Split an upload into (bundle, payload).
+pub fn unframe(body: &[u8]) -> Option<(&[u8], &[u8])> {
+    let len = u32::from_be_bytes(body.get(..4)?.try_into().ok()?) as usize;
+    let rest = &body[4..];
+    (len <= rest.len()).then(|| rest.split_at(len))
 }
 
 /// A key pair for signing, kept in a file that only its holder can read.

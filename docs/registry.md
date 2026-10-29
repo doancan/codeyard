@@ -1,8 +1,8 @@
 # Registry
 
 Yard is the extension registry: static files on a CDN plus a small publish service. This document describes what
-exists today: the signed index format, how clients verify it and publisher signatures, and the operator's commands. Hosting and the runbook
-come with #70. The design is in [plugin-architecture.md §8](plugin-architecture.md#8-registry-and-publishing).
+exists today: the signed index format, how clients verify it and publisher signatures, the publish service, and the
+operator's commands. Hosting and the runbook come with #70. The design is in [plugin-architecture.md §8](plugin-architecture.md#8-registry-and-publishing).
 
 ## Files
 
@@ -109,7 +109,56 @@ default log and announces a freeze a year ahead, so v2 support is added when tha
 pinned, so they would add a second log, not a second trust decision. The tests run the relevant cases of the Sigstore
 conformance suite (`crates/ext-core/testdata/sigstore`).
 
-## Operator commands
+## The publish service
+
+`crates/yard` builds the `yard` binary, which runs on the registry's server. Everything users download is static and
+lives in its public folder, which a CDN serves: `root.json`, `index.json`, their signatures, and
+`packages/<digest>.cyx`. State is one SQLite file.
+
+```text
+POST /v1/publish                 a Sigstore bundle and a package          → what was published, or why not
+POST /v1/status                  a Sigstore bundle and a status statement → yank, restore, deprecate
+GET  /packages/<digest>.cyx      the package; counts one download for the day (nothing about who asked is kept)
+GET  /index.json  /root.json …   the static files, for a registry without a CDN
+```
+
+An upload is the bundle's length (four bytes, big-endian), the bundle, then the package or statement. There are no
+accounts: the identity in the bundle's certificate is the publisher.
+
+A publish is accepted only when all of these hold:
+
+- The package passes the same checks as `cyx check` and the app (`ext-pkg`), and contains no code (code extensions
+  are accepted from Phase 2).
+- The bundle is a valid publisher signature over this id, version and content digest (above).
+- The publisher name (the part of the id before the dot) is unclaimed, or claimed by the same owner: a GitHub owner
+  (by numeric id) or a browser-login account. The first publish claims it. A name with the same look as another
+  owner's (`rnicrosoft`, `micros0ft`) or one letter away from it (`microsft`, for names of five letters or more) is
+  refused.
+- A new extension id or display name does not look like another owner's.
+- An existing extension is published from the same repository and workflow as before.
+- The version number has never been used for this id, even if that version was yanked.
+
+Status statements are `codeyard-yard/v1/status
+<id> <version> <yank|restore|deprecate [replacement]>
+`, signed by the
+identity that publishes the extension within the last 15 minutes. A revoked version stays revoked.
+
+Every change writes the package first, then signs and writes a new index (signature, then index; a client that reads
+between the two sees a mismatch and fetches again). `yard serve` also signs a fresh index at start and every 24 hours,
+so it never expires while the service runs.
+
+```text
+yard init FOLDER [--registry NAME]           a new registry: keys, root.json (pinning public-good Sigstore), yard.json
+yard serve CONFIG                            the service
+yard resign CONFIG                           sign a fresh index once, for a scheduler instead of serve's timer
+yard revoke CONFIG ID VERSION REASON…        the security role: stop a version on every client, with the reason
+yard immediate CONFIG ID VERSION             the security role: let clients update to an advisory fix at once
+```
+
+`yard init` signs the root with one development key. For production the root key holders sign `root.json` with
+`cyx yard sign root` (below). The pinned Sigstore roots are in `crates/yard/sigstore/`.
+
+## Root key commands
 
 ```text
 cyx yard keygen FILE                              a new key, readable only by you; prints the public key

@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (docs/registry.md).
 - Offline verification of publishers' keyless Sigstore signatures, pinned to the registry's Fulcio CA and Rekor key,
   with the publisher identity (repository, owner and workflow by id) taken from the certificate.
+- `yard`, the registry's publish service: signed uploads with no accounts, the same checks as `cyx check`, publisher
+  names that belong to their first owner, confusable names refused, versions never reused, yank/restore/deprecate as
+  signed statements, revoke and advisory fixes for the security role, and a static index signed daily.
 - Paste clipboard images into programs such as Codex in an SSH terminal: the image is transferred to a private temporary
   file on the remote host and its path is pasted into the terminal.
 - Local SSH port forwarding on Windows using a dedicated OpenSSH process for each forward.

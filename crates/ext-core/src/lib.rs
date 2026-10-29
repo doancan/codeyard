@@ -19,6 +19,8 @@
 mod der;
 pub mod lock;
 pub mod publisher;
+#[cfg(any(test, feature = "testing"))]
+pub mod testing;
 pub mod trust;
 pub mod yard;
 

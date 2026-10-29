@@ -7,6 +7,10 @@ description = "Installed extensions: content-addressed store, lock file, install
 repository.workspace = true
 publish = false
 
+[features]
+# The test Sigstore authority (`testing.rs`), for other crates' tests.
+testing = []
+
 [dependencies]
 base64 = "0.22.1"
 ext-manifest = { version = "0.5.0", path = "../ext-manifest" }

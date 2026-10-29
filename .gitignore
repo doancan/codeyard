@@ -17,6 +17,8 @@ lcov.info
 *.keychain-db
 *.key
 *.pem
+# Public Sigstore roots the registry pins (certificates and a public key, no secrets).
+!crates/yard/sigstore/*.pem
 !scripts/update-public-key.pem
 *.cer
 *.crt
