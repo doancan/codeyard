@@ -542,7 +542,7 @@ impl Render for Workbench {
             .on_action(cx.listener(|this, _: &crate::menus::TerminalMenu, w, cx| this.open_application_menu_by_index(5, w, cx)))
             .on_action(cx.listener(|this, _: &crate::menus::WindowMenu, w, cx| this.open_application_menu_by_index(6, w, cx)))
             .on_action(cx.listener(|this, _: &crate::menus::HelpMenu, w, cx| this.open_application_menu_by_index(7, w, cx)))
-            .when(cfg!(target_os = "macos"), |d| d.child(self.title_bar(&p, cx)))
+            .when(cfg!(target_os = "macos"), |d| d.child(self.title_bar(window, &p, cx)))
             .when(cfg!(target_os = "windows") && !window.is_fullscreen(), |d| d.child(self.windows_title_bar(window, &p, cx)))
             .when(!cfg!(target_os = "macos") && self.chrome.zen.is_none(), |d| d.child(self.application_menu_bar(&p, cx)))
             .when(self.docker_connected() && self.remote.docker.monitor.return_workspace.is_some(), |d| {

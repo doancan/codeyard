@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   A workspace file has its own Recents entry; reopening it (or a restart) brings back its folders, order, names and
   settings, while opening one of its folders directly opens only that folder.
 
+- Interface scale: *View: Zoom In*, *Zoom Out* and *Reset Zoom* (⌘= / ⌘- / ⌘0, Ctrl on Windows) scale the whole interface
+  from 75% to 200% in steps (75%, 80%, then every 10%), including menus, dialogs, tooltips, hit regions and accessibility
+  bounds. The value is saved once per change as `ui.scale` in the user's settings, applies to every open window and is
+  shown as a localized percentage. Invalid values fall back to 100% with "Interface scale must be between 75% and
+  200%."; a project settings file cannot set it. The display's own scale stays separate.
 - The extension registry's signed index: format, offline verification (a threshold of root keys, an expiring online
   key, no rollback to an older copy) and `cyx yard keygen | sign | verify` for the key ceremony and test registries
   (docs/registry.md).
@@ -167,6 +172,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   wrote at once. Saving against a known version no longer recreates a file deleted since (it is a conflict); a file the
   editor knows was deleted is still saved back. "Search: Open Results in Editor" is now "Search: Open Search Editor" and opens a Search Editor tab instead
   of a plain-text file.
+- Zoom no longer changes the editor and terminal font sizes for the session: it scales the whole interface, and
+  `editor.fontSize` and `terminal.fontSize` keep the values you set. The activity bar's view buttons scroll when the
+  window is too short for all of them, and the Manage button stays visible.
+- The patched GPUI applies a logical interface scale at the window (`vendor/gpui/src/ui_scale.rs`, listed in
+  `vendor/gpui/PATCHES.md`).
 - The About page groups application, platform and client protocol details, and shows the remote agent protocol when connected.
 - Releases are gated on performance instead of app size: `scripts/perf` compares startup, typing latency and memory with
   the previous release and blocks regressions beyond their budget. The app binary size limit is removed; the SSH agent keeps

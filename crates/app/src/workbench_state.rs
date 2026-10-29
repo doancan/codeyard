@@ -134,9 +134,6 @@ pub(super) struct ChromeLayout {
     pub(super) term_list_w: f32,
     pub(super) resizing_term_list: bool,
     pub(super) resizing_split: bool,
-    /// Zoom delta (pt) and the base sizes from settings (editor, line, terminal).
-    pub(super) zoom: f32,
-    pub(super) zoom_base: (f32, f32, f32),
     /// Zen mode: the previous layout is kept here while it is on.
     pub(super) zen: Option<ZenSaved>,
     /// Window bounds at the last draw (saved on exit, used at the next launch).

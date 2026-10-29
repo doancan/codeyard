@@ -4,6 +4,11 @@ use super::*;
 
 pub(super) const WINDOWS_TITLEBAR_H: f32 = 34.;
 
+/// Logical width that keeps 80 screen points free for the macOS traffic lights at any interface scale.
+pub(crate) fn traffic_light_room(ui_scale: f32) -> f32 {
+    80. / ui_scale
+}
+
 fn grid_minimum(node: &crate::editor_layout::Node) -> gpui::Size<gpui::Pixels> {
     use crate::editor_layout::{Axis, Node};
     match node {
@@ -799,7 +804,7 @@ impl Workbench {
 
     /// macOS: the native title is transparent, we draw it (so it follows the theme color). Back /
     /// forward, then the command center (the folder name; click to search files) in the middle.
-    pub(super) fn title_bar(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(super) fn title_bar(&self, window: &Window, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
         let root = self.roots.primary.read(cx).root().map(|r| ui::file_name(r).to_string());
         let remote = match &self.remote.conn {
             Conn::Connected { alias } | Conn::Reconnecting { alias, .. } => Some(alias.to_string()),
@@ -848,7 +853,8 @@ impl Workbench {
                 }
             })
             // Room for the traffic lights, mirrored on the right so the navigation group stays in the middle of the window.
-            .child(div().w(px(80.)).flex_none())
+            // The system draws them at a fixed size in screen points, so the room does not follow the interface scale.
+            .child(div().w(px(traffic_light_room(window.ui_scale()))).flex_none())
             .child(
                 div()
                     .flex_1()
@@ -898,7 +904,7 @@ impl Workbench {
                             .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(label)),
                     ),
             )
-            .child(div().w(px(80.)).flex_none())
+            .child(div().w(px(traffic_light_room(window.ui_scale()))).flex_none())
     }
 
     /// An action row on the welcome screen: icon, name, shortcut (from the keymap).

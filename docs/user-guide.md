@@ -9,6 +9,7 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Welcome, Settings page and customization](#welcome-settings-page-and-customization)
 - [Source control, Timeline and more](#source-control-timeline-and-more)
 - [Settings and keyboard shortcuts](#settings-and-keyboard-shortcuts)
+- [Interface scale](#interface-scale)
 - [Interface language](#interface-language)
 - [Updates](#updates)
 - [Themes](#themes)
@@ -82,7 +83,7 @@ is the complete list and always matches your key bindings; every setting is in [
 | Quick fix | ⌘. | Ctrl+. |
 | Format document | ⇧⌥F | Shift+Alt+F |
 | Save all | ⌥⌘S | Ctrl+Alt+S |
-| Zoom in / out / reset | ⌘= / ⌘- / ⌘0 | Ctrl+= / Ctrl+- / Ctrl+0 |
+| Interface zoom in / out / reset to 100% | ⌘= / ⌘- / ⌘0 | Ctrl+= / Ctrl+- / Ctrl+0 |
 | Back / forward | ⌃- / ⌃⇧- | Ctrl+Alt+- / Ctrl+Shift+- |
 | Reopen closed tab | ⇧⌘T | Ctrl+Shift+T |
 | New file / save as / new window | ⌘N / ⇧⌘S / ⇧⌘N | Ctrl+N / Ctrl+Shift+S / Ctrl+Shift+N |
@@ -476,6 +477,25 @@ Import VS Code Settings and Shortcuts" copies the settings that have an equivale
 your shortcuts (into a marked block of `keybindings.jsonc`, so importing again replaces it);
 it reports what had no equivalent. Your VS Code files are only read. Open tabs, cursors and unsaved changes are
 restored on the next start (hot exit).
+
+## Interface scale
+
+*View: Zoom In* (⌘= or ⌘+), *Zoom Out* (⌘-) and *Reset Zoom* (⌘0; Ctrl on Windows), also in the View menu, make the
+whole interface larger or smaller: menus, the activity bar, side bars, tabs, the editor, the terminal, dialogs, tooltips
+and the status bar together. The steps are 75%, 80%, then every 10% from 90% to 200%; Reset Zoom returns to 100%. The
+status bar shows the new value ("Interface scale: 110%").
+
+Each change is saved as `ui.scale` in your own `settings.jsonc` (0.75–2, default 1) and applies at once to every open
+window and after a restart. You can also type a value there or in *Preferences: Settings*, such as `1.25`; Zoom In and
+Zoom Out then continue from the next step. A value that is not a number from 0.75 to 2 is ignored with the message
+"Interface scale must be between 75% and 200%." and the interface stays at 100%. A project's `.codeyard/settings.jsonc`
+cannot set it.
+
+`editor.fontSize` and `terminal.fontSize` stay the sizes you chose: at 150% a 14 pt editor font is drawn 1.5 times as
+large, once, together with the rest of the window. The display's own scale (Retina, Windows display scaling) is applied
+separately, so moving a window to another monitor keeps the chosen interface scale. Window sizes and the minimum window
+size are in screen points and do not change when you zoom; when a small window cannot show every activity bar button,
+the buttons scroll and the Manage button stays at the bottom.
 
 ## Interface language
 

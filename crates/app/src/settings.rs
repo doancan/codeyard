@@ -229,6 +229,9 @@ pub struct Settings {
     pub http_confirm: String,
     /// UI language (`ui.language`): "auto" (system language), "en" or "tr"; user settings only. "en" in tests.
     pub ui_language: String,
+    /// Interface scale (`ui.scale`): every window's layout, text and hit regions, on top of the display's own scale.
+    /// Always within `UI_SCALE_MIN..=UI_SCALE_MAX`; user settings only.
+    pub ui_scale: f32,
     /// Update checks (`update.check`); user settings only, because it decides whether the app contacts the network by itself.
     pub update_check: crate::update::Policy,
     /// Folder hierarchy lines in the explorer.
@@ -395,6 +398,7 @@ impl Default for Settings {
             http_run_on: "workspace".into(),
             http_confirm: "remote".into(),
             ui_language: if cfg!(test) { "en" } else { "auto" }.into(),
+            ui_scale: 1.,
             update_check: crate::update::Policy::Ask,
             tree_guides: true,
             graph_show_author: true,
@@ -435,6 +439,11 @@ pub use text::{Seg, array_items, members, set_string_in, set_value_in, value_ran
 #[path = "settings_scope.rs"]
 mod scope;
 pub use scope::{Scope, ScopedLayer, Sources};
+#[path = "settings_scale.rs"]
+mod scale;
+#[cfg(test)]
+pub use scale::UI_SCALE_STEPS;
+pub use scale::{UI_SCALE_ERROR, UI_SCALE_MAX, UI_SCALE_MIN, parse_ui_scale, step_ui_scale, ui_scale_percent, ui_scale_value};
 
 pub fn config_dir() -> Option<PathBuf> {
     if let Some(d) = std::env::var_os("CODEYARD_CONFIG_DIR") {
@@ -503,6 +512,8 @@ pub const USER_ONLY_KEYS: &[&str] = &[
     "security.workspaceTrust.enabled",
     "http.confirmRequests",
     "ui.language",
+    // The interface scale applies to every window, so a repository must not zoom the user's whole application.
+    "ui.scale",
     "update.check",
     // A repository must not switch extensions on or off for the user, or swap their keys for a preset.
     "extensions.enabled",
@@ -822,6 +833,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.choice("ui.language", crate::i18n::SETTING_CHOICES) {
         s.ui_language = v;
+    }
+    if let Some(v) = r.scale("ui.scale") {
+        s.ui_scale = v;
     }
     if let Some(v) = r.choice("update.check", &["ask", "daily", "manual"]).and_then(|v| v.parse().ok()) {
         s.update_check = v;
@@ -1162,6 +1176,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     const KNOWN: &[&str] = &[
         "ui.language",
+        "ui.scale",
         "update.check",
         "http.runOn",
         "http.confirmRequests",
@@ -1366,6 +1381,15 @@ impl Reader<'_> {
                 None
             }
         }
+    }
+
+    /// An interface scale (`parse_ui_scale`); anything else warns with `UI_SCALE_ERROR`.
+    fn scale(&mut self, key: &str) -> Option<f32> {
+        let scale = parse_ui_scale(self.get(key)?);
+        if scale.is_none() {
+            self.warn(format!("{key}: {}", crate::i18n::t(UI_SCALE_ERROR)));
+        }
+        scale
     }
 
     fn integer(&mut self, key: &str, min: u64, max: u64) -> Option<u64> {

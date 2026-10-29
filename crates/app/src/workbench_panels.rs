@@ -11,31 +11,48 @@ pub(super) const PANEL_ANIM_FOR_TEST: std::time::Duration = PANEL_ANIM;
 #[path = "workbench_panel_tests.rs"]
 mod panel_tests;
 
+/// "Interface scale: 110%" in the interface language (Turkish puts the sign first: "%110").
+pub(crate) fn interface_scale_notice(scale: f32) -> String {
+    crate::i18n::tf("Interface scale: {}%", &[&settings::ui_scale_percent(scale)])
+}
+
 impl Workbench {
-    /// Zoom: editor and terminal font size (for the session; applied on top if the
-    /// settings file changes).
-    pub(super) fn apply_zoom(&mut self, delta: f32, window: &mut Window, cx: &mut Context<Self>) {
-        self.chrome.zoom = if delta == 0. { 0. } else { (self.chrome.zoom + delta).clamp(-6., 16.) };
-        let mut s = cx.global::<Settings>().clone();
-        s.editor_font_size = (self.chrome.zoom_base.0 + self.chrome.zoom).max(6.);
-        s.editor_line_height = (self.chrome.zoom_base.1 + self.chrome.zoom * 1.5).max(10.);
-        s.terminal_font_size = (self.chrome.zoom_base.2 + self.chrome.zoom).max(6.);
-        cx.set_global(s);
-        self.notice = Some(Notice::Info(crate::i18n::tf("Zoom: {}", &[&format!("{:+}", self.chrome.zoom)]).into()));
-        window.refresh();
+    /// Zoom: the interface scale (`ui.scale`) of every window. The editor and terminal font sizes stay what the user
+    /// set; the window scales them once together with everything else. The new value is written to the user's
+    /// settings file once and applied right away; other windows follow through `App::set_ui_scale` and, when they
+    /// re-read the file, find the same value and do nothing.
+    pub(super) fn set_interface_scale(&mut self, scale: f32, window: &mut Window, cx: &mut Context<Self>) {
+        let scale = if (settings::UI_SCALE_MIN..=settings::UI_SCALE_MAX).contains(&scale) { scale } else { 1. };
+        let current = cx.global::<Settings>().ui_scale;
+        if scale != current {
+            if self.config_paths().is_some() {
+                self.write_setting("ui.scale", settings::ui_scale_value(scale), window, cx);
+            }
+            // Without a settings folder (tests, a broken folder), or if the file could not be written, the scale
+            // still applies for this session.
+            if cx.global::<Settings>().ui_scale != scale {
+                cx.global_mut::<Settings>().ui_scale = scale;
+            }
+            cx.set_ui_scale(scale);
+        }
+        if !matches!(self.notice, Some(Notice::Error(_))) {
+            self.notice = Some(Notice::Info(interface_scale_notice(scale).into()));
+        }
         cx.notify();
     }
 
     pub(super) fn zoom_in(&mut self, _: &ZoomIn, window: &mut Window, cx: &mut Context<Self>) {
-        self.apply_zoom(1., window, cx);
+        let next = settings::step_ui_scale(cx.global::<Settings>().ui_scale, true);
+        self.set_interface_scale(next, window, cx);
     }
 
     pub(super) fn zoom_out(&mut self, _: &ZoomOut, window: &mut Window, cx: &mut Context<Self>) {
-        self.apply_zoom(-1., window, cx);
+        let next = settings::step_ui_scale(cx.global::<Settings>().ui_scale, false);
+        self.set_interface_scale(next, window, cx);
     }
 
     pub(super) fn zoom_reset(&mut self, _: &ZoomReset, window: &mut Window, cx: &mut Context<Self>) {
-        self.apply_zoom(0., window, cx);
+        self.set_interface_scale(1., window, cx);
     }
 
     /// Bottom ↔ right. A maximized panel covers the editor wherever it is docked, so moving it also restores its size:

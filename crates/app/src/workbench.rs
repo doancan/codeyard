@@ -100,6 +100,8 @@ mod palette_glue;
 mod panels_glue;
 #[cfg(test)]
 pub use panels_glue::ProblemRow;
+#[cfg(test)]
+pub(crate) use panels_glue::interface_scale_notice;
 #[path = "workbench_cyx.rs"]
 mod cyx_glue;
 #[path = "workbench_ports.rs"]
@@ -1184,8 +1186,6 @@ impl Workbench {
                 term_list_w,
                 resizing_term_list: false,
                 resizing_split: false,
-                zoom: 0.,
-                zoom_base: (theme::text::CODE.0, theme::text::CODE.1, theme::text::CODE.0),
                 zen: None,
                 window_bounds: None,
             },
