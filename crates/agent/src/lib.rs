@@ -73,6 +73,7 @@ pub fn handle(req: Request) -> Response {
         | Request::ProcSpawn { .. }
         | Request::ProcInput { .. }
         | Request::ProcKill { .. }
+        | Request::TaskSpawn { .. }
         | Request::LineIndex { .. }
         | Request::ReadLines { .. } => Err(Error::Unsupported("streaming request outside a session".into())),
         Request::ListFiles { root, limit } => list_files(&expand(&root), limit as usize).map(|(paths, truncated)| Response::Files { paths, truncated }),
@@ -465,37 +466,17 @@ impl Session {
             }
             Request::ProcSpawn { program, args, cwd } => {
                 let cwd = cwd.map(|c| expand(&c).to_string_lossy().into_owned());
-                match proc::spawn(&program, &args, cwd.as_deref()) {
-                    Err(e) => reply(Response::Error(Error::NotFound(format!("{program}: {e}")))),
-                    Ok((p, mut reader)) => {
-                        let pid = self.next_pty.fetch_add(1, Ordering::Relaxed);
-                        self.procs.locked().insert(pid, (self.out.generation(), p));
-                        reply(Response::ProcSpawned { proc: pid })?;
-                        let (out, procs) = (self.out.clone(), self.procs.clone());
-                        std::thread::spawn(move || {
-                            let mut buf = vec![0u8; 64 * 1024];
-                            while let Ok(n @ 1..) = reader.read(&mut buf) {
-                                let _ = send(&out, 0, Response::ProcOutput { proc: pid, data: buf[..n].to_vec() });
-                            }
-                            let code = loop {
-                                let mut processes = procs.locked();
-                                let Some((_, process)) = processes.get_mut(&pid) else { break None };
-                                match process.try_wait() {
-                                    Ok(None) => {
-                                        drop(processes);
-                                        std::thread::sleep(std::time::Duration::from_millis(10));
-                                    }
-                                    result => {
-                                        processes.remove(&pid);
-                                        break result.ok().flatten();
-                                    }
-                                }
-                            };
-                            let _ = send(&out, 0, Response::ProcExit { proc: pid, code });
-                        });
-                        Ok(())
-                    }
-                }
+                let spawned = proc::spawn(&program, &args, cwd.as_deref()).map(|(p, r)| (p, Box::new(r) as Box<dyn Read + Send>));
+                self.proc_spawned(spawned, &program, reply)
+            }
+            Request::TaskSpawn { command, cwd, env } => {
+                let cwd = cwd.map(|c| expand(&c).to_string_lossy().into_owned());
+                let name = match &command {
+                    proto::TaskCommand::Process { program, .. } => program.clone(),
+                    proto::TaskCommand::Shell { shell, .. } => shell.clone().unwrap_or_else(|| "shell".into()),
+                };
+                let spawned = proc::spawn_task(&command, cwd.as_deref(), &env).map(|(p, r)| (p, Box::new(r) as Box<dyn Read + Send>));
+                self.proc_spawned(spawned, &name, reply)
             }
             Request::LineIndex { path } if id != 0 => {
                 self.line_request(id, path, None);
@@ -543,6 +524,45 @@ impl Session {
 
 impl Session {
     /// Line index or a line range of a big file, answered from a thread (the scan can take a while).
+    /// Register a spawned process, answer `ProcSpawned`, then stream `ProcOutput` and one `ProcExit`.
+    fn proc_spawned(
+        &self,
+        spawned: io::Result<(proc::Proc, Box<dyn Read + Send>)>,
+        name: &str,
+        reply: impl FnOnce(Response) -> io::Result<()>,
+    ) -> io::Result<()> {
+        let (p, mut reader) = match spawned {
+            Err(e) => return reply(Response::Error(Error::NotFound(format!("{name}: {e}")))),
+            Ok(spawned) => spawned,
+        };
+        let pid = self.next_pty.fetch_add(1, Ordering::Relaxed);
+        self.procs.locked().insert(pid, (self.out.generation(), p));
+        reply(Response::ProcSpawned { proc: pid })?;
+        let (out, procs) = (self.out.clone(), self.procs.clone());
+        std::thread::spawn(move || {
+            let mut buf = vec![0u8; 64 * 1024];
+            while let Ok(n @ 1..) = reader.read(&mut buf) {
+                let _ = send(&out, 0, Response::ProcOutput { proc: pid, data: buf[..n].to_vec() });
+            }
+            let code = loop {
+                let mut processes = procs.locked();
+                let Some((_, process)) = processes.get_mut(&pid) else { break None };
+                match process.try_wait() {
+                    Ok(None) => {
+                        drop(processes);
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    result => {
+                        processes.remove(&pid);
+                        break result.ok().flatten();
+                    }
+                }
+            };
+            let _ = send(&out, 0, Response::ProcExit { proc: pid, code });
+        });
+        Ok(())
+    }
+
     fn line_request(&self, id: u32, path: String, range: Option<(u64, u32)>) {
         let (out, big) = (self.out.clone(), self.big.clone());
         std::thread::spawn(move || {
@@ -1346,6 +1366,98 @@ mod tests {
         let text = String::from_utf8_lossy(&output);
         assert!(text.contains("kod-42"), "{text}");
         assert_eq!(code, Some(3));
+    }
+
+    /// Output of a task until its `ProcExit`: (text, exit code).
+    #[cfg(unix)]
+    fn task_output(c: &mut Client, proc: u32) -> (String, Option<i32>) {
+        let mut text = Vec::new();
+        loop {
+            match c.recv().body {
+                Response::ProcOutput { proc: p, data } if p == proc => text.extend(data),
+                Response::ProcExit { proc: p, code } if p == proc => return (String::from_utf8_lossy(&text).into_owned(), code),
+                other => panic!("{other:?}"),
+            }
+        }
+    }
+
+    /// Process tasks get their arguments literally; variables are set and removed in order; stderr arrives in the same
+    /// stream; the exit code is reported.
+    #[cfg(unix)]
+    #[test]
+    fn a_process_task_keeps_its_arguments_and_environment_exactly() {
+        let mut c = Client::new();
+        let dir = std::env::temp_dir().join(format!("codeyard-task-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let script = "printf '%s|' \"$@\"; printf 'A=%s B=%s' \"$TASK_A\" \"${TASK_B-unset}\"; echo err >&2; exit 3";
+        let args = vec!["-c".into(), script.into(), "sh".into(), "two words".into(), "'q' \"d\" $HOME; *".into(), String::new()];
+        c.send(
+            1,
+            Request::TaskSpawn {
+                command: proto::TaskCommand::Process { program: "/bin/sh".into(), args },
+                cwd: Some(dir.to_string_lossy().into_owned()),
+                env: vec![("TASK_A".into(), Some("é ü".into())), ("TASK_B".into(), Some("x".into())), ("TASK_B".into(), None)],
+            },
+        );
+        let Response::ProcSpawned { proc } = c.recv().body else { panic!("spawn") };
+        let (text, code) = task_output(&mut c, proc);
+        assert_eq!(code, Some(3));
+        assert!(text.starts_with("two words|'q' \"d\" $HOME; *||A=é ü B=unset"), "{text:?}");
+        assert!(text.contains("err"), "stderr is part of the output: {text:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_shell_task_runs_its_line_in_the_given_shell_and_a_missing_folder_is_an_error() {
+        let mut c = Client::new();
+        let shell = proto::TaskCommand::Shell { shell: Some("/bin/sh".into()), args: Some(vec!["-c".into()]), line: "echo $((6 * 7))".into() };
+        c.send(1, Request::TaskSpawn { command: shell.clone(), cwd: None, env: Vec::new() });
+        let Response::ProcSpawned { proc } = c.recv().body else { panic!("spawn") };
+        assert_eq!(task_output(&mut c, proc), ("42\n".into(), Some(0)));
+        c.send(2, Request::TaskSpawn { command: shell, cwd: Some("/nonexistent/codeyard".into()), env: Vec::new() });
+        assert!(matches!(c.recv().body, Response::Error(_)));
+    }
+
+    /// Stopping a task stops what it started, also after the leader has exited and only a descendant holds the output.
+    #[cfg(unix)]
+    #[test]
+    fn killing_a_task_stops_its_descendants() {
+        let mut c = Client::new();
+        let dir = std::env::temp_dir().join(format!("codeyard-task-tree-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let pidfile = dir.join("child.pid");
+        let line = format!("sleep 300 & echo $! > '{}'; echo started; wait", pidfile.display());
+        c.send(
+            1,
+            Request::TaskSpawn {
+                command: proto::TaskCommand::Shell { shell: Some("/bin/sh".into()), args: Some(vec!["-c".into()]), line },
+                cwd: None,
+                env: Vec::new(),
+            },
+        );
+        let Response::ProcSpawned { proc } = c.recv().body else { panic!("spawn") };
+        let Response::ProcOutput { .. } = c.recv().body else { panic!("output") };
+        let child: i32 = std::fs::read_to_string(&pidfile).unwrap().trim().parse().unwrap();
+        // SAFETY: signal 0 only checks that the process exists.
+        assert_eq!(unsafe { libc::kill(child, 0) }, 0, "the descendant runs");
+        c.send(2, Request::ProcKill { proc });
+        let mut exited = None;
+        while exited.is_none() {
+            match c.recv().body {
+                Response::ProcExit { proc: p, code } if p == proc => exited = Some(code),
+                Response::Done | Response::ProcOutput { .. } => {}
+                other => panic!("{other:?}"),
+            }
+        }
+        assert_eq!(exited, Some(None), "a killed task has no exit code");
+        let gone = (0..200).any(|_| {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            // SAFETY: as above.
+            (unsafe { libc::kill(child, 0) }) != 0
+        });
+        assert!(gone, "the descendant was stopped with the task");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// A server that stops reading must not silently lose later input: once the queue overflows the process is ended and the

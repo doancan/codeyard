@@ -281,6 +281,13 @@ pub trait Host: Send + Sync + 'static {
     fn proc_input(&self, proc: u32, data: Vec<u8>);
     fn proc_kill(&self, proc: u32);
 
+    /// Run a task (`Request::TaskSpawn`): output and exit arrive like a piped process's; `proc_kill` stops it and what it
+    /// started. `Exit(None)` after a kill or when the connection drops.
+    fn task_spawn(&self, command: proto::TaskCommand, cwd: Option<String>, env: Vec<(String, Option<String>)>) -> Result<Proc> {
+        let _ = (command, cwd, env);
+        Err(HostError::Op(proto::Error::Unsupported("tasks".into())))
+    }
+
     /// Large file: (line count, size). The agent scans the file on the first call.
     fn line_index(&self, path: &str) -> Result<(u64, u64)> {
         match self.call(Request::LineIndex { path: path.into() })? {
@@ -1065,6 +1072,16 @@ impl Host for RemoteHost {
         let (tx, rx) = mpsc::channel();
         let (ev_tx, ev_rx) = mpsc::channel();
         self.start(Request::ProcSpawn { program: program.into(), args, cwd }, Waiter::ProcSpawn(tx, ev_tx))?;
+        match rx.recv().map_err(|_| self.disconnected())? {
+            Response::ProcSpawned { proc } => Ok(Proc { id: proc, events: ev_rx }),
+            other => Err(unexpected(other)),
+        }
+    }
+
+    fn task_spawn(&self, command: proto::TaskCommand, cwd: Option<String>, env: Vec<(String, Option<String>)>) -> Result<Proc> {
+        let (tx, rx) = mpsc::channel();
+        let (ev_tx, ev_rx) = mpsc::channel();
+        self.start(Request::TaskSpawn { command, cwd, env }, Waiter::ProcSpawn(tx, ev_tx))?;
         match rx.recv().map_err(|_| self.disconnected())? {
             Response::ProcSpawned { proc } => Ok(Proc { id: proc, events: ev_rx }),
             other => Err(unexpected(other)),
