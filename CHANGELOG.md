@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - The Search side bar's results, the bottom panel's tabs and the Output text are available to screen readers.
+- The Settings page, the Keyboard Shortcuts page and the Ports panel are available to screen readers: settings with
+  their values, switches, options and fields (changed and checked as with the pointer), commands with their keys, and
+  forwarded ports with their state and Open in Browser, Copy Address, Stop Forwarding and Forward Port buttons. An
+  action from an outdated tree does not reach another setting, command or port.
 - The Problems panel is available to screen readers: each problem with its severity, file, line and column, opened by
   activating it, and a spoken "No problems." when there are none.
 

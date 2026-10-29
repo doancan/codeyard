@@ -182,6 +182,7 @@ Cargo package has no name
 Cargo package has no targets	
 Cargo reported {0} executables for target {1}	
 Cargo target has no name	
+Categories	
 Change	
 Change All Occurrences	
 Change Color…	
@@ -1390,6 +1391,7 @@ No running containers.
 No saved copies yet. Save the file to start its local history.	
 No setting matches.	
 No settings folder on this machine.	
+No shortcut	
 No subtypes found	
 No supertypes found	
 No symbols found.	
@@ -1424,6 +1426,7 @@ Not changed: {0} ({1})
 Not compared	
 Not connected yet	
 Not deleted: {}	
+Not forwarded	
 Not in a git repository	
 Not installed; open setup instructions	
 Not paused	
@@ -1571,6 +1574,8 @@ Pop Stash…
 Popped {}	
 Port forwarding works while connected to an SSH host.	
 Port mappings	
+Port {0}, {1}	
+Port {}	
 Port {} is forwarded to localhost:{} ({} was busy here)	
 Port {} is forwarded: localhost:{}	
 Ports	

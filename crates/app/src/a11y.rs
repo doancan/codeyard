@@ -737,6 +737,7 @@ impl Snapshot {
             _ if self.search_editor.as_ref().and_then(SearchEdSnap::focus_node).is_some() => {
                 self.search_editor.as_ref().and_then(SearchEdSnap::focus_node).expect("focused search editor")
             }
+            _ if self.views.focus_node().is_some() => self.views.focus_node().expect("focused view"),
             FocusSnap::Picker if self.picker.is_some() => PICKER_INPUT,
             FocusSnap::Find(0) if self.find.is_some() => FIND_QUERY,
             FocusSnap::Find(_) if self.find.as_ref().is_some_and(|f| f.replacement.is_some()) => FIND_REPLACE,
@@ -940,7 +941,7 @@ impl Workbench {
             completion,
             terminal,
             scm,
-            views: self.a11y_views(cx),
+            views: self.a11y_views(window, cx),
             exts,
             ext_page: self.a11y_extension_page(),
             inspector: self.a11y_inspector(),

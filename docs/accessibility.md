@@ -30,6 +30,23 @@ The tree, in the order a screen reader walks it:
 - While the Search side bar is visible, a polite `Status` with its result line (the same words as on screen) and a `List`
   of up to 500 rows: a `Heading` per file and a `ListItem` per match (`line: text`). `Click` opens the match; it is
   found by file, line and column, so an activation after the results changed opens it only if it is still a result.
+- While the Ports tab of the bottom panel is shown, a `List` "Ports": the `TextInput` "Forward a port:" (`Focus`), and a
+  `ListItem` per row ("Port 8000, label"; the forwarded address or the state as its value; process and origin as its
+  description) with the row's buttons: Open in Browser, Copy Address, Stop Forwarding, or Forward Port for a port that is
+  only listening. At most 500 rows. Without an SSH connection or with nothing listening, a polite `Status` says so. A
+  button acts only while the same server port still shows the same forward (and, for Open and Copy, the same address).
+- The Settings page in front is a `Group`: its `SearchInput` (`Focus`, `SetValue`), a `TabList` of categories with
+  their counts (`Click` selects, as on screen), and a `Group` named like the list's heading with up to 256 settings:
+  title as label, description (with where the value comes from and a rejected value's error, marked invalid) and the
+  value as a `CheckBox` (toggled), a `RadioGroup` of `RadioButton`s, a `TextInput` (`Focus`; `SetValue` is checked
+  and written as Enter in the field is) or the theme `Button`. A changed setting adds its Reset button; the buttons
+  "Open settings.jsonc", "Keyboard Shortcuts" and "File icon theme…" follow. Actions send the page's own events, so
+  writing is the pointer's path; a switch from an outdated tree that showed another state, a setting no longer on the
+  page or a closed or reopened page changes nothing. With no rows, a polite `Status` says why.
+- The Keyboard Shortcuts page in front is a `Group` with its `SearchInput` and a `List` ("{n} commands") of up to
+  2,000 rows: command as label, its key (or "No shortcut") as description, set position. `Click` runs the command as a
+  click on the row does, only while the page still lists it. The page is read-only otherwise: keys are assigned in the
+  "Preferences: Open Keyboard Shortcuts" picker, which is exposed as a picker.
 - While Extensions is visible, a `Group` with a `TabList` (Installed, Market), a `SearchInput` that controls the list
   and points at the highlighted row as its active descendant, a polite live `Status` that says how many extensions
   match (an `Alert` when the list cannot be read), and a `ListBox` of the rows (name; version, id and description).
@@ -151,9 +168,9 @@ macOS. The CPU cost of the 250 ms snapshot loop has not been measured.
   file offsets in long files. Primary selection only; no multi-cursor, folding, wrapped lines, RTL or CRLF handling.
 - The terminal exposes the screen only, not the scrollback, and cannot be written to from the tree (typing goes through
   the keyboard as usual).
-- Not exposed: debug, testing and remote sidebars, an installed extension's page and the consent sheet, the Source Control graph, worktrees and sync controls, the bottom
-  panel's Ports list, hover and signature popups, the Settings and Keyboard Shortcuts pages,
-  context menus, and dialogs other than the update dialog. Only the tabs of the focused editor group are listed, and
+- Not exposed: debug, testing and remote sidebars, an installed extension's page and the consent sheet, the Source Control graph, worktrees and sync controls, hover
+  and signature popups, the Ports rows' "…" menu (label, local port, protocol, retry), the bounds of Settings, Keyboard
+  Shortcuts and Ports rows, context menus, and dialogs other than the update dialog. Only the tabs of the focused editor group are listed, and
   diff, large-file and page tabs are not.
 - No scroll actions, no `Blur`, no explicit expand/collapse action (Click toggles).
 - The update window on macOS has no adapter of its own.

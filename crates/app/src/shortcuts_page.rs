@@ -45,6 +45,20 @@ impl ShortcutsPage {
         window.focus(&self.query.focus_handle(cx));
     }
 
+    /// For assistive technology: the search text, the first `max` visible rows (command, key), how many are visible,
+    /// and whether the search field has focus.
+    pub fn access_rows(&self, max: usize, window: &Window, cx: &App) -> (String, Vec<(String, Option<String>)>, usize, bool) {
+        let q = self.query.read(cx).text().to_string();
+        let visible: Vec<_> = self.rows.iter().filter(|(l, k)| matches(l, k.as_deref(), &q)).collect();
+        let rows = visible.iter().take(max).map(|r| (*r).clone()).collect();
+        (q, rows, visible.len(), self.query.focus_handle(cx).is_focused(window))
+    }
+
+    /// Filters the list as typing `q` into the search field does.
+    pub fn set_query(&mut self, q: &str, cx: &mut Context<Self>) {
+        self.query.update(cx, |f, cx| f.set_text(q, cx));
+    }
+
     #[cfg(test)]
     pub fn visible_for_test(&self, cx: &App) -> Vec<String> {
         let q = self.query.read(cx).text().to_string();
@@ -54,11 +68,6 @@ impl ShortcutsPage {
     #[cfg(test)]
     pub fn rows_for_test(&self) -> Vec<(String, Option<String>)> {
         self.rows.clone()
-    }
-
-    #[cfg(test)]
-    pub fn set_query_for_test(&mut self, q: &str, cx: &mut Context<Self>) {
-        self.query.update(cx, |f, cx| f.set_text(q, cx));
     }
 }
 

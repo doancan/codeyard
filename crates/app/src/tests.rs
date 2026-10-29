@@ -536,10 +536,10 @@ fn welcome_and_settings_pages_open_as_tabs_and_write_settings(cx: &mut TestAppCo
     assert_eq!(page.read_with(cx, |p, cx| p.visible_keys(cx)), ["search.maxResults"]);
 
     // Number field: a valid value is written to the file and applied; an invalid value shows an error.
-    page.update(cx, |p, cx| p.submit_field_for_test("editor.fontSize", "99", cx));
+    page.update(cx, |p, cx| p.submit_field("editor.fontSize", "99", cx));
     assert!(page.read_with(cx, |p, _| p.error_for_test("editor.fontSize")).is_some());
     assert_eq!(cx.read_global(|s: &crate::settings::Settings, _| s.editor_font_size), theme::text::CODE.0);
-    page.update(cx, |p, cx| p.submit_field_for_test("editor.fontSize", "15", cx));
+    page.update(cx, |p, cx| p.submit_field("editor.fontSize", "15", cx));
     cx.run_until_parked();
     assert_eq!(cx.read_global(|s: &crate::settings::Settings, _| s.editor_font_size), 15.);
     assert!(std::fs::read_to_string(cfg.join("settings.jsonc")).unwrap().contains("\"editor.fontSize\": 15"));
@@ -1022,10 +1022,10 @@ fn shortcuts_reference_lists_searches_and_runs_commands(cx: &mut TestAppContext)
     assert_eq!(wb.read_with(cx, |wb, _| wb.page_for_test()), Some(("shortcuts", true)));
     let page = wb.read_with(cx, |wb, _| wb.shortcuts_page_for_test()).unwrap();
     assert!(page.read_with(cx, |p, cx| p.visible_for_test(cx)).len() > 100);
-    page.update(cx, |p, cx| p.set_query_for_test("block comment", cx));
+    page.update(cx, |p, cx| p.set_query("block comment", cx));
     assert_eq!(page.read_with(cx, |p, cx| p.visible_for_test(cx)), ["Editor: Toggle Block Comment"]);
     // Also searchable by key.
-    page.update(cx, |p, cx| p.set_query_for_test(if cfg!(target_os = "macos") { "⌃G" } else { "Ctrl+G" }, cx));
+    page.update(cx, |p, cx| p.set_query(if cfg!(target_os = "macos") { "⌃G" } else { "Ctrl+G" }, cx));
     assert!(page.read_with(cx, |p, cx| p.visible_for_test(cx)).contains(&"Go: Line…".to_string()));
     // Click closes the page; the command runs on the next frame after the editor draws (the test platform draws none).
     page.update(cx, |_, cx| cx.emit(crate::shortcuts_page::ShortcutsEvent::Run("View: Toggle Zen Mode".into())));

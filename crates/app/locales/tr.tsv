@@ -3264,3 +3264,10 @@ Problems: {}	Sorunlar: {}
 {0}, line {1}, column {2}	{0}, satır {1}, sütun {2}
 {0}, problems: {1}	{0}, sorun: {1}
 Bottom panel	Alt panel
+
+# ---- Settings, Keyboard Shortcuts and Ports accessibility ----
+Categories	Kategoriler
+No shortcut	Kısayol yok
+Not forwarded	Yönlendirilmedi
+Port {0}, {1}	Bağlantı noktası {0}, {1}
+Port {}	Bağlantı noktası {}

@@ -5,8 +5,12 @@
 use super::*;
 use crate::workbench::panels_glue::ProblemRow;
 
-pub(super) const PROBLEMS: NodeId = NodeId(68);
-pub(super) const PROBLEMS_EMPTY: NodeId = NodeId(69);
+#[path = "a11y_pages.rs"]
+mod pages;
+pub(super) use pages::{FIXED as PAGE_FIXED, PAGE_ROW};
+
+const PROBLEMS: NodeId = NodeId(68);
+const PROBLEMS_EMPTY: NodeId = NodeId(69);
 pub(super) const PROBLEM_ROW: u64 = 0x110_0000;
 /// Rows exposed at most (the panel can hold thousands; the count says how many there are).
 const MAX_ROWS: usize = 2_000;
@@ -189,6 +193,8 @@ pub(crate) struct SearchSideSnap {
 const SEARCH_SIDE: NodeId = NodeId(52);
 const SEARCH_SIDE_STATUS: NodeId = NodeId(53);
 const SEARCH_SIDE_ROW: u64 = PANEL_TAB + 16;
+/// This module's fixed nodes, for the id layout check.
+pub(super) const FIXED: [NodeId; 6] = [PROBLEMS, PROBLEMS_EMPTY, PANEL_TABS, OUTPUT_LOG, SEARCH_SIDE, SEARCH_SIDE_STATUS];
 const MAX_SEARCH_ROWS: usize = 500;
 
 /// The views exposed by this module, gathered so the main tree has one field and one action path for them.
@@ -197,6 +203,7 @@ pub(crate) struct ViewsSnap {
     pub(crate) problems: Option<ProblemsSnap>,
     pub(crate) panel: Option<PanelSnap>,
     pub(crate) search: Option<SearchSideSnap>,
+    pub(crate) pages: pages::PagesSnap,
 }
 
 impl ViewsSnap {
@@ -232,16 +239,22 @@ impl ViewsSnap {
         if let Some(problems) = &self.problems {
             kids.push(problems.append_tree(nodes));
         }
+        self.pages.append_tree(nodes, kids);
+    }
+
+    /// The focused field of these views, if one has focus.
+    pub(super) fn focus_node(&self) -> Option<NodeId> {
+        self.pages.focus_node()
     }
 }
 
 impl Workbench {
-    pub(super) fn a11y_views(&self, cx: &App) -> ViewsSnap {
+    pub(super) fn a11y_views(&self, window: &Window, cx: &App) -> ViewsSnap {
         let search = (self.chrome.panel == Some(Panel::Search)).then(|| {
             let (status, rows, total) = self.search.read(cx).access_rows(MAX_SEARCH_ROWS);
             SearchSideSnap { status, rows, total }
         });
-        ViewsSnap { problems: self.a11y_problems(cx), panel: self.a11y_panel(), search }
+        ViewsSnap { problems: self.a11y_problems(cx), panel: self.a11y_panel(), search, pages: self.a11y_pages(window, cx) }
     }
 
     pub(super) fn a11y_views_action(&mut self, req: &ActionRequest, last: &Snapshot, window: &mut Window, cx: &mut Context<Self>) -> bool {
@@ -253,7 +266,7 @@ impl Workbench {
             }
             return true;
         }
-        self.a11y_panel_action(req, last, cx) || self.a11y_problems_action(req, last, window, cx)
+        self.a11y_panel_action(req, last, cx) || self.a11y_problems_action(req, last, window, cx) || self.a11y_pages_action(req, &last.views.pages, window, cx)
     }
 }
 
