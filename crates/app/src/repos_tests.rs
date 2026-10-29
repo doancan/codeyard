@@ -168,11 +168,13 @@ fn a_nested_repository_in_an_ignored_folder_is_listed() {
 #[test]
 fn linked_worktrees_are_separate_entries() {
     let w = base("worktrees");
-    let main = w.join("main");
+    // In the form the workbench opens folders (`C:/…/main` on Windows, not `\\?\C:\…`, which `git worktree add` rejects).
+    let main = PathBuf::from(format!("{}/main", crate::ui::local_path(&w)));
+    let side = format!("{}/side", s(&main));
     repo_at(&main);
-    git(&main, &["worktree", "add", "-q", "-b", "side", &s(&main.join("side"))]);
+    git(&main, &["worktree", "add", "-q", "-b", "side", &side]);
     let d = run(&[s(&main)], Limits::default());
-    assert_eq!(worktrees(&d), vec![s(&main), s(&main.join("side"))]);
+    assert_eq!(worktrees(&d), vec![s(&main), side]);
     assert_ne!(d.repos[0].git_dir, d.repos[1].git_dir);
     let _ = std::fs::remove_dir_all(w);
 }

@@ -541,10 +541,11 @@ fn history_actions_of_linked_worktrees_stay_in_their_checkout(cx: &mut TestAppCo
     let _ = std::fs::remove_dir_all(&w);
     std::fs::create_dir_all(&w).unwrap();
     let w = std::fs::canonicalize(&w).unwrap();
-    let main = w.join("main");
+    // In the form the workbench opens folders (`C:/…/main` on Windows, not `\\?\C:\…`, which `git worktree add` rejects).
+    let main = PathBuf::from(format!("{}/main", crate::ui::local_path(&w)));
     make_repo(&main);
     git_in(&main, &["commit", "-q", "--allow-empty", "-m", "second"]);
-    let side = main.join("side");
+    let side = PathBuf::from(format!("{}/side", s(&main)));
     git_in(&main, &["worktree", "add", "-q", "-b", "side", side.to_str().unwrap()]);
     std::fs::write(main.join(".git/info/exclude"), "side/\n").unwrap();
     let (wb, scm, cx) = open(cx, &main, 2);
