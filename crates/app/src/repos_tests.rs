@@ -203,7 +203,6 @@ fn identity_survives_refresh_and_changes_on_replacement_or_removal() {
     assert!(inv.is_current(&old_b));
     // Replace b: same path, same git directory path, a new repository.
     std::fs::remove_dir_all(&b).unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(20));
     repo_at(&b);
     assert!(revalidate(&host::local(), &old_b).is_err(), "a replaced repository fails revalidation");
     let g = inv.begin();
@@ -222,6 +221,42 @@ fn identity_survives_refresh_and_changes_on_replacement_or_removal() {
     assert!(inv.by_worktree(&s(&b)).is_none());
     assert_eq!(inv.selected, None);
     assert!(inv.get(key_a).is_some());
+    let _ = std::fs::remove_dir_all(w);
+}
+
+/// The fingerprint is the git directory's own identity (inode and creation time), so everyday use never changes it:
+/// config edits, new hooks, `git push -u` (which writes the config), commits, fetches. Only a new git directory does,
+/// immediately (no waiting for a clock tick, so it holds on filesystems with one-second times too).
+#[test]
+fn the_fingerprint_survives_normal_use_and_changes_on_recreation() {
+    let w = base("fingerprint");
+    let (repo, bare) = (w.join("repo"), w.join("origin.git"));
+    repo_at(&repo);
+    git(&w, &["init", "-q", "--bare", &s(&bare)]);
+    let host = host::local();
+    let git_dir = s(&repo.join(".git"));
+    let first = fingerprint(&host, &git_dir).unwrap();
+    assert_ne!(first, 0, "the local host reports an identity for the git directory");
+    git(&repo, &["config", "core.editor", "true"]);
+    git(&repo, &["config", "codeyard.test", "1"]);
+    std::fs::create_dir_all(repo.join(".git/hooks")).unwrap();
+    std::fs::write(repo.join(".git/hooks/pre-commit"), "#!/bin/sh\nexit 0\n").unwrap();
+    std::fs::write(repo.join(".git/info/exclude"), "*.tmp\n").unwrap();
+    git(&repo, &["remote", "add", "origin", &s(&bare)]);
+    git(&repo, &["push", "-q", "-u", "origin", "main"]);
+    git(&repo, &["commit", "-q", "--allow-empty", "-m", "more"]);
+    git(&repo, &["fetch", "-q", "origin"]);
+    assert_eq!(fingerprint(&host, &git_dir).unwrap(), first, "normal use keeps the identity");
+    // The identity of a discovered entry, checked again on the host, still passes.
+    let found = run(&[s(&repo)], Limits::default());
+    let id = RepoId { key: 1, host_gen: 0, root: s(&repo), worktree: s(&repo), git_dir: git_dir.clone(), fingerprint: found.repos[0].fingerprint };
+    assert_eq!(id.fingerprint, first);
+    assert!(revalidate(&host, &id).is_ok());
+    // Deleted and created again right away: another git directory, another identity.
+    std::fs::remove_dir_all(&repo).unwrap();
+    repo_at(&repo);
+    assert_ne!(fingerprint(&host, &git_dir).unwrap(), first);
+    assert!(revalidate(&host, &id).is_err());
     let _ = std::fs::remove_dir_all(w);
 }
 

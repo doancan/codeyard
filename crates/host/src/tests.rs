@@ -56,7 +56,7 @@ fn a_silent_agent_makes_a_call_fail_instead_of_hanging() {
                     );
                 }
                 Request::Stat { path } if path == "/ok" => {
-                    let meta = proto::Meta { kind: proto::Kind::File, size: 1, mtime_ms: 0, readonly: false };
+                    let meta = proto::Meta { kind: proto::Kind::File, size: 1, mtime_ms: 0, readonly: false, file_id: 0, created_ms: 0 };
                     let _ = proto::write_frame(&mut w, &Frame { id, body: Response::Stat(meta) });
                 }
                 _ => {}
@@ -587,7 +587,7 @@ fn queued_frames_keep_their_order() {
                 }
                 Request::Stat { .. } => {
                     let _ = seen_tx.send(b"stat".to_vec());
-                    let meta = proto::Meta { kind: proto::Kind::File, size: 0, mtime_ms: 0, readonly: false };
+                    let meta = proto::Meta { kind: proto::Kind::File, size: 0, mtime_ms: 0, readonly: false, file_id: 0, created_ms: 0 };
                     let _ = proto::write_frame(&mut w, &Frame { id, body: Response::Stat(meta) });
                 }
                 _ => {}

@@ -99,17 +99,37 @@ fn probe(host: &dyn Host, dir: &str) -> Result<Option<Probe>, String> {
 }
 
 /// A value that changes when the git directory is created again (a repository deleted and initialized or cloned at the
-/// same path): the modification time of files Git writes once, when the repository is made. `Err`: the host could not
-/// be asked (a dropped connection), which must not pass for a new identity.
+/// same path) and never through normal use (commits, config changes, new hooks, `push -u`): the git directory's own
+/// file identity (inode) and creation time. Where the filesystem reports neither, the creation-time stand-in is the
+/// modification time of a file Git writes only when it makes the repository (`commondir` of a linked worktree,
+/// `description`); without those it is 0, never a path that changes in use. `Err`: the host could not be asked (a
+/// dropped connection), which must not pass for a new identity.
 pub fn fingerprint(host: &dyn Host, git_dir: &str) -> Result<i64, String> {
-    for name in ["commondir", "description", "info", "hooks", "config"] {
-        match host.stat(&crate::ui::join(git_dir, name)) {
-            Ok(m) => return Ok(m.mtime_ms),
-            Err(host::HostError::Op(_)) => {}
-            Err(e) => return Err(e.to_string()),
+    let stat = |path: &str| match host.stat(path) {
+        Ok(m) => Ok(Some(m)),
+        Err(host::HostError::Op(_)) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    };
+    if let Some(m) = stat(git_dir)?
+        && (m.file_id != 0 || m.created_ms != 0)
+    {
+        return Ok(mix(m.file_id, m.created_ms));
+    }
+    for name in ["commondir", "description"] {
+        if let Some(m) = stat(&crate::ui::join(git_dir, name))? {
+            return Ok(m.mtime_ms);
         }
     }
     Ok(0)
+}
+
+/// One value from the file identity and the creation time (both feed it; neither alone has to be unique).
+fn mix(file_id: u64, created_ms: i64) -> i64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    (file_id, created_ms).hash(&mut h);
+    // Never 0: 0 means "no fingerprint".
+    (h.finish() | 1) as i64
 }
 
 /// Git processes run at once while checking candidates (each one is a process start, slow on some machines).
