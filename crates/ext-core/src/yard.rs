@@ -295,9 +295,7 @@ impl fmt::Display for Error {
             Error::TooLarge { file, limit } => write!(f, "{file} is larger than {limit} bytes")?,
             Error::Malformed { file, reason } => write!(f, "{file} is not valid: {reason}")?,
             Error::Format { file, found } => write!(f, "{file} is format {found}; this Codeyard reads format {FORMAT}")?,
-            Error::Signature { file, valid, needed } => {
-                write!(f, "{file} has {valid} valid signature(s) from trusted keys; {needed} needed")?
-            }
+            Error::Signature { file, valid, needed } => write!(f, "{file} has {valid} valid signature(s) from trusted keys; {needed} needed")?,
             Error::KeyExpired { expired } => write!(f, "the registry's online key expired at {expired} (Unix time)")?,
             Error::Rollback { file, seen, found } => write!(f, "{file} is version {found}, older than version {seen} seen before")?,
             Error::WrongRegistry { root, index } => write!(f, "{INDEX_FILE} is for “{index}”, but {ROOT_FILE} is for “{root}”")?,

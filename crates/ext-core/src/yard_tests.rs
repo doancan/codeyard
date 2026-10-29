@@ -33,9 +33,7 @@ fn root_json(online: &SigningKey, version: u64, expires: u64) -> Vec<u8> {
 }
 
 fn index_value(version: u64) -> Value {
-    let release = |v: &str, status: Value| {
-        json!({ "version": v, "digest": DIGEST, "sha256": DIGEST, "size": 1200, "permissions": DIGEST, "published": NOW - 100, "status": status })
-    };
+    let release = |v: &str, status: Value| json!({ "version": v, "digest": DIGEST, "sha256": DIGEST, "size": 1200, "permissions": DIGEST, "published": NOW - 100, "status": status });
     json!({
         "format": 1, "registry": "yard.test", "version": version, "expires": NOW + INDEX_LIFETIME_SECS,
         "extensions": {
@@ -156,10 +154,7 @@ fn expiry_and_rollback() {
     // An expired index is returned, marked stale.
     assert!(verify(&y.trust(), y.files(), NOW + INDEX_LIFETIME_SECS, Seen::default()).unwrap().stale);
     // Older than what was accepted before.
-    assert_eq!(
-        verify(&y.trust(), y.files(), NOW, Seen { root: 1, index: 6 }).unwrap_err(),
-        Error::Rollback { file: INDEX_FILE, seen: 6, found: 5 }
-    );
+    assert_eq!(verify(&y.trust(), y.files(), NOW, Seen { root: 1, index: 6 }).unwrap_err(), Error::Rollback { file: INDEX_FILE, seen: 6, found: 5 });
     assert!(matches!(verify(&y.trust(), y.files(), NOW, Seen { root: 2, index: 0 }), Err(Error::Rollback { file: ROOT_FILE, .. })));
     // The same copy again (a 304) is fine.
     assert!(verify(&y.trust(), y.files(), NOW, Seen { root: 1, index: 5 }).is_ok());
