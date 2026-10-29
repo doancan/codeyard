@@ -234,7 +234,7 @@ signed package; a language server wrapper is therefore a normal High-risk extens
   grants ∩ workspace trust, then the path, host or program, before `Host` is called.
 - **Processes.** The broker resolves the program to an absolute path on the target host, refuses paths under
   a workspace root, and passes an explicit environment (proto v12 adds `Which` and `EnvSpec`).
-- **Network.** In-process hyper + rustls (already linked through GPUI). It checks the real peer address of
+- **Network.** In-process hyper + rustls (already linked through GPUI), in `ext-net`. It checks the real peer address of
   every connection, so private, CGNAT, link-local, metadata, NAT64 and IPv4-mapped ranges are blocked. No IP
   literals, at most 5 re-checked redirects, environment proxies ignored. WebSockets are not offered in v1.
 - **IPC.** `ext-proto` has its own frame cap (call limit + 64 KiB) and a per-process byte-rate budget.
@@ -410,6 +410,7 @@ nightly with no new crash; the scripted "new theme → visible" check passes in 
 | `ext-manifest` | manifest types, validation, `risk()`, `limits`, `when` parser, error catalogue |
 | `ext-pkg` | `.cyx` reader/writer, content digest, path safety, import check |
 | `ext-core` | install transaction, store, lock, contribution index, grants ∩ trust, index and signature verification |
+| `ext-net` | the `net` client: declared HTTPS hosts only, peer address checks, re-checked redirects, budgets |
 | `ext-ui` | view element tree, validation and caps, keyed diff, host-side input state, accessibility roles, events |
 | `ext-proto`, `ext-api` | app ↔ exthost frames; WIT and generated docs |
 | `ext-host` | the `codeyard-exthost` binary: engine, sandbox, `--compile`. The only crate that links wasmtime |

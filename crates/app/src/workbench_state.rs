@@ -107,6 +107,10 @@ pub(super) struct GitState {
     /// Whether the marks of inactive roots are being refreshed right now.
     pub(super) marks_busy: std::collections::HashSet<String>,
     pub(super) tree_marks: std::collections::HashMap<String, Arc<std::collections::HashMap<String, crate::git::Mark>>>,
+    /// The repositories of the workspace (see workbench_repos.rs).
+    pub(super) repos: super::repos_glue::RepoState,
+    /// The repository the open commit menu belongs to (its actions are pinned to it).
+    pub(super) menu_repo: Option<crate::scm::Target>,
 }
 
 /// Layout: side panel, bottom panel, split editor, zoom, zen mode, window bounds.

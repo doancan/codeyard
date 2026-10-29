@@ -217,8 +217,12 @@ impl Workbench {
             InputPurpose::CloneTarget { url } => self.run_clone(url, name, cx),
             InputPurpose::NewExtension { kind } => self.create_extension(kind, name, window, cx),
             InputPurpose::InstallFromRegistry => self.review_registry_extension(name, None, window, cx),
-            InputPurpose::CommitBranch { hash } => self.scm.update(cx, |s, cx| s.commit_op(hash, crate::graph::CommitOp::Branch(name), window, cx)),
-            InputPurpose::CommitTag { hash } => {
+            InputPurpose::CommitBranch { hash, repo } => {
+                if repo.is_some() {
+                    self.scm.update(cx, |s, cx| s.commit_op_in(repo, hash, crate::graph::CommitOp::Branch(name), window, cx));
+                }
+            }
+            InputPurpose::CommitTag { hash, repo } => {
                 // Tag names cannot hold a space, so whatever follows the first word is the message of an annotated tag.
                 let op = match name.trim().split_once(char::is_whitespace) {
                     Some((tag, message)) if !message.trim().is_empty() => {
@@ -226,10 +230,12 @@ impl Workbench {
                     }
                     _ => crate::graph::CommitOp::Tag(name.trim().to_string()),
                 };
-                self.scm.update(cx, |s, cx| s.commit_op(hash, op, window, cx))
+                if repo.is_some() {
+                    self.scm.update(cx, |s, cx| s.commit_op_in(repo, hash, op, window, cx));
+                }
             }
             // --- git-refs ---
-            InputPurpose::CreateBranchFrom { .. } | InputPurpose::RenameRemote { .. } | InputPurpose::SetRemoteUrl { .. } | InputPurpose::StashNamed => {
+            InputPurpose::CreateBranchFrom { .. } | InputPurpose::RenameRemote { .. } | InputPurpose::SetRemoteUrl { .. } | InputPurpose::StashNamed { .. } => {
                 self.finish_ref_input(purpose, name, cx)
             }
             InputPurpose::SaveProject { path } => self.save_project(path, name, cx),

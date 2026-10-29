@@ -5,12 +5,12 @@
 use super::*;
 use crate::search_editor::{AccessView, SearchEditor};
 
-const SEARCH_ED: NodeId = NodeId(32);
-const SEARCH_ED_QUERY: NodeId = NodeId(33);
-const SEARCH_ED_STATUS: NodeId = NodeId(34);
-const SEARCH_ED_LIST: NodeId = NodeId(35);
-const SEARCH_ED_APPLY: NodeId = NodeId(36);
-const SEARCH_ED_UNDO: NodeId = NodeId(37);
+pub(super) const SEARCH_ED: NodeId = NodeId(32);
+pub(super) const SEARCH_ED_QUERY: NodeId = NodeId(33);
+pub(super) const SEARCH_ED_STATUS: NodeId = NodeId(34);
+pub(super) const SEARCH_ED_LIST: NodeId = NodeId(35);
+pub(super) const SEARCH_ED_APPLY: NodeId = NodeId(36);
+pub(super) const SEARCH_ED_UNDO: NodeId = NodeId(37);
 /// Rows of the list (ids `SEARCH_ED_ROW + i`, i < `MAX_ROWS_SHOWN`) and the Search Editor tabs (`SEARCH_ED_TAB + i`).
 pub(super) const SEARCH_ED_ROW: u64 = 0xb0_0000;
 pub(super) const SEARCH_ED_TAB: u64 = 0xc0_0000;
