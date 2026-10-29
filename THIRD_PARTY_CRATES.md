@@ -338,7 +338,7 @@ Crates marked vendored live in `vendor/`.
 | libmimalloc-sys | 0.1.49 | MIT |  |
 | libredox | 0.1.25 | MIT |  |
 | libsqlite3-sys | 0.39.0 | MIT |  |
-| libz-sys | 1.1.30 | MIT OR Apache-2.0 |  |
+| libz-sys | 1.1.31 | MIT OR Apache-2.0 |  |
 | linux-raw-sys | 0.12.1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | linux-raw-sys | 0.4.15 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | litemap | 0.8.3 | Unicode-3.0 |  |
