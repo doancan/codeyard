@@ -33,6 +33,16 @@ pub fn command(program: &str, args: &[String], cwd: Option<&str>) -> std::io::Re
         c.creation_flags(0x08000000); // CREATE_NO_WINDOW: no console flash for Git/LSP.
         c
     };
+    #[cfg(windows)]
+    let args = match args {
+        // `cmd /C line`: cmd reads its command line itself, not by the C rules Rust quotes arguments with (a `\"` would
+        // reach it as is). The line goes over untouched; `/S` keeps every quote inside the outer pair.
+        [flag, line] if flag.eq_ignore_ascii_case("/c") && is_cmd(program) => {
+            std::os::windows::process::CommandExt::raw_arg(&mut cmd, format!("/D /S /C \"{line}\""));
+            &[]
+        }
+        _ => args,
+    };
     cmd.args(args);
     if let Some(dir) = cwd {
         if !std::path::Path::new(dir).is_dir() {
@@ -43,6 +53,13 @@ pub fn command(program: &str, args: &[String], cwd: Option<&str>) -> std::io::Re
     // Keep git's own pager/colors/prompts from kicking in.
     cmd.env("GIT_TERMINAL_PROMPT", "0").env("GIT_PAGER", "cat").env("LC_ALL", "C");
     Ok(cmd)
+}
+
+/// `cmd`, `cmd.exe` or a path to it.
+#[cfg(windows)]
+fn is_cmd(program: &str) -> bool {
+    let path = std::path::Path::new(program);
+    path.file_stem().is_some_and(|s| s.eq_ignore_ascii_case("cmd")) && path.extension().is_none_or(|e| e.eq_ignore_ascii_case("exe"))
 }
 
 #[cfg(windows)]

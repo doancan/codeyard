@@ -313,7 +313,7 @@ impl Workbench {
                 if let Some(t) = this.terminals.get(this.active_terminal).cloned() {
                     t.update(cx, |t, cx| {
                         t.set_fixed_title(title);
-                        t.send(&format!("{line}\n"));
+                        t.send_lines(&line);
                         cx.notify();
                     });
                 }

@@ -406,7 +406,7 @@ impl Workbench {
             let (label, command) = (task.label.clone(), expand_variables_for_shell(&task.command, &root, file.as_deref()));
             t.update(cx, |t, cx| {
                 t.set_fixed_title(label);
-                t.send(&format!("{command}\n"));
+                t.send_lines(&command);
                 cx.notify();
             });
         }

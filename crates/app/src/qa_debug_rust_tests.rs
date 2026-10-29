@@ -120,6 +120,7 @@ fn this_toolchain(dir: &Path, user: &[String]) -> Vec<String> {
 /// AC1, AC2: the formatter commands (and the source map, with `rust-src`) come first, the configuration's own commands
 /// follow unchanged.
 #[gpui::test]
+#[cfg_attr(windows, ignore = "the fake toolchain is a POSIX shell script")]
 fn rust_debugging_starts_with_the_toolchain_formatters_before_the_user_s_commands(cx: &mut TestAppContext) {
     if !have_tools() {
         return;
@@ -140,6 +141,7 @@ fn rust_debugging_starts_with_the_toolchain_formatters_before_the_user_s_command
 /// AC4 and "already imported": another adapter's arguments are exactly as before, and a configuration that loads the
 /// formatters itself is left alone.
 #[gpui::test]
+#[cfg_attr(windows, ignore = "the fake toolchain is a POSIX shell script")]
 fn other_adapters_and_own_formatter_imports_are_left_alone(cx: &mut TestAppContext) {
     if !have_tools() {
         return;

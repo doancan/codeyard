@@ -10,6 +10,7 @@ use crate::qa_integration_tests::{notice, wait_ticking};
 use crate::qa_lsp_settings_tests::{cargo_project, dir, open_project, rust_analyzer_installed, settle, wait_checked, write_settings};
 use crate::qa_workbench_tests::setup_with_config;
 use crate::test_lsp::FakeServer;
+use crate::test_paths::AppPath;
 use crate::workbench::Workbench;
 
 /// `ğ😀` before the macro: the cursor on `e` of `vec!` is character 14, UTF-16 column 15.
@@ -35,7 +36,7 @@ fn fixture<'a>(cx: &'a mut TestAppContext, name: &str, responses: Value) -> Opti
 
 /// `fixture` with the interface in `language` (the settings file sets it when it loads).
 fn fixture_in<'a>(cx: &'a mut TestAppContext, name: &str, responses: Value, language: &str) -> Option<Fixture<'a>> {
-    let d = dir(name);
+    let d = dir(&format!("rust-commands-{name}"));
     let fake = FakeServer::new(
         &d.join("server"),
         &json!({ "responses": responses, "on_open": [{ "method": "textDocument/publishDiagnostics", "params": { "uri": "$uri", "diagnostics": [
@@ -78,7 +79,7 @@ impl Fixture<'_> {
 }
 
 fn location(path: &Path, line: u32) -> Value {
-    json!({ "uri": crate::lsp::path_to_uri(&path.to_string_lossy()), "range": { "start": { "line": line, "character": 0 }, "end": { "line": line, "character": 7 } } })
+    json!({ "uri": crate::lsp::path_to_uri(&path.app()), "range": { "start": { "line": line, "character": 0 }, "end": { "line": line, "character": 7 } } })
 }
 
 /// AC1: each command sends its method with the file's URI and, where it takes one, the UTF-16 position.
@@ -111,7 +112,7 @@ fn qa_rust_expand_macro_opens_a_scratch_without_diagnostics(cx: &mut TestAppCont
     let scratch = f.active_path().unwrap();
     let ed = f.wb.read_with(f.cx, |wb, _| wb.active_editor_entity()).unwrap();
     assert_eq!(ed.read_with(f.cx, |e, _| (e.text(), e.language())), (expansion.to_string(), "Rust"));
-    assert!(!scratch.starts_with(&*f.root.to_string_lossy()), "outside the project");
+    assert!(!scratch.starts_with(&*f.root.app()), "outside the project");
 
     // The same macro again: a second scratch.
     let file = f.file.clone();
@@ -133,20 +134,20 @@ fn qa_rust_expand_macro_opens_a_scratch_without_diagnostics(cx: &mut TestAppCont
 /// AC3: one parent module opens it.
 #[gpui::test]
 fn qa_rust_parent_module_opens_the_only_result(cx: &mut TestAppContext) {
-    let d = dir("ac3-one-target");
+    let d = dir("rust-commands-ac3-one-target");
     std::fs::create_dir_all(&d).unwrap();
     let parent = d.join("main.rs");
     std::fs::write(&parent, "fn main() {}\n\nmod a;\nmod lib;\n").unwrap();
     let Some(mut f) = fixture(cx, "ac3-one", json!({ "experimental/parentModule": { "result": [location(&parent, 3)] } })) else { return };
     f.run(PARENT);
-    let p = parent.to_string_lossy().into_owned();
+    let p = parent.app();
     f.wait_active("the parent module at its mod line", |e| e.path == p && e.cursor_position().0 == 4);
 }
 
 /// AC3: several parent modules open the location list.
 #[gpui::test]
 fn qa_rust_parent_module_lists_several_results(cx: &mut TestAppContext) {
-    let d = dir("ac3-many-targets");
+    let d = dir("rust-commands-ac3-many-targets");
     std::fs::create_dir_all(&d).unwrap();
     let (a, b) = (d.join("a.rs"), d.join("b.rs"));
     std::fs::write(&a, "mod lib;\n").unwrap();
@@ -179,7 +180,7 @@ fn qa_rust_open_cargo_toml_opens_the_manifest(cx: &mut TestAppContext) {
     let fake = &f.fake;
     wait_ticking(f.cx, "the restart", |_| fake.starts() == 2 && fake.received("textDocument/didOpen").len() == 2);
     f.run(CARGO);
-    let m = manifest.to_string_lossy().into_owned();
+    let m = manifest.app();
     f.wait_active("Cargo.toml at line 3", |e| e.path == m && e.cursor_position().0 == 3);
 }
 
@@ -226,7 +227,7 @@ fn qa_rust_command_failures_have_notices_in_turkish(cx: &mut TestAppContext) {
 fn qa_rust_commands_in_a_python_file_send_nothing(cx: &mut TestAppContext) {
     let _en = crate::i18n::LangGuard::set("en");
     let Some(mut f) = fixture(cx, "ac7", json!({})) else { return };
-    let py = f.root.join("tool.py").to_string_lossy().into_owned();
+    let py = f.root.join("tool.py").app();
     std::fs::write(&py, "print('merhaba')\n").unwrap();
     f.wb.update_in(f.cx, |wb, window, cx| wb.open_file_in_root(py.clone(), window, cx));
     f.wait_active("the Python file", |e| e.path == py);
@@ -260,7 +261,7 @@ fn qa_rust_commands_against_a_real_rust_analyzer(cx: &mut TestAppContext) {
     let (wb, cx) = setup_with_config(cx, &cfg);
     open_project(&wb, cx, &ws);
     let open = |wb: &Entity<Workbench>, cx: &mut VisualTestContext, path: &Path, line: usize, col: usize| {
-        let p = path.to_string_lossy().into_owned();
+        let p = path.app();
         wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(p.clone(), window, cx));
         wait_ticking(cx, "the file", |cx| wb.read_with(cx, |wb, cx| wb.active_path(cx)).as_deref() == Some(&p));
         let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -278,7 +279,7 @@ fn qa_rust_commands_against_a_real_rust_analyzer(cx: &mut TestAppContext) {
     wait_checked(&wb, cx, "the expansion", |cx| {
         n += 1;
         if n % 20 == 1 {
-            let p = lib_rs.to_string_lossy().into_owned();
+            let p = lib_rs.app();
             if wb.read_with(cx, |wb, cx| wb.active_path(cx)).as_deref() == Some(&p) {
                 run(&wb, cx, EXPAND);
             }
@@ -289,13 +290,13 @@ fn qa_rust_commands_against_a_real_rust_analyzer(cx: &mut TestAppContext) {
     // The parent module of src/foo.rs: the `mod foo;` line (3) of src/lib.rs.
     open(&wb, cx, &a.join("src/foo.rs"), 0, 4);
     run(&wb, cx, PARENT);
-    let lib_path = lib_rs.to_string_lossy().into_owned();
+    let lib_path = lib_rs.app();
     wait_ticking(cx, "src/lib.rs at mod foo;", |cx| active(&wb, cx).is_some_and(|(p, (line, _), _)| p == lib_path && line == 3));
 
     // The Cargo.toml of member b, not the workspace's.
     open(&wb, cx, &ws.join("b/src/lib.rs"), 0, 4);
     run(&wb, cx, CARGO);
-    let manifest = ws.join("b/Cargo.toml").to_string_lossy().into_owned();
+    let manifest = ws.join("b/Cargo.toml").app();
     wait_ticking(cx, "b/Cargo.toml", |cx| active(&wb, cx).is_some_and(|(p, _, _)| p == manifest));
 }
 
@@ -303,7 +304,7 @@ fn qa_rust_commands_against_a_real_rust_analyzer(cx: &mut TestAppContext) {
 #[gpui::test]
 fn qa_rust_parent_module_over_ssh(cx: &mut TestAppContext) {
     let Some(_sshd) = crate::test_sshd::start("rust-commands") else { return };
-    let d = dir("ssh");
+    let d = dir("rust-commands-ssh");
     let root = d.join("project");
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("src/lib.rs"), "mod foo;\n").unwrap();
@@ -320,7 +321,7 @@ fn qa_rust_parent_module_over_ssh(cx: &mut TestAppContext) {
         cx.executor().advance_clock(std::time::Duration::from_secs(1));
         wb.read_with(cx, |wb, _| wb.ports_ready())
     });
-    let r = root.to_string_lossy().into_owned();
+    let r = root.app();
     wb.update_in(cx, |wb, window, cx| wb.open_path(&r, window, cx));
     cx.run_until_parked();
     let ed = crate::qa_integration_tests::ssh_open_file(&wb, cx, &root.join("src/foo.rs"));
@@ -329,7 +330,7 @@ fn qa_rust_parent_module_over_ssh(cx: &mut TestAppContext) {
         ed.read_with(cx, |e, _| e.lsp_client().is_some())
     });
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test(PARENT, window, cx));
-    let lib = root.join("src/lib.rs").to_string_lossy().into_owned();
+    let lib = root.join("src/lib.rs").app();
     crate::qa_integration_tests::wait_secs(cx, 30, "src/lib.rs opened on the host", |cx| {
         cx.executor().advance_clock(std::time::Duration::from_millis(500));
         wb.read_with(cx, |wb, cx| wb.active_path(cx)).as_deref() == Some(&lib)

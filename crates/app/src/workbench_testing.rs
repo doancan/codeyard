@@ -424,7 +424,8 @@ impl Workbench {
     }
 
     pub fn drop_external_for_test(&mut self, items: Vec<std::path::PathBuf>, dir: &std::path::Path, window: &mut Window, cx: &mut Context<Self>) {
-        self.drop_external(items, dir.to_string_lossy().into_owned(), window, cx);
+        // The explorer names its folders in the app's form (`C:/dir` on Windows).
+        self.drop_external(items, crate::ui::local_path(dir), window, cx);
     }
 
     /// `test`: probe the connection; otherwise remove it (a confirmation dialog appears).

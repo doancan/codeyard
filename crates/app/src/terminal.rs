@@ -517,6 +517,13 @@ impl TerminalView {
         self.write(text.as_bytes().to_vec());
     }
 
+    /// Type `text` and press Enter after each of its lines. Enter is a carriage return, as the key sends it: every shell
+    /// takes it, and the Windows console does not take a line feed as Enter.
+    pub fn send_lines(&mut self, text: &str) {
+        let lines: Vec<&str> = text.trim_end_matches('\n').split('\n').map(|l| l.trim_end_matches('\r')).collect();
+        self.send(&format!("{}\r", lines.join("\r")));
+    }
+
     pub fn set_fixed_title(&mut self, title: String) {
         self.title = title.into();
         self.title_locked = true;

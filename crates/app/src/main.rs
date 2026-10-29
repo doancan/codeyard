@@ -181,6 +181,8 @@ mod test_git;
 #[cfg(test)]
 mod test_lsp;
 #[cfg(test)]
+mod test_paths;
+#[cfg(test)]
 mod test_sshd;
 mod testexp;
 mod testrun;

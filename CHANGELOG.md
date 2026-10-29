@@ -142,6 +142,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Windows: tasks and *Terminal: Run Selected Text* ran nothing; the command was typed into the terminal but the line
+  feed after it is not Enter to the Windows console. Lines now end with a carriage return, as the Enter key sends.
+- Windows: Ctrl+C in the terminal did not stop the running program when Codeyard itself had been started with Ctrl+C
+  ignored (by some launchers, and by the relaunch after an update), since programs inherit that.
+- Windows: the Testing view could not run tests (it needed `sh`); it runs them with `cmd` now.
+- Windows: a debug `preLaunchTask` command with quotes in it reached `cmd` mangled; `cmd /C` gets its line as written.
+- Windows: the line the debugger stopped on was not shown in an open editor (the path came as `\\?\C:\…`).
+- Windows: Codeyard no longer quits at start when the session's atom table is full (a program that leaks atoms fills
+  it); the window opens without its UI Automation tree.
 - Text selected in the terminal can be copied while Claude Code, Codex or another program redraws its lines (a spinner, a
   status line) or adds lines below it: the selection follows its text instead of being dropped, so Ctrl+C copies
   instead of interrupting the program.

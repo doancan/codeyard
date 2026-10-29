@@ -81,7 +81,6 @@ impl Workbench {
             cx.notify();
             return;
         }
-        let payload = format!("{text}\n");
         let existed = self.active_terminal().is_some();
         if !existed {
             self.new_terminal(&NewTerminal, window, cx);
@@ -94,7 +93,7 @@ impl Workbench {
             }
             this.update(cx, |this, cx| {
                 if let Some(t) = this.active_terminal() {
-                    t.update(cx, |t, _| t.send(&payload));
+                    t.update(cx, |t, _| t.send_lines(&text));
                 }
             })
             .ok();
