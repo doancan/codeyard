@@ -93,7 +93,7 @@ fn non_json_numbers_keep_the_previous_settings_instead_of_zooming() {
 #[test]
 fn no_layer_but_the_users_own_file_can_set_the_interface_scale() {
     // The rule is central: every layer that is not the user's file (project settings, a workspace file, whatever layer
-    // is added later) is merged by `parse_layers_trusted`, which drops user-only keys whatever the layer is called.
+    // is added later) is merged by `parse_scoped`, which drops user-only keys whatever the layer is called.
     assert!(settings::is_user_only("ui.scale"));
     for name in [".codeyard/settings.jsonc", "team.code-workspace", "a-future-layer.jsonc", ""] {
         for trusted in [false, true] {
@@ -106,6 +106,31 @@ fn no_layer_but_the_users_own_file_can_set_the_interface_scale() {
     }
     for key in settings::USER_ONLY_KEYS {
         assert!(settings::is_user_only(key), "{key}");
+    }
+}
+
+#[test]
+fn a_workspace_file_layer_cannot_set_the_interface_scale() {
+    // The workspace file's `settings` and the folder's file, as the workbench layers them: neither moves the scale, and
+    // the Settings page keeps showing it as the user's.
+    use settings::{Scope, ScopedLayer};
+    for trusted in [false, true] {
+        let layers = [
+            ScopedLayer { name: "team.code-workspace", text: r#"{ "ui.scale": 2, "editor.tabSize": 3 }"#, warn: false, trusted, scope: Scope::Workspace },
+            ScopedLayer { name: ".codeyard/settings.jsonc", text: r#"{ "ui.scale": 0.75 }"#, warn: true, trusted, scope: Scope::Folder },
+        ];
+        let (s, warnings, sources) = settings::parse_scoped(r#"{ "ui.scale": 1.1 }"#, &layers).unwrap();
+        assert_eq!(s.ui_scale, 1.1, "trusted {trusted}");
+        assert_eq!(s.tab_size, Some(3));
+        assert_eq!(sources.of("ui.scale"), Scope::User);
+        assert_eq!(sources.of("editor.tabSize"), Scope::Workspace);
+        assert_eq!(
+            warnings,
+            vec![
+                "team.code-workspace: “ui.scale” can only be set in your own settings.jsonc".to_string(),
+                ".codeyard/settings.jsonc: “ui.scale” can only be set in your own settings.jsonc".to_string(),
+            ]
+        );
     }
 }
 
