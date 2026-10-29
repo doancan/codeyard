@@ -102,6 +102,9 @@ fn run_in(work: &Path, dir: &Path, manifest: &Manifest, exthost: &Path, wasm: &[
         settings,
         folders: vec![folder.clone()],
         reason: first.clone(),
+        // Run it as users will, in the OS sandbox; Windows' AppContainer is not verified yet (#100), so there the
+        // author's build runs behind Wasm and the exthost's own checks, as in `cyx dev`.
+        sandbox: !cfg!(windows),
     };
 
     let mut app = App::start(exthost, hello, manifest.clone(), folder)?;

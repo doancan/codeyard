@@ -222,6 +222,8 @@ impl Workbench {
     /// Stash picker (pop / apply / drop).
     pub(super) fn show_stash_picker(&mut self, op: StashOp, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.repo_root(cx) else { return };
+        // The list and the pick belong to this repository, whatever is selected by the time a stash is picked.
+        let repo = self.scm.read(cx).target(None).ok();
         let host = self.remote.host.clone();
         let task = cx.background_executor().spawn(async move { git::stash_list(host.as_ref(), &root) });
         cx.spawn_in(window, async move |this, cx| {
@@ -233,7 +235,7 @@ impl Workbench {
                 }
                 Ok(list) => {
                     let items = list.iter().map(|(r, m)| PickItem { label: m.clone().into(), detail: Some(r.clone().into()), keys: None }).collect();
-                    let refs = list.into_iter().map(|(r, _)| r).collect();
+                    let (refs, msgs) = list.into_iter().unzip();
                     let title = match op {
                         StashOp::Pop => crate::i18n::t("Pick a stash to pop"),
                         StashOp::Apply => crate::i18n::t("Pick a stash to apply"),
@@ -241,7 +243,7 @@ impl Workbench {
                         StashOp::Show => crate::i18n::t("Pick a stash to show"),
                     };
                     let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], title, "", None, cx));
-                    this.show_overlay(picker, OverlayKind::Stashes { refs, op }, window, cx);
+                    this.show_overlay(picker, OverlayKind::Stashes { refs, msgs, op, repo }, window, cx);
                 }
                 Err(e) => {
                     this.notice = Some(Notice::Error(crate::i18n::tf("Could not list stashes: {}", &[&first_line(&e)]).into()));
@@ -584,6 +586,8 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        // Every action of this menu runs in the repository whose history it was opened on.
+        self.vcs.menu_repo = self.scm.read(cx).history_target();
         use super::{MenuCmd, MenuTarget};
         use crate::graph::ResetMode;
         use crate::menu::MenuItem;
@@ -613,6 +617,19 @@ impl Workbench {
         self.open_commit_diff_from(root, entry, file.old, window, cx);
     }
 
+    /// An action pinned to a repository when its picker or input opened is confirmed: it goes ahead only while that
+    /// repository is still the one Source Control acts on (same path, same identity). Otherwise it says so and does
+    /// nothing, rather than running in the repository selected since.
+    pub(super) fn repo_unchanged(&mut self, pinned: &Option<crate::scm::Target>, cx: &mut Context<Self>) -> bool {
+        let current = self.scm.read(cx).target(None).ok();
+        let same = pinned.is_some() && *pinned == current;
+        if !same {
+            self.notice = Some(Notice::Error(crate::i18n::t("Repository changed while the operation was pending.").into()));
+            cx.notify();
+        }
+        same
+    }
+
     pub(super) fn repo_root(&mut self, cx: &mut Context<Self>) -> Option<String> {
         match self.git_status() {
             Some(st) => Some(st.root.clone()),
@@ -627,6 +644,7 @@ impl Workbench {
     /// Branch in the status bar or "Git: Checkout to…": list the branches.
     pub(super) fn show_branch_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(root) = self.repo_root(cx) else { return };
+        let repo = self.scm.read(cx).target(None).ok();
         let host = self.remote.host.clone();
         let r = root.clone();
         let task = cx.background_executor().spawn(async move { git::branch_infos(host.as_ref(), &r) });
@@ -660,7 +678,7 @@ impl Workbench {
                 }
                 let picker =
                     cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Select a branch to check out"), "", None, cx));
-                this.show_overlay(picker, OverlayKind::Branches { root, choices }, window, cx);
+                this.show_overlay(picker, OverlayKind::Branches { root, choices, repo }, window, cx);
             })
             .ok();
         })
@@ -986,7 +1004,7 @@ impl Workbench {
     pub(super) fn git_create_tag(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.repo_root(cx).is_some() {
             self.show_input(
-                InputPurpose::CommitTag { hash: "HEAD".into() },
+                InputPurpose::CommitTag { hash: "HEAD".into(), repo: self.scm.read(cx).target(None).ok() },
                 crate::i18n::t("Create tag"),
                 crate::i18n::t("Tag name, then an optional message for an annotated tag (at HEAD)"),
                 "",

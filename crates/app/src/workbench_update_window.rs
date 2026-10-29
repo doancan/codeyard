@@ -71,6 +71,8 @@ pub(super) struct UpdateWindow {
     /// The first frame puts the keyboard on the primary button; after that the workbench moves it as the buttons change.
     focused: bool,
     height: f32,
+    /// The interface scale the window was last sized for: its content size is logical, the window frame is not.
+    scale: f32,
     closing: bool,
     /// Whether the keyboard was used last: the focus ring is drawn only then (a click is not asking where the focus is).
     keys: Rc<Cell<bool>>,
@@ -93,7 +95,16 @@ impl UpdateWindow {
         });
         // The red button answers like Esc does: closing is not a way around a download or an install in progress.
         window.on_window_should_close(cx, move |_, app| dialog_may_close(host, app));
-        UpdateWindow { wb: weak, host, focused: false, height, closing: false, keys: Rc::new(Cell::new(false)), _observe: [gone, changed, host_closed] }
+        UpdateWindow {
+            wb: weak,
+            host,
+            focused: false,
+            height,
+            scale: window.ui_scale(),
+            closing: false,
+            keys: Rc::new(Cell::new(false)),
+            _observe: [gone, changed, host_closed],
+        }
     }
 
     fn close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -125,8 +136,9 @@ impl Render for UpdateWindow {
             }
         }
         let height = window_height(wb.read(cx), &model);
-        if (height - self.height).abs() > 0.5 {
+        if (height - self.height).abs() > 0.5 || window.ui_scale() != self.scale {
             self.height = height;
+            self.scale = window.ui_scale();
             cx.defer_in(window, move |_, window, _| window.resize(size(px(WIDTH), px(height))));
         }
         let host = self.host;
@@ -148,7 +160,9 @@ impl Workbench {
         }
         let Some(model) = self.dialog_model(cx) else { return };
         let Some(host) = window.window_handle().downcast::<Workbench>() else { return };
-        let (w, h) = (px(WIDTH), px(window_height(self, &model)));
+        // The frame is in screen points, so the logical content size is multiplied by the interface scale.
+        let scale = cx.ui_scale();
+        let (w, h) = (px(WIDTH) * scale, px(window_height(self, &model)) * scale);
         // Over the middle of the editor window, where the eye already is.
         let at = window.bounds();
         let bounds = Bounds::new(at.origin + gpui::point((at.size.width - w) / 2., ((at.size.height - h) / 2.).max(px(40.))), size(w, h));
@@ -162,7 +176,7 @@ impl Workbench {
         };
         self.update.opening = true;
         let wb = cx.entity();
-        let height = f32::from(h);
+        let height = f32::from(h) / scale;
         // The new window draws its first frame while it is being made, and that frame reads this workbench: it must not be in the
         // middle of an update then.
         cx.defer(move |cx| {

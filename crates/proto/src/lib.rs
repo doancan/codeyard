@@ -15,7 +15,7 @@ use std::io::{self, Read, Write};
 use serde::{Deserialize, Serialize};
 
 /// Compared in the handshake; on mismatch the agent is reinstalled.
-pub const VERSION: u32 = 13;
+pub const VERSION: u32 = 14;
 
 /// Max size of one frame. Larger files are read in chunks.
 pub const MAX_FRAME: usize = 64 * 1024 * 1024;
@@ -360,6 +360,11 @@ pub struct Meta {
     /// Unix epoch milliseconds.
     pub mtime_ms: i64,
     pub readonly: bool,
+    /// The file's identity on its filesystem (Unix: device and inode mixed into one value); 0 where unknown.
+    /// Writing to a file or into a folder keeps it; deleting and creating the path again changes it.
+    pub file_id: u64,
+    /// Creation time in Unix epoch milliseconds; 0 where the filesystem does not keep it.
+    pub created_ms: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

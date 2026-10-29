@@ -42,8 +42,13 @@ impl Render for Workbench {
         }
         self.chrome.a11y_bounds = Default::default();
         self.step_panel_anim(window);
+        // The repository search waits until Source Control is on screen (connecting opens a home folder: no scan unasked).
+        if self.chrome.panel == Some(Panel::Scm) {
+            self.discover_if_pending(cx);
+        }
         self.update_title(window, cx);
         self.chrome.window_bounds = Some(window.window_bounds());
+        self.sync_manage_menu(window, cx);
         self.track_notice(cx);
         self.sync_watches(cx);
         self.sync_slots(cx);
@@ -495,11 +500,12 @@ impl Render for Workbench {
                     this.chrome.sidebar_w = x.clamp(layout::SIDEBAR_MIN, layout::SIDEBAR_MAX);
                     cx.notify();
                 }
-                if let Some(resize) = this.tabs.resizing {
+                if let Some(resize) = this.tabs.resizing.clone() {
                     if this.tabs.contains_key(resize.anchor) && this.tabs.revision == resize.revision {
+                        let bounds = resize.bounds.get();
                         let (position, start, size) = match resize.axis {
-                            crate::editor_layout::Axis::Horizontal => (ev.position.x, resize.bounds.origin.x, resize.bounds.size.width),
-                            crate::editor_layout::Axis::Vertical => (ev.position.y, resize.bounds.origin.y, resize.bounds.size.height),
+                            crate::editor_layout::Axis::Horizontal => (ev.position.x, bounds.origin.x, bounds.size.width),
+                            crate::editor_layout::Axis::Vertical => (ev.position.y, bounds.origin.y, bounds.size.height),
                         };
                         let ratio = (position - start) / size.max(px(1.));
                         if this.tabs.layout.set_ratio(resize.split, ratio) {
@@ -542,7 +548,7 @@ impl Render for Workbench {
             .on_action(cx.listener(|this, _: &crate::menus::TerminalMenu, w, cx| this.open_application_menu_by_index(5, w, cx)))
             .on_action(cx.listener(|this, _: &crate::menus::WindowMenu, w, cx| this.open_application_menu_by_index(6, w, cx)))
             .on_action(cx.listener(|this, _: &crate::menus::HelpMenu, w, cx| this.open_application_menu_by_index(7, w, cx)))
-            .when(cfg!(target_os = "macos"), |d| d.child(self.title_bar(&p, cx)))
+            .when(cfg!(target_os = "macos"), |d| d.child(self.title_bar(window, &p, cx)))
             .when(cfg!(target_os = "windows") && !window.is_fullscreen(), |d| d.child(self.windows_title_bar(window, &p, cx)))
             .when(!cfg!(target_os = "macos") && self.chrome.zen.is_none(), |d| d.child(self.application_menu_bar(&p, cx)))
             .when(self.docker_connected() && self.remote.docker.monitor.return_workspace.is_some(), |d| {

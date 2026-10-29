@@ -103,7 +103,7 @@ impl EditorView {
         (0..self.buffer.len_lines()).map(|l| self.buffer.line(l)).collect()
     }
 
-    #[cfg(test)]
+    /// The whole text (tests; extensions reading an open document).
     pub fn text(&self) -> String {
         String::from_utf8(self.buffer.to_bytes()).unwrap_or_default()
     }

@@ -9,6 +9,7 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Welcome, Settings page and customization](#welcome-settings-page-and-customization)
 - [Source control, Timeline and more](#source-control-timeline-and-more)
 - [Settings and keyboard shortcuts](#settings-and-keyboard-shortcuts)
+- [Interface scale](#interface-scale)
 - [Interface language](#interface-language)
 - [Updates](#updates)
 - [Themes](#themes)
@@ -82,7 +83,7 @@ is the complete list and always matches your key bindings; every setting is in [
 | Quick fix | ⌘. | Ctrl+. |
 | Format document | ⇧⌥F | Shift+Alt+F |
 | Save all | ⌥⌘S | Ctrl+Alt+S |
-| Zoom in / out / reset | ⌘= / ⌘- / ⌘0 | Ctrl+= / Ctrl+- / Ctrl+0 |
+| Interface zoom in / out / reset to 100% | ⌘= / ⌘- / ⌘0 | Ctrl+= / Ctrl+- / Ctrl+0 |
 | Back / forward | ⌃- / ⌃⇧- | Ctrl+Alt+- / Ctrl+Shift+- |
 | Reopen closed tab | ⇧⌘T | Ctrl+Shift+T |
 | New file / save as / new window | ⌘N / ⇧⌘S / ⇧⌘N | Ctrl+N / Ctrl+Shift+S / Ctrl+Shift+N |
@@ -477,6 +478,28 @@ your shortcuts (into a marked block of `keybindings.jsonc`, so importing again r
 it reports what had no equivalent. Your VS Code files are only read. Open tabs, cursors and unsaved changes are
 restored on the next start (hot exit).
 
+## Interface scale
+
+*View: Zoom In* (⌘= or ⌘+), *Zoom Out* (⌘-) and *Reset Zoom* (⌘0; Ctrl on Windows), also in the View menu, make the
+whole interface larger or smaller: menus, the activity bar, side bars, tabs, the editor, the terminal, dialogs, tooltips
+and the status bar together. The steps are 75%, 80%, then every 10% from 90% to 200%; Reset Zoom returns to 100%. The
+status bar shows the new value ("Interface scale: 110%").
+
+Each change is saved as `ui.scale` in your own `settings.jsonc` (0.75–2, default 1) and applies at once to every open
+window and after a restart. You can also type a value there or in *Preferences: Settings*, such as `1.25` (it is rounded to whole
+percent); Zoom In and Zoom Out then continue from the next step. If the settings file cannot be written (no settings
+folder, a read-only folder), the zoom still applies for the session and a settings reload keeps it, until the file's
+own `ui.scale` changes. A value that is not a number from 0.75 to 2 is ignored with the message
+"Interface scale must be between 75% and 200%." and the interface stays at 100%. A project's `.codeyard/settings.jsonc`
+cannot set it.
+
+`editor.fontSize` and `terminal.fontSize` stay the sizes you chose: at 150% a 14 pt editor font is drawn 1.5 times as
+large, once, together with the rest of the window. The display's own scale (Retina, Windows display scaling) is applied
+separately, so moving a window to another monitor keeps the chosen interface scale. Window sizes and the minimum window
+size are in screen points and do not change when you zoom; when a small window cannot show every activity bar button,
+the buttons scroll, a small chevron at the top or bottom edge shows that more are hidden, and the Manage button stays at
+the bottom.
+
 ## Interface language
 
 The interface is English; **Turkish (`tr`)** is the first translation. The setting `"ui.language"` (your own `settings.jsonc` only,
@@ -614,7 +637,7 @@ to the editor's roles; comments and trailing commas are fine.
 ## Extensions
 
 Extensions add themes, snippets, keymap presets, key bindings, languages, JSON and YAML schemas, settings and language
-servers. They contain data only: this version runs no extension code. *Extensions: Show Extensions* in the command
+servers, and extensions with code add commands. *Extensions: Show Extensions* in the command
 palette (or the blocks icon in the activity bar, or *View › Extensions*) lists what is installed, turned-off ones
 included, with a search field. What comes with Codeyard is built in and always on.
 
@@ -624,9 +647,16 @@ in an SSH window. Before anything is installed, a consent sheet shows the extens
 contributes and what it may reach, in plain words ("Run taplo with any arguments"), with the author's reason quoted.
 A red line marks a **High risk** set: one that can run programs as you, or read private data and send it somewhere.
 For those, the keyboard starts on *Cancel*, so Enter never installs by accident; Escape cancels any sheet. A package
-that is not valid is not installed; the error says what is wrong, as the packaging tool would. A package with code
-(commands, views) is refused with that reason: this version runs data-only extensions. A new extension applies at
-once, in every open window, without a restart.
+that is not valid is not installed; the error says what is wrong, as the packaging tool would. A new extension
+applies at once, in every open window, without a restart.
+
+**Extensions with code.** Their commands appear in the command palette. The first one you run starts the extension in
+its own process (`codeyard-exthost`, beside Codeyard): it reaches only the files, programs
+and commands its sheet listed, and only through Codeyard, which checks every call, the same way for local and SSH
+folders. In a folder you have not trusted it may read what it declared and show messages, but not change files or run
+programs. When a call is refused, the message names the permission the extension would need. An extension that crashes
+three times within a minute is turned off until Codeyard restarts; one nobody used for five minutes is stopped and
+starts again on its next command.
 
 **Rules that keep them predictable.** An extension key binding never takes a key a built-in shortcut uses (the
 binding is left out and the status bar says so); a keymap preset you choose with `keymap.preset` may. An extension
@@ -727,6 +757,26 @@ window, on the same local or SSH host. The normal unsaved-file protection applie
 ones show a lock, and stale or bare entries cannot be opened from the list. Hover for the full path, commit and lock reason.
 The header offers **Add worktree** and **Refresh**. The list also refreshes with Git while Source Control and this section are
 visible, including checkouts added or removed in a terminal. Collapsing the section is remembered and pauses its refreshes.
+
+**Several repositories.** Source Control finds the repositories in the workspace folders and inside them (nested
+repositories, linked worktrees and submodules each count once). The search runs in the background, follows no
+symbolic links, skips hidden folders and dependency or build folders (`node_modules`, `target`, `dist`, `build`, …),
+goes at most four folders deep and stops at 64 repositories. With more than one, the changes list groups them by
+repository: each repository row shows its branch, ahead/behind counts, a missing upstream, a merge, rebase,
+cherry-pick, revert or bisect in progress, conflicts and the number of changes (hover for its path). Stage, unstage
+and discard on a file row or a group act on that row's repository, even when two repositories have files with the same
+path; clicking a file opens its repository's diff and selects that repository. The message box, Commit, Sync, the
+graph and the "…" menu act on the selected repository, named next to its branch; each repository keeps its own draft
+message and last result, and confirmations name the repository. Click a repository row to select it, or focus the list
+with Tab and use ↑/↓, Home and End to move between repositories and ←/→ (or Enter) to fold one. The workspace is
+searched again when folders are added or removed, when a repository disappears, and on **Refresh** once the last
+search is more than a minute old; while Source Control is visible the other repositories refresh a few at a time. A
+graph or stash action, the branch and stash pickers and the named stash belong to the repository they were opened
+on: picked after another repository was selected, they act on the one they were opened for or not at all, never on
+the new selection. A repository that is removed or created again at the same path while an operation is pending gets
+nothing from it: the result says "Repository is no longer available" or "Repository changed while the operation was
+pending", and the operation never moves to another repository. A draft typed for a repository that disappears stays
+with it. With a single repository the panel looks as before.
 
 **Stash.** Besides stash and stash with untracked files there are "Stash Staged Changes" (only what is staged;
 needs git 2.35 or newer), "Stash with Name…" and "Show Stash…", which lists the files a stash changed and opens one
@@ -912,7 +962,8 @@ test individually for precise attribution.
 palette or `File: Open Workspace from File…`) adds all its folders. The folder list is remembered per
 project. Go to file lists `folder › path` for the extra folders, Find in Files searches all of them,
 every folder gets its own language server, tasks / tests / debugging / new terminals use the folder
-of the active file, and Source Control shows the repository of the active file. Each extra folder's own settings
+of the active file, and Source Control shows the repository of the active file (unless a repository inside that folder
+was picked in Source Control; see **Several repositories** under Git). Each extra folder's own settings
 (`.vscode/settings.json`, `.codeyard/settings.jsonc`) apply to its files: indentation (`editor.tabSize`,
 `editor.insertSpaces`), saving (`editor.formatOnSave`, `editor.codeActionsOnSave`,
 `files.trimTrailingWhitespace`, `files.insertFinalNewline`), `editor.formatOnPaste` / `formatOnType`

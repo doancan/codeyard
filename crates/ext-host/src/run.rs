@@ -67,6 +67,10 @@ pub fn run(input: impl Read, output: impl Write + Send + 'static) -> Result<(), 
         let _ = ext_proto::write(&mut output, &ToApp::Mismatch { version: ext_proto::VERSION, build: ext_proto::BUILD.into() });
         return Err(format!("the app is build {} and this exthost {}", hello.build, ext_proto::BUILD));
     }
+    // Sandboxed before anything of the extension's is read: from here on the process reaches only its own files.
+    if hello.sandbox {
+        crate::sandbox::enter(&crate::sandbox::Policy::for_hello(&hello)?)?;
+    }
     ext_proto::write(&mut output, &ToApp::Ready { version: ext_proto::VERSION, build: ext_proto::BUILD.into() }).map_err(|e| e.to_string())?;
 
     let engine = crate::engine::engine().map_err(|e| e.to_string())?;

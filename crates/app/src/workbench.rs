@@ -47,6 +47,8 @@ mod container_overview_glue;
 #[path = "workbench_docker.rs"]
 mod docker_glue;
 // --- data ---
+#[path = "workbench_ext_code.rs"]
+mod code_glue;
 #[path = "workbench_data.rs"]
 mod data_glue;
 #[path = "workbench_debug.rs"]
@@ -76,8 +78,11 @@ mod groups_glue;
 mod market_glue;
 #[path = "workbench_market_view.rs"]
 mod market_view_glue;
+#[path = "workbench_repos.rs"]
+pub(crate) mod repos_glue;
 #[path = "workbench_ext_updates.rs"]
 mod updates_glue;
+
 use groups_glue::{Group, GroupKey, GroupResize};
 #[path = "workbench_hosts.rs"]
 mod hosts;
@@ -100,6 +105,8 @@ mod palette_glue;
 mod panels_glue;
 #[cfg(test)]
 pub use panels_glue::ProblemRow;
+#[cfg(test)]
+pub(crate) use panels_glue::interface_scale_notice;
 #[path = "workbench_cyx.rs"]
 mod cyx_glue;
 #[path = "workbench_ports.rs"]
@@ -590,6 +597,8 @@ struct MenuState {
     actions: Vec<Box<dyn gpui::Action>>,
     return_focus: Option<FocusHandle>,
     app_path: Option<Vec<usize>>,
+    /// The Manage menu: re-anchored to the gear button whenever the viewport changes (zoom, resize).
+    follows_manage: bool,
     _sub: Subscription,
 }
 
@@ -1040,6 +1049,22 @@ impl Workbench {
                         let _ = s.set("scm_sections", text);
                     }
                 }
+                crate::scm::ScmEvent::SelectRepository(key) => {
+                    this.select_repository(*key, cx);
+                }
+                crate::scm::ScmEvent::OpenRepoDiff { repo, path, staged } => {
+                    if this.select_repository(*repo, cx) {
+                        this.open_diff(path.clone(), *staged, window, cx);
+                    }
+                }
+                crate::scm::ScmEvent::RepoFileMenu(repo, path, staged, position) => {
+                    if this.select_repository(*repo, cx) {
+                        this.open_scm_file_menu(path, *staged, *position, window, cx);
+                    }
+                }
+                crate::scm::ScmEvent::RefreshRepo(key) => this.refresh_repo(*key, cx),
+                crate::scm::ScmEvent::Rediscover => this.rediscover(cx),
+                crate::scm::ScmEvent::RefreshInventory => this.refresh_inventory(cx),
             }),
             // A download in progress is cancelled and its partial file removed before the process ends.
             cx.on_app_quit(|this, cx| {
@@ -1164,6 +1189,8 @@ impl Workbench {
                 scm_root: None,
                 marks_busy: Default::default(),
                 tree_marks: Default::default(),
+                repos: Default::default(),
+                menu_repo: None,
             },
             chrome: state_glue::ChromeLayout {
                 a11y_bounds: Default::default(),
@@ -1184,8 +1211,8 @@ impl Workbench {
                 term_list_w,
                 resizing_term_list: false,
                 resizing_split: false,
-                zoom: 0.,
-                zoom_base: (theme::text::CODE.0, theme::text::CODE.1, theme::text::CODE.0),
+                activity_scroll: gpui::ScrollHandle::new(),
+                activity_hints: Default::default(),
                 zen: None,
                 window_bounds: None,
             },
@@ -1617,6 +1644,7 @@ impl Workbench {
             Run::Action(action) => window.defer(cx, move |window, cx| window.dispatch_action(action, cx)),
             Run::Connect(alias) => self.connect(alias, window, cx),
             Run::Disconnect => self.disconnect(cx),
+            Run::Extension { extension, command } => self.run_extension_command(&extension, &command, window, cx),
         }
     }
 
@@ -1710,6 +1738,7 @@ impl Workbench {
         self.vcs.status = None;
         self.scm.update(cx, |s, cx| s.set_status(self.remote.host.clone(), None, cx));
         self.vcs.scm_root = None;
+        self.reset_repos(cx);
         self.vcs.tree_marks.clear();
         self.roots.primary.update(cx, |t, cx| t.set_git(Arc::default(), cx));
         self.refresh_git_at(&path, 0, cx);
@@ -1717,6 +1746,7 @@ impl Workbench {
         self.search.update(cx, |s, cx| s.set_context(h, r, cx));
         let host = self.remote.host.clone();
         self.roots.primary.update(cx, |t, cx| t.set_root(host, Some(path.clone()), cx));
+        self.discover_repos(cx);
         let alias = match &self.remote.conn {
             Conn::Connected { alias } => Some(alias.as_str()),
             _ => None,

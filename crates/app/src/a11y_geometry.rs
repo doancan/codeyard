@@ -20,6 +20,18 @@ pub(in crate::workbench) struct PaintedBounds {
     status: Option<Bounds<Pixels>>,
 }
 
+#[cfg(test)]
+impl PaintedBounds {
+    /// The logical bounds the landmark was painted at in the last frame (tests).
+    pub(in crate::workbench) fn get(&self, which: Landmark) -> Option<Bounds<Pixels>> {
+        match which {
+            Landmark::Explorer => self.explorer,
+            Landmark::Editor => self.editor,
+            Landmark::Status => self.status,
+        }
+    }
+}
+
 /// Physical coordinates relative to the native content view, with y increasing downwards.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Geometry {
