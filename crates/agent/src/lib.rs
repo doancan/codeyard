@@ -106,6 +106,7 @@ type Out = Arc<Link>;
 
 impl Link {
     /// A response (id ≠ 0) or an event (id 0). Events are buffered while disconnected.
+    /// Borrowed response frames share the codec used for replay and daemon handshakes.
     fn send(&self, id: u32, body: Response) -> io::Result<()> {
         let mut st = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(w) = st.writer.as_mut() {
@@ -116,7 +117,7 @@ impl Link {
                 Err(e) if e.kind() == io::ErrorKind::InvalidData => {
                     if id != 0 {
                         let note = Response::Error(Error::Other(format!("the answer is too large to send ({e})")));
-                        if proto::write_frame(w, &Frame { id, body: note }).is_err() {
+                        if proto::write_frame(w, &Frame { id, body: &note }).is_err() {
                             st.writer = None;
                         }
                     }
@@ -156,17 +157,17 @@ impl Link {
         let mut st = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let mut w = BufWriter::new(writer);
         if let Some(hello) = hello {
-            proto::write_frame(&mut w, &hello)?;
+            proto::write_frame(&mut w, &Frame { id: hello.id, body: &hello.body })?;
         }
         // Clear only after a successful write: one that breaks midway must not lose buffered events (resent on next connect).
         for (pty, data) in &st.backlog {
-            proto::write_frame(&mut w, &Frame { id: 0, body: Response::PtyOutput { pty: *pty, data: data.clone() } })?;
+            proto::write_frame(&mut w, &Frame { id: 0, body: &Response::PtyOutput { pty: *pty, data: data.clone() } })?;
         }
         for (pty, code) in &st.exits {
-            proto::write_frame(&mut w, &Frame { id: 0, body: Response::PtyExit { pty: *pty, code: *code } })?;
+            proto::write_frame(&mut w, &Frame { id: 0, body: &Response::PtyExit { pty: *pty, code: *code } })?;
         }
         if !st.changes.is_empty() {
-            proto::write_frame(&mut w, &Frame { id: 0, body: Response::FsChanged(st.changes.clone()) })?;
+            proto::write_frame(&mut w, &Frame { id: 0, body: &Response::FsChanged(st.changes.clone()) })?;
         }
         st.backlog.clear();
         st.exits.clear();
