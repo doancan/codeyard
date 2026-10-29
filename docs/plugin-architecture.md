@@ -64,11 +64,17 @@ Processes:
 - **`codeyard-exthost --compile`.** Short-lived. Reads one `.wasm` on stdin, writes compiled code to stdout.
   The app stores it as `<wasm-sha>.cwasm` with a `.sha256` sidecar; the exthost checks the hash before loading,
   so one extension cannot plant compiled code for another.
+- On macOS the exthost alone carries one hardened-runtime exception, `allow-unsigned-executable-memory`, and copies
+  only the text of compiled code into anonymous memory; the app carries none. Measurements and the reasons are in
+  [extensions-spike.md](extensions-spike.md).
 
 Resource limits, all from one `limits` table in `ext-manifest` (author docs and perf rows are generated from it):
 - wasmtime epoch interruption makes guest code yield every 10 ms, so a busy task never blocks providers;
 - a provider reply that misses its deadline is dropped, not punished;
-- `StoreLimits` caps each instance's linear memory; an OS cap (Job Object, `RLIMIT_AS`) caps the process;
+- `StoreLimits` caps each instance's linear memory; an OS cap (a Job Object commit limit on Windows, resident
+  size elsewhere) caps the process. wasmtime's guard regions reserve hundreds of GB of address space, so
+  `RLIMIT_AS` works only with smaller reservations;
+- guest code is interrupted only while it runs, so an idle exthost causes no wakeups;
 - going over a memory cap, the IPC frame cap or the IPC byte rate kills the process.
 
 The app and exthost must share a build id. When the app updates in place, running exthosts are stopped and
@@ -388,9 +394,10 @@ then set to `min(stated, baseline × 1.25)` and only lowered. A waiver is one li
 | Activation, warm (process running, code cached) | p95 | +10% | 10 ms |
 | Activation, cold (spawn + sandbox + load) | p95 | +10% | macOS 150 ms, Windows 400 ms |
 | Provider platform overhead (excl. guest and I/O) | p95 | +10% | local 3 ms; remote 5 ms + RTT |
-| Exthost memory per extension (idle, Rust hello) | median | +10% | 25 MB; TypeScript set by the Phase 2 spike |
+| Exthost memory per extension (idle, Rust hello / TypeScript hello) | median | +10% | 25 MB / 50 MB |
 | Crash to providers answering again | p95 | +15% | 2 s |
 | Hot reload (2 MB Rust, compiler excluded) / declarative | p95 | +15% | 500 ms / 200 ms |
+| Hot reload, TypeScript (componentize excluded) | p95 | +15% | 750 ms |
 | Market search, keystroke to results, 10k entries | p95 | +10% | 16 ms, off the UI thread |
 
 Pass/fail gates: every hostile fixture is denied or trapped; fuzz targets run 10 minutes per PR and 4 hours
@@ -443,7 +450,8 @@ Settings: `extensions.autoUpdate` (`off | notify | install`, default `install`),
 - Per-extension generated build world (undeclared API as a compile error): the import check covers it now.
 - Long-lived publisher keys, private registries, mirrors, managed policy: after the public registry is stable.
 - Malware scanning for native programs: with open native publishing, after Phase 3.
-- Sharing one process among network-less extensions: only if per-process memory misses its ceiling.
+- Sharing one process among network-less extensions: only if per-process memory misses its ceiling. It would save
+  about 32 MB per extra TypeScript extension on macOS.
 - WebSockets, and a sandboxed canvas for previews and charts: after the element set is proven.
 - Go and Python SDKs, source-level Wasm breakpoints: when each meets its ceilings or is proven on macOS arm64.
 
@@ -470,3 +478,6 @@ Decided by the owner on 2026-10-28.
    accepted.
 4. **Root keys.** The owner holds 2 of 3 root key shares; the third is an offline backup. This is disclosed in
    SECURITY.md before Phase 1, and a second holder is added when one is available.
+5. **Phase 2 spike** (2026-10-29, [extensions-spike.md](extensions-spike.md)). TypeScript ships with Rust in Phase 2.
+   Rust measures well under 25 MB, so there is no shared process. TypeScript gets its own 50 MB memory ceiling: its
+   engine's machine code is about 32 MB per process on macOS, which the OS does not let processes share.
