@@ -486,8 +486,10 @@ and the status bar together. The steps are 75%, 80%, then every 10% from 90% to 
 status bar shows the new value ("Interface scale: 110%").
 
 Each change is saved as `ui.scale` in your own `settings.jsonc` (0.75–2, default 1) and applies at once to every open
-window and after a restart. You can also type a value there or in *Preferences: Settings*, such as `1.25`; Zoom In and
-Zoom Out then continue from the next step. A value that is not a number from 0.75 to 2 is ignored with the message
+window and after a restart. You can also type a value there or in *Preferences: Settings*, such as `1.25` (it is rounded to whole
+percent); Zoom In and Zoom Out then continue from the next step. If the settings file cannot be written (no settings
+folder, a read-only folder), the zoom still applies for the session and a settings reload keeps it, until the file's
+own `ui.scale` changes. A value that is not a number from 0.75 to 2 is ignored with the message
 "Interface scale must be between 75% and 200%." and the interface stays at 100%. A project's `.codeyard/settings.jsonc`
 cannot set it.
 
@@ -495,7 +497,8 @@ cannot set it.
 large, once, together with the rest of the window. The display's own scale (Retina, Windows display scaling) is applied
 separately, so moving a window to another monitor keeps the chosen interface scale. Window sizes and the minimum window
 size are in screen points and do not change when you zoom; when a small window cannot show every activity bar button,
-the buttons scroll and the Manage button stays at the bottom.
+the buttons scroll, a small chevron at the top or bottom edge shows that more are hidden, and the Manage button stays at
+the bottom.
 
 ## Interface language
 

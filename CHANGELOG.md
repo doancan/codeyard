@@ -36,7 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from 75% to 200% in steps (75%, 80%, then every 10%), including menus, dialogs, tooltips, hit regions and accessibility
   bounds. The value is saved once per change as `ui.scale` in the user's settings, applies to every open window and is
   shown as a localized percentage. Invalid values fall back to 100% with "Interface scale must be between 75% and
-  200%."; a project settings file cannot set it. The display's own scale stays separate.
+  200%."; a project settings file cannot set it. The display's own scale stays separate. Typed values are rounded
+  to whole percent; a zoom that cannot be saved stays for the session.
 - The extension registry's signed index: format, offline verification (a threshold of root keys, an expiring online
   key, no rollback to an older copy) and `cyx yard keygen | sign | verify` for the key ceremony and test registries
   (docs/registry.md).
@@ -174,7 +175,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of a plain-text file.
 - Zoom no longer changes the editor and terminal font sizes for the session: it scales the whole interface, and
   `editor.fontSize` and `terminal.fontSize` keep the values you set. The activity bar's view buttons scroll when the
-  window is too short for all of them, and the Manage button stays visible.
+  window is too short for all of them, with a chevron at the edge where more are hidden, and the Manage button stays
+  visible.
 - The patched GPUI applies a logical interface scale at the window (`vendor/gpui/src/ui_scale.rs`, listed in
   `vendor/gpui/PATCHES.md`).
 - The About page groups application, platform and client protocol details, and shows the remote agent protocol when connected.
@@ -190,6 +192,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The divider between editor groups no longer jumps away from the pointer when the interface scale or the window size
+  changes while it is being dragged.
 - The publish workflow that `cyx new` writes pins `actions/checkout` and the Codeyard publish action to commit SHAs. It
   referred to a `v1` tag that did not exist, and a tag can be moved to code that would then run with the job's signing
   identity.
