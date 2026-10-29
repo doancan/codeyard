@@ -5,6 +5,7 @@
 # More terms: agent araç, adapter bağdaştırıcı, clipboard pano, scratch taslak, snippet kod parçacığı, passphrase anahtar parolası,
 # Host Sunucu, Port Bağlantı Noktası (the word port stays in compounds: SSH port yönlendirme), Debug Hata Ayıklama, Breakpoint Kesme Noktası.
 # Updates: update güncelleme, release/version sürüm, checksum sağlama toplamı, install kur (kurulum), restart yeniden başlat.
+# Extensions: registry kayıt, Market Pazar, publisher yayıncı, withdrawn (yanked) geri çekildi, revoked iptal edildi, deprecated kullanımdan kalktı.
 
 # ---- Source Control worktrees ----
 Worktrees	Çalışma Ağaçları
@@ -2927,6 +2928,46 @@ the {} registry's list is more than 3 days old; install from the Extensions view
 {0} is now published by {1}, not {2} as before; review it with Extensions: Install from Registry…	{0} artık eskisi gibi {2} değil, {1} tarafından yayımlanıyor; Eklentiler: Kayıttan Kur… ile inceleyin
 {} is not in any of your registries	{} kayıtlarınızın hiçbirinde yok
 {}: expected a list	{}: bir liste bekleniyordu
+
+# ---- Extensions: Market ----
+Installed	Kurulu
+Market	Pazar
+Search the Market	Pazarda ara
+Extensions: Open Market	Eklentiler: Pazarı Aç
+Reading the registries…	Kayıtlar okunuyor…
+No extension matches the search.	Aramayla eşleşen eklenti yok.
+{} extension|{} extensions	{} eklenti
+The {} registry's list is more than 3 days old; versions withdrawn since may still show.	{} kaydının listesi 3 günden eski; o zamandan beri geri çekilen sürümler hâlâ görünebilir.
+No extension registry is set up yet. Add one to extensions.registries in your settings.	Henüz bir eklenti kaydı ayarlanmadı. Ayarlarınızda extensions.registries içine bir kayıt ekleyin.
+withdrawn	geri çekildi
+Deprecated	Kullanımdan kalktı
+This extension is no longer in the registry.	Bu eklenti artık kayıtta yok.
+{0} · version {1}	{0} · sürüm {1}
+{} license	{} lisansı
+{} download, including updates|{} downloads, including updates	güncellemeler dahil {} indirme
+Deprecated by its publisher: use {} instead.	Yayıncısı kullanımdan kaldırdı: yerine {} kullanın.
+Deprecated by its publisher.	Yayıncısı kullanımdan kaldırdı.
+Reinstall	Yeniden Kur
+Update	Güncelle
+Version {} is installed.	{} sürümü kurulu.
+Show Installed	Kurulu Olanı Göster
+No version of this extension can be installed: they were withdrawn or revoked.	Bu eklentinin kurulabilecek bir sürümü yok: geri çekildiler ya da iptal edildiler.
+This extension contains code, which this version of Codeyard does not run.	Bu eklenti kod içeriyor; Codeyard'ın bu sürümü kod çalıştırmıyor.
+Cannot show this extension's details: {}	Bu eklentinin ayrıntıları gösterilemiyor: {}
+Versions	Sürümler
+README	Benioku
+This extension has no README.	Bu eklentinin benioku dosyası yok.
+The README is shortened here; the full one is in the package.	Benioku burada kısaltıldı; tamamı pakette.
+Images are not shown here.	Görseller burada gösterilmez.
+Open this link in your browser?	Bu bağlantı tarayıcınızda açılsın mı?
+{} download|{} downloads	{} indirme
+deprecated, use {}	kullanımdan kalktı, yerine {}
+deprecated	kullanımdan kalktı
+withdrawn by its publisher	yayıncısı geri çekti
+revoked: {}	iptal edildi: {}
+pre-release	ön sürüm
+Permissions: none.	İzinler: yok.
+Permissions: {}	İzinler: {}
 Could not paste: {}	Yapıştırılamadı: {}
 
 # ---- Terminal panel toolbar, launch menu and terminal list ----

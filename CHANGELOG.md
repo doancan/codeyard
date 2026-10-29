@@ -29,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   publisher; the lock pins it, and a new publisher or an index older than 3 days is called out. Registries besides the
   public one go in `extensions.registries`. No request is made until something is installed from a registry, then at
   most one a day.
+- The Market: a second tab in the Extensions view that searches every registry's extensions on the device as you type
+  (10 000 in well under a frame), with a page per extension: README without remote images, versions with their
+  status, permissions in plain words, the publisher and downloads including updates. Install goes through the consent
+  sheet. Opening the Market reads each registry's list at most once a day; searching sends nothing. The registry
+  serves each version's manifest and README as a details file whose digest is in the signed index.
 - `cyx publish` signs keyless (GitHub Actions' identity, or a browser sign-in) and publishes; `--dry-run` prints the
   install sheet in the app's words. `cyx yank`, `restore` and `deprecate` change a published version. `cyx new` writes
   `.github/workflows/publish.yml` for tag-push releases through the `codeyard/publish` action. `.github` is never packaged.

@@ -156,6 +156,7 @@ registry! {
     "extensions.installFromFile" => wb::InstallExtensionFromFile,
     "extensions.installFromFolder" => wb::InstallExtensionFromFolder,
     "extensions.installFromRegistry" => wb::InstallExtensionFromRegistry,
+    "extensions.showMarket" => wb::ShowMarket,
     "test.runAll" => wb::RunAllTests,
     "test.runFailed" => wb::RunFailedTests,
     "test.refresh" => wb::RefreshTests,

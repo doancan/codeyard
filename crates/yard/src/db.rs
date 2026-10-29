@@ -104,8 +104,23 @@ fn release(tx: &Transaction, id: &ExtId, version: &Version) -> rusqlite::Result<
         .optional()
 }
 
-fn put_release(tx: &Transaction, id: &ExtId, r: &Release) -> rusqlite::Result<()> {
+pub fn put_release(tx: &Transaction, id: &ExtId, r: &Release) -> rusqlite::Result<()> {
     tx.execute("UPDATE versions SET release = ?3 WHERE id = ?1 AND version = ?2", params![id.as_str(), r.version.to_string(), json(r)]).map(drop)
+}
+
+/// Every version whose release has no details digest yet.
+pub fn releases_without_details(tx: &Transaction) -> rusqlite::Result<Vec<(ExtId, Release)>> {
+    let mut st = tx.prepare("SELECT id, release FROM versions")?;
+    let rows = st.query_map([], |r| Ok((r.get::<_, String>(0)?, from_json::<Release>(1, &r.get::<_, String>(1)?)?)))?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (id, release) = row?;
+        if release.details.is_none() {
+            let id = ExtId::parse(&id).map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, e.into()))?;
+            out.push((id, release));
+        }
+    }
+    Ok(out)
 }
 
 pub fn status(tx: &Transaction, id: &ExtId, version: &Version) -> rusqlite::Result<Option<Status>> {

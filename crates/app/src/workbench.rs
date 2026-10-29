@@ -72,6 +72,10 @@ mod fsops_glue;
 mod git_glue;
 #[path = "workbench_groups.rs"]
 mod groups_glue;
+#[path = "workbench_market.rs"]
+mod market_glue;
+#[path = "workbench_market_view.rs"]
+mod market_view_glue;
 use groups_glue::{Group, GroupKey, GroupResize};
 #[path = "workbench_hosts.rs"]
 mod hosts;
@@ -504,6 +508,7 @@ pub use debug::{
 };
 pub use ext_glue::{CancelExtensionConsent, InstallExtensionFromFile, InstallExtensionFromFolder, InstallExtensionFromRegistry, ShowExtensions};
 pub use host::askpass::{AskKind, AskRequest};
+pub use market_glue::{MarketNext, MarketPrevious, ShowMarket};
 pub use remote_glue::ShowRemoteExplorer;
 pub use terminals_glue::{
     ChangeTerminalColor, ConfigureTerminalSettings, FocusNextTerminal, FocusPreviousTerminal, KillAllTerminals, KillOtherTerminals, NewTerminalWithProfile,

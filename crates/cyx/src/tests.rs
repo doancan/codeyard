@@ -223,6 +223,25 @@ fn yard_keygen_sign_and_verify() {
     std::fs::remove_dir_all(&d).unwrap();
 }
 
+/// `cyx yard fixture`: a signed index the printed registry entry trusts, the same extensions every time.
+#[test]
+fn yard_fixture_is_a_signed_index_of_made_up_extensions() {
+    let d = tmp("fixture");
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    let setting = crate::yard::fixture(&d, 300, "http://127.0.0.1:1", now).unwrap();
+    let reg = ext_core::registry::Registry::from_setting(&serde_json::from_str(&setting).unwrap()).unwrap();
+    assert_eq!((reg.name.as_str(), reg.url.as_str()), ("fixture", "http://127.0.0.1:1"));
+    let v = crate::yard::verify(&d, &reg.keys, now).unwrap();
+    assert_eq!(v.index.extensions.len(), 300);
+    assert!(!v.stale);
+    let names: Vec<String> = v.index.extensions.values().map(|e| e.name.clone()).collect();
+    crate::yard::fixture(&d, 300, "http://127.0.0.1:1", now).unwrap();
+    assert!(crate::yard::verify(&d, &reg.keys, now).is_err(), "new keys every run: the old entry no longer trusts it");
+    let read: ext_core::yard::Index = serde_json::from_slice(&std::fs::read(d.join("index.json")).unwrap()).unwrap();
+    assert_eq!(read.extensions.values().map(|e| e.name.clone()).collect::<Vec<_>>(), names, "the same extensions");
+    std::fs::remove_dir_all(&d).unwrap();
+}
+
 #[test]
 fn the_publish_workflow_pins_every_action_to_a_commit() {
     let uses: Vec<&str> = scaffold::PUBLISH_WORKFLOW.lines().filter_map(|l| l.trim().strip_prefix("- uses: ")).collect();

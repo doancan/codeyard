@@ -754,7 +754,7 @@ impl Workbench {
     }
 
     pub fn review_registry_extension_for_test(&mut self, spec: &str, window: &mut Window, cx: &mut Context<Self>) {
-        self.review_registry_extension(spec.to_string(), window, cx);
+        self.review_registry_extension(spec.to_string(), None, window, cx);
     }
 
     /// The consent sheet's source line and its warnings.
@@ -769,6 +769,50 @@ impl Workbench {
         } else {
             self.cancel_consent(cx);
         }
+    }
+
+    // --- Market ---
+
+    pub fn extensions_tab_for_test(&mut self, market: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let tab = if market { market_glue::ExtTab::Market } else { market_glue::ExtTab::Installed };
+        self.set_extensions_tab(tab, window, cx);
+    }
+
+    pub fn market_search_for_test(&mut self, text: &str, cx: &mut Context<Self>) {
+        if let Some(f) = self.cfg.exts.market.search.clone() {
+            f.update(cx, |f, cx| f.set_text(text, cx));
+        }
+    }
+
+    /// The Market's results on screen (ids, best first) and its status line.
+    pub fn market_for_test(&self) -> (Vec<String>, String) {
+        let m = &self.cfg.exts.market;
+        let ids = m.catalog.as_ref().map(|c| m.results.iter().map(|&i| c.item(i).id.to_string()).collect()).unwrap_or_default();
+        (ids, market_view_glue::market_status(m).0)
+    }
+
+    pub fn market_cursor_for_test(&self) -> usize {
+        self.cfg.exts.market.cursor
+    }
+
+    /// The Market page in front: (title, its lines as a screen reader gets them, the install button's label, README
+    /// text or the error).
+    pub fn market_page_for_test(&self) -> Option<(String, Vec<String>, Option<String>, Result<Option<String>, String>)> {
+        let snap = self.a11y_extension_page()?;
+        let readme = match &self.cfg.exts.market.page.as_ref()?.loaded {
+            None => Ok(None),
+            Some(Err(e)) => Err(e.clone()),
+            Some(Ok(l)) => Ok(l.readme.as_deref().map(crate::markdown::plain_text)),
+        };
+        Some((snap.title, snap.lines, snap.install, readme))
+    }
+
+    pub fn open_market_row_for_test(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_market_row(ix, window, cx);
+    }
+
+    pub fn install_from_market_for_test(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.install_from_market(window, cx);
     }
 
     /// The detail page's extension: (id, version, contribution lines, permission lines, version a rollback goes to).

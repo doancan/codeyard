@@ -101,6 +101,55 @@ fn a_published_package_is_in_the_signed_index_and_on_disk() {
 }
 
 #[test]
+fn the_market_page_is_the_manifest_and_readme_with_its_digest_in_the_index() {
+    let t = Test::new("details");
+    let me = github(7, 42);
+    let long = "A line of the README.\n".repeat(y::MAX_README_BYTES / 10);
+    let m = manifest("you.night", "1.0.0", "Night", "[[themes]]\nlabel = \"Night\"\npath = \"t.json\"\n");
+    let pkg = package_with(&m, &[("t.json", THEME), ("README.md", &long)]);
+    t.publish(&pkg, &me).unwrap();
+    let r = t.release("you.night", "1.0.0");
+    let bytes = std::fs::read(t.dir.join("public/packages").join(format!("{}.details.json", r.digest))).unwrap();
+    assert_eq!(r.details.as_deref(), Some(y::Details::digest(&bytes).as_str()));
+    let d: y::Details = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(d.manifest, m);
+    let readme = d.readme.unwrap();
+    assert!(d.readme_cut && readme.len() <= y::MAX_README_BYTES && readme.ends_with('\n') && long.starts_with(&readme));
+    assert!(bytes.len() <= y::MAX_DETAILS_BYTES);
+    // Without a README there is none, and nothing is cut.
+    t.publish(&package("you.day", "1.0.0", "Day"), &me).unwrap();
+    let r = t.release("you.day", "1.0.0");
+    let d: y::Details = serde_json::from_slice(&std::fs::read(t.dir.join("public/packages").join(format!("{}.details.json", r.digest))).unwrap()).unwrap();
+    assert_eq!((d.readme, d.readme_cut), (None, false));
+}
+
+#[test]
+fn versions_published_before_details_get_them_on_the_next_start() {
+    let t = Test::new("details-later");
+    let pkg = package("you.night", "1.0.0", "Night");
+    t.publish(&pkg, &github(7, 42)).unwrap();
+    let digest = pkg.1.hex();
+    let details = t.dir.join("public/packages").join(format!("{digest}.details.json"));
+    // As a registry from before details files: no file, no digest.
+    std::fs::remove_file(&details).unwrap();
+    {
+        let mut conn = t.yard.lock();
+        let tx = conn.transaction().unwrap();
+        assert!(db::releases_without_details(&tx).unwrap().is_empty());
+        let mut release: y::Release = serde_json::from_str(&tx.query_row("SELECT release FROM versions", [], |r| r.get::<_, String>(0)).unwrap()).unwrap();
+        release.details = None;
+        db::put_release(&tx, &ExtId::parse("you.night").unwrap(), &release).unwrap();
+        assert_eq!(db::releases_without_details(&tx).unwrap().len(), 1);
+        tx.commit().unwrap();
+    }
+    let cfg = Config::load(&t.dir.join("yard.json")).unwrap();
+    let again = Yard::open(cfg).unwrap();
+    again.resign(NOW + 120).unwrap();
+    let r = t.release("you.night", "1.0.0");
+    assert_eq!(r.details.as_deref(), Some(y::Details::digest(&std::fs::read(&details).unwrap()).as_str()));
+}
+
+#[test]
 fn versions_are_never_reused_and_come_out_in_order() {
     let t = Test::new("versions");
     let me = github(7, 42);
@@ -296,6 +345,9 @@ fn the_http_service_end_to_end() {
     assert_eq!((status, pkg), (200, bytes));
     let (status, served) = request(addr, "GET", &format!("/packages/{}.sigstore.json", digest.hex()), b"");
     assert_eq!((status, served), (200, bundle.clone()), "the publisher signature, as uploaded");
+    let (status, page) = request(addr, "GET", &format!("/packages/{}.details.json", digest.hex()), b"");
+    assert_eq!((status, page), (200, std::fs::read(dir.join(format!("public/packages/{}.details.json", digest.hex()))).unwrap()));
+    assert_eq!(request(addr, "GET", "/packages/zz.details.json", b"").0, 404);
     assert_eq!(request(addr, "GET", "/packages/../yard.sigstore.json", b"").0, 404);
     assert_eq!(request(addr, "GET", "/packages/zz.cyx", b"").0, 404);
     assert_eq!(request(addr, "GET", "/yard.sqlite", b"").0, 404, "only the public files are served");

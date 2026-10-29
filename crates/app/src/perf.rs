@@ -4,6 +4,9 @@
 //! - `CODEYARD_PERF=<file>`: append one JSON line per sample, `{"metric":"…","value":…}`.
 //! - `CODEYARD_PERF_TYPING=<n>`: after the first frame settles, type `n` characters into the focused editor and record
 //!   keystroke → frame for each.
+//! - `CODEYARD_PERF_MARKET=<n>`: after the first frame settles, open the Market, wait for its catalogue, then type `n`
+//!   keys into its search (a word, then erasing it, over and over) and record keystroke → results in the view, and
+//!   keystroke → the frame that shows them.
 //! - `CODEYARD_PERF_EXIT=1`: quit when the scenario is done.
 
 use std::fs::File;
@@ -19,6 +22,8 @@ use crate::workbench::Workbench;
 static ON: AtomicBool = AtomicBool::new(false);
 static START: OnceLock<Instant> = OnceLock::new();
 static OUT: Mutex<Option<File>> = Mutex::new(None);
+/// When the Market key being measured was pressed; taken when its results are on screen.
+static MARKET_KEY: Mutex<Option<Instant>> = Mutex::new(None);
 
 /// Time between typed characters: long enough for the previous frame to finish.
 const TYPING_GAP: Duration = Duration::from_millis(60);
@@ -69,6 +74,25 @@ fn after_next_frame(window: &Window, f: impl FnOnce(&mut Window, &mut App) + 'st
     window.on_next_frame(move |window, _| window.on_next_frame(f));
 }
 
+/// The Market applied search results for the measured keystroke, if one is pending: `market.search_ms` is the time
+/// to that point (the search, off the UI thread, and its hand-over), `market.search_frame_ms` to the frame after the
+/// one that draws them (it includes up to two display refreshes, like `typing.keystroke_frame_ms`).
+pub fn market_results_shown(window: &Window) {
+    if !enabled() {
+        return;
+    }
+    if let Some(t0) = MARKET_KEY.lock().unwrap_or_else(|e| e.into_inner()).take() {
+        sample("market.search_ms", ms(t0.elapsed()));
+        after_next_frame(window, move |_, _| sample("market.search_frame_ms", ms(t0.elapsed())));
+    }
+}
+
+/// Keys the Market scenario types: a word letter by letter, then erased, so every key changes the query.
+fn market_key(i: usize) -> &'static str {
+    const KEYS: [&str; 10] = ["n", "i", "g", "h", "t", "backspace", "backspace", "backspace", "backspace", "backspace"];
+    KEYS[i % KEYS.len()]
+}
+
 /// Called once the first workbench window is open: records startup marks and runs the scripted scenario.
 pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
     if !enabled() {
@@ -76,6 +100,7 @@ pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
     }
     mark("startup.window_open_ms");
     let typing: usize = std::env::var("CODEYARD_PERF_TYPING").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    let market: usize = std::env::var("CODEYARD_PERF_MARKET").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let exit = std::env::var_os("CODEYARD_PERF_EXIT").is_some();
     handle
         .update(cx, |_, window, _| {
@@ -102,6 +127,27 @@ pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
                         })
                         .ok();
                         cx.background_executor().timer(SETTLE).await;
+                    }
+                    if market > 0 {
+                        cx.background_executor().timer(SETTLE).await;
+                        cx.update_window(handle.into(), |_, window, cx| window.dispatch_action(Box::new(crate::workbench::ShowMarket), cx)).ok();
+                        // The catalogue is read in the background; up to 30 s for a cold disk and a first fetch.
+                        for _ in 0..300 {
+                            if handle.read_with(cx, |wb, _| wb.market_ready_for_perf()).unwrap_or(true) {
+                                break;
+                            }
+                            cx.background_executor().timer(Duration::from_millis(100)).await;
+                        }
+                        for i in 0..market {
+                            let typed = cx.update_window(handle.into(), |_, window, cx| {
+                                *MARKET_KEY.lock().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
+                                window.dispatch_keystroke(Keystroke::parse(market_key(i)).expect("valid keystroke"), cx);
+                            });
+                            if typed.is_err() {
+                                break;
+                            }
+                            cx.background_executor().timer(TYPING_GAP).await;
+                        }
                     }
                     if exit {
                         cx.update(|cx| cx.quit()).ok();

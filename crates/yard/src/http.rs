@@ -5,6 +5,7 @@
 //! POST /v1/status                  framed bundle + status statement → 200 {id, version, status}
 //! GET  /packages/<digest>.cyx      the package; counts one download for today
 //! GET  /packages/<digest>.sigstore.json   its publisher signature, which clients verify themselves
+//! GET  /packages/<digest>.details.json     its manifest and README, for the Market's page (not a download)
 //! GET  /index.json, /index.json.sig, /root.json, /root.json.sig    the static files, for a registry without a CDN
 //! GET  /healthz
 //! ```
@@ -85,6 +86,13 @@ async fn handle(yard: Arc<Yard>, uploads: Arc<tokio::sync::Semaphore>, req: Requ
         (Method::GET, p) if p.starts_with("/packages/") && p.ends_with(".sigstore.json") => {
             let digest = p["/packages/".len()..p.len() - ".sigstore.json".len()].to_string();
             match yard.bundle(&digest).and_then(|f| std::fs::read(f).map_err(|_| Error::NotFound("no such package".into()))) {
+                Ok(bytes) => file(bytes, "application/json", "public, max-age=31536000, immutable"),
+                Err(e) => error(e),
+            }
+        }
+        (Method::GET, p) if p.starts_with("/packages/") && p.ends_with(".details.json") => {
+            let digest = p["/packages/".len()..p.len() - ".details.json".len()].to_string();
+            match yard.details(&digest).and_then(|f| std::fs::read(f).map_err(|_| Error::NotFound("no such package".into()))) {
                 Ok(bytes) => file(bytes, "application/json", "public, max-age=31536000, immutable"),
                 Err(e) => error(e),
             }

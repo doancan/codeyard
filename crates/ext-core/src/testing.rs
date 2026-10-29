@@ -234,6 +234,8 @@ impl TestRegistry {
         let digest = pkg.digest.hex();
         std::fs::write(self.dir.join(format!("packages/{digest}.cyx")), bytes).unwrap();
         std::fs::write(self.dir.join(format!("packages/{digest}.sigstore.json")), &bundle).unwrap();
+        let details = crate::yard::Details::of(&pkg).to_bytes();
+        std::fs::write(self.dir.join(format!("packages/{digest}.details.json")), &details).unwrap();
         let release = crate::yard::Release {
             version: m.version.clone(),
             digest,
@@ -245,6 +247,7 @@ impl TestRegistry {
             status: crate::yard::Status::Ok,
             downloads: 0,
             immediate: false,
+            details: Some(crate::yard::Details::digest(&details)),
         };
         let entry = self.index.extensions.entry(m.id.clone()).or_insert_with(|| crate::yard::Entry {
             name: m.name.clone(),
@@ -259,12 +262,16 @@ impl TestRegistry {
         release
     }
 
-    pub fn set_status(&mut self, id: &str, version: &str, status: crate::yard::Status, now: u64) {
+    /// Change one version's index entry (download counts, status, …) and sign a new index.
+    pub fn edit_release(&mut self, id: &str, version: &str, now: u64, f: impl FnOnce(&mut crate::yard::Release)) {
         let id = ext_manifest::ExtId::parse(id).unwrap();
         let v = ext_manifest::Version::parse(version).unwrap();
-        let r = self.index.extensions.get_mut(&id).unwrap().versions.iter_mut().find(|r| r.version == v).unwrap();
-        r.status = status;
+        f(self.index.extensions.get_mut(&id).unwrap().versions.iter_mut().find(|r| r.version == v).unwrap());
         self.sign(now);
+    }
+
+    pub fn set_status(&mut self, id: &str, version: &str, status: crate::yard::Status, now: u64) {
+        self.edit_release(id, version, now, |r| r.status = status);
     }
 
     /// Sign the index again (a new version, expiring 72 h after `now`).

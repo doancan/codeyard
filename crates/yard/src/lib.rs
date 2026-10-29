@@ -1,7 +1,7 @@
 //! Yard, the extension registry's publish service (docs/registry.md, docs/plugin-architecture.md §8).
 //!
 //! Everything users download is static: `index.json` and its signature, `root.json` and its signatures, and
-//! `packages/<digest>.cyx`, written into the public folder a CDN serves. This service exists for publishers: it takes a
+//! `packages/<digest>.cyx` with `<digest>.details.json` (its manifest and README, for the Market), written into the public folder a CDN serves. This service exists for publishers: it takes a
 //! package with its Sigstore bundle, runs the same checks as `cyx check` and the client, records it, and writes and
 //! signs a new index. A publisher proves who they are with the bundle itself (the identity in its Fulcio certificate),
 //! so there are no accounts, passwords or tokens. Yank, restore and deprecate are signed statements the same way.
@@ -143,7 +143,29 @@ impl Yard {
         }
         std::fs::create_dir_all(cfg.public.join("packages")).map_err(|e| format!("cannot create {}: {e}", cfg.public.display()))?;
         let db = db::open(&cfg.database).map_err(|e| format!("{}: {e}", cfg.database.display()))?;
-        Ok(Yard { cfg, root, pins, online, db: Mutex::new(db) })
+        let yard = Yard { cfg, root, pins, online, db: Mutex::new(db) };
+        yard.add_missing_details()?;
+        Ok(yard)
+    }
+
+    fn packages(&self) -> PathBuf {
+        self.cfg.public.join("packages")
+    }
+
+    /// Versions published before details files existed get theirs from the stored package; the next signing lists them.
+    fn add_missing_details(&self) -> Result<(), String> {
+        let mut conn = self.lock();
+        let tx = conn.transaction().map_err(|e| e.to_string())?;
+        for (id, mut release) in db::releases_without_details(&tx).map_err(|e| e.to_string())? {
+            let path = self.packages().join(format!("{}.cyx", release.digest));
+            let bytes = std::fs::read(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+            let pkg = ext_pkg::read(&bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+            let details = yard::Details::of(&pkg).to_bytes();
+            write_atomic(&self.packages().join(format!("{}.details.json", release.digest)), &details).map_err(|e| e.to_string())?;
+            release.details = Some(yard::Details::digest(&details));
+            db::put_release(&tx, &id, &release).map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())
     }
 
     pub fn config(&self) -> &Config {
@@ -203,6 +225,7 @@ impl Yard {
             return Err(Error::Conflict(format!("{} {} was published before; a version number is never reused, so raise it", m.id, m.version)));
         }
         let digest = pkg.digest.hex();
+        let details = yard::Details::of(&pkg).to_bytes();
         let release = yard::Release {
             version: m.version.clone(),
             digest: digest.clone(),
@@ -214,6 +237,7 @@ impl Yard {
             status: Status::Ok,
             downloads: 0,
             immediate: false,
+            details: Some(yard::Details::digest(&details)),
         };
         db::upsert_extension(&tx, m, &who).map_err(internal("database"))?;
         db::add_version(&tx, &m.id, &release).map_err(internal("database"))?;
@@ -222,6 +246,7 @@ impl Yard {
         write_atomic(&self.cfg.public.join("packages").join(format!("{digest}.cyx")), bytes)?;
         // Clients check the publisher's signature themselves; the registry only passes it on.
         write_atomic(&self.cfg.public.join("packages").join(format!("{digest}.sigstore.json")), bundle)?;
+        write_atomic(&self.packages().join(format!("{digest}.details.json")), &details)?;
         self.sign_index(&tx, now)?;
         tx.commit().map_err(internal("database"))?;
         let available = if release.code { now + CODE_WAIT_SECS } else { now };
@@ -310,6 +335,15 @@ impl Yard {
             return Err(Error::NotFound("no such package".into()));
         }
         let path = self.cfg.public.join("packages").join(format!("{digest}.sigstore.json"));
+        if path.is_file() { Ok(path) } else { Err(Error::NotFound("no such package".into())) }
+    }
+
+    /// The Market's page data for a package (not counted as a download).
+    pub fn details(&self, digest: &str) -> Result<PathBuf, Error> {
+        if ext_pkg::ContentDigest::parse(digest).is_none() {
+            return Err(Error::NotFound("no such package".into()));
+        }
+        let path = self.packages().join(format!("{digest}.details.json"));
         if path.is_file() { Ok(path) } else { Err(Error::NotFound("no such package".into())) }
     }
 

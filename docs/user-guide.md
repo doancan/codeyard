@@ -641,8 +641,17 @@ the first install pins it: if a later version comes from someone else, the sheet
 starts on *Cancel*. It does the same when the registry's list is more than 3 days old. Packages are installed on this
 computer, also in an SSH window.
 
-Codeyard asks a registry nothing until you install from it. After that it fetches the registry's whole list at most
-once a day, the same file for everyone, so the registry never learns what you have installed.
+**Market.** The Extensions view has two tabs: *Installed* and *Market* (also *Extensions: Open Market*). The Market
+lists every extension of your registries and searches their names, ids, descriptions and categories as you type,
+on your computer: searching sends nothing. ↑ and ↓ move through the results and Enter opens one; a screen reader is
+told how many match. An extension's page shows its README (images are not loaded; a link opens in your browser after
+you confirm its address), its versions with their dates and status (withdrawn, revoked, deprecated), its
+permissions in plain words, who publishes it and how often it was downloaded, updates included. There are no ratings.
+*Install* opens the same consent sheet as above.
+
+Codeyard asks a registry nothing until you install from it or open the Market. After that it fetches the registry's
+whole list at most once a day, the same file for everyone, so the registry never learns what you have installed.
+Opening an extension's page in the Market fetches that page once.
 
 From a terminal or a script, `codeyard --install-extension FILE.cyx` or `--install-extension publisher.name[@1.2.0]`
 (repeat the flag for several) installs without opening a window; running it is your consent, and the same checks

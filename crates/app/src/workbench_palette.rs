@@ -311,6 +311,7 @@ impl Workbench {
             Command::action("Extensions: Show Extensions", ShowExtensions),
             Command::action("Extensions: Install from File…", InstallExtensionFromFile),
             Command::action("Extensions: Install from Registry…", InstallExtensionFromRegistry),
+            Command::action("Extensions: Open Market", ShowMarket),
             Command::action("Extensions: Install from Folder…", InstallExtensionFromFolder),
             Command::action("Terminal: New Terminal with Profile…", NewTerminalWithProfile),
             Command::action("Terminal: Select Default Profile…", SelectDefaultTerminalProfile),

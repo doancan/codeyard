@@ -18,6 +18,7 @@
 
 mod der;
 pub mod lock;
+pub mod market;
 pub mod publisher;
 pub mod registry;
 #[cfg(any(test, feature = "testing"))]

@@ -114,6 +114,8 @@ mod lsp;
 #[cfg(test)]
 mod manage_menu_tests;
 mod markdown;
+#[cfg(test)]
+mod market_tests;
 mod menu;
 mod menus;
 mod merge;
@@ -304,6 +306,8 @@ fn bind_keys(cx: &mut App) {
         // The update dialog: Esc closes it, Tab walks its buttons, Enter and Space press the focused one (Enter: the primary one).
         KeyBinding::new("escape", UpdateDismiss, Some("UpdateDialog")),
         KeyBinding::new("escape", CancelExtensionConsent, Some("ExtensionConsent")),
+        KeyBinding::new("up", MarketPrevious, Some("MarketSearch")),
+        KeyBinding::new("down", MarketNext, Some("MarketSearch")),
         KeyBinding::new("cmd-w", UpdateDismiss, Some("UpdateDialog")),
         KeyBinding::new("tab", UpdateFocusNext, Some("UpdateDialog")),
         KeyBinding::new("shift-tab", UpdateFocusPrev, Some("UpdateDialog")),

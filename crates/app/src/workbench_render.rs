@@ -126,6 +126,7 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::show_run_debug))
             .on_action(cx.listener(Self::show_testing))
             .on_action(cx.listener(Self::show_extensions))
+            .on_action(cx.listener(Self::show_market))
             .on_action(cx.listener(Self::install_extension_from_file))
             .on_action(cx.listener(Self::install_extension_from_registry))
             .on_action(cx.listener(Self::install_extension_from_folder))

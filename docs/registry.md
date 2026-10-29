@@ -6,7 +6,8 @@ operator's commands. Hosting and the runbook come with #70. The design is in [pl
 
 ## Files
 
-A registry is four files at one base URL (and the packages, by content digest):
+A registry is four files at one base URL (and, by content digest, the packages, their publisher signatures and their
+details files):
 
 | File | Signed by | Holds |
 | --- | --- | --- |
@@ -32,7 +33,7 @@ signature for one file never passes for the other. A `.sig` file is `{"signature
                      "workflow": ".github/workflows/publish.yml" },
       "versions": [
         { "version": "1.0.0", "digest": "…", "sha256": "…", "size": 1200, "permissions": "…",
-          "code": false, "published": 1800000000, "status": "ok", "downloads": 31 }
+          "code": false, "published": 1800000000, "status": "ok", "downloads": 31, "details": "…" }
       ]
     }
   }
@@ -41,6 +42,9 @@ signature for one file never passes for the other. A `.sig` file is `{"signature
 
 - `digest` is the content digest the lock records; `sha256` is the `.cyx` file as downloaded; `permissions` is the
   sha256 of the permission set, so an update can tell "same permissions" without downloading.
+- `details` is the sha256 of `packages/<digest>.details.json`, the version's manifest and README for the Market
+  (below).
+- `downloads` counts every download of the version, updates included, per day and without logs.
 - `status` is `"ok"`, `{"deprecated": {"replacement": "id"}}`, `"yanked"` or `{"revoked": {"reason": "…"}}`.
 - A version with a suffix (`1.2.0-beta.1`) is a pre-release, offered only to users who opt in for that extension.
 - Versions are listed oldest first and never reused. Times are Unix seconds.
@@ -120,6 +124,7 @@ POST /v1/publish                 a Sigstore bundle and a package          → wh
 POST /v1/status                  a Sigstore bundle and a status statement → yank, restore, deprecate
 GET  /packages/<digest>.cyx      the package; counts one download for the day (nothing about who asked is kept)
 GET  /packages/<digest>.sigstore.json   its publisher signature; clients verify it themselves
+GET  /packages/<digest>.details.json     its manifest and README, for the Market (not counted as a download)
 GET  /index.json  /root.json …   the static files, for a registry without a CDN
 ```
 
@@ -144,6 +149,10 @@ Status statements are `codeyard-yard/v1/status
 `, signed by the
 identity that publishes the extension within the last 15 minutes. A revoked version stays revoked.
 
+With each package the service writes its details file: `{"manifest": "<codeyard-extension.toml>", "readme":
+"<README.md>"}`, the README cut at a line to 256 KiB (`"readme_cut": true` then), so the Market shows a page without
+downloading the package. A registry from before details files gets them for every version when `yard` next starts.
+
 Every change writes the package first, then signs and writes a new index (signature, then index; a client that reads
 between the two sees a mismatch and fetches again). `yard serve` also signs a fresh index at start and every 24 hours,
 so it never expires while the service runs.
@@ -166,8 +175,16 @@ so proxies and the system's certificates apply). Each registry's last accepted c
 when fetched, the index's ETag) are kept in `<data>/extensions/registries/<name>/`.
 
 - **When it asks.** Only for a registry an installed extension came from, at most once a day (a conditional request:
-  a 304 reads nothing), or when the user asks for an install. A user with no extension from a registry makes no
-  request; a test fails on any.
+  a 304 reads nothing), when the user opens the Market (the copy from earlier the same day is used), or when the user
+  asks for an install. Searching the Market asks nothing. Opening an extension's page fetches its details file once;
+  it is kept in `details/<sha256>.json` and checked against the index's `details` digest, its manifest against the
+  version's id, version and permission digest. A user with no extension from a registry who never opens the Market
+  makes no request; a test fails on any.
+- **The Market** searches the indexes on the device: the name, id, description and categories, every word of the
+  query somewhere, names before ids, categories and descriptions, ties most downloaded first. It runs off the UI
+  thread on each keystroke; 10 000 extensions take well under a millisecond, and the perf row
+  `market.search_ms` (key press to the results in the view, ceiling 16 ms) keeps it there. A README is shown
+  without images (none is requested) and its links open in the browser only after the user confirms the address.
 - **What it checks before the consent sheet**, in order: the index (above); the version may be installed (not yanked
   or revoked); the package's size and sha256 against the index, its content digest, id, version and permission
   digest; the publisher's bundle (`packages/<digest>.sigstore.json`) against the root's pinned Sigstore roots; and
@@ -185,6 +202,7 @@ when fetched, the index's ETag) are kept in `<data>/extensions/registries/<name>
 cyx yard keygen FILE                              a new key, readable only by you; prints the public key
 cyx yard sign <root|index> FILE --key KEYFILE     add your signature to FILE.sig
 cyx yard verify FOLDER --root-key HEX… [--threshold N]
+cyx yard fixture FOLDER --extensions N --url URL  a signed index of N made-up extensions, for the Market's perf run
 ```
 
 A root key ceremony is one `keygen` per holder, then each holder runs `sign root root.json` on the same file; signing

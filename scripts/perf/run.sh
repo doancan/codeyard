@@ -29,8 +29,9 @@ OUT=target/perf
 mkdir -p "$OUT"
 TMP=$(mktemp -d)
 pid=""
+server=""
 # Stop a running app too: an interrupted run must not leave Codeyard open on a deleted profile.
-trap '[ -n "$pid" ] && kill "$pid" 2>/dev/null; rm -rf "$TMP"' EXIT
+trap '[ -n "$pid" ] && kill "$pid" 2>/dev/null; [ -n "$server" ] && kill "$server" 2>/dev/null; rm -rf "$TMP"' EXIT
 trap 'exit 130' INT TERM
 . scripts/perf/footprint.sh
 
@@ -85,6 +86,15 @@ for f in "$TMP"/gen/*.cyx; do install_args+=(--install-extension "$f"); done
 CODEYARD_CONFIG_DIR="$EXT_PROFILE/config" CODEYARD_STATE_DIR="$EXT_PROFILE/state" "$OUT/codeyard-candidate" "${install_args[@]}" >/dev/null
 installed=$(grep -c '"digest"' "$EXT_PROFILE/config/extensions.lock.jsonc" 2>/dev/null || echo 0)
 [ "$installed" = 100 ] || { echo "perf: the extension profile has $installed extensions, not 100" >&2; exit 1; }
+# A registry of 10 000 made-up extensions (`cyx yard fixture`) served on this machine, and a profile that lists it.
+# Each run starts without its cached index, so the Market fetches it once (not measured) before the typing.
+MARKET_PROFILE="$TMP/market-profile"
+mkdir -p "$MARKET_PROFILE/config" "$MARKET_PROFILE/state"
+port=$(python3 -I -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+setting=$("$CYX" yard fixture "$TMP/market-yard" --extensions 10000 --url "http://127.0.0.1:$port")
+printf '{"update.check":"manual","extensions.registries":[%s]}\n' "$setting" > "$MARKET_PROFILE/config/settings.jsonc"
+python3 -I -m http.server --bind 127.0.0.1 --directory "$TMP/market-yard" "$port" >/dev/null 2>&1 &
+server=$!
 launch() { # app args... (background; $! is the pid)
   local app=$1; shift
   CODEYARD_STATE_DIR="$TMP/state" CODEYARD_CONFIG_DIR="$TMP/config" CODEYARD_NO_DOCK_ICON=1 "$app" "$@" >/dev/null 2>&1 &
@@ -141,6 +151,14 @@ for i in $(seq 1 "$runs"); do
     : > "$TMP/ext.jsonl"
     CODEYARD_PERF="$TMP/ext.jsonl" PROFILE_FROM="$EXT_PROFILE" run_scripted "$OUT/codeyard-${names[$k]}"
     grep '"startup.extensions_ms"' "$TMP/ext.jsonl" >> "$CODEYARD_PERF" || true
+    # The Market with 10 000 extensions: keystroke to the results, and to the frame that shows them; 40 keys.
+    : > "$TMP/market.jsonl"
+    CODEYARD_PERF="$TMP/market.jsonl" CODEYARD_PERF_MARKET=40 PROFILE_FROM="$MARKET_PROFILE" run_scripted "$OUT/codeyard-${names[$k]}"
+    if [ "$(count market.search_ms "$TMP/market.jsonl")" != 40 ] && [ "${names[$k]}" = candidate ]; then
+      echo "perf: the Market run of ${names[$k]} did not show results for 40 keys; is the window visible and the fixture served?" >&2
+      exit 1
+    fi
+    grep '"market\.' "$TMP/market.jsonl" >> "$CODEYARD_PERF" || true
   done
   printf '\rperf: timing run %s/%s' "$i" "$runs" >&2
 done

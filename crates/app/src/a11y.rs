@@ -48,6 +48,17 @@ const ABOUT_TAB: NodeId = NodeId(29);
 const ABOUT: NodeId = NodeId(30);
 const ABOUT_COPY: NodeId = NodeId(31);
 const ABOUT_DETAIL: u64 = 0xa0_0000;
+const EXT: NodeId = NodeId(41);
+const EXT_TABS: NodeId = NodeId(42);
+const EXT_TAB_INSTALLED: NodeId = NodeId(43);
+const EXT_TAB_MARKET: NodeId = NodeId(44);
+const EXT_SEARCH: NodeId = NodeId(45);
+const EXT_STATUS: NodeId = NodeId(46);
+const EXT_LIST: NodeId = NodeId(47);
+const EXT_PAGE: NodeId = NodeId(48);
+const EXT_PAGE_INSTALL: NodeId = NodeId(49);
+const EXT_ROW: u64 = 0xd0_0000;
+const EXT_PAGE_LINE: u64 = 0xe0_0000;
 const SERVICES: NodeId = NodeId(24);
 const SERVICES_INFO: NodeId = NodeId(25);
 const SERVICES_STATUS: NodeId = NodeId(26);
@@ -82,6 +93,8 @@ const _: () = {
         ABOUT_DETAIL,
         search_access::SEARCH_ED_ROW,
         search_access::SEARCH_ED_TAB,
+        EXT_ROW,
+        EXT_PAGE_LINE,
         ROW_BASE,
     ];
     let mut i = 1;
@@ -202,6 +215,7 @@ pub enum FocusSnap {
     Terminal,
     ScmMessage,
     AboutCopy,
+    ExtSearch,
 }
 
 /// The update dialog (or the first-run question) while it is open.
@@ -237,6 +251,8 @@ pub struct NoticeSnap {
     pub error: bool,
 }
 
+#[path = "a11y_extensions.rs"]
+mod ext_access;
 #[path = "a11y_scm.rs"]
 mod scm_access;
 #[path = "a11y_search_editor.rs"]
@@ -269,6 +285,8 @@ pub struct Snapshot {
     pub terminal: Option<TerminalSnap>,
     pub(crate) scm: Option<ScmSnap>,
     pub(crate) services: Option<crate::language_services_page::AccessView>,
+    pub(crate) exts: Option<ext_access::ExtSnap>,
+    pub(crate) ext_page: Option<ext_access::ExtPageSnap>,
     /// The Search Editor in front, and every Search Editor tab of the focused group.
     pub(crate) search_editor: Option<SearchEdSnap>,
     pub(crate) search_tabs: Vec<SearchTabSnap>,
@@ -448,6 +466,15 @@ impl Snapshot {
         if let Some(scm) = &self.scm {
             scm.append_tree(&mut nodes);
             kids.push(SCM);
+        }
+
+        if let Some(view) = &self.exts {
+            ext_access::append_tree(view, &mut nodes);
+            kids.push(EXT);
+        }
+        if let Some(page) = &self.ext_page {
+            ext_access::append_page(page, &mut nodes);
+            kids.push(EXT_PAGE);
         }
 
         // Tabs
@@ -713,6 +740,7 @@ impl Snapshot {
             FocusSnap::Terminal if self.terminal.is_some() => TERMINAL,
             FocusSnap::ScmMessage if self.scm.as_ref().is_some_and(|s| s.view.root.is_some()) => SCM_MESSAGE,
             FocusSnap::AboutCopy if self.about.as_ref().is_some_and(|a| a.active) => ABOUT_COPY,
+            FocusSnap::ExtSearch if self.exts.is_some() => EXT_SEARCH,
             FocusSnap::Explorer(k) if k < self.explorers.len() => self.explorers[k].focused.map_or(explorer_id(k), NodeId),
             _ => ROOT,
         };
@@ -865,12 +893,15 @@ impl Workbench {
 
         let (search_editor, search_tabs) = self.a11y_search_snap(window, cx);
         let scm = (self.chrome.panel == Some(Panel::Scm)).then(|| ScmSnap { generation: self.lsp.generation, view: self.scm.read(cx).a11y_view(window, cx) });
+        let exts = self.a11y_extensions(window, cx);
         let focus = if self.tabs.page_active && about_view.is_some_and(|view| view.focus_handle(cx).is_focused(window)) {
             FocusSnap::AboutCopy
         } else if let Some(k) = trees.iter().position(|t| t.read(cx).focus_handle(cx).is_focused(window)) {
             FocusSnap::Explorer(k)
         } else if scm.as_ref().is_some_and(|s| s.view.message_focused) {
             FocusSnap::ScmMessage
+        } else if exts.as_ref().is_some_and(|e| e.search_focused) {
+            FocusSnap::ExtSearch
         } else if picker_entity.as_ref().is_some_and(|p| p.focus_handle(cx).is_focused(window)) {
             FocusSnap::Picker
         } else if let Some(field) = find_bar.as_ref().and_then(|b| b.read(cx).a11y_focus(window, cx)) {
@@ -899,6 +930,8 @@ impl Workbench {
             completion,
             terminal,
             scm,
+            exts,
+            ext_page: self.a11y_extension_page(),
             search_editor,
             search_tabs,
             picker,
@@ -918,6 +951,10 @@ impl Workbench {
             return;
         }
         if self.a11y_scm_action(req, last, window, cx) {
+            cx.notify();
+            return;
+        }
+        if self.a11y_ext_action(req, last, window, cx) {
             cx.notify();
             return;
         }
@@ -1229,6 +1266,8 @@ mod tests {
         Snapshot {
             generation: 0,
             services: None,
+            exts: None,
+            ext_page: None,
             geometry: Geometry::default(),
             title: "Codeyard \u{2014} demo".into(),
             explorers: vec![ExplorerSnap {
