@@ -31,6 +31,7 @@ need vendor/gpui/src/window.rs '\.set_client_inset\(crate::ui_to_platform\(inset
 need vendor/gpui/src/text_system.rs 'if raster_bounds.len\(\) >= MAX_RASTER_BOUNDS' "bounded glyph raster bounds cache"
 absent vendor/gpui/src/window.rs '^pub\(crate\) struct DispatchEventResult' "pub(crate) DispatchEventResult"
 need vendor/xattr/src/sys/mod.rs 'libc::ENODATA' "Linux ENODATA instead of ENOATTR (xattr)"
+absent vendor/xattr/src/sys/linux_macos/macos.rs 'uint32_t' "deprecated libc::uint32_t (xattr)"
 # The root Cargo.toml uses the patches, and the version is pinned.
 need Cargo.toml '^gpui = \{ path = "vendor/gpui" \}' "[patch.crates-io] gpui"
 need Cargo.toml '^xattr = \{ path = "vendor/xattr" \}' "[patch.crates-io] xattr"
