@@ -705,8 +705,8 @@ mod tests {
     #[test]
     fn a_server_that_never_answers_initialize_is_killed() {
         let host = Arc::new(Probe::new());
-        // `sleep` never reads the request, let alone answers it.
-        let cfg = ServerConfig::plain("x", "sleep", vec!["30".into()]);
+        // A sleeping Python never reads the request, let alone answers it.
+        let cfg = ServerConfig::plain("x", crate::test_lsp::python(), vec!["-c".into(), "import time; time.sleep(30)".into()]);
         let (tx, _rx) = mpsc::channel();
         let dir = std::env::temp_dir().to_string_lossy().into_owned();
         let err = Client::start_with(host.clone(), cfg, &dir, tx, Duration::from_millis(300)).err().expect("no answer is an error");

@@ -1235,6 +1235,16 @@ mod platform {
                 eprintln!("accessibility: the window was already visible, no UI Automation tree");
                 return;
             }
+            // The adapter keeps itself in a window property, whose name takes a slot in the session's global atom table, and
+            // panics when it cannot set it. A program that leaks atoms can fill that table: open the window without the tree.
+            use windows::Win32::UI::WindowsAndMessaging::{RemovePropW, SetPropW};
+            let hwnd = windows::Win32::Foundation::HWND(raw);
+            let name = windows::core::w!("AccessKitAdapter");
+            if unsafe { SetPropW(hwnd, name, None) }.is_err() {
+                eprintln!("accessibility: the session's atom table is full, no UI Automation tree");
+                return;
+            }
+            let _ = unsafe { RemovePropW(hwnd, name) };
         }
         let (tx, mut rx) = unbounded::<ActionRequest>();
         let activate = Activate { cx: async_cx.clone(), handle, ctl: ctl.clone(), started };

@@ -645,7 +645,7 @@ impl Workbench {
         let Some(ov) = self.close_overlay(window, cx) else { return };
         let (ext, ticket, nothing) = match ov.kind {
             OverlayKind::ExtPick { extension, ticket } => (extension, ticket, Completion::Chosen(Vec::new())),
-            OverlayKind::Input(InputPurpose::ExtInput { extension, ticket }) => (extension, ticket, Completion::Text(None)),
+            OverlayKind::Input { purpose: InputPurpose::ExtInput { extension, ticket }, .. } => (extension, ticket, Completion::Text(None)),
             _ => return,
         };
         self.complete_extension_ticket(&ext, ticket, answer.unwrap_or(nothing));

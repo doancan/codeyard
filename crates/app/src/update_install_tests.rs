@@ -167,6 +167,8 @@ fn update_swap_falls_back_to_two_renames_when_the_exchange_is_not_possible() {
     let einval = |_: &Path, _: &Path| -> io::Result<()> { Err(io::Error::from_raw_os_error(22)) };
     assert_eq!(swap(&app, &staged, &old, &|a, b| std::fs::rename(a, b), &einval).unwrap(), old);
     assert_eq!((read(&app.join("v")), read(&old.join("v"))), ("2".into(), "1".into()));
+    // 22 and 13 are POSIX error numbers (EINVAL, EACCES); Windows numbers its errors differently.
+    #[cfg(unix)]
     assert!(exchange_unsupported(&io::Error::from_raw_os_error(22)) && !exchange_unsupported(&io::Error::from_raw_os_error(13)));
 }
 

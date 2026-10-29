@@ -2,6 +2,10 @@
 
 use super::*;
 
+#[cfg(test)]
+#[path = "workbench_file_input_tests.rs"]
+mod input_tests;
+
 impl Workbench {
     /// A prompt from ssh: queue it, show it when its turn comes.
     pub fn ask(&mut self, request: AskRequest, reply: AskReply, window: &mut Window, cx: &mut Context<Self>) {
@@ -88,8 +92,34 @@ impl Workbench {
                 | InputPurpose::CommitTag { .. }
                 | InputPurpose::CloneTarget { .. }
         );
+        // Graph forms store only a commit, so capture their repository here too.
+        let git_root = match &purpose {
+            InputPurpose::CreateBranch { root }
+            | InputPurpose::RenameBranch { root, .. }
+            | InputPurpose::AddRemote { root }
+            | InputPurpose::AddWorktree { root }
+            | InputPurpose::CreateBranchFrom { root, .. }
+            | InputPurpose::RenameRemote { root, .. }
+            | InputPurpose::SetRemoteUrl { root, .. } => Some(root.clone()),
+            InputPurpose::CommitBranch { .. } | InputPurpose::CommitTag { .. } | InputPurpose::StashNamed { .. } => {
+                let Some(root) = self.repo_root(cx) else { return };
+                Some(root)
+            }
+            _ => None,
+        };
+        let context = git_root.map(|root| super::types::InputContext::Git { host: self.remote.host.clone(), root }).or_else(|| {
+            matches!(
+                purpose,
+                InputPurpose::Create { .. }
+                    | InputPurpose::Rename { .. }
+                    | InputPurpose::NewFile { .. }
+                    | InputPurpose::SaveAs { .. }
+                    | InputPurpose::SaveLocalCopy { .. }
+            )
+            .then(|| super::types::InputContext::Workspace { host: self.remote.host.clone(), root: self.root(cx) })
+        });
         let picker = cx.new(|cx| Picker::new(vec![PickSource::Input { verb, path }], placeholder, initial, None, cx));
-        self.show_overlay(picker, OverlayKind::Input(purpose), window, cx);
+        self.show_overlay(picker, OverlayKind::Input { purpose, context }, window, cx);
     }
 
     pub fn start_create(&mut self, dir: String, is_dir: bool, window: &mut Window, cx: &mut Context<Self>) {
@@ -149,7 +179,7 @@ impl Workbench {
             InputPurpose::AddWatch => self.finish_add_watch(name, cx),
             InputPurpose::FunctionBreakpoint => self.finish_function_breakpoint(name, cx),
             InputPurpose::LaunchInput => self.answer_launch_input(name, window, cx),
-            InputPurpose::RenameTerminal => self.finish_rename_terminal(name, cx),
+            InputPurpose::RenameTerminal { terminal } => self.finish_rename_terminal(terminal, name, cx),
             InputPurpose::SetVariable { parent, name: var } => self.finish_set_variable(parent, var, name, cx),
             InputPurpose::PortLabel { remote } => self.finish_port_label(remote, name, cx),
             InputPurpose::PortLocal { remote } => self.finish_port_local(remote, name, cx),
@@ -480,6 +510,7 @@ impl Workbench {
     }
 
     pub(super) fn confirm_permanent_delete(&mut self, path: String, why: String, window: &mut Window, cx: &mut Context<Self>) {
+        let context = super::types::InputContext::Workspace { host: self.remote.host.clone(), root: self.root(cx) };
         let name = ui::file_name(&path).to_string();
         let detail = crate::i18n::tf("It can't be moved to the Trash ({}). Deleting it permanently can't be undone.", &[&why]);
         let answer = window.prompt(
@@ -494,6 +525,9 @@ impl Workbench {
                 return;
             }
             this.update_in(cx, |this, window, cx| {
+                if !context.matches(this, cx) {
+                    return;
+                }
                 let p = path.clone();
                 this.fs_op(move |h| h.delete(&p), move |this, window, cx| this.after_delete(path, window, cx), window, cx);
             })
@@ -514,18 +548,24 @@ impl Workbench {
                 let candidates: Vec<String> =
                     if ui::is_absolute_path(&path) { vec![path.clone()] } else { self.root(cx).map(|r| ui::join(&r, &path)).into_iter().collect() };
                 let host = self.remote.host.clone();
+                let context = super::types::InputContext::Workspace { host: host.clone(), root: self.root(cx) };
                 let task =
                     cx.background_executor().spawn(async move { candidates.into_iter().find(|c| host.stat(c).is_ok_and(|m| m.kind == proto::Kind::File)) });
                 cx.spawn_in(window, async move |this, cx| {
                     let found = task.await;
-                    this.update_in(cx, |this, window, cx| match found {
-                        Some(abs) => {
-                            let (l, c) = (line.unwrap_or(1).saturating_sub(1), col.unwrap_or(1).saturating_sub(1));
-                            this.open_location(abs, l, c, window, cx);
+                    this.update_in(cx, |this, window, cx| {
+                        if !context.matches(this, cx) {
+                            return;
                         }
-                        None => {
-                            this.notice = Some(Notice::Info(crate::i18n::tf("No file “{}” in this project", &[&path]).into()));
-                            cx.notify();
+                        match found {
+                            Some(abs) => {
+                                let (l, c) = (line.unwrap_or(1).saturating_sub(1), col.unwrap_or(1).saturating_sub(1));
+                                this.open_location(abs, l, c, window, cx);
+                            }
+                            None => {
+                                this.notice = Some(Notice::Info(crate::i18n::tf("No file “{}” in this project", &[&path]).into()));
+                                cx.notify();
+                            }
                         }
                     })
                     .ok();

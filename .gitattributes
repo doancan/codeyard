@@ -2,3 +2,5 @@
 crates/ext-core/testdata/** -text
 # Compiled WebAssembly test fixtures.
 *.wasm binary
+# Unix shell startup files are also embedded by Windows cross builds.
+crates/agent/src/shell/** text eol=lf

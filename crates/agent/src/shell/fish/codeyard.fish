@@ -8,7 +8,7 @@ if status is-interactive; and test "$TERM_PROGRAM" = codeyard; and not set -q __
         printf '\e]133;D;%s\a' $status
     end
     function __cy_prompt --on-event fish_prompt
-        printf '\e]7;file://%s%s\a' (hostname) $PWD
+        printf '\e]7;file://%s%s\a' (hostname) (string replace -a '%' '%25' -- "$PWD")
         printf '\e]133;A\a'
     end
 end

@@ -187,9 +187,11 @@ status bar reports it.
 | --- | --- | --- | --- |
 | `terminal.allowClipboardWrite` | `true` / `false` | `false` | Let programs in the terminal write to the clipboard |
 | `terminal.confirmOnClose` | `running`, `always`, `never` | `running` | Ask before closing a terminal |
+| `terminal.copyOnSelection` | `agents`, `always`, `off` | `agents` | Copy text selected with the mouse: while Claude Code or Codex runs, always, or never |
 | `terminal.defaultProfile` | text | empty | Profile new terminals use |
 | `terminal.fontSize` | number 6–48 | `12` on macOS, `14` on Windows and Linux | Font size of the terminal |
 | `terminal.lineHeight` | number 1–2 | `1.2` | Terminal row height, as a multiple of the font size |
+| `terminal.notifications` | `true` / `false` | `true` | Flag a terminal and the taskbar when its program rings the bell or asks for you |
 | `terminal.sanitizePaste` | `auto`, `always`, `off` | `auto` | Remove control characters from pasted text |
 | `terminal.scrollSensitivity` | number 0.1–10 | `2.0` | Mouse wheel and trackpad scroll speed multiplier |
 | `terminal.scrollback` | number 0–50000 | `2000` | Lines kept in terminal history |

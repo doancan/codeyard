@@ -787,7 +787,7 @@ impl Workbench {
                     .items_center()
                     .gap(px(theme::SPACE[4]))
                     .window_control_area(gpui::WindowControlArea::Drag)
-                    .child(div().text_size(px(text::XS.0)).font_weight(gpui::FontWeight::SEMIBOLD).text_color(c(p.text)).child("codeyard")) // i18n-keep: application name.
+                    .child(div().text_size(px(text::XS.0)).font_weight(gpui::FontWeight::SEMIBOLD).text_color(c(p.text)).child("Codeyard")) // i18n-keep: application name.
                     .child(
                         div()
                             .flex_1()
@@ -795,7 +795,7 @@ impl Workbench {
                             .truncate()
                             .text_size(px(text::XS.0))
                             .text_color(c(if window.is_window_active() { p.text } else { p.text_muted }))
-                            .child(if self.title == "codeyard" { String::new() } else { self.title.clone() }),
+                            .child(if self.title == "Codeyard" { String::new() } else { self.title.clone() }),
                     ),
             )
             .child(control("window-minimize", "minus", crate::i18n::t("Minimize window"), gpui::WindowControlArea::Min))
@@ -987,7 +987,7 @@ impl Workbench {
                             .flex()
                             .flex_col()
                             .gap(px(theme::SPACE[2]))
-                            .child(div().text_size(px(text::DISPLAY.0)).font_weight(gpui::FontWeight::SEMIBOLD).child("codeyard")) // i18n-keep: product name
+                            .child(div().text_size(px(text::DISPLAY.0)).font_weight(gpui::FontWeight::SEMIBOLD).child("Codeyard")) // i18n-keep: product name
                             .child(div().text_color(c(p.text_muted)).child(crate::i18n::t("Lightweight editing, on this machine or over SSH."))),
                     )
                     .child(

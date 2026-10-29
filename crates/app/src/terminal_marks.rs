@@ -43,6 +43,10 @@ pub(super) struct Marks {
     pub unseen: Option<Finished>,
     /// A command started or ended since the app was last told.
     pub activity_changed: bool,
+    /// A program asked for the user (bell, OSC 9/777) since the app was last told: the message, if it sent one.
+    pub attention: Option<Option<String>>,
+    /// A command that ran for `NOTIFY_RUN` or longer ended since the app was last told: the line it was typed on, its code.
+    pub long_finish: Option<(String, Option<i32>)>,
 }
 
 /// How a command ended, for its gutter dot.
@@ -55,6 +59,8 @@ pub enum MarkState {
 
 /// Commands that ran at least this long tell the terminal list when they finish out of sight.
 const NOTABLE_RUN: std::time::Duration = std::time::Duration::from_secs(3);
+/// Commands that ran at least this long also say so in a notice and on the taskbar when nobody watched them end.
+const NOTIFY_RUN: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// What a terminal is doing, for its row in the terminal list.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -67,11 +73,13 @@ pub enum Activity {
     Failed(i32),
 }
 
-/// A long command that finished while nobody looked at its terminal.
+/// A long command that finished while nobody looked at its terminal, or a program that asked for the user.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Finished {
     Succeeded,
     Failed,
+    /// The bell, or a notification (OSC 9/777): Claude Code or Codex waiting for an answer.
+    Attention,
 }
 
 impl TerminalView {
@@ -99,6 +107,14 @@ impl TerminalView {
         let at = self.cursor_abs() + self.marks.shift;
         match ev {
             OscEvent::Cwd(path) => self.marks.cwd = Some(path),
+            OscEvent::Notify { title, body } => {
+                let text = match title {
+                    Some(title) if !body.is_empty() => format!("{title}: {body}"),
+                    Some(title) => title,
+                    None => body,
+                };
+                self.ask_attention(Some(text));
+            }
             OscEvent::PromptStart => {
                 self.marks.list.push_back(CmdMark { prompt: at, ..CmdMark::default() });
                 if self.marks.list.len() > MAX_MARKS {
@@ -118,8 +134,13 @@ impl TerminalView {
                 if let Some(m) = self.marks.list.back_mut().filter(|m| m.output.is_some() && m.end.is_none()) {
                     m.end = Some((at, code));
                     self.marks.activity_changed = true;
-                    if self.marks.started.take().is_some_and(|t| t.elapsed() >= NOTABLE_RUN) {
+                    let typed = m.output.as_ref().map(|(_, typed)| typed.trim().to_string()).unwrap_or_default();
+                    let ran = self.marks.started.take().map(|t| t.elapsed()).unwrap_or_default();
+                    if ran >= NOTABLE_RUN && self.marks.unseen != Some(Finished::Attention) {
                         self.marks.unseen = Some(if matches!(code, Some(c) if c != 0) { Finished::Failed } else { Finished::Succeeded });
+                    }
+                    if ran >= NOTIFY_RUN {
+                        self.marks.long_finish = Some((typed, code));
                     }
                 }
             }
@@ -209,6 +230,16 @@ impl TerminalView {
         }
     }
 
+    /// A program asked for the user: the terminal list flags it until it is looked at. A later finish does not hide it.
+    pub(super) fn ask_attention(&mut self, message: Option<String>) {
+        self.marks.unseen = Some(Finished::Attention);
+        // A bell after a notification keeps the notification's message.
+        match &mut self.marks.attention {
+            Some(Some(_)) if message.is_none() => {}
+            pending => *pending = Some(message),
+        }
+    }
+
     /// A long command finished while the terminal was out of sight.
     pub fn unseen_finish(&self) -> Option<Finished> {
         self.marks.unseen
@@ -259,5 +290,12 @@ impl TerminalView {
     #[cfg(test)]
     pub fn feed_for_test(&mut self, data: &[u8]) {
         self.feed(data);
+    }
+
+    /// Like `feed_for_test`, then tells the app what the output asked for (bell, notifications), as the output pump does.
+    #[cfg(test)]
+    pub fn feed_and_report_for_test(&mut self, data: &[u8], cx: &mut gpui::Context<Self>) {
+        self.feed(data);
+        self.drain_events(cx);
     }
 }

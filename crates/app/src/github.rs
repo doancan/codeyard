@@ -559,28 +559,35 @@ mod tests {
     /// Real curl is not needed: any program that echoes its stdin shows the input arrives and the argument list stays clean.
     #[test]
     fn input_reaches_the_program_through_stdin() {
-        let args = vec!["-c".to_string(), "cat".to_string()];
-        assert_eq!(run_with_input("sh", &args, Some("secret"), std::time::Duration::from_secs(5)).unwrap(), "secret");
-        let e = run_with_input("sleep", &["30".into()], Some("x"), std::time::Duration::from_millis(300)).unwrap_err();
+        let py = crate::test_lsp::python();
+        let echo = vec!["-c".to_string(), "import sys; sys.stdout.write(sys.stdin.read())".to_string()];
+        assert_eq!(run_with_input(py, &echo, Some("secret"), std::time::Duration::from_secs(5)).unwrap(), "secret");
+        let e = run_with_input(py, &sleeping(), Some("x"), std::time::Duration::from_millis(300)).unwrap_err();
         assert!(e.contains("did not answer"), "the timeout still applies: {e}");
+    }
+
+    /// A program that sleeps for 30 seconds without reading anything: Python, which the tests have on every platform.
+    fn sleeping() -> Vec<String> {
+        vec!["-c".into(), "import time; time.sleep(30)".into()]
     }
 
     #[test]
     fn external_commands_time_out_and_report_missing_programs() {
+        let py = crate::test_lsp::python();
+        let run = |code: &str, secs: u64| run_with_timeout(py, &["-c".into(), code.into()], std::time::Duration::from_secs(secs));
         let t = std::time::Instant::now();
-        let e = run_with_timeout("sleep", &["30".into()], std::time::Duration::from_millis(300)).unwrap_err();
+        let e = run_with_timeout(py, &sleeping(), std::time::Duration::from_millis(300)).unwrap_err();
         assert!(e.contains("did not answer") && t.elapsed().as_secs() < 10, "{e}");
         let e = run_with_timeout("codeyard-no-such-program", &[], std::time::Duration::from_secs(5)).unwrap_err();
         assert!(e.contains("not installed"), "{e}");
-        assert_eq!(run_with_timeout("sh", &["-c".into(), "printf hi".into()], std::time::Duration::from_secs(5)).unwrap(), "hi");
-        let e = run_with_timeout("sh", &["-c".into(), "echo boom >&2; exit 3".into()], std::time::Duration::from_secs(5)).unwrap_err();
+        assert_eq!(run("import sys; sys.stdout.write('hi')", 5).unwrap(), "hi");
+        let e = run("import sys; sys.stderr.write('boom\\n'); sys.exit(3)", 5).unwrap_err();
         assert_eq!(e, "boom");
         // Large output must not deadlock the pipe.
-        let big = run_with_timeout("sh", &["-c".into(), "head -c 3000000 /dev/zero | tr '\\0' 'a'".into()], std::time::Duration::from_secs(20)).unwrap();
+        let big = run("import sys; sys.stdout.write('a' * 3000000)", 20).unwrap();
         assert_eq!(big.len(), 3_000_000);
         // The child never gets to ask questions.
-        let env = run_with_timeout("sh", &["-c".into(), "printf '%s' \"$GH_PROMPT_DISABLED$GIT_TERMINAL_PROMPT\"".into()], std::time::Duration::from_secs(5))
-            .unwrap();
+        let env = run("import os, sys; sys.stdout.write(os.environ['GH_PROMPT_DISABLED'] + os.environ['GIT_TERMINAL_PROMPT'])", 5).unwrap();
         assert_eq!(env, "10");
     }
 

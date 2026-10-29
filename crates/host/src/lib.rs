@@ -319,6 +319,14 @@ pub trait Host: Send + Sync + 'static {
         }
     }
 
+    /// Inspect an entry without following its final symlink or Windows directory junction.
+    fn lstat(&self, path: &str) -> Result<Meta> {
+        match self.call(Request::Lstat { path: path.into() })? {
+            Response::Stat(meta) => Ok(meta),
+            other => Err(unexpected(other)),
+        }
+    }
+
     /// (content, hash)
     fn read(&self, path: &str) -> Result<(Vec<u8>, u64)> {
         match self.call(Request::Read { path: path.into() })? {
@@ -383,6 +391,14 @@ pub trait Host: Send + Sync + 'static {
     /// Returns the new hash. `Conflict` if the disk differs from `expect_hash`.
     fn write(&self, path: &str, data: Vec<u8>, expect_hash: Option<u64>) -> Result<u64> {
         match self.call(Request::Write { path: path.into(), data, expect_hash })? {
+            Response::Written { hash } => Ok(hash),
+            other => Err(unexpected(other)),
+        }
+    }
+
+    /// Publish a complete new file atomically, refusing every existing destination entry.
+    fn write_new(&self, path: &str, data: Vec<u8>) -> Result<u64> {
+        match self.call(Request::WriteNew { path: path.into(), data })? {
             Response::Written { hash } => Ok(hash),
             other => Err(unexpected(other)),
         }
@@ -536,9 +552,10 @@ impl Shared {
             return;
         }
         let mut waiters = self.waiters.locked();
-        match waiters.remove(&frame.id) {
+        let abandoned = match waiters.remove(&frame.id) {
             Some(Waiter::Once(tx)) => {
                 let _ = tx.send(frame.body);
+                None
             }
             Some(Waiter::Stream(tx)) => {
                 let last = matches!(frame.body, Response::SearchDone { .. } | Response::HashDone { .. } | Response::Error(_));
@@ -546,20 +563,42 @@ impl Shared {
                 if tx.send(frame.body).is_ok() && !last {
                     waiters.insert(frame.id, Waiter::Stream(tx));
                 }
+                None
             }
             Some(Waiter::PtySpawn(tx, events)) => {
                 if let Response::PtySpawned { pty } = frame.body {
                     self.ptys.locked().insert(pty, events);
                 }
-                let _ = tx.send(frame.body);
+                tx.send(frame.body).err().map(|error| error.0)
             }
             Some(Waiter::ProcSpawn(tx, events)) => {
                 if let Response::ProcSpawned { proc } = frame.body {
                     self.procs.locked().insert(proc, events);
                 }
-                let _ = tx.send(frame.body);
+                tx.send(frame.body).err().map(|error| error.0)
             }
-            None => {}
+            None => Some(frame.body),
+        };
+        drop(waiters);
+        // A caller may time out before a slow spawn succeeds. Do not leave its
+        // shell/language server running without an owner or event receiver.
+        if let Some(response) = abandoned {
+            let request = match response {
+                Response::PtySpawned { pty } => {
+                    self.ptys.locked().remove(&pty);
+                    Request::PtyKill { pty }
+                }
+                Response::ProcSpawned { proc } => {
+                    self.procs.locked().remove(&proc);
+                    Request::ProcKill { proc }
+                }
+                _ => return,
+            };
+            if let Err(error) = self.post(0, &request)
+                && error.kind() == std::io::ErrorKind::WouldBlock
+            {
+                self.stalled();
+            }
         }
     }
 
@@ -742,6 +781,25 @@ pub fn spawn_transport(mut cmd: Command) -> Result<Transport> {
 }
 
 impl RemoteHost {
+    fn request_reply(&self, req: Request, waiter: Waiter, rx: mpsc::Receiver<Response>) -> Result<Response> {
+        let limit = call_timeout(&req, self.shared.call_limit_secs.load(Ordering::Relaxed));
+        let id = self.start(req, waiter)?;
+        match rx.recv_timeout(limit) {
+            Ok(response) => Ok(response),
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(self.disconnected()),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                // Serialize abandonment with route(): either remove the waiter
+                // before the reply arrives, or accept the reply it just sent.
+                let mut waiters = self.shared.waiters.locked();
+                waiters.remove(&id);
+                if let Ok(response) = rx.try_recv() {
+                    return Ok(response);
+                }
+                Err(HostError::Op(proto::Error::Other(format!("the agent did not answer within {} seconds", limit.as_secs()))))
+            }
+        }
+    }
+
     /// Copies are cancellable mutations: after stopping, wait for the agent to
     /// remove its staging entry instead of reporting a completed cancellation early.
     fn copy_call(&self, req: Request, cancel: Option<&AtomicBool>) -> Result<Response> {
@@ -989,19 +1047,8 @@ impl Host for RemoteHost {
         if matches!(req, Request::Copy { .. }) {
             return self.copy_call(req, None);
         }
-        let limit = call_timeout(&req, self.shared.call_limit_secs.load(Ordering::Relaxed));
         let (tx, rx) = mpsc::channel();
-        let id = self.start(req, Waiter::Once(tx))?;
-        match rx.recv_timeout(limit) {
-            Ok(r) => Ok(r),
-            Err(mpsc::RecvTimeoutError::Disconnected) => Err(self.disconnected()),
-            // No reply: hung agent or very slow disk. Drop the pending entry (a late reply is discarded);
-            // the connection stays up and the caller gets an error it can retry.
-            Err(mpsc::RecvTimeoutError::Timeout) => {
-                self.shared.waiters.locked().remove(&id);
-                Err(HostError::Op(proto::Error::Other(format!("the agent did not answer within {} seconds", limit.as_secs()))))
-            }
-        }
+        self.request_reply(req, Waiter::Once(tx), rx)
     }
 
     fn copy_path_cancellable(&self, from: &str, to: &str, cancel: &AtomicBool) -> Result<()> {
@@ -1031,8 +1078,7 @@ impl Host for RemoteHost {
     fn pty_spawn(&self, cols: u16, rows: u16, cwd: Option<String>, shell: Option<String>) -> Result<Pty> {
         let (tx, rx) = mpsc::channel();
         let (ev_tx, ev_rx) = mpsc::channel();
-        self.start(Request::PtySpawn { cols, rows, cwd, shell }, Waiter::PtySpawn(tx, ev_tx))?;
-        match rx.recv().map_err(|_| self.disconnected())? {
+        match self.request_reply(Request::PtySpawn { cols, rows, cwd, shell }, Waiter::PtySpawn(tx, ev_tx), rx)? {
             Response::PtySpawned { pty } => Ok(Pty { id: pty, events: ev_rx }),
             other => Err(unexpected(other)),
         }
@@ -1042,8 +1088,7 @@ impl Host for RemoteHost {
         let (tx, rx) = mpsc::channel();
         let (ev_tx, ev_rx) = mpsc::channel();
         let PtySpec { cols, rows, cwd, shell, args, env, integration } = spec;
-        self.start(Request::PtySpawnEx { cols, rows, cwd, shell, args, env, integration }, Waiter::PtySpawn(tx, ev_tx))?;
-        match rx.recv().map_err(|_| self.disconnected())? {
+        match self.request_reply(Request::PtySpawnEx { cols, rows, cwd, shell, args, env, integration }, Waiter::PtySpawn(tx, ev_tx), rx)? {
             Response::PtySpawned { pty } => Ok(Pty { id: pty, events: ev_rx }),
             other => Err(unexpected(other)),
         }
@@ -1064,8 +1109,7 @@ impl Host for RemoteHost {
     fn proc_spawn(&self, program: &str, args: Vec<String>, cwd: Option<String>) -> Result<Proc> {
         let (tx, rx) = mpsc::channel();
         let (ev_tx, ev_rx) = mpsc::channel();
-        self.start(Request::ProcSpawn { program: program.into(), args, cwd }, Waiter::ProcSpawn(tx, ev_tx))?;
-        match rx.recv().map_err(|_| self.disconnected())? {
+        match self.request_reply(Request::ProcSpawn { program: program.into(), args, cwd }, Waiter::ProcSpawn(tx, ev_tx), rx)? {
             Response::ProcSpawned { proc } => Ok(Proc { id: proc, events: ev_rx }),
             other => Err(unexpected(other)),
         }

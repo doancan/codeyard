@@ -1,5 +1,151 @@
 use super::*;
 
+#[test]
+fn hard_link_names_share_save_conflicts_across_framed_agent_sessions() {
+    let dir = tmp("linked-save-race");
+    let target = dir.join("document.txt");
+    let alias = dir.join("alias.txt");
+    std::fs::write(&target, b"original").unwrap();
+    std::fs::hard_link(&target, &alias).unwrap();
+    let hosts = [Arc::new(piped_agent()), Arc::new(piped_agent())];
+    let barrier = Arc::new(std::sync::Barrier::new(16));
+    let jobs: Vec<_> = (0..16)
+        .map(|index| {
+            let host = hosts[index % 2].clone();
+            let path = if index % 2 == 0 { &target } else { &alias }.to_string_lossy().into_owned();
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                let data = vec![index as u8 + 1; 1024 * 1024];
+                barrier.wait();
+                (host.write(&path, data.clone(), Some(proto::content_hash(b"original"))), data)
+            })
+        })
+        .collect();
+    let results: Vec<_> = jobs.into_iter().map(|job| job.join().unwrap()).collect();
+    let winners: Vec<_> = results.iter().filter(|(result, _)| result.is_ok()).collect();
+    assert_eq!(winners.len(), 1);
+    assert_eq!(results.iter().filter(|(result, _)| matches!(result, Err(HostError::Op(proto::Error::Conflict { .. })))).count(), 15);
+    assert_eq!(std::fs::read(&target).unwrap(), winners[0].1);
+    assert_eq!(std::fs::read(&alias).unwrap(), winners[0].1);
+}
+
+#[test]
+fn concurrent_versioned_saves_across_agent_sessions_reject_losing_writers() {
+    let dir = tmp("versioned-save-race");
+    std::fs::create_dir_all(dir.join("nested")).unwrap();
+    let target = dir.join("document.txt");
+    std::fs::write(&target, b"original").unwrap();
+    let expected = proto::content_hash(b"original");
+    let hosts = [Arc::new(piped_agent()), Arc::new(piped_agent())];
+    let barrier = Arc::new(std::sync::Barrier::new(16));
+    let jobs: Vec<_> = (0..16)
+        .map(|index| {
+            let host = hosts[index % 2].clone();
+            let path = if index % 2 == 0 { target.clone() } else { dir.join("nested/../document.txt") }.to_string_lossy().into_owned();
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                let data = vec![index as u8 + 1; 1024 * 1024];
+                barrier.wait();
+                (host.write(&path, data.clone(), Some(expected)), data)
+            })
+        })
+        .collect();
+    let results: Vec<_> = jobs.into_iter().map(|job| job.join().unwrap()).collect();
+    let winners: Vec<_> = results.iter().filter(|(result, _)| result.is_ok()).collect();
+    assert_eq!(winners.len(), 1, "the per-target guard must span sessions and canonical path aliases");
+    assert_eq!(results.iter().filter(|(result, _)| matches!(result, Err(HostError::Op(proto::Error::Conflict { .. })))).count(), 15);
+    assert_eq!(std::fs::read(&target).unwrap(), winners[0].1);
+}
+
+#[test]
+fn write_new_round_trips_over_the_framed_agent_without_overwriting() {
+    let dir = tmp("write-new");
+    let path = dir.join("new.txt").to_string_lossy().into_owned();
+    let host = piped_agent();
+    assert_eq!(host.write_new(&path, b"original".to_vec()).unwrap(), proto::content_hash(b"original"));
+    assert!(matches!(host.write_new(&path, b"replacement".to_vec()), Err(HostError::Op(proto::Error::AlreadyExists(_)))));
+    assert_eq!(host.read(&path).unwrap().0, b"original");
+    assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 1);
+}
+
+#[test]
+fn spawn_replies_whose_receivers_disappeared_do_not_keep_event_registrations() {
+    let host = piped_agent();
+    let (tx, rx) = mpsc::channel();
+    let (events, _) = mpsc::channel();
+    drop(rx);
+    host.shared.waiters.locked().insert(900, Waiter::PtySpawn(tx, events));
+    host.shared.route(Frame { id: 900, body: Response::PtySpawned { pty: 77 } });
+    assert!(!host.shared.ptys.locked().contains_key(&77));
+
+    let (tx, rx) = mpsc::channel();
+    let (events, _) = mpsc::channel();
+    drop(rx);
+    host.shared.waiters.locked().insert(901, Waiter::ProcSpawn(tx, events));
+    host.shared.route(Frame { id: 901, body: Response::ProcSpawned { proc: 78 } });
+    assert!(!host.shared.procs.locked().contains_key(&78));
+}
+
+#[test]
+fn silent_spawn_requests_time_out_and_late_processes_are_cleaned_up() {
+    for kind in 0..3 {
+        let (req_r, req_w) = std::io::pipe().unwrap();
+        let (resp_r, resp_w) = std::io::pipe().unwrap();
+        let (release, released) = mpsc::channel();
+        let (started, starting) = mpsc::channel();
+        let (killed, kills) = mpsc::channel();
+        let peer = std::thread::spawn(move || {
+            let mut input = BufReader::new(req_r);
+            let mut output = resp_w;
+            while let Ok(Some(Frame { id, body })) = proto::read_frame::<Request>(&mut input) {
+                let response = match body {
+                    Request::Hello { .. } => agent::handle(body),
+                    Request::PtySpawn { .. } | Request::PtySpawnEx { .. } | Request::ProcSpawn { .. } => {
+                        started.send(()).unwrap();
+                        released.recv().unwrap();
+                        if kind == 2 { Response::ProcSpawned { proc: 7 } } else { Response::PtySpawned { pty: 7 } }
+                    }
+                    Request::PtyKill { pty } => {
+                        let _ = killed.send(pty);
+                        Response::Done
+                    }
+                    Request::ProcKill { proc } => {
+                        let _ = killed.send(proc);
+                        Response::Done
+                    }
+                    Request::Bye => break,
+                    _ => Response::Done,
+                };
+                if proto::write_frame(&mut output, &Frame { id, body: response }).is_err() {
+                    break;
+                }
+            }
+        });
+        let host = Arc::new(RemoteHost::from_streams(Box::new(resp_r), Box::new(req_w), "slow spawn").unwrap());
+        host.set_call_timeout_secs(1);
+        let caller = host.clone();
+        let (done, result) = mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let outcome = match kind {
+                0 => caller.pty_spawn(80, 24, None, None).map(|_| ()),
+                1 => caller.pty_spawn_ex(PtySpec { cols: 80, rows: 24, ..Default::default() }).map(|_| ()),
+                _ => caller.proc_spawn("fixture", Vec::new(), None).map(|_| ()),
+            };
+            done.send(outcome.map_err(|e| e.to_string())).unwrap();
+        });
+        starting.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        let outcome = result.recv_timeout(std::time::Duration::from_secs(3));
+        // Always unblock and join the caller, including when testing the old hanging code.
+        release.send(()).unwrap();
+        worker.join().unwrap();
+        assert!(matches!(outcome, Ok(Err(ref error)) if error.contains("did not answer")), "spawn kind {kind}: {outcome:?}");
+        assert_eq!(kills.recv_timeout(std::time::Duration::from_secs(3)).unwrap(), 7);
+        assert!(host.shared.ptys.locked().is_empty() && host.shared.procs.locked().is_empty());
+        drop(host);
+        peer.join().unwrap();
+    }
+}
+
 /// The heartbeat primitive: a live agent answers `Ping`, a silent one does not (and its waiter is removed again).
 #[test]
 fn ping_tells_a_live_agent_from_a_silent_one() {
@@ -110,6 +256,37 @@ fn tmp(name: &str) -> std::path::PathBuf {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
+}
+
+#[test]
+#[cfg(any(unix, windows))]
+fn lstat_reports_links_even_when_their_targets_disappear() {
+    let root = tmp("lstat-links");
+    let target = root.join("target");
+    let link = root.join("link");
+    std::fs::create_dir(&target).unwrap();
+    std::fs::write(root.join("file.txt"), "hello").unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+    #[cfg(windows)]
+    {
+        let output = Command::new("cmd.exe").args(["/D", "/C", "mklink", "/J"]).arg(&link).arg(&target).output().unwrap();
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    }
+    let hosts = [local(), piped_agent()];
+    for host in &hosts {
+        assert_eq!(host.stat(&link.to_string_lossy()).unwrap().kind, proto::Kind::Dir);
+        assert_eq!(host.lstat(&link.to_string_lossy()).unwrap().kind, proto::Kind::Symlink);
+        let file = host.lstat(&root.join("file.txt").to_string_lossy()).unwrap();
+        assert_eq!((file.kind, file.size), (proto::Kind::File, 5));
+    }
+    std::fs::remove_dir(target).unwrap();
+    for host in &hosts {
+        assert!(matches!(host.stat(&link.to_string_lossy()), Err(HostError::Op(proto::Error::NotFound(_)))));
+        assert_eq!(host.lstat(&link.to_string_lossy()).unwrap().kind, proto::Kind::Symlink);
+        assert!(matches!(host.lstat(&root.join("missing").to_string_lossy()), Err(HostError::Op(proto::Error::NotFound(_)))));
+    }
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

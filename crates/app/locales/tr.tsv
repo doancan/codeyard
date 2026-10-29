@@ -27,12 +27,11 @@ Window	Pencere
 Help	Yardım
 
 # ---- Menu bar: application menu (macOS) ----
-About codeyard	codeyard Hakkında
 Services	Servisler
-Hide codeyard	codeyard'ı Gizle
+Hide Codeyard	Codeyard'ı Gizle
 Hide Others	Diğerlerini Gizle
 Show All	Tümünü Göster
-Quit codeyard	codeyard'dan Çık
+Quit Codeyard	Codeyard'dan Çık
 Settings…	Ayarlar…
 Open Settings (JSON)	Ayarları Aç (JSON)
 Keyboard Shortcuts	Klavye Kısayolları
@@ -1533,7 +1532,7 @@ Transfer cancelled.	Aktarım iptal edildi.
 {} (“{}” failed; {} of {} items were transferred before it)	{0} (“{1}” başarısız oldu; ondan önce {3} öğeden {2} tanesi aktarıldı)
 Transfer failed: {}	Aktarım başarısız: {}
 Cancel “{}”?	“{}” iptal edilsin mi?
-A file that is only partly transferred is removed, and so is a new folder. A folder you merge into keeps what was already copied.	Kısmen aktarılmış dosya silinir, yeni oluşturulan klasör de silinir. İçine birleştirdiğiniz mevcut bir klasör ise o ana kadar kopyalananları korur.
+Temporary transfer data is removed. Changes already made at the destination may remain.	Geçici aktarım verileri silinir. Hedefte zaten yapılmış değişiklikler kalabilir.
 Cancel Transfer	Aktarımı İptal Et
 Keep Going	Devam Et
 # ---- Port forwarding ----
@@ -2076,7 +2075,7 @@ the folder cannot be read on the right	klasör sağda okunamıyor
 {0} files and {1} folders go from {2} ({3}) to {4} ({5}). Files that exist there are replaced; anything that changed since the scan is left alone.	{0} dosya ve {1} klasör, {2} ({3}) konumundan {4} ({5}) konumuna gider. Orada olan dosyaların yerine yazılır; taramadan sonra değişen hiçbir şeye dokunulmaz.
 {0} on {1} is deleted for good, with everything in it. It is not moved to the Trash.	{1} üzerindeki {0}, içindekilerle birlikte kalıcı olarak silinir. Çöp Kutusu'na taşınmaz.
 {0} only on the left, {1} only on the right, {2} changed, {3} identical, {4} errors	{0} yalnızca solda, {1} yalnızca sağda, {2} değişmiş, {3} aynı, {4} hata
-{0} was left alone: {1}|{0} were left alone, the first one {1}	{0} öğeye dokunulmadı; ilki {1}
+Copying {0} item was not confirmed: {1}|Copying {0} items was not confirmed; first: {1}	{0} öğenin kopyalandığı doğrulanamadı; ilki {1}
 {} entry is left out.|{} entries are left out.	{} öğe dışarıda bırakıldı.
 {} has more entries than compare.folders.maxFiles allows, so the result is partial.	{} üzerinde compare.folders.maxFiles sınırından fazla öğe var, bu yüzden sonuç eksik.
 {} is a binary file: there is no text diff.	{} ikili bir dosya: metin farkı yok.
@@ -2490,6 +2489,13 @@ Terminal: Change Color…	Terminal: Rengi Değiştir…
 Terminal: Kill All Terminals	Terminal: Tüm Terminalleri Sonlandır
 Copy Last Command Output	Son Komutun Çıktısını Kopyala
 Mark prompts, commands and the folder in zsh, bash and fish	zsh, bash ve fish'te istemleri, komutları ve klasörü işaretle
+Flag a terminal and the taskbar when its program rings the bell or asks for you	Terminaldeki program zil çaldığında veya sizi beklediğinde terminali ve görev çubuğunu işaretle
+A command failed with code {}	Bir komut {} koduyla başarısız oldu
+A command finished	Bir komut bitti
+Failed with code {}: {}	{0} koduyla başarısız oldu: {1}
+Finished: {}	Bitti: {}
+Copy text selected with the mouse: while Claude Code or Codex runs, always, or never	Fareyle seçilen metni kopyala: Claude Code veya Codex çalışırken, her zaman ya da hiçbir zaman
+Hold Shift to select text	Metin seçmek için Shift'e basılı tutun
 Terminal: Go to Previous Command	Terminal: Önceki Komuta Git
 Terminal: Go to Next Command	Terminal: Sonraki Komuta Git
 Terminal: Copy Last Command Output	Terminal: Son Komutun Çıktısını Kopyala
@@ -3181,3 +3187,9 @@ Saved without formatting: {0}: {1}	Biçimlendirmeden kaydedildi: {0}: {1}
 editor.formatters.{}: expected “lsp” or an extension id	editor.formatters.{}: “lsp” ya da bir eklenti kimliği bekleniyordu
 {}: the formatter returned no edits	{}: biçimlendirici hiçbir düzenleme döndürmedi
 “{}” is not the command of an active extension	“{}” etkin bir eklentinin komutu değil
+Cannot inspect the transfer destination: {}	Aktarım hedefi incelenemedi: {}
+Could not reserve a temporary file for comparison.	Karşılaştırma için geçici dosya ayrılamadı.
+Could not read the remote URL: {}	Uzak depo URL'si okunamadı: {}
+Remote {} no longer exists.	{} uzak deposu artık mevcut değil.
+Remote {} changed since this pull request list was loaded. Reopen the list and try again.	Bu çekme isteği listesi yüklendikten sonra {} uzak deposu değişti. Listeyi yeniden açıp tekrar deneyin.
+Could not reserve a temporary Git reference.	Geçici Git referansı ayrılamadı.

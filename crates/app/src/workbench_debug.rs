@@ -1415,7 +1415,7 @@ fn normalize_frames(frames: &mut [Frame], local: bool) {
     if local {
         for f in frames {
             if let Some(c) = f.path.as_deref().and_then(|p| std::fs::canonicalize(p).ok()) {
-                f.path = Some(c.to_string_lossy().into_owned());
+                f.path = Some(crate::ui::local_path(&c));
             }
         }
     }

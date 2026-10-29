@@ -460,6 +460,7 @@ impl Workbench {
 
     /// Go to a location: open the file, show the (line, UTF-16 column) position.
     pub(super) fn open_location(&mut self, path: String, line: u32, col: u32, window: &mut Window, cx: &mut Context<Self>) {
+        let path = if self.remote.host.is_remote() { path } else { ui::local_path(std::path::Path::new(&path)) };
         self.record_nav(cx);
         self.lsp.pending_reveal = Some((path.clone(), line, col));
         // Opens in the focused group (if the same document is open in another group, it shows here too).

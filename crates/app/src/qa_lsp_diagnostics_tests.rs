@@ -11,6 +11,7 @@ use crate::qa_integration_tests::{notice, setup_with, wait_ticking};
 use crate::qa_lsp_settings_tests::{cargo_project, dir, open_project, rust_analyzer_installed, wait_checked};
 use crate::settings::Settings;
 use crate::test_lsp::FakeServer;
+use crate::test_paths::AppPath;
 use crate::workbench::{ProblemRow, Workbench};
 
 const A: &str = "pub fn f() {\n    let t = s;\n    println!(\"{s}\");\n    let n = 1;\n    let m = 2;\n}\n";
@@ -29,12 +30,12 @@ fn related(uri: &str, line: u32, col: u32, message: &str) -> Value {
 /// fake: on open it publishes, for `src/a.rs`, an E0382 error with related locations in both files and the compiler's
 /// colourful output, and a warning with 22 related locations; after a change it publishes an empty list.
 fn project<'a>(cx: &'a mut TestAppContext, name: &str) -> Option<(Entity<Workbench>, &'a mut VisualTestContext, String, String, FakeServer)> {
-    let d = dir(name);
+    let d = dir(&format!("diagnostics-{name}"));
     let root = d.join("project");
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("src/a.rs"), A).unwrap();
     std::fs::write(root.join("src/b.rs"), format!("{}ğ😀 s\n", "// x\n".repeat(11))).unwrap();
-    let (a, b) = (root.join("src/a.rs").to_string_lossy().into_owned(), root.join("src/b.rs").to_string_lossy().into_owned());
+    let (a, b) = (root.join("src/a.rs").app(), root.join("src/b.rs").app());
     let (ua, ub) = (path_to_uri(&a), path_to_uri(&b));
     let many: Vec<Value> = (0..22).map(|_| related(&ua, 3, 8, "also here")).collect();
     let publish = json!({ "method": "textDocument/publishDiagnostics", "params": { "uri": ua, "diagnostics": [
@@ -199,12 +200,12 @@ fn qa_diag_real_rust_analyzer_explains_a_use_after_move(cx: &mut TestAppContext)
 #[gpui::test]
 fn qa_diag_related_locations_over_ssh(cx: &mut TestAppContext) {
     let Some(_sshd) = crate::test_sshd::start("diag-related") else { return };
-    let d = dir("ssh");
+    let d = dir("diagnostics-ssh");
     let root = d.join("project");
     std::fs::create_dir_all(root.join("src")).unwrap();
     std::fs::write(root.join("src/a.rs"), A).unwrap();
     std::fs::write(root.join("src/b.rs"), format!("{}ğ😀 s\n", "// x\n".repeat(11))).unwrap();
-    let (a, b) = (root.join("src/a.rs").to_string_lossy().into_owned(), root.join("src/b.rs").to_string_lossy().into_owned());
+    let (a, b) = (root.join("src/a.rs").app(), root.join("src/b.rs").app());
     let publish = json!({ "method": "textDocument/publishDiagnostics", "params": { "uri": path_to_uri(&a), "diagnostics": [
         { "range": range(2, 15, 16), "severity": 1, "code": "E0382", "message": "borrow of moved value: `s`",
           "relatedInformation": [related(&path_to_uri(&b), 11, 4, "borrow later used here")] },
@@ -216,7 +217,7 @@ fn qa_diag_related_locations_over_ssh(cx: &mut TestAppContext) {
         cx.executor().advance_clock(std::time::Duration::from_secs(1));
         wb.read_with(cx, |wb, _| wb.ports_ready())
     });
-    let r = root.to_string_lossy().into_owned();
+    let r = root.app();
     wb.update_in(cx, |wb, window, cx| wb.open_path(&r, window, cx));
     cx.run_until_parked();
     crate::qa_integration_tests::ssh_open_file(&wb, cx, &root.join("src/a.rs"));
