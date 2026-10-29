@@ -2210,9 +2210,11 @@ dependencies = [
 name = "ext-ui"
 version = "0.5.0"
 dependencies = [
+ "base64",
  "ext-manifest",
  "postcard",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
