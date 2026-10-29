@@ -11,6 +11,7 @@
 1 minute	
 15 minutes	
 5 minutes	
+A compatible Node.js runtime could not be used on this host. Install Node.js 22.22.2 or newer with npm, then retry.	
 A container operation is running. Use Docker: Cancel Operation before starting another.	
 A file named “{}” is already there; a folder cannot replace it. Rename or remove it first.	
 A file that is only partly transferred is removed, and so is a new folder. A folder you merge into keeps what was already copied.	
@@ -43,6 +44,7 @@ Accept Incoming Change
 Act as your {} account	
 Actions	
 Activate Breakpoints	
+Activating the completed installation…	
 Add	
 Add Configuration…	
 Add Cursor Above	
@@ -187,8 +189,10 @@ Check out which branch, tag or commit (detached)?
 Checked out #{} as pr-{}	
 Checked out {} (detached HEAD)	
 Checking for updates…	
+Checking installed language services…	
 Checking out pull request #{}…	
 Checking out {}…	
+Checking the host runtime…	
 Checking whitespace…	
 Checking…	
 Checkout (Detached)	
@@ -547,6 +551,7 @@ Deleting {}…
 Deleting…	
 Deny	
 Destination: {0} on {1}. Existing files are never overwritten.	
+Destination: {}	
 Dev Container configuration: {}	
 Dev Container is ready. The current workspace or unsaved files changed, so it was not switched automatically. Connect through the Docker picker.	
 Dev Container result: {}	
@@ -604,6 +609,7 @@ Downloading has to wait: the connection dropped and is reconnecting.
 Downloading has to wait: the connection is still being set up.	
 Downloading is not possible in this workspace.	
 Downloading needs the connection to {}, which failed: use Reconnect first.	
+Downloading the pinned Node.js runtime…	
 Downloading the {0} dictionary (about {1} MB)…	
 Downloading works with a connected SSH host: connect first (⌃R).	
 Download…	
@@ -726,6 +732,7 @@ Enabled
 Encoding for files that are not UTF-8	
 End files with a newline when saving	
 Enter a folder path on {}…	
+Enter installs or retries. Escape cancels while installation is running.	
 Enter the remote as: name url	
 Enter: path branch	
 Error	
@@ -734,6 +741,7 @@ Evaluate an expression (↵)
 Every file of {} matches its package.	
 Every setting, with comments	
 Everything resolved so far in this merge is discarded.	
+Existing custom server commands are preserved. Services start only in trusted folders. Closing this tab cancels an installation that has not reached activation.	
 Exit	
 Expand All Inside	
 Expand Emmet abbreviations (div.box>ul>li*3) with Tab	
@@ -1015,13 +1023,16 @@ Inline
 Insert a snippet (or type its prefix in the editor and press Tab)	
 Insert the closing bracket or quote	
 Install	
+Install Language Services	
 Install and Restart	
 Install from File…	
 Install from Folder…	
+Install on {}	
 Install podman-compose to open a Compose project with Podman, then try again.	
 Install which dictionary? (English is built in)	
 Install {}	
 Install {}?	
+Installation cancelled. The previous language services are unchanged.	
 Installed ({})	
 Installed from the file {}	
 Installed from the folder {}	
@@ -1029,8 +1040,10 @@ Installed {0} {1}.
 Installed; choose this container engine	
 Installing Codeyard {}	
 Installing Codeyard {}. Click for details.	
+Installing the locked language service packages…	
 Installing — Codeyard will restart.	
 Installing…	
+Installs JavaScript/TypeScript, HTML and CSS services from the locked npm catalogue. A pinned Node.js runtime is downloaded from nodejs.org when a compatible runtime with npm is unavailable. Package scripts are disabled.	
 Into a folder on this computer or the connected host	
 Invalid pattern	
 Invalid string	
@@ -1063,6 +1076,7 @@ Kill All Terminals
 Kill Terminal	
 Language	
 Language Badges	
+Language Services	
 Language mode for this file	
 Language of Uppercase / Lowercase / Title Case: auto (Turkish rules when the text has ı İ ş ğ), tr (i ↔ İ, ı ↔ I) or en	
 Language of the menus, command palette, Welcome screen, status bar, Source Control, Explorer, Settings page chrome, file operations and Git prompts (the user guide lists exactly what is translated; the rest stays English): auto (the system language) or a language code, en or tr. Your own settings only; a folder cannot change it	
@@ -1070,7 +1084,10 @@ Language of the pattern (click for the next one)
 Language server	
 Language server: {0} for {1}	
 Language servers are off in “{}” until you trust it: they can run the project's build scripts. Run “Workspace: Trust This Folder”.	
+Language service setup failed: {}. Check the log and connection, then retry.	
+Language services are ready with Node.js {}.	
 Language: {0} ({1})	
+Languages: Manage Language Services	
 Later	
 Latest 300 lines; refreshed with resource snapshots.	
 Learn	
@@ -1114,6 +1131,7 @@ Lost the connection to {}: {}. Your open files stay here.
 Manage SSH hosts	
 Manage SSH hosts…	
 Manage: About, Settings, Color Theme…	
+Managed language services are not installed on this host.	
 Mar	
 Mark all as resolved (stage)	
 Mark as resolved (stage)	
@@ -1577,6 +1595,7 @@ Regex, Ignore Case
 Regex, Match Case	
 Regular expression	
 Regular expression (⌥R)	
+Reinstall Language Services	
 Release Page	
 Reload history	
 Remote & Languages	
@@ -1913,6 +1932,7 @@ Stop Web Preview
 Stop a search after this many matches	
 Stopped	
 Stopped.	
+Stopping installation and cleaning temporary files…	
 Storage information is unavailable.	
 Store secrets in your keychain	
 String interpolation is not supported	
@@ -1980,6 +2000,7 @@ The address is malformed: {}
 The branch goes back to how it was before the rebase started.	
 The branch is fully merged into the current branch.	
 The branch is removed from the remote repository for everyone. Local branches are not touched.	
+The bundled service catalogue is invalid. Reinstall Codeyard before retrying.	
 The clipboard has no text.	
 The complete file list is available in Output.	
 The connection dropped; trying to reconnect. Unsaved changes are kept.	
@@ -2003,9 +2024,11 @@ The file is not open any more.
 The file is too large for an outline.	
 The folder and everything in it will be deleted.	
 The folder could not be read on the server: {}	
+The host stopped responding. Installation files were retained because a process may still be running. Reconnect and inspect the destination before retrying.	
 The input “{0}” is of type “{1}”, which would run a command; use promptString or pickString.	
 The last background fetch failed: {}	
 The local port is busy	
+The managed installation is incomplete or belongs to another catalogue. Reinstall the services to repair it.	
 The new version couldn't be installed from here. You can download it from the release page instead.	
 The number {} cannot be written in JSON	
 The pattern does not parse: {0} (line {1}, column {2})	
@@ -2024,6 +2047,7 @@ The request failed.
 The response could not be saved (curl write error).	
 The response is larger than {} and was not downloaded.	
 The result would not parse in {0} file: {1}|The result would not parse in {0} files: {1}	
+The runtime checksum did not match. Nothing was activated. Check the connection and retry.	
 The search stopped at the result limit: only the files listed are changed. Open files can be undone; closed files are written to disk.	
 The selection is neither a JWT nor a Unix timestamp	
 The server did not answer within 60 seconds.	
@@ -2125,6 +2149,7 @@ Type a name from ~/.ssh/config or user@host
 Type a query. Esc closes the bar.	
 Type into terminals	
 Type the shortcut for {} (e.g. cmd-shift-d), then save	
+TypeScript {} · TypeScript Language Server {} · HTML/CSS {}	
 UI font of the whole window (empty: system font)	
 Unavailable	
 Underline misspelled words in prose files and in code comments	
@@ -2176,6 +2201,8 @@ Variables
 Variables are not supported	
 Verify Files	
 Verifying and installing…	
+Verifying installed service files…	
+Verifying the runtime checksum…	
 Version {}	
 View	
 View File History	

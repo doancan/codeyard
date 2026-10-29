@@ -1,0 +1,11 @@
+baseline  0b39890 (0b39890528)
+candidate 7bfff5c (7bfff5cf80)
+
+metric                           stat     baseline  candidate   change  result
+startup.first_frame_ms           p95         217.4      211.2    -2.9%  ok
+startup.window_open_ms           p95         172.2      169.0    -1.8%  ok
+startup.extensions_ms            p95           1.0        0.9    -5.1%  ok
+typing.keystroke_frame_ms        p95          26.0       25.5    -1.9%  ok
+memory.empty_window_mb           median       69.0       69.0    +0.0%  ok
+memory.syntax_10k_mb             median      114.0      114.0    +0.0%  ok
+memory.terminal_mb               median       74.0       74.0    +0.0%  ok

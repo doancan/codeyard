@@ -831,6 +831,12 @@ re-reads it.
 
 ## Language servers
 
+For JavaScript/TypeScript, HTML and CSS, run **Languages: Manage Language Services** to review the
+host, destination and pinned versions, then install from the editor. The page provides progress,
+cancellation and retry. SSH workspaces install on their own host. See [managed language services](language-services.md)
+for runtime requirements and recovery. Existing custom commands and disabled languages are preserved.
+The command-line installations in the table below remain available as manual alternatives.
+
 "Developer: Restart Language Servers" restarts them (after installing one, for example).
 When a server asks something ("reload the project?"), its options appear in a picker; Esc
 answers "none".
