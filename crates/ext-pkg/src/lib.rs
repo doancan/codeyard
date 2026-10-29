@@ -286,6 +286,11 @@ pub fn read(bytes: &[u8]) -> Result<Package, Error> {
     if listed.data != contents_list(&entries).as_bytes() {
         return Err(Error::Contents(format!("{CONTENTS} does not match the files in the package")));
     }
+    // Its mode is in the digest but in no hash list: only the canonical one is accepted, so one set of files has one
+    // digest (found by fuzzing).
+    if listed.executable {
+        return Err(Error::Contents(format!("{CONTENTS} must not be executable (mode 644)")));
+    }
     let manifest = manifest_of(&files)?;
     check_references(&manifest, &files)?;
     let digest = ContentDigest(sha256(&canonical_tar(&entries)?));
