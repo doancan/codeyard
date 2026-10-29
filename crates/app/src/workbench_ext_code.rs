@@ -102,6 +102,7 @@ impl Workbench {
                 out.push(Command { label: c.title.clone(), run: Run::Extension { extension: e.id().to_string(), command: local.to_string() } });
             }
         }
+        out.extend(self.ext_view_commands());
         out
     }
 
@@ -367,14 +368,13 @@ impl Workbench {
             Notify::ClearTimer { id: t } => {
                 self.cfg.exts.code.timers.remove(&(id.to_string(), t));
             }
+            Notify::Invalidate { view } => self.on_ext_view_invalidate(id, &view, window, cx),
             // Status items, diagnostics and decorations (#104).
             n @ (Notify::SetStatusItem { .. }
             | Notify::RemoveStatusItem { .. }
             | Notify::SetDiagnostics { .. }
             | Notify::ClearDiagnostics { .. }
             | Notify::SetDecorations { .. }) => self.on_provider_notify(id, n, cx),
-            // Views land with their surface (#103); until then they are logged so an author sees them arrive.
-            other => self.log_extension(id, LogLevel::Debug, format!("{} (not shown in this version)", other.wit_name())),
         }
     }
 

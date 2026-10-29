@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Extension views: a code extension's `[[views]]` appear in the sidebar (an activity bar button), the bottom panel (a
+  tab) or the editor area (a page), and in the palette as *Open View: …*. Codeyard draws the 22 elements itself with the
+  theme's colours and spacing, so a theme change redraws them without calling the extension; lists and tables of
+  10,000 rows draw only the rows on screen, and trees load one page at a time. The tree arrives as JSON
+  (docs/extensions/reference/ui.md), is checked, and is diffed by key so typed text, ticks, selections and expanded
+  items survive a re-render. Every element is reachable by keyboard and announced with its role and label. Each view
+  names its publisher, and none can cover the consent sheet or take the keyboard from it. Images from URLs are not
+  drawn yet (they wait for `net` fetching).
 - What code extensions contribute reaches the same places as the core's: commands in the editor and file-tree menus
   (with `when` and `enablement`), on key bindings and on status bar items; formatters for *Format Document* and format
   on save (chosen per language with `editor.formatters`); code actions in *Quick Fix…*; diagnostics in the Problems view

@@ -391,4 +391,6 @@ pub(super) enum MenuCmd {
     Remote(remote_glue::RemoteMenuCmd),
     /// The Run and Debug view: configuration selector, breakpoint rows (`MenuTarget::path` = "path\tline").
     Debug(debug::DebugMenuCmd),
+    /// An option of an extension view's select (`ViewsState::choosing`).
+    ExtViewChoice(usize),
 }

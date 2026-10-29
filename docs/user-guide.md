@@ -658,6 +658,12 @@ programs. When a call is refused, the message names the permission the extension
 three times within a minute is turned off until Codeyard restarts; one nobody used for five minutes is stopped and
 starts again on its next command.
 
+**Extension views.** An extension with code can add views: a button in the activity bar for a sidebar view, a tab
+in the bottom panel, or a page in the editor area (also *Open View: …* in the command palette). Codeyard draws them
+with your theme, so they follow theme and zoom changes, and they work with the keyboard (Tab between controls, arrows
+in lists and trees) and screen readers. Each view names its publisher at the top. A view stays in its place: it cannot
+cover Codeyard's install, trust or sign-in sheets, or take the keyboard while one of them waits for you. Images in its
+text are not loaded, and a link opens in your browser only after you confirm its address.
 **What extensions with code add.** Everything they put on screen names the extension.
 
 - *Commands* in the palette, in the editor's and the file tree's right-click menus (after the built-in entries, greyed

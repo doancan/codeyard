@@ -20,6 +20,7 @@ const _: () = {
         EXT_ROW,
         EXT_PAGE_LINE,
         SCM_REPO,
+        EXT_VIEW_NODE,
         ROW_BASE,
     ];
     let mut i = 1;

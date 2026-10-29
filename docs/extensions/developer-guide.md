@@ -280,7 +280,7 @@ You can also use another OAuth 2 provider. Declare its authorize and token URLs 
 
 ### Tree view
 
-Views are built from built-in elements such as `tree`, `list`, `table`, `button`, `text` and `badge`. Codeyard draws them with the user's theme and screen-reader support. You don't choose colours or fonts, only tones (`accent`, `success`, `warning`, `danger`, `muted`).
+Views are built from built-in elements such as `tree`, `list`, `table`, `button`, `text` and `badge`. Codeyard draws them with the user's theme and screen-reader support. You don't choose colours or fonts, only tones (`accent`, `success`, `warning`, `danger`, `muted`). The guide is [Views](views.md); every element and event is in the [views reference](reference/ui.md).
 
 ```toml
 [[views]]
@@ -305,7 +305,7 @@ ctx.views.register("deployments", async () =>
 ui.invalidate("deployments");
 ```
 
-There are no webviews, so you can't build HTML previews or charts in v1.
+The SDK turns this into the JSON tree Codeyard draws (`response.view`) and loads tree levels one page at a time. There are no webviews, so you can't build HTML previews or charts in v1.
 
 ### Diagnostics
 

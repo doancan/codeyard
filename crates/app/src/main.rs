@@ -79,6 +79,8 @@ mod ext_updates_tests;
 #[cfg(test)]
 mod ext_view_tests;
 #[cfg(test)]
+mod ext_views_tests;
+#[cfg(test)]
 mod features_tests;
 mod file_batch;
 mod find;

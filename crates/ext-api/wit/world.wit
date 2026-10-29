@@ -15,7 +15,7 @@ interface host-requests {
     command(tuple<string, string>),
     /// Draw a view (by local id); answer with `response.view`.
     render(string),
-    /// Something happened in a view: its id and the event, JSON-encoded (reference/ui.md).
+    /// Something happened in a view: its local id and the event as JSON, such as `{"click": {"path": ["refresh"]}}` (reference/ui.md).
     ui-event(tuple<string, string>),
     /// Format a document, or a range of it; answer with `response.edits`.
     format(tuple<document, option<range>, format-options>),

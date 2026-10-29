@@ -294,6 +294,7 @@ impl Workbench {
         self.sync_settings_page(cx);
         self.sync_extensions_view();
         self.sync_running_extensions(window, cx);
+        self.sync_ext_views(cx);
         self.forget_removed_extension_marks(cx);
         // Extra folders resolve over the user and workspace layers, which may have changed.
         self.resolve_folder_settings(cx);
