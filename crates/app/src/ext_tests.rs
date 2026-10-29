@@ -352,7 +352,20 @@ fn install_file_checks_like_the_view() {
     ];
     code_pkg.push(ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: ext_pkg::testing::COMPONENT.to_vec(), executable: false });
     std::fs::write(&code, ext_pkg::write(code_pkg).unwrap().0).unwrap();
-    assert!(crate::ext::install_file(&store, &code).unwrap_err().contains("contains code"));
+    // Code without permissions installs (it runs in codeyard-exthost); with permissions it needs the consent sheet.
+    if crate::ext_runtime::code_runs_here(&"tests").is_ok() {
+        assert_eq!(crate::ext::install_file(&store, &code).unwrap().id.as_str(), "you.code");
+    }
+    let asks = cfg.join("asks.cyx");
+    let manifest_text =
+        manifest("you.asks", "[code]\nentry = \"main.ts\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n[permissions]\nnet = [\"api.example.com\"]\n");
+    let asks_pkg = vec![
+        ext_pkg::Entry { path: "codeyard-extension.toml".into(), data: manifest_text.into_bytes(), executable: false },
+        ext_pkg::Entry { path: "main.ts".into(), data: vec![], executable: false },
+        ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: ext_pkg::testing::COMPONENT.to_vec(), executable: false },
+    ];
+    std::fs::write(&asks, ext_pkg::write(asks_pkg).unwrap().0).unwrap();
+    assert!(crate::ext::install_file(&store, &asks).unwrap_err().contains("asks for permissions"));
     let junk = cfg.join("junk.cyx");
     std::fs::write(&junk, b"not a package").unwrap();
     assert!(crate::ext::install_file(&store, &junk).unwrap_err().contains("no gzip header"));

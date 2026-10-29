@@ -4,13 +4,20 @@
 //!
 //!   codeyard-exthost --compile < extension.wasm > compiled.cwasm
 //!   codeyard-exthost                (the app speaks `ext-proto` on stdin/stdout)
+//!   codeyard-exthost --check-sandbox
+//!
+//! `--check-sandbox` tells the app whether installed code can run here: one line, `ok: <what is enforced>` with exit
+//! code 0, or `unavailable: <why>` with exit code 1 (sandbox.rs).
 #![deny(clippy::unwrap_used)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 mod bindings;
 mod convert;
 mod engine;
 mod prints;
 mod run;
+mod sandbox;
+mod selftest;
 mod state;
 mod storage;
 
@@ -21,8 +28,10 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.first().map(String::as_str) {
         Some("--compile") => compile(),
+        Some("--check-sandbox") => return sandbox::check(),
+        Some("--sandbox-selftest") => selftest::run(&args[1..]),
         None => run::run(std::io::stdin().lock(), std::io::stdout()),
-        Some(other) => Err(format!("unknown argument {other}; usage: codeyard-exthost [--compile]")),
+        Some(other) => Err(format!("unknown argument {other}; usage: codeyard-exthost [--compile | --check-sandbox]")),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

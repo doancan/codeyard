@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Code extensions run: their commands appear in the command palette, and the first one starts the extension in its
+  own `codeyard-exthost` process. Every file, search and process call is checked against the extension's declared
+  permissions and the folder's trust before it reaches the folder, locally and over SSH; a denial says which line to
+  add. An extension that crashes three times in a minute is turned off until Codeyard restarts.
 - The extension API `codeyard:api` 0.1.0 (docs/extensions/reference/api.md) and its import check: `cyx check`, the
   registry and the installer refuse a code extension whose `extension.wasm` imports an interface its manifest has no
   permission for, with the line to add.

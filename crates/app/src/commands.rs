@@ -7,6 +7,11 @@ pub enum Run {
     Action(Box<dyn Action>),
     Connect(String),
     Disconnect,
+    /// A command of a code extension: its id and the command's local id.
+    Extension {
+        extension: String,
+        command: String,
+    },
 }
 
 impl Clone for Run {
@@ -15,6 +20,7 @@ impl Clone for Run {
             Run::Action(a) => Run::Action(a.boxed_clone()),
             Run::Connect(h) => Run::Connect(h.clone()),
             Run::Disconnect => Run::Disconnect,
+            Run::Extension { extension, command } => Run::Extension { extension: extension.clone(), command: command.clone() },
         }
     }
 }

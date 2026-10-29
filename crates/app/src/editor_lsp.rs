@@ -464,6 +464,21 @@ impl EditorView {
         self.after_edit(cx);
     }
 
+    /// The selection (or the cursor as an empty range) in UTF-16 positions, for extensions.
+    pub fn lsp_selection(&self) -> crate::lsp::Range16 {
+        let head = self.buffer.cursor();
+        let r = self.buffer.selection().unwrap_or(head..head);
+        (self.buffer.lsp_position(r.start), self.buffer.lsp_position(r.end))
+    }
+
+    /// Select `range` (UTF-16 positions), for extensions.
+    pub fn set_lsp_selection(&mut self, range: crate::lsp::Range16, cx: &mut Context<Self>) {
+        let ((l0, c0), (l1, c1)) = range;
+        let (a, b) = (self.buffer.from_lsp_position(l0, c0), self.buffer.from_lsp_position(l1, c1));
+        self.buffer.set_selection(a.min(b)..a.max(b), b < a);
+        cx.notify();
+    }
+
     /// Document version for language server requests (see `apply_lsp_edits_if_unchanged`).
     pub fn lsp_buffer_version(&self) -> u64 {
         self.buffer.version()

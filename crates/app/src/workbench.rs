@@ -47,6 +47,8 @@ mod container_overview_glue;
 #[path = "workbench_docker.rs"]
 mod docker_glue;
 // --- data ---
+#[path = "workbench_ext_code.rs"]
+mod code_glue;
 #[path = "workbench_data.rs"]
 mod data_glue;
 #[path = "workbench_debug.rs"]
@@ -1642,6 +1644,7 @@ impl Workbench {
             Run::Action(action) => window.defer(cx, move |window, cx| window.dispatch_action(action, cx)),
             Run::Connect(alias) => self.connect(alias, window, cx),
             Run::Disconnect => self.disconnect(cx),
+            Run::Extension { extension, command } => self.run_extension_command(&extension, &command, window, cx),
         }
     }
 

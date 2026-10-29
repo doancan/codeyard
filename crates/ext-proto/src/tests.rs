@@ -31,6 +31,7 @@ fn hello() -> Hello {
         settings: vec![("interval".into(), Some("60".into()))],
         folders: vec!["file:///work".into()],
         reason: "command:refresh".into(),
+        sandbox: true,
     }
 }
 

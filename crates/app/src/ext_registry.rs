@@ -207,7 +207,7 @@ pub fn page(cfg_dir: &Path, reg: &Registry, id: &ext_manifest::ExtId, release: &
 /// Install what [`find`] returned (after the user's consent), pinning its publisher.
 pub fn install(cfg_dir: &Path, found: &Found) -> Result<ext_core::Installed, String> {
     if found.download.manifest.code.is_some() {
-        return Err(crate::i18n::tf("{} contains code, which this version does not run", &[&found.download.manifest.id]));
+        crate::ext_runtime::code_runs_here(&found.download.manifest.id)?;
     }
     let source = ext_core::Source::Registry { registry: found.registry.name.clone(), publisher: found.download.signed.publisher.clone() };
     crate::ext::store(cfg_dir).install(&found.download.bytes, source).map_err(|e| e.to_string())

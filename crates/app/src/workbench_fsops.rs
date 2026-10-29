@@ -142,6 +142,8 @@ impl Workbench {
 
     pub(super) fn finish_input(&mut self, purpose: InputPurpose, name: String, window: &mut Window, cx: &mut Context<Self>) {
         match purpose {
+            // Answered in on_extension_overlay_event before it gets here.
+            InputPurpose::ExtInput { .. } => {}
             InputPurpose::RenameSymbol { client, path, pos } => self.rename_symbol_to(client, path, pos, name, cx),
             InputPurpose::EditBreakpoint { path, line } => self.finish_edit_breakpoint(path, line, name, cx),
             InputPurpose::AddWatch => self.finish_add_watch(name, cx),

@@ -62,9 +62,13 @@ mod error_ui_tests;
 #[cfg(test)]
 mod explorer_bulk_tests;
 mod ext;
+mod ext_broker;
+#[cfg(test)]
+mod ext_code_tests;
 mod ext_registry;
 #[cfg(test)]
 mod ext_registry_tests;
+mod ext_runtime;
 #[cfg(test)]
 mod ext_tests;
 mod ext_updates;

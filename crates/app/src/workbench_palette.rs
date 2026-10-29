@@ -423,6 +423,7 @@ impl Workbench {
         if matches!(self.remote.conn, Conn::Connected { .. }) {
             cmds.push(Command { label: "Remote: Disconnect".into(), run: Run::Disconnect });
         }
+        cmds.extend(self.extension_commands());
         cmds.push(Command::action("App: Quit", Quit));
         cmds
     }
@@ -927,6 +928,9 @@ impl Workbench {
                 PickerEvent::Dismiss,
             ) => {
                 self.close_overlay(window, cx);
+            }
+            (OverlayKind::ExtPick { .. } | OverlayKind::Input(InputPurpose::ExtInput { .. }), _) => {
+                self.on_extension_overlay_event(event, window, cx);
             }
             (OverlayKind::Palette { .. } | OverlayKind::Input(_), PickerEvent::Dismiss) => {
                 self.close_overlay(window, cx);

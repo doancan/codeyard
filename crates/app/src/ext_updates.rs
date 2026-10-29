@@ -232,7 +232,7 @@ fn install(from: &From, id: &ExtId, l: &Locked, current: &Manifest, release: &Re
         return Ok(Some(Offer::MorePermissions { version, added }));
     }
     if d.manifest.code.is_some() {
-        return Err(crate::i18n::tf("{} contains code, which this version does not run", &[id]));
+        crate::ext_runtime::code_runs_here(id)?;
     }
     if let ext_core::publisher::Pin::Changed { was } = registry::pin(Some(l), &reg.name, &d.signed.publisher) {
         return Ok(Some(Offer::NewPublisher { version, publisher: d.signed.publisher, was }));

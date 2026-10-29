@@ -2918,8 +2918,6 @@ Write to the clipboard	Panoya yazma
 Read and write the clipboard	Panoyu okuma ve panoya yazma
 Type into terminals	Terminallere yazma
 Run Codeyard commands: {}	Codeyard komutlarını çalıştırma: {}
-{} contains code; this version of Codeyard runs data-only extensions (themes, snippets, keymaps, languages, schemas, language servers)	{} kod içeriyor; Codeyard’ın bu sürümü yalnızca veri eklentilerini çalıştırır (temalar, snippet’ler, kısayol düzenleri, diller, şemalar, dil sunucuları)
-{} contains code, which this version does not run	{} kod içeriyor; bu sürüm kodu çalıştırmaz
 Load installed extensions (off: Codeyard starts as if none were installed)	Kurulu eklentileri yükle (kapalı: Codeyard hiç eklenti kurulu değilmiş gibi açılır)
 Application details	Uygulama bilgileri
 Client protocol	İstemci protokolü
@@ -2976,7 +2974,6 @@ Update	Güncelle
 Version {} is installed.	{} sürümü kurulu.
 Show Installed	Kurulu Olanı Göster
 No version of this extension can be installed: they were withdrawn or revoked.	Bu eklentinin kurulabilecek bir sürümü yok: geri çekildiler ya da iptal edildiler.
-This extension contains code, which this version of Codeyard does not run.	Bu eklenti kod içeriyor; Codeyard'ın bu sürümü kod çalıştırmıyor.
 Cannot show this extension's details: {}	Bu eklentinin ayrıntıları gösterilemiyor: {}
 Versions	Sürümler
 README	Benioku
@@ -3120,3 +3117,14 @@ Repository: {}	Depo: {}
 no upstream	takip edilen dal yok
 Repositories	Depolar
 Repository discovery failed	Depolar aranamadı
+
+# Extensions: running code
+{} contains code, but codeyard-exthost is missing beside Codeyard	{} kod içeriyor, ancak Codeyard'ın yanında codeyard-exthost yok
+{} asks for permissions: install it from the Extensions view to review them	{} izin istiyor: izinleri görmek için Eklentiler görünümünden kurun
+{0} contains code, which needs a sandbox this system does not provide: {1}	{0} kod içeriyor; bu sistemin sağlamadığı bir sandbox gerektiriyor: {1}
+{} crashed three times and is turned off until Codeyard restarts.	{} üç kez çöktü; Codeyard yeniden başlayana kadar kapalı.
+{} cannot run: codeyard-exthost is missing beside Codeyard.	{} çalışamıyor: Codeyard'ın yanında codeyard-exthost yok.
+{0} could not start: {1}	{0} başlatılamadı: {1}
+{0} failed to start: {1}	{0} başlarken hata verdi: {1}
+{} crashed three times in a minute and was turned off.	{} bir dakikada üç kez çöktü ve kapatıldı.
+denied ({0}); add to [permissions]: {1}	reddedildi ({0}); [permissions] bölümüne ekleyin: {1}
