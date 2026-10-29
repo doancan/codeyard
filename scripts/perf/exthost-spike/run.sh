@@ -21,6 +21,10 @@ wasm=$CARGO_TARGET_DIR/wasm32-wasip2/release
   cd guest-js
   npm ci --no-audit --no-fund --silent
   node build.mjs "$out/js-hello.wasm" hello.js
+  # An edited build: what saving a source file in `cyx dev` produces.
+  sed "s/hello /hello again /" hello.js > hello.b.js
+  node build.mjs "$out/js-hello.b.wasm" hello.b.js
+  rm -f hello.b.js
   npx esbuild octokit.js --bundle --format=esm --platform=neutral --main-fields=module,main \
     --external:codeyard:spike/host@0.1.0 --log-level=warning --outfile=octokit.bundle.js
   node build.mjs "$out/js-octokit.wasm" octokit.bundle.js
@@ -38,5 +42,5 @@ fi
 echo "$(uname -sm), $(git rev-parse --short HEAD), wasmtime $(grep -A1 'name = "wasmtime"' host/Cargo.lock | sed -n 's/version = "\(.*\)"/\1/p' | head -1)"
 echo
 "$CARGO_TARGET_DIR/release/spike-measure$exe_suffix" "$exe" "$out/measure" \
-  rust-hello="$wasm/spike_guest.wasm" js-hello="$out/js-hello.wasm" js-octokit="$out/js-octokit.wasm" \
+  rust-hello="$wasm/spike_guest.wasm" js-hello="$out/js-hello.wasm" js-hello.b="$out/js-hello.b.wasm" js-octokit="$out/js-octokit.wasm" \
   rust-1.6mb="$wasm/spike_guest_big.wasm"

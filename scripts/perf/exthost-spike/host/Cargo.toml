@@ -13,7 +13,7 @@ name = "spike-measure"
 path = "src/measure.rs"
 
 [dependencies]
-wasmtime = { version = "50", default-features = false, features = ["cranelift", "component-model", "runtime", "parallel-compilation", "addr2line", "demangle", "std"] }
+wasmtime = { version = "50", default-features = false, features = ["cranelift", "component-model", "runtime", "parallel-compilation", "incremental-cache", "addr2line", "demangle", "std"] }
 wasmtime-wasi = { version = "50", default-features = false }
 
 [target.'cfg(unix)'.dependencies]

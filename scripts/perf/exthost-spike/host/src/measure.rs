@@ -3,7 +3,8 @@
 //!   spike-measure <exthost> <out-dir> <name>=<file.wasm>...
 //!
 //! For every component: compile time and size, cold start (spawn → `ready` → first reply), warm call latency,
-//! idle memory. The last component is also hot-reloaded from .wasm (Cranelift included) and from .cwasm.
+//! idle memory, and hot reload from .wasm (Cranelift included) and from .cwasm. A `<name>.b` argument is an edited
+//! build of `<name>`: reloads alternate between the two, as saving in `cyx dev` would.
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -110,17 +111,18 @@ fn main() {
     let exe = PathBuf::from(&args[1]);
     let out = PathBuf::from(&args[2]);
     std::fs::create_dir_all(&out).unwrap();
-    let parts: Vec<(String, PathBuf)> = args[3..]
+    let all: Vec<(String, PathBuf)> = args[3..]
         .iter()
         .map(|a| {
             let (n, p) = a.split_once('=').expect("name=file");
             (n.to_owned(), PathBuf::from(p))
         })
         .collect();
+    let parts: Vec<_> = all.iter().filter(|(n, _)| !n.ends_with(".b")).cloned().collect();
+    let mut reloads = Vec::new();
 
     println!("| Component | .wasm | .cwasm | Compile (median) | Cold start p50 / p95 | First reply after ready | Warm call p50 / p95 | Idle resident | Idle private |");
     println!("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
-    let mut last = None;
     for (name, _) in &parts {
         let cwasm = out.join(format!("{name}.cwasm"));
         // Keep the .wasm next to the .cwasm: a sandboxed exthost reads only that folder.
@@ -180,30 +182,39 @@ fn main() {
             pct(&mut warm, 0.95),
             fp.map_or("n/a".into(), |f| format!("{f:.1} MB")),
         );
-        last = Some((name.clone(), wasm.clone(), cwasm));
+        // The edited build sits next to the first, for the same reason.
+        let edited = all.iter().find(|(n, _)| *n == format!("{name}.b")).map(|(_, p)| {
+            let b = out.join(format!("{name}.b.wasm"));
+            std::fs::copy(p, &b).unwrap();
+            b
+        });
+        reloads.push((name.clone(), wasm.clone(), edited, cwasm));
     }
 
-    let (name, wasm, cwasm) = last.unwrap();
-    let mut h = Host::spawn(&exe, &cwasm);
-    assert_eq!(h.line(), "ready");
-    let mut reload = |file: &Path| {
-        let mut v: Vec<f64> = (0..RUNS)
-            .map(|_| {
-                let t = Instant::now();
-                let r = h.send(&format!("reload {}", file.display()));
-                assert!(r.starts_with("reloaded "), "{r}");
-                assert!(h.send("call again").starts_with("ok "));
-                ms(t.elapsed())
-            })
-            .collect();
-        (pct(&mut v.clone(), 0.5), pct(&mut v, 0.95))
-    };
-    let (w50, w95) = reload(&wasm);
-    let (c50, c95) = reload(&cwasm);
-    h.quit();
     println!();
-    println!("| Hot reload of {name} | p50 | p95 |");
+    println!("| Hot reload | from .wasm p50 / p95 (Cranelift + instantiate + activate) | from .cwasm p50 / p95 (instantiate + activate) |");
     println!("| --- | --- | --- |");
-    println!("| from .wasm (Cranelift compile + instantiate + activate) | {w50:.0} ms | {w95:.0} ms |");
-    println!("| from cached .cwasm (instantiate + activate) | {c50:.1} ms | {c95:.1} ms |");
+    for (name, wasm, edited, cwasm) in reloads {
+        let mut h = Host::spawn(&exe, &cwasm);
+        assert_eq!(h.line(), "ready");
+        let mut reload = |files: [&Path; 2]| {
+            let mut v: Vec<f64> = (0..RUNS)
+                .map(|i| {
+                    let t = Instant::now();
+                    let r = h.send(&format!("reload {}", files[i % 2].display()));
+                    assert!(r.starts_with("reloaded "), "{r}");
+                    assert!(h.send("call again").starts_with("ok "));
+                    ms(t.elapsed())
+                })
+                .collect();
+            // The first reload compiles everything; what an author waits for after that is the steady state.
+            v.remove(0);
+            (pct(&mut v.clone(), 0.5), pct(&mut v, 0.95))
+        };
+        let (w50, w95) = reload([&wasm, edited.as_deref().unwrap_or(&wasm)]);
+        let (c50, c95) = reload([&cwasm, &cwasm]);
+        h.quit();
+        let note = if edited.is_some() { " (alternating with an edited build)" } else { "" };
+        println!("| {name}{note} | {w50:.0} / {w95:.0} ms | {c50:.1} / {c95:.1} ms |");
+    }
 }

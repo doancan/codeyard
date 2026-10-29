@@ -35,10 +35,15 @@ impl codeyard::spike::host::Host for State {
     }
 }
 
-fn engine() -> Result<Engine> {
+fn engine(dev: bool) -> Result<Engine> {
     let mut c = Config::new();
     c.wasm_component_model(true);
     c.epoch_interruption(true);
+    // Hot reload: Cranelift reuses the code of functions it compiled before in this process. Every TypeScript build
+    // embeds the same engine, so a reload recompiles only what changed. Install-time `compile` does not need it.
+    if dev {
+        c.enable_incremental_compilation(std::sync::Arc::new(Incremental::default()))?;
+    }
     #[cfg(unix)]
     if std::env::var_os("SPIKE_LOAD").is_some_and(|v| v == "copy-text") {
         c.with_custom_code_memory(Some(std::sync::Arc::new(CopyText)));
@@ -50,6 +55,20 @@ fn engine() -> Result<Engine> {
 /// `com.apple.security.cs.allow-unsigned-executable-memory`), never a file mapping. Replacing just the text pages
 /// of a file-mapped `.cwasm` with an anonymous copy keeps the data (and linear-memory images) file-backed, so only
 /// the machine code counts as dirty memory.
+#[derive(Debug, Default)]
+struct Incremental(std::sync::Mutex<std::collections::HashMap<Vec<u8>, Vec<u8>>>);
+
+impl wasmtime::CacheStore for Incremental {
+    fn get(&self, key: &[u8]) -> Option<std::borrow::Cow<'_, [u8]>> {
+        self.0.lock().unwrap().get(key).cloned().map(std::borrow::Cow::Owned)
+    }
+
+    fn insert(&self, key: &[u8], value: Vec<u8>) -> bool {
+        self.0.lock().unwrap().insert(key.to_vec(), value);
+        true
+    }
+}
+
 #[cfg(unix)]
 struct CopyText;
 
@@ -169,7 +188,7 @@ fn start(engine: &Engine, linker: &Linker<State>, path: &Path) -> Result<Instanc
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    let engine = engine()?;
+    let engine = engine(args.get(1).is_some_and(|a| a == "run"))?;
     match args.get(1).map(String::as_str) {
         Some("compile") => {
             let mut wasm = Vec::new();
