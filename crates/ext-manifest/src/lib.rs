@@ -27,7 +27,7 @@ pub use risk::{Clipboard, Level, Line, Permissions, Risk, net_allows, risk};
 /// The file name of the manifest at the root of an extension.
 pub const FILE_NAME: &str = "codeyard-extension.toml";
 
-pub use validate::{Options, check_package_path, is_deceptive};
+pub use validate::{Options, check_https_url, check_package_path, is_deceptive};
 
 /// Parse and validate a manifest, as install and publish do. Every problem is reported, not just the first.
 pub fn parse(text: &str) -> Result<Manifest, Vec<Diagnostic>> {
@@ -362,6 +362,31 @@ impl Contributions {
     }
 }
 
+/// Account providers built into Codeyard; `[permissions] auth` may name them without an `[[oauth]]` table.
+pub const BUILTIN_PROVIDERS: &[&str] = &["github"];
+
+/// `[[oauth]]`: an OAuth 2 provider declared by the extension. Codeyard runs the browser sign-in (authorization code
+/// with PKCE, returning through `codeyard://ext/<id>/callback`), keeps the token in the keychain and signs requests to
+/// `hosts`. The extension never sees the token.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OAuthProvider {
+    /// The name `[permissions] auth` and `auth.session` use.
+    pub id: String,
+    /// Shown to the user: "Act as your <name> account".
+    pub name: String,
+    /// `https://` only.
+    pub authorize_url: String,
+    /// `https://` only: the code and refresh tokens are traded here.
+    pub token_url: String,
+    pub client_id: String,
+    /// Asked for at sign-in; `auth.session` may ask for fewer, never others.
+    pub scopes: Vec<String>,
+    /// The hosts `auth.fetch` signs requests to, in the form of `net` entries.
+    pub hosts: Vec<String>,
+    /// An `https://` URL that answers JSON about the signed-in account; its name is shown to the user.
+    pub account_url: Option<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Manifest {
     pub id: ExtId,
@@ -381,12 +406,20 @@ pub struct Manifest {
     /// Runs in untrusted folders (with no outbound permissions there). Default true.
     pub untrusted: bool,
     pub contributions: Contributions,
+    /// `[[oauth]]` providers, each named in `[permissions] auth`.
+    #[serde(default)]
+    pub oauth: Vec<OAuthProvider>,
 }
 
 impl Manifest {
     /// No code: the extension only adds data (themes, snippets, languages, …) and never starts a process of its own.
     pub fn is_declarative(&self) -> bool {
         self.code.is_none()
+    }
+
+    /// The `[[oauth]]` provider named `id`.
+    pub fn oauth_provider(&self, id: &str) -> Option<&OAuthProvider> {
+        self.oauth.iter().find(|p| p.id == id)
     }
 
     pub fn risk(&self) -> Risk {

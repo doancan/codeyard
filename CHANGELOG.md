@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Accounts for extensions: `auth.session` and `auth.fetch` with the built-in GitHub provider (the GitHub CLI sign-in
+  Codeyard already uses) or an `[[oauth]]` provider from the manifest (browser sign-in with PKCE through
+  `codeyard://ext/<id>/callback`, refresh tokens). The first use asks in a system dialog that names the publisher and
+  the account; tokens stay in the system keychain under the extension's publisher identity and Codeyard signs requests
+  to the provider's hosts only, so the extension never sees a token. The extension page lists accounts with
+  **Sign Out**. Extensions with `secrets` get their own keychain entries, and `net.fetch` reaches the hosts in `net`.
 - Code extensions run: their commands appear in the command palette, and the first one starts the extension in its
   own `codeyard-exthost` process. Every file, search and process call is checked against the extension's declared
   permissions and the folder's trust before it reaches the folder, locally and over SSH; a denial says which line to

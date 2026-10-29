@@ -43,6 +43,8 @@ pub struct RawManifest {
     pub commands: Vec<S<RawCommand>>,
     #[serde(default)]
     pub views: Vec<S<RawView>>,
+    #[serde(default)]
+    pub oauth: Vec<S<RawOAuth>>,
 }
 
 #[derive(Deserialize)]
@@ -176,4 +178,19 @@ pub struct RawView {
     pub title: S<String>,
     pub location: S<String>,
     pub when: Option<S<String>>,
+}
+
+/// `[[oauth]]`: an OAuth 2 provider the extension signs in to (authorization code with PKCE).
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawOAuth {
+    pub id: S<String>,
+    pub name: S<String>,
+    pub authorize_url: S<String>,
+    pub token_url: S<String>,
+    pub client_id: S<String>,
+    #[serde(default)]
+    pub scopes: Vec<S<String>>,
+    pub hosts: Vec<S<String>>,
+    pub account_url: Option<S<String>>,
 }

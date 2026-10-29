@@ -658,6 +658,15 @@ programs. When a call is refused, the message names the permission the extension
 three times within a minute is turned off until Codeyard restarts; one nobody used for five minutes is stopped and
 starts again on its next command.
 
+**Accounts.** An extension that declares `auth` can act as your GitHub account, or as an account at a service it
+names. The first time it asks, Codeyard shows a system dialog with the extension, its publisher and the account; nothing
+happens until you choose **Allow** (GitHub) or **Sign In…** (the service's page opens in your browser and comes back
+to Codeyard). GitHub uses the sign-in you already have with the GitHub CLI (`gh auth login`). The token is kept in
+your system keychain (Keychain on macOS, Credential Manager on Windows, the Secret Service on Linux) and Codeyard adds
+it to the extension's requests itself, only to that account's own hosts; the extension never sees it. The extension's
+page lists its accounts with **Sign Out**, which removes the token from the keychain. A sideloaded copy of an extension
+does not get the accounts or secrets of the registry one with the same id.
+
 **Rules that keep them predictable.** An extension key binding never takes a key a built-in shortcut uses (the
 binding is left out and the status bar says so); a keymap preset you choose with `keymap.preset` may. An extension
 language only applies to files no built-in language claims. Extension language servers start in trusted folders only,

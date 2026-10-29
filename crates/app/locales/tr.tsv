@@ -3116,3 +3116,34 @@ This extension contains code, and codeyard-exthost, which runs it, is missing be
 {0} failed to start: {1}	{0} başlarken hata verdi: {1}
 {} crashed three times in a minute and was turned off.	{} bir dakikada üç kez çöktü ve kapatıldı.
 denied ({0}); add to [permissions]: {1}	reddedildi ({0}); [permissions] bölümüne ekleyin: {1}
+A sign-in answer for {0} carried the code of {1}'s sign-in; it was ignored.	{0} için gelen bir oturum açma yanıtı {1} eklentisinin oturum açma kodunu taşıyordu; yok sayıldı.
+Accounts	Hesaplar
+Codeyard is not signed in to GitHub: run `gh auth login` in a terminal, then try again.	Codeyard GitHub'da oturum açmamış: bir terminalde `gh auth login` çalıştırın, sonra yeniden deneyin.
+Codeyard signs its requests to {} with this account. The extension never sees your password or token. You can sign out on its page in Extensions.	Codeyard, eklentinin {} adresine giden isteklerini bu hesapla imzalar. Eklenti parolanızı ya da belirtecinizi hiçbir zaman görmez. Eklentiler'deki sayfasından oturumu kapatabilirsiniz.
+Could not sign out: {}	Oturum kapatılamadı: {}
+GitHub did not accept Codeyard's sign-in: run `gh auth login` in a terminal, then try again.	GitHub, Codeyard'ın oturumunu kabul etmedi: bir terminalde `gh auth login` çalıştırın, sonra yeniden deneyin.
+Let {0} act as your GitHub account {1}?	{0}, GitHub hesabınız {1} adına işlem yapabilsin mi?
+Let {0} sign in to your {1} account?	{0}, {1} hesabınızla oturum açabilsin mi?
+Sign In…	Oturum Aç…
+Sign Out	Oturumu Kapat
+a host of the {0} account ({1}), not {2}	{0} hesabının bir sunucusu ({1}), {2} değil
+not signed in to {0}; call auth.session with “{1}” first	{0} hesabında oturum açılmamış; önce auth.session'ı “{1}” ile çağırın
+the keychain did not answer	anahtar zinciri yanıt vermedi
+the keychain refused the account: {}	anahtar zinciri hesabı kabul etmedi: {}
+the sign-in expired; sign in again	oturumun süresi doldu; yeniden oturum açın
+the sign-in failed: {}	oturum açılamadı: {}
+the sign-in was refused ({})	oturum açma reddedildi ({})
+the token endpoint answered {}	belirteç adresi {} yanıtını verdi
+the token endpoint sent a {} token; only bearer tokens can sign requests	belirteç adresi {} türünde bir belirteç gönderdi; istekleri yalnızca bearer belirteçleri imzalayabilir
+the token endpoint sent no access_token	belirteç adresi access_token göndermedi
+the window closed	pencere kapandı
+{0} ({1}) is published by {2}.	{0} ({1}) eklentisinin yayıncısı: {2}.
+{0} is signed in to {1} as {2}.	{0}, {1} hesabında {2} olarak oturum açtı.
+{0} is signed out of {1}.	{0}, {1} hesabındaki oturumu kapattı.
+{0}, in development from {1}	{0}, {1} klasöründen geliştirme aşamasında
+{0}, installed from {1} (not verified by a registry)	{0}, {1} konumundan kuruldu (bir kayıt tarafından doğrulanmadı)
+{0}, signed by {1} in the {2} registry	{0}, {2} kaydında {1} tarafından imzalandı
+{0}: finish signing in to {1} in your browser.	{0}: {1} oturumunu tarayıcınızda tamamlayın.
+{0}: signed in as {1}	{0}: {1} olarak oturum açık
+{} (not verified by a registry)	{} (bir kayıt tarafından doğrulanmadı)
+{}: not signed in	{}: oturum açılmamış

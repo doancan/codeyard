@@ -55,6 +55,8 @@ pub(super) struct ExtViewState {
     pub(super) updates: super::updates_glue::UpdateState,
     /// Running code extensions (workbench_ext_code.rs).
     pub(super) code: super::code_glue::CodeState,
+    /// Their accounts, secrets and sign-ins (workbench_ext_accounts.rs).
+    pub(super) accounts: super::accounts_glue::AccountsState,
 }
 
 /// The consent sheet's text and every other plain-words line of an extension.
@@ -251,6 +253,7 @@ impl Workbench {
         self.cfg.exts.pending = None;
         self.cfg.exts.market.page = None;
         self.cfg.exts.selected = Some(id.to_string());
+        self.refresh_extension_accounts(id, cx);
         self.open_extension_page(cx);
     }
 

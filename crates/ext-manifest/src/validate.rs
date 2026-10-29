@@ -3,11 +3,11 @@
 use std::collections::HashSet;
 use std::ops::Range;
 
-use crate::raw::{RawManifest, RawPermissions, S};
+use crate::raw::{RawManifest, RawOAuth, RawPermissions, S};
 use crate::risk::{self, Clipboard, Permissions};
 use crate::{
-    Activation, CodeEntry, CodeLanguage, Command, Contributions, ExtId, FileEntry, Keybinding, Language, LanguageServer, Manifest, SchemaAssociation, Setting,
-    SettingKind, Snippets, Version, View, ViewLocation, check_id_part, limits, when,
+    Activation, BUILTIN_PROVIDERS, CodeEntry, CodeLanguage, Command, Contributions, ExtId, FileEntry, Keybinding, Language, LanguageServer, Manifest,
+    OAuthProvider, SchemaAssociation, Setting, SettingKind, Snippets, Version, View, ViewLocation, check_id_part, limits, when,
 };
 use crate::{Code as C, Diagnostic};
 
@@ -216,6 +216,7 @@ fn build(cx: &mut Ctx, raw: RawManifest) -> Manifest {
     }
 
     let contributions = contributions(cx, &raw, &id, &permissions);
+    let oauth = oauth(cx, &raw.oauth, raw.permissions.as_ref().map(|p| p.get_ref()), &permissions);
 
     let mut activation: Vec<Activation> = Vec::new();
     if code.is_some() {
@@ -264,7 +265,95 @@ fn build(cx: &mut Ctx, raw: RawManifest) -> Manifest {
         dependencies,
         untrusted: raw.untrusted.unwrap_or(true),
         contributions,
+        oauth,
     }
+}
+
+/// An `https://` URL with a host name (the rules of `net`), no user info and no fragment. Returns the host.
+pub fn check_https_url(u: &str) -> Result<String, String> {
+    let Some(rest) = u.strip_prefix("https://") else { return Err("must start with https://".into()) };
+    if u.len() > limits::ITEM_LEN {
+        return Err(format!("is longer than {} characters", limits::ITEM_LEN));
+    }
+    if u.contains('#') || u.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err("must not contain spaces, control characters or a #fragment".into());
+    }
+    let authority = rest.split(['/', '?']).next().unwrap_or_default();
+    if authority.contains('@') {
+        return Err("must not contain a user name or password".into());
+    }
+    let (host, port) = match authority.split_once(':') {
+        Some((h, p)) => (h, Some(p)),
+        None => (authority, None),
+    };
+    if let Some(port) = port
+        && port.parse::<u16>().is_err()
+    {
+        return Err(format!("has an invalid port '{port}'"));
+    }
+    if host.starts_with("*.") {
+        return Err("must name one host, without *".into());
+    }
+    check_host(host).map_err(|e| format!("host '{host}' {e}"))?;
+    Ok(host.to_string())
+}
+
+/// `[[oauth]]` tables: each well formed and named in `[permissions] auth`; every `auth` entry is either built in or
+/// declared here.
+fn oauth(cx: &mut Ctx, raw: &[S<RawOAuth>], perms_raw: Option<&RawPermissions>, perms: &Permissions) -> Vec<OAuthProvider> {
+    cx.count("oauth providers", raw);
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for r in raw {
+        let span = r.span();
+        let r = r.get_ref();
+        let id = r.id.get_ref().clone();
+        if let Err(e) = check_id_part(&id) {
+            cx.err(C::BadContribution, r.id.span(), format!("oauth id '{id}' {e}"));
+        } else if BUILTIN_PROVIDERS.contains(&id.as_str()) {
+            cx.err(C::BadContribution, r.id.span(), format!("oauth id '{id}' is built into Codeyard")).fix =
+                Some(format!("remove this [[oauth]] table; auth = [\"{id}\"] is enough"));
+        } else if !seen.insert(id.clone()) {
+            cx.err(C::DuplicateId, r.id.span(), format!("oauth id '{id}' is used twice"));
+        } else if !perms.auth.contains(&id) {
+            cx.err(C::NotDeclared, span.clone(), format!("oauth provider '{id}' is not in [permissions] auth")).fix =
+                Some(format!("add to [permissions]:  auth = [\"{id}\"]"));
+        }
+        let name = cx.text("oauth name", &r.name, limits::NAME_LEN);
+        let mut url = |what: &str, v: &S<String>| {
+            if let Err(e) = check_https_url(v.get_ref()) {
+                cx.err(C::BadContribution, v.span(), format!("oauth {what} '{}' {e}", v.get_ref()));
+            }
+            v.get_ref().clone()
+        };
+        let authorize_url = url("authorize-url", &r.authorize_url);
+        let token_url = url("token-url", &r.token_url);
+        let account_url = r.account_url.as_ref().map(|a| url("account-url", a));
+        let client_id = cx.text("oauth client-id", &r.client_id, limits::ITEM_LEN);
+        if client_id.chars().any(|c| c.is_whitespace() || matches!(c, '&' | '#' | '"')) {
+            cx.err(C::BadContribution, r.client_id.span(), "oauth client-id must not contain spaces, &, # or quotes");
+        }
+        let scopes = list(cx, "oauth scopes", &r.scopes, |s| {
+            let ok = !s.is_empty() && s.len() <= limits::ITEM_LEN && s.chars().all(|c| c.is_ascii_graphic() && c != '"' && c != '\\');
+            if ok { Ok(()) } else { Err("must be one scope: printable characters without spaces or quotes".into()) }
+        });
+        if r.hosts.is_empty() {
+            cx.err(C::BadContribution, span.clone(), format!("oauth provider '{id}' lists no hosts")).fix =
+                Some("add  hosts = [\"api.example.com\"]: the hosts whose requests Codeyard signs".into());
+        }
+        let hosts = list(cx, "oauth hosts", &r.hosts, check_host);
+        out.push(OAuthProvider { id, name, authorize_url, token_url, client_id, scopes, hosts, account_url });
+    }
+    if let Some(p) = perms_raw {
+        for a in &p.auth {
+            let a_id = a.get_ref();
+            if check_id_part(a_id).is_ok() && !BUILTIN_PROVIDERS.contains(&a_id.as_str()) && !raw.iter().any(|r| r.get_ref().id.get_ref() == a_id) {
+                cx.err(C::NotDeclared, a.span(), format!("permissions.auth '{a_id}' is not a built-in provider and has no [[oauth]] table")).fix =
+                    Some(format!("use auth = [\"github\"], or add [[oauth]] with id = \"{a_id}\", its authorize-url, token-url, client-id and hosts"));
+            }
+        }
+    }
+    out
 }
 
 fn check_workspace_glob(g: &str) -> Result<(), String> {

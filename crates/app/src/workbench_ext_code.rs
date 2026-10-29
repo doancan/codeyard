@@ -21,14 +21,14 @@ const LOG_LINES: usize = 500;
 pub(super) struct CodeState {
     tx: mpsc::Sender<(String, Event)>,
     rx: Option<mpsc::Receiver<(String, Event)>>,
-    procs: HashMap<String, Arc<Process>>,
+    pub(super) procs: HashMap<String, Arc<Process>>,
     /// Requests waiting for their exthost to start.
     queued: HashMap<String, Vec<ToHost>>,
     pending: Arc<Mutex<Pending>>,
     crashes: Crashes,
     /// Crashed three times within a minute: not started again this session.
     pub(super) disabled: HashSet<String>,
-    cancels: HashMap<(String, u64), Arc<AtomicBool>>,
+    pub(super) cancels: HashMap<(String, u64), Arc<AtomicBool>>,
     /// The request that is a user action right now, per extension (`activeTab`, `open-external`).
     user_action: HashMap<String, u64>,
     pub(super) logs: HashMap<String, VecDeque<(LogLevel, String)>>,
@@ -423,6 +423,12 @@ impl Workbench {
                 };
                 complete(&proc, c);
             }
+            Start::Fetch { .. }
+            | Start::Session { .. }
+            | Start::AuthFetch { .. }
+            | Start::SecretGet { .. }
+            | Start::SecretSet { .. }
+            | Start::SecretDelete { .. } => self.extension_account_call(&active, scope, ticket, call, proc, window, cx),
             Start::ReadClipboard => {
                 let c = if scope.permissions.clipboard.reads() {
                     Completion::Text(cx.read_from_clipboard().and_then(|i| i.text()))

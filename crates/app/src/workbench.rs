@@ -47,6 +47,9 @@ mod container_overview_glue;
 #[path = "workbench_docker.rs"]
 mod docker_glue;
 // --- data ---
+#[path = "workbench_ext_accounts.rs"]
+mod accounts_glue;
+pub(crate) use accounts_glue::{deliver_callback as deliver_extension_callback, forward_callback_from_command_line};
 #[path = "workbench_ext_code.rs"]
 mod code_glue;
 #[path = "workbench_data.rs"]

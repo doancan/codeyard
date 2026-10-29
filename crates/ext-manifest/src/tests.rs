@@ -577,3 +577,53 @@ fn an_update_asks_only_for_what_is_new() {
     let narrower = Permissions { net: vec!["v2.api.x.com".into()], ..Default::default() };
     assert_eq!(narrower.added_since(&old).describe(), ["Connect to v2.api.x.com"]);
 }
+
+const ACME: &str = "[[oauth]]\nid = \"acme\"\nname = \"Acme\"\nauthorize-url = \"https://acme.example.com/oauth/authorize\"\ntoken-url = \"https://acme.example.com/oauth/token\"\nclient-id = \"cy-123\"\nscopes = [\"read\", \"deploy:write\"]\nhosts = [\"api.acme.example.com\"]\naccount-url = \"https://api.acme.example.com/me\"\n";
+
+#[test]
+fn an_oauth_provider_is_declared_and_named_in_auth() {
+    let m = parse(&with(&format!("[permissions]\nauth = [\"github\", \"acme\"]\nwhy = \"x\"\n{ACME}"))).unwrap();
+    let p = m.oauth_provider("acme").expect("declared");
+    assert_eq!(p.name, "Acme");
+    assert_eq!(p.token_url, "https://acme.example.com/oauth/token");
+    assert_eq!(p.scopes, ["read", "deploy:write"]);
+    assert_eq!(p.hosts, ["api.acme.example.com"]);
+    assert_eq!(p.account_url.as_deref(), Some("https://api.acme.example.com/me"));
+    assert!(m.oauth_provider("github").is_none(), "GitHub is built in");
+    // An `auth` entry that is neither built in nor declared.
+    let e = errors(&with("[permissions]\nauth = [\"acme\"]\n"));
+    assert_eq!(e[0].code, Code::NotDeclared);
+    assert!(e[0].fix.as_deref().is_some_and(|f| f.contains("[[oauth]]")), "{:?}", e[0].fix);
+    // A provider that `auth` does not name.
+    assert_eq!(codes(&with(&format!("[permissions]\nauth = [\"github\"]\n{ACME}"))), vec![Code::NotDeclared]);
+    // GitHub cannot be redeclared, and an id is used once.
+    let gh = ACME.replace("id = \"acme\"", "id = \"github\"");
+    assert_eq!(codes(&with(&format!("[permissions]\nauth = [\"github\"]\n{gh}"))), vec![Code::BadContribution]);
+    assert_eq!(codes(&with(&format!("[permissions]\nauth = [\"acme\"]\n{ACME}{ACME}"))), vec![Code::DuplicateId]);
+}
+
+#[test]
+fn oauth_urls_are_https_with_a_host_name() {
+    let bad = [
+        ("token-url = \"https://acme.example.com/oauth/token\"", "token-url = \"http://acme.example.com/oauth/token\""),
+        ("token-url = \"https://acme.example.com/oauth/token\"", "token-url = \"https://10.0.0.1/token\""),
+        ("token-url = \"https://acme.example.com/oauth/token\"", "token-url = \"https://user:pw@acme.example.com/token\""),
+        ("token-url = \"https://acme.example.com/oauth/token\"", "token-url = \"https://localhost/token\""),
+        ("authorize-url = \"https://acme.example.com/oauth/authorize\"", "authorize-url = \"javascript:alert(1)\""),
+        ("authorize-url = \"https://acme.example.com/oauth/authorize\"", "authorize-url = \"https://acme.example.com/a#frag\""),
+        ("account-url = \"https://api.acme.example.com/me\"", "account-url = \"file:///etc/passwd\""),
+        ("hosts = [\"api.acme.example.com\"]", "hosts = [\"*\"]"),
+        ("hosts = [\"api.acme.example.com\"]", "hosts = []"),
+        ("client-id = \"cy-123\"", "client-id = \"a&redirect_uri=x\""),
+        ("scopes = [\"read\", \"deploy:write\"]", "scopes = [\"read write\"]"),
+    ];
+    for (from, to) in bad {
+        let text = with(&format!("[permissions]\nauth = [\"acme\"]\n{}", ACME.replace(from, to)));
+        assert!(parse(&text).is_err(), "{to}");
+    }
+    assert_eq!(check_https_url("https://auth.example.com:8443/token?x=1").as_deref(), Ok("auth.example.com"));
+    assert!(check_https_url("https://auth.example.com:99999/").is_err());
+    // An unknown field is an error, as everywhere in the manifest.
+    let typo = ACME.replace("client-id", "client_id");
+    assert_eq!(codes(&with(&format!("[permissions]\nauth = [\"acme\"]\n{typo}"))), vec![Code::Syntax]);
+}

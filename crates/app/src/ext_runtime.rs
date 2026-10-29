@@ -128,6 +128,10 @@ pub struct Process {
     pub last_used: Mutex<Instant>,
 }
 
+/// Every frame the app sent to an exthost, in tests: what an extension could ever see.
+#[cfg(test)]
+pub static SENT_FOR_TEST: Mutex<Vec<Vec<u8>>> = Mutex::new(Vec::new());
+
 impl Process {
     /// Start an exthost for one extension and complete the handshake. Frames after `Ready` arrive at `events`,
     /// tagged with the extension id, from a reader thread.
@@ -193,6 +197,12 @@ impl Process {
     }
 
     pub fn send(&self, msg: &ToHost) -> Result<(), String> {
+        #[cfg(test)]
+        {
+            let mut frame = Vec::new();
+            let _ = ext_proto::write(&mut frame, msg);
+            SENT_FOR_TEST.lock().unwrap_or_else(|p| p.into_inner()).push(frame);
+        }
         *self.last_used.lock().unwrap_or_else(|p| p.into_inner()) = Instant::now();
         let mut w = self.stdin.lock().unwrap_or_else(|p| p.into_inner());
         ext_proto::write(&mut *w, msg).map_err(|e| e.to_string())

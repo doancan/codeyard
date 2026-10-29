@@ -248,7 +248,7 @@ fn permission_lines_are_the_consent_sheet_words() {
     let sets = [
         "read = [\"vercel.json\"]\nnet = [\"api.vercel.com\"]",
         "read = [\"**/*.rs\", \".env\"]\nwrite = [\"src/*.rs\"]\nnet = [\"*.github.io\"]\nwhy = \"x\"",
-        "write = [\"**\"]\nauth = [\"github\", \"acme\"]\nsecrets = true\nwhy = \"x\"",
+        "write = [\"**\"]\nauth = [\"github\", \"acme\"]\nsecrets = true\nwhy = \"x\"\n[[oauth]]\nid = \"acme\"\nname = \"Acme\"\nauthorize-url = \"https://acme.example.com/a\"\ntoken-url = \"https://acme.example.com/t\"\nclient-id = \"c\"\nhosts = [\"api.acme.example.com\"]",
         "run = [\"vercel\"]\nclipboard = \"read-write\"\nterminal = true\ncommands = [\"core:workbench.toggleZenMode\"]\nwhy = \"x\"",
         "clipboard = \"read\"",
         "clipboard = \"write\"",

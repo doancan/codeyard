@@ -275,7 +275,8 @@ impl Workbench {
                 .children(self.extension_update_card(e, p, cx))
                 .child(section_title(crate::i18n::t("Contributes"), p))
                 .child(line_list(contribution_lines(&m), crate::i18n::t("Nothing"), p))
-                .child(self.extension_permissions(&m, high_risk_line(&m), p)),
+                .child(self.extension_permissions(&m, high_risk_line(&m), p))
+                .children(self.extension_accounts_section(&m, p, cx)),
         )
         .into_any_element()
     }
