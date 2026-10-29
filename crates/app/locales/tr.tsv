@@ -3214,3 +3214,39 @@ Saved without formatting: {0}: {1}	Biçimlendirmeden kaydedildi: {0}: {1}
 editor.formatters.{}: expected “lsp” or an extension id	editor.formatters.{}: “lsp” ya da bir eklenti kimliği bekleniyordu
 {}: the formatter returned no edits	{}: biçimlendirici hiçbir düzenleme döndürmedi
 “{}” is not the command of an active extension	“{}” etkin bir eklentinin komutu değil
+# ---- Task runs ----
+No task is running.	Çalışan bir görev yok.
+Running task: {}	Görev çalışıyor: {}
+Task cancellation could not be confirmed. Reconnect and inspect the process.	Görevin durdurulduğu doğrulanamadı. Yeniden bağlanın ve süreci kontrol edin.
+Task could not start: {}	Görev başlatılamadı: {}
+Task dependency cycle: {}	Görev bağımlılık döngüsü: {}
+Task input cancelled	Görev girdisi iptal edildi
+Task “{0}” depends on “{1}”, which does not exist.	“{0}” görevi, var olmayan “{1}” görevine bağlı.
+Task “{0}” has an invalid problem matcher: {1}	“{0}” görevinin sorun eşleştiricisi geçersiz: {1}
+Task “{0}” has an invalid “{1}”.	“{0}” görevinde geçersiz bir “{1}” var.
+Task “{0}” uses the input “{1}”, which the task file does not define.	“{0}” görevi, görev dosyasında tanımlanmamış “{1}” girdisini kullanıyor.
+Task “{0}” uses “{1}”, which has no value here.	“{0}” görevi “{1}” kullanıyor; burada bunun bir değeri yok.
+Task “{0}” uses “{1}”, which would run an editor command; use an input instead.	“{0}” görevi “{1}” kullanıyor; bu bir düzenleyici komutu çalıştırır. Bunun yerine bir girdi kullanın.
+Task “{0}”: {1}	“{0}” görevi: {1}
+Task “{}” has a variable that cannot be expanded.	“{}” görevinde genişletilemeyen bir değişken var.
+Task “{}” has no command.	“{}” görevinin komutu yok.
+Task “{}” needs an open file.	“{}” görevi için açık bir dosya gerekiyor.
+Task “{}” runs in the background but its problem matcher has no endsPattern, so nothing can wait for it.	“{}” görevi arka planda çalışıyor ama sorun eşleştiricisinde endsPattern yok; bu yüzden hiçbir şey onu bekleyemez.
+Tasks: Restart Running Task	Görevler: Çalışan Görevi Yeniden Başlat
+Tasks: Terminate Task	Görevler: Görevi Sonlandır
+The input “{}” would run an editor command; use promptString or pickString.	“{}” girdisi bir düzenleyici komutu çalıştırır; promptString ya da pickString kullanın.
+The preLaunchTask “{0}” did not succeed ({1}), so debugging was not started. Check its terminal, then start debugging again.	preLaunchTask “{0}” başarılı olmadı ({1}); bu yüzden hata ayıklama başlatılmadı. Terminalini kontrol edip hata ayıklamayı yeniden başlatın.
+The task file has an invalid “{}”.	Görev dosyasında geçersiz bir “{}” var.
+The task file is not valid JSON.	Görev dosyası geçerli bir JSON değil.
+The task file is too large or has too many tasks.	Görev dosyası çok büyük ya da çok fazla görev içeriyor.
+There is no task called “{}”.	“{}” adında bir görev yok.
+Two tasks are called “{}”.	İki görevin adı da “{}”.
+cancelled	iptal edildi
+ended before it was ready	hazır olmadan sona erdi
+failed (exit code {})	başarısız (çıkış kodu {})
+not run: a dependency failed	çalıştırılmadı: bir bağımlılık başarısız oldu
+not run: too many tasks in the background	çalıştırılmadı: arka planda çok fazla görev var
+queued	sırada
+ready	hazır
+stopped	durduruldu
+succeeded	başarılı

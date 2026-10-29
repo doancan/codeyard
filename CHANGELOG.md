@@ -51,6 +51,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Tasks run as their task file describes them, locally and over SSH: process tasks keep each argument as written, shell
+  tasks quote for their shell, `dependsOn` runs in parallel or in sequence with a shared dependency once, `promptString`
+  and `pickString` inputs are asked first, background tasks release their dependents when their `endsPattern` matches,
+  and problem matchers (built-in or custom, multi-line) fill the Problems panel. Each command has its own output
+  terminal; "Tasks: Terminate Task" stops everything a run started and "Tasks: Restart Running Task" starts it again.
+- A debug configuration's `preLaunchTask` from a task file must succeed (or a background task become ready) before the
+  debugger starts; a failure never starts debugging.
 - Search Editors: "Search: Open Search Editor" keeps a query in its own tab with its options, globs, context lines and
   folders (every folder of a multi-folder workspace), for keyboard navigation and rerun. Tabs return after a restart
   with their query and up to 200 results, marked as restored until they run again; truncated, stopped and failed
@@ -219,6 +226,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A task no longer types its command into a new terminal: it runs as a process on the folder's machine, so a value from
+  a variable can never become more shell code, and Stop ends the processes it started.
 - The status-bar resources open as a strip inside the status bar, sliding left from their icon, instead of a card above it.
   The most important figures sit next to the icon, so a narrow window cuts the others first.
 - Focus rings show only after the keyboard was used: a click lights the button it presses instead of outlining it.

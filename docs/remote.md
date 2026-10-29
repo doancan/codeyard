@@ -50,7 +50,7 @@ streams are multiplexed. Current protocol version: **14**.
 | search | `Search`, `Cancel` | `ignore` + `regex`, results streamed in chunks, cancellable; `Cancel` also interrupts staged copies, which acknowledge cleanup with `Cancelled` |
 | watch | `Watch` | polls the given path set once a second; change events are pushed |
 | terminals | `PtySpawn`, `PtySpawnEx`, `PtyInput`, `PtyResize`, `PtyKill`, `PtyStatus`, `ListShells` | output is a pushed event; the agent keeps 256 KB of scrollback per pty for resume. `PtySpawnEx` (version 11) takes a profile's shell, arguments and environment and turns on shell integration; `PtyStatus` names the foreground program and the shell's folder (asked before closing a busy terminal and for splits); `ListShells` reads `/etc/shells` for the profile picker |
-| processes | `Exec`, `ProcSpawn`, `ProcInput`, `ProcKill` | `Exec` runs a one-shot command with bounded output (git, curl for `.http`, helper scripts); `Proc*` runs long-lived processes (language servers, debug adapters) |
+| processes | `Exec`, `ProcSpawn`, `TaskSpawn`, `ProcInput`, `ProcKill` | `Exec` runs a one-shot command with bounded output (git, curl for `.http`, helper scripts); `Proc*` runs long-lived processes (language servers, debug adapters); `TaskSpawn` runs a task with literal arguments or a shell line, its own environment changes and stdout and stderr in one stream |
 | folders | `HashTree`, `Cancel` | Compare Folders: one pass walks a folder (`.gitignore` and extra globs, symlinks never followed) and streams size, mtime and link target; a second pass hashes only the files the client names. Version 10 added it, so agents from earlier releases are replaced on the next connect |
 | big files | `LineIndex`, `ReadLines` | the agent samples a byte offset every 4096 lines and extends the index incrementally; used by the large-file view and log follow |
 
@@ -101,7 +101,7 @@ listening ports are found by `Exec`-ing `ss`, a read of `/proc/net/tcp*` or `lso
 - A killed pty child is reaped (no zombie shells); a failed handshake kills and waits for its ssh process, and the handshake
   has a 30 s deadline so a silent agent cannot stall reconnecting; a window closed during a reconnect never keeps the new
   connection.
-- Long-lived processes (`ProcSpawn`) lead their own process group on Unix; `ProcKill` and a dropped connection kill the
+- Long-lived processes (`ProcSpawn`, `TaskSpawn`) lead their own process group on Unix (a job object on Windows); `ProcKill` and a dropped connection kill the
   whole group while its leader runs, so a stopped test run or debug session leaves no test binary or debuggee behind.
 - Shell-integration scripts are written to `$XDG_CACHE_HOME/codeyard/shell-integration/<hash>` (or `~/.cache/…`), in 0700
   folders with 0600 files. A folder that is a symlink or belongs to another user is refused, and a changed script is
