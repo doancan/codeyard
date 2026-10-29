@@ -1724,6 +1724,11 @@ impl Window {
         self.ui_scale = scale;
         self.mouse_position = crate::ui_point_to_logical(on_screen, scale);
         self.update_scaled_metrics();
+        // The platform holds the client inset in its own points: send it again for the new scale.
+        if let Some(inset) = self.client_inset {
+            self.platform_window
+                .set_client_inset(crate::ui_to_platform(inset, scale));
+        }
         self.invalidate_character_coordinates();
     }
 

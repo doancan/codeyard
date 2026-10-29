@@ -27,6 +27,8 @@ need vendor/gpui/src/window.rs 'let event = event.to_logical\(window.ui_scale\);
 need vendor/gpui/src/window.rs 'self.sync_ui_scale\(cx\);' "interface scale applied before each frame"
 need vendor/gpui/src/window.rs 'platform_window.scale_factor\(\) \* self.ui_scale' "display scale combined with interface scale"
 need vendor/gpui/src/platform.rs 'ui_bounds_to_platform\(bounds, window.ui_scale\(\)\)' "IME bounds in platform points"
+need vendor/gpui/src/window.rs '\.set_client_inset\(crate::ui_to_platform\(inset, scale\)\)' "client inset re-sent after a scale change"
+need vendor/gpui/src/text_system.rs 'if raster_bounds.len\(\) >= MAX_RASTER_BOUNDS' "bounded glyph raster bounds cache"
 absent vendor/gpui/src/window.rs '^pub\(crate\) struct DispatchEventResult' "pub(crate) DispatchEventResult"
 need vendor/xattr/src/sys/mod.rs 'libc::ENODATA' "Linux ENODATA instead of ENOATTR (xattr)"
 # The root Cargo.toml uses the patches, and the version is pinned.

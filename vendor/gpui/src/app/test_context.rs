@@ -805,6 +805,21 @@ impl VisualTestContext {
         self.simulate_window_resize(self.window, size)
     }
 
+    /// Tiles (glyphs, icons, images) in the window's sprite atlas.
+    pub fn atlas_tile_count(&mut self) -> usize {
+        self.test_window(self.window).0.lock().test_atlas.len()
+    }
+
+    /// Glyph raster bounds cached by the application's text system.
+    pub fn raster_bounds_count(&mut self) -> usize {
+        self.update(|_, cx| cx.text_system().raster_bounds_len())
+    }
+
+    /// The client inset the platform window was last given, in platform points.
+    pub fn platform_client_inset(&mut self) -> Option<Pixels> {
+        self.test_window(self.window).0.lock().client_inset
+    }
+
     /// Move the window to a display with another scale factor (Retina 2.0 by default).
     pub fn simulate_display_scale(&mut self, scale_factor: f32) {
         self.test_window(self.window)

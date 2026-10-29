@@ -31,6 +31,9 @@ pub(crate) struct TestWindowState {
     is_fullscreen: bool,
     /// The display scale factor (2.0 unless a test moves the window to another display).
     scale_factor: f32,
+    /// The last client inset the window was given, in platform points.
+    pub(crate) client_inset: Option<Pixels>,
+    pub(crate) test_atlas: Arc<TestAtlas>,
 }
 
 #[derive(Clone)]
@@ -59,12 +62,14 @@ impl TestWindow {
         platform: Weak<TestPlatform>,
         display: Rc<dyn PlatformDisplay>,
     ) -> Self {
+        let test_atlas = Arc::new(TestAtlas::new());
         Self(Rc::new(Mutex::new(TestWindowState {
             bounds: params.bounds,
             display,
             platform,
             handle,
-            sprite_atlas: Arc::new(TestAtlas::new()),
+            sprite_atlas: test_atlas.clone(),
+            test_atlas,
             title: Default::default(),
             edited: false,
             should_close_handler: None,
@@ -77,6 +82,7 @@ impl TestWindow {
             input_handler: None,
             is_fullscreen: false,
             scale_factor: 2.0,
+            client_inset: None,
         })))
     }
 
@@ -307,6 +313,10 @@ impl PlatformWindow for TestWindow {
 
     fn update_ime_position(&self, _bounds: Bounds<Pixels>) {}
 
+    fn set_client_inset(&self, inset: Pixels) {
+        self.0.lock().client_inset = Some(inset);
+    }
+
     fn gpu_specs(&self) -> Option<GpuSpecs> {
         None
     }
@@ -325,6 +335,11 @@ impl TestAtlas {
             next_id: 0,
             tiles: HashMap::default(),
         }))
+    }
+
+    /// Number of tiles (glyphs, icons, images) in the atlas.
+    pub fn len(&self) -> usize {
+        self.0.lock().tiles.len()
     }
 }
 
