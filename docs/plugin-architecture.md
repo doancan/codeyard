@@ -69,9 +69,12 @@ Processes:
   [extensions-spike.md](extensions-spike.md).
 
 Resource limits, all from one `limits` table in `ext-manifest` (author docs and perf rows are generated from it):
-- wasmtime epoch interruption makes guest code yield every 10 ms, so a busy task never blocks providers;
+- exports return quickly, because everything that waits finishes through a ticket (§5.2); wasmtime epoch
+  interruption checks guest code every 10 ms and traps a call that runs past its CPU budget
+  (`limits::GUEST_CALL_MILLIS`, `ACTIVATE_MILLIS`), which counts as a crash. An instance cannot be re-entered while
+  a call is suspended, so yielding would not let providers run meanwhile; the budget is what keeps them answered;
 - a provider reply that misses its deadline is dropped, not punished;
-- `StoreLimits` caps each instance's linear memory; an OS cap (a Job Object commit limit on Windows, resident
+- `StoreLimits` caps each instance's linear memory (`limits::GUEST_MEMORY_BYTES`; growing past it traps); an OS cap (a Job Object commit limit on Windows, resident
   size elsewhere) caps the process. wasmtime's guard regions reserve hundreds of GB of address space, so
   `RLIMIT_AS` works only with smaller reservations;
 - guest code is interrupted only while it runs, so an idle exthost causes no wakeups;

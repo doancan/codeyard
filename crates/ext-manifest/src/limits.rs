@@ -44,6 +44,12 @@ pub const IPC_BYTES_PER_SECOND: u64 = 32 * 1024 * 1024;
 pub const IPC_BURST_BYTES: u64 = 64 * 1024 * 1024;
 /// The shortest interval of `timers.every`.
 pub const TIMER_MIN_SECONDS: u32 = 30;
+/// Linear memory of one extension instance; growing past it traps.
+pub const GUEST_MEMORY_BYTES: usize = 256 * 1024 * 1024;
+/// CPU time one call into an extension may take (exports must return quickly; long work waits on tickets).
+pub const GUEST_CALL_MILLIS: u64 = 2_000;
+/// `activate` may take longer: language runtimes start there.
+pub const ACTIVATE_MILLIS: u64 = 10_000;
 /// One `net` request, from the first connection to the last byte of the response, redirects included.
 pub const NET_TIMEOUT_SECS: u64 = 60;
 /// Redirects one `net` request follows; each is checked against `net` and the peer address rules again.

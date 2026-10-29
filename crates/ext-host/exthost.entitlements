@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- codeyard-exthost's only hardened-runtime exception (docs/extensions-spike.md). `allow-jit` is not enough:
+     wasmtime makes anonymous memory executable with mprotect, not MAP_JIT. The app binary gets no exception. -->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<true/>
+</dict>
+</plist>

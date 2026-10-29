@@ -16,7 +16,7 @@ cd "$(dirname "$0")/.."
 [ -f "$HOME/.cargo/env" ] && . "$HOME/.cargo/env"
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
 scripts/licenses.sh
-cargo build --release -q -p app -p cyx
+cargo build --release -q -p app -p cyx -p ext-host
 BIN=target/release/codeyard
 VERSION=$(cargo metadata --no-deps --format-version 1 | python3 -c \
   'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"]=="app"))')
@@ -40,6 +40,9 @@ cp "$BIN" "$APP/Contents/MacOS/codeyard"
 # `cyx`, the extension authors' tool: beside the app so it finds it, and linked into PATH by
 # "Extensions: Install cyx Command in PATH".
 cp target/release/cyx "$APP/Contents/MacOS/cyx"
+# `codeyard-exthost`, which runs code extensions: the only binary with wasmtime, and the only one with a
+# hardened-runtime exception (crates/ext-host/exthost.entitlements).
+cp target/release/codeyard-exthost "$APP/Contents/MacOS/codeyard-exthost"
 if [ -n "${AGENTS_DIR:-}" ]; then
   # Resources/, not MacOS/: Linux binaries cannot be code-signed, so they are sealed as data.
   mkdir "$APP/Contents/Resources/agents"
@@ -111,6 +114,7 @@ for agent in "$APP"/Contents/Resources/agents/codeyard-agent-*-apple-darwin; do
 done
 # A nested executable is signed on its own before the bundle seal (notarization checks each one).
 codesign "${sign_args[@]}" "$APP/Contents/MacOS/cyx"
+codesign "${sign_args[@]}" --entitlements crates/ext-host/exthost.entitlements "$APP/Contents/MacOS/codeyard-exthost"
 codesign "${sign_args[@]}" "$APP"
 codesign --verify --deep --strict "$APP"
 
