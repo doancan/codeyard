@@ -70,21 +70,25 @@ pub(super) struct UpdateWindow {
     host: WindowHandle<Workbench>,
     /// The first frame puts the keyboard on the primary button; after that the workbench moves it as the buttons change.
     focused: bool,
+    /// Logical height of the content and the interface scale the window was last sized for.
     height: f32,
+    scale: f32,
     closing: bool,
     /// Whether the keyboard was used last: the focus ring is drawn only then (a click is not asking where the focus is).
     keys: Rc<Cell<bool>>,
-    _observe: [gpui::Subscription; 3],
+    _observe: [gpui::Subscription; 4],
 }
 
 impl UpdateWindow {
     fn new(wb: Entity<Workbench>, host: WindowHandle<Workbench>, height: f32, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        crate::interface_scale::apply(window, cx);
         let weak = wb.downgrade();
         let me = window.window_handle();
         let gone = cx.observe_release(&wb, move |_, _, cx| {
             me.update(cx, |_, window, _| window.remove_window()).ok();
         });
         let changed = cx.observe(&wb, |_, _, cx| cx.notify());
+        let scaled = cx.observe_global_in::<Settings>(window, |_, window, cx| crate::interface_scale::apply(window, cx));
         // The editor window can close while the dialog is up (the entity may outlive it by a moment, or be kept by a running task).
         let host_closed = cx.on_window_closed(move |cx| {
             if !window_is_open(host, cx) {
@@ -93,7 +97,16 @@ impl UpdateWindow {
         });
         // The red button answers like Esc does: closing is not a way around a download or an install in progress.
         window.on_window_should_close(cx, move |_, app| dialog_may_close(host, app));
-        UpdateWindow { wb: weak, host, focused: false, height, closing: false, keys: Rc::new(Cell::new(false)), _observe: [gone, changed, host_closed] }
+        UpdateWindow {
+            wb: weak,
+            host,
+            focused: false,
+            height,
+            scale: window.interface_scale(),
+            closing: false,
+            keys: Rc::new(Cell::new(false)),
+            _observe: [gone, changed, host_closed, scaled],
+        }
     }
 
     fn close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -124,10 +137,11 @@ impl Render for UpdateWindow {
                 window.focus(h);
             }
         }
-        let height = window_height(wb.read(cx), &model);
-        if (height - self.height).abs() > 0.5 {
-            self.height = height;
-            cx.defer_in(window, move |_, window, _| window.resize(size(px(WIDTH), px(height))));
+        // The window is sized in screen points: the content's size times the interface scale (`ui.scale`).
+        let (height, scale) = (window_height(wb.read(cx), &model), window.interface_scale());
+        if (height - self.height).abs() > 0.5 || scale != self.scale {
+            (self.height, self.scale) = (height, scale);
+            cx.defer_in(window, move |_, window, _| window.resize(size(px(WIDTH * scale), px(height * scale))));
         }
         let host = self.host;
         // Same as above: the workbench is what `update` hands over, so it is not updated a second time.
@@ -148,7 +162,9 @@ impl Workbench {
         }
         let Some(model) = self.dialog_model(cx) else { return };
         let Some(host) = window.window_handle().downcast::<Workbench>() else { return };
-        let (w, h) = (px(WIDTH), px(window_height(self, &model)));
+        let height = window_height(self, &model);
+        let scale = cx.global::<Settings>().ui_scale;
+        let (w, h) = (px(WIDTH * scale), px(height * scale));
         // Over the middle of the editor window, where the eye already is.
         let at = window.bounds();
         let bounds = Bounds::new(at.origin + gpui::point((at.size.width - w) / 2., ((at.size.height - h) / 2.).max(px(40.))), size(w, h));
@@ -162,7 +178,6 @@ impl Workbench {
         };
         self.update.opening = true;
         let wb = cx.entity();
-        let height = f32::from(h);
         // The new window draws its first frame while it is being made, and that frame reads this workbench: it must not be in the
         // middle of an update then.
         cx.defer(move |cx| {

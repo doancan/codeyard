@@ -12,30 +12,38 @@ pub(super) const PANEL_ANIM_FOR_TEST: std::time::Duration = PANEL_ANIM;
 mod panel_tests;
 
 impl Workbench {
-    /// Zoom: editor and terminal font size (for the session; applied on top if the
-    /// settings file changes).
-    pub(super) fn apply_zoom(&mut self, delta: f32, window: &mut Window, cx: &mut Context<Self>) {
-        self.chrome.zoom = if delta == 0. { 0. } else { (self.chrome.zoom + delta).clamp(-6., 16.) };
-        let mut s = cx.global::<Settings>().clone();
-        s.editor_font_size = (self.chrome.zoom_base.0 + self.chrome.zoom).max(6.);
-        s.editor_line_height = (self.chrome.zoom_base.1 + self.chrome.zoom * 1.5).max(10.);
-        s.terminal_font_size = (self.chrome.zoom_base.2 + self.chrome.zoom).max(6.);
-        cx.set_global(s);
-        self.notice = Some(Notice::Info(crate::i18n::tf("Zoom: {}", &[&format!("{:+}", self.chrome.zoom)]).into()));
-        window.refresh();
+    /// Zoom: the whole interface (`ui.scale`). It is saved in your settings, so every window and the next start follow;
+    /// the editor and terminal font sizes stay as they are. `direction` 0 resets to 100%.
+    pub(super) fn apply_zoom(&mut self, direction: i8, window: &mut Window, cx: &mut Context<Self>) {
+        let current = cx.global::<Settings>().ui_scale;
+        let next = if direction == 0 { 1. } else { crate::interface_scale::step(current, direction) };
+        if self.config_paths().is_some() {
+            self.write_setting("ui.scale", serde_json::json!((f64::from(next) * 100.).round() / 100.), window, cx);
+            // A warning from reloading the settings file stays in front.
+            if !matches!(self.notice, Some(Notice::Info(_))) {
+                return;
+            }
+        } else {
+            // No settings folder to save into: zoom for this session only.
+            let mut s = cx.global::<Settings>().clone();
+            s.ui_scale = next;
+            cx.set_global(s);
+        }
+        let shown = crate::interface_scale::percent(cx.global::<Settings>().ui_scale);
+        self.notice = Some(Notice::Info(crate::i18n::tf("Interface scale: {}", &[&shown]).into()));
         cx.notify();
     }
 
     pub(super) fn zoom_in(&mut self, _: &ZoomIn, window: &mut Window, cx: &mut Context<Self>) {
-        self.apply_zoom(1., window, cx);
+        self.apply_zoom(1, window, cx);
     }
 
     pub(super) fn zoom_out(&mut self, _: &ZoomOut, window: &mut Window, cx: &mut Context<Self>) {
-        self.apply_zoom(-1., window, cx);
+        self.apply_zoom(-1, window, cx);
     }
 
     pub(super) fn zoom_reset(&mut self, _: &ZoomReset, window: &mut Window, cx: &mut Context<Self>) {
-        self.apply_zoom(0., window, cx);
+        self.apply_zoom(0, window, cx);
     }
 
     /// Bottom ↔ right. A maximized panel covers the editor wherever it is docked, so moving it also restores its size:

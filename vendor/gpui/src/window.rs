@@ -856,6 +856,8 @@ pub struct Window {
     modifiers: Modifiers,
     capslock: Capslock,
     scale_factor: f32,
+    /// Codeyard patch: logical zoom of the whole window, on top of the display's scale factor.
+    interface_scale: f32,
     pub(crate) bounds_observers: SubscriberSet<(), AnyObserver>,
     appearance: WindowAppearance,
     pub(crate) appearance_observers: SubscriberSet<(), AnyObserver>,
@@ -1125,7 +1127,10 @@ impl Window {
             let mut cx = cx.to_async();
             Box::new(move |event| {
                 handle
-                    .update(&mut cx, |_, window, cx| window.dispatch_event(event, cx))
+                    .update(&mut cx, |_, window, cx| {
+                        let event = window.event_from_platform(event);
+                        window.dispatch_event(event, cx)
+                    })
                     .log_err()
                     .unwrap_or(DispatchEventResult::default())
             })
@@ -1239,6 +1244,7 @@ impl Window {
             modifiers,
             capslock,
             scale_factor,
+            interface_scale: 1.,
             bounds_observers: SubscriberSet::new(),
             appearance,
             appearance_observers: SubscriberSet::new(),
@@ -1676,8 +1682,8 @@ impl Window {
     }
 
     fn bounds_changed(&mut self, cx: &mut App) {
-        self.scale_factor = self.platform_window.scale_factor();
-        self.viewport_size = self.platform_window.content_size();
+        self.scale_factor = self.platform_window.scale_factor() * self.interface_scale;
+        self.viewport_size = self.unscale_size(self.platform_window.content_size());
         self.display_id = self.platform_window.display().map(|display| display.id());
 
         self.refresh();
@@ -1747,7 +1753,7 @@ impl Window {
 
     /// Opens the native title bar context menu, useful when implementing client side decorations (Wayland and X11)
     pub fn show_window_menu(&self, position: Point<Pixels>) {
-        self.platform_window.show_window_menu(position)
+        self.platform_window.show_window_menu(position.map(|v| v * self.interface_scale))
     }
 
     /// Tells the compositor to take control of window movement (Wayland and X11)
@@ -1760,7 +1766,7 @@ impl Window {
     /// When using client side decorations, set this to the width of the invisible decorations (Wayland and X11)
     pub fn set_client_inset(&mut self, inset: Pixels) {
         self.client_inset = Some(inset);
-        self.platform_window.set_client_inset(inset);
+        self.platform_window.set_client_inset(inset * self.interface_scale);
     }
 
     /// Returns the client_inset value by [`Self::set_client_inset`].
@@ -1817,6 +1823,76 @@ impl Window {
     /// be rendered as two pixels on screen.
     pub fn scale_factor(&self) -> f32 {
         self.scale_factor
+    }
+
+    /// Codeyard patch: the logical zoom of everything in this window (1.0 = 100%). Layout, input, text
+    /// rasterization and everything that reads [`Self::scale_factor`] go through this one factor, so no element
+    /// scales itself.
+    pub fn interface_scale(&self) -> f32 {
+        self.interface_scale
+    }
+
+    /// Codeyard patch: change the logical zoom. A non-finite or non-positive value means 1.0.
+    pub fn set_interface_scale(&mut self, scale: f32) {
+        let scale = if scale.is_finite() && scale > 0. { scale } else { 1. };
+        if scale == self.interface_scale {
+            return;
+        }
+        let ratio = self.interface_scale / scale;
+        self.interface_scale = scale;
+        self.mouse_position = self.mouse_position.map(|v| v * ratio);
+        self.scale_factor = self.platform_window.scale_factor() * scale;
+        self.viewport_size = self.unscale_size(self.platform_window.content_size());
+        self.refresh();
+    }
+
+    fn unscale_size(&self, size: Size<Pixels>) -> Size<Pixels> {
+        size.map(|v| v * (1. / self.interface_scale))
+    }
+
+    /// Positions from the platform are in window points; elements see them in zoomed points.
+    pub(crate) fn event_from_platform(&self, event: PlatformInput) -> PlatformInput {
+        let k = 1. / self.interface_scale;
+        if k == 1. {
+            return event;
+        }
+        let at = |p: Point<Pixels>| p.map(|v| v * k);
+        match event {
+            PlatformInput::MouseDown(mut e) => {
+                e.position = at(e.position);
+                PlatformInput::MouseDown(e)
+            }
+            PlatformInput::MouseUp(mut e) => {
+                e.position = at(e.position);
+                PlatformInput::MouseUp(e)
+            }
+            PlatformInput::MouseMove(mut e) => {
+                e.position = at(e.position);
+                PlatformInput::MouseMove(e)
+            }
+            PlatformInput::MouseExited(mut e) => {
+                e.position = at(e.position);
+                PlatformInput::MouseExited(e)
+            }
+            PlatformInput::ScrollWheel(mut e) => {
+                e.position = at(e.position);
+                // Content keeps pace with the fingers on a trackpad.
+                if let crate::ScrollDelta::Pixels(d) = e.delta {
+                    e.delta = crate::ScrollDelta::Pixels(at(d));
+                }
+                PlatformInput::ScrollWheel(e)
+            }
+            PlatformInput::FileDrop(FileDropEvent::Entered { position, paths }) => {
+                PlatformInput::FileDrop(FileDropEvent::Entered { position: at(position), paths })
+            }
+            PlatformInput::FileDrop(FileDropEvent::Pending { position }) => {
+                PlatformInput::FileDrop(FileDropEvent::Pending { position: at(position) })
+            }
+            PlatformInput::FileDrop(FileDropEvent::Submit { position }) => {
+                PlatformInput::FileDrop(FileDropEvent::Submit { position: at(position) })
+            }
+            other => other,
+        }
     }
 
     /// The size of an em for the base font of the application. Adjusting this value allows the

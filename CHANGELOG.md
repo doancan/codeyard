@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Scale the whole interface from 75% to 200% with the `ui.scale` setting. Zoom In, Zoom Out and Reset Zoom change it for
+  every window and keep it for the next start; editor and terminal font sizes are scaled with everything else, not changed.
 - Search Editors: "Search: Open Search Editor" keeps a query in its own tab with its options, globs, context lines and
   folders (every folder of a multi-folder workspace), for keyboard navigation and rerun. Tabs return after a restart
   with their query and up to 200 results, marked as restored until they run again; truncated, stopped and failed
@@ -160,6 +162,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Zoom In / Zoom Out / Reset Zoom now scale the whole interface and are saved, instead of changing the editor and
+  terminal font sizes for the session.
 - The status-bar resources open as a strip inside the status bar, sliding left from their icon, instead of a card above it.
   The most important figures sit next to the icon, so a narrow window cuts the others first.
 - Focus rings show only after the keyboard was used: a click lights the button it presses instead of outlining it.

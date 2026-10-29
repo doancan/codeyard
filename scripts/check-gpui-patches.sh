@@ -22,7 +22,12 @@ need vendor/gpui/src/platform/mac/metal_renderer.rs 'set_maximum_drawable_count\
 absent vendor/gpui/src/platform/mac/metal_renderer.rs 'set_maximum_drawable_count\(3\)' "drawable count 3"
 need vendor/gpui/src/window.rs '^pub struct DispatchEventResult' "pub DispatchEventResult"
 absent vendor/gpui/src/window.rs '^pub\(crate\) struct DispatchEventResult' "pub(crate) DispatchEventResult"
+need vendor/gpui/src/window.rs 'pub fn set_interface_scale' "interface scale on the window"
+need vendor/gpui/src/window.rs 'let event = window.event_from_platform\(event\);' "platform input converted to interface scale"
+need vendor/gpui/src/window.rs 'platform_window.scale_factor\(\) \* self.interface_scale' "scale factor includes interface scale"
+need vendor/gpui/src/platform.rs 'window.interface_scale\(\)' "IME geometry converted to interface scale"
 need vendor/xattr/src/sys/mod.rs 'libc::ENODATA' "Linux ENODATA instead of ENOATTR (xattr)"
+absent vendor/xattr/src/sys/linux_macos/macos.rs 'uint32_t' "deprecated libc::uint32_t (xattr)"
 # The root Cargo.toml uses the patches, and the version is pinned.
 need Cargo.toml '^gpui = \{ path = "vendor/gpui" \}' "[patch.crates-io] gpui"
 need Cargo.toml '^xattr = \{ path = "vendor/xattr" \}' "[patch.crates-io] xattr"

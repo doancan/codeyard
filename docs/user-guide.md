@@ -82,7 +82,7 @@ is the complete list and always matches your key bindings; every setting is in [
 | Quick fix | ⌘. | Ctrl+. |
 | Format document | ⇧⌥F | Shift+Alt+F |
 | Save all | ⌥⌘S | Ctrl+Alt+S |
-| Zoom in / out / reset | ⌘= / ⌘- / ⌘0 | Ctrl+= / Ctrl+- / Ctrl+0 |
+| Zoom the whole interface in / out / reset (`ui.scale`, 75–200%, saved) | ⌘= / ⌘- / ⌘0 | Ctrl+= / Ctrl+- / Ctrl+0 |
 | Back / forward | ⌃- / ⌃⇧- | Ctrl+Alt+- / Ctrl+Shift+- |
 | Reopen closed tab | ⇧⌘T | Ctrl+Shift+T |
 | New file / save as / new window | ⌘N / ⇧⌘S / ⇧⌘N | Ctrl+N / Ctrl+Shift+S / Ctrl+Shift+N |

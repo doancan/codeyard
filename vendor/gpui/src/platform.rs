@@ -940,7 +940,12 @@ impl PlatformInputHandler {
 
     fn bounds_for_range(&mut self, range_utf16: Range<usize>) -> Option<Bounds<Pixels>> {
         self.cx
-            .update(|window, cx| self.handler.bounds_for_range(range_utf16, window, cx))
+            .update(|window, cx| {
+                let scale = window.interface_scale();
+                self.handler
+                    .bounds_for_range(range_utf16, window, cx)
+                    .map(|b| b.map(|v| v * scale))
+            })
             .ok()
             .flatten()
     }
@@ -970,7 +975,10 @@ impl PlatformInputHandler {
     #[allow(unused)]
     pub fn character_index_for_point(&mut self, point: Point<Pixels>) -> Option<usize> {
         self.cx
-            .update(|window, cx| self.handler.character_index_for_point(point, window, cx))
+            .update(|window, cx| {
+                let point = point.map(|v| v * (1. / window.interface_scale()));
+                self.handler.character_index_for_point(point, window, cx)
+            })
             .ok()
             .flatten()
     }

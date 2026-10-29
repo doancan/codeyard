@@ -201,6 +201,8 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // hosts are listed, nothing reconnects by itself), "continue" (like a browser: the last folder or SSH
   // host and its tabs come back) or "blank" (an empty window).
   "window.startup": "welcome",
+  // Size of the whole interface, from 0.75 (75%) to 2 (200%). View: Zoom In / Zoom Out / Reset Zoom change it.
+  // "ui.scale": 1,
   // Bring a folder's tabs and unsaved changes back whenever you open that folder.
   "window.restoreSession": true,
 

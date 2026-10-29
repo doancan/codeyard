@@ -151,6 +151,13 @@ pub const CATALOG: &[Entry] = &[
         Kind::Choice(&["workspace", "local"]),
     ),
     e(
+        "ui.scale",
+        crate::i18n::tr(
+            "Size of the whole interface: 1 is 100%, from 0.75 to 2. View: Zoom In, Zoom Out and Reset Zoom change it. The editor and terminal font sizes stay as they are and are scaled with everything else. Your own settings only; a folder cannot change it",
+        ),
+        Kind::Number { min: crate::settings::UI_SCALE_MIN, max: crate::settings::UI_SCALE_MAX },
+    ),
+    e(
         "ui.language",
         crate::i18n::tr(
             "Language of the menus, command palette, Welcome screen, status bar, Source Control, Explorer, Settings page chrome, file operations and Git prompts (the user guide lists exactly what is translated; the rest stays English): auto (the system language) or a language code, en or tr. Your own settings only; a folder cannot change it",
@@ -316,6 +323,8 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "http.runOn" => json!(s.http_run_on),
         "http.confirmRequests" => json!(s.http_confirm),
         "ui.language" => json!(s.ui_language),
+        // Through f64 an f32 1.1 would read 1.100000023841858.
+        "ui.scale" => json!((f64::from(s.ui_scale) * 100.).round() / 100.),
         "update.check" => json!(s.update_check.as_str()),
         "spelling.enabled" => json!(s.spelling),
         "spelling.checkComments" => json!(s.spelling_comments),

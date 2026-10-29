@@ -104,6 +104,7 @@ mod i18n_tests;
 mod icon_theme;
 mod image_size;
 mod input;
+mod interface_scale;
 mod jsonfmt;
 mod language_service_install;
 mod language_services;

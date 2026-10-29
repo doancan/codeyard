@@ -980,7 +980,6 @@ Start	Başlangıç
 Nothing yet.	Henüz yok.
 
 # ---- Problems, Output panel, Log filter, Zoom ----
-Zoom: {}	Yakınlaştırma: {}
 No output yet. Language server logs appear here.	Henüz çıktı yok. Dil sunucusu günlükleri burada görünür.
 No problems. Language servers start when you open a file.	Sorun yok. Dil sunucuları bir dosya açtığınızda başlar.
 No problems.	Sorun yok.
@@ -3106,3 +3105,6 @@ selected	seçili
 {} match|{} matches	{} eşleşme
 “{0}” cannot be written in {1}: not changed.	“{0}” {1} kodlamasında yazılamaz: değiştirilmedi.
 No matches in this file any more.	Bu dosyada artık eşleşme yok.
+Interface scale must be between 75% and 200%.	Arayüz ölçeği %75 ile %200 arasında olmalıdır.
+Interface scale: {}	Arayüz ölçeği: {}
+Size of the whole interface: 1 is 100%, from 0.75 to 2. View: Zoom In, Zoom Out and Reset Zoom change it. The editor and terminal font sizes stay as they are and are scaled with everything else. Your own settings only; a folder cannot change it	Tüm arayüzün boyutu: 1, %100 demektir; 0.75 ile 2 arasında olabilir. Görünüm: Büyüt, Küçült ve Yakınlaştırmayı Sıfırla komutları bunu değiştirir. Düzenleyici ve terminal yazı tipi boyutları olduğu gibi kalır ve diğer her şeyle birlikte ölçeklenir. Yalnızca kendi ayarlarınızda; bir klasör bunu değiştiremez

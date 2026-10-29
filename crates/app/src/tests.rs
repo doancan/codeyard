@@ -2860,13 +2860,13 @@ fn line_commands_pairs_and_zoom(cx: &mut TestAppContext) {
     cx.simulate_input("1)");
     assert!(text(cx).contains("    f(1)\n"), "stepped over the closing bracket: {}", text(cx));
 
-    // ⌘= / ⌘0: font size.
-    let size = |cx: &mut VisualTestContext| cx.update(|_, cx| cx.global::<crate::settings::Settings>().editor_font_size);
-    let base = size(cx);
+    // ⌘= / ⌘0: the whole interface; the font size setting stays.
+    let sizes = |cx: &mut VisualTestContext| cx.update(|window, cx| (window.interface_scale(), cx.global::<crate::settings::Settings>().editor_font_size));
+    let (_, font) = sizes(cx);
     cx.simulate_keystrokes("cmd-= cmd-=");
-    assert_eq!(size(cx), base + 2.);
+    assert_eq!(sizes(cx), (1.25, font));
     cx.simulate_keystrokes("cmd-0");
-    assert_eq!(size(cx), base);
+    assert_eq!(sizes(cx), (1., font));
 }
 
 #[gpui::test]

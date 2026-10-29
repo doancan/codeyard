@@ -202,6 +202,7 @@ status bar reports it.
 | Setting | Values | Default | What it does |
 | --- | --- | --- | --- |
 | `ui.language` | `auto`, `en`, `tr` | `auto` | Language of the menus, command palette, Welcome screen, status bar, Source Control, Explorer, Settings page chrome, file operations and Git prompts (the user guide lists exactly what is translated; the rest stays English): auto (the system language) or a language code, en or tr. Your own settings only; a folder cannot change it |
+| `ui.scale` | number 0.75–2 | `1.0` | Size of the whole interface: 1 is 100%, from 0.75 to 2. View: Zoom In, Zoom Out and Reset Zoom change it. The editor and terminal font sizes stay as they are and are scaled with everything else. Your own settings only; a folder cannot change it |
 
 ## `update`
 

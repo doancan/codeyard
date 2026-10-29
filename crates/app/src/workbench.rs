@@ -1070,6 +1070,8 @@ impl Workbench {
                     this.apply_theme(&choice, window, cx);
                 }
             }),
+            // `ui.scale` reaches every window, this one included, whichever window wrote it.
+            cx.observe_global_in::<Settings>(window, |_, window, cx| crate::interface_scale::apply(window, cx)),
         ];
         let (recent, pinned) = state.as_ref().map(projects::load_recent).unwrap_or_default();
         let dev = std::env::var_os("CODEYARD_DEV").is_some() || cfg!(debug_assertions);
@@ -1184,8 +1186,6 @@ impl Workbench {
                 term_list_w,
                 resizing_term_list: false,
                 resizing_split: false,
-                zoom: 0.,
-                zoom_base: (theme::text::CODE.0, theme::text::CODE.1, theme::text::CODE.0),
                 zen: None,
                 window_bounds: None,
             },
@@ -1260,6 +1260,8 @@ impl Workbench {
         };
         wb.apply_theme(&theme_choice, window, cx);
         wb.reload_config(window, cx);
+        // Later changes of `ui.scale` arrive through the observer above.
+        crate::interface_scale::apply(window, cx);
         wb.watch_config(window, cx);
         wb.poll_git(window, cx);
         wb.poll_extension_updates(window, cx);

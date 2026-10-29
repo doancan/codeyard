@@ -29,6 +29,7 @@ const COMMON: &[&str] = &[
     "modules.containers.enabled",
     "modules.webPreview.enabled",
     "theme",
+    "ui.scale",
     "editor.fontSize",
     "editor.fontFamily",
     "editor.tabSize",
@@ -46,6 +47,9 @@ const COMMON: &[&str] = &[
 
 /// The category of a setting (from the key prefix).
 pub fn category_of(key: &str) -> &'static str {
+    if key == "ui.scale" {
+        return "Window";
+    }
     match key.split('.').next().unwrap_or("") {
         "editor" | "data" => "Editor",
         "workbench" | "theme" => "Workbench",

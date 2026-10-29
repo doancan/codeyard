@@ -229,6 +229,8 @@ pub struct Settings {
     pub http_confirm: String,
     /// UI language (`ui.language`): "auto" (system language), "en" or "tr"; user settings only. "en" in tests.
     pub ui_language: String,
+    /// Logical zoom of the whole interface (`ui.scale`, 1.0 = 100%); your own settings only.
+    pub ui_scale: f32,
     /// Update checks (`update.check`); user settings only, because it decides whether the app contacts the network by itself.
     pub update_check: crate::update::Policy,
     /// Folder hierarchy lines in the explorer.
@@ -395,6 +397,7 @@ impl Default for Settings {
             http_run_on: "workspace".into(),
             http_confirm: "remote".into(),
             ui_language: if cfg!(test) { "en" } else { "auto" }.into(),
+            ui_scale: 1.,
             update_check: crate::update::Policy::Ask,
             tree_guides: true,
             graph_show_author: true,
@@ -490,6 +493,10 @@ pub const RESTRICTED_KEYS: &[&str] = &[
     "yaml.schemas",
 ];
 
+/// Range of `ui.scale`.
+pub const UI_SCALE_MIN: f64 = 0.75;
+pub const UI_SCALE_MAX: f64 = 2.;
+
 /// Not read from the project file even in a trusted folder: the gate is global, so one
 /// repo touching it would open it for every folder.
 pub const USER_ONLY_KEYS: &[&str] = &[
@@ -503,6 +510,8 @@ pub const USER_ONLY_KEYS: &[&str] = &[
     "security.workspaceTrust.enabled",
     "http.confirmRequests",
     "ui.language",
+    // A folder must not zoom every window of the app.
+    "ui.scale",
     "update.check",
     // A repository must not switch extensions on or off for the user, or swap their keys for a preset.
     "extensions.enabled",
@@ -822,6 +831,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     if let Some(v) = r.choice("ui.language", crate::i18n::SETTING_CHOICES) {
         s.ui_language = v;
+    }
+    if let Some(v) = r.scale("ui.scale") {
+        s.ui_scale = v;
     }
     if let Some(v) = r.choice("update.check", &["ask", "daily", "manual"]).and_then(|v| v.parse().ok()) {
         s.update_check = v;
@@ -1162,6 +1174,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     }
     const KNOWN: &[&str] = &[
         "ui.language",
+        "ui.scale",
         "update.check",
         "http.runOn",
         "http.confirmRequests",
@@ -1363,6 +1376,17 @@ impl Reader<'_> {
             }
             None => {
                 self.warn(crate::i18n::tf("{}: expected a number", &[&key]));
+                None
+            }
+        }
+    }
+
+    /// `ui.scale`: a number in `UI_SCALE_MIN..=UI_SCALE_MAX`, with the message the user sees as a percentage.
+    fn scale(&mut self, key: &str) -> Option<f32> {
+        match self.get(key)?.as_f64() {
+            Some(v) if (UI_SCALE_MIN..=UI_SCALE_MAX).contains(&v) => Some(v as f32),
+            _ => {
+                self.warn(crate::i18n::t("Interface scale must be between 75% and 200%.").into());
                 None
             }
         }
