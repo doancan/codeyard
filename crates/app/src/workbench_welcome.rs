@@ -314,6 +314,7 @@ impl Workbench {
                     Page::LanguageServices(_) => "language-services",
                     Page::Merge(_) => "merge",
                     Page::Compare(_) => "compare",
+                    Page::Search(_) => "search",
                 },
                 self.tabs.page_active,
             )

@@ -3056,8 +3056,7 @@ fn replace_in_files_open_and_closed(cx: &mut TestAppContext) {
         cx.executor().advance_clock(std::time::Duration::from_millis(300));
         search.read_with(cx, |s, _| !s.is_searching() && s.result_summary().len() == 2)
     });
-    search.update(cx, |s, cx| s.request_replace_all(cx));
-    // Confirmation dialog on the test platform: do the same work directly.
+    // The UI path reviews in a Search Editor (search_editor_tests); this drives the shared apply path directly.
     let files = vec![lib.to_string_lossy().into_owned(), dir.join("README.md").to_string_lossy().into_owned()];
     let q = proto::SearchQuery {
         root: dir.to_string_lossy().into_owned(),
@@ -4733,7 +4732,7 @@ fn git_branch_commands_through_the_palette(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-fn search_results_open_in_an_editor_tab(cx: &mut TestAppContext) {
+fn search_query_opens_in_a_search_editor_tab(cx: &mut TestAppContext) {
     let dir = project("searchtab");
     let (wb, cx) = setup_with_config(cx, &dir.join("cfg"));
     open(&wb, &dir, cx);
@@ -4742,11 +4741,10 @@ fn search_results_open_in_an_editor_tab(cx: &mut TestAppContext) {
     cx.simulate_input("SATIR 7");
     cx.simulate_keystrokes("enter");
     wait_for(cx, "arama", |cx| search.read_with(cx, |s, _| !s.is_searching()));
-    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Search: Open Results in Editor", window, cx));
-    cx.run_until_parked();
-    wait_for(cx, "sonuç sekmesi", |cx| wb.read_with(cx, |wb, cx| wb.active_path(cx)).is_some_and(|p| p.contains("search-results")));
-    let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
-    let text = ed.read_with(cx, |e, _| e.text());
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Search: Open Search Editor", window, cx));
+    let ed = wb.read_with(cx, |wb, _| wb.active_search_editor_for_test()).expect("a Search Editor tab");
+    wait_for(cx, "sonuç sekmesi", |cx| ed.read_with(cx, |e, _| e.doc.state == crate::search_doc::RunState::Complete));
+    let text = ed.read_with(cx, |e, _| e.doc.as_text());
     assert!(text.contains("# Query: SATIR 7") && text.contains("src/lib.rs:\n  7: // satır 7"), "{text}");
 }
 

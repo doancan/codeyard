@@ -118,6 +118,8 @@ mod replace_glue;
 // --- structural ---
 #[path = "workbench_schema.rs"]
 mod schema_glue;
+#[path = "workbench_search_editor.rs"]
+mod search_editor_glue;
 #[path = "workbench_session.rs"]
 mod session_glue;
 #[path = "workbench_settings.rs"]
@@ -196,6 +198,7 @@ actions!(
         KillTerminal,
         FindInFiles,
         OpenSearchInEditor,
+        UndoSearchReplace,
         OpenAsHex,
         OpenSettings,
         OpenKeybindings,
@@ -483,6 +486,8 @@ enum Page {
     Merge(Entity<crate::merge::MergeView>),
     // --- compare ---
     Compare(Entity<crate::compare_folders::CompareView>),
+    /// The Search Editor in front; every open one is also listed in its group's `searches`.
+    Search(Entity<crate::search_editor::SearchEditor>),
 }
 
 /// Floating picker on top: theme picker or palette (files / commands / line).
@@ -729,6 +734,8 @@ pub struct Workbench {
     update: state_glue::UpdateUi,
     /// Editor groups: tabs, separate tab views (diff, large file, page) and startup state.
     tabs: state_glue::TabsState,
+    /// Search Editors: subscriptions, the last replacement's undo record and saved state (see workbench_search_editor.rs).
+    searches: search_editor_glue::SearchEditors,
     // --- data ---
     /// Data lens: the query bar and the status bar path (see workbench_data.rs).
     data: data_glue::DataState,
@@ -974,11 +981,15 @@ impl Workbench {
                     this.tabs.pending_reveal = Some((path.clone(), *line, *column, *len));
                     this.open_file(path.clone(), window, cx);
                 }
-                SearchEvent::OpenInEditor(text) => {
-                    this.create_scratch_with("search-results.txt".into(), text, window, cx);
+                SearchEvent::OpenInEditor(spec) => {
+                    this.open_search_editor(spec.clone(), None, window, cx);
                 }
-                SearchEvent::ReplaceAll { files, query, replacement, preserve_case, matches, truncated } => {
-                    this.confirm_replace_all(files.clone(), query.clone(), replacement.clone(), *preserve_case, *matches, *truncated, window, cx)
+                SearchEvent::ReviewReplace { spec, only } => {
+                    let review = match only {
+                        Some(path) => crate::search_editor::Review::Only(path.clone()),
+                        None => crate::search_editor::Review::All,
+                    };
+                    this.open_search_editor(spec.clone(), Some(review), window, cx);
                 }
                 // --- structural ---
                 SearchEvent::StructuralBuffers { generation, family } => this.structural_buffers(*generation, family, cx),
@@ -1220,6 +1231,7 @@ impl Workbench {
                 file_index: None,
             },
             tabs: Default::default(),
+            searches: Default::default(),
             update: state_glue::UpdateUi::new(dev, cx),
             data: Default::default(),
             focus_handle: cx.focus_handle(),
@@ -1954,6 +1966,9 @@ impl Workbench {
     }
 
     fn close_editor(&mut self, _: &CloseEditor, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(Page::Search(ed)) = self.tabs.page.clone().filter(|_| self.tabs.page_active) {
+            return self.close_search_editor(&ed, cx);
+        }
         if self.tabs.diff_active {
             return self.close_diff(window, cx);
         }
@@ -2066,45 +2081,14 @@ impl Workbench {
         self.confirm_quit(window, cx);
     }
 
-    /// Replace in files: can't be undone (closed files are written to disk), so ask first.
-    fn confirm_replace_all(
-        &mut self,
-        files: Vec<String>,
-        query: proto::SearchQuery,
-        replacement: String,
-        preserve: bool,
-        matches: u32,
-        truncated: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let n = files.len();
-        let (m, r) = (matches as usize, &replacement);
-        let title = if n == 1 {
-            crate::i18n::tn("Replace {0} match in 1 file with “{1}”?", "Replace {0} matches in 1 file with “{1}”?", m, &[r])
-        } else {
-            crate::i18n::tn("Replace {0} match in {1} files with “{2}”?", "Replace {0} matches in {1} files with “{2}”?", m, &[&n, r])
-        };
-        let detail = if truncated {
-            crate::i18n::t(
-                "The search stopped at the result limit: only the files listed are changed. Open files can be undone; closed files are written to disk.",
-            )
-        } else {
-            crate::i18n::t("Open files can be undone with ⌘Z; closed files are written to disk.")
-        };
-        let answer = window.prompt(PromptLevel::Warning, &title, Some(detail), &[crate::i18n::t("Replace"), crate::i18n::t("Cancel")], cx);
-        cx.spawn_in(window, async move |this, cx| {
-            if answer.await == Ok(0) {
-                this.update(cx, |this, cx| this.replace_in_files_with(files, query, replacement, preserve, cx)).ok();
-            }
-        })
-        .detach();
-    }
-
+    /// Replace in files without review (tests drive the shared `apply_file_edits` path with it; the UI goes through a
+    /// Search Editor preview).
+    #[cfg(test)]
     pub fn replace_in_files(&mut self, files: Vec<String>, query: proto::SearchQuery, replacement: String, cx: &mut Context<Self>) {
         self.replace_in_files_with(files, query, replacement, false, cx)
     }
 
+    #[cfg(test)]
     pub fn replace_in_files_with(&mut self, files: Vec<String>, query: proto::SearchQuery, replacement: String, preserve: bool, cx: &mut Context<Self>) {
         let re = match agent::search::compile(&query) {
             Ok(re) => re,

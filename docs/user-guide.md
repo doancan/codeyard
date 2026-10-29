@@ -114,6 +114,8 @@ is the complete list and always matches your key bindings; every setting is in [
 | Settings (UI page) | ⌘, | Ctrl+, |
 | Markdown preview | ⇧⌘V | Ctrl+Shift+V |
 | Next / previous search result | F4 / ⇧F4 | F4 / Shift+F4 |
+| Search Editor: run the search again | ⇧⌘R | Ctrl+Shift+R |
+| Search Editor results: move / open or fold / select a change | ↑ ↓ / ↵ / Space | ↑ ↓ / Enter / Space |
 | Toggle block comment | ⇧⌥A | Shift+Alt+A |
 | Go to last edit location | ⌘K ⌘Q | Ctrl+K Ctrl+Q |
 | Open / close everything inside a folder (file tree) | ⇧→ / ⇧← | Shift+→ / Shift+← |
@@ -219,8 +221,55 @@ while switching focus; session restoration currently saves text-document tabs an
 
 **Images** (png, jpg, gif, webp, svg, bmp) open in a preview tab.
 
-**Find in files** (⇧⌘F) has a replace field: "Replace All" asks first, then changes open
-files in their editors (undoable) and closed files on disk.
+**Find in files** (⇧⌘F) has a replace field. "Replace All" (or ↵ in the field, or "replace in
+this file" on a result) does not write anything: it opens a Search Editor with a replacement
+preview, described below.
+
+### Search Editors and replacement review
+
+"Search: Open Search Editor" (or the page icon in the Search panel's results bar) keeps the current
+query in an editor tab of its own. Each tab remembers its query, the match case / whole word /
+regex options, the include and exclude globs, the replacement, how many context lines to show
+(the − / + buttons, 0–5) and the host and folders it searched. Several Search Editors can be open
+at once; the Search panel stays free for other queries.
+
+- **Navigate.** Click a match, or focus the list and use ↑ / ↓ and ↵; F4 / ⇧F4 step through the
+  matches. Context lines are read for the first 2000 matches. "Rerun" (⇧⌘R) searches again in
+  the same tab. In a workspace with several folders every folder is searched, as in the Search
+  panel; files of other folders show as `folder › path`. A tab whose folders are no longer all in
+  the workspace is marked stale.
+- **Bounded.** A tab keeps at most 20000 matches in 5000 files. When the search stops at the
+  result limit (`"search.maxResults"`), is stopped or fails, the tab says the results are
+  incomplete.
+- **Restart.** Search Editors come back with the workspace, with their query and up to 200
+  results each, marked "Restored from the last session". Nothing runs and nothing is replaced
+  until you rerun. A tab whose host or folder is not the one the window shows says so and cannot
+  open, preview or replace anything there.
+- **Preview.** "Preview Replace" (or ↵ in the replacement field) lists every change as the line
+  before and after, with a checkbox per change and per file (Space toggles the focused row).
+  The plan is made from the current text of each file: an open editor's unsaved text wins over
+  the disk. Nothing is written before "Apply 3 changes in 2 files" (the button counts the selected
+  changes and files).
+- **Apply.** Apply is refused while the results are incomplete or out of date ("Search results
+  are incomplete; rerun before replacing."). Open files change in their editors, one undo step
+  each, and are not saved. Closed files are written one at a time, each atomically and only if it
+  is still exactly what the preview read; otherwise it is left alone and reported as "File
+  changed since preview". Every file keeps its encoding (UTF-8 with or without a byte-order mark,
+  UTF-16, Windows-1254, ISO 8859-9, ISO 8859-1), its line endings, mixed ones included, and a
+  missing final newline; a file whose encoding cannot hold the replacement, or that would not be
+  written back byte for byte, is listed and not changed. Binary files are never changed. This is
+  not a multi-file transaction: the report lists what changed, what did not and why, and any file
+  whose outcome is unknown (for example when the connection drops), with no automatic retry.
+- **Replacement text.** In regex mode `$1`, `${name}`, `$&` and `\n` work as in the find bar;
+  line breaks become the file's line ending. Matching is per line, as in the search, and empty
+  matches (`^`, `\b`, `x*` where there is no `x`) are never replaced. "Preserve case" follows
+  each match's letter case.
+- **Undo.** "Undo Replace" in the tab, or "Search: Undo Last Replace", takes the whole batch back
+  once: open editors lose that one step, files get their previous bytes. A file or editor
+  changed since the replacement, or reopened with unsaved edits, is reported as an undo conflict
+  and kept as it is.
+
+Search Editors work the same on SSH hosts: the host searches, reads and writes the files.
 
 ### Structural search and replace
 

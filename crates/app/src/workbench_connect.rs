@@ -222,6 +222,8 @@ impl Workbench {
         }
         let ask_folder = chosen.is_none() && alias != LOCAL_AGENT_ALIAS;
         self.replace_root(chosen.unwrap_or(info.home), cx);
+        // If the folder could not be replaced (unsaved files), Search Editors of the old connection must say so.
+        self.sync_search_editors(cx);
         self.chrome.panel = Some(Panel::Explorer);
         self.sync_container_monitor(cx);
         if self.remote.docker.monitor.browser.terminal_target.as_ref() == Some(&alias) {
