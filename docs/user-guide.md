@@ -192,7 +192,12 @@ moves it back and "View: Toggle Secondary Side Bar" hides or shows it; the arran
 ends with it, or when the connection changes. "Terminal: Move Terminal into Editor Area" moves the active terminal into
 the focused editor group as a tab, next to your files; "Terminal: Move Terminal Back to Panel" returns it, and so does
 closing its tab (closing a terminal's tab never ends what runs in it). Opening another folder also returns
-it to the panel; a connection change ends it like a panel terminal.
+it to the panel; a connection change ends it like a panel terminal. Drag a terminal's tab onto another group's tab bar
+to move it there; screen readers list terminal tabs with the other tabs of the focused group, and selecting one brings it
+to the front. At the next start, each terminal that was in an editor group or in a window of its own comes back in the
+same place as a new shell, with its name, colour and folder, and the line "Previous session ended; started a new
+shell"; nothing from the previous session runs again. A window whose display is gone opens on an attached display, made
+to fit; a saved arrangement that cannot be read is ignored.
 
 Terminal line editing works as in Terminal.app: ⌘← / ⌘→ jump to the start / end of the line, ⌥← / ⌥→ move by word,
 ⌘⌫ deletes to the start of the line, ⌘⌦ to its end and ⌥⌦ the next word (these are the shell's own keys, Ctrl+A, Ctrl+E,
