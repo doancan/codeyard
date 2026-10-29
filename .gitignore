@@ -20,6 +20,9 @@ lcov.info
 # Public Sigstore roots the registry pins (certificates and a public key, no secrets).
 !crates/yard/sigstore/*.pem
 !scripts/update-public-key.pem
+# Test-only CA and server certificate for ext-net's local TLS server; trusted by nothing outside its tests.
+!crates/ext-net/testdata/*.pem
+!crates/ext-net/testdata/*.key
 *.cer
 *.crt
 *.mobileprovision
