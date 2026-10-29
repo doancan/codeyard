@@ -343,6 +343,27 @@ fn an_external_edit_after_our_write_is_followed(cx: &mut TestAppContext) {
     assert!(!notice(&wb, cx).contains("changed on disk"), "{}", notice(&wb, cx));
 }
 
+/// A watcher read that starts before our write and answers after it never brings back the text the write replaced (the
+/// scheduler orders the read, the write and their replies differently on each iteration).
+#[gpui::test(iterations = 30)]
+fn a_watcher_read_crossing_our_write_does_not_undo_it(cx: &mut TestAppContext) {
+    let (base, file) = mono("race-read-first");
+    std::fs::create_dir_all(base.join("docs")).unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &file, cx);
+    wait(cx, "open", |cx| labels(&wb, cx).len() == 2);
+    let docs = s(&base.join("docs"));
+    wb.update_in(cx, |wb, window, cx| {
+        wb.quiet_reload_workspace_for_test(cx);
+        wb.add_workspace_folder_now(docs, window, cx);
+    });
+    settle(&wb, cx);
+    settle(&wb, cx);
+    assert!(read(&file).contains(r#"{ "path": "docs" }"#), "{}", read(&file));
+    assert_eq!(labels(&wb, cx), ["Backend", "web", "docs"]);
+    assert!(!notice(&wb, cx).contains("changed on disk"), "{}", notice(&wb, cx));
+}
+
 /// An edit made while our write runs is not missed: the watcher event is no longer dropped during a save.
 #[gpui::test]
 fn an_external_edit_during_our_write_is_not_missed(cx: &mut TestAppContext) {

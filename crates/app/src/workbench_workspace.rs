@@ -48,6 +48,10 @@ pub(super) struct OpenWorkspace {
     save_again: bool,
     /// The text of the running write: when the watcher reports it, it is our own and changes nothing.
     writing: Option<String>,
+    /// Writes started so far: a watcher read that saw one start (or run) may hold the text from before it.
+    writes: u64,
+    /// The watcher saw a change while a write ran: read again once it is done.
+    reload_after_save: bool,
     /// The file's own folders are being opened: not an edit to save.
     applying: bool,
 }
@@ -177,6 +181,8 @@ impl Workbench {
             saving: false,
             save_again: false,
             writing: None,
+            writes: 0,
+            reload_after_save: false,
             applying: true,
         });
         self.roots.pending_extra_roots.clear();
@@ -280,8 +286,12 @@ impl Workbench {
         if !quiet {
             ws.generation = bumped;
             self.roots.workspace_generation = bumped;
+        } else if ws.saving {
+            // Read once our write is done: a read now may land before it and bring back the text it replaces.
+            ws.reload_after_save = true;
+            return;
         }
-        let (generation, host, path) = (ws.generation, ws.host.clone(), ws.path.clone());
+        let (generation, host, path, writes) = (ws.generation, ws.host.clone(), ws.path.clone(), ws.writes);
         let (h, p) = (host.clone(), path.clone());
         let task = cx.background_executor().spawn(async move { load(h.as_ref(), &p) });
         cx.spawn(async move |this, cx| {
@@ -293,6 +303,15 @@ impl Workbench {
                 let Some(ws) = this.roots.workspace.as_mut().filter(|w| w.generation == generation && w.path == path && Arc::ptr_eq(&w.host, &host)) else {
                     return;
                 };
+                if quiet && (ws.saving || ws.writes != writes) {
+                    // A write started after this read did: what it read may predate that write. Read again after it.
+                    let saving = ws.saving;
+                    ws.reload_after_save |= saving;
+                    if !saving {
+                        this.reload_workspace(true, cx);
+                    }
+                    return;
+                }
                 match loaded {
                     Err(e) => {
                         ws.error = Some(e.clone());
@@ -360,6 +379,7 @@ impl Workbench {
             return;
         }
         ws.saving = true;
+        ws.writes += 1;
         ws.writing = Some(next.text().to_string());
         let (generation, host, path, hash) = (ws.generation, ws.host.clone(), ws.path.clone(), ws.hash);
         let bytes = next.text().as_bytes().to_vec();
@@ -376,10 +396,12 @@ impl Workbench {
                 let current = this.roots.workspace.as_mut().filter(|w| w.path == path && Arc::ptr_eq(&w.host, &host));
                 let again = current.as_ref().is_some_and(|w| w.save_again);
                 let same_generation = current.as_ref().is_some_and(|w| w.generation == generation);
+                let mut reread = false;
                 if let Some(w) = current {
                     w.saving = false;
                     w.save_again = false;
                     w.writing = None;
+                    reread = std::mem::take(&mut w.reload_after_save);
                 }
                 let open_now = this.all_roots(cx);
                 match result {
@@ -416,6 +438,10 @@ impl Workbench {
                 }
                 if again {
                     this.save_workspace(cx);
+                }
+                // While the next write runs this only marks it, so the file is read after that one.
+                if reread {
+                    this.reload_workspace(true, cx);
                 }
                 cx.notify();
             })
@@ -520,6 +546,8 @@ impl Workbench {
                             saving: false,
                             save_again: false,
                             writing: None,
+                            writes: 0,
+                            reload_after_save: false,
                             applying: false,
                         });
                         this.remember_workspace_file(cx);
