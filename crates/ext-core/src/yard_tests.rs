@@ -40,11 +40,11 @@ fn index_value(version: u64) -> Value {
             "you.night": {
                 "name": "Night", "description": "A dark theme.", "categories": ["themes"],
                 "publisher": { "issuer": "https://token.actions.githubusercontent.com", "owner_id": 7, "repository_id": 42,
-                               "workflow": "you/night/.github/workflows/publish.yml" },
+                               "workflow": ".github/workflows/publish.yml" },
                 "versions": [release("1.0.0", json!("ok")), release("1.1.0", json!("yanked")), release("1.2.0-beta.1", json!("ok"))],
             },
             "you.old": {
-                "name": "Old", "publisher": { "issuer": "https://github.com/login/oauth", "owner_id": 8 },
+                "name": "Old", "publisher": { "issuer": "https://github.com/login/oauth", "subject": "old@example.com" },
                 "versions": [release("0.1.0", json!({ "deprecated": { "replacement": "you.night" } })),
                              release("0.2.0", json!({ "revoked": { "reason": "Sent files to an unknown host." } }))],
             },

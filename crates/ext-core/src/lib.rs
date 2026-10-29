@@ -16,7 +16,9 @@
 //! temporary folder (removed on the next transaction); after it, the new set and an index that the next `load`
 //! rebuilds. The lock is never ahead of the store.
 
+mod der;
 pub mod lock;
+pub mod publisher;
 pub mod trust;
 pub mod yard;
 

@@ -162,19 +162,33 @@ pub struct Entry {
     pub versions: Vec<Release>,
 }
 
-/// Who may publish an id: the identity in the publisher's signing certificate (docs/plugin-architecture.md §6.3).
+/// Who may publish an id: the identity in the publisher's signing certificate (docs/plugin-architecture.md §6.3). From
+/// GitHub Actions it is the repository and owner by numeric id (they survive renames) and the workflow file; from a
+/// browser login it is the account (`subject`).
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Publisher {
     /// The OIDC issuer, "https://token.actions.githubusercontent.com" for GitHub Actions.
     pub issuer: String,
-    /// Numeric ids survive renames, unlike `owner/repo`.
-    pub owner_id: u64,
-    /// `None` for a browser login, which signs as the account.
+    /// The signed-in account (an email address) for a browser login; `None` from CI.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_id: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repository_id: Option<u64>,
-    /// The workflow file and ref, `owner/repo/.github/workflows/publish.yml@refs/tags/v1.2.0` without the tag part.
+    /// The workflow file in that repository, `.github/workflows/publish.yml`, without the ref it ran at.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow: Option<String>,
+}
+
+impl std::fmt::Display for Publisher {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match (&self.subject, self.repository_id, &self.workflow) {
+            (Some(s), _, _) => write!(f, "{s} ({})", self.issuer),
+            (None, Some(repo), Some(w)) => write!(f, "repository {repo} of owner {}, {w}", self.owner_id.unwrap_or_default()),
+            _ => write!(f, "{}", self.issuer),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
