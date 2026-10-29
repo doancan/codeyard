@@ -386,7 +386,7 @@ impl Workbench {
                 }
             }
             MenuCmd::CommitBranch => self.show_input(
-                InputPurpose::CommitBranch { hash: target.path },
+                InputPurpose::CommitBranch { hash: target.path, repo: self.vcs.menu_repo.clone() },
                 crate::i18n::t("Create branch"),
                 crate::i18n::t("Name of the new branch (starts at this commit)"),
                 "",
@@ -394,7 +394,7 @@ impl Workbench {
                 cx,
             ),
             MenuCmd::CommitTag => self.show_input(
-                InputPurpose::CommitTag { hash: target.path },
+                InputPurpose::CommitTag { hash: target.path, repo: self.vcs.menu_repo.clone() },
                 crate::i18n::t("Create tag"),
                 crate::i18n::t("Tag name, then an optional message for an annotated tag"),
                 "",
@@ -410,7 +410,10 @@ impl Workbench {
                     MenuCmd::CommitReset(m) => CommitOp::Reset(m),
                     _ => return,
                 };
-                self.scm.update(cx, |s, cx| s.commit_op(target.path, op, window, cx));
+                // Pinned to the repository the menu was opened on; without one (no history loaded) nothing runs.
+                if let Some(repo) = self.vcs.menu_repo.clone() {
+                    self.scm.update(cx, |s, cx| s.commit_op_in(Some(repo), target.path, op, window, cx));
+                }
             }
             // --- git-refs ---
             MenuCmd::GitIgnore => self.git_ignore_path(target.path, target.is_dir, cx),

@@ -46,6 +46,9 @@ pub const IPC_BURST_BYTES: u64 = 64 * 1024 * 1024;
 pub const TIMER_MIN_SECONDS: u32 = 30;
 /// Linear memory of one extension instance; growing past it traps.
 pub const GUEST_MEMORY_BYTES: usize = 256 * 1024 * 1024;
+/// The whole exthost process: the guest's linear memory plus the engine and compiled code. A Job Object commit limit
+/// on Windows; elsewhere the app checks the process's resident size.
+pub const EXTHOST_MEMORY_BYTES: u64 = 512 * 1024 * 1024;
 /// CPU time one call into an extension may take (exports must return quickly; long work waits on tickets).
 pub const GUEST_CALL_MILLIS: u64 = 2_000;
 /// `activate` may take longer: language runtimes start there.
@@ -57,6 +60,14 @@ pub const PROVIDER_DEADLINE_MILLIS: u64 = 1_000;
 pub const STATUS_TEXT_LEN: usize = 64;
 /// Diagnostics or decorations one extension may set on one file; the rest are dropped.
 pub const MARKS_PER_FILE: usize = 1_000;
+/// One `net` request, from the first connection to the last byte of the response, redirects included.
+pub const NET_TIMEOUT_SECS: u64 = 60;
+/// Redirects one `net` request follows; each is checked against `net` and the peer address rules again.
+pub const NET_REDIRECTS: usize = 5;
+/// The body one `net` request sends.
+pub const NET_REQUEST_BYTES: u64 = 16 * 1024 * 1024;
+/// The body one `net` request receives.
+pub const NET_RESPONSE_BYTES: u64 = 64 * 1024 * 1024;
 
 /// An encoded view (`ext-ui`), refused before it is decoded.
 pub const UI_VIEW_BYTES: usize = 8 * 1024 * 1024;

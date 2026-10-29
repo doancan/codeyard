@@ -55,7 +55,12 @@ impl Workbench {
             return;
         }
         let Some(root) = self.active_root(cx) else { return };
-        if self.vcs.scm_root.as_deref().or(self.root(cx).as_deref()) == Some(root.as_str()) {
+        let current = self.vcs.scm_root.clone().or_else(|| self.root(cx));
+        if current.as_deref() == Some(root.as_str()) {
+            return;
+        }
+        // A repository picked in Source Control inside the active file's folder stays picked.
+        if current.as_deref().is_some_and(|c| c.starts_with(&format!("{}/", root.trim_end_matches('/'))) && self.vcs.repos.inventory.by_worktree(c).is_some()) {
             return;
         }
         self.vcs.scm_root = Some(root.clone());
@@ -98,12 +103,28 @@ impl Workbench {
                 if std::mem::take(&mut this.vcs.refresh_again) {
                     this.refresh_git(0, cx);
                 }
-                if !this.all_roots(cx).contains(&dir) {
+                // A repository picked in Source Control is not a workspace root but an entry of the inventory.
+                let picked = !this.all_roots(cx).contains(&dir);
+                if picked && this.vcs.repos.inventory.by_worktree(&dir).is_none() {
                     return; // another folder was opened meanwhile
                 }
                 if this.vcs.scm_root.clone().or_else(|| this.root(cx)).as_deref() != Some(dir.as_str()) {
                     this.refresh_git(0, cx); // the active file's root changed meanwhile
                     return;
+                }
+                if picked && let Ok(st) = &result {
+                    let same = st.as_ref().is_some_and(|s| s.root.trim_end_matches('/') == dir.trim_end_matches('/'));
+                    if !same {
+                        // The picked repository was deleted (or is now part of the enclosing one): Source Control does
+                        // not silently show another repository in its place.
+                        this.vcs.scm_root = None;
+                        this.notice = Some(Notice::Error(crate::i18n::tf("Repository is no longer available: {}", &[&dir]).into()));
+                        // Nothing of it stays on screen; the search that follows picks what to show.
+                        this.apply_git(None, cx);
+                        this.discover_repos(cx);
+                        this.refresh_git(0, cx);
+                        return;
+                    }
                 }
                 match result {
                     // No change (most polls): no redraw. Every frame makes Metal allocate ~110 MB of
@@ -166,6 +187,17 @@ impl Workbench {
                 }
             }
         }
+        if let Some(s) = &st
+            && self.vcs.repos.inventory.set_selected_status(s)
+        {
+            self.push_repos(cx);
+            // The selected repository changed: its operation state (merge, rebase) is read with its next refresh.
+            if self.vcs.repos.inventory.repos.len() > 1
+                && let Some(key) = self.vcs.repos.inventory.by_worktree(&s.root).map(|r| r.id.key)
+            {
+                self.refresh_repo(key, cx);
+            }
+        }
         let host = self.remote.host.clone();
         self.scm.update(cx, |s, cx| s.set_status(host, st.clone(), cx));
         self.vcs.status = st;
@@ -181,6 +213,7 @@ impl Workbench {
         self.vcs.branch = None;
         let host = self.remote.host.clone();
         let root = root.trim_end_matches('/').to_string();
+        let asked = root.clone();
         let task = cx.background_executor().spawn(async move {
             let mut dir = root;
             for _ in 0..6 {
@@ -201,6 +234,12 @@ impl Workbench {
         cx.spawn(async move |this, cx| {
             let branch = task.await;
             this.update(cx, |this, cx| {
+                // Read for a folder Source Control no longer looks at (another repository was selected meanwhile), or
+                // superseded by the status (which knows linked worktrees and submodules): not stored.
+                let current = this.vcs.scm_root.clone().or_else(|| this.root(cx));
+                if current.as_deref().map(|c| c.trim_end_matches('/')) != Some(asked.as_str()) || this.vcs.status.is_some() {
+                    return;
+                }
                 this.vcs.branch = branch.map(Into::into);
                 cx.notify();
             })

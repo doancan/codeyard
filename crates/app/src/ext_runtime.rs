@@ -36,10 +36,24 @@ pub fn exthost_path() -> Option<PathBuf> {
 
 /// Whether code extensions can run in this app: `Err` says why not, naming the extension.
 pub fn code_runs_here(id: &dyn std::fmt::Display) -> Result<(), String> {
-    match exthost_path() {
-        Some(_) => Ok(()),
-        None => Err(crate::i18n::tf("{} contains code, but codeyard-exthost is missing beside Codeyard", &[id])),
+    match (exthost_path(), sandbox()) {
+        (None, _) => Err(crate::i18n::tf("{} contains code, but codeyard-exthost is missing beside Codeyard", &[id])),
+        (Some(_), Err(why)) => Err(crate::i18n::tf("{0} contains code, which needs a sandbox this system does not provide: {1}", &[id, &why])),
+        (Some(_), Ok(())) => Ok(()),
     }
+}
+
+/// `codeyard-exthost --check-sandbox`, asked once per process: installed code runs only where the OS sandbox works.
+pub fn sandbox() -> Result<(), String> {
+    static ANSWER: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
+    ANSWER
+        .get_or_init(|| {
+            let exe = exthost_path().ok_or_else(|| "codeyard-exthost is missing".to_string())?;
+            let out = Command::new(exe).arg("--check-sandbox").output().map_err(|e| e.to_string())?;
+            let line = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if out.status.success() { Ok(()) } else { Err(line.strip_prefix("unavailable: ").unwrap_or(&line).to_string()) }
+        })
+        .clone()
 }
 
 /// `<data>/extensions/compiled/<build>/<wasm sha256>.cwasm`, with a `.sha256` sidecar of the compiled file.
@@ -292,6 +306,8 @@ pub struct Start<'a> {
     pub settings: Vec<(String, Option<String>)>,
     pub folders: Vec<String>,
     pub reason: String,
+    /// False only for the extension in development (`cyx dev`): the author's own folder, behind Wasm and the broker.
+    pub sandbox: bool,
 }
 
 impl Start<'_> {
@@ -310,6 +326,7 @@ impl Start<'_> {
             settings: self.settings,
             folders: self.folders,
             reason: self.reason,
+            sandbox: self.sandbox,
         }
     }
 }
