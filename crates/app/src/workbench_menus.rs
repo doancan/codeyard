@@ -332,6 +332,7 @@ impl Workbench {
                 self.roots.file_clip = previous;
             }
             MenuCmd::OpenTerminal => self.new_terminal_in(Some(dir), window, cx),
+            MenuCmd::TerminalLaunch(ix) => self.launch_from_menu(ix, window, cx),
             MenuCmd::SelectForCompare => {
                 self.notice = Some(Notice::Info(
                     crate::i18n::tf("Selected {} for compare. Right-click another file and choose Compare.", &[&ui::file_name(&target.path)]).into(),

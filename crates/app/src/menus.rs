@@ -473,10 +473,14 @@ pub(crate) fn menus(recent: &[state::RecentWorkspace]) -> Vec<Menu> {
             items: vec![
                 I::action(tr("New Terminal"), wb::NewTerminal),
                 I::action(tr("New Terminal with Profile…"), wb::NewTerminalWithProfile),
+                I::action(tr("Split Terminal"), wb::SplitTerminal),
                 I::action(tr("Toggle Terminal"), wb::ToggleTerminal),
                 I::action(tr("Rename Terminal…"), wb::RenameTerminal),
                 I::action(tr("Kill Terminal"), wb::KillTerminal),
                 I::action(tr("Kill All Terminals"), wb::KillAllTerminals),
+                sep(),
+                I::action(tr("Focus Next Terminal"), wb::FocusNextTerminal),
+                I::action(tr("Focus Previous Terminal"), wb::FocusPreviousTerminal),
                 sep(),
                 I::action(tr("Find"), crate::terminal::TermFind),
                 I::action(tr("Select All"), crate::terminal::TermSelectAll),
@@ -484,6 +488,8 @@ pub(crate) fn menus(recent: &[state::RecentWorkspace]) -> Vec<Menu> {
                 sep(),
                 I::action(tr("Scroll to Top"), crate::terminal::TermScrollToTop),
                 I::action(tr("Scroll to Bottom"), crate::terminal::TermScrollToBottom),
+                sep(),
+                I::action(tr("Configure Terminal Settings"), wb::ConfigureTerminalSettings),
             ],
         },
         Menu {

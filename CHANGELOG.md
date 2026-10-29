@@ -55,6 +55,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keyboard-accessible same-window navigation on local and SSH hosts. Detached, locked, stale and bare entries are identified;
   worktree paths with spaces, Unicode, quotes or line breaks are preserved by NUL-delimited Git output.
 
+- Terminal panel toolbar: New Terminal with a launch menu (profiles and installed shells, Split Terminal, tasks, default
+  profile and *Configure Terminal Settings*), Split and Kill buttons, shown only while the Terminal tab is active. Its icons
+  share one optical size, and the maximize button shows when the panel is maximized.
+- Terminal list: resizable by its left edge (remembered), larger rows, animated activity bars while a command runs, dots
+  for a failed last command or a long command that finished out of sight, tooltips with folder and command,
+  double-click to rename and middle-click to close.
+- *Terminal: Focus Next / Previous Terminal* (⇧⌘] / ⇧⌘[), *Terminal: Kill Other Terminals* and split in the terminal
+  with ⌘\ (Ctrl+Shift+5).
+
 - macOS accessibility landmark bounds for the window, primary Explorer viewport, focused text-editor pane
   and status bar, with display-scale conversion and updates when resizing, switching split groups or hiding panels.
 
@@ -130,6 +139,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Switching SSH hosts resets the workspace even when both servers use the same folder path, and preserves the
   previous server's saved tabs. Disconnecting clears remote folders, Git state and project settings without overwriting its session.
 - The empty Explorer's workspace link stays on one line in narrow sidebars.
+- Moving a maximized panel to the right or bottom did nothing visible; it now moves and returns to its own size.
+- Picking the other half of a split terminal, or another terminal and back, no longer drops the split, and closing a
+  terminal listed before the active one keeps the active terminal selected.
 - Run and Debug shows an automatic session's real name; without a launch file its selector says "Auto-detect project"
   instead of claiming there are no configurations.
 - Debugging saves workspace buffers before building or starting, honors format-on-save, and cancels on save errors,

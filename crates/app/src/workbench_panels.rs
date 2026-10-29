@@ -51,6 +51,15 @@ impl Workbench {
         cx.notify();
     }
 
+    /// The panel's width in a window `total` wide: its own when docked right, else the editor area's.
+    pub(super) fn panel_width(&self, total: f32) -> f32 {
+        if self.chrome.panel_right && !self.chrome.panel_max {
+            return self.chrome.panel_w;
+        }
+        let sidebar = if self.chrome.panel.is_some() && self.chrome.zen.is_none() { self.chrome.sidebar_w } else { 0. };
+        total - layout::ACTIVITYBAR_W - sidebar
+    }
+
     #[cfg(test)]
     pub fn panel_layout_for_test(&self) -> (bool, bool, bool) {
         (self.chrome.panel_open, self.chrome.panel_right, self.chrome.panel_max)

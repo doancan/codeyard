@@ -532,7 +532,7 @@ fn welcome_and_settings_pages_open_as_tabs_and_write_settings(cx: &mut TestAppCo
     let keys = page.read_with(cx, |p, cx| p.visible_keys(cx));
     assert!(keys.contains(&"theme") && keys.contains(&"editor.fontSize"), "{keys:?}");
     assert!(!keys.contains(&"search.maxResults"), "not in the shared settings");
-    page.update(cx, |p, cx| p.set_query_for_test("max results", cx));
+    page.update(cx, |p, cx| p.set_query("max results", cx));
     assert_eq!(page.read_with(cx, |p, cx| p.visible_keys(cx)), ["search.maxResults"]);
 
     // Number field: a valid value is written to the file and applied; an invalid value shows an error.
@@ -2503,6 +2503,79 @@ fn command_marks_follow_the_shell_integration_sequences(cx: &mut TestAppContext)
     // A prompt without a command (an empty line) is not counted.
     feed(cx, "\r\n\x1b]133;A\x07$ ");
     assert_eq!(term.read_with(cx, |t, _| t.command_count_for_test()), 2);
+}
+
+/// The terminal list's activity comes from the same sequences: a running command, a failed one, and a long command that
+/// finished out of sight until the terminal is looked at.
+#[gpui::test]
+fn terminal_activity_follows_the_shell_integration_sequences(cx: &mut TestAppContext) {
+    use crate::terminal::{Activity, Finished};
+    let dir = single_file_dir("activity");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    wb.update(cx, |wb, _| wb.set_shell("/bin/cat"));
+    cx.simulate_keystrokes("ctrl-`");
+    let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
+    let feed = |cx: &mut VisualTestContext, s: &str| term.update(cx, |t, _| t.feed_for_test(s.as_bytes()));
+    let state = |cx: &mut VisualTestContext| term.read_with(cx, |t, _| (t.activity(), t.unseen_finish()));
+    assert_eq!(state(cx), (Activity::Idle, None), "no command yet");
+    feed(cx, "\x1b]133;A\x07$ make\r\n\x1b]133;C\x07");
+    assert_eq!(state(cx), (Activity::Running("$ make".into()), None));
+    term.update(cx, |t, _| t.backdate_command_for_test(10));
+    feed(cx, "\x1b]133;D;2\x07\x1b]133;A\x07$ ");
+    assert_eq!(state(cx), (Activity::Failed(2), Some(Finished::Failed)), "a long command failed");
+    assert!(term.update(cx, |t, _| t.mark_seen()));
+    // A quick command says nothing when it ends, and success clears the failure.
+    feed(cx, "ls\r\n\x1b]133;C\x07a\r\n\x1b]133;D;0\x07\x1b]133;A\x07$ ");
+    assert_eq!(state(cx), (Activity::Idle, None));
+}
+
+/// Several terminals: the split pair stays together whichever of the two is active and comes back after visiting another
+/// terminal; next and previous go round the list; closing one before the active terminal keeps the active one.
+#[gpui::test]
+fn terminals_cycle_and_keep_their_split_pair(cx: &mut TestAppContext) {
+    let dir = single_file_dir("term-list");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    wb.update(cx, |wb, _| wb.set_shell("/bin/cat"));
+    cx.simulate_keystrokes("ctrl-`");
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: New", window, cx));
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Split", window, cx));
+    wait_for(cx, "the split", |cx| wb.read_with(cx, |wb, _| wb.terminal_count()) == 3);
+    let all = wb.read_with(cx, |wb, _| wb.terminals_for_test());
+    let active = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.active_terminal()).unwrap();
+    let partner = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.split_partner());
+    assert_eq!((active(cx), partner(cx)), (all[2].clone(), Some(all[1].clone())));
+    wb.update_in(cx, |wb, window, cx| wb.select_terminal_for_test(1, window, cx));
+    assert_eq!(partner(cx), Some(all[2].clone()), "the other half of the pair is still beside it");
+    wb.update_in(cx, |wb, window, cx| wb.select_terminal_for_test(0, window, cx));
+    assert_eq!(partner(cx), None, "a terminal outside the pair stands alone");
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Focus Previous Terminal", window, cx));
+    assert_eq!((active(cx), partner(cx)), (all[2].clone(), Some(all[1].clone())), "round to the last one, and the pair is back");
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Focus Next Terminal", window, cx));
+    assert_eq!(active(cx), all[0]);
+    // Close the first terminal while the last is active: the last stays active.
+    wb.update_in(cx, |wb, window, cx| wb.select_terminal_for_test(2, window, cx));
+    wb.update_in(cx, |wb, window, cx| wb.close_terminal_for_test(0, window, cx));
+    assert_eq!(active(cx), all[2]);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Kill Other Terminals", window, cx));
+    wait_for(cx, "the others closed", |cx| wb.read_with(cx, |wb, _| wb.terminal_count()) == 1);
+    assert_eq!(active(cx), all[2]);
+}
+
+/// The New Terminal button's menu: the profiles (the default ticked), then the machine's shells no profile runs.
+#[gpui::test]
+fn the_launch_menu_offers_profiles_and_shells(cx: &mut TestAppContext) {
+    let mut settings = crate::settings::Settings::default();
+    let profile = |name: &str, path: &str| crate::terminal_profiles::Profile { name: name.into(), path: path.into(), args: None, env: Vec::new(), color: None };
+    settings
+        .terminal_profiles
+        .insert(crate::terminal_profiles::os_key(std::env::consts::OS).into(), vec![profile("Login", "/bin/zsh"), profile("Plain", "/bin/sh")]);
+    settings.terminal_default_profile = Some("Plain".into());
+    let (wb, cx) = setup_with_settings(cx, settings);
+    let shells = ["/bin/zsh".to_string(), "/bin/bash".to_string()];
+    let menu = wb.read_with(cx, |wb, cx| wb.launch_menu_for_test(&shells, cx));
+    assert_eq!(menu, [("Login".to_string(), Some(false)), ("Plain".to_string(), Some(true)), ("bash".to_string(), None)]);
 }
 
 /// Scrolled back while a program with a scroll region (vim, less, tmux) keeps printing: the view stays inside the history

@@ -4,7 +4,94 @@ use super::*;
 use crate::terminal::Launch;
 use crate::terminal_profiles::{COLORS, Profile};
 
-gpui::actions!(workbench, [KillAllTerminals, RenameTerminal, ChangeTerminalColor, NewTerminalWithProfile, SelectDefaultTerminalProfile]);
+gpui::actions!(
+    workbench,
+    [
+        KillAllTerminals,
+        KillOtherTerminals,
+        RenameTerminal,
+        ChangeTerminalColor,
+        NewTerminalWithProfile,
+        SelectDefaultTerminalProfile,
+        ConfigureTerminalSettings,
+        FocusNextTerminal,
+        FocusPreviousTerminal
+    ]
+);
+
+/// Height of a row in the terminal list.
+const TERM_ROW_H: f32 = 28.;
+
+/// The launch menu's profile and shell entries (the default profile ticked) and what each starts: profiles first, then the
+/// machine's shells that no profile already runs.
+fn launch_menu_entries(profiles: &[Profile], shells: &[String], default: Option<&str>) -> (Vec<crate::menu::MenuItem>, Vec<Launch>) {
+    use crate::menu::MenuItem;
+    let mut items = Vec::new();
+    let mut launches = Vec::new();
+    for p in profiles {
+        items.push(MenuItem::new(&p.name).checked(default == Some(p.name.as_str())));
+        launches.push(launch_of(p));
+    }
+    for sh in shells.iter().filter(|sh| !profiles.iter().any(|p| &p.path == *sh)) {
+        items.push(MenuItem::new(crate::ui::file_name(sh)));
+        launches.push(Launch { shell: Some(sh.clone()), ..Launch::default() });
+    }
+    (items, launches)
+}
+
+/// What a row of the terminal list shows for one terminal.
+struct TermRow {
+    label: String,
+    mark: Option<String>,
+    exited: bool,
+    activity: crate::terminal::Activity,
+    /// A long command finished while the terminal was out of sight.
+    unseen: Option<crate::terminal::Finished>,
+    cwd: Option<String>,
+}
+
+impl TermRow {
+    /// `visible`: the terminal is on screen, so a finish it reports has been seen.
+    fn of(t: &TerminalView, visible: bool) -> Self {
+        let exited = t.has_exited();
+        TermRow {
+            label: if exited { crate::i18n::tf("{} (exited)", &[&t.title]) } else { t.title.to_string() },
+            mark: t.color.clone(),
+            exited,
+            activity: if exited { crate::terminal::Activity::Idle } else { t.activity() },
+            unseen: if visible { None } else { t.unseen_finish() },
+            cwd: t.live_cwd().or_else(|| t.start_dir()),
+        }
+    }
+
+    /// Beside the glyph: bars while a command runs, a dot for a finish not yet seen or a failed last command.
+    fn indicator(&self, i: usize, p: &Palette) -> Option<AnyElement> {
+        use crate::terminal::{Activity, Finished};
+        let dot = |color: u32| div().size(px(7.)).flex_none().rounded_full().bg(c(color)).into_any_element();
+        match (&self.activity, self.unseen) {
+            (Activity::Running(_), _) => Some(ui::activity_bars(("term-activity", i), 12., p.accent)),
+            (_, Some(Finished::Failed)) => Some(dot(p.danger)),
+            (_, Some(Finished::Succeeded)) => Some(dot(p.success)),
+            (Activity::Failed(_), None) => Some(dot(p.danger)),
+            (Activity::Idle, None) => None,
+        }
+    }
+
+    fn tooltip(&self) -> String {
+        use crate::terminal::Activity;
+        let mut lines = vec![self.label.clone()];
+        if let Some(cwd) = &self.cwd {
+            lines.push(cwd.clone());
+        }
+        match &self.activity {
+            Activity::Running(cmd) if !cmd.is_empty() => lines.push(crate::i18n::tf("Running: {}", &[cmd])),
+            Activity::Running(_) => lines.push(crate::i18n::t("A command is running").into()),
+            Activity::Failed(code) => lines.push(crate::i18n::tf("The last command exited with code {}", &[code])),
+            Activity::Idle => {}
+        }
+        lines.join("\n")
+    }
+}
 
 /// A terminal's mark colour.
 fn mark_color(role: Option<&str>, p: &Palette) -> u32 {
@@ -99,7 +186,7 @@ impl Workbench {
                     this.close_terminal(ix, window, cx);
                 }
             }
-            TerminalEvent::TitleChanged | TerminalEvent::Exited => cx.notify(),
+            TerminalEvent::TitleChanged | TerminalEvent::Exited | TerminalEvent::ActivityChanged => cx.notify(),
             TerminalEvent::ImagePasteFailed(error) => {
                 this.notice = Some(Notice::Error(crate::i18n::tf("Could not paste: {}", &[error]).into()));
                 cx.notify();
@@ -112,8 +199,10 @@ impl Workbench {
             }
             TerminalEvent::OpenLink(link) => this.open_link(link.clone(), window, cx),
             TerminalEvent::ContextMenu(position) => {
-                if let Some(ix) = this.terminals.iter().position(|t| t.downgrade() == weak) {
-                    this.active_terminal = ix;
+                if let Some(ix) = this.terminals.iter().position(|t| t.downgrade() == weak)
+                    && ix != this.active_terminal
+                {
+                    this.select_terminal(ix, window, cx);
                 }
                 this.open_terminal_menu(*position, window, cx);
             }
@@ -138,7 +227,7 @@ impl Workbench {
                 let before = this.terminals.len();
                 this.new_terminal_in(cwd, window, cx);
                 if this.terminals.len() > before {
-                    this.term_split = prev;
+                    this.term_split = prev.zip(this.terminals.last().cloned());
                     cx.notify();
                 }
             })
@@ -293,72 +382,246 @@ impl Workbench {
         }
     }
 
-    /// The list of terminals beside the active one (when there are several): mark, name and close.
+    /// The list of terminals beside the active one (when there are several): mark, activity, name and close. Its left edge
+    /// drags to resize it; a double click renames a terminal and a middle click closes it.
     pub(super) fn terminal_list(&self, p: &Palette, cx: &mut Context<Self>) -> Option<AnyElement> {
-        (self.terminals.len() > 1).then(|| {
+        if self.terminals.len() < 2 {
+            return None;
+        }
+        let resizing = self.chrome.resizing_term_list;
+        let shown = self.shown_split();
+        let pair = self.term_split.clone().filter(|(l, r)| self.terminals.contains(l) && self.terminals.contains(r));
+        let rows = self.terminals.iter().enumerate().map(|(i, t)| {
+            let active = i == self.active_terminal;
+            // The two split terminals carry the split glyph; they are on screen together when one of them is active.
+            let paired = pair.as_ref().is_some_and(|(l, r)| l == t || r == t);
+            let on_screen = active || shown.as_ref().is_some_and(|(l, r)| l == t || r == t);
+            let row = TermRow::of(t.read(cx), on_screen);
+            let term = t.clone();
+            let group: SharedString = format!("term-row-{i}").into();
+            let (fg, glyph_color) = match (row.exited, active) {
+                (true, _) => (p.text_muted, p.text_muted),
+                (false, true) => (p.text, row.mark.as_deref().map_or(p.text, |m| mark_color(Some(m), p))),
+                (false, false) => (p.text_muted, row.mark.as_deref().map_or(p.text_muted, |m| mark_color(Some(m), p))),
+            };
+            let tip: SharedString = row.tooltip().into();
             div()
-                .id("terminal-list")
-                .w(px(180.))
+                .id(("term-tab", i))
+                .group(group.clone())
+                .relative()
+                .w_full()
+                .h(px(TERM_ROW_H))
+                .flex()
+                .items_center()
+                .gap(px(theme::SPACE[2]))
+                .pl(px(theme::SPACE[4]))
+                .pr(px(theme::SPACE[2]))
+                .cursor_pointer()
+                .text_size(px(text::SM.0))
+                .when(active, |d| d.bg(c(p.surface_active)))
+                .hover(|d| d.bg(c(p.surface_hover)))
+                .text_color(c(fg))
+                // The active row carries the accent on its left edge, like the active editor tab.
+                .when(active, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(px(2.)).bg(c(p.accent))))
+                .child(icon(if paired { "tb-split" } else { "terminal" }, layout::ICON, glyph_color))
+                .children(row.indicator(i, p))
+                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().when(row.exited, |d| d.italic()).child(row.label))
+                .child(
+                    div()
+                        .id(("term-close", i))
+                        .size(px(20.))
+                        .flex_none()
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(px(theme::radius::SM))
+                        .opacity(0.)
+                        .when(active, |d| d.opacity(1.))
+                        .group_hover(group, |s| s.opacity(1.))
+                        .hover(|d| d.bg(c(p.surface_hover)))
+                        .child(icon("tb-close", 14., p.text_muted))
+                        .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Kill Terminal").into())).into())
+                        .on_click(cx.listener({
+                            let term = term.clone();
+                            move |this, _, window, cx| {
+                                cx.stop_propagation();
+                                this.request_close(vec![term.clone()], window, cx);
+                            }
+                        })),
+                )
+                .tooltip(move |_, cx| cx.new(|_| Tooltip(tip.clone())).into())
+                .on_mouse_down(
+                    MouseButton::Middle,
+                    cx.listener({
+                        let term = term.clone();
+                        move |this, _, window, cx| this.request_close(vec![term.clone()], window, cx)
+                    }),
+                )
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, ev: &gpui::MouseDownEvent, window, cx| {
+                        if ev.click_count == 2 {
+                            this.select_terminal(i, window, cx);
+                            this.rename_terminal(&RenameTerminal, window, cx);
+                        }
+                    }),
+                )
+                .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, window, cx| {
+                    if ev.click_count() < 2 {
+                        this.select_terminal(i, window, cx);
+                    }
+                }))
+                .into_any_element()
+        });
+        Some(
+            div()
+                .relative()
+                .w(px(self.chrome.term_list_w))
                 .flex_none()
                 .h_full()
                 .border_l_1()
                 .border_color(c(p.border))
-                .overflow_y_scroll()
-                .children(self.terminals.iter().enumerate().map(|(i, t)| {
-                    let active = i == self.active_terminal;
-                    let term = t.clone();
-                    let t = t.read(cx);
-                    let label = if t.has_exited() { crate::i18n::tf("{} (exited)", &[&t.title]) } else { t.title.to_string() };
-                    let mark = mark_color(t.color.as_deref(), p);
-                    let group: SharedString = format!("term-row-{i}").into();
+                .child(div().id("terminal-list").size_full().overflow_y_scroll().children(rows))
+                .child(
                     div()
-                        .id(("term-tab", i))
-                        .group(group.clone())
-                        .w_full()
-                        .h(px(layout::ROW_H))
-                        .flex()
-                        .items_center()
-                        .gap(px(theme::SPACE[2]))
-                        .px(px(theme::SPACE[4]))
-                        .cursor_pointer()
-                        .text_size(px(text::XS.0))
-                        .when(active, |d| d.bg(c(p.surface_active)))
-                        .hover(|d| d.bg(c(p.surface_hover)))
-                        .text_color(c(if active { p.text } else { p.text_muted }))
-                        .child(icon(
-                            "terminal",
-                            14.,
-                            if t.color.is_some() {
-                                mark
-                            } else if active {
-                                p.text
-                            } else {
-                                p.text_muted
-                            },
-                        ))
-                        .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().child(label))
-                        .child(div().id(("term-close", i)).opacity(0.).group_hover(group, |s| s.opacity(1.)).child(icon("x", 12., p.text_muted)).on_click(
-                            cx.listener(move |this, _, window, cx| {
-                                cx.stop_propagation();
-                                this.request_close(vec![term.clone()], window, cx);
+                        .id("terminal-list-sash")
+                        .absolute()
+                        .occlude()
+                        .left(px(-layout::SASH / 2.))
+                        .top_0()
+                        .bottom_0()
+                        .w(px(layout::SASH))
+                        .cursor(gpui::CursorStyle::ResizeLeftRight)
+                        .child(crate::ui_sash::highlight(p.accent, resizing))
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(|this, _, _, cx| {
+                                this.chrome.resizing_term_list = true;
+                                cx.notify();
                             }),
-                        ))
-                        .on_click(cx.listener(move |this, _, window, cx| {
-                            this.active_terminal = i;
-                            this.chrome.bottom = Bottom::Terminal;
-                            this.focus_terminal(window, cx);
-                        }))
-                        .into_any_element()
-                }))
-                .into_any_element()
+                        ),
+                )
+                .into_any_element(),
+        )
+    }
+
+    /// Make terminal `ix` the active one and focus it. What was on screen before, and what is now, counts as seen.
+    pub(super) fn select_terminal(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if ix >= self.terminals.len() {
+            return;
+        }
+        self.mark_visible_terminals_seen(cx);
+        self.active_terminal = ix;
+        self.chrome.bottom = Bottom::Terminal;
+        self.focus_terminal(window, cx);
+    }
+
+    /// The terminals on screen (the active one and its split partner) have been looked at.
+    fn mark_visible_terminals_seen(&mut self, cx: &mut Context<Self>) {
+        let visible: Vec<_> = match self.shown_split() {
+            Some((l, r)) => vec![l, r],
+            None => self.terminals.get(self.active_terminal).cloned().into_iter().collect(),
+        };
+        for t in visible {
+            t.update(cx, |t, _| t.mark_seen());
+        }
+    }
+
+    /// "Terminal: Focus Next Terminal" / "Focus Previous Terminal": round the list.
+    pub(super) fn focus_next_terminal(&mut self, _: &FocusNextTerminal, window: &mut Window, cx: &mut Context<Self>) {
+        self.cycle_terminal(1, window, cx);
+    }
+
+    pub(super) fn focus_previous_terminal(&mut self, _: &FocusPreviousTerminal, window: &mut Window, cx: &mut Context<Self>) {
+        self.cycle_terminal(-1, window, cx);
+    }
+
+    fn cycle_terminal(&mut self, step: isize, window: &mut Window, cx: &mut Context<Self>) {
+        let n = self.terminals.len();
+        if n == 0 {
+            return;
+        }
+        let ix = (self.active_terminal as isize + step).rem_euclid(n as isize) as usize;
+        self.chrome.panel_open = true;
+        self.select_terminal(ix, window, cx);
+    }
+
+    /// "Terminal: Kill Other Terminals": every terminal but the active one (asking first if programs run in them).
+    pub(super) fn kill_other_terminals(&mut self, _: &KillOtherTerminals, window: &mut Window, cx: &mut Context<Self>) {
+        let keep = self.terminals.get(self.active_terminal).cloned();
+        let others: Vec<_> = self.terminals.iter().filter(|t| Some(*t) != keep.as_ref()).cloned().collect();
+        if !others.is_empty() {
+            self.request_close(others, window, cx);
+        }
+    }
+
+    /// "Terminal: Configure Terminal Settings": the settings page, filtered to the terminal.
+    pub(super) fn configure_terminal_settings(&mut self, _: &ConfigureTerminalSettings, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_settings_page(&OpenSettingsPage, window, cx);
+        if let Some(Page::Settings(page)) = self.tabs.page.clone() {
+            page.update(cx, |page, cx| page.set_query("terminal.", cx));
+        }
+    }
+
+    /// The menu beside the New Terminal button: start one with a profile or another shell, split, tasks and settings.
+    pub(super) fn open_terminal_launch_menu(&mut self, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+        let profiles = self.terminal_profiles(cx);
+        let default = cx.global::<Settings>().terminal_default_profile.clone();
+        let host = self.remote.host.clone();
+        let shells = cx.background_executor().spawn(async move { host.list_shells() });
+        cx.spawn_in(window, async move |this, cx| {
+            let shells = shells.await;
+            this.update_in(cx, |this, window, cx| {
+                use crate::menu::MenuItem;
+                let (items, launches) = launch_menu_entries(&profiles, &shells, default.as_deref());
+                let mut items: Vec<MenuItem> = items;
+                let mut commands: Vec<MenuCmd> = (0..launches.len()).map(MenuCmd::TerminalLaunch).collect();
+                let mut actions: Vec<Box<dyn gpui::Action>> = Vec::new();
+                let key = |a: &dyn gpui::Action| Command { label: String::new(), run: Run::Action(a.boxed_clone()) }.shortcut(cx);
+                let fixed: Vec<(&str, Box<dyn gpui::Action>, bool)> = vec![
+                    (crate::i18n::t("New Terminal"), Box::new(NewTerminal), !launches.is_empty()),
+                    (crate::i18n::t("Split Terminal"), Box::new(SplitTerminal), false),
+                    (crate::i18n::t("New Terminal with Profile…"), Box::new(NewTerminalWithProfile), false),
+                    (crate::i18n::t("Run Task…"), Box::new(RunTask), true),
+                    (crate::i18n::t("Configure Tasks…"), Box::new(ConfigureTasks), false),
+                    (crate::i18n::t("Select Default Profile…"), Box::new(SelectDefaultTerminalProfile), true),
+                    (crate::i18n::t("Configure Terminal Settings"), Box::new(ConfigureTerminalSettings), false),
+                ];
+                for (label, action, sep) in fixed {
+                    let item = MenuItem::new(label).shortcut(key(action.as_ref()));
+                    items.push(if sep { item.separator() } else { item });
+                    commands.push(MenuCmd::Dispatch(actions.len()));
+                    actions.push(action);
+                }
+                this.term_launches = launches;
+                let target = MenuTarget { path: String::new(), is_dir: false, tab: None };
+                this.show_menu(items, commands, actions, target, position, window, cx);
+                if let Some(state) = &this.menu {
+                    state.menu.update(cx, |menu, _| menu.set_anchor(gpui::Corner::TopRight));
+                }
+            })
+            .ok();
         })
+        .detach();
+    }
+
+    /// An entry of the launch menu was chosen.
+    pub(super) fn launch_from_menu(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(launch) = self.term_launches.get(ix).cloned() {
+            let cwd = self.active_root(cx);
+            self.new_terminal_launch(cwd, launch, window, cx);
+        }
     }
 
     pub(super) fn close_terminal(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         let term = self.terminals.remove(ix);
         term.read(cx).kill();
-        if self.term_split.as_ref() == Some(&term) {
+        if self.term_split.as_ref().is_some_and(|(l, r)| *l == term || *r == term) {
             self.term_split = None;
+        }
+        // Closing a terminal before the active one moves the active one up a place.
+        if ix < self.active_terminal {
+            self.active_terminal -= 1;
         }
         if self.terminals.is_empty() {
             self.chrome.panel_open = false;
@@ -368,9 +631,6 @@ impl Workbench {
             }
         } else {
             self.active_terminal = self.active_terminal.min(self.terminals.len() - 1);
-            if self.term_split.as_ref() == self.terminals.get(self.active_terminal) {
-                self.term_split = None; // the split is meaningless if the peer became active
-            }
             self.focus_terminal(window, cx);
         }
         cx.notify();
@@ -403,9 +663,40 @@ impl Workbench {
         self.terminals.len()
     }
 
+    /// The split pair, when the active terminal is one of the two.
+    pub(super) fn shown_split(&self) -> Option<(Entity<TerminalView>, Entity<TerminalView>)> {
+        let active = self.terminals.get(self.active_terminal)?;
+        self.term_split.clone().filter(|(l, r)| (l == active || r == active) && self.terminals.contains(l) && self.terminals.contains(r))
+    }
+
+    #[cfg(test)]
+    pub fn terminals_for_test(&self) -> Vec<Entity<TerminalView>> {
+        self.terminals.clone()
+    }
+
+    #[cfg(test)]
+    pub fn close_terminal_for_test(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.close_terminal(ix, window, cx);
+    }
+
+    #[cfg(test)]
+    pub fn select_terminal_for_test(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.select_terminal(ix, window, cx);
+    }
+
+    /// The labels of the New Terminal button's menu, as it would open now.
+    #[cfg(test)]
+    pub fn launch_menu_for_test(&self, shells: &[String], cx: &App) -> Vec<(String, Option<bool>)> {
+        let default = cx.global::<Settings>().terminal_default_profile.clone();
+        let (items, _) = launch_menu_entries(&self.terminal_profiles(cx), shells, default.as_deref());
+        items.into_iter().map(|i| (i.label.to_string(), i.checked)).collect()
+    }
+
+    /// The terminal shown beside the active one.
     #[cfg(test)]
     pub fn split_partner(&self) -> Option<Entity<TerminalView>> {
-        self.term_split.clone()
+        let active = self.terminals.get(self.active_terminal)?;
+        self.shown_split().map(|(l, r)| if &l == active { r } else { l })
     }
 
     /// Right click in a terminal: the terminal has focus, so the clipboard and find actions go to it.
@@ -429,5 +720,39 @@ impl Workbench {
 
     pub fn active_terminal(&self) -> Option<Entity<TerminalView>> {
         self.terminals.get(self.active_terminal).cloned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn profile(name: &str, path: &str) -> Profile {
+        Profile { name: name.into(), path: path.into(), args: None, env: Vec::new(), color: None }
+    }
+
+    #[test]
+    fn the_launch_menu_lists_profiles_then_the_other_shells() {
+        let profiles = [profile("Work", "/bin/zsh"), profile("Plain", "/bin/sh")];
+        let shells = ["/bin/bash".to_string(), "/bin/zsh".to_string(), "/opt/homebrew/bin/fish".to_string()];
+        let (items, launches) = launch_menu_entries(&profiles, &shells, Some("Plain"));
+        let labels: Vec<(&str, Option<bool>)> = items.iter().map(|i| (i.label.as_ref(), i.checked)).collect();
+        assert_eq!(labels, [("Work", Some(false)), ("Plain", Some(true)), ("bash", None), ("fish", None)], "zsh already has a profile");
+        assert_eq!(launches.len(), labels.len());
+        assert_eq!(launches[2].shell.as_deref(), Some("/bin/bash"));
+        assert_eq!(launches[0], launch_of(&profiles[0]));
+    }
+
+    #[test]
+    fn a_row_shows_what_its_terminal_is_doing() {
+        use crate::terminal::{Activity, Finished};
+        let row = |activity, unseen| TermRow { label: "zsh".into(), mark: None, exited: false, activity, unseen, cwd: Some("/srv/app".into()) };
+        let p = theme::DARK;
+        assert!(row(Activity::Idle, None).indicator(0, &p).is_none(), "nothing to say");
+        assert!(row(Activity::Running("$ make".into()), None).indicator(0, &p).is_some());
+        assert!(row(Activity::Idle, Some(Finished::Succeeded)).indicator(0, &p).is_some());
+        assert!(row(Activity::Failed(2), None).indicator(0, &p).is_some());
+        assert_eq!(row(Activity::Running("$ make".into()), None).tooltip(), "zsh\n/srv/app\nRunning: $ make");
+        assert_eq!(row(Activity::Failed(2), None).tooltip(), "zsh\n/srv/app\nThe last command exited with code 2");
     }
 }

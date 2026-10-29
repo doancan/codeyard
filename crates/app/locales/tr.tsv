@@ -2926,3 +2926,20 @@ Create Here	Buraya Oluştur
 {} is loaded as an extension in development: save a file to reload it	{} geliştirilen eklenti olarak yüklendi: yeniden yüklemek için bir dosyayı kaydedin
 Could not create the extension: {}	Eklenti oluşturulamadı: {}
 Could not paste: {}	Yapıştırılamadı: {}
+
+# ---- Terminal panel toolbar, launch menu and terminal list ----
+Launch Profile…	Profil Başlat…
+Split Terminal	Terminali Böl
+Run Task…	Görev Çalıştır…
+Select Default Profile…	Varsayılan Profili Seç…
+Configure Tasks…	Görevleri Yapılandır…
+Configure Terminal Settings	Terminal Ayarlarını Yapılandır
+Focus Next Terminal	Sonraki Terminale Geç
+Focus Previous Terminal	Önceki Terminale Geç
+Running: {}	Çalışıyor: {}
+A command is running	Bir komut çalışıyor
+The last command exited with code {}	Son komut {} koduyla çıktı
+Terminal: Kill Other Terminals	Terminal: Diğer Terminalleri Sonlandır
+Terminal: Focus Next Terminal	Terminal: Sonraki Terminale Geç
+Terminal: Focus Previous Terminal	Terminal: Önceki Terminale Geç
+Terminal: Configure Terminal Settings	Terminal: Terminal Ayarlarını Yapılandır

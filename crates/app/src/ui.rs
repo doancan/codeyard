@@ -179,6 +179,35 @@ pub fn spinner(id: impl Into<gpui::ElementId>, size: f32, color: u32) -> gpui::A
         .into_any_element()
 }
 
+/// "Something runs here": three bars rising and falling out of step, `size` wide and high. Still bars with reduced motion.
+/// `id` must be unique among siblings.
+pub fn activity_bars(id: impl Into<gpui::ElementId>, size: f32, color: u32) -> gpui::AnyElement {
+    use gpui::{Animation, AnimationExt as _, IntoElement as _, ParentElement as _, Styled as _, div};
+    let id: gpui::ElementId = id.into();
+    let bar_w = (size / 5.).round().max(2.);
+    let still = crate::system_prefs::motion_reduced();
+    let bars = (0..3).map(|i| {
+        // Resting heights for reduced motion, and the phase of each bar while it moves.
+        let rest = [0.55, 0.9, 0.7][i];
+        let bar = div().w(px(bar_w)).rounded(px(bar_w / 2.)).bg(c(color));
+        if still {
+            return bar.h(px(size * rest)).into_any_element();
+        }
+        let phase = i as f32 / 3.;
+        bar.h(px(size * rest))
+            .with_animation(
+                gpui::ElementId::NamedChild(Box::new(id.clone()), ["a", "b", "c"][i].into()),
+                Animation::new(std::time::Duration::from_millis(900)).repeat(),
+                move |d, delta| {
+                    let t = ((delta + phase) % 1.) * std::f32::consts::TAU;
+                    d.h(px(size * (0.3 + 0.7 * (0.5 - 0.5 * t.cos()))))
+                },
+            )
+            .into_any_element()
+    });
+    div().size(px(size)).flex_none().flex().items_end().justify_between().children(bars).into_any_element()
+}
+
 /// Lucide (ISC) icons, embedded in the binary.
 pub struct Assets;
 
@@ -270,6 +299,16 @@ const ICONS: &[(&str, &[u8])] = icons![
     "file-solid",
     "codeyard-mark",
     "ellipsis",
+    // --- panel toolbar: one optical size for every glyph ---
+    "tb-plus",
+    "tb-dropdown",
+    "tb-split",
+    "tb-trash",
+    "tb-panel-right",
+    "tb-panel-bottom",
+    "tb-maximize",
+    "tb-restore",
+    "tb-close",
     // --- git-sync ---
     "cloud-upload",
     "cloud-download",
@@ -483,6 +522,27 @@ pub fn bridge_coalescing<T: Send + 'static>(
 
 /// Small icon button (view headers, panel tools): 22 px, hover background,
 /// tooltip required (it's icon-only, so what it does must be written).
+/// A toolbar button that stays pressed while `on` (a maximized panel): pressed background, full-strength glyph and a hover
+/// of its own so it still answers the pointer.
+pub fn toggle_button(id: impl Into<gpui::ElementId>, glyph: &'static str, tip: &'static str, on: bool, p: &Palette) -> gpui::Stateful<gpui::Div> {
+    use gpui::{InteractiveElement as _, ParentElement as _, StatefulInteractiveElement as _, Styled as _, prelude::FluentBuilder as _};
+    let (bg, hover, fg) = if on { (Some(p.surface_active), p.selection, p.text) } else { (None, p.surface_hover, p.text_muted) };
+    gpui::div()
+        .id(id)
+        .size(gpui::px(22.))
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
+        .rounded(gpui::px(theme::radius::SM))
+        .cursor_pointer()
+        .when_some(bg, |d, bg| d.bg(c(bg)))
+        .hover(move |d| d.bg(c(hover)))
+        .active(|d| d.bg(c(p.selection)))
+        .child(icon(glyph, 16., fg))
+        .tooltip(move |_, cx| gpui::AppContext::new(cx, |_| crate::workbench::Tooltip(tip.into())).into())
+}
+
 pub fn icon_button(id: impl Into<gpui::ElementId>, glyph: &'static str, tip: &'static str, p: &Palette) -> gpui::Stateful<gpui::Div> {
     use gpui::{InteractiveElement as _, ParentElement as _, StatefulInteractiveElement as _, Styled as _};
     gpui::div()

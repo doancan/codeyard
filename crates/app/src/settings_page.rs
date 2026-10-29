@@ -203,8 +203,8 @@ impl SettingsPage {
         window.focus(&self.query.focus_handle(cx));
     }
 
-    #[cfg(test)]
-    pub fn set_query_for_test(&mut self, q: &str, cx: &mut Context<Self>) {
+    /// Filter the page as if `q` had been typed into its search field.
+    pub fn set_query(&mut self, q: &str, cx: &mut Context<Self>) {
         self.query.update(cx, |f, cx| f.set_text(q, cx));
     }
 
@@ -610,9 +610,9 @@ mod tests {
         );
         let _tr = crate::i18n::LangGuard::set("tr");
         assert_eq!(category_label("Modules"), "Modüller");
-        page.update(cx, |page, cx| page.set_query_for_test("konteyner", cx));
+        page.update(cx, |page, cx| page.set_query("konteyner", cx));
         assert!(page.read_with(cx, |page, cx| page.visible_keys(cx)).contains(&"modules.containers.enabled"));
-        page.update(cx, |page, cx| page.set_query_for_test("yenile", cx));
+        page.update(cx, |page, cx| page.set_query("yenile", cx));
         assert!(page.read_with(cx, |page, cx| page.visible_keys(cx)).contains(&"webPreview.liveReload"));
     }
 

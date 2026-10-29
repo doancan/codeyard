@@ -101,6 +101,8 @@ is the complete list and always matches your key bindings; every setting is in [
 | Step over / into / out | F10, F11, ⇧F11 | F10, Ctrl+F11, Shift+F11 |
 | Pause the program | F6 | F6 |
 | Terminal: previous / next command (shell integration) | ⌘↑ / ⌘↓ | Ctrl+Shift+↑ / ↓ |
+| Split terminal (in the terminal) | ⌘\ | Ctrl+Shift+5 |
+| Next / previous terminal (in the terminal) | ⇧⌘] / ⇧⌘[ | Ctrl+Shift+] / Ctrl+Shift+[ |
 | Run and Debug view | ⌃⇧D | Alt+Shift+D |
 | Toggle bookmark / next / previous | ⌥⌘K / ⌥⌘L / ⌥⌘J | Ctrl+Alt+K / L / J |
 | Cut / copy / paste in the file tree | ⌘X / ⌘C / ⌘V | Ctrl+X / Ctrl+C / Ctrl+V |
@@ -1146,7 +1148,24 @@ system bash is 3.2) marks prompts and the folder only, so it has no command dots
 "terminal.profiles.macos": { "zsh (clean)": { "path": "/bin/zsh", "args": ["-f"], "env": { "LANG": "C" }, "color": "info" } }
 ```
 
-A terminal's tab menu can rename it, give it a colour or kill it. *Terminal: Kill All Terminals* closes every terminal.
+A terminal's tab menu can rename it, give it a colour or kill it. *Terminal: Kill All Terminals* closes every terminal,
+*Terminal: Kill Other Terminals* every one but the active terminal.
+
+**Panel toolbar.** While the Terminal tab is shown, the panel header has New Terminal, a menu beside it, Split and Kill.
+The menu starts a terminal with any profile or installed shell (the default profile is ticked) and also offers Split
+Terminal, Run Task…, Configure Tasks…, Select Default Profile… and *Configure Terminal Settings*, which opens Settings
+filtered to the terminal. The maximize button stays highlighted while the panel is maximized; moving a maximized panel to
+the bottom or the right restores its size.
+
+**Terminal list.** With two or more terminals a list appears beside them:
+
+- Drag its left edge to resize it; the width is remembered.
+- Bars beside a terminal's glyph move while a command runs in it. A red dot means its last command failed.
+- A command that ran for three seconds or more and finished while its terminal was out of sight leaves a green (success)
+  or red (failure) dot until you open that terminal.
+- Hover a row for its folder and what it runs. Double-click renames it, middle-click closes it.
+- Split terminals stay together: picking either one shows both, and picking another terminal and coming back brings the
+  pair back. ⇧⌘] / ⇧⌘[ (Ctrl+Shift+] / [) go to the next / previous terminal.
 
 **Safety.**
 

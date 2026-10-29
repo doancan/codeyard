@@ -358,6 +358,8 @@ pub(super) enum MenuCmd {
     Graph(crate::scm::GraphOption),
     /// Send the action in `MenuState::actions` to the focused item.
     Dispatch(usize),
+    /// Start the terminal at this index of `Workbench::term_launches` (the New Terminal button's menu).
+    TerminalLaunch(usize),
     AppSubmenu(usize),
     /// A row of the PORTS table (`MenuTarget::path` = the server port).
     Port(ports_glue::PortMenuCmd),

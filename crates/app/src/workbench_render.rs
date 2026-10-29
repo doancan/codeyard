@@ -18,6 +18,12 @@ impl Workbench {
             self.persist_session(cx);
             cx.notify();
         }
+        if std::mem::take(&mut self.chrome.resizing_term_list) {
+            if let Some(s) = &self.persist.state {
+                let _ = s.set("terminal_list_w", &format!("{:.0}", self.chrome.term_list_w));
+            }
+            cx.notify();
+        }
         if std::mem::take(&mut self.chrome.resizing_panel) {
             if let Some(s) = &self.persist.state {
                 let _ = s.set("panel_h", &format!("{:.0}", self.chrome.panel_h));
@@ -126,6 +132,10 @@ impl Render for Workbench {
             .on_action(cx.listener(|this, _: &StopTests, _, cx| this.stop_tests(cx)))
             .on_action(cx.listener(|this, _: &DebugTestAtCursor, w, cx| this.debug_test_at_cursor(w, cx)))
             .on_action(cx.listener(Self::kill_all_terminals))
+            .on_action(cx.listener(Self::kill_other_terminals))
+            .on_action(cx.listener(Self::focus_next_terminal))
+            .on_action(cx.listener(Self::focus_previous_terminal))
+            .on_action(cx.listener(Self::configure_terminal_settings))
             .on_action(cx.listener(Self::rename_terminal))
             .on_action(cx.listener(Self::change_terminal_color))
             .on_action(cx.listener(Self::new_terminal_with_profile))
@@ -491,6 +501,12 @@ impl Render for Workbench {
                         this.finish_resize(cx);
                     }
                 }
+                if this.chrome.resizing_term_list {
+                    // The list sits at the right edge of the panel, which is the right edge of the window.
+                    let total = window.viewport_size().width / px(1.);
+                    this.chrome.term_list_w = term_list_width(total - ev.position.x / px(1.), this.panel_width(total));
+                    cx.notify();
+                }
                 if this.chrome.resizing_panel && this.chrome.panel_right {
                     let total = window.viewport_size().width / px(1.);
                     let w = total - ev.position.x / px(1.);
@@ -853,5 +869,29 @@ mod resize_tests {
         assert_eq!(wb.read_with(cx, |wb, _| wb.panel_layout_for_test()), (true, !start, false), "moved and back to its own size");
         cx.dispatch_action(ToggleMaximizedPanel);
         assert_eq!(wb.read_with(cx, |wb, _| wb.panel_layout_for_test()), (true, !start, true), "maximizing on the new side");
+    }
+
+    // The terminal list's left edge drags like the other sashes, keeps room for the terminals and is remembered.
+    #[gpui::test]
+    fn the_terminal_list_resizes_by_its_edge(cx: &mut TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        let total = cx.update(|window, _| window.viewport_size().width / px(1.));
+        wb.update(cx, |wb, cx| {
+            wb.chrome.resizing_term_list = true;
+            cx.notify();
+        });
+        cx.simulate_mouse_move(point(px(total - 300.), px(300.)), Some(MouseButton::Left), Modifiers::none());
+        assert_eq!(wb.read_with(cx, |wb, _| wb.chrome.term_list_w), 300.);
+        // Far to the left: as wide as allowed, never wider.
+        cx.simulate_mouse_move(point(px(10.), px(300.)), Some(MouseButton::Left), Modifiers::none());
+        assert_eq!(wb.read_with(cx, |wb, _| wb.chrome.term_list_w), TERM_LIST_MAX);
+        // Close to the right edge: the narrowest.
+        cx.simulate_mouse_move(point(px(total - 50.), px(300.)), Some(MouseButton::Left), Modifiers::none());
+        assert_eq!(wb.read_with(cx, |wb, _| wb.chrome.term_list_w), TERM_LIST_MIN);
+        cx.simulate_mouse_up(point(px(total - 50.), px(300.)), MouseButton::Left, Modifiers::none());
+        assert!(!wb.read_with(cx, |wb, _| wb.chrome.resizing_term_list));
+        // A narrow panel keeps room for the terminals beside the list.
+        assert_eq!(term_list_width(400., 500.), 300.);
+        assert_eq!(term_list_width(400., 250.), TERM_LIST_MIN, "never narrower than the minimum");
     }
 }

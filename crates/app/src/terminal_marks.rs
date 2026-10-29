@@ -37,12 +37,39 @@ pub(super) struct Marks {
     pub shift: i64,
     /// Folder from OSC 7.
     pub cwd: Option<String>,
+    /// When the running command started (OSC 133;C).
+    pub started: Option<std::time::Instant>,
+    /// A long command finished; cleared once the terminal is looked at.
+    pub unseen: Option<Finished>,
+    /// A command started or ended since the app was last told.
+    pub activity_changed: bool,
 }
 
 /// How a command ended, for its gutter dot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MarkState {
     Running,
+    Succeeded,
+    Failed,
+}
+
+/// Commands that ran at least this long tell the terminal list when they finish out of sight.
+const NOTABLE_RUN: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// What a terminal is doing, for its row in the terminal list.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Activity {
+    /// At the prompt (or without shell integration).
+    Idle,
+    /// A command runs: the line it was typed on.
+    Running(String),
+    /// The last command failed with this exit code.
+    Failed(i32),
+}
+
+/// A long command that finished while nobody looked at its terminal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Finished {
     Succeeded,
     Failed,
 }
@@ -82,12 +109,18 @@ impl TerminalView {
                 let typed = self.line_text(self.cursor_abs() - 1).unwrap_or_default();
                 if let Some(m) = self.marks.list.back_mut().filter(|m| m.output.is_none()) {
                     m.output = Some((at, typed));
+                    self.marks.started = Some(std::time::Instant::now());
+                    self.marks.activity_changed = true;
                 }
             }
             // Only a command seen starting has an end (bash reports one after every prompt).
             OscEvent::CommandEnd(code) => {
                 if let Some(m) = self.marks.list.back_mut().filter(|m| m.output.is_some() && m.end.is_none()) {
                     m.end = Some((at, code));
+                    self.marks.activity_changed = true;
+                    if self.marks.started.take().is_some_and(|t| t.elapsed() >= NOTABLE_RUN) {
+                        self.marks.unseen = Some(if matches!(code, Some(c) if c != 0) { Finished::Failed } else { Finished::Succeeded });
+                    }
                 }
             }
         }
@@ -166,6 +199,26 @@ impl TerminalView {
         Some(self.term.bounds_to_string(from, to).trim_end().to_string())
     }
 
+    /// What the terminal is doing now: the newest command decides (a prompt with nothing typed yet keeps the one before).
+    pub fn activity(&self) -> Activity {
+        let Some(m) = self.marks.list.iter().rev().find(|m| m.output.is_some()) else { return Activity::Idle };
+        match (&m.output, m.end) {
+            (Some((_, typed)), None) => Activity::Running(typed.trim().to_string()),
+            (_, Some((_, Some(code)))) if code != 0 => Activity::Failed(code),
+            _ => Activity::Idle,
+        }
+    }
+
+    /// A long command finished while the terminal was out of sight.
+    pub fn unseen_finish(&self) -> Option<Finished> {
+        self.marks.unseen
+    }
+
+    /// The terminal was looked at: forget the unseen finish.
+    pub fn mark_seen(&mut self) -> bool {
+        self.marks.unseen.take().is_some()
+    }
+
     /// The shell's folder as it last said (OSC 7).
     pub fn live_cwd(&self) -> Option<String> {
         self.marks.cwd.clone()
@@ -195,6 +248,12 @@ impl TerminalView {
     #[cfg(test)]
     pub fn visible_marks_for_test(&self) -> Vec<(usize, MarkState)> {
         self.visible_marks(self.term.screen_lines())
+    }
+
+    /// Pretend the running command started `secs` seconds earlier.
+    #[cfg(test)]
+    pub fn backdate_command_for_test(&mut self, secs: u64) {
+        self.marks.started = self.marks.started.map(|t| t - std::time::Duration::from_secs(secs));
     }
 
     #[cfg(test)]
