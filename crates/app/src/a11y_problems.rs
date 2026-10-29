@@ -93,6 +93,91 @@ impl Workbench {
     }
 }
 
+/// The bottom panel's tabs and, while it is shown, the Output text.
+#[derive(Clone, PartialEq, Debug)]
+pub(crate) struct PanelSnap {
+    /// (tab, label, count) in screen order.
+    tabs: Vec<(Bottom, String, usize)>,
+    selected: Bottom,
+    output: Option<String>,
+}
+
+const PANEL_TABS: NodeId = NodeId(33);
+const OUTPUT_LOG: NodeId = NodeId(34);
+const PANEL_TAB: u64 = PROBLEM_ROW + BLOCK / 2;
+/// Output exposed at most (the panel shows the last 400 lines).
+const MAX_OUTPUT_LINES: usize = 400;
+
+impl PanelSnap {
+    pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>) -> Vec<NodeId> {
+        let mut list = Node::new(Role::TabList);
+        list.set_label(t("Panel"));
+        let mut kids = Vec::new();
+        for (i, (tab, label, count)) in self.tabs.iter().enumerate() {
+            let id = NodeId(PANEL_TAB + i as u64);
+            let mut n = Node::new(Role::Tab);
+            n.set_label(label.clone());
+            if *count > 0 {
+                n.set_description(count.to_string());
+            }
+            n.set_selected(*tab == self.selected);
+            n.add_action(Action::Click);
+            nodes.push((id, n));
+            kids.push(id);
+        }
+        list.set_children(kids);
+        nodes.push((PANEL_TABS, list));
+        let mut out = vec![PANEL_TABS];
+        if let Some(text) = &self.output {
+            let mut log = Node::new(Role::Log);
+            log.set_label(t("Output"));
+            log.set_value(if text.is_empty() { t("No output yet. Language server logs appear here.").to_string() } else { text.clone() });
+            log.set_live(Live::Polite);
+            nodes.push((OUTPUT_LOG, log));
+            out.push(OUTPUT_LOG);
+        }
+        out
+    }
+}
+
+impl Workbench {
+    pub(super) fn a11y_panel(&self) -> Option<PanelSnap> {
+        if !self.chrome.panel_open {
+            return None;
+        }
+        let (errors, warnings) = self.problem_counts();
+        let mut tabs = vec![(Bottom::Problems, t("Problems").to_string(), errors + warnings), (Bottom::Output, t("Output").to_string(), 0)];
+        if self.dbg.has_sessions() {
+            tabs.push((Bottom::Debug, t("Debug Console").to_string(), 0));
+        }
+        tabs.push((Bottom::Ports, t("Ports").to_string(), self.active_forwards()));
+        tabs.push((Bottom::Terminal, t("Terminal").to_string(), 0));
+        let output = (self.chrome.bottom == Bottom::Output).then(|| {
+            let skip = self.lsp.output.len().saturating_sub(MAX_OUTPUT_LINES);
+            self.lsp.output.iter().skip(skip).cloned().collect::<Vec<_>>().join("\n")
+        });
+        Some(PanelSnap { tabs, selected: self.chrome.bottom, output })
+    }
+
+    /// A tab of the panel: switched to only if the panel still offers it.
+    pub(super) fn a11y_panel_action(&mut self, req: &ActionRequest, last: &Snapshot, cx: &mut Context<Self>) -> bool {
+        let id = req.target_node.0;
+        if !(PANEL_TAB..PANEL_TAB + 16).contains(&id) {
+            return false;
+        }
+        let index = (id - PANEL_TAB) as usize;
+        let (Some(old), Some(current)) = (last.panel.as_ref(), self.a11y_panel()) else { return true };
+        if req.action == Action::Click
+            && let Some((tab, ..)) = old.tabs.get(index)
+            && current.tabs.iter().any(|(t, ..)| t == tab)
+        {
+            self.chrome.bottom = *tab;
+            cx.notify();
+        }
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use accesskit::{Action, ActionRequest, Role, TreeId};
@@ -153,5 +238,29 @@ mod tests {
             (e.path.clone(), e.cursor_position().0)
         });
         assert_eq!((path.as_str(), line), (file.as_str(), 3));
+    }
+
+    #[gpui::test]
+    fn the_panel_tabs_switch_and_the_output_is_readable(cx: &mut gpui::TestAppContext) {
+        let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+        wb.update(cx, |wb, cx| {
+            wb.chrome.panel_open = true;
+            wb.chrome.bottom = Bottom::Problems;
+            wb.log_output("rust-analyzer: indexing done".into());
+            cx.notify();
+        });
+        let snap = wb.update_in(cx, |wb, window, cx| wb.a11y_snapshot(window, cx));
+        let nodes = snap.to_tree().nodes;
+        assert!(nodes.iter().any(|(_, n)| n.role() == Role::Tab && n.label() == Some("Problems") && n.is_selected() == Some(true)));
+        assert!(!nodes.iter().any(|(_, n)| n.role() == Role::Log), "the Output text only while its tab is shown");
+        let (output, _) = nodes.iter().find(|(_, n)| n.role() == Role::Tab && n.label() == Some("Output")).expect("Output tab");
+        let req = ActionRequest { action: Action::Click, target_tree: TreeId::ROOT, target_node: *output, data: None };
+        wb.update_in(cx, |wb, window, cx| wb.a11y_action_for_test(&req, &snap, window, cx));
+        assert_eq!(wb.read_with(cx, |wb, _| wb.chrome.bottom), Bottom::Output);
+        let snap = wb.update_in(cx, |wb, window, cx| wb.a11y_snapshot(window, cx));
+        let nodes = snap.to_tree().nodes;
+        let (_, log) = nodes.iter().find(|(_, n)| n.role() == Role::Log).expect("the Output text");
+        assert_eq!(log.value(), Some("rust-analyzer: indexing done"));
+        assert!(nodes.iter().any(|(_, n)| n.role() == Role::Tab && n.label() == Some("Output") && n.is_selected() == Some(true)));
     }
 }
