@@ -75,7 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Terminal panel toolbar: New Terminal with a launch menu (profiles and installed shells, Split Terminal, tasks, default
   profile and *Configure Terminal Settings*), Split and Kill buttons, shown only while the Terminal tab is active. Its icons
-  share one optical size, and the maximize button shows when the panel is maximized.
+  share one optical size, and the maximize button shows when the panel is maximized. Maximize grows the panel towards
+  the top (the left when docked right) and restore shrinks it back, animated unless motion is reduced.
 - Terminal list: resizable by its left edge (remembered), larger rows, animated activity bars while a command runs, dots
   for a failed last command or a long command that finished out of sight, tooltips with folder and command,
   double-click to rename and middle-click to close.
