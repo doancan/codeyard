@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (docs/registry.md).
 - Offline verification of publishers' keyless Sigstore signatures, pinned to the registry's Fulcio CA and Rekor key,
   with the publisher identity (repository, owner and workflow by id) taken from the certificate.
+- Nested horizontal and vertical editor groups with directional splitting/focus, independent views of
+  shared documents, tab transfers, nested divider resizing and atomic layout/session restoration.
+  Up to 32 groups retain usable minimum sizes with scrolling in narrow windows.
+
+- Explorer multi-selection with modifier clicks, keyboard ranges and select-all, plus batch copy,
+  cut, drag and deletion with a single confirmation, progress/cancellation and per-entry errors.
+  Failed cuts remain available for retry; dirty buffers and successful moves retain their edits.
+- Filesystem-native recursive copies on local and SSH agents, with exclusive atomic publication,
+  symlink and executable-permission preservation, bounded traversal and no shell dependency.
+
 - `codeyard --install-extension FILE.cyx` installs an extension without opening a window (repeat the flag for several).
   The performance gate now measures loading 100 installed extensions at startup (ceiling 5 ms).
 - `cyx`, the extension authors' command, ships beside Codeyard: `cyx new` (theme, snippets, keymap, language, language
@@ -96,6 +106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Separate SSH configuration files use separate control connections even when they define the same host alias.
 - Web Preview reads files through directory handles without following symlinks or reparse points,
   preventing pathname replacement races. Each file now needs one agent request, reducing SSH round trips;
   directory and session redirects preserve URL query parameters.

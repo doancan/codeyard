@@ -2,12 +2,147 @@
 //! tab, keep preview, copy path, compare two files, new folder,
 //! refresh tree, close folder.
 
+use std::sync::Arc;
+
 use gpui::{AppContext as _, Context, Focusable, Window};
+use host::Host;
 
 use super::{EditorOpt, Notice, OpenWithKind, OverlayKind, PickItem, PickSource, Picker, Settings, Workbench, editor, parent_of};
 use crate::ui;
 
 impl Workbench {
+    pub(super) fn open_file(&mut self, path: String, window: &mut Window, cx: &mut Context<Self>) {
+        let host = self.remote.host.clone();
+        self.open_file_on(host, path, window, cx);
+    }
+
+    pub(super) fn open_file_on(&mut self, host: Arc<dyn Host>, path: String, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_file_as(host, path, false, window, cx);
+    }
+
+    /// `preview`: preview tab. Opens in place of a non-dirty preview tab if there is one
+    /// (so tabs don't pile up while browsing).
+    pub(super) fn open_file_as(&mut self, host: Arc<dyn Host>, path: String, preview: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.chrome.panel_max = false;
+        let path = if host.is_remote() { path } else { ui::local_path(std::path::Path::new(&path)) };
+        // Restored files must apply their hot-exit backup before an explicit open reuses them.
+        if let Some(ws) = self.persist.pending_restore.take()
+            && self.restore_tabs_for_open(ws, Some((path.clone(), preview)), window, cx)
+        {
+            return;
+        }
+        if let Some(format) = crate::large::image_format(&path) {
+            return self.open_image(path, format, window, cx);
+        }
+        if self.active_editor().is_some_and(|e| e.read(cx).path != path) {
+            self.record_nav(cx);
+        }
+        // If open in the other group, the same document shows in this group too (no second copy is loaded).
+        if !self.tabs.editors.iter().any(|e| e.read(cx).path == path)
+            && let Some(ed) = self.tabs.groups.values().flat_map(|g| &g.editors).find(|e| e.read(cx).path == path && e.read(cx).uses_host(&host)).cloned()
+        {
+            ed.update(cx, |e, _| e.preview = e.preview && preview);
+            self.tabs.editors.push(ed);
+            let ix = self.tabs.editors.len() - 1;
+            self.activate(ix, window, cx);
+            return;
+        }
+        if let Some(ix) = self.tabs.editors.iter().position(|e| e.read(cx).path == path) {
+            if !preview {
+                self.tabs.editors[ix].update(cx, |e, _| e.preview = false);
+            }
+            self.activate(ix, window, cx);
+            return;
+        }
+        self.tabs.opening = Some(path.clone());
+        self.tabs.open_error = None;
+        let editor_host = host.clone();
+        let group_key = self.tabs.current_key();
+        let workspace_host = self.remote.host.clone();
+        let p = path.clone();
+        let fallback = cx.global::<Settings>().fallback_encoding;
+        let task = cx.background_executor().spawn(async move { editor::load(host.as_ref(), &p, fallback) });
+        cx.spawn_in(window, async move |this, cx| {
+            let result = task.await;
+            this.update_in(cx, |this, window, cx| {
+                if !this.tabs.contains_key(group_key)
+                    || !Arc::ptr_eq(&this.remote.host, &workspace_host)
+                    || this.tabs.group(group_key.id).and_then(|g| g.opening.as_deref()) != Some(path.as_str())
+                {
+                    return; // something else was opened meanwhile
+                }
+                let previous_group = this.tabs.current_key();
+                this.tabs.focus(group_key);
+                this.tabs.opening = None;
+                let shared = this.all_editors().into_iter().find(|ed| {
+                    let e = ed.read(cx);
+                    e.path == path && e.uses_host(&editor_host)
+                });
+                if let Some(shared) = shared {
+                    shared.update(cx, |e, _| e.preview &= preview);
+                    let index = this.tabs.editors.iter().position(|ed| *ed == shared).unwrap_or_else(|| {
+                        this.tabs.editors.push(shared);
+                        this.tabs.editors.len() - 1
+                    });
+                    this.activate(index, window, cx);
+                    if previous_group != group_key && this.tabs.contains_key(previous_group) {
+                        this.focus_group_key(previous_group, window, cx);
+                    }
+                    return;
+                }
+                match result {
+                    Ok(loaded) => {
+                        let reuse = preview
+                            .then(|| {
+                                this.tabs.editors.iter().position(|e| {
+                                    let e = e.read(cx);
+                                    e.preview && !e.is_dirty()
+                                })
+                            })
+                            .flatten();
+                        let ed = this.add_editor(editor_host, path, loaded, window, cx);
+                        ed.update(cx, |e, _| e.preview = preview);
+                        // Mixed line endings collapse to one style on save (can cause a big git diff): warn beforehand.
+                        let (mixed, name) = ed.read_with(cx, |e, _| (e.has_mixed_line_endings(), e.line_ending_name()));
+                        if mixed {
+                            this.notice = Some(Notice::Info(
+                                crate::i18n::tf(
+                                    "This file mixes line endings; saving writes all of them as {}, like its first line. Change it in the status bar.",
+                                    &[&name],
+                                )
+                                .into(),
+                            ));
+                        }
+                        let ix = match reuse {
+                            Some(old) => {
+                                // Take the preview tab's place (same position).
+                                let new = this.tabs.editors.pop().expect("just pushed");
+                                this.tabs.editors[old] = new;
+                                old
+                            }
+                            None => this.tabs.editors.len() - 1,
+                        };
+                        this.activate(ix, window, cx);
+                    }
+                    // Too big to read in one go: read-only view loaded in pieces.
+                    Err(editor::OpenError::Host(host::HostError::Op(proto::Error::TooLarge { .. }))) => {
+                        this.open_large(path, window, cx);
+                    }
+                    Err(e) => {
+                        this.tabs.open_error = Some((path, e.to_string().into()));
+                        cx.notify();
+                    }
+                }
+                if previous_group != group_key && this.tabs.contains_key(previous_group) {
+                    this.focus_group_key(previous_group, window, cx);
+                }
+            })
+            .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
     pub(super) fn close_all_editors(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let all: Vec<usize> = (0..self.tabs.editors.len()).collect();
         self.close_tabs(all, window, cx);
@@ -140,11 +275,10 @@ impl Workbench {
             return;
         }
         self.persist_session(cx);
+        self.invalidate_file_operation();
         self.shutdown_lsp(cx);
         self.persist.backed_up.clear();
-        self.tabs.editors.clear();
-        self.tabs.other = None;
-        self.tabs.focused_left = true;
+        self.tabs = Default::default();
         self.tabs.active = None;
         self.tabs.diff = None;
         self.tabs.large = None;

@@ -211,6 +211,7 @@ impl Workbench {
             Command::action("Bookmarks: Clear in File", editor::ClearBookmarks),
             Command::action("Preferences: Open Workspace Settings", OpenWorkspaceSettings),
             Command::action("File: Refresh Explorer", RefreshExplorer),
+            Command::action("File: Cancel File Operation", CancelFileOperation),
             Command::action("File: Copy Path of Active File", CopyActivePath),
             Command::action("File: Copy Relative Path of Active File", CopyActiveRelativePath),
             Command::action("File: Compare Active File With…", CompareActiveWith),
@@ -294,9 +295,15 @@ impl Workbench {
             Command::action("Output: Clear", ClearOutput),
             Command::action("View: Ports (SSH port forwarding)", ShowPorts),
             Command::action("View: Split Editor", SplitEditor),
+            Command::action("View: Split Editor Left", SplitEditorLeft),
+            Command::action("View: Split Editor Up", SplitEditorUp),
+            Command::action("View: Split Editor Down", SplitEditorDown),
+            Command::action("View: Close Empty Editor Group", CloseEmptyEditorGroup),
             Command::action("View: Move Editor into Other Group", MoveEditorToOtherGroup),
             Command::action("View: Focus Left Editor Group", FocusLeftGroup),
             Command::action("View: Focus Right Editor Group", FocusRightGroup),
+            Command::action("View: Focus Upper Editor Group", FocusUpGroup),
+            Command::action("View: Focus Lower Editor Group", FocusDownGroup),
             Command::action("View: Source Control", ShowScm),
             Command::action("View: Run and Debug", ShowRunAndDebug),
             Command::action("View: Testing", ShowTesting),
@@ -661,7 +668,6 @@ impl Workbench {
             (OverlayKind::Switcher(order), PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let ix = order[*index];
                 self.close_overlay(window, cx);
-                self.tabs.focused_left = true;
                 self.activate(ix, window, cx);
             }
             (OverlayKind::CommitFiles { root, commit, files }, PickerEvent::Confirm(Pick::Item { index, .. })) => {

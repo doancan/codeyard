@@ -44,12 +44,12 @@ impl Registry {
         let Some(Frame { id, body }) = proto::read_frame::<Request>(&mut input)? else { return Ok(()) };
         let Request::Hello { client_version, session } = body else {
             let err = Response::Error(Error::Other("expected a hello first".into()));
-            return proto::write_frame(&mut output, &Frame { id, body: err });
+            return proto::write_frame(&mut output, &Frame { id, body: &err });
         };
         let mut info = match hello(client_version, false) {
             Ok(Response::Hello(info)) => info,
-            Ok(other) => return proto::write_frame(&mut output, &Frame { id, body: other }),
-            Err(e) => return proto::write_frame(&mut output, &Frame { id, body: Response::Error(e) }),
+            Ok(other) => return proto::write_frame(&mut output, &Frame { id, body: &other }),
+            Err(e) => return proto::write_frame(&mut output, &Frame { id, body: &Response::Error(e) }),
         };
         let key = session.unwrap_or_else(new_session_id);
         let (sess, resumed) = {
@@ -407,12 +407,14 @@ mod tests {
             std::thread::sleep(Duration::from_millis(20));
         }
         let mut s = stream.expect("daemon must listen");
-        use std::os::unix::fs::PermissionsExt;
-        assert_eq!(std::fs::metadata(&sock).unwrap().permissions().mode() & 0o777, 0o600, "owner only");
         let hello = Request::Hello { client_version: proto::VERSION, session: None };
         proto::write_frame(&mut s, &Frame { id: 7, body: hello }).unwrap();
         let mut r = BufReader::new(s.try_clone().unwrap());
         let f: Frame<Response> = proto::read_frame(&mut r).unwrap().unwrap();
         assert!(matches!(f.body, Response::Hello(_)));
+        // bind() makes the socket connectable before the daemon applies its mode.
+        // The handshake is the readiness barrier; the parent is already owner-only.
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(std::fs::metadata(&sock).unwrap().permissions().mode() & 0o777, 0o600, "owner only");
     }
 }

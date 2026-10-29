@@ -94,6 +94,7 @@ pub struct ExplorerSnap {
     pub name: String,
     pub rows: Vec<RowSnap>,
     pub rows_total: usize,
+    pub focused: Option<u64>,
 }
 
 #[derive(Clone, PartialEq, Debug, Default)]
@@ -374,6 +375,7 @@ impl Snapshot {
             self.geometry.apply(explorer_id(k), &mut tree);
             tree.set_label(if self.explorers.len() > 1 { format!("{}: {}", t("Explorer"), ex.name) } else { t("Explorer").to_string() });
             tree.set_size_of_set(ex.rows_total);
+            tree.set_multiselectable();
             let mut row_ids = Vec::new();
             for (i, r) in ex.rows.iter().enumerate() {
                 let mut n = Node::new(Role::TreeItem);
@@ -607,7 +609,7 @@ impl Snapshot {
             FocusSnap::Editor if self.editor.is_some() => EDITOR,
             FocusSnap::Terminal if self.terminal.is_some() => TERMINAL,
             FocusSnap::ScmMessage if self.scm.as_ref().is_some_and(|s| s.view.root.is_some()) => SCM_MESSAGE,
-            FocusSnap::Explorer(k) if k < self.explorers.len() => self.explorers[k].rows.iter().find(|r| r.selected).map_or(explorer_id(k), |r| NodeId(r.id)),
+            FocusSnap::Explorer(k) if k < self.explorers.len() => self.explorers[k].focused.map_or(explorer_id(k), NodeId),
             _ => ROOT,
         };
         TreeUpdate { nodes, tree: Some(TreeInfo::new(ROOT)), tree_id: TreeId::ROOT, focus }
@@ -624,21 +626,21 @@ impl Workbench {
                 let tree = tree.read(cx);
                 let (rows, selected) = tree.a11y_rows();
                 let rows_total = rows.len();
+                let focused = selected.filter(|i| *i < MAX_ROWS).and_then(|i| rows.get(i)).map(|r| row_id(&r.0).0);
                 let rows = rows
                     .into_iter()
                     .take(MAX_ROWS)
-                    .enumerate()
-                    .map(|(i, (path, name, depth, is_dir, expanded))| RowSnap {
+                    .map(|(path, name, depth, is_dir, expanded)| RowSnap {
                         id: row_id(&path).0,
+                        selected: tree.path_is_selected(&path),
                         path,
                         name,
                         depth,
                         is_dir,
                         expanded,
-                        selected: selected == Some(i),
                     })
                     .collect();
-                ExplorerSnap { name: tree.root().map_or(String::new(), |r| crate::ui::file_name(r).to_string()), rows, rows_total }
+                ExplorerSnap { name: tree.root().map_or(String::new(), |r| crate::ui::file_name(r).to_string()), rows, rows_total, focused }
             })
             .collect();
         let tree = self.roots.primary.read(cx);
@@ -1101,6 +1103,7 @@ mod tests {
                     },
                 ],
                 rows_total: 2,
+                focused: Some(row_id("/d/src/main.rs").0),
             }],
             tabs: vec![TabSnap { name: "lib.rs".into(), dirty: true }, TabSnap { name: "main.rs".into(), dirty: false }],
             active_tab: Some(1),
@@ -1260,7 +1263,7 @@ mod tests {
     fn every_folder_of_the_workspace_has_its_own_tree() {
         let mut s = snap();
         let row = RowSnap { id: row_id("/e/x.rs").0, path: "/e/x.rs".into(), name: "x.rs".into(), depth: 0, is_dir: false, expanded: false, selected: true };
-        s.explorers.push(ExplorerSnap { name: "e".into(), rows: vec![row], rows_total: 1 });
+        s.explorers.push(ExplorerSnap { name: "e".into(), focused: Some(row.id), rows: vec![row], rows_total: 1 });
         s.focus = FocusSnap::Explorer(1);
         let tree = accesskit_consumer::Tree::new(s.to_tree(), true);
         let state = tree.state();

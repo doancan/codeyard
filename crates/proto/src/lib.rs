@@ -15,7 +15,7 @@ use std::io::{self, Read, Write};
 use serde::{Deserialize, Serialize};
 
 /// Compared in the handshake; on mismatch the agent is reinstalled.
-pub const VERSION: u32 = 12;
+pub const VERSION: u32 = 13;
 
 /// Max size of one frame. Larger files are read in chunks.
 pub const MAX_FRAME: usize = 64 * 1024 * 1024;
@@ -175,6 +175,12 @@ pub enum Request {
     ReadPreview {
         root: String,
         path: String,
+    },
+    /// Copy a file, directory or symlink without following links. Publishes atomically;
+    /// `AlreadyExists` if the destination is occupied. Failed copies leave no destination.
+    Copy {
+        from: String,
+        to: String,
     },
 }
 
@@ -379,11 +385,13 @@ pub enum Error {
     InvalidPattern(String),
     Unsupported(String),
     Other(String),
+    Cancelled,
 }
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Error::Cancelled => write!(f, "operation cancelled"),
             Error::NotFound(p) => write!(f, "not found: {p}"),
             Error::PermissionDenied(p) => write!(f, "permission denied: {p}"),
             Error::IsDirectory(p) => write!(f, "is a folder: {p}"),
@@ -585,6 +593,7 @@ mod tests {
             Request::ListFiles { root: "/".into(), limit: 10 },
             Request::Hello { client_version: VERSION, session: None },
             Request::ReadPreview { root: "/preview".into(), path: "assets/style.css".into() },
+            Request::Copy { from: "/source".into(), to: "/copy".into() },
         ];
         for body in requests {
             let mut b = Vec::new();
@@ -640,5 +649,15 @@ mod tests {
         assert!(err.to_string().contains("too large"), "{err}");
         assert_ne!(err.kind(), io::ErrorKind::UnexpectedEof);
         assert!(BIGGEST.with(|b| b.get()) < 1024 * 1024, "the header alone must not cause a big allocation");
+    }
+    #[test]
+    fn copy_appends_after_the_existing_preview_request() {
+        for (request, tag) in
+            [(Request::ReadPreview { root: "/root".into(), path: "file.txt".into() }, 29), (Request::Copy { from: "/from".into(), to: "/to".into() }, 30)]
+        {
+            let bytes = postcard::to_stdvec(&request).unwrap();
+            assert_eq!(bytes[0], tag);
+            assert_eq!(postcard::from_bytes::<Request>(&bytes).unwrap(), request);
+        }
     }
 }

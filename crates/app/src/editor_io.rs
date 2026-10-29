@@ -185,6 +185,22 @@ impl EditorView {
         state::View { line, column, scroll_line: self.display.line_at_row(row).0 }
     }
 
+    /// Snapshot a group's primary cursor and scroll without changing its input home.
+    pub fn view_for_slot(&mut self, slot: usize) -> state::View {
+        let home = self.slot;
+        self.enter(slot);
+        let view = self.view();
+        self.enter(home);
+        view
+    }
+
+    pub fn set_view_for_slot(&mut self, slot: usize, view: state::View) {
+        let home = self.slot;
+        self.enter(slot);
+        self.set_view(view);
+        self.enter(home);
+    }
+
     pub fn set_view(&mut self, v: state::View) {
         let line = v.line.min(self.buffer.len_lines().saturating_sub(1));
         let at = self.buffer.line_to_char(line) + v.column.min(self.buffer.line_len_chars(line));
