@@ -73,6 +73,13 @@ pub const CATALOG: &[Entry] = &[
         Kind::Choice(&["glyphs", "minimal", "codeyard", "badges", "colorful", "apple", "material", "none"]),
     ),
     e("workbench.fontFamily", crate::i18n::tr("UI font of the whole window (empty: system font)"), Kind::Text),
+    e(
+        "ui.scale",
+        crate::i18n::tr(
+            "Interface scale of every window, from 0.75 (75%) to 2 (200%); View: Zoom In and Zoom Out step through 75%, 80% and every 10% from 90% to 200%. Editor and terminal font sizes are scaled with it. Your own settings only; a folder cannot change it",
+        ),
+        Kind::Number { min: 0.75, max: 2. },
+    ),
     e("extensions.enabled", crate::i18n::tr("Load installed extensions (off: Codeyard starts as if none were installed)"), Kind::Bool),
     e(
         "extensions.autoUpdate",
@@ -316,6 +323,7 @@ pub fn current(s: &Settings, key: &str) -> Value {
         "http.runOn" => json!(s.http_run_on),
         "http.confirmRequests" => json!(s.http_confirm),
         "ui.language" => json!(s.ui_language),
+        "ui.scale" => settings::ui_scale_value(s.ui_scale),
         "update.check" => json!(s.update_check.as_str()),
         "spelling.enabled" => json!(s.spelling),
         "spelling.checkComments" => json!(s.spelling_comments),
@@ -409,7 +417,10 @@ pub fn parse_input(kind: Kind, text: &str) -> Result<Value, String> {
 
 /// Apply constraints specific to a setting before it is written from either settings UI.
 pub fn parse_setting_input(key: &str, kind: Kind, text: &str) -> Result<Value, String> {
-    let value = parse_input(kind, text)?;
+    let value = match parse_input(kind, text) {
+        Err(_) if key == "ui.scale" => return Err(crate::i18n::t(settings::UI_SCALE_ERROR).into()),
+        other => other?,
+    };
     if matches!(key, "webPreview.port" | "webPreview.reloadInterval") && value.as_f64().is_some_and(|n| n.fract() != 0.) {
         return Err(crate::i18n::tf("{}: expected a whole number", &[&key]));
     }
