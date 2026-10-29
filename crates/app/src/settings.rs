@@ -713,9 +713,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.number("terminal.lineHeight", 1., 2.) {
         s.terminal_line_height = v as f32;
     }
-    if let Some(v) = r.integer("terminal.persistentScrollback", 0, crate::terminal_session::MAX_HISTORY_LINES as u64) {
-        s.terminal_persistent_scrollback = v as usize;
-    }
+    s.terminal_persistent_scrollback = r.integer("terminal.persistentScrollback", 0, crate::terminal_session::MAX_HISTORY_LINES as u64).map_or(0, |v| v as _);
     if let Some(v) = r.number("terminal.scrollback", 0., crate::terminal::SCROLLBACK_MAX as f64) {
         s.terminal_scrollback = v as usize;
     }
