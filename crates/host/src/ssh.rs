@@ -210,12 +210,29 @@ fn private_dir(dir: &Path, owner: Option<u32>) -> std::io::Result<()> {
 }
 
 /// The control socket for `alias`: `<dir>/cm-<16 hex>`. ssh's own `%C` is 40 hex characters and cannot be shortened,
-/// so we hash the alias ourselves; the alias fixes host, user and port through ssh config. 64 bits
-/// make a collision between the handful of aliases a person has negligible, and one would only reuse the wrong
-/// connection, never expose a socket.
+/// so we hash the alias and explicit configuration identity ourselves. Separate configurations may
+/// assign the same alias to different hosts. Keep the legacy key when the default config is used.
 #[cfg(unix)]
 fn control_path(alias: &str) -> Option<PathBuf> {
-    Some(control_path_in(&control_dir()?, alias))
+    let config = std::env::var_os("CODEYARD_SSH_CONFIG").map(PathBuf::from);
+    let config = match config {
+        Some(path) if !path.is_absolute() => Some(std::env::current_dir().ok()?.join(path)),
+        path => path,
+    };
+    Some(control_path_for_config_in(&control_dir()?, alias, config.as_deref()))
+}
+
+#[cfg(unix)]
+fn control_path_for_config_in(dir: &Path, alias: &str, config: Option<&Path>) -> PathBuf {
+    use std::os::unix::ffi::OsStrExt;
+    let Some(config) = config else { return control_path_in(dir, alias) };
+    let mut hasher = Sha256::new();
+    hasher.update(b"codeyard-ssh-config\0");
+    hasher.update((alias.len() as u64).to_le_bytes());
+    hasher.update(alias.as_bytes());
+    hasher.update(config.as_os_str().as_bytes());
+    let hash: String = hasher.finalize().iter().take(8).map(|b| format!("{b:02x}")).collect();
+    dir.join(format!("cm-{hash}"))
 }
 
 #[cfg(unix)]
@@ -984,6 +1001,24 @@ Match host foo\n  User nope\n";
             assert!(dir == home.join(".cache").join(APP_DIR) || dir == short_base.join(format!("cy-{me}")), "{dir:?}");
             let _ = std::fs::remove_dir_all(&home);
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn separate_ssh_configurations_never_share_a_control_connection_for_the_same_alias() {
+        use std::os::unix::ffi::OsStrExt;
+        let dir = Path::new("/private-control");
+        let a = Path::new("/profile-a/ssh_config");
+        let b = Path::new("/profile-b/ssh_config");
+        let key = |config| control_path_for_config_in(dir, "codeyard-e2e", config);
+        assert_eq!(key(None), control_path_in(dir, "codeyard-e2e"));
+        assert_ne!(key(Some(a)), key(Some(b)));
+        assert_ne!(key(Some(a)), key(None));
+        assert_ne!(key(Some(a)), control_path_for_config_in(dir, "other", Some(a)));
+        let non_utf8_a = Path::new(std::ffi::OsStr::from_bytes(b"/config-\xfe"));
+        let non_utf8_b = Path::new(std::ffi::OsStr::from_bytes(b"/config-\xff"));
+        assert_ne!(key(Some(non_utf8_a)), key(Some(non_utf8_b)));
+        assert_eq!(key(Some(a)).file_name().unwrap().len(), SOCKET_NAME_LEN);
     }
 
     #[cfg(unix)]

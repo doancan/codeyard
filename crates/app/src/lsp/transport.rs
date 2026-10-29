@@ -157,7 +157,17 @@ pub struct Client {
 
 impl Client {
     /// Start the server and handshake. Error if the command is not found or fails to start.
-    pub fn start(host: Arc<dyn Host>, config: ServerConfig, root: &str, events: mpsc::Sender<ServerEvent>) -> Result<Arc<Client>, String> {
+    pub fn start(host: Arc<dyn Host>, mut config: ServerConfig, root: &str, events: mpsc::Sender<ServerEvent>) -> Result<Arc<Client>, String> {
+        if let Some(service) = config.managed
+            && let Ok(destination) = crate::language_service_install::destination(host.as_ref())
+            && let Ok(Some(installed)) = crate::language_service_install::discover(host.as_ref(), &destination)
+        {
+            let (node, mut args) = installed.command(service);
+            args.pop(); // Keep the default configuration's own arguments after the fixed entry script.
+            args.extend(config.args);
+            config.command = node;
+            config.args = args;
+        }
         Self::start_with(host, config, root, events, Duration::from_secs(60))
     }
 
@@ -231,7 +241,7 @@ impl Client {
     /// New `settings` for a running server: later `workspace/configuration` requests are answered from them, and the
     /// server is told with `workspace/didChangeConfiguration` (most servers then ask again).
     pub fn change_settings(&self, settings: Arc<Value>) {
-        *self.settings.lock().unwrap() = settings;
+        *self.settings.lock().unwrap() = self.config.managed.map_or_else(|| settings.clone(), |service| Arc::new(service.configuration(&settings)));
         self.notify_settings();
     }
 

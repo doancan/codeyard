@@ -809,7 +809,6 @@ Move “{0}” into “{1}”?	“{0}”, “{1}” içine taşınsın mı?
 An existing file with the same name is never overwritten.	Aynı adlı mevcut bir dosyanın üzerine hiçbir zaman yazılmaz.
 Move	Taşı
 Can't copy a folder into itself.	Bir klasör kendi içine kopyalanamaz.
-Could not paste: {}	Yapıştırılamadı: {}
 Move “{}” to the Trash?	“{}” Çöp Kutusu'na taşınsın mı?
 You can restore it from the Trash.	Çöp Kutusu'ndan geri yükleyebilirsiniz.
 Unsaved changes stay open in their tabs; saving recreates the file.	Kaydedilmemiş değişiklikler sekmelerinde açık kalır; kaydedince dosya yeniden oluşturulur.
@@ -1784,7 +1783,6 @@ Staging changes inside a symlink or submodule is not supported	Sembolik bağ ya 
 Staging changes needs a UTF-8 file (this one is stored in another encoding)	Değişiklikleri stage'e almak için UTF-8 bir dosya gerekir (bu dosya başka bir kodlamayla saklanıyor)
 Staging changes is not supported in files with old-Mac (CR only) line endings	Değişiklikleri stage'e almak, eski Mac (yalnızca CR) satır sonlarına sahip dosyalarda desteklenmiyor
 # ---- About dialog and macOS Full Disk Access prompt ----
-Version {}	Sürüm {}
 Copy Version	Sürümü Kopyala
 Allow file access	Dosya erişimine izin verin
 Without Full Disk Access, Desktop, Documents or external drives may look empty.	Tam Disk Erişimi olmadan Masaüstü, Belgeler ya da harici sürücüler boş görünebilir.
@@ -2739,6 +2737,53 @@ Resolve the file conflict before debugging.	Hata ayıklamadan önce dosya çakı
 This file was deleted on disk. Save it explicitly before debugging.	Bu dosya diskten silinmiş. Hata ayıklamadan önce dosyayı açıkça kaydedin.
 Files are still unsaved. Resolve editor errors, then start debugging again.	Dosyalar henüz kaydedilmedi. Düzenleyici hatalarını çözün, ardından hata ayıklamayı yeniden başlatın.
 Auto-detect project	Projeyi Otomatik Algıla
+Copy the files again on the current host before pasting.	Yapıştırmadan önce dosyaları geçerli makinede yeniden kopyalayın.
+Wait for the file operation to finish, or cancel it from the status bar.	Dosya işleminin bitmesini bekleyin veya durum çubuğundan iptal edin.
+Apply a file operation to {} entry?|Apply a file operation to {} entries?	{} öğeye dosya işlemi uygulansın mı?
+Destination: {0} on {1}. Existing files are never overwritten.	Hedef: {1} üzerindeki {0}. Mevcut dosyaların üzerine yazılmaz.
+The complete file list is available in Output.	Dosyaların tam listesi Çıktı bölümünde bulunur.
+File operation: {0} completed, {1} failed, {2} not processed.	Dosya işlemi: {0} tamamlandı, {1} başarısız, {2} işlenmedi.
+Files: {0}/{1}	Dosyalar: {0}/{1}
+Cancel file operation	Dosya işlemini iptal et
+File: Cancel File Operation	Dosya: Dosya İşlemini İptal Et
+{} entry|{} entries	{} öğe
+Can't move a folder into itself.	Bir klasör kendi içine taşınamaz.
+View: Split Editor Left	Görünüm: Düzenleyiciyi Sola Böl
+View: Split Editor Up	Görünüm: Düzenleyiciyi Yukarı Böl
+View: Split Editor Down	Görünüm: Düzenleyiciyi Aşağı Böl
+View: Close Empty Editor Group	Görünüm: Boş Düzenleyici Grubunu Kapat
+View: Focus Upper Editor Group	Görünüm: Üstteki Düzenleyici Grubuna Odaklan
+View: Focus Lower Editor Group	Görünüm: Alttaki Düzenleyici Grubuna Odaklan
+A window supports up to {} editor groups.	Bir pencerede en fazla {} düzenleyici grubu açılabilir.
+
+# Managed language services
+Languages: Manage Language Services	Diller: Dil Servislerini Yönet
+Language Services	Dil Servisleri
+Installation cancelled. The previous language services are unchanged.	Kurulum iptal edildi. Önceki dil servisleri korundu.
+The host stopped responding. Installation files were retained because a process may still be running. Reconnect and inspect the destination before retrying.	Sunucu yanıt vermiyor. Bir işlem hâlâ çalışıyor olabileceğinden kurulum dosyaları korundu. Yeniden denemeden önce bağlanıp hedefi inceleyin.
+The bundled service catalogue is invalid. Reinstall Codeyard before retrying.	Uygulamadaki servis kataloğu geçersiz. Yeniden denemeden önce Codeyard’ı yeniden kurun.
+A compatible Node.js runtime could not be used on this host. Install Node.js 22.22.2 or newer with npm, then retry.	Bu sunucuda uyumlu bir Node.js çalışma ortamı kullanılamadı. Node.js 22.22.2 veya üstünü npm ile kurup yeniden deneyin.
+The runtime checksum did not match. Nothing was activated. Check the connection and retry.	Çalışma ortamının sağlama toplamı eşleşmedi. Hiçbir kurulum etkinleştirilmedi. Bağlantıyı kontrol edip yeniden deneyin.
+The managed installation is incomplete or belongs to another catalogue. Reinstall the services to repair it.	Yönetilen kurulum eksik veya başka bir kataloğa ait. Onarmak için servisleri yeniden kurun.
+Language service setup failed: {}. Check the log and connection, then retry.	Dil servisi kurulumu başarısız: {}. Günlüğü ve bağlantıyı kontrol edip yeniden deneyin.
+Checking installed language services…	Kurulu dil servisleri denetleniyor…
+Managed language services are not installed on this host.	Bu sunucuda yönetilen dil servisleri kurulu değil.
+Language services are ready with Node.js {}.	Dil servisleri Node.js {} ile hazır.
+Stopping installation and cleaning temporary files…	Kurulum durduruluyor ve geçici dosyalar temizleniyor…
+Checking the host runtime…	Sunucunun çalışma ortamı denetleniyor…
+Downloading the pinned Node.js runtime…	Sabit sürümlü Node.js çalışma ortamı indiriliyor…
+Verifying the runtime checksum…	Çalışma ortamının sağlama toplamı doğrulanıyor…
+Installing the locked language service packages…	Sabitlenmiş dil servisi paketleri kuruluyor…
+Verifying installed service files…	Kurulan servis dosyaları doğrulanıyor…
+Activating the completed installation…	Tamamlanan kurulum etkinleştiriliyor…
+Reinstall Language Services	Dil Servislerini Yeniden Kur
+Install Language Services	Dil Servislerini Kur
+TypeScript {} · TypeScript Language Server {} · HTML/CSS {}	TypeScript {} · TypeScript Dil Sunucusu {} · HTML/CSS {}
+Install on {}	{} üzerinde kur
+Destination: {}	Hedef: {}
+Installs JavaScript/TypeScript, HTML and CSS services from the locked npm catalogue. A pinned Node.js runtime is downloaded from nodejs.org when a compatible runtime with npm is unavailable. Package scripts are disabled.	JavaScript/TypeScript, HTML ve CSS servislerini sabitlenmiş npm kataloğundan kurar. npm içeren uyumlu bir çalışma ortamı yoksa nodejs.org üzerinden sabit sürümlü Node.js indirilir. Paket betikleri çalıştırılmaz.
+Existing custom server commands are preserved. Services start only in trusted folders. Closing this tab cancels an installation that has not reached activation.	Mevcut özel sunucu komutları korunur. Servisler yalnızca güvenilen klasörlerde başlatılır. Bu sekmeyi kapatmak, etkinleştirme aşamasına ulaşmamış kurulumu iptal eder.
+Enter installs or retries. Escape cancels while installation is running.	Enter kurar veya yeniden dener. Kurulum sürerken Escape iptal eder.
 
 # ---- Web Preview options ----
 Preview port (0: choose a free port automatically)	Önizleme portu (0: boş bir portu otomatik seç)
@@ -2768,6 +2813,16 @@ unknown command “{}”	bilinmeyen komut “{}”
 “{}” ships inside the package; this version only starts language servers found on PATH	“{}” paketin içinde geliyor; bu sürüm yalnızca PATH üzerindeki dil sunucularını başlatır
 language “{0}” names grammar “{1}”, which Codeyard does not have	“{0}” dili “{1}” dil bilgisini istiyor, Codeyard’da bu yok
 keymap preset “{0}” is not installed (installed: {1})	“{0}” kısayol düzeni kurulu değil (kurulu olanlar: {1})
+Extension in development not loaded: {}	Geliştirilen eklenti yüklenemedi: {}
+DEV	GELİŞTİRME
+Extension in development: it reloads when you save a file in its folder	Geliştirilen eklenti: klasöründe bir dosyayı kaydettiğinizde yeniden yüklenir
+Extensions: Install cyx Command in PATH	Eklentiler: cyx Komutunu PATH’e Kur
+{} exists and is not a link; remove it first	{} var ve bir bağlantı değil; önce onu kaldırın
+cyx is not next to Codeyard in this build; install it with cargo install --path crates/cyx	Bu derlemede cyx Codeyard’ın yanında değil; cargo install --path crates/cyx ile kurun
+cyx is installed in {}: run cyx new theme my-theme in a terminal	cyx {} içine kuruldu: bir terminalde cyx new theme my-theme çalıştırın
+cyx is installed in {}; add that folder to PATH in your shell profile	cyx {} içine kuruldu; bu klasörü kabuk profilinizde PATH’e ekleyin
+Could not install cyx: {}	cyx kurulamadı: {}
+cyx is in {}; add that folder to PATH to use it in a terminal	cyx {} içinde; terminalde kullanmak için bu klasörü PATH’e ekleyin
 
 # ---- Extensions view ----
 Extensions	Eklentiler
@@ -2856,5 +2911,17 @@ Client protocol	İstemci protokolü
 Remote connection	Uzak bağlantı
 Remote agent protocol	Uzak ajan protokolü
 Version	Sürüm
-Platform	Platform
+Platform	Çalışma platformu
 Copied	Kopyalandı
+Extensions: New Extension…	Eklentiler: Yeni Eklenti…
+Create	Oluştur
+Name of the new extension, like my-theme	Yeni eklentinin adı, örneğin my-theme
+Color theme	Renk teması
+Snippets	Snippet’ler
+Keymap preset	Kısayol düzeni
+Language	Dil
+Language server	Dil sunucusu
+What kind of extension?	Ne tür bir eklenti?
+Create Here	Buraya Oluştur
+{} is loaded as an extension in development: save a file to reload it	{} geliştirilen eklenti olarak yüklendi: yeniden yüklemek için bir dosyayı kaydedin
+Could not create the extension: {}	Eklenti oluşturulamadı: {}

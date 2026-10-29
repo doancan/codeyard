@@ -5,6 +5,7 @@
 
 pub mod bigfile;
 pub mod daemon;
+mod fileops;
 pub mod hashtree;
 mod preview;
 pub mod proc;
@@ -53,6 +54,7 @@ pub fn handle(req: Request) -> Response {
             fs::create_dir_all(&p).map(|_| Response::Done).map_err(|e| map_err(&p, e))
         }
         Request::Rename { from, to } => rename(&expand(&from), &expand(&to)).map(|_| Response::Done),
+        Request::Copy { from, to } => fileops::copy(&expand(&from), &expand(&to)).map(|_| Response::Done),
         Request::Delete { path } => delete(&expand(&path)).map(|_| Response::Done),
         // Streaming requests are handled inside `serve`; here only one-shot responses.
         Request::Search(_)
@@ -104,6 +106,7 @@ type Out = Arc<Link>;
 
 impl Link {
     /// A response (id ≠ 0) or an event (id 0). Events are buffered while disconnected.
+    /// Borrowed response frames share the codec used for replay and daemon handshakes.
     fn send(&self, id: u32, body: Response) -> io::Result<()> {
         let mut st = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(w) = st.writer.as_mut() {
@@ -114,7 +117,7 @@ impl Link {
                 Err(e) if e.kind() == io::ErrorKind::InvalidData => {
                     if id != 0 {
                         let note = Response::Error(Error::Other(format!("the answer is too large to send ({e})")));
-                        if proto::write_frame(w, &Frame { id, body: note }).is_err() {
+                        if proto::write_frame(w, &Frame { id, body: &note }).is_err() {
                             st.writer = None;
                         }
                     }
@@ -154,17 +157,17 @@ impl Link {
         let mut st = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let mut w = BufWriter::new(writer);
         if let Some(hello) = hello {
-            proto::write_frame(&mut w, &hello)?;
+            proto::write_frame(&mut w, &Frame { id: hello.id, body: &hello.body })?;
         }
         // Clear only after a successful write: one that breaks midway must not lose buffered events (resent on next connect).
         for (pty, data) in &st.backlog {
-            proto::write_frame(&mut w, &Frame { id: 0, body: Response::PtyOutput { pty: *pty, data: data.clone() } })?;
+            proto::write_frame(&mut w, &Frame { id: 0, body: &Response::PtyOutput { pty: *pty, data: data.clone() } })?;
         }
         for (pty, code) in &st.exits {
-            proto::write_frame(&mut w, &Frame { id: 0, body: Response::PtyExit { pty: *pty, code: *code } })?;
+            proto::write_frame(&mut w, &Frame { id: 0, body: &Response::PtyExit { pty: *pty, code: *code } })?;
         }
         if !st.changes.is_empty() {
-            proto::write_frame(&mut w, &Frame { id: 0, body: Response::FsChanged(st.changes.clone()) })?;
+            proto::write_frame(&mut w, &Frame { id: 0, body: &Response::FsChanged(st.changes.clone()) })?;
         }
         st.backlog.clear();
         st.exits.clear();
@@ -353,6 +356,17 @@ impl Session {
         // id 0: the client is not waiting for a response.
         let reply = |body: Response| if id == 0 { Ok(()) } else { send(&self.out, id, body) };
         match body {
+            Request::Copy { from, to } => {
+                let flag = Arc::new(AtomicBool::new(false));
+                self.cancels.locked().insert(id, flag.clone());
+                let (out, cancels) = (self.out.clone(), self.cancels.clone());
+                self.pool.run(move || {
+                    let result = fileops::copy_cancellable(&expand(&from), &expand(&to), &flag);
+                    cancels.locked().remove(&id);
+                    let _ = send(&out, id, result.map_or_else(Response::Error, |()| Response::Done));
+                });
+                Ok(())
+            }
             Request::Search(q) => {
                 let flag = Arc::new(AtomicBool::new(false));
                 self.cancels.locked().insert(id, flag.clone());
@@ -463,7 +477,20 @@ impl Session {
                             while let Ok(n @ 1..) = reader.read(&mut buf) {
                                 let _ = send(&out, 0, Response::ProcOutput { proc: pid, data: buf[..n].to_vec() });
                             }
-                            let code = procs.locked().remove(&pid).and_then(|(_, mut p)| p.wait());
+                            let code = loop {
+                                let mut processes = procs.locked();
+                                let Some((_, process)) = processes.get_mut(&pid) else { break None };
+                                match process.try_wait() {
+                                    Ok(None) => {
+                                        drop(processes);
+                                        std::thread::sleep(std::time::Duration::from_millis(10));
+                                    }
+                                    result => {
+                                        processes.remove(&pid);
+                                        break result.ok().flatten();
+                                    }
+                                }
+                            };
                             let _ = send(&out, 0, Response::ProcExit { proc: pid, code });
                         });
                         Ok(())
@@ -695,37 +722,7 @@ fn create_file(path: &Path) -> Result<(), Error> {
 }
 
 fn rename(from: &Path, to: &Path) -> Result<(), Error> {
-    // fs::rename overwrites the target; we don't. On case-insensitive disks
-    // (macOS) "readme" → "README" finds the target as the same file: allow it in that case.
-    if fs::symlink_metadata(to).is_ok() && !same_file(to, from) {
-        return Err(Error::AlreadyExists(to.display().to_string()));
-    }
-    fs::rename(from, to).map_err(|e| map_err(from, e))
-}
-
-#[cfg(unix)]
-fn same_file(target: &Path, from: &Path) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    fs::symlink_metadata(target).is_ok_and(|target| fs::symlink_metadata(from).is_ok_and(|m| m.dev() == target.dev() && m.ino() == target.ino()))
-}
-
-#[cfg(windows)]
-fn same_file(target: &Path, from: &Path) -> bool {
-    use std::os::windows::{fs::OpenOptionsExt, io::AsRawHandle};
-    use windows_sys::Win32::Storage::FileSystem::{
-        BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, GetFileInformationByHandle,
-    };
-    let identity = |path: &Path| -> Option<(u32, u32, u32)> {
-        let file = fs::OpenOptions::new().read(true).custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT).open(path).ok()?;
-        // SAFETY: BY_HANDLE_FILE_INFORMATION is plain integers (FILETIMEs included), so all-zero is a valid value.
-        let mut info: BY_HANDLE_FILE_INFORMATION = unsafe { std::mem::zeroed() };
-        // SAFETY: `file` keeps the handle open for the call, and `info` is a valid, exclusively borrowed output struct.
-        if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0 {
-            return None;
-        }
-        Some((info.dwVolumeSerialNumber, info.nFileIndexHigh, info.nFileIndexLow))
-    };
-    identity(target).is_some_and(|id| identity(from) == Some(id))
+    fileops::rename_exclusive(from, to).map_err(|e| map_err(to, e))
 }
 
 /// Relative paths in the protocol use '/' on every host (matching globs and Git).

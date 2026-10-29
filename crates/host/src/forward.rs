@@ -200,7 +200,7 @@ pub(crate) fn local_spec(alias: &str, spec: &str, cancel: bool) -> Result<(), Fo
     #[cfg(windows)]
     {
         guard(alias, false)?;
-        return if cancel { windows::cancel(alias, spec) } else { windows::open(alias, spec, 0) };
+        if cancel { windows::cancel(alias, spec) } else { windows::open(alias, spec, 0) }
     }
     #[cfg(not(windows))]
     mux(alias, "-L", spec, cancel, 0)

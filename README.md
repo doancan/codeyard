@@ -95,7 +95,7 @@ in-app port forwarding is unavailable there (use `ssh -L` / `ssh -R` in a termin
 ## Quick start
 
 ```
-codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel NAME] [--no-extensions] [--version]
+codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel NAME] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx] [--version]
 ```
 
 - `⇧⌘P` opens the command palette, `⌘P` goes to a file, `⌃R` opens the workspace switcher (recent folders, SSH hosts).

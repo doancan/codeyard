@@ -43,6 +43,8 @@ impl Workbench {
             Command::action("Search: Structural Replace…", crate::search::StructuralReplace),
             Command::action("View: Switch Editor…", SwitchEditor),
             Command::action("View: Toggle Zen Mode", ToggleZenMode),
+            Command::action("Extensions: Install cyx Command in PATH", InstallCyx),
+            Command::action("Extensions: New Extension…", NewExtension),
             Command::action("View: Toggle Full Screen", ToggleFullScreen),
             Command::action("Files: Open Folder…", OpenFolder),
             Command::action("Editor: Save", editor::Save),
@@ -209,6 +211,7 @@ impl Workbench {
             Command::action("Bookmarks: Clear in File", editor::ClearBookmarks),
             Command::action("Preferences: Open Workspace Settings", OpenWorkspaceSettings),
             Command::action("File: Refresh Explorer", RefreshExplorer),
+            Command::action("File: Cancel File Operation", CancelFileOperation),
             Command::action("File: Copy Path of Active File", CopyActivePath),
             Command::action("File: Copy Relative Path of Active File", CopyActiveRelativePath),
             Command::action("File: Compare Active File With…", CompareActiveWith),
@@ -292,9 +295,15 @@ impl Workbench {
             Command::action("Output: Clear", ClearOutput),
             Command::action("View: Ports (SSH port forwarding)", ShowPorts),
             Command::action("View: Split Editor", SplitEditor),
+            Command::action("View: Split Editor Left", SplitEditorLeft),
+            Command::action("View: Split Editor Up", SplitEditorUp),
+            Command::action("View: Split Editor Down", SplitEditorDown),
+            Command::action("View: Close Empty Editor Group", CloseEmptyEditorGroup),
             Command::action("View: Move Editor into Other Group", MoveEditorToOtherGroup),
             Command::action("View: Focus Left Editor Group", FocusLeftGroup),
             Command::action("View: Focus Right Editor Group", FocusRightGroup),
+            Command::action("View: Focus Upper Editor Group", FocusUpGroup),
+            Command::action("View: Focus Lower Editor Group", FocusDownGroup),
             Command::action("View: Source Control", ShowScm),
             Command::action("View: Run and Debug", ShowRunAndDebug),
             Command::action("View: Testing", ShowTesting),
@@ -355,6 +364,7 @@ impl Workbench {
             Command::action("Git: Commit & Push", GitCommitAndPush),
             Command::action("Git: Commit & Sync", GitCommitAndSync),
             Command::action("Developer: Restart Language Servers", RestartLanguageServers),
+            Command::action("Languages: Manage Language Services", ManageLanguageServices),
             Command::action("Git: View File History", GitFileHistory),
             Command::action("Git: Blame Line", GitBlameLine),
             Command::action("Git: Commit (Amend)", GitCommitAmend),
@@ -579,6 +589,21 @@ impl Workbench {
                 crate::icon_theme::set(crate::icon_theme::ALL[*index]);
                 cx.notify();
             }
+            (OverlayKind::NewExtensionKind, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let kind = super::cyx_glue::KINDS[*index];
+                self.close_overlay(window, cx);
+                self.show_input(
+                    InputPurpose::NewExtension { kind },
+                    crate::i18n::t("Create"),
+                    crate::i18n::t("Name of the new extension, like my-theme"),
+                    "",
+                    window,
+                    cx,
+                );
+            }
+            (OverlayKind::NewExtensionKind, PickerEvent::Dismiss) => {
+                self.close_overlay(window, cx);
+            }
             (OverlayKind::IconTheme { .. }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let t = crate::icon_theme::ALL[*index];
                 self.close_overlay(window, cx);
@@ -644,7 +669,6 @@ impl Workbench {
             (OverlayKind::Switcher(order), PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let ix = order[*index];
                 self.close_overlay(window, cx);
-                self.tabs.focused_left = true;
                 self.activate(ix, window, cx);
             }
             (OverlayKind::CommitFiles { root, commit, files }, PickerEvent::Confirm(Pick::Item { index, .. })) => {

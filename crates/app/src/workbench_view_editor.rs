@@ -4,101 +4,258 @@ use super::*;
 
 pub(super) const WINDOWS_TITLEBAR_H: f32 = 34.;
 
+fn grid_minimum(node: &crate::editor_layout::Node) -> gpui::Size<gpui::Pixels> {
+    use crate::editor_layout::{Axis, Node};
+    match node {
+        Node::Group { .. } => gpui::size(px(160.), px(96.)),
+        Node::Split { axis, first, second, .. } => {
+            let (a, b) = (grid_minimum(first), grid_minimum(second));
+            match axis {
+                Axis::Horizontal => gpui::size(a.width + b.width + px(layout::SASH), a.height.max(b.height)),
+                Axis::Vertical => gpui::size(a.width.max(b.width), a.height + b.height + px(layout::SASH)),
+            }
+        }
+    }
+}
+
+enum GridPlacement {
+    Pane(u8, gpui::Bounds<gpui::Pixels>),
+    Sash(u8, gpui::Bounds<gpui::Pixels>, gpui::Bounds<gpui::Pixels>),
+}
+
+fn grid_placements(node: &crate::editor_layout::Node, bounds: gpui::Bounds<gpui::Pixels>, out: &mut Vec<GridPlacement>) {
+    use crate::editor_layout::{Axis, Node};
+    let Node::Split { id, axis, ratio, first, second } = node else {
+        let Node::Group { id } = node else { unreachable!() };
+        out.push(GridPlacement::Pane(*id, bounds));
+        return;
+    };
+    let (a, b) = (grid_minimum(first), grid_minimum(second));
+    let sash = px(layout::SASH);
+    let (first_bounds, sash_bounds, second_bounds) = match axis {
+        Axis::Horizontal => {
+            let available = (bounds.size.width - sash).max(a.width + b.width);
+            let width = (available * *ratio).clamp(a.width, (available - b.width).max(a.width));
+            (
+                gpui::Bounds::new(bounds.origin, gpui::size(width, bounds.size.height)),
+                gpui::Bounds::new(gpui::point(bounds.left() + width, bounds.top()), gpui::size(sash, bounds.size.height)),
+                gpui::Bounds::new(gpui::point(bounds.left() + width + sash, bounds.top()), gpui::size(available - width, bounds.size.height)),
+            )
+        }
+        Axis::Vertical => {
+            let available = (bounds.size.height - sash).max(a.height + b.height);
+            let height = (available * *ratio).clamp(a.height, (available - b.height).max(a.height));
+            (
+                gpui::Bounds::new(bounds.origin, gpui::size(bounds.size.width, height)),
+                gpui::Bounds::new(gpui::point(bounds.left(), bounds.top() + height), gpui::size(bounds.size.width, sash)),
+                gpui::Bounds::new(gpui::point(bounds.left(), bounds.top() + height + sash), gpui::size(bounds.size.width, available - height)),
+            )
+        }
+    };
+    grid_placements(first, first_bounds, out);
+    out.push(GridPlacement::Sash(*id, sash_bounds, bounds));
+    grid_placements(second, second_bounds, out);
+}
+
 impl Workbench {
-    /// Editor area: a single group or two side by side (with a draggable divider between).
+    /// Render every group once inside the validated split tree.
     pub(super) fn editor_area(&self, main: AnyElement, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
-        let hint = || center(p).text_color(c(p.text_muted)).child(crate::i18n::t("Empty group: ⌘P opens a file here")).into_any_element();
-        // When split, a short hint in an empty group instead of the welcome screen.
-        let main =
-            if self.tabs.other.is_some() && self.tabs.editors.is_empty() && self.tabs.diff.is_none() && self.tabs.open_error.is_none() { hint() } else { main };
-        let focused_pane = div()
-            .flex_1()
-            .min_w_0()
-            .min_h_0()
-            .flex()
-            .flex_col()
-            .when(
-                (!self.tabs.editors.is_empty() && cx.global::<Settings>().show_tabs)
-                    || self.tabs.diff.is_some()
-                    || self.tabs.large.is_some()
-                    || self.tabs.page.is_some(),
-                |d| d.child(self.tabs(true, p, cx)),
-            )
-            .children(
-                (!self.tabs.diff_active && !self.tabs.large_active && !self.tabs.page_active && cx.global::<Settings>().breadcrumbs)
-                    .then(|| self.breadcrumbs(p, cx))
-                    .flatten(),
-            )
-            // --- data ---
-            .children(self.data_query_bar(p, cx))
-            .child(div().relative().flex_1().min_h_0().child(main).when(
-                self.active_editor().is_some() && !self.tabs.diff_active && !self.tabs.large_active && !self.tabs.page_active && self.tabs.open_error.is_none(),
-                |d| d.child(a11y::landmark(a11y::Landmark::Editor, cx)),
-            ));
-        let Some(g) = &self.tabs.other else { return focused_pane.into_any_element() };
-        let other_main = match g.active.and_then(|a| g.editors.get(a)) {
-            Some(ed) => editor::slot_view(ed.clone(), 1 - self.focused_slot()).into_any_element(),
-            None => hint(),
-        };
-        let other_pane = div()
-            .id("other-group")
-            .flex_1()
-            .min_w_0()
-            .min_h_0()
-            .flex()
-            .flex_col()
-            .when(!g.editors.is_empty(), |d| d.child(self.tabs(false, p, cx)))
-            .child(div().flex_1().min_h_0().child(other_main))
-            // Clicking inside moves focus to this group (the editor's own click is handled too).
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(|this, _, _, cx| {
-                    this.swap_groups();
-                    cx.notify();
-                }),
-            );
-        // Left/right: drawn on whichever side the focused group is; the focus frame is a thin accent line.
-        let ratio = self.chrome.split_ratio;
-        let (left, right): (AnyElement, AnyElement) = if self.tabs.focused_left {
-            (focused_pane.into_any_element(), other_pane.into_any_element())
-        } else {
-            (other_pane.into_any_element(), focused_pane.into_any_element())
-        };
-        let resizing = self.chrome.resizing_split;
-        div()
-            .id("editor-groups")
-            .flex_1()
-            .min_h_0()
-            .flex()
-            .child(div().flex_basis(gpui::relative(ratio)).flex_shrink().min_w_0().flex().child(left))
-            .child(
-                div()
-                    .id("group-sash")
-                    .w(px(layout::SASH))
-                    .flex_none()
-                    .h_full()
-                    .bg(c(p.border))
-                    .cursor(gpui::CursorStyle::ResizeLeftRight)
-                    .child(crate::ui_sash::highlight(p.accent, resizing))
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|this, _, _, cx| {
-                            cx.stop_propagation();
-                            this.chrome.resizing_split = true;
+        let mut panes = std::collections::BTreeMap::new();
+        let mut focused_main = Some(main);
+        for id in self.tabs.layout.groups() {
+            let key = self.tabs.key(id).expect("layout group has state");
+            let state = self.tabs.group(id).expect("layout group has state");
+            let focused = id == self.tabs.layout.focused();
+            let hint = || center(p).text_color(c(p.text_muted)).child(crate::i18n::t("Empty group: ⌘P opens a file here")).into_any_element();
+            let body = if focused {
+                if self.tabs.layout.groups().len() > 1 && state.is_empty() { hint() } else { focused_main.take().expect("one focused group") }
+            } else if let Some((path, message)) = &state.open_error {
+                center(p).child(ui::file_name(path).to_string()).child(message.clone()).into_any_element()
+            } else if state.page_active {
+                match state.page.clone() {
+                    Some(Page::About(view)) => view.into_any_element(),
+                    Some(Page::Settings(view)) => view.into_any_element(),
+                    Some(Page::Markdown(view)) => view.into_any_element(),
+                    Some(Page::Shortcuts(view)) => view.into_any_element(),
+                    Some(Page::LanguageServices(view)) => view.into_any_element(),
+                    Some(Page::Merge(view)) => view.into_any_element(),
+                    Some(Page::Compare(view)) => view.into_any_element(),
+                    Some(Page::Welcome) => self.welcome_view(p, cx).into_any_element(),
+                    Some(Page::Containers) => self.container_dashboard_view(p, cx).into_any_element(),
+                    Some(Page::Extension) => self.extension_page(p, cx),
+                    None => hint(),
+                }
+            } else if state.diff_active {
+                state.diff.clone().map(|v| v.into_any_element()).unwrap_or_else(hint)
+            } else if state.large_active {
+                state.large.clone().map(|v| v.into_any_element()).unwrap_or_else(hint)
+            } else {
+                state.active.and_then(|a| state.editors.get(a)).map(|ed| editor::slot_view(ed.clone(), usize::from(id)).into_any_element()).unwrap_or_else(hint)
+            };
+            let pane = div()
+                .id(("editor-group", usize::from(id)))
+                .debug_selector(move || format!("editor-group-{id}"))
+                .relative()
+                .size_full()
+                .min_w_0()
+                .min_h_0()
+                .flex()
+                .flex_col()
+                .overflow_hidden()
+                .when(
+                    (!state.editors.is_empty() && cx.global::<Settings>().show_tabs) || state.diff.is_some() || state.large.is_some() || state.page.is_some(),
+                    |d| d.child(self.tabs(key, p, cx)),
+                )
+                .when(focused, |d| {
+                    d.children(
+                        (!state.diff_active && !state.large_active && !state.page_active && cx.global::<Settings>().breadcrumbs)
+                            .then(|| self.breadcrumbs(p, cx))
+                            .flatten(),
+                    )
+                    .children(self.data_query_bar(p, cx))
+                })
+                .child(div().relative().flex_1().min_w_0().min_h_0().child(body).when(
+                    focused && self.active_editor().is_some() && !state.diff_active && !state.large_active && !state.page_active && state.open_error.is_none(),
+                    |d| d.child(a11y::landmark(a11y::Landmark::Editor, cx)),
+                ))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, _, _, cx| {
+                        if this.tabs.contains_key(key) && key != this.tabs.current_key() {
+                            this.tabs.focus(key);
+                            this.sync_slots(cx);
+                            this.refresh_active_flags(cx);
                             cx.notify();
-                        }),
-                    ),
-            )
-            .child(div().flex_basis(gpui::relative(1. - ratio)).flex_shrink().min_w_0().flex().child(right))
-            .into_any_element()
+                        }
+                    }),
+                );
+            panes.insert(id, pane.into_any_element());
+        }
+        self.editor_grid(panes, p, cx)
     }
 
-    /// A group's tab bar. `focused`: whether it is the focused group (if not, clicks
-    /// give focus to that group first; indices are relative to that group's list).
-    pub(super) fn tabs(&self, focused: bool, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
-        let (editors, active_ix): (&[Entity<EditorView>], Option<usize>) =
-            if focused { (&self.tabs.editors, self.tabs.active) } else { self.tabs.other.as_ref().map_or((&[][..], None), |g| (&g.editors[..], g.active)) };
-        let diff_here = focused && (self.tabs.diff_active || self.tabs.large_active || self.tabs.page_active);
+    /// Each pane has one independent layout root. Deep flex nesting otherwise
+    /// repeatedly measures the same subtrees while resolving intrinsic sizes.
+    fn editor_grid(&self, mut panes: std::collections::BTreeMap<u8, AnyElement>, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
+        use crate::editor_layout::{Axis, Node};
+        fn collect(node: &Node, out: &mut Vec<(u8, Axis)>) {
+            if let Node::Split { id, axis, first, second, .. } = node {
+                out.push((*id, *axis));
+                collect(first, out);
+                collect(second, out);
+            }
+        }
+        let root = self.tabs.layout.root().clone();
+        let minimum = grid_minimum(&root);
+        let mut splits = Vec::new();
+        collect(&root, &mut splits);
+        let anchor = self.tabs.current_key();
+        let revision = self.tabs.revision;
+        let mut sashes = std::collections::BTreeMap::new();
+        for (id, axis) in splits {
+            let bounds = std::rc::Rc::new(std::cell::Cell::new(gpui::Bounds::<gpui::Pixels>::default()));
+            let captured = bounds.clone();
+            let horizontal = axis == Axis::Horizontal;
+            let resizing = self.tabs.resizing.is_some_and(|r| r.split == id);
+            let sash = div()
+                .id(("group-sash", usize::from(id)))
+                .debug_selector(move || format!("group-sash-{id}"))
+                .size_full()
+                .bg(c(p.border))
+                .cursor(if horizontal { gpui::CursorStyle::ResizeLeftRight } else { gpui::CursorStyle::ResizeUpDown })
+                .child(crate::ui_sash::highlight(p.accent, resizing))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        if !this.tabs.contains_key(anchor) || this.tabs.revision != revision {
+                            return;
+                        }
+                        this.chrome.resizing_split = true;
+                        this.tabs.resizing = Some(GroupResize { split: id, axis, bounds: captured.get(), anchor, revision });
+                        cx.notify();
+                    }),
+                )
+                .into_any_element();
+            sashes.insert(id, (sash, bounds));
+        }
+        let reveal = self.tabs.reveal_group.clone();
+        let scroll = self.tabs.grid_scroll.clone();
+        let previous_viewport = self.tabs.grid_viewport.clone();
+        let repaint = cx.entity().downgrade();
+        let grid = gpui::canvas(
+            move |bounds, window, cx| {
+                let mut placements = Vec::new();
+                grid_placements(&root, bounds, &mut placements);
+                let viewport = scroll.bounds();
+                if previous_viewport.replace(viewport.size) != viewport.size {
+                    reveal.set(Some(anchor));
+                }
+                if reveal.get() == Some(anchor)
+                    && let Some(bounds) = placements.iter().find_map(|part| match part {
+                        GridPlacement::Pane(id, bounds) if *id == anchor.id => Some(*bounds),
+                        _ => None,
+                    })
+                {
+                    let delta = |start, end, near, far| {
+                        if start < near || end - start > far - near {
+                            near - start
+                        } else if end > far {
+                            far - end
+                        } else {
+                            px(0.)
+                        }
+                    };
+                    let previous = scroll.offset();
+                    let maximum = scroll.max_offset();
+                    let next = gpui::point(
+                        (previous.x + delta(bounds.left(), bounds.right(), viewport.left(), viewport.right())).clamp(-maximum.width, px(0.)),
+                        (previous.y + delta(bounds.top(), bounds.bottom(), viewport.top(), viewport.bottom())).clamp(-maximum.height, px(0.)),
+                    );
+                    reveal.set(None);
+                    if next != previous {
+                        scroll.set_offset(next);
+                        window.defer(cx, move |_, cx| {
+                            repaint.update(cx, |_, cx| cx.notify()).ok();
+                        });
+                    }
+                }
+                let mut elements = Vec::with_capacity(placements.len());
+                for placement in placements {
+                    let (mut element, bounds) = match placement {
+                        GridPlacement::Pane(id, bounds) => (panes.remove(&id).expect("one pane per group"), bounds),
+                        GridPlacement::Sash(id, bounds, parent) => {
+                            let (element, measured) = sashes.remove(&id).expect("one sash per split");
+                            measured.set(parent);
+                            (element, bounds)
+                        }
+                    };
+                    let clipped = bounds.intersect(&viewport);
+                    if clipped.size.width <= px(0.) || clipped.size.height <= px(0.) {
+                        continue;
+                    }
+                    element.prepaint_as_root(bounds.origin, bounds.size.map(gpui::AvailableSpace::Definite), window, cx);
+                    elements.push(element);
+                }
+                elements
+            },
+            |_, mut elements, window, cx| {
+                for element in &mut elements {
+                    element.paint(window, cx);
+                }
+            },
+        )
+        .size_full()
+        .min_w(minimum.width)
+        .min_h(minimum.height);
+        div().id("editor-grid-viewport").flex_1().min_w_0().min_h_0().overflow_scroll().track_scroll(&self.tabs.grid_scroll).child(grid).into_any_element()
+    }
+
+    /// Stable group identity follows every tab action, including events from a previous frame.
+    pub(super) fn tabs(&self, key: GroupKey, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
+        let state = self.tabs.group(key.id).expect("layout group has state");
+        let (editors, active_ix) = (&state.editors, state.active);
+        let diff_here = state.diff_active || state.large_active || state.page_active;
         // Files with the same name: folder name next to it (like VS Code "main.rs  a").
         let root = self.root(cx).map(|r| format!("{}/", r.trim_end_matches('/')));
         let rels: Vec<String> = editors
@@ -114,15 +271,15 @@ impl Workbench {
             (st.tab_icons, st.tab_close.clone())
         };
         div()
-            .id(if focused { "tabs" } else { "tabs-other" })
+            .id(SharedString::from(format!("tabs-{}", key.id)))
             .h(px(layout::TABBAR_H))
             .flex_none()
             .flex()
             .overflow_x_scroll()
-            .when(focused, |d| d.track_scroll(&self.tabs.tab_scroll))
+            .track_scroll(&state.tab_scroll)
             // Dropping on the empty area right of the tabs: goes to the end.
             .on_drop(cx.listener(move |this, d: &DraggedTab, window, cx| {
-                this.drop_tab(d.editor.clone(), d.from_focused, focused, None, window, cx);
+                this.drop_tab(d.editor.clone(), d.from, key, None, window, cx);
             }))
             .bg(c(p.surface))
             .border_b_1()
@@ -132,18 +289,18 @@ impl Workbench {
                 let active = active_ix == Some(ix) && !diff_here;
                 let dirty = ed.is_dirty();
                 let (preview, pinned) = (ed.preview, ed.pinned);
-                let group: SharedString = format!("tabg-{focused}-{ix}").into();
+                let group: SharedString = format!("tabg-{}-{ix}", key.id).into();
                 let rel = rels[ix].clone();
                 let hint = hints[ix].clone();
-                let dragged = DraggedTab { editor: editors[ix].clone(), from_focused: focused, name: ed.name.clone() };
+                let dragged = DraggedTab { editor: editors[ix].clone(), from: key, name: ed.name.clone() };
                 let drop_on = editors[ix].clone();
                 let accent = p.accent;
                 div()
-                    .id(SharedString::from(format!("tab-{focused}-{ix}")))
+                    .id(SharedString::from(format!("tab-{}-{ix}", key.id)))
                     .on_drag(dragged, |d, _, _, cx| cx.new(|_| d.clone()))
                     .drag_over::<DraggedTab>(move |s, _, _, _| s.border_l_2().border_color(c(accent)))
                     .on_drop(cx.listener(move |this, d: &DraggedTab, window, cx| {
-                        this.drop_tab(d.editor.clone(), d.from_focused, focused, Some(drop_on.clone()), window, cx);
+                        this.drop_tab(d.editor.clone(), d.from, key, Some(drop_on.clone()), window, cx);
                     }))
                     .group(group.clone())
                     .relative()
@@ -183,8 +340,11 @@ impl Workbench {
                     .when(
                         active && ed.path.rsplit_once('.').is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("md") || ext.eq_ignore_ascii_case("markdown")),
                         |d| {
-                            d.child(ui::icon_button("markdown-read", "eye", crate::i18n::t("Read"), p).on_click(cx.listener(|this, _, window, cx| {
+                            d.child(ui::icon_button("markdown-read", "eye", crate::i18n::t("Read"), p).on_click(cx.listener(move |this, _, window, cx| {
                                 cx.stop_propagation();
+                                if !this.ensure_group(key) {
+                                    return;
+                                }
                                 this.open_markdown_preview(&OpenMarkdownPreview, window, cx);
                             })))
                         },
@@ -193,8 +353,11 @@ impl Workbench {
                         d.child(
                             ui::icon_button("html-preview", "eye", crate::i18n::t("Preview HTML in your browser"), p)
                                 .debug_selector(|| "html-preview".into())
-                                .on_click(cx.listener(|this, _, window, cx| {
+                                .on_click(cx.listener(move |this, _, window, cx| {
                                     cx.stop_propagation();
+                                    if !this.ensure_group(key) {
+                                        return;
+                                    }
                                     this.open_web_preview(window, cx);
                                 })),
                         )
@@ -204,7 +367,7 @@ impl Workbench {
                         // Pinned: a pin instead of close (click: unpin).
                         d.child(
                             div()
-                                .id(SharedString::from(format!("tab-pin-{focused}-{ix}")))
+                                .id(SharedString::from(format!("tab-pin-{}-{ix}", key.id)))
                                 .size(px(20.))
                                 .flex()
                                 .items_center()
@@ -213,7 +376,9 @@ impl Workbench {
                                 .hover(|d| d.bg(c(p.surface_hover)))
                                 .child(icon("pin", 13., p.text_muted))
                                 .on_click(cx.listener(move |this, _, _, cx| {
-                                    this.ensure_group(focused);
+                                    if !this.ensure_group(key) {
+                                        return;
+                                    }
                                     cx.stop_propagation();
                                     this.toggle_pin(ix, cx);
                                 })),
@@ -223,7 +388,7 @@ impl Workbench {
                         d.child(
                             // Close: visible on the active tab and on hover; a dot if dirty.
                             div()
-                                .id(SharedString::from(format!("tab-close-{focused}-{ix}")))
+                                .id(SharedString::from(format!("tab-close-{}-{ix}", key.id)))
                                 .size(px(20.))
                                 .flex()
                                 .items_center()
@@ -237,7 +402,9 @@ impl Workbench {
                                     icon("x", 14., p.text_muted).into_any_element()
                                 })
                                 .on_click(cx.listener(move |this, _, window, cx| {
-                                    this.ensure_group(focused);
+                                    if !this.ensure_group(key) {
+                                        return;
+                                    }
                                     cx.stop_propagation();
                                     this.close_editor_at(ix, window, cx);
                                 })),
@@ -246,28 +413,34 @@ impl Workbench {
                     .on_mouse_down(
                         MouseButton::Middle,
                         cx.listener(move |this, _, window, cx| {
-                            this.ensure_group(focused);
+                            if !this.ensure_group(key) {
+                                return;
+                            }
                             this.close_editor_at(ix, window, cx)
                         }),
                     )
                     .on_mouse_down(
                         MouseButton::Right,
                         cx.listener(move |this, ev: &gpui::MouseDownEvent, window, cx| {
-                            this.ensure_group(focused);
+                            if !this.ensure_group(key) {
+                                return;
+                            }
                             this.open_tab_menu(ix, ev.position, window, cx);
                         }),
                     )
                     .on_click(cx.listener(move |this, ev: &gpui::ClickEvent, window, cx| {
                         this.record_nav(cx);
-                        this.ensure_group(focused);
+                        if !this.ensure_group(key) {
+                            return;
+                        }
                         if ev.click_count() >= 2 {
                             this.tabs.editors[ix].update(cx, |e, _| e.preview = false); // double click: make permanent
                         }
                         this.activate(ix, window, cx);
                     }))
             }))
-            .when_some(self.tabs.large.clone().filter(|_| focused), |d, view| {
-                let active = self.tabs.large_active;
+            .when_some(state.large.clone(), |d, view| {
+                let active = state.large_active;
                 let name = view.read(cx).name.clone();
                 let (glyph, suffix) =
                     if view.read(cx).is_image() { ("file-image", crate::i18n::t("preview")) } else { ("file-text", crate::i18n::t("read-only")) };
@@ -299,12 +472,18 @@ impl Workbench {
                                 .rounded(px(theme::radius::SM))
                                 .hover(|d| d.bg(c(p.surface_hover)))
                                 .child(icon("x", 14., p.text_muted))
-                                .on_click(cx.listener(|this, _, window, cx| {
+                                .on_click(cx.listener(move |this, _, window, cx| {
                                     cx.stop_propagation();
+                                    if !this.ensure_group(key) {
+                                        return;
+                                    }
                                     this.close_large(window, cx);
                                 })),
                         )
-                        .on_click(cx.listener(|this, _, window, cx| {
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            if !this.ensure_group(key) {
+                                return;
+                            }
                             this.tabs.large_active = true;
                             this.tabs.page_active = false;
                             this.tabs.diff_active = false;
@@ -315,8 +494,8 @@ impl Workbench {
                         })),
                 )
             })
-            .when_some(self.tabs.diff.clone().filter(|_| focused), |d, view| {
-                let active = self.tabs.diff_active;
+            .when_some(state.diff.clone(), |d, view| {
+                let active = state.diff_active;
                 let name = view.read(cx).name.clone();
                 d.child(
                     div()
@@ -346,12 +525,18 @@ impl Workbench {
                                 .rounded(px(theme::radius::SM))
                                 .hover(|d| d.bg(c(p.surface_hover)))
                                 .child(icon("x", 14., p.text_muted))
-                                .on_click(cx.listener(|this, _, window, cx| {
+                                .on_click(cx.listener(move |this, _, window, cx| {
                                     cx.stop_propagation();
+                                    if !this.ensure_group(key) {
+                                        return;
+                                    }
                                     this.close_diff(window, cx);
                                 })),
                         )
-                        .on_click(cx.listener(|this, _, window, cx| {
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            if !this.ensure_group(key) {
+                                return;
+                            }
                             this.tabs.diff_active = true;
                             this.tabs.page_active = false;
                             this.tabs.large_active = false;
@@ -362,8 +547,8 @@ impl Workbench {
                         })),
                 )
             })
-            .when_some(self.tabs.page.clone().filter(|_| focused), |d, page| {
-                let active = self.tabs.page_active;
+            .when_some(state.page.clone(), |d, page| {
+                let active = state.page_active;
                 let (glyph, title): (&str, String) = match &page {
                     Page::Welcome => ("rocket", crate::i18n::t("Welcome").into()),
                     Page::About(_) => ("info", crate::i18n::t("About Codeyard").into()),
@@ -372,6 +557,7 @@ impl Workbench {
                     Page::Settings(_) => ("settings", crate::i18n::t("Settings").into()),
                     Page::Markdown(v) => ("eye", v.read(cx).title(cx)),
                     Page::Shortcuts(_) => ("keyboard", crate::i18n::t("Keyboard Shortcuts").into()),
+                    Page::LanguageServices(_) => ("code", crate::i18n::t("Language Services").into()),
                     Page::Merge(v) => ("git-compare", v.read(cx).title(cx)),
                     Page::Compare(v) => ("git-compare", v.read(cx).title()),
                 };
@@ -403,12 +589,18 @@ impl Workbench {
                                 .rounded(px(theme::radius::SM))
                                 .hover(|d| d.bg(c(p.surface_hover)))
                                 .child(icon("x", 14., p.text_muted))
-                                .on_click(cx.listener(|this, _, _, cx| {
+                                .on_click(cx.listener(move |this, _, _, cx| {
                                     cx.stop_propagation();
+                                    if !this.ensure_group(key) {
+                                        return;
+                                    }
                                     this.close_page(cx);
                                 })),
                         )
-                        .on_click(cx.listener(|this, _, window, cx| {
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            if !this.ensure_group(key) {
+                                return;
+                            }
                             this.tabs.page_active = true;
                             this.tabs.diff_active = false;
                             this.tabs.large_active = false;

@@ -6,7 +6,7 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 
 | Variable | Effect |
 | --- | --- |
-| `CODEYARD_STATE_DIR` | Folder for the local state database, crash reports and backups (default: `~/Library/Application Support/codeyard` on macOS, `~/.local/state/codeyard` elsewhere). |
+| `CODEYARD_STATE_DIR` | Folder for the local state database, crash reports and backups (default: `~/Library/Application Support/codeyard` on macOS, `~/.local/state/codeyard` elsewhere). Local managed language services also use this profile’s `language-services` subdirectory. |
 | `CODEYARD_CONFIG_DIR` | Folder for `settings.jsonc`, `keybindings.jsonc`, `themes/`, `snippets/`, `projects.jsonc` (default `~/.config/codeyard`). |
 | `CODEYARD_SSH_CONFIG` | Use this file instead of `~/.ssh/config` for host lists and connections. |
 | `CODEYARD_AGENT_DIR` | Optional developer override for `codeyard-agent-<triple>` binaries. Windows uses embedded agents by default; Unix packages use `agents/` next to the executable (or the macOS bundle's Resources directory). |
@@ -26,6 +26,7 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_DEV_UPDATE` | Developer builds: play a whole update with canned data instead of asking GitHub: `available`, `uptodate`, `offline`, `untrusted` or `install-fails`. The download crawls at 1 MB/s, nothing touches the disk, and quitting only prints a line. Also lets a debug build show the first-run question about update checks, which it never does otherwise. |
 | `CODEYARD_DEV` | Enable developer commands in a release build (always on in debug builds). Without it, release builds ignore `--do`, because a command line another program put together could otherwise trust a folder and run its tasks. |
 | `CODEYARD_MENU_FLAVOR` | `macos`, `windows` or `linux`: draw menus in that platform's style instead of the running one (to review the other platforms' look). |
+| `CODEYARD_BIN` | The Codeyard binary `cyx dev` starts (default: `codeyard` on `PATH`, then the one beside `cyx`, then `/Applications/Codeyard.app` on macOS). |
 | `CODEYARD_PERF` | Append performance samples (one JSON line each) to this file; used by `scripts/perf/run.sh`. |
 | `CODEYARD_PERF_TYPING` | With `CODEYARD_PERF`: after startup, type this many characters into the focused editor, record key press to drawn frame for each, then save. |
 | `CODEYARD_PERF_EXIT` | With `CODEYARD_PERF`: quit when the scripted scenario is done. |
@@ -43,3 +44,5 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_FUZZ_SEED` | Change the seed of those tests to explore other inputs; a failure prints the seed and round to rerun. |
 | `CODEYARD_TEST_TIMEOUT_SCALE` | Multiplier for the tests' wait timeouts (default 1). `scripts/coverage.sh` sets 4 because instrumented builds are slow. |
 | `CODEYARD_TR_DICT_DIR` | Folder with a Turkish Hunspell dictionary for the manual `cargo test -p spell -- --ignored turkish` check. |
+| `CODEYARD_LANGUAGE_SERVICE_FIXTURE` | Explicit disposable managed-service installation for the opt-in real local/SSH language-service acceptance test. Ordinary tests do not read it. |
+| `CODEYARD_TEST_MANAGED_INSTALL` | With that opt-in test, `1` additionally installs packages/runtime under its owned SSH fixture; this can access the network. |

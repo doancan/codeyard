@@ -14,6 +14,7 @@ code they describe.
 | [containers.md](containers.md) | optional container module, Docker workflows and research on Apple Container, WSL Containers and Windows guests |
 | [web-preview.md](web-preview.md) | optional HTML/CSS/JavaScript server, browser live refresh, local/SSH/container support and serving boundaries |
 | [editor-services.md](editor-services.md) | schemas, spell check, merge editor, pull requests, `.http`, log follow: how each one works and where it stops |
+| [language-services.md](language-services.md) | explicit local/SSH language-service installation, pinned packages/runtime, cancellation, trust and recovery |
 | [design-tokens.md](design-tokens.md) | colour roles, themes and how tokens become Rust constants |
 | [accessibility.md](accessibility.md) | the AccessKit tree on macOS and Windows, motion and contrast, what is verified, what is missing |
 | [platforms.md](platforms.md) | what runs and what has been verified on macOS, Linux and Windows |
@@ -22,6 +23,7 @@ code they describe.
 | [ui-readiness.md](ui-readiness.md) | workbench resize, status bar, terminal, Git and resource panel review and validation |
 | [product-quality-plan.md](product-quality-plan.md) | 2026-10-28 native product findings, prioritized development batches and acceptance criteria |
 | [product-quality-report.md](product-quality-report.md) | delivered Rust/product fixes, integration scope, native walkthrough and validation evidence |
+| [core-workflows-delivery.md](core-workflows-delivery.md) | acceptance requirements and validation evidence for eleven core workflow deliveries |
 | [plugin-architecture.md](plugin-architecture.md) | **planned:** the extension platform design (runtime, permissions, registry, performance targets, roadmap) |
 | [extensions/developer-guide.md](extensions/developer-guide.md) | **draft:** how to write, test and publish an extension |
 | [translating.md](translating.md) | adding a language, the translation file format, plurals, quality bar, adding UI text |

@@ -12,6 +12,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Paste clipboard images into programs such as Codex in an SSH terminal: the image is transferred to a private temporary
   file on the remote host and its path is pasted into the terminal.
 - Local SSH port forwarding on Windows using a dedicated OpenSSH process for each forward.
+- Explicit local/SSH setup for JavaScript/TypeScript, HTML and CSS language services, with pinned
+  packages, a checksum-verified Node.js fallback, progress, cancellation, retry and atomic activation.
+
+- Nested horizontal and vertical editor groups with directional splitting/focus, independent views of
+  shared documents, tab transfers, nested divider resizing and atomic layout/session restoration.
+  Up to 32 groups retain usable minimum sizes with scrolling in narrow windows.
+
+- Explorer multi-selection with modifier clicks, keyboard ranges and select-all, plus batch copy,
+  cut, drag and deletion with a single confirmation, progress/cancellation and per-entry errors.
+  Failed cuts remain available for retry; dirty buffers and successful moves retain their edits.
+- Filesystem-native recursive copies on local and SSH agents, with exclusive atomic publication,
+  symlink and executable-permission preservation, bounded traversal and no shell dependency.
+
+- `codeyard --install-extension FILE.cyx` installs an extension without opening a window (repeat the flag for several).
+  The performance gate now measures loading 100 installed extensions at startup (ceiling 5 ms).
+- `cyx`, the extension authors' command, ships beside Codeyard: `cyx new` (theme, snippets, keymap, language, language
+  server), `cyx dev` (runs Codeyard with the folder loaded and a DEV badge; it reloads on save), `cyx check` (every
+  problem with its file, line and fix), `cyx package` (a reproducible `.cyx`) and `cyx import-vscode` (themes, snippets,
+  languages and local JSON schemas from a VS Code extension or `.vsix`). *Extensions: Install cyx Command in PATH* links it.
 - Installable declarative extensions: themes, snippets, keymap presets and key bindings, languages, JSON and YAML schemas,
   settings and language servers. The Extensions view installs a `.cyx` package or a folder after a consent sheet that
   lists contributions and permissions in plain words (High-risk sets in red, with *Cancel* focused), and disables,
@@ -91,6 +110,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Terminal Space sends a space, and Ctrl+C copies a selection while still interrupting the program when nothing is selected.
 - SSH connections detect an incompatible bundled agent before attaching to its daemon and explain how to rebuild or reinstall it.
+- Stopping a piped process also kills descendants when its leader has already exited. A process
+  that closes stdout remains cancellable instead of blocking the agent until its natural exit.
+- Separate SSH configuration files use separate control connections even when they define the same host alias.
 - Web Preview reads files through directory handles without following symlinks or reparse points,
   preventing pathname replacement races. Each file now needs one agent request, reducing SSH round trips;
   directory and session redirects preserve URL query parameters.

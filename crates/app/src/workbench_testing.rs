@@ -3,6 +3,13 @@
 use super::*;
 
 impl Workbench {
+    pub fn file_operation_active_for_test(&self) -> bool {
+        self.roots.file_operation.is_some()
+    }
+
+    pub fn file_clipboard_paths_for_test(&self) -> Vec<String> {
+        self.roots.file_clip.as_ref().map_or_else(Vec::new, |c| c.paths.clone())
+    }
     /// Recents in display order: (host, path, pinned).
     pub fn recent_for_test(&self) -> Vec<(Option<String>, String, bool)> {
         super::projects::ordered_recent(&self.persist.recent, &self.persist.pinned).into_iter().map(|(r, pinned)| (r.host, r.path, pinned)).collect()
@@ -363,22 +370,32 @@ impl Workbench {
         self.overlay.as_ref().map(|o| o.picker.read(cx).details())
     }
 
-    /// Tab drag and drop: groups left/right, tabs by name.
+    /// Legacy two-group test adapter uses spatial order, independent of slot allocation.
     pub fn drop_tab_for_test(&mut self, from_left: bool, name: &str, to_left: bool, before: Option<&str>, window: &mut Window, cx: &mut Context<Self>) {
-        let group = |this: &Self, left: bool| -> Vec<Entity<EditorView>> {
-            if left == this.tabs.focused_left { this.tabs.editors.clone() } else { this.tabs.other.as_ref().map(|g| g.editors.clone()).unwrap_or_default() }
-        };
-        let find = |v: &[Entity<EditorView>], n: &str| v.iter().find(|e| ui::file_name(&e.read(cx).path) == n).cloned();
-        let ed = find(&group(self, from_left), name).expect("no such tab");
-        let before = before.and_then(|b| find(&group(self, to_left), b));
-        let (from_focused, to_focused) = (from_left == self.tabs.focused_left, to_left == self.tabs.focused_left);
-        self.drop_tab(ed, from_focused, to_focused, before, window, cx);
+        let ids = self.tabs.layout.groups();
+        let from = self.tabs.key(ids[usize::from(!from_left)]).expect("source group");
+        let to = self.tabs.key(ids[usize::from(!to_left)]).expect("target group");
+        let find = |id, name: &str| self.tabs.group(id).and_then(|g| g.editors.iter().find(|e| ui::file_name(&e.read(cx).path) == name)).cloned();
+        let ed = find(from.id, name).expect("no such tab");
+        let before = before.and_then(|name| find(to.id, name));
+        self.drop_tab(ed, from, to, before, window, cx);
     }
 
     pub fn groups(&self, cx: &App) -> (Vec<String>, Option<Vec<String>>, bool) {
-        let names = |v: &[Entity<EditorView>]| v.iter().map(|e| ui::file_name(&e.read(cx).path).to_string()).collect::<Vec<_>>();
-        let (focused, other) = (names(&self.tabs.editors), self.tabs.other.as_ref().map(|g| names(&g.editors)));
-        if self.tabs.focused_left { (focused, other, true) } else { (other.unwrap_or_default(), Some(focused), false) }
+        let ids = self.tabs.layout.groups();
+        let names = |id| self.tabs.group(id).map(|g| g.editors.iter().map(|e| ui::file_name(&e.read(cx).path).to_string()).collect()).unwrap_or_default();
+        (names(ids[0]), ids.get(1).map(|id| names(*id)), self.tabs.layout.focused() == ids[0])
+    }
+
+    pub fn editor_grid_snapshot(&self) -> (crate::editor_layout::Layout, Vec<(u8, Vec<String>)>) {
+        let groups = self
+            .tabs
+            .layout
+            .groups()
+            .into_iter()
+            .map(|id| (id, self.tabs.group(id).expect("layout group").editors.iter().map(|e| e.entity_id().to_string()).collect()))
+            .collect();
+        (self.tabs.layout.clone(), groups)
     }
 
     /// Open without changing the root (for tests; same path as ⌘P / the tree).
@@ -759,4 +776,25 @@ pub struct DialogView {
     pub progress: Option<Option<f32>>,
     pub buttons: Vec<String>,
     pub primary: Option<String>,
+}
+
+impl Workbench {
+    #[cfg(unix)]
+    pub fn install_cyx_link_for_test(target: &std::path::Path, dirs: &[std::path::PathBuf]) -> Result<std::path::PathBuf, String> {
+        super::cyx_glue::install_link(target, dirs)
+    }
+}
+
+impl Workbench {
+    /// What `create_extension` does once `cyx new` has finished.
+    #[cfg(unix)]
+    pub fn finish_create_extension_for_test(&mut self, ok: bool, stderr: &str, dir: std::path::PathBuf, window: &mut Window, cx: &mut Context<Self>) {
+        use std::os::unix::process::ExitStatusExt;
+        let out = std::process::Output {
+            status: std::process::ExitStatus::from_raw(if ok { 0 } else { 1 << 8 }),
+            stdout: Vec::new(),
+            stderr: stderr.as_bytes().to_vec(),
+        };
+        self.finish_create_extension(Ok(out), dir, window, cx);
+    }
 }

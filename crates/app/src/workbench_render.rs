@@ -14,6 +14,8 @@ impl Workbench {
             cx.notify();
         }
         if std::mem::take(&mut self.chrome.resizing_split) {
+            self.tabs.resizing = None;
+            self.persist_session(cx);
             cx.notify();
         }
         if std::mem::take(&mut self.chrome.resizing_panel) {
@@ -70,6 +72,7 @@ impl Render for Workbench {
                 Page::Settings(view) => view.into_any_element(),
                 Page::Markdown(view) => view.into_any_element(),
                 Page::Shortcuts(view) => view.into_any_element(),
+                Page::LanguageServices(view) => view.into_any_element(),
                 Page::Merge(view) => view.into_any_element(),
                 Page::Compare(view) => view.into_any_element(),
             },
@@ -100,11 +103,14 @@ impl Render for Workbench {
             .key_context("Workbench")
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::open_folder))
+            .on_action(cx.listener(Self::cancel_file_operation))
             .on_action(cx.listener(Self::toggle_sidebar))
             .on_action(cx.listener(Self::trust_this_folder))
             .on_action(cx.listener(Self::show_explorer))
             .on_action(cx.listener(Self::switch_editor))
             .on_action(cx.listener(Self::toggle_zen))
+            .on_action(cx.listener(Self::install_cyx))
+            .on_action(cx.listener(Self::new_extension))
             .on_action(cx.listener(Self::toggle_full_screen))
             .on_action(cx.listener(Self::find_todos))
             .on_action(cx.listener(Self::show_remote))
@@ -149,6 +155,10 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::zoom_out))
             .on_action(cx.listener(Self::zoom_reset))
             .on_action(cx.listener(Self::split_editor))
+            .on_action(cx.listener(Self::split_editor_left))
+            .on_action(cx.listener(Self::split_editor_up))
+            .on_action(cx.listener(Self::split_editor_down))
+            .on_action(cx.listener(Self::close_empty_editor_group))
             .on_action(cx.listener(Self::go_back))
             .on_action(cx.listener(|this, _: &CloseAllEditors, window, cx| this.close_all_editors(window, cx)))
             .on_action(cx.listener(|this, _: &CloseOtherEditors, window, cx| this.close_other_editors(window, cx)))
@@ -286,6 +296,7 @@ impl Render for Workbench {
                 this.notice = Some(Notice::Info(crate::i18n::t("Restarting language servers…").into()));
                 cx.notify();
             }))
+            .on_action(cx.listener(Self::manage_language_services))
             .on_action(cx.listener(|this, _: &GitCommitAmend, _, cx| this.with_scm(cx, |s, cx| s.commit_amend(cx))))
             .on_action(cx.listener(|this, _: &GitUndoLastCommit, _, cx| this.with_scm(cx, |s, cx| s.undo_last_commit(cx))))
             .on_action(cx.listener(|this, _: &GitStash, _, cx| this.with_scm(cx, |s, cx| s.stash(false, cx))))
@@ -380,6 +391,8 @@ impl Render for Workbench {
             .on_action(cx.listener(Self::move_editor_to_other_group))
             .on_action(cx.listener(Self::focus_left_group))
             .on_action(cx.listener(Self::focus_right_group))
+            .on_action(cx.listener(Self::focus_up_group))
+            .on_action(cx.listener(Self::focus_down_group))
             .on_action(cx.listener(Self::close_editor))
             .on_action(cx.listener(Self::quit))
             .on_action(cx.listener(Self::select_theme))
@@ -475,13 +488,19 @@ impl Render for Workbench {
                     this.chrome.sidebar_w = x.clamp(layout::SIDEBAR_MIN, layout::SIDEBAR_MAX);
                     cx.notify();
                 }
-                if this.chrome.resizing_split {
-                    // Editor area: everything after the activity bar + (if open) the sidebar.
-                    let left = layout::ACTIVITYBAR_W + if this.chrome.panel.is_some() { this.chrome.sidebar_w } else { 0. };
-                    let width = (window.viewport_size().width / px(1.) - left).max(1.);
-                    let x = ev.position.x / px(1.) - left;
-                    this.chrome.split_ratio = (x / width).clamp(0.15, 0.85);
-                    cx.notify();
+                if let Some(resize) = this.tabs.resizing {
+                    if this.tabs.contains_key(resize.anchor) && this.tabs.revision == resize.revision {
+                        let (position, start, size) = match resize.axis {
+                            crate::editor_layout::Axis::Horizontal => (ev.position.x, resize.bounds.origin.x, resize.bounds.size.width),
+                            crate::editor_layout::Axis::Vertical => (ev.position.y, resize.bounds.origin.y, resize.bounds.size.height),
+                        };
+                        let ratio = (position - start) / size.max(px(1.));
+                        if this.tabs.layout.set_ratio(resize.split, ratio) {
+                            cx.notify();
+                        }
+                    } else {
+                        this.finish_resize(cx);
+                    }
                 }
                 if this.chrome.resizing_panel && this.chrome.panel_right {
                     let total = window.viewport_size().width / px(1.);
@@ -820,7 +839,7 @@ mod resize_tests {
                 cx.notify();
             });
             cx.run_until_parked();
-            let sizes = wb.read_with(cx, |wb, _| (wb.chrome.sidebar_w, wb.chrome.panel_h, wb.chrome.panel_w, wb.chrome.split_ratio));
+            let sizes = wb.read_with(cx, |wb, _| (wb.chrome.sidebar_w, wb.chrome.panel_h, wb.chrome.panel_w));
             if let Some(position) = release {
                 // An unrelated button must not end a left-button drag.
                 cx.simulate_mouse_up(position, MouseButton::Right, Modifiers::none());
@@ -830,7 +849,7 @@ mod resize_tests {
             }
             cx.simulate_mouse_move(point(px(600.), px(300.)), None, Modifiers::none());
             assert!(wb.read_with(cx, |wb, _| !wb.chrome.resizing_sidebar && !wb.chrome.resizing_panel && !wb.chrome.resizing_split));
-            assert_eq!(wb.read_with(cx, |wb, _| (wb.chrome.sidebar_w, wb.chrome.panel_h, wb.chrome.panel_w, wb.chrome.split_ratio)), sizes);
+            assert_eq!(wb.read_with(cx, |wb, _| (wb.chrome.sidebar_w, wb.chrome.panel_h, wb.chrome.panel_w)), sizes);
         }
     }
 }

@@ -50,7 +50,7 @@ is the complete list and always matches your key bindings; every setting is in [
 | Find in selection / select all matches (find bar) | ⌥⌘L / ⌥↵ | Ctrl+Alt+L / Alt+Enter |
 | Find in files | ⇧⌘F | Ctrl+Shift+F |
 | Structural search (replace: from the palette) | ⌥⇧⌘F | Ctrl+Alt+Shift+F |
-| Split editor (same file in the other group) | ⌘\ | Ctrl+\ |
+| Split editor (same file in a new group) | ⌘\ | Ctrl+\ |
 | Move tab to the other group | ⌃⌘→ / ⌃⌘← | Ctrl+Ctrl+→ (rebind) |
 | Focus left / right group | ⌘1 / ⌘2 | Ctrl+1 / Ctrl+2 |
 | Source control | ⌃⇧G | Ctrl+Shift+G |
@@ -136,6 +136,25 @@ jump to the next name that starts with them. OPEN EDITORS lists the open files a
 Right-click also has Duplicate, Open to the Side, Select for Compare / Compare with Selected
 (two files side by side) and Open in Integrated Terminal (in that folder).
 
+**Selecting several entries.** Cmd-click (Ctrl-click on Windows/Linux) toggles an entry;
+Shift-click selects a range. Shift+Up/Down, Shift+Home/End and Shift+PageUp/PageDown extend
+the selection, Cmd+A (Ctrl+A) selects the visible entries and Cmd+Space (Ctrl+Space) toggles
+the focused entry. Sorting and refresh keep the selected paths; collapsing a folder removes
+its hidden children from the selection. A selection belongs to one workspace tree at a time.
+
+Copy, cut, drag and delete apply to the selection, including from the context menu. Selecting
+a folder and its children processes the folder once. Batches show one confirmation with the
+count, destination and source paths; the complete list and failures are in Output. Existing
+targets are never overwritten: copies choose a numbered name, moves report the conflict and
+leave the failed cut entries on the clipboard for retry. Successful moves update open tabs;
+deleting files keeps their unsaved buffers open. A failed Trash operation never escalates to
+permanent batch deletion. The status bar shows progress; cancellation interrupts an active copy and stops before the next move or deletion;
+the palette also has *File: Cancel File Operation*. Closing/changing the workspace invalidates
+pending confirmations and stops the remaining entries. Copies stream on the file's host,
+preserve symlinks and executable permissions, and publish each completed entry atomically.
+One directory copy is limited to 100,000 entries and 128 nested levels; a limit or I/O failure
+removes its staged contents. Copying never needs `cp` or a shell. A lost connection or unconfirmed cancellation stops the batch and reports that the outcome needs inspection before retrying.
+
 **Editor.** `"editor.rulers": [80, 120]` draws vertical rulers; `"editor.renderWhitespace"`
 (`none`, `boundary`, `all`) marks spaces and tabs; `"editor.lineNumbers"` is `on`, `off` or
 `relative`; `"editor.cursorStyle"` is `line`, `block` or `underline`. Matching brackets are
@@ -174,10 +193,27 @@ scroll sideways (trackpad or ⇧+wheel). The minimap on the right is on by defau
 (`"editor.minimap.enabled": false` hides it); click or drag it to jump.
 
 **Folding** is by indentation (works in every language): hover the gutter for the arrows.
-Folds belong to the view, so the two groups of a split can fold differently. **Word wrap**
+Folds belong to the view, so groups displaying the same document can fold differently. **Word wrap**
 breaks at spaces at the window edge; ↑↓ move by screen row. Sort lines, upper/lower case,
 change line endings and indentation (click them in the status bar) are in the palette.
-With the same file open in both groups, each group has its own cursors, scroll and find bar.
+With the same file open in several groups, each group has its own cursors, scroll and find bar.
+Edits and undo belong to the shared document.
+
+**Editor groups** form a nested grid. ⌘\ (Ctrl+\ on Windows/Linux) adds a group to the right;
+use **View: Split Editor Left**, **Up**, or **Down** in the command palette for the other directions.
+Drag a divider to resize its two regions. Drag a tab within a group to reorder it, or onto another
+group to move it; closing a group's last document removes the empty group. **View: Close Empty
+Editor Group** also closes an explicitly opened empty group and cancels its pending file opening.
+The final group remains available for opening files.
+
+⌘1/⌘2 (Ctrl+1/Ctrl+2) focus the neighboring left/right group. The palette also provides **View:
+Focus Upper Editor Group** and **View: Focus Lower Editor Group**; all commands can be rebound
+in Keyboard Shortcuts. A window supports up to 32 groups. Minimum pane dimensions keep tabs and
+text usable; the grid scrolls when it cannot fit, and focusing a group brings it into view.
+With session restoration enabled, the grid, ratios, focused group, tab order, primary cursors and
+scroll positions return when the workspace reopens, including empty groups. Existing two-group
+sessions migrate automatically. Welcome/settings/diff/preview tabs stay in their owning group
+while switching focus; session restoration currently saves text-document tabs and empty groups.
 
 **Images** (png, jpg, gif, webp, svg, bmp) open in a preview tab.
 
@@ -546,6 +582,9 @@ binding is left out and the status bar says so); a keymap preset you choose with
 language only applies to files no built-in language claims. Extension language servers start in trusted folders only,
 and your own `lsp.servers` entry for the same language wins.
 
+From a terminal or a script, `codeyard --install-extension FILE.cyx` (repeat the flag for several) installs without
+opening a window; running it is your consent, and the same checks apply.
+
 **Manage.** Choose an extension in the list to open its page: contributions, permissions and these actions:
 
 - *Disable* / *Enable*: none of its contributions apply while it is disabled; it stays installed.
@@ -557,6 +596,9 @@ and your own `lsp.servers` entry for the same language wins.
 wrong. The status bar says *Extensions off* for the whole session, and the Extensions view says so instead of listing.
 To keep them off across sessions, set `"extensions.enabled": false` in your own settings (a project's settings cannot
 change it, nor `keymap.preset`).
+
+**Write your own.** *Extensions: New Extension…* creates one and loads it in the window with a DEV badge; it reloads
+when you save. The [extension guide](extensions/developer-guide.md) takes it from there to a `.cyx` package.
 
 ## Git
 
@@ -788,6 +830,12 @@ and `editor.rulers`; the first folder's settings already merge into the global o
 re-reads it.
 
 ## Language servers
+
+For JavaScript/TypeScript, HTML and CSS, run **Languages: Manage Language Services** to review the
+host, destination and pinned versions, then install from the editor. The page provides progress,
+cancellation and retry. SSH workspaces install on their own host. See [managed language services](language-services.md)
+for runtime requirements and recovery. Existing custom commands and disabled languages are preserved.
+The command-line installations in the table below remain available as manual alternatives.
 
 "Developer: Restart Language Servers" restarts them (after installing one, for example).
 When a server asks something ("reload the project?"), its options appear in a picker; Esc

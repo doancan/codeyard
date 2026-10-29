@@ -1,0 +1,11 @@
+baseline  0502dd4 (0502dd4885)
+candidate 9d19214 (9d19214b0f)
+
+metric                           stat     baseline  candidate   change  result
+startup.first_frame_ms           p95         209.2      208.2    -0.5%  ok
+startup.window_open_ms           p95         169.8      170.5    +0.4%  ok
+startup.extensions_ms            p95           0.9        1.0    +5.7%  ok
+typing.keystroke_frame_ms        p95          25.3       26.0    +2.9%  ok
+memory.empty_window_mb           median       69.0       69.0    +0.0%  ok
+memory.syntax_10k_mb             median      114.0      114.0    +0.0%  ok
+memory.terminal_mb               median       73.0       73.0    +0.0%  ok

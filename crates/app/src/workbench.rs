@@ -51,6 +51,9 @@ mod docker_glue;
 mod data_glue;
 #[path = "workbench_debug.rs"]
 mod debug;
+#[cfg(test)]
+#[path = "editor_grid_tests.rs"]
+mod editor_grid_tests;
 #[path = "workbench_editors.rs"]
 mod editors_glue;
 #[path = "workbench_ext.rs"]
@@ -59,6 +62,8 @@ mod ext_glue;
 mod ext_view_glue;
 #[path = "workbench_extras.rs"]
 mod extras_glue;
+#[path = "workbench_file_batch.rs"]
+mod file_batch_glue;
 #[path = "workbench_folder.rs"]
 mod folder_glue;
 #[path = "workbench_fsops.rs"]
@@ -67,6 +72,7 @@ mod fsops_glue;
 mod git_glue;
 #[path = "workbench_groups.rs"]
 mod groups_glue;
+use groups_glue::{Group, GroupKey, GroupResize};
 #[path = "workbench_hosts.rs"]
 mod hosts;
 #[path = "workbench_types.rs"]
@@ -88,6 +94,8 @@ mod palette_glue;
 mod panels_glue;
 #[cfg(test)]
 pub use panels_glue::ProblemRow;
+#[path = "workbench_cyx.rs"]
+mod cyx_glue;
 #[path = "workbench_ports.rs"]
 mod ports_glue;
 #[path = "workbench_projects.rs"]
@@ -172,6 +180,7 @@ actions!(
     workbench,
     [
         OpenFolder,
+        CancelFileOperation,
         ToggleSidebar,
         ShowExplorer,
         ShowRemote,
@@ -208,6 +217,10 @@ actions!(
         FormatSelection,
         SaveAll,
         SplitEditor,
+        SplitEditorLeft,
+        SplitEditorUp,
+        SplitEditorDown,
+        CloseEmptyEditorGroup,
         MoveEditorToOtherGroup,
         ToggleWordWrap,
         CloseSavedEditors,
@@ -321,6 +334,8 @@ actions!(
         GitCommitAndSync,
         FocusLeftGroup,
         FocusRightGroup,
+        FocusUpGroup,
+        FocusDownGroup,
         GitCommitAmend,
         GitUndoLastCommit,
         GitStash,
@@ -352,6 +367,7 @@ actions!(
         GitPruneWorktrees,
         GitDiscardAll,
         RestartLanguageServers,
+        ManageLanguageServices,
         CopyFullDiagnostic,
         RustExpandMacro,
         RustParentModule,
@@ -363,6 +379,8 @@ actions!(
         FindTodos,
         SwitchEditor,
         ToggleZenMode,
+        InstallCyx,
+        NewExtension,
         ToggleFullScreen,
         SelectIconTheme,
         InsertSnippet,
@@ -450,6 +468,7 @@ enum Page {
     Settings(Entity<crate::settings_page::SettingsPage>),
     Markdown(Entity<crate::markdown::MarkdownPreview>),
     Shortcuts(Entity<crate::shortcuts_page::ShortcutsPage>),
+    LanguageServices(Entity<crate::language_services_page::LanguageServicesPage>),
     Merge(Entity<crate::merge::MergeView>),
     // --- compare ---
     Compare(Entity<crate::compare_folders::CompareView>),
@@ -528,12 +547,6 @@ pub(super) const ROOT_SEP: &str = " › ";
 fn extra_folder_id(i: usize) -> &'static str {
     static IDS: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
     IDS.get_or_init(|| (1..=folder_glue::MAX_EXTRA_ROOTS).map(|n| &*Box::leak(format!("folder-{n}").into_boxed_str())).collect())[i]
-}
-
-/// The editor group that isn't focused.
-struct Group {
-    editors: Vec<Entity<EditorView>>,
-    active: Option<usize>,
 }
 
 /// Context menu of the file tree.
@@ -833,7 +846,7 @@ pub(super) fn tilde(path: &str) -> String {
 struct DraggedTab {
     editor: Entity<EditorView>,
     /// Whether it was in the focused group when the drag started.
-    from_focused: bool,
+    from: GroupKey,
     name: SharedString,
 }
 
@@ -1021,7 +1034,9 @@ impl Workbench {
         let (recent, pinned) = state.as_ref().map(projects::load_recent).unwrap_or_default();
         let dev = std::env::var_os("CODEYARD_DEV").is_some() || cfg!(debug_assertions);
         // The settings folder given (a temporary one in tests), as `theme_dir` does later, else the default.
+        let loading = std::time::Instant::now();
         crate::ext::reload(config_dir.as_deref());
+        crate::perf::sample("startup.extensions_ms", loading.elapsed().as_secs_f64() * 1000.0);
         let (themes, errors) = theme_glue::all_themes(config_dir.as_ref().map(|d| d.join("themes")).or_else(user_theme_dir).as_deref());
         let notice = errors.first().map(|reason| Notice::Error(crate::i18n::tf("Theme skipped: {}", &[reason]).into()));
         let theme_choice = state.as_ref().and_then(|s| s.get("theme")).unwrap_or_else(|| THEME_AUTO.into());
@@ -1117,7 +1132,6 @@ impl Workbench {
                 panel_w,
                 panel_max: false,
                 resizing_panel: false,
-                split_ratio: 0.5,
                 resizing_split: false,
                 zoom: 0.,
                 zoom_base: (theme::text::CODE.0, theme::text::CODE.1, theme::text::CODE.0),
@@ -1135,7 +1149,7 @@ impl Workbench {
             },
             cfg: state_glue::ConfigState {
                 dir: config_dir,
-                stamp: (None, None, None),
+                stamp: (None, None, None, 0),
                 theme_override: false,
                 project: Vec::new(),
                 trusted: Default::default(),
@@ -1173,29 +1187,14 @@ impl Workbench {
                 extra_trees: Vec::new(),
                 pending_extra_roots: Vec::new(),
                 file_clip: None,
+                file_operation: None,
                 compare_a: None,
                 // --- compare ---
                 compare_folder_a: None,
                 favorites: Vec::new(),
                 file_index: None,
             },
-            tabs: state_glue::TabsState {
-                editors: Vec::new(),
-                other: None,
-                focused_left: true,
-                active: None,
-                opening: None,
-                open_error: None,
-                diff: None,
-                diff_active: false,
-                large: None,
-                large_active: false,
-                page: None,
-                page_active: false,
-                _page_sub: None,
-                pending_reveal: None,
-                tab_scroll: gpui::ScrollHandle::new(),
-            },
+            tabs: Default::default(),
             update: state_glue::UpdateUi::new(dev, cx),
             data: Default::default(),
             focus_handle: cx.focus_handle(),
@@ -1540,8 +1539,12 @@ impl Workbench {
     /// All editors in both groups (focused group first; one open in both counts once).
     fn all_editors(&self) -> Vec<Entity<EditorView>> {
         let mut v = self.tabs.editors.clone();
-        if let Some(g) = &self.tabs.other {
-            v.extend(g.editors.iter().filter(|e| !self.tabs.editors.contains(e)).cloned());
+        for g in self.tabs.groups.values() {
+            for ed in &g.editors {
+                if !v.contains(ed) {
+                    v.push(ed.clone());
+                }
+            }
         }
         v
     }
@@ -1599,6 +1602,7 @@ impl Workbench {
             return;
         }
         self.cancel_pending_connection();
+        self.invalidate_file_operation();
         self.stop_web_preview(cx);
         self.persist_session(cx);
         self.shutdown_lsp(cx);
@@ -1607,9 +1611,7 @@ impl Workbench {
         self.roots.pending_extra_roots.clear();
         self.cfg.folders.clear();
         self.persist.backed_up.clear();
-        self.tabs.editors.clear();
-        self.tabs.other = None;
-        self.tabs.focused_left = true;
+        self.tabs = Default::default();
         self.tabs.active = None;
         self.tabs.open_error = None;
         self.tabs.opening = None;
@@ -1742,145 +1744,6 @@ impl Workbench {
             self.open_file(abs.to_string_lossy().into_owned(), window, cx);
         } else {
             self.set_root(abs.to_string_lossy().into_owned(), cx);
-        }
-    }
-
-    fn open_file(&mut self, path: String, window: &mut Window, cx: &mut Context<Self>) {
-        let host = self.remote.host.clone();
-        self.open_file_on(host, path, window, cx);
-    }
-
-    fn open_file_on(&mut self, host: Arc<dyn Host>, path: String, window: &mut Window, cx: &mut Context<Self>) {
-        self.open_file_as(host, path, false, window, cx);
-    }
-
-    /// `preview`: preview tab. Opens in place of a non-dirty preview tab if there is one
-    /// (so tabs don't pile up while browsing).
-    fn open_file_as(&mut self, host: Arc<dyn Host>, path: String, preview: bool, window: &mut Window, cx: &mut Context<Self>) {
-        self.chrome.panel_max = false;
-        let path = if host.is_remote() { path } else { ui::local_path(std::path::Path::new(&path)) };
-        if let Some(format) = crate::large::image_format(&path) {
-            return self.open_image(path, format, window, cx);
-        }
-        if self.active_editor().is_some_and(|e| e.read(cx).path != path) {
-            self.record_nav(cx);
-        }
-        // If open in the other group, the same document shows in this group too (no second copy is loaded).
-        if !self.tabs.editors.iter().any(|e| e.read(cx).path == path)
-            && let Some(ed) = self.tabs.other.as_ref().and_then(|g| g.editors.iter().find(|e| e.read(cx).path == path)).cloned()
-        {
-            ed.update(cx, |e, _| e.preview = e.preview && preview);
-            self.tabs.editors.push(ed);
-            let ix = self.tabs.editors.len() - 1;
-            self.activate(ix, window, cx);
-            return;
-        }
-        if let Some(ix) = self.tabs.editors.iter().position(|e| e.read(cx).path == path) {
-            if !preview {
-                self.tabs.editors[ix].update(cx, |e, _| e.preview = false);
-            }
-            self.activate(ix, window, cx);
-            return;
-        }
-        self.tabs.opening = Some(path.clone());
-        self.tabs.open_error = None;
-        let editor_host = host.clone();
-        let p = path.clone();
-        let fallback = cx.global::<Settings>().fallback_encoding;
-        let task = cx.background_executor().spawn(async move { editor::load(host.as_ref(), &p, fallback) });
-        cx.spawn_in(window, async move |this, cx| {
-            let result = task.await;
-            this.update_in(cx, |this, window, cx| {
-                if this.tabs.opening.as_deref() != Some(path.as_str()) {
-                    return; // something else was opened meanwhile
-                }
-                this.tabs.opening = None;
-                match result {
-                    Ok(loaded) => {
-                        let reuse = preview
-                            .then(|| {
-                                this.tabs.editors.iter().position(|e| {
-                                    let e = e.read(cx);
-                                    e.preview && !e.is_dirty()
-                                })
-                            })
-                            .flatten();
-                        let ed = this.add_editor(editor_host, path, loaded, window, cx);
-                        ed.update(cx, |e, _| e.preview = preview);
-                        // Mixed line endings collapse to one style on save (can cause a big git diff): warn beforehand.
-                        let (mixed, name) = ed.read_with(cx, |e, _| (e.has_mixed_line_endings(), e.line_ending_name()));
-                        if mixed {
-                            this.notice = Some(Notice::Info(
-                                crate::i18n::tf(
-                                    "This file mixes line endings; saving writes all of them as {}, like its first line. Change it in the status bar.",
-                                    &[&name],
-                                )
-                                .into(),
-                            ));
-                        }
-                        let ix = match reuse {
-                            Some(old) => {
-                                // Take the preview tab's place (same position).
-                                let new = this.tabs.editors.pop().expect("just pushed");
-                                this.tabs.editors[old] = new;
-                                old
-                            }
-                            None => this.tabs.editors.len() - 1,
-                        };
-                        this.activate(ix, window, cx);
-                    }
-                    // Too big to read in one go: read-only view loaded in pieces.
-                    Err(editor::OpenError::Host(host::HostError::Op(proto::Error::TooLarge { .. }))) => {
-                        this.open_large(path, window, cx);
-                    }
-                    Err(e) => {
-                        this.tabs.open_error = Some((path, e.to_string().into()));
-                        cx.notify();
-                    }
-                }
-            })
-            .ok();
-        })
-        .detach();
-        cx.notify();
-    }
-
-    /// Place restored editors into the saved layout: left/right group, order, active ones.
-    fn restore_layout(&mut self, layout: &[(String, u8, bool)], focus_left: bool, window: &mut Window, cx: &mut Context<Self>) {
-        let all = self.all_editors();
-        let find = |p: &str| all.iter().find(|e| e.read(cx).path == p).cloned();
-        let mut groups: [(Vec<Entity<EditorView>>, Option<usize>); 2] = [(Vec::new(), None), (Vec::new(), None)];
-        for (path, g, active) in layout {
-            let Some(ed) = find(path) else { continue };
-            let group = &mut groups[(*g as usize).min(1)];
-            if !group.0.contains(&ed) {
-                group.0.push(ed);
-                if *active {
-                    group.1 = Some(group.0.len() - 1);
-                }
-            }
-        }
-        // Anything not in the layout (opened from the command line) goes to the left group.
-        for ed in all {
-            if !groups[0].0.contains(&ed) && !groups[1].0.contains(&ed) {
-                groups[0].0.push(ed);
-            }
-        }
-        let [(left, left_active), (right, right_active)] = groups;
-        if left.is_empty() && right.is_empty() {
-            return;
-        }
-        let pick = |v: &Vec<Entity<EditorView>>, a: Option<usize>| a.filter(|&a| a < v.len()).or((!v.is_empty()).then(|| v.len() - 1));
-        let (la, ra) = (pick(&left, left_active), pick(&right, right_active));
-        let split = !left.is_empty() && !right.is_empty();
-        let focus_left = !split || focus_left || right.is_empty();
-        let (focused, focused_active, other, other_active) = if focus_left || left.is_empty() { (left, la, right, ra) } else { (right, ra, left, la) };
-        let (focused, focused_active) = if focused.is_empty() { (other.clone(), other_active) } else { (focused, focused_active) };
-        self.tabs.editors = focused;
-        self.tabs.other = split.then(|| Group { editors: other, active: other_active });
-        self.tabs.focused_left = !split || focus_left;
-        if let Some(ix) = focused_active {
-            self.activate(ix, window, cx);
         }
     }
 
@@ -2019,10 +1882,8 @@ impl Workbench {
         }
         self.sync_slots(cx);
         // When a split group's last tab closes, the group closes too and the other becomes the only one.
-        if self.tabs.editors.is_empty() && self.tabs.other.is_some() {
-            self.swap_groups();
-            self.tabs.other = None;
-            self.tabs.focused_left = true;
+        let group_key = self.tabs.current_key();
+        if self.tabs.remove_empty(group_key) {
             if let Some(a) = self.tabs.active {
                 self.activate(a, window, cx);
             }

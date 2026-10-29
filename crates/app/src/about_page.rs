@@ -105,7 +105,7 @@ impl Render for AboutPage {
                                 .flex()
                                 .flex_col()
                                 .gap(px(theme::SPACE[2]))
-                                .child(div().text_size(px(text::DISPLAY.0)).font_weight(FontWeight::SEMIBOLD).text_color(c(p.text)).child("Codeyard"))
+                                .child(div().text_size(px(text::DISPLAY.0)).font_weight(FontWeight::SEMIBOLD).text_color(c(p.text)).child("Codeyard")) // i18n-keep: product name
                                 .child(div().text_size(px(text::SM.0)).text_color(c(p.text_muted)).child(crate::i18n::t("About Codeyard"))),
                         ),
                 )

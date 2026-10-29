@@ -44,10 +44,15 @@ const SCM_COMMIT: NodeId = NodeId(20);
 const SCM_BRANCH: NodeId = NodeId(21);
 const SCM_RESULT: NodeId = NodeId(22);
 const SCM_EMPTY: NodeId = NodeId(23);
-const ABOUT_TAB: NodeId = NodeId(24);
-const ABOUT: NodeId = NodeId(25);
-const ABOUT_COPY: NodeId = NodeId(26);
+const ABOUT_TAB: NodeId = NodeId(29);
+const ABOUT: NodeId = NodeId(30);
+const ABOUT_COPY: NodeId = NodeId(31);
 const ABOUT_DETAIL: u64 = 0xa0_0000;
+const SERVICES: NodeId = NodeId(24);
+const SERVICES_INFO: NodeId = NodeId(25);
+const SERVICES_STATUS: NodeId = NodeId(26);
+const SERVICES_INSTALL: NodeId = NodeId(27);
+const SERVICES_CANCEL: NodeId = NodeId(28);
 const STATUS_ITEM: u64 = 0x10_0000;
 const UPDATE_BUTTON: u64 = 0x20_0000;
 const TAB_BASE: u64 = 0x30_0000;
@@ -98,6 +103,7 @@ pub struct ExplorerSnap {
     pub name: String,
     pub rows: Vec<RowSnap>,
     pub rows_total: usize,
+    pub focused: Option<u64>,
 }
 
 #[derive(Clone, PartialEq, Debug, Default)]
@@ -219,6 +225,8 @@ pub struct NoticeSnap {
 
 #[path = "a11y_scm.rs"]
 mod scm_access;
+#[path = "a11y_language_services.rs"]
+mod services_access;
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct ScmSnap {
@@ -242,6 +250,7 @@ pub struct Snapshot {
     pub completion: Option<ListSnap>,
     pub terminal: Option<TerminalSnap>,
     pub(crate) scm: Option<ScmSnap>,
+    pub(crate) services: Option<crate::language_services_page::AccessView>,
     pub picker: Option<PickerSnap>,
     pub notice: Option<NoticeSnap>,
     pub status: Vec<String>,
@@ -380,6 +389,10 @@ impl Snapshot {
         self.geometry.apply(ROOT, &mut root);
         root.set_label(self.title.clone());
         let mut kids = Vec::new();
+        if let Some(view) = &self.services {
+            services_access::append_tree(view, &mut nodes);
+            kids.push(SERVICES);
+        }
 
         // Explorer: one tree per folder of the workspace.
         for (k, ex) in self.explorers.iter().enumerate() {
@@ -387,6 +400,7 @@ impl Snapshot {
             self.geometry.apply(explorer_id(k), &mut tree);
             tree.set_label(if self.explorers.len() > 1 { format!("{}: {}", t("Explorer"), ex.name) } else { t("Explorer").to_string() });
             tree.set_size_of_set(ex.rows_total);
+            tree.set_multiselectable();
             let mut row_ids = Vec::new();
             for (i, r) in ex.rows.iter().enumerate() {
                 let mut n = Node::new(Role::TreeItem);
@@ -649,6 +663,7 @@ impl Snapshot {
 
         let focus = match self.focus {
             _ if self.dialog.is_some() => self.dialog.as_ref().and_then(|d| d.focused).map_or(UPDATE_DIALOG, |i| NodeId(UPDATE_BUTTON + i as u64)),
+            _ if self.services.as_ref().is_some_and(|view| view.focused) => services_access::focus_node(self.services.as_ref().expect("focused page")),
             FocusSnap::Picker if self.picker.is_some() => PICKER_INPUT,
             FocusSnap::Find(0) if self.find.is_some() => FIND_QUERY,
             FocusSnap::Find(_) if self.find.as_ref().is_some_and(|f| f.replacement.is_some()) => FIND_REPLACE,
@@ -656,7 +671,7 @@ impl Snapshot {
             FocusSnap::Terminal if self.terminal.is_some() => TERMINAL,
             FocusSnap::ScmMessage if self.scm.as_ref().is_some_and(|s| s.view.root.is_some()) => SCM_MESSAGE,
             FocusSnap::AboutCopy if self.about.as_ref().is_some_and(|a| a.active) => ABOUT_COPY,
-            FocusSnap::Explorer(k) if k < self.explorers.len() => self.explorers[k].rows.iter().find(|r| r.selected).map_or(explorer_id(k), |r| NodeId(r.id)),
+            FocusSnap::Explorer(k) if k < self.explorers.len() => self.explorers[k].focused.map_or(explorer_id(k), NodeId),
             _ => ROOT,
         };
         TreeUpdate { nodes, tree: Some(TreeInfo::new(ROOT)), tree_id: TreeId::ROOT, focus }
@@ -673,21 +688,21 @@ impl Workbench {
                 let tree = tree.read(cx);
                 let (rows, selected) = tree.a11y_rows();
                 let rows_total = rows.len();
+                let focused = selected.filter(|i| *i < MAX_ROWS).and_then(|i| rows.get(i)).map(|r| row_id(&r.0).0);
                 let rows = rows
                     .into_iter()
                     .take(MAX_ROWS)
-                    .enumerate()
-                    .map(|(i, (path, name, depth, is_dir, expanded))| RowSnap {
+                    .map(|(path, name, depth, is_dir, expanded)| RowSnap {
                         id: row_id(&path).0,
+                        selected: tree.path_is_selected(&path),
                         path,
                         name,
                         depth,
                         is_dir,
                         expanded,
-                        selected: selected == Some(i),
                     })
                     .collect();
-                ExplorerSnap { name: tree.root().map_or(String::new(), |r| crate::ui::file_name(r).to_string()), rows, rows_total }
+                ExplorerSnap { name: tree.root().map_or(String::new(), |r| crate::ui::file_name(r).to_string()), rows, rows_total, focused }
             })
             .collect();
         let tree = self.roots.primary.read(cx);
@@ -826,6 +841,10 @@ impl Workbench {
         };
         Snapshot {
             generation: self.lsp.generation,
+            services: self.tabs.page.as_ref().filter(|_| self.tabs.page_active).and_then(|page| match page {
+                Page::LanguageServices(page) => Some(page.read(cx).access_view(window, cx)),
+                _ => None,
+            }),
             geometry: Geometry::new(&self.chrome.a11y_bounds, window),
             title,
             explorers,
@@ -848,6 +867,9 @@ impl Workbench {
     /// Action from AT (main thread, in the GPUI context).
     fn a11y_action(&mut self, req: &ActionRequest, last: &Snapshot, window: &mut Window, cx: &mut Context<Self>) {
         if last.generation != self.lsp.generation {
+            return;
+        }
+        if self.a11y_services_action(req, last, window, cx) {
             return;
         }
         if self.a11y_scm_action(req, last, window, cx) {
@@ -1158,6 +1180,7 @@ mod tests {
         let runs = runs_for(lines, 3, 0);
         Snapshot {
             generation: 0,
+            services: None,
             geometry: Geometry::default(),
             title: "Codeyard \u{2014} demo".into(),
             explorers: vec![ExplorerSnap {
@@ -1175,6 +1198,7 @@ mod tests {
                     },
                 ],
                 rows_total: 2,
+                focused: Some(row_id("/d/src/main.rs").0),
             }],
             tabs: vec![TabSnap { name: "lib.rs".into(), dirty: true }, TabSnap { name: "main.rs".into(), dirty: false }],
             active_tab: Some(1),
@@ -1348,7 +1372,7 @@ mod tests {
     fn every_folder_of_the_workspace_has_its_own_tree() {
         let mut s = snap();
         let row = RowSnap { id: row_id("/e/x.rs").0, path: "/e/x.rs".into(), name: "x.rs".into(), depth: 0, is_dir: false, expanded: false, selected: true };
-        s.explorers.push(ExplorerSnap { name: "e".into(), rows: vec![row], rows_total: 1 });
+        s.explorers.push(ExplorerSnap { name: "e".into(), focused: Some(row.id), rows: vec![row], rows_total: 1 });
         s.focus = FocusSnap::Explorer(1);
         let tree = accesskit_consumer::Tree::new(s.to_tree(), true);
         let state = tree.state();

@@ -261,3 +261,136 @@ fn declared_settings_are_checked_and_others_warned() {
     assert_eq!(w.len(), 3, "{w:?}");
     crate::ext::set_for_test(Vec::new());
 }
+
+#[gpui::test]
+fn a_dev_folder_loads_reloads_and_reports_its_errors(cx: &mut TestAppContext) {
+    let cfg = config_dir("dev");
+    let dev = cfg.join("my-theme");
+    std::fs::create_dir_all(dev.join("themes")).unwrap();
+    std::fs::write(dev.join("codeyard-extension.toml"), manifest("you.mine", "[[themes]]\nlabel = \"Mine\"\npath = \"themes/mine.json\"\n")).unwrap();
+    std::fs::write(dev.join("themes/mine.json"), THEME).unwrap();
+    crate::ext::set_dev(Some(dev.clone()));
+    let (wb, cx) = setup(cx, &cfg);
+    assert!(wb.read_with(cx, |wb, _| wb.themes_for_test()).iter().any(|(id, name)| id == "ext:you.mine/mine" && name == "Mine"));
+    // Saving a file changes the fingerprint the settings poll watches.
+    let before = crate::ext::dev_stamp();
+    std::fs::write(dev.join("codeyard-extension.toml"), manifest("you.mine", "[[themes]]\nlabel = \"Mine Too\"\npath = \"themes/mine.json\"\n") + "\n")
+        .unwrap();
+    assert_ne!(crate::ext::dev_stamp(), before);
+    reload(&wb, cx);
+    assert!(wb.read_with(cx, |wb, _| wb.themes_for_test()).iter().any(|(_, name)| name == "Mine Too"));
+    // A mistake shows the author's error instead of the extension.
+    std::fs::remove_file(dev.join("themes/mine.json")).unwrap();
+    reload(&wb, cx);
+    let notice = wb.read_with(cx, |wb, _| wb.notice_for_test()).map(|(_, t)| t).unwrap_or_default();
+    assert!(notice.contains("themes.path points to 'themes/mine.json'"), "{notice}");
+    crate::ext::set_dev(None);
+}
+
+#[cfg(unix)]
+#[test]
+fn cyx_is_linked_into_the_first_writable_folder() {
+    let root = config_dir("cyx-link");
+    let target = root.join("Codeyard.app-cyx");
+    std::fs::write(&target, "#!/bin/sh\n").unwrap();
+    let blocked = root.join("blocked");
+    std::fs::write(&blocked, "a file, not a folder").unwrap();
+    let bin = root.join("bin");
+    let dir = Workbench::install_cyx_link_for_test(&target, &[blocked.clone(), bin.clone()]).unwrap();
+    assert_eq!(dir, bin);
+    assert_eq!(std::fs::read_link(bin.join("cyx")).unwrap(), target);
+    // Again: the old link is replaced.
+    Workbench::install_cyx_link_for_test(&target, std::slice::from_ref(&bin)).unwrap();
+    // A real file of that name is never replaced.
+    std::fs::remove_file(bin.join("cyx")).unwrap();
+    std::fs::write(bin.join("cyx"), "someone else's").unwrap();
+    assert!(Workbench::install_cyx_link_for_test(&target, std::slice::from_ref(&bin)).unwrap_err().contains("not a link"));
+}
+
+#[cfg(unix)]
+#[gpui::test]
+fn a_new_extension_is_loaded_in_development_and_opened(cx: &mut TestAppContext) {
+    let cfg = config_dir("new-ext");
+    let dir = cfg.join("glow");
+    std::fs::create_dir_all(dir.join("themes")).unwrap();
+    std::fs::write(dir.join("codeyard-extension.toml"), manifest("you.glow", "[[themes]]\nlabel = \"Glow\"\npath = \"themes/glow.json\"\n")).unwrap();
+    std::fs::write(dir.join("themes/glow.json"), THEME).unwrap();
+    let (wb, cx) = setup(cx, &cfg);
+    wb.update_in(cx, |wb, window, cx| wb.finish_create_extension_for_test(true, "", dir.clone(), window, cx));
+    cx.run_until_parked();
+    assert_eq!(crate::ext::dev_dir().as_deref(), Some(dir.as_path()));
+    assert!(wb.read_with(cx, |wb, _| wb.themes_for_test()).iter().any(|(id, _)| id == "ext:you.glow/glow"));
+    assert!(wb.read_with(cx, |wb, cx| wb.active_editor_entity().map(|e| e.read(cx).path.ends_with("codeyard-extension.toml"))).unwrap_or(false));
+    wb.update_in(cx, |wb, window, cx| wb.finish_create_extension_for_test(false, "error: glow/ already exists", dir.clone(), window, cx));
+    let notice = wb.read_with(cx, |wb, _| wb.notice_for_test()).map(|(_, t)| t).unwrap_or_default();
+    assert!(notice.contains("already exists"), "{notice}");
+    crate::ext::set_dev(None);
+}
+
+#[test]
+fn install_file_checks_like_the_view() {
+    let cfg = config_dir("install-file");
+    let pkg = |manifest_text: String, extra: Vec<(&str, &str)>| {
+        let mut entries = vec![ext_pkg::Entry { path: "codeyard-extension.toml".into(), data: manifest_text.into_bytes(), executable: false }];
+        entries.extend(extra.into_iter().map(|(p, t)| ext_pkg::Entry { path: p.into(), data: t.as_bytes().to_vec(), executable: false }));
+        ext_pkg::write(entries).unwrap().0
+    };
+    let store = crate::ext::store(&cfg);
+    let good = cfg.join("good.cyx");
+    std::fs::write(&good, pkg(manifest("you.night", "[[themes]]\nlabel = \"Night\"\npath = \"t.json\"\n"), vec![("t.json", THEME)])).unwrap();
+    let m = crate::ext::install_file(&store, &good).unwrap();
+    assert_eq!(m.id.as_str(), "you.night");
+    assert!(store.locked().unwrap().contains_key(&m.id));
+    let code = cfg.join("code.cyx");
+    std::fs::write(&code, pkg(manifest("you.code", "[code]\nentry = \"main.ts\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n"), vec![("main.ts", "")]))
+        .unwrap();
+    assert!(crate::ext::install_file(&store, &code).unwrap_err().contains("contains code"));
+    let junk = cfg.join("junk.cyx");
+    std::fs::write(&junk, b"not a package").unwrap();
+    assert!(crate::ext::install_file(&store, &junk).unwrap_err().contains("no gzip header"));
+}
+
+/// Local and SSH are the same (#35, exit criterion 5): over SSH a file in an extension's language gets that language, and
+/// the extension's language server starts on the host, found on PATH there, and is told the language id.
+#[gpui::test]
+fn extension_language_and_server_work_over_ssh(cx: &mut TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("ext-ssh") else { return };
+    let cfg = config_dir("ssh");
+    let Some(fake) = crate::test_lsp::FakeServer::new(&cfg.join("server"), &serde_json::json!({})) else { return };
+    let (program, args) = fake.command();
+    let args = args.iter().map(|a| format!("{a:?}")).collect::<Vec<_>>().join(", ");
+    install(
+        &cfg,
+        &[(
+            "codeyard-extension.toml",
+            &manifest(
+                "you.foo",
+                &format!(
+                    "[permissions]\nrun = [\"{program}\"]\nwhy = \"Starts the Foo language server.\"\n[[languages]]\nid = \"foo\"\nextensions = [\"foo\"]\nline-comment = \"#\"\n[[language-servers]]\ncommand = \"{program}\"\nargs = [{args}]\nlanguages = [\"foo\"]\n"
+                ),
+            ),
+        )],
+    );
+    let root = cfg.join("project");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("a.foo"), "# hello\n").unwrap();
+    let (wb, cx) = setup(cx, &cfg);
+    assert!(cx.update(|_, cx| cx.global::<crate::settings::Settings>().lsp_servers.iter().any(|(k, _)| k == "foo")), "the server joins lsp.servers");
+    wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
+    crate::qa_integration_tests::wait_secs(cx, 30, "connected", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_secs(1));
+        wb.read_with(cx, |wb, _| wb.ports_ready())
+    });
+    let r = root.to_string_lossy().into_owned();
+    wb.update_in(cx, |wb, window, cx| wb.open_path(&r, window, cx));
+    cx.run_until_parked();
+    crate::qa_integration_tests::ssh_open_file(&wb, cx, &root.join("a.foo"));
+    crate::qa_integration_tests::wait_secs(cx, 30, "the extension's server opened a.foo on the host", |cx| {
+        cx.executor().advance_clock(std::time::Duration::from_millis(500));
+        !fake.received("textDocument/didOpen").is_empty()
+    });
+    let open = &fake.received("textDocument/didOpen")[0];
+    assert_eq!(open["params"]["textDocument"]["languageId"], "foo");
+    assert!(open["params"]["textDocument"]["uri"].as_str().unwrap_or_default().ends_with("/a.foo"), "{open}");
+    crate::ext::set_for_test(Vec::new());
+}

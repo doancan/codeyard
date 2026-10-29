@@ -58,6 +58,9 @@ Windows x64 is built and released as a ZIP and a setup EXE (unsigned, so SmartSc
 - Rust debugging with the MSVC toolchain (`*-pc-windows-msvc`): lldb reads the PDB debug information there, which the
   toolchain's lldb formatters are not made for, so they are not loaded and `String`, `Vec` and `HashMap` show their fields.
   The `*-pc-windows-gnu` toolchains get them as on other systems.
+- Extensions: declarative extensions, the Extensions view and `cyx` work as on macOS, and the installer puts `cyx.exe` beside
+  Codeyard. *Extensions: Install cyx Command in PATH* names that folder instead of linking (the PATH is the user's to edit).
+  The extension performance rows only warn on Windows until there is a Windows reference machine (`plugin-architecture.md` §15).
 - Not verified: real SSH authentication, mixed-DPI displays, physical keyboard and IME behaviour.
 - `scripts/check-windows.sh` is the quick cross-compile check from macOS or Linux (`x86_64-pc-windows-gnu`); it runs nothing.
 

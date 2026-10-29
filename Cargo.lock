@@ -1550,6 +1550,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 
 [[package]]
+name = "cyx"
+version = "0.5.0"
+dependencies = [
+ "ext-manifest",
+ "ext-pkg",
+ "serde_json",
+]
+
+[[package]]
 name = "data-encoding"
 version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6407,6 +6416,15 @@ dependencies = [
  "core-foundation-sys",
  "libc",
  "objc",
+]
+
+[[package]]
+name = "task-engine"
+version = "0.5.0"
+dependencies = [
+ "fancy-regex",
+ "serde_json",
+ "theme",
 ]
 
 [[package]]
