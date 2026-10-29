@@ -353,7 +353,7 @@ fn install_file_checks_like_the_view() {
     code_pkg.push(ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: ext_pkg::testing::COMPONENT.to_vec(), executable: false });
     std::fs::write(&code, ext_pkg::write(code_pkg).unwrap().0).unwrap();
     // Code without permissions installs (it runs in codeyard-exthost); with permissions it needs the consent sheet.
-    if crate::ext_runtime::exthost_path().is_some() {
+    if crate::ext_runtime::code_runs_here(&"tests").is_ok() {
         assert_eq!(crate::ext::install_file(&store, &code).unwrap().id.as_str(), "you.code");
     }
     let asks = cfg.join("asks.cyx");

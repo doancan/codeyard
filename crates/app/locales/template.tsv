@@ -2225,7 +2225,6 @@ This debug adapter cannot change values.
 This debug adapter does not support data breakpoints.	
 This debug adapter has no exception breakpoints.	
 This engine runs Windows containers. Editing requires a Linux container; Windows container editing needs a separate Windows agent. Container logs remain available.	
-This extension contains code, and codeyard-exthost, which runs it, is missing beside Codeyard.	
 This extension has no README.	
 This extension is no longer in the registry.	
 This file has merge conflicts: resolve them first (Source Control marks it resolved when staged)	
@@ -2750,6 +2749,7 @@ your words
 {0} cannot be used with {1}	
 {0} commit{1} only exist on this branch and will be lost (the reflog keeps them for a while).	
 {0} containers · {1} running · {2} need attention	
+{0} contains code, which needs a sandbox this system does not provide: {1}	
 {0} could not be read ({1})	
 {0} could not start: {1}	
 {0} errors, {1} warnings	

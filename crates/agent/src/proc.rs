@@ -3,7 +3,9 @@
 //! is launched from the Dock or an ssh command, PATH does not include
 //! directories like ~/.cargo/bin.
 
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
+#[cfg(windows)]
+use std::io::Read;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -280,13 +282,13 @@ pub struct Proc {
     _job: job::Job,
 }
 
-pub fn spawn(program: &str, args: &[String], cwd: Option<&str>) -> io::Result<(Proc, impl Read + Send + 'static)> {
+pub fn spawn(program: &str, args: &[String], cwd: Option<&str>) -> io::Result<(Proc, std::process::ChildStdout)> {
     spawn_command(command(program, args, cwd)?)
 }
 
 /// An extension's process: an absolute `program`, and only `env` on top of a minimal environment (the user's and the
 /// agent's variables, which may hold tokens, never reach it).
-pub fn spawn_env(program: &str, args: &[String], cwd: Option<&str>, env: &[(String, String)]) -> io::Result<(Proc, impl Read + Send + 'static)> {
+pub fn spawn_env(program: &str, args: &[String], cwd: Option<&str>, env: &[(String, String)]) -> io::Result<(Proc, std::process::ChildStdout)> {
     if !std::path::Path::new(program).is_absolute() {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("{program} is not an absolute path")));
     }
@@ -347,7 +349,7 @@ pub fn which(program: &str) -> Option<String> {
     }
 }
 
-fn spawn_command(mut cmd: Command) -> io::Result<(Proc, impl Read + Send + 'static)> {
+fn spawn_command(mut cmd: Command) -> io::Result<(Proc, std::process::ChildStdout)> {
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     #[cfg(windows)]

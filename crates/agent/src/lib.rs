@@ -469,12 +469,12 @@ impl Session {
                 let (program, spawned) = match req {
                     Request::ProcSpawn { program, args, cwd } => {
                         let cwd = cwd.map(|c| expand(&c).to_string_lossy().into_owned());
-                        let r = proc::spawn(&program, &args, cwd.as_deref()).map(|(p, rd)| (p, Box::new(rd) as Box<dyn Read + Send>));
+                        let r = proc::spawn(&program, &args, cwd.as_deref());
                         (program, r)
                     }
                     Request::ProcSpawnEnv { program, args, cwd, env } => {
                         let cwd = cwd.map(|c| expand(&c).to_string_lossy().into_owned());
-                        let r = proc::spawn_env(&program, &args, cwd.as_deref(), &env).map(|(p, rd)| (p, Box::new(rd) as Box<dyn Read + Send>));
+                        let r = proc::spawn_env(&program, &args, cwd.as_deref(), &env);
                         (program, r)
                     }
                     _ => unreachable!("matched above"),
