@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS meta (
 
 pub fn open(path: &Path) -> rusqlite::Result<Connection> {
     let conn = Connection::open(path)?;
+    // `yard revoke` and `yard immediate` write while `yard serve` runs: wait for its transaction instead of failing.
+    conn.busy_timeout(std::time::Duration::from_secs(30))?;
+    // WAL also lets Litestream copy the database continuously for backups.
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.execute_batch(SCHEMA)?;

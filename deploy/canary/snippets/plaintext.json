@@ -1,0 +1,7 @@
+{
+  "Canary": {
+    "prefix": "codeyard-canary",
+    "body": ["This is the registry's canary; it does nothing."],
+    "description": "The registry's canary"
+  }
+}

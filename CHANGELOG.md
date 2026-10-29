@@ -34,6 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   status, permissions in plain words, the publisher and downloads including updates. Install goes through the consent
   sheet. Opening the Market reads each registry's list at most once a day; searching sends nothing. The registry
   serves each version's manifest and README as a details file whose digest is in the signed index.
+- Running the public registry: `yard init --root-keys` (no root key on the server), `yard rotate` and `yard promote`
+  for the 90-day online key with the root key holders' signatures, `cyx yard sign --key -` for a key kept in a
+  password manager, `cyx yard check` for a live registry, ETag answers for the index, the root key ceremony script,
+  the server setup (`deploy/yard`: systemd, Caddy, Litestream and R2 backups, single-command SSH keys), and hourly
+  monitoring, a weekly revocation canary and deploys from GitHub Actions. Hosting and the runbook are in
+  docs/registry.md.
 - `cyx publish` signs keyless (GitHub Actions' identity, or a browser sign-in) and publishes; `--dry-run` prints the
   install sheet in the app's words. `cyx yank`, `restore` and `deprecate` change a published version. `cyx new` writes
   `.github/workflows/publish.yml` for tag-push releases through the `codeyard/publish` action. `.github` is never packaged.

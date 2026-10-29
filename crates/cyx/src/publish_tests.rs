@@ -89,7 +89,7 @@ impl World {
         let dir = std::env::temp_dir().join(format!("cyx-publish-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let authority = Arc::new(Authority::new());
-        let cfg = ::yard::init(&dir.join("registry"), "yard.test", &authority.fulcio_pem(), &authority.rekor_pem(), now()).unwrap();
+        let cfg = ::yard::init(&dir.join("registry"), "yard.test", &authority.fulcio_pem(), &authority.rekor_pem(), None, now()).unwrap();
         let y = Arc::new(::yard::Yard::open(::yard::Config::load(&cfg).unwrap()).unwrap());
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         let listener = rt.block_on(tokio::net::TcpListener::bind("127.0.0.1:0")).unwrap();

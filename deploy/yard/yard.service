@@ -1,0 +1,35 @@
+# The registry's publish service. Installed by setup.sh as /etc/systemd/system/yard.service.
+[Unit]
+Description=Codeyard extension registry (yard)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=yard
+Group=yard
+ExecStart=/usr/local/bin/yard serve /srv/yard/yard.json
+Restart=always
+RestartSec=5
+# Only the registry's own folder is writable; nothing else on the machine is reachable to it.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/srv/yard
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

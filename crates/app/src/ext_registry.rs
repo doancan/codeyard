@@ -14,8 +14,8 @@ use std::process::{Command, Stdio};
 use ext_core::publisher::Pin;
 use ext_core::registry::{self, Download, Fetch, Got, Registry};
 
-/// The public registry. Its root keys come from the key ceremony (#70); until then only registries in
-/// `extensions.registries` are used.
+/// The public registry: (name, URL, root public keys, threshold). The keys come from the root key ceremony
+/// (docs/registry.md, "Root key ceremony"); until it has run, only registries in `extensions.registries` are used.
 pub const PUBLIC: Option<(&str, &str, &[&str], usize)> = None;
 
 /// Every registry this user installs from: the public one first, then their own, in settings order.

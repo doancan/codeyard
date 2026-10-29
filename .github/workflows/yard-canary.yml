@@ -1,0 +1,77 @@
+# The registry's canary (docs/registry.md, "The canary"): publish a new version of codeyard.canary, revoke it on the
+# server, and measure how long until the revocation is in the signed index clients fetch. The minutes go to the run's
+# summary; a run fails if it takes longer than 2 hours. Does nothing until the YARD_URL variable is set.
+name: yard-canary
+on:
+  schedule:
+    - cron: "41 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: yard-canary
+
+jobs:
+  canary:
+    if: vars.YARD_URL != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    environment: yard
+    permissions:
+      contents: read
+      id-token: write # the keyless publisher signature (Sigstore) for codeyard.canary
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
+        with:
+          shared-key: yard-tools
+      - run: cargo build --release --locked -p cyx
+      - name: Publish a new canary version
+        id: publish
+        env:
+          YARD_URL: ${{ vars.YARD_URL }}
+          RUN: ${{ github.run_number }}
+        run: |
+          version="0.0.$RUN"
+          sed -i "s/^version *= *\".*\"/version     = \"$version\"/" deploy/canary/codeyard-extension.toml
+          target/release/cyx publish deploy/canary --registry "$YARD_URL"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Revoke it on the server
+        env:
+          SSH_KEY: ${{ secrets.YARD_CANARY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.YARD_SSH_KNOWN_HOSTS }}
+          HOST: ${{ vars.YARD_SSH_HOST }}
+          VERSION: ${{ steps.publish.outputs.version }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/canary && chmod 600 ~/.ssh/canary
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/canary -o IdentitiesOnly=yes "canary@$HOST" "revoke $VERSION"
+          date +%s > revoked-at
+      - name: Wait until clients can see it
+        env:
+          YARD_URL: ${{ vars.YARD_URL }}
+          YARD_ROOT_KEYS: ${{ vars.YARD_ROOT_KEYS }}
+          YARD_THRESHOLD: ${{ vars.YARD_THRESHOLD }}
+          VERSION: ${{ steps.publish.outputs.version }}
+        run: |
+          set --
+          for k in $(echo "$YARD_ROOT_KEYS" | tr ',' ' '); do set -- "$@" --root-key "$k"; done
+          start=$(cat revoked-at)
+          while :; do
+            if target/release/cyx yard check "$YARD_URL" "$@" --threshold "${YARD_THRESHOLD:-2}" --revoked "codeyard.canary@$VERSION"; then
+              minutes=$(( ($(date +%s) - start + 59) / 60 ))
+              echo "Canary codeyard.canary $VERSION: the revocation was in the signed index after $minutes min. Clients fetch the index at most once a day, so an online client stops it within 24 h of that." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            if [ $(( $(date +%s) - start )) -gt 7200 ]; then
+              echo "Canary codeyard.canary $VERSION: not revoked in the index after 2 hours." >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            sleep 60
+          done

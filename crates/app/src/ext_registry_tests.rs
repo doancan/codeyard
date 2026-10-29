@@ -170,3 +170,14 @@ fn no_request_without_an_extension_from_a_registry(cx: &mut TestAppContext) {
     crate::ext_registry::refresh_installed(&cfg, &regs, crate::ext_registry::now() + ext_core::registry::REFRESH_SECS);
     assert_eq!(fetch.count(), after_install + 1);
 }
+
+/// The public registry the app ships: once set, it is a valid `extensions.registries` entry over https with the
+/// ceremony's three root keys, two of which must sign, so a typo fails here and not on users' machines.
+#[test]
+fn the_public_registry_entry_is_valid() {
+    let Some((name, url, keys, threshold)) = crate::ext_registry::PUBLIC else { return };
+    let setting = serde_json::json!({ "name": name, "url": url, "root-keys": keys, "threshold": threshold });
+    let r = ext_core::registry::Registry::from_setting(&setting).unwrap();
+    assert!(r.url.starts_with("https://"), "{}", r.url);
+    assert_eq!((r.keys.keys.len(), r.keys.threshold), (3, 2));
+}

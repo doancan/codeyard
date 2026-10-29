@@ -1,0 +1,11 @@
+# Continuous copy of the registry's database to object storage (Cloudflare R2). Installed as /etc/litestream.yml;
+# the bucket, endpoint and keys come from /etc/yard/backup.env.
+dbs:
+  - path: /srv/yard/yard.sqlite
+    replica:
+      type: s3
+      bucket: ${YARD_BACKUP_BUCKET}
+      path: yard.sqlite
+      endpoint: ${YARD_BACKUP_ENDPOINT}
+      region: auto
+      force-path-style: true
