@@ -146,6 +146,31 @@ impl Permissions {
     pub fn describe(&self) -> Vec<String> {
         self.lines().iter().map(Line::english).collect()
     }
+
+    /// What `self` asks for that `old` did not: the update card shows only this, and an empty result updates without
+    /// asking. Entries compare as written, so a narrower glob or host than before still counts as new. `why` is not
+    /// a permission.
+    pub fn added_since(&self, old: &Permissions) -> Permissions {
+        let new = |mine: &[String], theirs: &[String]| mine.iter().filter(|x| !theirs.contains(x)).cloned().collect::<Vec<_>>();
+        let clipboard = match (self.clipboard.reads() && !old.clipboard.reads(), self.clipboard.writes() && !old.clipboard.writes()) {
+            (true, true) => Clipboard::ReadWrite,
+            (true, false) => Clipboard::Read,
+            (false, true) => Clipboard::Write,
+            (false, false) => Clipboard::None,
+        };
+        Permissions {
+            read: new(&self.read, &old.read),
+            write: new(&self.write, &old.write),
+            net: new(&self.net, &old.net),
+            auth: new(&self.auth, &old.auth),
+            secrets: self.secrets && !old.secrets,
+            run: new(&self.run, &old.run),
+            clipboard,
+            terminal: self.terminal && !old.terminal,
+            commands: new(&self.commands, &old.commands),
+            why: None,
+        }
+    }
 }
 
 /// One line of the consent sheet.

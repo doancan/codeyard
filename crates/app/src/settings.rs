@@ -194,6 +194,9 @@ pub struct Settings {
     pub keymap_preset: String,
     /// `extensions.enabled`: false loads no extension, like `--no-extensions` but kept across sessions.
     pub extensions_enabled: bool,
+    /// `extensions.autoUpdate`: what happens when a registry has a newer version of an installed extension. User
+    /// settings only.
+    pub extension_auto_update: ext_core::update::AutoUpdate,
     /// `extensions.registries`: registries besides the public one (user settings only).
     pub extension_registries: Vec<ext_core::registry::Registry>,
     /// Values of settings that installed extensions declare (`ext.<publisher.name>.<key>`), checked against their type.
@@ -373,6 +376,7 @@ impl Default for Settings {
             icon_theme: crate::icon_theme::ALL[0].id().into(),
             keymap_preset: String::new(),
             extensions_enabled: true,
+            extension_auto_update: ext_core::update::AutoUpdate::Install,
             extension_registries: Vec::new(),
             ext_settings: std::collections::BTreeMap::new(),
             status_bar: true,
@@ -500,6 +504,8 @@ pub const USER_ONLY_KEYS: &[&str] = &[
     // A repository must not switch extensions on or off for the user, or swap their keys for a preset.
     "extensions.enabled",
     "keymap.preset",
+    // A repository must not turn updates (and the fixes they bring) off, nor install them for the user.
+    "extensions.autoUpdate",
     // A repository must not add a registry to install from.
     "extensions.registries",
     // --- git-sync ---
@@ -920,6 +926,9 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
     if let Some(v) = r.bool("extensions.enabled") {
         s.extensions_enabled = v;
     }
+    if let Some(v) = r.choice("extensions.autoUpdate", &["off", "notify", "install"]).and_then(|v| ext_core::update::AutoUpdate::parse(&v)) {
+        s.extension_auto_update = v;
+    }
     if let Some(v) = r.bool("workbench.editor.showTabs") {
         s.show_tabs = v;
     }
@@ -1251,6 +1260,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "workbench.fontFamily",
         "keymap.preset",
         "extensions.enabled",
+        "extensions.autoUpdate",
         "extensions.registries",
         "workbench.editor.showTabs",
         "workbench.tabs.showIcons",

@@ -653,6 +653,24 @@ Codeyard asks a registry nothing until you install from it or open the Market. A
 whole list at most once a day, the same file for everyone, so the registry never learns what you have installed.
 Opening an extension's page in the Market fetches that page once.
 
+**Updates.** Extensions from a registry stay current by themselves (`extensions.autoUpdate`, in your own settings):
+
+- `install` (the default): a newer version installs when it asks for the same or fewer permissions from the same
+  publisher. Data-only versions install at once; a version that runs code waits 48 hours after it is published, which
+  gives the registry time to stop a bad one (the registry can clear an urgent fix sooner). *Update Now* on the
+  extension's page skips the wait.
+- A version that asks for more keeps the one you have running and shows a card on the page with only what is new;
+  *Update* installs it. Another publisher, or a registry list more than 3 days old, opens the full sheet (*Review…*).
+- `notify` shows *Update available* in the list and the version on the page; you install it. `off` downloads nothing
+  until you ask.
+- Whatever the setting, a version its publisher withdrew goes back to the newest earlier one at once (from the kept
+  previous version when it is that one), and a version the registry revoked stops at once, with every extension that
+  depends on it, and its page says why. It stays stopped offline and after a restart, until a fixed version replaces it.
+  A deprecated version keeps working; its page names the replacement.
+- *Get Pre-releases* on an extension's page opts that extension into its publisher's pre-releases, with no wait;
+  *Stop Pre-releases* goes back to releases (the pre-release you have stays until a release passes it). The choice is
+  kept in `extensions.lock.jsonc`.
+
 From a terminal or a script, `codeyard --install-extension FILE.cyx` or `--install-extension publisher.name[@1.2.0]`
 (repeat the flag for several) installs without opening a window; running it is your consent, and the same checks
 apply. A changed publisher or an old registry list is refused there, with the reason: use the Extensions view.

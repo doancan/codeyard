@@ -524,3 +524,29 @@ fn more_shared_suffixes_are_any_host() {
         assert!(is_wide_host(h), "{h}");
     }
 }
+
+#[test]
+fn an_update_asks_only_for_what_is_new() {
+    let old = Permissions {
+        read: vec!["*.toml".into()],
+        net: vec!["api.x.com".into()],
+        clipboard: Clipboard::Write,
+        why: Some("Old reason.".into()),
+        ..Default::default()
+    };
+    // Fewer, or the same with another reason: nothing to ask.
+    assert!(Permissions { read: vec!["*.toml".into()], ..Default::default() }.added_since(&old).is_empty());
+    assert!(Permissions { why: Some("New reason.".into()), ..old.clone() }.added_since(&old).is_empty());
+    let new = Permissions {
+        read: vec!["*.toml".into(), "*.lock".into()],
+        net: vec!["api.x.com".into()],
+        clipboard: Clipboard::ReadWrite,
+        terminal: true,
+        ..Default::default()
+    };
+    let added = new.added_since(&old);
+    assert_eq!(added.describe(), ["Read *.lock", "Read the clipboard", "Type into terminals"]);
+    // A narrower entry than before is still a new one: entries compare as written.
+    let narrower = Permissions { net: vec!["v2.api.x.com".into()], ..Default::default() };
+    assert_eq!(narrower.added_since(&old).describe(), ["Connect to v2.api.x.com"]);
+}

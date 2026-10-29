@@ -139,8 +139,9 @@ impl Workbench {
             .map(|&i| {
                 let e = &s.list[i];
                 let mut detail = format!("{}, {}", e.manifest.version, e.manifest.id);
-                if e.disabled {
-                    detail = format!("{detail}, {}", t("Disabled"));
+                let badge = self.extension_badge(e);
+                if !badge.is_empty() {
+                    detail = format!("{detail}, {badge}");
                 }
                 (e.manifest.name.clone(), Some(detail))
             })

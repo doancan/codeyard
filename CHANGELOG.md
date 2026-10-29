@@ -34,6 +34,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   status, permissions in plain words, the publisher and downloads including updates. Install goes through the consent
   sheet. Opening the Market reads each registry's list at most once a day; searching sends nothing. The registry
   serves each version's manifest and README as a details file whose digest is in the signed index.
+- Extension updates and version status: `extensions.autoUpdate` (`install`, `notify`, `off`). Data-only versions
+  update at once and versions that run code after 48 h (*Update Now* skips the wait); more permissions wait for a card
+  that lists only what is new, and another publisher for the full sheet. A withdrawn version goes back to the newest
+  earlier one at once, and a revoked one stops with its dependents, also offline and after a restart. Pre-releases are
+  opt-in per extension on its page.
 - `cyx publish` signs keyless (GitHub Actions' identity, or a browser sign-in) and publishes; `--dry-run` prints the
   install sheet in the app's words. `cyx yank`, `restore` and `deprecate` change a published version. `cyx new` writes
   `.github/workflows/publish.yml` for tag-push releases through the `codeyard/publish` action. `.github` is never packaged.

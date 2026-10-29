@@ -173,6 +173,7 @@ fn pins_come_from_the_same_registry() {
         previous: None,
         source,
         disabled: false,
+        pre_release: false,
     };
     let me = github(7, 42);
     let from_test = locked(crate::Source::Registry { registry: "test".into(), publisher: me.clone() });

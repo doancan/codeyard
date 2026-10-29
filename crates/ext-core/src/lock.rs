@@ -9,8 +9,9 @@ use ext_pkg::ContentDigest;
 use serde::{Deserialize, Serialize};
 
 /// The format of the lock file. A newer format is refused rather than rewritten, as the state database does. Format 2
-/// adds registry sources; a lock without one is still written as format 1, so an older Codeyard keeps reading it.
-pub const FORMAT: u32 = 2;
+/// adds registry sources and format 3 the pre-release channel; a lock is written in the lowest format that holds it, so
+/// an older Codeyard keeps reading it.
+pub const FORMAT: u32 = 3;
 
 const HEADER: &str = "// Installed extensions. Written by Codeyard; change it with the Extensions view or `codeyard ext`.\n";
 
@@ -26,6 +27,9 @@ pub struct Locked {
     pub source: Source,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub disabled: bool,
+    /// The user opted into the registry's pre-releases of this extension (on its page).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pre_release: bool,
 }
 
 /// Where a package came from: shown in the Extensions view and used to update it.
@@ -92,7 +96,13 @@ impl Lock {
 
     pub fn render(&self) -> String {
         let mut out = String::from(HEADER);
-        let needs = if self.extensions.values().any(|l| l.source.registry().is_some()) { FORMAT } else { 1 };
+        let needs = if self.extensions.values().any(|l| l.pre_release) {
+            3
+        } else if self.extensions.values().any(|l| l.source.registry().is_some()) {
+            2
+        } else {
+            1
+        };
         let lock = Lock { format: needs, extensions: self.extensions.clone() };
         out.push_str(&serde_json::to_string_pretty(&lock).expect("lock serializes"));
         out.push('\n');

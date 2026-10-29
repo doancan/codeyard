@@ -270,6 +270,13 @@ impl TestRegistry {
         self.sign(now);
     }
 
+    /// Hand an id to another publisher (what the registry's admin does after a transfer) and sign a new index.
+    pub fn set_publisher(&mut self, id: &str, publisher: &Publisher, now: u64) {
+        let id = ext_manifest::ExtId::parse(id).unwrap();
+        self.index.extensions.get_mut(&id).unwrap().publisher = publisher.clone();
+        self.sign(now);
+    }
+
     pub fn set_status(&mut self, id: &str, version: &str, status: crate::yard::Status, now: u64) {
         self.edit_release(id, version, now, |r| r.status = status);
     }
