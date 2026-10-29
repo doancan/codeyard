@@ -202,6 +202,7 @@ dependencies = [
  "ext-manifest",
  "ext-pkg",
  "ext-proto",
+ "ext-ui",
  "futures",
  "gpui",
  "host",

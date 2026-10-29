@@ -167,6 +167,7 @@ impl Workbench {
             .child(item("act-testing", "flask-conical", crate::i18n::t("Testing"), Panel::Testing, failed_tests, cx))
             .child(item("act-remote", "screen-share", crate::i18n::t("Remote Explorer"), Panel::Remote, 0, cx))
             .child(item("act-extensions", "blocks", crate::i18n::t("Extensions"), Panel::Extensions, 0, cx))
+            .children(self.ext_view_activity_items(p, cx))
             .when(cx.global::<Settings>().docker_enabled, |d| {
                 d.child(item("act-containers", "server", crate::i18n::t("Containers"), Panel::Containers, 0, cx))
             });

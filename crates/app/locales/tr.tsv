@@ -3116,3 +3116,14 @@ This extension contains code, and codeyard-exthost, which runs it, is missing be
 {0} failed to start: {1}	{0} başlarken hata verdi: {1}
 {} crashed three times in a minute and was turned off.	{} bir dakikada üç kez çöktü ve kapatıldı.
 denied ({0}); add to [permissions]: {1}	reddedildi ({0}); [permissions] bölümüne ekleyin: {1}
+Answer the install sheet first.	Önce kurulum sayfasını yanıtlayın.
+Choose…	Seçin…
+Load more	Daha fazla yükle
+Open View: {0} ({1})	Görünümü Aç: {0} ({1})
+This view is not available.	Bu görünüm kullanılamıyor.
+by {}	yayımlayan: {}
+render must answer with response.view	render, response.view ile yanıt vermeli
+the extension stopped	eklenti durdu
+{0} could not draw this view: {1}	{0} bu görünümü çizemedi: {1}
+{0}, by {1}	{0}, yayımlayan: {1}
+{0}, from {1}	{0}, kaynak: {1}

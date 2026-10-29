@@ -24,13 +24,13 @@ pub(super) struct CodeState {
     procs: HashMap<String, Arc<Process>>,
     /// Requests waiting for their exthost to start.
     queued: HashMap<String, Vec<ToHost>>,
-    pending: Arc<Mutex<Pending>>,
+    pub(super) pending: Arc<Mutex<Pending>>,
     crashes: Crashes,
     /// Crashed three times within a minute: not started again this session.
     pub(super) disabled: HashSet<String>,
     cancels: HashMap<(String, u64), Arc<AtomicBool>>,
     /// The request that is a user action right now, per extension (`activeTab`, `open-external`).
-    user_action: HashMap<String, u64>,
+    pub(super) user_action: HashMap<String, u64>,
     pub(super) logs: HashMap<String, VecDeque<(LogLevel, String)>>,
     /// The last command answer of each extension, for the Inspector (#108) and tests.
     pub(super) last_answer: HashMap<String, String>,
@@ -100,6 +100,7 @@ impl Workbench {
                 out.push(Command { label: c.title.clone(), run: Run::Extension { extension: e.id().to_string(), command: local.to_string() } });
             }
         }
+        out.extend(self.ext_view_commands());
         out
     }
 
@@ -155,7 +156,7 @@ impl Workbench {
     }
 
     /// Send `msg` to the extension's exthost, starting it first (compile and handshake run in the background).
-    fn send_to_extension(&mut self, active: &crate::ext::Active, reason: &str, msg: ToHost, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn send_to_extension(&mut self, active: &crate::ext::Active, reason: &str, msg: ToHost, window: &mut Window, cx: &mut Context<Self>) {
         self.ensure_extension_pump(window, cx);
         let id = active.id().to_string();
         if let Some(p) = self.cfg.exts.code.procs.get(&id)
@@ -314,7 +315,7 @@ impl Workbench {
         }
     }
 
-    fn log_extension(&mut self, id: &str, level: LogLevel, line: String) {
+    pub(super) fn log_extension(&mut self, id: &str, level: LogLevel, line: String) {
         let log = self.cfg.exts.code.logs.entry(id.to_string()).or_default();
         if log.len() >= LOG_LINES {
             log.pop_front();
@@ -356,6 +357,7 @@ impl Workbench {
             Notify::ClearTimer { id: t } => {
                 self.cfg.exts.code.timers.remove(&(id.to_string(), t));
             }
+            Notify::Invalidate { view } => self.on_ext_view_invalidate(id, &view, window, cx),
             // Status items, views, diagnostics and decorations land with their surfaces (#103, #104); until then
             // they are logged so an author sees them arrive.
             other => self.log_extension(id, LogLevel::Debug, format!("{} (not shown in this version)", other.wit_name())),

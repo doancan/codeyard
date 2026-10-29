@@ -89,6 +89,7 @@ An existing file with the same name is never overwritten.
 Anchors and aliases were expanded.	
 Another debug adapter	
 Another publisher now: {0}. The version you have came from {1}.	
+Answer the install sheet first.	
 App: Quit	
 Apple Container supports connecting, starting containers and viewing logs. Dev Container project creation is not supported by this adapter yet; connect to an existing Apple container.	
 Application details	
@@ -217,6 +218,7 @@ Choose a folder on this computer…
 Choose an action	
 Choose an answer (Esc: none)	
 Choose an extension in the Extensions view.	
+Choose…	
 Clear Terminal	
 Clear filters	
 Clear the search	
@@ -1161,6 +1163,7 @@ Ln {}, Col {} ({} selected)
 Load	
 Load More Stack Frames	
 Load installed extensions (off: Codeyard starts as if none were installed)	
+Load more	
 Loading container details…	
 Loading image…	
 Loading pull requests…	
@@ -1445,6 +1448,7 @@ Open SSH Config File
 Open Settings (JSON)	
 Open Setup Instructions	
 Open System Settings	
+Open View: {0} ({1})	
 Open a .code-workspace file in the editor first.	
 Open a .http or .rest file to send requests.	
 Open a Markdown file (.md) to preview it.	
@@ -2231,6 +2235,7 @@ This release has no installer for this system. Download it from the release page
 This replacement is too large to preview. Narrow the search (fewer files or matches).	
 This repository has no remote. Add one with Git: Add Remote…	
 This search belongs to {0} on {1}, which this window does not show. Results cannot be opened or replaced here.	
+This view is not available.	
 This window is installing an update. You can close it in a few seconds.	
 Thursday	
 Timeline	
@@ -2457,6 +2462,7 @@ binary content, first {} shown as hex
 breakpoint	
 breaks when written:	
 brew install jdtls, or unpack Eclipse JDT LS and put jdtls on PATH	
+by {}	
 cannot read “{}” in the path	
 cannot read “{}” of the response	
 changes requested	
@@ -2612,6 +2618,7 @@ recently used
 reconnecting	
 redirects to {}; not followed, send a request to that address to continue	
 remote	
+render must answer with response.view	
 request failed	
 review needed	
 revoked: {}	
@@ -2649,6 +2656,7 @@ the debug adapter stopped
 the debug adapter stopped while starting	
 the debugger could not set the data breakpoint	
 the environment variable {} is not set	
+the extension stopped	
 the file cannot be read right now ({})	
 the file is gone (deleted or moved); following continues if it comes back	
 the file is no longer readable (permission denied)	
@@ -2720,6 +2728,7 @@ your words
 {0} commit{1} only exist on this branch and will be lost (the reflog keeps them for a while).	
 {0} containers · {1} running · {2} need attention	
 {0} could not be read ({1})	
+{0} could not draw this view: {1}	
 {0} could not start: {1}	
 {0} errors, {1} warnings	
 {0} failed to start: {1}	
@@ -2752,6 +2761,8 @@ your words
 {0} {1} waits for your OK in the Extensions view.	
 {0} · version {1}	
 {0} · version {1} · {2} license	
+{0}, by {1}	
+{0}, from {1}	
 {0}, {1} {2} {3}	
 {0}. The search stopped at the result limit, so the results are incomplete.	
 {0}. The search was cancelled, so the results are incomplete.	

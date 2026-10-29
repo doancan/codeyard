@@ -291,6 +291,7 @@ impl Workbench {
         self.sync_settings_page(cx);
         self.sync_extensions_view();
         self.sync_running_extensions(cx);
+        self.sync_ext_views(cx);
         // Extra folders resolve over the user and workspace layers, which may have changed.
         self.resolve_folder_settings(cx);
         // Registries the user installed from: updates and version status, their index at most daily (none asked

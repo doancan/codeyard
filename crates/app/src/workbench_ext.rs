@@ -55,6 +55,8 @@ pub(super) struct ExtViewState {
     pub(super) updates: super::updates_glue::UpdateState,
     /// Running code extensions (workbench_ext_code.rs).
     pub(super) code: super::code_glue::CodeState,
+    /// Views of code extensions (workbench_ext_views.rs).
+    pub(super) views: super::ext_views_glue::ViewsState,
 }
 
 /// The consent sheet's text and every other plain-words line of an extension.

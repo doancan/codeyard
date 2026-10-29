@@ -60,8 +60,12 @@ mod editor_grid_tests;
 mod editors_glue;
 #[path = "workbench_ext.rs"]
 mod ext_glue;
+#[path = "ext_ui_render.rs"]
+mod ext_ui_glue;
 #[path = "workbench_ext_view.rs"]
 mod ext_view_glue;
+#[path = "workbench_ext_views.rs"]
+mod ext_views_glue;
 #[path = "workbench_extras.rs"]
 mod extras_glue;
 #[path = "workbench_file_batch.rs"]
@@ -504,6 +508,8 @@ enum Page {
     Compare(Entity<crate::compare_folders::CompareView>),
     /// The Search Editor in front; every open one is also listed in its group's `searches`.
     Search(Entity<crate::search_editor::SearchEditor>),
+    /// An extension view in the editor area, by its full id (workbench_ext_views.rs).
+    ExtView(String),
 }
 
 /// Floating picker on top: theme picker or palette (files / commands / line).
@@ -569,6 +575,8 @@ enum Bottom {
     Ports,
     /// Debug: call stack, variables, console.
     Debug,
+    /// The extension view in `cfg.exts.views.bottom`.
+    ExtView,
 }
 
 /// Settings files of a folder (lowest to highest priority).
@@ -661,6 +669,8 @@ enum Panel {
     Remote,
     Containers,
     Extensions,
+    /// The extension view in `cfg.exts.views.sidebar`.
+    ExtView,
 }
 
 enum Conn {
@@ -1509,6 +1519,7 @@ impl Workbench {
                             }
                         },
                     )))
+                    .children(self.ext_view_panel_tabs(p, cx))
                     .child(div().flex_1())
                     // The terminal's own actions only while the terminal is the panel's view.
                     .when(self.chrome.bottom == Bottom::Terminal, |d| {
@@ -1569,6 +1580,7 @@ impl Workbench {
                     Bottom::Output => d.child(self.output_view(p)),
                     Bottom::Debug => d.child(self.debug_view(p, cx)),
                     Bottom::Ports => d.child(self.ports_view(p, cx)),
+                    Bottom::ExtView => d.child(self.ext_view_in(ext_manifest::ViewLocation::Bottom, p, cx)),
                     Bottom::Terminal => {
                         // Several terminals: their list on the right.
                         let list = self.terminal_list(p, cx);
@@ -1624,6 +1636,7 @@ impl Workbench {
             Run::Connect(alias) => self.connect(alias, window, cx),
             Run::Disconnect => self.disconnect(cx),
             Run::Extension { extension, command } => self.run_extension_command(&extension, &command, window, cx),
+            Run::ExtensionView(view) => self.open_ext_view(&view, window, cx),
         }
     }
 
