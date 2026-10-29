@@ -281,73 +281,7 @@ pub struct Proc {
 }
 
 pub fn spawn(program: &str, args: &[String], cwd: Option<&str>) -> io::Result<(Proc, impl Read + Send + 'static)> {
-    spawn_command(command(program, args, cwd)?)
-}
-
-/// An extension's process: an absolute `program`, and only `env` on top of a minimal environment (the user's and the
-/// agent's variables, which may hold tokens, never reach it).
-pub fn spawn_env(program: &str, args: &[String], cwd: Option<&str>, env: &[(String, String)]) -> io::Result<(Proc, impl Read + Send + 'static)> {
-    if !std::path::Path::new(program).is_absolute() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, format!("{program} is not an absolute path")));
-    }
-    let mut cmd = Command::new(program);
-    cmd.args(args).env_clear();
-    if let Some(dir) = cwd {
-        if !std::path::Path::new(dir).is_dir() {
-            return Err(io::Error::new(io::ErrorKind::NotFound, format!("the working directory {dir} does not exist")));
-        }
-        cmd.current_dir(dir);
-    }
-    for key in ["HOME", "LANG", "TMPDIR", "SystemRoot", "TEMP", "TMP", "USERPROFILE"] {
-        if let Some(v) = std::env::var_os(key) {
-            cmd.env(key, v);
-        }
-    }
-    // The program's own folder first, so a tool can find its siblings; then the system's.
-    let own = std::path::Path::new(program).parent().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
-    #[cfg(unix)]
-    cmd.env("PATH", format!("{own}:/usr/local/bin:/usr/bin:/bin"));
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        let system = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".into());
-        cmd.env("PATH", format!("{own};{system}\\System32;{system}"));
-        cmd.creation_flags(0x08000000);
-    }
-    for (k, v) in env {
-        cmd.env(k, v);
-    }
-    spawn_command(cmd)
-}
-
-/// Where `program` is on the login shell's PATH: an executable file, never a builtin or a function.
-pub fn which(program: &str) -> Option<String> {
-    if program.is_empty() || program.contains('/') || program.contains('\\') {
-        return None;
-    }
-    #[cfg(unix)]
-    {
-        let shell = std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/sh".into());
-        // The login shell sets PATH up; a plain sh walks it. The name is an argument, never part of a script.
-        let script = r#"IFS=:; for d in $PATH; do [ -f "$d/$1" ] && [ -x "$d/$1" ] && { echo "$d/$1"; exit 0; }; done; exit 1"#;
-        let path = Command::new(&shell).args(["-lc", "printf %s \"$PATH\""]).stdin(Stdio::null()).output().ok()?;
-        let out = Command::new("/bin/sh")
-            .args(["-c", script, "sh", program])
-            .env("PATH", String::from_utf8_lossy(&path.stdout).as_ref())
-            .stdin(Stdio::null())
-            .output()
-            .ok()?;
-        let found = String::from_utf8_lossy(&out.stdout).lines().next()?.trim().to_string();
-        (out.status.success() && found.starts_with('/')).then_some(found)
-    }
-    #[cfg(windows)]
-    {
-        let p = resolve_program(program);
-        (p.is_absolute() && p.is_file()).then(|| p.to_string_lossy().into_owned())
-    }
-}
-
-fn spawn_command(mut cmd: Command) -> io::Result<(Proc, impl Read + Send + 'static)> {
+    let mut cmd = command(program, args, cwd)?;
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
     #[cfg(windows)]

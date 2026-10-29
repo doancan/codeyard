@@ -119,6 +119,7 @@ Back to the default (removes the value from settings.jsonc)
 Back to this computer; files with unsaved changes must be saved or closed first	
 Bare repository	
 Binary file: not changed.	
+Bisect in progress	
 Blame Line	
 Bookmarks: Clear in File	
 Bookmarks: Jump to Next	
@@ -208,6 +209,7 @@ Checking…
 Checkout (Detached)	
 Checkout to…	
 Cherry-pick	
+Cherry-pick in progress	
 Cherry-pick stopped and was undone: {}	
 Cherry-picked {}	
 Choose	
@@ -1210,6 +1212,7 @@ Merge Conflict: Next Conflict
 Merge Conflict: Open Merge Editor	
 Merge Conflict: Previous Conflict	
 Merge aborted	
+Merge in progress	
 Merge into {}	
 Merge of {} has conflicts: resolve them in Source Control (or Git: Abort Merge)	
 Merge {}	
@@ -1639,6 +1642,7 @@ Reading the registries…
 Rebase	
 Rebase aborted	
 Rebase finished	
+Rebase in progress	
 Rebase stopped again on conflicts: resolve and stage them, then Git: Continue Rebase	
 Rebase stopped on conflicts: resolve them, then Git: Continue Rebase (or Abort Rebase)	
 Rebase {} onto {}?	
@@ -1743,7 +1747,12 @@ Replaced {} match|Replaced {} matches
 Replacement preview	
 Report copied	
 Report saved to {}	
+Repositories	
 Repository URL (https://… or git@host:owner/repo)	
+Repository changed while the operation was pending.	
+Repository discovery failed	
+Repository is no longer available: {}	
+Repository: {}	
 Rerun	
 Reset	
 Reset Hard to Here…	
@@ -1776,6 +1785,7 @@ Retry
 Reveal in Finder	
 Revert	
 Revert File	
+Revert in progress	
 Revert stopped and was undone: {}	
 Reverted {}	
 Reverting a change is not supported in this file (non-UTF-8 or CR-only line endings)	
@@ -1881,6 +1891,7 @@ Select a configuration
 Select a container to inspect resource history, logs, ports and storage.	
 Select a debug configuration	
 Select a file icon theme	
+Select a repository first	
 Select a row to open its details.	
 Select a word and press ⌘D to add the next match as another cursor.	
 Select all matches (⌥↵)	
@@ -2205,7 +2216,6 @@ This debug adapter cannot change values.
 This debug adapter does not support data breakpoints.	
 This debug adapter has no exception breakpoints.	
 This engine runs Windows containers. Editing requires a Linux container; Windows container editing needs a separate Windows agent. Container logs remain available.	
-This extension contains code, and codeyard-exthost, which runs it, is missing beside Codeyard.	
 This extension has no README.	
 This extension is no longer in the registry.	
 This file has merge conflicts: resolve them first (Source Control marks it resolved when staged)	
@@ -2589,6 +2599,7 @@ new value
 no configuration directory	
 no file name	
 no item {} in the response	
+no upstream	
 no “{}” in the response	
 not UTF-8	
 not available	
@@ -2727,6 +2738,7 @@ your words
 {0} cannot be used with {1}	
 {0} commit{1} only exist on this branch and will be lost (the reflog keeps them for a while).	
 {0} containers · {1} running · {2} need attention	
+{0} contains code, which needs a sandbox this system does not provide: {1}	
 {0} could not be read ({1})	
 {0} could not draw this view: {1}	
 {0} could not start: {1}	

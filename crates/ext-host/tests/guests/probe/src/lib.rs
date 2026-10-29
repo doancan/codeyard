@@ -1,5 +1,5 @@
 //! A test extension for codeyard-exthost's tests: each command exercises one part of the host, including the
-//! hostile ones (spin, grow, trap).
+//! hostile ones (spin, grow, trap, escape).
 
 wit_bindgen::generate!({ path: "../../../../ext-api/wit", world: "extension" });
 
@@ -129,6 +129,21 @@ impl Guest for Probe {
             }
             "doc" => wait(documents::active(), id),
             "every" => reply(id, format!("{}", timers::every(30))),
+            // What an extension can try from inside Wasm: WASI files, sockets and processes. Every line must fail.
+            // Only in probe-escape.wasm: its socket imports would fail the package import check, by design.
+            #[cfg(feature = "escape")]
+            "escape" => {
+                let tries = [
+                    ("read", std::fs::read(&args).map(drop)),
+                    ("list", std::fs::read_dir("/").map(drop)),
+                    ("write", std::fs::write("/tmp/codeyard-escape", b"x")),
+                    ("connect", std::net::TcpStream::connect("1.1.1.1:443").map(drop)),
+                    ("bind", std::net::TcpListener::bind("127.0.0.1:0").map(drop)),
+                    ("exec", std::process::Command::new("/bin/sh").status().map(drop)),
+                ];
+                let lines: Vec<String> = tries.iter().map(|(what, r)| format!("{what}: {}", if r.is_ok() { "ok" } else { "refused" })).collect();
+                reply(id, lines.join("\n"))
+            }
             _ => requests::respond(id, Err(&Error::Invalid(format!("unknown command {command}")))),
         }
     }

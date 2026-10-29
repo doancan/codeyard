@@ -103,6 +103,11 @@ impl Permissions {
             && self.commands.is_empty()
     }
 
+    /// Whether `net` lets the extension connect to `host`. See [`net_allows`].
+    pub fn allows_host(&self, host: &str) -> bool {
+        net_allows(&self.net, host)
+    }
+
     /// Interpreters in `run`; each needs its script inside the package.
     pub fn interpreters(&self) -> impl Iterator<Item = &str> {
         self.run.iter().map(String::as_str).filter(|p| is_interpreter(p))
@@ -315,6 +320,20 @@ pub fn is_sensitive_glob(glob: &str) -> bool {
 pub fn is_wide_host(host: &str) -> bool {
     let Some(rest) = host.strip_prefix("*.") else { return host == "*" };
     rest.split('.').count() < 2 || SHARED_SUFFIXES.contains(&rest)
+}
+
+/// Whether a `net` list allows `host`: an entry names it exactly, or a `*.` entry has it below, at any depth
+/// (`*.example.com` allows `a.example.com` and `a.b.example.com`, not `example.com`). The host is compared as given: the
+/// caller lowercases it and drops a trailing dot. A `*.` entry directly under a public suffix allows every host under
+/// that suffix, which is why [`is_wide_host`] shows it as "any host".
+pub fn net_allows(net: &[String], host: &str) -> bool {
+    if host.is_empty() || host.starts_with('.') || host.ends_with('.') || host.contains("..") {
+        return false;
+    }
+    net.iter().any(|entry| match entry.strip_prefix("*.") {
+        Some(base) => !base.is_empty() && host.strip_suffix(base).is_some_and(|sub| sub.len() > 1 && sub.ends_with('.')),
+        None => entry != "*" && entry == host,
+    })
 }
 
 /// Suffixes under which anyone can get a host name. A full public-suffix list would be exact; this list covers the common

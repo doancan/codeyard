@@ -13,8 +13,8 @@ testing = []
 
 [dependencies]
 base64 = "0.22.1"
-ext-manifest = { version = "0.5.0", path = "../ext-manifest" }
-ext-pkg = { version = "0.5.0", path = "../ext-pkg" }
+ext-manifest = { version = "0.6.0", path = "../ext-manifest" }
+ext-pkg = { version = "0.6.0", path = "../ext-pkg" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 sha2 = "0.11.1"

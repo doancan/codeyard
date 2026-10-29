@@ -11,6 +11,35 @@ impl ScmSnap {
             panel.set_busy();
         }
         let mut children = Vec::new();
+        if !view.repos.is_empty() {
+            // Several repositories: a list to pick the one Source Control acts on, each with its state.
+            let mut list = Node::new(Role::ListBox);
+            list.set_label(t("Repositories"));
+            let mut items = Vec::new();
+            for (i, repo) in view.repos.iter().enumerate() {
+                let id = NodeId(SCM_REPO + i as u64);
+                let mut option = Node::new(Role::ListBoxOption);
+                option.set_label(repo.label.clone());
+                let mut description = format!("{} · {}", repo.summary, repo.path);
+                if let Some((text, _)) = &repo.result {
+                    description = format!("{description} · {text}");
+                }
+                option.set_description(description);
+                option.set_selected(repo.selected);
+                option.set_position_in_set(i + 1);
+                option.set_size_of_set(view.repos.len());
+                if repo.busy {
+                    option.set_busy();
+                }
+                option.add_action(Action::Click);
+                option.add_action(Action::Focus);
+                nodes.push((id, option));
+                items.push(id);
+            }
+            list.set_children(items);
+            nodes.push((SCM_REPOS, list));
+            children.push(SCM_REPOS);
+        }
         if view.root.is_some() {
             let mut branch = Node::new(Role::Label);
             branch.set_value(view.branch.clone());
@@ -99,7 +128,8 @@ impl ScmSnap {
 impl Workbench {
     pub(super) fn a11y_scm_action(&mut self, req: &ActionRequest, last: &Snapshot, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let id = req.target_node;
-        let is_scm = [SCM_MESSAGE, SCM_COMMIT].contains(&id) || (SCM_GROUP..SCM_FILE + BLOCK).contains(&id.0);
+        let is_repo = (SCM_REPO..SCM_REPO + BLOCK).contains(&id.0);
+        let is_scm = [SCM_MESSAGE, SCM_COMMIT].contains(&id) || (SCM_GROUP..SCM_FILE + BLOCK).contains(&id.0) || is_repo;
         if !is_scm {
             return false;
         }
@@ -108,6 +138,17 @@ impl Workbench {
             return true;
         }
         let current = self.scm.read(cx).a11y_view(window, cx);
+        if is_repo {
+            // The option names a repository by its identity: if the inventory changed since the tree was read, the
+            // action applies to that same repository or to nothing.
+            let Some(repo) = snap.view.repos.get((id.0 - SCM_REPO) as usize) else { return true };
+            if matches!(req.action, Action::Click | Action::Focus) && current.repos.iter().any(|r| r.key == repo.key && r.path == repo.path) {
+                self.select_repository(repo.key, cx);
+                self.scm.update(cx, |s, cx| s.focus_repositories(window, cx));
+            }
+            return true;
+        }
+
         if snap.view.root != current.root || snap.view.branch != current.branch || current.root.is_none() {
             return true;
         }

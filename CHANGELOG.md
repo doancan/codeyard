@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-29
+
 ### Added
 
 - Extension views: a code extension's `[[views]]` appear in the sidebar (an activity bar button), the bottom panel (a
@@ -53,6 +55,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shown as a localized percentage. Invalid values fall back to 100% with "Interface scale must be between 75% and
   200%."; a project settings file cannot set it. The display's own scale stays separate. Typed values are rounded
   to whole percent; a zoom that cannot be saved stays for the session.
+- Source Control manages several repositories in one workspace. A bounded background search finds the repositories in
+  the workspace folders and nested inside them; the changes list groups them by repository with each one's branch,
+  ahead/behind, upstream, operation in progress, conflicts and change count. File and group actions act on their own
+  repository (identical relative paths stay apart); commit, sync, history and the "…" menu act on the selected
+  repository, which keeps its own draft and result. Operations carry the repository's identity and are checked again
+  before Git runs, so a repository removed or re-created while one is pending is never acted on, and its result is not
+  shown for another. Keyboard (↑/↓, Home/End, ←/→) and screen reader access to the repository list. Works locally and
+  over SSH. History, stash, branch-picker and named-stash actions stay with the repository they were opened on.
+  Repositories refresh a few at a time, and the workspace is searched again only when folders change, a repository
+  disappears, or on Refresh after a minute. The agent protocol is version 14: `Stat` also reports a file's identity and
+  creation time, which identify a repository's git directory.
 - The extension registry's signed index: format, offline verification (a threshold of root keys, an expiring online
   key, no rollback to an older copy) and `cyx yard keygen | sign | verify` for the key ceremony and test registries
   (docs/registry.md).
@@ -205,6 +218,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rows are 1.2 × the font size instead of the editor's looser 1.5 ×.
 - File tree rows are a little taller and roomier (24 px rows, wider side padding and icon gap).
 
+- Port mappings and mounted storage use responsive inspection cards with copyable addresses and paths.
+  Log entries place timestamp and severity above full-width messages, with a full-width search and console footer.
+
+- Container details promote the selected name and file/terminal actions into the header. Responsive CPU/memory
+  cards show current readings above charts, disk/network activity shares the available width, and log search has a visible field frame.
+
+- Container Overview fills the available width when resizing or hiding columns. Name and Image expand while
+  metrics stay aligned with larger table text; header actions and search/filters wrap in narrow windows. Sorting moves to the
+  Name/CPU/Memory column headers, and Clear filters appears only for an active query or filter.
+- The Container Overview header combines connection, update state and fleet counts, with grouped filters
+  and a framed search field. Redundant initial navigation and duplicate count rows are removed.
+
 ### Fixed
 
 - The divider between editor groups no longer jumps away from the pointer when the interface scale or the window size
@@ -252,19 +277,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The workspace-symbol test ran with language servers turned off, so it could never pass; it now starts rust-analyzer.
 
-### Changed
+### Security
 
-- Port mappings and mounted storage use responsive inspection cards with copyable addresses and paths.
-  Log entries place timestamp and severity above full-width messages, with a full-width search and console footer.
-
-- Container details promote the selected name and file/terminal actions into the header. Responsive CPU/memory
-  cards show current readings above charts, disk/network activity shares the available width, and log search has a visible field frame.
-
-- Container Overview fills the available width when resizing or hiding columns. Name and Image expand while
-  metrics stay aligned with larger table text; header actions and search/filters wrap in narrow windows. Sorting moves to the
-  Name/CPU/Memory column headers, and Clear filters appears only for an active query or filter.
-- The Container Overview header combines connection, update state and fleet counts, with grouped filters
-  and a framed search field. Redundant initial navigation and duplicate count rows are removed.
+- `libz-sys` 1.1.31 (RUSTSEC-2026-0418): its build script no longer writes the build's environment under `target/`. No
+  release or CI build had secrets in that environment.
 
 ## [0.5.0] - 2026-10-27
 
@@ -769,7 +785,8 @@ No extensions, no telemetry, no account.
 - **Screen readers.** Support is groundwork only.
 - No extensions, by design.
 
-[Unreleased]: https://github.com/doancan/codeyard/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/doancan/codeyard/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/doancan/codeyard/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/doancan/codeyard/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/doancan/codeyard/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/doancan/codeyard/compare/v0.3.2...v0.4.0

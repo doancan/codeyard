@@ -14,9 +14,9 @@ path = "src/main.rs"
 [dependencies]
 async-trait = "0.1.89"
 bytes = "1.11.1"
-ext-api = { version = "0.5.0", path = "../ext-api" }
-ext-manifest = { version = "0.5.0", path = "../ext-manifest" }
-ext-proto = { version = "0.5.0", path = "../ext-proto" }
+ext-api = { version = "0.6.0", path = "../ext-api" }
+ext-manifest = { version = "0.6.0", path = "../ext-manifest" }
+ext-proto = { version = "0.6.0", path = "../ext-proto" }
 sha2 = "0.11.1"
 # The `AsyncWrite` trait for the guest's stdout and stderr (wasmtime-wasi already links tokio).
 tokio = { version = "1.54.1", default-features = false }
@@ -25,3 +25,9 @@ wasmtime-wasi = { version = "50.0.0", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock = "0.4.4"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_System_Threading"] }

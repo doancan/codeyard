@@ -327,6 +327,7 @@ impl Workbench {
         self.sync_search_roots(cx);
         self.refresh_git(0, cx);
         self.workspace_folder_added(cx);
+        self.discover_repos(cx);
         cx.notify();
         true
     }
@@ -343,10 +344,14 @@ impl Workbench {
             self.cfg.folder_texts.remove(path);
             self.apply_folder_settings(cx);
             self.workspace_folder_removed(path, cx);
-            if self.vcs.scm_root.as_deref() == Some(path) {
+            // Source Control was on this folder or on a repository inside it.
+            let inside = |p: &str| p == path || p.starts_with(&format!("{}/", path.trim_end_matches('/')));
+            if self.vcs.scm_root.as_deref().is_some_and(inside) {
                 self.vcs.scm_root = None;
                 self.refresh_git(0, cx);
             }
+            self.discover_repos(cx);
+
             // The closed folder's language servers and diagnostics must not linger.
             self.lsp.diagnostics.retain(|p, _| !p.starts_with(&format!("{}/", path.trim_end_matches('/'))));
             cx.notify();

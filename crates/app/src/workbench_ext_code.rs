@@ -211,8 +211,12 @@ impl Workbench {
         let untrusted = !scope.trusted;
         let tx = self.cfg.exts.code.tx.clone();
         let reason = reason.to_string();
+        // The extension in development runs without the OS sandbox (its author's folder); everything installed runs in it.
+        let sandbox = crate::ext::dev_dir().is_none_or(|d| d != active.dir);
         let task = cx.background_executor().spawn(async move {
             let wasm = std::fs::read(&wasm_path).map_err(|e| format!("{}: {e}", wasm_path.display()))?;
+            // The sandbox lets the exthost write only here, so it must exist first.
+            std::fs::create_dir_all(data.join("data").join(&id)).map_err(|e| e.to_string())?;
             let cache = ext_runtime::Cache::new(&data);
             cache.gc();
             let compiled = cache.compiled(&exthost, &wasm)?;
@@ -227,6 +231,7 @@ impl Workbench {
                 settings: settings_now,
                 folders,
                 reason,
+                sandbox,
             };
             let hello = start.hello();
             Process::start(&exthost, hello, tx).map(|p| (id, p))
