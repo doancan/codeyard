@@ -205,6 +205,7 @@ impl Render for Workbench {
             .on_action(cx.listener(|this, _: &RunTask, _, cx| this.show_tasks(cx)))
             .on_action(cx.listener(|this, _: &RunBuildTask, _, cx| this.run_build_task(cx)))
             .on_action(cx.listener(|this, _: &RerunLastTask, window, cx| this.rerun_last_task(window, cx)))
+            .on_action(cx.listener(|this, _: &SelectRepository, window, cx| this.show_repo_picker(window, cx)))
             .on_action(cx.listener(Self::start_debugging))
             .on_action(cx.listener(Self::stop_debugging))
             .on_action(cx.listener(Self::restart_debugging))

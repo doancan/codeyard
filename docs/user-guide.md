@@ -703,6 +703,17 @@ staged. The panel also shows the last commit and who the commits will be made as
 refused commit explains how to set it. Clicking a file opens a side-by-side diff; F7 jumps
 between changes. Commits made in the terminal show up on their own.
 
+**Several repositories.** Source Control lists every repository of the workspace when there is
+more than one: each open folder's, and repositories nested inside them. Nested repositories are found
+up to four folder levels deep, without following symlinks and skipping `node_modules`, `target` and
+similar folders; at most 64 are listed. Each row shows the branch, how many commits there are to
+push and pull, and the number of changes. Click a row (or use "Git: Select Repository…") to work in
+that repository: the changes, commit box, graph and every operation below are its own, even when
+another repository has a file with the same name. Without a pick, Source Control shows the
+repository of the active file. An operation checks that the folder is still that repository just
+before it runs. If the repository was removed or replaced, the operation is refused
+(*Repository is no longer available*), and it never runs in an enclosing repository instead.
+
 **Graph:** the GRAPH section under the changes draws the history of every branch as lanes,
 with branch (blue), remote (green), tag (yellow) and HEAD labels; merges are hollow dots.
 Click a commit to list the files it changed and open one as a side-by-side diff.

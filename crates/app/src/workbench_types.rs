@@ -36,6 +36,8 @@ pub(super) enum OverlayKind {
     },
     /// Project switcher (⌃R), remove from recents, favorites.
     Projects(Vec<projects::SwitchChoice>),
+    /// "Git: Select Repository…": the work tree of each row.
+    Repositories(Vec<String>),
     ForgetRecent(Vec<RecentWorkspace>),
     Favorites(Vec<String>),
     /// "Tasks: Run Task…"

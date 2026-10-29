@@ -35,6 +35,8 @@ pub(crate) struct AccessView {
     pub can_commit: bool,
     pub result: Option<(String, bool)>,
     pub groups: Vec<AccessGroup>,
+    /// The repository list (empty unless there are several).
+    pub repos: Vec<super::RepoRow>,
 }
 
 impl ScmPanel {
@@ -70,6 +72,7 @@ impl ScmPanel {
         let (commit_label, can_commit) = self.status.as_ref().map_or_else(|| commit_button(0, 0), |s| self.commit_state(s, cx));
         AccessView {
             revision: self.status.clone(),
+            repos: if self.repos.len() > 1 { self.repos.clone() } else { Vec::new() },
             root: self.status.as_ref().map(|s| s.root.clone()),
             branch: self.status.as_ref().and_then(|s| s.branch.clone()).unwrap_or_else(|| crate::i18n::t("detached HEAD").into()),
             message: self.message.read(cx).text().to_string(),

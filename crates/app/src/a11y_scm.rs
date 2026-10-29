@@ -11,6 +11,27 @@ impl ScmSnap {
             panel.set_busy();
         }
         let mut children = Vec::new();
+        if !view.repos.is_empty() {
+            let list_id = NodeId(SCM_REPO);
+            let mut list = Node::new(Role::List);
+            list.set_label(t("Repositories"));
+            let mut rows = Vec::new();
+            for (i, repo) in view.repos.iter().enumerate() {
+                let id = NodeId(SCM_REPO + 1 + i as u64);
+                let mut row = Node::new(Role::ListItem);
+                row.set_label(repo.label.clone());
+                row.set_description(repo.description());
+                row.set_selected(repo.selected);
+                row.set_position_in_set(i + 1);
+                row.set_size_of_set(view.repos.len());
+                row.add_action(Action::Click);
+                nodes.push((id, row));
+                rows.push(id);
+            }
+            list.set_children(rows);
+            nodes.push((list_id, list));
+            children.push(list_id);
+        }
         if view.root.is_some() {
             let mut branch = Node::new(Role::Label);
             branch.set_value(view.branch.clone());
@@ -108,6 +129,17 @@ impl Workbench {
             return true;
         }
         let current = self.scm.read(cx).a11y_view(window, cx);
+        // A repository row: picked only if that repository is still listed (the list may have changed since it was read).
+        if (SCM_REPO + 1..SCM_REPO + 1 + crate::git::repos::MAX_REPOS as u64).contains(&id.0) {
+            let index = (id.0 - SCM_REPO - 1) as usize;
+            if req.action == Action::Click
+                && let Some(repo) = snap.view.repos.get(index)
+                && current.repos.iter().any(|r| r.root == repo.root)
+            {
+                self.select_repo(repo.root.clone(), cx);
+            }
+            return true;
+        }
         if snap.view.root != current.root || snap.view.branch != current.branch || current.root.is_none() {
             return true;
         }

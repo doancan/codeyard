@@ -366,6 +366,7 @@ impl Workbench {
         self.vcs.refresh_again = false;
         self.vcs.scm_root = None;
         self.vcs.tree_marks.clear();
+        self.forget_repos(cx);
         self.scm.update(cx, |s, cx| s.set_status(self.remote.host.clone(), None, cx));
         let h = self.remote.host.clone();
         self.search.update(cx, |s, cx| s.set_context(h, None, cx));

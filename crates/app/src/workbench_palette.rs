@@ -164,6 +164,7 @@ impl Workbench {
             Command::action("Projects: Remove from Recent…", ForgetRecent),
             Command::action("Favorites: Toggle Active File", ToggleFavorite),
             Command::action("Favorites: Show Favorites…", ShowFavorites),
+            Command::action("Git: Select Repository…", SelectRepository),
             Command::action("Tasks: Run Task…", RunTask),
             Command::action("Tasks: Run Build Task", RunBuildTask),
             Command::action("Tasks: Rerun Last Task", RerunLastTask),
@@ -656,6 +657,11 @@ impl Workbench {
                 self.close_overlay(window, cx);
                 self.run_code_action(client, action, cx);
             }
+            (OverlayKind::Repositories(roots), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let root = roots[*index].clone();
+                self.close_overlay(window, cx);
+                self.select_repo(root, cx);
+            }
             (OverlayKind::Projects(choices), PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let choice = choices[*index].clone();
                 self.close_overlay(window, cx);
@@ -895,6 +901,7 @@ impl Workbench {
                 | OverlayKind::PullRequestActions { .. }
                 | OverlayKind::EditorOption(_)
                 | OverlayKind::Projects(_)
+                | OverlayKind::Repositories(_)
                 | OverlayKind::ForgetRecent(_)
                 | OverlayKind::Favorites(_)
                 | OverlayKind::Tasks(_)

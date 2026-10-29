@@ -218,6 +218,7 @@ registry! {
     "bookmarks.jumpToNext" => ed::NextBookmark,
     "bookmarks.jumpToPrevious" => ed::PreviousBookmark,
     "bookmarks.list" => wb::ListBookmarks,
+    "git.selectRepository" => wb::SelectRepository,
     "tasks.run" => wb::RunTask,
     "workbench.togglePanelPosition" => wb::TogglePanelPosition,
     "workbench.toggleMaximizedPanel" => wb::ToggleMaximizedPanel,

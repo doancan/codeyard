@@ -953,6 +953,7 @@ Git: Remove Worktree…
 Git: Rename Branch…	
 Git: Rename Remote…	
 Git: Revert Change at Cursor	
+Git: Select Repository…	
 Git: Set Upstream Branch…	
 Git: Show Stash…	
 Git: Stage Change at Cursor	
@@ -1426,6 +1427,7 @@ Only on the right
 Only right	
 Only send it if you trust this file.	
 Only the connection is removed; the remote repository itself is untouched.	
+Only the first {} repositories are listed.	
 Only the local tag is removed. A copy on a remote stays until you delete it there (Git: Delete Remote Tag…).	
 Only this host's entry is removed. The previous file is kept as config.codeyard-bak.	
 Open	
@@ -1736,7 +1738,12 @@ Replaced {} match|Replaced {} matches
 Replacement preview	
 Report copied	
 Report saved to {}	
+Repositories	
 Repository URL (https://… or git@host:owner/repo)	
+Repository changed while the operation was pending.	
+Repository is no longer available: {}	
+Repository {0}, branch {1}, changes: {2}, to push: {3}, to pull: {4}	
+Repository {0}: {1}	
 Rerun	
 Reset	
 Reset Hard to Here…	
@@ -1874,6 +1881,7 @@ Select a configuration
 Select a container to inspect resource history, logs, ports and storage.	
 Select a debug configuration	
 Select a file icon theme	
+Select a repository	
 Select a row to open its details.	
 Select a word and press ⌘D to add the next match as another cursor.	
 Select all matches (⌥↵)	
@@ -2229,6 +2237,7 @@ This replacement is too large to preview. Narrow the search (fewer files or matc
 This repository has no remote. Add one with Git: Add Remote…	
 This search belongs to {0} on {1}, which this window does not show. Results cannot be opened or replaced here.	
 This window is installing an update. You can close it in a few seconds.	
+This workspace has one repository.	
 Thursday	
 Timeline	
 To customize Run and Debug, create a launch configuration.	
@@ -2670,6 +2679,7 @@ this computer
 this value cannot be watched	
 too many copies	
 type parameter	
+unavailable	
 unclosed [ in the path	
 undefined variable {}	
 unexpected GitHub response	

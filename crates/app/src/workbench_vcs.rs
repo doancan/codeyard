@@ -7,11 +7,16 @@ use super::*;
 impl Workbench {
     /// Refresh git status after `delay` ms (back-to-back events coalesce into one run).
     pub fn refresh_git(&mut self, delay: u64, cx: &mut Context<Self>) {
+        self.discover_repos(false, cx);
         if let Some(root) = self.vcs.scm_root.clone().or_else(|| self.root(cx)) {
             self.refresh_git_at(&root, delay, cx);
             // Tree marks of inactive roots stay current too (Source Control only shows the active root).
             for other in self.all_roots(cx).into_iter().filter(|r| *r != root) {
                 self.refresh_marks_only(other, cx);
+            }
+            // The other repositories' counts matter only while the list is in view.
+            if self.chrome.panel == Some(Panel::Scm) {
+                self.refresh_repo_statuses(cx);
             }
         }
     }
@@ -49,15 +54,15 @@ impl Workbench {
         .detach();
     }
 
-    /// Source control shows the active file's repo: if the file is in another root, branch and status are refreshed.
+    /// Source control shows the picked repository, or else the active file's: when that changes, branch and status are
+    /// refreshed.
     pub(super) fn sync_scm_root(&mut self, cx: &mut Context<Self>) {
-        if self.roots.extra_roots.is_empty() {
-            return;
-        }
-        let Some(root) = self.active_root(cx) else { return };
+        let Some(root) = self.wanted_scm_root(cx) else { return };
         if self.vcs.scm_root.as_deref().or(self.root(cx).as_deref()) == Some(root.as_str()) {
             return;
         }
+        // The picked repository is gone: Source Control follows the active file again.
+        self.vcs.pinned = false;
         self.vcs.scm_root = Some(root.clone());
         self.load_git_branch(&root, cx);
         self.vcs.error = None;
@@ -98,12 +103,24 @@ impl Workbench {
                 if std::mem::take(&mut this.vcs.refresh_again) {
                     this.refresh_git(0, cx);
                 }
-                if !this.all_roots(cx).contains(&dir) {
+                if !this.all_roots(cx).contains(&dir) && !this.vcs.repos.iter().any(|r| r.root == dir) {
                     return; // another folder was opened meanwhile
                 }
                 if this.vcs.scm_root.clone().or_else(|| this.root(cx)).as_deref() != Some(dir.as_str()) {
                     this.refresh_git(0, cx); // the active file's root changed meanwhile
                     return;
+                }
+                // A nested repository that now resolves to another work tree (its `.git` was removed, so git found the
+                // enclosing one) is gone: Source Control must not quietly show, and act on, the other repository.
+                let nested = this.vcs.repos.iter().any(|r| r.root == dir && r.found_in != dir);
+                let result = match result {
+                    Ok(Some(st)) if nested && st.root.trim_end_matches('/') != dir.trim_end_matches('/') => {
+                        Err(crate::i18n::tf("Repository is no longer available: {}", &[&dir]))
+                    }
+                    other => other,
+                };
+                if nested && result.is_err() {
+                    this.apply_git(None, cx);
                 }
                 match result {
                     // No change (most polls): no redraw. Every frame makes Metal allocate ~110 MB of
@@ -169,6 +186,7 @@ impl Workbench {
         let host = self.remote.host.clone();
         self.scm.update(cx, |s, cx| s.set_status(host, st.clone(), cx));
         self.vcs.status = st;
+        self.publish_repos(cx);
     }
 
     pub fn git_status(&self) -> Option<Arc<crate::git::Status>> {

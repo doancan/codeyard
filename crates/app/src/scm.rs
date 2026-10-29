@@ -50,6 +50,8 @@ pub enum ScmEvent {
     Publish,
     /// A commit went through and `git.postCommitCommand` (or "Commit & Push/Sync") asks for this next.
     PostCommit(git::PostCommit),
+    /// A repository of the list was picked (its work tree).
+    SelectRepo(String),
 }
 
 #[derive(Clone, Copy)]
@@ -122,6 +124,9 @@ pub struct ScmPanel {
     has_remote: bool,
     /// Row tooltips must not cover a context menu opened above them.
     menu_open: bool,
+    /// The workspace's repositories (shown when there are several) and whether the search stopped at its limit.
+    repos: Vec<RepoRow>,
+    repos_truncated: bool,
     _subs: Vec<Subscription>,
 }
 
@@ -135,6 +140,10 @@ pub(crate) use access::AccessView;
 
 #[path = "scm_worktrees.rs"]
 mod worktree_ui;
+
+#[path = "scm_repos.rs"]
+mod repos_ui;
+pub use repos_ui::RepoRow;
 
 impl EventEmitter<ScmEvent> for ScmPanel {}
 
@@ -184,6 +193,8 @@ impl ScmPanel {
             syncing: false,
             has_remote: false,
             menu_open: false,
+            repos: Vec::new(),
+            repos_truncated: false,
             _subs: subs,
         }
     }
@@ -323,11 +334,24 @@ impl ScmPanel {
         self.busy = true;
         self.result = None;
         let host = self.host.clone();
-        let task = cx.background_executor().spawn(async move { op(host.as_ref(), &root) });
+        // The operation is bound to this repository: if the folder is no longer it when the operation starts, nothing runs.
+        let id = self.status.as_deref().and_then(git::repos::RepoId::of);
+        let target = root.clone();
+        let task = cx.background_executor().spawn(async move {
+            if let Some(id) = &id {
+                git::repos::verify(host.as_ref(), id)?;
+            }
+            op(host.as_ref(), &target)
+        });
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
                 this.busy = false;
+                // Another repository was selected meanwhile: its panel must not show (or act on) this one's result.
+                if this.status.as_ref().map(|s| s.root.as_str()) != Some(root.as_str()) {
+                    cx.emit(ScmEvent::Refresh);
+                    return;
+                }
                 if result.is_ok() {
                     on_ok(this, cx);
                 }
@@ -741,8 +765,9 @@ impl Render for ScmPanel {
                         }),
                     ),
             );
+        let repos = self.repos_section(cx);
         let Some(st) = self.status.clone() else {
-            return div().key_context("ScmPanel").track_focus(&self.focus_handle).size_full().flex().flex_col().child(header).child(
+            return div().key_context("ScmPanel").track_focus(&self.focus_handle).size_full().flex().flex_col().child(header).children(repos).child(
                 div()
                     .px(px(theme::SPACE[6]))
                     .text_size(px(text::SM.0))
@@ -806,6 +831,7 @@ impl Render for ScmPanel {
             .flex_col()
             .text_size(px(text::SM.0))
             .child(header)
+            .children(repos)
             .child(
                 div()
                     .px(px(theme::SPACE[6]))

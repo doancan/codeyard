@@ -3106,3 +3106,15 @@ selected	seçili
 {} match|{} matches	{} eşleşme
 “{0}” cannot be written in {1}: not changed.	“{0}” {1} kodlamasında yazılamaz: değiştirilmedi.
 No matches in this file any more.	Bu dosyada artık eşleşme yok.
+
+# ---- Repositories ----
+Git: Select Repository…	Git: Depo Seç…
+Only the first {} repositories are listed.	Yalnızca ilk {} depo listeleniyor.
+Repositories	Depolar
+Repository changed while the operation was pending.	İşlem beklerken depo değişti.
+Repository is no longer available: {}	Depo artık kullanılamıyor: {}
+Repository {0}, branch {1}, changes: {2}, to push: {3}, to pull: {4}	Depo {0}, dal {1}, değişiklik: {2}, gönderilecek: {3}, çekilecek: {4}
+Repository {0}: {1}	Depo {0}: {1}
+Select a repository	Bir depo seçin
+This workspace has one repository.	Bu çalışma alanında tek bir depo var.
+unavailable	kullanılamıyor

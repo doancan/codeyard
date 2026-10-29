@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Source Control lists the workspace's repositories, including nested ones, with their branch, sync counts and changes;
+  picking one (a click, or "Git: Select Repository…") makes every operation target it. An operation is refused if its
+  repository was removed or replaced meanwhile, and never runs in another repository.
 - Search Editors: "Search: Open Search Editor" keeps a query in its own tab with its options, globs, context lines and
   folders (every folder of a multi-folder workspace), for keyboard navigation and rerun. Tabs return after a restart
   with their query and up to 200 results, marked as restored until they run again; truncated, stopped and failed

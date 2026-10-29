@@ -107,6 +107,15 @@ pub(super) struct GitState {
     /// Whether the marks of inactive roots are being refreshed right now.
     pub(super) marks_busy: std::collections::HashSet<String>,
     pub(super) tree_marks: std::collections::HashMap<String, Arc<std::collections::HashMap<String, crate::git::Mark>>>,
+    /// The workspace's repositories, the folders they were searched for, and whether the search hit its limit.
+    pub(super) repos: Vec<super::repos_glue::RepoEntry>,
+    pub(super) repos_for: Vec<String>,
+    pub(super) repos_truncated: bool,
+    pub(super) discovering: bool,
+    /// Repositories whose status is being read right now.
+    pub(super) repos_busy: std::collections::HashSet<String>,
+    /// The user picked the repository Source Control shows (the active file no longer changes it).
+    pub(super) pinned: bool,
 }
 
 /// Layout: side panel, bottom panel, split editor, zoom, zen mode, window bounds.

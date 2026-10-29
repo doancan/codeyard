@@ -133,6 +133,8 @@ pub mod settings_ui;
 #[path = "workbench_spell.rs"]
 mod spell_glue;
 // --- git-sync ---
+#[path = "workbench_repos.rs"]
+mod repos_glue;
 #[path = "workbench_state.rs"]
 mod state_glue;
 #[path = "workbench_structural.rs"]
@@ -275,6 +277,7 @@ actions!(
         ToggleFavorite,
         ShowFavorites,
         ListBookmarks,
+        SelectRepository,
         RunTask,
         RunBuildTask,
         RerunLastTask,
@@ -1018,6 +1021,7 @@ impl Workbench {
             }),
             cx.subscribe_in(&scm, window, |this, _, event: &crate::scm::ScmEvent, window, cx| match event {
                 crate::scm::ScmEvent::Refresh => this.refresh_git(0, cx),
+                crate::scm::ScmEvent::SelectRepo(root) => this.select_repo(root.clone(), cx),
                 crate::scm::ScmEvent::OpenDiff { path, staged } => this.open_diff(path.clone(), *staged, window, cx),
                 crate::scm::ScmEvent::OpenWorktree { root, path } => {
                     if this.vcs.status.as_ref().is_some_and(|s| &s.root == root) {
@@ -1164,6 +1168,12 @@ impl Workbench {
                 scm_root: None,
                 marks_busy: Default::default(),
                 tree_marks: Default::default(),
+                repos: Vec::new(),
+                repos_for: Vec::new(),
+                repos_truncated: false,
+                discovering: false,
+                repos_busy: Default::default(),
+                pinned: false,
             },
             chrome: state_glue::ChromeLayout {
                 a11y_bounds: Default::default(),
@@ -1711,6 +1721,7 @@ impl Workbench {
         self.scm.update(cx, |s, cx| s.set_status(self.remote.host.clone(), None, cx));
         self.vcs.scm_root = None;
         self.vcs.tree_marks.clear();
+        self.forget_repos(cx);
         self.roots.primary.update(cx, |t, cx| t.set_git(Arc::default(), cx));
         self.refresh_git_at(&path, 0, cx);
         let (h, r) = (self.remote.host.clone(), Some(path.clone()));

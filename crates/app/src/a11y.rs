@@ -74,6 +74,8 @@ const COMPLETION_OPTION: u64 = 0x60_0000;
 const EXTRA_TREE: u64 = 0x70_0000;
 const SCM_GROUP: u64 = 0x80_0000;
 const SCM_FILE: u64 = 0x90_0000;
+/// Source Control's repository rows: the upper half of the group block (groups use a handful of ids at its start).
+const SCM_REPO: u64 = SCM_GROUP + BLOCK / 2;
 /// Ids per block (status items, update buttons, tabs, ...).
 const BLOCK: u64 = 0x10_0000;
 const ROW_BASE: u64 = 0x2_0000_0000;

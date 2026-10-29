@@ -10,6 +10,7 @@ mod diff;
 mod ignore;
 mod log;
 mod refs;
+pub mod repos;
 mod stash;
 mod status;
 mod sync;
