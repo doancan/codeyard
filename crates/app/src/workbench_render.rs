@@ -64,7 +64,7 @@ impl Render for Workbench {
         self.chrome.a11y_bounds = Default::default();
         self.step_panel_anim(window);
         // The repository search waits until Source Control is on screen (connecting opens a home folder: no scan unasked).
-        if self.chrome.panel == Some(Panel::Scm) {
+        if self.view_shown(Panel::Scm) {
             self.discover_if_pending(cx);
         }
         self.update_title(window, cx);

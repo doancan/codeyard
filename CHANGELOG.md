@@ -73,6 +73,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - "Terminal: Move Terminal into Editor Area" moves the active terminal, with its running process, into the focused
   editor group as a tab; closing that tab or "Terminal: Move Terminal Back to Panel" returns it to the panel still
   running.
+
+## [0.6.0] - 2026-10-29
+
+### Added
+
 - Search Editors: "Search: Open Search Editor" keeps a query in its own tab with its options, globs, context lines and
   folders (every folder of a multi-folder workspace), for keyboard navigation and rerun. Tabs return after a restart
   with their query and up to 200 results, marked as restored until they run again; truncated, stopped and failed

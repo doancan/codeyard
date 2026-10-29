@@ -320,7 +320,7 @@ impl Workbench {
                             this.refresh_git(0, cx);
                         }
                         // The other repositories' rows are only on screen while Source Control is.
-                        if active && this.chrome.panel == Some(Panel::Scm) {
+                        if active && this.view_shown(Panel::Scm) {
                             this.refresh_repos(cx);
                         }
                     })
