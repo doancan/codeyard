@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use codeyard::api::types::{Completion, Error, HttpRequest, StreamEvent, Ticket};
-use codeyard::api::{documents, env, log, requests, settings, storage, timers, window, workspace};
+use codeyard::api::{documents, env, log, requests, settings, storage, timers, ui, window, workspace};
 use exports::codeyard::api::guest::{Activation, Guest};
 use codeyard::api::host_requests::Request;
 use codeyard::api::responses::Response;
@@ -52,6 +52,28 @@ impl Guest for Probe {
     }
 
     fn handle(id: u64, request: Request) {
+        // A view (`counter`): a button and how often it was clicked; a click redraws it through `ui.invalidate`.
+        if let Request::Render(view) = &request {
+            let clicks = storage::get("clicks").map_or(0, |b| b.len());
+            let tree = format!(
+                r#"{{"element": {{"column": {{"gap": 2}}}}, "children": [
+                    {{"element": {{"heading": {{"text": "Counter", "level": 2}}}}}},
+                    {{"key": "add", "element": {{"button": {{"label": "Add one", "tone": "accent"}}}}}},
+                    {{"key": "count", "element": {{"text": {{"text": "{view}: {clicks} clicks"}}}}}}
+                ]}}"#
+            );
+            requests::respond(id, Ok(&Response::View(tree)));
+            return;
+        }
+        if let Request::UiEvent((view, event)) = &request {
+            if event.contains(r#""click""#) && event.contains(r#""add""#) {
+                let n = storage::get("clicks").map_or(0, |b| b.len()) + 1;
+                let _ = storage::set("clicks", &vec![1u8; n]);
+                ui::invalidate(view);
+            }
+            requests::respond(id, Ok(&Response::None));
+            return;
+        }
         let Request::Command((command, args)) = request else {
             // Timers and settings changes are counted, so tests can see them arrive.
             if let Request::Timer(_) | Request::SettingsChanged(_) = &request {
