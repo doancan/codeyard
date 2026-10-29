@@ -1,7 +1,7 @@
 //! Integrated terminal (S08): VT parsing with alacritty_terminal, PTY on the agent
 //! (local or remote, same protocol). Colors are derived from the theme.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -54,6 +54,8 @@ pub use marks::{Activity, Finished};
 
 #[path = "terminal_scroll.rs"]
 mod scroll;
+#[path = "terminal_selection.rs"]
+mod selection;
 
 #[cfg(test)]
 #[path = "terminal_scroll_tests.rs"]
@@ -63,6 +65,13 @@ pub enum TerminalEvent {
     TitleChanged,
     /// A command started or finished (shell integration): the terminal list shows it.
     ActivityChanged,
+    /// The program rang the bell or sent a notification (OSC 9/777), with its message if it had one.
+    Attention(Option<String>),
+    /// A command that ran for 10 seconds or more ended: the line it was typed on and its exit code.
+    LongCommandFinished {
+        command: String,
+        code: Option<i32>,
+    },
     Exited,
     /// A key was pressed after the shell exited.
     CloseRequested,
@@ -180,6 +189,9 @@ pub struct TerminalView {
     cwd: Option<String>,
     host: Arc<dyn Host>,
     pty: Option<u32>,
+    /// A close request must also cancel a shell which has not finished starting.
+    closed: Cell<bool>,
+    starting: bool,
     /// Input sent before the shell started (task command): written once the pty is up.
     pending_input: Vec<u8>,
     /// Fixed title (task name): the shell's title updates don't change it.
@@ -194,6 +206,9 @@ pub struct TerminalView {
     /// Grid origin and cell width from the last paint (for mouse → cell).
     grid: (Point<Pixels>, Pixels),
     selecting: bool,
+    /// "Hold Shift to select": shown for a moment when a drag went to a program that reads the mouse; when it last showed.
+    shift_hint: bool,
+    shift_hint_last: Option<std::time::Instant>,
     /// Link hovered while ⌘ is held: (screen row, columns).
     hover_link: Option<(usize, std::ops::Range<usize>)>,
     /// The find bar, while it is open.
@@ -237,7 +252,9 @@ impl TerminalView {
     /// A terminal running `launch` (a profile or a picked shell).
     pub fn new_with(host: Arc<dyn Host>, cwd: Option<String>, launch: Launch, cx: &mut Context<Self>) -> Self {
         let Launch { shell, args, env, color } = launch;
-        let view = Self::blank(host.clone(), cwd.clone(), color, cx);
+        let mut view = Self::blank(host.clone(), cwd.clone(), color, cx);
+        view.starting = true;
+        let cleanup_host = host.clone();
         let (cols, rows) = (view.size.cols as u16, view.size.rows as u16);
         let integration = cx.global::<crate::settings::Settings>().terminal_shell_integration;
         let spawn = cx.background_executor().spawn(async move {
@@ -251,6 +268,7 @@ impl TerminalView {
                 Ok(p) => p,
                 Err(e) => {
                     this.update(cx, |t, cx| {
+                        t.starting = false;
                         t.error = Some(crate::i18n::tf("Could not start a shell: {}", &[&e]).into());
                         cx.notify();
                     })
@@ -261,7 +279,11 @@ impl TerminalView {
             let id = pty.id;
             let ok = this
                 .update(cx, |t, cx| {
+                    if t.closed.get() {
+                        return false;
+                    }
                     t.pty = Some(id);
+                    t.starting = false;
                     // Report it if the view got its size in the meantime.
                     t.host.pty_resize(id, t.size.cols as u16, t.size.rows as u16);
                     let pending = std::mem::take(&mut t.pending_input);
@@ -269,9 +291,11 @@ impl TerminalView {
                         t.host.pty_input(id, pending);
                     }
                     cx.notify();
+                    true
                 })
-                .is_ok();
+                .unwrap_or(false);
             if !ok {
+                cleanup_host.pty_kill(id);
                 return;
             }
             // Output pump: wait, then parse whatever piled up in one go (no frame per chunk).
@@ -364,6 +388,8 @@ impl TerminalView {
             cwd,
             host,
             pty: None,
+            closed: Cell::new(false),
+            starting: false,
             pending_input: Vec::new(),
             title_locked: false,
             term,
@@ -374,6 +400,8 @@ impl TerminalView {
             size,
             grid: (Point::default(), px(8.)),
             selecting: false,
+            shift_hint: false,
+            shift_hint_last: None,
             find: None,
             hover_link: None,
             metrics: {
@@ -390,6 +418,8 @@ impl TerminalView {
     }
 
     fn feed(&mut self, data: &[u8]) {
+        // TUIs that redraw in place erase the selected lines; the selection follows its text (terminal_selection.rs).
+        let kept = self.keep_selection();
         // Each shell-integration sequence is noted where it ends, with the cursor where the parser left it.
         let mut at = 0;
         for (end, ev) in self.osc.scan(data) {
@@ -398,6 +428,7 @@ impl TerminalView {
             self.on_osc(ev);
         }
         self.parser.advance(&mut self.term, &data[at..]);
+        self.restore_selection(kept, selection::scroll_bound(data, self.term.screen_lines()));
         // Deleting lines (`CSI M`, which full-screen programs send all the time) while the view is scrolled back can leave the
         // parser's view offset past the end of the history, and drawing that panics: bring it back inside.
         let grid = self.term.grid();
@@ -435,8 +466,21 @@ impl TerminalView {
                         cx.write_to_clipboard(ClipboardItem::new_string(s))
                     }
                 }
+                TermEvent::Bell => self.ask_attention(None),
                 _ => {}
             }
+        }
+        if let Some(message) = self.marks.attention.take() {
+            if cx.global::<crate::settings::Settings>().terminal_notifications {
+                cx.emit(TerminalEvent::Attention(message));
+            } else if self.unseen_finish() == Some(Finished::Attention) {
+                self.mark_seen();
+            }
+        }
+        if let Some((command, code)) = self.marks.long_finish.take()
+            && cx.global::<crate::settings::Settings>().terminal_notifications
+        {
+            cx.emit(TerminalEvent::LongCommandFinished { command, code });
         }
     }
 
@@ -457,18 +501,27 @@ impl TerminalView {
         self.exit.is_some()
     }
 
-    fn write(&self, data: Vec<u8>) {
-        if let (Some(id), false) = (self.pty, self.exit.is_some()) {
-            self.host.pty_input(id, data);
+    fn write(&mut self, data: Vec<u8>) {
+        if self.exit.is_some() || self.closed.get() {
+            return;
+        }
+        match self.pty {
+            Some(id) => self.host.pty_input(id, data),
+            None if self.starting => self.pending_input.extend_from_slice(&data),
+            None => {}
         }
     }
 
     /// Send text to the shell (once it starts, if it hasn't yet).
     pub fn send(&mut self, text: &str) {
-        match self.pty {
-            Some(_) => self.write(text.as_bytes().to_vec()),
-            None => self.pending_input.extend_from_slice(text.as_bytes()),
-        }
+        self.write(text.as_bytes().to_vec());
+    }
+
+    /// Type `text` and press Enter after each of its lines. Enter is a carriage return, as the key sends it: every shell
+    /// takes it, and the Windows console does not take a line feed as Enter.
+    pub fn send_lines(&mut self, text: &str) {
+        let lines: Vec<&str> = text.trim_end_matches('\n').split('\n').map(|l| l.trim_end_matches('\r')).collect();
+        self.send(&format!("{}\r", lines.join("\r")));
     }
 
     pub fn set_fixed_title(&mut self, title: String) {
@@ -478,6 +531,9 @@ impl TerminalView {
 
     /// Close the shell (when the tab is closed).
     pub fn kill(&self) {
+        if self.closed.replace(true) {
+            return;
+        }
         if let Some(id) = self.pty {
             self.host.pty_kill(id);
         }
@@ -704,6 +760,9 @@ impl TerminalView {
         }
         if !self.selecting || ev.pressed_button != Some(MouseButton::Left) {
             self.selecting = false;
+            if ev.pressed_button == Some(MouseButton::Left) && !ev.modifiers.shift && self.term.mode().intersects(TermMode::MOUSE_MODE) {
+                self.show_shift_hint(cx);
+            }
             return;
         }
         let (at, side) = self.grid_point(ev.position);
@@ -713,7 +772,7 @@ impl TerminalView {
         }
     }
 
-    fn on_mouse_up(&mut self, ev: &gpui::MouseUpEvent) {
+    fn on_mouse_up(&mut self, ev: &gpui::MouseUpEvent, cx: &mut Context<Self>) {
         if !ev.modifiers.shift
             && !self.selecting
             && let Some(bytes) = self.mouse_report(0, false, ev.position, &ev.modifiers)
@@ -721,10 +780,12 @@ impl TerminalView {
             self.write(bytes);
             return;
         }
-        self.selecting = false;
+        let was_selecting = std::mem::take(&mut self.selecting);
         // Single click without dragging: don't leave an empty selection.
         if self.term.selection.as_ref().is_some_and(|s| s.is_empty()) {
             self.term.selection = None;
+        } else if was_selecting {
+            self.copy_on_select(cx);
         }
     }
 
@@ -782,13 +843,23 @@ impl TerminalView {
     }
 
     fn paste_image(&mut self, image: gpui::Image, cx: &mut Context<Self>) {
+        if self.closed.get() || self.exit.is_some() || self.error.is_some() || (self.pty.is_none() && !self.starting) {
+            return;
+        }
         let host = self.host.clone();
         let pty = self.pty;
         let task = cx.background_executor().spawn(async move { crate::terminal_image_paste::save_remote_image(host.as_ref(), image) });
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
-                if this.pty != pty || this.exit.is_some() {
+                // None -> Some is a normal startup transition. A different
+                // existing PTY, or a closed/failed terminal, cannot accept this paste.
+                if this.closed.get()
+                    || this.exit.is_some()
+                    || this.error.is_some()
+                    || (pty.is_some() && this.pty != pty)
+                    || (this.pty.is_none() && !this.starting)
+                {
                     return;
                 }
                 match result {
@@ -1281,8 +1352,8 @@ impl Render for TerminalView {
             )
             .on_mouse_move(cx.listener(Self::on_mouse_move))
             .when(self.hover_link.is_some(), |d| d.cursor(gpui::CursorStyle::PointingHand))
-            .on_mouse_up(MouseButton::Left, cx.listener(|this, ev, _, _| this.on_mouse_up(ev)))
-            .on_mouse_up_out(MouseButton::Left, cx.listener(|this, ev, _, _| this.on_mouse_up(ev)))
+            .on_mouse_up(MouseButton::Left, cx.listener(|this, ev, _, cx| this.on_mouse_up(ev, cx)))
+            .on_mouse_up_out(MouseButton::Left, cx.listener(|this, ev, _, cx| this.on_mouse_up(ev, cx)))
             .relative()
             .size_full()
             .bg(c(p.bg))
@@ -1292,6 +1363,21 @@ impl Render for TerminalView {
             .text_color(c(p.text))
             .child(TerminalElement { view: cx.entity(), palette: p, focused })
             .children(find_bar)
+            .when(self.shift_hint, |d| {
+                d.child(
+                    div()
+                        .absolute()
+                        .top(px(theme::SPACE[2]))
+                        .right(px(theme::SPACE[4]))
+                        .px(px(theme::SPACE[3]))
+                        .py(px(theme::SPACE[1]))
+                        .rounded(px(theme::radius::SM))
+                        .bg(c(p.surface_raised))
+                        .text_color(c(p.text))
+                        .text_size(px(crate::ui::text::XS.0))
+                        .child(crate::i18n::t("Hold Shift to select text")),
+                )
+            })
             .when_some(self.error.clone().or(exit_line.map(Into::into)), |d, msg| {
                 d.child(
                     div()

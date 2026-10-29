@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use gpui::{Entity, Focusable, TestAppContext, VisualTestContext};
 
+use crate::test_paths::AppPath;
 use crate::ui::{self, ActiveTheme};
 use crate::workbench::Workbench;
 
@@ -634,13 +635,15 @@ fn save_local_copy_resolves_the_typed_path() {
     let home = std::path::Path::new("/home/ada");
     assert_eq!(local_copy_target("~/Downloads/a.rs", Some(home)).unwrap(), "/home/ada/Downloads/a.rs");
     assert_eq!(local_copy_target("  notes/a.txt ", Some(home)).unwrap(), "/home/ada/notes/a.txt");
-    assert_eq!(local_copy_target("/tmp/a.txt", Some(home)).unwrap(), "/tmp/a.txt");
+    // An absolute path as the system spells it (on Windows `/tmp` has no drive and is not one).
+    let abs = if cfg!(windows) { "C:/tmp/a.txt" } else { "/tmp/a.txt" };
+    assert_eq!(local_copy_target(abs, Some(home)).unwrap(), abs);
     assert_eq!(local_copy_target("~", Some(home)).unwrap(), "/home/ada");
     assert!(local_copy_target("", Some(home)).is_err());
     assert!(local_copy_target("~/Downloads/", Some(home)).is_err());
     // Without a known home dir a relative path is rejected, an absolute one works.
     assert!(local_copy_target("a.txt", None).is_err());
-    assert_eq!(local_copy_target("/tmp/a.txt", None).unwrap(), "/tmp/a.txt");
+    assert_eq!(local_copy_target(abs, None).unwrap(), abs);
 }
 
 /// Dragging the sidebar's resize line must resize it and nothing else: the explorer row under the
@@ -691,14 +694,14 @@ fn qa_default_startup_is_the_welcome_page_and_continue_resumes(cx: &mut TestAppC
     let (wb, cx) = setup_persistent(cx, &home);
     open(&wb, &dir, cx);
     open_in(&wb, &dir.join("src/main.rs"), cx);
-    assert_eq!(wb.read_with(cx, |w, cx| w.root_for_test(cx)).as_deref(), Some(dir.to_string_lossy().as_ref()));
+    assert_eq!(wb.read_with(cx, |w, cx| w.root_for_test(cx)).as_deref(), Some(dir.app().as_str()));
 
     let welcome = restart_with(wb, cx, &home, Startup::Welcome);
     assert_eq!(welcome.read_with(cx, |w, cx| w.root_for_test(cx)), None, "welcome: no folder opens by itself");
     assert!(welcome.read_with(cx, |w, cx| w.open_paths(cx)).is_empty(), "welcome: no tabs come back");
 
     let resumed = restart_with(welcome, cx, &home, Startup::Continue);
-    assert_eq!(resumed.read_with(cx, |w, cx| w.root_for_test(cx)).as_deref(), Some(dir.to_string_lossy().as_ref()), "continue: the last folder comes back");
+    assert_eq!(resumed.read_with(cx, |w, cx| w.root_for_test(cx)).as_deref(), Some(dir.app().as_str()), "continue: the last folder comes back");
     assert!(resumed.read_with(cx, |w, cx| w.open_paths(cx)).iter().any(|p| p.ends_with("src/main.rs")), "continue: the tabs come back");
 }
 
@@ -768,7 +771,8 @@ fn qa_startup_setting_parses_and_is_in_the_settings_page() {
 }
 
 fn drag(wb: &Entity<Workbench>, cx: &mut VisualTestContext, from: &std::path::Path, to_dir: &std::path::Path) {
-    let ev = crate::tree::TreeEvent::Move { from: from.to_string_lossy().into_owned(), to_dir: to_dir.to_string_lossy().into_owned() };
+    // The tree names its entries in the app's form (`C:/dir` on Windows).
+    let ev = crate::tree::TreeEvent::Move { from: from.app(), to_dir: to_dir.app() };
     wb.update_in(cx, |wb, window, cx| wb.tree_event_for_test(ev, window, cx));
     cx.run_until_parked();
 }

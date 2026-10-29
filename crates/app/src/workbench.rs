@@ -615,6 +615,7 @@ struct MenuState {
     app_path: Option<Vec<usize>>,
     /// The Manage menu: re-anchored to the gear button whenever the viewport changes (zoom, resize).
     follows_manage: bool,
+    context: Option<types::InputContext>,
     _sub: Subscription,
 }
 
@@ -622,8 +623,8 @@ struct MenuState {
 struct MenuTarget {
     path: String,
     is_dir: bool,
-    /// Tab index if this is a tab menu.
-    tab: Option<usize>,
+    /// Stable editor view and group lifetime if this is a tab menu.
+    tab: Option<types::TabTarget>,
 }
 
 /// Layout to restore when leaving zen mode.
@@ -1539,15 +1540,16 @@ impl Workbench {
                             cx.notify();
                         }),
                     ))
-                    .child(panel_tab("terminal-tab", crate::i18n::t("Terminal").into(), self.chrome.bottom == Bottom::Terminal, 0, p).on_click(cx.listener(
-                        |this, _, window, cx| {
-                            if this.terminals.is_empty() {
-                                this.new_terminal(&NewTerminal, window, cx);
-                            } else {
-                                this.focus_terminal(window, cx);
-                            }
-                        },
-                    )))
+                    .child(
+                        panel_tab("terminal-tab", crate::i18n::t("Terminal").into(), self.chrome.bottom == Bottom::Terminal, self.terminals_asking(cx), p)
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                if this.terminals.is_empty() {
+                                    this.new_terminal(&NewTerminal, window, cx);
+                                } else {
+                                    this.focus_terminal(window, cx);
+                                }
+                            })),
+                    )
                     .children(self.ext_view_panel_tabs(p, cx))
                     .child(div().flex_1())
                     // The terminal's own actions only while the terminal is the panel's view.
@@ -2409,7 +2411,7 @@ impl Workbench {
     fn update_title(&mut self, window: &mut Window, cx: &mut App) {
         let remote = self.remote.host.is_remote().then(|| self.remote.host.label());
         let parts: Vec<String> = [self.title_text(cx), remote].into_iter().flatten().collect();
-        let title = if parts.is_empty() { "codeyard".to_string() } else { parts.join(" — ") };
+        let title = if parts.is_empty() { "Codeyard".to_string() } else { parts.join(" — ") };
         if title != self.title {
             window.set_window_title(&title);
             self.title = title;

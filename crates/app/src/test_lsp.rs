@@ -16,6 +16,8 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
+use crate::test_paths::AppPath;
+
 const SCRIPT: &str = r#"import json, sys
 scenario_path, log_path, starts_path = sys.argv[1:4]
 with open(scenario_path, encoding='utf-8') as f:
@@ -90,7 +92,8 @@ pub struct FakeServer {
     starts: PathBuf,
 }
 
-fn python() -> &'static str {
+/// The Python 3 interpreter's command: `python` on Windows, `python3` elsewhere.
+pub(crate) fn python() -> &'static str {
     if cfg!(windows) { "python" } else { "python3" }
 }
 
@@ -114,7 +117,7 @@ impl FakeServer {
 
     /// The `lsp.servers` entry that starts this server.
     pub fn command(&self) -> (String, Vec<String>) {
-        let s = |p: &PathBuf| p.to_string_lossy().into_owned();
+        let s = |p: &PathBuf| p.app();
         (python().into(), vec![s(&self.script), s(&self.scenario), s(&self.log), s(&self.starts)])
     }
 
@@ -151,12 +154,13 @@ mod tests {
     use super::*;
     use crate::qa_integration_tests::{setup_with, wait_ticking};
     use crate::settings::Settings;
+    use crate::test_paths::canon;
 
     fn dir(name: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("codeyard-test-lsp-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
-        std::fs::canonicalize(d).unwrap()
+        canon(d)
     }
 
     fn spawn(fake: &FakeServer) -> Child {
@@ -249,7 +253,7 @@ mod tests {
         ] } }] });
         let Some(fake) = FakeServer::new(&d.join("server"), &scenario) else { return };
         let (wb, cx) = setup_with(cx, Settings { lsp_servers: vec![("rust".into(), Some(fake.command().into()))], ..Settings::default() });
-        let file = d.join("lib.rs").to_string_lossy().into_owned();
+        let file = d.join("lib.rs").app();
         wb.update_in(cx, |wb, window, cx| wb.open_path(&file, window, cx));
         wait_ticking(cx, "the fake server's diagnostic in Problems", |cx| wb.read_with(cx, |wb, _| wb.problems().iter().any(|(p, n)| p == &file && *n == 1)));
 

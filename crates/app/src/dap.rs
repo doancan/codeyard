@@ -1100,6 +1100,13 @@ pub(crate) mod tests {
         assert!(parse_frames(&json!({})).is_empty() && parse_variables(&Value::Null).is_empty());
     }
 
+    /// The launch configuration's `debugAdapter` object that runs the fake adapter, logging to `log`.
+    pub(crate) fn fake_adapter_json(script: &std::path::Path, log: &std::path::Path) -> String {
+        use crate::test_paths::AppPath;
+        let (command, args) = crate::qa_integration_tests::script_command(script, vec![log.app()]);
+        json!({ "command": command, "args": args }).to_string()
+    }
+
     /// Deterministic fake adapter (tests): the `launch` response comes after `configurationDone`;
     /// stops at the first breakpoint (line 3 if none), `next` advances one line, `continue`
     /// goes to the next breakpoint or ends the program. `argv[1]` is the log every command is written to.
@@ -1291,7 +1298,8 @@ while True:
         let script = write_fake_adapter(&dir);
         let (tx, rx) = mpsc::channel();
         let host: Arc<dyn Host> = Arc::new(host::local());
-        let session = Session::start(host, script.to_str().unwrap(), vec![log.to_string_lossy().into_owned()], None, tx).unwrap();
+        let (command, args) = crate::qa_integration_tests::script_command(&script, vec![log.to_string_lossy().into_owned()]);
+        let session = Session::start(host, &command, args, None, tx).unwrap();
         let src = "/p/main.c".to_string();
         let mut bps = BTreeMap::new();
         bps.insert(src.clone(), vec![Breakpoint::at(5), Breakpoint::at(9)]);
@@ -1339,7 +1347,8 @@ while True:
         let script = write_fake_adapter(&dir);
         let (tx, _rx) = mpsc::channel();
         let host: Arc<dyn Host> = Arc::new(host::local());
-        let session = Session::start(host, script.to_str().unwrap(), vec![dir.join("log.txt").to_string_lossy().into_owned()], None, tx).unwrap();
+        let (command, args) = crate::qa_integration_tests::script_command(&script, vec![dir.join("log.txt").to_string_lossy().into_owned()]);
+        let session = Session::start(host, &command, args, None, tx).unwrap();
         let err = session.begin("fake", "launch", json!({ "program": "/nope", "fail": true }), &BTreeMap::new(), &[]).unwrap_err();
         assert!(err.contains("cannot run /nope"), "{err}");
         session.stop();

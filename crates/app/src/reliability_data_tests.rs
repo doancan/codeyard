@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use gpui::{Focusable, TestAppContext, VisualTestContext};
 
 use crate::qa_workbench_tests::{fresh, globals, open, open_in, project, setup_persistent};
+use crate::test_paths::AppPath;
 use crate::workbench::Workbench;
 
 fn home(name: &str) -> PathBuf {
@@ -77,10 +78,10 @@ fn switching_folders_keeps_an_unprotected_edit_open(cx: &mut TestAppContext) {
     open(&wb, &dir, cx);
     open_in(&wb, &stray, cx);
     type_and_settle(cx, "keep me");
-    let other = other.to_string_lossy().into_owned();
+    let other = other.app();
     wb.update(cx, |wb, cx| wb.set_root(other, cx));
     cx.run_until_parked();
-    assert_eq!(wb.read_with(cx, |wb, cx| wb.root_for_test(cx)).as_deref(), dir.to_str(), "the folder must not change under a dirty buffer");
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.root_for_test(cx)).as_deref(), Some(dir.app().as_str()), "the folder must not change under a dirty buffer");
     assert!(wb.read_with(cx, |wb, cx| wb.any_dirty(cx)));
     assert!(wb.read_with(cx, |wb, _| wb.notice_for_test()).is_some_and(|(error, _)| error));
 }
@@ -173,7 +174,8 @@ fn save_as_keeps_the_old_tab_when_typing_continued_during_the_write(cx: &mut Tes
     open_in(&wb, &main, cx);
     cx.simulate_input("// before\n");
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
-    let (from, copy) = (main.to_string_lossy().into_owned(), dir.join("src/copy.txt").to_string_lossy().into_owned());
+    let (from, copy) = (crate::ui::local_path(&main), crate::ui::local_path(&dir.join("src/copy.txt")));
+    assert_eq!(from, ed.read_with(cx, |e, _| e.path.clone()), "the save fixture must address the actual editor path");
     wb.update_in(cx, |wb, window, cx| wb.save_as_for_test(from.clone(), copy, window, cx));
     // The write has been handed to the background but has not finished: this is typed in the meantime.
     ed.update(cx, |e, cx| e.apply_buffer_edits(|_| vec![(0..0, "// during\n".to_string())], cx));
@@ -194,7 +196,7 @@ fn save_as_closes_the_old_tab_when_nothing_changed_meanwhile(cx: &mut TestAppCon
     let main = dir.join("src/main.rs");
     open_in(&wb, &main, cx);
     cx.simulate_input("// before\n");
-    let (from, copy) = (main.to_string_lossy().into_owned(), dir.join("src/copy.rs").to_string_lossy().into_owned());
+    let (from, copy) = (crate::ui::local_path(&main), crate::ui::local_path(&dir.join("src/copy.rs")));
     wb.update_in(cx, |wb, window, cx| wb.save_as_for_test(from.clone(), copy, window, cx));
     cx.run_until_parked();
     assert!(!wb.read_with(cx, |wb, cx| wb.open_paths(cx)).contains(&from));

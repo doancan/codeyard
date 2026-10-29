@@ -126,6 +126,10 @@ mod windows {
         // Open the streams before spawning, so a setup failure cannot orphan a shell.
         let reader = pair.master.try_clone_reader().map_err(io::Error::other)?;
         let mut writer = pair.master.take_writer().map_err(io::Error::other)?;
+        // Ignoring Ctrl+C passes from a process to the ones it starts: had this one been started that way (by a launcher
+        // with CREATE_NEW_PROCESS_GROUP, or the relaunch after an update), no program in the terminal would stop on
+        // Ctrl+C. Take it normally again before the shell starts.
+        unsafe { windows_sys::Win32::System::Console::SetConsoleCtrlHandler(None, 0) };
         let child = std::sync::Arc::new(std::sync::Mutex::new(pair.slave.spawn_command(cmd).map_err(io::Error::other)?));
         drop(pair.slave);
         let master = std::sync::Arc::new(std::sync::Mutex::new(Some(pair.master)));

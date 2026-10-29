@@ -7,6 +7,7 @@ use gpui::{Entity, TestAppContext, VisualTestContext};
 
 use crate::qa_integration_tests::wait_secs;
 use crate::qa_workbench_tests::{open, project, restart_with, setup_persistent};
+use crate::test_paths::AppPath;
 use crate::workbench::Workbench;
 
 fn have_python() -> bool {
@@ -28,9 +29,8 @@ fn fake_project(name: &str) -> (PathBuf, PathBuf) {
         dir.join(".codeyard/launch.jsonc"),
         format!(
             r#"{{ "configurations": [ {{ "name": "Fake", "type": "custom", "request": "launch", "program": "/bin/true",
-                "source": "${{workspaceFolder}}/main.c", "debugAdapter": {{ "command": "{}", "args": ["{}"] }} }} ] }}"#,
-            script.display(),
-            log.display()
+                "source": "${{workspaceFolder}}/main.c", "debugAdapter": {} }} ] }}"#,
+            crate::dap::tests::fake_adapter_json(&script, &log)
         ),
     )
     .unwrap();
@@ -42,7 +42,7 @@ fn run(wb: &Entity<Workbench>, cx: &mut VisualTestContext, label: &str) {
 }
 
 fn open_main(wb: &Entity<Workbench>, dir: &Path, cx: &mut VisualTestContext) -> (String, Entity<crate::editor::EditorView>) {
-    let main = dir.join("main.c").to_string_lossy().into_owned();
+    let main = dir.join("main.c").app();
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(main.clone(), window, cx));
     cx.run_until_parked();
     (main, wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap())
@@ -229,9 +229,8 @@ fn write_launch(dir: &Path, log: &Path, configs: &[(&str, &str)], rest: &str) {
         .map(|(name, extra)| {
             format!(
                 r#"{{ "name": "{name}", "type": "custom", "request": "launch", "program": "/bin/true", "source": "${{workspaceFolder}}/main.c",
-                   "debugAdapter": {{ "command": "{}", "args": ["{}"] }} {extra} }}"#,
-                script.display(),
-                log.display()
+                   "debugAdapter": {} {extra} }}"#,
+                crate::dap::tests::fake_adapter_json(&script, &log)
             )
         })
         .collect();
@@ -246,10 +245,13 @@ fn run_without_debugging_sends_no_breakpoints_and_the_post_debug_task_runs(cx: &
     let home = project("dbg-nodebug-home");
     let (dir, log) = fake_project("dbg-nodebug");
     let marker = dir.join("post-task-ran");
-    std::fs::write(dir.join(".codeyard/tasks.jsonc"), format!(r#"[ {{ "label": "after", "command": "touch {}" }} ]"#, marker.display())).unwrap();
+    std::fs::write(dir.join(".codeyard/tasks.jsonc"), format!(r#"[ {{ "label": "after", "command": "echo done > \"{}\"" }} ]"#, marker.app())).unwrap();
     write_launch(&dir, &log, &[("Fake", r#", "postDebugTask": "after""#)], "");
     let (wb, cx) = setup_persistent(cx, &home);
-    wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    // A POSIX shell where there is one (no login files); the system shell on Windows.
+    if cfg!(unix) {
+        wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    }
     open(&wb, &dir, cx);
     let (_, ed) = open_main(&wb, &dir, cx);
     ed.update(cx, |e, cx| e.toggle_breakpoint_at(4, cx));
@@ -314,9 +316,11 @@ fn a_terminal_that_was_not_offered_is_refused(cx: &mut TestAppContext) {
     let home = project("dbg-sneak-home");
     let (dir, log) = fake_project("dbg-sneak");
     let marker = dir.join("terminal-ran");
-    write_launch(&dir, &log, &[("Fake", &format!(r#", "sneak": true, "marker": "{}""#, marker.display()))], "");
+    write_launch(&dir, &log, &[("Fake", &format!(r#", "sneak": true, "marker": "{}""#, marker.app()))], "");
     let (wb, cx) = setup_persistent(cx, &home);
-    wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    if cfg!(unix) {
+        wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    }
     open(&wb, &dir, cx);
     run(&wb, cx, "Debug: Start Debugging");
     let snap = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.debug_snapshot());
@@ -340,11 +344,13 @@ fn inputs_are_asked_before_the_start_and_the_program_can_run_in_a_terminal(cx: &
     write_launch(
         &dir,
         &log,
-        &[("Fake", &format!(r#", "args": ["${{input:level}}", "${{input:name}}"], "console": "integratedTerminal", "marker": "{}""#, marker.display()))],
+        &[("Fake", &format!(r#", "args": ["${{input:level}}", "${{input:name}}"], "console": "integratedTerminal", "marker": "{}""#, marker.app()))],
         r#", "inputs": [ { "id": "name", "type": "promptString", "description": "Your name" }, { "id": "level", "type": "pickString", "description": "Level", "options": ["low", "high"] } ]"#,
     );
     let (wb, cx) = setup_persistent(cx, &home);
-    wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    if cfg!(unix) {
+        wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    }
     open(&wb, &dir, cx);
     run(&wb, cx, "Debug: Start Debugging");
     // First question (in order of use): pick a level; then type a name.
@@ -356,6 +362,11 @@ fn inputs_are_asked_before_the_start_and_the_program_can_run_in_a_terminal(cx: &
     let launch = log_lines(&log, "launch");
     assert!(launch[0].contains("\"args\": [\"high\", \"Ada\"]"), "{launch:?}");
     assert!(log_lines(&log, "initialize")[0].contains("\"supportsRunInTerminalRequest\": true"));
-    wait_secs(cx, 10, "the program ran in a terminal", |_| std::fs::read_to_string(&marker).is_ok_and(|t| t.trim() == "ran-in-terminal"));
+    if cfg!(windows) {
+        // Not on local Windows yet: the console says how to run the program instead.
+        wait_secs(cx, 10, "the console says why", |cx| snap(cx).is_some_and(|s| s.3.iter().any(|l| l.contains("internalConsole"))));
+    } else {
+        wait_secs(cx, 10, "the program ran in a terminal", |_| std::fs::read_to_string(&marker).is_ok_and(|t| t.trim() == "ran-in-terminal"));
+    }
     run(&wb, cx, "Debug: Stop");
 }
