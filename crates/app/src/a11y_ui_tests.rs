@@ -7,6 +7,26 @@ use crate::qa_workbench_tests::{fresh, open, setup};
 use crate::workbench::a11y::FocusSnap;
 
 #[gpui::test]
+fn about_exposes_its_details_and_copy_action(cx: &mut TestAppContext) {
+    use accesskit::{Action, ActionRequest, Role, TreeId};
+
+    let (wb, cx) = setup(cx);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Help: About Codeyard", window, cx));
+    cx.run_until_parked();
+    let snap = wb.update_in(cx, |wb, window, cx| wb.a11y_snapshot(window, cx));
+    assert_eq!(snap.focus, FocusSnap::AboutCopy);
+    let about = snap.about.as_ref().expect("About is in the accessibility tree");
+    assert!(about.active);
+    assert!(about.details.iter().any(|(_, value)| value == env!("CARGO_PKG_VERSION")));
+    let nodes = snap.to_tree().nodes;
+    assert!(nodes.iter().any(|(_, n)| n.role() == Role::Tab && n.label() == Some("About Codeyard") && n.is_selected() == Some(true)));
+    let copy = nodes.iter().find(|(_, n)| n.role() == Role::Button && n.label() == Some("Copy Version")).expect("Copy Version button").0;
+    let req = ActionRequest { action: Action::Click, target_tree: TreeId::ROOT, target_node: copy, data: None };
+    wb.update_in(cx, |wb, window, cx| wb.a11y_action_for_test(&req, &snap, window, cx));
+    assert_eq!(cx.read_from_clipboard().and_then(|c| c.text()), Some(format!("Codeyard {}", env!("CARGO_PKG_VERSION"))));
+}
+
+#[gpui::test]
 fn command_palette_is_exposed_with_its_selected_row(cx: &mut TestAppContext) {
     let dir = fresh("a11y-palette");
     let (wb, cx) = setup(cx);

@@ -35,7 +35,7 @@
   (`ENOATTR = ENODATA`) through `[patch.crates-io]`.
 - Tests are written with macOS key names and the test harness maps them to the platform's equivalent
   (`cmd-s` → `ctrl-s`, `cmd-left` → `home`). Expectations that differ per platform are separated with `cfg!`.
-- Terminal copy/paste is Ctrl+Shift+C / Ctrl+Shift+V (Ctrl+C must reach the program); ⌘G / ⇧⌘G (find next) are
+- Terminal copy/paste is Ctrl+Shift+C / Ctrl+Shift+V; Ctrl+C copies a selection or interrupts the program when nothing is selected. ⌘G / ⇧⌘G (find next) are
   macOS-only, Linux and Windows use F3 / Shift+F3.
 - To re-check Linux, build and run `cargo test --workspace` in a `rust:1-bookworm` container with GPUI's Linux
   libraries installed, using a separate `target` directory.
