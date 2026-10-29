@@ -1,0 +1,259 @@
+package codeyard:api@0.1.0;
+
+/// Messages for the extension's log, shown in the Inspector.
+@since(version = 0.1.0)
+interface log {
+  enum level {
+    trace,
+    debug,
+    info,
+    warn,
+    error,
+  }
+
+  log: func(level: level, message: string);
+}
+
+/// What the extension runs in. Known at activation, so these calls are cheap.
+@since(version = 0.1.0)
+interface env {
+  enum theme-kind {
+    light,
+    dark,
+    high-contrast-light,
+    high-contrast-dark,
+  }
+
+  enum platform {
+    macos,
+    linux,
+    windows,
+  }
+
+  record environment {
+    codeyard-version: string,
+    api-version: string,
+    /// The interface language, such as `en` or `tr`.
+    language: string,
+    theme: theme-kind,
+    platform: platform,
+    /// The workspace is on an SSH host.
+    remote: bool,
+    workspace-trusted: bool,
+  }
+
+  info: func() -> environment;
+}
+
+/// Calls the host has not answered yet.
+@since(version = 0.1.0)
+interface tickets {
+  use types.{ticket};
+
+  /// Stop waiting: the ticket completes with `cancelled`, and a running process is killed.
+  cancel: func(ticket: ticket);
+}
+
+/// Answers to `guest.handle`.
+@since(version = 0.1.0)
+interface requests {
+  use types.{error};
+  use responses.{response};
+
+  /// Answer request `id`. A request is answered once; late answers (after `guest.cancel`) are dropped.
+  respond: func(id: u64, %result: result<response, error>);
+}
+
+/// What `guest.handle` answers with.
+@since(version = 0.1.0)
+interface responses {
+  use types.{text-edit, diagnostic, range};
+
+  record code-action {
+    /// Passed back in `request.run-code-action`.
+    id: string,
+    title: string,
+    /// Edits applied when chosen; a command runs instead when empty and `command` is set.
+    edits: list<tuple<string, list<text-edit>>>,
+    command: option<string>,
+    preferred: bool,
+    /// The diagnostics this action fixes.
+    fixes: list<diagnostic>,
+  }
+
+  record task {
+    /// Passed back in `request.run-task`.
+    id: string,
+    label: string,
+    detail: option<string>,
+    /// `build`, `test`, or empty.
+    group: string,
+  }
+
+  variant response {
+    /// Nothing to return (a command that finished, an event handled).
+    none,
+    /// A command's result.
+    json(string),
+    /// A view's element tree (reference/ui.md), JSON-encoded.
+    view(string),
+    edits(list<text-edit>),
+    code-actions(list<code-action>),
+    tasks(list<task>),
+    /// The ranges a task's problem matcher should look at, or a formatter's changed ranges.
+    ranges(list<range>),
+  }
+}
+
+/// Notices, picks, input, progress, status items and links. Every one shows the publisher.
+@since(version = 0.1.0)
+interface window {
+  use types.{ticket, tone, error};
+
+  enum severity {
+    info,
+    warning,
+    error,
+  }
+
+  /// Completes with `chosen`: the index of the action clicked, or empty when dismissed.
+  show-notice: func(severity: severity, message: string, actions: list<string>) -> ticket;
+
+  record pick-item {
+    label: string,
+    detail: option<string>,
+    picked: bool,
+  }
+
+  record pick-options {
+    title: option<string>,
+    placeholder: option<string>,
+    many: bool,
+  }
+
+  /// Completes with `chosen`: the picked indices, or empty when dismissed.
+  quick-pick: func(items: list<pick-item>, options: pick-options) -> ticket;
+
+  record input-options {
+    title: option<string>,
+    prompt: option<string>,
+    value: option<string>,
+    placeholder: option<string>,
+    password: bool,
+  }
+
+  /// Completes with `text`: what the user typed, or none when dismissed.
+  input-box: func(options: input-options) -> ticket;
+
+  /// Shows progress until `end-progress`. Cancelling it from the UI arrives as `request.cancel-progress`.
+  start-progress: func(title: string, cancellable: bool) -> u64;
+  report-progress: func(id: u64, message: option<string>, percent: option<u8>);
+  end-progress: func(id: u64);
+
+  record status-item {
+    /// Local to the extension.
+    id: string,
+    text: string,
+    tooltip: option<string>,
+    /// A command id to run on click.
+    command: option<string>,
+    tone: tone,
+  }
+
+  set-status-item: func(item: status-item) -> result<_, error>;
+  remove-status-item: func(id: string);
+
+  /// Opens an `https:` URL in the browser. Only while handling a user action (a command or a link click): the host
+  /// checks that, so the ticket completes with `done` or `failed(denied)`.
+  open-external: func(url: string) -> ticket;
+}
+
+/// Running commands.
+@since(version = 0.1.0)
+interface commands {
+  use types.{ticket};
+
+  /// The extension's own command, a dependency's, or a core command (`core:…`) the manifest lists.
+  /// Arguments and result are JSON; completes with `json`.
+  execute: func(command: string, args-json: string) -> ticket;
+}
+
+/// A persisted key-value store in the extension's data folder (50 MiB in all). Answered by the exthost itself.
+@since(version = 0.1.0)
+interface storage {
+  use types.{error};
+
+  get: func(key: string) -> option<list<u8>>;
+  /// Fails with `invalid` when the store would grow past its limit.
+  set: func(key: string, value: list<u8>) -> result<_, error>;
+  delete: func(key: string);
+  keys: func() -> list<string>;
+}
+
+/// The extension's own settings, as declared in its manifest.
+@since(version = 0.1.0)
+interface settings {
+  /// The value as JSON, or none when unset and without a default. Changes arrive as `request.settings-changed`.
+  get: func(key: string) -> option<string>;
+}
+
+/// Repeating timers. An active timer keeps the exthost running.
+@since(version = 0.1.0)
+interface timers {
+  /// Delivers `request.timer(id)` every `seconds` (at least 30), paused while the window is unfocused.
+  every: func(seconds: u32) -> u64;
+  clear: func(id: u64);
+}
+
+/// The extension's views.
+@since(version = 0.1.0)
+interface ui {
+  /// Ask for the view to be drawn again: the host sends `request.render` and diffs the result by key.
+  invalidate: func(view: string);
+}
+
+/// Open documents. A command the user started may read and edit the active document and its selections until it
+/// returns; anything else needs `read` (and `write` for edits) on the document's path.
+@since(version = 0.1.0)
+interface documents {
+  use types.{ticket, uri, range, text-edit};
+
+  /// Completes with `document`: the active editor's document, or none.
+  active: func() -> ticket;
+  /// Completes with `ranges`: the active editor's selections.
+  selections: func() -> ticket;
+  /// Completes with `document`: an open document, or none when it is not open.
+  read: func(uri: uri) -> ticket;
+  /// Applies edits made against `version`. Completes with `done`, or `failed(invalid)` when the document changed.
+  apply-edits: func(uri: uri, version: u32, edits: list<text-edit>) -> ticket;
+  set-selections: func(uri: uri, selections: list<range>) -> ticket;
+}
+
+/// Diagnostics and decorations the extension shows on documents.
+@since(version = 0.1.0)
+interface languages {
+  use types.{uri, range, diagnostic, tone};
+
+  /// Replaces this extension's diagnostics for `uri`.
+  set-diagnostics: func(uri: uri, diagnostics: list<diagnostic>);
+  /// Removes this extension's diagnostics for `uri`, or everywhere.
+  clear-diagnostics: func(uri: option<uri>);
+
+  enum decoration-place {
+    gutter,
+    line,
+    /// Text after the range's end, like an inline hint.
+    after,
+  }
+
+  record decoration {
+    range: range,
+    place: decoration-place,
+    tone: tone,
+    text: option<string>,
+    hover: option<string>,
+  }
+
+  /// Replaces one named set of decorations on `uri`.
+  set-decorations: func(uri: uri, set: string, decorations: list<decoration>);
+}

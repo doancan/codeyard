@@ -34,6 +34,16 @@ pub const PACKAGE_FILE_BYTES: u64 = 64 * 1024 * 1024;
 /// An extension's own data directory (`storage`).
 pub const DATA_DIR_BYTES: u64 = 50 * 1024 * 1024;
 
+/// The arguments or result of one API call (a file read, a fetch's request body, a view's tree).
+pub const CALL_BYTES: usize = 8 * 1024 * 1024;
+/// One frame between the app and an exthost: a call plus room for its envelope. A larger frame kills the exthost.
+pub const FRAME_BYTES: usize = CALL_BYTES + 64 * 1024;
+/// Sustained bytes per second an exthost may send the app; going over kills it.
+pub const IPC_BYTES_PER_SECOND: u64 = 32 * 1024 * 1024;
+/// Bytes an exthost may send in a burst above the sustained rate.
+pub const IPC_BURST_BYTES: u64 = 64 * 1024 * 1024;
+/// The shortest interval of `timers.every`.
+pub const TIMER_MIN_SECONDS: u32 = 30;
 /// One `net` request, from the first connection to the last byte of the response, redirects included.
 pub const NET_TIMEOUT_SECS: u64 = 60;
 /// Redirects one `net` request follows; each is checked against `net` and the peer address rules again.

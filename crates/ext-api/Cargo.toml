@@ -1,0 +1,15 @@
+[package]
+name = "ext-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The extension API: the codeyard:api WIT package, the permission each interface needs, and its values in Rust"
+repository.workspace = true
+publish = false
+
+[dependencies]
+ext-manifest = { version = "0.6.0", path = "../ext-manifest" }
+serde = { version = "1.0.229", features = ["derive"] }
+
+[dev-dependencies]
+wit-parser = "0.261.0"

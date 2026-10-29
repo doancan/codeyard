@@ -286,6 +286,7 @@ fn a_package_with_code_is_refused_with_the_reason(cx: &mut TestAppContext) {
             ("src/main.ts".into(), "export {}".into()),
         ],
     );
+    std::fs::write(src.join(ext_pkg::COMPONENT), ext_pkg::testing::COMPONENT).unwrap();
     let (wb, cx) = setup(cx, &cfg);
     wb.update_in(cx, |wb, window, cx| wb.review_extension_for_test(&src.to_string_lossy(), false, window, cx));
     cx.run_until_parked();

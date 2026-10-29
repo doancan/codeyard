@@ -154,7 +154,12 @@ Codeyard version from the API items and contribution points used (each has a `si
 
 ### 5.2 The API
 
-One WIT package (`crates/ext-api/wit`). Authors use an SDK and never see WIT.
+One WIT package (`crates/ext-api/wit`, reference generated as `docs/extensions/reference/api.md`). Authors use an
+SDK and never see WIT. Each permission has its own interface, so a component's imports show which permissions its
+code can use at all; `ext_pkg::check_component` compares them with the manifest. Calls that reach the app return a
+ticket at once and finish through the guest's `complete` export (streamed data through `event`), so an export call
+never waits on I/O and providers stay responsive; the SDKs turn tickets into async functions and Promises. A code
+extension's package carries its component as `extension.wasm`.
 
 - **Rust:** `codeyard-extension`, target `wasm32-wasip2`, plain cargo.
 - **TypeScript:** `@codeyard/extension`, componentized with ComponentizeJS (StarlingMonkey). All calls return
