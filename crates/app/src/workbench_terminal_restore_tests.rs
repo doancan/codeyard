@@ -83,3 +83,18 @@ fn without_persistent_scrollback_no_history_is_saved(cx: &mut gpui::TestAppConte
     let saved = wb.read_with(cx, |wb, _| wb.persist.state.as_ref().and_then(|s| s.get(&saved_terminals_key(wb.persist.workspace_id.unwrap())))).unwrap();
     assert!(saved.contains("\"version\":1") && !saved.contains("private-output"), "{saved}");
 }
+
+/// Opening a terminal saves it at once: a killed or crashed app still brings it back.
+#[gpui::test]
+fn a_terminal_is_saved_as_soon_as_it_opens(cx: &mut gpui::TestAppContext) {
+    let home = crate::qa_workbench_tests::fresh("term-restore-early-home");
+    let dir = crate::qa_workbench_tests::project("term-restore-early");
+    let (wb, cx) = crate::qa_workbench_tests::setup_persistent(cx, &home);
+    with_history(cx, 0);
+    crate::qa_workbench_tests::open(&wb, &dir, cx);
+    wb.update_in(cx, |wb, window, cx| wb.new_terminal_launch(None, crate::terminal::Launch::default(), window, cx));
+    // No session save happened: only opening the terminal.
+    let saved = wb.read_with(cx, |wb, _| wb.persist.state.as_ref().and_then(|s| s.get(&saved_terminals_key(wb.persist.workspace_id.unwrap())))).unwrap();
+    let parsed = crate::terminal_session::SavedTerminals::parse(&saved, 0).unwrap();
+    assert_eq!(parsed.terminals.len(), 1, "{saved}");
+}

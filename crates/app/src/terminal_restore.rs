@@ -7,6 +7,6 @@ impl TerminalView {
     /// What a restart needs to start this terminal again as a new shell; output-only terminals have no shell (`None`).
     pub fn saved(&self, history_lines: usize) -> Option<SavedTerminal> {
         let title = self.title_locked.then(|| self.title.to_string());
-        self.pty.map(|_| SavedTerminal::of(self.cwd.clone(), self.launched.clone(), self.color.clone(), title, &self.scrollback_text(), history_lines))
+        self.has_shell.then(|| SavedTerminal::of(self.cwd.clone(), self.launched.clone(), self.color.clone(), title, &self.scrollback_text(), history_lines))
     }
 }

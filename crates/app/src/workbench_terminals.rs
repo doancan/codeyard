@@ -208,6 +208,8 @@ impl Workbench {
             }
         }));
         self.terminals.push(term);
+        // Saved right away: a crash or a killed app must not lose a terminal opened since the last save.
+        self.persist_terminals(cx);
         self.active_terminal = self.terminals.len() - 1;
         self.chrome.panel_open = true;
         self.focus_terminal(window, cx);
@@ -360,6 +362,7 @@ impl Workbench {
                 cx.notify();
             });
         }
+        self.persist_terminals(cx);
     }
 
     /// "Terminal: Change Color…".
@@ -617,6 +620,7 @@ impl Workbench {
         let term = self.terminals.remove(ix);
         term.read(cx).kill();
         self.task_terminal_closed(&term, cx);
+        self.persist_terminals(cx);
         if self.term_split.as_ref().is_some_and(|(l, r)| *l == term || *r == term) {
             self.term_split = None;
         }

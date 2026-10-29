@@ -188,6 +188,8 @@ pub struct TerminalView {
     title_locked: bool,
     /// Program and arguments it was started with (`None`: the user's shell), kept so a restart can start the same.
     launched: (Option<String>, Option<Vec<String>>),
+    /// Started with a shell (not an output-only terminal): saved for the next start from the moment it opens.
+    has_shell: bool,
     term: Term<Listener>,
     parser: Processor<StdSyncHandler>,
     events: Listener,
@@ -243,6 +245,7 @@ impl TerminalView {
         let Launch { shell, args, env, color } = launch;
         let mut view = Self::blank(host.clone(), cwd.clone(), color, cx);
         view.launched = (shell.clone(), args.clone());
+        view.has_shell = true;
         let (cols, rows) = (view.size.cols as u16, view.size.rows as u16);
         let integration = cx.global::<crate::settings::Settings>().terminal_shell_integration;
         let spawn = cx.background_executor().spawn(async move {
@@ -372,6 +375,7 @@ impl TerminalView {
             pending_input: Vec::new(),
             title_locked: false,
             launched: (None, None),
+            has_shell: false,
             term,
             parser: Processor::new(),
             events,
