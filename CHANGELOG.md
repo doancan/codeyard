@@ -206,6 +206,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   terminal, killing it after two seconds if it is still there. Windows already ends them through job objects and the
   pseudo console.
 
+### Security
+
+- `wasmtime` and `wasmtime-wasi` 50.0.1 in `codeyard-exthost` (RUSTSEC-2026-0420, RUSTSEC-2026-0422,
+  RUSTSEC-2026-0423, RUSTSEC-2026-0424): fixes for typed functions with `i31` or `nullref` arguments, cross-engine
+  struct types, resources passed between components and the WASI host. Each extension still runs in its own exthost
+  process inside the OS sandbox.
+
 ## [0.6.0] - 2026-10-29
 
 ### Added
