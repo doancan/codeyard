@@ -5,7 +5,10 @@
 //! - **Client:** it checks that the process serving the pipe runs as the same user, so a pipe name taken first by
 //!   someone else is refused.
 //! - **I/O:** both ends use overlapped I/O, so a read waiting for the peer never holds up a write on the same pipe.
-//!   [`Pipe::shutdown`] cancels a pending read, which is how a client ends its connection at once.
+//!   [`Pipe::shutdown`] cancels a pending read, which is how a client ends its connection at once. Every wait is
+//!   bounded where it can be: a write that the peer does not take within `WRITE_TIMEOUT` (it stopped reading) ends
+//!   the connection, and a reader can set its own limit ([`Pipe::set_read_timeout`]). A pending operation is
+//!   cancelled with `CancelIoEx` when its time is up.
 
 use std::ffi::c_void;
 use std::io::{self, Read, Write};
@@ -17,7 +20,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use windows_sys::Win32::Foundation::{
     ERROR_ACCESS_DENIED, ERROR_BROKEN_PIPE, ERROR_IO_PENDING, ERROR_NO_DATA, ERROR_OPERATION_ABORTED, ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED,
-    ERROR_PIPE_NOT_CONNECTED, GENERIC_READ, GENERIC_WRITE, GetLastError, HANDLE, INVALID_HANDLE_VALUE, LocalFree,
+    ERROR_PIPE_NOT_CONNECTED, GENERIC_READ, GENERIC_WRITE, GetLastError, HANDLE, INVALID_HANDLE_VALUE, LocalFree, WAIT_TIMEOUT,
 };
 use windows_sys::Win32::Security::Authorization::{ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1};
 use windows_sys::Win32::Security::{GetTokenInformation, SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER, TokenUser};
@@ -31,12 +34,15 @@ use windows_sys::Win32::System::Pipes::{
 };
 use windows_sys::Win32::System::Threading::{
     CREATE_BREAKAWAY_FROM_JOB, CREATE_NEW_PROCESS_GROUP, CreateEventW, DETACHED_PROCESS, GetCurrentProcess, OpenProcess, OpenProcessToken,
-    PROCESS_QUERY_LIMITED_INFORMATION,
+    PROCESS_QUERY_LIMITED_INFORMATION, WaitForSingleObject,
 };
 
 use super::*;
 
 const BUFFER: u32 = 64 * 1024;
+/// A write the peer has not taken by then means it stopped reading: the connection is given up (output then goes to
+/// the session's backlog, as when it is gone).
+const WRITE_TIMEOUT: Duration = Duration::from_secs(30);
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -127,15 +133,25 @@ pub fn pipe_name(scope: &str) -> io::Result<String> {
 pub struct Pipe {
     handle: Arc<OwnedHandle>,
     closed: Arc<AtomicBool>,
+    /// How long a read on this clone waits (`None`: until data comes or the connection ends).
+    read_timeout: Option<Duration>,
 }
 
 impl Pipe {
     fn new(handle: OwnedHandle) -> Self {
-        Pipe { handle: Arc::new(handle), closed: Arc::default() }
+        Pipe { handle: Arc::new(handle), closed: Arc::default(), read_timeout: None }
     }
 
-    /// One overlapped operation, waited for: `op` starts it with the given OVERLAPPED.
-    fn io(&self, op: impl FnOnce(*mut OVERLAPPED) -> i32) -> io::Result<usize> {
+    /// Limit how long a read on this clone waits; one that runs out ends with `TimedOut` (what was being read is
+    /// cancelled, so the connection should be given up then).
+    pub fn set_read_timeout(&mut self, limit: Option<Duration>) {
+        self.read_timeout = limit;
+    }
+
+    /// One overlapped operation, waited for at most `limit`: `op` starts it with the given OVERLAPPED. When the time is
+    /// up the operation is cancelled and waited for (so `overlapped` and the buffer are no longer in use), and the
+    /// result is `TimedOut` unless it completed meanwhile.
+    fn io(&self, limit: Option<Duration>, op: impl FnOnce(*mut OVERLAPPED) -> i32) -> io::Result<usize> {
         // SAFETY: a manual-reset, unnamed event; owned below.
         let event = owned(unsafe { CreateEventW(std::ptr::null(), 1, 0, std::ptr::null()) })?;
         // SAFETY: OVERLAPPED is plain data; all zero is its initial state.
@@ -148,10 +164,24 @@ impl Pipe {
                 return Err(io::Error::from_raw_os_error(error as i32));
             }
         }
+        let mut timed_out = false;
+        if let Some(limit) = limit {
+            let ms = limit.as_millis().min(u128::from(u32::MAX - 1)) as u32;
+            // SAFETY: the event is owned and live; the wait is bounded.
+            if unsafe { WaitForSingleObject(event.as_raw_handle(), ms) } == WAIT_TIMEOUT {
+                timed_out = true;
+                // SAFETY: cancels exactly this operation; it then completes (as cancelled) and is waited for below.
+                unsafe { CancelIoEx(self.handle.as_raw_handle(), &overlapped) };
+            }
+        }
         let mut done = 0u32;
         // SAFETY: waits for the operation started above to finish (or be cancelled); `overlapped` outlives it.
         if unsafe { GetOverlappedResult(self.handle.as_raw_handle(), &overlapped, &mut done, 1) } == 0 {
-            return Err(io::Error::last_os_error());
+            let error = io::Error::last_os_error();
+            if timed_out && error.raw_os_error() == Some(ERROR_OPERATION_ABORTED as i32) {
+                return Err(io::Error::new(io::ErrorKind::TimedOut, "the pipe operation did not finish in time"));
+            }
+            return Err(error);
         }
         Ok(done as usize)
     }
@@ -185,7 +215,7 @@ impl Read for Pipe {
         let len = buf.len().min(u32::MAX as usize) as u32;
         let handle = self.handle.as_raw_handle();
         // SAFETY: `buf` is writable for `len` bytes and outlives the waited-for operation.
-        match self.io(|ov| unsafe { ReadFile(handle, buf.as_mut_ptr(), len, std::ptr::null_mut(), ov) }) {
+        match self.io(self.read_timeout, |ov| unsafe { ReadFile(handle, buf.as_mut_ptr(), len, std::ptr::null_mut(), ov) }) {
             Err(e) if ended(&e) => Ok(0),
             other => other,
         }
@@ -200,8 +230,8 @@ impl Write for Pipe {
         let len = buf.len().min(u32::MAX as usize) as u32;
         let handle = self.handle.as_raw_handle();
         // SAFETY: `buf` is readable for `len` bytes and outlives the waited-for operation.
-        match self.io(|ov| unsafe { WriteFile(handle, buf.as_ptr(), len, std::ptr::null_mut(), ov) }) {
-            Err(e) if ended(&e) => Err(io::ErrorKind::BrokenPipe.into()),
+        match self.io(Some(WRITE_TIMEOUT), |ov| unsafe { WriteFile(handle, buf.as_ptr(), len, std::ptr::null_mut(), ov) }) {
+            Err(e) if ended(&e) || e.kind() == io::ErrorKind::TimedOut => Err(io::ErrorKind::BrokenPipe.into()),
             other => other,
         }
     }
@@ -246,7 +276,7 @@ pub fn run(name: &Path) -> io::Result<()> {
         let pipe = Pipe::new(next);
         let handle = pipe.handle.as_raw_handle();
         // SAFETY: waits for a client on this instance with the overlapped structure `io` provides.
-        match pipe.io(|ov| unsafe { ConnectNamedPipe(handle, ov) }) {
+        match pipe.io(None, |ov| unsafe { ConnectNamedPipe(handle, ov) }) {
             Ok(_) => {}
             Err(e) if e.raw_os_error() == Some(ERROR_PIPE_CONNECTED as i32) => {}
             Err(_) => {

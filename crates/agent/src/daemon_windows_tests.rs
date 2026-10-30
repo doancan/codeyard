@@ -2,6 +2,10 @@
 //! PowerShell is opened in a session, the client goes away as a quitting app does, and a new connection to the session
 //! takes the same shell back with its token. A wrong token is refused, a session kept for 1 s ends with its shell, and
 //! the pipe allows this user only.
+//!
+//! Every wait is bounded: reads on the test's connection time out (`READ_LIMIT`) and fail the test with what was seen.
+//! ConPTY asks the terminal for its cursor position (`ESC [6n`) before it shows anything; the tests answer it, as the
+//! app's terminal does.
 
 use std::io::BufReader;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
@@ -13,6 +17,9 @@ use windows_sys::Win32::Security::DACL_SECURITY_INFORMATION;
 use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject};
 
 use super::*;
+
+/// No single read on a test connection waits longer: the daemon or the shell is stuck then.
+const READ_LIMIT: Duration = Duration::from_secs(30);
 
 /// A daemon of its own on a pipe named after the test.
 fn daemon(name: &str) -> std::path::PathBuf {
@@ -39,24 +46,45 @@ impl Conn {
             }
             std::thread::sleep(Duration::from_millis(50));
         };
-        let mut c = Conn { r: BufReader::new(p.clone()), w: p, next: 10, seen: String::new() };
+        let mut reader = p.clone();
+        reader.set_read_timeout(Some(READ_LIMIT));
+        let mut c = Conn { r: BufReader::new(reader), w: p, next: 10, seen: String::new() };
         let hello = Request::Hello { client_version: proto::VERSION, session: Some(session.into()) };
         proto::write_frame(&mut c.w, &Frame { id: 1, body: hello }).unwrap();
-        let resumed = match proto::read_frame::<Response>(&mut c.r).unwrap().unwrap().body {
+        let resumed = match c.frame().body {
             Response::Hello(info) => info.resumed,
             other => panic!("{other:?}"),
         };
         (c, resumed)
     }
 
+    /// The next frame from the daemon, within `READ_LIMIT`. Output is kept in `seen`, and ConPTY's cursor position
+    /// request is answered.
+    fn frame(&mut self) -> Frame<Response> {
+        let frame = match proto::read_frame::<Response>(&mut self.r) {
+            Ok(Some(frame)) => frame,
+            Ok(None) => panic!("the daemon closed the connection; got {:?}", self.seen),
+            Err(e) => panic!("no frame from the daemon: {e}; got {:?}", self.seen),
+        };
+        if let Response::PtyOutput { pty, data } = &frame.body {
+            if data.windows(4).any(|s| s == b"\x1b[6n") {
+                self.input(*pty, "\x1b[1;1R");
+            }
+            self.seen.push_str(&String::from_utf8_lossy(data));
+        }
+        frame
+    }
+
     fn call(&mut self, body: Request) -> Response {
         self.next += 1;
         let id = self.next;
         proto::write_frame(&mut self.w, &Frame { id, body }).unwrap();
+        let deadline = Instant::now() + READ_LIMIT;
         loop {
-            let frame = proto::read_frame::<Response>(&mut self.r).unwrap().unwrap();
+            assert!(Instant::now() < deadline, "no answer to request {id}; got {:?}", self.seen);
+            let frame = self.frame();
             match frame.body {
-                Response::PtyOutput { data, .. } => self.seen.push_str(&String::from_utf8_lossy(&data)),
+                Response::PtyOutput { .. } => {}
                 body if frame.id == id => return body,
                 _ => {}
             }
@@ -82,11 +110,7 @@ impl Conn {
                 return pid;
             }
             assert!(Instant::now() < deadline, "no pid in {:?}", self.seen);
-            match proto::read_frame::<Response>(&mut self.r).unwrap() {
-                Some(Frame { body: Response::PtyOutput { data, .. }, .. }) => self.seen.push_str(&String::from_utf8_lossy(&data)),
-                Some(_) => {}
-                None => panic!("the daemon closed the connection; got {:?}", self.seen),
-            }
+            self.frame();
         }
     }
 
