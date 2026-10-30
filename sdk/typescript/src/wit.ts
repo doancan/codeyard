@@ -116,7 +116,31 @@ export type Request =
   | { tag: "completion"; val: [Document, Position, string | undefined] }
   | { tag: "code-lens"; val: [Document, Range] }
   | { tag: "resolve-code-lens"; val: [Document, WitCodeLens] }
-  | { tag: "inlay-hints"; val: [Document, Range] };
+  | { tag: "inlay-hints"; val: [Document, Range] }
+  | { tag: "scm-status"; val: [string, string] }
+  | { tag: "scm-original"; val: [string, string] }
+  | { tag: "scm-validate"; val: [string, string, string] };
+
+export type FileState = "modified" | "added" | "deleted" | "renamed" | "untracked" | "ignored" | "conflicted";
+
+export interface WitScmAction {
+  command: string;
+  title: string;
+  icon: string | undefined;
+}
+
+export interface WitScmState {
+  head: string | undefined;
+  input: { placeholder: string; value: string | undefined; accept: WitScmAction | undefined };
+  groups: {
+    id: string;
+    label: string;
+    resources: { uri: string; state: FileState; detail: string | undefined }[];
+    resourceActions: WitScmAction[];
+    groupActions: WitScmAction[];
+    hideWhenEmpty: boolean;
+  }[];
+}
 
 export interface WitCodeLens {
   id: string;
@@ -150,7 +174,9 @@ export type Response =
   | { tag: "hover"; val: WitHover | undefined }
   | { tag: "completions"; val: { items: WitCompletionItem[]; incomplete: boolean } }
   | { tag: "code-lenses"; val: WitCodeLens[] }
-  | { tag: "inlay-hints"; val: WitInlayHint[] };
+  | { tag: "inlay-hints"; val: WitInlayHint[] }
+  | { tag: "scm"; val: WitScmState }
+  | { tag: "text"; val: string | undefined };
 
 export interface WitHover {
   contents: string;
@@ -329,6 +355,7 @@ export interface Bindings {
   clipboardRead?: { readText(): Ticket };
   clipboardWrite?: { writeText(text: string): Ticket };
   terminal?: { sendText(text: string): Ticket };
+  scm: { refresh(provider: string): void };
 }
 
 /// The guest's exports (`interface guest`).

@@ -7,8 +7,8 @@ use crate::raw::{RawManifest, RawOAuth, RawPermissions, S};
 use crate::risk::{self, Clipboard, Permissions};
 use crate::{
     Activation, BUILTIN_PROVIDERS, CodeEntry, CodeLanguage, Command, CompletionProvider, Contributions, ExtId, FileEntry, Keybinding, Language, LanguageServer,
-    Manifest, Menu, MenuLocation, OAuthProvider, Provider, SchemaAssociation, Setting, SettingKind, Snippets, StatusItem, Version, View, ViewLocation,
-    check_id_part, limits, when,
+    Manifest, Menu, MenuLocation, OAuthProvider, Provider, SchemaAssociation, ScmProvider, Setting, SettingKind, Snippets, StatusItem, Version, View,
+    ViewLocation, check_id_part, limits, when,
 };
 use crate::{Code as C, Diagnostic};
 
@@ -227,6 +227,7 @@ fn build(cx: &mut Ctx, raw: RawManifest) -> Manifest {
         if !contributions.tasks.is_empty() {
             activation.push(Activation::Tasks);
         }
+        activation.extend(contributions.scm.iter().map(|s| Activation::Scm(s.id.clone())));
     }
     if let (Some(a), None) = (&raw.activation, &raw.code)
         && let Some(first) = a.workspace_contains.first()
@@ -913,4 +914,37 @@ fn code_contributions(
         let local = local_id(cx, "tasks", &t.get_ref().id, &mut task_ids);
         out.tasks.push(id.qualify(&local));
     }
+
+    cx.count("scm", &raw.scm);
+    let mut scm_ids = HashSet::new();
+    for s in &raw.scm {
+        let s = s.get_ref();
+        let local = local_id(cx, "scm", &s.id, &mut scm_ids);
+        let label = cx.text("scm label", &s.label, limits::NAME_LEN);
+        if s.markers.is_empty() {
+            cx.err(C::BadContribution, s.id.span(), "scm needs at least one marker").fix =
+                Some("add markers = [\".hg\"]: a file or folder at the top of the folders it claims".into());
+        }
+        if let Some(extra) = s.markers.get(limits::SCM_MARKERS) {
+            cx.err(C::BadContribution, extra.span(), format!("scm has more than {} markers", limits::SCM_MARKERS));
+        }
+        let mut markers: Vec<String> = Vec::new();
+        for m in &s.markers {
+            if let Err(e) = check_marker(m.get_ref()) {
+                cx.err(C::BadPath, m.span(), format!("scm marker '{}' {e}", m.get_ref()));
+            } else if !markers.contains(m.get_ref()) {
+                markers.push(m.get_ref().clone());
+            }
+        }
+        out.scm.push(ScmProvider { id: id.qualify(&local), label, markers });
+    }
+}
+
+/// An `[[scm]]` marker: a path relative to the folder, without wildcards (`.hg`, `.jj/repo`).
+fn check_marker(m: &str) -> Result<(), String> {
+    check_workspace_glob(m)?;
+    if m.contains(['*', '?', '[', ']']) {
+        return Err("must be a plain name, without wildcards".into());
+    }
+    Ok(())
 }

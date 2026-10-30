@@ -26,6 +26,10 @@ export interface Handlers {
   reason: string;
   /** `ctx.state`: kept across a hot reload in `cyx dev` (`RELOAD_STATE_KEY`). */
   state: Map<string, unknown>;
+  /** Source control providers, by local id. */
+  scmStatus: Map<string, Fn>;
+  scmOriginal: Map<string, Fn>;
+  scmValidate: Map<string, Fn>;
 }
 
 function empty(): Handlers {
@@ -48,6 +52,9 @@ function empty(): Handlers {
     cancelledRequests: new Set(),
     reason: "",
     state: new Map(),
+    scmStatus: new Map(),
+    scmOriginal: new Map(),
+    scmValidate: new Map(),
   };
 }
 

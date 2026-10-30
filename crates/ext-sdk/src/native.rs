@@ -74,6 +74,8 @@ pub enum Note {
         set: String,
         decorations: Vec<Decoration>,
     },
+    /// `scm.refresh`: the provider's local id.
+    ScmRefresh(String),
 }
 
 /// What the extension calls. Implementations must not call back into the SDK from these methods: queue results and
@@ -254,6 +256,10 @@ pub(crate) fn clear_timer(id: u64) {
 
 pub(crate) fn invalidate(view: &str) {
     note(Note::Invalidate(view.into()));
+}
+
+pub(crate) fn scm_refresh(provider: &str) {
+    note(Note::ScmRefresh(provider.into()));
 }
 
 pub(crate) fn active_document() -> Ticket {

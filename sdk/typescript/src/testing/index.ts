@@ -126,6 +126,7 @@ export class MockHost {
   #ran: { program: string; args: string[]; cwd?: string; env: [string, string][] }[] = [];
   #applied: [string, number, TextEdit[]][] = [];
   #invalidated: string[] = [];
+  #scmRefreshed: string[] = [];
   #terminal: string[] = [];
 
   /**
@@ -350,6 +351,44 @@ export class MockHost {
       return item;
     });
     return { items, incomplete: r.val.incomplete };
+  }
+
+  // ---- source control providers ------------------------------------------------------------------------------------
+
+  /** A folder: `""` is the mock workspace folder itself. */
+  #folder(root: string): string {
+    return root === "" ? FOLDER : this.uri(root);
+  }
+
+  /** `request.scm-status`: the state of `root` (`""` for the mock folder, a path in it, or a uri) for provider `id`. */
+  async scmStatus(id: string, root = ""): Promise<W.WitScmState> {
+    const r = await this.request({ tag: "scm-status", val: [id, this.#folder(root)] });
+    if (r.tag !== "scm") throw CodeyardError.other(`the source control provider answered ${r.tag}`);
+    return r.val;
+  }
+
+  /** `request.scm-original`: the original text of `file` for provider `id`. */
+  async scmOriginal(id: string, file: string): Promise<string | undefined> {
+    const r = await this.request({ tag: "scm-original", val: [id, this.uri(file)] });
+    if (r.tag !== "text") throw CodeyardError.other(`the source control provider answered ${r.tag}`);
+    return r.val;
+  }
+
+  /** `request.scm-validate`: the message for the input box's `text`, if any. */
+  async scmValidate(id: string, text: string, root = ""): Promise<string | undefined> {
+    const r = await this.request({ tag: "scm-validate", val: [id, this.#folder(root), text] });
+    if (r.tag !== "text") throw CodeyardError.other(`the source control provider answered ${r.tag}`);
+    return r.val;
+  }
+
+  /** Press a button as Source Control does: its command, with the provider, folder, files and input box text. */
+  async scmPress(id: string, action: { command: string }, files: string[] = [], message = "", root = ""): Promise<any> {
+    return this.command(action.command, { provider: id, root: this.#folder(root), uris: files.map((f) => this.uri(f)), message });
+  }
+
+  /** Providers the extension asked to refresh (`ctx.scmRefresh`), in order. */
+  scmRefreshed(): string[] {
+    return [...this.#scmRefreshed];
   }
 
   async runCodeAction(id: string): Promise<void> {
@@ -689,6 +728,7 @@ export class MockHost {
         clear: (t) => void this.#timers.delete(t),
       },
       ui: { invalidate: (view) => void this.#invalidated.push(view) },
+      scm: { refresh: (provider) => void this.#scmRefreshed.push(provider) },
       documents: {
         active: () => this.#start("documents/active", [], () => [[], { tag: "document", val: this.#active }]),
         selections: () => this.#start("documents/selections", [], () => [[], { tag: "ranges", val: this.#selections }]),

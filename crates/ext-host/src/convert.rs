@@ -189,6 +189,50 @@ impl From<g::responses::Response> for v::Response {
             R::InlayHints(h) => {
                 v::Response::InlayHints(h.into_iter().map(|h| v::InlayHint { position: h.position.into(), label: h.label, tooltip: h.tooltip }).collect())
             }
+            R::Scm(s) => v::Response::Scm(s.into()),
+            R::Text(t) => v::Response::Text(t),
+        }
+    }
+}
+
+impl From<g::scm::ScmAction> for v::ScmAction {
+    fn from(a: g::scm::ScmAction) -> Self {
+        v::ScmAction { command: a.command, title: a.title, icon: a.icon }
+    }
+}
+
+impl From<g::scm::ScmState> for v::ScmState {
+    fn from(s: g::scm::ScmState) -> Self {
+        use g::scm::FileState as F;
+        let resource = |r: g::scm::ScmResource| v::ScmResource {
+            uri: r.uri,
+            state: match r.state {
+                F::Modified => v::FileState::Modified,
+                F::Added => v::FileState::Added,
+                F::Deleted => v::FileState::Deleted,
+                F::Renamed => v::FileState::Renamed,
+                F::Untracked => v::FileState::Untracked,
+                F::Ignored => v::FileState::Ignored,
+                F::Conflicted => v::FileState::Conflicted,
+            },
+            detail: r.detail,
+        };
+        let actions = |a: Vec<g::scm::ScmAction>| a.into_iter().map(Into::into).collect();
+        v::ScmState {
+            head: s.head,
+            input: v::ScmInput { placeholder: s.input.placeholder, value: s.input.value, accept: s.input.accept.map(Into::into) },
+            groups: s
+                .groups
+                .into_iter()
+                .map(|g| v::ScmGroup {
+                    id: g.id,
+                    label: g.label,
+                    resources: g.resources.into_iter().map(resource).collect(),
+                    resource_actions: actions(g.resource_actions),
+                    group_actions: actions(g.group_actions),
+                    hide_when_empty: g.hide_when_empty,
+                })
+                .collect(),
         }
     }
 }
@@ -332,6 +376,9 @@ impl From<v::Request> for g::host_requests::Request {
             v::Request::CodeLens { document, range } => R::CodeLens((document.into(), range.into())),
             v::Request::ResolveCodeLens { document, lens } => R::ResolveCodeLens((document.into(), lens.into())),
             v::Request::InlayHints { document, range } => R::InlayHints((document.into(), range.into())),
+            v::Request::ScmStatus { provider, root } => R::ScmStatus((provider, root)),
+            v::Request::ScmOriginal { provider, uri } => R::ScmOriginal((provider, uri)),
+            v::Request::ScmValidate { provider, root, value } => R::ScmValidate((provider, root, value)),
         }
     }
 }

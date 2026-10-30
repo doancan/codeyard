@@ -111,6 +111,7 @@ Ask before moving a file or folder by dragging it in the explorer
 Ask before moving a file to the Trash	
 Ask before pasting several lines into the terminal	
 Ask before running tasks, tests or the debugger of an untrusted folder	
+Asking the source control provider…	
 At most {} extra folders fit in one workspace.	
 Attach to a native process	
 Aug	
@@ -1060,6 +1061,7 @@ Ignore case unless the query has capital letters
 Ignore line endings	
 Ignore whitespace	
 Ignore “{}” in this session	
+Ignored	
 Ignored the language server's edit to {} file outside the open folders|Ignored the language server's edit to {} files outside the open folders	
 Image	
 Image exceeds 20 MB.	
@@ -1255,6 +1257,7 @@ Merge {}
 Merge {} into {}?	
 Merged {}	
 Merging {}…	
+Message	
 Message (↵ to commit)	
 Milliseconds between live preview checks	
 Mine	
@@ -2057,6 +2060,7 @@ Source Control
 Source Control (⌃⇧G)	
 Source Control graph view: graph (branch lanes), compact (one line per commit) or dates (grouped by day)	
 Source control	
+Source control: {0} (folders with {1})	
 Source on server	
 Spaces per indent level (empty: detect per file)	
 Spaces per level in the JSON and YAML written by Data: Convert To… and Data: Query…	
@@ -2257,6 +2261,7 @@ The pattern does not parse: {0} (line {1}, column {2})
 The preLaunchTask “{0}” did not succeed ({1}), so debugging was not started. Check its terminal, then start debugging again.	
 The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code.	
 The program is running: pause it first, or set a breakpoint.	
+The provider answered with something else: {}	
 The query ends too early	
 The query is nested too deeply	
 The query is too long	

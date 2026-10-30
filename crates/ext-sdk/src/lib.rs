@@ -36,6 +36,7 @@ pub mod net;
 pub mod process;
 pub mod protocol;
 mod runtime;
+pub mod scm;
 pub mod types;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -69,6 +70,7 @@ pub trait Extension: 'static {
 pub mod prelude {
     pub use crate::net::{Request, Response};
     pub use crate::process::{Chunk, Command, Output};
+    pub use crate::scm::{FileState, ScmAction, ScmArgs, ScmGroup, ScmInput, ScmResource, ScmState};
     pub use crate::types::*;
     pub use crate::{Context, Denied, Error, Extension, Result, Value, Why, json};
 }

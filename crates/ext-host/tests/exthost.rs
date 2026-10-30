@@ -23,8 +23,12 @@ fn dir(name: &str) -> PathBuf {
 
 /// `--compile` the probe once per test folder; returns the compiled file and its hash.
 fn compile(dir: &Path) -> (PathBuf, [u8; 32]) {
+    compile_wasm(dir, PROBE)
+}
+
+fn compile_wasm(dir: &Path, wasm: &[u8]) -> (PathBuf, [u8; 32]) {
     let mut c = Command::new(EXE).arg("--compile").stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
-    c.stdin.take().unwrap().write_all(PROBE).unwrap();
+    c.stdin.take().unwrap().write_all(wasm).unwrap();
     let out = c.wait_with_output().unwrap();
     assert!(out.status.success());
     let path = dir.join("probe.cwasm");
@@ -360,4 +364,52 @@ fn cold_start() {
         times.sort();
         println!("sandbox {sandbox:5}: median {:?}, p95 {:?}", times[10], times[18]);
     }
+}
+
+/// A source control provider (#144): the host asks for a folder's state and a file's original text, the answers
+/// travel back as `response.scm` and `response.text`, and `scm.refresh` reaches the app.
+#[test]
+fn a_source_control_provider_answers_and_asks_for_a_refresh() {
+    let d = dir("scm");
+    let (c, sha) = compile_wasm(&d, include_bytes!("../testdata/probe-scm.wasm"));
+    let mut h = Host::start(hello(&d, &c, sha, &["workspace"], false)).ready();
+    let request = Request::ScmStatus { provider: "toy".into(), root: "file:///work".into() };
+    h.send(&ToHost::Handle { id: 100, deadline_ms: 0, request });
+    let ticket = match h.next() {
+        ToApp::Start { ticket, call: Start::ReadFile { uri } } => {
+            assert_eq!(uri, "file:///work/.toyvcs/changes");
+            ticket
+        }
+        other => panic!("{other:?}"),
+    };
+    h.send(&ToHost::Complete { ticket, completion: Completion::Bytes(b"changes M a.txt\nstaged A b.txt\n".to_vec()) });
+    let Ok(Response::Scm(state)) = h.answer(100).0 else { panic!("no state") };
+    let files: Vec<(&str, &str, ext_api::value::FileState)> =
+        state.groups.iter().flat_map(|g| g.resources.iter().map(move |r| (g.id.as_str(), r.uri.as_str(), r.state))).collect();
+    assert_eq!(
+        files,
+        [("staged", "file:///work/b.txt", ext_api::value::FileState::Added), ("changes", "file:///work/a.txt", ext_api::value::FileState::Modified)]
+    );
+    assert_eq!(state.input.accept.map(|a| a.command).as_deref(), Some("scm-commit"));
+
+    let request = Request::ScmOriginal { provider: "toy".into(), uri: "file:///work/a.txt".into() };
+    h.send(&ToHost::Handle { id: 101, deadline_ms: 0, request });
+    let ticket = match h.next() {
+        ToApp::Start { ticket, call: Start::ReadFile { uri } } => {
+            assert_eq!(uri, "file:///work/.toyvcs/base/a.txt");
+            ticket
+        }
+        other => panic!("{other:?}"),
+    };
+    h.send(&ToHost::Complete { ticket, completion: Completion::Bytes(b"old".to_vec()) });
+    assert_eq!(h.answer(101).0, Ok(Response::Text(Some("old".into()))));
+
+    let request = Request::ScmValidate { provider: "toy".into(), root: "file:///work".into(), value: " ".into() };
+    h.send(&ToHost::Handle { id: 102, deadline_ms: 0, request });
+    assert_eq!(h.answer(102).0, Ok(Response::Text(Some("Write a message first".into()))));
+
+    let id = h.command("scm-refresh", "");
+    let (answer, seen) = h.answer(id);
+    assert_eq!(answer, Ok(Response::Json("refreshed".into())));
+    assert!(seen.iter().any(|m| matches!(m, ToApp::Notify(Notify::ScmRefresh { provider }) if provider == "toy")), "{seen:?}");
 }

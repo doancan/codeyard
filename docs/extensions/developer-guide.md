@@ -217,6 +217,11 @@ languages = ["toml"]            # request.hover; shown in the hover popup next t
 [[completion]]
 languages = ["toml"]            # request.completion; items join the language server's list
 trigger-characters = ["."]      # optional: these characters ask too, besides typing a word
+
+[[scm]]
+id      = "hg"                  # a source control provider (see Source control below)
+label   = "Mercurial"
+markers = [".hg"]               # it claims workspace folders that have one of these at the top
 ```
 
 A file-tree menu entry passes the file's URI to the command as its argument, and a view-title entry the view's full id
@@ -237,6 +242,49 @@ your commands, a dependency's, or a `core:` command your manifest lists in `perm
 without a command gets `request.resolve-code-lens` once it is on screen.
 A task runs in your extension: start processes with `process.spawn` and show progress. Everything you showed goes when
 the user disables or uninstalls the extension, or when it crashes.
+
+### Source control
+
+An `[[scm]]` provider shows a version control system other than Git in Source Control and the gutter. It claims each
+trusted workspace folder that has one of its `markers` (the first provider that matches wins; Git keeps the others),
+and your extension starts there with the reason `scm:<id>`. In an untrusted folder it is not started. Codeyard asks:
+
+- `request.scm-status` (`ctx.scm_status` / `ctx.scmStatus`): the folder's state: `head` (a branch, a change id), the
+  input box (`placeholder`, an optional `value` that replaces its text, and the `accept` button), and groups of files,
+  each file a uri with a state (`modified`, `added`, `deleted`, `renamed`, `untracked`, `ignored`, `conflicted`).
+  It asks when the folder is first shown, after files in it change (once per burst; changes inside a marker folder do
+  not count), on **Refresh**, after each of your buttons, and when you call `scm.refresh` (`ctx.scm_refresh`).
+- `request.scm-original` (`ctx.scm_original`): a file's text as you last recorded it, for the gutter's change marks;
+  none for a file you do not track.
+- `request.scm-validate` (`ctx.scm_validate`): a note about the input box's text, shown under it while the user types;
+  the accept button does not run while there is one.
+
+Buttons (`resource-actions` on each file, `group-actions` on a group's header, the input box's `accept`) name one of
+your own `[[commands]]`. Clicking one runs it as a user action with the JSON arguments
+`{"provider": "<local id>", "root": "<folder uri>", "uris": [...], "message": "<input box text>"}` (`ScmArgs::from` /
+`scmArgs`). Run your version control program with `run` (`ctx.run`): it runs on the workspace's host, so the same
+extension works on SSH folders. Codeyard waits `SCM_DEADLINE_MILLIS` (10 s) for an answer and shows at most
+`SCM_RESOURCES` files per folder. [`examples/extensions/jj-scm`](../../examples/extensions/jj-scm) is a complete
+provider for Jujutsu:
+
+```rust
+ctx.scm_status("jj", async |ctx, root| {
+    let summary = ctx.run(Command::new("jj").args(["diff", "--summary"]).cwd(&root)).await?.stdout_text();
+    let mut changes = ScmGroup::new("working-copy", "Working Copy").resource_action(ScmAction::new("restore", "Discard").icon("undo-2"));
+    for line in summary.lines() {
+        changes = changes.resource(ScmResource::new(format!("{root}/{}", &line[2..]), FileState::Modified));
+    }
+    Ok(ScmState::new().group(changes).input(ScmInput::new("Describe the change").accept(ScmAction::new("commit", "Commit"))))
+});
+ctx.command("commit", async |ctx, args| {
+    let args = ScmArgs::from(args)?;
+    ctx.run(Command::new("jj").args(["commit", "-m", &args.message]).cwd(&args.root)).await?;
+    Ok(Value::Null)
+});
+```
+
+In tests, `MockHost` has `scm_status`, `scm_original`, `scm_validate`, `scm_press` (a button, as Source Control
+presses it) and `scm_refreshed` (TypeScript: `scmStatus`, `scmOriginal`, `scmValidate`, `scmPress`, `scmRefreshed`).
 
 ## Permissions
 

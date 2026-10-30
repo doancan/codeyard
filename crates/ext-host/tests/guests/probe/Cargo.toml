@@ -14,6 +14,8 @@ path = "src/lib.rs"
 escape = []
 # The app's run-time guards (ext_prompts_ui_tests.rs): `clipboard`, `run` and `hold`; imports clipboard-read and process.
 guards = []
+# The app's Source Control tests (#144): a toy source control provider whose commit runs `echo`; imports process.
+scm = []
 
 [dependencies]
 wit-bindgen = "0.63"

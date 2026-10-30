@@ -942,6 +942,8 @@ impl Workbench {
                 self.send_to_extension(&active, &format!("language:{language}"), None, window, cx);
             }
         }
+        // In a folder a source control provider claims, its change marks (workbench_ext_scm.rs).
+        self.attach_ext_scm(ed, window, cx);
     }
 
     // --- tasks ---

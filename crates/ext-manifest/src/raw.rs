@@ -67,6 +67,8 @@ pub struct RawManifest {
     pub code_lens: Vec<S<RawLanguages>>,
     #[serde(default)]
     pub inlay_hints: Vec<S<RawLanguages>>,
+    #[serde(default)]
+    pub scm: Vec<S<RawScm>>,
 }
 
 #[derive(Deserialize)]
@@ -262,4 +264,13 @@ pub struct RawCompletion {
     pub languages: Vec<S<String>>,
     #[serde(default)]
     pub trigger_characters: Vec<S<String>>,
+}
+
+/// `[[scm]]`: a source control provider for folders that contain one of `markers`.
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawScm {
+    pub id: S<String>,
+    pub label: S<String>,
+    pub markers: Vec<S<String>>,
 }

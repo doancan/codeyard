@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Rebuild codeyard-exthost's test extension: crates/ext-host/tests/guests/probe → crates/ext-host/testdata/probe.wasm
-# (and probe-escape.wasm, with the sandbox escape attempts, and probe-guards.wasm, for the app's run-time guards),
+# (and probe-escape.wasm, with the sandbox escape attempts, probe-guards.wasm, for the app's run-time guards, and
+# probe-scm.wasm, a toy source control provider),
 # and the performance scenarios' decoration provider:
 # crates/ext-host/tests/guests/decorator → crates/ext-host/testdata/decorator.wasm.
 #   scripts/build-exthost-fixtures.sh
@@ -18,6 +19,10 @@ cp "$target/wasm32-wasip2/release/probe.wasm" crates/ext-host/testdata/probe-esc
 # The same guest with the commands of the app's run-time guards (clipboard, run, hold).
 (cd crates/ext-host/tests/guests/probe && CARGO_TARGET_DIR="$target" cargo build --release --target wasm32-wasip2 --quiet --features guards)
 cp "$target/wasm32-wasip2/release/probe.wasm" crates/ext-host/testdata/probe-guards.wasm
+# The same guest with a toy source control provider (the app's Source Control tests).
+(cd crates/ext-host/tests/guests/probe && CARGO_TARGET_DIR="$target" cargo build --release --target wasm32-wasip2 --quiet --features scm)
+cp "$target/wasm32-wasip2/release/probe.wasm" crates/ext-host/testdata/probe-scm.wasm
 (cd crates/ext-host/tests/guests/decorator && CARGO_TARGET_DIR="$target" cargo build --release --target wasm32-wasip2 --quiet)
 cp "$target/wasm32-wasip2/release/decorator.wasm" crates/ext-host/testdata/decorator.wasm
-ls -l crates/ext-host/testdata/probe.wasm crates/ext-host/testdata/probe-escape.wasm crates/ext-host/testdata/probe-guards.wasm crates/ext-host/testdata/decorator.wasm
+ls -l crates/ext-host/testdata/probe.wasm crates/ext-host/testdata/probe-escape.wasm crates/ext-host/testdata/probe-guards.wasm \
+  crates/ext-host/testdata/probe-scm.wasm crates/ext-host/testdata/decorator.wasm

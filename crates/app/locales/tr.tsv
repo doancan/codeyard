@@ -522,6 +522,10 @@ Merge Changes	Birleştirme Değişiklikleri
 Staged Changes	Stage'deki Değişiklikler
 Changes	Değişiklikler
 No changes.	Değişiklik yok.
+Message	İleti
+Ignored	Yok sayıldı
+Asking the source control provider…	Kaynak denetimi sağlayıcısına soruluyor…
+The provider answered with something else: {}	Sağlayıcı beklenmeyen bir yanıt verdi: {}
 Commit	Commit Et
 Commit ({})	Commit Et ({})
 Commit All ({})	Tümünü Commit Et ({})
@@ -2906,6 +2910,7 @@ Setting: {}	Ayar: {}
 Language server: {0} for {1}	Dil sunucusu: {1} için {0}
 Command: {}	Komut: {}
 View: {}	Görünüm: {}
+Source control: {0} (folders with {1})	Kaynak denetimi: {0} ({1} içeren klasörler)
 Read all files in the workspace	Çalışma alanındaki tüm dosyaları okuma
 Read {}	{} okuma
 Read files that can hold passwords and keys	Parola ve anahtar barındırabilecek dosyaları okuma
