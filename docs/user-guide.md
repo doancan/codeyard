@@ -210,7 +210,10 @@ window to the front instead of opening it in a side bar; the command palette, sh
 pickers work in that window. Closing the window, ⌘W in it, or "View: Move View Back to Side Bar" puts the view back in
 the side bar it came from. The windows belong to the folder: they are saved with it, close when the folder or the
 connection changes (their views going back to the side bars), and come back when the folder opens again, on an
-attached display. Screen readers find the view in its own window, named after the view.
+attached display. Screen readers find the view in its own window, named after the view. A code extension's side bar
+view moves the same way (and to the secondary side bar): it stays the same view, so what the extension draws reaches
+the window and what you do there goes to the extension. Its window comes back only while the extension is installed;
+it closes when you remove or turn off the extension, and the view returns to the side bar if the extension crashes.
 "Terminal: Move Terminal into New Window" moves the active terminal, with its running program, into a window of its own
 (the same terminal, not a copy). Closing that window puts the terminal back in the panel, still running;
 "Terminal: Move Terminals Back to Panel" does it for all of them. A detached terminal belongs to its editor window and
@@ -237,18 +240,20 @@ own window the command palette, Quick Open, Go to Line, the right-click menu and
 as in the main window and act on that window's editor; a command that shows something in the main window (another
 file, a side view) brings it to the front. Screen readers see the editor in its own window, and the terminal in its
 own window, the same way as in the main window.
-**Terminals after a restart.** With `window.restoreSession` on (the default), the panel's terminals come back when
-the folder opens again: same order, folder, title, color and program. On macOS and Linux, terminals of a local folder
-run in a small background process of Codeyard's (the terminal daemon). They are kept running only when you are expected
-to come back: when you **quit** Codeyard (⌘Q, Quit in the menu, an update's restart), or when it crashes or is killed.
-Leaving on purpose ends them at once, as always: **closing the window** (even the last one), *Close Folder*, opening
-another folder in the window or switching to an SSH folder. Open the folder again within 5 minutes and you get **the
-same shells back**, still running, with what they printed meanwhile and a line *Reconnected to terminal session* (also
-announced in the status bar). If another Codeyard instance already has those terminals open, they stay with it: this
-window starts new shells and says so in the status bar. If more than the last 256 KB
-of a terminal's output came while no window was open, the line says how much was lost. A terminal no window takes back
-within 5 minutes is ended, and the daemon stops 10 minutes after its last terminal. Any terminal that cannot be taken
-back (it ended, the daemon was restarted, `window.restoreSession` is off, an SSH folder) is a **new shell**: nothing that
+**Terminals after a restart.** With `window.restoreSession` on (the default), a folder's terminals come back when the
+folder opens again: the panel's in the same order, and those you moved into an editor group or a window of their own in
+those places, with the same folder, title, color and program. Their shells keep running when you are expected to come
+back: when you **quit** Codeyard (⌘Q, Quit in the menu, an update's restart), or when it crashes or is killed. A local
+folder's terminals run in a small background process of Codeyard's (the terminal daemon, on macOS and Linux); an SSH
+folder's already run in Codeyard's agent on the server. Leaving on purpose ends them at once, as always: **closing the
+window** (even the last one), *Close Folder*, opening another folder in the window or connecting elsewhere. Open the
+folder again within `terminal.persistentSessionTimeout` minutes (5 by default, at most 1440; 0 keeps nothing) and you get
+**the same shells back**, still running, with what they printed meanwhile and a line *Reconnected to terminal session*
+(also announced in the status bar). If another Codeyard instance already has a local folder's terminals open, they stay
+with it: this window starts new shells and says so in the status bar. If more than the last 256 KB of a terminal's output
+came while no window was open, the line says how much was lost. A terminal no window takes back in time is ended; the
+local daemon stops 10 minutes after its last terminal. Any terminal that cannot be taken back (it ended, the daemon or
+the server was restarted, `window.restoreSession` is off, Windows for a local folder) is a **new shell**: nothing that
 ran before is started or typed again, and a line says *Previous session ended; started a new shell*. If a terminal's folder is gone,
 it starts in the workspace folder and says so. `"terminal.persistentScrollback": 1000` also keeps the last lines of each
 terminal's history (plain text, with colors and control sequences removed) and shows them above that line; it is 0 (off) by

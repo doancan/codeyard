@@ -46,7 +46,7 @@ title = "Board"
 location = "editor"
 "#;
 
-const SIDE: &str = "you.probe.counter";
+pub(crate) const SIDE: &str = "you.probe.counter";
 const BOTTOM: &str = "you.probe.log";
 const EDITOR: &str = "you.probe.board";
 
@@ -71,7 +71,7 @@ fn install(cfg: &Path, manifest: &str) {
 }
 
 /// A window with the probe installed. `offline`: requests and events are recorded instead of sent.
-fn setup<'a>(cx: &'a mut TestAppContext, name: &str, offline: bool) -> (Entity<Workbench>, &'a mut VisualTestContext) {
+pub(crate) fn setup<'a>(cx: &'a mut TestAppContext, name: &str, offline: bool) -> (Entity<Workbench>, &'a mut VisualTestContext) {
     setup_with(cx, name, offline, MANIFEST, None)
 }
 
@@ -96,6 +96,8 @@ fn setup_with<'a>(
     let (wb, cx) = cx.add_window_view(move |window, cx| Workbench::with_state(state::State::in_memory().ok(), Some(cfg), window, cx));
     cx.simulate_resize(gpui::size(gpui::px(1280.), gpui::px(800.)));
     wb.update_in(cx, |wb, window, cx| {
+        // Offline, the probe never runs: it is loaded even where the exthost or its sandbox is missing.
+        let _guard = offline.then(crate::ext_runtime::load_without_exthost_for_test);
         wb.reload_config_for_test(window, cx);
         if offline {
             wb.ext_views_offline_for_test();
@@ -105,13 +107,13 @@ fn setup_with<'a>(
     (wb, cx)
 }
 
-fn open(wb: &Entity<Workbench>, cx: &mut VisualTestContext, id: &str) {
+pub(crate) fn open(wb: &Entity<Workbench>, cx: &mut VisualTestContext, id: &str) {
     let id = id.to_string();
     wb.update_in(cx, |wb, window, cx| wb.open_ext_view_for_test(&id, window, cx));
     cx.run_until_parked();
 }
 
-fn render(wb: &Entity<Workbench>, cx: &mut VisualTestContext, id: &str, tree: &Node) {
+pub(crate) fn render(wb: &Entity<Workbench>, cx: &mut VisualTestContext, id: &str, tree: &Node) {
     let (id, json) = (id.to_string(), ext_ui::encode_json(tree));
     wb.update_in(cx, |wb, window, cx| wb.ext_view_render_for_test(&id, &json, window, cx));
     cx.run_until_parked();
@@ -127,15 +129,15 @@ fn press(cx: &mut VisualTestContext, key: &str) {
     cx.run_until_parked();
 }
 
-fn text(t: &str) -> Node {
+pub(crate) fn text(t: &str) -> Node {
     Node::new(Element::Text { text: t.into(), tone: Tone::Neutral })
 }
 
-fn column(children: impl IntoIterator<Item = Node>) -> Node {
+pub(crate) fn column(children: impl IntoIterator<Item = Node>) -> Node {
     Node::new(Element::Column { gap: Space(2), pad: Space(0) }).children(children)
 }
 
-fn button(key: &str, label: &str) -> Node {
+pub(crate) fn button(key: &str, label: &str) -> Node {
     Node::new(Element::Button { label: label.into(), icon: None, tone: Tone::Neutral, disabled: false }).key(key)
 }
 

@@ -233,6 +233,36 @@ fn an_exclusive_session_is_not_taken_from_a_live_connection() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// `KeepFor` sets a session's own grace period: 0 ends its terminals as soon as the connection goes, a long one keeps
+/// them past the daemon's default.
+#[test]
+fn a_session_is_kept_as_long_as_its_client_asked() {
+    let (mut d, dir, sock) = daemon("keepfor", 1, 600);
+    let (mut gone, _) = Conn::open(&sock, "keep-none");
+    let pty = spawn_shell(&mut gone);
+    let short: i32 = shell_pid(&mut gone, pty, "short").parse().unwrap();
+    proto::write_frame(&mut gone.w, &Frame { id: 0, body: Request::KeepFor { secs: 0 } }).unwrap();
+    let (mut kept, _) = Conn::open(&sock, "keep-long");
+    let pty = spawn_shell(&mut kept);
+    let long: i32 = shell_pid(&mut kept, pty, "long").parse().unwrap();
+    proto::write_frame(&mut kept.w, &Frame { id: 0, body: Request::KeepFor { secs: 600 } }).unwrap();
+    std::thread::sleep(Duration::from_millis(200));
+    drop((gone, kept));
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while alive(short) {
+        assert!(Instant::now() < deadline, "a session kept for 0 s still runs its shell");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    // Well past the daemon's own 1 s grace period.
+    std::thread::sleep(Duration::from_secs(3));
+    assert!(alive(long), "a session kept for 10 minutes ended with the default grace period");
+    let _ = d.kill();
+    let _ = d.wait();
+    // SAFETY: SIGKILL to the test's own shell; the daemon that owned it is gone.
+    unsafe { libc::kill(long, libc::SIGKILL) };
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn output_lost_while_away_is_counted() {
     let (mut d, dir, sock) = daemon("gap", 300, 600);

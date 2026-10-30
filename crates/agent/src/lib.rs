@@ -79,6 +79,7 @@ pub fn handle(req: Request) -> Response {
         | Request::PtyToken { .. }
         | Request::PtyAttach { .. }
         | Request::PtyList
+        | Request::KeepFor { .. }
         | Request::LineIndex { .. }
         | Request::ReadLines { .. } => Err(Error::Unsupported("streaming request outside a session".into())),
         Request::ListFiles { root, limit } => list_files(&expand(&root), limit as usize).map(|(paths, truncated)| Response::Files { paths, truncated }),
@@ -101,6 +102,8 @@ pub struct Session {
     ptys: Arc<Mutex<HashMap<u32, pty::Pty>>>,
     /// Each terminal's secret, once a client asked for its token (`reattach`).
     secrets: Mutex<HashMap<u32, String>>,
+    /// Seconds the daemon keeps this session after its connection ends (`KeepFor`; `u64::MAX`: the daemon's default).
+    pub(crate) keep_for: AtomicU64,
     next_pty: AtomicU32,
     /// Piped processes and the generation of the connection they were opened on.
     procs: Arc<Mutex<HashMap<u32, (u64, proc::Proc)>>>,
@@ -151,6 +154,7 @@ impl Default for Session {
             cancels: Arc::default(),
             ptys: Arc::default(),
             secrets: Mutex::default(),
+            keep_for: AtomicU64::new(u64::MAX),
             next_pty: AtomicU32::new(1),
             procs: Arc::default(),
             big: Arc::default(),
@@ -319,7 +323,7 @@ impl Session {
             Request::PtySpawnEx { cols, rows, cwd, shell, args, env, integration } => {
                 self.spawn_pty(id, pty::Spawn { cols, rows, cwd, shell, args, env, integration })
             }
-            Request::PtyToken { .. } | Request::PtyAttach { .. } | Request::PtyList => self.reattach_request(id, body),
+            Request::PtyToken { .. } | Request::PtyAttach { .. } | Request::PtyList | Request::KeepFor { .. } => self.reattach_request(id, body),
             Request::PtyStatus { pty: pid } => {
                 let status = self.ptys.locked().get(&pid).map(pty::Pty::status).unwrap_or_default();
                 reply(Response::PtyStatus { busy: status.busy, name: status.name, cwd: status.cwd })

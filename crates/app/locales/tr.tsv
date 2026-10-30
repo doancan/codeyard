@@ -3301,6 +3301,7 @@ skipped	atlandı
 {} test|{} tests	{} test
 # ---- Terminal restore ----
 Lines of each terminal's history kept for the next start, as plain text on this computer (0: none)	Her terminalin geçmişinden bir sonraki açılış için bu bilgisayarda düz metin olarak saklanan satır sayısı (0: hiç)
+Minutes the terminals keep running for the next start after Codeyard quits, crashes or is killed (0: not kept)	Codeyard kapandıktan, çöktükten ya da sonlandırıldıktan sonra terminallerin bir sonraki açılış için çalışmaya devam ettiği dakika (0: tutulmaz)
 Saved terminal history cleared	Kaydedilen terminal geçmişi temizlendi
 Terminal session could not be restored: {}	Terminal oturumu geri yüklenemedi: {}
 Terminal: Clear Saved Terminal History	Terminal: Kaydedilen Terminal Geçmişini Temizle

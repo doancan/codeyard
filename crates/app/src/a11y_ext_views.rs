@@ -315,13 +315,15 @@ impl Build<'_> {
 }
 
 impl Workbench {
-    /// The extension views on screen: the sidebar's, the bottom panel's and the editor page's.
+    /// The extension views on screen: the side bar's (primary or secondary), those in windows of their own, the bottom
+    /// panel's and the editor page's.
     pub(in crate::workbench) fn a11y_ext_views(&self, window: &Window) -> Vec<ViewSnap> {
         let views = &self.cfg.exts.views;
         let mut shown = Vec::new();
-        if self.chrome.panel == Some(Panel::ExtView) {
+        if self.chrome.panel == Some(Panel::ExtView) || self.chrome.secondary == Some(Panel::ExtView) {
             shown.extend(views.sidebar.clone());
         }
+        shown.extend(self.ext_views_in_windows());
         if self.chrome.panel_open && self.chrome.bottom == Bottom::ExtView {
             shown.extend(views.bottom.clone());
         }

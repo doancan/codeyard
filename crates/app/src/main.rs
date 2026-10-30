@@ -1289,7 +1289,7 @@ fn main() {
             // Quitting is not closing: every window's terminals stay with the terminal daemon for the next start.
             for window in cx.windows() {
                 if let Some(wb) = window.downcast::<Workbench>() {
-                    let _ = wb.update(cx, |wb, _, _| wb.keep_terminals_for_restart());
+                    let _ = wb.update(cx, |wb, _, cx| wb.keep_terminals_for_restart(cx));
                 }
             }
             async {}

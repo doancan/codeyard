@@ -13,6 +13,9 @@ pub(super) fn parse(s: &mut Settings, r: &mut Reader<'_>, obj: &Map<String, Valu
         s.terminal_line_height = v as f32;
     }
     s.terminal_persistent_scrollback = r.integer("terminal.persistentScrollback", 0, crate::terminal_session::MAX_HISTORY_LINES as u64).map_or(0, |v| v as _);
+    if let Some(v) = r.integer("terminal.persistentSessionTimeout", 0, crate::terminal_session::MAX_SESSION_MINUTES) {
+        s.terminal_persistent_session_timeout = v;
+    }
     if let Some(v) = r.number("terminal.scrollback", 0., crate::terminal::SCROLLBACK_MAX as f64) {
         s.terminal_scrollback = v as usize;
     }

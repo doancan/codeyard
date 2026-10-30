@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 pub const EXCLUSIVE_SESSION: &str = "x-";
 
 /// Compared in the handshake; on mismatch the agent is reinstalled.
-pub const VERSION: u32 = 16;
+pub const VERSION: u32 = 17;
 
 /// Max size of one frame. Larger files are read in chunks.
 pub const MAX_FRAME: usize = 64 * 1024 * 1024;
@@ -212,6 +212,11 @@ pub enum Request {
     },
     /// The session's open terminals (`PtyList`), so a client can close the ones it did not take back.
     PtyList,
+    /// Daemon mode: keep this session (its terminals) this many seconds after its connection ends, instead of the
+    /// daemon's default; 0 ends it as soon as the connection ends. No reply.
+    KeepFor {
+        secs: u64,
+    },
 }
 
 /// What `TaskSpawn` runs.
