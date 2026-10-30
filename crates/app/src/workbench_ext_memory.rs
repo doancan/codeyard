@@ -88,6 +88,10 @@ impl Workbench {
         self.cfg.exts.memory.every = every;
     }
 
+    pub(crate) fn clear_extension_answer_for_test(&mut self, extension: &str) {
+        self.cfg.exts.code.last_answer.remove(extension);
+    }
+
     /// Exthosts running or starting in this window.
     pub(crate) fn extension_processes_for_test(&self) -> usize {
         crate::ext::current().active.iter().filter(|e| self.cfg.exts.code.running(e.id())).count()

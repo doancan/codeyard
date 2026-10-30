@@ -302,12 +302,15 @@ fn an_exthost_over_its_memory_cap_is_stopped_as_a_crash(cx: &mut TestAppContext)
         let pid = wb.read_with(cx, |wb, _| wb.extension_pid_for_test("you.probe")).expect("running");
         let idle = crate::ext_memory::resident_bytes(pid).expect("readable");
         wb.update(cx, |wb, _| wb.set_extension_memory_cap_for_test(idle + (32 << 20), Duration::from_millis(100)));
-        assert_eq!(run(&wb, cx, "Probe: Hold"), "64");
+        // The answer may not arrive: the check can stop it between growing and answering.
+        wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Hold", window, cx));
         let wb2 = wb.clone();
         until(cx, move |cx| wb2.read_with(cx, |wb, _| wb.extension_pid_for_test("you.probe").is_none()), "the exthost to be stopped");
         let notice = wb.read_with(cx, |wb, _| wb.notice_for_test()).map(|n| n.1).unwrap_or_default();
         if round < 3 {
             assert!(notice.contains("you.probe") && notice.contains("MB of memory, over the limit"), "{notice}");
+            // The next round's echo must change the answer.
+            wb.update(cx, |wb, _| wb.clear_extension_answer_for_test("you.probe"));
         } else {
             // Three crashes within a minute turn it off.
             assert!(notice.contains("crashed three times"), "{notice}");
