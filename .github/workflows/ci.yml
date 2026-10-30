@@ -135,6 +135,8 @@ jobs:
       - run: cargo fetch --locked
       - run: python3 -I scripts/test-crate-licenses.py
       - run: python3 -I scripts/crate-licenses.py --check
+      # The TypeScript SDK's npm packages (build tools cyx installs, dev dependencies) against THIRD_PARTY_NPM.md.
+      - run: python3 -I scripts/npm-licenses.py --check
       # Project board rules (scripts/project-sync.py, run by project.yml).
       - run: python3 -I scripts/test-project-sync.py
       # Performance gate decisions (scripts/perf/compare.py).
@@ -174,7 +176,8 @@ jobs:
           if-no-files-found: error
 
   # The crates that do not depend on GPUI, plus the musl agent and its size limit
-  # (the agent runs on Linux servers), and the Rust extension examples (the only job with the wasm32-wasip2 target).
+  # (the agent runs on Linux servers), and the extension SDKs and examples (the only job with the wasm32-wasip2 target
+  # and Node.js for TypeScript extensions).
   linux:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -184,17 +187,28 @@ jobs:
         with:
           toolchain: stable
           targets: x86_64-unknown-linux-musl, wasm32-wasip2
+      # TypeScript extensions: cyx builds them with Node.js (sdk/typescript/toolchain), `npm test` runs .ts directly.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2, Node.js 24
         with:
           shared-key: ci-linux
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
-      # ext-host builds codeyard-exthost, which cyx's tests use to run examples/extensions (`cyx test`); with
-      # CODEYARD_REQUIRE_WASM a missing target or exthost fails those tests instead of skipping them.
+      - name: TypeScript SDK (type check and tests)
+        working-directory: sdk/typescript
+        run: npm ci --ignore-scripts --no-audit --no-fund && npm run check && npm test
+      # Before cargo test: cyx's tests build the TypeScript examples, which need their node_modules.
+      - name: TypeScript example extensions (type check and unit tests against the mock host)
+        run: for d in examples/extensions/*/; do if [ -f "$d/package.json" ]; then (cd "$d" && npm ci --ignore-scripts --no-audit --no-fund && npm run check && npm test) || exit 1; fi; done
+      # ext-host builds codeyard-exthost, which cyx's tests use to run examples/extensions (`cyx test`, Rust and
+      # TypeScript); with CODEYARD_REQUIRE_WASM a missing target, exthost or Node.js fails those tests instead of skipping
+      # them.
       - run: cargo test --locked -p proto -p agent -p host -p buffer -p state -p syntax -p theme -p ext-manifest -p ext-pkg -p ext-core -p ext-proto -p ext-host -p ext-net -p cyx -p yard -p codeyard-extension -p codeyard-extension-test
         env:
           CODEYARD_REQUIRE_WASM: "1"
       - name: Example extensions (unit tests against the mock host)
-        run: for d in examples/extensions/*/; do cargo test --locked --manifest-path "$d/Cargo.toml" --target-dir target/examples; done
+        run: for d in examples/extensions/*/; do if [ -f "$d/Cargo.toml" ]; then cargo test --locked --manifest-path "$d/Cargo.toml" --target-dir target/examples || exit 1; fi; done
       # The shipped Linux agents are built with cargo-zigbuild (release.yml, docs/releasing.md), so the size gate builds
       # the same way. A plain `cargo build` with the system linker produces a static-PIE (+170 KB of relocations) and
       # measures ~1.7 MB: not the artifact users get. pip installs cargo-zigbuild together with zig.

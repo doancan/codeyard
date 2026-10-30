@@ -1,0 +1,18 @@
+[extension]
+id          = "codeyard.hello-view-ts"
+version     = "0.1.0"
+name        = "Hello View Ts"
+license     = "MIT"
+description = "A view."
+
+[code]
+entry = "src/extension.ts"
+
+[[views]]
+id       = "main"
+title    = "Hello View Ts"
+location = "sidebar"
+
+[[commands]]
+id    = "reset"
+title = "Hello View Ts: Reset"

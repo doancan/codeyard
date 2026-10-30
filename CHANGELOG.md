@@ -46,6 +46,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The extension API `codeyard:api` 0.1.0 (docs/extensions/reference/api.md) and its import check: `cyx check`, the
   registry and the installer refuse a code extension whose `extension.wasm` imports an interface its manifest has no
   permission for, with the line to add.
+- TypeScript code extensions (docs/extensions/typescript.md): `@codeyard/extension` (`sdk/typescript`) with the same
+  API as the Rust SDK, every call returning a Promise, and a global `fetch` mapped to the host's `net` with streamed
+  bodies, so npm packages such as Octokit and zod work once bundled. `cyx package`, `cyx test` and `cyx dev` build a
+  `.ts`/`.js` entry with esbuild and ComponentizeJS, which `cyx` installs at pinned versions in its cache; Node.js is
+  the only requirement. A Node.js built-in import fails the build at its line. `cyx test` shows TypeScript files and
+  lines in stack traces. `@codeyard/extension/testing` is the mock host for `npm test`. `cyx new command|view --lang
+  ts` and three examples in `examples/extensions/`.
+- `codeyard-exthost --compile --cache FILE` reuses Cranelift's compiled functions from the last compile; `cyx test`
+  uses it, and a rebuilt TypeScript extension compiles in about half the time.
 - Tasks run as their task file describes them, locally and over SSH: process tasks keep each argument as written, shell
   tasks quote for their shell, `dependsOn` runs in parallel or in sequence with a shared dependency once, `promptString`
   and `pickString` inputs are asked first, background tasks release their dependents when their `endsPattern` matches,
@@ -274,6 +283,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The extension host's idle memory for a TypeScript extension drops from 54 MB to 22 MB on macOS: it hashes the
+  compiled code in pieces and copies the code to executable memory without a heap buffer, so 32 MB of freed memory no
+  longer stays with the allocator.
 - The divider between editor groups no longer jumps away from the pointer when the interface scale or the window size
   changes while it is being dragged.
 - The publish workflow that `cyx new` writes pins `actions/checkout` and the Codeyard publish action to commit SHAs. It

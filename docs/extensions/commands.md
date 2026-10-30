@@ -1,6 +1,6 @@
 # Commands, views and other code
 
-A code extension is a Rust crate built into a WebAssembly component. It adds commands to the palette, views to the sidebar, formatters, code actions and anything else that needs code. This page covers writing one; [testing.md](testing.md) covers testing it, and [reference/api.md](reference/api.md) lists every call. TypeScript comes later.
+A code extension is a Rust crate built into a WebAssembly component. It adds commands to the palette, views to the sidebar, formatters, code actions and anything else that needs code. This page covers writing one; [testing.md](testing.md) covers testing it, and [reference/api.md](reference/api.md) lists every call. For TypeScript, see [typescript.md](typescript.md): the same API, with Promises.
 
 The SDK is **pre-release**: it is not on crates.io yet, so a new extension takes it from the Codeyard repository (see [The SDK dependency](#the-sdk-dependency)). Its API may still change before 1.0.
 

@@ -1,0 +1,31 @@
+{
+  "name": "@codeyard/extension",
+  "version": "0.1.0",
+  "description": "Write Codeyard extensions in TypeScript: the typed API, fetch mapped to the host, and a mock host for npm test",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/doancan/codeyard.git",
+    "directory": "sdk/typescript"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.ts\"",
+    "check": "tsc"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "6.0.3"
+  }
+}

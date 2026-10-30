@@ -106,8 +106,12 @@ fn new_refuses_bad_names_and_existing_folders() {
     assert!(parse_new(&s(&["theme", "My Theme"])).unwrap_err().contains("lowercase"));
     assert!(parse_new(&s(&["widget", "x"])).unwrap_err().contains("unknown kind"));
     assert!(parse_new(&s(&["theme", "x", "--publisher", "Bad Name"])).unwrap_err().contains("publisher"));
-    let (kind, name, publisher, _) = parse_new(&s(&["theme", "zzz-not-here", "--publisher", "acme"])).unwrap();
+    let (kind, name, publisher, _, _) = parse_new(&s(&["theme", "zzz-not-here", "--publisher", "acme"])).unwrap();
     assert_eq!((kind, name.as_str(), publisher.as_str()), (Kind::Theme, "zzz-not-here", "acme"));
+    let (kind, .., lang) = parse_new(&s(&["view", "zzz-not-here", "--lang", "ts"])).unwrap();
+    assert_eq!((kind, lang), (Kind::View, scaffold::Lang::TypeScript));
+    assert!(parse_new(&s(&["theme", "x", "--lang", "ts"])).unwrap_err().contains("code extensions"));
+    assert!(parse_new(&s(&["command", "x", "--lang", "go"])).unwrap_err().contains("unknown language"));
 }
 
 #[test]
