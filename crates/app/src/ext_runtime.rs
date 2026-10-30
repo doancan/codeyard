@@ -70,6 +70,10 @@ pub fn code_runs_here(id: &dyn std::fmt::Display) -> Result<(), String> {
 /// sandbox check runs a process, so it waits for the first install or start (`code_runs_here`); once it has answered,
 /// its answer counts here too.
 pub fn code_loads_here(id: &dyn std::fmt::Display) -> Result<(), String> {
+    #[cfg(test)]
+    if LOAD_WITHOUT_EXTHOST.with(|c| c.get()) {
+        return Ok(());
+    }
     // Looked up once per process: a reload with many code extensions installed asks once, not once each.
     static PRESENT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     match SANDBOX.get() {
