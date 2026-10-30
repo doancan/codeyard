@@ -3206,6 +3206,7 @@ This view is not available.	Bu görünüm kullanılamıyor.
 by {}	yayımlayan: {}
 render must answer with response.view	render, response.view ile yanıt vermeli
 the extension stopped	eklenti durdu
+the extension was reloaded	eklenti yeniden yüklendi
 {0} could not draw this view: {1}	{0} bu görünümü çizemedi: {1}
 {0}, by {1}	{0}, yayımlayan: {1}
 {0}, from {1}	{0}, kaynak: {1}

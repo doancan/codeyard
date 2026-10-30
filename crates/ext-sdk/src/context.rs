@@ -200,6 +200,12 @@ impl Context {
         Storage { _one_thread: PhantomData }
     }
 
+    /// In-memory values that survive a hot reload in `cyx dev`: the SDK saves them when the old build stops and gives
+    /// them back to the new one. Any other start begins empty. Use `storage` for what must outlast the session.
+    pub fn state(&self) -> State {
+        State { _one_thread: PhantomData }
+    }
+
     /// Ask for view `id` to be drawn again.
     pub fn invalidate(&self, view: &str) {
         sys::invalidate(view);
@@ -484,6 +490,28 @@ impl Storage {
 
     pub fn keys(&self) -> Vec<String> {
         sys::storage_keys()
+    }
+}
+
+/// The extension's in-memory state (`Context::state`), as JSON values by key.
+pub struct State {
+    _one_thread: PhantomData<*const ()>,
+}
+
+impl State {
+    /// The value under `key` as `T`; none when unset or of another shape.
+    pub fn get<T: DeserializeOwned>(&self, key: &str) -> Option<T> {
+        guest::with(|h| h.state.get(key).cloned()).and_then(|v| serde_json::from_value(v).ok())
+    }
+
+    pub fn set(&self, key: &str, value: &impl Serialize) -> Result<()> {
+        let v = serde_json::to_value(value)?;
+        guest::with(|h| h.state.insert(key.to_string(), v));
+        Ok(())
+    }
+
+    pub fn remove(&self, key: &str) {
+        guest::with(|h| h.state.remove(key));
     }
 }
 

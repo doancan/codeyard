@@ -2,8 +2,8 @@
 //!
 //! ```text
 //! cyx new <theme|snippets|keymap|language|language-server|command|view> <name> [--lang ts] [--publisher NAME] [--sdk PATH]
-//! cyx dev [FOLDER] [-- CODEYARD ARGS…]   run Codeyard with the extension loaded from FOLDER; it reloads on save
-//! cyx check [FOLDER]                     every problem with its file, line and fix
+//! cyx dev [FOLDER] [-- CODEYARD ARGS…]   run Codeyard with the extension loaded from FOLDER; rebuilt and reloaded on save (dev.rs)
+//! cyx check [FOLDER] [--fix]             every problem with its file, line and fix; --fix adds missing permissions (fix.rs)
 //! cyx package [FOLDER] [-o FILE]         build the code (build.rs), then a reproducible .cyx
 //! cyx test [FOLDER]                      the built extension in codeyard-exthost against a scripted app (harness.rs)
 //! cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]
@@ -17,6 +17,8 @@
 //! folder `cyx check` accepts installs. Only publishing and status changes use the network (`publish.rs`).
 
 mod build;
+mod dev;
+mod fix;
 mod harness;
 mod net;
 mod oidc;
@@ -44,7 +46,8 @@ usage:
                                              TypeScript with --lang ts; --sdk PATH takes the SDK from a Codeyard
                                              checkout)
   cyx dev [FOLDER] [-- CODEYARD ARGS…]       run Codeyard with it loaded; it reloads when you save
-  cyx check [FOLDER]                         list every problem with its file, line and fix
+  cyx check [FOLDER] [--fix]                 list every problem with its file, line and fix; --fix adds the
+                                             missing permissions to codeyard-extension.toml
   cyx package [FOLDER] [-o FILE]             build the code, then write a .cyx to install or publish
   cyx test [FOLDER]                          build the code and run each command and view in the extension host
   cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]
@@ -105,7 +108,11 @@ fn run(args: &[String]) -> Result<(), String> {
             test(&dir)
         }
         "check" => {
-            let dir = folder(rest.first())?;
+            let fix = rest.iter().any(|a| a == "--fix");
+            let dir = folder(rest.iter().find(|a| *a != "--fix"))?;
+            if fix {
+                print_fixes(&fix::fix(&dir)?);
+            }
             let report = check(&dir)?;
             for w in &report.warnings {
                 eprintln!("{w}");
@@ -125,14 +132,7 @@ fn run(args: &[String]) -> Result<(), String> {
                 None => (rest.first(), &rest[rest.len()..]),
             };
             let dir = folder(folder_arg)?;
-            // Start only something that loads: the window would otherwise open with an error the terminal explains better.
-            // Code is built once here; rebuilding on save needs the app's side of hot reload (#101).
-            build::build(&dir)?;
-            let report = check_dev(&dir)?;
-            for w in &report.warnings {
-                eprintln!("{w}");
-            }
-            dev(&dir, extra)
+            dev::run(&dir, extra)
         }
         "import-vscode" => {
             let (src, out) = parse_import(rest)?;
@@ -176,6 +176,25 @@ fn run(args: &[String]) -> Result<(), String> {
         },
         other => Err(format!("cyx: unknown command '{other}'\n\n{HELP}")),
     }
+}
+
+fn print_fixes(f: &fix::Fixed) {
+    if !f.applied.is_empty() {
+        println!("Fixed {} [permissions]:", ext_manifest::FILE_NAME);
+        for l in &f.applied {
+            println!("  {l}");
+        }
+    }
+    if !f.left.is_empty() {
+        println!("Not fixed, these need you:");
+        for (l, why) in &f.left {
+            println!("  {l}   ({why})");
+        }
+    }
+    if f.applied.is_empty() && f.left.is_empty() {
+        println!("Nothing to fix.");
+    }
+    println!();
 }
 
 fn now() -> u64 {
@@ -365,7 +384,7 @@ pub fn check(dir: &Path) -> Result<CheckReport, String> {
 }
 
 /// `cyx dev` lets an author try high-risk permissions before writing `why`: a warning, not an error.
-fn check_dev(dir: &Path) -> Result<CheckReport, String> {
+pub(crate) fn check_dev(dir: &Path) -> Result<CheckReport, String> {
     check_with(dir, ext_manifest::Options { require_why: false })
 }
 
@@ -404,7 +423,7 @@ fn check_with(dir: &Path, options: ext_manifest::Options) -> Result<CheckReport,
     }
 }
 
-fn with_placeholder_why(manifest: &str) -> String {
+pub(crate) fn with_placeholder_why(manifest: &str) -> String {
     match manifest.find("[permissions]") {
         Some(i) => {
             let at = i + "[permissions]".len();
@@ -483,7 +502,7 @@ fn parse_import(rest: &[String]) -> Result<(PathBuf, Option<PathBuf>), String> {
 }
 
 /// The Codeyard to start: `CODEYARD_BIN`, then `codeyard` on PATH, then the usual install locations.
-fn codeyard_binary() -> Option<PathBuf> {
+pub(crate) fn codeyard_binary() -> Option<PathBuf> {
     if let Some(p) = std::env::var_os("CODEYARD_BIN") {
         return Some(PathBuf::from(p));
     }
@@ -493,18 +512,4 @@ fn codeyard_binary() -> Option<PathBuf> {
     let beside = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join(exe))).filter(|p| p.is_file());
     let known = Some(PathBuf::from("/Applications/Codeyard.app/Contents/MacOS/codeyard")).filter(|p| cfg!(target_os = "macos") && p.is_file());
     on_path.or(beside).or(known)
-}
-
-fn dev(dir: &Path, extra: &[String]) -> Result<(), String> {
-    let bin = codeyard_binary()
-        .ok_or_else(|| "error: Codeyard was not found\n   = fix: install Codeyard, or set CODEYARD_BIN to the path of its codeyard binary".to_string())?;
-    let dir = std::fs::canonicalize(dir).map_err(|e| format!("error: {}: {e}", dir.display()))?;
-    println!("Running {} with {} loaded. Save a file to reload; close the window to stop.", bin.display(), dir.display());
-    let status = std::process::Command::new(&bin)
-        .arg("--extension-dev")
-        .arg(&dir)
-        .args(extra)
-        .status()
-        .map_err(|e| format!("error: cannot start {}: {e}", bin.display()))?;
-    if status.success() { Ok(()) } else { Err(format!("Codeyard exited with {status}")) }
 }

@@ -10,16 +10,16 @@ use gpui::{Entity, TestAppContext, VisualTestContext};
 use crate::ui::ActiveTheme;
 use crate::workbench::Workbench;
 
-const PROBE: &[u8] = include_bytes!("../../ext-host/testdata/probe.wasm");
+pub(crate) const PROBE: &[u8] = include_bytes!("../../ext-host/testdata/probe.wasm");
 
-fn config_dir(name: &str) -> PathBuf {
+pub(crate) fn config_dir(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("codeyard-extcode-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     d
 }
 
-const MANIFEST: &str = r#"[extension]
+pub(crate) const MANIFEST: &str = r#"[extension]
 id = "you.probe"
 version = "1.0.0"
 name = "Probe"
@@ -80,7 +80,7 @@ fn install(cfg: &Path) {
     crate::ext::store(cfg).install(&bytes, ext_core::Source::File { path: "/downloads/probe.cyx".into() }).expect("installs");
 }
 
-fn setup<'a>(cx: &'a mut TestAppContext, cfg: &Path) -> (Entity<Workbench>, &'a mut VisualTestContext) {
+pub(crate) fn setup<'a>(cx: &'a mut TestAppContext, cfg: &Path) -> (Entity<Workbench>, &'a mut VisualTestContext) {
     cx.update(|cx| {
         crate::bind_keys(cx);
         cx.set_global(ActiveTheme(theme::DARK));
@@ -94,7 +94,7 @@ fn setup<'a>(cx: &'a mut TestAppContext, cfg: &Path) -> (Entity<Workbench>, &'a 
 }
 
 /// Let the exthost (a real process) answer: run the window's tasks until `done` or 20 s.
-fn wait_for(cx: &mut VisualTestContext, wb: &Entity<Workbench>, done: impl Fn(&Workbench) -> bool) {
+pub(crate) fn wait_for(cx: &mut VisualTestContext, wb: &Entity<Workbench>, done: impl Fn(&Workbench) -> bool) {
     let deadline = Instant::now() + Duration::from_secs(20);
     while Instant::now() < deadline {
         cx.run_until_parked();
@@ -110,7 +110,7 @@ fn wait_for(cx: &mut VisualTestContext, wb: &Entity<Workbench>, done: impl Fn(&W
     );
 }
 
-fn notice_has(wb: &Workbench, text: &str) -> bool {
+pub(crate) fn notice_has(wb: &Workbench, text: &str) -> bool {
     wb.notice_for_test().is_some_and(|(_, t)| t.contains(text))
 }
 

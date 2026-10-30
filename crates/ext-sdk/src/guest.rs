@@ -39,6 +39,8 @@ pub(crate) struct Handlers {
     /// Progress the user cancelled.
     pub cancelled_progress: HashSet<u64>,
     pub reason: String,
+    /// `ctx.state()`: kept across a hot reload in `cyx dev` (`RELOAD_STATE_KEY`).
+    pub state: serde_json::Map<String, Value>,
 }
 
 thread_local! {
@@ -56,9 +58,25 @@ pub(crate) fn reset() {
     drop(old);
 }
 
+/// The storage key under which `ctx.state()` waits for the next activation during a hot reload. Reserved: the SDKs
+/// write it on `deactivate` and delete it on the next `activate`.
+pub const RELOAD_STATE_KEY: &str = "codeyard.reload-state";
+
+/// The activation reason of a hot reload (`cyx dev` swapped in a new build).
+pub const RELOAD: &str = "reload";
+
 /// `guest.activate`.
 pub fn activate<E: Extension>(reason: &str) -> std::result::Result<(), String> {
     with(|h| h.reason = reason.to_string());
+    // The snapshot is for the activation right after a reload; any other start forgets it.
+    if let Some(bytes) = sys::storage_get(RELOAD_STATE_KEY) {
+        sys::storage_delete(RELOAD_STATE_KEY);
+        if reason == RELOAD
+            && let Ok(Value::Object(state)) = serde_json::from_slice(&bytes)
+        {
+            with(|h| h.state = state);
+        }
+    }
     let r = E::activate(Context::new()).map_err(|e| e.to_string());
     runtime::run();
     r
@@ -68,6 +86,10 @@ pub fn activate<E: Extension>(reason: &str) -> std::result::Result<(), String> {
 pub fn deactivate<E: Extension>() {
     E::deactivate(Context::new());
     runtime::run();
+    let state = with(|h| std::mem::take(&mut h.state));
+    if !state.is_empty() {
+        let _ = serde_json::to_vec(&Value::Object(state)).map(|bytes| sys::storage_set(RELOAD_STATE_KEY, &bytes));
+    }
 }
 
 /// `guest.complete`.

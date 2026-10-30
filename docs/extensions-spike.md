@@ -108,6 +108,23 @@ is higher than the larger Rust component in this run; #99 looks at it with the r
 cores against the reference Mac's 10, so Cranelift is 3–5 times slower there: a TypeScript hot reload takes 1.2–1.6 s
 p95 and a Rust 1.6 MB one 165–200 ms.
 
+### Hot reload in the app (#106)
+
+Measured after the spike with the real dev window: a new `extension.wasm` in place → the old exthost stopped
+(`deactivate` saves `ctx.state`) → the new build compiled with the incremental cache and started with the reason
+`reload` → the first command answered, `ctx.state` carried over. The `cyx dev` rebuild (cargo) is not included, nor
+the dev window's 100 ms poll for the new file. Reference Mac, release `codeyard-exthost`, app test build
+(`ext_dev_tests::reload_time`, 20 runs alternating two builds that differ in one constant):
+
+| Component | p50 | p95 | Of which the compile |
+| --- | --- | --- | --- |
+| Rust, 0.22 MB (`ctx.state` counter) | 40 ms | 41 ms | about 30 ms |
+| Rust, 1.9 MB (the same with regex, toml and pulldown-cmark) | 212 ms | 222 ms | about 190 ms |
+
+Stopping the old exthost (its `deactivate` included) takes about 9 ms. For Rust components the incremental cache
+saves little (a changed constant moves code that LTO inlined everywhere: 219 ms against 251 ms without it, compiling
+alone); it pays for TypeScript, where the engine is the same in every build.
+
 ## What the spike did not cover
 
 - Linux and Windows sandboxes (#100): their cost is measured there.

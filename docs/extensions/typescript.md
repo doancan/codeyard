@@ -83,6 +83,7 @@ The same calls as the Rust SDK, in camelCase:
 | `ctx.notice`, `ctx.notify`, `ctx.quick_pick`, `ctx.quick_pick_many`, `ctx.input` | `ctx.notice`, `ctx.notify`, `ctx.quickPick`, `ctx.quickPickMany`, `ctx.input` |
 | `ctx.progress(title, cancellable)` | `ctx.progress(title)`, or `await ctx.withProgress(title, async (p) => …)`, which ends it |
 | `ctx.storage().get_json` / `set_json` | `ctx.storage.getJson` / `setJson` (also `get`, `set`, `getText`, `delete`, `keys`) |
+| `ctx.state().get` / `set` / `remove` | `ctx.state.get` / `set` / `delete` / `keys`: in memory, kept across a hot reload in `cyx dev` |
 | `ctx.setting::<T>(key)`, `ctx.on_settings_changed` | `ctx.setting<T>(key)`, `ctx.onSettingsChanged` |
 | `ctx.active_document`, `ctx.selections`, `ctx.apply_edits`, `ctx.set_diagnostics`, `ctx.set_decorations` | `ctx.activeDocument`, `ctx.selections`, `ctx.applyEdits`, `ctx.setDiagnostics`, `ctx.setDecorations` |
 | `ctx.read_file`, `ctx.read_text`, `ctx.stat`, `ctx.find_files`, `ctx.write_file` | `ctx.readFile`, `ctx.readText`, `ctx.stat`, `ctx.findFiles`, `ctx.search`, `ctx.writeFile` |

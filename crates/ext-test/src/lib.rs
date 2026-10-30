@@ -204,6 +204,14 @@ impl MockHost {
         self.pump();
     }
 
+    /// A hot reload as `cyx dev` does it: `deactivate`, forget everything the extension registered, then `activate`
+    /// with the reason `reload`. Storage is kept, and with it what `ctx.state()` held.
+    pub fn reload<E: Extension>(&self) -> std::result::Result<(), String> {
+        self.deactivate::<E>();
+        native::forget();
+        self.activate_for::<E>(codeyard_extension::RELOAD)
+    }
+
     /// Run the manifest's command `id` (its local id) and return its result.
     pub fn command(&self, id: &str, args: Value) -> Result<Value> {
         let args_json = if args.is_null() { String::new() } else { args.to_string() };

@@ -9,6 +9,11 @@ Working extensions built with the SDKs: Rust (`crates/ext-sdk`, [docs/extensions
 | `hello-command-ts` | TypeScript: the same command |
 | `hello-view-ts` | TypeScript: the same view |
 | `octokit-repos-ts` | TypeScript with npm packages: Octokit lists your GitHub repositories through `auth`, zod checks the answer |
+| `trim-formatter` | Rust: a formatter for Markdown and text (trailing spaces, one final newline), with UTF-16 columns |
+| `todo-actions` | Rust: code actions, one with edits and one that runs the extension's handler |
+| `crate-version` | Rust: `fetch` with the `net` permission, tested with an HTTP fixture |
+| `crate-version-ts` | TypeScript: the same with the global `fetch` |
+| `branch-status` | Rust: runs `git` (the `run` permission, with its `why`) and shows the branch in the status bar |
 
 The `hello-*` examples are exactly what `cyx new` writes, with the SDK taken from this checkout; a test keeps them in step with the templates in `crates/cyx/templates`. After changing a template, delete the example and write it again from this folder:
 

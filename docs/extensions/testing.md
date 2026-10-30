@@ -97,6 +97,16 @@ denied: the manifest does not declare net = ["api.github.com"]
    = fix: add to [permissions]:  net = ["api.github.com"]
 ```
 
+## Hot reload
+
+`host.reload::<MyExtension>()` (TypeScript: `await host.reload(extension)`) does what `cyx dev` does with a new build: `deactivate`, forget everything registered, then `activate` with the reason `reload`. Storage is kept, and with it what the extension put in `ctx.state`:
+
+```rust
+host.command("count", Value::Null)?;
+host.reload::<Counter>()?;
+assert_eq!(host.command("count", Value::Null)?, json!(2));   // ctx.state() came along
+```
+
 `host.untrusted()` makes the mock behave like an untrusted folder (no sending, writing or running). `MockHost::allow_all()` allows everything, and `host.manifest(text)` checks against another manifest.
 
 ## cyx test

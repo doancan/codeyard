@@ -136,7 +136,23 @@ impl Extension for Hello {
 codeyard_extension::export!(Hello);
 ```
 
-Calls that reach Codeyard return Promises (Rust: they are `async`); the SDK runs them without blocking the extension. `cyx package` builds the component for you: esbuild and ComponentizeJS for TypeScript (installed by `cyx` itself), plain cargo for Rust. Running code extensions in the `cyx dev` window, with reload on save, arrives with the app side of code extensions **(coming)**.
+Calls that reach Codeyard return Promises (Rust: they are `async`); the SDK runs them without blocking the extension. `cyx package` builds the component for you: esbuild and ComponentizeJS for TypeScript (installed by `cyx` itself), plain cargo for Rust.
+
+`cyx dev` runs it in Codeyard and **hot-reloads** it: when you save a source file, `cyx` rebuilds `extension.wasm` and the dev window swaps the new build in. The old build's `deactivate` runs, the new one is compiled (only the functions that changed, with Cranelift's incremental cache), activated with the reason `reload`, and open views are drawn again. Calls made meanwhile wait for the new build. A build that fails prints its errors in the terminal and the last good build keeps running.
+
+Values you keep in `ctx.state` survive a reload; everything else in memory starts fresh. Use `storage` for what must outlast the session.
+
+```rust
+let n: u32 = ctx.state().get("clicks").unwrap_or(0) + 1;   // Rust
+ctx.state().set("clicks", &n)?;
+```
+
+```ts
+const n = (ctx.state.get<number>("clicks") ?? 0) + 1;      // TypeScript
+ctx.state.set("clicks", n);
+```
+
+The SDKs save `ctx.state` as JSON in your extension's storage under the reserved key `codeyard.reload-state` when the old build stops, and read it back (and delete it) when the new one starts with the reason `reload`. Any other start begins with an empty `ctx.state`. Don't use that key yourself.
 
 You don't have to write any activation code. The extension starts the first time someone uses one of its commands, views or languages.
 
@@ -208,7 +224,15 @@ error[CY0201]: net access to "api.vercel.com" is not declared
    = fix: add to [permissions]:  net = ["api.vercel.com"]
 ```
 
-`cyx check --fix` adds the missing entries for you (draft).
+`cyx check --fix` adds the missing entries for you. It edits `codeyard-extension.toml` in place (comments, order and spacing stay as you wrote them), prints each line it added or changed, and lists the fixes it cannot make for you: a placeholder such as `net = ["<host>"]` from the component's imports, which provider an `auth` is for, and `why`.
+
+```
+$ cyx check --fix
+Fixed codeyard-extension.toml [permissions]:
+  run = ["git", "taplo"]
+Not fixed, these need you:
+  net = ["<host>"]   (put in the real value)
+```
 
 ```toml
 [permissions]
@@ -418,7 +442,7 @@ cyx test       # the real built extension in the extension host; fails on any re
 
 The live view tree with highlighting and source maps for TypeScript are not there yet; they come with extension views.
 
-While a debugger is attached, nothing times out. `storage` keeps data across sessions, and in `cyx dev` hot reload also keeps your in-memory state.
+While a debugger is attached, nothing times out. `storage` keeps data across sessions, and in `cyx dev` hot reload also keeps what you put in `ctx.state` (see [Your first command](#your-first-command)).
 
 ## Publish
 
@@ -437,7 +461,8 @@ The first publish claims your publisher name (the part of the id before the dot)
 
 Good to know:
 - **Themes, snippets and other no-code packs** reach users immediately.
-- **Updates with code** reach users after **48 hours**, and `cyx publish` tells you when. Users can press **Update now**.
+- **Updates with code** reach users after **48 hours**, and `cyx publish` tells you when. Users can press **Update now**. The registry reads whether a package has code from the package itself and marks it in its index.
+- **Code extensions on the public registry** are not accepted yet: for now it takes data-only extensions (themes, snippets, keymaps, languages, language servers). `cyx publish` says so when the registry refuses; share the `.cyx` from `cyx package` meanwhile, which installs from a file.
 - **Pre-releases** are versions with a suffix (`1.2.0-beta.1`). They go out at once, only to users who opted in for your extension. `cyx publish --pre-release` makes sure the version has one.
 - If a release is broken, `cyx yank 1.2.0` hides it from installs and users on it roll back right away; `cyx restore 1.2.0` brings it back. `cyx deprecate 1.2.0 --replacement you.other` points users elsewhere. Version numbers are never reused, so publish the fix as `1.2.1`.
 - `--registry URL` (or `CODEYARD_REGISTRY`) publishes to another registry, such as a local one from `yard init`.

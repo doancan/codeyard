@@ -16,8 +16,8 @@
 //
 // Design: docs/plugin-architecture.md §5.2.
 
-export { Context, Process, Progress, Storage, Timer } from "./context.ts";
+export { Context, Process, Progress, State, Storage, Timer } from "./context.ts";
 export { CodeyardError, DeniedError, type ErrorKind } from "./errors.ts";
 export { fetch, FetchHeaders, FetchResponse, hostOf, type FetchInit } from "./fetch.ts";
-export type { ExtensionModule } from "./guest.ts";
+export { RELOAD, RELOAD_STATE_KEY, type ExtensionModule } from "./guest.ts";
 export * from "./types.ts";

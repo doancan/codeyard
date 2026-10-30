@@ -68,6 +68,8 @@ mod ext_accounts_ui_tests;
 mod ext_broker;
 #[cfg(test)]
 mod ext_code_tests;
+#[cfg(test)]
+mod ext_dev_tests;
 mod ext_fetch;
 mod ext_inspector;
 #[cfg(test)]
