@@ -144,6 +144,7 @@ impl Render for Workbench {
             .on_action(cx.listener(|this, _: &RefreshTests, _, cx| this.refresh_tests(cx)))
             .on_action(cx.listener(|this, _: &StopTests, _, cx| this.stop_tests(cx)))
             .on_action(cx.listener(|this, _: &DebugTestAtCursor, w, cx| this.debug_test_at_cursor(w, cx)))
+            .on_action(cx.listener(|this, _: &ClearSavedTerminalHistory, _, cx| this.clear_saved_terminal_history(cx)))
             .on_action(cx.listener(Self::kill_all_terminals))
             .on_action(cx.listener(Self::kill_other_terminals))
             .on_action(cx.listener(Self::focus_next_terminal))

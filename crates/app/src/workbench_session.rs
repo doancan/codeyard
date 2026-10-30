@@ -136,6 +136,7 @@ impl Workbench {
             let _ = s.save_tabs_with_layout(ws, &tabs, Some(&json));
         }
         self.persist_search_editors(cx);
+        self.persist_terminals(cx);
     }
 
     pub(super) fn restore_group_views(&self, saved: SavedEditorSession, cx: &mut App) {
@@ -242,6 +243,7 @@ impl Workbench {
             return false;
         }
         self.restore_search_editors(ws, window, cx);
+        self.restore_terminals(ws, window, cx);
         let Some(s) = &self.persist.state else { return false };
         let mut tabs = s.tabs(ws).unwrap_or_default();
         let saved = s.tab_layout(ws).as_deref().and_then(SavedEditorSession::parse);
