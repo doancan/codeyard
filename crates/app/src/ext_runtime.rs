@@ -97,35 +97,26 @@ impl Cache {
 
     /// The compiled code of `wasm`, compiling it with `exthost` when it is not cached.
     pub fn compiled(&self, exthost: &Path, wasm: &[u8]) -> Result<(PathBuf, [u8; 32]), String> {
-        let key = hex(&Sha256::digest(wasm));
-        let dir = self.build_dir();
-        let path = dir.join(format!("{key}.cwasm"));
-        let sidecar = dir.join(format!("{key}.sha256"));
-        if let (Ok(code), Ok(want)) = (std::fs::read(&path), std::fs::read_to_string(&sidecar))
-            && hex(&Sha256::digest(&code)) == want.trim()
-        {
-            return Ok((path, Sha256::digest(&code).into()));
+        compile_into(&self.build_dir(), exthost, wasm, None)
+    }
+
+    /// The extension in development (`cyx dev`): compiled with Cranelift's incremental cache, so a rebuild recompiles
+    /// only the functions that changed, into `dev/<id>/`, which keeps only the latest build.
+    pub fn compiled_dev(&self, exthost: &Path, wasm: &[u8], id: &str) -> Result<(PathBuf, [u8; 32]), String> {
+        let safe: String = id.chars().map(|c| if c.is_ascii_alphanumeric() || c == '.' || c == '-' { c } else { '_' }).collect();
+        let dir = self.build_dir().join("dev").join(safe);
+        let incremental = dir.join("incremental.bin");
+        let (path, sha) = compile_into(&dir, exthost, wasm, Some(&incremental))?;
+        // Earlier builds: a running exthost has loaded its code already, and on Windows an open file stays.
+        if let Ok(rd) = std::fs::read_dir(&dir) {
+            let keep = path.file_stem().map(|s| s.to_os_string()).unwrap_or_default();
+            for e in rd.flatten() {
+                let p = e.path();
+                if p != incremental && p.file_stem().is_some_and(|s| s != keep) {
+                    let _ = std::fs::remove_file(p);
+                }
+            }
         }
-        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-        let mut child = Command::new(exthost)
-            .arg("--compile")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("cannot start {}: {e}", exthost.display()))?;
-        let mut stdin = child.stdin.take().ok_or("no stdin")?;
-        let input = wasm.to_vec();
-        let writer = std::thread::spawn(move || stdin.write_all(&input));
-        let out = child.wait_with_output().map_err(|e| e.to_string())?;
-        let _ = writer.join();
-        if !out.status.success() {
-            return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
-        }
-        let tmp = dir.join(format!(".{key}.tmp"));
-        std::fs::write(&tmp, &out.stdout).and_then(|()| std::fs::rename(&tmp, &path)).map_err(|e| e.to_string())?;
-        let sha: [u8; 32] = Sha256::digest(&out.stdout).into();
-        std::fs::write(&sidecar, hex(&sha)).map_err(|e| e.to_string())?;
         Ok((path, sha))
     }
 
@@ -140,6 +131,39 @@ impl Cache {
             }
         }
     }
+}
+
+/// `<dir>/<wasm sha256>.cwasm` with its `.sha256` sidecar, compiled with `exthost` unless it is there already.
+fn compile_into(dir: &Path, exthost: &Path, wasm: &[u8], incremental: Option<&Path>) -> Result<(PathBuf, [u8; 32]), String> {
+    let key = hex(&Sha256::digest(wasm));
+    let path = dir.join(format!("{key}.cwasm"));
+    let sidecar = dir.join(format!("{key}.sha256"));
+    if let (Ok(code), Ok(want)) = (std::fs::read(&path), std::fs::read_to_string(&sidecar))
+        && hex(&Sha256::digest(&code)) == want.trim()
+    {
+        return Ok((path, Sha256::digest(&code).into()));
+    }
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    let mut cmd = Command::new(exthost);
+    cmd.arg("--compile");
+    if let Some(cache) = incremental {
+        cmd.arg("--cache").arg(cache);
+    }
+    let mut child =
+        cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| format!("cannot start {}: {e}", exthost.display()))?;
+    let mut stdin = child.stdin.take().ok_or("no stdin")?;
+    let input = wasm.to_vec();
+    let writer = std::thread::spawn(move || stdin.write_all(&input));
+    let out = child.wait_with_output().map_err(|e| e.to_string())?;
+    let _ = writer.join();
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    let tmp = dir.join(format!(".{key}.tmp"));
+    std::fs::write(&tmp, &out.stdout).and_then(|()| std::fs::rename(&tmp, &path)).map_err(|e| e.to_string())?;
+    let sha: [u8; 32] = Sha256::digest(&out.stdout).into();
+    std::fs::write(&sidecar, hex(&sha)).map_err(|e| e.to_string())?;
+    Ok((path, sha))
 }
 
 fn hex(b: &[u8]) -> String {
@@ -162,6 +186,8 @@ pub struct Process {
     stdin: Mutex<ChildStdin>,
     child: Mutex<Child>,
     stopping: Arc<std::sync::atomic::AtomicBool>,
+    /// Replaced by a new build (hot reload): its end is not reported, since the extension runs on.
+    retired: Arc<std::sync::atomic::AtomicBool>,
     pub last_used: Mutex<Instant>,
 }
 
@@ -196,6 +222,8 @@ impl Process {
         }
         let stopping = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let stop = stopping.clone();
+        let retired = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let replaced = retired.clone();
         std::thread::Builder::new()
             .name(format!("exthost {id}"))
             .spawn(move || {
@@ -227,10 +255,12 @@ impl Process {
                     }
                 }
                 let crashed = !stop.load(std::sync::atomic::Ordering::Relaxed);
-                let _ = events.send((id, Event::Exited { crashed, reason }));
+                if !replaced.load(std::sync::atomic::Ordering::Relaxed) {
+                    let _ = events.send((id, Event::Exited { crashed, reason }));
+                }
             })
             .map_err(|e| e.to_string())?;
-        Ok(Process { stdin: Mutex::new(stdin), child: Mutex::new(child), stopping, last_used: Mutex::new(Instant::now()) })
+        Ok(Process { stdin: Mutex::new(stdin), child: Mutex::new(child), stopping, retired, last_used: Mutex::new(Instant::now()) })
     }
 
     pub fn send(&self, msg: &ToHost) -> Result<(), String> {
@@ -259,10 +289,18 @@ impl Process {
             if matches!(child.try_wait(), Ok(Some(_))) {
                 return;
             }
-            std::thread::sleep(Duration::from_millis(20));
+            // A hot reload waits for this; an exthost exits within milliseconds of `Shutdown`.
+            std::thread::sleep(Duration::from_millis(2));
         }
         let _ = child.kill();
         let _ = child.wait();
+    }
+
+    /// Stop it for a new build of the same extension (hot reload): `deactivate` runs, so the SDK can keep its state,
+    /// and its end is not reported as the extension stopping.
+    pub fn retire(&self) {
+        self.retired.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.stop();
     }
 
     /// Kill at once (a frame over its limits, a misbehaving guest).

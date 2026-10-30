@@ -17,6 +17,7 @@ ring = { version = "0.17.14", default-features = false, features = ["alloc"] }
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 sha2 = "0.11.1"
 tokio = { version = "1.54.1", features = ["net", "rt", "time"] }
+toml_edit = { version = "0.25.17", default-features = false, features = ["parse", "display"] }
 ext-api = { version = "0.6.0", path = "../ext-api" }
 ext-core = { version = "0.6.0", path = "../ext-core" }
 ext-manifest = { version = "0.6.0", path = "../ext-manifest" }

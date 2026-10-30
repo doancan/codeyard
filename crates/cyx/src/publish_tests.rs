@@ -214,6 +214,47 @@ fn a_signature_the_registry_would_refuse_is_caught_before_upload() {
     assert_eq!(err, "error: no token");
 }
 
+/// A code extension: the probe component the exthost tests use, with the permissions its imports need.
+const PROBE: &[u8] = include_bytes!("../../ext-host/testdata/probe.wasm");
+const PROBE_MANIFEST: &str = r#"[extension]
+id = "you.probe"
+version = "1.0.0"
+name = "Probe"
+license = "MIT"
+description = "Tests the host."
+
+[code]
+entry = "Cargo.toml"
+
+[permissions]
+read = ["a.txt"]
+net = ["api.example.com"]
+auth = ["github"]
+secrets = true
+why = "Tests every part of the host."
+
+[[commands]]
+id = "notice"
+title = "Probe: Notice"
+"#;
+
+#[test]
+fn a_code_extension_is_flagged_and_a_data_only_registry_says_so() {
+    let w = World::new("code");
+    let dir = w.dir.join("probe");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), PROBE_MANIFEST).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "").unwrap();
+    std::fs::write(dir.join(ext_pkg::COMPONENT), PROBE).unwrap();
+    let out = w.publish(&dir, &github(7, 42), true, false).unwrap();
+    assert!(out.contains("note: you.probe runs code: the index marks it as code"), "{out}");
+    // This registry (Phase 1) refuses code; cyx says what that means instead of passing the refusal on.
+    let err = w.publish(&dir, &github(7, 42), false, false).unwrap_err();
+    assert!(err.starts_with(&format!("error: {} accepts data-only extensions; you.probe 1.0.0 runs code", w.registry)), "{err}");
+    assert!(err.contains("`cyx package`"), "{err}");
+    assert!(w.index().extensions.is_empty());
+}
+
 #[test]
 fn registry_urls() {
     assert_eq!(publish::registry_url(Some("http://localhost:8080/")), "http://localhost:8080");

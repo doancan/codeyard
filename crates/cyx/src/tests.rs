@@ -318,3 +318,25 @@ fn yard_check_reports_what_needs_the_operator() {
     assert!(crate::yard::check(&read(), &keys, now, 14, Some(&canary)).unwrap().contains("codeyard.canary 0.0.1 is revoked"));
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+#[test]
+fn dev_watches_sources_but_not_build_output() {
+    let d = std::env::temp_dir().join(format!("cyx-dev-sources-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(d.join("src")).unwrap();
+    std::fs::create_dir_all(d.join("target/release")).unwrap();
+    for f in ["src/lib.rs", "Cargo.toml", "extension.wasm", ".extension.wasm.tmp", "extension.js.map", "Cargo.lock", "target/release/x.wasm", "a-1.0.0.cyx"] {
+        std::fs::write(d.join(f), "x").unwrap();
+    }
+    let names: Vec<String> = dev::sources(&d).iter().map(|(p, _, _)| p.strip_prefix(&d).unwrap().to_string_lossy().replace('\\', "/")).collect();
+    assert_eq!(names, ["Cargo.toml", "src/lib.rs"]);
+    // A build that did not change the code leaves extension.wasm alone, so Codeyard does not reload.
+    let before = std::fs::metadata(d.join("extension.wasm")).unwrap().modified().unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    build::install(&d, b"x").unwrap();
+    assert_eq!(std::fs::metadata(d.join("extension.wasm")).unwrap().modified().unwrap(), before);
+    assert!(!d.join(build::PARTIAL).exists());
+    build::install(&d, b"y").unwrap();
+    assert_eq!(std::fs::read(d.join("extension.wasm")).unwrap(), b"y");
+    std::fs::remove_dir_all(&d).unwrap();
+}

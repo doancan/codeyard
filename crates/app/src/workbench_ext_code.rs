@@ -23,7 +23,7 @@ pub(super) struct CodeState {
     rx: Option<mpsc::Receiver<(String, Event)>>,
     pub(super) procs: HashMap<String, Arc<Process>>,
     /// Requests waiting for their exthost to start.
-    queued: HashMap<String, Vec<ToHost>>,
+    pub(super) queued: HashMap<String, Vec<ToHost>>,
     pub(super) pending: Arc<Mutex<Pending>>,
     crashes: Crashes,
     /// Crashed three times within a minute: not started again this session.
@@ -37,7 +37,7 @@ pub(super) struct CodeState {
     pub(super) last_trap: HashMap<String, ext_proto::Trap>,
     pump: Option<gpui::Task<()>>,
     /// `timers.every`: dropping a task stops its timer.
-    timers: HashMap<(String, u64), gpui::Task<()>>,
+    pub(super) timers: HashMap<(String, u64), gpui::Task<()>>,
     /// `workspace-contains` checks already made, per extension and workspace roots, so a reload does not repeat them.
     checked_workspace: HashSet<(String, Vec<String>)>,
     /// The setting values each running exthost has, to send only changes.
@@ -46,6 +46,8 @@ pub(super) struct CodeState {
     pub(super) progress: HashMap<(String, u64), (String, Option<String>, Option<u8>)>,
     /// Activations, call times and denials for the Inspector and the extension page (#108).
     pub(super) record: Arc<Mutex<crate::ext_inspector::Record>>,
+    /// The build of the extension in development (`cyx dev` hot reload, workbench_ext_dev.rs).
+    pub(super) dev: super::dev_glue::DevCode,
 }
 
 impl CodeState {
@@ -86,6 +88,7 @@ impl Default for CodeState {
             checked_workspace: HashSet::new(),
             progress: HashMap::new(),
             record: Arc::default(),
+            dev: Default::default(),
         }
     }
 }
@@ -235,7 +238,7 @@ impl Workbench {
             std::fs::create_dir_all(data.join("data").join(&id)).map_err(|e| e.to_string())?;
             let cache = ext_runtime::Cache::new(&data);
             cache.gc();
-            let compiled = cache.compiled(&exthost, &wasm)?;
+            let compiled = if sandbox { cache.compiled(&exthost, &wasm)? } else { cache.compiled_dev(&exthost, &wasm, &id)? };
             let start = ext_runtime::Start {
                 id: &id,
                 package_dir: &package_dir,
@@ -359,6 +362,7 @@ impl Workbench {
             Notify::Respond { id: req, result } => {
                 self.cfg.exts.code.record().request_answered(id, req, result.is_err());
                 self.cfg.exts.code.pending.lock().unwrap_or_else(|p| p.into_inner()).answer(id, req, result);
+                self.dev_request_answered(id);
             }
             Notify::Cancel { ticket } => {
                 if let Some(c) = self.cfg.exts.code.cancels.remove(&(id.to_string(), ticket)) {
@@ -555,6 +559,7 @@ impl Workbench {
             self.cfg.exts.code.sent_settings.insert(id, now);
         }
         self.stop_removed_extensions();
+        self.reload_dev_code(window, cx);
         // Another window may have changed a permission switch.
         self.refresh_extension_grants(cx);
         self.activate_for_workspace(window, cx);

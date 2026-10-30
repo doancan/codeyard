@@ -2812,6 +2812,7 @@ the debug adapter stopped while starting
 the debugger could not set the data breakpoint	
 the environment variable {} is not set	
 the extension stopped	
+the extension was reloaded	
 the file cannot be read right now ({})	
 the file is gone (deleted or moved); following continues if it comes back	
 the file is no longer readable (permission denied)	

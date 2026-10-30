@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { CodeyardError, DeniedError, type Context } from "../src/index.ts";
+import { CodeyardError, DeniedError, RELOAD_STATE_KEY, type Context } from "../src/index.ts";
 import { describe as describeError, stackFrames } from "../src/errors.ts";
 import { start } from "../src/guest.ts";
 import { MockHost } from "../src/testing/index.ts";
@@ -62,6 +62,32 @@ test("a command asks, stores and notifies", async () => {
   assert.deepEqual(h.notices(), ["Hello, Ada!", "Hello, world!"]);
   assert.deepEqual(h.storage(), { count: "2" });
   await assert.rejects(h.command("missing"), /no command 'missing' is registered/);
+  h.dispose();
+});
+
+test("ctx.state survives a hot reload, and only a reload", async () => {
+  const h = host();
+  const ext = {
+    activate(ctx: Context) {
+      ctx.command("tally", (ctx) => {
+        const n = (ctx.state.get<number>("tally") ?? 0) + 1;
+        ctx.state.set("tally", n);
+        return { n, reason: ctx.activationReason };
+      });
+    },
+  };
+  await h.activate(ext);
+  await h.command("tally");
+  assert.deepEqual(await h.command("tally"), { n: 2, reason: "command" });
+  await h.reload(ext);
+  assert.deepEqual(await h.command("tally"), { n: 3, reason: "reload" });
+  // The snapshot is read once.
+  assert.equal(h.storage()[RELOAD_STATE_KEY], undefined);
+  await h.deactivate();
+  assert.equal(h.storage()[RELOAD_STATE_KEY], '{"tally":3}');
+  await h.activate(ext);
+  assert.deepEqual(await h.command("tally"), { n: 1, reason: "command" });
+  assert.equal(h.storage()[RELOAD_STATE_KEY], undefined);
   h.dispose();
 });
 

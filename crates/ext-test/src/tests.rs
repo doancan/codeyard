@@ -82,6 +82,11 @@ impl Extension for Probe {
             ctx.storage().set_json("n", &n)?;
             Ok(n)
         });
+        ctx.command("tally", async |ctx, _args| {
+            let n: u32 = ctx.state().get("tally").unwrap_or(0) + 1;
+            ctx.state().set("tally", &n)?;
+            Ok(json!({ "tally": n, "reason": ctx.activation_reason() }))
+        });
         ctx.command("interval", async |ctx, _args| ctx.setting::<u32>("interval"));
         ctx.command("words", async |ctx, _args| {
             let doc = ctx.active_document().await?.ok_or("no document")?;
@@ -171,6 +176,24 @@ fn storage_settings_and_documents() {
     assert_eq!(h.command("words", Value::Null).unwrap(), json!(3));
     assert_eq!(h.diagnostics("notes.md")[0].message, "first");
     assert!(matches!(h.calls().last(), Some(Call::ActiveDocument)));
+}
+
+#[test]
+fn state_survives_a_hot_reload_only() {
+    let h = host();
+    h.command("tally", Value::Null).unwrap();
+    assert_eq!(h.command("tally", Value::Null).unwrap(), json!({ "tally": 2, "reason": "command" }));
+    h.reload::<Probe>().unwrap();
+    assert_eq!(h.command("tally", Value::Null).unwrap(), json!({ "tally": 3, "reason": "reload" }));
+    // The snapshot is read once: it does not linger in storage.
+    assert!(!h.storage().contains_key(codeyard_extension::RELOAD_STATE_KEY));
+    // A start for any other reason begins empty.
+    h.deactivate::<Probe>();
+    assert!(h.storage().contains_key(codeyard_extension::RELOAD_STATE_KEY));
+    codeyard_extension::native::forget();
+    h.activate::<Probe>().unwrap();
+    assert_eq!(h.command("tally", Value::Null).unwrap()["tally"], json!(1));
+    assert!(!h.storage().contains_key(codeyard_extension::RELOAD_STATE_KEY));
 }
 
 #[test]

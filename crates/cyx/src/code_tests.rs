@@ -99,7 +99,9 @@ fn templates_default_to_the_sdk_repository() {
 #[test]
 fn the_examples_build_package_and_pass_cyx_test() {
     let Some(exthost) = toolchain() else { return };
-    for name in ["hello-command", "hello-view"] {
+    let examples =
+        [("hello-command", ""), ("hello-view", ""), ("trim-formatter", ""), ("todo-actions", ""), ("crate-version", "net"), ("branch-status", "process")];
+    for (name, needs) in examples {
         let dir = repo().join("examples/extensions").join(name);
         build::build_in(&dir, Some(&target_dir())).unwrap_or_else(|e| panic!("{name}: {e}"));
         let report = check(&dir).unwrap_or_else(|e| panic!("{name}: {e}"));
@@ -107,8 +109,11 @@ fn the_examples_build_package_and_pass_cyx_test() {
         let files = ext_pkg::collect_dir(&dir).unwrap();
         let (bytes, _) = ext_pkg::write(files).unwrap();
         let pkg = ext_pkg::read(&bytes).unwrap();
-        // The component imports only what it uses: no permission is needed.
-        assert!(pkg.component.is_some_and(|c| c.interfaces.iter().all(|i| ext_api::interface(i).is_some_and(|i| i.need == ext_api::Need::Nothing))));
+        // The component imports only what it uses: the free interfaces and the one its permission grants.
+        let interfaces = pkg.component.unwrap().interfaces;
+        let with_permission: Vec<&str> =
+            interfaces.iter().map(String::as_str).filter(|i| ext_api::interface(i).is_some_and(|i| i.need != ext_api::Need::Nothing)).collect();
+        assert_eq!(with_permission.join(","), needs, "{name}: {interfaces:?}");
         let manifest = build::manifest(&dir).unwrap();
         let run = harness::run(&dir, &manifest, &exthost).unwrap();
         assert!(run.failures.is_empty(), "{name}: {:#?}", run.lines);
@@ -159,6 +164,42 @@ codeyard_extension::export!(Fetcher);
     std::fs::remove_dir_all(&root).unwrap();
 }
 
+/// `cyx dev` with a stand-in for Codeyard that exits once `extension.wasm` is replaced: saving a source file rebuilds it.
+#[cfg(unix)]
+#[test]
+fn cyx_dev_rebuilds_on_save() {
+    use std::os::unix::fs::PermissionsExt;
+    if toolchain().is_none() {
+        return;
+    }
+    let root = tmp("dev");
+    let dir = root.join("live");
+    scaffold::create_with(&dir, Kind::Command, "live", "you", Some(&repo().to_string_lossy())).unwrap();
+    std::fs::copy(repo().join("examples/extensions/hello-command/Cargo.lock"), dir.join("Cargo.lock")).unwrap();
+    let bin = root.join("codeyard");
+    let script = "#!/bin/sh\nw=\"$2/extension.wasm\"\nbefore=$(cksum < \"$w\")\ni=0\nwhile [ $i -lt 1200 ]; do\n  sleep 0.1\n  [ \"$(cksum < \"$w\")\" != \"$before\" ] && exit 0\n  i=$((i+1))\ndone\nexit 3\n";
+    std::fs::write(&bin, script).unwrap();
+    std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let src = dir.join("src/lib.rs");
+    let edit = {
+        let (wasm, src) = (dir.join(ext_pkg::COMPONENT), src.clone());
+        std::thread::spawn(move || {
+            while !wasm.exists() {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            // After cyx has started the stand-in and looked at the sources once.
+            std::thread::sleep(std::time::Duration::from_millis(800));
+            let code = std::fs::read_to_string(&src).unwrap().replace("Hello, {name}!", "Hi, {name}!");
+            std::fs::write(&src, code).unwrap();
+        })
+    };
+    dev::run_with(&dir, &bin, &[], Some(&target_dir())).unwrap();
+    edit.join().unwrap();
+    // Nothing half-written is left behind.
+    assert!(!dir.join(build::PARTIAL).exists());
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
 #[test]
 fn package_builds_the_component_and_reports_a_missing_target() {
     // Without code there is nothing to build.
@@ -200,7 +241,7 @@ fn the_typescript_examples_build_package_and_pass_cyx_test() {
     if !node() {
         return;
     }
-    for (name, needs) in [("hello-command-ts", ""), ("hello-view-ts", ""), ("octokit-repos-ts", "auth")] {
+    for (name, needs) in [("hello-command-ts", ""), ("hello-view-ts", ""), ("octokit-repos-ts", "auth"), ("crate-version-ts", "net")] {
         let dir = repo().join("examples/extensions").join(name);
         build::build(&dir).unwrap_or_else(|e| panic!("{name}: {e}"));
         let report = check(&dir).unwrap_or_else(|e| panic!("{name}: {e}"));
