@@ -219,6 +219,8 @@ impl Workbench {
             .text_size(px(text::SM.0))
             .text_color(c(p.text))
             .tab_group()
+            // `views.keystroke_frame_ms` (CODEYARD_PERF): a key that reaches the view, to the frame that shows its effect.
+            .capture_key_down(|_, window, _| crate::perf::view_key(window))
             .on_key_down(|event: &KeyDownEvent, window, cx| {
                 let m = event.keystroke.modifiers;
                 if event.keystroke.key == "tab" && !m.control && !m.alt && !m.platform && !m.function {
@@ -289,7 +291,7 @@ impl Workbench {
             Element::Image { source, alt } => {
                 let image = match source {
                     ImageSource::Bytes(b) => draw.h.images.get(&content_hash(b)).cloned().flatten(),
-                    ImageSource::Url(_) => None,
+                    ImageSource::Url(u) => draw.h.remote.image(u.as_str()),
                 };
                 match image {
                     Some(img) => gpui::img(gpui::ImageSource::Image(img)).max_w_full().max_h(px(320.)).object_fit(gpui::ObjectFit::Contain).into_any_element(),

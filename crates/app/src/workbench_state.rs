@@ -141,8 +141,17 @@ pub(super) struct ChromeLayout {
     pub(super) last_primary: Option<Panel>,
     /// Terminals in windows of their own.
     pub(super) detached: Vec<super::views_glue::Detached>,
+    /// Editors in windows of their own (see workbench_editor_windows.rs).
+    pub(super) editor_windows: Vec<super::editor_windows_glue::DetachedEditor>,
+    /// The view slot of the editor window in use: commands act on its editor and its menus and pickers are drawn there.
+    pub(super) editor_host: Option<usize>,
+    /// Side views in windows of their own, and the one in use (its menus and pickers are drawn there).
+    pub(super) view_windows: Vec<super::view_windows_glue::ViewWindowEntry>,
+    pub(super) view_host: Option<Panel>,
     /// Panel on the right (next to the editor) and its width; maximized (covers the editor).
-    pub(super) panel_right: bool,
+    pub(super) panel_dock: super::docks_glue::PanelDock,
+    /// A side view being dragged by its activity bar icon (the side bars are drop zones meanwhile).
+    pub(super) view_drag: Option<Panel>,
     pub(super) panel_w: f32,
     pub(super) panel_max: bool,
     /// A running maximize/restore animation: when it started and whether it maximizes.
@@ -224,6 +233,9 @@ pub(super) struct PersistState {
     pub(super) pinned: Vec<(Option<String>, String)>,
     /// Recent entry opened over SSH: if it can't connect or the folder is missing, asks "remove from the list?".
     pub(super) opening_recent: Option<RecentWorkspace>,
+    /// This window's session on the terminal daemon, and the daemon socket to use (workbench_term_daemon.rs).
+    pub(super) term_daemon: Option<super::term_daemon_glue::TermDaemon>,
+    pub(super) term_socket: Option<std::path::PathBuf>,
 }
 
 /// Connection: host machine, SSH details and pending questions (see workbench_folder.rs).

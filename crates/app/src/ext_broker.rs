@@ -80,6 +80,15 @@ impl Scope {
         }
     }
 
+    /// An edit a code action the user chose makes: the document it was asked for is the user's to change (as with a
+    /// command they started), any other file needs `write`.
+    pub fn may_edit(&self, document: &str, path: &str) -> Result<String, v::Error> {
+        match normalize(path) {
+            Some(p) if normalize(document).as_deref() == Some(p.as_str()) => Ok(p),
+            _ => self.may_write(path),
+        }
+    }
+
     pub fn may_run(&self, program: &str) -> Result<(), v::Error> {
         if self.permissions.run.iter().any(|p| p == program) {
             Ok(())

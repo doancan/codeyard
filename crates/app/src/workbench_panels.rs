@@ -59,16 +59,10 @@ impl Workbench {
         self.set_interface_scale(1., window, cx);
     }
 
-    /// Bottom ↔ right. A maximized panel covers the editor wherever it is docked, so moving it also restores its size:
-    /// otherwise the move would not show.
+    /// Bottom ↔ right (from the left: to the bottom).
     pub(super) fn toggle_panel_position(&mut self, cx: &mut Context<Self>) {
-        self.chrome.panel_right = !self.chrome.panel_right;
-        self.chrome.panel_max = false;
-        self.chrome.panel_open = true;
-        if let Some(s) = &self.persist.state {
-            let _ = s.set("panel_right", if self.chrome.panel_right { "1" } else { "0" });
-        }
-        cx.notify();
+        let dock = if self.chrome.panel_dock.beside() { docks_glue::PanelDock::Bottom } else { docks_glue::PanelDock::Right };
+        self.dock_panel(dock, cx);
     }
 
     /// Maximize or restore. An open panel grows towards the top (or the left when docked right) and shrinks back, unless
@@ -97,8 +91,8 @@ impl Workbench {
     pub(super) fn animated_panel_size(&self) -> Option<f32> {
         let (start, maximizing) = self.chrome.panel_anim?;
         let area = self.chrome.panel_area?;
-        let full = if self.chrome.panel_right { area.size.width } else { area.size.height } / px(1.);
-        let own = if self.chrome.panel_right { self.chrome.panel_w } else { self.chrome.panel_h }.min(full);
+        let full = if self.chrome.panel_dock.beside() { area.size.width } else { area.size.height } / px(1.);
+        let own = if self.chrome.panel_dock.beside() { self.chrome.panel_w } else { self.chrome.panel_h }.min(full);
         let t = gpui::ease_in_out((start.elapsed().as_secs_f32() / PANEL_ANIM.as_secs_f32()).min(1.));
         let open = if maximizing { t } else { 1. - t };
         Some(own + (full - own) * open)
@@ -121,7 +115,7 @@ impl Workbench {
 
     /// The panel's width in a window `total` wide: its own when docked right, else the editor area's.
     pub(super) fn panel_width(&self, total: f32) -> f32 {
-        if self.chrome.panel_right && !self.chrome.panel_max {
+        if self.chrome.panel_dock.beside() && !self.chrome.panel_max {
             return self.chrome.panel_w;
         }
         let sidebar = if self.chrome.panel.is_some() && self.chrome.zen.is_none() { self.chrome.sidebar_w } else { 0. };
@@ -130,7 +124,7 @@ impl Workbench {
 
     #[cfg(test)]
     pub fn panel_layout_for_test(&self) -> (bool, bool, bool) {
-        (self.chrome.panel_open, self.chrome.panel_right, self.chrome.panel_max)
+        (self.chrome.panel_open, self.chrome.panel_dock.beside(), self.chrome.panel_max)
     }
 
     pub(super) fn show_ports(&mut self, _: &ShowPorts, _: &mut Window, cx: &mut Context<Self>) {

@@ -52,7 +52,12 @@ pub(super) struct ProviderState {
 #[derive(Clone)]
 pub(super) enum QuickFix {
     Lsp(Arc<crate::lsp::Client>, crate::lsp::CodeAction),
-    Extension { extension: String, action: v::CodeAction },
+    /// `document`: the path the actions were asked for, the one file its edits may change without `write`.
+    Extension {
+        extension: String,
+        document: String,
+        action: v::CodeAction,
+    },
 }
 
 /// The language id Codeyard gives a file (`rust`, `toml`, a language an extension adds), `plaintext` otherwise.
@@ -348,7 +353,7 @@ impl Workbench {
             }
             for (extension, answer) in asked {
                 if let Ok(Ok(Response::CodeActions(list))) = answer.await {
-                    fixes.extend(list.into_iter().map(|action| QuickFix::Extension { extension: extension.clone(), action }));
+                    fixes.extend(list.into_iter().map(|action| QuickFix::Extension { extension: extension.clone(), document: path.clone(), action }));
                 }
             }
             // Preferred first, the rest in the order they came.
@@ -373,7 +378,7 @@ impl Workbench {
             .map(|f| match f {
                 QuickFix::Lsp(_, a) => PickItem { label: a.title.clone().into(), detail: (!a.kind.is_empty()).then(|| a.kind.clone().into()), keys: None },
                 // Every extension surface names the extension.
-                QuickFix::Extension { extension, action } => {
+                QuickFix::Extension { extension, action, .. } => {
                     PickItem { label: action.title.clone().into(), detail: Some(extension.clone().into()), keys: None }
                 }
             })
@@ -385,14 +390,31 @@ impl Workbench {
     /// Run the chosen fix. An extension's: its edits, then its command; with neither, `run-code-action` asks the
     /// extension to do it.
     pub(super) fn run_quick_fix(&mut self, fix: QuickFix, window: &mut Window, cx: &mut Context<Self>) {
-        let (extension, action) = match fix {
+        let (extension, document, action) = match fix {
             QuickFix::Lsp(client, action) => return self.run_code_action(client, action, cx),
-            QuickFix::Extension { extension, action } => (extension, action),
+            QuickFix::Extension { extension, document, action } => (extension, document, action),
         };
         if !action.edits.is_empty() {
+            // The extension chose the files; each must be the document or in its `write`, checked as it is now. One
+            // refused file refuses the whole fix: half of an edit is worse than none.
+            let reg = crate::ext::current();
+            let scope = reg.active.iter().find(|a| a.id() == extension).map(|a| self.extension_scope(a, cx));
             let mut changes = serde_json::Map::new();
             for (uri, edits) in &action.edits {
-                let Some(path) = ext_broker::normalize(uri) else { continue };
+                let allowed = match &scope {
+                    Some(scope) => scope.may_edit(&document, uri),
+                    None => Err(v::Error::Invalid(format!("{extension} is no longer active"))),
+                };
+                let path = match allowed {
+                    Ok(path) => path,
+                    Err(e) => {
+                        let why = super::code_glue::explain(&e);
+                        self.log_extension(&extension, LogLevel::Warn, format!("code action \"{}\": edit to {uri} refused: {why}", action.title));
+                        self.notice = Some(Notice::Error(format!("{extension}: {why}").into()));
+                        cx.notify();
+                        return;
+                    }
+                };
                 let list: Vec<serde_json::Value> = edits
                     .iter()
                     .map(|e| {
@@ -1051,6 +1073,11 @@ impl Workbench {
             .expect("quick fix");
         self.close_overlay(window, cx);
         self.run_quick_fix(fix, window, cx);
+    }
+
+    /// Run an extension's code action as if the user chose it from the list asked for `document`.
+    pub fn run_extension_code_action_for_test(&mut self, extension: &str, document: &str, action: v::CodeAction, window: &mut Window, cx: &mut Context<Self>) {
+        self.run_quick_fix(QuickFix::Extension { extension: extension.into(), document: document.into(), action }, window, cx);
     }
 
     pub fn task_labels_for_test(&mut self, window: &mut Window, cx: &mut Context<Self>) -> std::rc::Rc<std::cell::RefCell<Option<Vec<String>>>> {

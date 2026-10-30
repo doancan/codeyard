@@ -96,6 +96,28 @@ fn credentials_must_be_named() {
     assert!(matches!(call(&named, Start::ReadFile { uri: uri(&format!("{r}/.env")) }).0, Completion::Bytes(_)));
 }
 
+/// A code action the user chose edits the document it was asked for; any other file needs `write`, so an action
+/// cannot slip a change into `.git/hooks` or a file outside the workspace.
+#[test]
+fn a_code_action_edits_its_document_and_other_files_need_write() {
+    let r = root("edit");
+    let doc = format!("{r}/src/a.rs");
+    let none = scope(&r, perms(&[], &[], &[]), true);
+    assert_eq!(none.may_edit(&doc, &uri(&doc)).unwrap(), doc);
+    assert_eq!(none.may_edit(&doc, &format!("{r}/src/./a.rs")).unwrap(), doc, "the same file, spelled differently");
+    for other in [format!("{r}/vercel.json"), format!("{r}/.git/hooks/pre-commit"), format!("{r}/src/../../escape.rs"), "/etc/passwd".into()] {
+        assert!(matches!(none.may_edit(&doc, &uri(&other)), Err(v::Error::Denied(_))), "{other}");
+    }
+    let json = scope(&r, perms(&[], &["*.json"], &[]), true);
+    assert_eq!(json.may_edit(&doc, &uri(&format!("{r}/vercel.json"))).unwrap(), format!("{r}/vercel.json"));
+    // In an untrusted folder (`write` already masked away) the other file is refused for that reason, the document not.
+    let untrusted = scope(&r, perms(&[], &[], &[]), false);
+    assert!(matches!(untrusted.may_edit(&doc, &uri(&format!("{r}/vercel.json"))), Err(v::Error::Denied(v::Denied { why: v::Why::UntrustedWorkspace, .. }))));
+    assert!(untrusted.may_edit(&doc, &uri(&doc)).is_ok());
+    // A document that does not normalize grants nothing.
+    assert!(none.may_edit("relative/a.rs", "relative/a.rs").is_err());
+}
+
 #[test]
 fn writes_need_write_and_trust() {
     let r = root("write");

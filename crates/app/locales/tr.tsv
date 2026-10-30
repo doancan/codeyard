@@ -3274,6 +3274,9 @@ No terminal is in front in the editor area.	Düzenleyici alanında önde bir ter
 Terminal: Move Terminal Back to Panel	Terminal: Terminali Panele Geri Taşı
 Terminal: Move Terminal into Editor Area	Terminal: Terminali Düzenleyici Alanına Taşı
 Previous session ended; started a new shell	Önceki oturum sona erdi; yeni bir kabuk başlatıldı
+Reconnected to terminal session	Terminal oturumuna yeniden bağlanıldı
+another Codeyard window has them; started new shells	bunlar başka bir Codeyard penceresinde; yeni kabuklar başlatıldı
+{} bytes of output were lost while no window was attached	Hiçbir pencere bağlı değilken {} bayt çıktı kayboldu
 {} (terminal)	{} (terminal sekmesi)
 # ---- Problems accessibility ----
 Information	Bilgi
@@ -3302,3 +3305,30 @@ Terminal session could not be restored: {}	Terminal oturumu geri yüklenemedi: {
 Terminal: Clear Saved Terminal History	Terminal: Kaydedilen Terminal Geçmişini Temizle
 the folder {} no longer exists; started a new shell in the workspace folder	{} klasörü artık yok; çalışma alanı klasöründe yeni bir kabuk başlatıldı
 the saved state is damaged	kaydedilen durum bozuk
+the image is larger than {} bytes	görsel {} bayttan büyük
+the server answered {}	sunucu {} yanıtını verdi
+not a PNG, JPEG, GIF, WebP or SVG image	PNG, JPEG, GIF, WebP veya SVG görseli değil
+View: Move Editor into New Window	Görünüm: Düzenleyiciyi Yeni Pencereye Taşı
+View: Copy Editor into New Window	Görünüm: Düzenleyiciyi Yeni Pencereye Kopyala
+View: Move Editors Back to Main Window	Görünüm: Düzenleyicileri Ana Pencereye Geri Taşı
+Open a file in the editor first.	Önce düzenleyicide bir dosya açın.
+Up to {} editors can be in windows of their own.	Kendi penceresinde en fazla {} düzenleyici olabilir.
+The editor could not move to a new window: {}	Düzenleyici yeni bir pencereye taşınamadı: {}
+No editor is in a window of its own.	Kendi penceresinde açık düzenleyici yok.
+Primary Side Bar	Birincil Kenar Çubuğu
+Secondary Side Bar	İkincil Kenar Çubuğu
+Extension View	Eklenti Görünümü
+View: Move Panel Left	Görünüm: Paneli Sola Taşı
+View: Move Panel Right	Görünüm: Paneli Sağa Taşı
+View: Move Panel to Bottom	Görünüm: Paneli Alta Taşı
+Primary side bar: {}	Birincil kenar çubuğu: {}
+Secondary side bar: {}	İkincil kenar çubuğu: {}
+In the secondary side bar: {}	İkincil kenar çubuğunda: {}
+Panel: below the editor	Panel: düzenleyicinin altında
+Panel: left of the editor	Panel: düzenleyicinin solunda
+Panel: right of the editor	Panel: düzenleyicinin sağında
+View: Move View into New Window	Görünüm: Görünümü Yeni Pencereye Taşı
+View: Move View Back to Side Bar	Görünüm: Görünümü Kenar Çubuğuna Geri Taşı
+Open a view in a side bar first.	Önce bir kenar çubuğunda bir görünüm açın.
+No view is in a window of its own.	Kendi penceresinde açık görünüm yok.
+The view could not move to a new window: {}	Görünüm yeni bir pencereye taşınamadı: {}
