@@ -111,7 +111,31 @@ export type Request =
   | { tag: "settings-changed"; val: string[] }
   | { tag: "timer"; val: bigint }
   | { tag: "cancel-progress"; val: bigint }
-  | { tag: "open-uri"; val: string };
+  | { tag: "open-uri"; val: string }
+  | { tag: "scm-status"; val: [string, string] }
+  | { tag: "scm-original"; val: [string, string] }
+  | { tag: "scm-validate"; val: [string, string, string] };
+
+export type FileState = "modified" | "added" | "deleted" | "renamed" | "untracked" | "ignored" | "conflicted";
+
+export interface WitScmAction {
+  command: string;
+  title: string;
+  icon: string | undefined;
+}
+
+export interface WitScmState {
+  head: string | undefined;
+  input: { placeholder: string; value: string | undefined; accept: WitScmAction | undefined };
+  groups: {
+    id: string;
+    label: string;
+    resources: { uri: string; state: FileState; detail: string | undefined }[];
+    resourceActions: WitScmAction[];
+    groupActions: WitScmAction[];
+    hideWhenEmpty: boolean;
+  }[];
+}
 
 export interface WitCodeAction {
   id: string;
@@ -129,7 +153,9 @@ export type Response =
   | { tag: "edits"; val: TextEdit[] }
   | { tag: "code-actions"; val: WitCodeAction[] }
   | { tag: "tasks"; val: { id: string; label: string; detail: string | undefined; group: string }[] }
-  | { tag: "ranges"; val: Range[] };
+  | { tag: "ranges"; val: Range[] }
+  | { tag: "scm"; val: WitScmState }
+  | { tag: "text"; val: string | undefined };
 
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
 
@@ -263,6 +289,7 @@ export interface Bindings {
   clipboardRead?: { readText(): Ticket };
   clipboardWrite?: { writeText(text: string): Ticket };
   terminal?: { sendText(text: string): Ticket };
+  scm: { refresh(provider: string): void };
 }
 
 /// The guest's exports (`interface guest`).

@@ -59,6 +59,8 @@ pub struct RawManifest {
     pub decorations: Vec<S<RawNamedLanguages>>,
     #[serde(default)]
     pub tasks: Vec<S<RawTasks>>,
+    #[serde(default)]
+    pub scm: Vec<S<RawScm>>,
 }
 
 #[derive(Deserialize)]
@@ -245,4 +247,13 @@ pub struct RawNamedLanguages {
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct RawTasks {
     pub id: S<String>,
+}
+
+/// `[[scm]]`: a source control provider for folders that contain one of `markers`.
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawScm {
+    pub id: S<String>,
+    pub label: S<String>,
+    pub markers: Vec<S<String>>,
 }

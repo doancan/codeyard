@@ -14,6 +14,7 @@ Working extensions built with the SDKs: Rust (`crates/ext-sdk`, [docs/extensions
 | `crate-version` | Rust: `fetch` with the `net` permission, tested with an HTTP fixture |
 | `crate-version-ts` | TypeScript: the same with the global `fetch` |
 | `branch-status` | Rust: runs `git` (the `run` permission, with its `why`) and shows the branch in the status bar |
+| `jj-scm` | Rust: a source control provider (`[[scm]]`) for Jujutsu: changes in Source Control, gutter marks, commit and restore through `jj` |
 
 The `hello-*` examples are exactly what `cyx new` writes, with the SDK taken from this checkout; a test keeps them in step with the templates in `crates/cyx/templates`. After changing a template, delete the example and write it again from this folder:
 

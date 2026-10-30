@@ -12,6 +12,7 @@
 //! ```
 
 mod host;
+mod scm;
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -412,5 +413,7 @@ impl Drop for MockHost {
     }
 }
 
+#[cfg(test)]
+mod scm_tests;
 #[cfg(test)]
 mod tests;

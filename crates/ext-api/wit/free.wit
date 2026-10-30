@@ -68,6 +68,7 @@ interface requests {
 @since(version = 0.1.0)
 interface responses {
   use types.{text-edit, diagnostic, range};
+  use scm.{scm-state};
 
   record code-action {
     /// Passed back in `request.run-code-action`.
@@ -102,6 +103,10 @@ interface responses {
     tasks(list<task>),
     /// The ranges a task's problem matcher should look at, or a formatter's changed ranges.
     ranges(list<range>),
+    /// A folder's source control state (`request.scm-status`).
+    scm(scm-state),
+    /// Some text, or none: a file's original text (`request.scm-original`), a validation message (`request.scm-validate`).
+    text(option<string>),
   }
 }
 

@@ -24,6 +24,10 @@ pub use wit_bindgen;
 use bindings::codeyard::api as w;
 use bindings::exports::codeyard::api::guest as g;
 
+#[path = "wasm_scm.rs"]
+mod scm;
+pub(crate) use scm::scm_refresh;
+
 /// The exports for extension `E`; `export!` names it.
 #[doc(hidden)]
 pub struct Glue<E>(std::marker::PhantomData<E>);
@@ -475,6 +479,9 @@ impl From<w::host_requests::Request> for Request {
             R::Timer(id) => Request::Timer(id),
             R::CancelProgress(id) => Request::CancelProgress(id),
             R::OpenUri(u) => Request::OpenUri(u),
+            R::ScmStatus((provider, root)) => Request::ScmStatus { provider, root },
+            R::ScmOriginal((provider, uri)) => Request::ScmOriginal { provider, uri },
+            R::ScmValidate((provider, root, value)) => Request::ScmValidate { provider, root, value },
         }
     }
 }
@@ -499,6 +506,8 @@ impl From<Response> for w::responses::Response {
                     })
                     .collect(),
             ),
+            Response::Scm(s) => R::Scm(s.into()),
+            Response::Text(t) => R::Text(t),
         }
     }
 }

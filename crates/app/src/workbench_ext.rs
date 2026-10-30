@@ -65,6 +65,8 @@ pub(super) struct ExtViewState {
     pub(super) views: super::ext_views_glue::ViewsState,
     /// What code extensions show: status items, diagnostics, decorations (workbench_ext_providers.rs).
     pub(super) providers: super::providers_glue::ProviderState,
+    /// Source control providers (workbench_ext_scm.rs).
+    pub(super) scm: super::ext_scm_glue::ScmProviders,
     /// First clipboard read and first remote process per session ask (workbench_ext_prompts.rs).
     pub(super) prompts: super::prompts_glue::PromptState,
     /// The resident-memory cap of exthosts (workbench_ext_memory.rs).
@@ -135,6 +137,7 @@ pub(super) fn contribution_lines(m: &Manifest) -> Vec<String> {
     out.extend(c.language_servers.iter().map(|s| crate::i18n::tf("Language server: {0} for {1}", &[&s.command, &s.languages.join(", ")])));
     out.extend(c.commands.iter().map(|x| crate::i18n::tf("Command: {}", &[&x.title])));
     out.extend(c.views.iter().map(|v| crate::i18n::tf("View: {}", &[&v.title])));
+    out.extend(c.scm.iter().map(|s| crate::i18n::tf("Source control: {0} (folders with {1})", &[&s.label, &s.markers.join(", ")])));
     out
 }
 

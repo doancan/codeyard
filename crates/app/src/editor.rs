@@ -524,6 +524,8 @@ pub struct EditorView {
     git_base: Option<buffer::Rope>,
     git_marks: Vec<Option<crate::git::LineMark>>,
     git_task: Option<gpui::Task<()>>,
+    /// A source control provider of an extension gives `git_base` (#144); git leaves the file alone.
+    scm_owned: bool,
     /// Language server (if any), language id, document version and latest diagnostics.
     lsp: Option<Arc<crate::lsp::Client>>,
     lsp_lang: &'static str,
@@ -956,6 +958,7 @@ impl EditorView {
             git_base: None,
             git_marks: Vec::new(),
             git_task: None,
+            scm_owned: false,
             lsp: None,
             lsp_lang: "",
             lsp_version: 0,

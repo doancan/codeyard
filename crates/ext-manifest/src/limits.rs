@@ -95,3 +95,13 @@ pub const UI_CHOICES: usize = 256;
 pub const UI_COLUMNS: usize = 32;
 /// An `https:` URL of an image or link.
 pub const UI_URL_LEN: usize = 2048;
+
+/// Markers of one `[[scm]]` provider.
+pub const SCM_MARKERS: usize = 8;
+/// Files one source control provider may list for one folder, over all its groups; the rest are dropped.
+pub const SCM_RESOURCES: usize = 10_000;
+/// The text of a file a source control provider returns for the gutter's change marks; a longer one shows no marks.
+pub const SCM_ORIGINAL_BYTES: usize = 8 * 1024 * 1024;
+/// How long the app waits for a source control provider's state, a file's original text or a check of the input box.
+/// Longer than other providers: they usually run a program. A later answer is dropped and noted in the log.
+pub const SCM_DEADLINE_MILLIS: u64 = 10_000;

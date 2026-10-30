@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Source control providers from code extensions (`[[scm]]`, #144): an extension claims the workspace folders that
+  have one of its markers (a `.hg` or `.jj` folder) and Source Control shows its head, input box and groups of changed
+  files there, with the extension's own commands on each file, group and the input box; the gutter's change marks
+  compare open files with the original text it gives. Git stays built in for every other folder. The API's new `scm`
+  interface and the `scm-status`, `scm-original` and `scm-validate` requests are in the WIT, the exthost, both SDKs
+  and their mock hosts. The state is asked again when files change, on Refresh, after a button and on `scm.refresh`;
+  untrusted folders are not claimed, and the programs a provider runs go through `run` on the workspace host, also over
+  SSH. Screen readers reach a provider's section, input box, files and buttons as they do Git's. New example:
+  `jj-scm`, a provider for Jujutsu.
 - Windows: terminals of a local folder are taken back after Codeyard quits, crashes or is killed, as on macOS and
   Linux. They run in the terminal daemon, which listens on a named pipe only the current user can open.
 - `cyx dev` hot-reloads code extensions: saving a source file rebuilds `extension.wasm` (cargo or the TypeScript

@@ -799,6 +799,14 @@ offered only in some situations, for example while a Rust file is open; it close
 - *Problems* in the Problems view and the editor, with the extension's id as their source, and *decorations*: a dot in
   the gutter, a tinted line or a note after the line, in theme colours.
 - *Tasks* in *Tasks: Run Task…*, which the extension runs itself when you pick one.
+- *Source control* for a version control system other than Git (Mercurial, Jujutsu, Perforce …). The extension
+  claims a workspace folder that has its marker, such as a `.hg` or `.jj` folder; there Source Control shows the
+  extension's name, where the folder stands, its message box and its groups of changed files, and the gutter's change
+  marks compare open files with the text the extension gives. Clicking a file opens its changes; the buttons on a file,
+  on a group and under the message box run the extension's commands (stage, discard, commit …), and the message box
+  shows the extension's note about your message, if any. The list is read again when files change, with **Refresh**,
+  and after each button. Git keeps every other folder. In a folder you have not trusted the extension is not asked,
+  and over SSH the programs it runs (`hg`, `jj` …) run on the remote host.
 
 Typing never waits for an extension. When one is disabled, uninstalled or crashes, its status items, problems and
 decorations go with it. The same works in SSH windows: the extension runs on your computer and sees the remote files

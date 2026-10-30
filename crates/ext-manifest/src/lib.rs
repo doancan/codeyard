@@ -256,6 +256,8 @@ pub enum Activation {
     Language(String),
     /// The user lists tasks (`[[tasks]]`).
     Tasks,
+    /// A trusted workspace folder has a marker of this `[[scm]]` provider (full id).
+    Scm(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -414,6 +416,21 @@ pub struct Contributions {
     pub decorations: Vec<Provider>,
     /// Ids (full) of the extension's task providers.
     pub tasks: Vec<String>,
+    /// Source control providers (`[[scm]]`).
+    #[serde(default)]
+    pub scm: Vec<ScmProvider>,
+}
+
+/// `[[scm]]`: a source control provider. It claims a workspace folder that has one of `markers` at its top (a `.hg` or
+/// `.jj` folder, a file): Source Control and the gutter's change marks ask it there, and git stays for the others.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScmProvider {
+    /// Full id: `publisher.name.local`.
+    pub id: String,
+    /// Shown in Source Control: `Mercurial`, `Jujutsu`.
+    pub label: String,
+    /// Names relative to the folder, such as `.hg`.
+    pub markers: Vec<String>,
 }
 
 impl Contributions {
@@ -427,6 +444,7 @@ impl Contributions {
             || !self.diagnostics.is_empty()
             || !self.decorations.is_empty()
             || !self.tasks.is_empty()
+            || !self.scm.is_empty()
     }
 
     /// Languages a provider of this extension handles, each once.

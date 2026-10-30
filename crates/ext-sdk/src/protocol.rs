@@ -2,6 +2,7 @@
 //! use these; the mock host (`codeyard-extension-test`) does.
 
 use crate::error::Error;
+use crate::scm::ScmState;
 use crate::types::*;
 
 /// The result of a ticket (`types.completion`).
@@ -66,6 +67,19 @@ pub enum Request {
     Timer(u64),
     CancelProgress(u64),
     OpenUri(String),
+    ScmStatus {
+        provider: String,
+        root: Uri,
+    },
+    ScmOriginal {
+        provider: String,
+        uri: Uri,
+    },
+    ScmValidate {
+        provider: String,
+        root: Uri,
+        value: String,
+    },
 }
 
 /// An answer to a request (`responses.response`), as far as the SDK makes them.
@@ -77,4 +91,8 @@ pub enum Response {
     View(String),
     Edits(Vec<TextEdit>),
     CodeActions(Vec<CodeAction>),
+    /// A folder's source control state.
+    Scm(ScmState),
+    /// A file's original text, or a validation message.
+    Text(Option<String>),
 }

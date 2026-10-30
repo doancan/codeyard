@@ -166,6 +166,7 @@ Codeyard version from the API items and contribution points used (each has a `si
 | `languages` | no | File names and extensions, a built-in grammar to highlight with, comment tokens. Only for files no built-in language claims (`files.associations` changes a built-in one) |
 | `json-schemas`, `yaml-schemas`, `settings` | no | Settings appear under "Extensions › Name" |
 | `language-servers` | no | Start a program from `PATH` where the files are (so also over SSH), so they need `run` and a trusted workspace. Entered before the user's `lsp.servers`; the user's entry for the same language wins |
+| `scm` | yes | Claims trusted folders that have a marker (`.hg`, `.jj`): Source Control and the gutter ask the provider there and its buttons run its commands; Git keeps the others |
 | `commands`, `menus`, `status-bar`, `views` | yes | |
 | `formatters`, `code-actions`, `diagnostics`, `decorations`, `tasks` | yes | |
 | `hover`, `completion`, `code-lens`, `inlay-hints`, SCM and PR providers | yes | Phase 3 |

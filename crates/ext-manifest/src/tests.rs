@@ -699,3 +699,24 @@ fn providers_declare_languages_and_start_the_extension_for_them() {
     assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[diagnostics]]\nid = \"Bad\"\nlanguages = [\"rust\"]\n")), vec![Code::BadContribution]);
     assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[formatters]]\nlanguage = \"toml\"\n")), vec![Code::Syntax]);
 }
+
+#[test]
+fn scm_providers_claim_folders_by_marker_and_start_the_extension_there() {
+    let code = "[code]\nentry = \"Cargo.toml\"\n";
+    let m = parse(&with(&format!("{code}[[scm]]\nid = \"hg\"\nlabel = \"Mercurial\"\nmarkers = [\".hg\", \".hg\", \".hg/store\"]\n"))).unwrap();
+    let s = &m.contributions.scm[0];
+    assert_eq!((s.id.as_str(), s.label.as_str()), ("a.b.hg", "Mercurial"));
+    assert_eq!(s.markers, [".hg", ".hg/store"], "a marker named twice counts once");
+    assert_eq!(m.activation, [Activation::Scm("a.b.hg".into())]);
+    assert!(m.contributions.needs_code());
+    assert_eq!(codes(&with("[[scm]]\nid = \"hg\"\nlabel = \"Mercurial\"\nmarkers = [\".hg\"]\n")), vec![Code::NeedsCode]);
+    assert_eq!(codes(&with(&format!("{code}[[scm]]\nid = \"hg\"\nlabel = \"Mercurial\"\nmarkers = []\n"))), vec![Code::BadContribution]);
+    for bad in ["*.hg", "../.hg", "/repo/.hg", ".hg/"] {
+        let text = with(&format!("{code}[[scm]]\nid = \"hg\"\nlabel = \"Mercurial\"\nmarkers = [\"{bad}\"]\n"));
+        assert_eq!(codes(&text), vec![Code::BadPath], "{bad}");
+    }
+    let twice = format!("{code}[[scm]]\nid = \"hg\"\nlabel = \"A\"\nmarkers = [\".hg\"]\n[[scm]]\nid = \"hg\"\nlabel = \"B\"\nmarkers = [\".hg\"]\n");
+    assert_eq!(codes(&with(&twice)), vec![Code::DuplicateId]);
+    assert_eq!(codes(&with(&format!("{code}[[scm]]\nid = \"hg\"\nlabel = \"\"\nmarkers = [\".hg\"]\n"))), vec![Code::BadText]);
+    assert_eq!(codes(&with(&format!("{code}[[scm]]\nid = \"hg\"\nmarkers = [\".hg\"]\n"))), vec![Code::Syntax]);
+}

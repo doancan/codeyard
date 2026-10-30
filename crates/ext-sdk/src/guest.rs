@@ -41,6 +41,8 @@ pub(crate) struct Handlers {
     pub reason: String,
     /// `ctx.state()`: kept across a hot reload in `cyx dev` (`RELOAD_STATE_KEY`).
     pub state: serde_json::Map<String, Value>,
+    /// Source control providers (`scm.rs`).
+    pub scm: crate::scm::ScmHandlers,
 }
 
 thread_local! {
@@ -170,11 +172,12 @@ pub fn handle(id: u64, request: Request) {
             sys::respond(id, Ok(Response::None));
         }
         Request::ProvideTasks | Request::RunTask(_) => sys::respond(id, Err(Error::Invalid("this SDK does not provide tasks yet".into()))),
+        r @ (Request::ScmStatus { .. } | Request::ScmOriginal { .. } | Request::ScmValidate { .. }) => crate::scm::handle(id, ctx, r),
     }
     runtime::run();
 }
 
-fn answer(id: u64, fut: impl Future<Output = Result<Response>> + 'static) {
+pub(crate) fn answer(id: u64, fut: impl Future<Output = Result<Response>> + 'static) {
     runtime::spawn_request(id, async move {
         let r = fut.await;
         sys::respond(id, r);

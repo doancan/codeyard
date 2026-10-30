@@ -1,0 +1,28 @@
+[extension]
+id          = "codeyard.jj-scm"
+version     = "0.1.0"
+name        = "Jujutsu"
+license     = "MIT"
+description = "Source Control for Jujutsu (jj) repositories: changes, the gutter, describe and commit."
+
+[code]
+entry = "Cargo.toml"
+
+# Every jj command runs where the workspace is (also over SSH). Running a program is high risk, so users see why.
+[permissions]
+run = ["jj"]
+why = "Runs jj in folders with a .jj folder to list, compare, restore and commit your changes."
+
+[[commands]]
+id    = "commit"
+title = "Jujutsu: Commit"
+
+[[commands]]
+id    = "restore"
+title = "Jujutsu: Discard Changes"
+
+# Folders with a .jj folder are Jujutsu's; git keeps the others.
+[[scm]]
+id      = "jj"
+label   = "Jujutsu"
+markers = [".jj"]

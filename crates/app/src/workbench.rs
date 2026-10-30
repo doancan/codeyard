@@ -67,6 +67,8 @@ mod editor_grid_tests;
 mod editors_glue;
 #[path = "workbench_ext.rs"]
 mod ext_glue;
+#[path = "workbench_ext_scm.rs"]
+mod ext_scm_glue;
 #[path = "ext_ui_render.rs"]
 mod ext_ui_glue;
 #[path = "workbench_ext_view.rs"]
@@ -1132,6 +1134,7 @@ impl Workbench {
                 crate::scm::ScmEvent::RefreshRepo(key) => this.refresh_repo(*key, cx),
                 crate::scm::ScmEvent::Rediscover => this.rediscover(cx),
                 crate::scm::ScmEvent::RefreshInventory => this.refresh_inventory(cx),
+                crate::scm::ScmEvent::Ext(e) => this.on_ext_scm_event(e.clone(), window, cx),
             }),
             // Terminals in windows of their own or in the editor area belong to this window: they end with it, unless the
             // app is quitting with them kept for the next start (`keep_terminals_for_restart`).

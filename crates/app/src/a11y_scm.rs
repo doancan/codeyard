@@ -2,6 +2,9 @@
 
 use super::*;
 
+#[path = "a11y_scm_ext.rs"]
+pub(super) mod ext;
+
 impl ScmSnap {
     pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>) {
         let view = &self.view;
@@ -106,12 +109,13 @@ impl ScmSnap {
                 nodes.push((id, section));
                 children.push(id);
             }
-        } else {
+        } else if view.ext.is_empty() {
             let mut empty = Node::new(Role::Label);
             empty.set_value(t("This folder is not a git repository."));
             nodes.push((SCM_EMPTY, empty));
             children.push(SCM_EMPTY);
         }
+        ext::append(&view.ext, nodes, &mut children);
         if let Some((text, error)) = &view.result {
             let mut result = Node::new(if *error { Role::Alert } else { Role::Status });
             result.set_label(text.clone());
@@ -127,6 +131,9 @@ impl ScmSnap {
 
 impl Workbench {
     pub(super) fn a11y_scm_action(&mut self, req: &ActionRequest, last: &Snapshot, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if self.a11y_scm_ext_action(req, last, window, cx) {
+            return true;
+        }
         let id = req.target_node;
         let is_repo = (SCM_REPO..SCM_REPO + BLOCK).contains(&id.0);
         let is_scm = [SCM_MESSAGE, SCM_COMMIT].contains(&id) || (SCM_GROUP..SCM_FILE + BLOCK).contains(&id.0) || is_repo;

@@ -87,6 +87,8 @@ mod ext_registry;
 mod ext_registry_tests;
 mod ext_runtime;
 #[cfg(test)]
+mod ext_scm_tests;
+#[cfg(test)]
 mod ext_tests;
 mod ext_updates;
 #[cfg(test)]
