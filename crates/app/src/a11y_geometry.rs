@@ -1,4 +1,6 @@
-//! Painted landmark bounds, converted from GPUI logical pixels to AccessKit physical pixels.
+//! Painted landmark and row bounds, converted from GPUI logical pixels to AccessKit physical pixels.
+
+use std::collections::HashMap;
 
 use accesskit::{Node, NodeId, Rect};
 use gpui::{Bounds, Context, IntoElement, Pixels, Window, canvas, point, prelude::*, px};
@@ -12,12 +14,34 @@ pub(in crate::workbench) enum Landmark {
     Status,
 }
 
-/// Logical bounds from the most recent workbench frame; absent landmarks were not painted.
+/// A row of a virtualized side view or panel list, by its index in the list it is drawn in (the same index as in the
+/// accessibility tree).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub(in crate::workbench) enum RowFrame {
+    DebugVariable,
+    DebugWatch,
+    DebugStack,
+    DebugBreakpoint,
+    Test,
+    Remote,
+    Port,
+}
+
+/// Logical bounds from the most recent workbench frame; absent landmarks and rows were not painted (a row scrolled out
+/// of its list is not drawn at all).
 #[derive(Debug, Default)]
 pub(in crate::workbench) struct PaintedBounds {
     explorer: Option<Bounds<Pixels>>,
     editor: Option<Bounds<Pixels>>,
     status: Option<Bounds<Pixels>>,
+    rows: HashMap<(RowFrame, usize), Bounds<Pixels>>,
+}
+
+impl PaintedBounds {
+    /// The visible part of a row as last painted.
+    pub(in crate::workbench) fn row(&self, which: RowFrame, index: usize) -> Option<Bounds<Pixels>> {
+        self.rows.get(&(which, index)).copied()
+    }
 }
 
 #[cfg(test)]
@@ -39,6 +63,7 @@ pub struct Geometry {
     explorer: Option<Rect>,
     editor: Option<Rect>,
     status: Option<Rect>,
+    rows: HashMap<(RowFrame, usize), Rect>,
 }
 
 impl Geometry {
@@ -49,6 +74,14 @@ impl Geometry {
             explorer: painted.explorer.and_then(|bounds| physical_bounds(bounds, scale)),
             editor: painted.editor.and_then(|bounds| physical_bounds(bounds, scale)),
             status: painted.status.and_then(|bounds| physical_bounds(bounds, scale)),
+            rows: painted.rows.iter().filter_map(|(key, bounds)| Some((*key, physical_bounds(*bounds, scale)?))).collect(),
+        }
+    }
+
+    /// The bounds of a row, while it is painted.
+    pub(super) fn apply_row(&self, which: RowFrame, index: usize, node: &mut Node) {
+        if let Some(bounds) = self.rows.get(&(which, index)) {
+            node.set_bounds(*bounds);
         }
     }
 
@@ -94,6 +127,29 @@ pub(in crate::workbench) fn landmark(which: Landmark, cx: &Context<Workbench>) -
                         Landmark::Status => &mut wb.chrome.a11y_bounds.status,
                     };
                     *target = Some(bounds);
+                })
+                .ok();
+        },
+    )
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
+}
+
+/// A row drawn in a list: capture its visible bounds the same way (an empty intersection, a row clipped away, is not
+/// recorded).
+pub(in crate::workbench) fn row_frame(which: RowFrame, index: usize, cx: &Context<Workbench>) -> impl IntoElement + use<> {
+    let entity = cx.entity().downgrade();
+    canvas(
+        |bounds, window, _| bounds.intersect(&window.content_mask().bounds),
+        move |_, bounds, _, cx| {
+            if bounds.size.width <= px(0.) || bounds.size.height <= px(0.) {
+                return;
+            }
+            entity
+                .update(cx, |wb, _| {
+                    wb.chrome.a11y_bounds.rows.insert((which, index), bounds);
                 })
                 .ok();
         },
