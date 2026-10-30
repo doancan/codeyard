@@ -58,7 +58,7 @@ fn denials_are_kept_in_a_ring() {
 fn a_fix_pasted_into_the_manifest_makes_the_call_pass() {
     let root = std::env::temp_dir().join(format!("inspector-fix-{}", std::process::id()));
     std::fs::create_dir_all(root.join("src")).unwrap();
-    let root = std::fs::canonicalize(&root).unwrap().to_string_lossy().replace('\\', "/");
+    let root = crate::ui::canonical_for_test(&root).to_string_lossy().replace('\\', "/");
     let scope = |p: Permissions| Scope {
         extension: "you.probe".into(),
         permissions: p,

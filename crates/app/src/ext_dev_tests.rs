@@ -21,8 +21,7 @@ fn swap_build(dir: &Path, wasm: &[u8]) {
 
 #[gpui::test]
 fn a_new_build_replaces_the_running_exthost(cx: &mut TestAppContext) {
-    if let Err(why) = crate::ext_runtime::code_runs_here(&"tests") {
-        eprintln!("skipped: {why}");
+    if !crate::ext_runtime::code_runs_for_test() {
         return;
     }
     let cfg = config_dir("dev-reload");

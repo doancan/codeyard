@@ -1285,8 +1285,7 @@ while True:
 
     #[test]
     fn session_runs_to_a_breakpoint_steps_and_finishes() {
-        if std::process::Command::new("python3").arg("-V").output().is_err() {
-            crate::test_sshd::skip_missing("python3");
+        if !crate::test_lsp::have_python() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("codeyard-dap-{}", std::process::id()));
@@ -1296,7 +1295,8 @@ while True:
         let script = write_fake_adapter(&dir);
         let (tx, rx) = mpsc::channel();
         let host: Arc<dyn Host> = Arc::new(host::local());
-        let session = Session::start(host, script.to_str().unwrap(), vec![log.to_string_lossy().into_owned()], None, tx).unwrap();
+        let session =
+            Session::start(host, crate::test_lsp::python(), vec![script.to_string_lossy().into_owned(), log.to_string_lossy().into_owned()], None, tx).unwrap();
         let src = "/p/main.c".to_string();
         let mut bps = BTreeMap::new();
         bps.insert(src.clone(), vec![Breakpoint::at(5), Breakpoint::at(9)]);
@@ -1335,8 +1335,7 @@ while True:
 
     #[test]
     fn launch_failure_is_reported_with_the_adapters_message() {
-        if std::process::Command::new("python3").arg("-V").output().is_err() {
-            crate::test_sshd::skip_missing("python3");
+        if !crate::test_lsp::have_python() {
             return;
         }
         let dir = std::env::temp_dir().join(format!("codeyard-dap-fail-{}", std::process::id()));
@@ -1344,7 +1343,14 @@ while True:
         let script = write_fake_adapter(&dir);
         let (tx, _rx) = mpsc::channel();
         let host: Arc<dyn Host> = Arc::new(host::local());
-        let session = Session::start(host, script.to_str().unwrap(), vec![dir.join("log.txt").to_string_lossy().into_owned()], None, tx).unwrap();
+        let session = Session::start(
+            host,
+            crate::test_lsp::python(),
+            vec![script.to_string_lossy().into_owned(), dir.join("log.txt").to_string_lossy().into_owned()],
+            None,
+            tx,
+        )
+        .unwrap();
         let err = session.begin("fake", "launch", json!({ "program": "/nope", "fail": true }), &BTreeMap::new(), &[]).unwrap_err();
         assert!(err.contains("cannot run /nope"), "{err}");
         session.stop();

@@ -17,6 +17,8 @@ fn read(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap()
 }
 
+// A release build (`cargo test --release`, the Windows job) is an installed kind of its own.
+#[cfg(debug_assertions)]
 #[test]
 fn update_install_kind_is_manual_in_a_debug_build() {
     assert_eq!(install_kind(), InstallKind::Manual(ManualReason::DevelopmentBuild));
@@ -167,7 +169,10 @@ fn update_swap_falls_back_to_two_renames_when_the_exchange_is_not_possible() {
     let einval = |_: &Path, _: &Path| -> io::Result<()> { Err(io::Error::from_raw_os_error(22)) };
     assert_eq!(swap(&app, &staged, &old, &|a, b| std::fs::rename(a, b), &einval).unwrap(), old);
     assert_eq!((read(&app.join("v")), read(&old.join("v"))), ("2".into(), "1".into()));
+    // EINVAL and ENOTSUP are Unix error numbers; everywhere an `Unsupported` error counts.
+    #[cfg(unix)]
     assert!(exchange_unsupported(&io::Error::from_raw_os_error(22)) && !exchange_unsupported(&io::Error::from_raw_os_error(13)));
+    assert!(exchange_unsupported(&io::Error::from(io::ErrorKind::Unsupported)));
 }
 
 #[test]

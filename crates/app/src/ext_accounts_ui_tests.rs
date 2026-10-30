@@ -139,11 +139,7 @@ fn frames_contain(needle: &str) -> bool {
 }
 
 fn skip() -> bool {
-    if crate::ext_runtime::exthost_path().is_none() {
-        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
-        return true;
-    }
-    false
+    !crate::ext_runtime::code_runs_for_test()
 }
 
 #[gpui::test]

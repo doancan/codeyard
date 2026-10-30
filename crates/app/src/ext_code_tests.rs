@@ -93,9 +93,10 @@ pub(crate) fn setup<'a>(cx: &'a mut TestAppContext, cfg: &Path) -> (Entity<Workb
     (wb, cx)
 }
 
-/// Let the exthost (a real process) answer: run the window's tasks until `done` or 20 s.
+/// Let the exthost (a real process) answer: run the window's tasks until `done` or 20 s (times
+/// `CODEYARD_TEST_TIMEOUT_SCALE` on slow runners).
 pub(crate) fn wait_for(cx: &mut VisualTestContext, wb: &Entity<Workbench>, done: impl Fn(&Workbench) -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(20);
+    let deadline = Instant::now() + Duration::from_secs(20 * crate::test_sshd::timeout_scale());
     while Instant::now() < deadline {
         cx.run_until_parked();
         if wb.read_with(cx, |wb, _| done(wb)) {
@@ -116,8 +117,7 @@ pub(crate) fn notice_has(wb: &Workbench, text: &str) -> bool {
 
 #[gpui::test]
 fn a_code_extension_command_runs_in_its_exthost(cx: &mut TestAppContext) {
-    if let Err(why) = crate::ext_runtime::code_runs_here(&"tests") {
-        eprintln!("skipped: {why}");
+    if !crate::ext_runtime::code_runs_for_test() {
         return;
     }
     let cfg = config_dir("run");
@@ -135,8 +135,7 @@ fn a_code_extension_command_runs_in_its_exthost(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn three_crashes_turn_an_extension_off(cx: &mut TestAppContext) {
-    if let Err(why) = crate::ext_runtime::code_runs_here(&"tests") {
-        eprintln!("skipped: {why}");
+    if !crate::ext_runtime::code_runs_for_test() {
         return;
     }
     let cfg = config_dir("crash");
@@ -159,8 +158,7 @@ fn answer_is(wb: &Workbench, want: &str) -> bool {
 
 #[gpui::test]
 fn picks_and_inputs_answer_through_the_window(cx: &mut TestAppContext) {
-    if let Err(why) = crate::ext_runtime::code_runs_here(&"tests") {
-        eprintln!("skipped: {why}");
+    if !crate::ext_runtime::code_runs_for_test() {
         return;
     }
     let cfg = config_dir("pick");
@@ -185,8 +183,7 @@ fn picks_and_inputs_answer_through_the_window(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn a_command_reads_the_active_document(cx: &mut TestAppContext) {
-    if let Err(why) = crate::ext_runtime::code_runs_here(&"tests") {
-        eprintln!("skipped: {why}");
+    if !crate::ext_runtime::code_runs_for_test() {
         return;
     }
     let cfg = config_dir("doc");
@@ -205,8 +202,7 @@ fn a_command_reads_the_active_document(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn a_workspace_with_a_matching_file_starts_the_extension(cx: &mut TestAppContext) {
-    if let Err(why) = crate::ext_runtime::code_runs_here(&"tests") {
-        eprintln!("skipped: {why}");
+    if !crate::ext_runtime::code_runs_for_test() {
         return;
     }
     let cfg = config_dir("contains");

@@ -14,14 +14,14 @@ fn qa_root() -> PathBuf {
     let base = std::env::var_os("CODEYARD_QA_TMP").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
     let d = base.join(format!("codeyard-qa-wb-{}", std::process::id()));
     std::fs::create_dir_all(&d).unwrap();
-    std::fs::canonicalize(d).unwrap()
+    crate::ui::canonical_for_test(d)
 }
 
 pub(crate) fn fresh(name: &str) -> PathBuf {
     let d = qa_root().join(name);
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
-    d
+    crate::ui::canonical_for_test(&d)
 }
 
 pub(crate) fn project(name: &str) -> PathBuf {
@@ -112,7 +112,8 @@ pub(crate) fn open(wb: &Entity<Workbench>, path: &std::path::Path, cx: &mut Visu
 }
 
 pub(crate) fn open_in(wb: &Entity<Workbench>, path: &std::path::Path, cx: &mut VisualTestContext) {
-    let p = path.to_string_lossy().into_owned();
+    // A file path as the explorer and the tabs give it (`ui::local_path`).
+    let p = ui::local_path(path);
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(p, window, cx));
     cx.run_until_parked();
 }
@@ -652,15 +653,17 @@ fn legacy_project_settings_folder_still_applies(cx: &mut TestAppContext) {
 fn save_local_copy_resolves_the_typed_path() {
     use crate::workbench::local_copy_target;
     let home = std::path::Path::new("/home/ada");
+    // An absolute path of this system (Windows: with a drive).
+    let abs = if cfg!(windows) { "C:/tmp/a.txt" } else { "/tmp/a.txt" };
     assert_eq!(local_copy_target("~/Downloads/a.rs", Some(home)).unwrap(), "/home/ada/Downloads/a.rs");
     assert_eq!(local_copy_target("  notes/a.txt ", Some(home)).unwrap(), "/home/ada/notes/a.txt");
-    assert_eq!(local_copy_target("/tmp/a.txt", Some(home)).unwrap(), "/tmp/a.txt");
+    assert_eq!(local_copy_target(abs, Some(home)).unwrap(), abs);
     assert_eq!(local_copy_target("~", Some(home)).unwrap(), "/home/ada");
     assert!(local_copy_target("", Some(home)).is_err());
     assert!(local_copy_target("~/Downloads/", Some(home)).is_err());
     // Without a known home dir a relative path is rejected, an absolute one works.
     assert!(local_copy_target("a.txt", None).is_err());
-    assert_eq!(local_copy_target("/tmp/a.txt", None).unwrap(), "/tmp/a.txt");
+    assert_eq!(local_copy_target(abs, None).unwrap(), abs);
 }
 
 /// Dragging the sidebar's resize line must resize it and nothing else: the explorer row under the
@@ -788,7 +791,8 @@ fn qa_startup_setting_parses_and_is_in_the_settings_page() {
 }
 
 fn drag(wb: &Entity<Workbench>, cx: &mut VisualTestContext, from: &std::path::Path, to_dir: &std::path::Path) {
-    let ev = crate::tree::TreeEvent::Move { from: from.to_string_lossy().into_owned(), to_dir: to_dir.to_string_lossy().into_owned() };
+    // Paths as the explorer gives them (`ui::local_path`).
+    let ev = crate::tree::TreeEvent::Move { from: ui::local_path(from), to_dir: ui::local_path(to_dir) };
     wb.update_in(cx, |wb, window, cx| wb.tree_event_for_test(ev, window, cx));
     cx.run_until_parked();
 }

@@ -13,7 +13,7 @@ fn root(name: &str) -> String {
     std::fs::write(d.join("vercel.json"), b"{}").unwrap();
     std::fs::write(d.join(".env"), b"SECRET=1").unwrap();
     std::fs::write(d.join("src/a.rs"), b"fn main() { needle(); }\n").unwrap();
-    std::fs::canonicalize(&d).unwrap().to_string_lossy().replace('\\', "/")
+    crate::ui::canonical_for_test(&d).to_string_lossy().replace('\\', "/")
 }
 
 fn scope(root: &str, p: Permissions, trusted: bool) -> Scope {

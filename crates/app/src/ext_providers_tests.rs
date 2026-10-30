@@ -96,11 +96,7 @@ id = "probe"
 "#;
 
 fn exthost_missing() -> bool {
-    let missing = crate::ext_runtime::exthost_path().is_none();
-    if missing {
-        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
-    }
-    missing
+    !crate::ext_runtime::code_runs_for_test()
 }
 
 fn config_dir(name: &str) -> PathBuf {
@@ -237,6 +233,8 @@ fn extension_commands_run_from_menus_keys_and_status_items(cx: &mut TestAppConte
 /// An extension binding never takes a built-in key, and an extension command is bound like a core one.
 #[gpui::test]
 fn extension_command_keys_are_bound(cx: &mut TestAppContext) {
+    // Only the bindings are looked at, the extension never runs: it loads where the exthost cannot (Windows).
+    let _offline = crate::ext_runtime::load_without_exthost_for_test();
     let cfg = config_dir("keys");
     let (_wb, cx) = setup(cx, &cfg, "{}");
     let bound = cx.update(|_, cx| {

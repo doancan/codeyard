@@ -35,7 +35,7 @@ fn following_a_growing_log_shows_new_lines_and_survives_rotation(cx: &mut TestAp
     std::fs::write(&file, (0..50).map(line).collect::<String>()).unwrap();
     let (_wb, cx) = setup(cx);
     let host: Arc<dyn host::Host> = Arc::new(host::local());
-    let path = file.to_string_lossy().into_owned();
+    let path = crate::ui::local_path(&file);
     let view = cx.update(|_, cx| cx.new(|cx| LargeFileView::new(host, path, cx)));
     view.update(cx, |v, cx| {
         v.watch(cx);
@@ -533,7 +533,7 @@ fn files_from_the_system_open_as_tabs_without_changing_the_project(cx: &mut Test
     // `open_urls` looks for real `Workbench` windows (the test helper `setup` wraps the view in a root view).
     let win = cx.add_window(|window, cx| crate::workbench::Workbench::with_state(state::State::in_memory().ok(), None, window, cx));
     let wb = win.root(cx).unwrap();
-    let canon = |p: &std::path::Path| crate::ui::local_path(&std::fs::canonicalize(p).unwrap());
+    let canon = |p: &std::path::Path| crate::ui::local_path(&crate::ui::canonical_for_test(p));
     let url = |p: &std::path::Path| crate::lsp::path_to_uri(&canon(p));
     let root = |cx: &mut TestAppContext| wb.read_with(cx, |wb, cx| wb.local_folder(cx));
     let tabs = |cx: &mut TestAppContext| wb.read_with(cx, |wb, cx| wb.open_paths(cx));
@@ -574,9 +574,7 @@ fn windows_terminal_links_open_absolute_files_without_a_project(cx: &mut TestApp
     let file = dir.join("şablon.txt");
     std::fs::write(&file, "outside a project").unwrap();
     let (wb, cx) = setup(cx);
-    wb.update_in(cx, |wb, window, cx| {
-        wb.open_link(crate::links::Link::File { path: file.to_string_lossy().into_owned(), line: Some(1), col: None }, window, cx)
-    });
+    wb.update_in(cx, |wb, window, cx| wb.open_link(crate::links::Link::File { path: crate::ui::local_path(&file), line: Some(1), col: None }, window, cx));
     wait_ticking(cx, "absolute terminal link", |cx| wb.read_with(cx, |wb, cx| wb.open_paths(cx).iter().any(|p| p.ends_with("şablon.txt"))));
 }
 
@@ -1025,6 +1023,9 @@ fn schema_download_hosts_are_asked_once(cx: &mut TestAppContext) {
 /// filter shows matching lines only (the pattern is a case-insensitive regular expression).
 #[gpui::test]
 fn logs_follow_automatically_and_can_be_filtered(cx: &mut TestAppContext) {
+    if !crate::test_sshd::posix_shell() {
+        return;
+    }
     let dir = fresh("log-filter");
     let log = dir.join("app.log");
     let plain = dir.join("data.txt");
@@ -1220,7 +1221,7 @@ fn following_a_file_that_vanishes_reports_it_and_recovers(cx: &mut TestAppContex
     std::fs::write(&file, "one\ntwo\n").unwrap();
     let (_wb, cx) = setup(cx);
     let host: Arc<dyn host::Host> = Arc::new(host::local());
-    let view = cx.update(|_, cx| cx.new(|cx| LargeFileView::new(host, file.to_string_lossy().into_owned(), cx)));
+    let view = cx.update(|_, cx| cx.new(|cx| LargeFileView::new(host, crate::ui::local_path(&file), cx)));
     view.update(cx, |v, cx| {
         v.watch(cx);
         v.set_follow(true, cx);
@@ -1247,6 +1248,9 @@ fn following_a_file_that_vanishes_reports_it_and_recovers(cx: &mut TestAppContex
 /// names are literal text, and nothing is executed.
 #[gpui::test]
 fn the_log_filter_is_safe_against_shell_metacharacters(cx: &mut TestAppContext) {
+    if !crate::test_sshd::posix_shell() {
+        return;
+    }
     let dir = fresh("log-filter-safe");
     let canary = dir.join("INJECTED");
     let log = dir.join("it's a \"log\" $HOME file.log");

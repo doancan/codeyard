@@ -90,16 +90,30 @@ pub struct FakeServer {
     starts: PathBuf,
 }
 
-fn python() -> &'static str {
+/// The Python 3 interpreter the scripted servers and adapters of the tests run with.
+pub(crate) fn python() -> &'static str {
     if cfg!(windows) { "python" } else { "python3" }
+}
+
+/// Whether Python 3 is installed; when not, the test prints a SKIPPED line and should return.
+pub(crate) fn have_python() -> bool {
+    let ok = std::process::Command::new(python()).arg("-c").arg("import sys; sys.exit(sys.version_info[0] != 3)").status().is_ok_and(|s| s.success());
+    if !ok {
+        crate::test_sshd::skip_missing("python3");
+    }
+    ok
+}
+
+/// A scripted server as a program and its arguments: started through the interpreter, since Windows does not honour a
+/// script's `#!` line.
+pub(crate) fn python_program(script: &Path, args: Vec<String>) -> (String, Vec<String>) {
+    (python().into(), std::iter::once(script.to_string_lossy().into_owned()).chain(args).collect())
 }
 
 impl FakeServer {
     /// Writes the server into `dir`. `None` (with the skip reported) when Python 3 is not installed.
     pub fn new(dir: &Path, scenario: &Value) -> Option<Self> {
-        let ok = std::process::Command::new(python()).arg("-c").arg("import sys; sys.exit(sys.version_info[0] != 3)").status().is_ok_and(|s| s.success());
-        if !ok {
-            crate::test_sshd::skip_missing("python3");
+        if !have_python() {
             return None;
         }
         std::fs::create_dir_all(dir).unwrap();
@@ -156,7 +170,7 @@ mod tests {
         let d = std::env::temp_dir().join(format!("codeyard-test-lsp-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
-        std::fs::canonicalize(d).unwrap()
+        crate::ui::canonical_for_test(d)
     }
 
     fn spawn(fake: &FakeServer) -> Child {
@@ -249,7 +263,7 @@ mod tests {
         ] } }] });
         let Some(fake) = FakeServer::new(&d.join("server"), &scenario) else { return };
         let (wb, cx) = setup_with(cx, Settings { lsp_enabled: true, lsp_servers: vec![("rust".into(), Some(fake.command().into()))], ..Settings::default() });
-        let file = d.join("lib.rs").to_string_lossy().into_owned();
+        let file = crate::ui::local_path(&d.join("lib.rs"));
         wb.update_in(cx, |wb, window, cx| wb.open_path(&file, window, cx));
         wait_ticking(cx, "the fake server's diagnostic in Problems", |cx| wb.read_with(cx, |wb, _| wb.problems().iter().any(|(p, n)| p == &file && *n == 1)));
 
