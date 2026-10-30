@@ -210,6 +210,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Quick Open in a workspace with several folders finds a file by its folder's name and path, as in `repoB/src/lib.rs`,
+  for every folder. Before, typing a folder's name found nothing, so files with the same relative path in two folders
+  could not be told apart.
 - Windows of their own (editors, side views, terminals) on macOS came back 32 pixels taller at every start: the frame's
   height was saved and the content was opened at that height. The content's size is saved now.
 - A file moved into a window of its own came back as a tab of the main window too after the second start when Codeyard

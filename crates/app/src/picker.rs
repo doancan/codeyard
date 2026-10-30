@@ -127,6 +127,8 @@ pub struct Picker {
     matcher: Matcher,
     /// Number of recently opened files at the head of the file list (ranked first).
     recent: usize,
+    /// With several folders open: the first folder's name, so its files are found as `folder/path` like the others'.
+    first_folder: Option<String>,
     /// ":line(:column)" in the query (jump there when a file is picked).
     goto: Option<(usize, Option<usize>)>,
     focus_handle: FocusHandle,
@@ -159,6 +161,7 @@ impl Picker {
             selected: 0,
             matcher: Matcher::new(Config::DEFAULT.match_paths()),
             recent: 0,
+            first_folder: None,
             goto: None,
             focus_handle: cx.focus_handle(),
             scroll: UniformListScrollHandle::new(),
@@ -191,7 +194,16 @@ impl Picker {
     /// File list arrived (or was refreshed).
     pub fn set_paths(&mut self, source: usize, new_paths: Vec<String>, was_truncated: bool, cx: &mut Context<Self>) {
         if let Some(Source::Paths { paths, folded, loading, truncated, .. }) = self.sources.get_mut(source) {
-            *folded = Arc::new(new_paths.iter().map(|p| p.chars().map(fuzzy::fold).collect()).collect());
+            // An extra folder's files are `folder › path`; they are searched as `folder / path`, so `folder/path` (as
+            // typed) finds them. The separator keeps its length, so the highlighted positions stay where they are.
+            // The first folder's files are searched as `first / path` when there are several folders.
+            let first = self.first_folder.as_ref().map(|f| format!("{f} / "));
+            let searched = |p: &String| match (&first, p.contains(crate::workbench::ROOT_SEP)) {
+                (_, true) => p.replacen(crate::workbench::ROOT_SEP, " / ", 1),
+                (Some(first), false) => format!("{first}{p}"),
+                (None, false) => p.clone(),
+            };
+            *folded = Arc::new(new_paths.iter().map(|p| searched(p).chars().map(fuzzy::fold).collect()).collect());
             *paths = Arc::new(new_paths);
             *loading = false;
             *truncated = was_truncated;
@@ -243,6 +255,11 @@ impl Picker {
     /// The first `n` of the file list are the recently opened ones.
     pub fn set_recent(&mut self, n: usize) {
         self.recent = n;
+    }
+
+    /// Several folders are open and `name` is the first one's (call before `set_paths`).
+    pub fn set_first_folder(&mut self, name: Option<String>) {
+        self.first_folder = name;
     }
 
     /// ":line(:column)" in the query.
@@ -373,8 +390,9 @@ impl Picker {
                     .map(|(i, hits)| {
                         let path = &paths[i];
                         let (dir, name) = path.rsplit_once('/').unwrap_or(("", path));
-                        // Highlight spans the whole path; the label is only the file name.
-                        let name_start = path.chars().count() - name.chars().count();
+                        // Highlight spans the whole searched text (with the first folder's name in front, if added);
+                        // the label is only the file name.
+                        let name_start = folded[i].chars().count() - name.chars().count();
                         Row {
                             pick: Some(Pick::Item { source: si, index: i }),
                             label: name.to_string().into(),
