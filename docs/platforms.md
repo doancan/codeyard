@@ -50,6 +50,12 @@ Windows x64 is built and released as a ZIP and a setup EXE (unsigned, so SmartSc
   opens hidden and is shown once the adapter is attached. Not yet tried with a screen reader (see `accessibility.md`).
 - `scripts/check-windows.ps1` runs the library tests, selected UI, path and keyboard regressions and the release build.
   GPUI needs `fxc.exe` from the Windows SDK.
+- Terminals of a local folder run in the terminal daemon, as on macOS and Linux. They are taken back after Codeyard
+  quits, crashes or is killed (`terminal.persistentSessionTimeout`). The daemon listens on a named pipe that only the
+  current user can open (a protected DACL with the user's SID alone; remote clients rejected) and owns the ConPTY
+  sessions. CI checks it with real processes (`agent/src/daemon_windows_tests.rs`): the same shell is taken back with
+  its token, a wrong token is refused, a kept session ends with its shell after its timeout, and the pipe's DACL is
+  checked.
 - Tasks: each task runs in a kill-on-close job object. CI runs these checks with real processes
   (`agent/src/proc_windows_tests.rs`):
   - Stop ends the task's leader and a grandchild that holds the output pipe, also after the leader has exited.

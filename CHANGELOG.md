@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Windows: terminals of a local folder are taken back after Codeyard quits, crashes or is killed, as on macOS and
+  Linux. They run in the terminal daemon, which listens on a named pipe only the current user can open.
 - `cyx dev` hot-reloads code extensions: saving a source file rebuilds `extension.wasm` (cargo or the TypeScript
   pipeline), and the dev window stops the running build, compiles the new one with Cranelift's incremental cache,
   activates it with the reason `reload` and draws its open views again; calls made meanwhile wait for it. A failed
@@ -212,6 +214,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   RUSTSEC-2026-0423, RUSTSEC-2026-0424): fixes for typed functions with `i31` or `nullref` arguments, cross-engine
   struct types, resources passed between components and the WASI host. Each extension still runs in its own exthost
   process inside the OS sandbox.
+- `wasmtime` and `wasmtime-wasi` 50.0.1 for the extension host (RUSTSEC-2026-0420, RUSTSEC-2026-0422,
+  RUSTSEC-2026-0423, RUSTSEC-2026-0424): type confusion between engines, a panic on typed functions with `i31` or
+  `nullref` arguments, and a UDP send to an address only allowed for receiving.
 
 ## [0.6.0] - 2026-10-29
 

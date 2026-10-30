@@ -1,8 +1,8 @@
 //! Workbench: saving a window's terminals and bringing them back, with terminals that outlive the app.
 //!
-//! A window's terminals run in an agent daemon session that can outlive the app: for a local folder (Unix, with
+//! A window's terminals run in an agent daemon session that can outlive the app: for a local folder (with
 //! `window.restoreSession`) the terminal daemon, the same binary started as `--daemon` on an owner-only socket in the
-//! state folder; for an SSH folder the agent daemon on the server, which already keeps sessions across dropped
+//! state folder (on Windows, a named pipe only this user can open); for an SSH folder the agent daemon on the server, which already keeps sessions across dropped
 //! connections. The session id is a random secret saved with the window's terminals, and each terminal has a token (the
 //! daemon's instance id and the terminal's own secret, never a process id).
 //!
@@ -28,7 +28,7 @@ static SOCKET: OnceLock<PathBuf> = OnceLock::new();
 static IN_USE: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 
 /// Use the terminal daemon on `socket` (called once by `main`).
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub fn enable_terminal_daemon(socket: PathBuf) {
     let _ = SOCKET.set(socket);
 }
@@ -37,6 +37,13 @@ pub fn enable_terminal_daemon(socket: PathBuf) {
 #[cfg(unix)]
 pub fn terminal_daemon_socket() -> Option<PathBuf> {
     state_path()?.parent().map(|d| d.join("terminals").join("d.sock"))
+}
+
+/// The named pipe the app uses on Windows: this user's, for this state folder.
+#[cfg(windows)]
+pub fn terminal_daemon_socket() -> Option<PathBuf> {
+    let scope = state_path()?.parent()?.to_string_lossy().into_owned();
+    agent::daemon::pipe_name(&scope).ok().map(PathBuf::from)
 }
 
 /// A window's connection to its session on the terminal daemon.
@@ -151,8 +158,17 @@ fn connect(socket: &std::path::Path) -> Option<(host::Transport, Box<dyn FnOnce(
     Some((transport, Box::new(move || drop(closer.shutdown(std::net::Shutdown::Both)))))
 }
 
-/// Windows runs no terminal daemon (`terminal_daemon_for` never asks for one there).
-#[cfg(not(unix))]
+/// A connection to the daemon's named pipe (started if none answers), and what ends it at once.
+#[cfg(windows)]
+fn connect(pipe: &std::path::Path) -> Option<(host::Transport, Box<dyn FnOnce() + Send>)> {
+    let pipe = agent::daemon::connect_or_start(pipe).ok()?;
+    let closer = pipe.clone();
+    let transport = host::Transport::pipes(Box::new(pipe.clone()), Box::new(pipe));
+    Some((transport, Box::new(move || closer.shutdown())))
+}
+
+/// No terminal daemon on other systems (`terminal_daemon_for` never asks for one there).
+#[cfg(not(any(unix, windows)))]
 fn connect(_: &std::path::Path) -> Option<(host::Transport, Box<dyn FnOnce() + Send>)> {
     None
 }
@@ -204,7 +220,7 @@ impl Workbench {
 
     /// The socket of the terminal daemon this window may use: restore on, a local folder, Unix.
     fn terminal_daemon_for(&self, cx: &App) -> Option<PathBuf> {
-        if !cfg!(unix) || !cx.global::<Settings>().restore_session || self.remote.host.is_remote() {
+        if !cfg!(any(unix, windows)) || !cx.global::<Settings>().restore_session || self.remote.host.is_remote() {
             return None;
         }
         self.persist.term_socket.clone().or_else(|| SOCKET.get().cloned())

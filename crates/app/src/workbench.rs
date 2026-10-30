@@ -182,7 +182,7 @@ mod term_daemon_glue;
 mod term_tabs_glue;
 #[path = "workbench_view_windows.rs"]
 mod view_windows_glue;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub use term_daemon_glue::{enable_terminal_daemon, terminal_daemon_socket};
 #[path = "workbench_terminals.rs"]
 mod terminals_glue;

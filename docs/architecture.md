@@ -291,8 +291,20 @@ tokens and rules apply.
 - **Protocol:** version 16 added `PtyToken`, `PtyAttach` and `PtyList`; version 17 adds `KeepFor`. The static Linux agent
   stays within its budget (1664 KB).
 
-Not covered: Windows runs no local terminal daemon. An SSH folder's session id is kept per host and folder, so two windows
-of the same SSH folder at quit cannot both be taken back (the second gets new shells).
+On Windows the terminal daemon listens on a named pipe instead of a socket (`agent/src/daemon_windows.rs`), with the
+same sessions, tokens and rules:
+
+- **Name:** `\\.\pipe\codeyard-<hash>-terminals`, the hash over the user's SID and the state folder.
+- **Access:** the pipe is created with a protected DACL that grants access to the user's SID alone and rejects remote
+  clients. It is created as the first instance, so a second daemon finds the first. A client refuses a pipe whose
+  serving process runs as another user, so a name taken first by someone else is not trusted.
+- **I/O:** both ends use overlapped I/O, so a pending read never blocks a write. A client ends its connection at once by
+  cancelling its read.
+- **Start-up:** the daemon is started as `codeyard --daemon <pipe>` with `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`.
+  It also breaks away from the app's job where the job allows it, so it outlives the app. It owns the ConPTY sessions.
+
+Not covered: an SSH folder's session id is kept per host and folder, so two windows of the same SSH folder at quit
+cannot both be taken back (the second gets new shells).
 
 ## Opening files from the system
 

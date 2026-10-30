@@ -1,10 +1,12 @@
 //! Daemon mode: sessions (terminals, watching) outlive the ssh connection.
 //! Each ssh connection is an `--attach` bridge: stdio <-> a per-user unix socket.
 //! A dropped session waits `GRACE`; with no sessions left the daemon exits after `IDLE_EXIT`.
+//! On Windows the same daemon listens on a named pipe only the current user can open (`daemon_windows.rs`); it keeps
+//! the app's local terminals for the next start.
 
 use std::collections::HashMap;
 use std::io::{self, BufReader, Read, Write};
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -108,6 +110,27 @@ impl Registry {
     }
 }
 
+/// End sessions whose grace has expired, and the daemon itself once it has had no sessions for `IDLE_EXIT` (`at_exit`
+/// runs first). Tests can shorten the durations (seconds): CODEYARD_DAEMON_GRACE / CODEYARD_DAEMON_IDLE.
+#[cfg(any(unix, windows))]
+fn start_reaper(registry: Arc<Registry>, at_exit: impl FnOnce() + Send + 'static) {
+    let secs = |name: &str, default: Duration| std::env::var(name).ok().and_then(|v| v.parse().ok()).map_or(default, Duration::from_secs);
+    let (grace, idle) = (secs("CODEYARD_DAEMON_GRACE", GRACE), secs("CODEYARD_DAEMON_IDLE", IDLE_EXIT));
+    let tick = Duration::from_secs(10).min(grace.max(Duration::from_secs(1)));
+    std::thread::spawn(move || {
+        let mut empty_since: Option<Instant> = None;
+        loop {
+            std::thread::sleep(tick);
+            if registry.reap(grace) {
+                empty_since = None;
+            } else if empty_since.get_or_insert_with(Instant::now).elapsed() >= idle {
+                at_exit();
+                std::process::exit(0);
+            }
+        }
+    });
+}
+
 #[cfg(unix)]
 mod unix {
     use std::os::unix::fs::PermissionsExt;
@@ -154,24 +177,9 @@ mod unix {
         let listener = short(socket, |p| UnixListener::bind(p))?;
         std::fs::set_permissions(socket, std::fs::Permissions::from_mode(0o600))?;
         let registry = Arc::new(Registry::default());
-
-        let reaper = registry.clone();
         let sock = socket.to_path_buf();
-        // Tests can shorten the durations (seconds): CODEYARD_DAEMON_GRACE / CODEYARD_DAEMON_IDLE.
-        let secs = |name: &str, default: Duration| std::env::var(name).ok().and_then(|v| v.parse().ok()).map_or(default, Duration::from_secs);
-        let (grace, idle) = (secs("CODEYARD_DAEMON_GRACE", GRACE), secs("CODEYARD_DAEMON_IDLE", IDLE_EXIT));
-        let tick = Duration::from_secs(10).min(grace.max(Duration::from_secs(1)));
-        std::thread::spawn(move || {
-            let mut empty_since: Option<Instant> = None;
-            loop {
-                std::thread::sleep(tick);
-                if reaper.reap(grace) {
-                    empty_since = None;
-                } else if empty_since.get_or_insert_with(Instant::now).elapsed() >= idle {
-                    let _ = std::fs::remove_file(&sock);
-                    std::process::exit(0);
-                }
-            }
+        start_reaper(registry.clone(), move || {
+            let _ = std::fs::remove_file(&sock);
         });
 
         for stream in listener.incoming() {
@@ -284,6 +292,12 @@ mod unix {
 
 #[cfg(unix)]
 pub use unix::{attach, connect_or_start, run};
+
+#[cfg(windows)]
+#[path = "daemon_windows.rs"]
+mod windows;
+#[cfg(windows)]
+pub use windows::{Pipe, connect, connect_or_start, pipe_name, run};
 
 #[cfg(test)]
 mod tests {
