@@ -266,10 +266,13 @@ impl Workbench {
             }
         }
         let session = self.terminal_session();
-        if let (Conn::Connected { alias }, Some(root), Some(session)) = (&self.remote.conn, self.root(cx), &session)
+        // Kept under what the next start reopens: the workspace file when one is open (Recents and a restart reopen
+        // that), else the folder.
+        let opened = self.roots.workspace.as_ref().map(|w| w.path.clone()).or_else(|| self.root(cx));
+        if let (Conn::Connected { alias }, Some(opened), Some(session)) = (&self.remote.conn, opened, &session)
             && self.remote.host.is_remote()
         {
-            let _ = s.set(&remote_session_key(alias, &root), session);
+            let _ = s.set(&remote_session_key(alias, &opened), session);
         }
         let saved = SavedTerminals { version: 1, active, terminals, session };
         if let Some(json) = saved.to_json() {
