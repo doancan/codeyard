@@ -51,6 +51,7 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_FISH` | Path of a fish binary that is not on `PATH`, so the quoting and login-shell tests also run against fish. |
 | `CODEYARD_FUZZ_SECS` | Make the hostile-input (`fuzz_tests.rs`) tests of the extension crates keep going for this many seconds instead of a fixed number of rounds; set by `.github/workflows/fuzz.yml`. |
 | `CODEYARD_EXTHOST_SELFTEST` | Test hook: `1` lets `codeyard-exthost --sandbox-selftest` run, which enters the OS sandbox and tries to escape it (`crates/ext-host/tests/sandbox.rs`, `scripts/check-exthost-sandbox-windows.ps1`). |
+| `CODEYARD_GUARD_TEST_OWNER` | Test hook: set by `crates/agent/tests/guard.rs` when it runs its own binary again as the owner that is killed; names that owner's scratch folder. Ordinary runs do not read it. |
 | `CODEYARD_FUZZ_SEED` | Change the seed of those tests to explore other inputs; a failure prints the seed and round to rerun. |
 | `CODEYARD_TEST_TIMEOUT_SCALE` | Multiplier for the tests' wait timeouts (default 1). `scripts/coverage.sh` sets 4 because instrumented builds are slow. |
 | `CODEYARD_TR_DICT_DIR` | Folder with a Turkish Hunspell dictionary for the manual `cargo test -p spell -- --ignored turkish` check. |

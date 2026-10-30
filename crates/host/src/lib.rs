@@ -10,6 +10,7 @@ mod outbox;
 pub mod ssh;
 pub mod ssh_config;
 pub mod ssh_hosts;
+mod terminals;
 pub mod transfer;
 
 /// Resolve tools without requiring a terminal launch of the editor. Container tools
@@ -258,6 +259,30 @@ pub trait Host: Send + Sync + 'static {
         }
     }
 
+    /// The token to take terminal `pty` back after a restart: (agent instance, terminal secret).
+    fn pty_token(&self, pty: u32) -> Result<(String, String)> {
+        match self.call(Request::PtyToken { pty })? {
+            Response::PtyToken { instance, secret } => Ok((instance, secret)),
+            other => Err(unexpected(other)),
+        }
+    }
+
+    /// Take terminal `pty` of this session back with its token: (output sequence number, bytes lost while away).
+    fn pty_attach(&self, pty: u32, instance: String, secret: String) -> Result<(u64, u64)> {
+        match self.call(Request::PtyAttach { pty, instance, secret })? {
+            Response::PtyAttached { sequence, dropped, .. } => Ok((sequence, dropped)),
+            other => Err(unexpected(other)),
+        }
+    }
+
+    /// The session's open terminals.
+    fn pty_list(&self) -> Result<Vec<u32>> {
+        match self.call(Request::PtyList)? {
+            Response::PtyList(ids) => Ok(ids),
+            other => Err(unexpected(other)),
+        }
+    }
+
     /// The shells the machine offers.
     fn list_shells(&self) -> Vec<String> {
         match self.call(Request::ListShells) {
@@ -469,6 +494,10 @@ struct Shared {
     /// Watch set to resend on reconnect.
     last_watch: Mutex<Option<Vec<String>>>,
     closing: std::sync::atomic::AtomicBool,
+    /// The session is meant to outlive this connection (a terminal daemon's): no `Bye` when it is dropped.
+    keep_session: AtomicBool,
+    /// Ends the connection itself when the host is dropped (a socket whose read half the reader thread still holds).
+    closer: Mutex<Option<Box<dyn FnOnce() + Send>>>,
     next_id: AtomicU32,
     /// Pin the call timeout (seconds; 0 = default table). For tests and diagnostics.
     call_limit_secs: AtomicU32,
@@ -1130,12 +1159,16 @@ impl Drop for RemoteHost {
         // (Best effort: ignored if the connection is already down.)
         self.shared.closing.store(true, Ordering::Relaxed); // first, so the reader doesn't try to reconnect when the agent closes
         // Waited for (briefly), because the child is killed right below and would take an unsent Bye with it.
-        if let Ok(w) = self.shared.writer()
+        if !self.shared.keep_session.load(Ordering::Relaxed)
+            && let Ok(w) = self.shared.writer()
             && let Ok(bytes) = Shared::encode(0, &Request::Bye)
         {
             let _ = w.send_within(bytes, std::time::Duration::from_secs(1));
         }
         self.shared.clear_writer();
+        if let Some(close) = self.shared.closer.locked().take() {
+            close();
+        }
         if let Some(mut child) = self.shared.child.locked().take() {
             let _ = child.kill();
             let _ = child.wait();

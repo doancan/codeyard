@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `cyx test` in CI.
 - `scripts/check-five-minutes.sh` scripts the "a command in under 5 minutes" goal: `cyx new command`, its unit tests
   and `cyx test` from an empty folder, Rust and TypeScript, each step timed; CI's Linux job runs it.
+- On macOS and Linux, the panel's terminals of a local folder keep running when Codeyard quits, crashes or is killed
+  (with `window.restoreSession`, the default). Opening the folder again within 5 minutes brings the same shells back,
+  with their output from meanwhile, and says "Reconnected to terminal session". A terminal that cannot be taken back is
+  a new shell as before, and nothing is ever typed into it. Terminals no window takes back are ended after 5 minutes.
+  Closing the window or the folder, or opening another one, still ends them at once. Terminals another Codeyard
+  instance has open stay with it: the window starts new shells and says so. The agent protocol is version 16.
 - The lists of the Run and Debug view, the Testing view, the Remote Explorer and the Ports panel work with the keyboard:
   Tab reaches them, Up/Down/Home/End move a cursor row shown in the focus colour, and Enter does what a click on the
   row does. Shift+F10 (and the Menu key) opens the focused row's menu under it and Escape returns to the row; the same
@@ -67,11 +73,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   10,000 rows draw only the rows on screen, and trees load one page at a time. The tree arrives as JSON
   (docs/extensions/reference/ui.md), is checked, and is diffed by key so typed text, ticks, selections and expanded
   items survive a re-render. Every element is reachable by keyboard and announced with its role and label. Each view
-  names its publisher, and none can cover the consent sheet or take the keyboard from it. Images from URLs are not
-  drawn yet (they wait for `net` fetching).
+  names its publisher, and none can cover the consent sheet or take the keyboard from it.
+- Extension views show `image` elements with an `https` URL: Codeyard fetches them through the extension's `net`
+  permission (declared hosts only, ext-net's address checks, at most 1 MB, formats GPUI decodes), only while the view
+  is on screen and never in an untrusted folder, and keeps them by URL until the view closes. A refused image shows
+  its alt text and the denial is listed in the Inspector.
+- A view's `when` in the manifest: a view is offered in the activity bar, the panel tabs and *Open View* only while
+  its `when` holds, and an open view closes when it turns false.
+- `views.keystroke_frame_ms` (`CODEYARD_PERF`): a key that reaches an extension view, to the frame that shows it. The
+  row in `perf/metrics.json` is `warn` until `scripts/perf/run.sh` has a scenario for it.
 - What code extensions contribute reaches the same places as the core's: commands in the editor and file-tree menus
   (with `when` and `enablement`), on key bindings and on status bar items; formatters for *Format Document* and format
-  on save (chosen per language with `editor.formatters`); code actions in *Quick Fix…*; diagnostics in the Problems view
+  on save (chosen per language with `editor.formatters`); code actions in *Quick Fix…*, whose edits change the document they were asked for and other files only within the
+  extension's `write` (one refused file refuses the whole action); diagnostics in the Problems view
   and the editor, tagged with the extension; gutter, line and after-the-line decorations in theme tones; and tasks in
   *Tasks: Run Task…*. Providers answer within a deadline and are cancelled when you type, so they never hold up typing;
   a late answer is dropped and noted in the extension's log. What an extension showed goes when it is disabled,
@@ -120,6 +134,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Terminals that were in the editor area or in their own window come back in the same place after a restart, as new
   shells with their name, colour and folder and a dimmed notice; no command of the previous session runs again.
   Windows whose display was removed open on an attached display.
+- "View: Move Editor into New Window" shows the active file in a window of its own, and "View: Copy Editor into New
+  Window" does so while keeping its tab. It is the same document as in the tabs: edits, undo, unsaved changes and saving
+  are shared, while each window keeps its own cursor and scroll. Language features, file watching, hot exit backups and
+  renames cover it like a tab. Closing that window puts the file back as a tab; ⌘W in it closes the file and asks to
+  save when no other tab or window shows it. "View: Move Editors Back to Main Window" returns all of them, and the
+  windows come back in place after a restart (a file that is also opened as a tab keeps its tab). The command palette,
+  the right-click menu, Go to Line and the other commands and shortcuts work in that window and act on its editor.
+- "View: Move View into New Window" shows the open side view (Explorer, Search, Source Control, Run and Debug,
+  Testing, Remote Explorer, Extensions) in a window of its own, the same view with the same state. Its icon and
+  commands bring that window forward; the command palette, shortcuts, menus and pickers work there. Closing the window
+  or "View: Move View Back to Side Bar" puts it back in the side bar it came from. The windows are saved with the
+  folder and come back with it, on an attached display; screen readers find the view in its window.
+- A side view moves to the other side bar by dragging its activity bar icon there; while it is dragged, both sides
+  show a highlighted drop zone. The panel docks left of, right of or below the editor ("View: Move Panel Left",
+  "View: Move Panel Right", "View: Move Panel to Bottom"), and the dock is restored at the next start. Screen readers
+  read which view each side bar shows and where the panel is from the window's description.
+- Screen readers see the editor in its own window (title, text, caret and selection, find bar, suggestions, the
+  picker opened there) and the terminal in its own window, as in the main window.
 - Terminals come back after a restart as new shells in their folders, with their titles, colors and programs, and say
   so; nothing runs again. `terminal.persistentScrollback` (off by default) also keeps the last lines of their history as
   plain text; "Terminal: Clear Saved Terminal History" removes it.
@@ -130,6 +162,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a variable can never become more shell code, and Stop ends the processes it started.
 - The Linux agent's size budget is 1664 KB (was 1600 KB): running tasks as processes on the server needs its own
   request in the protocol.
+
+### Fixed
+
+- Screen readers find the Search results in the secondary side bar too, not only in the primary one.
+- On macOS and Linux, a task, test run, language server or terminal no longer keeps running when Codeyard is killed or
+  crashes. A small guard process started with the app ends every task's process group at once and hangs up every
+  terminal, killing it after two seconds if it is still there. Windows already ends them through job objects and the
+  pseudo console.
 
 ## [0.6.0] - 2026-10-29
 

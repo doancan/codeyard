@@ -143,6 +143,8 @@ impl Workbench {
             let _ = s.save_tabs_with_layout(ws, &tabs, Some(&json));
         }
         self.persist_moved_terminals(cx);
+        self.persist_editor_windows(cx);
+        self.persist_view_windows();
         self.persist_search_editors(cx);
         self.persist_terminals(cx);
     }
@@ -252,8 +254,14 @@ impl Workbench {
         }
         self.restore_search_editors(ws, window, cx);
         self.restore_terminals(ws, window, cx);
+        // Read now (before anything saves the session again); opened after this window is drawn (a folder from the
+        // last session is opened while drawing).
+        let view_windows = self.saved_view_windows(ws);
+        cx.defer_in(window, move |this, window, cx| this.restore_view_windows(view_windows, window, cx));
         // Terminals that were in the editor area or in windows of their own: new shells, once the groups exist.
         let moved = self.saved_moved_terminals(ws);
+        // Files in windows of their own: loaded with the tabs, then shown in their windows again.
+        let windows = self.saved_editor_windows(ws);
         let Some(s) = &self.persist.state else { return false };
         let mut tabs = s.tabs(ws).unwrap_or_default();
         let saved = s.tab_layout(ws).as_deref().and_then(SavedEditorSession::parse);
@@ -264,6 +272,14 @@ impl Workbench {
         for b in &backups {
             if !tabs.iter().any(|t| t.rel_path == b.rel_path) {
                 tabs.push(state::Tab { rel_path: b.rel_path.clone(), active: false, pinned: false, group: 0 });
+            }
+        }
+        // Loaded only to go back into their windows (not saved as tabs): those tabs are taken away again.
+        let mut for_windows: Vec<String> = Vec::new();
+        for rel in windows.iter().flat_map(|w| w.only_here()) {
+            if !tabs.iter().any(|t| t.rel_path == rel) {
+                tabs.push(state::Tab { rel_path: rel.to_string(), active: false, pinned: false, group: 0 });
+                for_windows.push(rel.to_string());
             }
         }
         if tabs.is_empty() {
@@ -281,11 +297,16 @@ impl Workbench {
             self.tabs.opening.as_deref() == Some(path.as_str()) || self.all_editors().iter().any(|e| e.read(cx).path == path)
         };
         tabs.retain(|t| !busy(&t.rel_path));
+        // A file already open (or being opened, from the command line) keeps its tab; its window shows the same document.
+        for_windows.retain(|rel| tabs.iter().any(|t| t.rel_path == *rel));
         if tabs.is_empty() {
             self.restore_moved_terminals(moved, window, cx);
+            self.restore_editor_windows(windows, &[], window, cx);
             return false;
         }
         let request = request.filter(|(path, _)| tabs.iter().any(|tab| ui::join(&root, &tab.rel_path) == *path));
+        // The file asked for (the command line, Quick Open) is wanted as a tab as well as in its window.
+        for_windows.retain(|rel| request.as_ref().is_none_or(|(path, _)| ui::join(&root, rel) != *path));
         let requested = request.is_some();
         // Layout: the tab order and active tabs of the two groups; the file is loaded once.
         let layout: Vec<(String, u8, bool)> = tabs.iter().map(|t| (ui::join(&root, &t.rel_path), t.group, t.active)).collect();
@@ -353,6 +374,7 @@ impl Workbench {
                 }
                 this.restore_layout(&layout, saved, focus_left, window, cx);
                 this.restore_moved_terminals(moved, window, cx);
+                this.restore_editor_windows(windows, &for_windows, window, cx);
                 if let Some((path, preview)) = request {
                     this.open_file_as(restore_host, path, preview, window, cx);
                 }

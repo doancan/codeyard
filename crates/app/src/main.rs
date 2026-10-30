@@ -1055,6 +1055,23 @@ pub fn open_workbench_window(cx: &mut App) -> Option<gpui::WindowHandle<Workbenc
 }
 
 fn main() {
+    // The process guard started below runs this same binary: it ends this window's tasks and terminals if the app is
+    // killed (see `agent::guard`).
+    #[cfg(unix)]
+    if std::env::args_os().nth(1).is_some_and(|arg| arg == "--process-guard") {
+        agent::guard::run(std::io::stdin().lock());
+        return;
+    }
+    // The terminal daemon (started by a window with `window.restoreSession`): its shells outlive the app.
+    #[cfg(unix)]
+    if std::env::args_os().nth(1).is_some_and(|arg| arg == "--daemon") {
+        let Some(socket) = std::env::args_os().nth(2) else { std::process::exit(2) };
+        if let Err(e) = agent::daemon::run(std::path::Path::new(&socket)) {
+            eprintln!("codeyard: terminal daemon: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
     perf::init();
     if std::env::args_os().len() == 2 && std::env::args_os().nth(1).is_some_and(|arg| arg == "--check-agent-bundle") {
         match bundled_agents::check() {
@@ -1090,6 +1107,13 @@ fn main() {
     }
     // A folder or host on the command line wins; the file is consumed either way.
     let reopen = args.after_update.then(update_handover).flatten().filter(|_| args.path.is_none() && args.connect.is_none());
+    // Before anything can start a task or a terminal: if the app dies by a signal or a crash, the guard ends them.
+    #[cfg(unix)]
+    if let Some(socket) = workbench::terminal_daemon_socket() {
+        workbench::enable_terminal_daemon(socket);
+    }
+    #[cfg(unix)]
+    let _guard = std::env::current_exe().and_then(|exe| agent::guard::spawn(&exe)).map_err(|e| eprintln!("codeyard: no process guard: {e}")).ok();
     // Finder's "Open With", dropping on the Dock icon and `open -a Codeyard x` addresses are forwarded to the window through this channel
     // (the handler must be set up before the app opens; a request that arrives on first launch isn't lost either).
     let (open_tx, mut open_rx) = futures::channel::mpsc::unbounded::<Vec<String>>();
@@ -1260,8 +1284,14 @@ fn main() {
             .detach();
         }
         // All ssh ControlMasters are closed on every exit, including ⌘Q and the last window closing.
-        cx.on_app_quit(|_| {
+        cx.on_app_quit(|cx| {
             host::ssh::close_all_masters();
+            // Quitting is not closing: every window's terminals stay with the terminal daemon for the next start.
+            for window in cx.windows() {
+                if let Some(wb) = window.downcast::<Workbench>() {
+                    let _ = wb.update(cx, |wb, _, _| wb.keep_terminals_for_restart());
+                }
+            }
             async {}
         })
         .detach();
