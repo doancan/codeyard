@@ -6,9 +6,9 @@ use std::ops::Range;
 use crate::raw::{RawManifest, RawOAuth, RawPermissions, S};
 use crate::risk::{self, Clipboard, Permissions};
 use crate::{
-    Activation, BUILTIN_PROVIDERS, CodeEntry, CodeLanguage, Command, Contributions, ExtId, FileEntry, Keybinding, Language, LanguageServer, Manifest, Menu,
-    MenuLocation, OAuthProvider, Provider, SchemaAssociation, Setting, SettingKind, Snippets, StatusItem, Version, View, ViewLocation, check_id_part, limits,
-    when,
+    Activation, BUILTIN_PROVIDERS, CodeEntry, CodeLanguage, Command, CompletionProvider, Contributions, ExtId, FileEntry, Keybinding, Language, LanguageServer,
+    Manifest, Menu, MenuLocation, OAuthProvider, Provider, SchemaAssociation, Setting, SettingKind, Snippets, StatusItem, Version, View, ViewLocation,
+    check_id_part, limits, when,
 };
 use crate::{Code as C, Diagnostic};
 
@@ -785,6 +785,35 @@ fn languages(cx: &mut Ctx, what: &str, items: &[S<String>], span: Range<usize>) 
     out
 }
 
+/// `[[completion]] trigger-characters`: single punctuation characters, each once. Letters, digits and spaces are
+/// refused: a word already asks, and a space would ask on every word.
+fn trigger_characters(cx: &mut Ctx, items: &[S<String>]) -> Vec<char> {
+    const MAX: usize = 16;
+    if let Some(first) = items.get(MAX) {
+        cx.err(C::BadContribution, first.span(), format!("more than {MAX} completion trigger-characters"));
+    }
+    let mut out: Vec<char> = Vec::new();
+    for t in items.iter().take(MAX) {
+        let mut chars = t.get_ref().chars();
+        match (chars.next(), chars.next()) {
+            (Some(c), None) if !c.is_alphanumeric() && c != '_' && !c.is_whitespace() && !is_deceptive(c) => {
+                if !out.contains(&c) {
+                    out.push(c);
+                }
+            }
+            _ => {
+                cx.err(
+                    C::BadContribution,
+                    t.span(),
+                    format!("completion trigger character '{}' must be one punctuation character", t.get_ref().escape_debug()),
+                )
+                .fix = Some("use characters such as \".\" or \":\"".into());
+            }
+        }
+    }
+    out
+}
+
 /// Menus, status items, providers and tasks: contributions that run the extension's code (§5.1).
 fn code_contributions(
     cx: &mut Ctx,
@@ -858,6 +887,17 @@ fn code_contributions(
             let p = Provider { id: id.qualify(&local), languages: languages(cx, what, &p.languages, p.id.span()) };
             if diagnostics { out.diagnostics.push(p) } else { out.decorations.push(p) }
         }
+    }
+
+    cx.count("hover", &raw.hover);
+    for p in &raw.hover {
+        out.hover.push(Provider { id: String::new(), languages: languages(cx, "hover", &p.get_ref().languages, p.span()) });
+    }
+    cx.count("completion", &raw.completion);
+    for p in &raw.completion {
+        let languages = languages(cx, "completion", &p.get_ref().languages, p.span());
+        let trigger_characters = trigger_characters(cx, &p.get_ref().trigger_characters);
+        out.completion.push(CompletionProvider { languages, trigger_characters });
     }
 
     cx.count("tasks", &raw.tasks);

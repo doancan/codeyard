@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Code extensions can describe and complete: `[[hover]]` and `[[completion]]` (with optional `trigger-characters`)
+  in the manifest, `request.hover` and `request.completion` in `codeyard:api` 0.1, `ctx.hover` and `ctx.completion`
+  in the Rust and TypeScript SDKs, and `hover` / `completion` in both mock hosts. Their text shows in the hover popup
+  under the language server's, and their items join the completion list, each tagged with the extension. They have
+  the provider deadline; a completion request is cancelled when its word is left, a hover request when the mouse
+  moves on, and a late answer is dropped and noted in the extension's log. Typing never waits for them, and turning
+  an extension off or uninstalling it removes its items at once. Over SSH the document comes from the editor. The
+  `todo-actions` and `crate-version-ts` examples use them; `typing.keystroke_frame_completion_ms` (warn) measures
+  typing with one completion provider.
 - Windows: terminals of a local folder are taken back after Codeyard quits, crashes or is killed, as on macOS and
   Linux. They run in the terminal daemon, which listens on a named pipe only the current user can open.
 - `cyx dev` hot-reloads code extensions: saving a source file rebuilds `extension.wasm` (cargo or the TypeScript

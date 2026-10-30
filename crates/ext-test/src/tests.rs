@@ -100,6 +100,17 @@ impl Extension for Probe {
             Ok(())
         });
         ctx.formatter(async |_ctx, doc, _range, _options| Ok(vec![TextEdit::replace(Range::line(0, 0, doc.text.len() as u32), doc.text.trim())]));
+        ctx.hover(async |_ctx, doc, position| {
+            let line = doc.text.lines().nth(position.line as usize).unwrap_or_default();
+            Ok(line.contains("TODO").then(|| Hover::new(format!("**TODO** on line {}", position.line + 1))))
+        });
+        ctx.completion(async |_ctx, _doc, _position, trigger| {
+            let mut items = vec![CompletionItem::new("todo", CompletionKind::Keyword)];
+            if trigger.as_deref() == Some(".") {
+                items.push(CompletionItem { insert_text: Some("len()$0".into()), snippet: true, ..CompletionItem::new("len", CompletionKind::Method) });
+            }
+            Ok(items)
+        });
         let ticks = TICKS.with(Rc::clone);
         ctx.every(60, async move |_ctx| ticks.set(ticks.get() + 1));
         Ok(())
@@ -220,4 +231,17 @@ fn an_untrusted_folder_refuses_sending() {
     h.untrusted();
     let e = h.command("fetch", json!("https://api.example.com/v1")).unwrap_err();
     assert_eq!(e.denied().map(|d| d.why), Some(Why::UntrustedWorkspace));
+}
+
+#[test]
+fn hover_and_completion_answer_for_a_position() {
+    let h = host();
+    let doc = Document { uri: h.uri("a.rs"), language: "rust".into(), version: 1, text: "fn main() {}\n// TODO\n".into() };
+    assert_eq!(h.hover(doc.clone(), Position::new(1, 3)).unwrap(), Some(Hover::new("**TODO** on line 2")));
+    assert_eq!(h.hover(doc.clone(), Position::new(0, 3)).unwrap(), None);
+    let words = h.completion(doc.clone(), Position::new(0, 0), None).unwrap();
+    assert_eq!(words.items.iter().map(|i| i.label.as_str()).collect::<Vec<_>>(), ["todo"]);
+    assert!(!words.incomplete);
+    let dot = h.completion(doc, Position::new(0, 0), Some(".")).unwrap();
+    assert_eq!(dot.items[1].insert_text.as_deref(), Some("len()$0"));
 }

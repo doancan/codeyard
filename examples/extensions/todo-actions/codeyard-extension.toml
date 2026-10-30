@@ -3,7 +3,7 @@ id          = "codeyard.todo-actions"
 version     = "0.1.0"
 name        = "TODO Actions"
 license     = "MIT"
-description = "Mark TODO comments done, or collect them."
+description = "Mark TODO comments done, or collect them; hover and completion for TODO markers."
 
 [code]
 entry = "Cargo.toml"
@@ -11,6 +11,15 @@ entry = "Cargo.toml"
 # Codeyard asks for actions (the light bulb, Cmd+.) in files of these languages.
 [[code-actions]]
 languages = ["rust", "markdown"]
+
+# Hover text for TODO markers, shown next to the language server's.
+[[hover]]
+languages = ["rust", "markdown"]
+
+# Completions for markers in comments; typing a word asks, and so does `/` (the end of `//`).
+[[completion]]
+languages = ["rust", "markdown"]
+trigger-characters = ["/"]
 
 [[commands]]
 id    = "list"

@@ -73,6 +73,8 @@ mod ext_core_commands_tests;
 #[cfg(test)]
 mod ext_dev_tests;
 mod ext_fetch;
+#[cfg(test)]
+mod ext_hover_tests;
 mod ext_inspector;
 #[cfg(test)]
 mod ext_inspector_ui_tests;

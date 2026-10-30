@@ -699,3 +699,27 @@ fn providers_declare_languages_and_start_the_extension_for_them() {
     assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[diagnostics]]\nid = \"Bad\"\nlanguages = [\"rust\"]\n")), vec![Code::BadContribution]);
     assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[formatters]]\nlanguage = \"toml\"\n")), vec![Code::Syntax]);
 }
+
+#[test]
+fn hover_and_completion_declare_languages_and_trigger_characters() {
+    let m = parse(&with(
+        "[code]\nentry = \"Cargo.toml\"\n[[hover]]\nlanguages = [\"toml\"]\n[[completion]]\nlanguages = [\"toml\", \"rust\"]\ntrigger-characters = [\".\", \":\", \".\"]\n",
+    ))
+    .unwrap();
+    let c = &m.contributions;
+    assert!(c.hover[0].handles("toml") && !c.hover[0].handles("rust"));
+    assert!(c.completion[0].handles("rust"));
+    assert_eq!(c.completion[0].trigger_characters, ['.', ':'], "a character named twice counts once");
+    assert_eq!(m.activation, [Activation::Language("toml".into()), Activation::Language("rust".into())]);
+    // Without trigger characters, typing a word or asking still works.
+    let m = parse(&with("[code]\nentry = \"Cargo.toml\"\n[[completion]]\nlanguages = [\"toml\"]\n")).unwrap();
+    assert!(m.contributions.completion[0].trigger_characters.is_empty());
+    assert_eq!(codes(&with("[[hover]]\nlanguages = [\"toml\"]\n")), vec![Code::NeedsCode]);
+    assert_eq!(codes(&with("[[completion]]\nlanguages = [\"toml\"]\n")), vec![Code::NeedsCode]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[hover]]\nlanguages = []\n")), vec![Code::BadContribution, Code::NeverActivates]);
+    for bad in ["\"ab\"", "\"a\"", "\" \"", "\"\"", "\"_\"", "\"\\u202e\""] {
+        let toml = format!("[code]\nentry = \"Cargo.toml\"\n[[completion]]\nlanguages = [\"toml\"]\ntrigger-characters = [{bad}]\n");
+        assert_eq!(codes(&with(&toml)), vec![Code::BadContribution], "{bad}");
+    }
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[completion]]\nlanguages = [\"toml\"]\ntrigger = [\".\"]\n")), vec![Code::Syntax]);
+}

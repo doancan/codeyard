@@ -1,6 +1,7 @@
 //! Editor: what code extensions put on a document (docs/plugin-architecture.md §5.1). Decorations are drawn with tones,
 //! never colours of the extension's choosing, so themes and high contrast keep working. The formatter that runs on save
-//! is chosen and asked by the Workbench; the editor only waits for its edits, as it does for a language server.
+//! is chosen and asked by the Workbench; the editor only waits for its edits, as it does for a language server. Hover and
+//! completion are in editor_ext_lang.rs.
 
 use std::rc::Rc;
 
@@ -8,6 +9,10 @@ use ext_api::value::{DecorationPlace, Tone};
 use futures::channel::oneshot;
 
 use super::*;
+
+/// Hover and completion from extensions.
+#[path = "editor_ext_lang.rs"]
+pub mod lang;
 
 /// What the Workbench needs to ask a formatter: the document as it is now.
 pub struct FormatJob {
@@ -40,6 +45,7 @@ pub struct LineDecoration {
 pub struct ExtMarks {
     pub decorations: Vec<LineDecoration>,
     pub save_formatter: Option<SaveFormatter>,
+    pub lang: lang::ExtLangState,
 }
 
 /// The palette colour of a tone.
