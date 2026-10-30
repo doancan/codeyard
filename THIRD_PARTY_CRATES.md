@@ -139,19 +139,19 @@ Crates marked vendored live in `vendor/`.
 | cpp_demangle | 0.5.1 | MIT OR Apache-2.0 |  |
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 |  |
 | cpufeatures | 0.3.1 | MIT OR Apache-2.0 |  |
-| cranelift-assembler-x64 | 0.137.0 | Apache-2.0 WITH LLVM-exception |  |
-| cranelift-assembler-x64-meta | 0.137.0 | Apache-2.0 WITH LLVM-exception |  |
-| cranelift-bforest | 0.137.0 | Apache-2.0 WITH LLVM-exception |  |
-| cranelift-bitset | 0.137.0 | Apache-2.0 WITH LLVM-exception |  |
-| cranelift-codegen | 0.137.0 | Apache-2.0 WITH LLVM-exception |  |
-| cranelift-codegen-meta | 0.137.0 | Apache-2.0 WITH LLVM-exception |  |
-| cranelift-codegen-shared | 0.137.0 | Apache-2.0 WITH LLVM-exception |  |
-| cranelift-control | 0.137.0 | Apache-2.0 WITH LLVM-exception |  |
-| cranelift-entity | 0.137.0 | Apache-2.0 WITH LLVM-exception |  |
-| cranelift-frontend | 0.137.0 | Apache-2.0 WITH LLVM-exception |  |
-| cranelift-isle | 0.137.0 | Apache-2.0 WITH LLVM-exception |  |
-| cranelift-native | 0.137.0 | Apache-2.0 WITH LLVM-exception |  |
-| cranelift-srcgen | 0.137.0 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-assembler-x64 | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-assembler-x64-meta | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-bforest | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-bitset | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-codegen | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-codegen-meta | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-codegen-shared | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-control | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-entity | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-frontend | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-isle | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-native | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
+| cranelift-srcgen | 0.137.1 | Apache-2.0 WITH LLVM-exception |  |
 | crc32fast | 1.5.3 | MIT OR Apache-2.0 |  |
 | critical-section | 1.2.0 | MIT OR Apache-2.0 |  |
 | crossbeam-deque | 0.8.8 | MIT OR Apache-2.0 |  |
@@ -482,8 +482,8 @@ Crates marked vendored live in `vendor/`.
 | profiling-procmacros | 1.0.18 | MIT OR Apache-2.0 |  |
 | psm | 0.1.32 | MIT OR Apache-2.0 |  |
 | pulldown-cmark | 0.13.5 | MIT |  |
-| pulley-interpreter | 50.0.0 | Apache-2.0 WITH LLVM-exception |  |
-| pulley-macros | 50.0.0 | Apache-2.0 WITH LLVM-exception |  |
+| pulley-interpreter | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| pulley-macros | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
 | pulp | 0.22.3 | MIT |  |
 | pulp-wasm-simd-flag | 0.1.1 | MIT |  |
 | pxfm | 0.1.30 | BSD-3-Clause OR Apache-2.0 |  |
@@ -756,20 +756,20 @@ Crates marked vendored live in `vendor/`.
 | wasmparser | 0.261.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | wasmparser | 0.262.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | wasmprinter | 0.261.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
-| wasmtime | 50.0.0 | Apache-2.0 WITH LLVM-exception |  |
-| wasmtime-environ | 50.0.0 | Apache-2.0 WITH LLVM-exception |  |
-| wasmtime-internal-component-macro | 50.0.0 | Apache-2.0 WITH LLVM-exception |  |
-| wasmtime-internal-component-util | 50.0.0 | Apache-2.0 WITH LLVM-exception |  |
-| wasmtime-internal-core | 50.0.0 | Apache-2.0 WITH LLVM-exception |  |
-| wasmtime-internal-cranelift | 50.0.0 | Apache-2.0 WITH LLVM-exception |  |
-| wasmtime-internal-fiber | 50.0.0 | Apache-2.0 WITH LLVM-exception |  |
-| wasmtime-internal-jit-debug | 50.0.0 | Apache-2.0 WITH LLVM-exception |  |
-| wasmtime-internal-jit-icache-coherence | 50.0.0 | Apache-2.0 WITH LLVM-exception |  |
-| wasmtime-internal-unwinder | 50.0.0 | Apache-2.0 WITH LLVM-exception |  |
-| wasmtime-internal-versioned-export-macros | 50.0.0 | Apache-2.0 WITH LLVM-exception |  |
-| wasmtime-internal-wit-bindgen | 50.0.0 | Apache-2.0 WITH LLVM-exception |  |
-| wasmtime-wasi | 50.0.0 | Apache-2.0 WITH LLVM-exception |  |
-| wasmtime-wasi-io | 50.0.0 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-environ | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-component-macro | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-component-util | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-core | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-cranelift | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-fiber | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-jit-debug | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-jit-icache-coherence | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-unwinder | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-versioned-export-macros | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-internal-wit-bindgen | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-wasi | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
+| wasmtime-wasi-io | 50.0.1 | Apache-2.0 WITH LLVM-exception |  |
 | wast | 262.0.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | wat | 1.262.0 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT |  |
 | wayland-backend | 0.3.17 | MIT |  |
