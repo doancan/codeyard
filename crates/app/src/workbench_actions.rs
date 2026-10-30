@@ -148,6 +148,8 @@ impl Workbench {
             .on_action(cx.listener(|this, _: &RunFileTests, _, cx| this.run_test(true, cx)))
             .on_action(cx.listener(|this, _: &ConfigureTasks, window, cx| this.configure_tasks(window, cx)))
             .on_action(cx.listener(|this, _: &TogglePanelPosition, _, cx| this.toggle_panel_position(cx)))
+            .on_action(cx.listener(|this, _: &MoveViewIntoNewWindow, window, cx| this.view_into_new_window(window, cx)))
+            .on_action(cx.listener(|this, _: &MoveViewBackToSideBar, _, cx| this.return_view_windows(cx)))
             .on_action(cx.listener(|this, _: &MovePanelLeft, _, cx| this.dock_panel(docks_glue::PanelDock::Left, cx)))
             .on_action(cx.listener(|this, _: &MovePanelRight, _, cx| this.dock_panel(docks_glue::PanelDock::Right, cx)))
             .on_action(cx.listener(|this, _: &MovePanelToBottom, _, cx| this.dock_panel(docks_glue::PanelDock::Bottom, cx)))

@@ -194,6 +194,7 @@ impl Workbench {
     pub(super) fn use_editor_window(&mut self, slot: usize, cx: &mut Context<Self>) {
         let Some(ed) = self.chrome.editor_windows.iter().find(|d| d.slot == slot).map(|d| d.editor.clone()) else { return };
         if self.chrome.editor_host != Some(slot) {
+            self.chrome.view_host = None;
             self.chrome.editor_host = Some(slot);
             cx.notify();
         }
@@ -203,6 +204,7 @@ impl Workbench {
     /// The main window is in use again.
     pub(super) fn leave_editor_window(&mut self) {
         self.chrome.editor_host = None;
+        self.chrome.view_host = None;
     }
 
     /// Something is shown in the main window's tabs (a file opened from an editor's window, a group focused): the

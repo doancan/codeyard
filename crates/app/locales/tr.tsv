@@ -3324,3 +3324,8 @@ In the secondary side bar: {}	İkincil kenar çubuğunda: {}
 Panel: below the editor	Panel: düzenleyicinin altında
 Panel: left of the editor	Panel: düzenleyicinin solunda
 Panel: right of the editor	Panel: düzenleyicinin sağında
+View: Move View into New Window	Görünüm: Görünümü Yeni Pencereye Taşı
+View: Move View Back to Side Bar	Görünüm: Görünümü Kenar Çubuğuna Geri Taşı
+Open a view in a side bar first.	Önce bir kenar çubuğunda bir görünüm açın.
+No view is in a window of its own.	Kendi penceresinde açık görünüm yok.
+The view could not move to a new window: {}	Görünüm yeni bir pencereye taşınamadı: {}

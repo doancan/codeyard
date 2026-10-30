@@ -371,6 +371,7 @@ impl Workbench {
         let h = self.remote.host.clone();
         self.search.update(cx, |s, cx| s.set_context(h, None, cx));
         self.close_editor_windows(cx);
+        self.close_view_windows(cx);
         self.tabs = Default::default();
         self.tabs.active = None;
         self.tabs.opening = None;
