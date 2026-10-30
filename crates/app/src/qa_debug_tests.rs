@@ -359,3 +359,53 @@ fn inputs_are_asked_before_the_start_and_the_program_can_run_in_a_terminal(cx: &
     wait_secs(cx, 10, "the program ran in a terminal", |_| std::fs::read_to_string(&marker).is_ok_and(|t| t.trim() == "ran-in-terminal"));
     run(&wb, cx, "Debug: Stop");
 }
+
+/// "Break on Value Change" on a variable asks the adapter for the value's id (in that variable's scope) and sets a
+/// data breakpoint; it is listed, turned off and on (a disabled one is not sent, nor any while breakpoints are
+/// deactivated), removed, and belongs to its session only.
+#[gpui::test]
+fn data_breakpoints_from_a_variable_are_listed_toggled_removed_and_end_with_the_session(cx: &mut TestAppContext) {
+    if !have_python() {
+        return;
+    }
+    let home = project("dbg-data-home");
+    let (dir, log) = fake_project("dbg-data");
+    let (wb, cx) = setup_persistent(cx, &home);
+    open(&wb, &dir, cx);
+    run(&wb, cx, "Debug: Start Debugging");
+    let snap = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.debug_snapshot());
+    wait_secs(cx, 10, "stopped", |cx| snap(cx).is_some_and(|s| s.0 == "stopped:breakpoint"));
+    wait_secs(cx, 10, "the variables", |cx| wb.read_with(cx, |wb, _| wb.reference_for_test("x")).is_some());
+    wb.update_in(cx, |wb, window, cx| wb.open_variable_menu_for_test("x", window, cx));
+    let labels = wb.read_with(cx, |wb, cx| wb.menu_labels(cx)).expect("the variable's menu");
+    assert!(labels.iter().any(|l| l == "Break on Value Change"), "{labels:?}");
+    wb.update(cx, |wb, cx| wb.select_menu_for_test("Break on Value Change", cx));
+    let states = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.data_breakpoint_states_for_test());
+    wait_secs(cx, 10, "the data breakpoint", |cx| states(cx) == vec![("x (4 bytes)".to_string(), true)]);
+    assert!(log_lines(&log, "dataBreakpointInfo")[0].contains("\"variablesReference\": 10"), "asked in the variable's own scope");
+    assert!(log_lines(&log, "setDataBreakpoints").last().unwrap().contains("var:x"));
+
+    wb.update(cx, |wb, cx| wb.set_data_breakpoint_enabled_for_test(0, false, cx));
+    wait_secs(cx, 10, "an empty list sent", |_| log_lines(&log, "setDataBreakpoints").last().is_some_and(|l| l.contains("\"breakpoints\": []")));
+    assert_eq!(states(cx), vec![("x (4 bytes)".to_string(), false)], "still listed, turned off");
+    wb.update(cx, |wb, cx| wb.set_data_breakpoint_enabled_for_test(0, true, cx));
+    wait_secs(cx, 10, "sent again", |_| log_lines(&log, "setDataBreakpoints").last().is_some_and(|l| l.contains("var:x")));
+    run(&wb, cx, "Debug: Deactivate/Activate Breakpoints");
+    wait_secs(cx, 10, "none while deactivated", |_| log_lines(&log, "setDataBreakpoints").last().is_some_and(|l| l.contains("\"breakpoints\": []")));
+    run(&wb, cx, "Debug: Deactivate/Activate Breakpoints");
+    wait_secs(cx, 10, "back when active", |_| log_lines(&log, "setDataBreakpoints").last().is_some_and(|l| l.contains("var:x")));
+
+    wb.update(cx, |wb, cx| wb.remove_data_breakpoint_for_test(0, cx));
+    assert!(states(cx).is_empty());
+    wait_secs(cx, 10, "removed", |_| log_lines(&log, "setDataBreakpoints").last().is_some_and(|l| l.contains("\"breakpoints\": []")));
+
+    // A new one ends with its session: the next run starts without it.
+    wb.update(cx, |wb, cx| wb.add_data_breakpoint_for_test("x", cx));
+    wait_secs(cx, 10, "set again", |cx| states(cx).len() == 1);
+    run(&wb, cx, "Debug: Stop");
+    wait_secs(cx, 10, "ended", |cx| snap(cx).is_some_and(|s| s.0 == "ended"));
+    run(&wb, cx, "Debug: Start Debugging");
+    wait_secs(cx, 10, "stopped again", |cx| snap(cx).is_some_and(|s| s.0 == "stopped:breakpoint"));
+    assert!(states(cx).is_empty(), "data breakpoints are not carried into another session");
+    run(&wb, cx, "Debug: Stop");
+}

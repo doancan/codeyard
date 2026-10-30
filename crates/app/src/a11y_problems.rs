@@ -271,7 +271,8 @@ impl ViewsSnap {
 
 impl Workbench {
     pub(super) fn a11y_views(&self, window: &Window, cx: &App) -> ViewsSnap {
-        let search = (self.chrome.panel == Some(Panel::Search)).then(|| {
+        // Wherever the view is: either side bar or a window of its own (whose tree takes it from here).
+        let search = self.view_shown(Panel::Search).then(|| {
             let (status, rows, total) = self.search.read(cx).access_rows(MAX_SEARCH_ROWS);
             SearchSideSnap { status, rows, total }
         });
@@ -280,7 +281,7 @@ impl Workbench {
             panel: self.a11y_panel(),
             search,
             pages: self.a11y_pages(window, cx),
-            side: self.a11y_side(cx),
+            side: self.a11y_side(window, cx),
             consent: self.a11y_consent(window),
             row_focus: self.focused_row(window, cx),
         }

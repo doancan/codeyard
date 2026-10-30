@@ -68,7 +68,7 @@ impl Workbench {
     }
 
     /// A side view's content, for whichever side bar shows it.
-    fn side_view(&mut self, panel: Panel, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn side_view(&mut self, panel: Panel, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
         match panel {
             Panel::Explorer => self.explorer_panel(p, cx),
             Panel::Search => div()
@@ -191,6 +191,7 @@ impl Render for Workbench {
         self.sync_slots(cx);
         self.sync_timeline(cx);
         self.sync_outline(cx);
+        self.sync_ext_views_frame(cx);
         self.sync_update_window(window, cx);
         let remote = self.remote.host.is_remote();
         let project = self.root(cx).map(std::path::PathBuf::from);
@@ -236,8 +237,15 @@ impl Render for Workbench {
         };
         // A view asked for in the primary side bar that lives in the secondary one opens there.
         self.place_views();
+        self.place_window_views(window, cx);
         let sidebar = self.chrome.panel.map(|panel| self.side_view(panel, &p, cx));
         let secondary = self.chrome.secondary.map(|panel| self.side_view(panel, &p, cx));
+        // While a view is dragged: drop zones over each side (at least `ZONE_MIN` wide, also where no side bar is open).
+        const ZONE_MIN: f32 = 180.;
+        let bar = if cx.global::<Settings>().activity_bar { layout::ACTIVITYBAR_W } else { 0. };
+        let left_w = (bar + if sidebar.is_some() { self.chrome.sidebar_w } else { 0. }).max(ZONE_MIN);
+        let right_w = if secondary.is_some() { self.chrome.sidebar_w } else { ZONE_MIN };
+        let drop_zones = self.view_drop_zones(left_w, right_w, &p, cx);
 
         self.with_actions(div().id("workbench"), cx)
             .key_context("Workbench")
@@ -288,15 +296,21 @@ impl Render for Workbench {
                         this.finish_resize(cx);
                     }
                 }
+                // Docked left, the panel starts at the editor area's left edge and is resized from its right edge.
+                let left_dock = (this.chrome.panel_dock == docks_glue::PanelDock::Left).then(|| this.chrome.panel_area.map_or(0., |a| a.origin.x / px(1.)));
                 if this.chrome.resizing_term_list {
-                    // The list sits at the right edge of the panel, which is the right edge of the window.
+                    // The list sits at the right edge of the panel: the right edge of the window, or of a panel docked left.
                     let total = window.viewport_size().width / px(1.);
-                    this.chrome.term_list_w = term_list_width(total - ev.position.x / px(1.), this.panel_width(total));
+                    let right = left_dock.map_or(total, |x| x + this.chrome.panel_w);
+                    this.chrome.term_list_w = term_list_width(right - ev.position.x / px(1.), this.panel_width(total));
                     cx.notify();
                 }
-                if this.chrome.resizing_panel && this.chrome.panel_right {
+                if this.chrome.resizing_panel && this.chrome.panel_dock.beside() {
                     let total = window.viewport_size().width / px(1.);
-                    let w = total - ev.position.x / px(1.);
+                    let w = match left_dock {
+                        Some(x) => ev.position.x / px(1.) - x,
+                        None => total - ev.position.x / px(1.),
+                    };
                     this.chrome.panel_w = w.clamp(PANEL_MIN * 2., (total - 300.).max(PANEL_MIN * 2.));
                     cx.notify();
                 } else if this.chrome.resizing_panel {
@@ -307,12 +321,23 @@ impl Render for Workbench {
                 }
             }))
             // Finish before editor/terminal handlers can consume the release.
-            .capture_any_mouse_up(cx.listener(|this, ev: &gpui::MouseUpEvent, _, cx| {
+            .capture_any_mouse_up(cx.listener(|this, ev: &gpui::MouseUpEvent, window, cx| {
                 if ev.button == MouseButton::Left {
                     this.finish_resize(cx);
+                    // The drop zones go; a drop on one is still delivered for this release.
+                    this.end_view_drag(cx);
+                    // A tab released inside the window is the drop targets' business.
+                    this.end_tab_drag(ev.position, window, cx);
                 }
             }))
-            .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _, _, cx| this.finish_resize(cx)))
+            .on_mouse_up_out(
+                MouseButton::Left,
+                cx.listener(|this, ev: &gpui::MouseUpEvent, window, cx| {
+                    this.finish_resize(cx);
+                    // A tab released outside the window leaves it.
+                    this.end_tab_drag(ev.position, window, cx);
+                }),
+            )
             .on_action(cx.listener(|this, _: &crate::menus::FileMenu, w, cx| this.open_application_menu_by_index(0, w, cx)))
             .on_action(cx.listener(|this, _: &crate::menus::EditMenu, w, cx| this.open_application_menu_by_index(1, w, cx)))
             .on_action(cx.listener(|this, _: &crate::menus::SelectionMenu, w, cx| this.open_application_menu_by_index(2, w, cx)))
@@ -346,6 +371,7 @@ impl Render for Workbench {
             })
             .child(
                 div()
+                    .relative()
                     .flex()
                     .flex_1()
                     .min_h_0()
@@ -381,8 +407,10 @@ impl Render for Workbench {
                             .min_w_0()
                             .flex()
                             .relative()
-                            .when(!self.chrome.panel_right, |d| d.flex_col())
+                            .when(!self.chrome.panel_dock.beside(), |d| d.flex_col())
                             .child(Self::panel_area_probe(cx))
+                            // Docked left, the panel comes before the editor.
+                            .when(self.chrome.panel_open && self.chrome.panel_dock == docks_glue::PanelDock::Left, |d| d.child(self.panel(&p, cx)))
                             // A maximized panel takes the editor's place; while it grows or shrinks, the editor gives way.
                             .when(!(self.chrome.panel_open && self.chrome.panel_max) || self.chrome.panel_anim.is_some(), |d| {
                                 d.child(
@@ -399,7 +427,7 @@ impl Render for Workbench {
                                         .children(self.debug_toolbar(&p, cx)),
                                 )
                             })
-                            .when(self.chrome.panel_open, |d| d.child(self.panel(&p, cx))),
+                            .when(self.chrome.panel_open && self.chrome.panel_dock != docks_glue::PanelDock::Left, |d| d.child(self.panel(&p, cx))),
                     )
                     // The secondary side bar: views moved to the right of the editor.
                     .when_some(secondary.filter(|_| self.chrome.zen.is_none()), |d, s| {
@@ -413,13 +441,14 @@ impl Render for Workbench {
                                 .border_color(c(p.border))
                                 .child(s),
                         )
-                    }),
+                    })
+                    .children(drop_zones),
             )
             .when(self.chrome.zen.is_none() && cx.global::<Settings>().status_bar, |d| d.child(self.status_bar(&p, window.viewport_size().width / px(1.), cx)))
             .children(self.error_toast(&p, cx))
             .children(self.update_dialog(&p, cx))
             // A menu or picker opened from an editor's own window is drawn there.
-            .when(self.hosted_editor().is_none(), |d| {
+            .when(self.hosted_editor().is_none() && self.view_host_window().is_none(), |d| {
                 let menu_top = if self.menu.as_ref().is_some_and(|m| m.app_path.is_some()) { self.application_menu_bottom(window) } else { 0. };
                 let picker_top = if cfg!(target_os = "macos") {
                     layout::TITLEBAR_H + 4.
@@ -637,7 +666,7 @@ mod resize_tests {
     fn maximize_and_restore_animate_the_panel_size(cx: &mut TestAppContext) {
         let (wb, cx) = crate::qa_workbench_tests::setup(cx);
         wb.update(cx, |wb, cx| {
-            wb.chrome.panel_right = false;
+            wb.chrome.panel_dock = docks_glue::PanelDock::Bottom;
             wb.chrome.panel_open = true;
             cx.notify();
         });

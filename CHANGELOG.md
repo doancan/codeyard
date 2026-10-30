@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- An editor tab dragged out of the window and released outside it becomes a window of its own at that place, showing
+  the same document; released over another Codeyard window, the file opens there instead and its tab here closes (a
+  file with unsaved changes or on another machine stays, with a message).
+- A code extension's side bar view can move into a window of its own ("View: Move View into New Window") and to the
+  secondary side bar. It stays the same view: the extension's updates reach the window and what you do there goes to
+  the extension. The window is restored with the folder while the extension is installed, closes when the extension
+  is removed or turned off, and gives the view back to the side bar when the extension crashes.
+- Terminals in editor groups and in windows of their own, and the terminals of SSH folders, are taken back after a
+  restart the same way as a local folder's panel terminals: the same shells, in their places, with "Reconnected to
+  terminal session". SSH folders resume their session on the server's agent, which already kept the shells.
+- Setting `terminal.persistentSessionTimeout`: how many minutes terminals keep running for the next start after
+  Codeyard quits, crashes or is killed (default 5, at most 1440; 0: they end with the app). The agent protocol is
+  version 17.
+- "Break on Value Change" in a variable's right-click menu sets a data breakpoint on it (when the debugger supports
+  them). Data breakpoints are listed in the Breakpoints section, where each can be turned off or removed by mouse,
+  keyboard (Enter, Shift+F10) or screen reader; they last for their debug session.
+- Screen readers get the painted bounds of the rows of the Settings and Keyboard Shortcuts pages and of menu items
+  (none for a row scrolled out of view).
+- On macOS and Linux, the panel's terminals of a local folder keep running when Codeyard quits, crashes or is killed
+  (with `window.restoreSession`, the default). Opening the folder again within 5 minutes brings the same shells back,
+  with their output from meanwhile, and says "Reconnected to terminal session". A terminal that cannot be taken back is
+  a new shell as before, and nothing is ever typed into it. Terminals no window takes back are ended after 5 minutes.
+  Closing the window or the folder, or opening another one, still ends them at once. Terminals another Codeyard
+  instance has open stay with it: the window starts new shells and says so. The agent protocol is version 16.
 - The lists of the Run and Debug view, the Testing view, the Remote Explorer and the Ports panel work with the keyboard:
   Tab reaches them, Up/Down/Home/End move a cursor row shown in the focus colour, and Enter does what a click on the
   row does. Shift+F10 (and the Menu key) opens the focused row's menu under it and Escape returns to the row; the same
@@ -49,16 +73,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   10,000 rows draw only the rows on screen, and trees load one page at a time. The tree arrives as JSON
   (docs/extensions/reference/ui.md), is checked, and is diffed by key so typed text, ticks, selections and expanded
   items survive a re-render. Every element is reachable by keyboard and announced with its role and label. Each view
-  names its publisher, and none can cover the consent sheet or take the keyboard from it. Images from URLs are not
-  drawn yet (they wait for `net` fetching).
+  names its publisher, and none can cover the consent sheet or take the keyboard from it.
+- Extension views show `image` elements with an `https` URL: Codeyard fetches them through the extension's `net`
+  permission (declared hosts only, ext-net's address checks, at most 1 MB, formats GPUI decodes), only while the view
+  is on screen and never in an untrusted folder, and keeps them by URL until the view closes. A refused image shows
+  its alt text and the denial is listed in the Inspector.
+- A view's `when` in the manifest: a view is offered in the activity bar, the panel tabs and *Open View* only while
+  its `when` holds, and an open view closes when it turns false.
+- `views.keystroke_frame_ms` (`CODEYARD_PERF`): a key that reaches an extension view, to the frame that shows it. The
+  row in `perf/metrics.json` is `warn` until `scripts/perf/run.sh` has a scenario for it.
 - What code extensions contribute reaches the same places as the core's: commands in the editor and file-tree menus
   (with `when` and `enablement`), on key bindings and on status bar items; formatters for *Format Document* and format
-  on save (chosen per language with `editor.formatters`); code actions in *Quick Fix…*; diagnostics in the Problems view
+  on save (chosen per language with `editor.formatters`); code actions in *Quick Fix…*, whose edits change the document they were asked for and other files only within the
+  extension's `write` (one refused file refuses the whole action); diagnostics in the Problems view
   and the editor, tagged with the extension; gutter, line and after-the-line decorations in theme tones; and tasks in
   *Tasks: Run Task…*. Providers answer within a deadline and are cancelled when you type, so they never hold up typing;
   a late answer is dropped and noted in the extension's log. What an extension showed goes when it is disabled,
   uninstalled or crashes. The manifest gains `[[menus]]`, `[[status-bar]]`, `[[formatters]]`, `[[code-actions]]`,
   `[[diagnostics]]`, `[[decorations]]` and `[[tasks]]`, checked like the other contributions.
+- View-title menus: `[[menus]]` entries with `location = "view-title"` appear under a **…** button in the title bar
+  of that extension view (sidebar, bottom panel or editor), with `when` and `enablement`, and run the command with the
+  view's id as its argument.
+- Core commands for extensions: a public list (docs/extensions/reference/core-commands.md, generated from
+  `ext_manifest::core_commands`) of Codeyard commands an extension may run with `commands.execute("core:…")`: Zen mode,
+  Settings, the file explorer, reveal the active file, Problems, Save All, Format Document, open a file and run a task.
+  Each names the permission it implies, which the extension must hold too (Save All: `write` on every unsaved file;
+  opening a file: `read` on it; a task: its program in `run`, and a single program, not a shell line), checked with the
+  permissions in effect in that window. A command not in the list is refused with the fix, and `cyx check` warns about
+  one in `permissions.commands`. Menus may name listed core commands that take no argument.
+- `codeyard --install-extension FOLDER` installs a built extension folder as it is, without building it.
+- Performance scenarios for typing with two decoration providers and for the provider platform overhead
+  (`CODEYARD_PERF_DECORATIONS`, `CODEYARD_PERF_PROVIDERS`, run by `scripts/perf/run.sh` with a small decoration
+  provider installed twice); both rows stay warn-only until a baseline has them.
 - Code extensions run: their commands appear in the command palette, and the first one starts the extension in its
   own `codeyard-exthost` process. Every file, search and process call is checked against the extension's declared
   permissions and the folder's trust before it reaches the folder, locally and over SSH; a denial says which line to
@@ -109,6 +155,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   save when no other tab or window shows it. "View: Move Editors Back to Main Window" returns all of them, and the
   windows come back in place after a restart (a file that is also opened as a tab keeps its tab). The command palette,
   the right-click menu, Go to Line and the other commands and shortcuts work in that window and act on its editor.
+- "View: Move View into New Window" shows the open side view (Explorer, Search, Source Control, Run and Debug,
+  Testing, Remote Explorer, Extensions) in a window of its own, the same view with the same state. Its icon and
+  commands bring that window forward; the command palette, shortcuts, menus and pickers work there. Closing the window
+  or "View: Move View Back to Side Bar" puts it back in the side bar it came from. The windows are saved with the
+  folder and come back with it, on an attached display; screen readers find the view in its window.
+- A side view moves to the other side bar by dragging its activity bar icon there; while it is dragged, both sides
+  show a highlighted drop zone. The panel docks left of, right of or below the editor ("View: Move Panel Left",
+  "View: Move Panel Right", "View: Move Panel to Bottom"), and the dock is restored at the next start. Screen readers
+  read which view each side bar shows and where the panel is from the window's description.
 - Screen readers see the editor in its own window (title, text, caret and selection, find bar, suggestions, the
   picker opened there) and the terminal in its own window, as in the main window.
 - Terminals come back after a restart as new shells in their folders, with their titles, colors and programs, and say
@@ -130,6 +185,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a variable can never become more shell code, and Stop ends the processes it started.
 - The Linux agent's size budget is 1664 KB (was 1600 KB): running tasks as processes on the server needs its own
   request in the protocol.
+
+### Fixed
+
+- Windows: a shell task's arguments run through cmd.exe reach the program unchanged when they contain `%` (a value like
+  `%PATH%` is no longer expanded) or end with a backslash (`C:\dir\` no longer swallows the closing quote).
+- Screen readers find the Search results in the secondary side bar too, not only in the primary one.
+- Screen readers find an extension's side bar view when it is in the secondary side bar.
+- On macOS and Linux, a task, test run, language server or terminal no longer keeps running when Codeyard is killed or
+  crashes. A small guard process started with the app ends every task's process group at once and hangs up every
+  terminal, killing it after two seconds if it is still there. Windows already ends them through job objects and the
+  pseudo console.
 
 ## [0.6.0] - 2026-10-29
 

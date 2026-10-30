@@ -135,10 +135,12 @@ Both, Incoming First
 Bottom panel	
 Box invisible and look-alike Unicode characters (zero-width spaces, bidi controls, Cyrillic letters inside Latin words)	
 Branch {}	
+Break on Value Change	
 Breaking on: {}	
 Breakpoints	
 Breakpoints are active.	
 Breakpoints are deactivated: the program runs past them.	
+Breaks when the value is written; for this debug session only.	
 Bring a folder's tabs and unsaved changes back when you open it	
 Build and Open	
 Build failed: {}	
@@ -797,6 +799,7 @@ Explorer (⇧⌘E)
 Export as Text…	
 Exposed only; not published on the server.	
 Extension Inspector	
+Extension View	
 Extension id, like publisher.name or publisher.name@1.2.0	
 Extension in development not loaded: {}	
 Extension in development: it reloads when you save a file in its folder	
@@ -1066,6 +1069,7 @@ Import VS Code Settings and Shortcuts
 Imported {0} settings and {1} shortcuts from VS Code ({2} settings and {3} shortcuts have no equivalent here)	
 In Privacy & Security, press + and add Codeyard, then turn it on.	
 In the file tree, type to jump to a name; ⇧→ opens everything inside a folder, ⇧← closes it.	
+In the secondary side bar: {}	
 Incoming	
 Indent of each folder level in the explorer (px)	
 Indent using 2 spaces	
@@ -1257,6 +1261,7 @@ Minified
 Minimal	
 Minimize	
 Minimize window	
+Minutes the terminals keep running for the next start after Codeyard quits, crashes or is killed (0: not kept)	
 Missing value for Cargo option {}	
 Modified	
 Modules	
@@ -1418,6 +1423,7 @@ No timestamp
 No type definition found	
 No unsaved changes: the file matches what is on disk.	
 No version of this extension can be installed: they were withdrawn or revoked.	
+No view is in a window of its own.	
 No view is in the secondary side bar. Use View: Move View to Secondary Side Bar.	
 No workspace file is open.	
 No workspace file is open. Use File: Save Workspace As… to create one.	
@@ -1520,6 +1526,7 @@ Open a folder to find its tests.
 Open a folder to search in it.	
 Open a project, connect to a host, or switch workspace	
 Open a terminal with…	
+Open a view in a side bar first.	
 Open a view in the side bar first.	
 Open an HTML file or a project folder to start Web Preview.	
 Open as Hex	
@@ -1549,6 +1556,9 @@ Output
 Output: Clear	
 Overview	
 Overwrite	
+Panel: below the editor	
+Panel: left of the editor	
+Panel: right of the editor	
 Passphrase	
 Password	
 Paste	
@@ -1617,6 +1627,8 @@ Previous Problem
 Previous match (⇧↵)	
 Previous result (⇧F4)	
 Previous session ended; started a new shell	
+Primary Side Bar	
+Primary side bar: {}	
 Problems	
 Problems: Copy Full Diagnostic	
 Problems: {}	
@@ -1706,6 +1718,7 @@ Recent
 Recent denials	
 Reconnect	
 Reconnect to {}	
+Reconnected to terminal session	
 Reconnected, but the server session had expired: terminals were closed.	
 Reconnected. Terminals kept running.	
 Reconnecting to {0} (attempt {1})	
@@ -1893,6 +1906,7 @@ Save copy
 Save files automatically	
 Save or close the files with unsaved changes first.	
 Save project as	
+Save the file first: a tab with unsaved changes cannot move to another window.	
 Save the file to finish, then stage it in Source Control.	
 Save theme	
 Save user@host to ~/.ssh/config and connect	
@@ -1936,6 +1950,8 @@ Search: Structural Search…
 Search: Undo Last Replace	
 Search: {}	
 Searching…	
+Secondary Side Bar	
+Secondary side bar: {}	
 Seconds between background fetches	
 Select All	
 Select All Occurrences	
@@ -2212,6 +2228,7 @@ The debug adapter exited before it started listening
 The debug adapter stopped	
 The debug adapter stopped (exit code {})	
 The debugger could not bind this breakpoint.	
+The destination window is no longer available.	
 The download finished but js-debug was not found in it.	
 The editor could not move to a new window: {}	
 The element can't be renamed.	
@@ -2273,6 +2290,7 @@ The update couldn't be verified
 The update failed part-way and Codeyard couldn't put the previous version back. It may be at {0}. If Codeyard doesn't start, move it back to {1}.	
 The update failed. Click for details.	
 The version that was on disk has been kept in Local History.	
+The view could not move to a new window: {}	
 The workspace changed. Open the source project and review its container configuration again.	
 The workspace file lists no folder that exists on this computer.	
 The workspace file no longer exists on this computer.	
@@ -2339,6 +2357,7 @@ This release has no installer for this system. Download it from the release page
 This replacement is too large to preview. Narrow the search (fewer files or matches).	
 This repository has no remote. Add one with Git: Add Remote…	
 This search belongs to {0} on {1}, which this window does not show. Results cannot be opened or replaced here.	
+This tab cannot move to that window: its folder is on another machine.	
 This view is not available.	
 This window is installing an update. You can close it in a few seconds.	
 Thursday	
@@ -2464,6 +2483,11 @@ View: Move Editor into New Window
 View: Move Editor into Other Group	
 View: Move Editors Back to Main Window	
 View: Move Panel (bottom ⇄ right)	
+View: Move Panel Left	
+View: Move Panel Right	
+View: Move Panel to Bottom	
+View: Move View Back to Side Bar	
+View: Move View into New Window	
 View: Move View to Primary Side Bar	
 View: Move View to Secondary Side Bar	
 View: Open Next Editor	
@@ -2567,6 +2591,7 @@ a program
 a string is not closed	
 a theme must be a JSON object	
 about {0} MB · {1}	
+another Codeyard window has them; started new shells	
 approved	
 args must be a list of texts	
 at {}	
@@ -2715,6 +2740,7 @@ no item {} in the response
 no upstream	
 no “{}” in the response	
 not UTF-8	
+not a PNG, JPEG, GIF, WebP or SVG image	
 not available	
 not declared	
 not run	
@@ -2803,6 +2829,7 @@ the folder cannot be read on the right
 the folder is not trusted	
 the folder {} no longer exists; started a new shell in the workspace folder	
 the header “{}” is not valid	
+the image is larger than {} bytes	
 the keychain did not answer	
 the keychain refused the account: {}	
 the launch file is not an object	
@@ -2814,6 +2841,7 @@ the repository may be private: sign in with `gh auth login` or set GITHUB_TOKEN
 the response body is not JSON	
 the response of “{}” has no header {}	
 the saved state is damaged	
+the server answered {}	
 the sign-in expired; sign in again	
 the sign-in failed: {}	
 the sign-in was refused ({})	
@@ -2974,6 +3002,7 @@ your words
 {} already exists. Choose another name.	
 {} asks for permissions: install it from the Extensions view to review them	
 {} bookmark|{} bookmarks	
+{} bytes of output were lost while no window was attached	
 {} cannot be negated	
 {} cannot be parsed as JSON	
 {} cannot be parsed as a number	

@@ -196,6 +196,26 @@ Opening a file from Explorer or Quick Open restores a maximized terminal panel t
 Control, Run and Debug, Testing, Remote, Extensions) to a second side bar on the right of the editor; its activity bar
 icon and commands then open it there, next to whatever the left side bar shows. "View: Move View to Primary Side Bar"
 moves it back and "View: Toggle Secondary Side Bar" hides or shows it; the arrangement comes back at the next start.
+You can also drag a view's activity bar icon to the other side: while you drag, the left and right edges of the window
+show a highlighted drop zone, and the view opens in the side bar you drop it on. The panel (terminal, Problems,
+Output) docks below the editor or beside it: "View: Move Panel Left", "View: Move Panel Right" and "View: Move Panel
+to Bottom" (or the button in the panel's header); a panel docked beside the editor is resized from its edge towards the
+editor, and the dock is kept for the next start. Screen readers read which view each side bar shows and where the panel
+is in the window's description. Drag an editor tab out of the window and release it outside: over another Codeyard
+window, the file opens there and its tab here closes (a file with unsaved changes, or one on another machine than that
+window's folder, stays where it is and the status bar says why); anywhere else, the tab becomes a window of its own at
+that place, showing the same document (as "View: Move Editor into New Window" does).
+"View: Move View into New Window" moves the open side view (Explorer, Search, Source Control, Run and Debug, Testing,
+Remote Explorer, Extensions) into a window of its own, for example on another display. It is the same view: what you
+select, expand or type there is what the side bar would have shown. Its activity bar icon and commands then bring that
+window to the front instead of opening it in a side bar; the command palette, shortcuts, its right-click menus and
+pickers work in that window. Closing the window, ⌘W in it, or "View: Move View Back to Side Bar" puts the view back in
+the side bar it came from. The windows belong to the folder: they are saved with it, close when the folder or the
+connection changes (their views going back to the side bars), and come back when the folder opens again, on an
+attached display. Screen readers find the view in its own window, named after the view. A code extension's side bar
+view moves the same way (and to the secondary side bar): it stays the same view, so what the extension draws reaches
+the window and what you do there goes to the extension. Its window comes back only while the extension is installed;
+it closes when you remove or turn off the extension, and the view returns to the side bar if the extension crashes.
 "Terminal: Move Terminal into New Window" moves the active terminal, with its running program, into a window of its own
 (the same terminal, not a copy). Closing that window puts the terminal back in the panel, still running;
 "Terminal: Move Terminals Back to Panel" does it for all of them. A detached terminal belongs to its editor window and
@@ -222,9 +242,21 @@ own window the command palette, Quick Open, Go to Line, the right-click menu and
 as in the main window and act on that window's editor; a command that shows something in the main window (another
 file, a side view) brings it to the front. Screen readers see the editor in its own window, and the terminal in its
 own window, the same way as in the main window.
-**Terminals after a restart.** With `window.restoreSession` on (the default), the panel's terminals come back when
-the folder opens again: same order, folder, title, color and program. Each one is a **new shell**: nothing that ran before
-is started or typed again, and a line says *Previous session ended; started a new shell*. If a terminal's folder is gone,
+**Terminals after a restart.** With `window.restoreSession` on (the default), a folder's terminals come back when the
+folder opens again: the panel's in the same order, and those you moved into an editor group or a window of their own in
+those places, with the same folder, title, color and program. Their shells keep running when you are expected to come
+back: when you **quit** Codeyard (⌘Q, Quit in the menu, an update's restart), or when it crashes or is killed. A local
+folder's terminals run in a small background process of Codeyard's (the terminal daemon, on macOS and Linux); an SSH
+folder's already run in Codeyard's agent on the server. Leaving on purpose ends them at once, as always: **closing the
+window** (even the last one), *Close Folder*, opening another folder in the window or connecting elsewhere. Open the
+folder again within `terminal.persistentSessionTimeout` minutes (5 by default, at most 1440; 0 keeps nothing) and you get
+**the same shells back**, still running, with what they printed meanwhile and a line *Reconnected to terminal session*
+(also announced in the status bar). If another Codeyard instance already has a local folder's terminals open, they stay
+with it: this window starts new shells and says so in the status bar. If more than the last 256 KB of a terminal's output
+came while no window was open, the line says how much was lost. A terminal no window takes back in time is ended; the
+local daemon stops 10 minutes after its last terminal. Any terminal that cannot be taken back (it ended, the daemon or
+the server was restarted, `window.restoreSession` is off, Windows for a local folder) is a **new shell**: nothing that
+ran before is started or typed again, and a line says *Previous session ended; started a new shell*. If a terminal's folder is gone,
 it starts in the workspace folder and says so. `"terminal.persistentScrollback": 1000` also keeps the last lines of each
 terminal's history (plain text, with colors and control sequences removed) and shows them above that line; it is 0 (off) by
 default, because history can contain secrets. "Terminal: Clear Saved Terminal History" removes the saved history now.
@@ -745,11 +777,19 @@ in the bottom panel, or a page in the editor area (also *Open View: …* in the 
 with your theme, so they follow theme and zoom changes, and they work with the keyboard (Tab between controls, arrows
 in lists and trees) and screen readers. Each view names its publisher at the top. A view stays in its place: it cannot
 cover Codeyard's install, trust or sign-in sheets, or take the keyboard while one of them waits for you. Images in its
-text are not loaded, and a link opens in your browser only after you confirm its address.
+text are not loaded, and a link opens in your browser only after you confirm its address. An image element with a web
+address is loaded by Codeyard, only from a site the extension asked for on its install sheet, never in a folder you have
+not trusted, and only while the view is on screen; anything else shows the image's description. A view can also be
+offered only in some situations, for example while a Rust file is open; it closes by itself when that stops.
 **What extensions with code add.** Everything they put on screen names the extension.
 
 - *Commands* in the palette, in the editor's and the file tree's right-click menus (after the built-in entries, greyed
-  out when they do not apply), and on keys an extension binds (never a built-in key). A file-tree entry gets the file.
+  out when they do not apply), under the **…** button in the title bar of the extension's own views, and on keys an
+  extension binds (never a built-in key). A file-tree entry gets the file.
+- *Codeyard commands* run by an extension, from the short list in its docs (Zen mode, Save All, Format Document, open
+  a file, run a task …): only the ones its sheet lists under "Run Codeyard commands", and only on files and programs
+  it may use anyway. Saving all files needs write access to every unsaved file, and running a task needs its program
+  in the extension's list.
 - *Status bar items*, which run a command when clicked.
 - *Formatters.* *Format Document* and `editor.formatOnSave` use the extension that formats the file's language when
   there is no language server for it; `editor.formatters` chooses per language, for example
@@ -818,7 +858,9 @@ Opening an extension's page in the Market fetches that page once.
 
 From a terminal or a script, `codeyard --install-extension FILE.cyx` or `--install-extension publisher.name[@1.2.0]`
 (repeat the flag for several) installs without opening a window; running it is your consent, and the same checks
-apply. A changed publisher or an old registry list is refused there, with the reason: use the Extensions view.
+apply. A folder with a built extension (its manifest and, for code, `extension.wasm`) installs the same way, packaged
+as it is, without building it. A changed publisher or an old registry list is refused there, with the reason: use the
+Extensions view.
 
 **Manage.** Choose an extension in the list to open its page: contributions, permissions and these actions:
 
@@ -1017,8 +1059,10 @@ Swift use `lldb-dap` (from PATH or Xcode via `xcrun`). Add `.vscode/launch.json`
 `"debugAdapter": { "command": "…", "args": [] }` to use your own adapter. Click the gutter or press F9
 for a breakpoint; the file opens on the paused line, the Run and Debug view lists the call stack, the
 variables (click to expand) and the bottom panel's Debug Console evaluates expressions; `Debug: Add Watch Expression…` keeps expressions evaluated at
-every stop, hovering an expression shows its value while paused, `Debug: Break When Value Changes…` stops the
-program whenever a variable is written, `Debug: Break on Exceptions…` toggles
+every stop, hovering an expression shows its value while paused, `Debug: Break When Value Changes…` (or "Break on
+Value Change" in a variable's right-click menu, when the debugger supports it) stops the program whenever a variable
+is written; such data breakpoints are listed first under Breakpoints, where you can turn them off or remove them, and
+last only for that debug session (the debugger's id for a value means nothing in the next run), `Debug: Break on Exceptions…` toggles
 the adapter's exception filters, and several threads get a list; local variables also appear at
 the end of the lines that use them. `Debug: Edit Breakpoint…` makes a conditional breakpoint (`i == 3`),
 a logpoint (`log: i is {i}`) or a hit-count one (`hit: >= 5`). Node needs Microsoft's js-debug:

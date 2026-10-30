@@ -145,8 +145,15 @@ pub(super) struct ChromeLayout {
     pub(super) editor_windows: Vec<super::editor_windows_glue::DetachedEditor>,
     /// The view slot of the editor window in use: commands act on its editor and its menus and pickers are drawn there.
     pub(super) editor_host: Option<usize>,
+    /// Side views in windows of their own, and the one in use (its menus and pickers are drawn there).
+    pub(super) view_windows: Vec<super::view_windows_glue::ViewWindowEntry>,
+    pub(super) view_host: Option<gpui::AnyWindowHandle>,
     /// Panel on the right (next to the editor) and its width; maximized (covers the editor).
-    pub(super) panel_right: bool,
+    pub(super) panel_dock: super::docks_glue::PanelDock,
+    /// A side view being dragged by its activity bar icon (the side bars are drop zones meanwhile).
+    pub(super) view_drag: Option<Panel>,
+    /// The editor tab being dragged and the group it left (a release outside the window takes it out).
+    pub(super) tab_drag: Option<(Entity<EditorView>, super::GroupKey)>,
     pub(super) panel_w: f32,
     pub(super) panel_max: bool,
     /// A running maximize/restore animation: when it started and whether it maximizes.
@@ -228,6 +235,18 @@ pub(super) struct PersistState {
     pub(super) pinned: Vec<(Option<String>, String)>,
     /// Recent entry opened over SSH: if it can't connect or the folder is missing, asks "remove from the list?".
     pub(super) opening_recent: Option<RecentWorkspace>,
+    /// This window's session on the terminal daemon, and the daemon socket to use (workbench_term_daemon.rs).
+    pub(super) term_daemon: Option<super::term_daemon_glue::TermDaemon>,
+    pub(super) term_socket: Option<std::path::PathBuf>,
+    /// The window's session is being taken back; terminals outside the panel wait in `pending_moved` until it is.
+    pub(super) term_restoring: bool,
+    pub(super) pending_moved: Option<super::term_tabs_glue::restore::SavedTerminals>,
+    /// Terminals outside the panel taken back before their places were restored (by position), waiting for them.
+    pub(super) moved_back: Vec<(usize, host::Pty, u64)>,
+    /// The app is quitting and this window's terminals are kept for the next start: nothing ends them on the way out.
+    pub(super) keeping_terminals: bool,
+    /// The SSH session id this window resumed, so no other window of the app takes it.
+    pub(super) remote_claim: Option<super::term_daemon_glue::Claim>,
 }
 
 /// Connection: host machine, SSH details and pending questions (see workbench_folder.rs).

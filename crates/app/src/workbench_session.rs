@@ -144,6 +144,7 @@ impl Workbench {
         }
         self.persist_moved_terminals(cx);
         self.persist_editor_windows(cx);
+        self.persist_view_windows();
         self.persist_search_editors(cx);
         self.persist_terminals(cx);
     }
@@ -253,6 +254,10 @@ impl Workbench {
         }
         self.restore_search_editors(ws, window, cx);
         self.restore_terminals(ws, window, cx);
+        // Read now (before anything saves the session again); opened after this window is drawn (a folder from the
+        // last session is opened while drawing).
+        let view_windows = self.saved_view_windows(ws);
+        cx.defer_in(window, move |this, window, cx| this.restore_view_windows(view_windows, window, cx));
         // Terminals that were in the editor area or in windows of their own: new shells, once the groups exist.
         let moved = self.saved_moved_terminals(ws);
         // Files in windows of their own: loaded with the tabs, then shown in their windows again.

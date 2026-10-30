@@ -36,6 +36,8 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_PERF` | Append performance samples (one JSON line each) to this file; used by `scripts/perf/run.sh`. |
 | `CODEYARD_PERF_TYPING` | With `CODEYARD_PERF`: after startup, type this many characters into the focused editor, record key press to drawn frame for each, then save. |
 | `CODEYARD_PERF_MARKET` | With `CODEYARD_PERF`: after startup, open the Market, wait for its list, then press this many keys in its search (a word typed and erased), recording key press to the results in the view and to the frame that shows them. |
+| `CODEYARD_PERF_DECORATIONS` | With `CODEYARD_PERF`: after startup, run `decorate` in every installed extension that decorates the open file's language, wait for the decorations, then type this many characters and record key press to drawn frame for each, then save. |
+| `CODEYARD_PERF_PROVIDERS` | With `CODEYARD_PERF`: after startup (and the decorations scenario), ask the extensions' task providers for their tasks this many times, recording each request to a running extension to its answer. |
 | `CODEYARD_PERF_EXIT` | With `CODEYARD_PERF`: quit when the scripted scenario is done. |
 | `CODEYARD_DO_DELAY_MS` | Delay before `--do "Command;Command"` runs its commands. |
 | `CODEYARD_DUMP_DOCK` | Print the Dock menu to stderr a few seconds after start; with a number, click that row. |
@@ -50,6 +52,8 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_FISH` | Path of a fish binary that is not on `PATH`, so the quoting and login-shell tests also run against fish. |
 | `CODEYARD_FUZZ_SECS` | Make the hostile-input (`fuzz_tests.rs`) tests of the extension crates keep going for this many seconds instead of a fixed number of rounds; set by `.github/workflows/fuzz.yml`. |
 | `CODEYARD_EXTHOST_SELFTEST` | Test hook: `1` lets `codeyard-exthost --sandbox-selftest` run, which enters the OS sandbox and tries to escape it (`crates/ext-host/tests/sandbox.rs`, `scripts/check-exthost-sandbox-windows.ps1`). |
+| `CODEYARD_GUARD_TEST_OWNER` | Test hook: set by `crates/agent/tests/guard.rs` when it runs its own binary again as the owner that is killed; names that owner's scratch folder. Ordinary runs do not read it. |
+| `CODEYARD_TEST_LEADER_EXITS` | Test hook (Windows): set by `crates/agent/src/proc_windows_tests.rs` for its task-leader fixture, which then exits right after starting the grandchild. Ordinary runs do not read it. |
 | `CODEYARD_FUZZ_SEED` | Change the seed of those tests to explore other inputs; a failure prints the seed and round to rerun. |
 | `CODEYARD_TEST_TIMEOUT_SCALE` | Multiplier for the tests' wait timeouts (default 1). `scripts/coverage.sh` sets 4 because instrumented builds are slow. |
 | `CODEYARD_TR_DICT_DIR` | Folder with a Turkish Hunspell dictionary for the manual `cargo test -p spell -- --ignored turkish` check. |

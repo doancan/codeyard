@@ -164,6 +164,7 @@ impl Workbench {
             self.push_breakpoints(&path);
         }
         self.push_function_breakpoints();
+        self.push_data_breakpoints();
         self.save_breakpoint_settings();
         self.notice = Some(Notice::Info(if self.dbg.bps.active {
             crate::i18n::t("Breakpoints are active.").into()
@@ -380,8 +381,16 @@ impl Workbench {
     }
 
     pub(in crate::workbench) fn finish_data_breakpoint(&mut self, name: String, cx: &mut Context<Self>) {
+        self.add_data_breakpoint_in(None, name, cx);
+    }
+
+    /// A data breakpoint on the variable `name`: in the scope or object `parent` (a variable's own menu), or else in
+    /// the loaded scope that has it (the first scope otherwise). Only while the program is paused, and only when the
+    /// adapter says it supports them.
+    pub(in crate::workbench) fn add_data_breakpoint_in(&mut self, parent: Option<i64>, name: String, cx: &mut Context<Self>) {
         let name = name.trim().to_string();
         let sid = self.dbg.cur_id();
+        let active = self.dbg.bps.active;
         let Some(d) = self.dbg.cur_mut().filter(|d| matches!(d.status, DebugStatus::Stopped(_))) else { return };
         let Some(session) = d.session.clone() else { return };
         if name.is_empty() {
@@ -393,34 +402,39 @@ impl Workbench {
             return;
         }
         // Scope / object containing the variable: search the loaded child lists, otherwise the first scope.
-        let reference = d
-            .scopes
-            .iter()
-            .map(|s| s.reference)
-            .chain(d.children.keys().copied())
-            .find(|r| d.children.get(r).is_some_and(|vars| vars.iter().any(|v| v.name == name)))
+        let reference = parent
+            .or_else(|| {
+                d.scopes
+                    .iter()
+                    .map(|s| s.reference)
+                    .chain(d.children.keys().copied())
+                    .find(|r| d.children.get(r).is_some_and(|vars| vars.iter().any(|v| v.name == name)))
+            })
             .or_else(|| d.scopes.first().map(|s| s.reference))
             .unwrap_or(0);
-        let existing: Vec<String> = d.data_breakpoints.iter().map(|(id, _)| id.clone()).collect();
+        let existing: Vec<String> = if active { d.data_breakpoints.iter().filter(|b| b.enabled).map(|b| b.id.clone()).collect() } else { Vec::new() };
         let task = cx.background_executor().spawn(async move {
             let (id, description) = session.data_breakpoint_info(reference, &name)?;
             let mut ids = existing;
             if !ids.contains(&id) {
                 ids.push(id.clone());
             }
-            session.set_data_breakpoints(&ids)?;
+            if active {
+                session.set_data_breakpoints(&ids)?;
+            }
             Ok::<_, String>((id, description))
         });
         cx.spawn(async move |this, cx| {
             let result = task.await;
             this.update(cx, |this, cx| {
                 match result {
-                    Ok((id, description)) => {
+                    Ok((id, desc)) => {
                         if let Some(d) = this.dbg.by_id_mut(sid) {
-                            if !d.data_breakpoints.iter().any(|(i, _)| *i == id) {
-                                d.data_breakpoints.push((id, description.clone()));
+                            match d.data_breakpoints.iter_mut().find(|b| b.id == id) {
+                                Some(b) => b.enabled = true,
+                                None => d.data_breakpoints.push(crate::debug_model::DataBp { id, desc: desc.clone(), enabled: true }),
                             }
-                            d.push_console("console", crate::i18n::tf("Data breakpoint set: the program stops when {} is written.", &[&description]));
+                            d.push_console("console", crate::i18n::tf("Data breakpoint set: the program stops when {} is written.", &[&desc]));
                         }
                     }
                     Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Data breakpoint: {}", &[&e]).into())),
@@ -432,15 +446,49 @@ impl Workbench {
         .detach();
     }
 
+    /// Sends the current session's enabled data breakpoints (none while breakpoints are deactivated).
+    pub(in crate::workbench) fn push_data_breakpoints(&mut self) {
+        let active = self.dbg.bps.active;
+        let Some(d) = self.dbg.cur() else { return };
+        let Some(session) = d.session.clone() else { return };
+        let ids: Vec<String> = if active { d.data_breakpoints.iter().filter(|b| b.enabled).map(|b| b.id.clone()).collect() } else { Vec::new() };
+        session.set_data_breakpoints_async(&ids);
+    }
+
+    /// Turns the data breakpoint at `index` of the current session on or off.
+    pub(in crate::workbench) fn set_data_breakpoint_enabled(&mut self, index: usize, enabled: bool, cx: &mut Context<Self>) {
+        let Some(bp) = self.dbg.cur_mut().and_then(|d| d.data_breakpoints.get_mut(index)) else { return };
+        bp.enabled = enabled;
+        self.push_data_breakpoints();
+        cx.notify();
+    }
+
+    /// Removes the data breakpoint at `index` of the current session.
+    pub(in crate::workbench) fn remove_data_breakpoint(&mut self, index: usize, cx: &mut Context<Self>) {
+        let Some(d) = self.dbg.cur_mut().filter(|d| index < d.data_breakpoints.len()) else { return };
+        d.data_breakpoints.remove(index);
+        self.push_data_breakpoints();
+        cx.notify();
+    }
+
+    /// The Breakpoints list: the current session's data breakpoints first, then the function and line breakpoints.
+    pub(in crate::workbench) fn bp_rows(&self) -> Vec<crate::debug_model::BpRow> {
+        let mut rows: Vec<crate::debug_model::BpRow> = self
+            .dbg
+            .cur()
+            .map(|d| d.data_breakpoints.iter().cloned().enumerate().map(|(index, bp)| crate::debug_model::BpRow::Data { index, bp }).collect())
+            .unwrap_or_default();
+        rows.extend(self.dbg.bps.rows());
+        rows
+    }
+
     pub(in crate::workbench) fn remove_data_breakpoints(&mut self, _: &super::super::RemoveDataBreakpoints, _: &mut Window, cx: &mut Context<Self>) {
         let Some(d) = self.dbg.cur_mut() else { return };
         if d.data_breakpoints.is_empty() {
             return;
         }
         d.data_breakpoints.clear();
-        if let Some(session) = d.session.clone() {
-            session.set_data_breakpoints_async(&[]);
-        }
+        self.push_data_breakpoints();
         cx.notify();
     }
 }

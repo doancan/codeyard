@@ -37,7 +37,7 @@ trap 'exit 130' INT TERM
 
 cargo build --release -q -p app -p cyx -p ext-host
 cp target/release/codeyard "$OUT/codeyard-candidate"
-# Code extensions load only where the extension host is beside the app (both builds find this one).
+# Code extensions run in codeyard-exthost beside the app; both builds use this one.
 cp target/release/codeyard-exthost "$OUT/codeyard-exthost"
 names=(candidate)
 commits=("$(git rev-parse HEAD)")
@@ -104,6 +104,21 @@ setting=$("$CYX" yard fixture "$TMP/market-yard" --extensions 10000 --url "http:
 printf '{"update.check":"manual","extensions.registries":[%s]}\n' "$setting" > "$MARKET_PROFILE/config/settings.jsonc"
 python3 -I -m http.server --bind 127.0.0.1 --directory "$TMP/market-yard" "$port" >/dev/null 2>&1 &
 server=$!
+# Two decoration providers (crates/ext-host/testdata/decorator.wasm under two ids, code with no permissions), installed
+# from folders: for typing with decorations and for the provider overhead.
+DECO_PROFILE="$TMP/deco-profile"
+mkdir -p "$DECO_PROFILE/config" "$DECO_PROFILE/state"
+printf '{"update.check":"manual"}\n' > "$DECO_PROFILE/config/settings.jsonc"
+deco_args=()
+for n in a b; do
+  d="$TMP/gen/decorations-$n"
+  mkdir -p "$d"
+  cp crates/ext-host/testdata/decorator.wasm "$d/extension.wasm"
+  : > "$d/Cargo.toml"
+  printf '[extension]\nid = "perf.decorations-%s"\nversion = "1.0.0"\nname = "Decorations %s"\nlicense = "MIT"\n\n[code]\nentry = "Cargo.toml"\n\n[[commands]]\nid = "decorate"\ntitle = "Perf: Decorate"\n\n[[decorations]]\nid = "lines"\nlanguages = ["rust"]\n\n[[tasks]]\nid = "noop"\n' "$n" "$n" > "$d/codeyard-extension.toml"
+  deco_args+=(--install-extension "$d")
+done
+CODEYARD_CONFIG_DIR="$DECO_PROFILE/config" CODEYARD_STATE_DIR="$DECO_PROFILE/state" "$OUT/codeyard-candidate" "${deco_args[@]}" >/dev/null
 launch() { # app args... (background; $! is the pid)
   local app=$1; shift
   CODEYARD_STATE_DIR="$TMP/state" CODEYARD_CONFIG_DIR="$TMP/config" CODEYARD_NO_DOCK_ICON=1 "$app" "$@" >/dev/null 2>&1 &
@@ -173,6 +188,18 @@ for i in $(seq 1 "$runs"); do
       exit 1
     fi
     grep '"market\.' "$TMP/market.jsonl" >> "$CODEYARD_PERF" || true
+    # Two extensions decorate the 10k-line file: 40 keys, keystroke to frame; then 40 rounds of asking both for their
+    # tasks, request to answer in the window. Warn-only rows until a baseline has them (perf/metrics.json).
+    cp crates/app/testdata/big.rs "$TMP/big.rs"
+    : > "$TMP/deco.jsonl"
+    CODEYARD_PERF="$TMP/deco.jsonl" CODEYARD_PERF_DECORATIONS=40 CODEYARD_PERF_PROVIDERS=40 PROFILE_FROM="$DECO_PROFILE" \
+      run_scripted "$OUT/codeyard-${names[$k]}" "$TMP/big.rs"
+    if [ "${names[$k]}" = candidate ] && { [ "$(count typing.keystroke_frame_decorations_ms "$TMP/deco.jsonl")" != 40 ] ||
+      [ "$(count extensions.provider_overhead_ms "$TMP/deco.jsonl")" -lt 40 ]; }; then
+      echo "perf: the decorations run of ${names[$k]} did not type 40 keys and ask the providers 40 times; is codeyard-exthost built and the window visible?" >&2
+      exit 1
+    fi
+    grep -e '"typing\.keystroke_frame_decorations_ms"' -e '"extensions\.provider_overhead_ms"' "$TMP/deco.jsonl" >> "$CODEYARD_PERF" || true
   done
   printf '\rperf: timing run %s/%s' "$i" "$runs" >&2
 done

@@ -363,6 +363,8 @@ fn spawn_owned(mut cmd: Command) -> io::Result<(Proc, Option<std::process::Child
     }
     let mut child = cmd.spawn()?;
     drop(cmd);
+    #[cfg(unix)]
+    crate::guard::task_started(child.id());
     #[cfg(windows)]
     let job = match job::Job::attach(&child) {
         Ok(job) => job,
@@ -412,13 +414,22 @@ impl Proc {
     pub fn wait(&mut self) -> Option<i32> {
         self.input = None;
         self.waited = true;
+        self.forget();
         self.child.wait().ok().and_then(exit_code)
+    }
+
+    /// The group leaves the process guard before its leader is reaped (after that its id may be reused).
+    fn forget(&self) {
+        #[cfg(unix)]
+        crate::guard::forget(self.child.id());
     }
 
     /// Poll without taking the process out of its session's table. Closing stdout
     /// must not make a still-running command impossible to cancel.
     pub fn try_wait(&mut self) -> io::Result<Option<i32>> {
         let Some(status) = self.child.try_wait()? else { return Ok(None) };
+        // Reaped: the group id is free from here on, so the guard must not keep it.
+        self.forget();
         self.input = None;
         self.waited = true;
         Ok(Some(exit_code(status).unwrap_or(1)))
@@ -436,6 +447,9 @@ impl Drop for Proc {
         {
             // SAFETY: kill has no memory-safety preconditions; a negative pid names the group this child leads.
             unsafe { libc::kill(-pid, libc::SIGKILL) };
+        }
+        if !self.waited {
+            self.forget();
         }
         let _ = self.child.kill();
         let _ = self.child.wait();
@@ -458,3 +472,7 @@ fn exit_code(status: std::process::ExitStatus) -> Option<i32> {
 #[cfg(test)]
 #[path = "proc_tests.rs"]
 mod tests;
+
+#[cfg(all(test, windows))]
+#[path = "proc_windows_tests.rs"]
+mod windows_tests;

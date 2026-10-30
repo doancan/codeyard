@@ -234,7 +234,7 @@ URL on a `net` host.
 | `secrets` | its own keychain entries | "Store secrets in your keychain" |
 | `run` | listed programs, with any arguments | "Run vercel with any arguments" |
 | `clipboard`, `terminal` | read or write the clipboard; type into a terminal | |
-| `commands` | listed public core commands | Each core command declares the permission it implies; the caller must hold it too |
+| `commands` | listed public core commands (`ext_manifest::core_commands`, docs/extensions/reference/core-commands.md) | Each core command declares the permission it implies; the caller must hold it too |
 
 One function, `risk(permission_set)` in `ext-manifest`, decides everything risk-related: whether `why` is
 required, the banner on the consent sheet, whether the registry needs human review, and what

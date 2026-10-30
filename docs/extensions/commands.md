@@ -100,7 +100,18 @@ ctx.command("refresh", async |ctx, args| {
 });
 ```
 
-The id is the local id from `[[commands]]`. Run other commands with `ctx.execute("other.ext.cmd", json!([…])).await`; core commands (`core:…`) must be listed in `[permissions] commands`.
+The id is the local id from `[[commands]]`. Run other commands with `ctx.execute("other.ext.cmd", json!([…])).await`.
+Codeyard's own commands start with `core:`. Only those in [reference/core-commands.md](reference/core-commands.md) can
+be run, and each must be listed in `[permissions] commands`. Each also implies a permission you must hold: Save All
+needs `write` on every file it saves, `core:editor.open` needs `read` on the file, and `core:tasks.run` needs the
+task's program in `run`:
+
+```rust
+ctx.execute("core:editor.open", json!(format!("file://{root}/docs/guide.md"))).await?;
+```
+
+A command that is not in the list is refused with the fix, and so is one you have not listed or whose implied
+permission you lack. `cyx check` warns about a `core:` entry in `permissions.commands` that is not in the list.
 
 ## Views
 

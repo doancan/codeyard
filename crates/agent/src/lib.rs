@@ -6,17 +6,19 @@
 pub mod bigfile;
 pub mod daemon;
 mod fileops;
+pub mod guard;
 pub mod hashtree;
 mod preview;
 pub mod proc;
 pub mod pty;
+mod reattach;
 pub mod search;
 mod shell_integration;
 pub mod watch;
 
 use std::collections::HashMap;
 use std::fs;
-use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::io::{self, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -74,6 +76,10 @@ pub fn handle(req: Request) -> Response {
         | Request::ProcInput { .. }
         | Request::ProcKill { .. }
         | Request::TaskSpawn { .. }
+        | Request::PtyToken { .. }
+        | Request::PtyAttach { .. }
+        | Request::PtyList
+        | Request::KeepFor { .. }
         | Request::LineIndex { .. }
         | Request::ReadLines { .. } => Err(Error::Unsupported("streaming request outside a session".into())),
         Request::ListFiles { root, limit } => list_files(&expand(&root), limit as usize).map(|(paths, truncated)| Response::Files { paths, truncated }),
@@ -82,122 +88,11 @@ pub fn handle(req: Request) -> Response {
     result.unwrap_or_else(Response::Error)
 }
 
-/// Maximum output kept per terminal while disconnected (the tail is kept).
-const PTY_BACKLOG: usize = 256 * 1024;
-
-/// The session's connection endpoint. While disconnected (daemon mode, ssh dropped) terminal output, shell exits
-/// and file changes are buffered and replayed in order on reconnect. Other responses are dropped (the client's
-/// pending requests already got "no connection").
-#[derive(Default)]
-struct Link {
-    inner: Mutex<LinkState>,
-}
-
-#[derive(Default)]
-struct LinkState {
-    writer: Option<BufWriter<Box<dyn Write + Send>>>,
-    /// Increments on every connect: so a stale connection's drop can't tear down the new one.
-    generation: u64,
-    backlog: Vec<(u32, Vec<u8>)>,
-    exits: Vec<(u32, Option<i32>)>,
-    changes: Vec<(String, proto::ChangeKind)>,
-}
-
-type Out = Arc<Link>;
-
-impl Link {
-    /// A response (id ≠ 0) or an event (id 0). Events are buffered while disconnected.
-    /// Borrowed response frames share the codec used for replay and daemon handshakes.
-    fn send(&self, id: u32, body: Response) -> io::Result<()> {
-        let mut st = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(w) = st.writer.as_mut() {
-            match proto::write_frame(w, &Frame { id, body: &body }) {
-                Ok(()) => return Ok(()),
-                // Frame too large (a huge directory listing, an `Exec` with both streams full): the connection is fine, only this response
-                // could not be sent. It is reported as an error so the client doesn't wait forever; events (id 0) are dropped.
-                Err(e) if e.kind() == io::ErrorKind::InvalidData => {
-                    if id != 0 {
-                        let note = Response::Error(Error::Other(format!("the answer is too large to send ({e})")));
-                        if proto::write_frame(w, &Frame { id, body: &note }).is_err() {
-                            st.writer = None;
-                        }
-                    }
-                    return Ok(());
-                }
-                Err(_) => st.writer = None, // connection dropped
-            }
-        }
-        match body {
-            Response::PtyOutput { pty, data } => {
-                match st.backlog.iter_mut().find(|(p, _)| *p == pty) {
-                    Some((_, buf)) => buf.extend_from_slice(&data),
-                    None => st.backlog.push((pty, data)),
-                }
-                for (_, buf) in st.backlog.iter_mut().filter(|(p, _)| *p == pty) {
-                    if buf.len() > PTY_BACKLOG {
-                        let cut = buf.len() - PTY_BACKLOG;
-                        buf.drain(..cut);
-                    }
-                }
-            }
-            Response::PtyExit { pty, code } => st.exits.push((pty, code)),
-            Response::FsChanged(c) => {
-                for ch in c {
-                    if !st.changes.contains(&ch) {
-                        st.changes.push(ch);
-                    }
-                }
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-
-    /// New connection: handshake response first, then the buffered events.
-    fn attach(&self, writer: Box<dyn Write + Send>, hello: Option<Frame<Response>>) -> io::Result<u64> {
-        let mut st = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        let mut w = BufWriter::new(writer);
-        if let Some(hello) = hello {
-            proto::write_frame(&mut w, &Frame { id: hello.id, body: &hello.body })?;
-        }
-        // Clear only after a successful write: one that breaks midway must not lose buffered events (resent on next connect).
-        for (pty, data) in &st.backlog {
-            proto::write_frame(&mut w, &Frame { id: 0, body: &Response::PtyOutput { pty: *pty, data: data.clone() } })?;
-        }
-        for (pty, code) in &st.exits {
-            proto::write_frame(&mut w, &Frame { id: 0, body: &Response::PtyExit { pty: *pty, code: *code } })?;
-        }
-        if !st.changes.is_empty() {
-            proto::write_frame(&mut w, &Frame { id: 0, body: &Response::FsChanged(st.changes.clone()) })?;
-        }
-        st.backlog.clear();
-        st.exits.clear();
-        st.changes.clear();
-        st.writer = Some(w);
-        st.generation += 1;
-        Ok(st.generation)
-    }
-
-    /// Mark disconnected, but only if this is still the current connection.
-    fn detach(&self, generation: u64) {
-        let mut st = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        if st.generation == generation {
-            st.writer = None;
-        }
-    }
-
-    fn generation(&self) -> u64 {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).generation
-    }
-
-    fn is_attached(&self) -> bool {
-        self.inner.lock().unwrap_or_else(|e| e.into_inner()).writer.is_some()
-    }
-}
-
-fn send(out: &Out, id: u32, body: Response) -> io::Result<()> {
-    out.send(id, body)
-}
+#[path = "link.rs"]
+mod link;
+#[cfg(test)]
+use link::Link;
+use link::{Out, send};
 
 /// A session: running searches, open terminals, watching. Locally (stdio) it
 /// ends together with the connection; in daemon mode it lives on after the connection drops.
@@ -205,6 +100,10 @@ pub struct Session {
     out: Out,
     cancels: Arc<Mutex<HashMap<u32, Arc<AtomicBool>>>>,
     ptys: Arc<Mutex<HashMap<u32, pty::Pty>>>,
+    /// Each terminal's secret, once a client asked for its token (`reattach`).
+    secrets: Mutex<HashMap<u32, String>>,
+    /// Seconds the daemon keeps this session after its connection ends (`KeepFor`; `u64::MAX`: the daemon's default).
+    pub(crate) keep_for: AtomicU64,
     next_pty: AtomicU32,
     /// Piped processes and the generation of the connection they were opened on.
     procs: Arc<Mutex<HashMap<u32, (u64, proc::Proc)>>>,
@@ -254,6 +153,8 @@ impl Default for Session {
             out: Arc::default(),
             cancels: Arc::default(),
             ptys: Arc::default(),
+            secrets: Mutex::default(),
+            keep_for: AtomicU64::new(u64::MAX),
             next_pty: AtomicU32::new(1),
             procs: Arc::default(),
             big: Arc::default(),
@@ -289,6 +190,10 @@ impl Session {
                 self.dispatch(id, body)?;
             }
             while let Some(Frame { id, body }) = proto::read_frame::<Request>(input)? {
+                // A newer connection took the session over: this one may no longer type into its terminals.
+                if self.out.generation() != generation {
+                    break;
+                }
                 self.dispatch(id, body)?;
             }
             Ok(())
@@ -418,6 +323,7 @@ impl Session {
             Request::PtySpawnEx { cols, rows, cwd, shell, args, env, integration } => {
                 self.spawn_pty(id, pty::Spawn { cols, rows, cwd, shell, args, env, integration })
             }
+            Request::PtyToken { .. } | Request::PtyAttach { .. } | Request::PtyList | Request::KeepFor { .. } => self.reattach_request(id, body),
             Request::PtyStatus { pty: pid } => {
                 let status = self.ptys.locked().get(&pid).map(pty::Pty::status).unwrap_or_default();
                 reply(Response::PtyStatus { busy: status.busy, name: status.name, cwd: status.cwd })

@@ -15,8 +15,8 @@ impl Workbench {
         let item = |id: &'static str, name: &'static str, label: &'static str, panel: Panel, badge: usize, cx: &mut Context<Self>| {
             let selected =
                 self.chrome.panel == Some(panel) || (panel == Panel::Containers && self.tabs.page_active && matches!(self.tabs.page, Some(Page::Containers)));
-            div()
-                .id(id)
+            // Dragged onto the other side bar, the view moves there.
+            self.view_drag(panel, div().id(id), cx)
                 .debug_selector(|| id.to_string())
                 .group(id)
                 .relative()
@@ -206,18 +206,25 @@ impl Workbench {
     }
 
     pub(super) fn view_header(&self, title: impl Into<SharedString>, p: &Palette) -> impl IntoElement {
-        div()
-            .h(px(layout::VIEW_HEADER_H))
-            .flex_none()
-            .flex()
-            .items_center()
-            .px(px(theme::SPACE[6]))
-            .text_size(px(text::XXS.0))
-            .font_weight(gpui::FontWeight::SEMIBOLD)
-            .text_color(c(p.text_muted))
-            .child(title.into())
+        view_header(title, p)
     }
+}
 
+/// A side view's title row.
+pub(super) fn view_header(title: impl Into<SharedString>, p: &Palette) -> impl IntoElement {
+    div()
+        .h(px(layout::VIEW_HEADER_H))
+        .flex_none()
+        .flex()
+        .items_center()
+        .px(px(theme::SPACE[6]))
+        .text_size(px(text::XXS.0))
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_color(c(p.text_muted))
+        .child(title.into())
+}
+
+impl Workbench {
     /// Explorer tree events (the first and extra folders' trees use the same path).
     pub(super) fn on_tree_event(&mut self, event: &TreeEvent, window: &mut Window, cx: &mut Context<Self>) {
         let this = self;

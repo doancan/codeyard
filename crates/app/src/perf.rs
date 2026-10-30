@@ -7,7 +7,14 @@
 //! - `CODEYARD_PERF_MARKET=<n>`: after the first frame settles, open the Market, wait for its catalogue, then type `n`
 //!   keys into its search (a word, then erasing it, over and over) and record keystroke → results in the view, and
 //!   keystroke → the frame that shows them.
+//! - `CODEYARD_PERF_DECORATIONS=<n>`: after the first frame settles, run `decorate` in every extension that decorates
+//!   the open file's language, wait for their decorations, then type `n` characters and record keystroke → frame under
+//!   `typing.keystroke_frame_decorations_ms`.
+//! - `CODEYARD_PERF_PROVIDERS=<n>`: ask the task providers for their tasks `n` times, one round after the other;
+//!   each answer records `extensions.provider_overhead_ms` (requests to a running extension only).
 //! - `CODEYARD_PERF_EXIT=1`: quit when the scenario is done.
+//!
+//! Whenever `CODEYARD_PERF` is set, a key that reaches an extension view is recorded as `views.keystroke_frame_ms`.
 
 use std::fs::File;
 use std::io::Write;
@@ -87,10 +94,65 @@ pub fn market_results_shown(window: &Window) {
     }
 }
 
+/// A key reached an extension view: `views.keystroke_frame_ms` is the time to the frame after the one that shows its
+/// effect, like `typing.keystroke_frame_ms`.
+pub fn view_key(window: &Window) {
+    if !enabled() {
+        return;
+    }
+    let t0 = Instant::now();
+    after_next_frame(window, move |_, _| sample("views.keystroke_frame_ms", ms(t0.elapsed())));
+}
+
 /// Keys the Market scenario types: a word letter by letter, then erased, so every key changes the query.
 fn market_key(i: usize) -> &'static str {
     const KEYS: [&str; 10] = ["n", "i", "g", "h", "t", "backspace", "backspace", "backspace", "backspace", "backspace"];
     KEYS[i % KEYS.len()]
+}
+
+/// Type `n` characters into the focused editor, recording keystroke → frame under `metric`, then save so the harness
+/// can check that the keys reached the editor (scripts/perf/run.sh).
+async fn type_keys(handle: WindowHandle<Workbench>, n: usize, metric: &'static str, cx: &mut gpui::AsyncApp) {
+    for _ in 0..n {
+        // Through the window, not the workbench entity: the key handler updates the workbench itself.
+        let typed = cx.update_window(handle.into(), |_, window, cx| {
+            let t0 = Instant::now();
+            window.dispatch_keystroke(Keystroke::parse("a").expect("valid keystroke"), cx);
+            after_next_frame(window, move |_, _| sample(metric, ms(t0.elapsed())));
+        });
+        if typed.is_err() {
+            break;
+        }
+        cx.background_executor().timer(TYPING_GAP).await;
+    }
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.dispatch_keystroke(Keystroke::parse("cmd-s").expect("valid keystroke"), cx);
+    })
+    .ok();
+    cx.background_executor().timer(SETTLE).await;
+}
+
+/// `CODEYARD_PERF_DECORATIONS` and `CODEYARD_PERF_PROVIDERS`: the decoration providers mark the open file (up to 30 s
+/// for them to start), then the keys are typed and the task providers asked.
+async fn extension_scenario(handle: WindowHandle<Workbench>, decorations: usize, providers: usize, cx: &mut gpui::AsyncApp) {
+    cx.background_executor().timer(SETTLE).await;
+    let asked = handle.update(cx, |wb, window, cx| wb.start_decorations_for_perf(window, cx)).unwrap_or(0);
+    for _ in 0..300 {
+        if handle.read_with(cx, |wb, cx| wb.decoration_sets_for_perf(cx)).unwrap_or(asked) >= asked {
+            break;
+        }
+        cx.background_executor().timer(Duration::from_millis(100)).await;
+    }
+    if decorations > 0 {
+        type_keys(handle, decorations, "typing.keystroke_frame_decorations_ms", cx).await;
+    }
+    for _ in 0..providers {
+        let Ok(done) = handle.update(cx, |wb, window, cx| wb.ask_tasks_for_perf(window, cx)) else { break };
+        while !done.get() {
+            cx.background_executor().timer(Duration::from_millis(2)).await;
+        }
+        cx.background_executor().timer(TYPING_GAP).await;
+    }
 }
 
 /// Called once the first workbench window is open: records startup marks and runs the scripted scenario.
@@ -101,6 +163,8 @@ pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
     mark("startup.window_open_ms");
     let typing: usize = std::env::var("CODEYARD_PERF_TYPING").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let market: usize = std::env::var("CODEYARD_PERF_MARKET").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    let decorations: usize = std::env::var("CODEYARD_PERF_DECORATIONS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    let providers: usize = std::env::var("CODEYARD_PERF_PROVIDERS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let exit = std::env::var_os("CODEYARD_PERF_EXIT").is_some();
     handle
         .update(cx, |_, window, _| {
@@ -109,24 +173,10 @@ pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
                 cx.spawn(async move |cx| {
                     if typing > 0 {
                         cx.background_executor().timer(SETTLE).await;
-                        for _ in 0..typing {
-                            // Through the window, not the workbench entity: the key handler updates the workbench itself.
-                            let typed = cx.update_window(handle.into(), |_, window, cx| {
-                                let t0 = Instant::now();
-                                window.dispatch_keystroke(Keystroke::parse("a").expect("valid keystroke"), cx);
-                                after_next_frame(window, move |_, _| sample("typing.keystroke_frame_ms", ms(t0.elapsed())));
-                            });
-                            if typed.is_err() {
-                                break;
-                            }
-                            cx.background_executor().timer(TYPING_GAP).await;
-                        }
-                        // Save, so the harness can check that the keys reached the editor (scripts/perf/run.sh).
-                        cx.update_window(handle.into(), |_, window, cx| {
-                            window.dispatch_keystroke(Keystroke::parse("cmd-s").expect("valid keystroke"), cx);
-                        })
-                        .ok();
-                        cx.background_executor().timer(SETTLE).await;
+                        type_keys(handle, typing, "typing.keystroke_frame_ms", cx).await;
+                    }
+                    if decorations > 0 || providers > 0 {
+                        extension_scenario(handle, decorations, providers, cx).await;
                     }
                     if market > 0 {
                         cx.background_executor().timer(SETTLE).await;

@@ -155,7 +155,7 @@ impl Workbench {
             RowFrame::DebugVariable => d.cur().map(variable_rows).map_or(0, |r| r.len()),
             RowFrame::DebugWatch => d.watch_exprs.len(),
             RowFrame::DebugStack => stack_rows(&d.sessions, d.cur().map(|s| s.id)).len(),
-            RowFrame::DebugBreakpoint => d.bps.rows().len(),
+            RowFrame::DebugBreakpoint => self.bp_rows().len(),
             RowFrame::Test => self.test_rows(cx).len(),
             RowFrame::Remote => self.remote_rows(cx).len(),
             RowFrame::Port => self.ssh_alias().map_or(0, |alias| port_rows(&self.ports.set, &self.ports.listening, &alias).len()),
@@ -188,11 +188,12 @@ impl Workbench {
                 Some(StackRow::LoadMore) => self.load_more_frames(cx),
                 _ => {}
             },
-            RowFrame::DebugBreakpoint => {
-                if let Some(BpRow::Line { path, line, .. }) = self.dbg.bps.rows().into_iter().nth(ix) {
-                    self.open_location(path, line as u32, 0, window, cx);
-                }
-            }
+            RowFrame::DebugBreakpoint => match self.bp_rows().into_iter().nth(ix) {
+                Some(BpRow::Line { path, line, .. }) => self.open_location(path, line as u32, 0, window, cx),
+                // A data breakpoint has no place to open: Enter turns it on or off, as its checkbox does.
+                Some(BpRow::Data { index, bp }) => self.set_data_breakpoint_enabled(index, !bp.enabled, cx),
+                _ => {}
+            },
             RowFrame::Test => match self.test_rows(cx).into_iter().nth(ix) {
                 Some(Row::File { file, .. }) => {
                     let Some(rel) = self.jobs.tests.files.get(file).map(|f| f.rel.clone()) else { return };
@@ -240,8 +241,9 @@ impl Workbench {
                 Some(StackRow::Frame { index, .. }) => self.open_frame_menu(index, at, window, cx),
                 _ => return false,
             },
-            RowFrame::DebugBreakpoint => match self.dbg.bps.rows().into_iter().nth(ix) {
+            RowFrame::DebugBreakpoint => match self.bp_rows().into_iter().nth(ix) {
                 Some(BpRow::Line { path, line, meta }) => self.open_breakpoint_menu(path, line, meta.disabled, at, window, cx),
+                Some(BpRow::Data { index, bp }) => self.open_data_breakpoint_menu(index, bp.enabled, at, window, cx),
                 _ => return false,
             },
             RowFrame::Remote => match self.remote_rows(cx).into_iter().nth(ix) {

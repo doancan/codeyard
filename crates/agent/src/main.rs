@@ -13,6 +13,9 @@ fn main() {
             }
         }
         Some("--version") => println!("{}", proto::VERSION),
+        // The process guard of an owner that runs tasks and terminals itself (see `agent::guard`).
+        #[cfg(unix)]
+        Some("--process-guard") => agent::guard::run(std::io::stdin().lock()),
         // Daemon: persistent sessions (terminals survive an ssh drop).
         #[cfg(unix)]
         Some("--daemon") => {

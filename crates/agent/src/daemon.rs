@@ -55,6 +55,11 @@ impl Registry {
         let (sess, resumed) = {
             let mut map = self.sessions.locked();
             match map.get_mut(&key) {
+                // An exclusive session is not taken from a connection that is still there.
+                Some(e) if key.starts_with(proto::EXCLUSIVE_SESSION) && e.session.out.is_attached() => {
+                    let refused = Response::Error(Error::PermissionDenied("the session is in use by another connection".into()));
+                    return proto::write_frame(&mut output, &Frame { id, body: &refused });
+                }
                 Some(e) => {
                     e.detached_since = None;
                     (e.session.clone(), true)
@@ -73,20 +78,27 @@ impl Registry {
             self.sessions.locked().remove(&key);
             return result;
         }
-        // Connection ended: if no other connection took over, the session is disconnected.
-        if !sess.out.is_attached()
-            && let Some(e) = self.sessions.locked().get_mut(&key)
-        {
-            e.detached_since.get_or_insert_with(Instant::now);
+        // Connection ended: if no other connection took over, the session is disconnected (or ends now, if its client
+        // asked not to keep it).
+        if !sess.out.is_attached() {
+            let mut map = self.sessions.locked();
+            if sess.keep_for.load(Ordering::Relaxed) == 0 {
+                if let Some(e) = map.remove(&key) {
+                    e.session.shutdown();
+                }
+            } else if let Some(e) = map.get_mut(&key) {
+                e.detached_since.get_or_insert_with(Instant::now);
+            }
         }
         result
     }
 
-    /// Close disconnected sessions whose grace has expired. Returns whether any session is left.
+    /// Close disconnected sessions whose grace (their own `KeepFor`, else `grace`) has expired. Returns whether any
+    /// session is left.
     pub fn reap(&self, grace: Duration) -> bool {
         let mut map = self.sessions.locked();
         map.retain(|_, e| match e.detached_since {
-            Some(t) if t.elapsed() >= grace => {
+            Some(t) if t.elapsed() >= Some(e.session.keep_for.load(Ordering::Relaxed)).filter(|s| *s != u64::MAX).map_or(grace, Duration::from_secs) => {
                 e.session.shutdown();
                 false
             }
@@ -204,27 +216,27 @@ mod unix {
         }
     }
 
+    /// A connection to the daemon on `socket`, started first (this executable with `--daemon`, a detached process) if
+    /// none answers.
+    pub fn connect_or_start(socket: &Path) -> io::Result<UnixStream> {
+        if let Ok(s) = connect(socket) {
+            return Ok(s);
+        }
+        spawn_daemon(socket)?;
+        let mut last = None;
+        for _ in 0..100 {
+            match connect(socket) {
+                Ok(s) => return Ok(s),
+                Err(e) => last = Some(e),
+            }
+            std::thread::sleep(Duration::from_millis(30));
+        }
+        Err(last.unwrap_or_else(|| io::Error::other("daemon did not start")))
+    }
+
     /// Bridge: stdio <-> socket. Starts the daemon if missing (detached process, doesn't die with ssh).
     pub fn attach(socket: &Path) -> io::Result<()> {
-        let stream = match connect(socket) {
-            Ok(s) => s,
-            Err(_) => {
-                spawn_daemon(socket)?;
-                let mut last = None;
-                let mut found = None;
-                for _ in 0..100 {
-                    match connect(socket) {
-                        Ok(s) => {
-                            found = Some(s);
-                            break;
-                        }
-                        Err(e) => last = Some(e),
-                    }
-                    std::thread::sleep(Duration::from_millis(30));
-                }
-                found.ok_or_else(|| last.unwrap_or_else(|| io::Error::other("daemon did not start")))?
-            }
-        };
+        let stream = connect_or_start(socket)?;
         let mut from_daemon = stream.try_clone()?;
         std::thread::spawn(move || {
             // stdout is line-buffered: flush after every chunk for binary frames.
@@ -271,7 +283,7 @@ mod unix {
 }
 
 #[cfg(unix)]
-pub use unix::{attach, run};
+pub use unix::{attach, connect_or_start, run};
 
 #[cfg(test)]
 mod tests {

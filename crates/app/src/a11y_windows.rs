@@ -1,23 +1,34 @@
 //! Accessibility trees of the workbench's other windows: an editor's own window (window title, the editor as a text
 //! field with its caret and selection, its find bar and suggestions, and the picker opened there) and a terminal's own
 //! window (the terminal's text and cursor). They use the same node ids and tree builder as the main window, so a
-//! screen reader finds the editor and the terminal where it does there. Actions go to the workbench with that window,
-//! after making it the one commands act on.
+//! screen reader finds the editor and the terminal where it does there. A side view's own window holds that view's
+//! part of the main tree (Explorer, Source Control, Search, Extensions, Run and Debug, Testing, Remote Explorer), which
+//! the main window's tree then leaves out. Actions go to the workbench with that window, after making it the one
+//! commands act on.
 
 use super::*;
 use crate::workbench::editor_windows_glue::EditorWindow;
+use crate::workbench::view_windows_glue::{ViewRef, ViewWindow};
 use crate::workbench::views_glue::DetachedTerminal;
 
 /// What a window's tree is made of: how its snapshot is taken and how its actions are carried out.
 #[derive(Clone, Copy)]
 pub(in crate::workbench) struct Hooks {
-    pub(super) snapshot: fn(gpui::AnyView, &mut Window, &mut App) -> Option<Snapshot>,
-    pub(super) action: fn(gpui::AnyView, &ActionRequest, &Snapshot, &mut Window, &mut App),
+    pub(in crate::workbench) snapshot: fn(gpui::AnyView, &mut Window, &mut App) -> Option<Snapshot>,
+    pub(in crate::workbench) action: fn(gpui::AnyView, &ActionRequest, &Snapshot, &mut Window, &mut App),
 }
 
-/// The main window.
-pub(super) const WORKBENCH: Hooks = Hooks {
-    snapshot: |root, window, cx| Some(root.downcast::<Workbench>().ok()?.read(cx).a11y_snapshot(window, cx)),
+/// The main window (without the views drawn in windows of their own).
+pub(in crate::workbench) const WORKBENCH: Hooks = Hooks {
+    snapshot: |root, window, cx| {
+        let wb = root.downcast::<Workbench>().ok()?;
+        let wb = wb.read(cx);
+        let mut snap = wb.a11y_snapshot(window, cx);
+        for entry in &wb.chrome.view_windows {
+            take_view(&mut snap, &entry.view);
+        }
+        Some(snap)
+    },
     action: |root, req, last, window, cx| {
         if let Ok(wb) = root.downcast::<Workbench>() {
             wb.update(cx, |wb, cx| wb.a11y_action(req, last, window, cx));
@@ -39,6 +50,85 @@ pub(in crate::workbench) const EDITOR_WINDOW: Hooks = Hooks {
         }
     },
 };
+
+/// A side view's own window.
+pub(in crate::workbench) const VIEW_WINDOW: Hooks = Hooks {
+    snapshot: |root, window, cx| Some(view_window_snapshot(&root.downcast::<ViewWindow>().ok()?, window, cx)),
+    action: |root, req, last, window, cx| {
+        let Ok(root) = root.downcast::<ViewWindow>() else { return };
+        let (_, home) = root.read(cx).parts();
+        if let Some(wb) = home.upgrade() {
+            wb.update(cx, |wb, cx| {
+                wb.use_view_window(window.window_handle(), cx);
+                wb.a11y_action(req, last, window, cx);
+            });
+        }
+    },
+};
+
+/// Moves the part of `snap` that belongs to `view` into a snapshot of its own (Run and Debug, Testing and Remote
+/// Explorer share one part, which stays in both).
+fn take_view(snap: &mut Snapshot, view: &ViewRef) -> Snapshot {
+    let mut part = Snapshot::default();
+    match view.panel {
+        Panel::Explorer => {
+            part.explorers = std::mem::take(&mut snap.explorers);
+            if matches!(snap.focus, FocusSnap::Explorer(_)) {
+                part.focus = std::mem::replace(&mut snap.focus, FocusSnap::Window);
+            }
+        }
+        Panel::Scm => {
+            part.scm = snap.scm.take();
+            if matches!(snap.focus, FocusSnap::ScmMessage | FocusSnap::ScmRepos) {
+                part.focus = std::mem::replace(&mut snap.focus, FocusSnap::Window);
+            }
+        }
+        Panel::Search => part.views.search = snap.views.search.take(),
+        Panel::Extensions => {
+            part.exts = snap.exts.take();
+            if matches!(snap.focus, FocusSnap::ExtSearch) {
+                part.focus = std::mem::replace(&mut snap.focus, FocusSnap::Window);
+            }
+        }
+        Panel::Debug | Panel::Testing | Panel::Remote => {
+            part.views.side = snap.views.side.clone();
+            part.views.row_focus = snap.views.row_focus;
+        }
+        Panel::ExtView => {
+            let (mine, rest) = std::mem::take(&mut snap.ext_views).into_iter().partition(|v| Some(&v.id) == view.ext.as_ref());
+            part.ext_views = mine;
+            snap.ext_views = rest;
+        }
+        Panel::Containers => {}
+    }
+    part
+}
+
+/// The view in its own window: its part of the workbench's tree, taken with this window (focus and row frames are
+/// this window's), the window's name, and the picker opened there.
+pub(super) fn view_window_snapshot(root: &Entity<ViewWindow>, window: &Window, cx: &mut App) -> Snapshot {
+    let (view, home) = root.read(cx).parts();
+    let Some(wb) = home.upgrade() else { return Snapshot::default() };
+    let wb = wb.read(cx);
+    let mut full = wb.a11y_snapshot(window, cx);
+    let mut snap = take_view(&mut full, &view);
+    snap.generation = full.generation;
+    snap.geometry = Geometry::whole_window(window);
+    snap.title = wb.view_window_title(&view);
+    if wb.chrome.view_host == Some(window.window_handle()) {
+        snap.picker = full.picker.take();
+        if full.focus == FocusSnap::Picker {
+            snap.focus = FocusSnap::Picker;
+        }
+    }
+    snap
+}
+
+/// The node of element `i` of the extension view at `slot` (tests).
+#[cfg(test)]
+pub(in crate::workbench) fn ext_view_node(slot: usize, i: usize) -> NodeId {
+    ext_views_access::ViewSnap::node_id(slot, i)
+}
 
 /// A terminal's own window.
 pub(in crate::workbench) const TERMINAL_WINDOW: Hooks = Hooks {

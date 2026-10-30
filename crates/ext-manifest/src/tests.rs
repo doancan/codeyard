@@ -659,6 +659,17 @@ fn menus_name_a_command_a_place_and_for_view_titles_a_view() {
 }
 
 #[test]
+fn menus_may_name_listed_core_commands_that_need_no_argument() {
+    let base = with(CODE);
+    let m = parse(&format!("{base}[[menus]]\ncommand = \"core:workbench.saveAll\"\nlocation = \"view-title\"\nview = \"list\"\n")).unwrap();
+    assert_eq!(m.contributions.menus[0].command, "core:workbench.saveAll");
+    for bad in ["core:workbench.quit", "core:editor.open"] {
+        let text = format!("{base}[[menus]]\ncommand = \"{bad}\"\nlocation = \"file-tree\"\n");
+        assert_eq!(codes(&text), vec![Code::BadContribution], "{bad}");
+    }
+}
+
+#[test]
 fn status_items_have_local_ids_and_their_own_commands() {
     let base = with(CODE);
     let m = parse(&format!("{base}[[status-bar]]\nid = \"deploy\"\ncommand = \"go\"\n[[status-bar]]\nid = \"count\"\n")).unwrap();

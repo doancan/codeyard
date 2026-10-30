@@ -149,6 +149,12 @@ impl Guest for Probe {
             "secret-set" => wait(codeyard::api::secrets::set("api-key", "s3cr3t"), id),
             "secret-get" => wait(codeyard::api::secrets::get("api-key"), id),
             "every" => reply(id, format!("{}", timers::every(30))),
+            // `commands.execute`: the argument is "<command> <argument>"; the argument goes as a JSON string, or null.
+            "exec" => {
+                let line = args.trim_matches('"');
+                let (command, arg) = line.split_once(' ').map_or((line, "null".to_string()), |(c, a)| (c, format!("\"{a}\"")));
+                wait(codeyard::api::commands::execute(command, &arg), id)
+            }
             // What an extension can try from inside Wasm: WASI files, sockets and processes. Every line must fail.
             // Only in probe-escape.wasm: its socket imports would fail the package import check, by design.
             #[cfg(feature = "escape")]

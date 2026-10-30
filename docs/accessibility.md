@@ -188,6 +188,12 @@ repository, branch and file state, and committing checks the reviewed status and
    (`a11y_windows.rs`): the window title, the editor as a text field with that window's caret and selection, its find
    bar, suggestions and the picker opened there, or the terminal's text and cursor. The editor fills the window, so its
    bounds are the window's. Actions go to the workbench with that window, after making it the window commands act on.
+   A side view's own window holds that view's part of the workbench's tree (taken with that window, so focus and row
+   frames are its own), named after the view; the main window's tree leaves it out. An extension view's window holds
+   that view's nodes, and clicks and focus from the screen reader go to the extension as in the side bar.
+
+7. **Layout.** The main window's description says which view each side bar shows, which views live in the secondary
+   side bar and where the panel is docked, so moving a view by drag and drop is reflected without reading the screen.
 
 `CODEYARD_NO_A11Y=1` disables the adapter. `attach` is skipped under test because `TestWindow::window_handle()` is
 `unimplemented!()`. `scripts/a11y-probe/` holds the Swift tools (`axdump`, `axact`, `axpress`) that read the real
@@ -214,13 +220,19 @@ cursor blinking and *Auto* follows Increase contrast.
 Cost: with no assistive technology the adapter is within measurement noise (≤ 2 MB); with one active, about +5…8 MB on
 macOS. The CPU cost of the 250 ms snapshot loop has not been measured.
 
+Data breakpoints are rows of the Breakpoints list: a check box "Data breakpoint: <value>" that says it lasts for the
+debug session, with Remove Breakpoint and More Actions… (Enable/Disable, Remove) like a line breakpoint; Enter on the
+row turns it off or on. Pages and menus that draw themselves record their rows' painted bounds with the same kind of
+probe as the workbench's lists (`painted.rs`).
+
 ## Not verified / missing
 
 - **No screen reader has been run.** VoiceOver (speech, rotor, VO cursor, "interact with text area") and NVDA, JAWS or
   Narrator on Windows. The Windows adapter builds and passes CI, but no UI Automation client has read its tree yet.
-- **Fine-grained bounds.** Landmark frames and the rows of the Run and Debug, Testing, Remote Explorer and Ports lists
-  are available, but individual Explorer rows, status items, Source Control controls, the buttons inside rows, the
-  Settings and Keyboard Shortcuts rows, menu items and text runs do not yet expose their painted frames. Text still needs `character_positions` and
+- **Fine-grained bounds.** Landmark frames, the rows of the Run and Debug, Testing, Remote Explorer and Ports lists, the
+  rows of the Settings and Keyboard Shortcuts pages and the items of an open menu are available (painted, clipped to
+  what is visible; a row scrolled out of view has none), but individual Explorer rows, status items, Source Control
+  controls, the buttons inside rows and text runs do not yet expose their painted frames. Text still needs `character_positions` and
   `character_widths`; precise character hit testing, caret highlighting and magnifier caret tracking remain unimplemented.
 - **Focus** was not observed live on macOS (`Focused="0"` in every dump: the test window was not key). The code path
   (`TreeUpdate.focus`, `update_view_focus_state`) exists but is unverified.
@@ -229,8 +241,7 @@ macOS. The CPU cost of the 250 ms snapshot loop has not been measured.
 - The terminal exposes the screen only, not the scrollback, and cannot be written to from the tree (typing goes through
   the keyboard as usual).
 - Not exposed: an installed extension's page, the Source Control graph, worktrees and sync controls, hover and
-  signature popups, the bounds of Settings and Keyboard Shortcuts rows and of menu items, the Run and Debug view's data
-  breakpoints and the configuration selector's menu, opening a breakpoint's place, the Testing filter field, the Remote
+  signature popups, the Run and Debug view's configuration selector's menu, opening a breakpoint's place, the Testing filter field, the Remote
   Explorer's Add, SSH config and Refresh buttons, and the Debug Console. Only the tabs of the focused editor group are
   listed, and diff, large-file and page tabs are not.
 - Keyboard: the Run and Debug lists (variables, watches, call stack, breakpoints), the Testing tree, the Remote

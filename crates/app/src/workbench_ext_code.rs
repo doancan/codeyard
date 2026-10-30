@@ -454,6 +454,7 @@ impl Workbench {
             }
             Start::Execute { command, args_json } => match scope.may_execute(command) {
                 Err(e) => complete(&proc, Completion::Failed(e)),
+                Ok(()) if command.starts_with("core:") => self.execute_core_for_extension(id, ticket, scope, command, args_json, proc, window, cx),
                 Ok(()) => self.execute_for_extension(id, ticket, command, args_json, proc, window, cx),
             },
             Start::WriteClipboard { text } => {

@@ -20,6 +20,9 @@ use gpui::{Subscription, UniformListScrollHandle};
 use super::*;
 use crate::input::{FieldEvent, TextField};
 
+#[path = "workbench_ext_view_images.rs"]
+mod images;
+
 /// The pause in typing after which a text input sends `change`.
 const CHANGE_PAUSE: Duration = Duration::from_millis(400);
 
@@ -32,6 +35,8 @@ pub(super) struct Declared {
     pub(super) local: String,
     pub(super) title: String,
     pub(super) location: ViewLocation,
+    /// The manifest's `when`: the view is offered only while it holds.
+    pub(super) when: Option<String>,
 }
 
 impl Declared {
@@ -48,7 +53,7 @@ pub(super) fn declared_views() -> Vec<Declared> {
     for e in reg.active.iter().filter(|e| e.manifest.code.is_some()) {
         for d in &e.manifest.contributions.views {
             let local = d.id.strip_prefix(e.id()).and_then(|r| r.strip_prefix('.')).unwrap_or(&d.id).to_string();
-            out.push(Declared { id: d.id.clone(), extension: e.id().to_string(), local, title: d.title.clone(), location: d.location });
+            out.push(Declared { id: d.id.clone(), extension: e.id().to_string(), local, title: d.title.clone(), location: d.location, when: d.when.clone() });
         }
     }
     out
@@ -75,6 +80,8 @@ pub(super) struct HostedView {
     /// Parsed `markdown` sources and decoded `image` bytes, by a hash of their content.
     pub(super) markdown: HashMap<u64, Rc<Vec<crate::markdown::Block>>>,
     pub(super) images: HashMap<u64, Option<Arc<gpui::Image>>>,
+    /// `image` elements with an `https` URL, fetched through the extension's `net` permission.
+    pub(super) remote: images::RemoteImages,
     /// Bumped on every keystroke in a text input; a pending `change` is sent only if it is still the latest.
     typing: u64,
     /// Operations of the last diff (tests).
@@ -97,6 +104,7 @@ impl HostedView {
             scroll: HashMap::new(),
             markdown: HashMap::new(),
             images: HashMap::new(),
+            remote: images::RemoteImages::default(),
             typing: 0,
             last_ops: 0,
         }
@@ -152,6 +160,8 @@ pub(super) struct ViewsState {
     pub(super) bottom: Option<String>,
     /// Render requests sent; a theme change must not add one.
     pub(super) renders: u64,
+    /// Declared views whose `when` is false: not offered, and closed if open. Worked out each frame.
+    pub(super) hidden: HashSet<String>,
     /// The select whose menu is open: view, path and its option keys.
     choosing: Option<(String, KeyPath, Vec<Key>)>,
     /// Rows the last frame built per row container (tests: only the visible ones).
@@ -175,10 +185,11 @@ impl Workbench {
         self.cfg.exts.views.hosted.iter_mut().find(|h| h.decl.id == id)
     }
 
-    /// "Open View: …" in the palette, one per declared view.
+    /// "Open View: …" in the palette, one per declared view whose `when` holds.
     pub(super) fn ext_view_commands(&self) -> Vec<Command> {
         declared_views()
             .into_iter()
+            .filter(|d| !self.cfg.exts.views.hidden.contains(&d.id))
             .map(|d| Command { label: crate::i18n::tf("Open View: {0} ({1})", &[&d.title, &d.publisher()]), run: Run::ExtensionView(d.id) })
             .collect()
     }
@@ -186,6 +197,9 @@ impl Workbench {
     /// Show a view in its place and ask its extension for the tree the first time.
     pub(super) fn open_ext_view(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
         let Some(decl) = declared_views().into_iter().find(|d| d.id == id) else { return };
+        if !self.ext_view_when_holds(&decl, cx) {
+            return;
+        }
         match decl.location {
             ViewLocation::Sidebar => {
                 self.chrome.panel = Some(Panel::ExtView);
@@ -222,6 +236,17 @@ impl Workbench {
             }
         }
         cx.notify();
+    }
+
+    /// Hosts `decl` (a view shown in a window of its own after a restart) and asks for its tree if it has none.
+    pub(super) fn ensure_ext_view(&mut self, decl: Declared, window: &mut Window, cx: &mut Context<Self>) {
+        let id = decl.id.clone();
+        if self.ext_view(&id).is_none() {
+            self.cfg.exts.views.hosted.push(HostedView::new(decl));
+        }
+        if self.ext_view(&id).is_some_and(|h| h.tree.is_none() && !h.in_flight) {
+            self.request_ext_view_render(&id, window, cx);
+        }
     }
 
     /// `ui.invalidate(view)` from an extension: draw it again if it is open. A view that was never opened is not
@@ -321,7 +346,7 @@ impl Workbench {
         let Some(h) = self.ext_view_mut(id) else { return };
         let Some(tree) = h.tree.take() else { return };
         let mut live: HashSet<KeyPath> = HashSet::new();
-        let (mut md, mut imgs) = (HashSet::new(), HashSet::new());
+        let (mut md, mut imgs, mut urls) = (HashSet::new(), HashSet::new(), Vec::new());
         let mut new_fields = Vec::new();
         let mut stack: Vec<(&Node, KeyPath, bool)> = vec![(&tree, Vec::new(), false)];
         while let Some((n, mut path, in_tree)) = stack.pop() {
@@ -359,6 +384,7 @@ impl Workbench {
                     imgs.insert(k);
                     h.images.entry(k).or_insert_with(|| image_format(b).map(|f| Arc::new(gpui::Image::from_bytes(f, b.clone()))));
                 }
+                Element::Image { source: ext_ui::ImageSource::Url(u), .. } => urls.push(u.as_str().to_string()),
                 _ => {}
             }
             let below_tree = in_tree || kind == Kind::Tree;
@@ -370,6 +396,7 @@ impl Workbench {
         h.scroll.retain(|p, _| live.contains(p));
         h.markdown.retain(|k, _| md.contains(k));
         h.images.retain(|k, _| imgs.contains(k));
+        h.remote.want(urls);
         h.tree = Some(tree);
         for (path, placeholder, multiline, text) in new_fields {
             let field = cx.new(|cx| {
@@ -618,7 +645,7 @@ impl Workbench {
         let shown = (self.chrome.bottom == Bottom::ExtView).then_some(self.cfg.exts.views.bottom.as_deref()).flatten();
         declared_views()
             .into_iter()
-            .filter(|d| d.location == ViewLocation::Bottom)
+            .filter(|d| d.location == ViewLocation::Bottom && !self.cfg.exts.views.hidden.contains(&d.id))
             .enumerate()
             .map(|(i, d)| {
                 let active = shown == Some(d.id.as_str());
@@ -648,7 +675,7 @@ impl Workbench {
         let shown = (self.chrome.panel == Some(Panel::ExtView)).then_some(self.cfg.exts.views.sidebar.as_deref()).flatten();
         declared_views()
             .into_iter()
-            .filter(|d| d.location == ViewLocation::Sidebar)
+            .filter(|d| d.location == ViewLocation::Sidebar && !self.cfg.exts.views.hidden.contains(&d.id))
             .enumerate()
             .map(|(i, d)| {
                 let selected = shown == Some(d.id.as_str());
@@ -693,9 +720,13 @@ impl Workbench {
         declared_views().into_iter().find(|d| d.id == id).map_or_else(|| id.to_string(), |d| d.title)
     }
 
-    /// After a settings reload: views whose extension is gone are closed.
+    /// After a settings reload, and when a view's `when` turns false: views whose extension is gone, or whose `when`
+    /// is false, are closed.
     pub(super) fn sync_ext_views(&mut self, cx: &mut Context<Self>) {
-        let declared: HashSet<String> = declared_views().into_iter().map(|d| d.id).collect();
+        let hidden = &self.cfg.exts.views.hidden;
+        let declared: HashSet<String> = declared_views().into_iter().map(|d| d.id).filter(|id| !hidden.contains(id)).collect();
+        // A view's window closes with the view (its extension gone, or its `when` false).
+        self.close_gone_ext_view_windows(&declared, cx);
         let views = &mut self.cfg.exts.views;
         views.hosted.retain(|h| declared.contains(&h.decl.id));
         if views.sidebar.as_ref().is_some_and(|s| !declared.contains(s)) {
@@ -713,6 +744,63 @@ impl Workbench {
         if matches!(&self.tabs.page, Some(Page::ExtView(id)) if !declared.contains(id)) {
             self.close_page(cx);
         }
+    }
+}
+
+impl Workbench {
+    /// Whether a view's `when` holds now. A view without one is always offered; one that does not parse (the manifest
+    /// check refuses those) never is. Keys are what this window shows: `editor` when a file is open in an editor tab,
+    /// `editor.language` its language, `terminal` when the bottom panel shows the terminal, `file-tree`, `scm` and
+    /// `search` when that view is in a side bar, `panel` when the bottom panel is open. `ext.<key>` is not set yet.
+    pub(super) fn ext_view_when_holds(&self, d: &Declared, cx: &App) -> bool {
+        use ext_manifest::when::Value as W;
+        let Some(src) = d.when.as_deref() else { return true };
+        let Ok(expr) = ext_manifest::when::parse(src) else { return false };
+        let lookup = |key: &str| -> Option<W> {
+            Some(match key {
+                "editor" => W::Bool(self.active_editor().is_some()),
+                "editor.language" => W::Str(self.active_editor().map(|e| super::providers_glue::language_id(&e.read(cx).path)).unwrap_or_default()),
+                "terminal" => W::Bool(self.chrome.panel_open && self.chrome.bottom == Bottom::Terminal),
+                "file-tree" => W::Bool(self.view_shown(Panel::Explorer)),
+                "scm" => W::Bool(self.view_shown(Panel::Scm)),
+                "search" => W::Bool(self.view_shown(Panel::Search)),
+                "panel" => W::Bool(self.chrome.panel_open),
+                "workspace.trusted" => W::Bool(self.all_roots(cx).iter().all(|r| self.is_trusted_root(r, cx))),
+                _ => return None,
+            })
+        };
+        expr.eval(&lookup)
+    }
+
+    /// Each frame: work out which views' `when` is false, close those that are open, and let the views on screen fetch
+    /// their URL images.
+    pub(super) fn sync_ext_views_frame(&mut self, cx: &mut Context<Self>) {
+        let declared = declared_views();
+        if declared.iter().any(|d| d.when.is_some()) || !self.cfg.exts.views.hidden.is_empty() {
+            let hidden: HashSet<String> = declared.iter().filter(|d| !self.ext_view_when_holds(d, cx)).map(|d| d.id.clone()).collect();
+            let close = self.cfg.exts.views.hosted.iter().any(|h| hidden.contains(&h.decl.id));
+            self.cfg.exts.views.hidden = hidden;
+            if close {
+                self.sync_ext_views(cx);
+            }
+        }
+        self.fetch_ext_view_images(cx);
+    }
+
+    /// The views drawn now: the side bar's, the bottom panel's and the editor area's, when each is showing.
+    pub(super) fn ext_views_on_screen(&self) -> Vec<String> {
+        let views = &self.cfg.exts.views;
+        let mut out = Vec::new();
+        if self.view_shown(Panel::ExtView) {
+            out.extend(views.sidebar.clone());
+        }
+        if self.chrome.panel_open && self.chrome.bottom == Bottom::ExtView {
+            out.extend(views.bottom.clone());
+        }
+        if let (Some(Page::ExtView(id)), true) = (&self.tabs.page, self.tabs.page_active) {
+            out.push(id.clone());
+        }
+        out
     }
 }
 

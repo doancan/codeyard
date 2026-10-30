@@ -57,8 +57,8 @@ pub(super) struct DebugState {
     pub watch_values: Vec<String>,
     /// The program's threads and the (selected) thread `thread` reported by the stop.
     pub threads: Vec<(i64, String)>,
-    /// Data breakpoints (bound to the session): (dataId, description).
-    pub data_breakpoints: Vec<(String, String)>,
+    /// Data breakpoints (bound to the session).
+    pub data_breakpoints: Vec<crate::debug_model::DataBp>,
     /// Depth of the selected thread's stack when the adapter says (more frames load on demand).
     pub total_frames: Option<usize>,
     /// Values whose elements load a page at a time: reference → (elements loaded, elements in all).

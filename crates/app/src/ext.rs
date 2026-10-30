@@ -509,14 +509,20 @@ pub fn check_setting(key: &str, value: &serde_json::Value) -> Result<(), String>
     Err(crate::i18n::tf("{0}: expected {1}", &[&format!("\"{key}\""), &kind]))
 }
 
-/// Install a package file (`codeyard --install-extension`): the checks of the Extensions view, without its sheet. A
-/// package with code installs only when it asks for no permissions: anything more needs the consent sheet.
+/// Install a package file, or a folder packaged as `cyx package` would but without building it (`codeyard
+/// --install-extension`): the checks of the Extensions view, without its sheet. A package with code installs only when
+/// it asks for no permissions: anything more needs the consent sheet.
 pub fn install_file(store: &ext_core::Store, path: &Path) -> Result<Manifest, String> {
-    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    let (bytes, source) = if path.is_dir() {
+        let files = ext_pkg::collect_dir(path).map_err(|e| e.to_string())?;
+        (ext_pkg::write(files).map_err(|e| e.to_string())?.0, ext_core::Source::Folder { path: path.display().to_string() })
+    } else {
+        (std::fs::read(path).map_err(|e| e.to_string())?, ext_core::Source::File { path: path.display().to_string() })
+    };
     let pkg = ext_pkg::read(&bytes).map_err(|e| e.to_string())?;
     if pkg.manifest.code.is_some() && !pkg.manifest.permissions.is_empty() {
         return Err(crate::i18n::tf("{} asks for permissions: install it from the Extensions view to review them", &[&pkg.manifest.id]));
     }
-    let installed = store.install(&bytes, ext_core::Source::File { path: path.display().to_string() }).map_err(|e| e.to_string())?;
+    let installed = store.install(&bytes, source).map_err(|e| e.to_string())?;
     Ok(installed.manifest)
 }

@@ -52,7 +52,12 @@ pub(super) struct ProviderState {
 #[derive(Clone)]
 pub(super) enum QuickFix {
     Lsp(Arc<crate::lsp::Client>, crate::lsp::CodeAction),
-    Extension { extension: String, action: v::CodeAction },
+    /// `document`: the path the actions were asked for, the one file its edits may change without `write`.
+    Extension {
+        extension: String,
+        document: String,
+        action: v::CodeAction,
+    },
 }
 
 /// The language id Codeyard gives a file (`rust`, `toml`, a language an extension adds), `plaintext` otherwise.
@@ -149,7 +154,10 @@ impl Workbench {
             let timer = cx.background_executor().timer(deadline);
             match futures::future::select(answer.next(), timer).await {
                 futures::future::Either::Left((a, _)) => {
-                    crate::perf::sample("extensions.provider_overhead_ms", sent.elapsed().as_secs_f64() * 1000.0);
+                    // The platform's share: a request to a running extension (starting one is measured on its own).
+                    if running {
+                        crate::perf::sample("extensions.provider_overhead_ms", sent.elapsed().as_secs_f64() * 1000.0);
+                    }
                     let _ = tx.send(a.unwrap_or(Err(v::Error::Cancelled)));
                     this.update(cx, |this, _| this.cfg.exts.providers.waiting.retain(|w| !(w.1 == ext && w.2 == id))).ok();
                 }
@@ -345,7 +353,7 @@ impl Workbench {
             }
             for (extension, answer) in asked {
                 if let Ok(Ok(Response::CodeActions(list))) = answer.await {
-                    fixes.extend(list.into_iter().map(|action| QuickFix::Extension { extension: extension.clone(), action }));
+                    fixes.extend(list.into_iter().map(|action| QuickFix::Extension { extension: extension.clone(), document: path.clone(), action }));
                 }
             }
             // Preferred first, the rest in the order they came.
@@ -370,7 +378,7 @@ impl Workbench {
             .map(|f| match f {
                 QuickFix::Lsp(_, a) => PickItem { label: a.title.clone().into(), detail: (!a.kind.is_empty()).then(|| a.kind.clone().into()), keys: None },
                 // Every extension surface names the extension.
-                QuickFix::Extension { extension, action } => {
+                QuickFix::Extension { extension, action, .. } => {
                     PickItem { label: action.title.clone().into(), detail: Some(extension.clone().into()), keys: None }
                 }
             })
@@ -382,14 +390,31 @@ impl Workbench {
     /// Run the chosen fix. An extension's: its edits, then its command; with neither, `run-code-action` asks the
     /// extension to do it.
     pub(super) fn run_quick_fix(&mut self, fix: QuickFix, window: &mut Window, cx: &mut Context<Self>) {
-        let (extension, action) = match fix {
+        let (extension, document, action) = match fix {
             QuickFix::Lsp(client, action) => return self.run_code_action(client, action, cx),
-            QuickFix::Extension { extension, action } => (extension, action),
+            QuickFix::Extension { extension, document, action } => (extension, document, action),
         };
         if !action.edits.is_empty() {
+            // The extension chose the files; each must be the document or in its `write`, checked as it is now. One
+            // refused file refuses the whole fix: half of an edit is worse than none.
+            let reg = crate::ext::current();
+            let scope = reg.active.iter().find(|a| a.id() == extension).map(|a| self.extension_scope(a, cx));
             let mut changes = serde_json::Map::new();
             for (uri, edits) in &action.edits {
-                let Some(path) = ext_broker::normalize(uri) else { continue };
+                let allowed = match &scope {
+                    Some(scope) => scope.may_edit(&document, uri),
+                    None => Err(v::Error::Invalid(format!("{extension} is no longer active"))),
+                };
+                let path = match allowed {
+                    Ok(path) => path,
+                    Err(e) => {
+                        let why = super::code_glue::explain(&e);
+                        self.log_extension(&extension, LogLevel::Warn, format!("code action \"{}\": edit to {uri} refused: {why}", action.title));
+                        self.notice = Some(Notice::Error(format!("{extension}: {why}").into()));
+                        cx.notify();
+                        return;
+                    }
+                };
                 let list: Vec<serde_json::Value> = edits
                     .iter()
                     .map(|e| {
@@ -454,6 +479,9 @@ impl Workbench {
                 if this.cfg.exts.code.user_action.get(&ext) == Some(&id) {
                     this.cfg.exts.code.user_action.remove(&ext);
                 }
+                if let Some(Ok(Response::Json(j))) = &result {
+                    this.cfg.exts.code.last_answer.insert(ext.clone(), j.clone());
+                }
                 if let Some(Err(e)) = result.filter(|_| !this.cfg.exts.code.disabled.contains(&ext)) {
                     this.notice = Some(Notice::Error(format!("{ext}: {}", super::code_glue::explain(&e)).into()));
                     cx.notify();
@@ -466,14 +494,16 @@ impl Workbench {
 
     // --- menus ---
 
-    /// Extension commands for a menu: (title, action, enabled). `when` hides an entry, `enablement` greys it out.
+    /// Extension commands for a menu: (title, action, enabled). `when` hides an entry, `enablement` greys it out. An
+    /// entry runs the extension's command with `target` (a file-tree menu's file) or the view (a view-title menu) as its
+    /// argument, or a core command (`core:…`) as the palette runs it.
     pub(super) fn extension_menu(
         &self,
         location: MenuLocation,
         view: Option<&str>,
         target: Option<&str>,
         cx: &App,
-    ) -> Vec<(String, RunExtensionCommand, bool)> {
+    ) -> Vec<(String, Box<dyn gpui::Action>, bool)> {
         let reg = crate::ext::current();
         let language = self.active_editor().map(|e| language_id(&e.read(cx).path));
         let trusted = self.all_roots(cx).iter().all(|r| self.is_trusted_root(r, cx));
@@ -490,8 +520,12 @@ impl Workbench {
             })
         };
         let holds = |expr: &Option<String>| expr.as_deref().is_none_or(|w| ext_manifest::when::parse(w).is_ok_and(|e| e.eval(&lookup)));
-        let args = target.map_or_else(|| "null".to_string(), |path| serde_json::Value::String(ext_broker::uri(path)).to_string());
-        let mut out = Vec::new();
+        let args = match (target, view) {
+            (Some(path), _) => serde_json::Value::String(ext_broker::uri(path)).to_string(),
+            (None, Some(view)) if location == MenuLocation::ViewTitle => serde_json::Value::String(view.to_string()).to_string(),
+            _ => "null".to_string(),
+        };
+        let mut out: Vec<(String, Box<dyn gpui::Action>, bool)> = Vec::new();
         for e in reg.active.iter().filter(|e| e.manifest.code.is_some()) {
             for m in e
                 .manifest
@@ -503,16 +537,58 @@ impl Workbench {
                 if !holds(&m.when) {
                     continue;
                 }
+                // A core command the manifest check allowed: listed for extensions, with no argument needed.
+                if let Some(core) = m.command.strip_prefix("core:").and_then(ext_manifest::core_command) {
+                    if let Some(action) = crate::commands::action_by_id(core.id).filter(|_| !core.title.is_empty()) {
+                        out.push((crate::i18n::t(core.title).to_string(), action, true));
+                    }
+                    continue;
+                }
                 let Some((owner, local)) = resolve_command(e.id(), &m.command) else { continue };
                 let Some(cmd) = reg.active.iter().find(|x| x.id() == owner).and_then(|x| x.manifest.contributions.commands.iter().find(|c| c.id == m.command))
                 else {
                     continue;
                 };
                 let enabled = holds(&cmd.enablement) && !self.cfg.exts.code.disabled.contains(&owner);
-                out.push((cmd.title.clone(), RunExtensionCommand { extension: owner, command: local, args: args.clone() }, enabled));
+                out.push((cmd.title.clone(), Box::new(RunExtensionCommand { extension: owner, command: local, args: args.clone() }), enabled));
             }
         }
         out
+    }
+
+    /// The view-title menu button of the extension view `view`, when extensions put entries there.
+    pub(super) fn ext_view_title_menu(&self, view: &str, p: &Palette, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if !crate::ext::current().active.iter().any(|e| e.manifest.contributions.menus.iter().any(|m| m.view.as_deref() == Some(view))) {
+            return None;
+        }
+        if self.extension_menu(MenuLocation::ViewTitle, Some(view), None, cx).is_empty() {
+            return None;
+        }
+        let id = view.to_string();
+        let button = ui::icon_button(SharedString::from(format!("ext-view-menu-{view}")), "ellipsis", crate::i18n::t("More Actions…"), p).on_mouse_down(
+            gpui::MouseButton::Left,
+            cx.listener(move |this, ev: &gpui::MouseDownEvent, window, cx| {
+                cx.stop_propagation();
+                this.show_ext_view_title_menu(&id, ev.position, window, cx);
+            }),
+        );
+        Some(div().ml_auto().flex_none().child(button).into_any_element())
+    }
+
+    /// The view-title menu of the extension view `view`, at `position`.
+    pub(super) fn show_ext_view_title_menu(&mut self, view: &str, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+        let (mut items, mut commands, mut actions) = (Vec::new(), Vec::new(), Vec::new());
+        let key = |a: &dyn gpui::Action| Command { label: String::new(), run: Run::Action(a.boxed_clone()) }.shortcut(cx);
+        for (title, action, enabled) in self.extension_menu(MenuLocation::ViewTitle, Some(view), None, cx) {
+            items.push(MenuItem::new(&title).shortcut(key(action.as_ref())).enabled(enabled));
+            commands.push(MenuCmd::Dispatch(actions.len()));
+            actions.push(action);
+        }
+        if items.is_empty() {
+            return;
+        }
+        let target = MenuTarget { path: String::new(), is_dir: false, tab: None };
+        self.show_menu(items, commands, actions, target, position, window, cx);
     }
 
     /// Like `show_action_menu`, with the extension entries for `location` after the built-in ones.
@@ -549,10 +625,10 @@ impl Workbench {
     ) {
         let key = |a: &dyn gpui::Action| Command { label: String::new(), run: Run::Action(a.boxed_clone()) }.shortcut(cx);
         for (i, (title, action, enabled)) in self.extension_menu(location, None, target, cx).into_iter().enumerate() {
-            let item = MenuItem::new(&title).shortcut(key(&action)).enabled(enabled);
+            let item = MenuItem::new(&title).shortcut(key(action.as_ref())).enabled(enabled);
             items.push(if i == 0 { item.separator() } else { item });
             commands.push(MenuCmd::Dispatch(actions.len()));
-            actions.push(Box::new(action));
+            actions.push(action);
         }
     }
 
@@ -795,6 +871,8 @@ impl Workbench {
     pub(super) fn on_extension_exited(&mut self, id: &str, crashed: bool, cx: &mut Context<Self>) {
         if crashed {
             self.forget_extension_marks(id, cx);
+            // Its views in windows of their own go back to the side bar, which shows what happened.
+            self.return_ext_view_windows(id, cx);
         }
     }
 
@@ -865,6 +943,33 @@ impl Workbench {
     pub(super) fn run_extension_task(&mut self, extension: &str, id: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.ask_extension_as_user(extension, Request::RunTask { id: id.to_string() }, "tasks", window, cx);
     }
+
+    // --- performance scenarios (crate::perf) ---
+
+    /// `CODEYARD_PERF_DECORATIONS`: run the `decorate` command of every active extension with `[[decorations]]` for the
+    /// active file's language (scripts/perf/run.sh installs two); the number asked.
+    pub fn start_decorations_for_perf(&mut self, window: &mut Window, cx: &mut Context<Self>) -> usize {
+        let Some(path) = self.active_editor().map(|e| e.read(cx).path.clone()) else { return 0 };
+        let ids: Vec<String> = self.providers_for(&language_id(&path), |c| &c.decorations).iter().map(|a| a.id().to_string()).collect();
+        for id in &ids {
+            self.run_extension_command(id, "decorate", window, cx);
+        }
+        ids.len()
+    }
+
+    /// Decoration sets extensions have on the active file.
+    pub fn decoration_sets_for_perf(&self, cx: &App) -> usize {
+        let path = self.active_editor().map(|e| e.read(cx).path.clone()).unwrap_or_default();
+        self.cfg.exts.providers.decorations.get(&path).map_or(0, Vec::len)
+    }
+
+    /// `CODEYARD_PERF_PROVIDERS`: ask every task provider for its tasks once; the flag turns true when all answered.
+    pub fn ask_tasks_for_perf(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Rc<std::cell::Cell<bool>> {
+        let done = Rc::new(std::cell::Cell::new(false));
+        let flag = done.clone();
+        self.with_extension_tasks(Vec::new(), window, cx, move |_, _, _, _| flag.set(true));
+        done
+    }
 }
 
 /// `command` as named by `extension` → (the extension that owns it, its local id): a local id or full id of its own,
@@ -894,7 +999,40 @@ impl Workbench {
 
     pub fn run_extension_menu_for_test(&mut self, location: MenuLocation, title: &str, target: Option<&str>, window: &mut Window, cx: &mut Context<Self>) {
         let (_, action, _) = self.extension_menu(location, None, target, cx).into_iter().find(|(t, ..)| t == title).expect("menu entry");
-        self.on_run_extension_command(&action, window, cx);
+        self.run_menu_action_for_test(action, window, cx);
+    }
+
+    /// An extension command runs here; a core command is dispatched as the menu dispatches it.
+    fn run_menu_action_for_test(&mut self, action: Box<dyn gpui::Action>, window: &mut Window, cx: &mut Context<Self>) {
+        match action.as_any().downcast_ref::<RunExtensionCommand>() {
+            Some(a) => self.on_run_extension_command(a, window, cx),
+            None => window.dispatch_action(action, cx),
+        }
+    }
+
+    /// The view-title menu of `view`: (title, enabled).
+    pub fn ext_view_title_menu_for_test(&self, view: &str, cx: &App) -> Vec<(String, bool)> {
+        self.extension_menu(MenuLocation::ViewTitle, Some(view), None, cx).into_iter().map(|(t, _, e)| (t, e)).collect()
+    }
+
+    pub fn run_ext_view_title_menu_for_test(&mut self, view: &str, title: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let (_, action, _) = self.extension_menu(MenuLocation::ViewTitle, Some(view), None, cx).into_iter().find(|(t, ..)| t == title).expect("menu entry");
+        self.run_menu_action_for_test(action, window, cx);
+    }
+
+    /// The most decoration sets any file has.
+    pub fn decoration_sets_any_file_for_test(&self) -> usize {
+        self.cfg.exts.providers.decorations.values().map(Vec::len).max().unwrap_or(0)
+    }
+
+    pub fn forget_extension_answer_for_test(&mut self, id: &str) {
+        self.cfg.exts.code.last_answer.remove(id);
+    }
+
+    /// Run `command` of `extension` with a JSON argument, as a menu or key binding does.
+    pub fn run_extension_command_with_for_test(&mut self, extension: &str, command: &str, args: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let a = RunExtensionCommand { extension: extension.into(), command: command.into(), args: args.into() };
+        self.on_run_extension_command(&a, window, cx);
     }
 
     pub fn click_extension_status_for_test(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
@@ -937,6 +1075,11 @@ impl Workbench {
             .expect("quick fix");
         self.close_overlay(window, cx);
         self.run_quick_fix(fix, window, cx);
+    }
+
+    /// Run an extension's code action as if the user chose it from the list asked for `document`.
+    pub fn run_extension_code_action_for_test(&mut self, extension: &str, document: &str, action: v::CodeAction, window: &mut Window, cx: &mut Context<Self>) {
+        self.run_quick_fix(QuickFix::Extension { extension: extension.into(), document: document.into(), action }, window, cx);
     }
 
     pub fn task_labels_for_test(&mut self, window: &mut Window, cx: &mut Context<Self>) -> std::rc::Rc<std::cell::RefCell<Option<Vec<String>>>> {

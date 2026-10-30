@@ -164,7 +164,7 @@ Never write an engine version, an API version, `*` or `startup`. `cyx` works out
 
 ```toml
 [[menus]]
-command  = "refresh"            # one of your commands, or a dependency's full id
+command  = "refresh"            # one of your commands, a dependency's full id, or a core command
 location = "editor-context"     # editor-context | file-tree | view-title (with view = "<your view>")
 when     = "editor.language == 'toml'"   # hides the entry; a command's `enablement` greys it out
 
@@ -190,7 +190,10 @@ languages = ["rust"]            # languages.set-decorations: gutter, line or aft
 id = "deployments"              # request.provide-tasks lists them, request.run-task runs one
 ```
 
-A file-tree menu entry passes the file's URI to the command as its argument. A code action's edits are applied when
+A file-tree menu entry passes the file's URI to the command as its argument, and a view-title entry the view's full id
+(`you.ext.deployments`): view-title entries appear under the **…** button in that view's title bar. A menu entry may
+also name a core command that takes no argument, such as `core:workbench.saveAll`
+([the list](reference/core-commands.md)); the user's click runs it, so it needs no permission. A code action's edits are applied when
 the user picks it, then its `command` runs; an action with neither gets `request.run-code-action`. Your extension
 starts when a file of one of these languages opens or a provider is first asked. Providers have one second
 (`PROVIDER_DEADLINE_MILLIS`) to answer, plus the start-up time on the first request; a later
@@ -215,6 +218,7 @@ error[CY0201]: net access to "api.vercel.com" is not declared
 read = ["vercel.json"]          # workspace globs; .env* and .git/ must be named explicitly
 net  = ["api.vercel.com"]       # HTTPS to these hosts
 run  = ["vercel"]               # these programs, any arguments
+commands = ["core:workbench.saveAll"]   # core commands your code runs (reference/core-commands.md)
 why  = "Shows your Vercel deployments next to the code."
 ```
 

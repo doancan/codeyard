@@ -96,6 +96,28 @@ fn credentials_must_be_named() {
     assert!(matches!(call(&named, Start::ReadFile { uri: uri(&format!("{r}/.env")) }).0, Completion::Bytes(_)));
 }
 
+/// A code action the user chose edits the document it was asked for; any other file needs `write`, so an action
+/// cannot slip a change into `.git/hooks` or a file outside the workspace.
+#[test]
+fn a_code_action_edits_its_document_and_other_files_need_write() {
+    let r = root("edit");
+    let doc = format!("{r}/src/a.rs");
+    let none = scope(&r, perms(&[], &[], &[]), true);
+    assert_eq!(none.may_edit(&doc, &uri(&doc)).unwrap(), doc);
+    assert_eq!(none.may_edit(&doc, &format!("{r}/src/./a.rs")).unwrap(), doc, "the same file, spelled differently");
+    for other in [format!("{r}/vercel.json"), format!("{r}/.git/hooks/pre-commit"), format!("{r}/src/../../escape.rs"), "/etc/passwd".into()] {
+        assert!(matches!(none.may_edit(&doc, &uri(&other)), Err(v::Error::Denied(_))), "{other}");
+    }
+    let json = scope(&r, perms(&[], &["*.json"], &[]), true);
+    assert_eq!(json.may_edit(&doc, &uri(&format!("{r}/vercel.json"))).unwrap(), format!("{r}/vercel.json"));
+    // In an untrusted folder (`write` already masked away) the other file is refused for that reason, the document not.
+    let untrusted = scope(&r, perms(&[], &[], &[]), false);
+    assert!(matches!(untrusted.may_edit(&doc, &uri(&format!("{r}/vercel.json"))), Err(v::Error::Denied(v::Denied { why: v::Why::UntrustedWorkspace, .. }))));
+    assert!(untrusted.may_edit(&doc, &uri(&doc)).is_ok());
+    // A document that does not normalize grants nothing.
+    assert!(none.may_edit("relative/a.rs", "relative/a.rs").is_err());
+}
+
 #[test]
 fn writes_need_write_and_trust() {
     let r = root("write");
@@ -166,9 +188,33 @@ fn commands_are_own_dependencies_or_listed_core() {
     assert!(s.may_execute("you.ext.refresh").is_ok());
     assert!(s.may_execute("you.lib.go").is_ok());
     assert!(s.may_execute("core:workbench.toggleZenMode").is_ok());
-    assert!(s.may_execute("core:workbench.quit").is_err());
+    // Listed for extensions but not in this manifest: the line to add. Not listed for extensions: refused with where
+    // the list is.
+    assert!(matches!(s.may_execute("core:workbench.saveAll"), Err(v::Error::Denied(d)) if d.permission == "commands = [\"core:workbench.saveAll\"]"));
+    assert!(matches!(s.may_execute("core:workbench.quit"), Err(v::Error::Invalid(m)) if m.contains("core-commands.md")));
     assert!(s.may_execute("you.extra.go").is_err(), "a prefix of the id is not the id");
     assert!(s.may_execute("them.ext.go").is_err());
+}
+
+#[test]
+fn core_commands_need_what_they_imply() {
+    use ext_manifest::core_commands::Implies;
+    let r = root("imply");
+    let s = scope(&r, perms(&["docs/**"], &["src/**"], &["cargo"]), true);
+    let file = |rel: &str| format!("{r}/{rel}");
+    assert!(s.may_imply(Implies::Nothing, &[file("anything")]).is_ok());
+    assert!(s.may_imply(Implies::ReadArgument, &[file("docs/a.md")]).is_ok());
+    assert!(denied_why(&Completion::Failed(s.may_imply(Implies::ReadArgument, &[file("src/a.rs")]).unwrap_err())).is_some());
+    assert!(s.may_imply(Implies::WriteUnsaved, &[file("src/a.rs"), file("src/b.rs")]).is_ok());
+    // One file it may not write is enough to refuse the whole command.
+    let e = s.may_imply(Implies::WriteUnsaved, &[file("src/a.rs"), file("Cargo.toml")]).unwrap_err();
+    assert!(matches!(&e, v::Error::Denied(d) if d.permission == "write = [\"Cargo.toml\"]"), "{e:?}");
+    assert!(s.may_imply(Implies::RunTask, &["cargo".into()]).is_ok());
+    assert!(s.may_imply(Implies::RunTask, &["make".into()]).is_err());
+    // An untrusted folder's permissions have no `write` or `run` (ext_core::trust), and the denial says why.
+    let untrusted = scope(&r, perms(&["docs/**"], &[], &[]), false);
+    let e = untrusted.may_imply(Implies::WriteActiveFile, &[file("src/a.rs")]).unwrap_err();
+    assert_eq!(denied_why(&Completion::Failed(e)), Some(v::Why::UntrustedWorkspace));
 }
 
 #[test]

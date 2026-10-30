@@ -65,6 +65,8 @@ struct TestingSnap {
 struct MenuSnap {
     entity: gpui::EntityId,
     items: Vec<(String, Option<String>, bool, Option<bool>, bool)>,
+    /// Each item's painted, visible bounds (none while scrolled out of view).
+    bounds: Vec<Option<accesskit::Rect>>,
     selected: Option<usize>,
 }
 
@@ -304,6 +306,9 @@ impl MenuSnap {
             }
             n.set_position_in_set(i + 1);
             n.set_size_of_set(self.items.len());
+            if let Some(b) = self.bounds.get(i).copied().flatten() {
+                n.set_bounds(b);
+            }
             if *enabled {
                 n.add_action(Action::Click);
             } else {
@@ -344,17 +349,17 @@ impl SideSnap {
 }
 
 impl Workbench {
-    pub(super) fn a11y_side(&self, cx: &App) -> SideSnap {
+    pub(super) fn a11y_side(&self, window: &Window, cx: &App) -> SideSnap {
         let testing = (self.chrome.panel == Some(Panel::Testing)).then(|| self.a11y_testing(cx));
         let remote = (self.chrome.panel == Some(Panel::Remote)).then(|| {
             let mut rows = self.remote_rows(cx);
             rows.truncate(MAX_REMOTE);
             rows
         });
-        SideSnap { debug: self.a11y_debug(cx), testing, remote, menu: self.a11y_menu(cx) }
+        SideSnap { debug: self.a11y_debug(cx), testing, remote, menu: self.a11y_menu(window, cx) }
     }
 
-    fn a11y_menu(&self, cx: &App) -> Option<MenuSnap> {
+    fn a11y_menu(&self, window: &Window, cx: &App) -> Option<MenuSnap> {
         let state = self.menu.as_ref()?;
         let menu = state.menu.read(cx);
         let items = menu
@@ -363,7 +368,8 @@ impl Workbench {
             .take(MAX_MENU)
             .map(|i| (i.label.to_string(), i.shortcut.as_ref().map(|s| s.to_string()), i.enabled, i.checked, i.submenu))
             .collect();
-        Some(MenuSnap { entity: state.menu.entity_id(), items, selected: menu.selected() })
+        let bounds = menu.item_bounds(menu.items().len().min(MAX_MENU), window);
+        Some(MenuSnap { entity: state.menu.entity_id(), items, bounds, selected: menu.selected() })
     }
 
     fn a11y_testing(&self, cx: &App) -> TestingSnap {
@@ -568,7 +574,9 @@ impl Workbench {
         }
         let i = (req.target_node.0 - MENU_ITEM) as usize;
         let Some(item) = old.items.get(i) else { return };
-        let same = self.a11y_menu(cx).is_some_and(|now| now.items.get(i) == Some(item));
+        let now =
+            menu.read(cx).items().get(i).map(|it| (it.label.to_string(), it.shortcut.as_ref().map(|s| s.to_string()), it.enabled, it.checked, it.submenu));
+        let same = now.as_ref() == Some(item);
         if same {
             menu.update(cx, |m, cx| m.activate(i, cx));
         }

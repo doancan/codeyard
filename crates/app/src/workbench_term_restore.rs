@@ -1,7 +1,9 @@
 //! Workbench: terminals outside the panel across restarts. Which editor group held which terminal (in order) and where
-//! detached terminal windows were is saved with the session; on the next start a NEW shell takes each place, with the
-//! title, colour and folder of the old one and a dimmed notice. Nothing of the old session is run again: no command,
-//! no input. The saved value is versioned and bounded; a damaged one restores nothing and never blocks startup.
+//! detached terminal windows were is saved with the session, with each terminal's token. On the next start a terminal
+//! still running in the window's session is taken back into its place, as the panel's are (`workbench_term_daemon.rs`);
+//! otherwise a NEW shell takes the place, with the title, colour and folder of the old one and a dimmed notice. Nothing
+//! of the old session is run again: no command, no input. The saved value is versioned and bounded; a damaged one
+//! restores nothing and never blocks startup.
 
 use super::*;
 use gpui::{Bounds, Pixels};
@@ -35,6 +37,9 @@ pub(crate) struct SavedTerminal {
     color: Option<String>,
     #[serde(default)]
     cwd: Option<String>,
+    /// The token to take it back from the window's session.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    token: Option<crate::terminal_session::SavedPty>,
 }
 
 /// Where a terminal was: an editor group (by id), or a window of its own (x, y, width, height, when known).
@@ -60,7 +65,14 @@ impl SavedTerminals {
             .terminals
             .iter()
             .all(|t| fits(&t.title, MAX_TITLE) && fits(&t.cwd, MAX_CWD) && t.color.as_deref().is_none_or(|c| crate::terminal_profiles::COLORS.contains(&c)));
+        let hex = |s: &str| s.len() <= 64 && s.bytes().all(|b| b.is_ascii_hexdigit());
+        let valid = valid && saved.terminals.iter().filter_map(|t| t.token.as_ref()).all(|k| hex(&k.instance) && hex(&k.secret));
         valid.then_some(saved)
+    }
+
+    /// The saved tokens, by position.
+    pub(crate) fn tokens(&self) -> Vec<(usize, crate::terminal_session::SavedPty)> {
+        self.terminals.iter().enumerate().filter_map(|(ix, t)| Some((ix, t.token.clone()?))).collect()
     }
 
     #[cfg(test)]
@@ -110,7 +122,7 @@ impl Workbench {
             }
             let color = t.color.clone().filter(|c| crate::terminal_profiles::COLORS.contains(&c.as_str()));
             let cwd = fits(t.live_cwd().or_else(|| t.start_dir()), MAX_CWD);
-            terminals.push(SavedTerminal { place, title: fits(t.fixed_title(), MAX_TITLE), color, cwd });
+            terminals.push(SavedTerminal { place, title: fits(t.fixed_title(), MAX_TITLE), color, cwd, token: t.token().cloned() });
         };
         for id in self.tabs.layout.groups() {
             for term in self.tabs.group(id).map(|g| g.terminals.as_slice()).unwrap_or_default() {
@@ -143,6 +155,26 @@ impl Workbench {
         if !self.chrome.detached.is_empty() || self.editor_terminal_count() > 0 {
             return;
         }
+        // The window's session is still being taken back: these are placed once it is (some may be taken back too).
+        if self.persist.term_restoring {
+            self.persist.pending_moved = Some(saved);
+            return;
+        }
+        let back = std::mem::take(&mut self.persist.moved_back);
+        self.place_moved_terminals(saved, back, window, cx);
+    }
+
+    /// Put each saved terminal in its place: the ones in `back` (by position) as they are, the others as new shells.
+    pub(in crate::workbench) fn place_moved_terminals(
+        &mut self,
+        saved: SavedTerminals,
+        mut back: Vec<(usize, host::Pty, u64)>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.chrome.detached.is_empty() || self.editor_terminal_count() > 0 {
+            return;
+        }
         let root = self.active_root(cx);
         let local = !self.remote.host.is_remote();
         let displays: Vec<Bounds<Pixels>> = cx.primary_display().into_iter().chain(cx.displays()).map(|d| d.bounds()).collect();
@@ -152,7 +184,20 @@ impl Workbench {
                 displays_unique.push(d);
             }
         }
-        for saved in saved.terminals {
+        for (ix, saved) in saved.terminals.into_iter().enumerate() {
+            if let Some(at) = back.iter().position(|(i, _, _)| *i == ix) {
+                let (_, pty, dropped) = back.swap_remove(at);
+                let shown = crate::terminal_session::SavedTerminal {
+                    cwd: saved.cwd.clone(),
+                    color: saved.color.clone(),
+                    title: saved.title.clone(),
+                    token: saved.token.clone(),
+                    ..Default::default()
+                };
+                let term = self.reattached_terminal(pty, &shown, dropped, window, cx);
+                self.put_moved_terminal(term, saved.place, &displays_unique, window, cx);
+                continue;
+            }
             // The folder it was in, if it is still there (on a remote host: if it is inside the open folder).
             let cwd = saved
                 .cwd
@@ -169,34 +214,40 @@ impl Workbench {
                 }
                 t.show_restored_notice(cx);
             });
-            match saved.place {
-                Place::Group(id) => {
-                    let id = if self.tabs.group(id).is_some() { id } else { self.tabs.layout.focused() };
-                    let group = self.tabs.group_mut(id).expect("layout group has state");
-                    group.terminals.push(term.clone());
-                    if group.page.is_none() && group.editors.is_empty() {
-                        group.page = Some(Page::Terminal(term));
-                        group.page_active = true;
-                    }
-                }
-                Place::Window(at) => {
-                    let bounds = place_window(at, &displays_unique)
-                        .unwrap_or_else(|| Bounds::new(window.bounds().origin + gpui::point(px(40.), px(40.)), views_glue::DETACHED_SIZE));
-                    match self.open_detached(term.clone(), bounds, cx) {
-                        Ok(handle) => self.chrome.detached.push(views_glue::Detached { term, window: handle }),
-                        Err(_) => {
-                            self.terminals.push(term);
-                            self.active_terminal = self.terminals.len() - 1;
-                            self.chrome.bottom = Bottom::Terminal;
-                            self.chrome.panel_open = true;
-                        }
-                    }
-                }
-            }
+            self.put_moved_terminal(term, saved.place, &displays_unique, window, cx);
         }
         self.refresh_active_flags(cx);
         // Restoring the groups saved an arrangement without these; save it again with them.
         self.persist_moved_terminals(cx);
         cx.notify();
+    }
+
+    /// Put a restored terminal in its saved place: its group (else the focused one), or a window of its own on a
+    /// display (else the panel).
+    fn put_moved_terminal(&mut self, term: Entity<TerminalView>, place: Place, displays: &[Bounds<Pixels>], window: &mut Window, cx: &mut Context<Self>) {
+        match place {
+            Place::Group(id) => {
+                let id = if self.tabs.group(id).is_some() { id } else { self.tabs.layout.focused() };
+                let group = self.tabs.group_mut(id).expect("layout group has state");
+                group.terminals.push(term.clone());
+                if group.page.is_none() && group.editors.is_empty() {
+                    group.page = Some(Page::Terminal(term));
+                    group.page_active = true;
+                }
+            }
+            Place::Window(at) => {
+                let bounds = place_window(at, displays)
+                    .unwrap_or_else(|| Bounds::new(window.bounds().origin + gpui::point(px(40.), px(40.)), views_glue::DETACHED_SIZE));
+                match self.open_detached(term.clone(), bounds, cx) {
+                    Ok(handle) => self.chrome.detached.push(views_glue::Detached { term, window: handle }),
+                    Err(_) => {
+                        self.terminals.push(term);
+                        self.active_terminal = self.terminals.len() - 1;
+                        self.chrome.bottom = Bottom::Terminal;
+                        self.chrome.panel_open = true;
+                    }
+                }
+            }
+        }
     }
 }
