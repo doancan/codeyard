@@ -529,7 +529,11 @@ a test or the debugger first asks "Do you trust the authors of this folder?". A 
 program (a filter, diff or merge driver, an ssh or credential command, a hooks folder) gets **no Git at all** until it is
 trusted: `git status` alone would run its filters. A notice names the settings. Folders you had already opened before this
 rule existed are trusted once. Trusting is remembered per folder (per host over SSH) and starts the language servers at once;
-`Workspace: Trust This Folder` does it without a question. `security.workspaceTrust.enabled: false`
+`Workspace: Trust This Folder` does it without a question. With a workspace file open, trust covers the workspace as a
+whole: the question becomes "Do you trust the authors of this workspace?" and names the file, and the answer (or
+`Workspace: Trust This Folder`) trusts the file's own folder and every folder it lists in one step. A folder the
+workspace does not list is still asked about on its own, and over SSH the trust only holds on that host.
+`security.workspaceTrust.enabled: false`
 in your own `settings.jsonc` turns the check off; a project file can never change that key.
 
 ```jsonc
@@ -1084,7 +1088,9 @@ a logpoint (`log: i is {i}`) or a hit-count one (`hit: >= 5`). Node needs Micros
 `Debug: Install JavaScript Debugger` fetches it once (VS Code's copy is used when installed).
 Over SSH the adapter runs on the server; Go and Node adapters talk TCP and are reached through a
 port forward on the shared SSH connection. `CODEYARD_DAP_TRACE=1` prints the protocol when a
-configuration misbehaves. Rust values and the standard library's sources: see [Working in Rust](#working-in-rust).
+configuration misbehaves. `"stopOnEntry": true` pauses the program before it runs and the Debug Console says
+"Paused on entry", also with `lldb-dap`, which reports that stop as a SIGSTOP signal; a SIGSTOP after that is shown as
+an exception. Rust values and the standard library's sources: see [Working in Rust](#working-in-rust).
 
 To debug a program that is already running, start it with its debug server and attach:
 `python -m debugpy --listen 5678 --wait-for-client app.py`, then a configuration
@@ -1182,8 +1188,9 @@ each under its `name` if it has one. Relative paths are resolved against the fil
   a program (`terminal.shell`, `lsp.servers`, …) apply from a workspace file only when the folder that holds the
   file is trusted, and user-only keys never do.
 - **Tasks and debugging:** the file's tasks join *Tasks: Run Task* (source `workspace`) and its launch
-  configurations join Run and Debug. They run in the active file's folder, on that folder's host. If the workspace
-  file sits outside that folder, its own folder must be trusted as well, so you may be asked twice.
+  configurations join Run and Debug. They run in the active file's folder, on that folder's host. Before the first
+  one runs you are asked once whether you trust the workspace; trusting it trusts the workspace file's own folder
+  and all of its folders (see *Workspace Trust* above).
 - **Saving:** *Add Folder to Workspace…* and *Remove Folder from Workspace…* write the folder list back to the
   file. Only the folder list changes: comments, unknown fields and sections Codeyard does not use stay as they
   were. If nothing changed, nothing is written. *File: Save Workspace* writes on demand. *File: Save Workspace As…*

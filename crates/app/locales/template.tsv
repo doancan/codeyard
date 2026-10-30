@@ -628,6 +628,7 @@ Disk size includes the writable layer and virtual image size; volumes are exclud
 Disk write	
 Dismiss this file from the results	
 Do you trust the authors of this folder?	
+Do you trust the authors of this workspace?	
 Do you want to save the changes you made to {}?	
 Docker, then open a folder inside it	
 Docker: Cancel Operation	
@@ -1578,6 +1579,7 @@ Pause (F6)
 Pause the program first (a breakpoint or ⏸): the variable has to be in scope.	
 Pause updates	
 Paused	
+Paused on entry	
 Paused on exception: {}	
 Payload	
 Permission switches	
@@ -2383,6 +2385,7 @@ Track which remote branch?
 Transfer cancelled.	
 Transfer failed: {}	
 Trust Folder and Continue	
+Trust Workspace and Continue	
 Trust this host and connect	
 Trusted “{}”	
 Try Again	
@@ -3152,6 +3155,7 @@ your words
 “{0}” cannot be written in {1}: not changed.	
 “{0}” is not a valid regular expression ({1}). Escape special characters with a backslash.	
 “{}” already exists. Replace it?	
+“{}” and its folders can run programs through their tasks, debug configurations and project settings. Only continue if you trust where this workspace came from.	
 “{}” asks for inputs, which a compound cannot ask for: start it on its own.	
 “{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	
 “{}” can't be opened	

@@ -60,6 +60,9 @@ impl Workbench {
         let file = self.active_editor().map(|e| e.read(cx).path.clone());
         // The workspace file's shared tasks and configurations, resolved against the active file's folder.
         let (shared_tasks, shared_launch) = self.workspace_tasks_and_launch();
+        // `${workspaceFolder:name}` names a folder of the workspace, as in tasks.
+        let folders: Vec<(String, String)> =
+            self.all_roots(cx).into_iter().map(|r| (r.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next().unwrap_or(&r).to_string(), r)).collect();
         Some(cx.background_executor().spawn(async move {
             let read = |rel: &str| host.read(&ui::join(&root, rel)).ok().map(|(d, _)| String::from_utf8_lossy(&d).into_owned());
             let mut tasks = Vec::new();
@@ -73,12 +76,12 @@ impl Workbench {
             }
             let (mut configs, mut compounds) = (Vec::new(), Vec::new());
             if let Some(t) = &shared_launch {
-                configs.extend(debug_config::parse_launch_json(t, &root, file.as_deref(), &tasks));
+                configs.extend(debug_config::parse_launch_json_in(t, &root, file.as_deref(), &tasks, &folders));
                 compounds.extend(debug_config::parse_compounds(t, &root, file.as_deref(), &tasks));
             }
             for path in [".codeyard/launch.jsonc", ".vscode/launch.json"] {
                 if let Some(t) = read(path) {
-                    configs.extend(debug_config::parse_launch_json(&t, &root, file.as_deref(), &tasks));
+                    configs.extend(debug_config::parse_launch_json_in(&t, &root, file.as_deref(), &tasks, &folders));
                     compounds.extend(debug_config::parse_compounds(&t, &root, file.as_deref(), &tasks));
                 }
             }
