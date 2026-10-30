@@ -22,11 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   action from an outdated tree does not reach another setting, command or port.
 - The Problems panel is available to screen readers: each problem with its severity, file, line and column, opened by
   activating it, and a spoken "No problems." when there are none.
-
-## [0.6.0] - 2026-10-29
-
-### Added
-
 - Accounts for extensions: `auth.session` and `auth.fetch` with the built-in GitHub provider (the GitHub CLI sign-in
   Codeyard already uses) or an `[[oauth]]` provider from the manifest (browser sign-in with PKCE through
   `codeyard://ext/<id>/callback`, refresh tokens). The first use asks in a system dialog that names the publisher and
