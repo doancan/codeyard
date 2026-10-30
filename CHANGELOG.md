@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Windows: terminals of a local folder are taken back after Codeyard quits, crashes or is killed, as on macOS and
+  Linux. They run in the terminal daemon, which listens on a named pipe only the current user can open.
 - `cyx dev` hot-reloads code extensions: saving a source file rebuilds `extension.wasm` (cargo or the TypeScript
   pipeline), and the dev window stops the running build, compiles the new one with Cranelift's incremental cache,
   activates it with the reason `reload` and draws its open views again; calls made meanwhile wait for it. A failed
