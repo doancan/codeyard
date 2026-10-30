@@ -1361,6 +1361,8 @@ impl Workbench {
                 term_daemon: None,
                 term_socket: None,
                 term_restoring: false,
+                panel_restoring: false,
+                terminal_wanted: false,
                 pending_moved: None,
                 moved_back: Vec::new(),
                 keeping_terminals: false,
