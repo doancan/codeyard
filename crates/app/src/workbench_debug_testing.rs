@@ -90,6 +90,7 @@ impl Workbench {
             request: "launch".into(),
             args: serde_json::Value::Null,
             pre_launch: None,
+            pre_launch_task: None,
             cargo_target: None,
             post_debug: None,
             no_debug: false,
