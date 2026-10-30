@@ -204,25 +204,35 @@ fn quit_all(wb: Entity<Workbench>, cx: &mut gpui::VisualTestContext) {
     });
     drop(wb);
     cx.update(|window, _| window.remove_window());
+    // The terminal windows go too, as every window does when the app quits.
+    for w in cx.cx.windows() {
+        let _ = gpui::AppContext::update_window(&mut cx.cx, w, |_, window, _| window.remove_window());
+    }
     cx.run_until_parked();
 }
 
-/// A terminal moved into an editor group comes back into that group as the same shell, next to the panel's own.
-/// (A window of its own goes through the same placing code; it is not used here because a closed test window that held
-/// a detached terminal keeps the workbench alive in this process, see the PR.)
+/// A terminal moved into an editor group and one in a window of its own come back to their places as the same shells,
+/// next to the panel's own.
 #[gpui::test]
 fn terminals_outside_the_panel_are_taken_back_into_their_places(cx: &mut gpui::TestAppContext) {
     let home = crate::qa_workbench_tests::fresh("termd-moved-home");
     let dir = crate::qa_workbench_tests::project("termd-moved");
     let sock = daemon("moved");
-    let (in_group, in_panel) = {
+    let (in_group, in_window, in_panel) = {
         let (wb, vcx) = window(cx, &home, &dir, &sock);
-        for _ in 0..2 {
+        for _ in 0..3 {
             wb.update_in(vcx, |wb, window, cx| wb.new_terminal_launch(None, crate::terminal::Launch::default(), window, cx));
         }
         wait_ticking(vcx, "their tokens", |cx| wb.read_with(cx, |wb, cx| wb.terminals.iter().all(|t| t.read(cx).token().is_some())));
-        let (first, second) = wb.read_with(vcx, |wb, _| (wb.terminals[0].clone(), wb.terminals[1].clone()));
-        let pids = (pid_of(&first, vcx, &dir.join("pid-group")), pid_of(&second, vcx, &dir.join("pid-panel")));
+        let terms = wb.read_with(vcx, |wb, _| wb.terminals.clone());
+        let pids =
+            (pid_of(&terms[0], vcx, &dir.join("pid-group")), pid_of(&terms[1], vcx, &dir.join("pid-window")), pid_of(&terms[2], vcx, &dir.join("pid-panel")));
+        // The second goes to a window of its own, the first into the editor area; the third stays in the panel.
+        wb.update_in(vcx, |wb, window, cx| {
+            wb.active_terminal = 1;
+            wb.detach_terminal(window, cx);
+        });
+        wait_ticking(vcx, "the terminal window", |cx| wb.read_with(cx, |wb, _| wb.chrome.detached.len() == 1));
         wb.update_in(vcx, |wb, window, cx| {
             wb.active_terminal = 0;
             wb.move_terminal_into_editor(window, cx);
@@ -232,13 +242,17 @@ fn terminals_outside_the_panel_are_taken_back_into_their_places(cx: &mut gpui::T
         pids
     };
     let (wb, cx) = window(cx, &home, &dir, &sock);
-    wait_ticking(cx, "both back in their places", |cx| wb.read_with(cx, |wb, _| wb.editor_terminal_count() == 1 && wb.terminals.len() == 1));
-    let (group_term, panel_term) = wb.read_with(cx, |wb, _| (wb.editor_terminals_for_test()[0].clone(), wb.terminals[0].clone()));
-    for term in [&group_term, &panel_term] {
+    wait_ticking(cx, "all back in their places", |cx| {
+        wb.read_with(cx, |wb, _| wb.editor_terminal_count() == 1 && wb.chrome.detached.len() == 1 && wb.terminals.len() == 1)
+    });
+    let (group_term, window_term, panel_term) =
+        wb.read_with(cx, |wb, _| (wb.editor_terminals_for_test()[0].clone(), wb.chrome.detached[0].term.clone(), wb.terminals[0].clone()));
+    for term in [&group_term, &window_term, &panel_term] {
         let shown = cx.update(|_, cx| term.read(cx).scrollback_text() + &term.read(cx).screen_text());
         assert!(shown.contains("Reconnected to terminal session") && !shown.contains("Previous session ended"), "{shown}");
     }
     assert_eq!(pid_of(&group_term, cx, &dir.join("pid-group-2")), in_group, "the editor group's terminal is the same shell");
+    assert_eq!(pid_of(&window_term, cx, &dir.join("pid-window-2")), in_window, "the window's terminal is the same shell");
     assert_eq!(pid_of(&panel_term, cx, &dir.join("pid-panel-2")), in_panel, "the panel's terminal is the same shell");
 }
 
@@ -288,16 +302,21 @@ fn an_ssh_folders_terminal_is_taken_back_after_a_restart(cx: &mut gpui::TestAppC
         });
         let term = wb.read_with(vcx, |wb, _| wb.terminals[0].clone());
         let pid = pid_of(&term, vcx, &dir.join("pid-1"));
+        term.update(vcx, |t, _| t.send("sleep 1; echo printed-while-away\n"));
+        // The command reached the host (the shell echoed it) before the app goes.
+        crate::qa_integration_tests::wait_secs(vcx, 30, "the command echoed", |cx| {
+            cx.update(|_, cx| term.read(cx).scrollback_text() + &term.read(cx).screen_text()).contains("sleep 1")
+        });
+        // Nothing of the window may outlive it here: its connection must go as a quitting app's does.
+        drop(term);
         quit_all(wb, vcx);
         pid
     };
     std::thread::sleep(std::time::Duration::from_secs(1));
     let (wb, cx) = ssh_window(cx, &home, &path);
-    // (What the shell printed while no window was attached is checked without windows, below: in this test process the
-    // first window's connection is not torn down the way a quitting app's is.)
-    crate::qa_integration_tests::wait_secs(cx, 30, "the terminal taken back", |cx| text(&wb, cx).contains("Reconnected to terminal session"));
+    crate::qa_integration_tests::wait_secs(cx, 30, "the terminal taken back", |cx| text(&wb, cx).contains("printed-while-away"));
     let shown = text(&wb, cx);
-    assert!(!shown.contains("Previous session ended"), "{shown}");
+    assert!(shown.contains("Reconnected to terminal session") && !shown.contains("Previous session ended"), "{shown}");
     let term = wb.read_with(cx, |wb, _| wb.terminals[0].clone());
     assert_eq!(pid_of(&term, cx, &dir.join("pid-2")), first, "the same shell process on the host");
 }
