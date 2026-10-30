@@ -119,6 +119,7 @@ impl Render for EditorView {
                             .when(minimap, |d| d.pr(px(MINIMAP_W + 16.)))
                             // While the completion list is open, Up/Down/Enter/Tab/Esc go to the list.
                             .key_context(key_context.as_str())
+                            .on_action(cx.on(Self::show_context_menu))
                             .on_action(cx.on(Self::trigger_completion))
                             .on_action(cx.on(Self::completion_next))
                             .on_action(cx.on(Self::completion_prev))

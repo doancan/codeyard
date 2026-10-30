@@ -5,7 +5,7 @@ use gpui::{App, BoxShadow, Context, Corner, EventEmitter, FocusHandle, Focusable
 
 use crate::ui::{c, ca, palette};
 
-actions!(menu, [MenuPrev, MenuNext, MenuConfirm, MenuDismiss, MenuLeft, MenuRight]);
+actions!(menu, [MenuPrev, MenuNext, MenuConfirm, MenuDismiss, MenuLeft, MenuRight, ShowContextMenu]);
 
 /// Which platform's menu look is used.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
