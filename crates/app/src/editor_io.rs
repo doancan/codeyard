@@ -253,7 +253,7 @@ impl EditorView {
         let n = self.buffer.len_chars();
         self.buffer.replace(0..n, &text, false);
         self.buffer.set_cursor(0, false);
-        self.sync_syntax();
+        self.sync_syntax(cx);
         if base_hash != self.disk_hash {
             self.flag_conflict();
         }
@@ -417,7 +417,7 @@ impl EditorView {
             self.buffer.ensure_final_newline();
         }
         if trim || final_nl {
-            self.sync_syntax();
+            self.sync_syntax(cx);
         }
         let data = match self.encoded() {
             Ok(d) => d,
