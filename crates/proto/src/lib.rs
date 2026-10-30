@@ -14,8 +14,13 @@ use std::io::{self, Read, Write};
 
 use serde::{Deserialize, Serialize};
 
+/// Prefix of a daemon session id that only one live connection may hold (a window's terminals on the local terminal
+/// daemon): a second `Hello` for it is refused while the first connection lives. Other sessions are taken over by the
+/// newest connection (an SSH reconnect while the old connection is still half-open).
+pub const EXCLUSIVE_SESSION: &str = "x-";
+
 /// Compared in the handshake; on mismatch the agent is reinstalled.
-pub const VERSION: u32 = 15;
+pub const VERSION: u32 = 16;
 
 /// Max size of one frame. Larger files are read in chunks.
 pub const MAX_FRAME: usize = 64 * 1024 * 1024;
@@ -32,7 +37,8 @@ pub struct Frame<T> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Request {
     /// `session`: ID of the previous session when reconnecting (in daemon mode
-    /// terminals and watches resume where they were).
+    /// terminals and watches resume where they were). A session id that starts with [`EXCLUSIVE_SESSION`] is refused
+    /// with `PermissionDenied` while another connection is attached to it, instead of being taken over.
     Hello {
         client_version: u32,
         session: Option<String>,
@@ -191,6 +197,21 @@ pub enum Request {
         /// Set (`Some`) or remove (`None`) variables, in order, on top of the agent's environment.
         env: Vec<(String, Option<String>)>,
     },
+    /// The token a client keeps to attach to this terminal again after it restarts (`PtyToken`): the agent process's
+    /// random instance id and a random secret of this terminal. Never a process id.
+    PtyToken {
+        pty: u32,
+    },
+    /// Take this session's terminal `pty` back after a restart, proving it with its token (`PtyAttached`). Refused with
+    /// `NotFound` when the terminal has ended, and with `PermissionDenied` when the instance or secret is not the one this
+    /// agent gave (another agent process, a guessed or stale token).
+    PtyAttach {
+        pty: u32,
+        instance: String,
+        secret: String,
+    },
+    /// The session's open terminals (`PtyList`), so a client can close the ones it did not take back.
+    PtyList,
 }
 
 /// What `TaskSpawn` runs.
@@ -337,6 +358,18 @@ pub enum Response {
         cwd: Option<String>,
     },
     Shells(Vec<String>),
+    PtyToken {
+        instance: String,
+        secret: String,
+    },
+    PtyAttached {
+        pty: u32,
+        /// Bytes the terminal has written since it started (its output sequence number).
+        sequence: u64,
+        /// Bytes of its output lost while no client was attached (the backlog keeps the last 256 KB).
+        dropped: u64,
+    },
+    PtyList(Vec<u32>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

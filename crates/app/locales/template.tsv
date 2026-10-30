@@ -1701,6 +1701,7 @@ Recent
 Recent denials	
 Reconnect	
 Reconnect to {}	
+Reconnected to terminal session	
 Reconnected, but the server session had expired: terminals were closed.	
 Reconnected. Terminals kept running.	
 Reconnecting to {0} (attempt {1})	
@@ -2561,6 +2562,7 @@ a program
 a string is not closed	
 a theme must be a JSON object	
 about {0} MB · {1}	
+another Codeyard window has them; started new shells	
 approved	
 args must be a list of texts	
 at {}	
@@ -2967,6 +2969,7 @@ your words
 {} already exists. Choose another name.	
 {} asks for permissions: install it from the Extensions view to review them	
 {} bookmark|{} bookmarks	
+{} bytes of output were lost while no window was attached	
 {} cannot be negated	
 {} cannot be parsed as JSON	
 {} cannot be parsed as a number	

@@ -215,6 +215,77 @@ truncating `fs::write`.
 - **GPUI upgrades** are deliberate: the version is pinned, local patches are listed in `vendor/gpui/PATCHES.md`
   and re-applied on every upgrade.
 
+## Who owns local processes
+
+Locally the agent is a thread of the app (`host::local()`), so the app is the parent of every task, test run, language
+server, debug adapter and terminal shell it starts. Each task leads its own process group on Unix (so Stop reaches its
+descendants) and runs in a kill-on-close job object on Windows; each terminal shell leads its own session. A normal
+quit or a closed terminal ends them through `Drop`. A signal or a crash runs no destructor, though. On Windows the system
+still closes the job handles and pseudo consoles, which ends their processes. On Unix nothing did: a process group or
+session has no tie to the process that created it.
+
+**Today: a process guard (`agent::guard`).** Before the first window opens, the app starts the same binary again as
+`codeyard --process-guard`, in a process group of its own and with only a pipe for standard input. The app keeps the pipe's
+write end; Rust opens pipes close-on-exec, so no task, shell or helper inherits it. Every spawn in `agent::proc` and
+`agent::pty` sends the guard one line: `t <pgid>` for a task's group, `p <pgid>` for a terminal's session. Before a
+leader is reaped the app sends `- <pgid>`: after reaping, the id may be reused, so the guard never holds one that is
+free. However the app ends, the kernel closes the pipe. On end of input the guard:
+
+- sends SIGKILL to every task group at once (an orphaned build or test run has no one to report to);
+- sends SIGHUP and SIGCONT to every terminal group, then SIGKILL to whatever is still there after `PTY_GRACE` (2 s), so a
+  shell can save its history and end its jobs.
+
+Then it exits. The guard ignores SIGHUP and SIGINT meant for the app's terminal. A pipe works the same on macOS, which has
+no `PR_SET_PDEATHSIG`. On Linux a death signal would also only follow the creating thread, and it reaches the leader but
+not its descendants. The guard costs one process that reads one line per spawn, and starting it takes one `fork`/`exec`
+before the first window. It runs the app binary, which branches off before any app or GPUI set-up. Measured on macOS
+with a debug build, it uses a 4.7 MB physical footprint and 11.7 MB resident, mostly the binary's shared pages. The same
+mode of the much smaller agent binary uses 1.5 MB, so a dedicated helper is the way to shrink it if that matters. The agent binary has the same `--process-guard` mode (4 KB of the static Linux agent: 1620 → 1624 KB, budget
+1664 KB). The protocol is unchanged: the guard lives on the owner's side of the connection.
+
+What the guard does not cover:
+
+- A descendant that moves to a process group or session of its own (`setsid`, a daemonizing tool), on any platform.
+- A group whose leader was already reaped while descendants still ran.
+- The instant between `spawn` and the registration line.
+- Remote hosts: there the daemon (`docs/remote.md`) owns the processes and ties them to the connection.
+
+**Terminals that outlive the app (#82).** With `window.restoreSession` on, a local window runs its terminals (only those) on
+the terminal daemon, the same daemon as over SSH (`agent::daemon`). Everything else stays on the in-process agent, so
+file access and tasks keep their speed and the guard's immediate kill.
+
+- **Start-up:** the app binary is started as `codeyard --daemon <state>/terminals/d.sock`. The socket is owner-only (mode
+  0600, in a 0700 folder) and the daemon runs in its own session, outside the guard.
+- **Session:** the window connects straight to the socket and opens a session with a random 128-bit id. Its terminals
+  live in that session, and the id is saved with the window's terminals.
+- **Tokens:** for each terminal the window asks for a token (`PtyToken`): the daemon process's random instance id plus a
+  random 128-bit secret of that terminal. The window saves the token with the terminal and never stores a pid.
+- **On restart:** the window takes the session back (`Hello{session}`; the saved terminal ids are registered before the
+  first frame, so the buffered output reaches them) and proves each terminal with `PtyAttach`. A secret or instance that
+  does not match is refused (`PermissionDenied`), an ended terminal is `NotFound`, and both become new shells as before.
+  `PtyList` finds the session's terminals that no window took back, and they are ended.
+- **Output while away:** the daemon keeps the last 256 KB of each terminal's output while no window is attached. It also
+  counts every byte, so `PtyAttached` carries the output sequence number and the bytes cut from the backlog; the view
+  shows that gap.
+- **One owner:** a session is used by at most one window of the app (a process-wide set). Window session ids start with
+  `proto::EXCLUSIVE_SESSION`, and the daemon refuses a second `Hello` for such a session (`PermissionDenied`) while the
+  first connection lives. So another app instance never takes a live window's terminals: it retries for a second (a
+  killed owner's socket is noticed at once, but not instantly), then opens a session of its own with new shells and says
+  why. Sessions without the prefix (SSH) are still taken over by the newest connection, as a reconnect needs when the old
+  one is half-open; `Session::run` stops reading from a superseded connection, so the old one cannot type.
+- **When a session is kept:** only when the user is expected to come back. `on_app_quit` marks every window's session to
+  be kept (⌘Q, Quit, an update's restart); a crash or a kill runs nothing at all. Both leave the session detached, with
+  no `Bye`. Leaving on purpose sends `Bye`, and the daemon ends the session and its shells at once: closing a window
+  (also the last one, which quits the app only after the window is gone), Close Folder, another folder in the window, or
+  a switch to an SSH folder (`close_all_terminals` drops the session).
+- **Bounds:** a kept session no window takes back is ended after the daemon's grace period (5 minutes), and its shells
+  with it. The daemon exits 10 minutes after its last session.
+- **Protocol:** version 16 adds `PtyToken`, `PtyAttach` and `PtyList`. The static Linux agent is 1636 KB (budget 1664 KB).
+
+Not covered: terminals moved to the editor area or a window of their own (#79) still come back as new shells, and their
+daemon shells are ended at the next restore. SSH folders keep their existing reconnect-while-running behaviour but are not
+taken back after an app restart. Windows runs no terminal daemon.
+
 ## Opening files from the system
 
 Finder's *Open With*, dropping a file or folder on the Dock icon and `open -a Codeyard x` arrive as `file://` URLs through

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- On macOS and Linux, the panel's terminals of a local folder keep running when Codeyard quits, crashes or is killed
+  (with `window.restoreSession`, the default). Opening the folder again within 5 minutes brings the same shells back,
+  with their output from meanwhile, and says "Reconnected to terminal session". A terminal that cannot be taken back is
+  a new shell as before, and nothing is ever typed into it. Terminals no window takes back are ended after 5 minutes.
+  Closing the window or the folder, or opening another one, still ends them at once. Terminals another Codeyard
+  instance has open stay with it: the window starts new shells and says so. The agent protocol is version 16.
 - The lists of the Run and Debug view, the Testing view, the Remote Explorer and the Ports panel work with the keyboard:
   Tab reaches them, Up/Down/Home/End move a cursor row shown in the focus colour, and Enter does what a click on the
   row does. Shift+F10 (and the Menu key) opens the focused row's menu under it and Escape returns to the row; the same
@@ -121,6 +127,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a variable can never become more shell code, and Stop ends the processes it started.
 - The Linux agent's size budget is 1664 KB (was 1600 KB): running tasks as processes on the server needs its own
   request in the protocol.
+
+### Fixed
+
+- On macOS and Linux, a task, test run, language server or terminal no longer keeps running when Codeyard is killed or
+  crashes. A small guard process started with the app ends every task's process group at once and hangs up every
+  terminal, killing it after two seconds if it is still there. Windows already ends them through job objects and the
+  pseudo console.
 
 ## [0.6.0] - 2026-10-29
 

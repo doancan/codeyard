@@ -3274,6 +3274,9 @@ No terminal is in front in the editor area.	Düzenleyici alanında önde bir ter
 Terminal: Move Terminal Back to Panel	Terminal: Terminali Panele Geri Taşı
 Terminal: Move Terminal into Editor Area	Terminal: Terminali Düzenleyici Alanına Taşı
 Previous session ended; started a new shell	Önceki oturum sona erdi; yeni bir kabuk başlatıldı
+Reconnected to terminal session	Terminal oturumuna yeniden bağlanıldı
+another Codeyard window has them; started new shells	bunlar başka bir Codeyard penceresinde; yeni kabuklar başlatıldı
+{} bytes of output were lost while no window was attached	Hiçbir pencere bağlı değilken {} bayt çıktı kayboldu
 {} (terminal)	{} (terminal sekmesi)
 # ---- Problems accessibility ----
 Information	Bilgi
