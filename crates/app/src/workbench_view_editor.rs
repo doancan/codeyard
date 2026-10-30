@@ -312,11 +312,17 @@ impl Workbench {
                 let rel = rels[ix].clone();
                 let hint = hints[ix].clone();
                 let dragged = DraggedTab { editor: editors[ix].clone(), from: key, name: ed.name.clone() };
+                let home = cx.entity().downgrade();
                 let drop_on = editors[ix].clone();
                 let accent = p.accent;
                 div()
                     .id(SharedString::from(format!("tab-{}-{ix}", key.id)))
-                    .on_drag(dragged, |d, _, _, cx| cx.new(|_| d.clone()))
+                    .debug_selector(move || format!("tab-{}-{ix}", key.id))
+                    .on_drag(dragged, move |d, _, _, cx| {
+                        // Remembered, so a release outside the window can take the tab out of it.
+                        home.update(cx, |wb, _| wb.start_tab_drag(d.editor.clone(), d.from)).ok();
+                        cx.new(|_| d.clone())
+                    })
                     .drag_over::<DraggedTab>(move |s, _, _, _| s.border_l_2().border_color(c(accent)))
                     .on_drop(cx.listener(move |this, d: &DraggedTab, window, cx| {
                         this.drop_tab(d.editor.clone(), d.from, key, Some(drop_on.clone()), window, cx);

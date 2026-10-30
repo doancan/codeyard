@@ -1,6 +1,6 @@
 //! codeyard: lightweight, native code editor. Local + SSH.
 //!
-//!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|ID[@VERSION]]
+//!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|FOLDER|ID[@VERSION]]
 
 // Normal Windows launches are GUI applications in every profile. Test harnesses keep their console.
 #![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
@@ -68,6 +68,8 @@ mod ext_accounts_ui_tests;
 mod ext_broker;
 #[cfg(test)]
 mod ext_code_tests;
+#[cfg(test)]
+mod ext_core_commands_tests;
 #[cfg(test)]
 mod ext_dev_tests;
 mod ext_fetch;
@@ -140,6 +142,7 @@ mod menu;
 mod menus;
 mod merge;
 mod outline;
+mod painted;
 mod perf;
 mod picker;
 mod port_forwards;
@@ -756,7 +759,7 @@ struct Args {
     no_extensions: bool,
     /// `--extension-dev FOLDER` (`cyx dev`): load that folder as an extension and reload it on every save.
     extension_dev: Option<String>,
-    /// `--install-extension FILE.cyx` (repeatable): install these packages and exit, without a window.
+    /// `--install-extension FILE.cyx` or `FOLDER` (repeatable): install these packages and exit, without a window.
     install: Vec<String>,
 }
 
@@ -866,7 +869,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
             }
             "-h" | "--help" => {
                 println!(
-                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|ID[@VERSION]]"
+                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|FOLDER|ID[@VERSION]]"
                 );
                 std::process::exit(0);
             }

@@ -97,9 +97,15 @@ impl Scope {
         }
     }
 
-    /// A command the extension may run: its own, a dependency's, or a core command its manifest lists.
+    /// A command the extension may run: its own, a dependency's, or a core command extensions may run
+    /// (`ext_manifest::CORE_COMMANDS`) that its manifest lists. What a core command implies is checked when it runs.
     pub fn may_execute(&self, command: &str) -> Result<(), v::Error> {
         if let Some(core) = command.strip_prefix("core:") {
+            if ext_manifest::core_command(core).is_none() {
+                return Err(v::Error::Invalid(format!(
+                    "{command} is not a core command extensions may run; pick one from docs/extensions/reference/core-commands.md"
+                )));
+            }
             let listed = self.permissions.commands.iter().any(|c| c == command || c == core);
             return if listed { Ok(()) } else { Err(self.refuse("commands", command, &self.revoked.commands, |c| c == command || c == core, self.why(true))) };
         }
@@ -109,6 +115,21 @@ impl Scope {
         } else {
             Err(v::Error::Invalid(format!("{command} is not this extension's command or a dependency's; add the extension to [dependencies]")))
         }
+    }
+
+    /// The permission a core command implies, on each of its targets: the files it reads or writes, or the program of
+    /// the task it runs (`ext_manifest::core_commands::Implies`).
+    pub fn may_imply(&self, implies: ext_manifest::core_commands::Implies, targets: &[String]) -> Result<(), v::Error> {
+        use ext_manifest::core_commands::Implies;
+        for t in targets {
+            match implies {
+                Implies::Nothing => {}
+                Implies::ReadArgument => drop(self.may_read(t)?),
+                Implies::WriteActiveFile | Implies::WriteUnsaved => drop(self.may_write(t)?),
+                Implies::RunTask => self.may_run(t)?,
+            }
+        }
+        Ok(())
     }
 }
 

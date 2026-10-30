@@ -399,6 +399,13 @@ fn check_with(dir: &Path, options: ext_manifest::Options) -> Result<CheckReport,
             ext_manifest::FILE_NAME
         ));
     }
+    // A core command this version does not list is refused when the extension runs it (a newer Codeyard may list it).
+    for c in m.permissions.commands.iter().filter(|c| ext_manifest::core_command(c).is_none()) {
+        warnings.push(format!(
+            "warning: {c} is not a core command extensions may run, so commands.execute refuses it\n  --> {} [permissions] commands\n   = fix: pick one from docs/extensions/reference/core-commands.md",
+            ext_manifest::FILE_NAME
+        ));
+    }
     // The package rules (files the manifest names, paths, sizes) as a full package build would apply them.
     let files = ext_pkg::collect_dir(dir).map_err(|e| format!("error: {e}"))?;
     let check_files: Vec<ext_pkg::Entry> = if m.missing_why() {

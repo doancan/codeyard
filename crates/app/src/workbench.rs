@@ -52,6 +52,8 @@ mod accounts_glue;
 pub(crate) use accounts_glue::{deliver_callback as deliver_extension_callback, forward_callback_from_command_line};
 #[path = "workbench_ext_code.rs"]
 mod code_glue;
+#[path = "workbench_ext_core.rs"]
+mod core_commands_glue;
 #[path = "workbench_data.rs"]
 mod data_glue;
 #[path = "workbench_debug.rs"]
@@ -168,6 +170,8 @@ mod state_glue;
 mod structural_glue;
 #[path = "workbench_sync.rs"]
 mod sync_glue;
+#[path = "workbench_tab_drag.rs"]
+mod tab_drag_glue;
 #[path = "workbench_task_run.rs"]
 mod task_run_glue;
 #[path = "workbench_tasks.rs"]
@@ -1308,6 +1312,7 @@ impl Workbench {
                 view_host: None,
                 panel_dock,
                 view_drag: None,
+                tab_drag: None,
                 panel_w,
                 panel_max: false,
                 panel_anim: None,

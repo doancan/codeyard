@@ -321,14 +321,23 @@ impl Render for Workbench {
                 }
             }))
             // Finish before editor/terminal handlers can consume the release.
-            .capture_any_mouse_up(cx.listener(|this, ev: &gpui::MouseUpEvent, _, cx| {
+            .capture_any_mouse_up(cx.listener(|this, ev: &gpui::MouseUpEvent, window, cx| {
                 if ev.button == MouseButton::Left {
                     this.finish_resize(cx);
                     // The drop zones go; a drop on one is still delivered for this release.
                     this.end_view_drag(cx);
+                    // A tab released inside the window is the drop targets' business.
+                    this.end_tab_drag(ev.position, window, cx);
                 }
             }))
-            .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _, _, cx| this.finish_resize(cx)))
+            .on_mouse_up_out(
+                MouseButton::Left,
+                cx.listener(|this, ev: &gpui::MouseUpEvent, window, cx| {
+                    this.finish_resize(cx);
+                    // A tab released outside the window leaves it.
+                    this.end_tab_drag(ev.position, window, cx);
+                }),
+            )
             .on_action(cx.listener(|this, _: &crate::menus::FileMenu, w, cx| this.open_application_menu_by_index(0, w, cx)))
             .on_action(cx.listener(|this, _: &crate::menus::EditMenu, w, cx| this.open_application_menu_by_index(1, w, cx)))
             .on_action(cx.listener(|this, _: &crate::menus::SelectionMenu, w, cx| this.open_application_menu_by_index(2, w, cx)))

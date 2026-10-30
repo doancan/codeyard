@@ -90,6 +90,23 @@ fn a_missing_why_is_a_warning_in_dev_and_an_error_to_package() {
 }
 
 #[test]
+fn an_unknown_core_command_is_a_warning() {
+    let root = tmp("core");
+    let dir = root.join("lsp");
+    scaffold::create(&dir, Kind::LanguageServer, "lsp", "you").unwrap();
+    let path = dir.join(ext_manifest::FILE_NAME);
+    let text = std::fs::read_to_string(&path)
+        .unwrap()
+        .replace("run = [\"taplo\"]\n", "run = [\"taplo\"]\ncommands = [\"core:workbench.saveAll\", \"core:workbench.quit\"]\n");
+    std::fs::write(&path, text).unwrap();
+    let report = check(&dir).unwrap();
+    assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
+    assert!(report.warnings[0].starts_with("warning: core:workbench.quit is not a core command"), "{:?}", report.warnings);
+    assert!(report.warnings[0].contains("reference/core-commands.md"), "{:?}", report.warnings);
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
 fn a_missing_file_is_named() {
     let root = tmp("missing");
     let dir = root.join("night");

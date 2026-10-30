@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `cyx test` in CI.
 - `scripts/check-five-minutes.sh` scripts the "a command in under 5 minutes" goal: `cyx new command`, its unit tests
   and `cyx test` from an empty folder, Rust and TypeScript, each step timed; CI's Linux job runs it.
+- An editor tab dragged out of the window and released outside it becomes a window of its own at that place, showing
+  the same document; released over another Codeyard window, the file opens there instead and its tab here closes (a
+  file with unsaved changes or on another machine stays, with a message).
 - A code extension's side bar view can move into a window of its own ("View: Move View into New Window") and to the
   secondary side bar. It stays the same view: the extension's updates reach the window and what you do there goes to
   the extension. The window is restored with the folder while the extension is installed, closes when the extension
@@ -37,7 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Setting `terminal.persistentSessionTimeout`: how many minutes terminals keep running for the next start after
   Codeyard quits, crashes or is killed (default 5, at most 1440; 0: they end with the app). The agent protocol is
   version 17.
-
+- "Break on Value Change" in a variable's right-click menu sets a data breakpoint on it (when the debugger supports
+  them). Data breakpoints are listed in the Breakpoints section, where each can be turned off or removed by mouse,
+  keyboard (Enter, Shift+F10) or screen reader; they last for their debug session.
+- Screen readers get the painted bounds of the rows of the Settings and Keyboard Shortcuts pages and of menu items
+  (none for a row scrolled out of view).
 - On macOS and Linux, the panel's terminals of a local folder keep running when Codeyard quits, crashes or is killed
   (with `window.restoreSession`, the default). Opening the folder again within 5 minutes brings the same shells back,
   with their output from meanwhile, and says "Reconnected to terminal session". A terminal that cannot be taken back is
@@ -102,6 +109,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a late answer is dropped and noted in the extension's log. What an extension showed goes when it is disabled,
   uninstalled or crashes. The manifest gains `[[menus]]`, `[[status-bar]]`, `[[formatters]]`, `[[code-actions]]`,
   `[[diagnostics]]`, `[[decorations]]` and `[[tasks]]`, checked like the other contributions.
+- View-title menus: `[[menus]]` entries with `location = "view-title"` appear under a **…** button in the title bar
+  of that extension view (sidebar, bottom panel or editor), with `when` and `enablement`, and run the command with the
+  view's id as its argument.
+- Core commands for extensions: a public list (docs/extensions/reference/core-commands.md, generated from
+  `ext_manifest::core_commands`) of Codeyard commands an extension may run with `commands.execute("core:…")`: Zen mode,
+  Settings, the file explorer, reveal the active file, Problems, Save All, Format Document, open a file and run a task.
+  Each names the permission it implies, which the extension must hold too (Save All: `write` on every unsaved file;
+  opening a file: `read` on it; a task: its program in `run`, and a single program, not a shell line), checked with the
+  permissions in effect in that window. A command not in the list is refused with the fix, and `cyx check` warns about
+  one in `permissions.commands`. Menus may name listed core commands that take no argument.
+- `codeyard --install-extension FOLDER` installs a built extension folder as it is, without building it.
+- Performance scenarios for typing with two decoration providers and for the provider platform overhead
+  (`CODEYARD_PERF_DECORATIONS`, `CODEYARD_PERF_PROVIDERS`, run by `scripts/perf/run.sh` with a small decoration
+  provider installed twice); both rows stay warn-only until a baseline has them.
 - Code extensions run: their commands appear in the command palette, and the first one starts the extension in its
   own `codeyard-exthost` process. Every file, search and process call is checked against the extension's declared
   permissions and the folder's trust before it reaches the folder, locally and over SSH; a denial says which line to
