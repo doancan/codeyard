@@ -1065,8 +1065,8 @@ Image exceeds 20 MB.
 Image unavailable	
 Image: {}	
 Images are not shown here.	
-Import VS Code Settings and Shortcuts	
-Imported {0} settings and {1} shortcuts from VS Code ({2} settings and {3} shortcuts have no equivalent here)	
+Import Settings and Shortcuts from Another Editor	
+Imported {0} settings and {1} shortcuts ({2} settings and {3} shortcuts have no equivalent here)	
 In Privacy & Security, press + and add Codeyard, then turn it on.	
 In the file tree, type to jump to a name; ⇧→ opens everything inside a folder, ⇧← closes it.	
 In the secondary side bar: {}	
@@ -1128,7 +1128,7 @@ JSON schema for {}
 JSON: Minify Document	
 Jan	
 JavaScript debugger installed: F5 now works for Node.	
-JavaScript debugging needs Microsoft's js-debug adapter: run “Debug: Install JavaScript Debugger” (a one-time download, MIT licensed), or install VS Code (its copy is used).	
+JavaScript debugging needs Microsoft's js-debug adapter: run “Debug: Install JavaScript Debugger” (a one-time download, MIT licensed), or install an editor that ships it (its copy is used).	
 JavaScript tests can be run here, not debugged: add a launch configuration for the runner.	
 Jul	
 Jump to latest and follow	
@@ -1324,7 +1324,6 @@ No Cargo.toml found for this file
 No Docker contexts found. Install Docker and start its engine.	
 No SSH host connected	
 No SSH hosts yet. Use Remote: Add SSH Host…	
-No VS Code settings found on this machine	
 No WSL distributions found.	
 No active debug session.	
 No block comment syntax for this file type	
@@ -1405,6 +1404,7 @@ No running containers.
 No saved copies yet. Save the file to start its local history.	
 No setting matches.	
 No settings folder on this machine.	
+No settings from another editor found on this machine	
 No shortcut	
 No subtypes found	
 No supertypes found	
@@ -1606,7 +1606,7 @@ Ports and storage
 Ports below 1024 need extra privileges on this computer	
 Ports: {}	
 Preferences: Configure User Snippets	
-Preferences: Import VS Code Settings and Shortcuts	
+Preferences: Import Settings and Shortcuts from Another Editor	
 Preferences: Keyboard Shortcuts	
 Preferences: Open Keyboard Shortcuts	
 Preferences: Open Settings	
@@ -2250,6 +2250,7 @@ The managed installation is incomplete or belongs to another catalogue. Reinstal
 The new version couldn't be installed from here. You can download it from the release page instead.	
 The number {} cannot be written in JSON	
 The open folder is no longer listed in the workspace file.	
+The other editor's settings.json could not be read	
 The pattern does not parse: {0} (line {1}, column {2})	
 The preLaunchTask “{0}” did not succeed ({1}), so debugging was not started. Check its terminal, then start debugging again.	
 The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code.	
@@ -2304,7 +2305,7 @@ Theme: Open User Themes Folder
 Theme: Pick Color Theme…	
 Theme: Pick File Icon Theme…	
 Theme: Save Current Colors as User Theme…	
-Themes live in {}: drop VS Code or native theme .json files there	
+Themes live in {}: drop theme .json files there	
 Themes, languages, language servers, snippets and key bindings that come with Codeyard are built in and always on.	
 There are no local changes to stash	
 There are no staged changes to stash	
@@ -2449,7 +2450,6 @@ Uploading needs the connection to {}, which failed: use Reconnect first.
 Uploading works with a connected SSH host: connect first (⌃R).	
 User Forwarded	
 User: {}	
-VS Code settings.json could not be read	
 Variables	
 Variables are not supported	
 Verify Files	
@@ -3096,8 +3096,8 @@ your words
 {} week ago|{} weeks ago	
 {} year ago|{} years ago	
 {} · Color theme (opens the theme picker)	
-{} · VS Code import	
 {} · extension {}	
+{} · imported	
 {} · user	
 {} ↔ Clipboard	
 {}+ results	
