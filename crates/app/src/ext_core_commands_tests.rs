@@ -68,20 +68,14 @@ view = "counter"
 "#;
 
 fn skipped() -> bool {
-    match crate::ext_runtime::code_runs_here(&"tests") {
-        Ok(()) => false,
-        Err(why) => {
-            eprintln!("skipped: {why}");
-            true
-        }
-    }
+    !crate::ext_runtime::code_runs_for_test()
 }
 
 fn config_dir(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("codeyard-extcore-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
-    std::fs::canonicalize(&d).unwrap()
+    crate::ui::canonical_for_test(&d)
 }
 
 fn setup<'a>(cx: &'a mut TestAppContext, cfg: &Path) -> (Entity<Workbench>, &'a mut VisualTestContext) {

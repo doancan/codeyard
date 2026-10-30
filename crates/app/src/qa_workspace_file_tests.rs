@@ -17,7 +17,7 @@ fn dir(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("codeyard-ws-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
-    std::fs::canonicalize(d).unwrap()
+    crate::ui::canonical_for_test(d)
 }
 
 fn setup(cx: &mut TestAppContext) -> (Entity<Workbench>, &mut VisualTestContext) {
@@ -551,8 +551,7 @@ fn folders_beyond_the_limit_are_reported(cx: &mut TestAppContext) {
 #[gpui::test]
 #[cfg(unix)] // `/bin/true` and a script adapter
 fn shared_launch_configuration_starts_in_the_active_folder(cx: &mut TestAppContext) {
-    if std::process::Command::new("python3").arg("-V").output().is_err() {
-        crate::test_sshd::skip_missing("python3");
+    if !crate::test_lsp::have_python() {
         return;
     }
     let base = dir("launch");
@@ -566,9 +565,10 @@ fn shared_launch_configuration_starts_in_the_active_folder(cx: &mut TestAppConte
         &file,
         format!(
             r#"{{ "folders": [ {{ "path": "app" }} ], "launch": {{ "configurations": [ {{ "name": "WS Fake", "type": "custom", "request": "launch",
-                "program": "/bin/true", "source": "${{workspaceFolder}}/main.c", "debugAdapter": {{ "command": "{}", "args": ["{}"] }} }} ] }} }}"#,
-            script.display(),
-            log.display()
+                "program": "/bin/true", "source": "${{workspaceFolder}}/main.c", "debugAdapter": {{ "command": "{}", "args": ["{}", "{}"] }} }} ] }} }}"#,
+            crate::test_lsp::python(),
+            crate::ui::local_path(&script),
+            crate::ui::local_path(&log)
         ),
     )
     .unwrap();

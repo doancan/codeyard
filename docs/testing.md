@@ -66,8 +66,8 @@ the 2026-10-27 local run passed 1,516 tests, with three documented manual/data-d
 
 ## Gates
 
-On Windows, `scripts/check-windows.ps1` requires Python 3 for the scripted Rust debugger fixture and selects the Rust
-hardening, product, accessibility and worktree suites alongside its native UI/path tests. It also validates agent inputs and checks that the release EXE contains both Linux
+On Windows, `scripts/check-windows.ps1` requires Python 3 for the scripted Rust debugger fixture and runs every test of
+the workspace (see "Windows" below). It also validates agent inputs and checks that the release EXE contains both Linux
 agents after copying it alone to an empty directory. The check also requires the Windows GUI subsystem and native
 application icon resource, preventing extra console windows and generic EXE icons. `scripts/build-windows.ps1` performs that standalone check for
 local builds too. Build-script validation tests can be run with
@@ -100,6 +100,27 @@ Secrets. The signed dry run and six mocked notarization/credential-cleanup tests
 Normal editor scenes use an isolated profile with `update.check: manual`, so the first-run update question's
 extra native window does not contaminate them. The undecided profile is measured separately as
 `first-run update question` (95 MB); all existing scene budgets are unchanged.
+
+### Windows
+
+The Windows job runs `cargo test --release --workspace` with no name filter: libraries, binaries (the app, `cyx`,
+`codeyard-exthost`) and integration tests. A test is never kept off Windows by leaving its name out of a list, because
+such a list silently drops every new test (until 2026-10 it ran 322 of the app's 1,833 tests). The rule:
+
+- Code that exists only on Unix (a POSIX shell script as a fixture, Unix permissions, the SSH daemon's sockets) is
+  tested under `#[cfg(unix)]`, next to the code it tests.
+- A test that needs something this machine lacks checks for it first and returns after printing a `SKIPPED` line
+  with the reason: `test_sshd::start` for `sshd`, `test_sshd::skip_missing` for an external tool (python3, clangd, …)
+  and `ext_runtime::code_runs_for_test` for code extensions, which run only in `codeyard-exthost` inside its OS
+  sandbox (on Windows the AppContainer sandbox is off until its hardware check passes, `crates/ext-proto/src/appcontainer.rs`).
+  Tests whose extension never runs load it with `ext_runtime::load_without_exthost_for_test` and run everywhere.
+- Where the tool must be there, a skip is a failure: `CODEYARD_REQUIRE_SSHD=1`, `CODEYARD_REQUIRE_TOOLS` (a list, or `1`
+  for all) and `CODEYARD_REQUIRE_WASM`. The macOS and Linux app jobs require `codeyard-exthost`, so its tests cannot
+  pass there by skipping.
+- Expected paths are built with `crate::ui::local_path` (Windows paths can carry the `\\?\` prefix after
+  `canonicalize`), and expected text does not assume `\n` where a file or a process may give `\r\n`.
+
+The job prints every test's output (`--nocapture`), so the `SKIPPED` lines are in its log.
 
 ## CI build scheduling and caches
 

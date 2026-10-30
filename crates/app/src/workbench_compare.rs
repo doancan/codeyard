@@ -594,7 +594,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("codeyard-cmpops-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::canonicalize(&dir).unwrap()
+        crate::ui::canonical_for_test(&dir)
     }
 
     fn end(path: &Path) -> End {

@@ -34,7 +34,7 @@ fn write(dir: &Path, name: &str, bytes: &[u8]) -> PathBuf {
 }
 
 fn root(name: &str) -> PathBuf {
-    std::fs::canonicalize(fresh(name)).unwrap()
+    crate::ui::canonical_for_test(fresh(name))
 }
 
 fn spec(pattern: &str, regex: bool, replacement: &str) -> SearchSpec {
@@ -194,7 +194,7 @@ fn dirty_buffers_win_and_later_edits_are_conflicts(cx: &mut TestAppContext) {
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     // The disk of open.txt has no match yet; its unsaved text does.
-    let path = open_file.to_string_lossy().into_owned();
+    let path = crate::ui::local_path(&open_file);
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(path, window, cx));
     cx.run_until_parked();
     let buf = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -218,7 +218,7 @@ fn dirty_buffers_win_and_later_edits_are_conflicts(cx: &mut TestAppContext) {
 
     // A buffer typed in after its preview is a conflict too, and keeps what was typed.
     let second = write(&dir, "second.txt", b"zz\n");
-    let path = second.to_string_lossy().into_owned();
+    let path = crate::ui::local_path(&second);
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(path, window, cx));
     cx.run_until_parked();
     let buf2 = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -242,7 +242,7 @@ fn batch_undo_restores_and_reports_undo_conflicts(cx: &mut TestAppContext) {
     let o = write(&dir, "o.txt", b"v1 o\n");
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let path = o.to_string_lossy().into_owned();
+    let path = crate::ui::local_path(&o);
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(path, window, cx));
     cx.run_until_parked();
     let buf = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -302,7 +302,7 @@ fn incomplete_and_foreign_results_stop_unsafe_work(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert!(report(&ed, cx).iter().any(|l| l.contains("Open this search's folder")));
     let before = wb.read_with(cx, |wb, cx| wb.active_path(cx));
-    emit(&ed, SearchEditorEvent::Open { path: dir.join("f0.txt").to_string_lossy().into_owned(), line: 1, column: 0, len: 3 }, cx);
+    emit(&ed, SearchEditorEvent::Open { path: crate::ui::local_path(&dir.join("f0.txt")), line: 1, column: 0, len: 3 }, cx);
     cx.run_until_parked();
     assert_eq!(wb.read_with(cx, |wb, cx| wb.active_path(cx)), before, "a match from another folder is not opened here");
 }
@@ -435,7 +435,7 @@ fn replace_all_covers_every_workspace_folder(cx: &mut TestAppContext) {
     let b = write(&web, "b.txt", b"foo foo\r\n");
     let (wb, cx) = setup(cx);
     open(&wb, &api, cx);
-    let web_path = web.to_string_lossy().into_owned();
+    let web_path = crate::ui::local_path(&web);
     assert!(wb.update_in(cx, |wb, window, cx| wb.add_workspace_folder_now(web_path.clone(), window, cx)));
     cx.run_until_parked();
     let search = wb.read_with(cx, |wb, _| wb.search_panel());
@@ -459,7 +459,7 @@ fn replace_all_covers_every_workspace_folder(cx: &mut TestAppContext) {
     // A single file in the other folder can be reviewed on its own.
     emit(&ed, SearchEditorEvent::Rerun, cx);
     wait(cx, "rerun", |cx| ed.read_with(cx, |e, _| e.doc.state == RunState::Complete && e.doc.stale.is_none()));
-    let only = Some(Review::Only(b.to_string_lossy().into_owned()));
+    let only = Some(Review::Only(crate::ui::local_path(&b)));
     let ed2 = wb.update_in(cx, |wb, window, cx| wb.open_search_editor_for_test(spec("bar", false, "baz"), only, window, cx)).unwrap();
     wait(cx, "per-file review", |cx| ed2.read_with(cx, |e, _| e.has_plan()));
     assert_eq!(ed2.read_with(cx, |e, _| e.apply_label_for_test()), "Apply 2 changes in 1 file");
@@ -473,7 +473,7 @@ fn per_file_review_selects_only_that_file(cx: &mut TestAppContext) {
     let b = write(&dir, "b.txt", b"foo foo\n");
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let only = Some(Review::Only(b.to_string_lossy().into_owned()));
+    let only = Some(Review::Only(crate::ui::local_path(&b)));
     let ed = wb.update_in(cx, |wb, window, cx| wb.open_search_editor_for_test(spec("foo", false, "bar"), only, window, cx)).unwrap();
     wait(cx, "review", |cx| ed.read_with(cx, |e, _| e.has_plan()));
     assert_eq!(ed.read_with(cx, |e, _| e.apply_label_for_test()), "Apply 2 changes in 1 file");
@@ -512,7 +512,7 @@ fn search_editor_replaces_and_undoes_over_ssh(cx: &mut TestAppContext) {
 
 /// Open `name` in an editor and return it.
 fn open_buffer(wb: &Entity<Workbench>, path: &Path, cx: &mut VisualTestContext) -> Entity<crate::editor::EditorView> {
-    let p = path.to_string_lossy().into_owned();
+    let p = crate::ui::local_path(path);
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(p, window, cx));
     cx.run_until_parked();
     wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap()
@@ -613,7 +613,7 @@ fn undo_skips_a_file_reopened_with_unsaved_edits(cx: &mut TestAppContext) {
     preview(&ed, cx);
     apply(&ed, cx);
     assert_eq!(std::fs::read(&a).unwrap(), b"v2\n");
-    let path = a.to_string_lossy().into_owned();
+    let path = crate::ui::local_path(&a);
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(path, window, cx));
     cx.run_until_parked();
     let buf = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();

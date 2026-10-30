@@ -155,7 +155,8 @@ mod tests {
             std::fs::write(&path, &want).unwrap();
             return;
         }
-        let have = std::fs::read_to_string(&path).unwrap_or_default();
+        // A Windows checkout may have turned the file's `\n` into `\r\n`.
+        let have = std::fs::read_to_string(&path).unwrap_or_default().replace("\r\n", "\n");
         assert!(have == want, "docs/settings.md is out of date: run `UPDATE_DOCS=1 cargo test -p app docs_reference`");
     }
 

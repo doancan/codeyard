@@ -221,7 +221,7 @@ fn restart_with_saved(wb: Entity<Workbench>, cx: &mut gpui::VisualTestContext, h
 
 fn wait(cx: &mut gpui::VisualTestContext, mut done: impl FnMut(&mut gpui::VisualTestContext) -> bool) -> bool {
     let start = std::time::Instant::now();
-    while start.elapsed() < std::time::Duration::from_secs(10) {
+    while start.elapsed() < std::time::Duration::from_secs(10 * crate::test_sshd::timeout_scale()) {
         cx.run_until_parked();
         if done(cx) {
             return true;
@@ -248,7 +248,9 @@ fn a_restart_starts_a_new_shell_in_the_group_without_replaying_anything(cx: &mut
     old.update(vcx, |t, _| {
         t.set_fixed_title("build".into());
         t.color = Some("success".into());
-        t.send(&format!("touch '{}'\n", marker.display()));
+        // The default shell: `echo … > "…"` means the same in a POSIX shell, PowerShell and cmd (Windows), and `\r` is
+        // the Enter key, which a Windows console needs (a Unix terminal turns it into `\n`).
+        t.send(&format!("echo x > \"{}\"\r", marker.display()));
     });
     assert!(wait(vcx, |_| marker.exists()), "the first shell ran the command");
     std::fs::remove_file(&marker).unwrap();
@@ -268,7 +270,7 @@ fn a_restart_starts_a_new_shell_in_the_group_without_replaying_anything(cx: &mut
     assert!(text.contains("Previous session ended; started a new shell"), "the notice is shown: {text}");
     // The new shell runs what it is given in order: once a command typed now has run, anything replayed would have too.
     let ready = dir.join("ready");
-    term.update(vcx, |t, _| t.send(&format!("touch '{}'\n", ready.display())));
+    term.update(vcx, |t, _| t.send(&format!("echo x > \"{}\"\r", ready.display())));
     assert!(wait(vcx, |_| ready.exists()), "the new shell takes input");
     assert!(!marker.exists(), "no command of the previous session ran again");
     wb.update(vcx, |wb, cx| wb.close_all_terminals(cx));
