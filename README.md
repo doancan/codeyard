@@ -55,7 +55,7 @@ Numbers: every release is measured against the previous one. `scripts/perf` runs
 release when startup, typing latency or memory regresses past its budget (see [Budgets and gates](docs/architecture.md#budgets-and-gates)).
 `scripts/memcheck.sh` also keeps absolute memory limits: an empty window must stay under 85 MB, a 10k-line file with syntax
 highlighting under 130 MB, measured with macOS `footprint` at 1280x800 @2x with the screen buffers included. The Linux SSH agent
-stays under 1600 KB because it is copied to every server. The app binary has no size limit. Files over 32 MB open in a chunked
+stays under 1664 KB because it is copied to every server. The app binary has no size limit. Files over 32 MB open in a chunked
 read-only view.
 
 ## Highlights

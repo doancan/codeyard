@@ -284,7 +284,7 @@ Measured by `scripts/memcheck.sh` (macOS `footprint`, 1280×800 @2x; the screen 
 | 10k lines, plain text | 95 MB |
 | 10k lines, syntax highlighting | 130 MB |
 | remote agent daemon, idle | 8 MB |
-| agent binary (Linux musl) | 1600 KB |
+| agent binary (Linux musl) | 1664 KB |
 
 The app binary has no size budget: it grows with features, and users feel time and memory, not bytes. Its size is
 printed by `scripts/memcheck.sh` for the record. The agent keeps its budget because it is copied to every server.

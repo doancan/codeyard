@@ -79,7 +79,7 @@ echo "size:"
 printf "  %-4s %-40s %6s MB\n" info "app binary" "$(du -m "$APP" | cut -f1)"
 for t in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
   f=target/$t/release-agent/codeyard-agent
-  # 1600 KB: processes, port scan and the large-file index brought it to ~1.5 MB; a guide, not a hard limit.
-  [ -f "$f" ] && check "agent ($t)" 1600 "$(du -k "$f" | cut -f1)" KB
+  # 1664 KB: processes, port scan, the large-file index and task runs brought it to ~1.6 MB; a guide, not a hard limit.
+  [ -f "$f" ] && check "agent ($t)" 1664 "$(du -k "$f" | cut -f1)" KB
 done
 exit $fail
