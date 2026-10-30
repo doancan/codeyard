@@ -53,6 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   terminal; "Tasks: Terminate Task" stops everything a run started and "Tasks: Restart Running Task" starts it again.
 - A debug configuration's `preLaunchTask` from a task file must succeed (or a background task become ready) before the
   debugger starts; a failure never starts debugging.
+- Terminals come back after a restart as new shells in their folders, with their titles, colors and programs, and say
+  so; nothing runs again. `terminal.persistentScrollback` (off by default) also keeps the last lines of their history as
+  plain text; "Terminal: Clear Saved Terminal History" removes it.
 
 ### Changed
 
@@ -60,14 +63,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a variable can never become more shell code, and Stop ends the processes it started.
 - The Linux agent's size budget is 1664 KB (was 1600 KB): running tasks as processes on the server needs its own
   request in the protocol.
-
-## [0.6.0] - 2026-10-29
-
-### Added
-
-- Terminals come back after a restart as new shells in their folders, with their titles, colors and programs, and say
-  so; nothing runs again. `terminal.persistentScrollback` (off by default) also keeps the last lines of their history as
-  plain text; "Terminal: Clear Saved Terminal History" removes it.
 
 ## [0.6.0] - 2026-10-29
 
