@@ -150,10 +150,19 @@ impl EditorView {
         self.buffer.selected_texts()
     }
 
-    /// QA: first and last buffer line visible in the last paint.
-    #[cfg(test)]
-    pub fn qa_visible_lines(&self) -> Option<(usize, usize)> {
+    /// First and last buffer line visible in the last paint.
+    pub fn visible_lines(&self) -> Option<(usize, usize)> {
         Some((self.visible.first()?.line, self.visible.last()?.line))
+    }
+
+    /// Accessibility scroll action: move the view `pages` screens down (up when negative), the caret stays.
+    pub fn a11y_scroll(&mut self, pages: isize, cx: &mut Context<Self>) {
+        let Some((first, last)) = self.visible_lines() else { return };
+        let page = (last - first).max(1) as isize;
+        let max = self.buffer.len_lines().saturating_sub(1) as isize;
+        let row = self.row_of_line((first as isize + pages * page).clamp(0, max) as usize);
+        self.scroll.scroll_to_item_strict(row, ScrollStrategy::Top);
+        cx.notify();
     }
 
     #[cfg(test)]

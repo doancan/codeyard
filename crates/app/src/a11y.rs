@@ -86,13 +86,12 @@ const BLOCK: u64 = 0x10_0000;
 const ROW_BASE: u64 = 0x2_0000_0000;
 const RUN_BASE: u64 = 0x4_0000_0000;
 const TERM_RUN_BASE: u64 = 0x8_0000_0000;
-/// Window shown to AT in the editor: this many lines before/after the cursor line.
-const WINDOW_BEFORE: usize = 100;
-const WINDOW_AFTER: usize = 200;
+/// Lines of the editor shown to AT (see `window_start`).
+const EDITOR_WINDOW: usize = 300;
 /// Characters per text run (word_starts is u8, so at most 255).
 const RUN_CHARS: usize = 200;
-/// Max rows shown to AT in the explorer.
-const MAX_ROWS: usize = 5000;
+/// Rows of an explorer tree shown to AT (see `window_start`).
+const EXPLORER_WINDOW: usize = 1000;
 /// Max rows shown to AT in a picker or the suggestion list.
 const MAX_OPTIONS: usize = 500;
 
@@ -111,6 +110,8 @@ pub struct ExplorerSnap {
     pub name: String,
     pub rows: Vec<RowSnap>,
     pub rows_total: usize,
+    /// Index of the first row of `rows` in the whole tree.
+    pub first: usize,
     pub focused: Option<u64>,
 }
 
@@ -302,6 +303,36 @@ pub struct Snapshot {
     pub focus: FocusSnap,
 }
 
+/// First of the `len` items (explorer rows, editor lines) of `total` shown to AT, so snapshots stay bounded: centred on
+/// `focus` (selection, caret) while it is on screen, otherwise on the `visible` range (after a scroll).
+fn window_start(total: usize, len: usize, focus: Option<usize>, visible: Option<(usize, usize)>) -> usize {
+    let centre = match (focus, visible) {
+        (Some(f), Some((a, b))) if (a..=b).contains(&f) => f,
+        (_, Some((a, b))) => (a + b) / 2,
+        (f, None) => f.unwrap_or(0),
+    };
+    centre.saturating_sub(len / 2).min(total.saturating_sub(len))
+}
+
+/// Scroll position of a windowed node, in items (rows, lines), and its scroll actions.
+fn set_scroll(node: &mut Node, first: usize, shown: usize, total: usize) {
+    node.set_scroll_y(first as f64);
+    node.set_scroll_y_min(0.);
+    node.set_scroll_y_max(total.saturating_sub(shown) as f64);
+    node.add_action(Action::ScrollUp);
+    node.add_action(Action::ScrollDown);
+}
+
+impl EditorSnap {
+    /// The lines around the caret, or the visible ones after a scroll; run offsets are document-relative.
+    pub(super) fn of(e: &crate::editor::EditorView) -> EditorSnap {
+        let line = e.cursor_position().0.saturating_sub(1);
+        let first = window_start(e.line_count(), EDITOR_WINDOW, Some(line), e.visible_lines());
+        let (selection, total_lines, lines) = e.a11y_view(first, first + EDITOR_WINDOW);
+        EditorSnap { name: e.name.to_string(), dirty: e.is_dirty(), runs: runs_for(lines, total_lines, first), selection, total_lines, first_line: first }
+    }
+}
+
 /// Split into runs: each line into runs of at most RUN_CHARS characters, the line ending in the last run.
 fn runs_for(lines: Vec<(usize, String)>, total_lines: usize, first_line: usize) -> Vec<RunSnap> {
     let mut runs = Vec::new();
@@ -446,13 +477,14 @@ impl Snapshot {
             tree.set_label(if self.explorers.len() > 1 { format!("{}: {}", t("Explorer"), ex.name) } else { t("Explorer").to_string() });
             tree.set_size_of_set(ex.rows_total);
             tree.set_multiselectable();
+            set_scroll(&mut tree, ex.first, ex.rows.len(), ex.rows_total);
             let mut row_ids = Vec::new();
             for (i, r) in ex.rows.iter().enumerate() {
                 let mut n = Node::new(Role::TreeItem);
                 n.set_label(r.name.clone());
                 n.set_level(r.depth + 1);
                 n.set_selected(r.selected);
-                n.set_position_in_set(i + 1);
+                n.set_position_in_set(ex.first + i + 1);
                 n.set_size_of_set(ex.rows_total);
                 if r.is_dir {
                     n.set_expanded(r.expanded);
@@ -616,7 +648,9 @@ impl Snapshot {
             let mut ed = Node::new(Role::MultilineTextInput);
             self.geometry.apply(EDITOR, &mut ed);
             ed.set_label(if e.dirty { tf("{} (modified)", &[&e.name]) } else { e.name.clone() });
-            ed.set_description(tf("{0} lines, showing from line {1}", &[&e.total_lines, &(e.first_line + 1)]));
+            let last = e.total_lines.min(e.first_line + EDITOR_WINDOW).max(e.first_line + 1);
+            ed.set_description(tf("{0} lines, showing lines {1}–{2}", &[&e.total_lines, &(e.first_line + 1), &last]));
+            set_scroll(&mut ed, e.first_line, last - e.first_line, e.total_lines);
             ed.add_action(Action::Focus);
             ed.add_action(Action::SetTextSelection);
             let mut children = run_nodes(&e.runs, RUN_BASE, &mut nodes);
@@ -779,10 +813,13 @@ impl Workbench {
                 let tree = tree.read(cx);
                 let (rows, selected) = tree.a11y_rows();
                 let rows_total = rows.len();
-                let focused = selected.filter(|i| *i < MAX_ROWS).and_then(|i| rows.get(i)).map(|r| row_id(&r.0).0);
+                let first = window_start(rows_total, EXPLORER_WINDOW, selected, tree.visible_rows());
+                let shown = first..first + EXPLORER_WINDOW;
+                let focused = selected.filter(|i| shown.contains(i)).and_then(|i| rows.get(i)).map(|r| row_id(&r.0).0);
                 let rows = rows
                     .into_iter()
-                    .take(MAX_ROWS)
+                    .skip(first)
+                    .take(EXPLORER_WINDOW)
                     .map(|(path, name, depth, is_dir, expanded)| RowSnap {
                         id: row_id(&path).0,
                         selected: tree.path_is_selected(&path),
@@ -793,7 +830,7 @@ impl Workbench {
                         expanded,
                     })
                     .collect();
-                ExplorerSnap { name: tree.root().map_or(String::new(), |r| crate::ui::file_name(r).to_string()), rows, rows_total, focused }
+                ExplorerSnap { name: tree.root().map_or(String::new(), |r| crate::ui::file_name(r).to_string()), rows, rows_total, first, focused }
             })
             .collect();
         let tree = self.roots.primary.read(cx);
@@ -805,13 +842,7 @@ impl Workbench {
 
         let editor_visible = !self.tabs.diff_active && !self.tabs.large_active && !self.tabs.page_active;
         let ed = self.active_editor().filter(|_| editor_visible);
-        let editor = ed.map(|e| {
-            let e = e.read(cx);
-            let line = e.cursor_position().0.saturating_sub(1);
-            let first = line.saturating_sub(WINDOW_BEFORE);
-            let (selection, total_lines, lines) = e.a11y_view(first, line + WINDOW_AFTER);
-            EditorSnap { name: e.name.to_string(), dirty: e.is_dirty(), runs: runs_for(lines, total_lines, first), selection, total_lines, first_line: first }
-        });
+        let editor = ed.map(|e| EditorSnap::of(e.read(cx)));
 
         // Same texts as the status bar (status_bar() elements; should move into a shared function later).
         let mut status = Vec::new();
@@ -1091,6 +1122,19 @@ impl Workbench {
                     }
                 }
             }
+            (Action::ScrollUp | Action::ScrollDown, EDITOR) => {
+                let pages = if req.action == Action::ScrollUp { -1 } else { 1 };
+                if let Some(e) = self.active_editor().cloned() {
+                    e.update(cx, |e, cx| e.a11y_scroll(pages, cx));
+                }
+            }
+            (Action::ScrollUp | Action::ScrollDown, id) if id == EXPLORER || (id.0 >= EXTRA_TREE && id.0 < EXTRA_TREE + BLOCK) => {
+                let k = if id == EXPLORER { 0 } else { (id.0 - EXTRA_TREE) as usize };
+                let pages = if req.action == Action::ScrollUp { -1 } else { 1 };
+                if let Some(tree) = self.all_trees().get(k).filter(|_| self.view_shown(Panel::Explorer)) {
+                    tree.update(cx, |t, cx| t.a11y_scroll(pages, cx));
+                }
+            }
             (Action::SetTextSelection, EDITOR) => {
                 let (Some(ActionData::SetTextSelection(sel)), Some(snap)) = (&req.data, &last.editor) else { return };
                 let (Some(a), Some(h)) = (char_of(&snap.runs, sel.anchor), char_of(&snap.runs, sel.focus)) else { return };
@@ -1280,3 +1324,7 @@ mod tests;
 #[cfg(test)]
 #[path = "a11y_geometry_tests.rs"]
 mod geometry_tests;
+
+#[cfg(test)]
+#[path = "a11y_range_tests.rs"]
+mod range_tests;

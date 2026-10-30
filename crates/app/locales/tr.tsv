@@ -936,7 +936,7 @@ Leave out animations: the blinking cursor, spinners and sliding panels (auto: fo
 Theme “{1}”: {0} colour pair is below WCAG AA contrast ({2} on {3}: {4}:1, needs {5}:1)|Theme “{1}”: {0} colour pairs are below WCAG AA contrast, for example {2} on {3}: {4}:1, needs {5}:1	“{1}” teması: {0} renk çifti WCAG AA kontrastının altında (örneğin {3} üzerinde {2}: {4}:1, en az {5}:1 olmalı)
 Terminal {0} of {1}	Terminal {0} / {1}
 {} (modified)	{} (değiştirildi)
-{0} lines, showing from line {1}	{0} satır, {1}. satırdan itibaren gösteriliyor
+{0} lines, showing lines {1}–{2}	{0} satır, {1}–{2}. satırlar gösteriliyor
 Connecting to {}	{} sunucusuna bağlanılıyor
 Reconnecting to {0} (attempt {1})	{0} sunucusuna yeniden bağlanılıyor (deneme {1})
 Branch {}	Dal {}

@@ -14,8 +14,9 @@ The tree, in the order a screen reader walks it:
 
 - `Window` (title "Codeyard — folder").
 - One `Tree` per folder of the workspace: "Explorer", or "Explorer: name" when there are several. One `TreeItem` per
-  visible row: name, level, selected, expanded, set position; capped at 5,000 rows per tree. These trees are omitted
-  while Explorer is hidden. Row actions resolve the current path rather than reusing an old row index.
+  row in a range of 1,000 rows: name, level, selected, expanded, set position in the whole tree. The range is centred
+  on the selection while it is on screen, otherwise on the visible rows; the tree reports its scroll position in rows
+  and supports scroll up/down by a page, which moves the range. These trees are omitted while Explorer is hidden. Row actions resolve the current path rather than reusing an old row index.
 - While Source Control is visible, a `Group` with the branch, a writable `MultilineTextInput` for the commit message,
   a correctly labeled/enabled commit button, change groups with expand/collapse buttons, file diff buttons and
   Stage/Unstage buttons. Operation errors are assertive live regions; successful results are polite. The message
@@ -116,8 +117,9 @@ The tree, in the order a screen reader walks it:
   row shows, a `Status` with "3 of 12" (a polite live region, so it is spoken while typing and moving between matches),
   then the options as `CheckBox` (with their state) and the buttons, in the order they are drawn. Labels are the tooltips,
   shortcut included.
-- `MultilineTextInput` for the active editor: file name, `(modified)`, a text window around the caret, text runs of at
-  most 200 characters, the primary selection. While suggestions are open it holds a `ListBox` "Suggestions" (one
+- `MultilineTextInput` for the active editor: file name, `(modified)`, a range of 300 lines (centred on the caret
+  while it is on screen, otherwise on the visible lines; scroll up/down by a page moves it), its scroll position in
+  lines and "N lines, showing lines A–B" as description, text runs of at most 200 characters, the primary selection. While suggestions are open it holds a `ListBox` "Suggestions" (one
   `ListBoxOption` per suggestion with its detail, at most 500) and the selected suggestion is its active descendant, so a
   screen reader speaks it as the selection moves while the keyboard stays in the editor.
 - While the terminal panel is open, a read-only `Terminal`: one text run per row on screen and the cursor as a collapsed
@@ -236,8 +238,10 @@ probe as the workbench's lists (`painted.rs`).
   `character_widths`; precise character hit testing, caret highlighting and magnifier caret tracking remain unimplemented.
 - **Focus** was not observed live on macOS (`Focused="0"` in every dump: the test window was not key). The code path
   (`TreeUpdate.focus`, `update_view_focus_state`) exists but is unverified.
-- The editor exposes a window of lines around the caret, not the whole document, so absolute offsets differ from
-  file offsets in long files. Primary selection only; no multi-cursor, folding, wrapped lines, RTL or CRLF handling.
+- The editor and the Explorer expose a bounded range, not the whole document or tree. Run offsets, the selection and
+  set positions are document- or tree-relative, but the text value of the editor node starts at the range, so a
+  client that counts characters from the node's value sees offsets relative to the first exposed line; the scroll
+  position and description give that line. Primary selection only; no multi-cursor, folding, wrapped lines, RTL or CRLF handling.
 - The terminal exposes the screen only, not the scrollback, and cannot be written to from the tree (typing goes through
   the keyboard as usual).
 - Not exposed: an installed extension's page, the Source Control graph, worktrees and sync controls, hover and
