@@ -266,16 +266,16 @@ for i in $(seq 1 "$runs"); do
       exit 1
     fi
     grep '"views\.keystroke_frame_ms"' "$TMP/views.jsonl" >> "$CODEYARD_PERF" || true
-    # Hot reload: 11 new builds swapped in, each to its first answer; the first fills the incremental cache and is
-    # dropped.
+    # Hot reload: 10 new builds swapped in, each to its first answer, after an unrecorded one that fills the
+    # incremental cache.
     cp "$RELOAD_DIR/a.wasm" "$RELOAD_DIR/ext/extension.wasm"
     : > "$TMP/reload.jsonl"
-    CODEYARD_PERF="$TMP/reload.jsonl" CODEYARD_PERF_RELOAD=11 run_scripted "$OUT/codeyard-${names[$k]}" --extension-dev "$RELOAD_DIR/ext"
-    if [ "${names[$k]}" = candidate ] && [ "$(count extensions.hot_reload_ms "$TMP/reload.jsonl")" != 11 ]; then
-      echo "perf: the hot reload run of ${names[$k]} did not swap in 11 builds; is codeyard-exthost built?" >&2
+    CODEYARD_PERF="$TMP/reload.jsonl" CODEYARD_PERF_RELOAD=10 run_scripted "$OUT/codeyard-${names[$k]}" --extension-dev "$RELOAD_DIR/ext"
+    if [ "${names[$k]}" = candidate ] && [ "$(count extensions.hot_reload_ms "$TMP/reload.jsonl")" != 10 ]; then
+      echo "perf: the hot reload run of ${names[$k]} did not swap in 10 builds; is codeyard-exthost built?" >&2
       exit 1
     fi
-    grep '"extensions\.hot_reload_ms"' "$TMP/reload.jsonl" | tail -n +2 >> "$CODEYARD_PERF" || true
+    grep '"extensions\.hot_reload_ms"' "$TMP/reload.jsonl" >> "$CODEYARD_PERF" || true
   done
   printf '\rperf: timing run %s/%s' "$i" "$runs" >&2
 done

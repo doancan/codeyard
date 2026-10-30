@@ -157,7 +157,7 @@ impl Workbench {
         }
         let Some((_, since)) = code.dev.since.take() else { return };
         let ms = since.elapsed().as_secs_f64() * 1000.0;
-        crate::perf::sample("extensions.hot_reload_ms", ms);
+        crate::perf::hot_reload(ms);
         self.log_extension(id, LogLevel::Info, format!("reloaded: the new build answered {ms:.0} ms after it was noticed"));
     }
 }

@@ -826,9 +826,16 @@ impl Workbench {
         Some(id)
     }
 
-    /// The view has its tree and holds the keyboard: keys pressed now reach it.
-    pub fn ext_view_focused_for_perf(&self, id: &str, window: &Window) -> bool {
-        self.ext_view(id).is_some_and(|h| h.tree.is_some() && h.focus.values().any(|f| f.is_focused(window)))
+    /// Once the view has its tree, give it the keyboard (again: on a fresh profile the welcome screen takes focus back
+    /// after the view opens); whether it holds the keyboard now, so keys pressed reach it.
+    pub fn focus_ext_view_for_perf(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if self.ext_view(id).is_none_or(|h| h.tree.is_none()) {
+            return false;
+        }
+        if !self.ext_view(id).is_some_and(|h| h.focus.values().any(|f| f.is_focused(window))) {
+            self.focus_ext_view(id, window, cx);
+        }
+        self.ext_view(id).is_some_and(|h| h.focus.values().any(|f| f.is_focused(window)))
     }
 }
 

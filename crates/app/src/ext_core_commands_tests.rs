@@ -310,7 +310,7 @@ fn the_perf_view_lists_ten_thousand_rows(cx: &mut TestAppContext) {
     let id = wb.update_in(cx, |wb, window, cx| wb.open_ext_view_for_perf(window, cx)).expect("a view");
     assert_eq!(id, "perf.viewlist.rows");
     let deadline = Instant::now() + Duration::from_secs(20 * crate::test_sshd::timeout_scale());
-    while !wb.update_in(cx, |wb, window, _| wb.ext_view_focused_for_perf(&id, window)) {
+    while !wb.update_in(cx, |wb, window, cx| wb.focus_ext_view_for_perf(&id, window, cx)) {
         assert!(Instant::now() < deadline, "the view was not drawn: {:?}", wb.read_with(cx, |wb, _| wb.ext_view_error_for_test(&id)));
         cx.run_until_parked();
         std::thread::sleep(Duration::from_millis(20));
