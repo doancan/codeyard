@@ -250,21 +250,34 @@ What the guard does not cover:
 - The instant between `spawn` and the registration line.
 - Remote hosts: there the daemon (`docs/remote.md`) owns the processes and ties them to the connection.
 
-**Next: terminals that survive an app restart (#82).** Locally there is nothing to reattach to today, because terminals
-end with the app. The SSH daemon is the model for that work:
+**Terminals that outlive the app (#82).** With `window.restoreSession` on, a local window runs its terminals (only those) on
+the terminal daemon, the same daemon as over SSH (`agent::daemon`). Everything else stays on the in-process agent, so
+file access and tasks keep their speed and the guard's immediate kill.
 
-1. Run the local agent as a child process: `codeyard --local-agent`, or `--daemon` on a per-user socket as over SSH,
-   instead of a thread. It speaks the same protocol over pipes. Tasks then get the immediate kill above when the connection
-   ends, and PTYs get the daemon's grace window.
-2. Give each PTY an opaque random token scoped to the host and to the daemon's own random instance id, plus an output
-   sequence number for gap detection. Persist only the token, never a pid. A token from another host, another daemon
-   instance or one already attached is refused, so a reused pid can never be attached.
-3. Reattaching on restart sends `Hello{session}` and the tokens. Whatever comes back is reconnected; the rest is shown as
-   ended and revived as a new shell, with nothing replayed.
+- **Start-up:** the app binary is started as `codeyard --daemon <state>/terminals/d.sock`. The socket is owner-only (mode
+  0600, in a 0700 folder) and the daemon runs in its own session, outside the guard.
+- **Session:** the window connects straight to the socket and opens a session with a random 128-bit id. Its terminals
+  live in that session, and the id is saved with the window's terminals.
+- **Tokens:** for each terminal the window asks for a token (`PtyToken`): the daemon process's random instance id plus a
+  random 128-bit secret of that terminal. The window saves the token with the terminal and never stores a pid.
+- **On restart:** the window takes the session back (`Hello{session}`; the saved terminal ids are registered before the
+  first frame, so the buffered output reaches them) and proves each terminal with `PtyAttach`. A secret or instance that
+  does not match is refused (`PermissionDenied`), an ended terminal is `NotFound`, and both become new shells as before.
+  `PtyList` finds the session's terminals that no window took back, and they are ended.
+- **Output while away:** the daemon keeps the last 256 KB of each terminal's output while no window is attached. It also
+  counts every byte, so `PtyAttached` carries the output sequence number and the bytes cut from the backlog; the view
+  shows that gap.
+- **One owner:** a session is used by at most one window of the app (a process-wide set). A newer connection to a
+  session (another app instance) replaces the older one, which can no longer type: `Session::run` stops reading from a
+  superseded connection.
+- **Bounds:** a session no window takes back is ended after the daemon's grace period (5 minutes) and its shells with it;
+  the daemon exits 10 minutes after its last session. A window that closes leaves its session for that grace period too
+  (`RemoteHost` sends no `Bye` for a daemon session), so reopening the folder soon takes the terminals back.
+- **Protocol:** version 16 adds `PtyToken`, `PtyAttach` and `PtyList`. The static Linux agent is 1636 KB (budget 1664 KB).
 
-The costs to weigh first: one more resident process per user (the SSH daemon idles at about 8 MB) and one more process
-start on launch. Local file reads and saves would also go through the pipe instead of a function call: measure typing and
-large-file latency before switching.
+Not covered: terminals moved to the editor area or a window of their own (#79) still come back as new shells, and their
+daemon shells are ended at the next restore. SSH folders keep their existing reconnect-while-running behaviour but are not
+taken back after an app restart. Windows runs no terminal daemon.
 
 ## Opening files from the system
 
