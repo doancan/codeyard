@@ -111,7 +111,7 @@ impl ViewWindow {
 
 impl Render for ViewWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.bounds.set(Some(window.bounds()));
+        self.bounds.set(Some(super::views_glue::reopen_bounds(window)));
         // Keys always reach the workbench's actions here, even when what has the keyboard is not drawn here (the view's
         // own target, as the Explorer's tree with no folder open). A focus set since the last frame (a menu that just
         // opened) is left alone: it is drawn in this frame.

@@ -77,6 +77,15 @@ fn restart(wb: Entity<Workbench>, cx: &mut VisualTestContext, home: &std::path::
 /// Quit and reopen the window with the given `window.startup` setting.
 pub(crate) fn restart_with(wb: Entity<Workbench>, cx: &mut VisualTestContext, home: &std::path::Path, startup: crate::settings::Startup) -> Entity<Workbench> {
     assert!(wb.update(cx, |wb, cx| wb.prepare_quit(cx)));
+    reopen(wb, cx, home, startup)
+}
+
+/// `restart_with` after a crash or a kill: nothing is saved on the way out, the next start finds what was last saved.
+pub(crate) fn restart_after_kill(wb: Entity<Workbench>, cx: &mut VisualTestContext, home: &std::path::Path) -> Entity<Workbench> {
+    reopen(wb, cx, home, crate::settings::Startup::Continue)
+}
+
+fn reopen(wb: Entity<Workbench>, cx: &mut VisualTestContext, home: &std::path::Path, startup: crate::settings::Startup) -> Entity<Workbench> {
     drop(wb);
     let db = home.join("state.db");
     let data = home.to_path_buf();

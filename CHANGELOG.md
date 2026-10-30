@@ -199,6 +199,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Windows of their own (editors, side views, terminals) on macOS came back 32 pixels taller at every start: the frame's
+  height was saved and the content was opened at that height. The content's size is saved now.
+- A file moved into a window of its own came back as a tab of the main window too after the second start when Codeyard
+  had been killed or had crashed: the tab loaded at the first start to show it was saved as a tab.
 - Opening a folder with `--terminal`, or asking for a new terminal while the folder's terminals were being restored,
   made the restore give up: the saved terminals did not come back and the new shell ran outside the terminal session,
   so it was not kept for the next start. The new terminal now waits for the restore.
