@@ -379,3 +379,40 @@ fn placeholder_client_ids_are_flagged() {
         assert!(placeholder_client_ids(&with(id)).is_empty(), "{id}");
     }
 }
+
+/// #146: a program inside the package is built per platform: `cyx check` checks each one in `native/`, and `cyx
+/// package` writes `<id>-<version>-<triple>.cyx` for each (or the one `--target` names).
+#[test]
+fn native_programs_are_packaged_per_platform() {
+    let root = tmp("native");
+    let dir = root.join("hello");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), ext_core::testing::native_manifest("you.hello", "1.0.0")).unwrap();
+    let e = check(&dir).unwrap_err();
+    assert!(e.contains("native/<triple>/"), "{e}");
+    let (linux, mac) = ("x86_64-unknown-linux-musl", "aarch64-apple-darwin");
+    for t in [linux, mac] {
+        let bin = dir.join("native").join(t).join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("hello"), "#!/bin/sh\necho hi\n").unwrap();
+        #[cfg(unix)]
+        std::fs::set_permissions(bin.join("hello"), std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    }
+    if !cfg!(unix) {
+        return std::fs::remove_dir_all(&root).unwrap(); // A folder on Windows has no executable bit for Unix programs.
+    }
+    check(&dir).unwrap();
+    let out = root.join("out");
+    std::fs::create_dir_all(&out).unwrap();
+    let written = package_platforms(&dir, Some(&out), None).unwrap();
+    let names: Vec<String> = written.iter().map(|(p, _)| p.file_name().unwrap().to_string_lossy().into_owned()).collect();
+    assert_eq!(names, [format!("you.hello-1.0.0-{mac}.cyx"), format!("you.hello-1.0.0-{linux}.cyx")]);
+    let pkg = ext_pkg::read(&std::fs::read(&written[1].0).unwrap()).unwrap();
+    assert_eq!(pkg.target.as_deref(), Some(linux));
+    assert!(pkg.files.contains_key("bin/hello") && !pkg.files.keys().any(|p| p.starts_with("native")));
+    let one = package_platforms(&dir, Some(&root.join("one.cyx")), Some(linux)).unwrap();
+    assert_eq!(one[0].1, written[1].1, "the same platform packages to the same digest");
+    assert!(package_platforms(&dir, Some(&root.join("x.cyx")), None).unwrap_err().contains("--target"));
+    assert!(package_platforms(&dir, Some(&out), Some("x86_64-pc-windows-msvc")).is_err(), "no folder for it");
+    std::fs::remove_dir_all(&root).unwrap();
+}

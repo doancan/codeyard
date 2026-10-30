@@ -242,12 +242,13 @@ impl TestRegistry {
             sha256: hex(&Sha256::digest(bytes)),
             size: bytes.len() as u64,
             permissions: crate::yard::permission_digest(m),
-            code: !m.is_declarative(),
+            code: !m.is_declarative() || m.has_native_programs(),
             published: now,
             status: crate::yard::Status::Ok,
             downloads: 0,
             immediate: false,
             details: Some(crate::yard::Details::digest(&details)),
+            targets: Default::default(),
         };
         let entry = self.index.extensions.entry(m.id.clone()).or_insert_with(|| crate::yard::Entry {
             name: m.name.clone(),
@@ -256,6 +257,22 @@ impl TestRegistry {
             publisher: publisher.clone(),
             versions: Vec::new(),
         });
+        // A per-platform package joins its version's other platforms, as the registry does.
+        if let Some(t) = &pkg.target {
+            let target = crate::yard::TargetPackage { digest: release.digest.clone(), sha256: release.sha256.clone(), size: release.size };
+            if let Some(r) = entry.versions.iter_mut().find(|r| r.version == m.version) {
+                r.targets.insert(t.clone(), target);
+                let r = r.clone();
+                self.sign(now);
+                return r;
+            }
+            let mut release = release;
+            release.targets.insert(t.clone(), target);
+            entry.versions.push(release.clone());
+            entry.versions.sort_by(|a, b| a.version.cmp(&b.version));
+            self.sign(now);
+            return release;
+        }
         entry.versions.push(release.clone());
         entry.versions.sort_by(|a, b| a.version.cmp(&b.version));
         self.sign(now);
@@ -346,6 +363,25 @@ struct Logged {
     set: Vec<u8>,
     root: [u8; 32],
     checkpoint: String,
+}
+
+/// The manifest of a test extension with a native program: `./bin/hello`, which a command of its code may run.
+pub fn native_manifest(id: &str, version: &str) -> String {
+    format!(
+        "[extension]\nid = \"{id}\"\nversion = \"{version}\"\nname = \"Hello\"\nlicense = \"MIT\"\n\n[permissions]\nrun = [\"./bin/hello\"]\nwhy = \"Runs its own helper.\"\n"
+    )
+}
+
+/// One platform's package of [`native_manifest`]: `bin/hello` is a shell script that prints its first argument, so a
+/// test can run it on a Unix machine whatever the platform it is labelled for.
+pub fn native_package(id: &str, version: &str, target: &str) -> Vec<u8> {
+    let program = ext_manifest::program_file("./bin/hello", target);
+    let entries = vec![
+        ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: native_manifest(id, version).into_bytes(), executable: false },
+        ext_pkg::Entry { path: program, data: format!("#!/bin/sh\necho \"hello from {target}: $1\"\n").into_bytes(), executable: true },
+        ext_pkg::Entry { path: ext_pkg::TARGET.into(), data: format!("{target}\n").into_bytes(), executable: false },
+    ];
+    ext_pkg::write(entries).expect("native test package").0
 }
 
 /// A Rekor `hashedrekord` 0.0.1 entry body.

@@ -66,6 +66,7 @@ fn a_fix_pasted_into_the_manifest_makes_the_call_pass() {
         trusted: true,
         dependencies: Vec::new(),
         revoked: Permissions::default(),
+        programs: None,
     };
     let file = format!("{root}/src/a.rs");
     let d = match scope(Permissions::default()).may_read(&file) {

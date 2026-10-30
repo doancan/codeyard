@@ -143,8 +143,9 @@ pub struct Found {
 }
 
 /// Find `spec` (`publisher.name[@version]`) in the user's registries, download and check it. The daily cached index
-/// is used first; a registry is asked again only if it does not list the id yet.
-pub fn find(cfg_dir: &Path, registries: &[Registry], spec: &str, now: u64) -> Result<Found, String> {
+/// is used first; a registry is asked again only if it does not list the id yet. An extension with native programs is
+/// downloaded for `target`, the platform of the workspace's host (this machine's, or the SSH server's).
+pub fn find(cfg_dir: &Path, registries: &[Registry], spec: &str, target: &str, now: u64) -> Result<Found, String> {
     let (id, version) = registry::parse_spec(spec)?;
     if registries.is_empty() {
         return Err(crate::i18n::t("No extension registry is set up yet. Add one to extensions.registries in your settings, or install a .cyx file.").into());
@@ -174,7 +175,7 @@ pub fn find(cfg_dir: &Path, registries: &[Registry], spec: &str, now: u64) -> Re
             }
         };
         let stale = v.stale;
-        let download = with_fetch(|f| registry::download(reg, &v, &id, version.as_ref(), pre, f, now)).map_err(|e| e.to_string())?;
+        let download = with_fetch(|f| registry::download_for(reg, &v, &id, version.as_ref(), pre, target, f, now)).map_err(|e| e.to_string())?;
         let pin = registry::pin(locked.get(&id), &reg.name, &download.signed.publisher);
         return Ok(Found { registry: reg.clone(), download, pin, stale });
     }
@@ -210,13 +211,37 @@ pub fn install(cfg_dir: &Path, found: &Found) -> Result<ext_core::Installed, Str
         crate::ext_runtime::code_runs_here(&found.download.manifest.id)?;
     }
     let source = ext_core::Source::Registry { registry: found.registry.name.clone(), publisher: found.download.signed.publisher.clone() };
-    crate::ext::store(cfg_dir).install(&found.download.bytes, source).map_err(|e| e.to_string())
+    crate::ext::store(cfg_dir).install_with_targets(&found.download.bytes, source, found.download.targets.clone()).map_err(|e| e.to_string())
+}
+
+/// Another platform's package of the installed version of `id`, for a workspace on that platform: downloaded from the
+/// registry it was installed from, with every check of an install, and checked against the digest the lock (or the
+/// signed index) lists for it. Returns its folder in the store.
+pub fn fetch_target(cfg_dir: &Path, registries: &[Registry], id: &ext_manifest::ExtId, target: &str) -> Result<PathBuf, String> {
+    let store = crate::ext::store(cfg_dir);
+    let locked = store.locked().map_err(|e| e.to_string())?;
+    let l = locked.get(id).ok_or_else(|| crate::i18n::tf("{} is not installed", &[id]))?;
+    let Some((name, publisher)) = l.source.registry() else {
+        return Err(crate::i18n::tf("{0} was not installed from a registry, so it has no package for {1}; install the package built for {1}", &[id, &target]));
+    };
+    let reg = registries.iter().find(|r| r.name == name).ok_or_else(|| crate::i18n::tf("the {} registry is no longer in your settings", &[&name]))?;
+    let dir = registry::cache_dir(&cache_root(cfg_dir), reg);
+    let now = now();
+    let v = with_fetch(|f| registry::index(reg, &dir, f, now, false)).map_err(|e| e.to_string())?;
+    let d = with_fetch(|f| registry::download_for(reg, &v, id, Some(&l.version), true, target, f, now)).map_err(|e| e.to_string())?;
+    if &d.signed.publisher != publisher {
+        return Err(crate::i18n::tf(
+            "{0} is now published by {1}, not {2} as before; review it with Extensions: Install from Registry…",
+            &[id, &d.signed.publisher, publisher],
+        ));
+    }
+    store.add_target(id, &d.bytes).map_err(|e| e.to_string())
 }
 
 /// `codeyard --install-extension publisher.name[@version]`: running it is the consent, but a changed publisher or a
 /// stale index needs the Extensions view, where the user sees why.
 pub fn install_from_command_line(cfg_dir: &Path, registries: &[Registry], spec: &str) -> Result<ext_manifest::Manifest, String> {
-    let found = find(cfg_dir, registries, spec, now())?;
+    let found = find(cfg_dir, registries, spec, ext_manifest::this_target().unwrap_or("unknown"), now())?;
     if let Pin::Changed { was } = &found.pin {
         return Err(crate::i18n::tf(
             "{0} is now published by {1}, not {2} as before; review it with Extensions: Install from Registry…",

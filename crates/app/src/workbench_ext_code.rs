@@ -136,6 +136,15 @@ impl Workbench {
                 eff.permissions.net.push(i.host);
             }
         }
+        // Programs inside the package: the workspace host's platform's package, fetched from the registry when needed.
+        let programs = active.manifest.has_native_programs().then(|| {
+            let (cfg, id, dir) = (self.cfg.dir.clone(), active.manifest.id.clone(), active.dir.clone());
+            let registries = crate::ext_registry::registries(cx.global::<Settings>());
+            crate::ext_programs::Programs(Arc::new(move |target: &str, run: &str| {
+                let pkg = crate::ext_programs::package_dir(cfg.as_deref(), &registries, &id, &dir, target)?;
+                crate::ext_programs::read_program(&pkg, target, run)
+            }))
+        });
         Scope {
             extension: active.id().to_string(),
             permissions: eff.permissions,
@@ -143,6 +152,7 @@ impl Workbench {
             trusted,
             dependencies: active.manifest.dependencies.iter().map(|(d, _)| d.to_string()).collect(),
             revoked,
+            programs,
         }
     }
 

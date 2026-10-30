@@ -226,7 +226,10 @@ fn install(from: &From, id: &ExtId, l: &Locked, current: &Manifest, release: &Re
             return Ok(Some(Offer::MorePermissions { version, added }));
         }
     }
-    let d = with_fetch(|f| registry::download(reg, v, id, Some(&release.version), release.is_pre_release(), f, now)).map_err(|e| e.to_string())?;
+    // An extension with native programs stays on the platform it was installed for.
+    let platform = l.targets.iter().find(|(_, d)| **d == l.digest).map(|(t, _)| t.as_str()).or(ext_manifest::this_target()).unwrap_or("unknown");
+    let d =
+        with_fetch(|f| registry::download_for(reg, v, id, Some(&release.version), release.is_pre_release(), platform, f, now)).map_err(|e| e.to_string())?;
     // The package decides, whatever the page said.
     if let Some(added) = more(&d.manifest.permissions) {
         return Ok(Some(Offer::MorePermissions { version, added }));
@@ -238,14 +241,14 @@ fn install(from: &From, id: &ExtId, l: &Locked, current: &Manifest, release: &Re
         return Ok(Some(Offer::NewPublisher { version, publisher: d.signed.publisher, was }));
     }
     let source = Source::Registry { registry: reg.name.clone(), publisher: d.signed.publisher };
-    crate::ext::store(cfg_dir).install(&d.bytes, source).map_err(|e| e.to_string())?;
+    crate::ext::store(cfg_dir).install_with_targets(&d.bytes, source, d.targets).map_err(|e| e.to_string())?;
     Ok(None)
 }
 
 /// Leave a yanked version for `target`: from the store when it is the version this one replaced, else downloaded with
 /// the same checks as an update.
 fn roll_back(from: &From, id: &ExtId, l: &Locked, current: &Manifest, target: &Release) -> Result<Option<Offer>, String> {
-    if l.previous.is_some_and(|p| p.hex() == target.digest) {
+    if l.previous.is_some_and(|p| p.hex() == target.digest || target.targets.values().any(|t| t.digest == p.hex())) {
         return crate::ext::store(from.cfg_dir).rollback(id).map(|_| None).map_err(|e| e.to_string());
     }
     install(from, id, l, current, target, None)

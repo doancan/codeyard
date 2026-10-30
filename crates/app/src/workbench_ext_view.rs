@@ -176,12 +176,38 @@ impl Workbench {
             let m = &pending.manifest;
             let (install, cancel) = s.consent_focus.clone().expect("created with the sheet");
             let risk = high_risk_line(m);
+            let ready = self.consent_typed_ok(cx);
+            // Native programs: the id typed into a field before Install does anything (§6.3).
+            let typed = m.has_native_programs().then(|| {
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(theme::SPACE[1]))
+                    .child(section_title(crate::i18n::t("Native programs"), p))
+                    .child(div().child(crate::i18n::t(
+                        "It brings its own programs, built for each platform. They run on the computer that holds the workspace (this one, or the SSH server) with your rights.",
+                    )))
+                    .child(div().font_weight(gpui::FontWeight::SEMIBOLD).child(crate::i18n::tf("Type {} to install it.", &[&m.id])))
+                    .children(s.consent_typed.clone().map(|f| {
+                        div()
+                            .debug_selector(|| "ext-consent-typed".into())
+                            .max_w(px(360.))
+                            .px(px(theme::SPACE[2]))
+                            .py(px(theme::SPACE[1]))
+                            .rounded(px(theme::radius::SM))
+                            .border_1()
+                            .border_color(c(p.border_input))
+                            .bg(c(p.bg))
+                            .child(f)
+                    }))
+            });
             let buttons = div()
                 .flex()
                 .gap(px(theme::SPACE[2]))
                 .pt(px(theme::SPACE[4]))
                 .child(
                     action_button("ext-consent-install", crate::i18n::t("Install"), p)
+                        .when(!ready, |b| b.opacity(0.5))
                         .track_focus(&install)
                         .on_click(cx.listener(|this, _, w, cx| this.confirm_consent(w, cx))),
                 )
@@ -203,6 +229,7 @@ impl Workbench {
                         .child(section_title(crate::i18n::t("Contributes"), p))
                         .child(line_list(contribution_lines(m), crate::i18n::t("Nothing"), p))
                         .children(pending.warnings.iter().map(|w| div().pt(px(theme::SPACE[2])).text_color(c(p.danger)).child(w.clone())))
+                        .children(typed)
                         .child(buttons),
                 )
                 .into_any_element();
