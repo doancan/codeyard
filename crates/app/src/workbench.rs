@@ -161,8 +161,11 @@ mod sync_glue;
 mod task_run_glue;
 #[path = "workbench_tasks.rs"]
 pub mod tasks;
+#[path = "workbench_term_daemon.rs"]
+mod term_daemon_glue;
 #[path = "workbench_term_tabs.rs"]
 mod term_tabs_glue;
+pub use term_daemon_glue::{enable_terminal_daemon, terminal_daemon_socket};
 #[path = "workbench_terminals.rs"]
 mod terminals_glue;
 #[cfg(test)]
@@ -1316,6 +1319,8 @@ impl Workbench {
                 recent,
                 pinned,
                 opening_recent: None,
+                term_daemon: None,
+                term_socket: None,
             },
             remote: state_glue::RemoteState {
                 docker: Default::default(),

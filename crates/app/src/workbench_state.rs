@@ -222,6 +222,9 @@ pub(super) struct PersistState {
     pub(super) pinned: Vec<(Option<String>, String)>,
     /// Recent entry opened over SSH: if it can't connect or the folder is missing, asks "remove from the list?".
     pub(super) opening_recent: Option<RecentWorkspace>,
+    /// This window's session on the terminal daemon, and the daemon socket to use (workbench_term_daemon.rs).
+    pub(super) term_daemon: Option<super::term_daemon_glue::TermDaemon>,
+    pub(super) term_socket: Option<std::path::PathBuf>,
 }
 
 /// Connection: host machine, SSH details and pending questions (see workbench_folder.rs).

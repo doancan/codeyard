@@ -1,7 +1,9 @@
 //! What is saved of a window's terminals so a restart can bring them back: their order, folders, titles, colors and the
-//! program they ran, and optionally a bounded copy of their history. A restored terminal is always a new shell: nothing
-//! saved is ever sent to it as input, and saved history is plain text with every control sequence removed, so showing it
-//! cannot run anything or change the terminal's state. Environment variables are never saved (they may hold secrets).
+//! program they ran, and optionally a bounded copy of their history. A terminal the terminal daemon still runs is taken
+//! back with its saved token (the window's daemon session plus the terminal's own token, never a process id); any other
+//! is restored as a new shell: nothing saved is ever sent to a terminal as input, and saved history is plain text with
+//! every control sequence removed, so showing it cannot run anything or change the terminal's state. Environment
+//! variables are never saved (they may hold secrets).
 
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +28,18 @@ pub struct SavedTerminal {
     /// The last lines of its history, as plain text (only with `terminal.persistentScrollback`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history: Option<String>,
+    /// The token to take it back from the terminal daemon, when the daemon kept it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<SavedPty>,
+}
+
+/// A terminal's token on the terminal daemon: its id in the window's session, the daemon's instance id and the
+/// terminal's secret. All three must match for the daemon to hand the terminal back.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct SavedPty {
+    pub pty: u32,
+    pub instance: String,
+    pub secret: String,
 }
 
 impl SavedTerminal {
@@ -39,7 +53,7 @@ impl SavedTerminal {
         history_lines: usize,
     ) -> Self {
         let history = (history_lines > 0).then(|| sanitize_history(history, history_lines)).flatten();
-        Self { cwd, shell: launched.0, args: launched.1, color, title, history }
+        Self { cwd, shell: launched.0, args: launched.1, color, title, history, token: None }
     }
 }
 
@@ -48,6 +62,9 @@ pub struct SavedTerminals {
     pub version: u32,
     pub active: usize,
     pub terminals: Vec<SavedTerminal>,
+    /// The window's session on the terminal daemon (a random secret), while its terminals run there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<String>,
 }
 
 /// Plain text only: escape sequences and control characters (but newlines and tabs) are dropped, at most `lines` lines
@@ -125,6 +142,16 @@ impl SavedTerminals {
             t.history = t.history.as_deref().and_then(|h| sanitize_history(h, history_lines));
         }
         saved.active = saved.active.min(saved.terminals.len().saturating_sub(1));
+        // A token is only ever compared by the daemon, but a hand-edited file must not make it hold anything large.
+        let sane = |s: &str| s.len() <= 64 && s.bytes().all(|b| b.is_ascii_hexdigit());
+        if saved.session.as_deref().is_some_and(|s| !sane(s)) {
+            saved.session = None;
+        }
+        for t in &mut saved.terminals {
+            if t.token.as_ref().is_some_and(|k| !sane(&k.instance) || !sane(&k.secret)) || saved.session.is_none() {
+                t.token = None;
+            }
+        }
         Some(saved)
     }
 }
@@ -149,7 +176,7 @@ mod tests {
         assert_eq!(SavedTerminals::parse("{", 100), None);
         assert_eq!(SavedTerminals::parse(r#"{"version":9,"active":0,"terminals":[]}"#, 100), None);
         let many: Vec<SavedTerminal> = (0..20).map(|i| SavedTerminal { title: Some(format!("t{i}\u{7}")), ..Default::default() }).collect();
-        let text = SavedTerminals { version: 1, active: 15, terminals: many }.to_json().unwrap();
+        let text = SavedTerminals { version: 1, active: 15, terminals: many, session: None }.to_json().unwrap();
         let saved = SavedTerminals::parse(&text, 100).unwrap();
         assert_eq!(saved.terminals.len(), MAX_TERMINALS);
         assert_eq!(saved.active, MAX_TERMINALS - 1);
@@ -159,7 +186,7 @@ mod tests {
     #[test]
     fn history_is_dropped_when_the_setting_is_off() {
         let t = SavedTerminal { history: Some("secret output".into()), ..Default::default() };
-        let text = SavedTerminals { version: 1, active: 0, terminals: vec![t] }.to_json().unwrap();
+        let text = SavedTerminals { version: 1, active: 0, terminals: vec![t], session: None }.to_json().unwrap();
         assert_eq!(SavedTerminals::parse(&text, 0).unwrap().terminals[0].history, None);
     }
 }

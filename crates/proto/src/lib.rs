@@ -15,7 +15,7 @@ use std::io::{self, Read, Write};
 use serde::{Deserialize, Serialize};
 
 /// Compared in the handshake; on mismatch the agent is reinstalled.
-pub const VERSION: u32 = 15;
+pub const VERSION: u32 = 16;
 
 /// Max size of one frame. Larger files are read in chunks.
 pub const MAX_FRAME: usize = 64 * 1024 * 1024;
@@ -191,6 +191,21 @@ pub enum Request {
         /// Set (`Some`) or remove (`None`) variables, in order, on top of the agent's environment.
         env: Vec<(String, Option<String>)>,
     },
+    /// The token a client keeps to attach to this terminal again after it restarts (`PtyToken`): the agent process's
+    /// random instance id and a random secret of this terminal. Never a process id.
+    PtyToken {
+        pty: u32,
+    },
+    /// Take this session's terminal `pty` back after a restart, proving it with its token (`PtyAttached`). Refused with
+    /// `NotFound` when the terminal has ended, and with `PermissionDenied` when the instance or secret is not the one this
+    /// agent gave (another agent process, a guessed or stale token).
+    PtyAttach {
+        pty: u32,
+        instance: String,
+        secret: String,
+    },
+    /// The session's open terminals (`PtyList`), so a client can close the ones it did not take back.
+    PtyList,
 }
 
 /// What `TaskSpawn` runs.
@@ -337,6 +352,18 @@ pub enum Response {
         cwd: Option<String>,
     },
     Shells(Vec<String>),
+    PtyToken {
+        instance: String,
+        secret: String,
+    },
+    PtyAttached {
+        pty: u32,
+        /// Bytes the terminal has written since it started (its output sequence number).
+        sequence: u64,
+        /// Bytes of its output lost while no client was attached (the backlog keeps the last 256 KB).
+        dropped: u64,
+    },
+    PtyList(Vec<u32>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

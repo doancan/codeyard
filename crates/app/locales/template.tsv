@@ -1699,6 +1699,7 @@ Recent
 Recent denials	
 Reconnect	
 Reconnect to {}	
+Reconnected to terminal session	
 Reconnected, but the server session had expired: terminals were closed.	
 Reconnected. Terminals kept running.	
 Reconnecting to {0} (attempt {1})	
@@ -2960,6 +2961,7 @@ your words
 {} already exists. Choose another name.	
 {} asks for permissions: install it from the Extensions view to review them	
 {} bookmark|{} bookmarks	
+{} bytes of output were lost while no window was attached	
 {} cannot be negated	
 {} cannot be parsed as JSON	
 {} cannot be parsed as a number	
