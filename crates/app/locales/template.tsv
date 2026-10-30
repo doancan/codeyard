@@ -2894,10 +2894,10 @@ your words
 {0}, from {1}	
 {0}, in development from {1}	
 {0}, installed from {1} (not verified by a registry)	
-{0}, signed by {1} in the {2} registry	
 {0}, line {1}	
 {0}, line {1}, column {2}	
 {0}, problems: {1}	
+{0}, signed by {1} in the {2} registry	
 {0}, {1} {2} {3}	
 {0}. The search stopped at the result limit, so the results are incomplete.	
 {0}. The search was cancelled, so the results are incomplete.	
