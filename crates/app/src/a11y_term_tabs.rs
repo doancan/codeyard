@@ -6,6 +6,20 @@ use super::*;
 /// Terminal tabs (`TERM_TAB + i`).
 pub(super) const TERM_TAB: u64 = 0x1f0_0000;
 
+/// The terminal in front for screen readers: its text as runs, its cursor and "Terminal 2 of 3".
+pub(super) fn terminal_snap(term: &Entity<crate::terminal::TerminalView>, ix: usize, count: usize, cx: &App) -> TerminalSnap {
+    let (rows, cursor) = term.read(cx).a11y_view();
+    let mut starts = Vec::with_capacity(rows.len());
+    let mut at = 0;
+    for row in &rows {
+        starts.push(at);
+        at += row.chars().count() + 1;
+    }
+    let total = rows.len();
+    let cursor = cursor.and_then(|(row, col)| starts.get(row).map(|s| s + col.min(rows[row].chars().count())));
+    TerminalSnap { label: tf("Terminal {0} of {1}", &[&(ix + 1), &count]), runs: runs_for(starts.into_iter().zip(rows).collect(), total, 0), cursor }
+}
+
 /// A terminal tab of the focused group.
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct TermTabSnap {

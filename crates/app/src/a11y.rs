@@ -880,18 +880,7 @@ impl Workbench {
         });
         let shown = self.a11y_terminal(window, cx);
         let term = shown.as_ref().map(|(t, _, _)| t.clone());
-        let terminal = shown.as_ref().map(|(term, ix, count)| {
-            let (rows, cursor) = term.read(cx).a11y_view();
-            let mut starts = Vec::with_capacity(rows.len());
-            let mut at = 0;
-            for row in &rows {
-                starts.push(at);
-                at += row.chars().count() + 1;
-            }
-            let total = rows.len();
-            let cursor = cursor.and_then(|(row, col)| starts.get(row).map(|s| s + col.min(rows[row].chars().count())));
-            TerminalSnap { label: tf("Terminal {0} of {1}", &[&(ix + 1), count]), runs: runs_for(starts.into_iter().zip(rows).collect(), total, 0), cursor }
-        });
+        let terminal = shown.as_ref().map(|(term, ix, count)| term_tab_access::terminal_snap(term, *ix, *count, cx));
         let picker_entity = self.overlay.as_ref().map(|o| o.picker.clone());
         let picker = picker_entity.as_ref().map(|p| {
             let v = p.read(cx).a11y_view(MAX_OPTIONS);
