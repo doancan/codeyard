@@ -178,6 +178,9 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Lines of each terminal's history kept for the next start, as plain text (0: none). Terminals always come back as
   // new shells: nothing is run again.
   // "terminal.persistentScrollback": 0,
+  // Minutes the terminals of a window keep running after Codeyard quits, crashes or is killed, so the next start takes
+  // them back (0: they end with the app; at most 1440).
+  // "terminal.persistentSessionTimeout": 5,
   "terminal.scrollSensitivity": 2,
   // Let programs in the terminal write to the clipboard (OSC 52). Off by default: a program you run, or a file you cat, could replace
   // what you copied.

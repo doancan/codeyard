@@ -95,6 +95,9 @@ pub struct Settings {
     pub terminal_scrollback: usize,
     /// Lines of each terminal's history saved for the next start (`terminal.persistentScrollback`; 0: none).
     pub terminal_persistent_scrollback: usize,
+    /// Minutes a window's terminals keep running for the next start after Codeyard quits, crashes or is killed
+    /// (`terminal.persistentSessionTimeout`; 0: not kept).
+    pub terminal_persistent_session_timeout: u64,
     pub terminal_scroll_sensitivity: f32,
     /// Whether a program in the terminal may put text on the clipboard (OSC 52).
     pub terminal_allow_clipboard_write: bool,
@@ -331,6 +334,7 @@ impl Default for Settings {
             terminal_line_height: crate::terminal::LINE_HEIGHT,
             terminal_scrollback: 2000,
             terminal_persistent_scrollback: 0,
+            terminal_persistent_session_timeout: 5,
             terminal_scroll_sensitivity: 2.,
             terminal_allow_clipboard_write: false,
             terminal_shell_integration: true,
@@ -1191,6 +1195,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "terminal.lineHeight",
         "terminal.scrollback",
         "terminal.persistentScrollback",
+        "terminal.persistentSessionTimeout",
         "terminal.scrollSensitivity",
         "terminal.sanitizePaste",
         "terminal.warnMultilinePaste",

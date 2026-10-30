@@ -705,7 +705,13 @@ fn check_agent_version(output: &str) -> Result<()> {
 }
 
 /// Connect: identify the server, install the agent if missing (SHA-256 verified), start it.
-pub fn connect(alias: &str, bundle: &AgentBundle, mut progress: impl FnMut(Step)) -> Result<RemoteHost> {
+pub fn connect(alias: &str, bundle: &AgentBundle, progress: impl FnMut(Step)) -> Result<RemoteHost> {
+    connect_session(alias, bundle, None, progress)
+}
+
+/// [`connect`] to the agent daemon's session `session` (a window's saved one, so its terminals can be taken back after a
+/// restart), or to a new session with a random secret id.
+pub fn connect_session(alias: &str, bundle: &AgentBundle, session: Option<String>, mut progress: impl FnMut(Step)) -> Result<RemoteHost> {
     progress(Step::Probing);
     let probe = run(alias, r#"uname -sm; printf '%s\n' "$HOME""#, None)?;
     let mut lines = probe.lines();
@@ -761,7 +767,7 @@ if [ "$h" = {sha} ]; then mv "$t" {remote}; else rm -f "$t"; echo "agent hash mi
         Target::DevContainerRuntime { engine, .. } => format!("devcontainer://{engine}"),
         Target::Wsl(d) => format!("wsl://{d}"),
     };
-    RemoteHost::connect(connector, new_session_id(alias), label)
+    RemoteHost::connect(connector, session.unwrap_or_else(crate::random_token), label)
 }
 
 /// Forward a local port to a server port (or remove it with `cancel`). Reuses the open
