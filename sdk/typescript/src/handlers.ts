@@ -1,6 +1,7 @@
 // What the extension registered in `activate`.
 
 import type { Context } from "./context.ts";
+import type { PullRequestProvider } from "./pulls.ts";
 
 type Fn = (ctx: Context, ...args: any[]) => unknown;
 
@@ -12,6 +13,8 @@ export interface Handlers {
   codeActions: Fn | undefined;
   runCodeAction: Fn | undefined;
   openUri: Fn | undefined;
+  /** `ctx.pullRequests`: by the `[[pull-requests]]` local id. */
+  pullRequests: Map<string, PullRequestProvider>;
   settingsChanged: Fn[];
   timers: Map<bigint, Fn>;
   /** Progress the user cancelled. */
@@ -32,6 +35,7 @@ function empty(): Handlers {
     codeActions: undefined,
     runCodeAction: undefined,
     openUri: undefined,
+    pullRequests: new Map(),
     settingsChanged: [],
     timers: new Map(),
     cancelledProgress: new Set(),

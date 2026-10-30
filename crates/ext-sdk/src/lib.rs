@@ -35,6 +35,7 @@ mod guest;
 pub mod net;
 pub mod process;
 pub mod protocol;
+pub mod pulls;
 mod runtime;
 pub mod types;
 
@@ -69,6 +70,7 @@ pub trait Extension: 'static {
 pub mod prelude {
     pub use crate::net::{Request, Response};
     pub use crate::process::{Chunk, Command, Output};
+    pub use crate::pulls::{ChangedFile, Check, CheckState, Checkout, Comment, FileContents, FileStatus, PullRequest, PullRequestDetails, PullState, Remote};
     pub use crate::types::*;
     pub use crate::{Context, Denied, Error, Extension, Result, Value, Why, json};
 }

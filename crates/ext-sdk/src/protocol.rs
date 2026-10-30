@@ -66,6 +66,7 @@ pub enum Request {
     Timer(u64),
     CancelProgress(u64),
     OpenUri(String),
+    PullRequests(crate::pulls::PullQuery),
 }
 
 /// An answer to a request (`responses.response`), as far as the SDK makes them.
@@ -77,4 +78,5 @@ pub enum Response {
     View(String),
     Edits(Vec<TextEdit>),
     CodeActions(Vec<CodeAction>),
+    PullRequests(crate::pulls::PullAnswer),
 }

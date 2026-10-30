@@ -4,6 +4,9 @@
 
 use serde::{Deserialize, Serialize};
 
+mod pulls;
+pub use pulls::*;
+
 pub type Ticket = u64;
 pub type Uri = String;
 
@@ -319,6 +322,7 @@ pub enum Response {
     CodeActions(Vec<CodeAction>),
     Tasks(Vec<Task>),
     Ranges(Vec<Range>),
+    PullRequests(PullAnswer),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -342,12 +346,14 @@ pub enum Request {
     Timer { id: u64 },
     CancelProgress { id: u64 },
     OpenUri { uri: String },
+    PullRequests { query: PullQuery },
 }
 
 impl Request {
     /// Started by a user action, so it may use the active document (Chrome's `activeTab`) and `open-external`.
     pub fn is_user_action(&self) -> bool {
         matches!(self, Request::Command { .. } | Request::UiEvent { .. } | Request::RunCodeAction { .. } | Request::RunTask { .. } | Request::OpenUri { .. })
+            || matches!(self, Request::PullRequests { query } if query.is_user_action())
     }
 }
 

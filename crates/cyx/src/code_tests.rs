@@ -99,8 +99,15 @@ fn templates_default_to_the_sdk_repository() {
 #[test]
 fn the_examples_build_package_and_pass_cyx_test() {
     let Some(exthost) = toolchain() else { return };
-    let examples =
-        [("hello-command", ""), ("hello-view", ""), ("trim-formatter", ""), ("todo-actions", ""), ("crate-version", "net"), ("branch-status", "process")];
+    let examples = [
+        ("hello-command", ""),
+        ("hello-view", ""),
+        ("trim-formatter", ""),
+        ("todo-actions", ""),
+        ("crate-version", "net"),
+        ("branch-status", "process"),
+        ("gitea-pulls", "auth"),
+    ];
     for (name, needs) in examples {
         let dir = repo().join("examples/extensions").join(name);
         build::build_in(&dir, Some(&target_dir())).unwrap_or_else(|e| panic!("{name}: {e}"));

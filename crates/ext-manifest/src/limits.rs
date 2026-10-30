@@ -56,6 +56,9 @@ pub const ACTIVATE_MILLIS: u64 = 10_000;
 /// How long the app waits for a provider (formatter, code actions, tasks) to answer a request. A later answer is dropped
 /// and noted in the extension's log; the user's typing never waits for it.
 pub const PROVIDER_DEADLINE_MILLIS: u64 = 1_000;
+/// How long the Pull Requests view waits for a `[[pull-requests]]` provider, whose answers come from the network. A
+/// later answer is dropped like any provider's.
+pub const PULL_REQUEST_DEADLINE_MILLIS: u64 = 20_000;
 /// Text of a status bar item.
 pub const STATUS_TEXT_LEN: usize = 64;
 /// Diagnostics or decorations one extension may set on one file; the rest are dropped.

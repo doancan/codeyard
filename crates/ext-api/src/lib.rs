@@ -19,11 +19,12 @@ pub const PACKAGE: &str = "codeyard:api";
 pub const VERSION: Version = Version(0, 1, 0);
 
 /// The package's WIT files, by name.
-pub const WIT: [(&str, &str); 4] = [
+pub const WIT: [(&str, &str); 5] = [
     ("types.wit", include_str!("../wit/types.wit")),
     ("free.wit", include_str!("../wit/free.wit")),
     ("permissions.wit", include_str!("../wit/permissions.wit")),
     ("world.wit", include_str!("../wit/world.wit")),
+    ("pulls.wit", include_str!("../wit/pulls.wit")),
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -128,7 +129,7 @@ const fn i(name: &'static str, need: Need) -> Interface {
 }
 
 /// Every interface of `codeyard:api`, in WIT order. A test keeps this in step with `wit/`.
-pub const INTERFACES: [Interface; 24] = [
+pub const INTERFACES: [Interface; 25] = [
     i("types", Need::Nothing),
     // Imported by every component, through the types `guest` uses.
     i("host-requests", Need::Nothing),
@@ -154,6 +155,8 @@ pub const INTERFACES: [Interface; 24] = [
     i("clipboard-read", Need::ClipboardRead),
     i("clipboard-write", Need::ClipboardWrite),
     i("terminal", Need::Terminal),
+    // Types only, imported through `host-requests` and `responses`.
+    i("pull-requests", Need::Nothing),
 ];
 
 /// The interface the guest exports.

@@ -59,6 +59,8 @@ pub struct RawManifest {
     pub decorations: Vec<S<RawNamedLanguages>>,
     #[serde(default)]
     pub tasks: Vec<S<RawTasks>>,
+    #[serde(default)]
+    pub pull_requests: Vec<S<RawPullRequests>>,
 }
 
 #[derive(Deserialize)]
@@ -245,4 +247,14 @@ pub struct RawNamedLanguages {
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct RawTasks {
     pub id: S<String>,
+}
+
+/// `[[pull-requests]]`: a pull (merge) request provider for the remotes on `hosts`.
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawPullRequests {
+    pub id: S<String>,
+    pub label: S<String>,
+    pub hosts: S<Vec<S<String>>>,
+    pub auth: Option<S<String>>,
 }

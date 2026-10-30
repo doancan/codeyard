@@ -193,6 +193,59 @@ ctx.code_actions(async |ctx, doc, range, diagnostics| {
 ctx.on_code_action(async |ctx, id| Ok(()));   // for actions with a `command` instead of edits
 ```
 
+## Pull request providers
+
+A `[[pull-requests]]` entry makes the extension a pull (merge) request provider. Codeyard asks it for the open requests
+of each repository remote on its `hosts`, and shows them in the Pull Requests view next to GitHub's. Picking one offers
+its details, its changed files as diffs, adding a comment and checking it out.
+
+```toml
+[permissions]
+auth = ["codeberg"]             # declared in an [[oauth]] table, or built in
+
+[[pull-requests]]
+id    = "codeberg"
+label = "Codeberg"              # shown next to each request
+hosts = ["codeberg.org"]        # the remotes it claims; `*.example.com` works as in `net`
+auth  = "codeberg"              # passed to you as `remote.account`
+```
+
+```rust
+ctx.pull_requests("codeberg")
+    .list(async |ctx, remote| {
+        let account = remote.account.clone().unwrap_or_default();
+        ctx.session(&account, &[]).await?;   // asks on first use
+        let url = format!("https://{}/api/v1/repos/{}/pulls?state=open", remote.host, remote.path);
+        let list: Vec<Value> = ctx.fetch_as(&account, Request::get(url)).await?.error_for_status()?.json()?;
+        Ok(list.iter().map(to_pull_request).collect())
+    })
+    .details(async |ctx, remote, id| Ok(PullRequestDetails { /* summary, description, checks, labels */ ..Default::default() }))
+    .files(async |ctx, remote, id| Ok(vec![ChangedFile { path: "src/main.rs".into(), ..Default::default() }]))
+    .contents(async |ctx, remote, id, file| Ok(FileContents { base: Some(old), head: Some(new) }))
+    .comments(async |ctx, remote, id| Ok(vec![]))
+    .on_comment(async |ctx, remote, id, body| Ok(()))
+    .checkout(async |ctx, remote, id| Ok(Checkout { fetch_url: None, reference: format!("refs/pull/{id}/head"), branch: format!("pr-{id}") }));
+```
+
+- `remote` is the repository remote: its `name` (`origin`), `url`, `host`, `path` (`group/sub/app`) and `account`, the
+  entry's `auth`. Call the forge with `ctx.fetch_as(account, …)`: Codeyard adds the token, so your code never sees it.
+  A request is signed only after the user signed in, so call `ctx.session` first.
+- `list`, `details`, `files` and `contents` are needed. Without `comments` a request shows none; without `on_comment`
+  or `checkout` those actions fail and say so.
+- `PullRequest::id` is yours: Codeyard passes it back in every other query. `reference` is shown before the title
+  (`#42`, `!42`), times are Unix milliseconds (0 when unknown), and `url` must be `https:`.
+- `description` and comment bodies are Markdown, shown on the request's details page; file contents are shown as plain
+  text in a diff. Codeyard cuts long text and drops control and invisible characters.
+- `checkout` says what git should fetch: `reference` from `fetch_url` (a fork's `https://` or ssh URL) or from the
+  remote itself, into the local branch `branch`. Codeyard checks the names and runs `git fetch` and `git checkout -B`
+  on the machine the repository is on, so it works the same over SSH.
+- Commenting and checking out are user actions. Every query has `PULL_REQUEST_DEADLINE_MILLIS` (20 s) to answer, plus
+  the start-up time; a later answer is dropped and noted in your log in the Inspector.
+
+`cyx test` asks each provider for the list of a remote on its first host; without network an error counts as an answer.
+In unit tests, `host.list_pull_requests(remote)` and `host.pull_requests(PullQuery::…)` send the queries and
+`host.http(…)` answers the signed requests ([examples/extensions/gitea-pulls](../../examples/extensions/gitea-pulls)).
+
 ## Network, files and programs
 
 These need permissions in the manifest, and Codeyard checks every call against them.

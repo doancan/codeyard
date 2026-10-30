@@ -151,6 +151,7 @@ fn text_ok(s: &str) -> bool {
 impl g::types::Host for State {}
 impl g::responses::Host for State {}
 impl g::host_requests::Host for State {}
+impl g::pull_requests::Host for State {}
 
 impl g::log::Host for State {
     fn log(&mut self, level: g::log::Level, message: String) {

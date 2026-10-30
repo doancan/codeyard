@@ -36,6 +36,8 @@ pub(crate) struct Handlers {
     pub open_uri: Option<StringFn>,
     pub settings_changed: Vec<KeysFn>,
     pub timers: HashMap<u64, TickFn>,
+    /// `[[pull-requests]]` providers, by local id.
+    pub pulls: crate::pulls::Providers,
     /// Progress the user cancelled.
     pub cancelled_progress: HashSet<u64>,
     pub reason: String,
@@ -169,12 +171,13 @@ pub fn handle(id: u64, request: Request) {
             with(|h| h.cancelled_progress.insert(p));
             sys::respond(id, Ok(Response::None));
         }
+        Request::PullRequests(query) => crate::pulls::handle(id, ctx, query),
         Request::ProvideTasks | Request::RunTask(_) => sys::respond(id, Err(Error::Invalid("this SDK does not provide tasks yet".into()))),
     }
     runtime::run();
 }
 
-fn answer(id: u64, fut: impl Future<Output = Result<Response>> + 'static) {
+pub(crate) fn answer(id: u64, fut: impl Future<Output = Result<Response>> + 'static) {
     runtime::spawn_request(id, async move {
         let r = fut.await;
         sys::respond(id, r);

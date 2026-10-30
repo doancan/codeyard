@@ -475,6 +475,7 @@ impl From<w::host_requests::Request> for Request {
             R::Timer(id) => Request::Timer(id),
             R::CancelProgress(id) => Request::CancelProgress(id),
             R::OpenUri(u) => Request::OpenUri(u),
+            R::PullRequests(q) => Request::PullRequests(crate::pulls::wasm::query(q)),
         }
     }
 }
@@ -499,6 +500,7 @@ impl From<Response> for w::responses::Response {
                     })
                     .collect(),
             ),
+            Response::PullRequests(a) => R::PullRequests(crate::pulls::wasm::answer(a)),
         }
     }
 }

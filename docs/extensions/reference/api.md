@@ -49,6 +49,26 @@ Needs no permission. Since 0.1.0.
 
 - `invalidate(view: string)`: Ask for the view to be drawn again: the host sends `request.render` and diffs the result by key.
 
+## `pull-requests`
+
+Pull (merge) request providers: `[[pull-requests]]` in the manifest. The host asks with `request.pull-requests` and the extension answers with `response.pull-requests`. The provider calls its forge with `auth.fetch`, so it never sees the account's token.
+
+Needs no permission. Since 0.1.0.
+
+- type `remote`: record `{ provider: string, name: string, url: string, host: string, path: string, account: option<string> }`. A repository remote whose host the provider claims.
+- type `state`: enum `open | draft | merged | closed`
+- type `summary`: record `{ id: string, reference: string, title: string, author: string, state: state, source-branch: string, target-branch: string, updated: u64, url: option<string> }`
+- type `check-state`: enum `pending | success | failure | neutral`
+- type `check`: record `{ name: string, state: check-state, url: option<string> }`
+- type `details`: record `{ summary: summary, description: string, checks: list<check>, labels: list<string> }`
+- type `file-status`: enum `added | modified | deleted | renamed`
+- type `changed-file`: record `{ path: string, old-path: option<string>, status: file-status }`
+- type `file-contents`: record `{ base: option<string>, head: option<string> }`. One changed file's text on both sides, for a diff.
+- type `comment`: record `{ author: string, body: string, created: u64, path: option<string>, line: option<u32> }`
+- type `checkout`: record `{ fetch-url: option<string>, ref: string, branch: string }`. How to check a request out. The host runs `git fetch <from> <ref>` and creates or resets `branch` on what it fetched, on the machine the repository is on.
+- type `query`: variant `list(remote) | details(tuple<remote, string>) | files(tuple<remote, string>) | contents(tuple<remote, string, changed-file>) | comments(tuple<remote, string>) | add-comment(tuple<remote, string, string>) | checkout(tuple<remote, string>)`
+- type `answer`: variant `list(list<summary>) | details(details) | files(list<changed-file>) | contents(file-contents) | comments(list<comment>) | checkout(checkout) | done`
+
 ## `types`
 
 Types shared by every interface. Importing it needs no permission.
@@ -92,7 +112,7 @@ Needs no permission. Since 0.1.0.
 
 - type `code-action`: record `{ id: string, title: string, edits: list<tuple<string, list<text-edit>>>, command: option<string>, preferred: bool, fixes: list<diagnostic> }`
 - type `task`: record `{ id: string, label: string, detail: option<string>, group: string }`
-- type `response`: variant `none | json(string) | view(string) | edits(list<text-edit>) | code-actions(list<code-action>) | tasks(list<task>) | ranges(list<range>)`
+- type `response`: variant `none | json(string) | view(string) | edits(list<text-edit>) | code-actions(list<code-action>) | tasks(list<task>) | ranges(list<range>) | pull-requests(answer)`
 
 ## `requests`
 
@@ -258,7 +278,7 @@ What the host asks the extension.
 Needs no permission. Since 0.1.0.
 
 - type `format-options`: record `{ tab-size: u32, insert-spaces: bool }`
-- type `request`: variant `command(tuple<string, string>) | render(string) | ui-event(tuple<string, string>) | format(tuple<document, option<range>, format-options>) | code-actions(tuple<document, range, list<diagnostic>>) | run-code-action(string) | provide-tasks | run-task(string) | settings-changed(list<string>) | timer(u64) | cancel-progress(u64) | open-uri(string)`
+- type `request`: variant `command(tuple<string, string>) | render(string) | ui-event(tuple<string, string>) | format(tuple<document, option<range>, format-options>) | code-actions(tuple<document, range, list<diagnostic>>) | run-code-action(string) | provide-tasks | run-task(string) | settings-changed(list<string>) | timer(u64) | cancel-progress(u64) | open-uri(string) | pull-requests(query)`
 
 ## `guest`
 

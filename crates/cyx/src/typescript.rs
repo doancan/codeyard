@@ -24,7 +24,7 @@ const TOOLCHAIN: [(&str, &str); 3] = [
 ];
 
 /// `@codeyard/extension`'s sources, except the mock host (`testing/`), which only `npm test` uses.
-pub const SDK: [(&str, &str); 10] = [
+pub const SDK: [(&str, &str); 11] = [
     ("context.ts", include_str!("../../../sdk/typescript/src/context.ts")),
     ("errors.ts", include_str!("../../../sdk/typescript/src/errors.ts")),
     ("fetch.ts", include_str!("../../../sdk/typescript/src/fetch.ts")),
@@ -32,6 +32,7 @@ pub const SDK: [(&str, &str); 10] = [
     ("guest.ts", include_str!("../../../sdk/typescript/src/guest.ts")),
     ("handlers.ts", include_str!("../../../sdk/typescript/src/handlers.ts")),
     ("index.ts", include_str!("../../../sdk/typescript/src/index.ts")),
+    ("pulls.ts", include_str!("../../../sdk/typescript/src/pulls.ts")),
     ("runtime.ts", include_str!("../../../sdk/typescript/src/runtime.ts")),
     ("types.ts", include_str!("../../../sdk/typescript/src/types.ts")),
     ("wit.ts", include_str!("../../../sdk/typescript/src/wit.ts")),
@@ -96,8 +97,8 @@ pub fn build(dir: &Path, m: &Manifest, entry: &str) -> Result<PathBuf, String> {
 /// imports every interface of the world it builds against, so the world is narrowed to these; the SDK refuses a call
 /// to any other with the manifest line that would allow it.
 pub fn granted(m: &Manifest) -> Vec<&'static str> {
-    // `types`, `host-requests` and `responses` hold only types; the world pulls them in through the others.
-    let types_only = ["types", "host-requests", "responses"];
+    // `types`, `host-requests`, `responses` and `pull-requests` hold only types; the world pulls them in through the others.
+    let types_only = ["types", "host-requests", "responses", "pull-requests"];
     ext_api::INTERFACES.iter().filter(|i| !types_only.contains(&i.name) && i.need.granted(&m.permissions)).map(|i| i.name).collect()
 }
 

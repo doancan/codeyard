@@ -5,6 +5,8 @@ use ext_api::value as v;
 use crate::bindings::codeyard::api as g;
 use crate::bindings::exports::codeyard::api::guest as gx;
 
+mod pulls;
+
 // --- guest → app
 
 impl From<g::types::Position> for v::Position {
@@ -183,6 +185,7 @@ impl From<g::responses::Response> for v::Response {
             ),
             R::Tasks(t) => v::Response::Tasks(t.into_iter().map(|t| v::Task { id: t.id, label: t.label, detail: t.detail, group: t.group }).collect()),
             R::Ranges(r) => v::Response::Ranges(r.into_iter().map(Into::into).collect()),
+            R::PullRequests(a) => v::Response::PullRequests(a.into()),
         }
     }
 }
@@ -307,6 +310,7 @@ impl From<v::Request> for g::host_requests::Request {
             v::Request::Timer { id } => R::Timer(id),
             v::Request::CancelProgress { id } => R::CancelProgress(id),
             v::Request::OpenUri { uri } => R::OpenUri(uri),
+            v::Request::PullRequests { query } => R::PullRequests(query.into()),
         }
     }
 }

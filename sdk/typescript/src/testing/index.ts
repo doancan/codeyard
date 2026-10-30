@@ -18,6 +18,23 @@ import { join } from "node:path";
 import { CodeyardError, DeniedError, fromWit } from "../errors.ts";
 import { installGlobals, start, type ExtensionModule } from "../guest.ts";
 import { hostOf } from "../fetch.ts";
+import {
+  fromWitCheckout,
+  fromWitComment,
+  fromWitContents,
+  fromWitDetails,
+  fromWitFile,
+  fromWitSummary,
+  toWitQuery,
+  type ChangedFile,
+  type Checkout,
+  type Comment,
+  type FileContents,
+  type PullRequest,
+  type PullRequestDetails,
+  type PullRequestQuery,
+  type Remote,
+} from "../pulls.ts";
 import type { CodeAction, Diagnostic, Document, FormatOptions, LogLevel, Range, Severity, StatusItem, TextEdit } from "../types.ts";
 import { fromWitDiagnostic, toWitDiagnostic } from "../types.ts";
 import type * as W from "../wit.ts";
@@ -320,6 +337,56 @@ export class MockHost {
 
   async openUri(uri: string): Promise<void> {
     await this.request({ tag: "open-uri", val: uri });
+  }
+
+  // ---- pull request providers (`ctx.pullRequests`); `remote.provider` picks the provider -------------------------
+
+  /** Send a pull request query and return the provider's answer as WIT (`{ tag: "list", val: [...] }`, …). */
+  async pullRequests(query: PullRequestQuery): Promise<W.PullAnswer> {
+    const r = await this.request({ tag: "pull-requests", val: toWitQuery(query) });
+    if (r.tag !== "pull-requests") throw CodeyardError.other(`the pull request provider answered ${r.tag}`);
+    const want = query.tag === "add-comment" ? "done" : query.tag;
+    if (r.val.tag !== want) throw CodeyardError.other(`the pull request provider answered ${r.val.tag} to ${query.tag}`);
+    return r.val;
+  }
+
+  async listPullRequests(remote: Remote): Promise<PullRequest[]> {
+    const a = await this.pullRequests({ tag: "list", remote });
+    return a.tag === "list" ? a.val.map(fromWitSummary) : [];
+  }
+
+  async pullRequestDetails(remote: Remote, id: string): Promise<PullRequestDetails> {
+    const a = await this.pullRequests({ tag: "details", remote, id });
+    if (a.tag !== "details") throw CodeyardError.other(`unexpected answer ${a.tag}`);
+    return fromWitDetails(a.val);
+  }
+
+  async pullRequestFiles(remote: Remote, id: string): Promise<ChangedFile[]> {
+    const a = await this.pullRequests({ tag: "files", remote, id });
+    return a.tag === "files" ? a.val.map(fromWitFile) : [];
+  }
+
+  async pullRequestContents(remote: Remote, id: string, file: ChangedFile): Promise<FileContents> {
+    const a = await this.pullRequests({ tag: "contents", remote, id, file });
+    if (a.tag !== "contents") throw CodeyardError.other(`unexpected answer ${a.tag}`);
+    return fromWitContents(a.val);
+  }
+
+  async pullRequestComments(remote: Remote, id: string): Promise<Comment[]> {
+    const a = await this.pullRequests({ tag: "comments", remote, id });
+    return a.tag === "comments" ? a.val.map(fromWitComment) : [];
+  }
+
+  /** The user writes a comment on the request. */
+  async addPullRequestComment(remote: Remote, id: string, body: string): Promise<void> {
+    await this.pullRequests({ tag: "add-comment", remote, id, body });
+  }
+
+  /** The user checks the request out: how Codeyard would fetch it. */
+  async checkoutPullRequest(remote: Remote, id: string): Promise<Checkout> {
+    const a = await this.pullRequests({ tag: "checkout", remote, id });
+    if (a.tag !== "checkout") throw CodeyardError.other(`unexpected answer ${a.tag}`);
+    return fromWitCheckout(a.val);
   }
 
   /** Change a setting and tell the extension. */

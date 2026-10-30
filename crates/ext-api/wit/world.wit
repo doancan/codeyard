@@ -4,6 +4,7 @@ package codeyard:api@0.1.0;
 @since(version = 0.1.0)
 interface host-requests {
   use types.{document, range, diagnostic};
+  use pull-requests.{query};
 
   record format-options {
     tab-size: u32,
@@ -35,6 +36,8 @@ interface host-requests {
     cancel-progress(u64),
     /// A `codeyard://ext/<id>/…` link was opened: its path and query.
     open-uri(string),
+    /// A `[[pull-requests]]` provider's query; answer with `response.pull-requests`.
+    pull-requests(query),
   }
 }
 

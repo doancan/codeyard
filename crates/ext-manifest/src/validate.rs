@@ -12,6 +12,8 @@ use crate::{
 };
 use crate::{Code as C, Diagnostic};
 
+mod pulls;
+
 struct Ctx {
     errors: Vec<Diagnostic>,
     options: Options,
@@ -227,6 +229,7 @@ fn build(cx: &mut Ctx, raw: RawManifest) -> Manifest {
         if !contributions.tasks.is_empty() {
             activation.push(Activation::Tasks);
         }
+        activation.extend(contributions.pull_requests.iter().map(|p| Activation::PullRequests(p.id.clone())));
     }
     if let (Some(a), None) = (&raw.activation, &raw.code)
         && let Some(first) = a.workspace_contains.first()
@@ -737,6 +740,7 @@ fn contributions(cx: &mut Ctx, raw: &RawManifest, id: &ExtId, perms: &Permission
         out.language_servers.push(LanguageServer { command, args: s.args.clone(), languages: s.languages.iter().map(|l| l.get_ref().clone()).collect() });
     }
     code_contributions(cx, raw, id, &command_ids, &view_ids, &deps, &mut out);
+    pulls::contribute(cx, raw, id, perms, &mut out);
     out
 }
 

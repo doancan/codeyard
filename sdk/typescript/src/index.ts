@@ -21,3 +21,17 @@ export { CodeyardError, DeniedError, type ErrorKind } from "./errors.ts";
 export { fetch, FetchHeaders, FetchResponse, hostOf, type FetchInit } from "./fetch.ts";
 export { RELOAD, RELOAD_STATE_KEY, type ExtensionModule } from "./guest.ts";
 export * from "./types.ts";
+export type {
+  ChangedFile,
+  Check,
+  CheckState,
+  Checkout,
+  Comment,
+  FileContents,
+  FileStatus,
+  PullRequest,
+  PullRequestDetails,
+  PullRequestProvider,
+  PullRequestState,
+  Remote,
+} from "./pulls.ts";

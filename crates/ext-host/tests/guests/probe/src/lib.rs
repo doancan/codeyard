@@ -4,6 +4,7 @@
 wit_bindgen::generate!({ path: "../../../../ext-api/wit", world: "extension" });
 
 mod providers;
+mod pulls;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -61,6 +62,10 @@ impl Guest for Probe {
     }
 
     fn handle(id: u64, request: Request) {
+        let request = match request {
+            Request::PullRequests(query) => return pulls::handle(id, query),
+            other => other,
+        };
         // A view (`counter`): a button and how often it was clicked; a click redraws it through `ui.invalidate`.
         if let Request::Render(view) = &request {
             let clicks = storage::get("clicks").map_or(0, |b| b.len());
@@ -180,6 +185,9 @@ impl Guest for Probe {
 
     fn complete(ticket: Ticket, result: Completion) {
         let body = BODIES.with(|b| b.borrow_mut().remove(&ticket));
+        if pulls::complete(ticket, &result, body.as_deref()).is_some() {
+            return;
+        }
         if let Some(id) = WAITING.with(|w| w.borrow_mut().remove(&ticket)) {
             match body {
                 Some(b) => reply(id, format!("{} body {}", describe(&result), String::from_utf8_lossy(&b))),

@@ -204,7 +204,17 @@ languages = ["rust"]            # languages.set-decorations: gutter, line or aft
 
 [[tasks]]
 id = "deployments"              # request.provide-tasks lists them, request.run-task runs one
+
+[[pull-requests]]
+id    = "codeberg"
+label = "Codeberg"
+hosts = ["codeberg.org"]        # the repository remotes it claims, merged into the Pull Requests view
+auth  = "codeberg"              # optional; must be in [permissions] auth
 ```
+
+A `[[pull-requests]]` provider lists, describes, diffs, comments on and checks out the pull (merge) requests of the
+remotes on its hosts ([commands.md](commands.md#pull-request-providers)); it calls the forge with `auth.fetch`, so it
+never sees the token.
 
 A file-tree menu entry passes the file's URI to the command as its argument, and a view-title entry the view's full id
 (`you.ext.deployments`): view-title entries appear under the **…** button in that view's title bar. A menu entry may
