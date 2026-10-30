@@ -12,6 +12,10 @@ publish = false
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 
+# Tests check what `ui` builds with Codeyard's own view rules.
+[dev-dependencies]
+ext-ui = { version = "0.6.0", path = "../ext-ui" }
+
 # Only inside a component; on the host target the SDK talks to the mock host of codeyard-extension-test.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wit-bindgen = { version = "0.63.0", default-features = false, features = ["macros", "realloc", "std"] }

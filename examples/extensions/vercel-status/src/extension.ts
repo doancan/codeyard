@@ -4,7 +4,7 @@
 //
 // The project is the one `vercel link` wrote to .vercel/project.json, or the `project` setting.
 
-import type { Context, Element, StatusItem, Tone } from "@codeyard/extension";
+import { ui, type Context, type StatusItem, type Tone, type ViewNode } from "@codeyard/extension";
 
 const API = "https://api.vercel.com";
 const TOKEN = "token";
@@ -219,50 +219,35 @@ function showStatus(ctx: Context, s: Snapshot) {
   ctx.setStatusItem(item);
 }
 
-/**
- * A node of the view, in the JSON form Codeyard draws (docs/extensions/reference/ui.md). Not the `{ type: … }`
- * shorthand of the `cyx new view` template, which Codeyard refuses (#182); hence the cast to `Element`.
- */
-function node(kind: string, props: Record<string, unknown>, key?: string, children?: Element[]): Element {
-  const n: Record<string, unknown> = { element: { [kind]: props } };
-  if (key !== undefined) n.key = key;
-  if (children?.length) n.children = children;
-  return n as unknown as Element;
-}
-
-export function view(s: Snapshot | undefined): Element {
-  const refresh = node("button", { label: "Refresh", icon: "refresh" }, "refresh");
-  if (!s) return node("column", { pad: 2 }, undefined, [node("progress", { label: "Loading deployments" })]);
+/** The view, built with `ui` in the form Codeyard draws (docs/extensions/reference/ui.md). */
+export function view(s: Snapshot | undefined): ViewNode {
+  const refresh = ui.button("refresh", "Refresh", { icon: "refresh" });
+  if (!s) return ui.column([ui.progress("Loading deployments")], { pad: 2 });
   if (s.kind === "no-token") {
-    return node(
-      "empty-state",
-      { title: "Connect to Vercel", text: "Set an access token to see this project's deployments.", icon: "key" },
-      undefined,
-      [node("button", { label: "Set Access Token", tone: "accent" }, "set-token")],
-    );
+    return ui.emptyState("Connect to Vercel", "Set an access token to see this project's deployments.", [ui.button("set-token", "Set Access Token", { tone: "accent" })], {
+      icon: "key",
+    });
   }
   if (s.kind === "no-project") {
-    return node(
-      "empty-state",
-      { title: "No linked project", text: "Run `vercel link` in this folder, or set Vercel Status › Project in Settings." },
-      undefined,
-      [refresh],
-    );
+    return ui.emptyState("No linked project", "Run `vercel link` in this folder, or set Vercel Status › Project in Settings.", [refresh]);
   }
-  const top = [node("row", { gap: 2 }, undefined, [node("text", { text: s.project.id, tone: "muted" }), refresh])];
-  if (s.kind === "error") return node("column", { gap: 2, pad: 2 }, undefined, [node("banner", { text: s.message, tone: "danger" }), ...top]);
-  if (s.deployments.length === 0) return node("column", { gap: 2, pad: 2 }, undefined, [...top, node("text", { text: "No deployments yet.", tone: "muted" })]);
+  const top = [ui.row([ui.text(s.project.id, { tone: "muted" }), refresh], { gap: 2 })];
+  if (s.kind === "error") return ui.column([ui.banner(s.message, { tone: "danger" }), ...top], { gap: 2, pad: 2 });
+  if (s.deployments.length === 0) return ui.column([...top, ui.text("No deployments yet.", { tone: "muted" })], { gap: 2, pad: 2 });
   const rows = s.deployments.map((d) => {
     const { label, tone } = stateOf(d);
-    return node("row", {}, d.uid, [
-      node("badge", { text: label, tone }),
-      node("text", { text: d.target === "production" ? "Production" : "Preview" }),
-      node("text", { text: branchOf(d) || "—" }),
-      node("text", { text: messageOf(d) || d.name }),
-      node("text", { text: when(d.created), tone: "muted" }),
-      node("link", { label: "Open", url: `https://${d.url}` }, "open"),
-    ]);
+    return ui.row(
+      [
+        ui.badge(label, { tone }),
+        ui.text(d.target === "production" ? "Production" : "Preview"),
+        ui.text(branchOf(d) || "—"),
+        ui.text(messageOf(d) || d.name),
+        ui.text(when(d.created), { tone: "muted" }),
+        ui.link("open", "Open", { url: `https://${d.url}` }),
+      ],
+      { key: d.uid },
+    );
   });
-  const table = node("table", { label: "Deployments", columns: ["State", "Target", "Branch", "Commit", "Created", "Link"] }, "deployments", rows);
-  return node("column", { gap: 2, pad: 2 }, undefined, [...top, table]);
+  const table = ui.table("deployments", "Deployments", ["State", "Target", "Branch", "Commit", "Created", "Link"], rows);
+  return ui.column([...top, table], { gap: 2, pad: 2 });
 }

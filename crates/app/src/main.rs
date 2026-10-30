@@ -96,6 +96,8 @@ mod ext_runtime;
 #[cfg(test)]
 mod ext_scm_tests;
 #[cfg(test)]
+mod ext_template_views_tests;
+#[cfg(test)]
 mod ext_tests;
 mod ext_updates;
 #[cfg(test)]

@@ -37,8 +37,8 @@ Install the package from the Extensions view (**Install from File…**), which s
 ## How it is built
 
 - `ctx.setStatusItem` for the `[[status-bar]]` item, `ctx.view` for the `[[views]]` entry, `ctx.every` for the timer.
-- The view is a tree in the JSON form of [the views reference](../../../docs/extensions/reference/ui.md): a `table`
-  with a `badge` per state and a `link` per deployment, an `empty-state` with a button while there is no token.
+- The view is built with the SDK's `ui` functions, which write the form of
+  [the views reference](../../../docs/extensions/reference/ui.md): a `table` with a `badge` per state and a `link` per deployment, an `empty-state` with a button while there is no token.
 - `[activation] workspace-contains` starts it in a folder with a `vercel.json`. `.vercel/project.json` is listed too,
   but `vercel link` adds `.vercel` to `.gitignore`, which that check honours; such a folder starts the extension on its
   first command or when the view opens.

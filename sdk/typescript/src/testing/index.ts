@@ -56,6 +56,7 @@ import { fromWitCodeLens, fromWitDiagnostic, toWitCodeLens, toWitDiagnostic } fr
 import type * as W from "../wit.ts";
 import { allowsNet, allowsRead, allowsWrite, globMatch, permissionsOf, type Permissions } from "./permissions.ts";
 import { parseToml, type Table } from "./toml.ts";
+import { checkEvent, checkView } from "./view-check.ts";
 
 /** The workspace folder of every mock. */
 export const FOLDER = "file:///work";
@@ -327,16 +328,27 @@ export class MockHost {
     return r.val ? JSON.parse(r.val) : null;
   }
 
-  /** Draw view `id`: its element tree. */
+  /**
+   * Draw view `id`: its tree, checked as Codeyard checks it before drawing (crates/ext-ui), so a tree Codeyard would
+   * refuse fails the test with the reason Codeyard shows.
+   */
   async render(id: string): Promise<any> {
     const r = await this.request({ tag: "render", val: id });
     if (r.tag !== "view") throw CodeyardError.other(`view ${id} answered ${r.tag}`);
-    return JSON.parse(r.val);
+    const verdict = checkView(r.val);
+    if (!verdict.ok) throw CodeyardError.other(`Codeyard would not draw view ${id}: ${verdict.message}`);
+    return verdict.view;
   }
 
-  /** Send an event to view `id`. */
+  /**
+   * Send an event to view `id`, in the form Codeyard sends (docs/extensions/reference/ui.md#events):
+   * `{ click: { path: ["add"] } }`, `{ change: { path: ["name"], value: { text: "web" } } }`, …
+   */
   async viewEvent(id: string, event: unknown): Promise<void> {
-    await this.request({ tag: "ui-event", val: [id, JSON.stringify(event)] });
+    const json = JSON.stringify(event);
+    const why = checkEvent(json);
+    if (why !== undefined) throw CodeyardError.other(`Codeyard never sends ${json} (it sends events such as {"click": {"path": ["add"]}}): ${why}`);
+    await this.request({ tag: "ui-event", val: [id, json] });
   }
 
   async format(document: Document, range: Range | undefined, options: FormatOptions): Promise<TextEdit[]> {

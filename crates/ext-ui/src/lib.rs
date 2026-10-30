@@ -8,6 +8,7 @@
 mod access;
 mod diff;
 mod event;
+pub mod schema;
 mod state;
 mod validate;
 mod wire;
@@ -16,6 +17,8 @@ mod wire;
 mod fuzz_tests;
 #[cfg(test)]
 mod json_tests;
+#[cfg(test)]
+mod schema_tests;
 #[cfg(test)]
 mod tests;
 
