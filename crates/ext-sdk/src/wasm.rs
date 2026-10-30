@@ -477,7 +477,25 @@ impl From<w::host_requests::Request> for Request {
             R::OpenUri(u) => Request::OpenUri(u),
             R::Hover((document, position)) => Request::Hover { document: document.into(), position: position.into() },
             R::Completion((document, position, trigger)) => Request::Completion { document: document.into(), position: position.into(), trigger },
+            R::CodeLens((document, range)) => Request::CodeLens { document: document.into(), range: range.into() },
+            R::ResolveCodeLens((document, lens)) => Request::ResolveCodeLens { document: document.into(), lens: lens.into() },
+            R::InlayHints((document, range)) => Request::InlayHints { document: document.into(), range: range.into() },
         }
+    }
+}
+
+impl From<w::responses::CodeLens> for CodeLens {
+    fn from(l: w::responses::CodeLens) -> Self {
+        let command =
+            l.command.map(|c| LensCommand { title: c.title, command: c.command, args: serde_json::from_str(&c.args_json).unwrap_or(serde_json::Value::Null) });
+        CodeLens { id: l.id, range: l.range.into(), command }
+    }
+}
+
+impl From<CodeLens> for w::responses::CodeLens {
+    fn from(l: CodeLens) -> Self {
+        let command = l.command.map(|c| w::responses::LensCommand { title: c.title, command: c.command, args_json: c.args.to_string() });
+        w::responses::CodeLens { id: l.id, range: l.range.into(), command }
     }
 }
 
@@ -503,6 +521,10 @@ impl From<Response> for w::responses::Response {
             ),
             Response::Hover(h) => R::Hover(h.map(|h| w::responses::Hover { contents: h.contents, range: h.range.map(Into::into) })),
             Response::Completions(l) => R::Completions(completion_list(l)),
+            Response::CodeLenses(l) => R::CodeLenses(l.into_iter().map(Into::into).collect()),
+            Response::InlayHints(h) => {
+                R::InlayHints(h.into_iter().map(|h| w::responses::InlayHint { position: h.position.into(), label: h.label, tooltip: h.tooltip }).collect())
+            }
         }
     }
 }

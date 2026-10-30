@@ -29,3 +29,20 @@ test("hovering a dependency in Cargo.toml shows its latest version", async () =>
   assert.equal(await host.hover({ ...doc, uri: "file:///work/other.toml" }, { line: 1, character: 2 }), undefined);
   host.dispose();
 });
+
+test("hints the latest version after each dependency in view", async () => {
+  const host = new MockHost();
+  host.http("GET", "https://crates.io/api/v1/crates/anyhow", 200, { crate: { max_version: "1.0.99" } });
+  host.http("GET", "https://crates.io/api/v1/crates/ghost", 404, {});
+  await host.activate(extension);
+  const text = '[package]\nname = "x"\n\n[dependencies]\nanyhow = "1"\nghost = "0.1"\n';
+  const doc = { uri: "file:///work/Cargo.toml", language: "toml", version: 1, text };
+  const view = (from: number, to: number) => ({ start: { line: from, character: 0 }, end: { line: to, character: 0 } });
+  // `name` is in [package], not a dependency; `ghost` is not on crates.io.
+  assert.deepEqual(await host.inlayHints(doc, view(0, 7)), [{ position: { line: 4, character: 12 }, label: "latest 1.0.99" }]);
+  // Only the lines in view are asked about, and a crate is fetched once.
+  assert.deepEqual(await host.inlayHints(doc, view(5, 7)), []);
+  assert.deepEqual(await host.inlayHints({ ...doc, uri: "file:///work/other.toml" }, view(0, 7)), []);
+  assert.deepEqual(host.fetched().map((r) => r.url), ["https://crates.io/api/v1/crates/anyhow", "https://crates.io/api/v1/crates/ghost"]);
+  host.dispose();
+});

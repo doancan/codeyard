@@ -1,6 +1,6 @@
 //! Workbench: what code extensions contribute besides palette commands (docs/plugin-architecture.md §5.1): menus, key
 //! bindings and status items that run their commands; formatters, code actions, diagnostics, decorations and tasks
-//! (hover and completion in workbench_ext_hover.rs).
+//! (hover and completion in workbench_ext_hover.rs, code lenses and inlay hints in workbench_ext_lenses.rs).
 //!
 //! Providers are asked with a deadline (`limits::PROVIDER_DEADLINE_MILLIS`, plus `ACTIVATE_MILLIS` while the
 //! extension starts). Nothing the user does waits for them: a request about a document is cancelled when the document
@@ -37,6 +37,10 @@ pub struct RunExtensionCommand {
 #[path = "workbench_ext_hover.rs"]
 mod hover;
 
+/// Code lenses and inlay hints (workbench_ext_lenses.rs).
+#[path = "workbench_ext_lenses.rs"]
+mod lenses;
+
 /// How long a late answer is still listened for (to note it in the log) before the request is forgotten.
 const LATE_GRACE: Duration = Duration::from_secs(30);
 
@@ -53,6 +57,8 @@ pub(super) struct ProviderState {
     waiting: Vec<(String, String, u64)>,
     /// Hover and completion: how editors ask (workbench_ext_hover.rs).
     lang: hover::LangState,
+    /// Code lenses and inlay hints asked for each editor (workbench_ext_lenses.rs).
+    lenses: lenses::LensState,
 }
 
 /// One row of the quick-fix list: a language server's action or an extension's.
@@ -874,6 +880,7 @@ impl Workbench {
             !list.is_empty()
         });
         p.waiting.retain(|(_, e, _)| e != id);
+        self.forget_extension_lenses(id, cx);
         self.refresh_diagnostics(&touched, cx);
         self.refresh_decorations(&decorated, cx);
         self.drop_ext_language_items(&|e| e != id, cx);
@@ -892,6 +899,7 @@ impl Workbench {
             self.forget_extension_marks(&id, cx);
         }
         self.sync_ext_language(cx);
+        self.forget_inactive_lenses(cx);
     }
 
     /// An exthost ended. A crash takes what the extension showed with it (it would be stale); an idle stop keeps it.
@@ -918,6 +926,7 @@ impl Workbench {
             e.set_ext_decorations(decorations, cx);
             e.set_ext_language(offer);
         });
+        self.attach_lenses(ed, window, cx);
         if !diagnostics.is_empty() {
             let d = self.diagnostics_for(&path);
             ed.update(cx, |e, cx| e.set_diagnostics(d, cx));

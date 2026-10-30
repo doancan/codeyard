@@ -3,7 +3,7 @@ id          = "codeyard.crate-version-ts"
 version     = "0.1.0"
 name        = "Crate Version Ts"
 license     = "MIT"
-description = "The latest version of a crate on crates.io."
+description = "The latest version of a crate on crates.io, and after each dependency in Cargo.toml."
 
 [code]
 entry = "src/extension.ts"
@@ -18,4 +18,8 @@ title = "Crate Version Ts: Latest Version of a Crate"
 
 # Resting the mouse on a dependency in Cargo.toml shows its latest version, next to the language server's hover.
 [[hover]]
+languages = ["toml"]
+
+# A hint with the latest version after each dependency of a Cargo.toml in view.
+[[inlay-hints]]
 languages = ["toml"]

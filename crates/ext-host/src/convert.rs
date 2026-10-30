@@ -185,11 +185,29 @@ impl From<g::responses::Response> for v::Response {
             R::Ranges(r) => v::Response::Ranges(r.into_iter().map(Into::into).collect()),
             R::Hover(h) => v::Response::Hover(h.map(|h| v::Hover { contents: h.contents, range: h.range.map(Into::into) })),
             R::Completions(l) => v::Response::Completions(completion_list(l)),
+            R::CodeLenses(l) => v::Response::CodeLenses(l.into_iter().map(Into::into).collect()),
+            R::InlayHints(h) => {
+                v::Response::InlayHints(h.into_iter().map(|h| v::InlayHint { position: h.position.into(), label: h.label, tooltip: h.tooltip }).collect())
+            }
         }
     }
 }
 
+impl From<g::responses::CodeLens> for v::CodeLens {
+    fn from(l: g::responses::CodeLens) -> Self {
+        let command = l.command.map(|c| v::LensCommand { title: c.title, command: c.command, args_json: c.args_json });
+        v::CodeLens { id: l.id, range: l.range.into(), command }
+    }
+}
+
 // --- app → guest
+
+impl From<v::CodeLens> for g::responses::CodeLens {
+    fn from(l: v::CodeLens) -> Self {
+        let command = l.command.map(|c| g::responses::LensCommand { title: c.title, command: c.command, args_json: c.args_json });
+        g::responses::CodeLens { id: l.id, range: l.range.into(), command }
+    }
+}
 
 impl From<v::Position> for g::types::Position {
     fn from(p: v::Position) -> Self {
@@ -311,6 +329,9 @@ impl From<v::Request> for g::host_requests::Request {
             v::Request::OpenUri { uri } => R::OpenUri(uri),
             v::Request::Hover { document, position } => R::Hover((document.into(), position.into())),
             v::Request::Completion { document, position, trigger } => R::Completion((document.into(), position.into(), trigger)),
+            v::Request::CodeLens { document, range } => R::CodeLens((document.into(), range.into())),
+            v::Request::ResolveCodeLens { document, lens } => R::ResolveCodeLens((document.into(), lens.into())),
+            v::Request::InlayHints { document, range } => R::InlayHints((document.into(), range.into())),
         }
     }
 }

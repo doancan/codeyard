@@ -233,6 +233,42 @@ test("files, processes and progress go through the permissions", async () => {
   h.dispose();
 });
 
+test("code lenses run their command with their arguments; hints cover the range asked", async () => {
+  const h = host();
+  const lines = (text: string, from: number, to: number) => text.split("\n").map((l, n) => [n, l] as const).slice(from, to);
+  await h.activate({
+    activate(ctx) {
+      ctx.command("echo", (_ctx, args) => args);
+      ctx.codeLenses((_ctx, doc, range) => [
+        ...lines(doc.text, range.start.line, range.end.line)
+          .filter(([, l]) => l.startsWith("fn "))
+          .map(([n]) => ({ range: { start: { line: n, character: 0 }, end: { line: n, character: 0 } }, command: { title: "Run", command: "echo", args: { line: n } } })),
+        { id: "later", range: range },
+      ]);
+      ctx.resolveCodeLens((_ctx, _doc, lens) => ({ ...lens, command: { title: `Resolved ${lens.id}`, command: "echo", args: lens.id } }));
+      ctx.inlayHints((_ctx, doc, range) =>
+        lines(doc.text, range.start.line, range.end.line).map(([n, l]) => ({ position: { line: n, character: l.length }, label: `${l.length} chars` })),
+      );
+    },
+  });
+  const doc = { uri: "file:///work/a.rs", language: "rust", version: 1, text: "fn a() {}\nlet x = 1;\nfn b() {}\n" };
+  const range = (from: number, to: number) => ({ start: { line: from, character: 0 }, end: { line: to, character: 0 } });
+  const lenses = await h.codeLenses(doc, range(1, 3));
+  assert.equal(lenses.length, 2, "only the lines asked for");
+  assert.equal(lenses[0]!.range.start.line, 2);
+  assert.deepEqual(await h.clickCodeLens(lenses[0]!), { line: 2 }, "the command runs with the lens's arguments");
+  await assert.rejects(h.clickCodeLens(lenses[1]!), /resolve it first/);
+  const resolved = await h.resolveCodeLens(doc, lenses[1]!);
+  assert.equal(resolved.command?.title, "Resolved later");
+  assert.equal(await h.clickCodeLens(resolved), "later");
+  const hints = await h.inlayHints(doc, range(0, 2));
+  assert.deepEqual(
+    hints.map((x) => x.label),
+    ["9 chars", "10 chars"],
+  );
+  h.dispose();
+});
+
 test("a thrown error answers with its message and stack", async () => {
   const h = host();
   await h.activate({

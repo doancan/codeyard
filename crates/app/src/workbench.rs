@@ -2517,6 +2517,7 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
             }
             EditorEvent::OpenMergeEditor => return this.open_merge_editor(&OpenMergeEditor, window, cx),
             EditorEvent::SendRequest(line) => return this.send_request_at(Some(*line), window, cx),
+            EditorEvent::Extension(_) => return, // workbench_ext_lenses.rs
             EditorEvent::Changed => {
                 // The user moved on: what extensions were asked about the old text is cancelled.
                 this.cancel_providers_about(&ed.read(cx).path.clone());

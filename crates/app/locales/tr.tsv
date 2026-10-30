@@ -3363,3 +3363,4 @@ Cannot copy {0} to {1}: {2}	{0}, {1} üzerine kopyalanamıyor: {2}
 Type {} to install it.	Kurmak için {} yazın.
 Native programs	Yerel programlar
 It brings its own programs, built for each platform. They run on the computer that holds the workspace (this one, or the SSH server) with your rights.	Her platform için derlenmiş kendi programlarını getirir. Bu programlar çalışma alanının bulunduğu bilgisayarda (bu bilgisayar ya da SSH sunucusu) sizin yetkilerinizle çalışır.
+{0} (from {1})	{0} ({1} eklentisinden)

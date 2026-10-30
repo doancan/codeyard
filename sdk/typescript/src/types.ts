@@ -3,6 +3,8 @@
 
 import type {
   CompletionKind,
+  WitCodeLens,
+  WitInlayHint,
   DecorationPlace,
   Diagnostic as WitDiagnostic,
   DiagnosticSeverity,
@@ -100,6 +102,49 @@ export interface Decoration {
   tone?: Tone;
   text?: string;
   hover?: string;
+}
+
+/**
+ * A code lens: clickable text shown with its line that runs a command with arguments. A lens without `command` is
+ * resolved once it is on screen (`ctx.resolveCodeLens`).
+ */
+export interface CodeLens {
+  /** Passed back to `resolveCodeLens`. */
+  id?: string;
+  /** The lens belongs to the range's first line. */
+  range: Range;
+  command?: LensCommand;
+}
+
+/** What a code lens shows and runs. */
+export interface LensCommand {
+  title: string;
+  /** The extension's own command (local or full id), a dependency's full id, or a `core:` command the manifest lists. */
+  command: string;
+  /** The command's argument, as its handler receives it. */
+  args?: unknown;
+}
+
+/** An inlay hint: short text at the end of its line, such as a type. */
+export interface InlayHint {
+  position: Position;
+  label: string;
+  tooltip?: string;
+}
+
+export function toWitCodeLens(l: CodeLens): WitCodeLens {
+  const command = l.command && { title: l.command.title, command: l.command.command, argsJson: JSON.stringify(l.command.args ?? null) };
+  return { id: l.id ?? "", range: l.range, command };
+}
+
+export function fromWitCodeLens(l: WitCodeLens): CodeLens {
+  const lens: CodeLens = { id: l.id, range: l.range };
+  if (l.command) lens.command = { title: l.command.title, command: l.command.command, args: JSON.parse(l.command.argsJson || "null") };
+  return lens;
+}
+
+export function toWitInlayHint(h: InlayHint): WitInlayHint {
+  return { position: h.position, label: h.label, tooltip: h.tooltip };
 }
 
 /** A code action a provider offers. */
