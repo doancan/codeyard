@@ -189,8 +189,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Terminals come back after a restart as new shells in their folders, with their titles, colors and programs, and say
   so; nothing runs again. `terminal.persistentScrollback` (off by default) also keeps the last lines of their history as
   plain text; "Terminal: Clear Saved Terminal History" removes it.
+- Extensions with code ask once per session, in a system dialog that names the extension and its publisher, before
+  their first clipboard read and before the first program they run on a remote host. **Deny** refuses it with
+  `revoked-by-user` until Codeyard quits, and the refusal is listed under the extension's recent denials.
+- On macOS and Linux an extension process that uses more than 512 MB of memory is stopped and counted as a crash, with
+  a message that says why (Windows already had the limit).
+- `cyx package --no-build` packages the `extension.wasm` already in the folder.
 
 ### Changed
+
+- Installed extensions with code start no process when Codeyard opens: the check that the system sandbox works now
+  runs when the first one starts. The startup measurement with 100 installed extensions now has 50 with code.
 
 - A task no longer types its command into a new terminal: it runs as a process on the folder's machine, so a value from
   a variable can never become more shell code, and Stop ends the processes it started.

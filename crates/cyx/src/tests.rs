@@ -58,6 +58,25 @@ fn check_runs_the_import_check_on_the_component() {
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
+/// `--no-build` packages the component already in the folder: no toolchain runs (the perf scenario's code extensions).
+#[test]
+fn package_no_build_takes_the_component_that_is_there() {
+    let root = tmp("no-build");
+    let dir = root.join("code");
+    std::fs::create_dir_all(&dir).unwrap();
+    let manifest = "[extension]\nid = \"you.code\"\nversion = \"0.1.0\"\nname = \"Code\"\nlicense = \"MIT\"\n[code]\nentry = \"Cargo.toml\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n";
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), manifest).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "not a crate: nothing builds it").unwrap();
+    std::fs::write(dir.join(ext_pkg::COMPONENT), ext_pkg::testing::COMPONENT).unwrap();
+    let out = root.join("code.cyx");
+    let args: Vec<String> = ["package", dir.to_str().unwrap(), "--no-build", "-o", out.to_str().unwrap()].iter().map(|s| s.to_string()).collect();
+    run(&args).unwrap();
+    let pkg = ext_pkg::read(&std::fs::read(&out).unwrap()).unwrap();
+    assert_eq!(pkg.manifest.id.as_str(), "you.code");
+    assert!(pkg.files.contains_key(ext_pkg::COMPONENT));
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
 #[test]
 fn check_errors_name_the_line_and_the_fix() {
     let root = tmp("errors");

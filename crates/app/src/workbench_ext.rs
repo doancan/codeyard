@@ -65,6 +65,10 @@ pub(super) struct ExtViewState {
     pub(super) views: super::ext_views_glue::ViewsState,
     /// What code extensions show: status items, diagnostics, decorations (workbench_ext_providers.rs).
     pub(super) providers: super::providers_glue::ProviderState,
+    /// First clipboard read and first remote process per session ask (workbench_ext_prompts.rs).
+    pub(super) prompts: super::prompts_glue::PromptState,
+    /// The resident-memory cap of exthosts (workbench_ext_memory.rs).
+    pub(super) memory: super::memory_glue::MemoryState,
 }
 
 /// The consent sheet's text and every other plain-words line of an extension.
