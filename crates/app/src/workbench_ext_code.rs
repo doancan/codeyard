@@ -230,6 +230,10 @@ impl Workbench {
         // The extension in development runs without the OS sandbox (its author's folder); everything installed runs in it.
         let sandbox = crate::ext::dev_dir().is_none_or(|d| d != active.dir);
         let task = cx.background_executor().spawn(async move {
+            // Checked here, not at startup (`ext_runtime::code_loads_here`): the check runs a process.
+            if sandbox {
+                ext_runtime::code_runs_here(&id)?;
+            }
             let wasm = std::fs::read(&wasm_path).map_err(|e| format!("{}: {e}", wasm_path.display()))?;
             // The sandbox lets the exthost write only here, so it must exist first.
             std::fs::create_dir_all(data.join("data").join(&id)).map_err(|e| e.to_string())?;
@@ -266,6 +270,7 @@ impl Workbench {
                             let _ = p.send(m);
                         }
                         code.procs.insert(id, p);
+                        this.watch_extension_memory(cx);
                     }
                     Err(e) => {
                         code.pending.lock().unwrap_or_else(|p| p.into_inner()).fail_all(&ext, &e);
@@ -399,7 +404,7 @@ impl Workbench {
     }
 
     /// A host call that returns a ticket: checked, then run on a background thread or answered from the window.
-    fn on_extension_call(&mut self, id: &str, ticket: u64, call: Start, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn on_extension_call(&mut self, id: &str, ticket: u64, call: Start, window: &mut Window, cx: &mut Context<Self>) {
         let arrived = std::time::Instant::now();
         let Some(proc) = self.cfg.exts.code.procs.get(id).cloned() else { return };
         let reg = crate::ext::current();
@@ -407,6 +412,8 @@ impl Workbench {
         let scope = self.extension_scope(&active, cx);
         let record = self.cfg.exts.code.record.clone();
         record.lock().unwrap_or_else(|p| p.into_inner()).ticket_started(id, ticket, call.wit_name(), arrived);
+        // The first clipboard read and the first remote process per session ask (workbench_ext_prompts.rs).
+        let Some(call) = self.ask_first_use(&active, &scope, ticket, call, window, cx) else { return };
         let complete = |p: &Arc<Process>, c: Completion| {
             record.lock().unwrap_or_else(|p| p.into_inner()).ticket_done(id, ticket, &c, None);
             let _ = p.send(&ToHost::Complete { ticket, completion: c });
@@ -618,7 +625,7 @@ impl Workbench {
 
 impl Workbench {
     /// Complete a ticket of `extension` from the window (a pick, an input).
-    fn complete_extension_ticket(&mut self, extension: &str, ticket: u64, completion: Completion) {
+    pub(super) fn complete_extension_ticket(&mut self, extension: &str, ticket: u64, completion: Completion) {
         self.cfg.exts.code.record().ticket_done(extension, ticket, &completion, None);
         if let Some(p) = self.cfg.exts.code.procs.get(extension) {
             let _ = p.send(&ToHost::Complete { ticket, completion });

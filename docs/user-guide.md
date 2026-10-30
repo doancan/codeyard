@@ -680,7 +680,17 @@ its own process (`codeyard-exthost`, beside Codeyard): it reaches only the files
 and commands its sheet listed, and only through Codeyard, which checks every call, the same way for local and SSH
 folders. In a folder you have not trusted it may read what it declared and show messages, but not change files or run
 programs. When a call is refused, the message names the permission the extension would need. One nobody used for
-five minutes is stopped and starts again on its next command.
+five minutes is stopped and starts again on its next command. Installed extensions do nothing until you use them: none
+starts a process when Codeyard opens.
+
+Two things it declared still ask once, in a system dialog that names the extension, its publisher and what it wants:
+its first clipboard read, and the first program it runs on a remote (SSH) host. **Allow for this session** lets it
+until Codeyard quits; **Deny** refuses that call and the later ones of that kind until then, with `revoked-by-user`,
+and the refusal is listed under *Recent denials*. Programs on your own computer and clipboard writes do not ask.
+
+An extension's process may use up to 512 MB of memory. On macOS and Linux Codeyard checks every few seconds while one
+runs and stops one that uses more, with a message that says so; on Windows the system enforces the limit. That counts
+as a crash.
 
 On the page of an extension with code:
 

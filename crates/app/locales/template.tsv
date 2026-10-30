@@ -81,6 +81,7 @@ All conflicts are resolved
 All levels	
 Allow	
 Allow file access	
+Allow for this session	
 Already debugging: Shift+F5 stops the session.	
 Already formatted	
 Already listed after an update? Remove it with − and add it again.	
@@ -1112,6 +1113,8 @@ Invalid pattern
 Invalid string	
 It can't be moved to the Trash ({}). Deleting it permanently can't be undone.	
 It declares no permissions.	
+It wants to read the text you copied, here or in other apps.	
+It wants to run {0} on the remote host {1}, with your account there.	
 Its contributions are removed from every window, with the data it stored.	
 Its folder is deleted. Git refuses when the worktree has uncommitted changes; the branch stays.	
 Its publisher deprecated it and suggests {} instead.	
@@ -1167,7 +1170,9 @@ Left ↔ Right
 Let programs in the terminal write to the clipboard	
 Let the language server format while typing }, ; or Enter	
 Let {0} act as your GitHub account {1}?	
+Let {0} run programs on {1}?	
 Let {0} sign in to your {1} account?	
+Let {} read the clipboard?	
 Lifecycle: {}	
 Lightweight editing, on this machine or over SSH.	
 Line endings for this file (applied on save)	
@@ -2536,6 +2541,7 @@ You have unsaved changes
 You have {}	
 You have {}, the latest version.	
 You · Uncommitted changes	
+Your answer holds until Codeyard quits.	
 Your changes will be lost if you don't save them.	
 Your commits on this branch are rewritten on top of it (their hashes change). Conflicts stop the rebase; resolve them and use Git: Continue Rebase, or Git: Abort Rebase.	
 Your open files and unsaved changes come back after the restart.	
@@ -2668,6 +2674,7 @@ it changed after the scan
 it could not be compared	
 it is a file on one side and a folder or link on the other	
 it is not a regular file or folder	
+it used {0} MB of memory, over the limit of {1} MB, and was stopped	
 its name differs from another entry only in letter case	
 its pattern must capture at least file, line (or location) and message	
 its structure could not be read safely	

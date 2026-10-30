@@ -12,6 +12,8 @@ path = "src/lib.rs"
 [features]
 # The `escape` command (tests/sandbox.rs, tests/exthost.rs): imports wasi:sockets.
 escape = []
+# The app's run-time guards (ext_prompts_ui_tests.rs): `clipboard`, `run` and `hold`; imports clipboard-read and process.
+guards = []
 
 [dependencies]
 wit-bindgen = "0.63"

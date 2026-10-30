@@ -4,7 +4,7 @@
 //! cyx new <theme|snippets|keymap|language|language-server|command|view> <name> [--lang ts] [--publisher NAME] [--sdk PATH]
 //! cyx dev [FOLDER] [-- CODEYARD ARGS…]   run Codeyard with the extension loaded from FOLDER; it reloads on save
 //! cyx check [FOLDER]                     every problem with its file, line and fix
-//! cyx package [FOLDER] [-o FILE]         build the code (build.rs), then a reproducible .cyx
+//! cyx package [FOLDER] [-o FILE] [--no-build]  build the code (build.rs), then a reproducible .cyx
 //! cyx test [FOLDER]                      the built extension in codeyard-exthost against a scripted app (harness.rs)
 //! cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]
 //! cyx publish [FOLDER] [--dry-run] [--pre-release] [--registry URL]
@@ -46,6 +46,7 @@ usage:
   cyx dev [FOLDER] [-- CODEYARD ARGS…]       run Codeyard with it loaded; it reloads when you save
   cyx check [FOLDER]                         list every problem with its file, line and fix
   cyx package [FOLDER] [-o FILE]             build the code, then write a .cyx to install or publish
+                                             (--no-build: package the extension.wasm already there)
   cyx test [FOLDER]                          build the code and run each command and view in the extension host
   cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]
                                              convert a VS Code theme, snippets, keymap or language
@@ -114,8 +115,8 @@ fn run(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         "package" => {
-            let (dir, out) = parse_package(rest)?;
-            let (path, digest) = package(&dir, out.as_deref())?;
+            let (dir, out, build) = parse_package(rest)?;
+            let (path, digest) = if build { package(&dir, out.as_deref())? } else { package_built(&dir, out.as_deref())? };
             println!("Wrote {}\ncontent digest {digest}", path.display());
             Ok(())
         }
@@ -420,22 +421,31 @@ fn render(errors: &[ext_manifest::Diagnostic], text: &str) -> String {
     out.join("\n\n")
 }
 
-fn parse_package(rest: &[String]) -> Result<(PathBuf, Option<PathBuf>), String> {
+/// The folder, the output file, and whether to build first (not with `--no-build`).
+fn parse_package(rest: &[String]) -> Result<(PathBuf, Option<PathBuf>, bool), String> {
     let mut dir = None;
     let mut out = None;
+    let mut build = true;
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
-            "-o" | "--output" => out = Some(PathBuf::from(it.next().ok_or("usage: cyx package [FOLDER] [-o FILE]")?)),
+            "-o" | "--output" => out = Some(PathBuf::from(it.next().ok_or("usage: cyx package [FOLDER] [-o FILE] [--no-build]")?)),
+            "--no-build" => build = false,
             _ => dir = Some(a.clone()),
         }
     }
-    Ok((folder(dir.as_ref())?, out))
+    Ok((folder(dir.as_ref())?, out, build))
 }
 
 /// Build the code if there is any, check, then write `<id>-<version>.cyx` (or `out`).
 pub fn package(dir: &Path, out: Option<&Path>) -> Result<(PathBuf, ext_pkg::ContentDigest), String> {
     build::build(dir)?;
+    package_built(dir, out)
+}
+
+/// `cyx package --no-build`: the `extension.wasm` already in the folder (built by another tool, or a fixture), checked
+/// and packaged like a built one.
+pub fn package_built(dir: &Path, out: Option<&Path>) -> Result<(PathBuf, ext_pkg::ContentDigest), String> {
     let report = check(dir)?;
     let files = ext_pkg::collect_dir(dir).map_err(|e| format!("error: {e}"))?;
     let (bytes, digest) = ext_pkg::write(files).map_err(|e| format!("error: {e}"))?;

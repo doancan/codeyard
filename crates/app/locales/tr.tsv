@@ -3302,3 +3302,12 @@ Terminal session could not be restored: {}	Terminal oturumu geri yüklenemedi: {
 Terminal: Clear Saved Terminal History	Terminal: Kaydedilen Terminal Geçmişini Temizle
 the folder {} no longer exists; started a new shell in the workspace folder	{} klasörü artık yok; çalışma alanı klasöründe yeni bir kabuk başlatıldı
 the saved state is damaged	kaydedilen durum bozuk
+
+# ---- Code extensions: first-use prompts and the memory cap ----
+Let {} read the clipboard?	{} panoyu okuyabilsin mi?
+It wants to read the text you copied, here or in other apps.	Burada ya da başka uygulamalarda kopyaladığınız metni okumak istiyor.
+Let {0} run programs on {1}?	{0}, {1} üzerinde program çalıştırabilsin mi?
+It wants to run {0} on the remote host {1}, with your account there.	{0} programını uzak ana bilgisayar {1} üzerinde, oradaki hesabınızla çalıştırmak istiyor.
+Your answer holds until Codeyard quits.	Yanıtınız Codeyard kapanana kadar geçerli.
+Allow for this session	Bu oturum için izin ver
+it used {0} MB of memory, over the limit of {1} MB, and was stopped	{0} MB bellek kullandı, {1} MB sınırını aştı ve durduruldu

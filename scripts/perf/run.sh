@@ -35,8 +35,10 @@ trap '[ -n "$pid" ] && kill "$pid" 2>/dev/null; [ -n "$server" ] && kill "$serve
 trap 'exit 130' INT TERM
 . scripts/perf/footprint.sh
 
-cargo build --release -q -p app -p cyx
+cargo build --release -q -p app -p cyx -p ext-host
 cp target/release/codeyard "$OUT/codeyard-candidate"
+# Code extensions load only where the extension host is beside the app (both builds find this one).
+cp target/release/codeyard-exthost "$OUT/codeyard-exthost"
 names=(candidate)
 commits=("$(git rev-parse HEAD)")
 versions=("$(git describe --tags --always --dirty)")
@@ -72,14 +74,21 @@ fresh_profile() {
   printf '{"update.check":"manual"}\n' > "$TMP/config/settings.jsonc"
 }
 
-# A profile with 100 installed extensions (themes made by `cyx new`), built once per run with the candidate.
+# A profile with 100 installed, inactive extensions, built once per run with the candidate: 50 themes made by `cyx new`
+# and 50 code extensions (a command each, the test component of ext-pkg, packaged without a toolchain). Loading them
+# must start no process: no extension host, and no sandbox check.
 EXT_PROFILE="$TMP/ext-profile"
 mkdir -p "$EXT_PROFILE/config" "$EXT_PROFILE/state" "$TMP/gen"
 printf '{"update.check":"manual"}\n' > "$EXT_PROFILE/config/settings.jsonc"
 CYX="$PWD/target/release/cyx"
-for n in $(seq 1 100); do
+for n in $(seq 1 50); do
   (cd "$TMP/gen" && "$CYX" new theme "t$n" --publisher perf >/dev/null)
   "$CYX" package "$TMP/gen/t$n" -o "$TMP/gen/t$n.cyx" >/dev/null
+  mkdir -p "$TMP/gen/c$n"
+  printf '[extension]\nid = "perf.c%s"\nversion = "0.1.0"\nname = "Code %s"\nlicense = "MIT"\n\n[code]\nentry = "Cargo.toml"\n\n[[commands]]\nid = "go"\ntitle = "Code %s: Go"\n' "$n" "$n" "$n" > "$TMP/gen/c$n/codeyard-extension.toml"
+  : > "$TMP/gen/c$n/Cargo.toml"
+  cp crates/ext-pkg/testdata/guest.wasm "$TMP/gen/c$n/extension.wasm"
+  "$CYX" package "$TMP/gen/c$n" --no-build -o "$TMP/gen/c$n.cyx" >/dev/null
 done
 install_args=()
 for f in "$TMP"/gen/*.cyx; do install_args+=(--install-extension "$f"); done
@@ -150,6 +159,11 @@ for i in $(seq 1 "$runs"); do
     # 100 installed extensions: only the time to load them counts.
     : > "$TMP/ext.jsonl"
     CODEYARD_PERF="$TMP/ext.jsonl" PROFILE_FROM="$EXT_PROFILE" run_scripted "$OUT/codeyard-${names[$k]}"
+    # Starting a code extension compiles it into the cache and makes its data folder first: neither may exist.
+    if [ "${names[$k]}" = candidate ] && { [ -e "$TMP/state/extensions/compiled" ] || [ -e "$TMP/state/extensions/data" ]; }; then
+      echo "perf: an installed, inactive code extension started at startup" >&2
+      exit 1
+    fi
     grep '"startup.extensions_ms"' "$TMP/ext.jsonl" >> "$CODEYARD_PERF" || true
     # The Market with 10 000 extensions: keystroke to the results, and to the frame that shows them; 40 keys.
     : > "$TMP/market.jsonl"

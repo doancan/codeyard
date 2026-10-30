@@ -3,7 +3,7 @@
   "metrics": [
     {"id": "startup.first_frame_ms", "what": "start of main to the first drawn frame, welcome screen", "stat": "p95", "budget": 0.10, "ceiling": null, "gate": "block"},
     {"id": "startup.window_open_ms", "what": "start of main to the first window created", "stat": "p95", "budget": 0.10, "ceiling": null, "gate": "warn"},
-    {"id": "startup.extensions_ms", "what": "loading 100 installed, inactive extensions at startup", "stat": "p95", "budget": 0.10, "budget_abs": 1.0, "ceiling": 5, "gate": "block"},
+    {"id": "startup.extensions_ms", "what": "loading 100 installed, inactive extensions at startup (50 with code; none may start)", "stat": "p95", "budget": 0.10, "budget_abs": 1.0, "ceiling": 5, "gate": "block"},
     {"id": "typing.keystroke_frame_ms", "what": "key press to the drawn frame, 10k-line Rust file with highlighting", "stat": "p95", "budget": 0.10, "ceiling": null, "gate": "block"},
     {"id": "typing.keystroke_frame_decorations_ms", "what": "key press to the drawn frame, 10k-line Rust file with highlighting and 2 decoration providers active (warn until the scenario is in run.sh)", "stat": "p95", "budget": 0.10, "ceiling": 8, "gate": "warn"},
     {"id": "extensions.provider_overhead_ms", "what": "provider platform overhead: request sent to an extension to its answer back in the window, trivial local provider (warn until the scenario is in run.sh)", "stat": "p95", "budget": 0.10, "ceiling": 3, "gate": "warn"},

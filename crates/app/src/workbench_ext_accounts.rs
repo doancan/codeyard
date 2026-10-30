@@ -223,7 +223,7 @@ impl Workbench {
     }
 
     /// Who the extension is: its lock entry's source, or the folder in development.
-    fn extension_publisher(&self, active: &crate::ext::Active) -> Publisher {
+    pub(super) fn extension_publisher(&self, active: &crate::ext::Active) -> Publisher {
         let dev = crate::ext::dev_dir().filter(|d| *d == active.dir);
         let source = match (&dev, &self.cfg.dir) {
             (None, Some(dir)) => crate::ext::store(dir).locked().ok().and_then(|l| l.get(&active.manifest.id).map(|e| e.source.clone())),

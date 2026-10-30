@@ -87,6 +87,10 @@ mod inspector_glue;
 mod market_glue;
 #[path = "workbench_market_view.rs"]
 mod market_view_glue;
+#[path = "workbench_ext_memory.rs"]
+mod memory_glue;
+#[path = "workbench_ext_prompts.rs"]
+mod prompts_glue;
 #[path = "workbench_ext_providers.rs"]
 mod providers_glue;
 #[path = "workbench_repos.rs"]
