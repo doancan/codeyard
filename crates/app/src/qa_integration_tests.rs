@@ -842,7 +842,7 @@ fn qa_debug_launch_failure_is_reported(cx: &mut TestAppContext) {
     wait_for(cx, "session ended", |cx| wb.read_with(cx, |wb, _| wb.debug_snapshot()).is_some_and(|s| s.0 == "ended"));
 }
 
-/// A missing build tool fails the pre-launch step; its output reaches Problems.
+/// A failing preLaunchTask stops the start (the debugger never starts); its output reaches Problems.
 #[gpui::test]
 fn qa_debug_build_failure_fills_problems(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-debugbuild");
@@ -857,8 +857,9 @@ fn qa_debug_build_failure_fills_problems(cx: &mut TestAppContext) {
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     run(&wb, cx, "Debug: Start Debugging");
-    wait_for(cx, "build failure", |cx| notice(&wb, cx).contains("Build failed"));
-    wait_for(cx, "compiler error in Problems", |cx| wb.read_with(cx, |wb, _| wb.problems()).iter().any(|(p, n)| p.ends_with("/src/a.c") && *n == 1));
+    wait_for(cx, "build failure", |cx| notice(&wb, cx).contains("did not succeed"));
+    // The output is scanned after a short pause (the clock is advanced for it).
+    wait_ticking(cx, "compiler error in Problems", |cx| wb.read_with(cx, |wb, _| wb.problems()).iter().any(|(p, n)| p.ends_with("/src/a.c") && *n == 1));
 }
 
 /// The real thing: clang -g + lldb-dap. A breakpoint inside a loop stops with the real local

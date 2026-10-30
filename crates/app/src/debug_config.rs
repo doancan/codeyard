@@ -28,8 +28,11 @@ pub struct LaunchConfig {
     pub request: String,
     /// Arguments sent to the adapter (`program`, `args`, `cwd`... variables expanded).
     pub args: Value,
-    /// Shell command to run before launch (`preLaunchTask` or automatic build).
+    /// Shell command to run before launch (automatic build, or a `preLaunchTask` without a task file).
     pub pre_launch: Option<String>,
+    /// `preLaunchTask` from a task file: the task runs as a planned task (dependencies, inputs, background readiness)
+    /// and the adapter starts only after it succeeds or becomes ready.
+    pub pre_launch_task: Option<String>,
     /// Automatically detected Cargo target; its executable is resolved from build artifacts.
     pub cargo_target: Option<crate::cargo_project::CargoTarget>,
     /// Task to run after the session ends (`postDebugTask`): (label, command).
@@ -420,8 +423,9 @@ pub fn parse_launch_json(text: &str, root: &str, file: Option<&str>, tasks: &[Ta
                 o.entry("cwd").or_insert_with(|| json!("${workspaceFolder}"));
             }
             let args = expand_value(&args, root, file);
-            let pre_launch =
-                c["preLaunchTask"].as_str().and_then(|label| tasks.iter().find(|t| t.label == label)).map(|t| expand_variables(&t.command, root, file));
+            let pre = c["preLaunchTask"].as_str().and_then(|label| tasks.iter().find(|t| t.label == label));
+            let pre_launch_task = pre.filter(|t| t.file.is_some()).map(|t| t.label.clone());
+            let pre_launch = pre.filter(|t| t.file.is_none()).map(|t| expand_variables(&t.command, root, file));
             let post_debug = task_command(&c["postDebugTask"], tasks, root, file);
             let mut config = LaunchConfig {
                 name,
@@ -429,6 +433,7 @@ pub fn parse_launch_json(text: &str, root: &str, file: Option<&str>, tasks: &[Ta
                 request: c["request"].as_str().unwrap_or("launch").to_string(),
                 args,
                 pre_launch,
+                pre_launch_task,
                 cargo_target: None,
                 post_debug,
                 no_debug: false,
@@ -461,6 +466,7 @@ pub fn detect(cargo_toml: Option<&str>, has_go_mod: bool, file: Option<&str>, ro
             request: "launch".into(),
             args: json!({ "args": [], "cwd": root }),
             pre_launch: None,
+            pre_launch_task: None,
             cargo_target: Some(crate::cargo_project::CargoTarget::binary(name)),
             post_debug: None,
             no_debug: false,
@@ -475,6 +481,7 @@ pub fn detect(cargo_toml: Option<&str>, has_go_mod: bool, file: Option<&str>, ro
             // outputMode remote: program output reaches the console as a DAP event (default: delve's stdout).
             args: json!({ "mode": "debug", "program": root, "cwd": root, "outputMode": "remote" }),
             pre_launch: None,
+            pre_launch_task: None,
             cargo_target: None,
             post_debug: None,
             no_debug: false,
@@ -489,6 +496,7 @@ pub fn detect(cargo_toml: Option<&str>, has_go_mod: bool, file: Option<&str>, ro
             request: "launch".into(),
             args: json!({ "type": "pwa-node", "name": format!("Debug Node: {base}"), "program": f, "cwd": root, "console": "internalConsole" }),
             pre_launch: None,
+            pre_launch_task: None,
             cargo_target: None,
             post_debug: None,
             no_debug: false,
@@ -503,6 +511,7 @@ pub fn detect(cargo_toml: Option<&str>, has_go_mod: bool, file: Option<&str>, ro
             request: "launch".into(),
             args: json!({ "program": f, "cwd": root, "console": "internalConsole" }),
             pre_launch: None,
+            pre_launch_task: None,
             cargo_target: None,
             post_debug: None,
             no_debug: false,
@@ -620,10 +629,8 @@ pub fn rust_formatters(host: &dyn host::Host, root: &str, existing: &[String]) -
 mod tests {
     #[test]
     fn compounds_inputs_and_the_post_debug_task_are_read() {
-        let tasks = vec![
-            Task { label: "build".into(), command: "make".into(), source: "tasks.jsonc" },
-            Task { label: "clean".into(), command: "rm -rf ${workspaceFolder}/out".into(), source: "tasks.jsonc" },
-        ];
+        let tasks =
+            vec![Task::shell("build".into(), "make".into(), "tasks.jsonc"), Task::shell("clean".into(), "rm -rf ${workspaceFolder}/out".into(), "tasks.jsonc")];
         let text = r#"{
           // comment
           "configurations": [
@@ -726,7 +733,7 @@ mod tests {
     }
 
     fn task(label: &str, command: &str) -> Task {
-        Task { label: label.into(), command: command.into(), source: "tasks.json" }
+        Task::shell(label.into(), command.into(), "tasks.json")
     }
 
     #[test]

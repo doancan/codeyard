@@ -200,6 +200,7 @@ mod structural;
 mod structural_tests;
 mod sysopen;
 mod system_prefs;
+mod task_run;
 mod terminal;
 mod terminal_image_paste;
 mod terminal_osc;

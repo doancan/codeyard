@@ -167,6 +167,8 @@ impl Workbench {
             Command::action("Tasks: Run Task…", RunTask),
             Command::action("Tasks: Run Build Task", RunBuildTask),
             Command::action("Tasks: Rerun Last Task", RerunLastTask),
+            Command::action("Tasks: Terminate Task", TerminateTask),
+            Command::action("Tasks: Restart Running Task", RestartRunningTask),
             Command::action("Debug: Start Debugging", StartDebugging),
             Command::action("Debug: Continue", DebugContinue),
             Command::action("Debug: Pause", DebugPause),
@@ -757,6 +759,11 @@ impl Workbench {
                 self.close_overlay(window, cx);
                 self.answer_launch_input(value, window, cx);
             }
+            (OverlayKind::TaskInput(options), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let value = options[*index].clone();
+                self.close_overlay(window, cx);
+                self.answer_task_input(value, window, cx);
+            }
             (OverlayKind::TerminalLaunch(list), PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let launch = list[*index].clone();
                 self.close_overlay(window, cx);
@@ -917,6 +924,7 @@ impl Workbench {
                 | OverlayKind::Tasks(_)
                 | OverlayKind::DebugConfigs(_)
                 | OverlayKind::LaunchInput(_)
+                | OverlayKind::TaskInput(_)
                 | OverlayKind::LaunchTemplates(_)
                 | OverlayKind::TerminalLaunch(_)
                 | OverlayKind::TerminalDefaultProfile(_)

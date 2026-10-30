@@ -1393,6 +1393,7 @@ No supertypes found
 No symbols found.	
 No symbols in this file	
 No symbols matching “{}”	
+No task is running.	
 No tasks found. “Tasks: Configure Tasks” creates .codeyard/tasks.jsonc.	
 No terminal profiles yet: add them under terminal.profiles in settings.jsonc.	
 No test at the cursor: put it inside a test function.	
@@ -1844,6 +1845,7 @@ Run to Cursor
 Run {} with any arguments	
 Running	
 Running code extensions in this window: why they started, how long their calls took, what was denied. Nothing here leaves this computer.	
+Running task: {}	
 Running the program in a terminal is not supported on Windows yet: use {} in the configuration.	
 Running: {}	
 Running…	
@@ -2095,10 +2097,27 @@ Tabs
 Tag name, then an optional message for an annotated tag	
 Tag name, then an optional message for an annotated tag (at HEAD)	
 Tagged {0} as {1}	
+Task cancellation could not be confirmed. Reconnect and inspect the process.	
+Task could not start: {}	
+Task dependency cycle: {}	
+Task input cancelled	
+Task “{0}” depends on “{1}”, which does not exist.	
+Task “{0}” has an invalid problem matcher: {1}	
+Task “{0}” has an invalid “{1}”.	
+Task “{0}” uses the input “{1}”, which the task file does not define.	
+Task “{0}” uses “{1}”, which has no value here.	
+Task “{0}” uses “{1}”, which would run an editor command; use an input instead.	
+Task “{0}”: {1}	
+Task “{}” has a variable that cannot be expanded.	
+Task “{}” has no command.	
+Task “{}” needs an open file.	
+Task “{}” runs in the background but its problem matcher has no endsPattern, so nothing can wait for it.	
 Tasks: Configure Tasks	
 Tasks: Rerun Last Task	
+Tasks: Restart Running Task	
 Tasks: Run Build Task	
 Tasks: Run Task…	
+Tasks: Terminate Task	
 Terminal	
 Terminal colour	
 Terminal row height, as a multiple of the font size	
@@ -2176,6 +2195,7 @@ The folder and everything in it will be deleted.
 The folder could not be read on the server: {}	
 The host stopped responding. Installation files were retained because a process may still be running. Reconnect and inspect the destination before retrying.	
 The input “{0}” is of type “{1}”, which would run a command; use promptString or pickString.	
+The input “{}” would run an editor command; use promptString or pickString.	
 The last background fetch failed: {}	
 The last command exited with code {}	
 The local port is busy	
@@ -2184,6 +2204,7 @@ The new version couldn't be installed from here. You can download it from the re
 The number {} cannot be written in JSON	
 The open folder is no longer listed in the workspace file.	
 The pattern does not parse: {0} (line {1}, column {2})	
+The preLaunchTask “{0}” did not succeed ({1}), so debugging was not started. Check its terminal, then start debugging again.	
 The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code.	
 The program is running: pause it first, or set a breakpoint.	
 The query ends too early	
@@ -2210,6 +2231,9 @@ The shell may run each line as soon as it arrives.
 The state database was damaged ({0}). It was moved to {1} and a new one was started; recent folders and open tabs were forgotten.	
 The string is not closed	
 The tag disappears from the remote repository for everyone. Your local copy is kept.	
+The task file has an invalid “{}”.	
+The task file is not valid JSON.	
+The task file is too large or has too many tasks.	
 The test runner stopped without reporting this test. See Test Results for build or runner errors.	
 The token has no signature.	
 The update couldn't be installed	
@@ -2239,6 +2263,7 @@ There is no breakpoint on this line (F9 adds one).
 There is no commit to undo	
 There is no replacement to undo.	
 There is no request here. Write METHOD URL on a line, separate requests with ###.	
+There is no task called “{}”.	
 There is nothing to copy.	
 There is nothing to ignore here	
 There isn't enough free disk space for the download. Free some space and try again.	
@@ -2305,6 +2330,7 @@ Trusted “{}”
 Try Again	
 Try again	
 Tuesday	
+Two tasks are called “{}”.	
 Type > for commands	
 Type a commit message first	
 Type a line number between 1 and {}	
@@ -2493,6 +2519,7 @@ Zoom Out
 `{}` did not answer within {} seconds; check the network connection and try again	
 `{}` is not installed or not on PATH	
 a comment is not closed	
+a field refers to a group the regular expression does not have	
 a host of the {0} account ({1}), not {2}	
 a key binding condition needs a context, not a constant	
 a program	
@@ -2511,6 +2538,7 @@ breakpoint
 breaks when written:	
 brew install jdtls, or unpack Eclipse JDT LS and put jdtls on PATH	
 by {}	
+cancelled	
 cannot read “{}” in the path	
 cannot read “{}” of the response	
 changes requested	
@@ -2557,6 +2585,7 @@ editor.formatters.{}: expected “lsp” or an extension id
 empty body	
 empty variable	
 ended	
+ended before it was ready	
 entry	
 entry {0} needs {1} and {2}	
 enum	
@@ -2572,6 +2601,7 @@ expected an object { … } (previous settings kept)
 expression to watch (e.g. total * 2, items.len())	
 extensions.registries[{0}]: the name “{1}” is used twice	
 failed	
+failed (exit code {})	
 fetches {} from {}	
 field	
 file	
@@ -2604,12 +2634,14 @@ installed · {}
 instruction breakpoint	
 interface	
 invalid JSON: {}	
+invalid “{}”	
 it appeared after the scan	
 it changed after the scan	
 it could not be compared	
 it is a file on one side and a folder or link on the other	
 it is not a regular file or folder	
 its name differs from another entry only in letter case	
+its pattern must capture at least file, line (or location) and message	
 its structure could not be read safely	
 join needs a string separator, got {}	
 just now	
@@ -2643,6 +2675,8 @@ no “{}” in the response
 not UTF-8	
 not available	
 not declared	
+not run: a dependency failed	
+not run: too many tasks in the background	
 not running	
 not selected	
 not set	
@@ -2664,9 +2698,11 @@ ports.rules.{}: expected an object with label, onForward or protocol
 pre-release	
 preview	
 property	
+queued	
 reachable? architecture? agent ready?	
 read-only	
 reads environment variables from this computer ({{$processEnv}})	
+ready	
 recently used	
 reconnecting	
 redirects to {}; not followed, send a request to that address to continue	
@@ -2688,8 +2724,10 @@ source
 split input and separator must be strings	
 starting	
 step	
+stopped	
 string	
 struct	
+succeeded	
 symbol	
 symbolic links are not copied	
 syntax error at “{}”	
@@ -2724,6 +2762,8 @@ the keychain refused the account: {}
 the launch file is not an object	
 the launch file is not valid JSON: {}	
 the path is now a folder, not a file	
+the pattern cannot be evaluated	
+the regular expression is invalid ({})	
 the repository may be private: sign in with `gh auth login` or set GITHUB_TOKEN	
 the response body is not JSON	
 the response of “{}” has no header {}	
@@ -2740,10 +2780,12 @@ the {} registry is no longer in your settings
 the {} registry's list is more than 3 days old; install from the Extensions view to confirm	
 theme {} isn't installed here: copy its .json into ~/.config/codeyard/themes to use it	
 theme “{}” not found (available: auto, {})	
+there is no built-in matcher called “{}”	
 this computer	
 this value cannot be watched	
 this version was revoked	
 too many copies	
+too many or too large patterns	
 turned off after three crashes	
 turned off on the extension page	
 type parameter	

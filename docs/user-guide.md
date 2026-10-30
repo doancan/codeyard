@@ -896,13 +896,39 @@ Star files and folders ("Add to Favorites" in the tree's menu) to keep them in t
 section of the explorer and at the top of ⌘P. Bookmarks (⌥⌘K) mark lines; "Bookmarks: List…"
 shows them across the project.
 
-"Tasks: Run Task" finds `.codeyard/tasks.jsonc`, `.vscode/tasks.json`, package.json scripts
-(npm, pnpm, yarn or bun, by lock file), Makefile targets, Cargo and Go; each runs in its own
-terminal. ⇧⌘B runs the first task with "build" in its name.
+"Tasks: Run Task" finds `.codeyard/tasks.jsonc`, `.vscode/tasks.json`, the workspace file's tasks,
+package.json scripts (npm, pnpm, yarn or bun, by lock file), Makefile targets, Cargo and Go. ⇧⌘B runs
+the first task with "build" in its name.
 
-Compiler messages in a task's output (gcc / clang, Go, javac, rustc / cargo, tsc / MSBuild, eslint
-stylish) go to the Problems panel and underline the line in the editor, like a VS Code problem
-matcher without any setup; running another task clears them. Click a problem to jump to it.
+A task from a task file runs as the file describes it, on the folder's machine (locally or on the SSH
+server):
+
+- `"type": "process"` runs the program with each argument exactly as written; `"type": "shell"` (the
+  default) runs the command line in your login shell, or in `options.shell`. Arguments are quoted for
+  that shell (`quoting`: `strong`, `weak`, `escape`), and a value put into the command line by a variable
+  (`${file}`, an input answer) is always one argument, whatever it contains.
+- `options.cwd` and `options.env` (a `null` value removes the variable) apply to that task; `windows`,
+  `osx` and `linux` sections override fields per system.
+- `dependsOn` runs other tasks first: in parallel by default, one after the other with
+  `"dependsOrder": "sequence"`. A task several others need runs once. If one fails, the tasks that need it
+  do not start. A dependency cycle or a missing task is reported before anything runs.
+- `${input:id}` asks a `promptString` or `pickString` question from the file's `inputs` before anything
+  runs. Dismissing a question runs nothing. Answers are not shown in the output or kept.
+- A background task (`"isBackground": true`) counts as ready when its problem matcher's `endsPattern`
+  matches; tasks that depend on it start then. Ending before that is a failure.
+- Each command shows its output in its own terminal tab, then how it ended. "Tasks: Terminate Task" stops
+  every running task and everything it started; "Tasks: Restart Running Task" starts it again, and running
+  a task that is still running restarts it. Closing a task's terminal stops it too.
+
+`problemMatcher` (a built-in name such as `$tsc`, `$gcc`, `$rustc`, `$eslint-stylish`, or your own
+`pattern`, including multi-line ones) turns output lines into entries in the Problems panel and
+underlines in the editor; a watcher's `beginsPattern` clears the previous build's problems. Tasks without
+a matcher still get their compiler messages (gcc / clang, Go, javac, rustc / cargo, tsc / MSBuild, eslint
+stylish) found automatically. Running another task clears them. Click a problem to jump to it.
+
+A debug configuration's `preLaunchTask` runs the same way, and the debugger starts only after it
+succeeds (or, for a background task, becomes ready). If it fails, debugging does not start and the
+status bar says why. `postDebugTask` runs when the session ends.
 
 ## Highlighting, diffs and crash reports
 

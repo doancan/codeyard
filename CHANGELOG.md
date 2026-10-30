@@ -46,6 +46,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The extension API `codeyard:api` 0.1.0 (docs/extensions/reference/api.md) and its import check: `cyx check`, the
   registry and the installer refuse a code extension whose `extension.wasm` imports an interface its manifest has no
   permission for, with the line to add.
+- Tasks run as their task file describes them, locally and over SSH: process tasks keep each argument as written, shell
+  tasks quote for their shell, `dependsOn` runs in parallel or in sequence with a shared dependency once, `promptString`
+  and `pickString` inputs are asked first, background tasks release their dependents when their `endsPattern` matches,
+  and problem matchers (built-in or custom, multi-line) fill the Problems panel. Each command has its own output
+  terminal; "Tasks: Terminate Task" stops everything a run started and "Tasks: Restart Running Task" starts it again.
+- A debug configuration's `preLaunchTask` from a task file must succeed (or a background task become ready) before the
+  debugger starts; a failure never starts debugging.
+
+### Changed
+
+- A task no longer types its command into a new terminal: it runs as a process on the folder's machine, so a value from
+  a variable can never become more shell code, and Stop ends the processes it started.
+- The Linux agent's size budget is 1664 KB (was 1600 KB): running tasks as processes on the server needs its own
+  request in the protocol.
 
 ## [0.6.0] - 2026-10-29
 

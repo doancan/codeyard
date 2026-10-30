@@ -232,6 +232,8 @@ registry! {
     "workbench.toggleMaximizedPanel" => wb::ToggleMaximizedPanel,
     "tasks.build" => wb::RunBuildTask,
     "tasks.rerun" => wb::RerunLastTask,
+    "tasks.terminate" => wb::TerminateTask,
+    "tasks.restart" => wb::RestartRunningTask,
     "test.runAtCursor" => wb::RunTestAtCursor,
     "debug.start" => wb::StartDebugging,
     "debug.stop" => wb::StopDebugging,
