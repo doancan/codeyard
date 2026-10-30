@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (with `window.restoreSession`, the default). Opening the folder again within 5 minutes brings the same shells back,
   with their output from meanwhile, and says "Reconnected to terminal session". A terminal that cannot be taken back is
   a new shell as before, and nothing is ever typed into it. Terminals no window takes back are ended after 5 minutes.
-  The agent protocol is version 16.
+  Closing the window or the folder, or opening another one, still ends them at once. Terminals another Codeyard
+  instance has open stay with it: the window starts new shells and says so. The agent protocol is version 16.
 - The Run and Debug, Testing and Remote Explorer views and open context menus are available to screen readers:
   configurations and Start, the session's state, variables (expandable), watches, call stack and breakpoints with
   their enabled state, the debug toolbar's buttons; test files and tests with their outcome and Run and Debug Test;

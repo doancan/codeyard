@@ -267,12 +267,19 @@ file access and tasks keep their speed and the guard's immediate kill.
 - **Output while away:** the daemon keeps the last 256 KB of each terminal's output while no window is attached. It also
   counts every byte, so `PtyAttached` carries the output sequence number and the bytes cut from the backlog; the view
   shows that gap.
-- **One owner:** a session is used by at most one window of the app (a process-wide set). A newer connection to a
-  session (another app instance) replaces the older one, which can no longer type: `Session::run` stops reading from a
-  superseded connection.
-- **Bounds:** a session no window takes back is ended after the daemon's grace period (5 minutes) and its shells with it;
-  the daemon exits 10 minutes after its last session. A window that closes leaves its session for that grace period too
-  (`RemoteHost` sends no `Bye` for a daemon session), so reopening the folder soon takes the terminals back.
+- **One owner:** a session is used by at most one window of the app (a process-wide set). Window session ids start with
+  `proto::EXCLUSIVE_SESSION`, and the daemon refuses a second `Hello` for such a session (`PermissionDenied`) while the
+  first connection lives. So another app instance never takes a live window's terminals: it retries for a second (a
+  killed owner's socket is noticed at once, but not instantly), then opens a session of its own with new shells and says
+  why. Sessions without the prefix (SSH) are still taken over by the newest connection, as a reconnect needs when the old
+  one is half-open; `Session::run` stops reading from a superseded connection, so the old one cannot type.
+- **When a session is kept:** only when the user is expected to come back. `on_app_quit` marks every window's session to
+  be kept (⌘Q, Quit, an update's restart); a crash or a kill runs nothing at all. Both leave the session detached, with
+  no `Bye`. Leaving on purpose sends `Bye`, and the daemon ends the session and its shells at once: closing a window
+  (also the last one, which quits the app only after the window is gone), Close Folder, another folder in the window, or
+  a switch to an SSH folder (`close_all_terminals` drops the session).
+- **Bounds:** a kept session no window takes back is ended after the daemon's grace period (5 minutes), and its shells
+  with it. The daemon exits 10 minutes after its last session.
 - **Protocol:** version 16 adds `PtyToken`, `PtyAttach` and `PtyList`. The static Linux agent is 1636 KB (budget 1664 KB).
 
 Not covered: terminals moved to the editor area or a window of their own (#79) still come back as new shells, and their

@@ -200,9 +200,13 @@ shell"; nothing from the previous session runs again. A window whose display is 
 to fit; a saved arrangement that cannot be read is ignored.
 **Terminals after a restart.** With `window.restoreSession` on (the default), the panel's terminals come back when
 the folder opens again: same order, folder, title, color and program. On macOS and Linux, terminals of a local folder
-run in a small background process of Codeyard's (the terminal daemon), so quitting, a crash or a killed app does not end
-them. Open the folder again within 5 minutes and you get **the same shells back**, still running, with what they printed
-meanwhile and a line *Reconnected to terminal session* (also announced in the status bar). If more than the last 256 KB
+run in a small background process of Codeyard's (the terminal daemon). They are kept running only when you are expected
+to come back: when you **quit** Codeyard (⌘Q, Quit in the menu, an update's restart), or when it crashes or is killed.
+Leaving on purpose ends them at once, as always: **closing the window** (even the last one), *Close Folder*, opening
+another folder in the window or switching to an SSH folder. Open the folder again within 5 minutes and you get **the
+same shells back**, still running, with what they printed meanwhile and a line *Reconnected to terminal session* (also
+announced in the status bar). If another Codeyard instance already has those terminals open, they stay with it: this
+window starts new shells and says so in the status bar. If more than the last 256 KB
 of a terminal's output came while no window was open, the line says how much was lost. A terminal no window takes back
 within 5 minutes is ended, and the daemon stops 10 minutes after its last terminal. Any terminal that cannot be taken
 back (it ended, the daemon was restarted, `window.restoreSession` is off, an SSH folder) is a **new shell**: nothing that
