@@ -134,10 +134,12 @@ Both, Incoming First
 Bottom panel	
 Box invisible and look-alike Unicode characters (zero-width spaces, bidi controls, Cyrillic letters inside Latin words)	
 Branch {}	
+Break on Value Change	
 Breaking on: {}	
 Breakpoints	
 Breakpoints are active.	
 Breakpoints are deactivated: the program runs past them.	
+Breaks when the value is written; for this debug session only.	
 Bring a folder's tabs and unsaved changes back when you open it	
 Build and Open	
 Build failed: {}	

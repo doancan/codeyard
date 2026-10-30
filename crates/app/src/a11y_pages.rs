@@ -74,6 +74,8 @@ pub(crate) struct ShortcutsSnap {
     entity: gpui::EntityId,
     query: String,
     rows: Vec<(String, Option<String>)>,
+    /// Each row's painted, visible bounds (none while scrolled out of view).
+    bounds: Vec<Option<accesskit::Rect>>,
     total: usize,
     focused: bool,
 }
@@ -167,6 +169,9 @@ impl SettingsSnap {
                     AccessControl::Field(_) => Role::TextInput,
                 });
                 n.set_label(row.title.clone());
+                if let Some(b) = row.bounds {
+                    n.set_bounds(b);
+                }
                 let mut about = vec![row.about.clone()];
                 about.extend(row.source.map(str::to_string));
                 if let Some(error) = &row.error {
@@ -246,6 +251,9 @@ impl ShortcutsSnap {
             n.set_position_in_set(i + 1);
             n.set_size_of_set(self.total);
             n.add_action(Action::Click);
+            if let Some(b) = self.bounds.get(i).copied().flatten() {
+                n.set_bounds(b);
+            }
             nodes.push((id, n));
             ids.push(id);
         }
@@ -353,7 +361,8 @@ impl Workbench {
         let shortcuts = match page {
             Some(Page::Shortcuts(v)) => {
                 let (query, rows, total, focused) = v.read(cx).access_rows(MAX_SHORTCUTS, window, cx);
-                Some(ShortcutsSnap { entity: v.entity_id(), query, rows, total, focused })
+                let bounds = v.read(cx).access_row_bounds(rows.len(), window);
+                Some(ShortcutsSnap { entity: v.entity_id(), query, rows, bounds, total, focused })
             }
             _ => None,
         };

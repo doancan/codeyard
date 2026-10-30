@@ -14,6 +14,8 @@ pub enum ShortcutsEvent {
 pub struct ShortcutsPage {
     rows: Vec<(String, Option<String>)>,
     query: Entity<TextField>,
+    /// Where each shown row (by its place in the list) was painted in the last frame (accessibility).
+    bounds: crate::painted::RowBounds<usize>,
     focus_handle: FocusHandle,
     _sub: Subscription,
 }
@@ -38,7 +40,7 @@ impl ShortcutsPage {
         rows.sort_by(|a, b| b.1.is_some().cmp(&a.1.is_some()).then_with(|| a.0.cmp(&b.0)));
         let query = cx.new(|cx| TextField::new(crate::i18n::tr("Search commands or keys (e.g. “comment”, “⌘D”)"), cx));
         let sub = cx.observe(&query, |_, _, cx| cx.notify());
-        ShortcutsPage { rows, query, focus_handle: cx.focus_handle(), _sub: sub }
+        ShortcutsPage { rows, query, bounds: Default::default(), focus_handle: cx.focus_handle(), _sub: sub }
     }
 
     pub fn focus_search(&self, window: &mut Window, cx: &App) {
@@ -52,6 +54,11 @@ impl ShortcutsPage {
         let visible: Vec<_> = self.rows.iter().filter(|(l, k)| matches(l, k.as_deref(), &q)).collect();
         let rows = visible.iter().take(max).map(|r| (*r).clone()).collect();
         (q, rows, visible.len(), self.query.focus_handle(cx).is_focused(window))
+    }
+
+    /// The painted, visible bounds of the first `count` shown rows (physical pixels; `None` while scrolled out of view).
+    pub fn access_row_bounds(&self, count: usize, window: &Window) -> Vec<Option<accesskit::Rect>> {
+        (0..count).map(|i| crate::painted::physical(&self.bounds, &i, window)).collect()
     }
 
     /// Filters the list as typing `q` into the search field does.
@@ -77,6 +84,9 @@ impl Render for ShortcutsPage {
         let q = self.query.read(cx).text().to_string();
         let rows: Vec<_> = self.rows.iter().filter(|(l, k)| matches(l, k.as_deref(), &q)).cloned().collect();
         let n = rows.len();
+        // Rows record where they are painted in this frame.
+        self.bounds.borrow_mut().clear();
+        let bounds = self.bounds.clone();
         div()
             .id("shortcuts-page")
             .key_context("ShortcutsPage")
@@ -111,6 +121,8 @@ impl Render for ShortcutsPage {
                     let run = label.clone();
                     div()
                         .id(("shortcut", i))
+                        .relative()
+                        .child(crate::painted::probe(&bounds, i))
                         .h(px(30.))
                         .flex()
                         .items_center()

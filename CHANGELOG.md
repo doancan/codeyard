@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- "Break on Value Change" in a variable's right-click menu sets a data breakpoint on it (when the debugger supports
+  them). Data breakpoints are listed in the Breakpoints section, where each can be turned off or removed by mouse,
+  keyboard (Enter, Shift+F10) or screen reader; they last for their debug session.
+- Screen readers get the painted bounds of the rows of the Settings and Keyboard Shortcuts pages and of menu items
+  (none for a row scrolled out of view).
 - On macOS and Linux, the panel's terminals of a local folder keep running when Codeyard quits, crashes or is killed
   (with `window.restoreSession`, the default). Opening the folder again within 5 minutes brings the same shells back,
   with their output from meanwhile, and says "Reconnected to terminal session". A terminal that cannot be taken back is

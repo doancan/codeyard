@@ -106,17 +106,7 @@ impl Geometry {
 }
 
 fn physical_bounds(bounds: Bounds<Pixels>, scale: f32) -> Option<Rect> {
-    if !scale.is_finite() || scale <= 0. {
-        return None;
-    }
-    let scale = f64::from(scale);
-    let rect = Rect::new(
-        f64::from(bounds.left() / px(1.)) * scale,
-        f64::from(bounds.top() / px(1.)) * scale,
-        f64::from(bounds.right() / px(1.)) * scale,
-        f64::from(bounds.bottom() / px(1.)) * scale,
-    );
-    (rect.width() > 0. && rect.height() > 0. && [rect.x0, rect.y0, rect.x1, rect.y1].into_iter().all(f64::is_finite)).then_some(rect)
+    crate::painted::physical_scaled(bounds, scale)
 }
 
 /// Capture layout without drawing, taking focus, intercepting input or requesting another frame.

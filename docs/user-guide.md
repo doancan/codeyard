@@ -1035,8 +1035,10 @@ Swift use `lldb-dap` (from PATH or Xcode via `xcrun`). Add `.vscode/launch.json`
 `"debugAdapter": { "command": "…", "args": [] }` to use your own adapter. Click the gutter or press F9
 for a breakpoint; the file opens on the paused line, the Run and Debug view lists the call stack, the
 variables (click to expand) and the bottom panel's Debug Console evaluates expressions; `Debug: Add Watch Expression…` keeps expressions evaluated at
-every stop, hovering an expression shows its value while paused, `Debug: Break When Value Changes…` stops the
-program whenever a variable is written, `Debug: Break on Exceptions…` toggles
+every stop, hovering an expression shows its value while paused, `Debug: Break When Value Changes…` (or "Break on
+Value Change" in a variable's right-click menu, when the debugger supports it) stops the program whenever a variable
+is written; such data breakpoints are listed first under Breakpoints, where you can turn them off or remove them, and
+last only for that debug session (the debugger's id for a value means nothing in the next run), `Debug: Break on Exceptions…` toggles
 the adapter's exception filters, and several threads get a list; local variables also appear at
 the end of the lines that use them. `Debug: Edit Breakpoint…` makes a conditional breakpoint (`i == 3`),
 a logpoint (`log: i is {i}`) or a hit-count one (`hit: >= 5`). Node needs Microsoft's js-debug:

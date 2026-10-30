@@ -77,8 +77,24 @@ const _: () = {
 /// A breakpoint row: where it is (line breakpoints) or its function, and whether it is enabled.
 #[derive(Clone, PartialEq, Debug)]
 enum BpSnap {
-    Line { path: String, line: usize, enabled: bool, detail: String },
-    Function { index: usize, name: String, enabled: bool, detail: String },
+    /// A data breakpoint of the session, by its place in the session's list.
+    Data {
+        index: usize,
+        desc: String,
+        enabled: bool,
+    },
+    Line {
+        path: String,
+        line: usize,
+        enabled: bool,
+        detail: String,
+    },
+    Function {
+        index: usize,
+        name: String,
+        enabled: bool,
+        detail: String,
+    },
 }
 
 /// The Run and Debug side view while it is shown.
@@ -286,7 +302,9 @@ impl DebugViewSnap {
         let mut ids = Vec::new();
         for (i, bp) in self.bps.iter().enumerate() {
             let id = NodeId(BP_ROW + 2 * i as u64);
+            let data = t("Breaks when the value is written; for this debug session only.").to_string();
             let (label, enabled, detail) = match bp {
+                BpSnap::Data { desc, enabled, .. } => (tf("Data breakpoint: {}", &[desc]), *enabled, &data),
                 BpSnap::Line { path, line, enabled, detail } => (tf("{0}, line {1}", &[&crate::ui::file_name(path), &(line + 1)]), *enabled, detail),
                 BpSnap::Function { name, enabled, detail, .. } => (format!("{name}()"), *enabled, detail),
             };
@@ -298,7 +316,7 @@ impl DebugViewSnap {
             }
             n.add_action(Action::Click);
             n.set_children(vec![push_button(nodes, NodeId(id.0 + 1), t("Remove Breakpoint"), Some(label.clone()), true)]);
-            if matches!(bp, BpSnap::Line { .. }) {
+            if matches!(bp, BpSnap::Line { .. } | BpSnap::Data { .. }) {
                 add_menu(nodes, &mut n, MenuRow::Breakpoint, i, &label);
             }
             geometry.apply_row(RowFrame::DebugBreakpoint, i, &mut n);
@@ -392,12 +410,12 @@ impl Workbench {
             .collect();
         let mut stack = stack_rows(&d.sessions, cur.map(|s| s.id));
         stack.truncate(MAX_STACK);
-        let bps = d
-            .bps
-            .rows()
+        let bps = self
+            .bp_rows()
             .into_iter()
             .take(MAX_BPS)
             .map(|row| match row {
+                BpRow::Data { index, bp } => BpSnap::Data { index, desc: bp.desc, enabled: bp.enabled },
                 BpRow::Line { path, line, meta } => BpSnap::Line { enabled: !meta.disabled, detail: bp_detail(&meta), path, line },
                 BpRow::Function { index, bp } => {
                     let detail = match &bp.verified {
@@ -470,6 +488,7 @@ impl Workbench {
                 let Some(bp) = old.bps.get(index) else { return true };
                 // The breakpoint must still be listed as the tree showed it (a toggle from an old tree is not repeated).
                 let same = |b: &&BpSnap| match (b, bp) {
+                    (BpSnap::Data { index, desc, enabled }, BpSnap::Data { index: i, desc: d, enabled: e }) => (index, desc, enabled) == (i, d, e),
                     (BpSnap::Line { path, line, enabled, .. }, BpSnap::Line { path: p, line: l, enabled: e, .. }) => (path, line, enabled) == (p, l, e),
                     (BpSnap::Function { index, name, enabled, .. }, BpSnap::Function { index: i, name: m, enabled: e, .. }) => {
                         (index, name, enabled) == (i, m, e)
@@ -478,6 +497,8 @@ impl Workbench {
                 };
                 let Some(current) = now.bps.iter().find(same).cloned() else { return true };
                 match (current, part) {
+                    (BpSnap::Data { index, enabled, .. }, 0) => self.set_data_breakpoint_enabled(index, !enabled, cx),
+                    (BpSnap::Data { index, .. }, _) => self.remove_data_breakpoint(index, cx),
                     (BpSnap::Line { path, line, enabled, .. }, 0) => self.set_breakpoint_enabled(path, line, !enabled, cx),
                     (BpSnap::Line { path, line, .. }, _) => {
                         let target = MenuTarget { path: format!("{path}\t{line}"), is_dir: false, tab: None };
@@ -509,9 +530,16 @@ impl Workbench {
             }
         } else if let Some(i) = menu_request(req, MenuRow::Breakpoint, |id| rows(BP_ROW, DEBUG_ROW + BLOCK)(id).filter(|k| k.is_multiple_of(2)).map(|k| k / 2))
         {
-            if let Some(BpSnap::Line { path, line, enabled, .. }) = old.bps.get(i).filter(|b| now.bps.get(i) == Some(*b)) {
-                let at = self.row_menu_anchor(MenuRow::Breakpoint, i, window);
-                self.open_breakpoint_menu(path.clone(), *line, !enabled, at, window, cx);
+            match old.bps.get(i).filter(|b| now.bps.get(i) == Some(*b)) {
+                Some(BpSnap::Line { path, line, enabled, .. }) => {
+                    let at = self.row_menu_anchor(MenuRow::Breakpoint, i, window);
+                    self.open_breakpoint_menu(path.clone(), *line, !enabled, at, window, cx);
+                }
+                Some(BpSnap::Data { index, enabled, .. }) => {
+                    let at = self.row_menu_anchor(MenuRow::Breakpoint, i, window);
+                    self.open_data_breakpoint_menu(*index, *enabled, at, window, cx);
+                }
+                _ => {}
             }
         } else {
             return false;

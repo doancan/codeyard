@@ -190,3 +190,61 @@ fn an_open_menu_is_read_and_runs_its_item_but_not_from_another_menu(cx: &mut gpu
     let (_, tree) = nodes(&wb, cx);
     assert!(!tree.iter().any(|(_, n)| n.role() == Role::Menu), "a closed menu leaves the tree");
 }
+
+/// The items of an open menu report where they are painted, inside the window, top to bottom.
+#[gpui::test]
+fn menu_items_have_their_painted_bounds(cx: &mut gpui::TestAppContext) {
+    let dir = project("a11y-menu-bounds");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    open(&wb, &dir.join("README.md"), cx);
+    wb.update_in(cx, |wb, window, cx| wb.open_tab_menu_for_test(0, window, cx));
+    cx.run_until_parked();
+    let (_, tree) = nodes(&wb, cx);
+    let items: Vec<&Node> = tree.iter().filter(|(_, n)| matches!(n.role(), Role::MenuItem | Role::MenuItemCheckBox)).map(|(_, n)| n).collect();
+    assert!(!items.is_empty());
+    let (scale, size) = cx.update(|window, _| (f64::from(window.scale_factor()), window.viewport_size()));
+    let (width, height) = (f64::from(size.width / px(1.)) * scale, f64::from(size.height / px(1.)) * scale);
+    let mut last_bottom = 0.;
+    for n in items {
+        let b = n.bounds().unwrap_or_else(|| panic!("{:?} has bounds", n.label()));
+        assert!(b.width() > 0. && b.height() > 0.);
+        assert!(b.x1 <= width + 0.5 && b.y1 <= height + 0.5, "{b:?} inside the window");
+        assert!(b.y0 >= last_bottom - 0.5, "items are drawn top to bottom: {b:?}");
+        last_bottom = b.y1;
+    }
+}
+
+/// A data breakpoint is a check box in the Breakpoints list like the others: its state, a toggle and a Remove button
+/// that act only on what the tree showed, a row menu, and painted bounds.
+#[gpui::test]
+fn data_breakpoints_are_listed_toggled_and_removed_like_line_breakpoints(cx: &mut gpui::TestAppContext) {
+    let (wb, cx) = setup(cx);
+    wb.update(cx, |wb, cx| {
+        wb.chrome.panel = Some(Panel::Debug);
+        wb.push_paused_session_for_test("fixture", cx);
+        let d = wb.dbg.cur_mut().unwrap();
+        d.data_breakpoints.push(crate::debug_model::DataBp { id: "var:total".into(), desc: "total (4 bytes)".into(), enabled: true });
+        cx.notify();
+    });
+    cx.run_until_parked();
+    let (snap, tree) = nodes(&wb, cx);
+    let (bp, node) = find(&tree, Role::CheckBox, "Data breakpoint: total (4 bytes)");
+    assert_eq!(node.toggled(), Some(Toggled::True));
+    assert!(node.description().is_some_and(|d| d.contains("debug session")), "it says it lasts for this session only");
+    assert!(node.bounds().is_some_and(|b| b.height() > 0.), "the row has its painted bounds");
+    assert!(tree.iter().any(|(id, n)| node.children().contains(id) && n.label() == Some(crate::i18n::t("More Actions…"))), "a row menu");
+
+    // Unchecked like a click on its check box; the same click from the old tree is not repeated.
+    act(&wb, &snap, bp, Action::Click, cx);
+    let states = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.data_breakpoint_states_for_test());
+    assert_eq!(states(cx), vec![("total (4 bytes)".to_string(), false)]);
+    act(&wb, &snap, bp, Action::Click, cx);
+    assert_eq!(states(cx), vec![("total (4 bytes)".to_string(), false)], "an outdated toggle is ignored");
+
+    // Removed through its own button.
+    let (snap, tree) = nodes(&wb, cx);
+    let (bp, _) = find(&tree, Role::CheckBox, "Data breakpoint: total (4 bytes)");
+    act(&wb, &snap, child(&tree, bp, crate::i18n::t("Remove Breakpoint")), Action::Click, cx);
+    assert!(states(cx).is_empty());
+}

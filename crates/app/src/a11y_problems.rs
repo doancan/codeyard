@@ -281,7 +281,7 @@ impl Workbench {
             panel: self.a11y_panel(),
             search,
             pages: self.a11y_pages(window, cx),
-            side: self.a11y_side(cx),
+            side: self.a11y_side(window, cx),
             consent: self.a11y_consent(window),
             row_focus: self.focused_row(window, cx),
         }

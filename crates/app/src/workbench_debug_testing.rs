@@ -165,7 +165,28 @@ impl Workbench {
     }
 
     pub fn data_breakpoints_for_test(&self) -> Vec<String> {
-        self.dbg.cur().map(|d| d.data_breakpoints.iter().map(|(_, desc)| desc.clone()).collect()).unwrap_or_default()
+        self.dbg.cur().map(|d| d.data_breakpoints.iter().map(|b| b.desc.clone()).collect()).unwrap_or_default()
+    }
+
+    /// The current session's data breakpoints: (description, enabled).
+    pub fn data_breakpoint_states_for_test(&self) -> Vec<(String, bool)> {
+        self.dbg.cur().map(|d| d.data_breakpoints.iter().map(|b| (b.desc.clone(), b.enabled)).collect()).unwrap_or_default()
+    }
+
+    pub fn set_data_breakpoint_enabled_for_test(&mut self, index: usize, on: bool, cx: &mut Context<Self>) {
+        self.set_data_breakpoint_enabled(index, on, cx);
+    }
+
+    pub fn remove_data_breakpoint_for_test(&mut self, index: usize, cx: &mut Context<Self>) {
+        self.remove_data_breakpoint(index, cx);
+    }
+
+    /// Right click on the variable `name` (the first loaded one with that name).
+    pub fn open_variable_menu_for_test(&mut self, name: &str, window: &mut Window, cx: &mut Context<Self>) {
+        let parent = self.dbg.cur().and_then(|d| d.children.iter().find(|(_, vs)| vs.iter().any(|v| v.name == name)).map(|(r, _)| *r));
+        if let Some(parent) = parent {
+            self.open_variable_menu(parent, name.to_string(), gpui::point(gpui::px(10.), gpui::px(10.)), window, cx);
+        }
     }
 
     pub fn add_watch_for_test(&mut self, expr: &str, cx: &mut Context<Self>) {

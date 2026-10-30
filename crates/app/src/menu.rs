@@ -184,6 +184,8 @@ pub struct ContextMenu {
     anchor: Corner,
     flavor: Flavor,
     scroll: gpui::ScrollHandle,
+    /// Where each item was painted in the last frame (accessibility).
+    bounds: crate::painted::RowBounds<usize>,
 }
 
 impl EventEmitter<MenuEvent> for ContextMenu {}
@@ -203,7 +205,13 @@ impl ContextMenu {
             anchor: Corner::TopLeft,
             flavor: Flavor::detect(),
             scroll: gpui::ScrollHandle::new(),
+            bounds: Default::default(),
         }
+    }
+
+    /// The painted, visible bounds of the first `count` items (physical pixels; `None` while scrolled out of view).
+    pub fn item_bounds(&self, count: usize, window: &Window) -> Vec<Option<accesskit::Rect>> {
+        (0..count).map(|i| crate::painted::physical(&self.bounds, &i, window)).collect()
     }
 
     /// Which corner of the menu the position corresponds to: menus that open upward next to a button want `Corner::BottomLeft`.
@@ -304,6 +312,9 @@ impl Render for ContextMenu {
         let selected = self.selected;
         // A menu with toggles keeps a check column in front of every label so the labels stay aligned.
         let checks = self.items.iter().any(|i| i.checked.is_some());
+        // Items record where they are painted in this frame.
+        self.bounds.borrow_mut().clear();
+        let bounds = self.bounds.clone();
         div()
             .id("context-menu")
             .debug_selector(|| "context-menu".into())
@@ -355,6 +366,8 @@ impl Render for ContextMenu {
                         div()
                             .id(("menu-item", i))
                             .debug_selector(move || format!("menu-item-{i}"))
+                            .relative()
+                            .child(crate::painted::probe(&bounds, i))
                             .h(px(m.row_h))
                             .flex_none()
                             .px(px(m.row_px))

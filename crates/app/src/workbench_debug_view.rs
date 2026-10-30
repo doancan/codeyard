@@ -33,6 +33,11 @@ pub enum DebugMenuCmd {
     CopyValue,
     CopyExpression,
     AddToWatch,
+    /// "Break on Value Change": a data breakpoint on the variable.
+    BreakOnValueChange,
+    /// Data breakpoint rows: by their place in the session's list.
+    ToggleDataBreakpoint(usize),
+    RemoveDataBreakpoint(usize),
     /// Frame rows carry the frame index.
     RestartFrame,
     CopyCallStack,
@@ -252,6 +257,15 @@ impl Workbench {
                 self.dbg.bps.remove(&path, line);
                 self.breakpoints_changed_in_store(&path, true, cx);
             }
+            (DebugMenuCmd::ToggleDataBreakpoint(i), _) => {
+                let on = self.dbg.cur().and_then(|d| d.data_breakpoints.get(i)).is_some_and(|b| !b.enabled);
+                self.set_data_breakpoint_enabled(i, on, cx);
+            }
+            (DebugMenuCmd::RemoveDataBreakpoint(i), _) => self.remove_data_breakpoint(i, cx),
+            (DebugMenuCmd::BreakOnValueChange, _) => {
+                let Some((parent, name)) = target.path.split_once('\t').and_then(|(p, n)| Some((p.parse::<i64>().ok()?, n.to_string()))) else { return };
+                self.add_data_breakpoint_in(Some(parent), name, cx);
+            }
             (DebugMenuCmd::RestartFrame, _) => self.restart_frame(target.path.parse().unwrap_or(0), cx),
             (DebugMenuCmd::CopyCallStack, _) => self.copy_call_stack(cx),
             (DebugMenuCmd::SetValue | DebugMenuCmd::CopyValue | DebugMenuCmd::CopyExpression | DebugMenuCmd::AddToWatch, _) => {
@@ -278,13 +292,19 @@ impl Workbench {
     ) {
         let stopped = self.dbg.cur().is_some_and(|d| matches!(d.status, DebugStatus::Stopped(_)));
         let can_set = self.dbg.cur().and_then(|d| d.session.as_ref()).is_some_and(|s| s.supports("supportsSetVariable") || s.supports("supportsSetExpression"));
-        let items = vec![
+        let mut items = vec![
             MenuItem::new(crate::i18n::t("Set Value…")).enabled(stopped && can_set),
             MenuItem::new(crate::i18n::t("Copy Value")).separator(),
             MenuItem::new(crate::i18n::t("Copy as Expression")),
             MenuItem::new(crate::i18n::t("Add to Watch")).separator(),
         ];
-        let commands = [DebugMenuCmd::SetValue, DebugMenuCmd::CopyValue, DebugMenuCmd::CopyExpression, DebugMenuCmd::AddToWatch].map(MenuCmd::Debug).to_vec();
+        let mut commands =
+            [DebugMenuCmd::SetValue, DebugMenuCmd::CopyValue, DebugMenuCmd::CopyExpression, DebugMenuCmd::AddToWatch].map(MenuCmd::Debug).to_vec();
+        // Only offered when the debugger can watch a value.
+        if self.dbg.cur().and_then(|d| d.session.as_ref()).is_some_and(|s| s.supports_data_breakpoints()) {
+            items.push(MenuItem::new(crate::i18n::t("Break on Value Change")).enabled(stopped).separator());
+            commands.push(MenuCmd::Debug(DebugMenuCmd::BreakOnValueChange));
+        }
         let target = MenuTarget { path: format!("{parent}\t{name}"), is_dir: false, tab: None };
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);
     }
@@ -325,6 +345,23 @@ impl Workbench {
         ];
         let commands = [DebugMenuCmd::EditBreakpoint, DebugMenuCmd::ToggleBreakpoint, DebugMenuCmd::RemoveBreakpoint].map(MenuCmd::Debug).to_vec();
         let target = MenuTarget { path: format!("{path}\t{line}"), is_dir: false, tab: None };
+        self.show_menu(items, commands, Vec::new(), target, position, window, cx);
+    }
+
+    pub(in crate::workbench) fn open_data_breakpoint_menu(
+        &mut self,
+        index: usize,
+        enabled: bool,
+        position: gpui::Point<gpui::Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let items = vec![
+            MenuItem::new(if enabled { crate::i18n::t("Disable Breakpoint") } else { crate::i18n::t("Enable Breakpoint") }),
+            MenuItem::new(crate::i18n::t("Remove Breakpoint")).separator(),
+        ];
+        let commands = [DebugMenuCmd::ToggleDataBreakpoint(index), DebugMenuCmd::RemoveDataBreakpoint(index)].map(MenuCmd::Debug).to_vec();
+        let target = MenuTarget { path: String::new(), is_dir: false, tab: None };
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);
     }
 
@@ -721,26 +758,8 @@ impl Workbench {
     }
 
     fn breakpoints_body(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
-        let rows = self.dbg.bps.rows();
         // Data breakpoints belong to the session (the adapter's id for a value), so they are listed while it lives.
-        let data: Vec<String> = self.dbg.cur().map(|d| d.data_breakpoints.iter().map(|(_, desc)| desc.clone()).collect()).unwrap_or_default();
-        if !data.is_empty() {
-            let list = div().flex().flex_col().children(data.into_iter().map(|desc| {
-                div()
-                    .h(px(layout::ROW_H))
-                    .flex()
-                    .items_center()
-                    .gap(px(theme::SPACE[2]))
-                    .pl(px(theme::SPACE[5] + 22.))
-                    .whitespace_nowrap()
-                    .overflow_hidden()
-                    .child(div().flex_none().size(px(8.)).rounded_full().bg(c(p.danger)))
-                    .child(div().flex_none().text_color(c(p.text_muted)).child(crate::i18n::t("breaks when written:")))
-                    .child(div().min_w_0().overflow_hidden().child(desc))
-            }));
-            let rest = if rows.is_empty() { div().into_any_element() } else { self.breakpoint_list(rows, p, cx) };
-            return div().size_full().flex().flex_col().child(list).child(div().flex_1().min_h_0().child(rest)).into_any_element();
-        }
+        let rows = self.bp_rows();
         if rows.is_empty() {
             return self.note(crate::i18n::t("No breakpoints: F9 or a click in the gutter adds one."), p);
         }
@@ -760,6 +779,7 @@ impl Workbench {
                     .filter_map(|ix| {
                         let row = rows.get(ix)?;
                         let (enabled, verified) = match row {
+                            BpRow::Data { bp, .. } => (bp.enabled, Verified::Yes),
                             BpRow::Line { meta, .. } => (!meta.disabled, meta.verified.clone()),
                             BpRow::Function { bp, .. } => (!bp.disabled, bp.verified.clone()),
                         };
@@ -799,6 +819,31 @@ impl Workbench {
                             .hover(|d| d.bg(c(p.surface_hover)))
                             .when(!enabled || !active, |d| d.text_color(c(p.text_muted)));
                         let el = match row {
+                            BpRow::Data { index, bp } => {
+                                let (index, on) = (*index, bp.enabled);
+                                base.child(checkbox(SharedString::from(format!("dbg-dbp-check-{ix}"))).on_click(cx.listener(move |this, _, _, cx| {
+                                    cx.stop_propagation();
+                                    this.set_data_breakpoint_enabled(index, !on, cx);
+                                })))
+                                .child(div().flex_none().size(px(8.)).rounded(px(1.)).bg(c(dot)))
+                                .child(div().flex_none().text_color(c(p.text_muted)).child(crate::i18n::t("breaks when written:")))
+                                .child(div().flex_shrink().min_w_0().overflow_hidden().child(bp.desc.clone()))
+                                .child(div().absolute().right(px(theme::SPACE[3])).invisible().group_hover(group.clone(), |d| d.visible()).child(
+                                    ui::icon_button(("dbg-dbp-x", ix), "x", crate::i18n::t("Remove Breakpoint"), &p).on_click(cx.listener(
+                                        move |this, _, _, cx| {
+                                            cx.stop_propagation();
+                                            this.remove_data_breakpoint(index, cx);
+                                        },
+                                    )),
+                                ))
+                                .on_mouse_down(
+                                    MouseButton::Right,
+                                    cx.listener(move |this, ev: &gpui::MouseDownEvent, w, cx| {
+                                        cx.stop_propagation();
+                                        this.open_data_breakpoint_menu(index, on, ev.position, w, cx);
+                                    }),
+                                )
+                            }
                             BpRow::Line { path, line, meta } => {
                                 let (path, line) = (path.clone(), *line);
                                 let shown = root.as_deref().and_then(|r| path.strip_prefix(&format!("{r}/"))).unwrap_or(&path).to_string();
