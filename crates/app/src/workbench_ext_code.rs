@@ -362,6 +362,7 @@ impl Workbench {
             Notify::Respond { id: req, result } => {
                 self.cfg.exts.code.record().request_answered(id, req, result.is_err());
                 self.cfg.exts.code.pending.lock().unwrap_or_else(|p| p.into_inner()).answer(id, req, result);
+                self.dev_request_answered(id);
             }
             Notify::Cancel { ticket } => {
                 if let Some(c) = self.cfg.exts.code.cancels.remove(&(id.to_string(), ticket)) {

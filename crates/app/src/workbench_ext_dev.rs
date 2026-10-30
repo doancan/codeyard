@@ -24,8 +24,9 @@ pub(super) struct DevCode {
     polled: (Option<(u64, SystemTime)>, Option<SystemTime>),
     /// The build the window last acted on (size and modification time of `extension.wasm`).
     seen: Option<(u64, SystemTime)>,
-    /// When the build that is being swapped in was noticed (the Inspector log shows the reload time).
-    since: Option<Instant>,
+    /// The extension being swapped and when its new build was noticed, until the new build answers its first request
+    /// (`extensions.hot_reload_ms`, and a line in the extension's log).
+    since: Option<(String, Instant)>,
 }
 
 /// The size and modification time of the dev extension's component, if there is one.
@@ -84,11 +85,12 @@ impl Workbench {
             return;
         }
         dev.seen = stamp;
-        dev.since = Some(Instant::now());
+        let noticed = Instant::now();
         let reg = crate::ext::current();
         let Some(active) = reg.active.iter().find(|e| e.dir == dir && e.manifest.code.is_some()) else { return };
         // Not running: its next start loads the new build anyway.
         if self.cfg.exts.code.running(active.id()) {
+            self.cfg.exts.code.dev.since = Some((active.id().to_string(), noticed));
             self.restart_dev_extension(active.id().to_string(), window, cx);
         }
     }
@@ -124,6 +126,7 @@ impl Workbench {
     /// open views again.
     fn start_new_build(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
         let waiting = self.cfg.exts.code.queued.remove(id).unwrap_or_default();
+        let waiting_was_empty = waiting.is_empty();
         let reg = crate::ext::current();
         let Some(active) = reg.active.iter().find(|e| e.id() == id).cloned() else { return };
         self.send_to_extension(&active, RELOAD, None, window, cx);
@@ -131,13 +134,31 @@ impl Workbench {
             self.send_to_extension(&active, RELOAD, Some(m), window, cx);
         }
         let views: Vec<String> = self.cfg.exts.views.hosted.iter().filter(|h| h.decl.extension == id).map(|h| h.decl.id.clone()).collect();
+        let asked = !waiting_was_empty || !views.is_empty();
         for v in views {
             self.request_ext_view_render(&v, window, cx);
         }
-        if let Some(since) = self.cfg.exts.code.dev.since.take() {
+        let dev = &mut self.cfg.exts.code.dev;
+        if let Some((_, since)) = &dev.since {
             let ms = since.elapsed().as_millis();
+            // Nothing asked of the new build yet: its first answer, whenever it comes, says nothing about the reload.
+            if !asked {
+                dev.since = None;
+            }
             self.log_extension(id, LogLevel::Info, format!("old build stopped after {ms} ms; starting the new one"));
         }
+    }
+
+    /// A request of `id` was answered: the first answer of a new build ends the hot reload's measurement.
+    pub(super) fn dev_request_answered(&mut self, id: &str) {
+        let code = &mut self.cfg.exts.code;
+        if !code.dev.since.as_ref().is_some_and(|(e, _)| e == id) || !code.procs.contains_key(id) {
+            return;
+        }
+        let Some((_, since)) = code.dev.since.take() else { return };
+        let ms = since.elapsed().as_secs_f64() * 1000.0;
+        crate::perf::sample("extensions.hot_reload_ms", ms);
+        self.log_extension(id, LogLevel::Info, format!("reloaded: the new build answered {ms:.0} ms after it was noticed"));
     }
 }
 

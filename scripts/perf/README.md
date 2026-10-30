@@ -27,6 +27,7 @@ with a message instead of producing numbers. The baseline is built once in `targ
 | `typing.keystroke_frame_ms` | key press to the drawn frame, 10k-line Rust file with highlighting; 40 keys per run | p95 | +10% |
 | `typing.keystroke_frame_decorations_ms` | as `typing.keystroke_frame_ms`, with 2 extensions decorating the file (warn only until the scenario is added to `run.sh`) | p95 | +10%; ceiling 8 ms |
 | `extensions.provider_overhead_ms` | an extension provider request (format, code actions, tasks) sent to its answer back in the window, with a provider that answers at once (warn only until the scenario is added to `run.sh`) | p95 | +10%; ceiling 3 ms |
+| `extensions.hot_reload_ms` | `cyx dev`: a new `extension.wasm` noticed to the first request answered by the new build (the old exthost stopped, the new build compiled with the incremental cache and started), 2 MB Rust component (warn only until the scenario is added to `run.sh`; `cargo test -p app ext_dev_tests::reload_time -- --ignored` measures it meanwhile) | p95 | +15%; ceiling 500 ms |
 | `market.search_ms` | key press in the Market's search to the results in the view (searched off the UI thread), 10 000 extensions (`cyx yard fixture`, served on this machine); 40 keys per run | p95 | +10% and +1 ms; ceiling 16 ms |
 | `market.search_frame_ms` | the same keys, to the drawn frame showing the results (warn only: like typing, it includes up to two display refreshes) | p95 | +10% |
 | `memory.empty_window_mb` | settled footprint, welcome screen | median | +5% |

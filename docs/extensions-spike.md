@@ -113,13 +113,14 @@ p95 and a Rust 1.6 MB one 165–200 ms.
 Measured after the spike with the real dev window: a new `extension.wasm` in place → the old exthost stopped
 (`deactivate` saves `ctx.state`) → the new build compiled with the incremental cache and started with the reason
 `reload` → the first command answered, `ctx.state` carried over. The `cyx dev` rebuild (cargo) is not included, nor
-the dev window's 100 ms poll for the new file. Reference Mac, release `codeyard-exthost`, app test build
+the dev window's 100 ms poll for the new file. Reference Mac, release build of the app's tests and of `codeyard-exthost`
 (`ext_dev_tests::reload_time`, 20 runs alternating two builds that differ in one constant):
 
 | Component | p50 | p95 | Of which the compile |
 | --- | --- | --- | --- |
-| Rust, 0.22 MB (`ctx.state` counter) | 40 ms | 41 ms | about 30 ms |
-| Rust, 1.9 MB (the same with regex, toml and pulldown-cmark) | 212 ms | 222 ms | about 190 ms |
+| Rust, 0.22 MB (`ctx.state` counter) | 30 ms | 33 ms | about 25 ms |
+| Rust, 1.9 MB (the same with regex, toml and pulldown-cmark) | 168 ms | 180 ms | about 160 ms |
+| TypeScript, 12 MB (the same counter) | 616 ms | 655 ms | about 550 ms |
 
 Stopping the old exthost (its `deactivate` included) takes about 9 ms. For Rust components the incremental cache
 saves little (a changed constant moves code that LTO inlined everywhere: 219 ms against 251 ms without it, compiling

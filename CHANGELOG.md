@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   activates it with the reason `reload` and draws its open views again; calls made meanwhile wait for it. A failed
   build leaves the last good one running. `ctx.state` (Rust and TypeScript SDKs) keeps in-memory values across the
   reload, through the reserved storage key `codeyard.reload-state`; the mock hosts have `reload`. On an M1 Max a reload
-  takes 40 / 41 ms (p50 / p95) for a 0.2 MB Rust component and 212 / 222 ms for a 1.9 MB one.
+  takes 30 / 33 ms (p50 / p95) for a 0.2 MB Rust component, 168 / 180 ms for a 1.9 MB one and 616 / 655 ms
+  for a TypeScript one.
 - `cyx check --fix` adds the missing permissions that the manifest checks and the component's import check report
   (`CY0201`) to `codeyard-extension.toml`, keeping its comments and layout, prints the lines it changed and lists the
   fixes that need the author (placeholders, which sign-in provider, `why`).
