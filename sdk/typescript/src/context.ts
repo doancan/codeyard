@@ -4,6 +4,7 @@
 import { CodeyardError, fromWit } from "./errors.ts";
 import { fetch, hostOf, type FetchInit, type FetchResponse } from "./fetch.ts";
 import { handlers } from "./handlers.ts";
+import { registerPullRequests, type PullRequestProvider } from "./pulls.ts";
 import { background, call, host, optional, wait } from "./runtime.ts";
 import {
   fromWitDiagnostic,
@@ -38,6 +39,7 @@ import {
   type TextEdit,
   type Uri,
 } from "./types.ts";
+import type { ScmState } from "./scm.ts";
 import type { Completion, StreamEvent } from "./wit.ts";
 
 type Awaitable<T> = T | Promise<T>;
@@ -155,6 +157,14 @@ export class Context {
     handlers.openUri = f;
   }
 
+  /**
+   * Serve the manifest's `[[pull-requests]]` provider `id` (its local id): list a remote's pull (merge) requests and
+   * show one. Call the forge with `ctx.fetchAs(remote.account, …)`, so the extension never sees the token.
+   */
+  pullRequests(id: string, provider: PullRequestProvider): void {
+    registerPullRequests(id, provider);
+  }
+
   /** The extension's settings changed: their keys. */
   onSettingsChanged(f: (ctx: Context, keys: string[]) => Awaitable<void>): void {
     handlers.settingsChanged.push(f);
@@ -201,6 +211,31 @@ export class Context {
   /** Ask for view `id` to be drawn again. */
   invalidate(view: string): void {
     host().ui.invalidate(view);
+  }
+
+  // ---- source control (`[[scm]]`) ----------------------------------------------------------------------------------
+
+  /**
+   * The state of a folder that `[[scm]]` provider `id` claims: its groups of changed files and its input box. Asked
+   * when Source Control shows the folder, after files change, and after `scmRefresh(id)`.
+   */
+  scmStatus(id: string, f: (ctx: Context, root: string) => Awaitable<ScmState>): void {
+    handlers.scmStatus.set(id, f);
+  }
+
+  /** The text of a file as provider `id` last recorded it, for the gutter's change marks; undefined when untracked. */
+  scmOriginal(id: string, f: (ctx: Context, uri: string) => Awaitable<string | undefined>): void {
+    handlers.scmOriginal.set(id, f);
+  }
+
+  /** Check the input box's text: a message to show under the box, or undefined when it is fine. */
+  scmValidate(id: string, f: (ctx: Context, root: string, text: string) => Awaitable<string | undefined>): void {
+    handlers.scmValidate.set(id, f);
+  }
+
+  /** Ask Codeyard to read provider `id`'s state again now (after the extension changed something itself). */
+  scmRefresh(id: string): void {
+    host().scm.refresh(id);
   }
 
   // ---- window ------------------------------------------------------------------------------------------------------

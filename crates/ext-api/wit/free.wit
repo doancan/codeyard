@@ -68,7 +68,9 @@ interface requests {
 @since(version = 0.1.0)
 interface responses {
   use types.{text-edit, diagnostic, range};
+  use scm.{scm-state};
   use types.{position};
+  use pull-requests.{answer};
 
   record code-action {
     /// Passed back in `request.run-code-action`.
@@ -135,6 +137,12 @@ interface responses {
     completions(completion-list),
     code-lenses(list<code-lens>),
     inlay-hints(list<inlay-hint>),
+    /// A folder's source control state (`request.scm-status`).
+    scm(scm-state),
+    /// Some text, or none: a file's original text (`request.scm-original`), a validation message (`request.scm-validate`).
+    text(option<string>),
+    /// The answer to `request.pull-requests`.
+    pull-requests(answer),
   }
 
   /// Shown in the hover popup next to the language server's, under the extension's name.

@@ -151,6 +151,7 @@ fn text_ok(s: &str) -> bool {
 impl g::types::Host for State {}
 impl g::responses::Host for State {}
 impl g::host_requests::Host for State {}
+impl g::pull_requests::Host for State {}
 
 impl g::log::Host for State {
     fn log(&mut self, level: g::log::Level, message: String) {
@@ -268,6 +269,12 @@ impl g::timers::Host for State {
 impl g::ui::Host for State {
     fn invalidate(&mut self, view: String) {
         self.notify(Notify::Invalidate { view });
+    }
+}
+
+impl g::scm::Host for State {
+    fn refresh(&mut self, provider: String) {
+        self.notify(Notify::ScmRefresh { provider });
     }
 }
 

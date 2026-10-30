@@ -819,6 +819,14 @@ offered only in some situations, for example while a Rust file is open; it close
 - *Problems* in the Problems view and the editor, with the extension's id as their source, and *decorations*: a dot in
   the gutter, a tinted line or a note after the line, in theme colours.
 - *Tasks* in *Tasks: Run Task…*, which the extension runs itself when you pick one.
+- *Source control* for a version control system other than Git (Mercurial, Jujutsu, Perforce …). The extension
+  claims a workspace folder that has its marker, such as a `.hg` or `.jj` folder; there Source Control shows the
+  extension's name, where the folder stands, its message box and its groups of changed files, and the gutter's change
+  marks compare open files with the text the extension gives. Clicking a file opens its changes; the buttons on a file,
+  on a group and under the message box run the extension's commands (stage, discard, commit …), and the message box
+  shows the extension's note about your message, if any. The list is read again when files change, with **Refresh**,
+  and after each button. Git keeps every other folder. In a folder you have not trusted the extension is not asked,
+  and over SSH the programs it runs (`hg`, `jj` …) run on the remote host.
 
 Typing never waits for an extension. When one is disabled, uninstalled or crashes, its status items, problems,
 decorations, hover text, completion items, lenses and hints go with it. The same works in SSH windows: the extension runs on your computer and sees the remote files
@@ -1474,6 +1482,16 @@ results and review state. Pick one to *check it out* (`git fetch origin pull/N/h
 open it on GitHub, or copy its link or branch name. It uses the `gh` CLI when it is installed and signed in (private repositories,
 checks, reviews); otherwise the public GitHub API, with `GITHUB_TOKEN` / `GH_TOKEN` if set. Read-only: reviewing and commenting stay on GitHub.
 Lists show the latest 50 open pull requests. Errors say what to do (sign in with `gh auth login`, commit or stash local changes, check the remote); calls time out after 30 seconds and never wait for a prompt.
+
+Extensions add other forges (GitLab, Gitea, Forgejo, Bitbucket): an extension with a pull request provider claims the
+remotes on its hosts, and their open requests appear in the same list, after GitHub's, each named with the provider
+and the extension. Pick one to see its details and comments (a Markdown page, kept as a scratch file), its changed
+files (each opens as a diff), to add a comment, to check it out (git fetches what the provider names into a local
+branch, on the machine the repository is on, so over SSH too), or to open or copy its link or branch name. The
+extension signs in to the forge
+with the account you allow on first use; Codeyard keeps the token in the system keychain and signs its requests, so the
+extension never sees it. A provider that does not answer within 20 seconds is left out, and its error is shown above
+the list and in its log in the Extension Inspector.
 
 ## HTTP files
 

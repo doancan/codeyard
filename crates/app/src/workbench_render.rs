@@ -188,6 +188,7 @@ impl Render for Workbench {
         self.sync_manage_menu(window, cx);
         self.track_notice(cx);
         self.sync_watches(cx);
+        self.sync_ext_scm(window, cx);
         self.sync_slots(cx);
         self.sync_timeline(cx);
         self.sync_outline(cx);

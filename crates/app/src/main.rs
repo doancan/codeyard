@@ -87,10 +87,15 @@ mod ext_prompts;
 mod ext_prompts_ui_tests;
 #[cfg(test)]
 mod ext_providers_tests;
+mod ext_pulls;
+#[cfg(test)]
+mod ext_pulls_ui_tests;
 mod ext_registry;
 #[cfg(test)]
 mod ext_registry_tests;
 mod ext_runtime;
+#[cfg(test)]
+mod ext_scm_tests;
 #[cfg(test)]
 mod ext_tests;
 mod ext_updates;

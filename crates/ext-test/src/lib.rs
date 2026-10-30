@@ -12,6 +12,7 @@
 //! ```
 
 mod host;
+mod scm;
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -21,6 +22,7 @@ use std::time::Duration;
 
 use codeyard_extension::native::{self, Note};
 use codeyard_extension::protocol::{Request, Response};
+use codeyard_extension::pulls::{PullAnswer, PullQuery, PullRequest, Remote};
 use codeyard_extension::types::*;
 use codeyard_extension::{Denied, Error, Extension, Result, Value};
 
@@ -302,6 +304,22 @@ impl MockHost {
         self.request(Request::OpenUri(uri.to_string())).map(|_| ())
     }
 
+    /// Ask a `[[pull-requests]]` provider (the one `query.remote().provider` names), as the Pull Requests view does.
+    pub fn pull_requests(&self, query: PullQuery) -> Result<PullAnswer> {
+        match self.request(Request::PullRequests(query))? {
+            Response::PullRequests(a) => Ok(a),
+            other => Err(Error::Other(format!("the pull request provider answered {other:?}"))),
+        }
+    }
+
+    /// The open requests a provider lists for `remote`.
+    pub fn list_pull_requests(&self, remote: Remote) -> Result<Vec<PullRequest>> {
+        match self.pull_requests(PullQuery::List(remote))? {
+            PullAnswer::List(l) => Ok(l),
+            other => Err(Error::Other(format!("the pull request provider answered {other:?} to list"))),
+        }
+    }
+
     /// Change a setting and tell the extension.
     pub fn change_setting(&self, key: &str, json: Option<&str>) {
         self.setting(key, json);
@@ -457,5 +475,9 @@ impl Drop for MockHost {
     }
 }
 
+#[cfg(test)]
+mod pulls_tests;
+#[cfg(test)]
+mod scm_tests;
 #[cfg(test)]
 mod tests;

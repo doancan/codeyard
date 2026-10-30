@@ -4,6 +4,12 @@
 
 use serde::{Deserialize, Serialize};
 
+#[path = "value_scm.rs"]
+mod scm;
+pub use scm::*;
+mod pulls;
+pub use pulls::*;
+
 pub type Ticket = u64;
 pub type Uri = String;
 
@@ -347,6 +353,9 @@ pub enum Response {
     Completions(CompletionList),
     CodeLenses(Vec<CodeLens>),
     InlayHints(Vec<InlayHint>),
+    Scm(ScmState),
+    Text(Option<String>),
+    PullRequests(PullAnswer),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -375,12 +384,17 @@ pub enum Request {
     CodeLens { document: Document, range: Range },
     ResolveCodeLens { document: Document, lens: CodeLens },
     InlayHints { document: Document, range: Range },
+    ScmStatus { provider: String, root: Uri },
+    ScmOriginal { provider: String, uri: Uri },
+    ScmValidate { provider: String, root: Uri, value: String },
+    PullRequests { query: PullQuery },
 }
 
 impl Request {
     /// Started by a user action, so it may use the active document (Chrome's `activeTab`) and `open-external`.
     pub fn is_user_action(&self) -> bool {
         matches!(self, Request::Command { .. } | Request::UiEvent { .. } | Request::RunCodeAction { .. } | Request::RunTask { .. } | Request::OpenUri { .. })
+            || matches!(self, Request::PullRequests { query } if query.is_user_action())
     }
 }
 
@@ -541,6 +555,7 @@ pub enum Notify {
     SetDiagnostics { uri: Uri, diagnostics: Vec<Diagnostic> },
     ClearDiagnostics { uri: Option<Uri> },
     SetDecorations { uri: Uri, set: String, decorations: Vec<Decoration> },
+    ScmRefresh { provider: String },
 }
 
 impl Notify {
@@ -560,6 +575,7 @@ impl Notify {
             Notify::SetDiagnostics { .. } => "languages/set-diagnostics",
             Notify::ClearDiagnostics { .. } => "languages/clear-diagnostics",
             Notify::SetDecorations { .. } => "languages/set-decorations",
+            Notify::ScmRefresh { .. } => "scm/refresh",
         }
     }
 }

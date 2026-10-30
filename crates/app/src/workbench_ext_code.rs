@@ -408,6 +408,7 @@ impl Workbench {
                 self.cfg.exts.code.timers.remove(&(id.to_string(), t));
             }
             Notify::Invalidate { view } => self.on_ext_view_invalidate(id, &view, window, cx),
+            Notify::ScmRefresh { provider } => self.on_ext_scm_refresh(id, &provider, window, cx),
             // Status items, diagnostics and decorations (#104).
             n @ (Notify::SetStatusItem { .. }
             | Notify::RemoveStatusItem { .. }

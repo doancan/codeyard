@@ -24,6 +24,10 @@ pub use wit_bindgen;
 use bindings::codeyard::api as w;
 use bindings::exports::codeyard::api::guest as g;
 
+#[path = "wasm_scm.rs"]
+mod scm;
+pub(crate) use scm::scm_refresh;
+
 /// The exports for extension `E`; `export!` names it.
 #[doc(hidden)]
 pub struct Glue<E>(std::marker::PhantomData<E>);
@@ -480,6 +484,10 @@ impl From<w::host_requests::Request> for Request {
             R::CodeLens((document, range)) => Request::CodeLens { document: document.into(), range: range.into() },
             R::ResolveCodeLens((document, lens)) => Request::ResolveCodeLens { document: document.into(), lens: lens.into() },
             R::InlayHints((document, range)) => Request::InlayHints { document: document.into(), range: range.into() },
+            R::ScmStatus((provider, root)) => Request::ScmStatus { provider, root },
+            R::ScmOriginal((provider, uri)) => Request::ScmOriginal { provider, uri },
+            R::ScmValidate((provider, root, value)) => Request::ScmValidate { provider, root, value },
+            R::PullRequests(q) => Request::PullRequests(crate::pulls::wasm::query(q)),
         }
     }
 }
@@ -525,6 +533,9 @@ impl From<Response> for w::responses::Response {
             Response::InlayHints(h) => {
                 R::InlayHints(h.into_iter().map(|h| w::responses::InlayHint { position: h.position.into(), label: h.label, tooltip: h.tooltip }).collect())
             }
+            Response::Scm(s) => R::Scm(s.into()),
+            Response::Text(t) => R::Text(t),
+            Response::PullRequests(a) => R::PullRequests(crate::pulls::wasm::answer(a)),
         }
     }
 }

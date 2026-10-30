@@ -6,7 +6,9 @@ import { Context } from "./context.ts";
 import { CodeyardError, describe, toWit } from "./errors.ts";
 import { fetch, FetchHeaders, FetchResponse } from "./fetch.ts";
 import { handlers, resetHandlers } from "./handlers.ts";
+import { answerPullRequests } from "./pulls.ts";
 import { background, complete, event, host, install } from "./runtime.ts";
+import { toWitScmState, type ScmState } from "./scm.ts";
 import {
   fromWitCodeLens,
   fromWitDiagnostic,
@@ -230,6 +232,8 @@ function handle(id: bigint, request: Request): void {
       if (!f) return respond(id, { tag: "ok", val: none });
       return answer(id, () => f(ctx, request.val), () => none);
     }
+    case "pull-requests":
+      return answer(id, () => answerPullRequests(ctx, request.val), (val) => ({ tag: "pull-requests", val }));
     case "settings-changed": {
       // Answered at once; the handlers run in the background.
       respond(id, { tag: "ok", val: none });
@@ -297,5 +301,23 @@ function handle(id: bigint, request: Request): void {
     case "provide-tasks":
     case "run-task":
       return respond(id, { tag: "err", val: toWit(CodeyardError.invalid("this SDK does not provide tasks yet")) });
+    case "scm-status": {
+      const [provider, root] = request.val;
+      const f = handlers.scmStatus.get(provider);
+      if (!f) return missing(`no source control state for '${provider}' is registered; call ctx.scmStatus("${provider}", …) in activate`);
+      return answer(id, () => f(ctx, root) as ScmState, (s) => ({ tag: "scm", val: toWitScmState(s) }));
+    }
+    case "scm-original": {
+      const [provider, uri] = request.val;
+      const f = handlers.scmOriginal.get(provider);
+      if (!f) return respond(id, { tag: "ok", val: { tag: "text", val: undefined } });
+      return answer(id, () => f(ctx, uri) as string | undefined, (t) => ({ tag: "text", val: t ?? undefined }));
+    }
+    case "scm-validate": {
+      const [provider, root, text] = request.val;
+      const f = handlers.scmValidate.get(provider);
+      if (!f) return respond(id, { tag: "ok", val: { tag: "text", val: undefined } });
+      return answer(id, () => f(ctx, root, text) as string | undefined, (t) => ({ tag: "text", val: t ?? undefined }));
+    }
   }
 }

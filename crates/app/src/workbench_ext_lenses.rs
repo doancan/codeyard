@@ -144,7 +144,7 @@ impl Workbench {
                     _ => Request::CodeLens { document: document.clone(), range },
                 };
                 // Not `about` the file: an edit cancels them here (a new question), a cursor move does not.
-                let (rid, answer) = self.ask_provider_with_id(a, &reason, request, None, window, cx);
+                let (rid, answer) = self.ask_provider_with_id(a, &reason, request, None, limits::PROVIDER_DEADLINE_MILLIS, window, cx);
                 ids.push((a.id().to_string(), rid));
                 pending.push(arrival(a.id().to_string(), kind, rid, answer));
             }
@@ -210,7 +210,15 @@ impl Workbench {
                 let mut answers = Vec::new();
                 for lens in unresolved.into_iter().take(RESOLVE_MAX) {
                     let request = Request::ResolveCodeLens { document: document.clone(), lens };
-                    let (rid, answer) = self.ask_provider_with_id(&active, &format!("language:{}", document.language), request, None, window, cx);
+                    let (rid, answer) = self.ask_provider_with_id(
+                        &active,
+                        &format!("language:{}", document.language),
+                        request,
+                        None,
+                        limits::PROVIDER_DEADLINE_MILLIS,
+                        window,
+                        cx,
+                    );
                     if let Some(ask) = self.cfg.exts.providers.lenses.asks.get_mut(&editor.entity_id()) {
                         ask.ids.push((ext.to_string(), rid));
                     }

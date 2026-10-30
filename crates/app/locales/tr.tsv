@@ -522,6 +522,10 @@ Merge Changes	Birleştirme Değişiklikleri
 Staged Changes	Stage'deki Değişiklikler
 Changes	Değişiklikler
 No changes.	Değişiklik yok.
+Message	İleti
+Ignored	Yok sayıldı
+Asking the source control provider…	Kaynak denetimi sağlayıcısına soruluyor…
+The provider answered with something else: {}	Sağlayıcı beklenmeyen bir yanıt verdi: {}
 Commit	Commit Et
 Commit ({})	Commit Et ({})
 Commit All ({})	Tümünü Commit Et ({})
@@ -2906,6 +2910,7 @@ Setting: {}	Ayar: {}
 Language server: {0} for {1}	Dil sunucusu: {1} için {0}
 Command: {}	Komut: {}
 View: {}	Görünüm: {}
+Source control: {0} (folders with {1})	Kaynak denetimi: {0} ({1} içeren klasörler)
 Read all files in the workspace	Çalışma alanındaki tüm dosyaları okuma
 Read {}	{} okuma
 Read files that can hold passwords and keys	Parola ve anahtar barındırabilecek dosyaları okuma
@@ -3364,3 +3369,34 @@ Type {} to install it.	Kurmak için {} yazın.
 Native programs	Yerel programlar
 It brings its own programs, built for each platform. They run on the computer that holds the workspace (this one, or the SSH server) with your rights.	Her platform için derlenmiş kendi programlarını getirir. Bu programlar çalışma alanının bulunduğu bilgisayarda (bu bilgisayar ya da SSH sunucusu) sizin yetkilerinizle çalışır.
 {0} (from {1})	{0} ({1} eklentisinden)
+# ---- Pull requests from code extensions ----
+No open pull requests.	Açık pull request yok.
+{} is no longer active.	{} artık etkin değil.
+Show details and comments	Ayrıntıları ve yorumları göster
+Show changed files	Değişen dosyaları göster
+Add comment…	Yorum ekle…
+Check out	Checkout et
+Open on {}	{} üzerinde aç
+Add comment	Yorum ekle
+Comment on {} (Markdown)	{} için yorum (Markdown)
+Loading {}…	{} yükleniyor…
+{}: no changed files.	{}: değişen dosya yok.
+{} files	{} dosya
+Changed files	Değişen dosyalar
+Pull request changes	Pull request değişiklikleri
+Adding comment…	Yorum ekleniyor…
+Comment added to {}.	{} için yorum eklendi.
+Checked out {} as {}	{0}, {1} olarak checkout edildi
+renamed from {}	{} adından değiştirildi
+renamed	adı değiştirildi
+added	eklendi
+deleted	silindi
+modified	değiştirildi
+open	açık
+merged	birleştirildi
+closed	kapalı
+Labels	Etiketler
+Checks	Denetimler
+Description	Açıklama
+No description.	Açıklama yok.
+Comments ({})	Yorumlar ({})

@@ -116,7 +116,32 @@ export type Request =
   | { tag: "completion"; val: [Document, Position, string | undefined] }
   | { tag: "code-lens"; val: [Document, Range] }
   | { tag: "resolve-code-lens"; val: [Document, WitCodeLens] }
-  | { tag: "inlay-hints"; val: [Document, Range] };
+  | { tag: "inlay-hints"; val: [Document, Range] }
+  | { tag: "scm-status"; val: [string, string] }
+  | { tag: "scm-original"; val: [string, string] }
+  | { tag: "scm-validate"; val: [string, string, string] }
+  | { tag: "pull-requests"; val: PullQuery };
+
+export type FileState = "modified" | "added" | "deleted" | "renamed" | "untracked" | "ignored" | "conflicted";
+
+export interface WitScmAction {
+  command: string;
+  title: string;
+  icon: string | undefined;
+}
+
+export interface WitScmState {
+  head: string | undefined;
+  input: { placeholder: string; value: string | undefined; accept: WitScmAction | undefined };
+  groups: {
+    id: string;
+    label: string;
+    resources: { uri: string; state: FileState; detail: string | undefined }[];
+    resourceActions: WitScmAction[];
+    groupActions: WitScmAction[];
+    hideWhenEmpty: boolean;
+  }[];
+}
 
 export interface WitCodeLens {
   id: string;
@@ -150,7 +175,95 @@ export type Response =
   | { tag: "hover"; val: WitHover | undefined }
   | { tag: "completions"; val: { items: WitCompletionItem[]; incomplete: boolean } }
   | { tag: "code-lenses"; val: WitCodeLens[] }
-  | { tag: "inlay-hints"; val: WitInlayHint[] };
+  | { tag: "inlay-hints"; val: WitInlayHint[] }
+  | { tag: "scm"; val: WitScmState }
+  | { tag: "text"; val: string | undefined }
+  | { tag: "pull-requests"; val: PullAnswer };
+
+// ---- `pull-requests` ----------------------------------------------------------------------------------------------
+
+export interface PullRemote {
+  provider: string;
+  name: string;
+  url: string;
+  host: string;
+  path: string;
+  account: string | undefined;
+}
+
+export type PullState = "open" | "draft" | "merged" | "closed";
+
+export interface PullSummary {
+  id: string;
+  reference: string;
+  title: string;
+  author: string;
+  state: PullState;
+  sourceBranch: string;
+  targetBranch: string;
+  updated: bigint;
+  url: string | undefined;
+}
+
+export type PullCheckState = "pending" | "success" | "failure" | "neutral";
+
+export interface PullCheck {
+  name: string;
+  state: PullCheckState;
+  url: string | undefined;
+}
+
+export interface PullDetails {
+  summary: PullSummary;
+  description: string;
+  checks: PullCheck[];
+  labels: string[];
+}
+
+export type PullFileStatus = "added" | "modified" | "deleted" | "renamed";
+
+export interface PullChangedFile {
+  path: string;
+  oldPath: string | undefined;
+  status: PullFileStatus;
+}
+
+export interface PullFileContents {
+  base: string | undefined;
+  head: string | undefined;
+}
+
+export interface PullComment {
+  author: string;
+  body: string;
+  created: bigint;
+  path: string | undefined;
+  line: number | undefined;
+}
+
+export interface PullCheckout {
+  fetchUrl: string | undefined;
+  ref: string;
+  branch: string;
+}
+
+export type PullQuery =
+  | { tag: "list"; val: PullRemote }
+  | { tag: "details"; val: [PullRemote, string] }
+  | { tag: "files"; val: [PullRemote, string] }
+  | { tag: "contents"; val: [PullRemote, string, PullChangedFile] }
+  | { tag: "comments"; val: [PullRemote, string] }
+  | { tag: "add-comment"; val: [PullRemote, string, string] }
+  | { tag: "checkout"; val: [PullRemote, string] };
+
+export type PullAnswer =
+  | { tag: "list"; val: PullSummary[] }
+  | { tag: "details"; val: PullDetails }
+  | { tag: "files"; val: PullChangedFile[] }
+  | { tag: "contents"; val: PullFileContents }
+  | { tag: "comments"; val: PullComment[] }
+  | { tag: "checkout"; val: PullCheckout }
+  | { tag: "done" };
 
 export interface WitHover {
   contents: string;
@@ -329,6 +442,7 @@ export interface Bindings {
   clipboardRead?: { readText(): Ticket };
   clipboardWrite?: { writeText(text: string): Ticket };
   terminal?: { sendText(text: string): Ticket };
+  scm: { refresh(provider: string): void };
 }
 
 /// The guest's exports (`interface guest`).

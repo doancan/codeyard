@@ -69,6 +69,8 @@ pub enum ScmEvent {
     Rediscover,
     /// The Refresh button: search again if the last search is old.
     RefreshInventory,
+    /// In the section of a folder an extension's provider claims (scm_ext.rs).
+    Ext(ExtEvent),
 }
 
 /// Where an operation runs: the repository's worktree and, when the inventory knows it, its identity. The identity is
@@ -172,6 +174,8 @@ pub struct ScmPanel {
     has_remote: bool,
     /// Row tooltips must not cover a context menu opened above them.
     menu_open: bool,
+    /// Folders that code extensions' providers claim (scm_ext.rs).
+    ext: ext_ui::ExtSources,
     _subs: Vec<Subscription>,
 }
 
@@ -181,7 +185,7 @@ pub use graph_ui::GraphOption;
 
 #[path = "scm_access.rs"]
 mod access;
-pub(crate) use access::AccessView;
+pub(crate) use access::{AccessExt, AccessView};
 
 #[path = "scm_ops.rs"]
 mod ops;
@@ -190,6 +194,11 @@ mod repos_ui;
 
 #[path = "scm_worktrees.rs"]
 mod worktree_ui;
+
+#[path = "scm_ext.rs"]
+mod ext_ui;
+pub use ext_ui::{ExtEvent, ExtSource};
+pub(crate) use ext_ui::{describe as describe_ext_state, relative as ext_relative, shown_groups as ext_shown_groups};
 
 impl EventEmitter<ScmEvent> for ScmPanel {}
 
@@ -247,6 +256,7 @@ impl ScmPanel {
             syncing: false,
             has_remote: false,
             menu_open: false,
+            ext: Default::default(),
             _subs: subs,
         }
     }
@@ -645,6 +655,7 @@ impl Render for ScmPanel {
                         cx.emit(ScmEvent::Refresh);
                         // Repositories created or removed since the last search (searched again only after a while).
                         cx.emit(ScmEvent::RefreshInventory);
+                        cx.emit(ScmEvent::Ext(ExtEvent::Refresh));
                     })),
             )
             .child(
@@ -667,10 +678,13 @@ impl Render for ScmPanel {
                         }),
                     ),
             );
-        let Some(st) = self.status.clone() else {
+        // A folder an extension's provider claims is its, not git's.
+        let ext = self.ext_sections(window, cx);
+        let Some(st) = self.status.clone().filter(|_| !self.git_hidden()) else {
             // Several repositories but none to act on (the selected one cannot be read): the list stays, to pick another.
             let multi = self.multi();
             let note = if multi { crate::i18n::t("Select a repository first") } else { crate::i18n::t("This folder is not a git repository.") };
+            let has_ext = !ext.is_empty();
             return div()
                 .key_context("ScmPanel")
                 .track_focus(&self.focus_handle)
@@ -678,9 +692,17 @@ impl Render for ScmPanel {
                 .flex()
                 .flex_col()
                 .child(header)
-                .child(
-                    div().px(px(theme::SPACE[6])).when(multi, |d| d.pb(px(theme::SPACE[3]))).text_size(px(text::SM.0)).text_color(c(p.text_muted)).child(note),
-                )
+                .when(!has_ext || multi, |d| {
+                    d.child(
+                        div()
+                            .px(px(theme::SPACE[6]))
+                            .when(multi, |d| d.pb(px(theme::SPACE[3])))
+                            .text_size(px(text::SM.0))
+                            .text_color(c(p.text_muted))
+                            .child(note),
+                    )
+                })
+                .when(has_ext, |d| d.child(div().id("scm-ext-list").flex_1().min_h_0().overflow_y_scroll().children(ext)))
                 .when(multi, |d| d.child(self.repo_list(self.repo_focus.is_focused(window), cx)));
         };
         let staged: Vec<Change> = st.staged().cloned().collect();
@@ -854,7 +876,7 @@ impl Render for ScmPanel {
                     })
                     .into_any_element()
             })
-
+            .children(ext)
             .children(self.stash_section(cx))
             .child(self.worktree_section(cx))
             .child(self.graph_section(self.query.focus_handle(cx).is_focused(window), graph_fills, cx))

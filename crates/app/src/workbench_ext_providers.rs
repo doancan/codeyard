@@ -151,23 +151,44 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> oneshot::Receiver<Result<Response, v::Error>> {
-        self.ask_provider_with_id(active, reason, request, about, window, cx).1
+        self.ask_provider_with_id(active, reason, request, about, limits::PROVIDER_DEADLINE_MILLIS, window, cx).1
     }
 
-    /// `ask_provider`, with the request's id (to cancel it: `cancel_provider_request`).
+    /// `ask_provider` with its own deadline (`deadline_ms`, plus the start-up time). A request the user started
+    /// (`Request::is_user_action`) may use what user actions may while it runs.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn ask_provider_within(
+        &mut self,
+        active: &Active,
+        reason: &str,
+        request: Request,
+        about: Option<String>,
+        deadline_ms: u64,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> oneshot::Receiver<Result<Response, v::Error>> {
+        self.ask_provider_with_id(active, reason, request, about, deadline_ms, window, cx).1
+    }
+
+    /// `ask_provider_within`, with the request id (to cancel it: `cancel_provider_request`).
+    #[allow(clippy::too_many_arguments)]
     fn ask_provider_with_id(
         &mut self,
         active: &Active,
         reason: &str,
         request: Request,
         about: Option<String>,
+        deadline_ms: u64,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> (u64, oneshot::Receiver<Result<Response, v::Error>>) {
         let ext = active.id().to_string();
         let running = self.cfg.exts.code.procs.contains_key(&ext);
-        let deadline = Duration::from_millis(limits::PROVIDER_DEADLINE_MILLIS + if running { 0 } else { limits::ACTIVATE_MILLIS });
+        let deadline = Duration::from_millis(deadline_ms + if running { 0 } else { limits::ACTIVATE_MILLIS });
         let (id, answer) = self.cfg.exts.code.pending.lock().unwrap_or_else(|p| p.into_inner()).add(&ext);
+        if request.is_user_action() {
+            self.cfg.exts.code.user_action.insert(ext.clone(), id);
+        }
         let msg = ToHost::Handle { id, deadline_ms: deadline.as_millis() as u32, request };
         self.send_to_extension(active, reason, Some(msg), window, cx);
         if let Some(path) = about {
@@ -185,13 +206,18 @@ impl Workbench {
                         crate::perf::sample("extensions.provider_overhead_ms", sent.elapsed().as_secs_f64() * 1000.0);
                     }
                     let _ = tx.send(a.unwrap_or(Err(v::Error::Cancelled)));
-                    this.update(cx, |this, _| this.cfg.exts.providers.waiting.retain(|w| !(w.1 == ext && w.2 == id))).ok();
+                    this.update(cx, |this, _| {
+                        this.cfg.exts.providers.waiting.retain(|w| !(w.1 == ext && w.2 == id));
+                        this.cfg.exts.code.user_action.retain(|e, i| !(*e == ext && *i == id));
+                    })
+                    .ok();
                 }
                 futures::future::Either::Right((_, late)) => {
                     let _ = tx.send(Err(v::Error::Timeout));
                     // Tell the extension to stop, and keep listening a while so a late answer is noted, not lost.
                     this.update(cx, |this, _| {
                         this.cfg.exts.providers.waiting.retain(|w| !(w.1 == ext && w.2 == id));
+                        this.cfg.exts.code.user_action.retain(|e, i| !(*e == ext && *i == id));
                         if let Some(p) = this.cfg.exts.code.procs.get(&ext) {
                             let _ = p.send(&ToHost::Cancel { id });
                         }
@@ -942,6 +968,8 @@ impl Workbench {
                 self.send_to_extension(&active, &format!("language:{language}"), None, window, cx);
             }
         }
+        // In a folder a source control provider claims, its change marks (workbench_ext_scm.rs).
+        self.attach_ext_scm(ed, window, cx);
     }
 
     // --- tasks ---

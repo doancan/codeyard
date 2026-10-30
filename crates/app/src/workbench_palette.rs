@@ -874,10 +874,23 @@ impl Workbench {
                 self.close_overlay(window, cx);
                 self.apply_spell_choice(editor, range, word, choice, cx);
             }
-            (OverlayKind::PullRequests { remote, pulls }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
-                let (remote, pull) = (remote.clone(), pulls[*index].clone());
+            (OverlayKind::PullRequests(rows), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let row = rows[*index].clone();
                 self.close_overlay(window, cx);
-                self.pick_pull_request(remote, pull, window, cx);
+                match row {
+                    pulls_glue::PullRow::GitHub { remote, pull } => self.pick_pull_request(remote, pull, window, cx),
+                    pulls_glue::PullRow::Extension(pull) => self.pick_ext_pull(pull, window, cx),
+                }
+            }
+            (OverlayKind::ExtPullActions { pull, choices }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let (pull, action) = (pull.clone(), choices[*index]);
+                self.close_overlay(window, cx);
+                self.run_ext_pull_action(*pull, action, window, cx);
+            }
+            (OverlayKind::ExtPullFiles { pull, files }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let (pull, file) = (pull.clone(), files[*index].clone());
+                self.close_overlay(window, cx);
+                self.open_ext_pull_file(*pull, file, window, cx);
             }
             (OverlayKind::PullRequestActions { remote, pull, choices, .. }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let (remote, pull, action) = (remote.clone(), pull.clone(), choices[*index]);
@@ -933,8 +946,10 @@ impl Workbench {
                 | OverlayKind::HostMenu(_)
                 | OverlayKind::SpellFix { .. }
                 | OverlayKind::Dictionaries
-                | OverlayKind::PullRequests { .. }
+                | OverlayKind::PullRequests(_)
                 | OverlayKind::PullRequestActions { .. }
+                | OverlayKind::ExtPullActions { .. }
+                | OverlayKind::ExtPullFiles { .. }
                 | OverlayKind::EditorOption(_)
                 | OverlayKind::Projects(_)
                 | OverlayKind::ForgetRecent(_)

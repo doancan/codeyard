@@ -299,6 +299,10 @@ pub enum Activation {
     Language(String),
     /// The user lists tasks (`[[tasks]]`).
     Tasks,
+    /// A trusted workspace folder has a marker of this `[[scm]]` provider (full id).
+    Scm(String),
+    /// The Pull Requests view asks this `[[pull-requests]]` provider (full id).
+    PullRequests(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -479,6 +483,23 @@ pub struct Contributions {
     pub code_lenses: Vec<Provider>,
     #[serde(default)]
     pub inlay_hints: Vec<Provider>,
+    /// Source control providers (`[[scm]]`).
+    #[serde(default)]
+    pub scm: Vec<ScmProvider>,
+    #[serde(default)]
+    pub pull_requests: Vec<PullRequestProvider>,
+}
+
+/// `[[scm]]`: a source control provider. It claims a workspace folder that has one of `markers` at its top (a `.hg` or
+/// `.jj` folder, a file): Source Control and the gutter's change marks ask it there, and git stays for the others.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScmProvider {
+    /// Full id: `publisher.name.local`.
+    pub id: String,
+    /// Shown in Source Control: `Mercurial`, `Jujutsu`.
+    pub label: String,
+    /// Names relative to the folder, such as `.hg`.
+    pub markers: Vec<String>,
 }
 
 impl Contributions {
@@ -496,6 +517,8 @@ impl Contributions {
             || !self.completion.is_empty()
             || !self.code_lenses.is_empty()
             || !self.inlay_hints.is_empty()
+            || !self.scm.is_empty()
+            || !self.pull_requests.is_empty()
     }
 
     /// Languages a provider of this extension handles, each once.
@@ -512,6 +535,26 @@ impl Contributions {
             }
         }
         out
+    }
+}
+
+/// `[[pull-requests]]`: pull (merge) requests of the repository remotes on `hosts`, merged into the Pull Requests view.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PullRequestProvider {
+    /// Full id: `publisher.name.local`.
+    pub id: String,
+    /// Shown next to each request, such as `Gitea`.
+    pub label: String,
+    /// Remote hosts it claims, in the form of `net` entries (`gitea.example.com`, `*.example.com`).
+    pub hosts: Vec<String>,
+    /// The `auth` provider its requests are signed with, passed to it with each remote.
+    pub auth: Option<String>,
+}
+
+impl PullRequestProvider {
+    /// Whether a remote on `host` is this provider's.
+    pub fn claims(&self, host: &str) -> bool {
+        net_allows(&self.hosts, &host.to_ascii_lowercase())
     }
 }
 

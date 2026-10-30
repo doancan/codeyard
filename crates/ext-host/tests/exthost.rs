@@ -23,8 +23,12 @@ fn dir(name: &str) -> PathBuf {
 
 /// `--compile` the probe once per test folder; returns the compiled file and its hash.
 fn compile(dir: &Path) -> (PathBuf, [u8; 32]) {
+    compile_wasm(dir, PROBE)
+}
+
+fn compile_wasm(dir: &Path, wasm: &[u8]) -> (PathBuf, [u8; 32]) {
     let mut c = Command::new(EXE).arg("--compile").stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().unwrap();
-    c.stdin.take().unwrap().write_all(PROBE).unwrap();
+    c.stdin.take().unwrap().write_all(wasm).unwrap();
     let out = c.wait_with_output().unwrap();
     assert!(out.status.success());
     let path = dir.join("probe.cwasm");
@@ -239,6 +243,62 @@ fn an_untrusted_folder_refuses_sending() {
 }
 
 #[test]
+fn pull_request_queries_reach_the_provider_and_its_forge_calls_go_through_auth() {
+    use ext_api::value::{ChangedFile, FileStatus, PullAnswer, PullQuery, PullRemote, StreamEvent};
+    let d = dir("pulls");
+    let (c, sha) = compile(&d);
+    let mut h = Host::start(hello(&d, &c, sha, &["auth"], false)).ready();
+    let remote = PullRemote {
+        provider: "acme".into(),
+        name: "origin".into(),
+        url: "git@git.acme.example.com:team/app.git".into(),
+        host: "git.acme.example.com".into(),
+        path: "team/app".into(),
+        account: Some("acme".into()),
+    };
+    let ask = |h: &mut Host, query: PullQuery| {
+        let id = h.next_id;
+        h.next_id += 1;
+        h.send(&ToHost::Handle { id, deadline_ms: 20_000, request: Request::PullRequests { query } });
+        id
+    };
+    // `list` calls the forge through `auth.fetch`: the app signs it, the guest gets the body.
+    let id = ask(&mut h, PullQuery::List { remote: remote.clone() });
+    let ticket = match h.next() {
+        ToApp::Start { ticket, call: Start::AuthFetch { provider, request } } => {
+            assert_eq!((provider.as_str(), request.url.as_str()), ("acme", "https://api.acme.example.com/repos/team/app/pulls"));
+            assert!(request.headers.iter().all(|(k, _)| !k.eq_ignore_ascii_case("authorization")));
+            ticket
+        }
+        other => panic!("{other:?}"),
+    };
+    h.send(&ToHost::Event { ticket, event: StreamEvent::Data(b"7|Fix it|ada|topic|main\n".to_vec()) });
+    h.send(&ToHost::Complete { ticket, completion: Completion::Done });
+    match h.answer(id).0 {
+        Ok(Response::PullRequests(PullAnswer::List(l))) => {
+            assert_eq!((l[0].id.as_str(), l[0].reference.as_str(), l[0].title.as_str(), l[0].source_branch.as_str()), ("7", "!7", "Fix it", "topic"))
+        }
+        other => panic!("{other:?}"),
+    }
+    // Files and contents come back as typed answers.
+    let id = ask(&mut h, PullQuery::Files { remote: remote.clone(), id: "7".into() });
+    assert!(matches!(h.answer(id).0, Ok(Response::PullRequests(PullAnswer::Files(f))) if f.len() == 2 && f[1].status == FileStatus::Added));
+    let file = ChangedFile { path: "a.txt".into(), old_path: None, status: FileStatus::Modified };
+    let id = ask(&mut h, PullQuery::Contents { remote: remote.clone(), id: "7".into(), file });
+    match h.answer(id).0 {
+        Ok(Response::PullRequests(PullAnswer::Contents(c))) => {
+            assert_eq!((c.base.as_deref(), c.head.as_deref()), (Some("one\n"), Some("one\ntwo from a.txt\n")))
+        }
+        other => panic!("{other:?}"),
+    }
+    let id = ask(&mut h, PullQuery::Checkout { remote, id: "7".into() });
+    match h.answer(id).0 {
+        Ok(Response::PullRequests(PullAnswer::Checkout(c))) => assert_eq!((c.r#ref.as_str(), c.branch.as_str()), ("refs/pull/7/head", "pr-7")),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
 fn storage_persists_and_prints_reach_the_log() {
     let d = dir("storage");
     let (c, sha) = compile(&d);
@@ -360,4 +420,52 @@ fn cold_start() {
         times.sort();
         println!("sandbox {sandbox:5}: median {:?}, p95 {:?}", times[10], times[18]);
     }
+}
+
+/// A source control provider (#144): the host asks for a folder's state and a file's original text, the answers
+/// travel back as `response.scm` and `response.text`, and `scm.refresh` reaches the app.
+#[test]
+fn a_source_control_provider_answers_and_asks_for_a_refresh() {
+    let d = dir("scm");
+    let (c, sha) = compile_wasm(&d, include_bytes!("../testdata/probe-scm.wasm"));
+    let mut h = Host::start(hello(&d, &c, sha, &["workspace"], false)).ready();
+    let request = Request::ScmStatus { provider: "toy".into(), root: "file:///work".into() };
+    h.send(&ToHost::Handle { id: 100, deadline_ms: 0, request });
+    let ticket = match h.next() {
+        ToApp::Start { ticket, call: Start::ReadFile { uri } } => {
+            assert_eq!(uri, "file:///work/.toyvcs/changes");
+            ticket
+        }
+        other => panic!("{other:?}"),
+    };
+    h.send(&ToHost::Complete { ticket, completion: Completion::Bytes(b"changes M a.txt\nstaged A b.txt\n".to_vec()) });
+    let Ok(Response::Scm(state)) = h.answer(100).0 else { panic!("no state") };
+    let files: Vec<(&str, &str, ext_api::value::FileState)> =
+        state.groups.iter().flat_map(|g| g.resources.iter().map(move |r| (g.id.as_str(), r.uri.as_str(), r.state))).collect();
+    assert_eq!(
+        files,
+        [("staged", "file:///work/b.txt", ext_api::value::FileState::Added), ("changes", "file:///work/a.txt", ext_api::value::FileState::Modified)]
+    );
+    assert_eq!(state.input.accept.map(|a| a.command).as_deref(), Some("scm-commit"));
+
+    let request = Request::ScmOriginal { provider: "toy".into(), uri: "file:///work/a.txt".into() };
+    h.send(&ToHost::Handle { id: 101, deadline_ms: 0, request });
+    let ticket = match h.next() {
+        ToApp::Start { ticket, call: Start::ReadFile { uri } } => {
+            assert_eq!(uri, "file:///work/.toyvcs/base/a.txt");
+            ticket
+        }
+        other => panic!("{other:?}"),
+    };
+    h.send(&ToHost::Complete { ticket, completion: Completion::Bytes(b"old".to_vec()) });
+    assert_eq!(h.answer(101).0, Ok(Response::Text(Some("old".into()))));
+
+    let request = Request::ScmValidate { provider: "toy".into(), root: "file:///work".into(), value: " ".into() };
+    h.send(&ToHost::Handle { id: 102, deadline_ms: 0, request });
+    assert_eq!(h.answer(102).0, Ok(Response::Text(Some("Write a message first".into()))));
+
+    let id = h.command("scm-refresh", "");
+    let (answer, seen) = h.answer(id);
+    assert_eq!(answer, Ok(Response::Json("refreshed".into())));
+    assert!(seen.iter().any(|m| matches!(m, ToApp::Notify(Notify::ScmRefresh { provider }) if provider == "toy")), "{seen:?}");
 }

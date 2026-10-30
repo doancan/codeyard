@@ -46,11 +46,15 @@ pub(crate) struct Handlers {
     pub timers: HashMap<u64, TickFn>,
     pub hover: Option<HoverFn>,
     pub completion: Option<CompletionFn>,
+    /// `[[pull-requests]]` providers, by local id.
+    pub pulls: crate::pulls::Providers,
     /// Progress the user cancelled.
     pub cancelled_progress: HashSet<u64>,
     pub reason: String,
     /// `ctx.state()`: kept across a hot reload in `cyx dev` (`RELOAD_STATE_KEY`).
     pub state: serde_json::Map<String, Value>,
+    /// Source control providers (`scm.rs`).
+    pub scm: crate::scm::ScmHandlers,
 }
 
 thread_local! {
@@ -201,12 +205,14 @@ pub fn handle(id: u64, request: Request) {
             Some(f) => answer(id, async move { f(ctx, document, range).await.map(Response::InlayHints) }),
             None => sys::respond(id, Ok(Response::InlayHints(Vec::new()))),
         },
+        Request::PullRequests(query) => crate::pulls::handle(id, ctx, query),
         Request::ProvideTasks | Request::RunTask(_) => sys::respond(id, Err(Error::Invalid("this SDK does not provide tasks yet".into()))),
+        r @ (Request::ScmStatus { .. } | Request::ScmOriginal { .. } | Request::ScmValidate { .. }) => crate::scm::handle(id, ctx, r),
     }
     runtime::run();
 }
 
-fn answer(id: u64, fut: impl Future<Output = Result<Response>> + 'static) {
+pub(crate) fn answer(id: u64, fut: impl Future<Output = Result<Response>> + 'static) {
     runtime::spawn_request(id, async move {
         let r = fut.await;
         sys::respond(id, r);

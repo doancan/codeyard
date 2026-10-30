@@ -1,7 +1,8 @@
 //! `cyx test`: the built `extension.wasm` in the real `codeyard-exthost`, against a scripted app. It activates the
-//! extension, runs each declared command and draws each declared view, and answers every call the way the app's broker
-//! would: checked against the manifest's permissions, with dismissed pickers and no network, files or programs. A
-//! refused call fails the test with its fix; so do a trap, an error from `activate` and a request left unanswered.
+//! extension, runs each declared command, draws each declared view, asks each pull request provider for a list, and
+//! answers every call the way the app's broker would: checked against the manifest's permissions, with dismissed
+//! pickers and no network, files or programs. A refused call fails the test with its fix; so do a trap, an error from
+//! `activate` and a request left unanswered.
 
 use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -82,7 +83,13 @@ fn run_in(work: &Path, dir: &Path, manifest: &Manifest, exthost: &Path, wasm: &[
     let settings = manifest.contributions.settings.iter().map(|s| (s.key.clone(), s.default.as_ref().and_then(|v| serde_json::to_string(v).ok()))).collect();
     let id = manifest.id.as_str();
     let local = |full: &str| full.strip_prefix(&format!("{id}.")).unwrap_or(full).to_string();
-    let first = manifest.contributions.commands.first().map(|c| format!("command:{}", local(&c.id))).unwrap_or_else(|| "workspace-contains".into());
+    let first = manifest
+        .contributions
+        .commands
+        .first()
+        .map(|c| format!("command:{}", local(&c.id)))
+        .or_else(|| manifest.contributions.pull_requests.first().map(|p| format!("pull-requests:{}", local(&p.id))))
+        .unwrap_or_else(|| "workspace-contains".into());
     let hello = Hello {
         version: ext_proto::VERSION,
         build: ext_proto::BUILD.into(),
@@ -145,6 +152,31 @@ fn run_in(work: &Path, dir: &Path, manifest: &Manifest, exthost: &Path, wasm: &[
             },
             (false, Some(Err(e))) => report.fail(format!("{what} failed: {e}")),
             (_, Some(Ok(other))) => report.fail(format!("{what} answered {other:?}")),
+        }
+    }
+    // Each pull request provider lists a remote on its first host; without network, an error is an answer too.
+    for p in &manifest.contributions.pull_requests {
+        if app.dead || !report.failures.is_empty() {
+            break;
+        }
+        let name = local(&p.id);
+        let host = p.hosts.first().map_or("example.com", |h| h.trim_start_matches("*.")).to_string();
+        let remote = ext_api::value::PullRemote {
+            provider: name.clone(),
+            name: "origin".into(),
+            url: format!("https://{host}/example/repo.git"),
+            host,
+            path: "example/repo".into(),
+            account: p.auth.clone(),
+        };
+        let what = format!("pull requests {name}");
+        match app.request(&mut report, Request::PullRequests { query: ext_api::value::PullQuery::List { remote } }) {
+            None if app.dead => {}
+            None => report.fail(format!("{what} did not answer within {} s", WAIT.as_secs())),
+            Some(Err(ApiError::Denied(d))) => report.fail(format!("{what} was denied: {}", fix(&d))),
+            Some(Ok(Response::PullRequests(ext_api::value::PullAnswer::List(l)))) => report.pass(format!("{what} lists ({} open)", l.len())),
+            Some(Err(e)) => report.pass(format!("{what} answers (with an error: {e})")),
+            Some(Ok(other)) => report.fail(format!("{what} answered {other:?}")),
         }
     }
     app.shutdown();

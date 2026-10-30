@@ -49,6 +49,26 @@ Needs no permission. Since 0.1.0.
 
 - `invalidate(view: string)`: Ask for the view to be drawn again: the host sends `request.render` and diffs the result by key.
 
+## `pull-requests`
+
+Pull (merge) request providers: `[[pull-requests]]` in the manifest. The host asks with `request.pull-requests` and the extension answers with `response.pull-requests`. The provider calls its forge with `auth.fetch`, so it never sees the account's token.
+
+Needs no permission. Since 0.1.0.
+
+- type `remote`: record `{ provider: string, name: string, url: string, host: string, path: string, account: option<string> }`. A repository remote whose host the provider claims.
+- type `state`: enum `open | draft | merged | closed`
+- type `summary`: record `{ id: string, reference: string, title: string, author: string, state: state, source-branch: string, target-branch: string, updated: u64, url: option<string> }`
+- type `check-state`: enum `pending | success | failure | neutral`
+- type `check`: record `{ name: string, state: check-state, url: option<string> }`
+- type `details`: record `{ summary: summary, description: string, checks: list<check>, labels: list<string> }`
+- type `file-status`: enum `added | modified | deleted | renamed`
+- type `changed-file`: record `{ path: string, old-path: option<string>, status: file-status }`
+- type `file-contents`: record `{ base: option<string>, head: option<string> }`. One changed file's text on both sides, for a diff.
+- type `comment`: record `{ author: string, body: string, created: u64, path: option<string>, line: option<u32> }`
+- type `checkout`: record `{ fetch-url: option<string>, ref: string, branch: string }`. How to check a request out. The host runs `git fetch <from> <ref>` and creates or resets `branch` on what it fetched, on the machine the repository is on.
+- type `query`: variant `list(remote) | details(tuple<remote, string>) | files(tuple<remote, string>) | contents(tuple<remote, string, changed-file>) | comments(tuple<remote, string>) | add-comment(tuple<remote, string, string>) | checkout(tuple<remote, string>)`
+- type `answer`: variant `list(list<summary>) | details(details) | files(list<changed-file>) | contents(file-contents) | comments(list<comment>) | checkout(checkout) | done`
+
 ## `types`
 
 Types shared by every interface. Importing it needs no permission.
@@ -83,31 +103,6 @@ Calls the host has not answered yet.
 Needs no permission. Since 0.1.0.
 
 - `cancel(ticket: ticket)`: Stop waiting: the ticket completes with `cancelled`, and a running process is killed.
-
-## `responses`
-
-What `guest.handle` answers with.
-
-Needs no permission. Since 0.1.0.
-
-- type `code-action`: record `{ id: string, title: string, edits: list<tuple<string, list<text-edit>>>, command: option<string>, preferred: bool, fixes: list<diagnostic> }`
-- type `task`: record `{ id: string, label: string, detail: option<string>, group: string }`
-- type `lens-command`: record `{ title: string, command: string, args-json: string }`. What a code lens shows and the command a click runs.
-- type `code-lens`: record `{ id: string, range: range, command: option<lens-command> }`
-- type `inlay-hint`: record `{ position: position, label: string, tooltip: option<string> }`
-- type `hover`: record `{ contents: string, range: option<range> }`. Shown in the hover popup next to the language server's, under the extension's name.
-- type `completion-kind`: enum `text | method | function | constructor | field | variable | class | interface | module | property | unit | value | enum | keyword | snippet | color | file | reference | folder | enum-member | constant | struct | event | operator | type-parameter`. The icon a completion item shows, as in the Language Server Protocol.
-- type `completion-item`: record `{ label: string, kind: completion-kind, detail: option<string>, documentation: option<string>, insert-text: option<string>, snippet: bool, range: option<range>, additional-edits: list<text-edit>, filter-text: option<string>, sort-text: option<string> }`
-- type `completion-list`: record `{ items: list<completion-item>, incomplete: bool }`
-- type `response`: variant `none | json(string) | view(string) | edits(list<text-edit>) | code-actions(list<code-action>) | tasks(list<task>) | ranges(list<range>) | hover(option<hover>) | completions(completion-list) | code-lenses(list<code-lens>) | inlay-hints(list<inlay-hint>)`
-
-## `requests`
-
-Answers to `guest.handle`.
-
-Needs no permission. Since 0.1.0.
-
-- `respond(id: u64, result: result<response, error>)`: Answer request `id`. A request is answered once; late answers (after `guest.cancel`) are dropped.
 
 ## `window`
 
@@ -258,6 +253,45 @@ Needs `terminal = true` in `[permissions]`. Since 0.1.0.
 
 - `send-text(text: string) -> ticket`: Types `text` into the active terminal. Completes with `failed(not-found)` when there is none.
 
+## `scm`
+
+Source control providers (`[[scm]]`): what the Source Control view and the gutter show for a folder the provider claims. The host asks with `request.scm-status`, `request.scm-original` and `request.scm-validate`; buttons run the extension's own commands.
+
+Needs no permission. Since 0.1.0.
+
+- type `file-state`: enum `modified | added | deleted | renamed | untracked | ignored | conflicted`. How a file differs from what the provider last recorded.
+- type `scm-action`: record `{ command: string, title: string, icon: option<string> }`. A button: one of the extension's own commands. It runs with the JSON arguments `{"provider": "<local id>", "root": "<folder uri>", "uris": ["<file uri>", …], "message": "<input box text>"}`.
+- type `scm-resource`: record `{ uri: uri, state: file-state, detail: option<string> }`
+- type `scm-group`: record `{ id: string, label: string, resources: list<scm-resource>, resource-actions: list<scm-action>, group-actions: list<scm-action>, hide-when-empty: bool }`
+- type `scm-input`: record `{ placeholder: string, value: option<string>, accept: option<scm-action> }`
+- type `scm-state`: record `{ head: option<string>, input: scm-input, groups: list<scm-group> }`
+- `refresh(provider: string)`: Ask the host for `request.scm-status` again now, after the extension changed something itself.
+
+## `responses`
+
+What `guest.handle` answers with.
+
+Needs no permission. Since 0.1.0.
+
+- type `code-action`: record `{ id: string, title: string, edits: list<tuple<string, list<text-edit>>>, command: option<string>, preferred: bool, fixes: list<diagnostic> }`
+- type `task`: record `{ id: string, label: string, detail: option<string>, group: string }`
+- type `lens-command`: record `{ title: string, command: string, args-json: string }`. What a code lens shows and the command a click runs.
+- type `code-lens`: record `{ id: string, range: range, command: option<lens-command> }`
+- type `inlay-hint`: record `{ position: position, label: string, tooltip: option<string> }`
+- type `hover`: record `{ contents: string, range: option<range> }`. Shown in the hover popup next to the language server's, under the extension's name.
+- type `completion-kind`: enum `text | method | function | constructor | field | variable | class | interface | module | property | unit | value | enum | keyword | snippet | color | file | reference | folder | enum-member | constant | struct | event | operator | type-parameter`. The icon a completion item shows, as in the Language Server Protocol.
+- type `completion-item`: record `{ label: string, kind: completion-kind, detail: option<string>, documentation: option<string>, insert-text: option<string>, snippet: bool, range: option<range>, additional-edits: list<text-edit>, filter-text: option<string>, sort-text: option<string> }`
+- type `completion-list`: record `{ items: list<completion-item>, incomplete: bool }`
+- type `response`: variant `none | json(string) | view(string) | edits(list<text-edit>) | code-actions(list<code-action>) | tasks(list<task>) | ranges(list<range>) | hover(option<hover>) | completions(completion-list) | code-lenses(list<code-lens>) | inlay-hints(list<inlay-hint>) | scm(scm-state) | text(option<string>) | pull-requests(answer)`
+
+## `requests`
+
+Answers to `guest.handle`.
+
+Needs no permission. Since 0.1.0.
+
+- `respond(id: u64, result: result<response, error>)`: Answer request `id`. A request is answered once; late answers (after `guest.cancel`) are dropped.
+
 ## `host-requests`
 
 What the host asks the extension.
@@ -265,7 +299,7 @@ What the host asks the extension.
 Needs no permission. Since 0.1.0.
 
 - type `format-options`: record `{ tab-size: u32, insert-spaces: bool }`
-- type `request`: variant `command(tuple<string, string>) | render(string) | ui-event(tuple<string, string>) | format(tuple<document, option<range>, format-options>) | code-actions(tuple<document, range, list<diagnostic>>) | run-code-action(string) | provide-tasks | run-task(string) | settings-changed(list<string>) | timer(u64) | cancel-progress(u64) | open-uri(string) | hover(tuple<document, position>) | completion(tuple<document, position, option<string>>) | code-lens(tuple<document, range>) | resolve-code-lens(tuple<document, code-lens>) | inlay-hints(tuple<document, range>)`
+- type `request`: variant `command(tuple<string, string>) | render(string) | ui-event(tuple<string, string>) | format(tuple<document, option<range>, format-options>) | code-actions(tuple<document, range, list<diagnostic>>) | run-code-action(string) | provide-tasks | run-task(string) | settings-changed(list<string>) | timer(u64) | cancel-progress(u64) | open-uri(string) | hover(tuple<document, position>) | completion(tuple<document, position, option<string>>) | code-lens(tuple<document, range>) | resolve-code-lens(tuple<document, code-lens>) | inlay-hints(tuple<document, range>) | scm-status(tuple<string, uri>) | scm-original(tuple<string, uri>) | scm-validate(tuple<string, uri, string>) | pull-requests(query)`
 
 ## `guest`
 
