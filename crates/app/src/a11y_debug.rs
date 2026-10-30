@@ -320,6 +320,18 @@ impl DebugViewSnap {
     }
 }
 
+/// The node of row `index` of a Run and Debug list (`None` for another list).
+pub(in crate::workbench) fn row_node(kind: RowFrame, index: usize) -> Option<NodeId> {
+    let i = index as u64;
+    match kind {
+        RowFrame::DebugVariable if index < MAX_VARS => Some(NodeId(VAR_ROW + i)),
+        RowFrame::DebugWatch if index < MAX_WATCHES => Some(NodeId(WATCH_ROW + 2 * i)),
+        RowFrame::DebugStack if index < MAX_STACK => Some(NodeId(STACK_ROW + i)),
+        RowFrame::DebugBreakpoint if index < MAX_BPS => Some(NodeId(BP_ROW + 2 * i)),
+        _ => None,
+    }
+}
+
 impl ToolbarSnap {
     fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>) -> NodeId {
         let resume = if self.running {

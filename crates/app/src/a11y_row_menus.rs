@@ -79,16 +79,9 @@ pub(in crate::workbench) fn menu_request(req: &ActionRequest, kind: MenuRow, row
 }
 
 impl Workbench {
-    /// Where a menu opened from the tree appears: at the bottom left of its row as last painted, else (the row is
-    /// scrolled out of view) at the middle of the window.
+    /// Where a menu opened from the tree appears: under its row, as with Shift+F10.
     pub(in crate::workbench) fn row_menu_anchor(&self, kind: MenuRow, index: usize, window: &Window) -> gpui::Point<gpui::Pixels> {
-        match self.chrome.a11y_bounds.row(kind.frame(), index) {
-            Some(bounds) => bounds.bottom_left(),
-            None => {
-                let size = window.viewport_size();
-                gpui::point(size.width / 2., size.height / 2.)
-            }
-        }
+        self.row_anchor(kind.frame(), index, window)
     }
 }
 

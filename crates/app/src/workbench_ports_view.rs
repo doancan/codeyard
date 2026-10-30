@@ -288,16 +288,18 @@ impl Workbench {
             let list = gpui::uniform_list(
                 "port-rows",
                 rows.len(),
-                cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
+                cx.processor(move |this, range: std::ops::Range<usize>, window, cx| {
                     range
                         .filter_map(|ix| {
                             let row = this.port_row(ix, rows.get(ix)?, &p, cx);
-                            Some(a11y::framed_row(a11y::RowFrame::Port, ix, row, cx))
+                            Some(this.nav_row(a11y::RowFrame::Port, ix, row, window, cx))
                         })
                         .collect()
                 }),
             )
+            .track_scroll(self.row_scroll(a11y::RowFrame::Port))
             .size_full();
+            let list = self.row_list(a11y::RowFrame::Port, list, cx);
             div().flex_1().min_h_0().child(list).into_any_element()
         };
         div()

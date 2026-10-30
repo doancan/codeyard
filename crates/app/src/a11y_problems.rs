@@ -215,6 +215,8 @@ pub(crate) struct ViewsSnap {
     pub(crate) pages: pages::PagesSnap,
     pub(crate) side: side::SideSnap,
     pub(crate) consent: Option<dialogs::ConsentSnap>,
+    /// The keyboard list of a side view or the Ports panel that has the focus, and its cursor row.
+    pub(in crate::workbench) row_focus: Option<(crate::workbench::a11y::RowFrame, usize)>,
 }
 
 impl ViewsSnap {
@@ -259,7 +261,11 @@ impl ViewsSnap {
 
     /// The focused field of these views, if one has focus (a dialog's button first).
     pub(super) fn focus_node(&self) -> Option<NodeId> {
-        self.consent.as_ref().and_then(dialogs::ConsentSnap::focus_node).or_else(|| self.side.focus_node()).or_else(|| self.pages.focus_node())
+        let row = self.row_focus.and_then(|(kind, ix)| match kind {
+            crate::workbench::a11y::RowFrame::Port => pages::port_node(ix),
+            kind => side::row_node(kind, ix),
+        });
+        self.consent.as_ref().and_then(dialogs::ConsentSnap::focus_node).or_else(|| self.side.focus_node()).or(row).or_else(|| self.pages.focus_node())
     }
 }
 
@@ -276,6 +282,7 @@ impl Workbench {
             pages: self.a11y_pages(window, cx),
             side: self.a11y_side(cx),
             consent: self.a11y_consent(window),
+            row_focus: self.focused_row(window, cx),
         }
     }
 

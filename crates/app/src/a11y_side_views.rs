@@ -320,6 +320,15 @@ impl MenuSnap {
     }
 }
 
+/// The node of row `index` of a Run and Debug, Testing or Remote Explorer list.
+pub(in crate::workbench) fn row_node(kind: RowFrame, index: usize) -> Option<NodeId> {
+    match kind {
+        RowFrame::Test if index < MAX_TESTS => Some(NodeId(TEST_ROW + index as u64 * TEST_IDS)),
+        RowFrame::Remote if index < MAX_REMOTE => Some(NodeId(REMOTE_ROW + index as u64 * REMOTE_IDS)),
+        _ => debug_access::row_node(kind, index),
+    }
+}
+
 impl SideSnap {
     pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>, kids: &mut Vec<NodeId>, geometry: &Geometry) {
         self.debug.append_tree(nodes, kids, geometry);

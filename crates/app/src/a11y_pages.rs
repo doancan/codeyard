@@ -314,6 +314,11 @@ impl PortsSnap {
     }
 }
 
+/// The node of row `index` of the Ports list.
+pub(in crate::workbench) fn port_node(index: usize) -> Option<NodeId> {
+    (index < MAX_PORTS).then(|| NodeId(PORT_ROW + index as u64 * PORT_IDS))
+}
+
 /// The pages and panel of this module in one place, kept in [`ViewsSnap`].
 #[derive(Clone, PartialEq, Debug, Default)]
 pub(crate) struct PagesSnap {

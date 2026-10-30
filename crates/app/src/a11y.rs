@@ -19,7 +19,7 @@ use accesskit::{Action, ActionData, ActionRequest, Live, Node, NodeId, Role, Tex
 #[path = "a11y_geometry.rs"]
 mod geometry;
 pub use geometry::Geometry;
-pub(super) use geometry::{Landmark, PaintedBounds, RowFrame, framed_row, landmark, row_frame};
+pub(super) use geometry::{Landmark, PaintedBounds, RowFrame, landmark, row_frame};
 
 const ROOT: NodeId = NodeId(1);
 const EXPLORER: NodeId = NodeId(2);

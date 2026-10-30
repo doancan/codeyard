@@ -160,11 +160,6 @@ pub(in crate::workbench) fn row_frame(which: RowFrame, index: usize, cx: &Contex
     .size_full()
 }
 
-/// `row` with its bounds captured (for rows drawn by a helper that returns a finished element).
-pub(in crate::workbench) fn framed_row(which: RowFrame, index: usize, row: gpui::AnyElement, cx: &Context<Workbench>) -> gpui::AnyElement {
-    gpui::div().relative().w_full().child(row).child(row_frame(which, index, cx)).into_any_element()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
