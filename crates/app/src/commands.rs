@@ -235,6 +235,8 @@ registry! {
     "workbench.moveViewToSecondarySideBar" => wb::MoveViewToSecondarySideBar,
     "workbench.moveViewToPrimarySideBar" => wb::MoveViewToPrimarySideBar,
     "workbench.toggleSecondarySideBar" => wb::ToggleSecondarySideBar,
+    "workbench.action.moveViewToNewWindow" => wb::MoveViewIntoNewWindow,
+    "workbench.action.moveViewBackToSideBar" => wb::MoveViewBackToSideBar,
     "workbench.action.moveEditorToNewWindow" => wb::MoveEditorIntoNewWindow,
     "workbench.action.copyEditorToNewWindow" => wb::CopyEditorIntoNewWindow,
     "workbench.action.restoreEditorsToMainWindow" => wb::MoveEditorsBackToMainWindow,

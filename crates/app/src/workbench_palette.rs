@@ -424,6 +424,8 @@ impl Workbench {
             Command::action("View: Move View to Secondary Side Bar", MoveViewToSecondarySideBar),
             Command::action("View: Move View to Primary Side Bar", MoveViewToPrimarySideBar),
             Command::action("View: Toggle Secondary Side Bar", ToggleSecondarySideBar),
+            Command::action("View: Move View into New Window", MoveViewIntoNewWindow),
+            Command::action("View: Move View Back to Side Bar", MoveViewBackToSideBar),
             Command::action("View: Move Editor into New Window", MoveEditorIntoNewWindow),
             Command::action("View: Copy Editor into New Window", CopyEditorIntoNewWindow),
             Command::action("View: Move Editors Back to Main Window", MoveEditorsBackToMainWindow),

@@ -67,7 +67,7 @@ impl Render for DraggedView {
 }
 
 /// The name a view is read out by (the screen reader's layout description).
-fn view_name(panel: Panel) -> String {
+pub(super) fn view_name(panel: Panel) -> String {
     use crate::i18n::t;
     match panel {
         Panel::Explorer => t("Explorer"),
@@ -121,6 +121,10 @@ impl Workbench {
         self.chrome.view_drag = None;
         if view == Panel::Containers {
             return cx.notify();
+        }
+        // A view in a window of its own leaves it for the side bar it is dropped on.
+        if self.in_view_window(view) {
+            self.view_window_returned(view, true, cx);
         }
         if secondary {
             if self.chrome.panel == Some(view) {
