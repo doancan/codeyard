@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Terminals in editor groups and in windows of their own, and the terminals of SSH folders, are taken back after a
+  restart the same way as a local folder's panel terminals: the same shells, in their places, with "Reconnected to
+  terminal session". SSH folders resume their session on the server's agent, which already kept the shells.
+- Setting `terminal.persistentSessionTimeout`: how many minutes terminals keep running for the next start after
+  Codeyard quits, crashes or is killed (default 5, at most 1440; 0: they end with the app). The agent protocol is
+  version 17.
+
 - On macOS and Linux, the panel's terminals of a local folder keep running when Codeyard quits, crashes or is killed
   (with `window.restoreSession`, the default). Opening the folder again within 5 minutes brings the same shells back,
   with their output from meanwhile, and says "Reconnected to terminal session". A terminal that cannot be taken back is
