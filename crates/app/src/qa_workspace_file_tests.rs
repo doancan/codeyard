@@ -878,3 +878,24 @@ fn workspace_file_over_ssh(cx: &mut TestAppContext) {
     });
     assert_eq!(read(&file), MONO);
 }
+
+/// "File: Open Active File as Workspace" (the way to open one on an SSH server) closes the tab that had the keyboard
+/// with the old folder: the keyboard stays in the window, so shortcuts keep working without a click.
+#[gpui::test]
+fn opening_the_active_file_as_workspace_keeps_the_keyboard_in_the_window(cx: &mut TestAppContext) {
+    let (base, file) = mono("active-focus");
+    let (wb, cx) = setup(cx);
+    open(&wb, &base, cx);
+    let f = s(&file);
+    wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(f, window, cx));
+    wait(cx, "the workspace file in the editor", |cx| wb.read_with(cx, |wb, _| wb.active_editor_entity().is_some()));
+    wb.update_in(cx, |wb, window, cx| {
+        let ed = wb.active_editor_entity().unwrap();
+        window.focus(&ed.focus_handle(cx));
+    });
+    cx.run_until_parked();
+    wb.update_in(cx, |_, window, cx| window.dispatch_action(Box::new(crate::workbench::OpenActiveWorkspaceFile), cx));
+    wait(cx, "both folders open", |cx| labels(&wb, cx) == ["Backend", "web"]);
+    let focused = cx.update(|window, cx| window.focused(cx).is_some() && wb.read(cx).focus_handle(cx).contains_focused(window, cx));
+    assert!(focused, "the keyboard is still in the window");
+}

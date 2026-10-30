@@ -210,6 +210,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- After "File: Open Active File as Workspace" (the way to open a workspace file on an SSH server), no shortcut worked
+  until something was clicked: the tab that had the keyboard closed with the old folder. The keyboard now stays in the
+  window whenever what had it goes away.
 - Quick Open in a workspace with several folders finds a file by its folder's name and path, as in `repoB/src/lib.rs`,
   for every folder. Before, typing a folder's name found nothing, so files with the same relative path in two folders
   could not be told apart.
