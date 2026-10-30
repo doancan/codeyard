@@ -535,11 +535,17 @@ impl Workbench {
                 if self.overlay.is_some() {
                     self.close_overlay(window, cx);
                 }
+                // Detected Cargo targets also say how they will be built (features, profile, output folder).
+                let build = cx.global::<crate::settings::Settings>().rust_build.summary();
                 let items = configs
                     .iter()
                     .map(|c| PickItem {
                         label: c.name.clone().into(),
-                        detail: Some(c.adapter.as_ref().map(|a| a.id.clone()).unwrap_or_else(|e| e.chars().take(60).collect()).into()),
+                        detail: Some(match (c.adapter.as_ref(), build.as_ref().filter(|_| c.cargo_target.is_some())) {
+                            (Ok(a), Some(build)) => format!("{} · {build}", a.id).into(),
+                            (Ok(a), None) => a.id.clone().into(),
+                            (Err(e), _) => e.chars().take(60).collect::<String>().into(),
+                        }),
                         keys: None,
                     })
                     .collect();
@@ -568,6 +574,9 @@ impl Workbench {
         // Starting a configuration again replaces its session (restart); other sessions keep running.
         self.retire_sessions(&config.name, cx);
         self.dbg.last = Some(config.name.clone());
+        if let Some(target) = &mut config.cargo_target {
+            target.build = cx.global::<crate::settings::Settings>().rust_build.clone();
+        }
         self.dbg.next_id += 1;
         let sid = self.dbg.next_id;
         let (tx, rx) = mpsc::channel();

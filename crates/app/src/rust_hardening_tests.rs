@@ -244,3 +244,88 @@ fn rust_hardening_cancelled_launch_does_not_report_a_late_prelaunch_error(cx: &m
     let notice = wb.read_with(cx, |wb, _| wb.notice_for_test());
     assert!(notice.is_none(), "an ended session must ignore its late failure: {notice:?}");
 }
+
+/// A virtual workspace with two differently named binaries; `extra` must be on for the program to build.
+fn two_target_workspace(name: &str) -> std::path::PathBuf {
+    let dir = crate::qa_workbench_tests::fresh(name);
+    std::fs::create_dir_all(dir.join("app/src/bin")).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "[workspace]\nmembers = [\"app\"]\nresolver = \"3\"\n[profile.fast]\ninherits = \"release\"\n").unwrap();
+    std::fs::write(dir.join("app/Cargo.toml"), "[package]\nname = \"app-pkg\"\nversion = \"0.1.0\"\nedition = \"2024\"\n[features]\nextra = []\n").unwrap();
+    std::fs::write(dir.join("app/src/bin/server.rs"), "#[cfg(feature = \"extra\")]\nfn main() {}\n").unwrap();
+    std::fs::write(dir.join("app/src/bin/client.rs"), "fn main() {}\n").unwrap();
+    dir
+}
+
+/// Discovers the targets, offers both in the picker and debugs `server` with the chosen options; returns the program
+/// the adapter was asked to launch.
+fn debug_server_with_options(wb: &gpui::Entity<crate::workbench::Workbench>, cx: &mut gpui::VisualTestContext, dir: &std::path::Path, python: &str) -> String {
+    cx.update(|_, cx| {
+        cx.global_mut::<crate::settings::Settings>().rust_build = crate::cargo_project::BuildOptions {
+            features: vec!["extra".into()],
+            no_default_features: false,
+            profile: Some("fast".into()),
+            target_dir: Some("chosen out".into()),
+        };
+    });
+    let pending = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let out = pending.clone();
+    wb.update(cx, |wb, cx| {
+        let task = wb.detected_debug_configs_for_test(cx).unwrap();
+        cx.spawn(async move |_, _| *out.lock().unwrap() = Some(task.await.0)).detach();
+    });
+    crate::qa_integration_tests::wait_ticking(cx, "Cargo target discovery", |_| pending.lock().unwrap().is_some());
+    let configs = pending.lock().unwrap().take().unwrap();
+    let names: Vec<_> = configs.iter().filter_map(|c| c.cargo_target.as_ref()).map(|t| t.name.as_str()).collect();
+    assert_eq!(names, ["client", "server"]);
+    let rows = wb.update_in(cx, |wb, window, cx| wb.debug_picker_rows_for_test(configs.clone(), window, cx));
+    assert_eq!(rows.len(), 2, "a picker offers the targets: {rows:?}");
+    assert!(rows.iter().all(|(_, detail)| detail.ends_with("fast · features: extra · output: chosen out")), "{rows:?}");
+    let mut config = configs.into_iter().find(|c| c.cargo_target.as_ref().is_some_and(|t| t.name == "server")).unwrap();
+    let script = crate::dap::tests::write_fake_adapter(dir);
+    let log = dir.join("dap.log");
+    config.adapter = Ok(crate::debug_config::Adapter {
+        id: "lldb-dap".into(),
+        command: python.into(),
+        args: vec![script.to_string_lossy().into_owned(), log.to_string_lossy().into_owned()],
+        connect: None,
+    });
+    wb.update(cx, |wb, cx| wb.start_debug_config_for_test(config, cx));
+    let launch = || std::fs::read_to_string(&log).unwrap_or_default().lines().find(|l| l.starts_with("launch ")).map(str::to_string);
+    crate::qa_integration_tests::wait_ticking(cx, "the launch request", |cx| launch().is_some() || wb.read_with(cx, |wb, _| wb.notice_for_test()).is_some());
+    let Some(line) = launch() else { panic!("no launch: {:?}", wb.read_with(cx, |wb, _| wb.notice_for_test())) };
+    let args: serde_json::Value = serde_json::from_str(line.trim_start_matches("launch ")).unwrap();
+    cx.simulate_keystrokes("shift-f5");
+    cx.run_until_parked();
+    args["program"].as_str().unwrap().to_string()
+}
+
+fn fake_adapter_python() -> Option<&'static str> {
+    let python = if cfg!(windows) { "python" } else { "python3" };
+    let ok = std::process::Command::new(python).arg("-V").output().is_ok();
+    if !ok {
+        crate::test_sshd::skip_missing(python);
+    }
+    ok.then_some(python)
+}
+
+#[gpui::test]
+fn rust_debug_builds_the_picked_target_with_the_chosen_features_profile_and_output_folder(cx: &mut gpui::TestAppContext) {
+    let Some(python) = fake_adapter_python() else { return };
+    let dir = two_target_workspace("rust-debug-build-options");
+    let (wb, cx) = crate::qa_workbench_tests::setup(cx);
+    cx.update(|_, cx| cx.global_mut::<crate::settings::Settings>().lsp_enabled = false);
+    crate::qa_workbench_tests::open(&wb, &dir, cx);
+    let program = debug_server_with_options(&wb, cx, &dir, python);
+    let expected = dir.join("chosen out").join("fast").join(if cfg!(windows) { "server.exe" } else { "server" });
+    assert_eq!(std::path::Path::new(&program), expected);
+}
+
+#[gpui::test]
+fn rust_debug_build_options_apply_on_the_ssh_host(cx: &mut gpui::TestAppContext) {
+    let Some(_sshd) = crate::test_sshd::start("rust-debug-build-options-ssh") else { return };
+    let Some(python) = fake_adapter_python() else { return };
+    let dir = std::fs::canonicalize(two_target_workspace("rust-debug-build-options-ssh")).unwrap();
+    let (wb, cx) = crate::qa_integration_tests::ssh_workbench(cx, &dir);
+    let program = debug_server_with_options(&wb, cx, &dir, python);
+    assert_eq!(std::path::Path::new(&program), dir.join("chosen out/fast/server"), "built on the server in its workspace folder");
+}
