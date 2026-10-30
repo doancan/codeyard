@@ -19,7 +19,7 @@ use accesskit::{Action, ActionData, ActionRequest, Live, Node, NodeId, Role, Tex
 #[path = "a11y_geometry.rs"]
 mod geometry;
 pub use geometry::Geometry;
-pub(super) use geometry::{Landmark, PaintedBounds, landmark};
+pub(super) use geometry::{Landmark, PaintedBounds, RowFrame, landmark, row_frame};
 
 const ROOT: NodeId = NodeId(1);
 const EXPLORER: NodeId = NodeId(2);
@@ -470,7 +470,7 @@ impl Snapshot {
             scm.append_tree(&mut nodes);
             kids.push(SCM);
         }
-        self.views.append_tree(&mut nodes, &mut kids);
+        self.views.append_tree(&mut nodes, &mut kids, &self.geometry);
 
         if let Some(view) = &self.exts {
             ext_access::append_tree(view, &mut nodes);

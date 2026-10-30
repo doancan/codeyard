@@ -43,6 +43,18 @@ impl EditorView {
         });
     }
 
+    /// Shift+F10 or the Menu key: the editor's menu under the caret, for what is selected (as a right click inside the
+    /// selection opens it).
+    pub(super) fn show_context_menu(&mut self, _: &crate::menu::ShowContextMenu, _: &mut Window, cx: &mut Context<Self>) {
+        self.hover = None;
+        self.completion = None;
+        let Some((line, x)) = self.screen_pos(self.buffer.cursor()) else { return };
+        let at = gpui::point(x, line.bounds.bottom());
+        cx.emit(EditorEvent::ContextMenu(at));
+        cx.stop_propagation();
+        cx.notify();
+    }
+
     /// If the right click is outside the selection, move the cursor there (if inside the selection it stays, and Cut/Copy apply to it).
     pub(super) fn on_right_click(&mut self, ev: &MouseDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         window.focus(&self.focus_handle);

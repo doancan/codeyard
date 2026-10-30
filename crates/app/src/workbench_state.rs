@@ -122,6 +122,8 @@ pub(super) struct GitState {
 /// Layout: side panel, bottom panel, split editor, zoom, zen mode, window bounds.
 pub(super) struct ChromeLayout {
     pub(super) a11y_bounds: super::a11y::PaintedBounds,
+    /// Keyboard focus and cursor rows of the side view and panel lists (workbench_row_nav.rs).
+    pub(super) row_nav: super::row_nav_glue::RowNav,
     pub(super) web_preview: super::web_preview_glue::State,
     pub(super) resources: Entity<crate::resource_monitor::ResourceMonitor>,
     pub(super) panel: Option<Panel>,
