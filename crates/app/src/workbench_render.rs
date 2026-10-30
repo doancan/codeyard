@@ -3,6 +3,70 @@
 use super::*;
 
 impl Workbench {
+    /// Error card: bottom right, above the status bar; closed with ×.
+    fn error_toast(&self, p: &Palette, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+        let Some(Notice::Error(message)) = &self.notice else { return None };
+        Some(
+            div()
+                .id("error-toast")
+                .absolute()
+                .right(px(theme::SPACE[6]))
+                .bottom(px(layout::STATUSBAR_H + theme::SPACE[4]))
+                .w(px(420.))
+                .flex()
+                .items_start()
+                .gap(px(theme::SPACE[3]))
+                .p(px(theme::SPACE[4]))
+                .bg(c(p.surface_raised))
+                .border_1()
+                .border_color(c(p.border))
+                .rounded(px(theme::radius::MD))
+                .shadow_lg()
+                .text_size(px(text::SM.0))
+                .text_color(c(p.text))
+                .occlude()
+                .child(div().flex_none().pt(px(1.)).child(icon("circle-x", 16., p.danger)))
+                .child(div().flex_1().min_w_0().child(message.clone()))
+                .when(matches!(self.remote.conn, Conn::Failed { .. }), |d| {
+                    d.child(
+                        div()
+                            .id("error-toast-reconnect")
+                            .flex_none()
+                            .h(px(22.))
+                            .px(px(theme::SPACE[4]))
+                            .flex()
+                            .items_center()
+                            .rounded(px(theme::radius::SM))
+                            .bg(c(p.accent))
+                            .text_color(c(p.on_accent))
+                            .text_size(px(text::XS.0))
+                            .cursor_pointer()
+                            .hover(|d| d.opacity(0.9))
+                            .child(crate::i18n::t("Reconnect"))
+                            .on_click(cx.listener(|this, _, window, cx| this.reconnect_lost(window, cx))),
+                    )
+                })
+                .child(
+                    div()
+                        .id("error-toast-close")
+                        .flex_none()
+                        .size(px(20.))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .rounded(px(theme::radius::SM))
+                        .cursor_pointer()
+                        .hover(|d| d.bg(c(p.surface_hover)))
+                        .child(icon("x", 14., p.text_muted))
+                        .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Close").into())).into())
+                        .on_click(cx.listener(|this, _, _, cx| {
+                            this.notice = None;
+                            cx.notify();
+                        })),
+                ),
+        )
+    }
+
     /// A side view's content, for whichever side bar shows it.
     fn side_view(&mut self, panel: Panel, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
         match panel {
@@ -1013,71 +1077,5 @@ mod resize_tests {
         // A narrow panel keeps room for the terminals beside the list.
         assert_eq!(term_list_width(400., 500.), 300.);
         assert_eq!(term_list_width(400., 250.), TERM_LIST_MIN, "never narrower than the minimum");
-    }
-}
-
-impl Workbench {
-    /// Error card: bottom right, above the status bar; closed with ×.
-    fn error_toast(&self, p: &Palette, cx: &mut Context<Self>) -> Option<impl IntoElement> {
-        let Some(Notice::Error(message)) = &self.notice else { return None };
-        Some(
-            div()
-                .id("error-toast")
-                .absolute()
-                .right(px(theme::SPACE[6]))
-                .bottom(px(layout::STATUSBAR_H + theme::SPACE[4]))
-                .w(px(420.))
-                .flex()
-                .items_start()
-                .gap(px(theme::SPACE[3]))
-                .p(px(theme::SPACE[4]))
-                .bg(c(p.surface_raised))
-                .border_1()
-                .border_color(c(p.border))
-                .rounded(px(theme::radius::MD))
-                .shadow_lg()
-                .text_size(px(text::SM.0))
-                .text_color(c(p.text))
-                .occlude()
-                .child(div().flex_none().pt(px(1.)).child(icon("circle-x", 16., p.danger)))
-                .child(div().flex_1().min_w_0().child(message.clone()))
-                .when(matches!(self.remote.conn, Conn::Failed { .. }), |d| {
-                    d.child(
-                        div()
-                            .id("error-toast-reconnect")
-                            .flex_none()
-                            .h(px(22.))
-                            .px(px(theme::SPACE[4]))
-                            .flex()
-                            .items_center()
-                            .rounded(px(theme::radius::SM))
-                            .bg(c(p.accent))
-                            .text_color(c(p.on_accent))
-                            .text_size(px(text::XS.0))
-                            .cursor_pointer()
-                            .hover(|d| d.opacity(0.9))
-                            .child(crate::i18n::t("Reconnect"))
-                            .on_click(cx.listener(|this, _, window, cx| this.reconnect_lost(window, cx))),
-                    )
-                })
-                .child(
-                    div()
-                        .id("error-toast-close")
-                        .flex_none()
-                        .size(px(20.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .rounded(px(theme::radius::SM))
-                        .cursor_pointer()
-                        .hover(|d| d.bg(c(p.surface_hover)))
-                        .child(icon("x", 14., p.text_muted))
-                        .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Close").into())).into())
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.notice = None;
-                            cx.notify();
-                        })),
-                ),
-        )
     }
 }
