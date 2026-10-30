@@ -272,6 +272,8 @@ pub struct Snapshot {
     /// Physical landmark frames from the latest painted layout.
     pub geometry: Geometry,
     pub title: String,
+    /// Where the views are (side bars, panel dock): the window's description.
+    pub(crate) layout: String,
     pub explorers: Vec<ExplorerSnap>,
     pub tabs: Vec<TabSnap>,
     /// Index into `tabs` of the tab in front (`None` while a diff, large file or page tab is in front).
@@ -430,6 +432,7 @@ impl Snapshot {
         let mut root = Node::new(Role::Window);
         self.geometry.apply(ROOT, &mut root);
         root.set_label(self.title.clone());
+        root.set_description(self.layout.clone());
         let mut kids = Vec::new();
         if let Some(view) = &self.services {
             services_access::append_tree(view, &mut nodes);
@@ -927,6 +930,7 @@ impl Workbench {
             }),
             geometry: Geometry::new(&self.chrome.a11y_bounds, window),
             title,
+            layout: self.a11y_layout(),
             explorers,
             tabs,
             active_tab,
@@ -1108,13 +1112,11 @@ impl Workbench {
 
 #[cfg(any(target_os = "macos", windows))]
 pub use platform::attach;
-#[cfg(any(target_os = "macos", windows))]
-pub(in crate::workbench) use platform::attach_with;
 
 /// The AccessKit adapter: `accesskit_macos` (NSAccessibility, VoiceOver) or `accesskit_windows` (UI Automation: NVDA,
 /// JAWS, Narrator). Both subclass the native view or window; the tree and the actions are the same.
 #[cfg(any(target_os = "macos", windows))]
-mod platform {
+pub(in crate::workbench) mod platform {
     use super::*;
     use accesskit::{ActionHandler, ActivationHandler};
     #[cfg(target_os = "macos")]
@@ -1287,6 +1289,7 @@ mod tests {
             ext_views: Vec::new(),
             geometry: Geometry::default(),
             title: "Codeyard \u{2014} demo".into(),
+            layout: String::new(),
             explorers: vec![ExplorerSnap {
                 name: "d".into(),
                 rows: vec![

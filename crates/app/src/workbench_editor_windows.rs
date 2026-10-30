@@ -365,7 +365,7 @@ impl Workbench {
         match opened {
             Ok(handle) => {
                 #[cfg(any(target_os = "macos", windows))]
-                a11y::attach_with(handle.into(), a11y::windows_access::EDITOR_WINDOW, cx);
+                a11y::platform::attach_with(handle.into(), a11y::windows_access::EDITOR_WINDOW, cx);
                 #[cfg(windows)]
                 handle.update(cx, |_, window, _| window.activate_window()).ok();
                 self.chrome.editor_windows.push(DetachedEditor { editor: ed, slot, window: handle, bounds: shared });

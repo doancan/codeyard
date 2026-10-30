@@ -115,6 +115,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   save when no other tab or window shows it. "View: Move Editors Back to Main Window" returns all of them, and the
   windows come back in place after a restart (a file that is also opened as a tab keeps its tab). The command palette,
   the right-click menu, Go to Line and the other commands and shortcuts work in that window and act on its editor.
+- A side view moves to the other side bar by dragging its activity bar icon there; while it is dragged, both sides
+  show a highlighted drop zone. The panel docks left of, right of or below the editor ("View: Move Panel Left",
+  "View: Move Panel Right", "View: Move Panel to Bottom"), and the dock is restored at the next start. Screen readers
+  read which view each side bar shows and where the panel is from the window's description.
 - Screen readers see the editor in its own window (title, text, caret and selection, find bar, suggestions, the
   picker opened there) and the terminal in its own window, as in the main window.
 - Terminals come back after a restart as new shells in their folders, with their titles, colors and programs, and say

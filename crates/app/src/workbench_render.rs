@@ -238,6 +238,12 @@ impl Render for Workbench {
         self.place_views();
         let sidebar = self.chrome.panel.map(|panel| self.side_view(panel, &p, cx));
         let secondary = self.chrome.secondary.map(|panel| self.side_view(panel, &p, cx));
+        // While a view is dragged: drop zones over each side (at least `ZONE_MIN` wide, also where no side bar is open).
+        const ZONE_MIN: f32 = 180.;
+        let bar = if cx.global::<Settings>().activity_bar { layout::ACTIVITYBAR_W } else { 0. };
+        let left_w = (bar + if sidebar.is_some() { self.chrome.sidebar_w } else { 0. }).max(ZONE_MIN);
+        let right_w = if secondary.is_some() { self.chrome.sidebar_w } else { ZONE_MIN };
+        let drop_zones = self.view_drop_zones(left_w, right_w, &p, cx);
 
         self.with_actions(div().id("workbench"), cx)
             .key_context("Workbench")
@@ -288,15 +294,21 @@ impl Render for Workbench {
                         this.finish_resize(cx);
                     }
                 }
+                // Docked left, the panel starts at the editor area's left edge and is resized from its right edge.
+                let left_dock = (this.chrome.panel_dock == docks_glue::PanelDock::Left).then(|| this.chrome.panel_area.map_or(0., |a| a.origin.x / px(1.)));
                 if this.chrome.resizing_term_list {
-                    // The list sits at the right edge of the panel, which is the right edge of the window.
+                    // The list sits at the right edge of the panel: the right edge of the window, or of a panel docked left.
                     let total = window.viewport_size().width / px(1.);
-                    this.chrome.term_list_w = term_list_width(total - ev.position.x / px(1.), this.panel_width(total));
+                    let right = left_dock.map_or(total, |x| x + this.chrome.panel_w);
+                    this.chrome.term_list_w = term_list_width(right - ev.position.x / px(1.), this.panel_width(total));
                     cx.notify();
                 }
-                if this.chrome.resizing_panel && this.chrome.panel_right {
+                if this.chrome.resizing_panel && this.chrome.panel_dock.beside() {
                     let total = window.viewport_size().width / px(1.);
-                    let w = total - ev.position.x / px(1.);
+                    let w = match left_dock {
+                        Some(x) => ev.position.x / px(1.) - x,
+                        None => total - ev.position.x / px(1.),
+                    };
                     this.chrome.panel_w = w.clamp(PANEL_MIN * 2., (total - 300.).max(PANEL_MIN * 2.));
                     cx.notify();
                 } else if this.chrome.resizing_panel {
@@ -310,6 +322,8 @@ impl Render for Workbench {
             .capture_any_mouse_up(cx.listener(|this, ev: &gpui::MouseUpEvent, _, cx| {
                 if ev.button == MouseButton::Left {
                     this.finish_resize(cx);
+                    // The drop zones go; a drop on one is still delivered for this release.
+                    this.end_view_drag(cx);
                 }
             }))
             .on_mouse_up_out(MouseButton::Left, cx.listener(|this, _, _, cx| this.finish_resize(cx)))
@@ -346,6 +360,7 @@ impl Render for Workbench {
             })
             .child(
                 div()
+                    .relative()
                     .flex()
                     .flex_1()
                     .min_h_0()
@@ -381,8 +396,10 @@ impl Render for Workbench {
                             .min_w_0()
                             .flex()
                             .relative()
-                            .when(!self.chrome.panel_right, |d| d.flex_col())
+                            .when(!self.chrome.panel_dock.beside(), |d| d.flex_col())
                             .child(Self::panel_area_probe(cx))
+                            // Docked left, the panel comes before the editor.
+                            .when(self.chrome.panel_open && self.chrome.panel_dock == docks_glue::PanelDock::Left, |d| d.child(self.panel(&p, cx)))
                             // A maximized panel takes the editor's place; while it grows or shrinks, the editor gives way.
                             .when(!(self.chrome.panel_open && self.chrome.panel_max) || self.chrome.panel_anim.is_some(), |d| {
                                 d.child(
@@ -399,7 +416,7 @@ impl Render for Workbench {
                                         .children(self.debug_toolbar(&p, cx)),
                                 )
                             })
-                            .when(self.chrome.panel_open, |d| d.child(self.panel(&p, cx))),
+                            .when(self.chrome.panel_open && self.chrome.panel_dock != docks_glue::PanelDock::Left, |d| d.child(self.panel(&p, cx))),
                     )
                     // The secondary side bar: views moved to the right of the editor.
                     .when_some(secondary.filter(|_| self.chrome.zen.is_none()), |d, s| {
@@ -413,7 +430,8 @@ impl Render for Workbench {
                                 .border_color(c(p.border))
                                 .child(s),
                         )
-                    }),
+                    })
+                    .children(drop_zones),
             )
             .when(self.chrome.zen.is_none() && cx.global::<Settings>().status_bar, |d| d.child(self.status_bar(&p, window.viewport_size().width / px(1.), cx)))
             .children(self.error_toast(&p, cx))
@@ -637,7 +655,7 @@ mod resize_tests {
     fn maximize_and_restore_animate_the_panel_size(cx: &mut TestAppContext) {
         let (wb, cx) = crate::qa_workbench_tests::setup(cx);
         wb.update(cx, |wb, cx| {
-            wb.chrome.panel_right = false;
+            wb.chrome.panel_dock = docks_glue::PanelDock::Bottom;
             wb.chrome.panel_open = true;
             cx.notify();
         });

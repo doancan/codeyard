@@ -796,6 +796,7 @@ Explorer (⇧⌘E)
 Export as Text…	
 Exposed only; not published on the server.	
 Extension Inspector	
+Extension View	
 Extension id, like publisher.name or publisher.name@1.2.0	
 Extension in development not loaded: {}	
 Extension in development: it reloads when you save a file in its folder	
@@ -1065,6 +1066,7 @@ Import VS Code Settings and Shortcuts
 Imported {0} settings and {1} shortcuts from VS Code ({2} settings and {3} shortcuts have no equivalent here)	
 In Privacy & Security, press + and add Codeyard, then turn it on.	
 In the file tree, type to jump to a name; ⇧→ opens everything inside a folder, ⇧← closes it.	
+In the secondary side bar: {}	
 Incoming	
 Indent of each folder level in the explorer (px)	
 Indent using 2 spaces	
@@ -1544,6 +1546,9 @@ Output
 Output: Clear	
 Overview	
 Overwrite	
+Panel: below the editor	
+Panel: left of the editor	
+Panel: right of the editor	
 Passphrase	
 Password	
 Paste	
@@ -1612,6 +1617,8 @@ Previous Problem
 Previous match (⇧↵)	
 Previous result (⇧F4)	
 Previous session ended; started a new shell	
+Primary Side Bar	
+Primary side bar: {}	
 Problems	
 Problems: Copy Full Diagnostic	
 Problems: {}	
@@ -1932,6 +1939,8 @@ Search: Structural Search…
 Search: Undo Last Replace	
 Search: {}	
 Searching…	
+Secondary Side Bar	
+Secondary side bar: {}	
 Seconds between background fetches	
 Select All	
 Select All Occurrences	
@@ -2460,6 +2469,9 @@ View: Move Editor into New Window
 View: Move Editor into Other Group	
 View: Move Editors Back to Main Window	
 View: Move Panel (bottom ⇄ right)	
+View: Move Panel Left	
+View: Move Panel Right	
+View: Move Panel to Bottom	
 View: Move View to Primary Side Bar	
 View: Move View to Secondary Side Bar	
 View: Open Next Editor	
