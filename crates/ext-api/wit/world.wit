@@ -3,7 +3,7 @@ package codeyard:api@0.1.0;
 /// What the host asks the extension.
 @since(version = 0.1.0)
 interface host-requests {
-  use types.{document, range, diagnostic};
+  use types.{document, range, diagnostic, position};
   use responses.{code-lens};
 
   record format-options {
@@ -36,6 +36,11 @@ interface host-requests {
     cancel-progress(u64),
     /// A `codeyard://ext/<id>/…` link was opened: its path and query.
     open-uri(string),
+    /// Describe what is at a position (the mouse rests there, or Show Hover); answer with `response.hover`.
+    hover(tuple<document, position>),
+    /// Offer completions at a position; answer with `response.completions`. The string is the character that was
+    /// typed when it is one of the manifest's `trigger-characters`, none when the user typed a word or asked.
+    completion(tuple<document, position, option<string>>),
     /// Code lenses for the lines of a document in view: the range starts at the first and ends at the start of the line
     /// after the last. Answer with `response.code-lenses`.
     code-lens(tuple<document, range>),

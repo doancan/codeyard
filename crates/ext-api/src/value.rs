@@ -343,6 +343,8 @@ pub enum Response {
     CodeActions(Vec<CodeAction>),
     Tasks(Vec<Task>),
     Ranges(Vec<Range>),
+    Hover(Option<Hover>),
+    Completions(CompletionList),
     CodeLenses(Vec<CodeLens>),
     InlayHints(Vec<InlayHint>),
 }
@@ -368,6 +370,8 @@ pub enum Request {
     Timer { id: u64 },
     CancelProgress { id: u64 },
     OpenUri { uri: String },
+    Hover { document: Document, position: Position },
+    Completion { document: Document, position: Position, trigger: Option<String> },
     CodeLens { document: Document, range: Range },
     ResolveCodeLens { document: Document, lens: CodeLens },
     InlayHints { document: Document, range: Range },
@@ -378,6 +382,74 @@ impl Request {
     pub fn is_user_action(&self) -> bool {
         matches!(self, Request::Command { .. } | Request::UiEvent { .. } | Request::RunCodeAction { .. } | Request::RunTask { .. } | Request::OpenUri { .. })
     }
+}
+
+/// `responses.hover`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Hover {
+    /// Markdown.
+    pub contents: String,
+    pub range: Option<Range>,
+}
+
+/// `responses.completion-kind`, in the Language Server Protocol's order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CompletionKind {
+    Text,
+    Method,
+    Function,
+    Constructor,
+    Field,
+    Variable,
+    Class,
+    Interface,
+    Module,
+    Property,
+    Unit,
+    Value,
+    Enum,
+    Keyword,
+    Snippet,
+    Color,
+    File,
+    Reference,
+    Folder,
+    EnumMember,
+    Constant,
+    Struct,
+    Event,
+    Operator,
+    TypeParameter,
+}
+
+impl CompletionKind {
+    /// The Language Server Protocol's `CompletionItemKind` number.
+    pub fn lsp(self) -> u8 {
+        self as u8 + 1
+    }
+}
+
+/// `responses.completion-item`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompletionItem {
+    pub label: String,
+    pub kind: CompletionKind,
+    pub detail: Option<String>,
+    /// Markdown.
+    pub documentation: Option<String>,
+    pub insert_text: Option<String>,
+    pub snippet: bool,
+    pub range: Option<Range>,
+    pub additional_edits: Vec<TextEdit>,
+    pub filter_text: Option<String>,
+    pub sort_text: Option<String>,
+}
+
+/// `responses.completion-list`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompletionList {
+    pub items: Vec<CompletionItem>,
+    pub incomplete: bool,
 }
 
 /// A host call that returns a ticket: the exthost forwards it to the app, which answers with a `Completion` (and

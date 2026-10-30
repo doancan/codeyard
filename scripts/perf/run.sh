@@ -119,6 +119,15 @@ for n in a b; do
   deco_args+=(--install-extension "$d")
 done
 CODEYARD_CONFIG_DIR="$DECO_PROFILE/config" CODEYARD_STATE_DIR="$DECO_PROFILE/state" "$OUT/codeyard-candidate" "${deco_args[@]}" >/dev/null
+# One completion provider (the same component, answering 50 items at once), installed from a folder: for typing with
+# completion.
+COMP_PROFILE="$TMP/comp-profile"
+mkdir -p "$COMP_PROFILE/config" "$COMP_PROFILE/state" "$TMP/gen/completion"
+printf '{"update.check":"manual"}\n' > "$COMP_PROFILE/config/settings.jsonc"
+cp crates/ext-host/testdata/decorator.wasm "$TMP/gen/completion/extension.wasm"
+: > "$TMP/gen/completion/Cargo.toml"
+printf '[extension]\nid = "perf.completion"\nversion = "1.0.0"\nname = "Completion"\nlicense = "MIT"\n\n[code]\nentry = "Cargo.toml"\n\n[[completion]]\nlanguages = ["rust"]\n' > "$TMP/gen/completion/codeyard-extension.toml"
+CODEYARD_CONFIG_DIR="$COMP_PROFILE/config" CODEYARD_STATE_DIR="$COMP_PROFILE/state" "$OUT/codeyard-candidate" --install-extension "$TMP/gen/completion" >/dev/null
 # One extension giving code lenses and inlay hints for Rust (decorator.wasm again), installed from a folder: for typing
 # with lenses and hints.
 LENS_PROFILE="$TMP/lens-profile"
@@ -209,6 +218,15 @@ for i in $(seq 1 "$runs"); do
       exit 1
     fi
     grep -e '"typing\.keystroke_frame_decorations_ms"' -e '"extensions\.provider_overhead_ms"' "$TMP/deco.jsonl" >> "$CODEYARD_PERF" || true
+    # One extension completes Rust: 40 keys, a new word every third, keystroke to frame. Warn-only until a baseline has it.
+    cp crates/app/testdata/big.rs "$TMP/big.rs"
+    : > "$TMP/comp.jsonl"
+    CODEYARD_PERF="$TMP/comp.jsonl" CODEYARD_PERF_COMPLETION=40 PROFILE_FROM="$COMP_PROFILE" run_scripted "$OUT/codeyard-${names[$k]}" "$TMP/big.rs"
+    if [ "${names[$k]}" = candidate ] && [ "$(count typing.keystroke_frame_completion_ms "$TMP/comp.jsonl")" != 40 ]; then
+      echo "perf: the completion run of ${names[$k]} did not type 40 keys; is codeyard-exthost built and the window visible?" >&2
+      exit 1
+    fi
+    grep '"typing\.keystroke_frame_completion_ms"' "$TMP/comp.jsonl" >> "$CODEYARD_PERF" || true
     # One extension gives code lenses and inlay hints for the lines in view of the 10k-line file: 40 keys, keystroke
     # to frame. Warn-only until a baseline has it.
     cp crates/app/testdata/big.rs "$TMP/big.rs"

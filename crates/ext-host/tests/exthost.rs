@@ -156,6 +156,36 @@ fn commands_run_and_tickets_complete() {
     assert!(d.join("data/storage").join(hex("deactivated")).exists());
 }
 
+/// `request.hover` and `request.completion` cross the component boundary both ways, with every field of an item.
+#[test]
+fn hover_and_completion_answer_through_the_guest() {
+    use ext_api::value::{CompletionKind, Document, Position};
+    let d = dir("hover");
+    let (c, sha) = compile(&d);
+    let mut h = Host::start(hello(&d, &c, sha, &[], false)).ready();
+    let document = Document { uri: "file:///w/a.toml".into(), language: "toml".into(), version: 3, text: "a = 1\n".into() };
+    let position = Position { line: 0, character: 2 };
+    h.send(&ToHost::Handle { id: 50, deadline_ms: 0, request: Request::Hover { document: document.clone(), position } });
+    match h.answer(50).0 {
+        Ok(Response::Hover(Some(hover))) => assert_eq!((hover.contents.as_str(), hover.range), ("**Probe** hover at 0:2", None)),
+        other => panic!("{other:?}"),
+    }
+    h.send(&ToHost::Handle { id: 51, deadline_ms: 0, request: Request::Completion { document, position, trigger: Some(".".into()) } });
+    match h.answer(51).0 {
+        Ok(Response::Completions(list)) => {
+            let labels: Vec<&str> = list.items.iter().map(|i| i.label.as_str()).collect();
+            assert_eq!(labels, ["probe-item", "probe-dot"]);
+            assert_eq!(list.items[0].kind, CompletionKind::Keyword);
+            assert_eq!(list.items[0].kind.lsp(), 14, "the Language Server Protocol's number");
+            assert_eq!(list.items[0].documentation.as_deref(), Some("**probe-item** from the probe"));
+            assert!(!list.incomplete);
+        }
+        other => panic!("{other:?}"),
+    }
+    h.send(&ToHost::Shutdown);
+    assert!(h.exit().success());
+}
+
 fn hex(s: &str) -> String {
     s.bytes().map(|b| format!("{b:02x}")).collect()
 }

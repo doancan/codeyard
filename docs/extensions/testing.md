@@ -44,6 +44,7 @@ mod tests {
 | `host.view_event("view", json!(…))` | sends an event to a view |
 | `host.format(doc, range, options)` | runs the formatter |
 | `host.code_actions(doc, range, diagnostics)`, `host.run_code_action(id)` | asks the code action provider, runs a chosen action |
+| `host.hover(doc, position)`, `host.completion(doc, position, trigger)` | asks the hover or completion provider (`trigger`: `Some(".")` for a trigger character) |
 | `host.code_lenses(doc, range)`, `host.resolve_code_lens(doc, lens)`, `host.click_code_lens(&lens)` | asks for the lenses of the lines in `range`, resolves one, runs a lens's command with its arguments |
 | `host.inlay_hints(doc, range)` | asks for the inlay hints of the lines in `range` |
 | `host.change_setting(key, json)` | changes a setting and tells the extension |
@@ -171,7 +172,8 @@ test("says hello", async () => {
 });
 ```
 
-Everything is the Rust mock's, in camelCase, and the calls that drive the extension return Promises: `await host.command(id, args)`, `await host.render(view)`, `await host.viewEvent(view, event)`, `await host.changeSetting(key, value)`, `await host.advance(seconds)`. Fixtures take plain values: `host.http("GET", url, 200, { deployments: [] })` sends an object as JSON, `host.setting("interval", 120)`, `host.process("vercel", ["ls"], { stdout: "web  ready\n" })`. The checks are `host.notices()`, `host.fetched()`, `host.ran()`, `host.readText(path)`, `host.storage()`, `host.denied()` and the rest of the list above.
+Everything is the Rust mock's, in camelCase, and the calls that drive the extension return Promises: `await host.command(id, args)`, `await host.render(view)`, `await host.viewEvent(view, event)`, `await host.changeSetting(key, value)`, `await host.advance(seconds)`, `await host.hover(doc, position)`,
+`await host.completion(doc, position, trigger)`. Fixtures take plain values: `host.http("GET", url, 200, { deployments: [] })` sends an object as JSON, `host.setting("interval", 120)`, `host.process("vercel", ["ls"], { stdout: "web  ready\n" })`. The checks are `host.notices()`, `host.fetched()`, `host.ran()`, `host.readText(path)`, `host.storage()`, `host.denied()` and the rest of the list above.
 
 `new MockHost()` reads `codeyard-extension.toml` from the folder `npm test` runs in; `new MockHost({ manifest })` takes the text, and `MockHost.allowAll()` allows everything. While a mock is active it is the global `fetch`, so npm packages such as Octokit reach its fixtures and never the network; `host.dispose()` gives `fetch` back.
 

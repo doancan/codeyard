@@ -1,8 +1,9 @@
 //! Editor: what code extensions put on a document (docs/plugin-architecture.md §5.1). Decorations are drawn with tones,
 //! never colours of the extension's choosing, so themes and high contrast keep working. The formatter that runs on save
-//! is chosen and asked by the Workbench; the editor only waits for its edits, as it does for a language server.
-//! Code lenses and inlay hints (#143) show at the end of their line with the language server's; the editor reports
-//! the lines it draws, and a click on a lens, to the Workbench (workbench_ext_lenses.rs).
+//! is chosen and asked by the Workbench; the editor only waits for its edits, as it does for a language server. Hover and
+//! completion are in editor_ext_lang.rs. Code lenses and inlay hints (#143) show at the end of their line with the
+//! language server's; the editor reports the lines it draws, and a click on a lens, to the Workbench
+//! (workbench_ext_lenses.rs).
 
 use std::rc::Rc;
 
@@ -10,6 +11,10 @@ use ext_api::value::{DecorationPlace, Tone};
 use futures::channel::oneshot;
 
 use super::*;
+
+/// Hover and completion from extensions.
+#[path = "editor_ext_lang.rs"]
+pub mod lang;
 
 /// What the Workbench needs to ask a formatter: the document as it is now.
 pub struct FormatJob {
@@ -73,6 +78,7 @@ pub enum ExtEvent {
 pub struct ExtMarks {
     pub decorations: Vec<LineDecoration>,
     pub save_formatter: Option<SaveFormatter>,
+    pub lang: lang::ExtLangState,
     /// Lenses and hints, each kind for the text as it was when it had `lens_lines` / `hint_lines` lines: once the line
     /// count changes they are stale and not shown until the providers answer again.
     pub lenses: Vec<ExtLens>,

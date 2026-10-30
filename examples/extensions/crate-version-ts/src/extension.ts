@@ -1,8 +1,10 @@
-// Crate Version Ts: a command that uses the global `fetch`. Requests go through Codeyard, which checks the host
-// against `net` in the manifest; a refused request rejects with an error that says what to add.
+// Crate Version Ts: a command that uses the global `fetch`, and a hover provider for Cargo.toml that uses it too.
+// Requests go through Codeyard, which checks the host against `net` in the manifest; a refused request rejects with an
+// error that says what to add.
 //
 // Inlay hints: in a `Cargo.toml`, each dependency line in view (`serde = "1.0"`) gets a hint with the latest version.
-// Codeyard asks only for the lines in view, again after an edit; the versions are kept, so each crate is fetched once.
+// Codeyard asks only for the lines in view, again after an edit; the versions are kept, so each crate is fetched once
+// (a hover must answer quickly too).
 
 import type { Context, InlayHint } from "@codeyard/extension";
 
@@ -40,12 +42,17 @@ export function activate(ctx: Context) {
     const name = (await ctx.input({ prompt: "Crate name" }))?.trim();
     if (!name) return null;
     const version = await latestOf(name);
-    if (version === null) {
-      ctx.notice(`There is no crate named ${name} on crates.io.`);
-      return null;
-    }
-    ctx.notice(`${name} ${version}`);
+    ctx.notice(version ? `${name} ${version}` : `There is no crate named ${name} on crates.io.`);
     return version;
+  });
+  ctx.hover(async (_ctx, document, position) => {
+    if (!document.uri.endsWith("Cargo.toml")) return undefined;
+    // A dependency line: `name = "1.0"` or `name = { version = "1.0" }`.
+    const line = document.text.split("\n")[position.line] ?? "";
+    const name = /^\s*([A-Za-z0-9_-]+)\s*=/.exec(line)?.[1];
+    if (!name || position.character > line.indexOf("=")) return undefined;
+    const version = await latestOf(name);
+    return version ? { contents: `**${name}**: the latest version on crates.io is ${version}` } : undefined;
   });
 
   ctx.inlayHints(async (_ctx, document, range) => {

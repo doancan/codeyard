@@ -123,7 +123,7 @@ pub struct Settings {
     pub word_wrap: bool,
     /// The active file is selected and visible in the tree.
     pub auto_reveal: bool,
-    /// Files deleted locally go to the Trash (`files.enableTrash`).
+    /// Files deleted locally go to the Trash (`files.enableTrash`, off: deletes are permanent and ask first).
     pub enable_trash: bool,
     /// In files without a language server, suggest words from the document.
     pub word_based_suggestions: bool,
@@ -369,7 +369,7 @@ impl Default for Settings {
             auto_reveal: true,
             cursor_blinking: true,
             word_based_suggestions: true,
-            enable_trash: true,
+            enable_trash: false,
             ports_auto_forward: true,
             ports_local_bind: host::forward::LocalBind::Loopback,
             ports_rules: Vec::new(),

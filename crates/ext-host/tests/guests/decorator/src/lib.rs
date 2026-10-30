@@ -1,7 +1,8 @@
 //! A decoration provider for the performance scenarios (scripts/perf/run.sh): `decorate` marks the active document's
 //! lines (a gutter mark on each, a muted note on every tenth), and its task provider answers at once with one task, so
-//! the time measured is the platform's, not the extension's. Asked for code lenses and inlay hints (#143), it answers
-//! at once too: a lens on every fifth line in view and a hint on every line.
+//! the time measured is the platform's, not the extension's. Its completion provider answers at once with 50 items
+//! (`CODEYARD_PERF_COMPLETION`). Asked for code lenses and inlay hints (#143), it answers at once too: a lens on every
+//! fifth line in view and a hint on every line.
 
 wit_bindgen::generate!({ path: "../../../../ext-api/wit", world: "extension" });
 
@@ -73,6 +74,24 @@ impl Guest for Decorator {
             Request::ProvideTasks => {
                 let task = Task { id: "noop".into(), label: "Decorator: No-op".into(), detail: None, group: "build".into() };
                 requests::respond(id, Ok(&Response::Tasks(vec![task])));
+            }
+            Request::Completion(_) => {
+                use codeyard::api::responses::{CompletionItem, CompletionKind, CompletionList};
+                let items = (0..50)
+                    .map(|n| CompletionItem {
+                        label: format!("perf_item_{n}"),
+                        kind: CompletionKind::Variable,
+                        detail: Some("perf".into()),
+                        documentation: None,
+                        insert_text: None,
+                        snippet: false,
+                        range: None,
+                        additional_edits: vec![],
+                        filter_text: None,
+                        sort_text: None,
+                    })
+                    .collect();
+                requests::respond(id, Ok(&Response::Completions(CompletionList { items, incomplete: false })));
             }
             _ => requests::respond(id, Ok(&Response::None)),
         }

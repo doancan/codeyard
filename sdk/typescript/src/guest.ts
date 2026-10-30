@@ -15,9 +15,12 @@ import {
   toWitInlayHint,
   type CodeAction,
   type CodeLens,
+  type CompletionItem,
+  type CompletionList,
+  type Hover,
   type InlayHint,
 } from "./types.ts";
-import type { Bindings, Guest, Request, Response, WitCodeAction } from "./wit.ts";
+import type { Bindings, Guest, Request, Response, WitCodeAction, WitCompletionItem } from "./wit.ts";
 
 /** An extension module: `export function activate(ctx) { … }`, optionally `export function deactivate(ctx) { … }`. */
 export interface ExtensionModule {
@@ -149,6 +152,26 @@ function codeAction(a: CodeAction): WitCodeAction {
   };
 }
 
+function completionItem(i: CompletionItem): WitCompletionItem {
+  return {
+    label: i.label,
+    kind: i.kind ?? "text",
+    detail: i.detail,
+    documentation: i.documentation,
+    insertText: i.insertText,
+    snippet: i.snippet ?? false,
+    range: i.range,
+    additionalEdits: i.additionalEdits ?? [],
+    filterText: i.filterText,
+    sortText: i.sortText,
+  };
+}
+
+function completions(r: CompletionItem[] | CompletionList | undefined): Response {
+  const list = Array.isArray(r) ? { items: r } : (r ?? { items: [] });
+  return { tag: "completions", val: { items: list.items.map(completionItem), incomplete: list.incomplete ?? false } };
+}
+
 function handle(id: bigint, request: Request): void {
   const missing = (what: string) => respond(id, { tag: "err", val: toWit(CodeyardError.notFound(what)) });
   switch (request.tag) {
@@ -222,6 +245,23 @@ function handle(id: bigint, request: Request): void {
     case "cancel-progress": {
       handlers.cancelledProgress.add(request.val);
       return respond(id, { tag: "ok", val: none });
+    }
+    // Without a provider, nothing to add: the language server's answer shows alone.
+    case "hover": {
+      const f = handlers.hover;
+      if (!f) return respond(id, { tag: "ok", val: { tag: "hover", val: undefined } });
+      const [document, position] = request.val;
+      return answer(
+        id,
+        () => f(ctx, document, position) as Hover | undefined,
+        (h) => ({ tag: "hover", val: h ? { contents: h.contents, range: h.range } : undefined }),
+      );
+    }
+    case "completion": {
+      const f = handlers.completion;
+      if (!f) return respond(id, { tag: "ok", val: completions(undefined) });
+      const [document, position, trigger] = request.val;
+      return answer(id, () => f(ctx, document, position, trigger) as CompletionItem[] | CompletionList, completions);
     }
     case "code-lens": {
       const f = handlers.codeLenses;

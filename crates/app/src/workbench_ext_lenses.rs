@@ -13,7 +13,6 @@ use std::time::Duration;
 
 use ext_api::value::{self as v, LogLevel, Request, Response};
 use ext_manifest::limits;
-use ext_proto::ToHost;
 use futures::StreamExt;
 use futures::channel::oneshot;
 use gpui::{EntityId, Task, WeakEntity};
@@ -145,7 +144,7 @@ impl Workbench {
                     _ => Request::CodeLens { document: document.clone(), range },
                 };
                 // Not `about` the file: an edit cancels them here (a new question), a cursor move does not.
-                let (rid, answer) = self.ask_provider_id(a, &reason, request, None, window, cx);
+                let (rid, answer) = self.ask_provider_with_id(a, &reason, request, None, window, cx);
                 ids.push((a.id().to_string(), rid));
                 pending.push(arrival(a.id().to_string(), kind, rid, answer));
             }
@@ -211,7 +210,7 @@ impl Workbench {
                 let mut answers = Vec::new();
                 for lens in unresolved.into_iter().take(RESOLVE_MAX) {
                     let request = Request::ResolveCodeLens { document: document.clone(), lens };
-                    let (rid, answer) = self.ask_provider_id(&active, &format!("language:{}", document.language), request, None, window, cx);
+                    let (rid, answer) = self.ask_provider_with_id(&active, &format!("language:{}", document.language), request, None, window, cx);
                     if let Some(ask) = self.cfg.exts.providers.lenses.asks.get_mut(&editor.entity_id()) {
                         ask.ids.push((ext.to_string(), rid));
                     }
@@ -259,10 +258,7 @@ impl Workbench {
     /// Cancel requests still in flight: the extension is told, and their answers will be dropped.
     fn cancel_lens_requests(&mut self, ids: Vec<(String, u64)>) {
         for (ext, id) in ids {
-            if let Some(p) = self.cfg.exts.code.procs.get(&ext) {
-                let _ = p.send(&ToHost::Cancel { id });
-            }
-            self.cfg.exts.code.pending.lock().unwrap_or_else(|p| p.into_inner()).answer(&ext, id, Err(v::Error::Cancelled));
+            self.cancel_provider_request(&ext, id);
         }
     }
 

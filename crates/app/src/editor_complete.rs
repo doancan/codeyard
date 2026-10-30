@@ -19,6 +19,8 @@ impl EditorView {
 
     /// Open, filter or close the list based on the typed text (single cursor only).
     pub(super) fn after_typed(&mut self, typed: &str, cx: &mut Context<Self>) {
+        // Extensions are asked on their own (editor_ext_lang.rs): their items join whichever list opens.
+        self.ext_after_typed(typed, cx);
         let Some(client) = self.lsp.clone() else {
             return if self.schema.is_some() { self.after_typed_schema(typed, cx) } else { self.after_typed_words(typed, cx) };
         };
@@ -73,10 +75,12 @@ impl EditorView {
         let cursor = self.buffer.cursor();
         let rope = self.buffer.rope();
         let typed = (1..=MAX_WORD + 1).take_while(|&n| n <= cursor && Self::is_word(rope.char(cursor - n))).count();
+        // A list of extension items only still gets the document's words.
+        let words_shown = self.completion.as_ref().is_some_and(|c| c.items.iter().any(|i| i.source.is_none()));
         match &self.completion {
-            Some(_) => self.refilter(cx),
-            None if (2..=MAX_WORD).contains(&typed) => self.request_word_completion(cx),
-            None => {}
+            Some(_) if words_shown || !(2..=MAX_WORD).contains(&typed) => self.refilter(cx),
+            _ if (2..=MAX_WORD).contains(&typed) => self.request_word_completion(cx),
+            _ => {}
         }
     }
 
@@ -88,10 +92,7 @@ impl EditorView {
         let cursor = self.buffer.cursor();
         let start = self.word_start(cursor);
         let version = self.buffer.version();
-        let open = move |e: &mut Self, items: Vec<crate::lsp::CompletionItem>, cx: &mut Context<Self>| {
-            e.completion = (!items.is_empty()).then(|| Completion { items, shown: Vec::new(), selected: 0, start, incomplete: false, prefix: String::new() });
-            e.refilter(cx);
-        };
+        let open = move |e: &mut Self, items: Vec<crate::lsp::CompletionItem>, cx: &mut Context<Self>| e.open_completion(items, start, false, cx);
         if let Some((v, at, words)) = &self.word_cache
             && version.saturating_sub(*v) < STALE_AFTER_EDITS
             && cursor.abs_diff(*at) < AROUND / 4
@@ -150,8 +151,7 @@ impl EditorView {
             let Ok((items, incomplete)) = task.await else { return };
             this.update(cx, |e, cx| {
                 let start = e.word_start(e.buffer.cursor());
-                e.completion = (!items.is_empty()).then(|| Completion { items, shown: Vec::new(), selected: 0, start, incomplete, prefix: String::new() });
-                e.refilter(cx);
+                e.open_completion(items, start, incomplete, cx);
             })
             .ok();
         }));
@@ -208,6 +208,7 @@ impl EditorView {
     }
 
     pub(super) fn trigger_completion(&mut self, _: &TriggerCompletion, _: &mut Window, cx: &mut Context<Self>) {
+        self.ask_ext_completion(None, cx);
         self.request_completion(None, cx);
     }
 
@@ -228,12 +229,14 @@ impl EditorView {
 
     pub(super) fn completion_dismiss(&mut self, _: &CompletionDismiss, _: &mut Window, cx: &mut Context<Self>) {
         self.completion = None;
+        self.end_ext_completion();
         cx.notify();
     }
 
     /// Apply the selected suggestion: main edit + additional edits (imports) as a single undo step.
     pub(super) fn completion_accept(&mut self, _: &CompletionAccept, _: &mut Window, cx: &mut Context<Self>) {
         let Some(c) = self.completion.take() else { return };
+        self.end_ext_completion();
         let Some(item) = c.shown.get(c.selected).map(|&i| c.items[i].clone()) else { return };
         let cursor = self.buffer.cursor();
         let main = match item.range {

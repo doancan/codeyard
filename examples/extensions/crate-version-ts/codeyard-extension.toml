@@ -16,6 +16,10 @@ net = ["crates.io"]
 id    = "latest"
 title = "Crate Version Ts: Latest Version of a Crate"
 
+# Resting the mouse on a dependency in Cargo.toml shows its latest version, next to the language server's hover.
+[[hover]]
+languages = ["toml"]
+
 # A hint with the latest version after each dependency of a Cargo.toml in view.
 [[inlay-hints]]
 languages = ["toml"]

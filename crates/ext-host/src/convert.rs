@@ -183,6 +183,8 @@ impl From<g::responses::Response> for v::Response {
             ),
             R::Tasks(t) => v::Response::Tasks(t.into_iter().map(|t| v::Task { id: t.id, label: t.label, detail: t.detail, group: t.group }).collect()),
             R::Ranges(r) => v::Response::Ranges(r.into_iter().map(Into::into).collect()),
+            R::Hover(h) => v::Response::Hover(h.map(|h| v::Hover { contents: h.contents, range: h.range.map(Into::into) })),
+            R::Completions(l) => v::Response::Completions(completion_list(l)),
             R::CodeLenses(l) => v::Response::CodeLenses(l.into_iter().map(Into::into).collect()),
             R::InlayHints(h) => {
                 v::Response::InlayHints(h.into_iter().map(|h| v::InlayHint { position: h.position.into(), label: h.label, tooltip: h.tooltip }).collect())
@@ -325,6 +327,8 @@ impl From<v::Request> for g::host_requests::Request {
             v::Request::Timer { id } => R::Timer(id),
             v::Request::CancelProgress { id } => R::CancelProgress(id),
             v::Request::OpenUri { uri } => R::OpenUri(uri),
+            v::Request::Hover { document, position } => R::Hover((document.into(), position.into())),
+            v::Request::Completion { document, position, trigger } => R::Completion((document.into(), position.into(), trigger)),
             v::Request::CodeLens { document, range } => R::CodeLens((document.into(), range.into())),
             v::Request::ResolveCodeLens { document, lens } => R::ResolveCodeLens((document.into(), lens.into())),
             v::Request::InlayHints { document, range } => R::InlayHints((document.into(), range.into())),
@@ -356,4 +360,53 @@ pub fn environment(e: &v::EnvInfo) -> g::env::Environment {
 
 pub fn activation(reason: &str) -> gx::Activation {
     gx::Activation { reason: reason.to_string() }
+}
+
+/// `responses.completion-list`, guest → app.
+fn completion_list(l: g::responses::CompletionList) -> v::CompletionList {
+    use g::responses::CompletionKind as K;
+    let kind = |k: K| match k {
+        K::Text => v::CompletionKind::Text,
+        K::Method => v::CompletionKind::Method,
+        K::Function => v::CompletionKind::Function,
+        K::Constructor => v::CompletionKind::Constructor,
+        K::Field => v::CompletionKind::Field,
+        K::Variable => v::CompletionKind::Variable,
+        K::Class => v::CompletionKind::Class,
+        K::Interface => v::CompletionKind::Interface,
+        K::Module => v::CompletionKind::Module,
+        K::Property => v::CompletionKind::Property,
+        K::Unit => v::CompletionKind::Unit,
+        K::Value => v::CompletionKind::Value,
+        K::Enum => v::CompletionKind::Enum,
+        K::Keyword => v::CompletionKind::Keyword,
+        K::Snippet => v::CompletionKind::Snippet,
+        K::Color => v::CompletionKind::Color,
+        K::File => v::CompletionKind::File,
+        K::Reference => v::CompletionKind::Reference,
+        K::Folder => v::CompletionKind::Folder,
+        K::EnumMember => v::CompletionKind::EnumMember,
+        K::Constant => v::CompletionKind::Constant,
+        K::Struct => v::CompletionKind::Struct,
+        K::Event => v::CompletionKind::Event,
+        K::Operator => v::CompletionKind::Operator,
+        K::TypeParameter => v::CompletionKind::TypeParameter,
+    };
+    let items = l
+        .items
+        .into_iter()
+        .map(|i| v::CompletionItem {
+            label: i.label,
+            kind: kind(i.kind),
+            detail: i.detail,
+            documentation: i.documentation,
+            insert_text: i.insert_text,
+            snippet: i.snippet,
+            range: i.range.map(Into::into),
+            additional_edits: i.additional_edits.into_iter().map(Into::into).collect(),
+            filter_text: i.filter_text,
+            sort_text: i.sort_text,
+        })
+        .collect();
+    v::CompletionList { items, incomplete: l.incomplete }
 }

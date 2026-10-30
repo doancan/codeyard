@@ -182,6 +182,32 @@ test("timers fire on the virtual clock; views draw and handle events", async () 
   h.dispose();
 });
 
+test("hover and completion answer for a position", async () => {
+  const h = host();
+  await h.activate({
+    activate(ctx) {
+      ctx.hover(async (_ctx, doc, pos) => {
+        const line = doc.text.split("\n")[pos.line] ?? "";
+        return line.includes("TODO") ? { contents: `**TODO** on line ${pos.line + 1}` } : undefined;
+      });
+      ctx.completion(async (_ctx, _doc, _pos, trigger) =>
+        trigger === "." ? { items: [{ label: "len", kind: "method", insertText: "len()$0", snippet: true }], incomplete: true } : [{ label: "todo" }],
+      );
+    },
+  });
+  const doc = { uri: "file:///work/a.ts", language: "typescript", version: 1, text: "let a = 1;\n// TODO\n" };
+  assert.deepEqual(await h.hover(doc, { line: 1, character: 3 }), { contents: "**TODO** on line 2" });
+  assert.equal(await h.hover(doc, { line: 0, character: 3 }), undefined);
+  assert.deepEqual(await h.completion(doc, { line: 0, character: 0 }), {
+    items: [{ label: "todo", kind: "text", snippet: false, additionalEdits: [] }],
+    incomplete: false,
+  });
+  const dot = await h.completion(doc, { line: 0, character: 0 }, ".");
+  assert.equal(dot.incomplete, true);
+  assert.deepEqual(dot.items[0], { label: "len", kind: "method", insertText: "len()$0", snippet: true, additionalEdits: [] });
+  h.dispose();
+});
+
 test("files, processes and progress go through the permissions", async () => {
   const h = host();
   h.file("apps/vercel.json", '{"a":1}');

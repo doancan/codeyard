@@ -5,6 +5,8 @@
 //!   is never answered, until the host cancels the request: then the answer comes anyway (late), and the host must
 //!   drop it.
 //! - Formatting and code actions also lint the document: each `TODO` becomes a warning and a gutter decoration.
+//! - Hover names the position; completion offers `probe-item` (and `probe-dot` after `.`). In a document containing
+//!   `slow`, completion is never answered until the host cancels it: then a late `probe-late` comes, to be dropped.
 //! - Code lenses (#143), for the lines asked about only: a `[section]` line gets "Run <section>", which runs `echo` with
 //!   `{"section": …, "line": …}`; a `#core` line gets a lens running `core:workbench.saveAll` (which the manifest does
 //!   not list); a `#later` line gets a lens resolved on demand. A document containing `slow` is never answered, like
@@ -14,13 +16,32 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 
 use crate::codeyard::api::host_requests::Request;
-use crate::codeyard::api::responses::{CodeAction, CodeLens, InlayHint, LensCommand, Response, Task};
+use crate::codeyard::api::responses::{
+    CodeAction, CodeLens, CompletionItem, CompletionKind, CompletionList, Hover, InlayHint, LensCommand, Response, Task,
+};
 use crate::codeyard::api::types::{Diagnostic, DiagnosticSeverity, Document, Position, Range, TextEdit, Tone};
 use crate::codeyard::api::{languages, requests, window};
 
 thread_local! {
     /// Format requests the probe sits on (documents that contain `slow`).
     static SLOW: RefCell<HashSet<u64>> = RefCell::new(HashSet::new());
+    /// Completion requests the probe sits on.
+    static SLOW_COMPLETION: RefCell<HashSet<u64>> = RefCell::new(HashSet::new());
+}
+
+fn completion_item(label: &str, detail: &str) -> CompletionItem {
+    CompletionItem {
+        label: label.into(),
+        kind: CompletionKind::Keyword,
+        detail: Some(detail.into()),
+        documentation: Some(format!("**{label}** from the probe")),
+        insert_text: None,
+        snippet: false,
+        range: None,
+        additional_edits: vec![],
+        filter_text: None,
+        sort_text: None,
+    }
 }
 
 fn utf16_len(s: &str) -> u32 {
@@ -161,6 +182,21 @@ pub fn handle(id: u64, request: Request) {
             let _ = window::show_notice(window::Severity::Info, &format!("Task {task} ran"), &[]);
             requests::respond(id, Ok(&Response::None));
         }
+        Request::Hover((_doc, position)) => {
+            let contents = format!("**Probe** hover at {}:{}", position.line, position.character);
+            requests::respond(id, Ok(&Response::Hover(Some(Hover { contents, range: None }))));
+        }
+        Request::Completion((doc, _position, trigger)) => {
+            if doc.text.contains("slow") {
+                SLOW_COMPLETION.with(|s| s.borrow_mut().insert(id));
+                return;
+            }
+            let mut items = vec![completion_item("probe-item", "from the probe")];
+            if trigger.as_deref() == Some(".") {
+                items.push(completion_item("probe-dot", "after a dot"));
+            }
+            requests::respond(id, Ok(&Response::Completions(CompletionList { items, incomplete: false })));
+        }
         _ => requests::respond(id, Ok(&Response::None)),
     }
 }
@@ -196,6 +232,10 @@ pub fn cancel(id: u64) {
     if SLOW.with(|s| s.borrow_mut().remove(&id)) {
         let edits = vec![TextEdit { range: everything(""), new_text: "LATE".into() }];
         requests::respond(id, Ok(&Response::Edits(edits)));
+    }
+    if SLOW_COMPLETION.with(|s| s.borrow_mut().remove(&id)) {
+        let items = vec![completion_item("probe-late", "too late")];
+        requests::respond(id, Ok(&Response::Completions(CompletionList { items, incomplete: false })));
     }
 }
 

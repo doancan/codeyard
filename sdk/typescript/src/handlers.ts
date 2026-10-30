@@ -12,6 +12,8 @@ export interface Handlers {
   codeActions: Fn | undefined;
   runCodeAction: Fn | undefined;
   openUri: Fn | undefined;
+  hover: Fn | undefined;
+  completion: Fn | undefined;
   codeLenses: Fn | undefined;
   resolveCodeLens: Fn | undefined;
   inlayHints: Fn | undefined;
@@ -35,6 +37,8 @@ function empty(): Handlers {
     codeActions: undefined,
     runCodeAction: undefined,
     openUri: undefined,
+    hover: undefined,
+    completion: undefined,
     codeLenses: undefined,
     resolveCodeLens: undefined,
     inlayHints: undefined,

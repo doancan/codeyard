@@ -304,3 +304,93 @@ pub struct ProcessCommand {
     pub env: Vec<(String, String)>,
     pub stdin: Option<Vec<u8>>,
 }
+
+/// What a hover provider describes (`responses.hover`), shown next to the language server's under the extension's
+/// name.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Hover {
+    /// Markdown; Codeyard shows it as plain text.
+    pub contents: String,
+    /// The range described; the word at the position when none.
+    pub range: Option<Range>,
+}
+
+impl Hover {
+    pub fn new(contents: impl Into<String>) -> Hover {
+        Hover { contents: contents.into(), range: None }
+    }
+}
+
+/// The icon a completion item shows, as in the Language Server Protocol (`responses.completion-kind`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum CompletionKind {
+    #[default]
+    Text,
+    Method,
+    Function,
+    Constructor,
+    Field,
+    Variable,
+    Class,
+    Interface,
+    Module,
+    Property,
+    Unit,
+    Value,
+    Enum,
+    Keyword,
+    Snippet,
+    Color,
+    File,
+    Reference,
+    Folder,
+    EnumMember,
+    Constant,
+    Struct,
+    Event,
+    Operator,
+    TypeParameter,
+}
+
+/// A completion a provider offers (`responses.completion-item`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CompletionItem {
+    /// Shown in the list, and inserted when `insert_text` is none.
+    pub label: String,
+    pub kind: CompletionKind,
+    /// One line shown next to the label, such as a type.
+    pub detail: Option<String>,
+    /// Markdown shown beside the list while the item is selected.
+    pub documentation: Option<String>,
+    pub insert_text: Option<String>,
+    /// `insert_text` is a snippet: `$1`, `${1:default}` and `$0` are tab stops.
+    pub snippet: bool,
+    /// The text replaced; the word before the cursor when none.
+    pub range: Option<Range>,
+    /// More edits made when the item is chosen, such as an import.
+    pub additional_edits: Vec<TextEdit>,
+    /// Matched against what the user typed; the label when none.
+    pub filter_text: Option<String>,
+    /// Orders items that match equally well; the label when none.
+    pub sort_text: Option<String>,
+}
+
+impl CompletionItem {
+    pub fn new(label: impl Into<String>, kind: CompletionKind) -> CompletionItem {
+        CompletionItem { label: label.into(), kind, ..CompletionItem::default() }
+    }
+}
+
+/// A completion provider's answer (`responses.completion-list`). A `Vec<CompletionItem>` converts into one.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CompletionList {
+    pub items: Vec<CompletionItem>,
+    /// More typing changes the answer: Codeyard asks again as the user types, instead of only filtering.
+    pub incomplete: bool,
+}
+
+impl From<Vec<CompletionItem>> for CompletionList {
+    fn from(items: Vec<CompletionItem>) -> CompletionList {
+        CompletionList { items, incomplete: false }
+    }
+}

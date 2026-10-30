@@ -475,6 +475,8 @@ impl From<w::host_requests::Request> for Request {
             R::Timer(id) => Request::Timer(id),
             R::CancelProgress(id) => Request::CancelProgress(id),
             R::OpenUri(u) => Request::OpenUri(u),
+            R::Hover((document, position)) => Request::Hover { document: document.into(), position: position.into() },
+            R::Completion((document, position, trigger)) => Request::Completion { document: document.into(), position: position.into(), trigger },
             R::CodeLens((document, range)) => Request::CodeLens { document: document.into(), range: range.into() },
             R::ResolveCodeLens((document, lens)) => Request::ResolveCodeLens { document: document.into(), lens: lens.into() },
             R::InlayHints((document, range)) => Request::InlayHints { document: document.into(), range: range.into() },
@@ -517,10 +519,60 @@ impl From<Response> for w::responses::Response {
                     })
                     .collect(),
             ),
+            Response::Hover(h) => R::Hover(h.map(|h| w::responses::Hover { contents: h.contents, range: h.range.map(Into::into) })),
+            Response::Completions(l) => R::Completions(completion_list(l)),
             Response::CodeLenses(l) => R::CodeLenses(l.into_iter().map(Into::into).collect()),
             Response::InlayHints(h) => {
                 R::InlayHints(h.into_iter().map(|h| w::responses::InlayHint { position: h.position.into(), label: h.label, tooltip: h.tooltip }).collect())
             }
         }
     }
+}
+
+fn completion_list(l: CompletionList) -> w::responses::CompletionList {
+    use w::responses::CompletionKind as K;
+    let kind = |k: CompletionKind| match k {
+        CompletionKind::Text => K::Text,
+        CompletionKind::Method => K::Method,
+        CompletionKind::Function => K::Function,
+        CompletionKind::Constructor => K::Constructor,
+        CompletionKind::Field => K::Field,
+        CompletionKind::Variable => K::Variable,
+        CompletionKind::Class => K::Class,
+        CompletionKind::Interface => K::Interface,
+        CompletionKind::Module => K::Module,
+        CompletionKind::Property => K::Property,
+        CompletionKind::Unit => K::Unit,
+        CompletionKind::Value => K::Value,
+        CompletionKind::Enum => K::Enum,
+        CompletionKind::Keyword => K::Keyword,
+        CompletionKind::Snippet => K::Snippet,
+        CompletionKind::Color => K::Color,
+        CompletionKind::File => K::File,
+        CompletionKind::Reference => K::Reference,
+        CompletionKind::Folder => K::Folder,
+        CompletionKind::EnumMember => K::EnumMember,
+        CompletionKind::Constant => K::Constant,
+        CompletionKind::Struct => K::Struct,
+        CompletionKind::Event => K::Event,
+        CompletionKind::Operator => K::Operator,
+        CompletionKind::TypeParameter => K::TypeParameter,
+    };
+    let items = l
+        .items
+        .into_iter()
+        .map(|i| w::responses::CompletionItem {
+            label: i.label,
+            kind: kind(i.kind),
+            detail: i.detail,
+            documentation: i.documentation,
+            insert_text: i.insert_text,
+            snippet: i.snippet,
+            range: i.range.map(Into::into),
+            additional_edits: i.additional_edits.into_iter().map(Into::into).collect(),
+            filter_text: i.filter_text,
+            sort_text: i.sort_text,
+        })
+        .collect();
+    w::responses::CompletionList { items, incomplete: l.incomplete }
 }

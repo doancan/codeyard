@@ -112,6 +112,8 @@ export type Request =
   | { tag: "timer"; val: bigint }
   | { tag: "cancel-progress"; val: bigint }
   | { tag: "open-uri"; val: string }
+  | { tag: "hover"; val: [Document, Position] }
+  | { tag: "completion"; val: [Document, Position, string | undefined] }
   | { tag: "code-lens"; val: [Document, Range] }
   | { tag: "resolve-code-lens"; val: [Document, WitCodeLens] }
   | { tag: "inlay-hints"; val: [Document, Range] };
@@ -145,8 +147,55 @@ export type Response =
   | { tag: "code-actions"; val: WitCodeAction[] }
   | { tag: "tasks"; val: { id: string; label: string; detail: string | undefined; group: string }[] }
   | { tag: "ranges"; val: Range[] }
+  | { tag: "hover"; val: WitHover | undefined }
+  | { tag: "completions"; val: { items: WitCompletionItem[]; incomplete: boolean } }
   | { tag: "code-lenses"; val: WitCodeLens[] }
   | { tag: "inlay-hints"; val: WitInlayHint[] };
+
+export interface WitHover {
+  contents: string;
+  range: Range | undefined;
+}
+
+export type CompletionKind =
+  | "text"
+  | "method"
+  | "function"
+  | "constructor"
+  | "field"
+  | "variable"
+  | "class"
+  | "interface"
+  | "module"
+  | "property"
+  | "unit"
+  | "value"
+  | "enum"
+  | "keyword"
+  | "snippet"
+  | "color"
+  | "file"
+  | "reference"
+  | "folder"
+  | "enum-member"
+  | "constant"
+  | "struct"
+  | "event"
+  | "operator"
+  | "type-parameter";
+
+export interface WitCompletionItem {
+  label: string;
+  kind: CompletionKind;
+  detail: string | undefined;
+  documentation: string | undefined;
+  insertText: string | undefined;
+  snippet: boolean;
+  range: Range | undefined;
+  additionalEdits: TextEdit[];
+  filterText: string | undefined;
+  sortText: string | undefined;
+}
 
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
 

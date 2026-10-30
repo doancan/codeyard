@@ -648,6 +648,11 @@ impl EditorView {
             self.hover = None;
             cx.notify();
         }
+        self.schedule_hover_at(ix, position, cx);
+    }
+
+    /// Show info about the character at `ix` after the hover delay; `position` is where the popup opens.
+    pub(super) fn schedule_hover_at(&mut self, ix: usize, position: Point<Pixels>, cx: &mut Context<Self>) {
         let mut diagnostics = self.diagnostics_at(ix);
         if let Some((_, word)) = self.misspelling_at(ix, cx) {
             let message = tf("“{}” is not in the dictionary. Quick Fix shows suggestions.", &[&word]);
@@ -656,7 +661,8 @@ impl EditorView {
         let client = self.lsp.clone();
         let debug = self.debug_eval.clone().zip(self.debug_expression_at(ix));
         let schema_hover = self.schema_hover_input(ix, client.is_some());
-        if client.is_none() && diagnostics.is_empty() && debug.is_none() && schema_hover.is_none() {
+        let ext = self.ext_hover_ask(ix);
+        if client.is_none() && diagnostics.is_empty() && debug.is_none() && schema_hover.is_none() && ext.is_none() {
             self.hover_task = None;
             return;
         }
@@ -664,6 +670,11 @@ impl EditorView {
         let uri = crate::lsp::path_to_uri(&self.path);
         self.hover_task = Some(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(std::time::Duration::from_millis(450)).await;
+            // Extensions are asked first and answer while the language server does; each shows when it arrives.
+            let ext = match ext {
+                Some(ask) => ask.send(cx).await,
+                None => None,
+            };
             // If the program is stopped: the expression's value (DAP `evaluate`, context "hover") goes before the server's description.
             let value = match debug {
                 Some(((session, frame), expr)) => {
@@ -696,11 +707,14 @@ impl EditorView {
             };
             this.update(cx, |e, cx| {
                 if text.is_some() || !diagnostics.is_empty() {
-                    e.hover = Some(Hover { at: ix, diagnostics, text, position });
+                    e.hover = Some(Hover { at: ix, diagnostics, text, position, ext: Vec::new() });
                     cx.notify();
                 }
             })
             .ok();
+            if let Some(reply) = ext {
+                Self::show_ext_hovers(this, reply, ix, position, cx).await;
+            }
         }));
     }
 

@@ -66,6 +66,16 @@ pub enum Request {
     Timer(u64),
     CancelProgress(u64),
     OpenUri(String),
+    Hover {
+        document: Document,
+        position: Position,
+    },
+    /// The trigger character typed, when one of the manifest's `trigger-characters` asked.
+    Completion {
+        document: Document,
+        position: Position,
+        trigger: Option<String>,
+    },
     /// Code lenses for the lines in view (the range).
     CodeLens {
         document: Document,
@@ -92,6 +102,8 @@ pub enum Response {
     View(String),
     Edits(Vec<TextEdit>),
     CodeActions(Vec<CodeAction>),
+    Hover(Option<Hover>),
+    Completions(CompletionList),
     CodeLenses(Vec<CodeLens>),
     InlayHints(Vec<InlayHint>),
 }
