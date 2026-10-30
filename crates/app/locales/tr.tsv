@@ -37,7 +37,7 @@ Settings…	Ayarlar…
 Open Settings (JSON)	Ayarları Aç (JSON)
 Keyboard Shortcuts	Klavye Kısayolları
 Color Theme…	Renk Teması…
-Import VS Code Settings and Shortcuts	VS Code Ayarlarını ve Kısayollarını İçe Aktar
+Import Settings and Shortcuts from Another Editor	Başka Bir Editörün Ayarlarını ve Kısayollarını İçe Aktar
 Exit	Çıkış
 About Codeyard	Codeyard Hakkında
 
@@ -368,7 +368,7 @@ Terminal: Run Selected Text	Terminal: Seçili Metni Çalıştır
 Go: Last Edit Location	Gezin: Son Düzenleme Konumu
 Git: Clone Repository…	Git: Depoyu Klonla…
 Preferences: Open Keyboard Shortcuts	Tercihler: Klavye Kısayollarını Aç
-Preferences: Import VS Code Settings and Shortcuts	Tercihler: VS Code Ayarlarını ve Kısayollarını İçe Aktar
+Preferences: Import Settings and Shortcuts from Another Editor	Tercihler: Başka Bir Editörün Ayarlarını ve Kısayollarını İçe Aktar
 View: Problems	Görünüm: Sorunlar
 View: Output	Görünüm: Çıktı
 Output: Clear	Çıktı: Temizle
@@ -1042,7 +1042,7 @@ unrecognized theme format (expected “color” or “colors”)	tanınmayan tem
 {}: the color must be a string	{}: renk string olmalı
 {}: invalid color {}	{}: geçersiz renk {}
 unknown role: {}	bilinmeyen rol: {}
-No VS Code settings found on this machine	Bu makinede VS Code ayarı bulunamadı
+No settings from another editor found on this machine	Bu makinede başka bir editörün ayarı bulunamadı
 The connection is down, so files with unsaved changes cannot be saved. Use File: Save a Copy to This Computer… to keep them, or close them, then reconnect.	Bağlantı kesik; bu yüzden kaydedilmemiş değişiklikleri olan dosyalar kaydedilemez. Onları korumak için Dosya: Bu Bilgisayara Kopya Kaydet… komutunu kullanın ya da kapatın, sonra yeniden bağlanın.
 Save or close the files with unsaved changes first.	Önce kaydedilmemiş değişiklikleri olan dosyaları kaydedin ya da kapatın.
 Open a folder first: project settings live in it.	Önce bir klasör açın: proje ayarları klasörün içinde durur.
@@ -1373,7 +1373,7 @@ Unknown theme '{0}'. Available: {1}	Bilinmeyen tema: '{0}'. Kullanılabilir olan
 dark	koyu
 light	açık
 {} · user	{} · kullanıcı
-{} · VS Code import	{} · VS Code'dan içe aktarma
+{} · imported	{} · içe aktarıldı
 Select a color theme	Bir renk teması seçin
 Select a file icon theme	Bir dosya simgesi teması seçin
 Open as Hex	Hex Olarak Aç
@@ -1660,7 +1660,7 @@ request failed	istek başarısız oldu
 # ---- Debug configurations (debug_config.rs) ----
 the checksum does not match: the download is incomplete or was altered	sağlama toplamı eşleşmiyor: indirme eksik ya da değiştirilmiş
 the archive does not contain js-debug/src/dapDebugServer.js	arşiv js-debug/src/dapDebugServer.js dosyasını içermiyor
-JavaScript debugging needs Microsoft's js-debug adapter: run “Debug: Install JavaScript Debugger” (a one-time download, MIT licensed), or install VS Code (its copy is used).	JavaScript hata ayıklaması için Microsoft'un js-debug bağdaştırıcısı gerekir: “Hata Ayıklama: JavaScript Hata Ayıklayıcısını Kur” komutunu çalıştırın (tek seferlik indirme, MIT lisanslı) ya da VS Code'u kurun (onun kopyası kullanılır).
+JavaScript debugging needs Microsoft's js-debug adapter: run “Debug: Install JavaScript Debugger” (a one-time download, MIT licensed), or install an editor that ships it (its copy is used).	JavaScript hata ayıklaması için Microsoft'un js-debug bağdaştırıcısı gerekir: “Hata Ayıklama: JavaScript Hata Ayıklayıcısını Kur” komutunu çalıştırın (tek seferlik indirme, MIT lisanslı) ya da onu içeren bir editör kurun (onun kopyası kullanılır).
 No debug adapter for type “{0}”. Supported: lldb (C, C++, Rust, Swift), go, python; or add {1} to the configuration.	“{0}” türü için hata ayıklama bağdaştırıcısı yok. Desteklenenler: lldb (C, C++, Rust, Swift), go, python; ya da yapılandırmaya {1} ekleyin.
 Debug Rust: {}	Rust Hata Ayıklama: {}
 Debug Go package	Go Paketi Hata Ayıklama
@@ -1849,11 +1849,11 @@ Download	İndir
 Schema cache cleared. Schemas are downloaded again when needed.	Şema önbelleği temizlendi. Şemalar gerektiğinde yeniden indirilir.
 no file name	dosya adı yok
 HOME is not set	HOME ayarlı değil
-# ---- VS Code import, session restore ----
-VS Code settings.json could not be read	VS Code settings.json okunamadı
+# ---- Settings import, session restore ----
+The other editor's settings.json could not be read	Diğer editörün settings.json dosyası okunamadı
 theme {} isn't installed here: copy its .json into ~/.config/codeyard/themes to use it	{} teması burada kurulu değil: kullanmak için .json dosyasını ~/.config/codeyard/themes içine kopyalayın
 no configuration directory	yapılandırma klasörü yok
-Imported {0} settings and {1} shortcuts from VS Code ({2} settings and {3} shortcuts have no equivalent here)	VS Code'dan {0} ayar ve {1} kısayol içe aktarıldı ({2} ayarın ve {3} kısayolun burada karşılığı yok)
+Imported {0} settings and {1} shortcuts ({2} settings and {3} shortcuts have no equivalent here)	{0} ayar ve {1} kısayol içe aktarıldı ({2} ayarın ve {3} kısayolun burada karşılığı yok)
 {} no longer exists, so it was not reopened.	{} artık yok, bu yüzden yeniden açılmadı.
 # ---- Compare, scratch files, snippets, user themes (workbench_extras) ----
 The clipboard has no text.	Panoda metin yok.
@@ -1868,7 +1868,7 @@ Name of the new theme (it joins the theme list)	Yeni temanın adı (tema listesi
 Give the theme a name.	Temaya bir ad verin.
 Saved {} (edit the colors in that file)	{} kaydedildi (renkleri o dosyada düzenleyin)
 Could not write {}: {}	{0} yazılamadı: {1}
-Themes live in {}: drop VS Code or native theme .json files there	Temalar {} içinde durur: VS Code ya da yerel tema .json dosyalarını oraya bırakın
+Themes live in {}: drop theme .json files there	Temalar {} içinde durur: tema .json dosyalarını oraya bırakın
 Snippets reloaded	Kod parçacıkları yeniden yüklendi
 user	kullanıcı
 Insert a snippet (or type its prefix in the editor and press Tab)	Bir kod parçacığı ekleyin (ya da düzenleyicide önekini yazıp Tab'a basın)

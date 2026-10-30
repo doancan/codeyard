@@ -208,6 +208,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The settings and shortcuts import is "Preferences: Import Settings and Shortcuts from Another Editor", and its
+  messages no longer name another product. A shortcut block written by an earlier import is still replaced by a new one.
 - Installed extensions with code start no process when Codeyard opens: the check that the system sandbox works now
   runs when the first one starts. The startup measurement with 100 installed extensions now has 50 with code.
 
