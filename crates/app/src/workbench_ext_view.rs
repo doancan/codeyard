@@ -188,7 +188,7 @@ impl Workbench {
                 .child(
                     action_button("ext-consent-cancel", crate::i18n::t("Cancel"), p)
                         .track_focus(&cancel)
-                        .on_click(cx.listener(|this, _, _, cx| this.cancel_consent(cx))),
+                        .on_click(cx.listener(|this, _, w, cx| this.cancel_consent(w, cx))),
                 );
             // Escape answers Cancel, as in every other dialog.
             return page

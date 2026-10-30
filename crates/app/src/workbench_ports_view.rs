@@ -5,7 +5,7 @@
 use gpui::{AnyElement, Context, MouseButton, SharedString, div, prelude::*, px};
 use host::forward::LocalBind;
 
-use super::super::{MenuCmd, MenuTarget, Workbench, center};
+use super::super::{MenuCmd, MenuTarget, Workbench, a11y, center};
 use crate::menu::MenuItem;
 use crate::port_forwards::{ForwardSet, ForwardState, Origin, Protocol, failure_text};
 use crate::ports::ListeningPort;
@@ -108,7 +108,13 @@ const W_ACTIONS: f32 = 104.;
 
 impl Workbench {
     /// Right-click or "…" on a row.
-    fn open_port_menu(&mut self, row: &PortRow, position: gpui::Point<gpui::Pixels>, window: &mut gpui::Window, cx: &mut Context<Self>) {
+    pub(in crate::workbench) fn open_port_menu(
+        &mut self,
+        row: &PortRow,
+        position: gpui::Point<gpui::Pixels>,
+        window: &mut gpui::Window,
+        cx: &mut Context<Self>,
+    ) {
         let active = row.state == RowState::Active;
         if row.state == RowState::Listening {
             let items = vec![MenuItem::new(crate::i18n::t("Forward Port"))];
@@ -282,11 +288,18 @@ impl Workbench {
             let list = gpui::uniform_list(
                 "port-rows",
                 rows.len(),
-                cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
-                    range.filter_map(|ix| Some(this.port_row(ix, rows.get(ix)?, &p, cx))).collect()
+                cx.processor(move |this, range: std::ops::Range<usize>, window, cx| {
+                    range
+                        .filter_map(|ix| {
+                            let row = this.port_row(ix, rows.get(ix)?, &p, cx);
+                            Some(this.nav_row(a11y::RowFrame::Port, ix, row, window, cx))
+                        })
+                        .collect()
                 }),
             )
+            .track_scroll(self.row_scroll(a11y::RowFrame::Port))
             .size_full();
+            let list = self.row_list(a11y::RowFrame::Port, list, cx);
             div().flex_1().min_h_0().child(list).into_any_element()
         };
         div()

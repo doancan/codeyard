@@ -39,7 +39,7 @@ pub(super) struct TestingState {
     before: testexp::Results,
     pub(super) run: Option<gpui::Task<()>>,
     output: Option<Entity<TerminalView>>,
-    scroll: gpui::UniformListScrollHandle,
+    pub(super) scroll: gpui::UniformListScrollHandle,
 }
 
 impl TestingState {
@@ -528,15 +528,24 @@ impl Workbench {
                 .flex_1()
                 .min_h_0()
                 .child(
-                    gpui::uniform_list(
-                        "test-rows",
-                        rows.len(),
-                        cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
-                            range.filter_map(|ix| Some(this.test_row(ix, rows.get(ix)?, &p, cx))).collect()
-                        }),
-                    )
-                    .track_scroll(t.scroll.clone())
-                    .size_full(),
+                    self.row_list(
+                        a11y::RowFrame::Test,
+                        gpui::uniform_list(
+                            "test-rows",
+                            rows.len(),
+                            cx.processor(move |this, range: std::ops::Range<usize>, window, cx| {
+                                range
+                                    .filter_map(|ix| {
+                                        let row = this.test_row(ix, rows.get(ix)?, &p, cx);
+                                        Some(this.nav_row(a11y::RowFrame::Test, ix, row, window, cx))
+                                    })
+                                    .collect()
+                            }),
+                        )
+                        .track_scroll(t.scroll.clone())
+                        .size_full(),
+                        cx,
+                    ),
                 )
                 .into_any_element()
         };

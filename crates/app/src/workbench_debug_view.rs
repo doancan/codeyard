@@ -268,7 +268,14 @@ impl Workbench {
         }
     }
 
-    fn open_variable_menu(&mut self, parent: i64, name: String, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(in crate::workbench) fn open_variable_menu(
+        &mut self,
+        parent: i64,
+        name: String,
+        position: gpui::Point<gpui::Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let stopped = self.dbg.cur().is_some_and(|d| matches!(d.status, DebugStatus::Stopped(_)));
         let can_set = self.dbg.cur().and_then(|d| d.session.as_ref()).is_some_and(|s| s.supports("supportsSetVariable") || s.supports("supportsSetExpression"));
         let items = vec![
@@ -282,7 +289,7 @@ impl Workbench {
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);
     }
 
-    fn open_frame_menu(&mut self, index: usize, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(in crate::workbench) fn open_frame_menu(&mut self, index: usize, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
         let can_restart = self
             .dbg
             .cur()
@@ -302,7 +309,7 @@ impl Workbench {
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);
     }
 
-    fn open_breakpoint_menu(
+    pub(in crate::workbench) fn open_breakpoint_menu(
         &mut self,
         path: String,
         line: usize,
@@ -542,10 +549,11 @@ impl Workbench {
 
     fn var_list(&self, id: &'static str, rows: Vec<VarRow>, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
         let p = *p;
-        gpui::uniform_list(
+        let kind = if id == "dbg-watch-rows" { a11y::RowFrame::DebugWatch } else { a11y::RowFrame::DebugVariable };
+        let list = gpui::uniform_list(
             id,
             rows.len(),
-            cx.processor(move |_, range: std::ops::Range<usize>, _, cx| {
+            cx.processor(move |this, range: std::ops::Range<usize>, window, cx| {
                 range
                     .filter_map(|ix| {
                         let r = rows.get(ix)?;
@@ -553,84 +561,81 @@ impl Workbench {
                         let watch = r.watch;
                         let group = SharedString::from(format!("{id}-{ix}"));
                         if let Some(paged) = r.more {
-                            return Some(
-                                div()
-                                    .id((id, ix))
-                                    .h(px(layout::ROW_H))
-                                    .w_full()
-                                    .flex()
-                                    .items_center()
-                                    .pl(px(theme::SPACE[5] + 12. + theme::SPACE[2] + layout::TREE_INDENT * r.depth as f32))
-                                    .text_color(c(p.accent))
-                                    .cursor_pointer()
-                                    .hover(|d| d.bg(c(p.surface_hover)))
-                                    .child(r.name.clone())
-                                    .on_click(cx.listener(move |this, _, _, cx| this.load_more_variables(paged, cx)))
-                                    .into_any_element(),
-                            );
-                        }
-                        // Variables (not scopes or watches) have a menu.
-                        let menu = (r.parent != 0).then(|| (r.parent, r.name.clone()));
-                        Some(
-                            div()
+                            let el = div()
                                 .id((id, ix))
-                                .group(group.clone())
                                 .relative()
                                 .h(px(layout::ROW_H))
                                 .w_full()
                                 .flex()
                                 .items_center()
-                                .gap(px(theme::SPACE[2]))
-                                .pl(px(theme::SPACE[5] + layout::TREE_INDENT * r.depth as f32))
-                                .pr(px(theme::SPACE[3]))
-                                .whitespace_nowrap()
-                                .overflow_hidden()
+                                .pl(px(theme::SPACE[5] + 12. + theme::SPACE[2] + layout::TREE_INDENT * r.depth as f32))
+                                .text_color(c(p.accent))
+                                .cursor_pointer()
                                 .hover(|d| d.bg(c(p.surface_hover)))
-                                .child(
-                                    div()
-                                        .w(px(12.))
-                                        .flex_none()
-                                        .when(reference > 0, |d| d.child(icon(if r.open { "chevron-down" } else { "chevron-right" }, 12., p.text_muted))),
-                                )
-                                .child(
-                                    div()
-                                        .flex_none()
-                                        .text_color(c(if r.depth == 0 && watch.is_none() { p.text } else { p.syntax_function }))
-                                        .child(r.name.clone()),
-                                )
-                                .when(!r.value.is_empty(), |d| {
-                                    d.child(div().flex_none().text_color(c(p.text_muted)).child(if watch.is_some() { "=" } else { ":" }))
-                                        .child(div().min_w_0().overflow_hidden().font_family(ui::MONO_FONT).child(r.value.clone()))
-                                })
-                                .when_some(r.ty.clone(), |d, t| d.child(div().flex_none().text_color(c(p.text_muted)).text_size(px(text::XS.0)).child(t)))
-                                .when_some(watch, |d, i| {
-                                    d.child(div().absolute().right(px(theme::SPACE[3])).invisible().group_hover(group.clone(), |d| d.visible()).child(
-                                        ui::icon_button(("dbg-watch-x", i), "x", crate::i18n::t("Remove Expression"), &p).on_click(cx.listener(
-                                            move |this, _, _, cx| {
-                                                cx.stop_propagation();
-                                                this.remove_watch(i, cx);
-                                            },
-                                        )),
-                                    ))
-                                })
-                                .when(reference > 0, |d| d.cursor_pointer().on_click(cx.listener(move |this, _, _, cx| this.toggle_variable(reference, cx))))
-                                .when_some(menu, |d, (parent, name)| {
-                                    d.on_mouse_down(
-                                        MouseButton::Right,
-                                        cx.listener(move |this, ev: &gpui::MouseDownEvent, w, cx| {
+                                .child(r.name.clone())
+                                .on_click(cx.listener(move |this, _, _, cx| this.load_more_variables(paged, cx)))
+                                .into_any_element();
+                            return Some(this.nav_row(kind, ix, el, window, cx));
+                        }
+                        // Variables (not scopes or watches) have a menu.
+                        let menu = (r.parent != 0).then(|| (r.parent, r.name.clone()));
+                        let el = div()
+                            .id((id, ix))
+                            .group(group.clone())
+                            .relative()
+                            .h(px(layout::ROW_H))
+                            .w_full()
+                            .flex()
+                            .items_center()
+                            .gap(px(theme::SPACE[2]))
+                            .pl(px(theme::SPACE[5] + layout::TREE_INDENT * r.depth as f32))
+                            .pr(px(theme::SPACE[3]))
+                            .whitespace_nowrap()
+                            .overflow_hidden()
+                            .hover(|d| d.bg(c(p.surface_hover)))
+                            .child(
+                                div()
+                                    .w(px(12.))
+                                    .flex_none()
+                                    .when(reference > 0, |d| d.child(icon(if r.open { "chevron-down" } else { "chevron-right" }, 12., p.text_muted))),
+                            )
+                            .child(
+                                div().flex_none().text_color(c(if r.depth == 0 && watch.is_none() { p.text } else { p.syntax_function })).child(r.name.clone()),
+                            )
+                            .when(!r.value.is_empty(), |d| {
+                                d.child(div().flex_none().text_color(c(p.text_muted)).child(if watch.is_some() { "=" } else { ":" }))
+                                    .child(div().min_w_0().overflow_hidden().font_family(ui::MONO_FONT).child(r.value.clone()))
+                            })
+                            .when_some(r.ty.clone(), |d, t| d.child(div().flex_none().text_color(c(p.text_muted)).text_size(px(text::XS.0)).child(t)))
+                            .when_some(watch, |d, i| {
+                                d.child(div().absolute().right(px(theme::SPACE[3])).invisible().group_hover(group.clone(), |d| d.visible()).child(
+                                    ui::icon_button(("dbg-watch-x", i), "x", crate::i18n::t("Remove Expression"), &p).on_click(cx.listener(
+                                        move |this, _, _, cx| {
                                             cx.stop_propagation();
-                                            this.open_variable_menu(parent, name.clone(), ev.position, w, cx);
-                                        }),
-                                    )
-                                })
-                                .into_any_element(),
-                        )
+                                            this.remove_watch(i, cx);
+                                        },
+                                    )),
+                                ))
+                            })
+                            .when(reference > 0, |d| d.cursor_pointer().on_click(cx.listener(move |this, _, _, cx| this.toggle_variable(reference, cx))))
+                            .when_some(menu, |d, (parent, name)| {
+                                d.on_mouse_down(
+                                    MouseButton::Right,
+                                    cx.listener(move |this, ev: &gpui::MouseDownEvent, w, cx| {
+                                        cx.stop_propagation();
+                                        this.open_variable_menu(parent, name.clone(), ev.position, w, cx);
+                                    }),
+                                )
+                            })
+                            .into_any_element();
+                        Some(this.nav_row(kind, ix, el, window, cx))
                     })
                     .collect()
             }),
         )
-        .size_full()
-        .into_any_element()
+        .track_scroll(self.row_scroll(kind))
+        .size_full();
+        self.row_list(kind, list, cx)
     }
 
     fn stack_body(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
@@ -639,10 +644,11 @@ impl Workbench {
             return self.note(crate::i18n::t("No debug session."), p);
         }
         let p = *p;
-        gpui::uniform_list(
+        let kind = a11y::RowFrame::DebugStack;
+        let list = gpui::uniform_list(
             "dbg-stack-rows",
             rows.len(),
-            cx.processor(move |_, range: std::ops::Range<usize>, _, cx| {
+            cx.processor(move |this, range: std::ops::Range<usize>, window, cx| {
                 range
                     .filter_map(|ix| {
                         let row = rows.get(ix)?;
@@ -704,13 +710,14 @@ impl Workbench {
                                 .on_click(cx.listener(|this, _, _, cx| this.load_more_frames(cx))),
                             StackRow::Note(t) => base.pl(px(theme::SPACE[6])).text_color(c(p.text_muted)).child(t.clone()),
                         };
-                        Some(el.into_any_element())
+                        Some(this.nav_row(kind, ix, el.into_any_element(), window, cx))
                     })
                     .collect()
             }),
         )
-        .size_full()
-        .into_any_element()
+        .track_scroll(self.row_scroll(kind))
+        .size_full();
+        self.row_list(kind, list, cx)
     }
 
     fn breakpoints_body(&self, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
@@ -744,10 +751,11 @@ impl Workbench {
         let root = self.root(cx);
         let active = self.dbg.bps.active;
         let p = *p;
-        gpui::uniform_list(
+        let kind = a11y::RowFrame::DebugBreakpoint;
+        let list = gpui::uniform_list(
             "dbg-bp-rows",
             rows.len(),
-            cx.processor(move |_, range: std::ops::Range<usize>, _, cx| {
+            cx.processor(move |this, range: std::ops::Range<usize>, window, cx| {
                 range
                     .filter_map(|ix| {
                         let row = rows.get(ix)?;
@@ -857,13 +865,14 @@ impl Workbench {
                                 )
                             }
                         };
-                        Some(el.into_any_element())
+                        Some(this.nav_row(kind, ix, el.into_any_element(), window, cx))
                     })
                     .collect()
             }),
         )
-        .size_full()
-        .into_any_element()
+        .track_scroll(self.row_scroll(kind))
+        .size_full();
+        self.row_list(kind, list, cx)
     }
 
     /// The view's rows as text: Variables (`name: value`, indented by depth) and Call Stack (`session|thread|frame:…`).

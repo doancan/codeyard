@@ -26,7 +26,7 @@ pub(super) struct RemoteView {
     pub(super) probes: HashMap<String, Result<(), String>>,
     containers: Option<Targets>,
     wsl: Option<Targets>,
-    scroll: gpui::UniformListScrollHandle,
+    pub(super) scroll: gpui::UniformListScrollHandle,
 }
 
 /// A command from a host row's menu.
@@ -188,7 +188,7 @@ impl Workbench {
         }
     }
 
-    fn open_host_menu(&mut self, alias: &str, group: Group, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_host_menu(&mut self, alias: &str, group: Group, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
         let connected = self.connected_to(alias);
         let mut items = vec![
             MenuItem::new(if connected { crate::i18n::t("Open Folder…") } else { crate::i18n::t("Connect in Current Window") }),
@@ -256,15 +256,24 @@ impl Workbench {
             .child(
                 // The list fills the view, so rows are as wide as the sidebar.
                 div().flex_1().min_h_0().child(
-                    gpui::uniform_list(
-                        "remote-rows",
-                        rows.len(),
-                        cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
-                            range.filter_map(|ix| Some(this.remote_row(ix, rows.get(ix)?, &p, cx))).collect()
-                        }),
-                    )
-                    .track_scroll(self.remote.view.scroll.clone())
-                    .size_full(),
+                    self.row_list(
+                        a11y::RowFrame::Remote,
+                        gpui::uniform_list(
+                            "remote-rows",
+                            rows.len(),
+                            cx.processor(move |this, range: std::ops::Range<usize>, window, cx| {
+                                range
+                                    .filter_map(|ix| {
+                                        let row = this.remote_row(ix, rows.get(ix)?, &p, cx);
+                                        Some(this.nav_row(a11y::RowFrame::Remote, ix, row, window, cx))
+                                    })
+                                    .collect()
+                            }),
+                        )
+                        .track_scroll(self.remote.view.scroll.clone())
+                        .size_full(),
+                        cx,
+                    ),
                 ),
             )
             .into_any_element()

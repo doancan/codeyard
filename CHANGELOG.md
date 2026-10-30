@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The lists of the Run and Debug view, the Testing view, the Remote Explorer and the Ports panel work with the keyboard:
+  Tab reaches them, Up/Down/Home/End move a cursor row shown in the focus colour, and Enter does what a click on the
+  row does. Shift+F10 (and the Menu key) opens the focused row's menu under it and Escape returns to the row; the same
+  key opens the Explorer's menu for the selection and the editor's menu at the caret. The keys are rebindable
+  (`rows.*`, `list.showContextMenu`).
+- Screen readers reach the row menus of the Run and Debug view (variables, call stack frames, line breakpoints), the
+  Remote Explorer's hosts and the Ports panel: each such row offers "More Actions…" (and the Show Menu action), which
+  opens the same menu a right click opens, under the row; the menu takes the keyboard and gives it back when it
+  closes. A row that changed since the tree was read opens nothing.
+- The extension consent sheet is a modal alert dialog for screen readers: its title, where the package comes from,
+  the High-risk line and warnings, every line of the sheet, and Install and Cancel (focused as the keyboard is).
+  Escape, Cancel and Install give the keyboard back to what had it before the sheet; a button of an older sheet
+  answers nothing.
+- Rows of the Run and Debug, Testing and Remote Explorer views and of the Ports panel report the bounds they are
+  painted at (clipped to their list), so a screen reader's highlight and hit testing find them.
 - The Run and Debug, Testing and Remote Explorer views and open context menus are available to screen readers:
   configurations and Start, the session's state, variables (expandable), watches, call stack and breakpoints with
   their enabled state, the debug toolbar's buttons; test files and tests with their outcome and Run and Debug Test;
