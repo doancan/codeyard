@@ -53,18 +53,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   terminal; "Tasks: Terminate Task" stops everything a run started and "Tasks: Restart Running Task" starts it again.
 - A debug configuration's `preLaunchTask` from a task file must succeed (or a background task become ready) before the
   debugger starts; a failure never starts debugging.
-
-### Changed
-
-- A task no longer types its command into a new terminal: it runs as a process on the folder's machine, so a value from
-  a variable can never become more shell code, and Stop ends the processes it started.
-- The Linux agent's size budget is 1664 KB (was 1600 KB): running tasks as processes on the server needs its own
-  request in the protocol.
-
-## [0.6.0] - 2026-10-29
-
-### Added
-
 - A side view (Explorer, Search, Source Control, Run and Debug, Testing, Remote, Extensions) can move to a secondary side
   bar on the right of the editor and back ("View: Move View to Secondary Side Bar"); its icon and commands then open
   it there, and the arrangement is restored at the next start.
@@ -77,6 +65,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Terminals that were in the editor area or in their own window come back in the same place after a restart, as new
   shells with their name, colour and folder and a dimmed notice; no command of the previous session runs again.
   Windows whose display was removed open on an attached display.
+
+### Changed
+
+- A task no longer types its command into a new terminal: it runs as a process on the folder's machine, so a value from
+  a variable can never become more shell code, and Stop ends the processes it started.
+- The Linux agent's size budget is 1664 KB (was 1600 KB): running tasks as processes on the server needs its own
+  request in the protocol.
 
 ## [0.6.0] - 2026-10-29
 
