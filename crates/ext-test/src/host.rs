@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use codeyard_extension::native::{Call, Host, Note};
 use codeyard_extension::protocol::{Completion, Response, StreamEvent};
-use codeyard_extension::types::*;
+use codeyard_extension::types::{self, *};
 use codeyard_extension::{Denied, Error, Why};
 use ext_manifest::Permissions;
 
@@ -28,6 +28,16 @@ pub struct HttpFixture {
     pub body: Vec<u8>,
 }
 
+/// An account as the mock keeps it. A provider not in the map is signed in as `test-user`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Account {
+    SignedIn(String),
+    /// Not signed in: `auth.fetch` fails as in Codeyard, and the next `auth.session` asks (and the user agrees).
+    SignedOut,
+    /// Not signed in, and the user cancels every sign-in Codeyard asks for.
+    Declines,
+}
+
 pub struct Timer {
     pub period: u64,
     pub next: u64,
@@ -43,6 +53,9 @@ pub struct State {
     pub permissions: Option<Permissions>,
     /// The manifest's `[[oauth]]` providers: id, then the name and the hosts `auth.fetch` may sign requests to.
     pub oauth: BTreeMap<String, (String, Vec<String>)>,
+    pub accounts: BTreeMap<String, Account>,
+    /// Self-managed instances the user added (#184): (`[[oauth]]` id, host).
+    pub instances: Vec<(String, String)>,
     pub untrusted: bool,
     pub files: BTreeMap<Uri, Vec<u8>>,
     pub http: Vec<HttpFixture>,
@@ -116,9 +129,14 @@ impl State {
                 let host = host_of(&r.url);
                 check(&|p| p.allows_net(&host), format!(r#"net = ["{host}"]"#), true)
             }
-            Call::Session { provider, .. } => check(&|p| p.auth.iter().any(|a| a == provider), format!(r#"auth = ["{provider}"]"#), true),
-            Call::AuthFetch { provider, request } => check(&|p| p.auth.iter().any(|a| a == provider), format!(r#"auth = ["{provider}"]"#), true)
-                .or_else(|| self.unsigned_host(provider, &request.url)),
+            Call::Session { provider, .. } => (!self.granted(provider)).then(|| self.account_refusal(provider)),
+            Call::AuthFetch { provider, request } => {
+                if self.granted(provider) {
+                    self.unsigned_host(provider, &request.url)
+                } else {
+                    Some(self.account_refusal(provider))
+                }
+            }
             Call::Spawn(c) => check(&|p| p.allows_run(&c.program), format!(r#"run = ["{}"]"#, c.program), true),
             Call::SecretGet(_) | Call::SecretSet { .. } | Call::SecretDelete(_) => check(&|p| p.secrets, "secrets = true".into(), false),
             Call::ReadClipboard => check(&|p| p.clipboard.reads(), r#"clipboard = "read""#.into(), false),
@@ -131,18 +149,36 @@ impl State {
         }
     }
 
+    /// Whether `account` is declared, as Codeyard decides: its provider is in `auth` (an instance's is its provider's)
+    /// and, for an instance (`gitlab@git.example.com`), the user added it.
+    fn declared(&self, account: &str) -> bool {
+        let (base, host) = ext_manifest::split_account(account);
+        self.permissions.as_ref().is_none_or(|p| p.auth.iter().any(|a| a == base))
+            && host.is_none_or(|h| self.instances.iter().any(|(p, i)| p == base && i == h))
+    }
+
+    fn granted(&self, account: &str) -> bool {
+        self.declared(account) && !self.untrusted
+    }
+
+    /// Why `account` may not be used: Codeyard names its provider's `auth` line.
+    fn account_refusal(&self, account: &str) -> Denied {
+        let line = format!(r#"auth = ["{}"]"#, ext_manifest::split_account(account).0);
+        Denied { permission: line, why: if self.declared(account) { Why::UntrustedWorkspace } else { Why::NotDeclared } }
+    }
+
     /// `auth.fetch` signs requests only to the hosts of the provider (`[[oauth]] hosts`, GitHub's API hosts), as the
     /// app does: a request to any other host is refused and not sent.
     fn unsigned_host(&self, provider: &str, url: &str) -> Option<Denied> {
         self.permissions.as_ref()?;
-        let (name, hosts) = match self.oauth.get(provider) {
-            Some((name, hosts)) => (name.clone(), hosts.clone()),
-            None if provider == "github" => ("GitHub".to_string(), GITHUB_HOSTS.iter().map(|h| (*h).to_string()).collect()),
-            None => return None,
+        let hosts: Vec<String> = match (self.oauth.get(provider), ext_manifest::split_account(provider)) {
+            (_, (_, Some(instance))) => vec![instance.to_string()],
+            (Some((_, hosts)), _) => hosts.clone(),
+            (None, _) if provider == "github" => GITHUB_HOSTS.iter().map(|h| (*h).to_string()).collect(),
+            (None, _) => return None,
         };
         let host = host_of(url);
-        (!ext_manifest::net_allows(&hosts, &host))
-            .then(|| Denied { permission: format!("a host of the {name} account ({}), not {host}", hosts.join(", ")), why: Why::NotDeclared })
+        (!ext_manifest::net_allows(&hosts, &host)).then(|| Denied { permission: ext_manifest::oauth_host_line(provider, &host), why: Why::NotDeclared })
     }
 
     /// The streamed events and the completion of an allowed call.
@@ -201,6 +237,11 @@ impl State {
             Call::AuthFetch { request: r, .. } if r.headers.iter().any(|(n, _)| n.trim().eq_ignore_ascii_case("authorization")) => {
                 (none, Completion::Failed(Error::Invalid("the authorization header is added by Codeyard; remove it from the request".into())))
             }
+            Call::AuthFetch { provider, .. } if !matches!(self.accounts.get(&provider), None | Some(Account::SignedIn(_))) => {
+                // Codeyard's words when the keychain has no account for the provider.
+                let name = self.oauth.get(&provider).map_or_else(|| if provider == "github" { "GitHub".into() } else { provider.clone() }, |(n, _)| n.clone());
+                (none, Completion::Failed(Error::Invalid(format!("not signed in to {name}; call auth.session with “{provider}” first"))))
+            }
             Call::Fetch(r) | Call::AuthFetch { request: r, .. } => {
                 self.fetched.push(r.clone());
                 let fixture = self.http.iter().find(|f| (f.method == "*" || f.method.eq_ignore_ascii_case(&r.method)) && f.url == r.url);
@@ -211,7 +252,16 @@ impl State {
                     }
                 }
             }
-            Call::Session { provider, .. } => (none, Completion::Account(Account { provider, label: "test-user".into() })),
+            // The first use asks; the user agrees (as `test-user`) unless the test said they decline, which Codeyard
+            // reports as `cancelled`.
+            Call::Session { provider, .. } => match self.accounts.get(&provider).cloned() {
+                Some(Account::Declines) => (none, Completion::Failed(Error::Cancelled)),
+                Some(Account::SignedIn(label)) => (none, Completion::Account(types::Account { provider, label })),
+                None | Some(Account::SignedOut) => {
+                    self.accounts.insert(provider.clone(), Account::SignedIn("test-user".into()));
+                    (none, Completion::Account(types::Account { provider, label: "test-user".into() }))
+                }
+            },
             Call::SecretGet(k) => (none, Completion::Text(self.secrets.get(&k).cloned())),
             Call::SecretSet { key, value } => {
                 self.secrets.insert(key, value);

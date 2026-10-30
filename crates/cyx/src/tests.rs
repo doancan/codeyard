@@ -360,3 +360,22 @@ fn dev_watches_sources_but_not_build_output() {
     assert_eq!(std::fs::read(d.join("extension.wasm")).unwrap(), b"y");
     std::fs::remove_dir_all(&d).unwrap();
 }
+
+/// #187: a client id the template or a README left in place is flagged; a real one is not.
+#[test]
+fn placeholder_client_ids_are_flagged() {
+    let with = |id: &str| {
+        ext_manifest::parse(&format!(
+            "[extension]\nid = \"you.forge\"\nversion = \"0.1.0\"\nname = \"F\"\nlicense = \"MIT\"\n[code]\nentry = \"Cargo.toml\"\n[permissions]\nauth = [\"forge\"]\nwhy = \"x\"\n\
+             [[pull-requests]]\nid = \"forge\"\nlabel = \"F\"\nhosts = [\"forge.example.com\"]\nauth = \"forge\"\n\
+             [[oauth]]\nid = \"forge\"\nname = \"Forge\"\nauthorize-url = \"https://forge.example.com/a\"\ntoken-url = \"https://forge.example.com/t\"\nclient-id = \"{id}\"\nhosts = [\"forge.example.com\"]\n"
+        ))
+        .unwrap()
+    };
+    for id in ["your-client-id", "your-gitlab-application-id", "YOUR_CLIENT_ID", "<client-id>", "example-id", "changeme", "xxxxxxxx"] {
+        assert_eq!(placeholder_client_ids(&with(id)).len(), 1, "{id}");
+    }
+    for id in ["3f2a9c1b7d", "Iv1.8a61f9b3a7aba766", "cy-123", "0oa1b2c3d4"] {
+        assert!(placeholder_client_ids(&with(id)).is_empty(), "{id}");
+    }
+}

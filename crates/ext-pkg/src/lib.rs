@@ -37,6 +37,10 @@ pub const CONTENTS: &str = "CONTENTS.sha256";
 /// Folder and file names `pack_dir` leaves out: version control, build output, dependencies, OS litter.
 pub const EXCLUDED: &[&str] = &[".git", ".github", ".hg", ".svn", "target", "node_modules", ".DS_Store", "Thumbs.db", "desktop.ini"];
 
+/// Folders left out at the top of an extension only: its tests (`test/` in TypeScript, `tests/` in Rust), which run
+/// on the author's machine and in `cyx test`, never in Codeyard.
+pub const EXCLUDED_AT_ROOT: &[&str] = &["test", "tests"];
+
 #[derive(Debug)]
 pub enum Error {
     /// Not a gzip stream, or gzip around something that is not a package tar.
@@ -328,8 +332,8 @@ pub fn read(bytes: &[u8]) -> Result<Package, Error> {
     Ok(Package { manifest, files, digest, component })
 }
 
-/// Collect an extension folder for `write`: every regular file except `EXCLUDED` names and packages (`*.cyx`, such as
-/// the one `cyx package` wrote last time), with its executable bit.
+/// Collect an extension folder for `write`: every regular file except `EXCLUDED` names, the `EXCLUDED_AT_ROOT` test
+/// folders and packages (`*.cyx`, such as the one `cyx package` wrote last time), with its executable bit.
 /// Symlinks are refused rather than followed: a package must not depend on what a link points to on the author's disk.
 pub fn collect_dir(root: &Path) -> Result<Vec<Entry>, Error> {
     fn walk(root: &Path, dir: &Path, out: &mut Vec<Entry>) -> Result<(), Error> {
@@ -341,6 +345,9 @@ pub fn collect_dir(root: &Path) -> Result<Vec<Entry>, Error> {
                 continue;
             }
             let path = item.path();
+            if dir == root && EXCLUDED_AT_ROOT.iter().any(|x| name == *x) && item.file_type().is_ok_and(|t| t.is_dir()) {
+                continue;
+            }
             if path.extension().is_some_and(|x| x.eq_ignore_ascii_case("cyx")) && item.file_type().is_ok_and(|t| t.is_file()) {
                 continue;
             }

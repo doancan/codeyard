@@ -495,12 +495,95 @@ hosts         = ["*.acme.example.com"]
   await assert.rejects(h.command("get", ["github", "https://example.com/x"]), (e: unknown) => e instanceof DeniedError);
   assert.deepEqual(
     h.denied().map((d) => d.permission),
-    ["a host of the Acme account (*.acme.example.com), not evil.example.org", "a host of the GitHub account (api.github.com, uploads.github.com), not example.com"],
+    ['[[oauth]] acme hosts = ["evil.example.org"]', '[[oauth]] github hosts = ["example.com"]'],
   );
+  // #183: the fix names the `[[oauth]]` table, not the `auth` line the manifest already has.
+  assert.equal(h.denied()[0]?.fix, 'add "evil.example.org" to hosts in the [[oauth]] table with id = "acme"');
+  assert.match(h.denied()[1]?.fix ?? "", /with fetch \(net\) instead/);
   await assert.rejects(
     h.command("get", ["acme", "https://api.acme.example.com/me", { authorization: "Bearer mine" }]),
     (e: unknown) => e instanceof CodeyardError && e.kind === "invalid" && /added by Codeyard/.test(e.message),
   );
   assert.equal(h.fetched().length, 2, "only the two allowed requests were sent");
+  h.dispose();
+});
+
+test("sign-in outcomes: declined and signed out, as Codeyard reports them", async () => {
+  const h = new MockHost({
+    manifest: `
+[permissions]
+auth = ["acme"]
+
+[[oauth]]
+id            = "acme"
+name          = "Acme"
+authorize-url = "https://acme.example.com/oauth/authorize"
+token-url     = "https://acme.example.com/oauth/token"
+client-id     = "x"
+hosts         = ["api.acme.example.com"]
+`,
+  });
+  h.http("GET", "https://api.acme.example.com/me", 200, {});
+  await h.activate({
+    activate(ctx: Context) {
+      ctx.command("me", async (ctx) => {
+        const who = await ctx.session("acme");
+        return { label: who.label, status: (await ctx.fetchAs("acme", "https://api.acme.example.com/me")).status };
+      });
+      ctx.command("fetch-only", async (ctx) => (await ctx.fetchAs("acme", "https://api.acme.example.com/me")).status);
+    },
+  });
+  assert.deepEqual(await h.command("me"), { label: "test-user", status: 200 });
+
+  h.declineSignIn("acme");
+  await assert.rejects(h.command("me"), (e: unknown) => e instanceof CodeyardError && e.kind === "cancelled");
+  await assert.rejects(h.command("fetch-only"), (e: unknown) => e instanceof CodeyardError && e.kind === "invalid" && /not signed in to Acme; call auth.session with “acme” first/.test(e.message));
+
+  h.signedOut("acme");
+  await assert.rejects(h.command("fetch-only"), /not signed in to Acme/);
+  // The next session asks again, and this time the user agrees.
+  assert.deepEqual(await h.command("me"), { label: "test-user", status: 200 });
+
+  h.signIn("acme", "ada");
+  assert.deepEqual(await h.command("me"), { label: "ada", status: 200 });
+  assert.deepEqual(h.denied(), []);
+  h.dispose();
+});
+
+test("an instance account is granted by its provider's entry once added, and signs its own host only", async () => {
+  const h = new MockHost({
+    manifest: `
+[permissions]
+auth = ["forge"]
+
+[[oauth]]
+id            = "forge"
+name          = "Forge"
+authorize-url = "https://forge.example.com/oauth/authorize"
+token-url     = "https://forge.example.com/oauth/token"
+client-id     = "x"
+hosts         = ["forge.example.com"]
+instances     = true
+`,
+  });
+  h.http("GET", "https://git.corp.example/api/me", 200, {});
+  h.http("GET", "https://forge.example.com/api/me", 200, {});
+  await h.activate({
+    activate(ctx: Context) {
+      ctx.command("get", async (ctx, [account, url]) => {
+        await ctx.session(account);
+        return (await ctx.fetchAs(account, url)).status;
+      });
+    },
+  });
+  const account = "forge@git.corp.example";
+  await assert.rejects(h.command("get", [account, "https://git.corp.example/api/me"]), (e: unknown) => e instanceof DeniedError && e.permission === 'auth = ["forge"]');
+  h.instance("forge", "git.corp.example");
+  assert.equal(await h.command("get", [account, "https://git.corp.example/api/me"]), 200);
+  await assert.rejects(
+    h.command("get", [account, "https://forge.example.com/api/me"]),
+    (e: unknown) => e instanceof DeniedError && e.permission === '[[oauth]] forge@git.corp.example hosts = ["forge.example.com"]',
+  );
+  assert.equal(h.fetched().length, 1);
   h.dispose();
 });
