@@ -522,6 +522,15 @@ fn bind_keys(cx: &mut App) {
         KeyBinding::new("secondary-c", t::CopyEntry, tr),
         KeyBinding::new("secondary-x", t::CutEntry, tr),
         KeyBinding::new("secondary-v", t::PasteEntry, tr),
+        // Rows of the Run and Debug, Testing, Remote Explorer and Ports lists
+        KeyBinding::new("up", workbench::RowPrevious, Some(workbench::ROW_LIST)),
+        KeyBinding::new("down", workbench::RowNext, Some(workbench::ROW_LIST)),
+        KeyBinding::new("home", workbench::RowFirst, Some(workbench::ROW_LIST)),
+        KeyBinding::new("end", workbench::RowLast, Some(workbench::ROW_LIST)),
+        KeyBinding::new("enter", workbench::RowActivate, Some(workbench::ROW_LIST)),
+        // The focused row's (or the editor's, the Explorer's) context menu; "menu" is the Windows Application key.
+        KeyBinding::new("shift-f10", menu::ShowContextMenu, None),
+        KeyBinding::new("menu", menu::ShowContextMenu, None),
         // Context menu
         KeyBinding::new("up", menu::MenuPrev, Some("ContextMenu")),
         KeyBinding::new("down", menu::MenuNext, Some("ContextMenu")),

@@ -130,6 +130,9 @@ pub mod projects;
 mod pulls_glue;
 #[path = "workbench_remote.rs"]
 mod remote_glue;
+#[path = "workbench_row_nav.rs"]
+mod row_nav_glue;
+pub use row_nav_glue::{ROW_LIST, RowActivate, RowFirst, RowLast, RowNext, RowPrevious};
 #[path = "workbench_rust.rs"]
 mod rust_glue;
 // --- git-refs ---
@@ -1259,6 +1262,7 @@ impl Workbench {
             },
             chrome: state_glue::ChromeLayout {
                 a11y_bounds: Default::default(),
+                row_nav: row_nav_glue::RowNav::new(cx),
                 resources: cx.new(crate::resource_monitor::ResourceMonitor::new),
                 web_preview: Default::default(),
                 panel: Some(Panel::Explorer),
