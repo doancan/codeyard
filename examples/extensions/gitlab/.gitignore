@@ -1,0 +1,4 @@
+node_modules/
+extension.wasm
+extension.js.map
+*.cyx

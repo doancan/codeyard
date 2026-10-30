@@ -249,7 +249,14 @@ fn the_typescript_examples_build_package_and_pass_cyx_test() {
     if !node() {
         return;
     }
-    for (name, needs) in [("hello-command-ts", ""), ("hello-view-ts", ""), ("octokit-repos-ts", "auth"), ("crate-version-ts", "net")] {
+    for (name, needs) in [
+        ("hello-command-ts", ""),
+        ("hello-view-ts", ""),
+        ("octokit-repos-ts", "auth"),
+        ("crate-version-ts", "net"),
+        ("vercel-status", "net,secrets,workspace"),
+        ("gitlab", "auth"),
+    ] {
         let dir = repo().join("examples/extensions").join(name);
         build::build(&dir).unwrap_or_else(|e| panic!("{name}: {e}"));
         let report = check(&dir).unwrap_or_else(|e| panic!("{name}: {e}"));

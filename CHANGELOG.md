@@ -232,6 +232,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - On macOS and Linux an extension process that uses more than 512 MB of memory is stopped and counted as a crash, with
   a message that says why (Windows already had the limit).
 - `cyx package --no-build` packages the `extension.wasm` already in the folder.
+- Example extensions built on the public API only, as an outside author would (#148): `vercel-status` (TypeScript: the
+  latest deployment in the status bar, recent deployments in a sidebar view, a refresh command and timer, the token in
+  `secrets`) and `gitlab` (TypeScript: merge requests in the Pull Requests view through a GitLab `[[oauth]]` account,
+  gitlab.com or a self-managed instance). CI builds both and runs their unit tests and `cyx test`.
+- Both mock hosts: `secrets()` returns the keychain entries the extension left. An `auth.fetch` to a host outside the
+  account's `[[oauth]] hosts` (or GitHub's API hosts) is refused, and one with its own `authorization` header fails, as
+  in Codeyard.
 
 ### Changed
 
@@ -253,6 +260,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `cyx package` no longer puts the `.cyx` it wrote last time into the new package (it doubled in size on every run).
+  New extensions from `cyx new` ignore `*.cyx` in git.
+- `cyx check` on a code extension that is not built yet says to run `cyx package` or `cyx test`, which build it.
 - A debug configuration with `"stopOnEntry": true` run with lldb-dap said "Paused on exception: signal SIGSTOP": the
   adapter reports the stop on entry as a signal. The first stop of such a session now reads "Paused on entry"; a
   SIGSTOP later on is still reported as an exception.
