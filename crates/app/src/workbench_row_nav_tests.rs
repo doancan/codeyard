@@ -205,3 +205,30 @@ fn port_labels(wb: &Entity<Workbench>, cx: &mut VisualTestContext) -> Vec<String
         crate::workbench::ports_glue::port_rows(&wb.ports.set, &wb.ports.listening, &alias).iter().map(|r| r.port.to_string()).collect()
     })
 }
+
+/// A data breakpoint row by keyboard: Enter turns it off and on (as its check box does), Shift+F10 opens its menu.
+#[gpui::test]
+fn data_breakpoint_rows_are_driven_by_the_keyboard(cx: &mut gpui::TestAppContext) {
+    let (wb, cx) = setup(cx);
+    cx.simulate_resize(size(px(1280.), px(800.)));
+    wb.update(cx, |wb, cx| {
+        wb.chrome.panel = Some(Panel::Debug);
+        wb.dbg.bps.toggle_line("/p/src/main.rs", 2);
+        wb.push_paused_session_for_test("fixture", cx);
+        let d = wb.dbg.cur_mut().unwrap();
+        d.data_breakpoints.push(crate::debug_model::DataBp { id: "var:total".into(), desc: "total".into(), enabled: true });
+    });
+    cx.run_until_parked();
+    let states = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.data_breakpoint_states_for_test());
+    focus_list(&wb, RowFrame::DebugBreakpoint, 0, cx);
+    keys(cx, "enter");
+    assert_eq!(states(cx), vec![("total".to_string(), false)], "Enter turned it off");
+    keys(cx, "enter");
+    assert_eq!(states(cx), vec![("total".to_string(), true)]);
+    keys(cx, "shift-f10");
+    assert_eq!(menu(&wb, cx).as_deref(), Some(&["Disable Breakpoint", "Remove Breakpoint"].map(String::from)[..]));
+    keys(cx, "escape");
+    // The line breakpoint follows it in the list.
+    keys(cx, "down");
+    assert_eq!(focused(&wb, cx), Some((RowFrame::DebugBreakpoint, 1)));
+}

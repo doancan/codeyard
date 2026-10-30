@@ -187,3 +187,35 @@ fn ports_rows_show_their_state_and_act_only_on_the_forward_they_showed(cx: &mut 
     act(&wb, &snap, button(&tree, row, "Open in Browser"), Action::Click, None, cx);
     assert_eq!(cx.opened_url().as_deref(), Some("http://localhost:9001"));
 }
+
+/// Rows of the Settings and Keyboard Shortcuts pages report their painted, clipped bounds; rows scrolled out of view
+/// have none.
+#[gpui::test]
+fn page_rows_have_their_painted_bounds_and_hidden_rows_none(cx: &mut gpui::TestAppContext) {
+    let dir = project("a11y-page-row-bounds");
+    let (wb, cx) = setup(cx);
+    cx.simulate_resize(gpui::size(gpui::px(1000.), gpui::px(420.)));
+    open(&wb, &dir, cx);
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Preferences: Open Settings", window, cx));
+    cx.run_until_parked();
+    let (_, tree) = nodes(&wb, cx);
+    let height = cx.update(|window, _| f64::from(window.viewport_size().height / gpui::px(1.)) * f64::from(window.scale_factor()));
+    let (_, theme) = find(&tree, Role::Button, "Theme");
+    let rect = theme.bounds().expect("the first setting is on screen");
+    assert!(rect.width() > 0. && rect.height() > 0. && rect.y1 <= height + 0.5, "{rect:?}");
+    let rows: Vec<&Node> =
+        tree.iter().filter(|(id, _)| id.0 >= SET_ROW && id.0 < SHORTCUT_ROW && (id.0 - SET_ROW).is_multiple_of(ROW_IDS)).map(|(_, n)| n).collect();
+    assert!(rows.len() > 3, "{} rows", rows.len());
+    assert!(rows.iter().any(|n| n.bounds().is_none()), "a row below the fold has no bounds");
+    for b in rows.iter().filter_map(|n| n.bounds()) {
+        assert!(b.y1 <= height + 0.5, "painted rows lie inside the window: {b:?}");
+    }
+
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Help: Keyboard Shortcuts Reference", window, cx));
+    cx.run_until_parked();
+    let (_, tree) = nodes(&wb, cx);
+    let shortcuts: Vec<&Node> = tree.iter().filter(|(id, _)| id.0 >= SHORTCUT_ROW && id.0 < SHORTCUT_ROW + 0x1000).map(|(_, n)| n).collect();
+    assert!(shortcuts.len() > 20, "{} commands", shortcuts.len());
+    assert!(shortcuts[0].bounds().is_some_and(|b| b.height() > 0.), "the first command is on screen");
+    assert!(shortcuts.iter().any(|n| n.bounds().is_none()), "a command below the fold has no bounds");
+}

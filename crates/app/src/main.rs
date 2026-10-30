@@ -140,6 +140,7 @@ mod menu;
 mod menus;
 mod merge;
 mod outline;
+mod painted;
 mod perf;
 mod picker;
 mod port_forwards;

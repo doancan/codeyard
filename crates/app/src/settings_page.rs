@@ -47,6 +47,8 @@ pub struct AccessSetting {
     pub modified: bool,
     pub error: Option<String>,
     pub source: Option<&'static str>,
+    /// The row's painted, visible bounds (physical pixels); `None` while it is scrolled out of view.
+    pub bounds: Option<accesskit::Rect>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -148,6 +150,8 @@ pub struct SettingsPage {
     /// Fields for number and text settings.
     fields: HashMap<&'static str, Entity<TextField>>,
     errors: HashMap<&'static str, String>,
+    /// Where each setting's row was painted in the last frame (accessibility).
+    bounds: crate::painted::RowBounds<&'static str>,
     focus_handle: FocusHandle,
     _subs: Vec<Subscription>,
 }
@@ -241,7 +245,8 @@ impl SettingsPage {
             }));
             fields.insert(e.key, field);
         }
-        let mut page = SettingsPage { query, category: 0, fields, errors: HashMap::new(), focus_handle: cx.focus_handle(), _subs: subs };
+        let mut page =
+            SettingsPage { query, category: 0, fields, errors: HashMap::new(), bounds: Default::default(), focus_handle: cx.focus_handle(), _subs: subs };
         page.sync_fields(cx);
         page
     }
@@ -378,6 +383,7 @@ impl SettingsPage {
                     modified: Self::is_modified(s, key),
                     error: self.errors.get(key).cloned(),
                     source: source_note(key, cx),
+                    bounds: crate::painted::physical(&self.bounds, &key, window),
                 }
             })
             .collect();
@@ -512,6 +518,8 @@ impl SettingsPage {
         });
         div()
             .id(("setting", ix))
+            .relative()
+            .child(crate::painted::probe(&self.bounds, key))
             .w_full()
             .flex()
             .flex_col()
@@ -559,6 +567,8 @@ impl Render for SettingsPage {
         let s = cx.global::<Settings>().clone();
         let keys = self.visible_keys(cx);
         let searching = !self.query.read(cx).text().is_empty();
+        // Rows record where they are painted in this frame.
+        self.bounds.borrow_mut().clear();
         let rows: Vec<gpui::AnyElement> = keys.iter().enumerate().map(|(i, k)| self.entry_view(k, i, &s, cx)).collect();
         let nav = CATEGORIES.iter().enumerate().map(|(i, name)| {
             let active = i == self.category && !searching;

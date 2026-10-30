@@ -3333,3 +3333,5 @@ View: Move View Back to Side Bar	Görünüm: Görünümü Kenar Çubuğuna Geri 
 Open a view in a side bar first.	Önce bir kenar çubuğunda bir görünüm açın.
 No view is in a window of its own.	Kendi penceresinde açık görünüm yok.
 The view could not move to a new window: {}	Görünüm yeni bir pencereye taşınamadı: {}
+Break on Value Change	Değer Değişince Dur
+Breaks when the value is written; for this debug session only.	Değer yazıldığında durur; yalnızca bu hata ayıklama oturumu için.

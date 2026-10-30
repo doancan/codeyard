@@ -62,11 +62,34 @@ impl BpResult {
     }
 }
 
+/// A data breakpoint: the program stops when a value is written. It belongs to its debug session (the adapter's id for
+/// the value means nothing to another run), so it is never saved.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DataBp {
+    /// The adapter's `dataId`.
+    pub id: String,
+    /// What the adapter calls the value.
+    pub desc: String,
+    pub enabled: bool,
+}
+
 /// One row of the Breakpoints list.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BpRow {
-    Line { path: String, line: usize, meta: BpMeta },
-    Function { index: usize, bp: FunctionBp },
+    /// A data breakpoint of the current session, by its place in the session's list.
+    Data {
+        index: usize,
+        bp: DataBp,
+    },
+    Line {
+        path: String,
+        line: usize,
+        meta: BpMeta,
+    },
+    Function {
+        index: usize,
+        bp: FunctionBp,
+    },
 }
 
 #[derive(Debug)]
