@@ -80,6 +80,25 @@ The tree, in the order a screen reader walks it:
   menu, has the focus. `Click` chooses the item through the menu itself, exactly as a click on it does (the menu
   closes, focus returns, the command runs); it acts only on the same menu with the same item at that place. Escape
   is unchanged.
+- Row menus: a Run and Debug variable (not a scope), call stack frame and line breakpoint, a Remote Explorer host and a
+  Ports row have the `ShowContextMenu` action and a "More Actions…" `Button` (a menu popup, the row's name as
+  description) among their children. Both open the menu a right click on the row opens (Set Value…, Copy Value, Add to
+  Watch; Restart Frame, Copy Call Stack; Edit Condition…, Disable Breakpoint; Connect, Edit Host…, Remove Host…;
+  Change Local Port…, Protocol, Retry, Stop Forwarding), at the bottom left of the row as last painted (the middle of
+  the window when the row is scrolled out of its list). The menu then takes the focus as described above and returns
+  it when it closes. The macOS and Windows adapters do not forward `ShowContextMenu` yet, so the button is the way in
+  for VoiceOver and Narrator today. The request is refused unless the row is still the same variable, frame, breakpoint
+  (in the same enabled state), host (in the same state) or port forward at that place, in the same debug session.
+- While the extension consent sheet is open and in front: a modal `AlertDialog` named "Install {name}?", described by where the
+  package comes from, the High-risk line and the warnings, with one `Label` per line of the sheet (id, version and
+  licence, source, description, permissions, the publisher's reason, contributions, warnings) and the Install and
+  Cancel `Button`s (`Click`, `Focus`). The keyboard lands on Install, or on Cancel for a High-risk set or a sheet with
+  warnings, and the focused button is the tree's focus. Escape answers Cancel. Escape, Cancel and Install give the
+  keyboard back to whatever had it when the sheet opened. A button acts only on the package the tree showed (a newer
+  sheet for another package is left alone).
+- Confirmations asked with a system dialog (discard changes, uninstall an extension, remove a host, delete files) are
+  native dialogs on macOS (a sheet) and Windows (a task dialog); the system exposes them to its screen reader and they
+  are not part of this tree.
 - While Extensions is visible, a `Group` with a `TabList` (Installed, Market), a `SearchInput` that controls the list
   and points at the highlighted row as its active descendant, a polite live `Status` that says how many extensions
   match (an `Alert` when the list cannot be read), and a `ListBox` of the rows (name; version, id and description).
@@ -116,7 +135,9 @@ The tree, in the order a screen reader walks it:
   tab order; the focused button is the tree's focus. On macOS the dialog is a window of its own ("Software Update"); the
   tree belongs to the editor window and still lists the dialog, but the separate window has no adapter yet, so a screen
   reader reaches its title and nothing more there. The status bar item and *Help: Check for Updates…* are the way in.
-- Geometry: the window, primary Explorer viewport, focused text-editor pane and status bar expose their painted bounds.
+- Geometry: the window, primary Explorer viewport, focused text-editor pane and status bar expose their painted bounds,
+  and so do the rows of the Run and Debug view (variables, watches, call stack, breakpoints), the Testing view, the
+  Remote Explorer and the Ports panel while they are drawn (a row scrolled out of its list has none).
   Bounds are clipped to the visible content mask and scaled from GPUI logical pixels to AccessKit physical pixels.
   Resizing, switching split-editor focus and hiding/restoring panels update or clear these coordinates.
 
@@ -192,8 +213,9 @@ macOS. The CPU cost of the 250 ms snapshot loop has not been measured.
 
 - **No screen reader has been run.** VoiceOver (speech, rotor, VO cursor, "interact with text area") and NVDA, JAWS or
   Narrator on Windows. The Windows adapter builds and passes CI, but no UI Automation client has read its tree yet.
-- **Fine-grained bounds.** Landmark frames are available, but individual Explorer rows, status items, Source Control
-  controls and text runs do not yet expose their painted frames. Text still needs `character_positions` and
+- **Fine-grained bounds.** Landmark frames and the rows of the Run and Debug, Testing, Remote Explorer and Ports lists
+  are available, but individual Explorer rows, status items, Source Control controls, the buttons inside rows, the
+  Settings and Keyboard Shortcuts rows, menu items and text runs do not yet expose their painted frames. Text still needs `character_positions` and
   `character_widths`; precise character hit testing, caret highlighting and magnifier caret tracking remain unimplemented.
 - **Focus** was not observed live on macOS (`Focused="0"` in every dump: the test window was not key). The code path
   (`TreeUpdate.focus`, `update_view_focus_state`) exists but is unverified.
@@ -201,13 +223,14 @@ macOS. The CPU cost of the 250 ms snapshot loop has not been measured.
   file offsets in long files. Primary selection only; no multi-cursor, folding, wrapped lines, RTL or CRLF handling.
 - The terminal exposes the screen only, not the scrollback, and cannot be written to from the tree (typing goes through
   the keyboard as usual).
-- Not exposed: an installed extension's page and the consent sheet, the Source Control graph, worktrees and sync
-  controls, hover and signature popups, the Ports rows' "…" menu (label, local port, protocol, retry), the bounds of
-  Settings, Keyboard Shortcuts, Ports, Run and Debug, Testing and Remote Explorer rows and of menu items, the Run and
-  Debug view's data breakpoints, row menus (Set Value, Copy, Edit Condition, Restart Frame: reachable through the
-  context menu only by pointer), opening a breakpoint's place, the Testing filter field, the Remote Explorer's Add,
-  SSH config and Refresh buttons and a host's "…" menu, the Debug Console, and dialogs other than the update dialog. Only the tabs of the focused editor group are listed, and
-  diff, large-file and page tabs are not.
+- Not exposed: an installed extension's page, the Source Control graph, worktrees and sync controls, hover and
+  signature popups, the bounds of Settings and Keyboard Shortcuts rows and of menu items, the Run and Debug view's data
+  breakpoints and the configuration selector's menu, opening a breakpoint's place, the Testing filter field, the Remote
+  Explorer's Add, SSH config and Refresh buttons, and the Debug Console. Only the tabs of the focused editor group are
+  listed, and diff, large-file and page tabs are not.
+- Row menus are reached through the tree only: the Run and Debug, Testing, Remote Explorer and Ports rows cannot take
+  the keyboard focus themselves yet, so there is no Shift+F10 or Menu key path to their menus without a screen reader.
+- System confirmation dialogs on Linux are drawn by GPUI inside the window (there is no Linux adapter, see below).
 - No scroll actions, no `Blur`. Explicit `Expand`/`Collapse` only in the Run and Debug, Testing and Remote Explorer
   trees (elsewhere Click toggles).
 - The update window on macOS has no adapter of its own.
