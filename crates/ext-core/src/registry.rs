@@ -11,9 +11,11 @@
 //! Every client fetches the same bytes (the whole index), at most once a day and only when it has something from the
 //! registry or the user opens the Market, so the registry learns nothing about what anyone installed.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use ext_manifest::{ExtId, Manifest, Version};
+use ext_pkg::ContentDigest;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
@@ -207,16 +209,35 @@ pub struct Download {
     pub manifest: Manifest,
     pub release: Release,
     pub signed: Signed,
+    /// For a release with native programs: every platform's content digest, as the index lists them (for the lock).
+    pub targets: BTreeMap<String, ContentDigest>,
 }
 
 /// Choose the version (`version`, else the newest installable one, pre-releases only if asked), download the package
-/// and its publisher signature, and check everything the index promises about them.
+/// and its publisher signature, and check everything the index promises about them. A release with native programs is
+/// downloaded for this machine's platform; [`download_for`] names another (the workspace's host).
 pub fn download(
     reg: &Registry,
     v: &Verified,
     id: &ExtId,
     version: Option<&Version>,
     pre_release: bool,
+    fetch: &dyn Fetch,
+    now: u64,
+) -> Result<Download, Error> {
+    download_for(reg, v, id, version, pre_release, ext_manifest::this_target().unwrap_or("unknown"), fetch, now)
+}
+
+/// [`download`] the package for platform `target` (a target triple); the same package for a release without native
+/// programs.
+#[allow(clippy::too_many_arguments)]
+pub fn download_for(
+    reg: &Registry,
+    v: &Verified,
+    id: &ExtId,
+    version: Option<&Version>,
+    pre_release: bool,
+    target: &str,
     fetch: &dyn Fetch,
     now: u64,
 ) -> Result<Download, Error> {
@@ -234,21 +255,34 @@ pub fn download(
         Got::Body { bytes, .. } => Ok(bytes),
         Got::NotModified => Err(Error::Network(format!("{name}: unexpected “not modified”"))),
     };
-    let bytes = body(format!("packages/{}.cyx", release.digest), ext_manifest::limits::PACKAGE_BYTES as usize)?;
+    let wanted = release.package_for(target).ok_or_else(|| {
+        let built: Vec<&str> = release.targets.keys().map(String::as_str).collect();
+        Error::NotFound(format!("{id} {} has native programs and is not built for {target} (only for {})", release.version, built.join(", ")))
+    })?;
+    let limit = if release.targets.is_empty() { ext_manifest::limits::PACKAGE_BYTES } else { ext_manifest::limits::TARGET_PACKAGE_BYTES };
+    let bytes = body(format!("packages/{}.cyx", wanted.digest), limit as usize)?;
     let bad = |what: &str| {
         Error::Package(format!("{id} {}: the downloaded package {what} does not match the registry's index; nothing was installed", release.version))
     };
-    if bytes.len() as u64 != release.size || hex(&Sha256::digest(&bytes)) != release.sha256 {
+    if bytes.len() as u64 != wanted.size || hex(&Sha256::digest(&bytes)) != wanted.sha256 {
         return Err(bad("file"));
     }
     let pkg = ext_pkg::read(&bytes).map_err(|e| Error::Package(e.to_string()))?;
-    if pkg.digest.hex() != release.digest || &pkg.manifest.id != id || pkg.manifest.version != release.version {
+    if pkg.digest.hex() != wanted.digest || &pkg.manifest.id != id || pkg.manifest.version != release.version {
         return Err(bad("content"));
+    }
+    // A per-platform package says which platform it is for, and it must be the one the index lists it under.
+    if !release.targets.is_empty() && pkg.target.as_deref() != Some(target) {
+        return Err(bad("platform"));
+    }
+    let mut targets = BTreeMap::new();
+    for (t, p) in release.targets.iter().filter(|(t, _)| ext_manifest::is_target(t)) {
+        targets.insert(t.clone(), ContentDigest::parse(&p.digest).ok_or_else(|| bad("platform list"))?);
     }
     if yard::permission_digest(&pkg.manifest) != release.permissions {
         return Err(bad("permission list"));
     }
-    let bundle = body(format!("packages/{}.sigstore.json", release.digest), publisher::MAX_BUNDLE_BYTES)?;
+    let bundle = body(format!("packages/{}.sigstore.json", wanted.digest), publisher::MAX_BUNDLE_BYTES)?;
     let pins = Pins::from_pem(&v.root.fulcio, &v.root.rekor).map_err(Error::Signature)?;
     let signed = publisher::verify_package(&bundle, id, &release.version, &pkg.digest, &pins, now).map_err(Error::Signature)?;
     if signed.publisher != entry.publisher {
@@ -257,7 +291,7 @@ pub fn download(
             release.version, signed.publisher, entry.publisher
         )));
     }
-    Ok(Download { bytes, manifest: pkg.manifest, release: release.clone(), signed })
+    Ok(Download { bytes, manifest: pkg.manifest, release: release.clone(), signed, targets })
 }
 
 /// What the Market's page shows of one version, checked against the index.

@@ -81,6 +81,7 @@ mod ext_inspector_ui_tests;
 #[cfg(test)]
 mod ext_lenses_tests;
 mod ext_memory;
+mod ext_programs;
 mod ext_prompts;
 #[cfg(test)]
 mod ext_prompts_ui_tests;

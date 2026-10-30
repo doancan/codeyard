@@ -117,7 +117,7 @@ impl World {
     }
 
     fn publish(&self, dir: &std::path::Path, who: &Publisher, dry_run: bool, pre_release: bool) -> Result<String, String> {
-        let p = publish::Publish { dir, registry: &self.registry, dry_run, pre_release };
+        let p = publish::Publish { dir, registry: &self.registry, dry_run, pre_release, target: None };
         publish::publish(&p, &self.endpoints, || Ok(token("repo:you/night:ref:refs/tags/v1", who)), now())
     }
 
@@ -205,7 +205,7 @@ fn a_signature_the_registry_would_refuse_is_caught_before_upload() {
     let other = fake_sigstore(Arc::new(Authority::new()));
     let ep = sigstore::Endpoints { fulcio: other.clone(), rekor: other, oidc: String::new() };
     let dir = w.extension("night", "1.0.0");
-    let p = publish::Publish { dir: &dir, registry: &w.registry, dry_run: false, pre_release: false };
+    let p = publish::Publish { dir: &dir, registry: &w.registry, dry_run: false, pre_release: false, target: None };
     let err = publish::publish(&p, &ep, || Ok(token("s", &github(7, 42))), now()).unwrap_err();
     assert!(err.contains("nothing was uploaded"), "{err}");
     assert!(w.index().extensions.is_empty());
