@@ -343,7 +343,7 @@ impl Render for EditorView {
                                                     };
                                                     let code = window.text_system().shape_line(text.clone().into(), px(font_size), &[run], None).width;
                                                     // Extension lenses and hints name their extension.
-                                                    let tip: SharedString = match this.ext_eol_tooltip(ix).filter(|_| id == "line-end-hint") {
+                                                    let tip: SharedString = match (id == "line-end-hint").then(|| this.ext_eol_tooltip(ix)).flatten() {
                                                         Some(t) => format!("{hint}\n{t}").into(),
                                                         None => hint.clone(),
                                                     };
