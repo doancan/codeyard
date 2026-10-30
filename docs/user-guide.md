@@ -715,7 +715,12 @@ text are not loaded, and a link opens in your browser only after you confirm its
 **What extensions with code add.** Everything they put on screen names the extension.
 
 - *Commands* in the palette, in the editor's and the file tree's right-click menus (after the built-in entries, greyed
-  out when they do not apply), and on keys an extension binds (never a built-in key). A file-tree entry gets the file.
+  out when they do not apply), under the **…** button in the title bar of the extension's own views, and on keys an
+  extension binds (never a built-in key). A file-tree entry gets the file.
+- *Codeyard commands* run by an extension, from the short list in its docs (Zen mode, Save All, Format Document, open
+  a file, run a task …): only the ones its sheet lists under "Run Codeyard commands", and only on files and programs
+  it may use anyway. Saving all files needs write access to every unsaved file, and running a task needs its program
+  in the extension's list.
 - *Status bar items*, which run a command when clicked.
 - *Formatters.* *Format Document* and `editor.formatOnSave` use the extension that formats the file's language when
   there is no language server for it; `editor.formatters` chooses per language, for example
@@ -784,7 +789,9 @@ Opening an extension's page in the Market fetches that page once.
 
 From a terminal or a script, `codeyard --install-extension FILE.cyx` or `--install-extension publisher.name[@1.2.0]`
 (repeat the flag for several) installs without opening a window; running it is your consent, and the same checks
-apply. A changed publisher or an old registry list is refused there, with the reason: use the Extensions view.
+apply. A folder with a built extension (its manifest and, for code, `extension.wasm`) installs the same way, packaged
+as it is, without building it. A changed publisher or an old registry list is refused there, with the reason: use the
+Extensions view.
 
 **Manage.** Choose an extension in the list to open its page: contributions, permissions and these actions:
 

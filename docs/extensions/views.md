@@ -20,7 +20,10 @@ location = "sidebar"          # sidebar | bottom | editor
 - `bottom` adds a tab to the bottom panel, next to Problems and Terminal.
 - `editor` opens as a page tab in the editor area.
 
-Every view is also in the command palette as **Open View: Deployments (you)**. Opening a view starts your extension
+Every view is also in the command palette as **Open View: Deployments (you)**. A `[[menus]]` entry with
+`location = "view-title"` and `view = "deployments"` puts your command under the **…** button in the view's title bar;
+it runs with the view's full id (`"you.ext.deployments"`) as its argument, and `when` and `enablement` apply as in
+other menus. Opening a view starts your extension
 (the activation reason is `view:deployments`), so a view costs nothing until someone looks at it.
 
 ## Draw it

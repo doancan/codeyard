@@ -5,6 +5,7 @@
 //! Design: docs/plugin-architecture.md §4–§6.
 
 mod allow;
+pub mod core_commands;
 pub mod diagnostics;
 pub mod limits;
 mod raw;
@@ -22,6 +23,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+pub use core_commands::{CORE_COMMANDS, CoreCommand, core_command};
 pub use diagnostics::{Code, Diagnostic};
 pub use risk::{Clipboard, Level, Line, Permissions, Risk, net_allows, risk};
 

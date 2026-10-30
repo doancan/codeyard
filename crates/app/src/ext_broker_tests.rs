@@ -166,9 +166,33 @@ fn commands_are_own_dependencies_or_listed_core() {
     assert!(s.may_execute("you.ext.refresh").is_ok());
     assert!(s.may_execute("you.lib.go").is_ok());
     assert!(s.may_execute("core:workbench.toggleZenMode").is_ok());
-    assert!(s.may_execute("core:workbench.quit").is_err());
+    // Listed for extensions but not in this manifest: the line to add. Not listed for extensions: refused with where
+    // the list is.
+    assert!(matches!(s.may_execute("core:workbench.saveAll"), Err(v::Error::Denied(d)) if d.permission == "commands = [\"core:workbench.saveAll\"]"));
+    assert!(matches!(s.may_execute("core:workbench.quit"), Err(v::Error::Invalid(m)) if m.contains("core-commands.md")));
     assert!(s.may_execute("you.extra.go").is_err(), "a prefix of the id is not the id");
     assert!(s.may_execute("them.ext.go").is_err());
+}
+
+#[test]
+fn core_commands_need_what_they_imply() {
+    use ext_manifest::core_commands::Implies;
+    let r = root("imply");
+    let s = scope(&r, perms(&["docs/**"], &["src/**"], &["cargo"]), true);
+    let file = |rel: &str| format!("{r}/{rel}");
+    assert!(s.may_imply(Implies::Nothing, &[file("anything")]).is_ok());
+    assert!(s.may_imply(Implies::ReadArgument, &[file("docs/a.md")]).is_ok());
+    assert!(denied_why(&Completion::Failed(s.may_imply(Implies::ReadArgument, &[file("src/a.rs")]).unwrap_err())).is_some());
+    assert!(s.may_imply(Implies::WriteUnsaved, &[file("src/a.rs"), file("src/b.rs")]).is_ok());
+    // One file it may not write is enough to refuse the whole command.
+    let e = s.may_imply(Implies::WriteUnsaved, &[file("src/a.rs"), file("Cargo.toml")]).unwrap_err();
+    assert!(matches!(&e, v::Error::Denied(d) if d.permission == "write = [\"Cargo.toml\"]"), "{e:?}");
+    assert!(s.may_imply(Implies::RunTask, &["cargo".into()]).is_ok());
+    assert!(s.may_imply(Implies::RunTask, &["make".into()]).is_err());
+    // An untrusted folder's permissions have no `write` or `run` (ext_core::trust), and the denial says why.
+    let untrusted = scope(&r, perms(&["docs/**"], &[], &[]), false);
+    let e = untrusted.may_imply(Implies::WriteActiveFile, &[file("src/a.rs")]).unwrap_err();
+    assert_eq!(denied_why(&Completion::Failed(e)), Some(v::Why::UntrustedWorkspace));
 }
 
 #[test]

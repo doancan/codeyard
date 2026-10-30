@@ -163,7 +163,8 @@ impl Workbench {
             } else {
                 d.title.clone()
             }))
-            .child(div().flex_none().debug_selector(move || format!("ext-view-publisher-{tag}")).child(crate::i18n::tf("by {}", &[&d.publisher()])));
+            .child(div().flex_none().debug_selector(move || format!("ext-view-publisher-{tag}")).child(crate::i18n::tf("by {}", &[&d.publisher()])))
+            .children(self.ext_view_title_menu(id, p, cx));
         let draw = Draw { id, tag, h, p: *p };
         let body: AnyElement = match (&h.error, &h.tree) {
             (Some(e), _) => {
