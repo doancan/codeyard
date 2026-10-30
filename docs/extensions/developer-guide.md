@@ -250,6 +250,8 @@ why  = "Shows your Vercel deployments next to the code."
 
 **What users see.** When someone installs your extension they get one sheet that lists your permissions in plain words ("Connect to api.vercel.com", "Run vercel with any arguments") and quotes your `why`. Some combinations count as high risk: anything that *reads* private data (a wide `read`, files like `.env` or `.git/`, clipboard, secrets, an account) together with anything that *sends* (`net`, `run`, `write`, terminal), and anything that can run code as the user (`run`, terminal, or writing build files and hooks). That sheet gets a red banner, and for those combinations `why` is required. Write it in one honest sentence, 200 characters at most.
 
+At run time, undeclared access is refused, never asked. Codeyard asks the user only on the first account use, the first clipboard read per session and the first program run on a remote (SSH) host per session; if they deny it, that call and the later ones of its kind fail with `revoked-by-user` until Codeyard quits, so handle that error and say what stops working.
+
 To see exactly what users will see:
 
 ```sh

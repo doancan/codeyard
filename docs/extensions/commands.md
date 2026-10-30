@@ -260,6 +260,9 @@ cyx package        # cargo build --release --target wasm32-wasip2, then extensio
 
 `cyx package` builds the crate, copies the component to `extension.wasm` in the extension's folder, checks that its imports match the manifest (a component that can call `net` needs `net` declared, and so on) and writes the package. `cyx test` and `cyx dev` build the same way. `cyx check` checks the `extension.wasm` that is there.
 
+`cyx package --no-build` skips the build and packages the `extension.wasm` already in the folder, for a component
+built by another tool.
+
 `cyx dev` builds once when it starts. Rebuilding and reloading on save, with in-memory state kept, comes with the dev window's support for code extensions.
 
 ## The SDK dependency

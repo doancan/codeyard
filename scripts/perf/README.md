@@ -23,7 +23,7 @@ with a message instead of producing numbers. The baseline is built once in `targ
 | --- | --- | --- | --- |
 | `startup.first_frame_ms` | start of `main` to the first drawn frame, welcome screen; one sample per run | p95 | +10% |
 | `startup.window_open_ms` | start of `main` to the window being created (warn only) | p95 | +10% |
-| `startup.extensions_ms` | loading 100 installed, inactive extensions at startup (themes made by `cyx new`) | p95 | +10% and +1 ms; ceiling 5 ms |
+| `startup.extensions_ms` | loading 100 installed, inactive extensions at startup (50 themes made by `cyx new`, 50 code extensions packaged with `cyx package --no-build`); the run fails if one of them starts | p95 | +10% and +1 ms; ceiling 5 ms |
 | `typing.keystroke_frame_ms` | key press to the drawn frame, 10k-line Rust file with highlighting; 40 keys per run | p95 | +10% |
 | `typing.keystroke_frame_decorations_ms` | as `typing.keystroke_frame_ms`, with 2 installed extensions decorating the file (the decoration provider `crates/ext-host/testdata/decorator.wasm`, about 1000 marks each); 40 keys per run (warn only until a baseline has it) | p95 | +10%; ceiling 8 ms |
 | `views.keystroke_frame_ms` | key press in an extension view (PageDown in a list of 10 000 rows) to the drawn frame (warn only until the scenario is added to `run.sh`) | p95 | +10%; ceiling 8 ms |

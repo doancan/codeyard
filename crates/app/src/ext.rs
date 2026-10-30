@@ -210,7 +210,8 @@ pub fn reload_with(cfg_dir: Option<&Path>, enabled: bool) -> Vec<String> {
                     continue;
                 }
                 // Code runs in codeyard-exthost, which ships beside the app; without it none of the extension applies.
-                if let Some(Err(why)) = e.manifest.code.as_ref().map(|_| crate::ext_runtime::code_runs_here(&e.manifest.id)) {
+                // Nothing here starts a process: the sandbox is checked when code first starts.
+                if let Some(Err(why)) = e.manifest.code.as_ref().map(|_| crate::ext_runtime::code_loads_here(&e.manifest.id)) {
                     problems.push(why);
                     continue;
                 }

@@ -66,10 +66,30 @@ pub fn code_runs_here(id: &dyn std::fmt::Display) -> Result<(), String> {
     }
 }
 
+/// Whether installed code extensions load at startup: only what costs nothing, so they start no process then. The
+/// sandbox check runs a process, so it waits for the first install or start (`code_runs_here`); once it has answered,
+/// its answer counts here too.
+pub fn code_loads_here(id: &dyn std::fmt::Display) -> Result<(), String> {
+    #[cfg(test)]
+    if LOAD_WITHOUT_EXTHOST.with(|c| c.get()) {
+        return Ok(());
+    }
+    // Looked up once per process: a reload with many code extensions installed asks once, not once each.
+    static PRESENT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    match SANDBOX.get() {
+        Some(_) => code_runs_here(id),
+        None if !*PRESENT.get_or_init(|| exthost_path().is_some()) => {
+            Err(crate::i18n::tf("{} contains code, but codeyard-exthost is missing beside Codeyard", &[id]))
+        }
+        None => Ok(()),
+    }
+}
+
+static SANDBOX: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
+
 /// `codeyard-exthost --check-sandbox`, asked once per process: installed code runs only where the OS sandbox works.
 pub fn sandbox() -> Result<(), String> {
-    static ANSWER: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
-    ANSWER
+    SANDBOX
         .get_or_init(|| {
             let exe = exthost_path().ok_or_else(|| "codeyard-exthost is missing".to_string())?;
             let out = Command::new(exe).arg("--check-sandbox").output().map_err(|e| e.to_string())?;
@@ -186,6 +206,9 @@ pub struct Process {
     stdin: Mutex<ChildStdin>,
     child: Mutex<Child>,
     stopping: Arc<std::sync::atomic::AtomicBool>,
+    /// Why the app killed it, when that counts as a crash (over its memory cap): the reason its exit reports.
+    killed_for: Arc<Mutex<Option<String>>>,
+    pid: u32,
     /// Replaced by a new build (hot reload): its end is not reported, since the extension runs on.
     retired: Arc<std::sync::atomic::AtomicBool>,
     pub last_used: Mutex<Instant>,
@@ -222,6 +245,8 @@ impl Process {
         }
         let stopping = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let stop = stopping.clone();
+        let killed_for: Arc<Mutex<Option<String>>> = Arc::default();
+        let killed = killed_for.clone();
         let retired = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let replaced = retired.clone();
         std::thread::Builder::new()
@@ -247,6 +272,9 @@ impl Process {
                     }
                 };
                 let mut reason = reason;
+                if let Some(why) = killed.lock().unwrap_or_else(|p| p.into_inner()).take() {
+                    reason = why;
+                }
                 if let Some(mut err) = stderr {
                     let mut s = String::new();
                     let _ = std::io::Read::read_to_string(&mut err, &mut s);
@@ -260,7 +288,8 @@ impl Process {
                 }
             })
             .map_err(|e| e.to_string())?;
-        Ok(Process { stdin: Mutex::new(stdin), child: Mutex::new(child), stopping, retired, last_used: Mutex::new(Instant::now()) })
+        let pid = child.id();
+        Ok(Process { stdin: Mutex::new(stdin), child: Mutex::new(child), stopping, killed_for, pid, retired, last_used: Mutex::new(Instant::now()) })
     }
 
     pub fn send(&self, msg: &ToHost) -> Result<(), String> {
@@ -292,6 +321,19 @@ impl Process {
             // A hot reload waits for this; an exthost exits within milliseconds of `Shutdown`.
             std::thread::sleep(Duration::from_millis(2));
         }
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+
+    /// The exthost's process id.
+    pub fn pid(&self) -> u32 {
+        self.pid
+    }
+
+    /// Kill at once and report it as a crash with `reason` (over its memory cap).
+    pub fn kill_as_crash(&self, reason: String) {
+        *self.killed_for.lock().unwrap_or_else(|p| p.into_inner()) = Some(reason);
+        let mut child = self.child.lock().unwrap_or_else(|p| p.into_inner());
         let _ = child.kill();
         let _ = child.wait();
     }

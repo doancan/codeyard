@@ -132,7 +132,7 @@ pub fn command(id: u64, command: &str) -> Option<()> {
             languages::clear_diagnostics(None);
             Ok(())
         }
-        _ => return None,
+        _ => return guards(id, command),
     };
     requests::respond(id, Ok(&Response::Json(format!("{result:?}"))));
     Some(())
@@ -144,4 +144,37 @@ pub fn cancel(id: u64) {
         let edits = vec![TextEdit { range: everything(""), new_text: "LATE".into() }];
         requests::respond(id, Ok(&Response::Edits(edits)));
     }
+}
+
+/// Only in probe-guards.wasm, for the app's run-time guards (ext_prompts_ui_tests.rs): `clipboard` and `run` import
+/// `clipboard-read` and `process`, which every manifest using the plain probe would otherwise have to declare; `hold`
+/// keeps 64 MB more each time, touched, under the guest's limit and over a lowered resident cap.
+#[cfg(feature = "guards")]
+fn guards(id: u64, command: &str) -> Option<()> {
+    thread_local! {
+        static HELD: RefCell<Vec<Vec<u8>>> = const { RefCell::new(Vec::new()) };
+    }
+    match command {
+        "clipboard" => crate::wait(crate::codeyard::api::clipboard_read::read_text(), id),
+        "run" => {
+            let c = crate::codeyard::api::process::Command { program: "echo".into(), args: vec!["hi".into()], cwd: None, env: vec![], stdin: None };
+            crate::wait(crate::codeyard::api::process::spawn(&c), id)
+        }
+        "hold" => {
+            let total = HELD.with(|h| {
+                let mut h = h.borrow_mut();
+                h.push(vec![1u8; 64 << 20]);
+                std::hint::black_box(&*h);
+                h.len() * 64
+            });
+            crate::reply(id, format!("{total}"))
+        }
+        _ => return None,
+    }
+    Some(())
+}
+
+#[cfg(not(feature = "guards"))]
+fn guards(_: u64, _: &str) -> Option<()> {
+    None
 }

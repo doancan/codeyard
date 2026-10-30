@@ -76,7 +76,8 @@ Resource limits, all from one `limits` table in `ext-manifest` (author docs and 
   a call is suspended, so yielding would not let providers run meanwhile; the budget is what keeps them answered;
 - a provider reply that misses its deadline is dropped, not punished;
 - `StoreLimits` caps each instance's linear memory (`limits::GUEST_MEMORY_BYTES`; growing past it traps); an OS cap of `limits::EXTHOST_MEMORY_BYTES` caps the
-  process: a Job Object commit limit on Windows; on macOS and Linux the app checks the exthost's resident size.
+  process: a Job Object commit limit on Windows; on macOS and Linux the app reads the exthost's resident size every
+  3 s while any runs (`proc_pid_rusage` physical footprint; `/proc/<pid>/statm`) and kills one over it, as a crash.
   wasmtime's guard regions reserve hundreds of GB of address space, so `RLIMIT_AS` is not used;
 - guest code is interrupted only while it runs, so an idle exthost causes no wakeups;
 - going over a memory cap, the IPC frame cap or the IPC byte rate kills the process.
