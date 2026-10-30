@@ -651,6 +651,19 @@ impl Workbench {
         (!self.is_trusted_root(&dir, cx)).then_some(dir)
     }
 
+    /// What trusting the open workspace covers: the file's name, its own folder and every folder it lists. Only on the
+    /// file's host, so trust stays per host over SSH.
+    pub(super) fn workspace_trust_scope(&self) -> Option<(String, Vec<String>)> {
+        let ws = self.roots.workspace.as_ref().filter(|ws| Arc::ptr_eq(&ws.host, &self.remote.host))?;
+        let mut dirs = vec![ws.doc.dir().to_string()];
+        for (_, root) in &ws.opened {
+            if !dirs.contains(root) {
+                dirs.push(root.clone());
+            }
+        }
+        Some((ui::file_name(&ws.path).to_string(), dirs))
+    }
+
     /// Whether the workspace file's settings may set `RESTRICTED_KEYS`.
     pub(super) fn workspace_settings_trusted(&self, cx: &gpui::App) -> bool {
         self.roots.workspace.as_ref().is_none_or(|ws| self.is_trusted_root(ws.doc.dir(), cx))
