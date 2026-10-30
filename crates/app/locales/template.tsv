@@ -2773,13 +2773,13 @@ the regular expression is invalid ({})
 the repository may be private: sign in with `gh auth login` or set GITHUB_TOKEN	
 the response body is not JSON	
 the response of “{}” has no header {}	
+the saved state is damaged	
 the sign-in expired; sign in again	
 the sign-in failed: {}	
 the sign-in was refused ({})	
 the token endpoint answered {}	
 the token endpoint sent a {} token; only bearer tokens can sign requests	
 the token endpoint sent no access_token	
-the saved state is damaged	
 the token was rejected: it may be expired or revoked — renew GITHUB_TOKEN/GH_TOKEN or run `gh auth login`	
 the variable {} refers to itself	
 the window closed	
