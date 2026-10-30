@@ -8,7 +8,7 @@
 
 use serde_json::{Value, json};
 
-use crate::workbench::tasks::{Task, expand_variables};
+use crate::workbench::tasks::{Task, expand_variables, expand_variables_in};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Adapter {
@@ -367,7 +367,13 @@ pub fn adapter_for(ty: &str) -> Result<Adapter, String> {
 
 /// From `launch.json`: variables (`${workspaceFolder}`, `${file}`...) are expanded, `preLaunchTask`
 /// is looked up by label in `tasks` (if not found the label isn't treated as a command, ignored).
+#[cfg(test)]
 pub fn parse_launch_json(text: &str, root: &str, file: Option<&str>, tasks: &[Task]) -> Vec<LaunchConfig> {
+    parse_launch_json_in(text, root, file, tasks, &[])
+}
+
+/// `parse_launch_json` in a workspace with several folders (name, path): `${workspaceFolder:name}` names one of them.
+pub fn parse_launch_json_in(text: &str, root: &str, file: Option<&str>, tasks: &[Task], folders: &[(String, String)]) -> Vec<LaunchConfig> {
     let Ok(v) = serde_json::from_str::<Value>(&theme::themes::strip_jsonc(text)) else { return Vec::new() };
     let items = match &v {
         Value::Array(a) => a.clone(),
@@ -422,7 +428,7 @@ pub fn parse_launch_json(text: &str, root: &str, file: Option<&str>, tasks: &[Ta
                 // Project root if no working directory is given.
                 o.entry("cwd").or_insert_with(|| json!("${workspaceFolder}"));
             }
-            let args = expand_value(&args, root, file);
+            let args = expand_value(&args, root, file, folders);
             let pre = c["preLaunchTask"].as_str().and_then(|label| tasks.iter().find(|t| t.label == label));
             let pre_launch_task = pre.filter(|t| t.file.is_some()).map(|t| t.label.clone());
             let pre_launch = pre.filter(|t| t.file.is_none()).map(|t| expand_variables(&t.command, root, file));
@@ -446,11 +452,11 @@ pub fn parse_launch_json(text: &str, root: &str, file: Option<&str>, tasks: &[Ta
         .collect()
 }
 
-fn expand_value(v: &Value, root: &str, file: Option<&str>) -> Value {
+fn expand_value(v: &Value, root: &str, file: Option<&str>, folders: &[(String, String)]) -> Value {
     match v {
-        Value::String(s) => Value::String(expand_variables(s, root, file)),
-        Value::Array(a) => Value::Array(a.iter().map(|x| expand_value(x, root, file)).collect()),
-        Value::Object(o) => Value::Object(o.iter().map(|(k, x)| (k.clone(), expand_value(x, root, file))).collect()),
+        Value::String(s) => Value::String(expand_variables_in(s, root, file, folders)),
+        Value::Array(a) => Value::Array(a.iter().map(|x| expand_value(x, root, file, folders)).collect()),
+        Value::Object(o) => Value::Object(o.iter().map(|(k, x)| (k.clone(), expand_value(x, root, file, folders))).collect()),
         other => other.clone(),
     }
 }
@@ -627,6 +633,18 @@ pub fn rust_formatters(host: &dyn host::Host, root: &str, existing: &[String]) -
 
 #[cfg(test)]
 mod tests {
+    /// In a workspace with several folders, `${workspaceFolder:name}` names one of them, in the program and in its
+    /// arguments; an unknown name stays as written (no folder is guessed).
+    #[test]
+    fn named_workspace_folders_are_expanded_in_launch_configurations() {
+        let folders = vec![("repoA".to_string(), "/w/repoA".to_string()), ("repoB".to_string(), "/w/repoB/".to_string())];
+        let text = r#"{ "configurations": [ { "name": "hello", "type": "lldb", "request": "launch",
+            "program": "${workspaceFolder:repoA}/hello", "args": ["${workspaceFolderBasename:repoB}", "${workspaceFolder:nope}"] } ] }"#;
+        let c = parse_launch_json_in(text, "/w/repoA", None, &[], &folders);
+        assert_eq!(c[0].args["program"], "/w/repoA/hello");
+        assert_eq!(c[0].args["args"], json!(["repoB", "${workspaceFolder:nope}"]));
+    }
+
     #[test]
     fn compounds_inputs_and_the_post_debug_task_are_read() {
         let tasks =

@@ -230,6 +230,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SIGSTOP later on is still reported as an exception.
 - A task stopped with "Tasks: Terminate Task" was reported as an error ("Task 'watch': cancelled"). A stop the user
   asked for is reported as information now; a failed task is still an error.
+- A workspace file's debug configurations understand `${workspaceFolder:name}` and `${workspaceFolderBasename:name}`, as
+  its tasks already did. Before, the program path kept the variable as written and debugging failed to start with
+  "Expected process to be stopped".
 - After "File: Open Active File as Workspace" (the way to open a workspace file on an SSH server), no shortcut worked
   until something was clicked: the tab that had the keyboard closed with the old folder. The keyboard now stays in the
   window whenever what had it goes away.
