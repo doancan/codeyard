@@ -19,7 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   drawn yet (they wait for `net` fetching).
 - What code extensions contribute reaches the same places as the core's: commands in the editor and file-tree menus
   (with `when` and `enablement`), on key bindings and on status bar items; formatters for *Format Document* and format
-  on save (chosen per language with `editor.formatters`); code actions in *Quick Fix…*; diagnostics in the Problems view
+  on save (chosen per language with `editor.formatters`); code actions in *Quick Fix…*, whose edits change the document they were asked for and other files only within the
+  extension's `write` (one refused file refuses the whole action); diagnostics in the Problems view
   and the editor, tagged with the extension; gutter, line and after-the-line decorations in theme tones; and tasks in
   *Tasks: Run Task…*. Providers answer within a deadline and are cancelled when you type, so they never hold up typing;
   a late answer is dropped and noted in the extension's log. What an extension showed goes when it is disabled,

@@ -397,6 +397,50 @@ fn extension_code_actions_join_quick_fix(cx: &mut TestAppContext) {
     wait_for(cx, "the extension to run the action", |cx| notice(&wb, cx).contains("you.probe: Code action hello"));
 }
 
+/// A code action's edits outside its document need `write`: one refused file refuses the whole action, nothing is
+/// changed, the user is told and the extension's log says why.
+#[gpui::test]
+fn an_extension_code_action_cannot_edit_files_it_may_not_write(cx: &mut TestAppContext) {
+    if exthost_missing() {
+        return;
+    }
+    let cfg = config_dir("actions-scope");
+    let (wb, cx) = setup(cx, &cfg, "{}");
+    let dir = config_dir("actions-scope-files");
+    let file = dir.join("todo.toml");
+    let other = dir.join("other.toml");
+    std::fs::write(&file, "a = 1 # TODO\n").unwrap();
+    std::fs::write(&other, "b = 2\n").unwrap();
+    let ed = open(&wb, &file, cx);
+    let document = ed.read_with(cx, |e, _| e.path.clone());
+    let edit = |line: u32, new_text: &str| {
+        let pos = |character| ext_api::value::Position { line, character };
+        ext_api::value::TextEdit { range: ext_api::value::Range { start: pos(0), end: pos(0) }, new_text: new_text.into() }
+    };
+    let uri = |p: &std::path::Path| crate::ext_broker::uri(&p.to_string_lossy());
+    // As the app sent it: the editor's path, which may be spelled differently from `file` (`/private/var` on macOS).
+    let own_uri = crate::ext_broker::uri(&document);
+    let action = ext_api::value::CodeAction {
+        id: "sneak".into(),
+        title: "Probe: Sneak".into(),
+        edits: vec![(own_uri.clone(), vec![edit(0, "# ok\n")]), (uri(&other), vec![edit(0, "# sneaked\n")])],
+        command: None,
+        preferred: false,
+        fixes: vec![],
+    };
+    wb.update_in(cx, |wb, window, cx| wb.run_extension_code_action_for_test("you.probe", &document, action.clone(), window, cx));
+    cx.run_until_parked();
+    assert_eq!(text(&ed, cx), "a = 1 # TODO\n", "the document is untouched too");
+    assert_eq!(std::fs::read_to_string(&other).unwrap(), "b = 2\n");
+    assert!(notice(&wb, cx).contains("you.probe"), "{}", notice(&wb, cx));
+    let log = wb.read_with(cx, |wb, _| wb.extension_log_for_test("you.probe"));
+    assert!(log.iter().any(|l| l.contains("Probe: Sneak") && l.contains("refused")), "{log:?}");
+    // Its own document alone is the user's to change.
+    let own = ext_api::value::CodeAction { edits: vec![(own_uri, vec![edit(0, "# ok\n")])], ..action };
+    wb.update_in(cx, |wb, window, cx| wb.run_extension_code_action_for_test("you.probe", &document, own, window, cx));
+    wait_for(cx, "the edit", |cx| text(&ed, cx) == "# ok\na = 1 # TODO\n");
+}
+
 /// Tasks an extension provides are listed with the folder's, and running one asks the extension.
 #[gpui::test]
 fn extension_tasks_are_listed_and_run(cx: &mut TestAppContext) {
