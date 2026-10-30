@@ -52,10 +52,10 @@ mod marks;
 
 pub use marks::{Activity, Finished};
 
-#[path = "terminal_revival.rs"]
-mod revival;
 #[path = "terminal_restore.rs"]
 mod restore;
+#[path = "terminal_revival.rs"]
+mod revival;
 #[path = "terminal_scroll.rs"]
 mod scroll;
 
