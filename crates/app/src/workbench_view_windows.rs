@@ -29,9 +29,48 @@ pub(super) struct ViewWindowEntry {
     bounds: std::rc::Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
 }
 
+/// What a view's window shows, drawn as a cached view: it is drawn again only when what it reads changes, not with
+/// every change of the workbench. Source Control and Search are views of their own and read nothing else; the other
+/// views are drawn from the workbench's state, so they redraw with it, as they do in a side bar.
+pub(super) struct ViewBody {
+    panel: Panel,
+    home: WeakEntity<Workbench>,
+    scm: Entity<crate::scm::ScmPanel>,
+    search: Entity<SearchPanel>,
+    /// Frames drawn (tests: an unrelated change must not draw it again).
+    #[cfg(test)]
+    pub(super) renders: usize,
+}
+
+impl Render for ViewBody {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        #[cfg(test)]
+        {
+            self.renders += 1;
+        }
+        let p = *palette(cx);
+        let body = match self.panel {
+            Panel::Scm => self.scm.clone().into_any_element(),
+            Panel::Search => div()
+                .flex()
+                .flex_col()
+                .size_full()
+                .child(view_explorer_glue::view_header(crate::i18n::upper(crate::i18n::t("Search")), &p))
+                .child(div().flex_1().min_h_0().child(self.search.clone()))
+                .into_any_element(),
+            panel => match self.home.upgrade() {
+                Some(home) => home.update(cx, |wb, cx| wb.side_view(panel, &p, cx)),
+                None => div().into_any_element(),
+            },
+        };
+        div().size_full().flex().flex_col().child(body)
+    }
+}
+
 /// The root view of a side view's own window.
 pub(super) struct ViewWindow {
     panel: Panel,
+    body: Entity<ViewBody>,
     home: WeakEntity<Workbench>,
     focus: FocusHandle,
     bounds: std::rc::Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
@@ -70,14 +109,16 @@ impl Render for ViewWindow {
         let p = *palette(cx);
         let panel = self.panel;
         let root = div().id("view-window");
+        // The actions and the menu or picker layer come from the workbench (cheap, drawn with it); the view itself is
+        // the cached body.
         let (root, body, layers) = match self.home.upgrade().filter(|_| self.ready) {
             Some(home) => home.update(cx, |wb, cx| {
-                let body = wb.side_view(panel, &p, cx);
                 let layers: Vec<AnyElement> = if wb.chrome.view_host == Some(panel) {
                     wb.menu_layer(0., cx).into_iter().chain(wb.picker_layer(theme::SPACE[4], cx)).collect()
                 } else {
                     Vec::new()
                 };
+                let body = gpui::AnyView::from(self.body.clone()).cached(gpui::StyleRefinement::default().size_full());
                 (wb.with_actions(root, cx), Some(body), layers)
             }),
             None => (root, None, Vec::new()),
@@ -247,6 +288,7 @@ impl Workbench {
         let shared = std::rc::Rc::new(std::cell::Cell::new(Some(bounds)));
         let cell = shared.clone();
         let target = self.view_focus(panel, cx);
+        let (scm, search) = (self.scm.clone(), self.search.clone());
         let opened = cx.open_window(options, move |window, cx| {
             // Closing the window puts the view back in its side bar.
             let back = home.clone();
@@ -255,10 +297,18 @@ impl Workbench {
                 true
             });
             window.set_window_title(&title);
+            let body = cx.new(|_| ViewBody {
+                panel,
+                home: home.clone(),
+                scm,
+                search,
+                #[cfg(test)]
+                renders: 0,
+            });
             cx.new(|cx| {
                 let focus = cx.focus_handle();
                 window.focus(target.as_ref().unwrap_or(&focus));
-                let mut subs = vec![
+                let subs = vec![
                     cx.observe_window_bounds(window, |this: &mut ViewWindow, window, _| this.bounds.set(Some(window.bounds()))),
                     cx.observe_window_activation(window, |this: &mut ViewWindow, window, cx| {
                         if window.is_window_active() {
@@ -266,10 +316,6 @@ impl Workbench {
                         }
                     }),
                 ];
-                // The view is drawn from the workbench's state: it redraws with it.
-                if let Some(wb) = home.upgrade() {
-                    subs.push(cx.observe(&wb, |_, _, cx| cx.notify()));
-                }
                 // Once the view is drawn here, the keyboard goes into it.
                 let target = target.clone();
                 cx.defer_in(window, move |this: &mut ViewWindow, window, cx| {
@@ -277,7 +323,7 @@ impl Workbench {
                     window.focus(target.as_ref().unwrap_or(&this.focus));
                     cx.notify();
                 });
-                ViewWindow { panel, home, focus, bounds: cell, ready: false, last_focus: None, _subs: subs }
+                ViewWindow { panel, body, home, focus, bounds: cell, ready: false, last_focus: None, _subs: subs }
             })
         });
         match opened {

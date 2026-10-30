@@ -166,6 +166,68 @@ fn the_views_window_has_its_part_of_the_accessibility_tree(cx: &mut gpui::TestAp
     assert!(main.explorers.is_empty(), "and not in the main window's");
 }
 
+/// The Search results are in the accessibility tree wherever the Search view is: the primary side bar, the secondary
+/// one, or its own window (and then only in that window's tree).
+#[gpui::test]
+fn search_results_are_in_the_tree_wherever_the_search_view_is(cx: &mut gpui::TestAppContext) {
+    let (wb, vcx) = setup(cx);
+    let main = |vcx: &mut VisualTestContext| vcx.update(|window, cx| (a11y::windows_access::WORKBENCH.snapshot)(wb.clone().into(), window, cx)).unwrap();
+    wb.update_in(vcx, |wb, window, cx| wb.find_in_files(&FindInFiles, window, cx));
+    vcx.run_until_parked();
+    assert_eq!(wb.read_with(vcx, |wb, _| wb.chrome.panel), Some(Panel::Search));
+    assert!(main(vcx).views.search.is_some(), "primary side bar");
+    wb.update(vcx, |wb, cx| wb.dock_view(Panel::Search, true, cx));
+    vcx.run_until_parked();
+    assert_eq!(wb.read_with(vcx, |wb, _| wb.chrome.secondary), Some(Panel::Search));
+    assert!(main(vcx).views.search.is_some(), "secondary side bar");
+    wb.update_in(vcx, |wb, window, cx| {
+        wb.chrome.panel = None;
+        wb.view_into_new_window(window, cx);
+    });
+    vcx.run_until_parked();
+    assert!(wb.read_with(vcx, |wb, _| wb.in_view_window(Panel::Search)));
+    assert!(main(vcx).views.search.is_none(), "not in the main window's tree");
+    let handle = view_window(&wb, Panel::Search, vcx);
+    let mut win = VisualTestContext::from_window(handle.into(), vcx);
+    let root = handle.update(&mut win, |_, _, cx| cx.entity()).unwrap();
+    let snap = win.update(|window, cx| (a11y::windows_access::VIEW_WINDOW.snapshot)(root.into(), window, cx)).unwrap();
+    assert!(snap.views.search.is_some(), "its own window");
+    accesskit_consumer::Tree::new(snap.to_tree(), true);
+}
+
+/// The view's content is drawn again only when what it shows changes: typing in an editor of the main window (which
+/// changes the workbench) does not draw a Source Control window's view again.
+#[gpui::test]
+fn an_unrelated_change_does_not_redraw_a_view_window(cx: &mut gpui::TestAppContext) {
+    let dir = fresh("viewwin-redraw");
+    let file = dir.join("a.txt");
+    std::fs::write(&file, "alpha\n").unwrap();
+    let (wb, vcx) = setup(cx);
+    open(&wb, &dir, vcx);
+    crate::qa_workbench_tests::open_in(&wb, &file, vcx);
+    wb.update_in(vcx, |wb, window, cx| {
+        wb.show_scm(&ShowScm, window, cx);
+        wb.view_into_new_window(window, cx);
+    });
+    vcx.run_until_parked();
+    let handle = view_window(&wb, Panel::Scm, vcx);
+    let body = vcx.update(|_, cx| handle.read(cx).unwrap().body.clone());
+    let renders = |vcx: &mut VisualTestContext| vcx.update(|_, cx| body.read(cx).renders);
+    let before = renders(vcx);
+    assert!(before > 0, "the view was drawn");
+    wb.update_in(vcx, |wb, window, cx| {
+        wb.leave_editor_window();
+        wb.focus_group_key(wb.tabs.current_key(), window, cx);
+    });
+    for ch in ["x", "y", "z"] {
+        vcx.simulate_input(ch);
+        vcx.run_until_parked();
+    }
+    let ed = wb.read_with(vcx, |wb, _| wb.tab_editor().cloned()).unwrap();
+    assert!(ed.read_with(vcx, |e, _| e.is_dirty()), "the edits happened");
+    assert_eq!(renders(vcx), before, "typing in the main window did not draw the view again");
+}
+
 #[test]
 fn saved_view_windows_are_versioned_and_bounded() {
     let saved = SavedViewWindows::parse(r#"{"version":1,"windows":[{"view":"scm","secondary":true,"at":[1,2,300,400]},{"view":"nope"},{"view":"scm"}]}"#)
