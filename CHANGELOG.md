@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   secondary side bar. It stays the same view: the extension's updates reach the window and what you do there goes to
   the extension. The window is restored with the folder while the extension is installed, closes when the extension
   is removed or turned off, and gives the view back to the side bar when the extension crashes.
+- Terminals in editor groups and in windows of their own, and the terminals of SSH folders, are taken back after a
+  restart the same way as a local folder's panel terminals: the same shells, in their places, with "Reconnected to
+  terminal session". SSH folders resume their session on the server's agent, which already kept the shells.
+- Setting `terminal.persistentSessionTimeout`: how many minutes terminals keep running for the next start after
+  Codeyard quits, crashes or is killed (default 5, at most 1440; 0: they end with the app). The agent protocol is
+  version 17.
+
 - On macOS and Linux, the panel's terminals of a local folder keep running when Codeyard quits, crashes or is killed
   (with `window.restoreSession`, the default). Opening the folder again within 5 minutes brings the same shells back,
   with their output from meanwhile, and says "Reconnected to terminal session". A terminal that cannot be taken back is
@@ -59,8 +66,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   10,000 rows draw only the rows on screen, and trees load one page at a time. The tree arrives as JSON
   (docs/extensions/reference/ui.md), is checked, and is diffed by key so typed text, ticks, selections and expanded
   items survive a re-render. Every element is reachable by keyboard and announced with its role and label. Each view
-  names its publisher, and none can cover the consent sheet or take the keyboard from it. Images from URLs are not
-  drawn yet (they wait for `net` fetching).
+  names its publisher, and none can cover the consent sheet or take the keyboard from it.
+- Extension views show `image` elements with an `https` URL: Codeyard fetches them through the extension's `net`
+  permission (declared hosts only, ext-net's address checks, at most 1 MB, formats GPUI decodes), only while the view
+  is on screen and never in an untrusted folder, and keeps them by URL until the view closes. A refused image shows
+  its alt text and the denial is listed in the Inspector.
+- A view's `when` in the manifest: a view is offered in the activity bar, the panel tabs and *Open View* only while
+  its `when` holds, and an open view closes when it turns false.
+- `views.keystroke_frame_ms` (`CODEYARD_PERF`): a key that reaches an extension view, to the frame that shows it. The
+  row in `perf/metrics.json` is `warn` until `scripts/perf/run.sh` has a scenario for it.
 - What code extensions contribute reaches the same places as the core's: commands in the editor and file-tree menus
   (with `when` and `enablement`), on key bindings and on status bar items; formatters for *Format Document* and format
   on save (chosen per language with `editor.formatters`); code actions in *Quick Fix…*, whose edits change the document they were asked for and other files only within the
@@ -144,6 +158,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Windows: a shell task's arguments run through cmd.exe reach the program unchanged when they contain `%` (a value like
+  `%PATH%` is no longer expanded) or end with a backslash (`C:\dir\` no longer swallows the closing quote).
 - Screen readers find the Search results in the secondary side bar too, not only in the primary one.
 - Screen readers find an extension's side bar view when it is in the secondary side bar.
 - On macOS and Linux, a task, test run, language server or terminal no longer keeps running when Codeyard is killed or

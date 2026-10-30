@@ -240,18 +240,20 @@ own window the command palette, Quick Open, Go to Line, the right-click menu and
 as in the main window and act on that window's editor; a command that shows something in the main window (another
 file, a side view) brings it to the front. Screen readers see the editor in its own window, and the terminal in its
 own window, the same way as in the main window.
-**Terminals after a restart.** With `window.restoreSession` on (the default), the panel's terminals come back when
-the folder opens again: same order, folder, title, color and program. On macOS and Linux, terminals of a local folder
-run in a small background process of Codeyard's (the terminal daemon). They are kept running only when you are expected
-to come back: when you **quit** Codeyard (⌘Q, Quit in the menu, an update's restart), or when it crashes or is killed.
-Leaving on purpose ends them at once, as always: **closing the window** (even the last one), *Close Folder*, opening
-another folder in the window or switching to an SSH folder. Open the folder again within 5 minutes and you get **the
-same shells back**, still running, with what they printed meanwhile and a line *Reconnected to terminal session* (also
-announced in the status bar). If another Codeyard instance already has those terminals open, they stay with it: this
-window starts new shells and says so in the status bar. If more than the last 256 KB
-of a terminal's output came while no window was open, the line says how much was lost. A terminal no window takes back
-within 5 minutes is ended, and the daemon stops 10 minutes after its last terminal. Any terminal that cannot be taken
-back (it ended, the daemon was restarted, `window.restoreSession` is off, an SSH folder) is a **new shell**: nothing that
+**Terminals after a restart.** With `window.restoreSession` on (the default), a folder's terminals come back when the
+folder opens again: the panel's in the same order, and those you moved into an editor group or a window of their own in
+those places, with the same folder, title, color and program. Their shells keep running when you are expected to come
+back: when you **quit** Codeyard (⌘Q, Quit in the menu, an update's restart), or when it crashes or is killed. A local
+folder's terminals run in a small background process of Codeyard's (the terminal daemon, on macOS and Linux); an SSH
+folder's already run in Codeyard's agent on the server. Leaving on purpose ends them at once, as always: **closing the
+window** (even the last one), *Close Folder*, opening another folder in the window or connecting elsewhere. Open the
+folder again within `terminal.persistentSessionTimeout` minutes (5 by default, at most 1440; 0 keeps nothing) and you get
+**the same shells back**, still running, with what they printed meanwhile and a line *Reconnected to terminal session*
+(also announced in the status bar). If another Codeyard instance already has a local folder's terminals open, they stay
+with it: this window starts new shells and says so in the status bar. If more than the last 256 KB of a terminal's output
+came while no window was open, the line says how much was lost. A terminal no window takes back in time is ended; the
+local daemon stops 10 minutes after its last terminal. Any terminal that cannot be taken back (it ended, the daemon or
+the server was restarted, `window.restoreSession` is off, Windows for a local folder) is a **new shell**: nothing that
 ran before is started or typed again, and a line says *Previous session ended; started a new shell*. If a terminal's folder is gone,
 it starts in the workspace folder and says so. `"terminal.persistentScrollback": 1000` also keeps the last lines of each
 terminal's history (plain text, with colors and control sequences removed) and shows them above that line; it is 0 (off) by
@@ -763,7 +765,10 @@ in the bottom panel, or a page in the editor area (also *Open View: …* in the 
 with your theme, so they follow theme and zoom changes, and they work with the keyboard (Tab between controls, arrows
 in lists and trees) and screen readers. Each view names its publisher at the top. A view stays in its place: it cannot
 cover Codeyard's install, trust or sign-in sheets, or take the keyboard while one of them waits for you. Images in its
-text are not loaded, and a link opens in your browser only after you confirm its address.
+text are not loaded, and a link opens in your browser only after you confirm its address. An image element with a web
+address is loaded by Codeyard, only from a site the extension asked for on its install sheet, never in a folder you have
+not trusted, and only while the view is on screen; anything else shows the image's description. A view can also be
+offered only in some situations, for example while a Rust file is open; it closes by itself when that stops.
 **What extensions with code add.** Everything they put on screen names the extension.
 
 - *Commands* in the palette, in the editor's and the file tree's right-click menus (after the built-in entries, greyed

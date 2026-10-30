@@ -578,7 +578,10 @@ impl Workbench {
             let Some(view) = w.view_ref() else { continue };
             // An extension view comes back only while its extension is there and declares it for a side bar.
             if let Some(id) = &view.ext {
-                let Some(d) = declared.iter().find(|d| d.id == *id && d.location == ext_manifest::ViewLocation::Sidebar) else { continue };
+                let hidden = &self.cfg.exts.views.hidden;
+                let Some(d) = declared.iter().find(|d| d.id == *id && d.location == ext_manifest::ViewLocation::Sidebar && !hidden.contains(id)) else {
+                    continue;
+                };
                 self.ensure_ext_view(d.clone(), window, cx);
             }
             let bounds = term_tabs_glue::restore::place_window(w.at, &displays)

@@ -3300,11 +3300,15 @@ skipped	atlandı
 {} test|{} tests	{} test
 # ---- Terminal restore ----
 Lines of each terminal's history kept for the next start, as plain text on this computer (0: none)	Her terminalin geçmişinden bir sonraki açılış için bu bilgisayarda düz metin olarak saklanan satır sayısı (0: hiç)
+Minutes the terminals keep running for the next start after Codeyard quits, crashes or is killed (0: not kept)	Codeyard kapandıktan, çöktükten ya da sonlandırıldıktan sonra terminallerin bir sonraki açılış için çalışmaya devam ettiği dakika (0: tutulmaz)
 Saved terminal history cleared	Kaydedilen terminal geçmişi temizlendi
 Terminal session could not be restored: {}	Terminal oturumu geri yüklenemedi: {}
 Terminal: Clear Saved Terminal History	Terminal: Kaydedilen Terminal Geçmişini Temizle
 the folder {} no longer exists; started a new shell in the workspace folder	{} klasörü artık yok; çalışma alanı klasöründe yeni bir kabuk başlatıldı
 the saved state is damaged	kaydedilen durum bozuk
+the image is larger than {} bytes	görsel {} bayttan büyük
+the server answered {}	sunucu {} yanıtını verdi
+not a PNG, JPEG, GIF, WebP or SVG image	PNG, JPEG, GIF, WebP veya SVG görseli değil
 View: Move Editor into New Window	Görünüm: Düzenleyiciyi Yeni Pencereye Taşı
 View: Copy Editor into New Window	Görünüm: Düzenleyiciyi Yeni Pencereye Kopyala
 View: Move Editors Back to Main Window	Görünüm: Düzenleyicileri Ana Pencereye Geri Taşı

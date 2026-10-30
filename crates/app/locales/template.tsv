@@ -1254,6 +1254,7 @@ Minified
 Minimal	
 Minimize	
 Minimize window	
+Minutes the terminals keep running for the next start after Codeyard quits, crashes or is killed (0: not kept)	
 Missing value for Cargo option {}	
 Modified	
 Modules	
@@ -2727,6 +2728,7 @@ no item {} in the response
 no upstream	
 no “{}” in the response	
 not UTF-8	
+not a PNG, JPEG, GIF, WebP or SVG image	
 not available	
 not declared	
 not run	
@@ -2815,6 +2817,7 @@ the folder cannot be read on the right
 the folder is not trusted	
 the folder {} no longer exists; started a new shell in the workspace folder	
 the header “{}” is not valid	
+the image is larger than {} bytes	
 the keychain did not answer	
 the keychain refused the account: {}	
 the launch file is not an object	
@@ -2826,6 +2829,7 @@ the repository may be private: sign in with `gh auth login` or set GITHUB_TOKEN
 the response body is not JSON	
 the response of “{}” has no header {}	
 the saved state is damaged	
+the server answered {}	
 the sign-in expired; sign in again	
 the sign-in failed: {}	
 the sign-in was refused ({})	

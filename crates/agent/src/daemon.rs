@@ -78,20 +78,27 @@ impl Registry {
             self.sessions.locked().remove(&key);
             return result;
         }
-        // Connection ended: if no other connection took over, the session is disconnected.
-        if !sess.out.is_attached()
-            && let Some(e) = self.sessions.locked().get_mut(&key)
-        {
-            e.detached_since.get_or_insert_with(Instant::now);
+        // Connection ended: if no other connection took over, the session is disconnected (or ends now, if its client
+        // asked not to keep it).
+        if !sess.out.is_attached() {
+            let mut map = self.sessions.locked();
+            if sess.keep_for.load(Ordering::Relaxed) == 0 {
+                if let Some(e) = map.remove(&key) {
+                    e.session.shutdown();
+                }
+            } else if let Some(e) = map.get_mut(&key) {
+                e.detached_since.get_or_insert_with(Instant::now);
+            }
         }
         result
     }
 
-    /// Close disconnected sessions whose grace has expired. Returns whether any session is left.
+    /// Close disconnected sessions whose grace (their own `KeepFor`, else `grace`) has expired. Returns whether any
+    /// session is left.
     pub fn reap(&self, grace: Duration) -> bool {
         let mut map = self.sessions.locked();
         map.retain(|_, e| match e.detached_since {
-            Some(t) if t.elapsed() >= grace => {
+            Some(t) if t.elapsed() >= Some(e.session.keep_for.load(Ordering::Relaxed)).filter(|s| *s != u64::MAX).map_or(grace, Duration::from_secs) => {
                 e.session.shutdown();
                 false
             }

@@ -378,3 +378,48 @@ fn a_restored_window_lands_on_an_attached_display() {
     }
     assert_eq!(place_window(Some([0., 0., 800., 500.]), &[]), None, "no display known");
 }
+
+/// A workbench that moved a terminal and an editor into windows of their own is released once its window closes: those
+/// windows only point back at it weakly, and they close with it. (A workbench left alive would keep its editors,
+/// language servers and terminals after the window is gone, since the app keeps running on macOS.)
+#[gpui::test]
+fn a_workbench_is_released_when_its_window_closes_with_detached_windows_open(cx: &mut gpui::TestAppContext) {
+    let dir = crate::qa_workbench_tests::project("release-detached");
+    let (wb, vcx) = crate::qa_workbench_tests::setup(cx);
+    crate::qa_workbench_tests::open(&wb, &dir, vcx);
+    crate::qa_workbench_tests::open(&wb, &dir.join("README.md"), vcx);
+    wb.update_in(vcx, |wb, window, cx| wb.new_terminal(&NewTerminal, window, cx));
+    vcx.run_until_parked();
+    wb.update_in(vcx, |wb, window, cx| {
+        wb.detach_terminal(window, cx);
+        wb.editor_into_new_window(false, window, cx);
+    });
+    vcx.run_until_parked();
+    let windows = vcx.cx.windows().len();
+    assert_eq!(windows, 3, "the main window, the terminal's and the editor's");
+    let weak = wb.downgrade();
+    drop(wb);
+    vcx.update(|window, _| window.remove_window());
+    vcx.run_until_parked();
+    assert!(weak.upgrade().is_none(), "the workbench is released with its window");
+    assert_eq!(vcx.cx.windows().len(), 0, "its terminal and editor windows closed with it");
+}
+
+/// Closing the detached windows first, then the main window, releases it too.
+#[gpui::test]
+fn a_workbench_is_released_after_its_detached_windows_and_then_its_window_close(cx: &mut gpui::TestAppContext) {
+    let (wb, vcx) = crate::qa_workbench_tests::setup(cx);
+    wb.update_in(vcx, |wb, window, cx| wb.new_terminal(&NewTerminal, window, cx));
+    vcx.run_until_parked();
+    wb.update_in(vcx, |wb, window, cx| wb.detach_terminal(window, cx));
+    vcx.run_until_parked();
+    let handle = wb.read_with(vcx, |wb, _| wb.chrome.detached[0].window);
+    let mut detached = gpui::VisualTestContext::from_window(handle.into(), vcx);
+    assert!(detached.simulate_close(), "the terminal's window closes");
+    vcx.run_until_parked();
+    let weak = wb.downgrade();
+    drop(wb);
+    vcx.update(|window, _| window.remove_window());
+    vcx.run_until_parked();
+    assert!(weak.upgrade().is_none(), "the workbench is released with its window");
+}
