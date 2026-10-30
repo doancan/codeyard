@@ -39,6 +39,40 @@ impl std::fmt::Debug for Programs {
     }
 }
 
+/// The programs of installed extension `id`, unpacked at `dir`: its own package when it is built for the platform asked
+/// for, else that platform's package from the store, fetched from the registry the first time.
+pub fn of_extension(cfg_dir: Option<PathBuf>, registries: Vec<ext_core::registry::Registry>, id: ExtId, dir: PathBuf) -> Programs {
+    Programs(Arc::new(move |target: &str, run: &str| {
+        let pkg = package_dir(cfg_dir.as_deref(), &registries, &id, &dir, target)?;
+        read_program(&pkg, target, run)
+    }))
+}
+
+/// A language server whose command is a program inside its extension's package (`command = "./bin/server"`). Two are
+/// the same server when they come from the same extension folder (an update is another folder, so it restarts).
+#[derive(Clone, Debug)]
+pub struct PackageServer {
+    pub extension: String,
+    pub dir: PathBuf,
+    pub programs: Programs,
+}
+
+impl PartialEq for PackageServer {
+    fn eq(&self, other: &Self) -> bool {
+        (&self.extension, &self.dir) == (&other.extension, &other.dir)
+    }
+}
+
+impl Eq for PackageServer {}
+
+/// The absolute path on `host` to start package program `run` from: the program of the host's platform, pushed to it
+/// and checked by hash there ([`push`]). A copy that does not match is never started.
+pub fn ready(host: &dyn Host, extension: &str, programs: &Programs, run: &str) -> Result<String, String> {
+    let target = host_target(host).ok_or_else(|| crate::i18n::tf("{} is a platform extension programs are not built for", &[&host.label()]))?;
+    let p = (programs.0)(target, run)?;
+    push(host, extension, &p)
+}
+
 /// The platform of the workspace's host, as a target triple packages are built for.
 pub fn host_target(host: &dyn Host) -> Option<&'static str> {
     let info = host.info();

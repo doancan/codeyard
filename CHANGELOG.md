@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   locally and over SSH. The consent sheet asks for the extension's id to be typed before it installs one. Yard takes
   code and native programs only from publishers listed in `yard.json`'s `invited`, and a publisher's first native
   program stays unlisted until a reviewer runs `yard review approve` (`yard review list | approve | reject`).
+  A `[[language-servers]]` command inside the package (`command = "./bin/server"`) starts from the same pushed and
+  hash-checked copy, locally and over SSH, and is refused when the hash does not match. An update that adds a native
+  program opens the full sheet, which asks for the id to be typed as a first install does, instead of the permission
+  card. Screen readers find the sheet's id field (a text field with what to type, what is typed and the focus).
 
 - Code extensions can describe and complete: `[[hover]]` and `[[completion]]` (with optional `trigger-characters`)
   in the manifest, `request.hover` and `request.completion` in `codeyard:api` 0.1, `ctx.hover` and `ctx.completion`
