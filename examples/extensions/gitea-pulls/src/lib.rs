@@ -3,8 +3,8 @@
 //! next to GitHub's. Every call to the forge goes through `ctx.fetch_as` with the remote's account: Codeyard adds the
 //! token, so the extension never sees it.
 //!
-//! The same code serves any Gitea or Forgejo server: add its host to `hosts` in the manifest and to the `[[oauth]]`
-//! table, or declare a second provider.
+//! The same code serves any Gitea or Forgejo server: the user adds one on the extension's page (`instances = true` in
+//! the manifest), and its remotes arrive with that server's host and account.
 
 use codeyard_extension::prelude::*;
 

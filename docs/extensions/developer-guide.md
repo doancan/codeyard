@@ -232,7 +232,9 @@ auth  = "codeberg"              # optional; must be in [permissions] auth
 
 A `[[pull-requests]]` provider lists, describes, diffs, comments on and checks out the pull (merge) requests of the
 remotes on its hosts ([commands.md](commands.md#pull-request-providers)); it calls the forge with `auth.fetch`, so it
-never sees the token.
+never sees the token. Users see them with **Pull Requests: Show…**, next to GitHub's. `cyx new pull-requests <name>
+[--lang ts]` starts one, with its `[[oauth]]` account, tests with HTTP fixtures and a README on registering the OAuth
+application.
 
 A file-tree menu entry passes the file's URI to the command as its argument, and a view-title entry the view's full id
 (`you.ext.deployments`): view-title entries appear under the **…** button in that view's title bar. A menu entry may
@@ -419,9 +421,12 @@ client-id     = "your-public-client-id"                  # no client secret: PKC
 scopes        = ["read", "deploy"]                       # auth.session may ask for fewer
 hosts         = ["api.acme.example.com"]                 # the hosts auth.fetch signs requests to
 account-url   = "https://api.acme.example.com/me"        # optional: JSON with the account's name
+instances     = true                                     # optional: users may add self-managed servers (below)
 ```
 
-Register `codeyard://ext/<your extension id>/callback` as the redirect URI with the provider. Codeyard signs in as a public client, so the provider must accept PKCE without a client secret; for a service whose OAuth needs a secret (Vercel's, for one), keep a token the user creates in `secrets` instead ([examples/extensions/vercel-status](../../examples/extensions/vercel-status)). The user can sign out on your extension's page. The next `auth.fetch` then fails with "not signed in", and your extension calls `auth.session` again.
+Register `codeyard://ext/<your extension id>/callback` as the redirect URI with the provider. Codeyard signs in as a public client, so the provider must accept PKCE without a client secret; for a service whose OAuth needs a secret (Vercel's, for one), keep a token the user creates in `secrets` instead ([examples/extensions/vercel-status](../../examples/extensions/vercel-status)). The user can sign out on your extension's page. The next `auth.fetch` then fails with "not signed in", and your extension calls `auth.session` again. An `auth.fetch` to a host outside `hosts` is refused with `[[oauth]] acme hosts = ["<host>"]`, and the fix says which table to add the host to.
+
+**Self-managed servers.** A forge such as GitLab, Gitea or Forgejo also runs on servers of its own, each with its own OAuth application. With `instances = true`, the user adds one on your extension's page (Accounts › **Add Instance…**): its host and the client id of the application they registered there. Codeyard shows the host, the client id and the redirect URI, and asks first, as it does for a permission; nothing your extension or a workspace writes can add one. The instance is your `[[oauth]]` table with its URLs on that host, so `authorize-url`, `token-url` and `account-url` must all be on one host that `hosts` lists. It is an account of its own, `<id>@<host>` (`gitlab@git.example.com`): it signs requests to its host only, `auth = ["<id>"]` grants it, and turning that switch off turns it off. A `[[pull-requests]]` provider whose `auth` is that id claims the instance's remotes, which carry the instance's account; where `net` allows the `[[oauth]]` host, it allows the instance's too. Treat `remote.account` as opaque and build URLs from `remote.host`, and the same code serves every instance ([examples/extensions/gitlab](../../examples/extensions/gitlab)).
 
 **Secrets.** If a service has no OAuth, `secrets = true` gives your extension its own keychain entries. Use `secrets.set(key, value)`, `secrets.get(key)` and `secrets.delete(key)` (TypeScript: `ctx.setSecret`, `ctx.secret`, `ctx.deleteSecret`), and ask for the value with `ctx.input({ prompt, password: true })` so it is not shown as it is typed. Keys are `a-z A-Z 0-9 . _ -`, up to 128 characters. A value is at most 2048 bytes. The entries belong to your publisher identity, so a sideloaded copy of your extension cannot read them.
 

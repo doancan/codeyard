@@ -1,6 +1,6 @@
 # Testing code extensions
 
-There are two kinds of test, and a new extension from `cyx new command` or `cyx new view` comes with both set up:
+There are two kinds of test, and a new extension from `cyx new command`, `cyx new view` or `cyx new pull-requests` comes with both set up:
 
 - **Unit tests** with `cargo test` (Rust) or `npm test` (TypeScript, [below](#typescript)). They run on your computer, in milliseconds, against a mock Codeyard: fake files, fixture HTTP responses, recorded processes, scripted answers and a virtual clock.
 - **`cyx test`** builds the real component and runs it in Codeyard's extension host: it activates the extension, runs every command and draws every view.
@@ -10,7 +10,9 @@ There are two kinds of test, and a new extension from `cyx new command` or `cyx 
 - [Fixtures and scripted answers](#fixtures-and-scripted-answers)
 - [What the test can check](#what-the-test-can-check)
 - [Permissions in tests](#permissions-in-tests)
+- [Accounts in tests](#accounts-in-tests)
 - [cyx test](#cyx-test)
+- [HTTP fixtures for cyx test](#http-fixtures-for-cyx-test)
 - [TypeScript](#typescript)
 - [In CI](#in-ci)
 <!-- /toc -->
@@ -101,6 +103,27 @@ denied: the manifest does not declare net = ["api.github.com"]
    = fix: add to [permissions]:  net = ["api.github.com"]
 ```
 
+An `auth.fetch` to a host that is not one of the account's names that host and the `[[oauth]]` table it belongs in:
+
+```
+denied: the manifest does not declare [[oauth]] gitlab hosts = ["evil.example.org"]
+   = fix: add "evil.example.org" to hosts in the [[oauth]] table with id = "gitlab"
+```
+
+## Accounts in tests
+
+Every `auth` provider starts signed in as `test-user`. To test what the extension does when the sign-in does not work out:
+
+```rust
+host.decline_sign_in("gitlab");   // the user picks Cancel: auth.session fails with `cancelled`
+host.signed_out("gitlab");        // after Sign Out: auth.fetch fails with "not signed in to GitLab; call auth.session …",
+                                  // and the next auth.session signs in again
+host.sign_in("gitlab", "ada");    // signed in, with this account name
+host.instance("gitlab", "git.example.com")  // a self-managed instance the user added: account `gitlab@git.example.com`
+```
+
+TypeScript: `host.declineSignIn(provider)`, `host.signedOut(provider)`, `host.signIn(provider, label)`, `host.instance(provider, host)`. A token the service refuses is its answer, so give the request a `401` fixture.
+
 ## Hot reload
 
 `host.reload::<MyExtension>()` (TypeScript: `await host.reload(extension)`) does what `cyx dev` does with a new build: `deactivate`, forget everything registered, then `activate` with the reason `reload`. Storage is kept, and with it what the extension put in `ctx.state`:
@@ -142,6 +165,38 @@ error[CY0201]: net/fetch needs a permission the manifest does not declare
 ```
 
 `cyx test` finds `codeyard-exthost` next to `cyx` (both ship with Codeyard), or uses `CODEYARD_EXTHOST`.
+
+Each `[[pull-requests]]` provider is asked for the open requests of a remote on its first host,
+`https://<host>/example/repo.git`, signed with its `auth` account.
+
+## HTTP fixtures for cyx test
+
+`cyx test` reaches no network. To run the success path of a command or provider that fetches, give it answers in
+`test/fixtures.json` (or another file with `cyx test --fixtures FILE`):
+
+```json
+{
+  "http": [
+    {
+      "method": "GET",
+      "url": "https://gitlab.com/api/v4/projects/example%2Frepo/merge_requests?state=opened",
+      "status": 200,
+      "body": [{ "iid": 7, "title": "Fix the parser" }]
+    },
+    { "method": "*", "url": "https://api.example.com/down", "status": 503, "body": "down", "headers": { "retry-after": "60" } }
+  ]
+}
+```
+
+- `url` matches the request's URL in full, query included; `method` is a method or `*` (the default).
+- `status` defaults to 200. A `body` that is a string is sent as it is; any other JSON value is sent as JSON, with
+  `content-type: application/json` unless `headers` sets one.
+- The answer is for `net.fetch` and `auth.fetch` alike, after the usual checks: a host not in `net`, or not one of the
+  account's hosts, is still refused and fails the test. An `auth.fetch` is answered as if the account were signed in.
+- A request without a fixture fails with a message naming the URL and the file, which counts as an answer.
+
+The `test/` and `tests/` folders at the top of an extension are left out of its package, so fixtures and tests never
+ship.
 
 For a TypeScript extension, a thrown error's stack trace shows the TypeScript file and line, from the bundle's source map:
 

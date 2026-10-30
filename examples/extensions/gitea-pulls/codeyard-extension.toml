@@ -24,6 +24,9 @@ client-id     = "your-client-id"
 scopes        = ["read:repository", "write:issue"]
 hosts         = ["codeberg.org"]
 account-url   = "https://codeberg.org/api/v1/user"
+# Another Gitea or Forgejo server: the user adds its host and their own client id on the extension's page (Accounts ›
+# Add Instance…), and Codeyard uses these URLs on that host.
+instances     = true
 
 # The remotes this provider answers for, and the account its requests use.
 [[pull-requests]]
