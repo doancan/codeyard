@@ -25,6 +25,7 @@ fn scope(root: &str, p: Permissions, trusted: bool) -> Scope {
         trusted,
         dependencies: vec!["you.lib".into()],
         revoked: Permissions::default(),
+        programs: None,
     }
 }
 
@@ -184,6 +185,7 @@ fn commands_are_own_dependencies_or_listed_core() {
         trusted: true,
         dependencies: vec!["you.lib".into()],
         revoked: Permissions::default(),
+        programs: None,
     };
     assert!(s.may_execute("you.ext.refresh").is_ok());
     assert!(s.may_execute("you.lib.go").is_ok());

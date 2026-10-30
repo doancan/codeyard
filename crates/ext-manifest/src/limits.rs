@@ -26,6 +26,8 @@ pub const WHEN_DEPTH: usize = 16;
 
 /// A `.cyx` package, compressed.
 pub const PACKAGE_BYTES: u64 = 64 * 1024 * 1024;
+/// A per-platform package (`<id>-<version>-<triple>.cyx`, one that carries native programs), compressed.
+pub const TARGET_PACKAGE_BYTES: u64 = 128 * 1024 * 1024;
 /// A `.cyx` package, unpacked.
 pub const PACKAGE_UNPACKED_BYTES: u64 = 256 * 1024 * 1024;
 pub const PACKAGE_FILES: usize = 10_000;

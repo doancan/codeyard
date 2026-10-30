@@ -81,7 +81,7 @@ impl Events {
 }
 
 fn scope(p: Permissions, trusted: bool) -> Scope {
-    Scope { extension: "you.deploy".into(), permissions: p, roots: Vec::new(), trusted, dependencies: Vec::new(), revoked: Default::default() }
+    Scope { extension: "you.deploy".into(), permissions: p, roots: Vec::new(), trusted, dependencies: Vec::new(), revoked: Default::default(), programs: None }
 }
 
 fn get(url: &str) -> v::HttpRequest {

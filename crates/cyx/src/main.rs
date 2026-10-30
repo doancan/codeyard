@@ -4,10 +4,11 @@
 //! cyx new <theme|snippets|keymap|language|language-server|command|view> <name> [--lang ts] [--publisher NAME] [--sdk PATH]
 //! cyx dev [FOLDER] [-- CODEYARD ARGS…]   run Codeyard with the extension loaded from FOLDER; rebuilt and reloaded on save (dev.rs)
 //! cyx check [FOLDER] [--fix]             every problem with its file, line and fix; --fix adds missing permissions (fix.rs)
-//! cyx package [FOLDER] [-o FILE] [--no-build]  build the code (build.rs), then a reproducible .cyx
+//! cyx package [FOLDER] [-o FILE] [--no-build] [--target TRIPLE]  build the code (build.rs), then a reproducible .cyx
+//!                                        (one per platform in native/ when the extension ships native programs)
 //! cyx test [FOLDER]                      the built extension in codeyard-exthost against a scripted app (harness.rs)
 //! cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]
-//! cyx publish [FOLDER] [--dry-run] [--pre-release] [--registry URL]
+//! cyx publish [FOLDER] [--dry-run] [--pre-release] [--registry URL] [--target TRIPLE]
 //! cyx yank | restore VERSION [FOLDER]    hide a version from installs, or bring it back
 //! cyx deprecate VERSION [FOLDER] [--replacement ID]
 //! cyx yard <keygen|sign|verify> …        the registry operator's commands (yard.rs)
@@ -48,13 +49,16 @@ usage:
   cyx dev [FOLDER] [-- CODEYARD ARGS…]       run Codeyard with it loaded; it reloads when you save
   cyx check [FOLDER] [--fix]                 list every problem with its file, line and fix; --fix adds the
                                              missing permissions to codeyard-extension.toml
-  cyx package [FOLDER] [-o FILE]             build the code, then write a .cyx to install or publish
-                                             (--no-build: package the extension.wasm already there)
+  cyx package [FOLDER] [-o FILE|FOLDER]      build the code, then write a .cyx to install or publish
+                                             (--no-build: package the extension.wasm already there;
+                                             --target TRIPLE: one platform's package of an extension with
+                                             native programs in native/<TRIPLE>/; without it, every platform)
   cyx test [FOLDER]                          build the code and run each command and view in the extension host
   cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]
                                              convert a VS Code theme, snippets, keymap or language
-  cyx publish [FOLDER] [--dry-run] [--pre-release] [--registry URL]
+  cyx publish [FOLDER] [--dry-run] [--pre-release] [--registry URL] [--target TRIPLE]
                                              sign it (no keys: GitHub Actions or a browser sign-in) and publish
+                                             (native programs: every platform in native/, or the one named)
   cyx yank | restore VERSION [FOLDER]        hide a published version from installs, or bring it back
   cyx deprecate VERSION [FOLDER] [--replacement ID]
   cyx yard <keygen|sign|verify> …           the registry operator's commands (cyx yard help)
@@ -122,9 +126,13 @@ fn run(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         "package" => {
-            let (dir, out, build) = parse_package(rest)?;
-            let (path, digest) = if build { package(&dir, out.as_deref())? } else { package_built(&dir, out.as_deref())? };
-            println!("Wrote {}\ncontent digest {digest}", path.display());
+            let (dir, out, build, target) = parse_package(rest)?;
+            if build {
+                build::build(&dir)?;
+            }
+            for (path, digest) in package_platforms(&dir, out.as_deref(), target.as_deref())? {
+                println!("Wrote {}\ncontent digest {digest}", path.display());
+            }
             Ok(())
         }
         "dev" => {
@@ -149,11 +157,14 @@ fn run(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         "publish" => {
-            let (dir, registry, dry_run, pre_release) = parse_publish(rest)?;
-            let p = publish::Publish { dir: &dir, registry: &registry, dry_run, pre_release };
+            let (dir, registry, dry_run, pre_release, target) = parse_publish(rest)?;
             let ep = sigstore::Endpoints::from_env();
             let oidc = ep.oidc.clone();
-            println!("{}", publish::publish(&p, &ep, || oidc::token(&oidc), now())?);
+            // An extension with native programs is published once per platform; each package is signed on its own.
+            for t in publish_targets(&dir, target)? {
+                let p = publish::Publish { dir: &dir, registry: &registry, dry_run, pre_release, target: t.as_deref() };
+                println!("{}", publish::publish(&p, &ep, || oidc::token(&oidc), now())?);
+            }
             Ok(())
         }
         "yank" | "restore" | "deprecate" => {
@@ -202,15 +213,18 @@ fn now() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs())
 }
 
-fn parse_publish(rest: &[String]) -> Result<(PathBuf, String, bool, bool), String> {
-    let usage = "usage: cyx publish [FOLDER] [--dry-run] [--pre-release] [--registry URL]";
-    let (mut dir, mut registry, mut dry_run, mut pre_release) = (None, None, false, false);
+type PublishArgs = (PathBuf, String, bool, bool, Option<String>);
+
+fn parse_publish(rest: &[String]) -> Result<PublishArgs, String> {
+    let usage = "usage: cyx publish [FOLDER] [--dry-run] [--pre-release] [--registry URL] [--target TRIPLE]";
+    let (mut dir, mut registry, mut dry_run, mut pre_release, mut target) = (None, None, false, false, None);
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--dry-run" => dry_run = true,
             "--pre-release" => pre_release = true,
             "--registry" => registry = Some(it.next().ok_or(usage)?.as_str()),
+            "--target" => target = Some(it.next().ok_or(usage)?.clone()),
             s if s.starts_with('-') => {
                 return Err(format!(
                     "cyx publish: unknown option {s}
@@ -220,7 +234,21 @@ fn parse_publish(rest: &[String]) -> Result<(PathBuf, String, bool, bool), Strin
             _ => dir = Some(a.clone()),
         }
     }
-    Ok((folder(dir.as_ref())?, publish::registry_url(registry), dry_run, pre_release))
+    Ok((folder(dir.as_ref())?, publish::registry_url(registry), dry_run, pre_release, target))
+}
+
+/// The platforms to publish: none (one package) without native programs, else `target` or every one in `native/`.
+fn publish_targets(dir: &Path, target: Option<String>) -> Result<Vec<Option<String>>, String> {
+    if !build::manifest(dir).is_ok_and(|m| m.has_native_programs()) {
+        return match target {
+            Some(_) => Err("error: --target is for extensions with native programs (a `run` entry inside the package)".into()),
+            None => Ok(vec![None]),
+        };
+    }
+    Ok(match target {
+        Some(t) => vec![Some(t)],
+        None => native_platforms(dir)?.into_iter().map(Some).collect(),
+    })
 }
 
 fn parse_status(cmd: &str, rest: &[String]) -> Result<(ext_manifest::Version, PathBuf, String, Option<ext_manifest::ExtId>), String> {
@@ -407,8 +435,34 @@ fn check_with(dir: &Path, options: ext_manifest::Options) -> Result<CheckReport,
             ext_manifest::FILE_NAME
         ));
     }
-    // The package rules (files the manifest names, paths, sizes) as a full package build would apply them.
-    let files = ext_pkg::collect_dir(dir).map_err(|e| format!("error: {e}"))?;
+    // The package rules (files the manifest names, paths, sizes) as a full package build would apply them: for each
+    // platform of an extension with native programs.
+    if m.has_native_programs() {
+        for t in native_platforms(dir)? {
+            check_files(dir, Some(&t), &m, &text)?;
+        }
+    } else {
+        check_files(dir, None, &m, &text)?;
+    }
+    Ok(CheckReport { id: m.id.to_string(), version: m.version.to_string(), warnings })
+}
+
+/// The platforms an extension with native programs has in `native/`; none is an error that says what to do.
+fn native_platforms(dir: &Path) -> Result<Vec<String>, String> {
+    let targets = ext_pkg::native_targets(dir);
+    if targets.is_empty() {
+        return Err(format!(
+            "error: permissions.run names a program inside the package, but {}/ has no platform folder\n   = fix: build the program for each platform and put it in {}/<triple>/ (one of {})",
+            ext_pkg::NATIVE_DIR,
+            ext_pkg::NATIVE_DIR,
+            ext_manifest::TARGETS.join(", ")
+        ));
+    }
+    Ok(targets)
+}
+
+fn check_files(dir: &Path, target: Option<&str>, m: &ext_manifest::Manifest, text: &str) -> Result<(), String> {
+    let files = ext_pkg::collect_dir_for(dir, target).map_err(|e| format!("error: {e}"))?;
     let check_files: Vec<ext_pkg::Entry> = if m.missing_why() {
         // Validate the rest as if `why` were there, so the author sees every other problem now.
         files
@@ -423,11 +477,12 @@ fn check_with(dir: &Path, options: ext_manifest::Options) -> Result<CheckReport,
     } else {
         files
     };
+    let platform = target.map(|t| format!(" (for {t})")).unwrap_or_default();
     match ext_pkg::write(check_files) {
-        Ok(_) => Ok(CheckReport { id: m.id.to_string(), version: m.version.to_string(), warnings }),
-        Err(ext_pkg::Error::Manifest(errors)) => Err(render(&errors, &text)),
+        Ok(_) => Ok(()),
+        Err(ext_pkg::Error::Manifest(errors)) => Err(render(&errors, text)),
         Err(ext_pkg::Error::Component(errors)) => Err(errors.iter().map(|d| d.render(ext_pkg::COMPONENT, "")).collect::<Vec<_>>().join("\n")),
-        Err(e) => Err(format!("error: {e}")),
+        Err(e) => Err(format!("error{platform}: {e}")),
     }
 }
 
@@ -447,20 +502,51 @@ fn render(errors: &[ext_manifest::Diagnostic], text: &str) -> String {
     out.join("\n\n")
 }
 
-/// The folder, the output file, and whether to build first (not with `--no-build`).
-fn parse_package(rest: &[String]) -> Result<(PathBuf, Option<PathBuf>, bool), String> {
-    let mut dir = None;
-    let mut out = None;
-    let mut build = true;
+/// The folder, the output file, whether to build first (not with `--no-build`), and the platform.
+fn parse_package(rest: &[String]) -> Result<(PathBuf, Option<PathBuf>, bool, Option<String>), String> {
+    let usage = "usage: cyx package [FOLDER] [-o FILE] [--no-build] [--target TRIPLE]";
+    let (mut dir, mut out, mut build, mut target) = (None, None, true, None);
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
-            "-o" | "--output" => out = Some(PathBuf::from(it.next().ok_or("usage: cyx package [FOLDER] [-o FILE] [--no-build]")?)),
+            "-o" | "--output" => out = Some(PathBuf::from(it.next().ok_or(usage)?)),
             "--no-build" => build = false,
+            "--target" => target = Some(it.next().ok_or(usage)?.clone()),
             _ => dir = Some(a.clone()),
         }
     }
-    Ok((folder(dir.as_ref())?, out, build))
+    Ok((folder(dir.as_ref())?, out, build, target))
+}
+
+/// `cyx package` after the build: one package, or for an extension with native programs one per platform
+/// (`<id>-<version>-<triple>.cyx`), only `target`'s when it is given.
+pub fn package_platforms(dir: &Path, out: Option<&Path>, target: Option<&str>) -> Result<Vec<(PathBuf, ext_pkg::ContentDigest)>, String> {
+    check(dir)?;
+    let native = build::manifest(dir)?.has_native_programs();
+    let targets: Vec<Option<String>> = match (native, target) {
+        (false, None) => vec![None],
+        (false, Some(_)) => return Err("error: --target is for extensions with native programs (a `run` entry inside the package)".into()),
+        (true, Some(t)) => vec![Some(t.to_string())],
+        (true, None) => native_platforms(dir)?.into_iter().map(Some).collect(),
+    };
+    if out.is_some_and(|o| !o.is_dir()) && targets.len() > 1 {
+        return Err("error: -o names one file, but this extension has a package per platform\n   = fix: add --target TRIPLE, or give -o a folder".into());
+    }
+    targets.iter().map(|t| package_one(dir, out, t.as_deref())).collect()
+}
+
+fn package_one(dir: &Path, out: Option<&Path>, target: Option<&str>) -> Result<(PathBuf, ext_pkg::ContentDigest), String> {
+    let files = ext_pkg::collect_dir_for(dir, target).map_err(|e| format!("error: {e}"))?;
+    let (bytes, digest) = ext_pkg::write(files).map_err(|e| format!("error: {e}"))?;
+    let m = ext_pkg::read(&bytes).map_err(|e| format!("error: {e}"))?.manifest;
+    // `-o` names the file, or the folder the usual name goes in.
+    let path = match out {
+        Some(o) if o.is_dir() => o.join(ext_pkg::file_name(&m, target)),
+        Some(o) => o.to_path_buf(),
+        None => PathBuf::from(ext_pkg::file_name(&m, target)),
+    };
+    std::fs::write(&path, bytes).map_err(|e| format!("error: cannot write {}: {e}", path.display()))?;
+    Ok((path, digest))
 }
 
 /// Build the code if there is any, check, then write `<id>-<version>.cyx` (or `out`).
@@ -472,12 +558,8 @@ pub fn package(dir: &Path, out: Option<&Path>) -> Result<(PathBuf, ext_pkg::Cont
 /// `cyx package --no-build`: the `extension.wasm` already in the folder (built by another tool, or a fixture), checked
 /// and packaged like a built one.
 pub fn package_built(dir: &Path, out: Option<&Path>) -> Result<(PathBuf, ext_pkg::ContentDigest), String> {
-    let report = check(dir)?;
-    let files = ext_pkg::collect_dir(dir).map_err(|e| format!("error: {e}"))?;
-    let (bytes, digest) = ext_pkg::write(files).map_err(|e| format!("error: {e}"))?;
-    let path = out.map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from(format!("{}-{}.cyx", report.id, report.version)));
-    std::fs::write(&path, bytes).map_err(|e| format!("error: cannot write {}: {e}", path.display()))?;
-    Ok((path, digest))
+    check(dir)?;
+    package_one(dir, out, None)
 }
 
 /// `cyx test`: build, check, then run the component in the extension host. Fails on any refused call.

@@ -124,7 +124,8 @@ pub fn watch_stamp(cfg_dir: &Path) -> u64 {
 
 /// The dev folder as an extension, or the author-facing reason it cannot load (the same checks as `cyx check`).
 fn load_dev(dir: &Path) -> Result<Active, String> {
-    let files = ext_pkg::collect_dir(dir).map_err(|e| e.to_string())?;
+    // Native programs are checked as this machine's platform; a workspace on another one takes its `native/` folder.
+    let files = ext_pkg::collect_dir_for(dir, ext_pkg::folder_target(dir).as_deref()).map_err(|e| e.to_string())?;
     let (bytes, _) = ext_pkg::write(files).map_err(|e| e.to_string())?;
     let pkg = ext_pkg::read(&bytes).map_err(|e| e.to_string())?;
     Ok(Active { manifest: Arc::new(pkg.manifest), dir: dir.to_path_buf() })
@@ -437,7 +438,7 @@ pub fn language_for(path: &str) -> Option<Language> {
 
 /// Language server entries for `lsp.servers`, before the user's own (the user's entry for the same key wins). Each
 /// extension server is entered under every language it serves. Programs come from `PATH` where the files are, so they
-/// work over SSH too; a program shipped inside the package waits for signed native packages.
+/// work over SSH too; a program shipped inside the package runs only through the broker (`ext_programs`) for now.
 pub fn server_entries() -> (Vec<(String, Option<crate::lsp::ServerSpec>)>, Vec<String>) {
     let (mut out, mut warnings) = (Vec::new(), Vec::new());
     for ext in &current().active {
@@ -514,13 +515,14 @@ pub fn check_setting(key: &str, value: &serde_json::Value) -> Result<(), String>
 /// it asks for no permissions: anything more needs the consent sheet.
 pub fn install_file(store: &ext_core::Store, path: &Path) -> Result<Manifest, String> {
     let (bytes, source) = if path.is_dir() {
-        let files = ext_pkg::collect_dir(path).map_err(|e| e.to_string())?;
+        let files = ext_pkg::collect_dir_for(path, ext_pkg::folder_target(path).as_deref()).map_err(|e| e.to_string())?;
         (ext_pkg::write(files).map_err(|e| e.to_string())?.0, ext_core::Source::Folder { path: path.display().to_string() })
     } else {
         (std::fs::read(path).map_err(|e| e.to_string())?, ext_core::Source::File { path: path.display().to_string() })
     };
     let pkg = ext_pkg::read(&bytes).map_err(|e| e.to_string())?;
-    if pkg.manifest.code.is_some() && !pkg.manifest.permissions.is_empty() {
+    // Native programs need their id typed on the sheet (§6.3), and they always ask to run.
+    if (pkg.manifest.code.is_some() || pkg.manifest.has_native_programs()) && !pkg.manifest.permissions.is_empty() {
         return Err(crate::i18n::tf("{} asks for permissions: install it from the Extensions view to review them", &[&pkg.manifest.id]));
     }
     let installed = store.install(&bytes, source).map_err(|e| e.to_string())?;

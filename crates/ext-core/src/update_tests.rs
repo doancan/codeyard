@@ -24,6 +24,7 @@ fn release(version: &str, status: Status, code: bool, published: u64) -> Release
         downloads: 0,
         immediate: false,
         details: None,
+        targets: Default::default(),
     }
 }
 
@@ -44,6 +45,7 @@ fn on(version: &str, pre_release: bool) -> Locked {
         source: Source::Registry { registry: "t".into(), publisher: github(7, 42) },
         disabled: false,
         pre_release,
+        targets: Default::default(),
     }
 }
 

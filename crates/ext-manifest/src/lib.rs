@@ -25,10 +25,53 @@ use serde::{Deserialize, Serialize};
 
 pub use core_commands::{CORE_COMMANDS, CoreCommand, core_command};
 pub use diagnostics::{Code, Diagnostic};
-pub use risk::{Clipboard, Level, Line, Permissions, Risk, net_allows, risk};
+pub use risk::{Clipboard, Level, Line, Permissions, Risk, is_package_program, net_allows, package_program_path, risk};
 
 /// The file name of the manifest at the root of an extension.
 pub const FILE_NAME: &str = "codeyard-extension.toml";
+
+/// The platforms a per-platform package (one with programs inside, docs/plugin-architecture.md §7) can be built for,
+/// as Rust target triples. Linux programs are static (musl), so one package serves every distribution.
+pub const TARGETS: &[&str] = &[
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-musl",
+    "x86_64-pc-windows-msvc",
+    "aarch64-pc-windows-msvc",
+];
+
+/// The target triple of the machine this runs on, when it is one of [`TARGETS`].
+pub fn this_target() -> Option<&'static str> {
+    target_for(std::env::consts::ARCH, std::env::consts::OS)
+}
+
+/// The target triple of a machine by Rust's names for its architecture and system (`std::env::consts`, which a
+/// workspace host reports), when it is one of [`TARGETS`].
+pub fn target_for(arch: &str, os: &str) -> Option<&'static str> {
+    let t = match (arch, os) {
+        ("aarch64", "macos") => "aarch64-apple-darwin",
+        ("x86_64", "macos") => "x86_64-apple-darwin",
+        ("x86_64", "linux") => "x86_64-unknown-linux-musl",
+        ("aarch64", "linux") => "aarch64-unknown-linux-musl",
+        ("x86_64", "windows") => "x86_64-pc-windows-msvc",
+        ("aarch64", "windows") => "aarch64-pc-windows-msvc",
+        _ => return None,
+    };
+    Some(t)
+}
+
+/// Whether `triple` is one of [`TARGETS`].
+pub fn is_target(triple: &str) -> bool {
+    TARGETS.contains(&triple)
+}
+
+/// The file a `run` entry inside the package names in the package for `target`: `./bin/server` is `bin/server`, and
+/// `bin/server.exe` on Windows.
+pub fn program_file(run: &str, target: &str) -> String {
+    let path = package_program_path(run);
+    if target.contains("-windows-") && !path.to_ascii_lowercase().ends_with(".exe") { format!("{path}.exe") } else { path.to_string() }
+}
 
 pub use allow::glob_match;
 pub use validate::{Options, check_https_url, check_package_path, is_deceptive};
@@ -577,6 +620,12 @@ impl Manifest {
 
     pub fn risk(&self) -> Risk {
         risk(&self.permissions)
+    }
+
+    /// It ships native programs inside its package (`run = ["./bin/server"]`): it is built and published per platform,
+    /// and installing it asks the user to type its id (docs/plugin-architecture.md §6.3).
+    pub fn has_native_programs(&self) -> bool {
+        self.permissions.package_programs().next().is_some()
     }
 
     /// The permission set is high risk and has no `why`: an error at install and publish, a warning in `cyx dev`.
