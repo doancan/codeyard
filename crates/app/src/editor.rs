@@ -189,7 +189,7 @@ mod display_glue;
 mod edit_glue;
 #[path = "editor_ext.rs"]
 mod ext_glue;
-pub use ext_glue::{FormatJob, LineDecoration, SaveFormatter, tone_color};
+pub use ext_glue::{ExtEvent, ExtHint, ExtLens, FormatJob, LineDecoration, SaveFormatter, lang as ext_lang, tone_color};
 #[path = "editor_find.rs"]
 mod find_glue;
 #[path = "editor_git.rs"]
@@ -249,6 +249,8 @@ pub enum EditorEvent {
     OpenMergeEditor,
     /// The "Send Request" link of a request in an `.http` file (request line, 0-based).
     SendRequest(usize),
+    /// Code lenses and inlay hints of extensions (workbench_ext_lenses.rs).
+    Extension(ExtEvent),
 }
 
 /// Open completion list.
@@ -271,6 +273,8 @@ struct Hover {
     diagnostics: Vec<crate::lsp::Diagnostic>,
     text: Option<String>,
     position: Point<Pixels>,
+    /// What extensions said about it: (extension, text) (editor_ext_lang.rs).
+    ext: Vec<(String, String)>,
 }
 
 /// "Peek Definition": a few lines around the target, shown as a card under the cursor.
@@ -524,6 +528,8 @@ pub struct EditorView {
     git_base: Option<buffer::Rope>,
     git_marks: Vec<Option<crate::git::LineMark>>,
     git_task: Option<gpui::Task<()>>,
+    /// A source control provider of an extension gives `git_base` (#144); git leaves the file alone.
+    scm_owned: bool,
     /// Language server (if any), language id, document version and latest diagnostics.
     lsp: Option<Arc<crate::lsp::Client>>,
     lsp_lang: &'static str,
@@ -956,6 +962,7 @@ impl EditorView {
             git_base: None,
             git_marks: Vec::new(),
             git_task: None,
+            scm_owned: false,
             lsp: None,
             lsp_lang: "",
             lsp_version: 0,
@@ -1269,7 +1276,7 @@ impl EditorView {
     /// For the accessibility tree (a11y.rs): the shown suggestions (label, detail), at most `limit`, and the selected one.
     pub fn a11y_completion(&self, limit: usize) -> Option<(Vec<(String, Option<String>)>, usize)> {
         let c = self.completion.as_ref()?;
-        let rows = c.shown.iter().take(limit).map(|&i| (c.items[i].label.clone(), c.items[i].detail.clone())).collect();
+        let rows = c.shown.iter().take(limit).map(|&i| (c.items[i].label.clone(), c.items[i].shown_detail())).collect();
         Some((rows, c.selected))
     }
 

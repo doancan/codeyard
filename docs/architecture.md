@@ -331,6 +331,10 @@ An untrusted folder (anything not opened before the trust gate existed and not t
 `security.workspaceTrust.enabled` (user settings only) turns the whole gate off. Folders recorded in the recent list when the
 language-server gate was introduced are trusted once (`trust_migrated_v1`) so existing projects keep working.
 
+Trust is recorded per folder and host (`trust:<alias>:<path>`). With a workspace file open, the unit the user answers
+for is the workspace (`workspace_trust_scope`): the question names the file, and trusting writes a record for the
+file's folder and for every folder it lists, on the file's host. A folder outside that list is still asked about alone.
+
 ## Known limitations
 
 Deliberate, with the reason:

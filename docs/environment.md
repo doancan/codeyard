@@ -38,6 +38,8 @@ All variables are optional. `scripts/docs-check.sh` fails when the code reads a 
 | `CODEYARD_PERF_MARKET` | With `CODEYARD_PERF`: after startup, open the Market, wait for its list, then press this many keys in its search (a word typed and erased), recording key press to the results in the view and to the frame that shows them. |
 | `CODEYARD_PERF_DECORATIONS` | With `CODEYARD_PERF`: after startup, run `decorate` in every installed extension that decorates the open file's language, wait for the decorations, then type this many characters and record key press to drawn frame for each, then save. |
 | `CODEYARD_PERF_PROVIDERS` | With `CODEYARD_PERF`: after startup (and the decorations scenario), ask the extensions' task providers for their tasks this many times, recording each request to a running extension to its answer. |
+| `CODEYARD_PERF_COMPLETION` | With `CODEYARD_PERF`: after startup, wait until an installed extension completes the open file's language, then type this many keys (a new word every third key) and record key press to drawn frame for each, then save. |
+| `CODEYARD_PERF_LENSES` | With `CODEYARD_PERF`: after startup, wait for the code lenses and inlay hints of the installed extension that gives them for the open file's language, then type this many characters and record key press to drawn frame for each, then save. |
 | `CODEYARD_PERF_EXIT` | With `CODEYARD_PERF`: quit when the scripted scenario is done. |
 | `CODEYARD_DO_DELAY_MS` | Delay before `--do "Command;Command"` runs its commands. |
 | `CODEYARD_DUMP_DOCK` | Print the Dock menu to stderr a few seconds after start; with a number, click that row. |

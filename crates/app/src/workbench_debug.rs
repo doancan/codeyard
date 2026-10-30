@@ -156,6 +156,18 @@ fn console_append(console: &mut ConsoleLines, partial: &mut Option<(String, Stri
 }
 
 /// Display form of the adapter's stop reason (DAP `reason`); unknown reasons pass through (code compares the raw `reason`).
+/// The reason a stop is shown with and its console line. `entry_expected`: the configuration asked for
+/// `stopOnEntry` and nothing stopped yet. Some adapters (lldb-dap) report that first stop as an exception
+/// "signal SIGSTOP"; it is the stop the user asked for, so it reads as one. A SIGSTOP later on stays an exception.
+fn stop_message(reason: String, text: Option<String>, entry_expected: bool) -> (String, Option<(&'static str, String)>) {
+    let sigstop = reason == "exception" && text.as_deref().is_none_or(|t| t.contains("SIGSTOP"));
+    if reason == "entry" || (entry_expected && sigstop) {
+        return ("entry".into(), Some(("console", crate::i18n::t("Paused on entry").into())));
+    }
+    let line = text.filter(|_| reason == "exception").map(|t| ("stderr", crate::i18n::tf("Paused on exception: {}", &[&t])));
+    (reason, line)
+}
+
 fn stop_reason(reason: &str) -> String {
     use crate::i18n::{t, tr};
     let known = [
@@ -719,11 +731,13 @@ impl Workbench {
                 if matches!(d.status, DebugStatus::Ended(_)) {
                     return;
                 }
+                let stop_on_entry = d.config.args.get("stopOnEntry").and_then(serde_json::Value::as_bool) == Some(true);
+                let (reason, line) = stop_message(reason, text, !d.stopped_once && stop_on_entry);
                 d.stopped_once = true;
-                d.status = DebugStatus::Stopped(reason.clone());
+                d.status = DebugStatus::Stopped(reason);
                 d.thread = thread_id;
-                if let Some(t) = text.filter(|_| reason == "exception") {
-                    d.push_console("stderr", crate::i18n::tf("Paused on exception: {}", &[&t]));
+                if let Some((category, line)) = line {
+                    d.push_console(category, line);
                 }
                 // The session that stopped is the one the controls and the editors follow.
                 self.dbg.focused = Some(sid);
@@ -1438,43 +1452,5 @@ fn load_scopes(session: &dap::Session, frame_id: i64) -> (Vec<Scope>, HashMap<i6
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn inline_values_cover_the_function_up_to_the_stop_line() {
-        let src: Vec<String> =
-            ["int helper(void);", "", "int add(int a, int b) {", "    int sum = a + b;", "    // sum is unused here", "    return sum;", "}"]
-                .iter()
-                .map(|s| s.to_string())
-                .collect();
-        let locals = vec![("a".to_string(), "3".to_string()), ("b".to_string(), "4".to_string()), ("sum".to_string(), "7".to_string())];
-        let v = inline_values(&src, 5, &locals);
-        assert_eq!(v.get(&2).map(String::as_str), Some("a = 3  b = 4"), "signature line");
-        assert_eq!(v.get(&3).map(String::as_str), Some("a = 3  b = 4  sum = 7"));
-        assert_eq!(v.get(&4), None, "a name in a comment does not count");
-        assert_eq!(v.get(&5).map(String::as_str), Some("sum = 7"));
-        assert_eq!(v.get(&0), None, "other function");
-        assert!(inline_values(&src, 5, &[]).is_empty() && inline_values(&src, 99, &locals).is_empty());
-        let long = inline_values(&src, 3, &[("sum".into(), "x".repeat(50))]);
-        assert!(long[&3].ends_with('…') && long[&3].chars().count() < 45);
-    }
-
-    #[test]
-    fn console_lines_are_cut_and_capped_whatever_the_adapter_sends() {
-        let (mut console, mut partial) = (ConsoleLines::new(), None);
-        // 300 chunks of 64 KB without a newline: the unfinished line never grows past PARTIAL_LIMIT.
-        let chunk = "x".repeat(64 * 1024);
-        for _ in 0..300 {
-            console_append(&mut console, &mut partial, "stdout", &chunk);
-            assert!(partial.as_ref().is_none_or(|(_, p): &(String, String)| p.len() <= PARTIAL_LIMIT));
-        }
-        assert!(!console.is_empty() && console.iter().all(|(_, l)| l.chars().count() <= LINE_LIMIT + 1), "every line is cut");
-        // Many short lines: the console keeps CONSOLE_LIMIT.
-        console_append(&mut console, &mut partial, "stdout", &"a\n".repeat(CONSOLE_LIMIT * 2));
-        assert_eq!(console.len(), CONSOLE_LIMIT);
-        console_push(&mut console, "stderr", &"y".repeat(LINE_LIMIT * 3));
-        assert_eq!(console.len(), CONSOLE_LIMIT);
-        assert!(console.last().unwrap().1.chars().count() <= LINE_LIMIT + 1);
-    }
-}
+#[path = "workbench_debug_tests.rs"]
+mod tests;

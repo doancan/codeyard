@@ -485,7 +485,9 @@ impl Workbench {
         let status = task_run::state_label(&outcome);
         if live.run.finished() {
             let text = crate::i18n::tf("Task “{0}”: {1}", &[&label, &status]);
-            self.notice = Some(if outcome.satisfied() { Notice::Info(text.into()) } else { Notice::Error(text.into()) });
+            // A run the user stopped is no failure: it is reported as information, like a success.
+            let fine = outcome.satisfied() || outcome == State::Cancelled;
+            self.notice = Some(if fine { Notice::Info(text.into()) } else { Notice::Error(text.into()) });
         }
         match after {
             Some(After::Debug(config)) if outcome.satisfied() => self.start_debug(*config, cx),

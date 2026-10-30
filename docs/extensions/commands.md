@@ -13,6 +13,8 @@ The SDK is **pre-release**: it is not on crates.io yet, so a new extension takes
 - [Talking to the user](#talking-to-the-user)
 - [Documents, diagnostics and decorations](#documents-diagnostics-and-decorations)
 - [Formatters and code actions](#formatters-and-code-actions)
+- [Hover and completion](#hover-and-completion)
+- [Code lenses and inlay hints](#code-lenses-and-inlay-hints)
 - [Network, files and programs](#network-files-and-programs)
 - [Storage, settings and timers](#storage-settings-and-timers)
 - [Errors and refused calls](#errors-and-refused-calls)
@@ -84,7 +86,7 @@ Anything that reaches Codeyard, such as a notice with buttons, a file read or an
 Under the hood every async call returns a ticket at once, and the SDK resumes your code when Codeyard delivers the result. The extension never blocks while it waits, so it can answer other requests at the same time. You don't manage any of this; two rules are enough:
 
 - **Don't block.** There are no threads and no `std::thread::sleep`. A handler that computes for more than 2 seconds without awaiting is stopped. Long work awaits calls, and shows progress.
-- **Answer fast.** Providers (views, formatters, code actions) are cancelled when the user moves on. The SDK drops a cancelled handler, which cancels the calls it was waiting on.
+- **Answer fast.** Providers (views, formatters, code actions, hover, completion) are cancelled when the user moves on. The SDK drops a cancelled handler, which cancels the calls it was waiting on.
 
 `ctx.background(async move { … })` runs a task that no request waits for, such as work started from `activate`.
 
@@ -191,6 +193,54 @@ ctx.code_actions(async |ctx, doc, range, diagnostics| {
     Ok(vec![CodeAction { id: "fix-todo".into(), title: "Remove TODO".into(), edits: vec![(doc.uri, edits)], ..Default::default() }])
 });
 ctx.on_code_action(async |ctx, id| Ok(()));   // for actions with a `command` instead of edits
+```
+
+## Hover and completion
+
+Declare `[[hover]]` and `[[completion]]` with their languages (and, for completion, optional `trigger-characters`).
+What you return shows next to the language server's, under your extension's id. Answer from the document you are
+given, within the provider deadline (one second): a later answer is dropped and noted in your log.
+
+```rust
+ctx.hover(async |ctx, doc, position| {
+    Ok(Some(Hover::new("**TODO**: work left to do.")))   // Markdown, shown as plain text; `None` for nothing
+});
+
+ctx.completion(async |ctx, doc, position, trigger| {
+    // `trigger` is the trigger character typed, `None` when the user typed a word or asked.
+    Ok(vec![CompletionItem { insert_text: Some("TODO: $0".into()), snippet: true, ..CompletionItem::new("TODO", CompletionKind::Keyword) }])
+});
+```
+
+A completion answer is a `Vec<CompletionItem>`, or a `CompletionList` with `incomplete: true` when more typing changes
+it (you are asked again on each key instead of the list only being filtered). An item may set its `range`,
+`filter_text`, `sort_text`, `documentation` and `additional_edits` (an import, say).
+
+## Code lenses and inlay hints
+
+A code lens is clickable text shown with its line; a click runs a command with the arguments you gave. An inlay hint is
+short text at the end of its line, such as a type. Declare `[[code-lens]]` and `[[inlay-hints]]` with their languages
+(see the [developer guide](developer-guide.md#contributions-that-run-your-code)). Codeyard asks only for the lines in view: `range`
+starts at the first one and ends at the start of the line after the last. It asks again once typing pauses after an
+edit and once the view stops after a scroll, and cancels the question before; typing never waits for the answer.
+
+```rust
+ctx.code_lenses(async |ctx, doc, range| {
+    // Runs `run-test` (one of your [[commands]]) with { "name": "parses" } when clicked.
+    Ok(vec![CodeLens::new(12, "Run test", "run-test", json!({ "name": "parses" }))])
+});
+ctx.inlay_hints(async |ctx, doc, range| Ok(vec![InlayHint::new(Position::new(3, 18), ": u32")]));
+```
+
+A lens's command is one of your commands (local or full id), a dependency's full id, or a `core:` command your
+manifest lists in `permissions.commands`; anything else is refused when clicked. When working out a lens is costly,
+return `CodeLens::unresolved(line, id)` and fill it in when it is on screen:
+
+```rust
+ctx.resolve_code_lens(async |ctx, doc, mut lens| {
+    lens.command = Some(LensCommand { title: "3 references".into(), command: "refs".into(), args: json!(lens.id) });
+    Ok(lens)
+});
 ```
 
 ## Pull request providers

@@ -13,6 +13,11 @@ export interface Handlers {
   codeActions: Fn | undefined;
   runCodeAction: Fn | undefined;
   openUri: Fn | undefined;
+  hover: Fn | undefined;
+  completion: Fn | undefined;
+  codeLenses: Fn | undefined;
+  resolveCodeLens: Fn | undefined;
+  inlayHints: Fn | undefined;
   /** `ctx.pullRequests`: by the `[[pull-requests]]` local id. */
   pullRequests: Map<string, PullRequestProvider>;
   settingsChanged: Fn[];
@@ -24,6 +29,10 @@ export interface Handlers {
   reason: string;
   /** `ctx.state`: kept across a hot reload in `cyx dev` (`RELOAD_STATE_KEY`). */
   state: Map<string, unknown>;
+  /** Source control providers, by local id. */
+  scmStatus: Map<string, Fn>;
+  scmOriginal: Map<string, Fn>;
+  scmValidate: Map<string, Fn>;
 }
 
 function empty(): Handlers {
@@ -35,6 +44,11 @@ function empty(): Handlers {
     codeActions: undefined,
     runCodeAction: undefined,
     openUri: undefined,
+    hover: undefined,
+    completion: undefined,
+    codeLenses: undefined,
+    resolveCodeLens: undefined,
+    inlayHints: undefined,
     pullRequests: new Map(),
     settingsChanged: [],
     timers: new Map(),
@@ -42,6 +56,9 @@ function empty(): Handlers {
     cancelledRequests: new Set(),
     reason: "",
     state: new Map(),
+    scmStatus: new Map(),
+    scmOriginal: new Map(),
+    scmValidate: new Map(),
   };
 }
 

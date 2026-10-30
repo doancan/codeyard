@@ -105,6 +105,7 @@ fn every_imported_function_has_one_call() {
         Notify::SetDiagnostics { uri: String::new(), diagnostics: vec![] },
         Notify::ClearDiagnostics { uri: None },
         Notify::SetDecorations { uri: String::new(), set: String::new(), decorations: vec![] },
+        Notify::ScmRefresh { provider: String::new() },
     ];
     let mut ours: Vec<&str> = starts.iter().map(Start::wit_name).chain(notifies.iter().map(Notify::wit_name)).collect();
     ours.extend(LOCAL);

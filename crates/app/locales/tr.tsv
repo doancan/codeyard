@@ -522,6 +522,10 @@ Merge Changes	Birleştirme Değişiklikleri
 Staged Changes	Stage'deki Değişiklikler
 Changes	Değişiklikler
 No changes.	Değişiklik yok.
+Message	İleti
+Ignored	Yok sayıldı
+Asking the source control provider…	Kaynak denetimi sağlayıcısına soruluyor…
+The provider answered with something else: {}	Sağlayıcı beklenmeyen bir yanıt verdi: {}
 Commit	Commit Et
 Commit ({})	Commit Et ({})
 Commit All ({})	Tümünü Commit Et ({})
@@ -1491,6 +1495,9 @@ Trusted “{}”	“{}” güvenilir olarak işaretlendi
 “{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	“{}” klasörü görevleri, hata ayıklama yapılandırmaları ve proje ayarları aracılığıyla program çalıştırabilir. Yalnızca bu klasörün nereden geldiğine güveniyorsanız devam edin.
 Do you trust the authors of this folder?	Bu klasörün yazarlarına güveniyor musunuz?
 Trust Folder and Continue	Klasöre Güven ve Devam Et
+Do you trust the authors of this workspace?	Bu çalışma alanının yazarlarına güveniyor musunuz?
+“{}” and its folders can run programs through their tasks, debug configurations and project settings. Only continue if you trust where this workspace came from.	“{}” ve klasörleri, görevleri, hata ayıklama yapılandırmaları ve proje ayarları aracılığıyla program çalıştırabilir. Yalnızca bu çalışma alanının nereden geldiğine güveniyorsanız devam edin.
+Trust Workspace and Continue	Çalışma Alanına Güven ve Devam Et
 Open a folder first.	Önce bir klasör açın.
 Passphrase	Anahtar parolası
 Password	Parola
@@ -1609,6 +1616,7 @@ Evaluate an expression (↵)	Bir ifadeyi değerlendirin (↵)
 Starting “{}”…	“{}” başlatılıyor…
 Could not start debugging: {}	Hata ayıklama başlatılamadı: {}
 Paused on exception: {}	İstisnada duraklatıldı: {}
+Paused on entry	Girişte duraklatıldı
 Process exited with code {}	Süreç {} koduyla çıktı
 The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code.	Program hiçbir kesme noktasında durmadan bitti. Hata ayıklayıcı kesme noktalarını dosya yoluna göre hata ayıklama bilgisiyle eşleştirir: bu klasörden hata ayıklama bilgisiyle (-g) derleyin ve kesme noktasının kod içeren bir satırda olduğunu denetleyin.
 Debug session ended	Hata ayıklama oturumu bitti
@@ -2902,6 +2910,7 @@ Setting: {}	Ayar: {}
 Language server: {0} for {1}	Dil sunucusu: {1} için {0}
 Command: {}	Komut: {}
 View: {}	Görünüm: {}
+Source control: {0} (folders with {1})	Kaynak denetimi: {0} ({1} içeren klasörler)
 Read all files in the workspace	Çalışma alanındaki tüm dosyaları okuma
 Read {}	{} okuma
 Read files that can hold passwords and keys	Parola ve anahtar barındırabilecek dosyaları okuma
@@ -3349,6 +3358,7 @@ Breaks when the value is written; for this debug session only.	Değer yazıldı�
 Save the file first: a tab with unsaved changes cannot move to another window.	Önce dosyayı kaydedin: kaydedilmemiş değişiklikleri olan bir sekme başka bir pencereye taşınamaz.
 This tab cannot move to that window: its folder is on another machine.	Bu sekme o pencereye taşınamaz: klasörü başka bir makinede.
 The destination window is no longer available.	Hedef pencere artık yok.
+{0} (from {1})	{0} ({1} eklentisinden)
 # ---- Pull requests from code extensions ----
 No open pull requests.	Açık pull request yok.
 {} is no longer active.	{} artık etkin değil.

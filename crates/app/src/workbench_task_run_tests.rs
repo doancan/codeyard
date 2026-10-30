@@ -106,6 +106,8 @@ fn stop_ends_the_task_and_everything_it_started(cx: &mut gpui::TestAppContext) {
     wb.update(cx, |wb, cx| wb.terminate_tasks(cx));
     wait_ticking(cx, "the run to stop", |cx| last_run_finished(&wb, cx));
     assert_eq!(wb.read_with(cx, |wb, _| wb.jobs.runs.last().unwrap().run.outcome().clone()), State::Cancelled);
+    // The user asked for the stop: it is reported as information, not as an error.
+    assert_eq!(notice(&wb, cx), "info: Task “serve”: cancelled");
     // SAFETY: signal 0 only asks whether the process exists.
     wait_ticking(cx, "the child to be gone", |_| unsafe { libc::kill(child, 0) } != 0);
 }

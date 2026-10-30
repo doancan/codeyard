@@ -35,8 +35,24 @@ import {
   type PullRequestQuery,
   type Remote,
 } from "../pulls.ts";
-import type { CodeAction, Diagnostic, Document, FormatOptions, LogLevel, Range, Severity, StatusItem, TextEdit } from "../types.ts";
-import { fromWitDiagnostic, toWitDiagnostic } from "../types.ts";
+import type {
+  CodeAction,
+  CodeLens,
+  CompletionItem,
+  CompletionList,
+  Diagnostic,
+  Document,
+  FormatOptions,
+  Hover,
+  InlayHint,
+  LogLevel,
+  Position,
+  Range,
+  Severity,
+  StatusItem,
+  TextEdit,
+} from "../types.ts";
+import { fromWitCodeLens, fromWitDiagnostic, toWitCodeLens, toWitDiagnostic } from "../types.ts";
 import type * as W from "../wit.ts";
 import { allowsNet, allowsRead, allowsWrite, globMatch, permissionsOf, type Permissions } from "./permissions.ts";
 import { parseToml, type Table } from "./toml.ts";
@@ -127,6 +143,7 @@ export class MockHost {
   #ran: { program: string; args: string[]; cwd?: string; env: [string, string][] }[] = [];
   #applied: [string, number, TextEdit[]][] = [];
   #invalidated: string[] = [];
+  #scmRefreshed: string[] = [];
   #terminal: string[] = [];
 
   /**
@@ -331,8 +348,94 @@ export class MockHost {
     }));
   }
 
+  /** Ask the hover provider about `position`, as the mouse resting there does. */
+  async hover(document: Document, position: Position): Promise<Hover | undefined> {
+    const r = await this.request({ tag: "hover", val: [document, position] });
+    if (r.tag !== "hover") throw CodeyardError.other(`the hover provider answered ${r.tag}`);
+    if (!r.val) return undefined;
+    return r.val.range === undefined ? { contents: r.val.contents } : { contents: r.val.contents, range: r.val.range };
+  }
+
+  /** Ask the completion provider at `position`; `trigger` is the trigger character typed, if one asked. */
+  async completion(document: Document, position: Position, trigger?: string): Promise<Required<CompletionList>> {
+    const r = await this.request({ tag: "completion", val: [document, position, trigger] });
+    if (r.tag !== "completions") throw CodeyardError.other(`the completion provider answered ${r.tag}`);
+    const items: CompletionItem[] = r.val.items.map((i) => {
+      const item: CompletionItem = { label: i.label, kind: i.kind, snippet: i.snippet, additionalEdits: i.additionalEdits };
+      for (const k of ["detail", "documentation", "insertText", "range", "filterText", "sortText"] as const) {
+        if (i[k] !== undefined) Object.assign(item, { [k]: i[k] });
+      }
+      return item;
+    });
+    return { items, incomplete: r.val.incomplete };
+  }
+
+  // ---- source control providers ------------------------------------------------------------------------------------
+
+  /** A folder: `""` is the mock workspace folder itself. */
+  #folder(root: string): string {
+    return root === "" ? FOLDER : this.uri(root);
+  }
+
+  /** `request.scm-status`: the state of `root` (`""` for the mock folder, a path in it, or a uri) for provider `id`. */
+  async scmStatus(id: string, root = ""): Promise<W.WitScmState> {
+    const r = await this.request({ tag: "scm-status", val: [id, this.#folder(root)] });
+    if (r.tag !== "scm") throw CodeyardError.other(`the source control provider answered ${r.tag}`);
+    return r.val;
+  }
+
+  /** `request.scm-original`: the original text of `file` for provider `id`. */
+  async scmOriginal(id: string, file: string): Promise<string | undefined> {
+    const r = await this.request({ tag: "scm-original", val: [id, this.uri(file)] });
+    if (r.tag !== "text") throw CodeyardError.other(`the source control provider answered ${r.tag}`);
+    return r.val;
+  }
+
+  /** `request.scm-validate`: the message for the input box's `text`, if any. */
+  async scmValidate(id: string, text: string, root = ""): Promise<string | undefined> {
+    const r = await this.request({ tag: "scm-validate", val: [id, this.#folder(root), text] });
+    if (r.tag !== "text") throw CodeyardError.other(`the source control provider answered ${r.tag}`);
+    return r.val;
+  }
+
+  /** Press a button as Source Control does: its command, with the provider, folder, files and input box text. */
+  async scmPress(id: string, action: { command: string }, files: string[] = [], message = "", root = ""): Promise<any> {
+    return this.command(action.command, { provider: id, root: this.#folder(root), uris: files.map((f) => this.uri(f)), message });
+  }
+
+  /** Providers the extension asked to refresh (`ctx.scmRefresh`), in order. */
+  scmRefreshed(): string[] {
+    return [...this.#scmRefreshed];
+  }
+
   async runCodeAction(id: string): Promise<void> {
     await this.request({ tag: "run-code-action", val: id });
+  }
+
+  /** The code lenses for the lines of `document` in `range`, as the editor asks for the lines in view. */
+  async codeLenses(document: Document, range: Range): Promise<CodeLens[]> {
+    const r = await this.request({ tag: "code-lens", val: [document, range] });
+    if (r.tag !== "code-lenses") throw CodeyardError.other(`the code lens provider answered ${r.tag}`);
+    return r.val.map(fromWitCodeLens);
+  }
+
+  /** Resolve a lens without a command, as the editor does once it is on screen. */
+  async resolveCodeLens(document: Document, lens: CodeLens): Promise<CodeLens> {
+    const r = await this.request({ tag: "resolve-code-lens", val: [document, toWitCodeLens(lens)] });
+    if (r.tag !== "code-lenses" || r.val.length !== 1) throw CodeyardError.other(`resolving a code lens answered ${r.tag}`);
+    return fromWitCodeLens(r.val[0]!);
+  }
+
+  /** Click a lens: run its command with its arguments, as the editor does (the extension's own commands here). */
+  async clickCodeLens(lens: CodeLens): Promise<any> {
+    if (!lens.command) throw CodeyardError.invalid("the lens has no command yet; resolve it first");
+    return this.command(lens.command.command, lens.command.args);
+  }
+
+  async inlayHints(document: Document, range: Range): Promise<InlayHint[]> {
+    const r = await this.request({ tag: "inlay-hints", val: [document, range] });
+    if (r.tag !== "inlay-hints") throw CodeyardError.other(`the inlay hint provider answered ${r.tag}`);
+    return r.val.map((h) => (h.tooltip === undefined ? { position: h.position, label: h.label } : { position: h.position, label: h.label, tooltip: h.tooltip }));
   }
 
   async openUri(uri: string): Promise<void> {
@@ -692,6 +795,7 @@ export class MockHost {
         clear: (t) => void this.#timers.delete(t),
       },
       ui: { invalidate: (view) => void this.#invalidated.push(view) },
+      scm: { refresh: (provider) => void this.#scmRefreshed.push(provider) },
       documents: {
         active: () => this.#start("documents/active", [], () => [[], { tag: "document", val: this.#active }]),
         selections: () => this.#start("documents/selections", [], () => [[], { tag: "ranges", val: this.#selections }]),

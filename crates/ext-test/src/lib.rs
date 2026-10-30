@@ -12,6 +12,7 @@
 //! ```
 
 mod host;
+mod scm;
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -250,8 +251,53 @@ impl MockHost {
         }
     }
 
+    /// Ask the hover provider about `position`, as the mouse resting there does.
+    pub fn hover(&self, document: Document, position: Position) -> Result<Option<Hover>> {
+        match self.request(Request::Hover { document, position })? {
+            Response::Hover(h) => Ok(h),
+            other => Err(Error::Other(format!("the hover provider answered {other:?}"))),
+        }
+    }
+
+    /// Ask the completion provider at `position`; `trigger` is the trigger character typed, if one asked.
+    pub fn completion(&self, document: Document, position: Position, trigger: Option<&str>) -> Result<CompletionList> {
+        match self.request(Request::Completion { document, position, trigger: trigger.map(str::to_string) })? {
+            Response::Completions(l) => Ok(l),
+            other => Err(Error::Other(format!("the completion provider answered {other:?}"))),
+        }
+    }
+
     pub fn run_code_action(&self, id: &str) -> Result<()> {
         self.request(Request::RunCodeAction(id.to_string())).map(|_| ())
+    }
+
+    /// The code lenses for the lines of `document` in `range`, as the editor asks for the lines in view.
+    pub fn code_lenses(&self, document: Document, range: Range) -> Result<Vec<CodeLens>> {
+        match self.request(Request::CodeLens { document, range })? {
+            Response::CodeLenses(l) => Ok(l),
+            other => Err(Error::Other(format!("the code lens provider answered {other:?}"))),
+        }
+    }
+
+    /// Resolve a lens without a command, as the editor does once it is on screen.
+    pub fn resolve_code_lens(&self, document: Document, lens: CodeLens) -> Result<CodeLens> {
+        match self.request(Request::ResolveCodeLens { document, lens })? {
+            Response::CodeLenses(mut l) if l.len() == 1 => Ok(l.remove(0)),
+            other => Err(Error::Other(format!("resolving a code lens answered {other:?}"))),
+        }
+    }
+
+    /// Click a lens: run its command with its arguments, as the editor does (the extension's own commands here).
+    pub fn click_code_lens(&self, lens: &CodeLens) -> Result<Value> {
+        let Some(c) = &lens.command else { return Err(Error::Invalid("the lens has no command yet; resolve it first".into())) };
+        self.command(&c.command, c.args.clone())
+    }
+
+    pub fn inlay_hints(&self, document: Document, range: Range) -> Result<Vec<InlayHint>> {
+        match self.request(Request::InlayHints { document, range })? {
+            Response::InlayHints(h) => Ok(h),
+            other => Err(Error::Other(format!("the inlay hint provider answered {other:?}"))),
+        }
     }
 
     pub fn open_uri(&self, uri: &str) -> Result<()> {
@@ -431,5 +477,7 @@ impl Drop for MockHost {
 
 #[cfg(test)]
 mod pulls_tests;
+#[cfg(test)]
+mod scm_tests;
 #[cfg(test)]
 mod tests;

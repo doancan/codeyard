@@ -272,6 +272,12 @@ impl g::ui::Host for State {
     }
 }
 
+impl g::scm::Host for State {
+    fn refresh(&mut self, provider: String) {
+        self.notify(Notify::ScmRefresh { provider });
+    }
+}
+
 impl g::documents::Host for State {
     fn active(&mut self) -> Ticket {
         self.start("documents", Start::ActiveDocument)

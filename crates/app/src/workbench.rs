@@ -67,6 +67,8 @@ mod editor_grid_tests;
 mod editors_glue;
 #[path = "workbench_ext.rs"]
 mod ext_glue;
+#[path = "workbench_ext_scm.rs"]
+mod ext_scm_glue;
 #[path = "ext_ui_render.rs"]
 mod ext_ui_glue;
 #[path = "workbench_ext_view.rs"]
@@ -647,7 +649,7 @@ fn folder_settings_paths(root: &str) -> Vec<String> {
 }
 
 /// Separator between extra folder name and path in the Go to file list (never occurs in file names).
-pub(super) const ROOT_SEP: &str = " › ";
+pub(crate) const ROOT_SEP: &str = " › ";
 
 /// ID of the extra folder section (header drawing needs `&'static str`; IDs are created once).
 fn extra_folder_id(i: usize) -> &'static str {
@@ -1134,6 +1136,7 @@ impl Workbench {
                 crate::scm::ScmEvent::RefreshRepo(key) => this.refresh_repo(*key, cx),
                 crate::scm::ScmEvent::Rediscover => this.rediscover(cx),
                 crate::scm::ScmEvent::RefreshInventory => this.refresh_inventory(cx),
+                crate::scm::ScmEvent::Ext(e) => this.on_ext_scm_event(e.clone(), window, cx),
             }),
             // Terminals in windows of their own or in the editor area belong to this window: they end with it, unless the
             // app is quitting with them kept for the next start (`keep_terminals_for_restart`).
@@ -2500,10 +2503,7 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
                 }
                 return this.show_locations(locs, what, window, cx);
             }
-            EditorEvent::BreakpointsChanged => {
-                this.on_breakpoints_changed(ed, cx);
-                return;
-            }
+            EditorEvent::BreakpointsChanged => return this.on_breakpoints_changed(ed, cx),
             EditorEvent::BookmarksChanged => {
                 this.save_bookmarks(ed, cx);
                 cx.notify();
@@ -2519,6 +2519,7 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
             }
             EditorEvent::OpenMergeEditor => return this.open_merge_editor(&OpenMergeEditor, window, cx),
             EditorEvent::SendRequest(line) => return this.send_request_at(Some(*line), window, cx),
+            EditorEvent::Extension(_) => return, // workbench_ext_lenses.rs
             EditorEvent::Changed => {
                 // The user moved on: what extensions were asked about the old text is cancelled.
                 this.cancel_providers_about(&ed.read(cx).path.clone());

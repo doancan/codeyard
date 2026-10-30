@@ -4,6 +4,8 @@
 wit_bindgen::generate!({ path: "../../../../ext-api/wit", world: "extension" });
 
 mod providers;
+#[cfg(feature = "scm")]
+mod scm;
 mod pulls;
 
 use std::cell::RefCell;
@@ -88,6 +90,8 @@ impl Guest for Probe {
             requests::respond(id, Ok(&Response::None));
             return;
         }
+        #[cfg(feature = "scm")]
+        let Some(request) = scm::handle(id, request) else { return };
         let Request::Command((command, args)) = request else {
             // Timers and settings changes are counted, so tests can see them arrive.
             if let Request::Timer(_) | Request::SettingsChanged(_) = &request {
@@ -98,6 +102,10 @@ impl Guest for Probe {
             return;
         };
         if providers::command(id, &command).is_some() {
+            return;
+        }
+        #[cfg(feature = "scm")]
+        if scm::command(id, &command, &args).is_some() {
             return;
         }
         match command.as_str() {
@@ -184,6 +192,10 @@ impl Guest for Probe {
     }
 
     fn complete(ticket: Ticket, result: Completion) {
+        #[cfg(feature = "scm")]
+        if scm::complete(ticket, &result) {
+            return;
+        }
         let body = BODIES.with(|b| b.borrow_mut().remove(&ticket));
         if pulls::complete(ticket, &result, body.as_deref()).is_some() {
             return;

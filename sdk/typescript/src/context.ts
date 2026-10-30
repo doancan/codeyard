@@ -12,7 +12,11 @@ import {
   type Account,
   type Chunk,
   type CodeAction,
+  type CodeLens,
+  type InlayHint,
   type Command,
+  type CompletionItem,
+  type CompletionList,
   type Decoration,
   type Diagnostic,
   type Document,
@@ -20,11 +24,13 @@ import {
   type Env,
   type FileStat,
   type FormatOptions,
+  type Hover,
   type InputOptions,
   type LogLevel,
   type Output,
   type PickItem,
   type PickOptions,
+  type Position,
   type Range,
   type SearchMatch,
   type SearchOptions,
@@ -33,6 +39,7 @@ import {
   type TextEdit,
   type Uri,
 } from "./types.ts";
+import type { ScmState } from "./scm.ts";
 import type { Completion, StreamEvent } from "./wit.ts";
 
 type Awaitable<T> = T | Promise<T>;
@@ -108,6 +115,43 @@ export class Context {
     handlers.runCodeAction = f;
   }
 
+  /**
+   * Describe what is at a position of a document of the manifest's `[[hover]]` languages: shown in the hover popup
+   * next to the language server's, under the extension's name. Answer within the provider deadline.
+   */
+  hover(f: (ctx: Context, document: Document, position: Position) => Awaitable<Hover | undefined>): void {
+    handlers.hover = f;
+  }
+
+  /**
+   * Offer completions at a position of a document of the manifest's `[[completion]]` languages: they join the
+   * language server's in the list. `trigger` is the character typed when one of the manifest's `trigger-characters`
+   * asked, undefined when the user typed a word or asked. Answer within the provider deadline: a late answer is dropped.
+   */
+  completion(
+    f: (ctx: Context, document: Document, position: Position, trigger: string | undefined) => Awaitable<CompletionItem[] | CompletionList>,
+  ): void {
+    handlers.completion = f;
+  }
+
+  /**
+   * Code lenses for the lines of `document` in view: `range` starts at the first and ends at the start of the line
+   * after the last. Asked again after an edit (once typing pauses) and after a scroll; a slow answer is dropped.
+   */
+  codeLenses(f: (ctx: Context, document: Document, range: Range) => Awaitable<CodeLens[]>): void {
+    handlers.codeLenses = f;
+  }
+
+  /** Give a lens returned without `command` its command, once it is on screen. */
+  resolveCodeLens(f: (ctx: Context, document: Document, lens: CodeLens) => Awaitable<CodeLens>): void {
+    handlers.resolveCodeLens = f;
+  }
+
+  /** Inlay hints for the lines of `document` in view (`range`, as for `codeLenses`): short text at the end of a line. */
+  inlayHints(f: (ctx: Context, document: Document, range: Range) => Awaitable<InlayHint[]>): void {
+    handlers.inlayHints = f;
+  }
+
   /** A `codeyard://ext/<id>/…` link was opened: its path and query. */
   onUri(f: (ctx: Context, uri: string) => Awaitable<void>): void {
     handlers.openUri = f;
@@ -167,6 +211,31 @@ export class Context {
   /** Ask for view `id` to be drawn again. */
   invalidate(view: string): void {
     host().ui.invalidate(view);
+  }
+
+  // ---- source control (`[[scm]]`) ----------------------------------------------------------------------------------
+
+  /**
+   * The state of a folder that `[[scm]]` provider `id` claims: its groups of changed files and its input box. Asked
+   * when Source Control shows the folder, after files change, and after `scmRefresh(id)`.
+   */
+  scmStatus(id: string, f: (ctx: Context, root: string) => Awaitable<ScmState>): void {
+    handlers.scmStatus.set(id, f);
+  }
+
+  /** The text of a file as provider `id` last recorded it, for the gutter's change marks; undefined when untracked. */
+  scmOriginal(id: string, f: (ctx: Context, uri: string) => Awaitable<string | undefined>): void {
+    handlers.scmOriginal.set(id, f);
+  }
+
+  /** Check the input box's text: a message to show under the box, or undefined when it is fine. */
+  scmValidate(id: string, f: (ctx: Context, root: string, text: string) => Awaitable<string | undefined>): void {
+    handlers.scmValidate.set(id, f);
+  }
+
+  /** Ask Codeyard to read provider `id`'s state again now (after the extension changed something itself). */
+  scmRefresh(id: string): void {
+    host().scm.refresh(id);
   }
 
   // ---- window ------------------------------------------------------------------------------------------------------

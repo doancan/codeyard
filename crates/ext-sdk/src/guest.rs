@@ -20,6 +20,11 @@ pub(crate) type ViewFn = Rc<dyn Fn(Context) -> BoxFuture<Result<Value>>>;
 pub(crate) type ViewEventFn = Rc<dyn Fn(Context, Value) -> BoxFuture<Result<()>>>;
 pub(crate) type FormatFn = Rc<dyn Fn(Context, Document, Option<Range>, FormatOptions) -> BoxFuture<Result<Vec<TextEdit>>>>;
 pub(crate) type CodeActionsFn = Rc<dyn Fn(Context, Document, Range, Vec<Diagnostic>) -> BoxFuture<Result<Vec<CodeAction>>>>;
+pub(crate) type HoverFn = Rc<dyn Fn(Context, Document, Position) -> BoxFuture<Result<Option<Hover>>>>;
+pub(crate) type CompletionFn = Rc<dyn Fn(Context, Document, Position, Option<String>) -> BoxFuture<Result<CompletionList>>>;
+pub(crate) type CodeLensFn = Rc<dyn Fn(Context, Document, Range) -> BoxFuture<Result<Vec<CodeLens>>>>;
+pub(crate) type ResolveLensFn = Rc<dyn Fn(Context, Document, CodeLens) -> BoxFuture<Result<CodeLens>>>;
+pub(crate) type InlayHintsFn = Rc<dyn Fn(Context, Document, Range) -> BoxFuture<Result<Vec<InlayHint>>>>;
 pub(crate) type StringFn = Rc<dyn Fn(Context, String) -> BoxFuture<Result<()>>>;
 pub(crate) type KeysFn = Rc<dyn Fn(Context, Vec<String>) -> BoxFuture<()>>;
 pub(crate) type TickFn = Rc<dyn Fn(Context) -> BoxFuture<()>>;
@@ -34,8 +39,13 @@ pub(crate) struct Handlers {
     pub code_actions: Option<CodeActionsFn>,
     pub run_code_action: Option<StringFn>,
     pub open_uri: Option<StringFn>,
+    pub code_lenses: Option<CodeLensFn>,
+    pub resolve_code_lens: Option<ResolveLensFn>,
+    pub inlay_hints: Option<InlayHintsFn>,
     pub settings_changed: Vec<KeysFn>,
     pub timers: HashMap<u64, TickFn>,
+    pub hover: Option<HoverFn>,
+    pub completion: Option<CompletionFn>,
     /// `[[pull-requests]]` providers, by local id.
     pub pulls: crate::pulls::Providers,
     /// Progress the user cancelled.
@@ -43,6 +53,8 @@ pub(crate) struct Handlers {
     pub reason: String,
     /// `ctx.state()`: kept across a hot reload in `cyx dev` (`RELOAD_STATE_KEY`).
     pub state: serde_json::Map<String, Value>,
+    /// Source control providers (`scm.rs`).
+    pub scm: crate::scm::ScmHandlers,
 }
 
 thread_local! {
@@ -171,8 +183,31 @@ pub fn handle(id: u64, request: Request) {
             with(|h| h.cancelled_progress.insert(p));
             sys::respond(id, Ok(Response::None));
         }
+        // Without a provider, nothing to add: the language server's answer shows alone.
+        Request::Hover { document, position } => match with(|h| h.hover.clone()) {
+            Some(f) => answer(id, async move { f(ctx, document, position).await.map(Response::Hover) }),
+            None => sys::respond(id, Ok(Response::Hover(None))),
+        },
+        Request::Completion { document, position, trigger } => match with(|h| h.completion.clone()) {
+            Some(f) => answer(id, async move { f(ctx, document, position, trigger).await.map(Response::Completions) }),
+            None => sys::respond(id, Ok(Response::Completions(CompletionList::default()))),
+        },
+        Request::CodeLens { document, range } => match with(|h| h.code_lenses.clone()) {
+            Some(f) => answer(id, async move { f(ctx, document, range).await.map(Response::CodeLenses) }),
+            None => sys::respond(id, Ok(Response::CodeLenses(Vec::new()))),
+        },
+        // Without a resolver, the lens comes back as it was (and stays hidden).
+        Request::ResolveCodeLens { document, lens } => match with(|h| h.resolve_code_lens.clone()) {
+            Some(f) => answer(id, async move { f(ctx, document, lens).await.map(|l| Response::CodeLenses(vec![l])) }),
+            None => sys::respond(id, Ok(Response::CodeLenses(vec![lens]))),
+        },
+        Request::InlayHints { document, range } => match with(|h| h.inlay_hints.clone()) {
+            Some(f) => answer(id, async move { f(ctx, document, range).await.map(Response::InlayHints) }),
+            None => sys::respond(id, Ok(Response::InlayHints(Vec::new()))),
+        },
         Request::PullRequests(query) => crate::pulls::handle(id, ctx, query),
         Request::ProvideTasks | Request::RunTask(_) => sys::respond(id, Err(Error::Invalid("this SDK does not provide tasks yet".into()))),
+        r @ (Request::ScmStatus { .. } | Request::ScmOriginal { .. } | Request::ScmValidate { .. }) => crate::scm::handle(id, ctx, r),
     }
     runtime::run();
 }

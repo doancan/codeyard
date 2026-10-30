@@ -69,6 +69,7 @@ impl Workbench {
         }
         let changed: Vec<String> = changes.iter().map(|(p, _)| p.clone()).collect();
         self.refresh_repos_for(&changed, cx);
+        self.ext_scm_files_changed(&changed);
         if let Some(g) = &self.vcs.status {
             let prefix = format!("{}/", g.root.trim_end_matches('/'));
             let git_dir = g.git_dir.as_ref().map(|d| format!("{}/", d.trim_end_matches('/')));

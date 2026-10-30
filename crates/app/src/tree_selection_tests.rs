@@ -123,3 +123,48 @@ fn explorer_recursive_read_errors_stop_without_scheduling_an_endless_retry(cx: &
     cx.run_until_parked();
     assert!(tree.read_with(cx, |tree, _| tree.load_epochs.is_empty()));
 }
+
+/// A folder deleted while it is expanded leaves no row behind, whichever read comes back first: the watcher re-reads
+/// the folder itself (now missing) and the delete re-reads its parent. Deleted outside Codeyard, only the folder's own
+/// change may arrive: its parent is read again then too.
+#[gpui::test]
+fn explorer_a_deleted_expanded_folder_leaves_no_not_found_row(cx: &mut gpui::TestAppContext) {
+    crate::qa_workbench_tests::globals(cx);
+    // (compact folders, the folder's own read first, the parent read at all)
+    for (compact, folder_first, parent) in
+        [(true, true, true), (true, false, true), (false, true, true), (false, false, true), (true, true, false), (false, true, false)]
+    {
+        let dir = crate::qa_workbench_tests::fresh(&format!("tree-deleted-{compact}-{folder_first}-{parent}"));
+        std::fs::create_dir_all(dir.join("a/b")).unwrap();
+        std::fs::write(dir.join("a/b/f.txt"), "f").unwrap();
+        std::fs::write(dir.join("a/keep.txt"), "k").unwrap();
+        let root = crate::ui::local_path(&dir);
+        let (a, b) = (format!("{root}/a"), format!("{root}/a/b"));
+        let tree = cx.new(|cx| FileTree::new(Arc::new(host::local()), cx));
+        tree.update(cx, |t, cx| {
+            t.opts.compact = compact;
+            t.set_root(Arc::new(host::local()), Some(root.clone()), cx);
+        });
+        cx.run_until_parked();
+        // A root with one folder opens it by itself; open whatever is still closed.
+        for d in [&a, &b] {
+            if !tree.read_with(cx, |t, _| t.expanded.contains(d.as_str())) {
+                tree.update(cx, |t, cx| t.toggle(d, cx));
+                cx.run_until_parked();
+            }
+        }
+        let opened = tree.read_with(cx, |t, _| t.row_names());
+        assert!(opened.contains(&"f.txt".to_string()), "b is open: {opened:?}");
+        std::fs::remove_dir_all(dir.join("a/b")).unwrap();
+        tree.update(cx, |t, cx| {
+            let order = if folder_first { [&b, &a] } else { [&a, &b] };
+            for d in order.into_iter().filter(|d| parent || **d == b) {
+                t.reload(d, cx);
+            }
+        });
+        cx.run_until_parked();
+        let (names, errors) = tree.read_with(cx, |t, _| (t.row_names(), t.row_errors()));
+        assert!(errors.is_empty(), "compact {compact}, folder first {folder_first}, parent {parent}: {errors:?} in {names:?}");
+        assert!(!names.iter().any(|n| n == "b" || n == "f.txt"), "compact {compact}: {names:?}");
+    }
+}
