@@ -224,6 +224,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A workspace file's debug configurations understand `${workspaceFolder:name}` and `${workspaceFolderBasename:name}`, as
   its tasks already did. Before, the program path kept the variable as written and debugging failed to start with
   "Expected process to be stopped".
+- After "File: Open Active File as Workspace" (the way to open a workspace file on an SSH server), no shortcut worked
+  until something was clicked: the tab that had the keyboard closed with the old folder. The keyboard now stays in the
+  window whenever what had it goes away.
 - Over SSH, the terminals of a workspace file with several folders were not taken back after a restart: their session was
   kept under the first folder while the next start reopened the workspace file. It is kept under the workspace file now.
 - A folder deleted while it was open in the file tree no longer stays there with "not found" beside it. When a
