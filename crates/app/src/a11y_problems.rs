@@ -8,6 +8,12 @@ use crate::workbench::panels_glue::ProblemRow;
 #[path = "a11y_pages.rs"]
 mod pages;
 pub(super) use pages::{FIXED as PAGE_FIXED, PAGE_ROW};
+#[path = "a11y_dialogs.rs"]
+mod dialogs;
+pub(super) use dialogs::{DIALOG_LINE, FIXED as DIALOG_FIXED};
+#[path = "a11y_row_menus.rs"]
+mod row_menus;
+pub(super) use row_menus::ROW_MENU;
 #[path = "a11y_side_views.rs"]
 mod side;
 pub(super) use side::{DEBUG_FIXED, DEBUG_ROW, FIXED as SIDE_FIXED, MENU_ITEM, REMOTE_ROW, TEST_ROW};
@@ -208,10 +214,13 @@ pub(crate) struct ViewsSnap {
     pub(crate) search: Option<SearchSideSnap>,
     pub(crate) pages: pages::PagesSnap,
     pub(crate) side: side::SideSnap,
+    pub(crate) consent: Option<dialogs::ConsentSnap>,
+    /// The keyboard list of a side view or the Ports panel that has the focus, and its cursor row.
+    pub(in crate::workbench) row_focus: Option<(crate::workbench::a11y::RowFrame, usize)>,
 }
 
 impl ViewsSnap {
-    pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>, kids: &mut Vec<NodeId>) {
+    pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>, kids: &mut Vec<NodeId>, geometry: &Geometry) {
         if let Some(s) = &self.search {
             let mut status = Node::new(Role::Status);
             status.set_label(s.status.clone());
@@ -243,13 +252,20 @@ impl ViewsSnap {
         if let Some(problems) = &self.problems {
             kids.push(problems.append_tree(nodes));
         }
-        self.pages.append_tree(nodes, kids);
-        self.side.append_tree(nodes, kids);
+        self.pages.append_tree(nodes, kids, geometry);
+        self.side.append_tree(nodes, kids, geometry);
+        if let Some(consent) = &self.consent {
+            consent.append_tree(nodes, kids);
+        }
     }
 
-    /// The focused field of these views, if one has focus.
+    /// The focused field of these views, if one has focus (a dialog's button first).
     pub(super) fn focus_node(&self) -> Option<NodeId> {
-        self.side.focus_node().or_else(|| self.pages.focus_node())
+        let row = self.row_focus.and_then(|(kind, ix)| match kind {
+            crate::workbench::a11y::RowFrame::Port => pages::port_node(ix),
+            kind => side::row_node(kind, ix),
+        });
+        self.consent.as_ref().and_then(dialogs::ConsentSnap::focus_node).or_else(|| self.side.focus_node()).or(row).or_else(|| self.pages.focus_node())
     }
 }
 
@@ -259,7 +275,15 @@ impl Workbench {
             let (status, rows, total) = self.search.read(cx).access_rows(MAX_SEARCH_ROWS);
             SearchSideSnap { status, rows, total }
         });
-        ViewsSnap { problems: self.a11y_problems(cx), panel: self.a11y_panel(), search, pages: self.a11y_pages(window, cx), side: self.a11y_side(cx) }
+        ViewsSnap {
+            problems: self.a11y_problems(cx),
+            panel: self.a11y_panel(),
+            search,
+            pages: self.a11y_pages(window, cx),
+            side: self.a11y_side(cx),
+            consent: self.a11y_consent(window),
+            row_focus: self.focused_row(window, cx),
+        }
     }
 
     pub(super) fn a11y_views_action(&mut self, req: &ActionRequest, last: &Snapshot, window: &mut Window, cx: &mut Context<Self>) -> bool {
@@ -271,7 +295,8 @@ impl Workbench {
             }
             return true;
         }
-        self.a11y_panel_action(req, last, cx)
+        self.a11y_consent_action(req, last.views.consent.as_ref(), window, cx)
+            || self.a11y_panel_action(req, last, cx)
             || self.a11y_problems_action(req, last, window, cx)
             || self.a11y_pages_action(req, &last.views.pages, window, cx)
             || self.a11y_side_action(req, &last.views.side, window, cx)

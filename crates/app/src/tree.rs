@@ -233,6 +233,8 @@ pub struct FileTree {
     /// While "expand all" runs: folders still waiting to load and the remaining budget (folder count).
     recursive: HashSet<String>,
     budget: usize,
+    /// The list's visible area in the last frame, to put a menu opened by keyboard under the selected row.
+    bounds: Option<gpui::Bounds<gpui::Pixels>>,
 }
 
 impl EventEmitter<TreeEvent> for FileTree {}
@@ -273,6 +275,7 @@ impl FileTree {
             root_selected: false,
             recursive: HashSet::new(),
             budget: 0,
+            bounds: None,
         }
     }
 
@@ -796,6 +799,25 @@ impl FileTree {
         cx.notify();
     }
 
+    /// Shift+F10 or the Menu key: the selected row's menu (the root folder's without a selection), under the row, as a
+    /// right click opens it.
+    fn show_context_menu(&mut self, _: &crate::menu::ShowContextMenu, _: &mut Window, cx: &mut Context<Self>) {
+        let bounds = self.bounds.unwrap_or_default();
+        let (path, is_dir, position) = match self.selected.filter(|_| !self.root_selected).and_then(|ix| Some((ix, self.rows.get(ix)?))) {
+            Some((ix, row)) => {
+                // Scrolled to the top first, so the menu opens just under the first visible row.
+                self.scroll.scroll_to_item(ix, ScrollStrategy::Top);
+                let y = (bounds.top() + px(ROW_H)).min(bounds.bottom());
+                (row.path.clone(), row.is_dir, gpui::point(bounds.left() + px(ROW_PAD_L), y))
+            }
+            None => match self.root.clone() {
+                Some(root) => (root, true, gpui::point(bounds.left() + px(ROW_PAD_L), bounds.top() + px(ROW_H))),
+                None => return,
+            },
+        };
+        cx.emit(TreeEvent::ContextMenu { path, is_dir, position });
+    }
+
     fn select_prev(&mut self, _: &SelectPrev, _: &mut Window, cx: &mut Context<Self>) {
         let ix = self.selected.map_or(0, |i| i.saturating_sub(1));
         self.select(ix, cx);
@@ -1108,6 +1130,7 @@ impl Render for FileTree {
                 this.collapse_recursive(&dir, cx);
             }))
             .on_action(cx.listener(Self::confirm))
+            .on_action(cx.listener(Self::show_context_menu))
             .on_action(cx.listener(Self::rename_entry))
             .on_action(cx.listener(Self::delete_entry))
             .on_action(cx.listener(Self::copy_entry))
@@ -1143,8 +1166,22 @@ impl Render for FileTree {
                 }),
             )
             .size_full()
+            .relative()
             .text_color(c(p.text))
             .child(body)
+            .child({
+                let tree = cx.entity().downgrade();
+                gpui::canvas(
+                    |bounds, window, _| bounds.intersect(&window.content_mask().bounds),
+                    move |_, bounds, _, cx| {
+                        tree.update(cx, |t, _| t.bounds = Some(bounds)).ok();
+                    },
+                )
+                .absolute()
+                .top_0()
+                .left_0()
+                .size_full()
+            })
     }
 }
 
