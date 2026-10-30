@@ -13,7 +13,7 @@ use std::time::Instant;
 
 use windows_sys::Win32::Foundation::{LocalFree, WAIT_OBJECT_0};
 use windows_sys::Win32::Security::Authorization::{ConvertSecurityDescriptorToStringSecurityDescriptorW, GetSecurityInfo, SE_KERNEL_OBJECT};
-use windows_sys::Win32::Security::DACL_SECURITY_INFORMATION;
+use windows_sys::Win32::Security::{DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR};
 use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE, WaitForSingleObject};
 
 use super::*;
@@ -194,6 +194,35 @@ fn windows_a_kept_session_ends_with_its_shell_after_its_timeout() {
     assert!(ends_within(pid, Duration::from_secs(20)), "the shell of an expired session still runs");
 }
 
+/// A security descriptor's `info` parts as SDDL text. The descriptor stays the caller's.
+fn sddl(sd: PSECURITY_DESCRIPTOR, info: u32) -> String {
+    let mut text = std::ptr::null_mut();
+    // SAFETY: `sd` is a live descriptor; `text` receives a LocalAlloc'd string, freed below.
+    let ok = unsafe { ConvertSecurityDescriptorToStringSecurityDescriptorW(sd, SDDL_REVISION_1, info, &mut text, std::ptr::null_mut()) };
+    assert_ne!(ok, 0, "{}", io::Error::last_os_error());
+    // SAFETY: a NUL-terminated wide string from the call above.
+    let len = (0..).take_while(|&i| unsafe { *text.add(i) } != 0).count();
+    // SAFETY: `len` characters counted in the same string.
+    let out = String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(text, len) });
+    // SAFETY: allocated by the call above, freed once.
+    unsafe { LocalFree(text.cast()) };
+    out
+}
+
+/// This user's SID as SDDL writes it in an access entry: a well-known account has a short alias there (the built-in
+/// Administrator, as on CI runners, is `LA`), any other its `S-1-5-...` form.
+fn user_in_sddl() -> String {
+    let wide: Vec<u16> = format!("O:{}", current_user().unwrap()).encode_utf16().chain([0]).collect();
+    let mut sd = std::ptr::null_mut();
+    // SAFETY: a NUL-terminated SDDL string; `sd` receives a LocalAlloc'd descriptor, freed below.
+    let ok = unsafe { ConvertStringSecurityDescriptorToSecurityDescriptorW(wide.as_ptr(), SDDL_REVISION_1, &mut sd, std::ptr::null_mut()) };
+    assert_ne!(ok, 0, "{}", io::Error::last_os_error());
+    let owner = sddl(sd, OWNER_SECURITY_INFORMATION);
+    // SAFETY: allocated by the call above, freed once.
+    unsafe { LocalFree(sd) };
+    owner.trim_start_matches("O:").to_owned()
+}
+
 /// The pipe is created with a protected DACL that grants access to this user's SID alone.
 #[test]
 fn windows_the_daemon_pipe_is_for_this_user_only() {
@@ -214,25 +243,15 @@ fn windows_the_daemon_pipe_is_for_this_user_only() {
         )
     };
     assert_eq!(status, 0, "GetSecurityInfo");
-    let mut text = std::ptr::null_mut();
-    // SAFETY: `sd` is the descriptor just returned; `text` receives a LocalAlloc'd string, freed below.
-    let ok = unsafe { ConvertSecurityDescriptorToStringSecurityDescriptorW(sd, SDDL_REVISION_1, DACL_SECURITY_INFORMATION, &mut text, std::ptr::null_mut()) };
-    assert_ne!(ok, 0, "{}", io::Error::last_os_error());
-    // SAFETY: a NUL-terminated wide string from the call above.
-    let len = (0..).take_while(|&i| unsafe { *text.add(i) } != 0).count();
-    // SAFETY: `len` characters counted in the same string.
-    let sddl = String::from_utf16_lossy(unsafe { std::slice::from_raw_parts(text, len) });
-    // SAFETY: both were allocated by the calls above, freed once.
-    unsafe {
-        LocalFree(text.cast());
-        LocalFree(sd);
-    }
-    let user = current_user().unwrap();
-    assert!(sddl.starts_with("D:P"), "protected, nothing inherited: {sddl}");
-    assert_eq!(sddl.matches("(A;").count(), 1, "one access entry: {sddl}");
-    assert!(sddl.contains(&user), "for this user: {sddl}");
+    let dacl = sddl(sd, DACL_SECURITY_INFORMATION);
+    // SAFETY: allocated by GetSecurityInfo above, freed once.
+    unsafe { LocalFree(sd) };
+    let user = user_in_sddl();
+    assert!(dacl.starts_with("D:P"), "protected, nothing inherited: {dacl}");
+    assert_eq!(dacl.matches("(A;").count(), 1, "one access entry: {dacl}");
+    assert!(dacl.ends_with(&format!(";{user})")), "for this user ({user}): {dacl}");
     for others in [";WD)", ";AU)", ";BU)", ";AN)", ";SY)", ";BA)"] {
-        assert!(!sddl.contains(others), "{others} has access: {sddl}");
+        assert!(!dacl.contains(others), "{others} has access: {dacl}");
     }
     c.drop_connection();
 }
