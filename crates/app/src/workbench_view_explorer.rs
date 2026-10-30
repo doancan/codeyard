@@ -15,8 +15,8 @@ impl Workbench {
         let item = |id: &'static str, name: &'static str, label: &'static str, panel: Panel, badge: usize, cx: &mut Context<Self>| {
             let selected =
                 self.chrome.panel == Some(panel) || (panel == Panel::Containers && self.tabs.page_active && matches!(self.tabs.page, Some(Page::Containers)));
-            div()
-                .id(id)
+            // Dragged onto the other side bar, the view moves there.
+            self.view_drag(panel, div().id(id), cx)
                 .debug_selector(|| id.to_string())
                 .group(id)
                 .relative()

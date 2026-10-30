@@ -146,7 +146,9 @@ pub(super) struct ChromeLayout {
     /// The view slot of the editor window in use: commands act on its editor and its menus and pickers are drawn there.
     pub(super) editor_host: Option<usize>,
     /// Panel on the right (next to the editor) and its width; maximized (covers the editor).
-    pub(super) panel_right: bool,
+    pub(super) panel_dock: super::docks_glue::PanelDock,
+    /// A side view being dragged by its activity bar icon (the side bars are drop zones meanwhile).
+    pub(super) view_drag: Option<Panel>,
     pub(super) panel_w: f32,
     pub(super) panel_max: bool,
     /// A running maximize/restore animation: when it started and whether it maximizes.

@@ -189,6 +189,9 @@ repository, branch and file state, and committing checks the reviewed status and
    bar, suggestions and the picker opened there, or the terminal's text and cursor. The editor fills the window, so its
    bounds are the window's. Actions go to the workbench with that window, after making it the window commands act on.
 
+7. **Layout.** The main window's description says which view each side bar shows, which views live in the secondary
+   side bar and where the panel is docked, so moving a view by drag and drop is reflected without reading the screen.
+
 `CODEYARD_NO_A11Y=1` disables the adapter. `attach` is skipped under test because `TestWindow::window_handle()` is
 `unimplemented!()`. `scripts/a11y-probe/` holds the Swift tools (`axdump`, `axact`, `axpress`) that read the real
 tree with `AXUIElementCreateApplication(pid)`:

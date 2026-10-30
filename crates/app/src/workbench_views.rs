@@ -92,7 +92,7 @@ impl Workbench {
         }
     }
 
-    fn save_views(&self) {
+    pub(super) fn save_views(&self) {
         if let Some(s) = &self.persist.state {
             let ids: Vec<&str> = self.chrome.in_secondary.iter().map(|v| view_id(*v)).collect();
             let _ = s.set("secondary_views", &ids.join(","));
@@ -198,7 +198,7 @@ impl Workbench {
         });
         if let Ok(handle) = &opened {
             #[cfg(any(target_os = "macos", windows))]
-            a11y::attach_with((*handle).into(), a11y::windows_access::TERMINAL_WINDOW, cx);
+            a11y::platform::attach_with((*handle).into(), a11y::windows_access::TERMINAL_WINDOW, cx);
             #[cfg(windows)]
             handle.update(cx, |_, window, _| window.activate_window()).ok();
         }

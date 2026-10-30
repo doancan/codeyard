@@ -3309,3 +3309,15 @@ Open a file in the editor first.	Önce düzenleyicide bir dosya açın.
 Up to {} editors can be in windows of their own.	Kendi penceresinde en fazla {} düzenleyici olabilir.
 The editor could not move to a new window: {}	Düzenleyici yeni bir pencereye taşınamadı: {}
 No editor is in a window of its own.	Kendi penceresinde açık düzenleyici yok.
+Primary Side Bar	Birincil Kenar Çubuğu
+Secondary Side Bar	İkincil Kenar Çubuğu
+Extension View	Eklenti Görünümü
+View: Move Panel Left	Görünüm: Paneli Sola Taşı
+View: Move Panel Right	Görünüm: Paneli Sağa Taşı
+View: Move Panel to Bottom	Görünüm: Paneli Alta Taşı
+Primary side bar: {}	Birincil kenar çubuğu: {}
+Secondary side bar: {}	İkincil kenar çubuğu: {}
+In the secondary side bar: {}	İkincil kenar çubuğunda: {}
+Panel: below the editor	Panel: düzenleyicinin altında
+Panel: left of the editor	Panel: düzenleyicinin solunda
+Panel: right of the editor	Panel: düzenleyicinin sağında
