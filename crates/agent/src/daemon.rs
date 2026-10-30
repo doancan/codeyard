@@ -55,6 +55,11 @@ impl Registry {
         let (sess, resumed) = {
             let mut map = self.sessions.locked();
             match map.get_mut(&key) {
+                // An exclusive session is not taken from a connection that is still there.
+                Some(e) if key.starts_with(proto::EXCLUSIVE_SESSION) && e.session.out.is_attached() => {
+                    let refused = Response::Error(Error::PermissionDenied("the session is in use by another connection".into()));
+                    return proto::write_frame(&mut output, &Frame { id, body: &refused });
+                }
                 Some(e) => {
                     e.detached_since = None;
                     (e.session.clone(), true)

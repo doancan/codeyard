@@ -1273,8 +1273,14 @@ fn main() {
             .detach();
         }
         // All ssh ControlMasters are closed on every exit, including ⌘Q and the last window closing.
-        cx.on_app_quit(|_| {
+        cx.on_app_quit(|cx| {
             host::ssh::close_all_masters();
+            // Quitting is not closing: every window's terminals stay with the terminal daemon for the next start.
+            for window in cx.windows() {
+                if let Some(wb) = window.downcast::<Workbench>() {
+                    let _ = wb.update(cx, |wb, _, _| wb.keep_terminals_for_restart());
+                }
+            }
             async {}
         })
         .detach();

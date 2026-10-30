@@ -667,6 +667,8 @@ impl Workbench {
         for t in self.terminals.drain(..) {
             t.read(cx).kill();
         }
+        // The folder or connection is left on purpose: its terminal daemon session ends now too.
+        self.persist.term_daemon = None;
         self.chrome.panel_open = false;
     }
 

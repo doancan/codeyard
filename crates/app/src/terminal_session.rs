@@ -144,7 +144,7 @@ impl SavedTerminals {
         saved.active = saved.active.min(saved.terminals.len().saturating_sub(1));
         // A token is only ever compared by the daemon, but a hand-edited file must not make it hold anything large.
         let sane = |s: &str| s.len() <= 64 && s.bytes().all(|b| b.is_ascii_hexdigit());
-        if saved.session.as_deref().is_some_and(|s| !sane(s)) {
+        if saved.session.as_deref().is_some_and(|s| !sane(s.strip_prefix(proto::EXCLUSIVE_SESSION).unwrap_or(s))) {
             saved.session = None;
         }
         for t in &mut saved.terminals {

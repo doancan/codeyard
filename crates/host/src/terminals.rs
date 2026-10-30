@@ -7,6 +7,17 @@
 use super::*;
 
 impl RemoteHost {
+    /// End the session now (`Bye`): the daemon closes its terminals at once instead of keeping them for a restart.
+    pub fn end_session(&self) {
+        self.shared.keep_session.store(false, Ordering::Relaxed);
+        self.shared.closing.store(true, Ordering::Relaxed);
+        if let Ok(w) = self.shared.writer()
+            && let Ok(bytes) = Shared::encode(0, &Request::Bye)
+        {
+            let _ = w.send_within(bytes, std::time::Duration::from_secs(1));
+        }
+    }
+
     /// Hello with `session` on `t`, then read. When the daemon still has that session (`resumed`), a `Pty` per id in
     /// `ptys` receives that terminal's events from the first frame on. Never reconnects: a lost connection is final, as
     /// another window or process may have taken the session over.

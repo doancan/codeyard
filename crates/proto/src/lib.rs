@@ -14,6 +14,11 @@ use std::io::{self, Read, Write};
 
 use serde::{Deserialize, Serialize};
 
+/// Prefix of a daemon session id that only one live connection may hold (a window's terminals on the local terminal
+/// daemon): a second `Hello` for it is refused while the first connection lives. Other sessions are taken over by the
+/// newest connection (an SSH reconnect while the old connection is still half-open).
+pub const EXCLUSIVE_SESSION: &str = "x-";
+
 /// Compared in the handshake; on mismatch the agent is reinstalled.
 pub const VERSION: u32 = 16;
 
@@ -32,7 +37,8 @@ pub struct Frame<T> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Request {
     /// `session`: ID of the previous session when reconnecting (in daemon mode
-    /// terminals and watches resume where they were).
+    /// terminals and watches resume where they were). A session id that starts with [`EXCLUSIVE_SESSION`] is refused
+    /// with `PermissionDenied` while another connection is attached to it, instead of being taken over.
     Hello {
         client_version: u32,
         session: Option<String>,

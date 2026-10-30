@@ -193,6 +193,46 @@ fn a_restarted_client_takes_its_terminal_back_with_its_token_only() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// An exclusive session (a window's terminals) is refused to a second connection while the first one lives, and given
+/// to it once the first is gone.
+#[test]
+fn an_exclusive_session_is_not_taken_from_a_live_connection() {
+    let (mut d, dir, sock) = daemon("exclusive", 300, 600);
+    let session = format!("{}window-x", proto::EXCLUSIVE_SESSION);
+    let (mut c1, _) = Conn::open(&sock, &session);
+    let pty = spawn_shell(&mut c1);
+    let mut s = UnixStream::connect(&sock).unwrap();
+    proto::write_frame(&mut s, &Frame { id: 1, body: Request::Hello { client_version: proto::VERSION, session: Some(session.clone()) } }).unwrap();
+    let mut r = BufReader::new(s.try_clone().unwrap());
+    let refused = proto::read_frame::<Response>(&mut r).unwrap().unwrap().body;
+    assert!(matches!(refused, Response::Error(proto::Error::PermissionDenied(_))), "{refused:?}");
+    // The first connection still owns its terminal.
+    let marker = dir.join("still-owned");
+    c1.input(pty, &format!("touch {}\n", marker.display()));
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !marker.exists() {
+        assert!(Instant::now() < deadline, "the first connection lost its terminal");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    // Its owner gone, the session goes to the next connection.
+    drop(c1);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let mut s = UnixStream::connect(&sock).unwrap();
+        proto::write_frame(&mut s, &Frame { id: 1, body: Request::Hello { client_version: proto::VERSION, session: Some(session.clone()) } }).unwrap();
+        let mut r = BufReader::new(s.try_clone().unwrap());
+        if let Response::Hello(info) = proto::read_frame::<Response>(&mut r).unwrap().unwrap().body {
+            assert!(info.resumed);
+            break;
+        }
+        assert!(Instant::now() < deadline, "the session was not freed after its owner left");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let _ = d.kill();
+    let _ = d.wait();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn output_lost_while_away_is_counted() {
     let (mut d, dir, sock) = daemon("gap", 300, 600);
