@@ -288,7 +288,7 @@ impl Workbench {
     }
 
     /// A new window showing `ed` through a new view of it (with `view`'s cursor and scroll when given).
-    fn show_in_editor_window(
+    pub(super) fn show_in_editor_window(
         &mut self,
         ed: Entity<EditorView>,
         bounds: Bounds<Pixels>,

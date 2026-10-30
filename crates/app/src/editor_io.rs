@@ -281,6 +281,12 @@ impl EditorView {
         std::ptr::addr_eq(Arc::as_ptr(&self.host), Arc::as_ptr(host))
     }
 
+    /// Whether `host` is the same machine as this file's (this computer, or the same SSH host), even through another
+    /// connection (another window's).
+    pub fn on_same_machine(&self, host: &Arc<dyn Host>) -> bool {
+        self.uses_host(host) || (self.host.is_remote() == host.is_remote() && (!host.is_remote() || self.host.label() == host.label()))
+    }
+
     /// The watcher reported that the file changed externally.
     pub fn on_disk_change(&mut self, kind: proto::ChangeKind, cx: &mut Context<Self>) {
         if kind == proto::ChangeKind::Removed {

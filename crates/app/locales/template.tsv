@@ -1901,6 +1901,7 @@ Save copy
 Save files automatically	
 Save or close the files with unsaved changes first.	
 Save project as	
+Save the file first: a tab with unsaved changes cannot move to another window.	
 Save the file to finish, then stage it in Source Control.	
 Save theme	
 Save user@host to ~/.ssh/config and connect	
@@ -2222,6 +2223,7 @@ The debug adapter exited before it started listening
 The debug adapter stopped	
 The debug adapter stopped (exit code {})	
 The debugger could not bind this breakpoint.	
+The destination window is no longer available.	
 The download finished but js-debug was not found in it.	
 The editor could not move to a new window: {}	
 The element can't be renamed.	
@@ -2350,6 +2352,7 @@ This release has no installer for this system. Download it from the release page
 This replacement is too large to preview. Narrow the search (fewer files or matches).	
 This repository has no remote. Add one with Git: Add Remote…	
 This search belongs to {0} on {1}, which this window does not show. Results cannot be opened or replaced here.	
+This tab cannot move to that window: its folder is on another machine.	
 This view is not available.	
 This window is installing an update. You can close it in a few seconds.	
 Thursday	

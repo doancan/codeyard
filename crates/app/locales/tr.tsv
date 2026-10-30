@@ -3335,3 +3335,6 @@ No view is in a window of its own.	Kendi penceresinde açık görünüm yok.
 The view could not move to a new window: {}	Görünüm yeni bir pencereye taşınamadı: {}
 Break on Value Change	Değer Değişince Dur
 Breaks when the value is written; for this debug session only.	Değer yazıldığında durur; yalnızca bu hata ayıklama oturumu için.
+Save the file first: a tab with unsaved changes cannot move to another window.	Önce dosyayı kaydedin: kaydedilmemiş değişiklikleri olan bir sekme başka bir pencereye taşınamaz.
+This tab cannot move to that window: its folder is on another machine.	Bu sekme o pencereye taşınamaz: klasörü başka bir makinede.
+The destination window is no longer available.	Hedef pencere artık yok.

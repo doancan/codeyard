@@ -168,6 +168,8 @@ mod state_glue;
 mod structural_glue;
 #[path = "workbench_sync.rs"]
 mod sync_glue;
+#[path = "workbench_tab_drag.rs"]
+mod tab_drag_glue;
 #[path = "workbench_task_run.rs"]
 mod task_run_glue;
 #[path = "workbench_tasks.rs"]
@@ -1308,6 +1310,7 @@ impl Workbench {
                 view_host: None,
                 panel_dock,
                 view_drag: None,
+                tab_drag: None,
                 panel_w,
                 panel_max: false,
                 panel_anim: None,
