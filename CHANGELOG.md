@@ -192,6 +192,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The settings and shortcuts import is "Preferences: Import Settings and Shortcuts from Another Editor", and its
+  messages no longer name another product. A shortcut block written by an earlier import is still replaced by a new one.
 - A task no longer types its command into a new terminal: it runs as a process on the folder's machine, so a value from
   a variable can never become more shell code, and Stop ends the processes it started.
 - The Linux agent's size budget is 1664 KB (was 1600 KB): running tasks as processes on the server needs its own
