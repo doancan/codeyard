@@ -1453,12 +1453,14 @@ pub(super) fn inline_values(lines: &[String], stop: usize, locals: &[(String, St
 }
 
 /// Scopes of a frame and the first scope's variables (in the background).
-/// The compiler may report the logical path (`/tmp/x`) while the editor holds the canonical one (`/private/tmp/x`).
+/// The compiler may report the logical path (`/tmp/x`) while the editor holds the canonical one (`/private/tmp/x`). The
+/// canonical path is kept in the editor's form (`ui::local_path`): on Windows `canonicalize` adds `\\?\` and backslashes,
+/// and such a frame matched no open file, so the paused line was never shown.
 fn normalize_frames(frames: &mut [Frame], local: bool) {
     if local {
         for f in frames {
             if let Some(c) = f.path.as_deref().and_then(|p| std::fs::canonicalize(p).ok()) {
-                f.path = Some(c.to_string_lossy().into_owned());
+                f.path = Some(ui::local_path(&c));
             }
         }
     }

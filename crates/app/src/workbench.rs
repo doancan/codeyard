@@ -2016,9 +2016,10 @@ impl Workbench {
         let abs = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
         if abs.is_file() {
             if let Some(dir) = abs.parent() {
-                self.set_root(dir.to_string_lossy().into_owned(), cx);
+                self.set_root(ui::local_path(dir), cx);
             }
-            self.open_file(abs.to_string_lossy().into_owned(), window, cx);
+            // The form the explorer and the tabs use (without Windows' `\\?\` prefix of `canonicalize`).
+            self.open_file(ui::local_path(&abs), window, cx);
         } else {
             self.set_root(abs.to_string_lossy().into_owned(), cx);
         }
