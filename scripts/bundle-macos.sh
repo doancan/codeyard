@@ -70,6 +70,13 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSHumanReadableCopyright</key><string>Copyright © 2026 Codeyard contributors. MIT OR Apache-2.0.</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>com.codeyard.app</string>
+      <key>CFBundleURLSchemes</key><array><string>codeyard</string></array>
+    </dict>
+  </array>
   <key>CFBundleDocumentTypes</key>
   <array>
     <dict>

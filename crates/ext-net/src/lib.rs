@@ -204,6 +204,42 @@ impl Request {
     pub fn get(url: impl Into<String>) -> Request {
         Request { method: Method::GET, url: url.into(), headers: HeaderMap::new(), body: Body::Empty }
     }
+
+    /// A request as the API carries it (`http-request`): method and header names as text, the body in one piece.
+    /// Malformed names or values are `invalid`; the rules on headers apply when it is sent.
+    pub fn from_parts(method: &str, url: impl Into<String>, headers: &[(String, String)], body: Vec<u8>) -> Result<Request, Error> {
+        let method =
+            Method::from_bytes(method.trim().to_ascii_uppercase().as_bytes()).map_err(|_| Error::Invalid(format!("'{method}' is not an HTTP method")))?;
+        let mut map = HeaderMap::new();
+        for (name, value) in headers {
+            let n = header::HeaderName::from_bytes(name.trim().as_bytes()).map_err(|_| Error::Invalid(format!("'{name}' is not a header name")))?;
+            let v = HeaderValue::from_str(value).map_err(|_| Error::Invalid(format!("the value of header '{name}' has characters a header cannot carry")))?;
+            map.append(n, v);
+        }
+        let body = if body.is_empty() { Body::Empty } else { Body::Full(body.into()) };
+        Ok(Request { method, url: url.into(), headers: map, body })
+    }
+
+    /// Set a header, replacing what the caller set (the app adds `authorization` this way).
+    pub fn set_header(&mut self, name: &'static str, value: &str) -> Result<(), Error> {
+        let mut v = HeaderValue::from_str(value).map_err(|_| Error::Invalid(format!("the value of header '{name}' has characters a header cannot carry")))?;
+        // Kept out of `Debug` output and logs.
+        v.set_sensitive(true);
+        self.headers.insert(header::HeaderName::from_static(name), v);
+        Ok(())
+    }
+
+    /// Whether the caller set header `name` (lowercase).
+    pub fn has_header(&self, name: &str) -> bool {
+        self.headers.contains_key(name)
+    }
+}
+
+impl Response {
+    /// The headers as text pairs, as the API carries them; values that are not text are skipped.
+    pub fn header_pairs(&self) -> Vec<(String, String)> {
+        self.headers.iter().filter_map(|(n, v)| v.to_str().ok().map(|v| (n.as_str().to_string(), v.to_string()))).collect()
+    }
 }
 
 /// The final response, after redirects. The body is read separately so it can stream.

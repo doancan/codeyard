@@ -25,6 +25,10 @@ entry = "Cargo.toml"
 [permissions]
 read = ["a.txt"]
 net = ["api.example.com"]
+# The probe also imports `auth` and `secrets` (#105).
+auth = ["github"]
+secrets = true
+why = "Tests every part of the host."
 
 [[views]]
 id = "counter"

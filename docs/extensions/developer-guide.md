@@ -136,6 +136,7 @@ You don't have to write any activation code. The extension starts the first time
 | `extension.version`, `name`, `license` | yes | `description`, `repository`, `categories` and `icon` are optional |
 | `code.entry` | for code | `Cargo.toml` means Rust, `.ts`/`.js` means TypeScript. Leave it out for themes and other no-code packs |
 | `permissions` | if used | `read`, `write`, `net`, `run`, `auth`, `secrets`, `clipboard`, `terminal`, `commands`, plus `why` ([details](#permissions)) |
+| `[[oauth]]` | for an OAuth account | An OAuth 2 provider named in `auth` ([details](#call-an-api-with-the-users-github-login)) |
 | `activation` | rarely | Codeyard works it out from your contributions. The only form you ever write is `workspace-contains = ["vercel.json"]` |
 | `[[commands]]`, `[[views]]`, `[[status-bar]]`, … | — | Contributions. Ids are local: `refresh` becomes `you.ext.refresh` |
 | `when`, `enablement` | — | `editor.language == 'rust' && !terminal`. Keys: `editor`, `terminal`, `file-tree`, `scm`, `search`, `panel`, `workspace.trusted`, `editor.language`, `ext.<key>` |
@@ -276,7 +277,28 @@ const res = await fetch("https://api.github.com/user/repos", { auth: "github" })
 const repos = await res.json();
 ```
 
-You can also use another OAuth 2 provider. Declare its authorize and token URLs in the manifest (draft), and Codeyard runs the browser sign-in.
+The first `auth.session("github")` asks the user once, naming your extension, its publisher and the account. GitHub uses the sign-in Codeyard already has (the GitHub CLI). `auth.fetch` signs requests to `api.github.com` and `uploads.github.com` only. A request to any other host is refused and is not sent. Don't set an `authorization` header yourself.
+
+You can also use another OAuth 2 provider. Declare it in an `[[oauth]]` table and name it in `auth`. Codeyard runs the browser sign-in with PKCE and keeps the token. It refreshes the token when it is about to expire.
+
+```toml
+[permissions]
+auth = ["acme"]
+
+[[oauth]]
+id            = "acme"
+name          = "Acme"                                   # shown to the user
+authorize-url = "https://acme.example.com/oauth/authorize"
+token-url     = "https://acme.example.com/oauth/token"   # https only
+client-id     = "your-public-client-id"                  # no client secret: PKCE replaces it
+scopes        = ["read", "deploy"]                       # auth.session may ask for fewer
+hosts         = ["api.acme.example.com"]                 # the hosts auth.fetch signs requests to
+account-url   = "https://api.acme.example.com/me"        # optional: JSON with the account's name
+```
+
+Register `codeyard://ext/<your extension id>/callback` as the redirect URI with the provider. The user can sign out on your extension's page. The next `auth.fetch` then fails with "not signed in", and your extension calls `auth.session` again.
+
+**Secrets.** If a service has no OAuth, `secrets = true` gives your extension its own keychain entries. Use `secrets.set(key, value)`, `secrets.get(key)` and `secrets.delete(key)`. Keys are `a-z A-Z 0-9 . _ -`, up to 128 characters. A value is at most 2048 bytes. The entries belong to your publisher identity, so a sideloaded copy of your extension cannot read them.
 
 ### Tree view
 

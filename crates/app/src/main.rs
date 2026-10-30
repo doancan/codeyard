@@ -62,9 +62,13 @@ mod error_ui_tests;
 #[cfg(test)]
 mod explorer_bulk_tests;
 mod ext;
+mod ext_accounts;
+#[cfg(test)]
+mod ext_accounts_ui_tests;
 mod ext_broker;
 #[cfg(test)]
 mod ext_code_tests;
+mod ext_fetch;
 mod ext_inspector;
 #[cfg(test)]
 mod ext_inspector_ui_tests;
@@ -1058,6 +1062,10 @@ fn main() {
     workbench::migrate_legacy_dirs();
     crash::install(workbench::crash_dir());
     let args = parse_args();
+    // Windows and Linux start Codeyard with an extension's sign-in address: hand it to the running one.
+    if let Some(url) = args.path.as_deref().filter(|p| p.starts_with("codeyard://")) {
+        std::process::exit(workbench::forward_callback_from_command_line(url));
+    }
     if !args.install.is_empty() {
         std::process::exit(install_extensions(&args.install));
     }

