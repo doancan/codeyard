@@ -2519,8 +2519,8 @@ Zoom Out
 `{}` did not answer within {} seconds; check the network connection and try again	
 `{}` is not installed or not on PATH	
 a comment is not closed	
-a host of the {0} account ({1}), not {2}	
 a field refers to a group the regular expression does not have	
+a host of the {0} account ({1}), not {2}	
 a key binding condition needs a context, not a constant	
 a program	
 a string is not closed	
@@ -2675,9 +2675,9 @@ no “{}” in the response
 not UTF-8	
 not available	
 not declared	
-not running	
 not run: a dependency failed	
 not run: too many tasks in the background	
+not running	
 not selected	
 not set	
 not signed in to {0}; call auth.session with “{1}” first	
@@ -2785,9 +2785,9 @@ this computer
 this value cannot be watched	
 this version was revoked	
 too many copies	
+too many or too large patterns	
 turned off after three crashes	
 turned off on the extension page	
-too many or too large patterns	
 type parameter	
 unclosed [ in the path	
 undefined variable {}	
