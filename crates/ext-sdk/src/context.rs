@@ -131,6 +131,37 @@ impl Context {
         guest::with(|h| h.run_code_action = Some(string_fn(f)));
     }
 
+    /// Describe what is at a position of a document of the manifest's `[[hover]]` languages: shown in the hover popup
+    /// next to the language server's, under the extension's name. Answer within the provider deadline.
+    pub fn hover<F>(&self, f: F)
+    where
+        F: AsyncFn(Context, Document, Position) -> Result<Option<Hover>> + 'static,
+    {
+        let f = Rc::new(f);
+        let cb: guest::HoverFn = Rc::new(move |ctx, doc, position| {
+            let f = f.clone();
+            Box::pin(async move { f(ctx, doc, position).await })
+        });
+        guest::with(|h| h.hover = Some(cb));
+    }
+
+    /// Offer completions at a position of a document of the manifest's `[[completion]]` languages: they join the
+    /// language server's in the list. `trigger` is the character typed when one of the manifest's
+    /// `trigger-characters` asked, none when the user typed a word or asked. Return a `Vec<CompletionItem>` or a
+    /// [`CompletionList`]. Answer within the provider deadline: a late answer is dropped.
+    pub fn completion<F, R>(&self, f: F)
+    where
+        F: AsyncFn(Context, Document, Position, Option<String>) -> Result<R> + 'static,
+        R: Into<CompletionList>,
+    {
+        let f = Rc::new(f);
+        let cb: guest::CompletionFn = Rc::new(move |ctx, doc, position, trigger| {
+            let f = f.clone();
+            Box::pin(async move { f(ctx, doc, position, trigger).await.map(Into::into) })
+        });
+        guest::with(|h| h.completion = Some(cb));
+    }
+
     /// A `codeyard://ext/<id>/…` link was opened: its path and query.
     pub fn on_uri<F>(&self, f: F)
     where

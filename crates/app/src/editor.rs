@@ -189,7 +189,7 @@ mod display_glue;
 mod edit_glue;
 #[path = "editor_ext.rs"]
 mod ext_glue;
-pub use ext_glue::{FormatJob, LineDecoration, SaveFormatter, tone_color};
+pub use ext_glue::{FormatJob, LineDecoration, SaveFormatter, lang as ext_lang, tone_color};
 #[path = "editor_find.rs"]
 mod find_glue;
 #[path = "editor_git.rs"]
@@ -271,6 +271,8 @@ struct Hover {
     diagnostics: Vec<crate::lsp::Diagnostic>,
     text: Option<String>,
     position: Point<Pixels>,
+    /// What extensions said about it: (extension, text) (editor_ext_lang.rs).
+    ext: Vec<(String, String)>,
 }
 
 /// "Peek Definition": a few lines around the target, shown as a card under the cursor.
@@ -1269,7 +1271,7 @@ impl EditorView {
     /// For the accessibility tree (a11y.rs): the shown suggestions (label, detail), at most `limit`, and the selected one.
     pub fn a11y_completion(&self, limit: usize) -> Option<(Vec<(String, Option<String>)>, usize)> {
         let c = self.completion.as_ref()?;
-        let rows = c.shown.iter().take(limit).map(|&i| (c.items[i].label.clone(), c.items[i].detail.clone())).collect();
+        let rows = c.shown.iter().take(limit).map(|&i| (c.items[i].label.clone(), c.items[i].shown_detail())).collect();
         Some((rows, c.selected))
     }
 

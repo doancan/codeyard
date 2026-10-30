@@ -134,8 +134,8 @@ keys are commands like any other (`rows.previous`, `rows.next`, `rows.first`, `r
 
 Right-click in the file tree for new file/folder, cut/copy/paste, rename, delete, copy path,
 favorites. Drag files and folders onto a folder to move them (an existing file is never
-overwritten). Deleting a local file moves it to the Trash (`"files.enableTrash": false` deletes
-permanently; on SSH hosts there is no Trash, so it asks). Right-click a tab for close others /
+overwritten). Deleting a file or folder deletes it permanently after asking; with
+`"files.enableTrash": true` local files go to the Trash instead (SSH hosts have no Trash). Right-click a tab for close others /
 to the right / saved, pin, copy path; drag tabs to reorder them or onto the other group.
 Right-click in the editor for go to definition / references, rename, cut/copy/paste,
 file history and blame. A single click in the tree opens a preview tab (italic) that the next
@@ -796,12 +796,15 @@ offered only in some situations, for example while a Rust file is open; it close
   `{ "toml": "you.taplo" }`, or `"lsp"` to keep the language server. If you type while it works, its answer is dropped,
   and a formatter that takes more than a second is skipped: the file is saved as it is.
 - *Code actions* in *Quick Fix…* (⌘.), next to the language server's.
+- *Hover and completion.* What an extension says about the word under the mouse (or *Editor: Show Hover*) shows in
+  the hover popup under the language server's, with the extension's id above it. Its completions join the list as
+  you type, with its id at the right of each item. An extension that takes more than a second is left out.
 - *Problems* in the Problems view and the editor, with the extension's id as their source, and *decorations*: a dot in
   the gutter, a tinted line or a note after the line, in theme colours.
 - *Tasks* in *Tasks: Run Task…*, which the extension runs itself when you pick one.
 
-Typing never waits for an extension. When one is disabled, uninstalled or crashes, its status items, problems and
-decorations go with it. The same works in SSH windows: the extension runs on your computer and sees the remote files
+Typing never waits for an extension. When one is disabled, uninstalled or crashes, its status items, problems,
+decorations, hover text and completion items go with it. The same works in SSH windows: the extension runs on your computer and sees the remote files
 through Codeyard.
 
 **Accounts.** An extension that declares `auth` can act as your GitHub account, or as an account at a service it

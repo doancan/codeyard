@@ -210,6 +210,19 @@ pub struct CompletionItem {
     pub doc: Option<String>,
     /// The server's original item for `completionItem/resolve` (only those carrying `data`).
     pub resolve: Option<std::sync::Arc<Value>>,
+    /// The code extension that offered it; `None` for the language server's or the document's.
+    pub source: Option<String>,
+}
+
+impl CompletionItem {
+    /// The detail with the extension that offered the item, as screen readers hear it.
+    pub fn shown_detail(&self) -> Option<String> {
+        match (&self.detail, &self.source) {
+            (d, None) => d.clone(),
+            (None, Some(s)) => Some(s.clone()),
+            (Some(d), Some(s)) => Some(format!("{d} · {s}")),
+        }
+    }
 }
 
 /// Words in the document when there is no language server (VS Code `editor.wordBasedSuggestions`).
@@ -254,6 +267,7 @@ pub fn buffer_words(text: &str, cursor: usize, limit: usize) -> Vec<CompletionIt
             extra: Vec::new(),
             doc: None,
             resolve: None,
+            source: None,
         })
         .collect()
 }
@@ -296,6 +310,7 @@ pub fn parse_completions(v: &Value) -> (Vec<CompletionItem>, bool) {
                 extra,
                 doc: it.get("documentation").and_then(|d| hover_text(&serde_json::json!({ "contents": d }))).filter(|d| !d.trim().is_empty()),
                 resolve: (idx < 1000).then(|| it.get("data").map(|_| std::sync::Arc::new(it.clone()))).flatten(),
+                source: None,
             }
         })
         .collect();

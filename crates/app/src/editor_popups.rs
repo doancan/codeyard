@@ -204,6 +204,8 @@ impl EditorView {
                             .justify_end()
                             .children(it.detail.clone()),
                     )
+                    // An extension's item names the extension.
+                    .children(it.source.clone().map(|s| div().flex_none().text_size(px(font_size - 2.)).text_color(c(p.text_muted)).child(s)))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.on(move |e, _, window, cx| {
@@ -405,6 +407,15 @@ impl EditorView {
                     .text_size(px(font_size - 1.))
                     .children(diag_rows)
                     .when_some(h.text.clone(), |d, t| d.child(div().font_family(font.clone()).text_color(c(p.text)).child(t)))
+                    // Each extension's text under its name, after the language server's.
+                    .children(h.ext.iter().map(|(ext, t)| {
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(theme::SPACE[1]))
+                            .child(div().text_size(px(font_size - 2.)).text_color(c(p.text_muted)).child(ext.clone()))
+                            .child(div().font_family(font.clone()).text_color(c(p.text)).child(t.clone()))
+                    }))
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .into_any_element(),
             );

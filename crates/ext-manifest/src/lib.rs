@@ -376,7 +376,7 @@ pub struct StatusItem {
     pub command: Option<String>,
 }
 
-/// A provider for some languages: `[[formatters]]`, `[[code-actions]]`, and with an id `[[diagnostics]]`,
+/// A provider for some languages: `[[formatters]]`, `[[code-actions]]`, `[[hover]]`, and with an id `[[diagnostics]]`,
 /// `[[decorations]]`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Provider {
@@ -387,6 +387,20 @@ pub struct Provider {
 }
 
 impl Provider {
+    pub fn handles(&self, language: &str) -> bool {
+        self.languages.iter().any(|l| l == language)
+    }
+}
+
+/// `[[completion]]`: completions for some languages.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CompletionProvider {
+    pub languages: Vec<String>,
+    /// Characters that ask for completions when typed (`.`, `:`), besides typing a word.
+    pub trigger_characters: Vec<char>,
+}
+
+impl CompletionProvider {
     pub fn handles(&self, language: &str) -> bool {
         self.languages.iter().any(|l| l == language)
     }
@@ -414,6 +428,10 @@ pub struct Contributions {
     pub decorations: Vec<Provider>,
     /// Ids (full) of the extension's task providers.
     pub tasks: Vec<String>,
+    #[serde(default)]
+    pub hover: Vec<Provider>,
+    #[serde(default)]
+    pub completion: Vec<CompletionProvider>,
 }
 
 impl Contributions {
@@ -427,13 +445,17 @@ impl Contributions {
             || !self.diagnostics.is_empty()
             || !self.decorations.is_empty()
             || !self.tasks.is_empty()
+            || !self.hover.is_empty()
+            || !self.completion.is_empty()
     }
 
     /// Languages a provider of this extension handles, each once.
     pub fn provider_languages(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
-        for p in self.formatters.iter().chain(&self.code_actions).chain(&self.diagnostics).chain(&self.decorations) {
-            for l in &p.languages {
+        let completion = self.completion.iter().map(|c| &c.languages);
+        let all = self.formatters.iter().chain(&self.code_actions).chain(&self.diagnostics).chain(&self.decorations).chain(&self.hover);
+        for languages in all.map(|p| &p.languages).chain(completion) {
+            for l in languages {
                 if !out.contains(l) {
                     out.push(l.clone());
                 }

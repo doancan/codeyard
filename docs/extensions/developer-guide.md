@@ -83,7 +83,7 @@ The same goes for other no-code contributions: `keymap-preset`, `keybindings`, `
 
 ## Your first command
 
-Commands, views, formatters and code actions need code, which `cyx` builds into a WebAssembly component. Write it in TypeScript (you need Node.js 22.18 or newer) or in Rust (you need Rust and `rustup target add wasm32-wasip2`). Both SDKs are pre-release and have the same API; the full guides are [typescript.md](typescript.md) and [commands.md](commands.md).
+Commands, views, formatters, code actions, hover and completion need code, which `cyx` builds into a WebAssembly component. Write it in TypeScript (you need Node.js 22.18 or newer) or in Rust (you need Rust and `rustup target add wasm32-wasip2`). Both SDKs are pre-release and have the same API; the full guides are [typescript.md](typescript.md) and [commands.md](commands.md).
 
 ```sh
 cyx new command hello --lang ts   # or: cyx new view hello --lang ts; leave out --lang ts for Rust
@@ -204,6 +204,13 @@ languages = ["rust"]            # languages.set-decorations: gutter, line or aft
 
 [[tasks]]
 id = "deployments"              # request.provide-tasks lists them, request.run-task runs one
+
+[[hover]]
+languages = ["toml"]            # request.hover; shown in the hover popup next to the language server's
+
+[[completion]]
+languages = ["toml"]            # request.completion; items join the language server's list
+trigger-characters = ["."]      # optional: these characters ask too, besides typing a word
 ```
 
 A file-tree menu entry passes the file's URI to the command as its argument, and a view-title entry the view's full id
@@ -214,6 +221,9 @@ the user picks it, then its `command` runs; an action with neither gets `request
 starts when a file of one of these languages opens or a provider is first asked. Providers have one second
 (`PROVIDER_DEADLINE_MILLIS`) to answer, plus the start-up time on the first request; a later
 answer is dropped and noted in your log, and a request about a document is cancelled as soon as the user types in it.
+A completion request lasts while the user types the same word (your items are filtered as the word goes on) and is
+cancelled when the word is left or the list closed; a hover request is cancelled when the mouse moves to another word.
+Your hover text and items are shown under your extension's id. Over SSH you get the document as the editor has it.
 A task runs in your extension: start processes with `process.spawn` and show progress. Everything you showed goes when
 the user disables or uninstalls the extension, or when it crashes.
 

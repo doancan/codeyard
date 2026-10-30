@@ -59,6 +59,10 @@ pub struct RawManifest {
     pub decorations: Vec<S<RawNamedLanguages>>,
     #[serde(default)]
     pub tasks: Vec<S<RawTasks>>,
+    #[serde(default)]
+    pub hover: Vec<S<RawLanguages>>,
+    #[serde(default)]
+    pub completion: Vec<S<RawCompletion>>,
 }
 
 #[derive(Deserialize)]
@@ -226,7 +230,7 @@ pub struct RawStatusItem {
     pub command: Option<S<String>>,
 }
 
-/// `[[formatters]]`, `[[code-actions]]`.
+/// `[[formatters]]`, `[[code-actions]]`, `[[hover]]`.
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct RawLanguages {
@@ -245,4 +249,13 @@ pub struct RawNamedLanguages {
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct RawTasks {
     pub id: S<String>,
+}
+
+/// `[[completion]]`.
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawCompletion {
+    pub languages: Vec<S<String>>,
+    #[serde(default)]
+    pub trigger_characters: Vec<S<String>>,
 }
