@@ -228,6 +228,36 @@ fn an_unrelated_change_does_not_redraw_a_view_window(cx: &mut gpui::TestAppConte
     assert_eq!(renders(vcx), before, "typing in the main window did not draw the view again");
 }
 
+/// A view window holds its workbench weakly: once the main window and the view window are gone, the workbench is
+/// released (and, with it, everything it owns).
+#[gpui::test]
+fn closing_the_windows_releases_the_workbench(cx: &mut gpui::TestAppContext) {
+    let (wb, vcx) = setup(cx);
+    wb.update_in(vcx, |wb, window, cx| {
+        wb.show_scm(&ShowScm, window, cx);
+        wb.view_into_new_window(window, cx);
+        wb.show_explorer(&ShowExplorer, window, cx);
+        wb.view_into_new_window(window, cx);
+    });
+    vcx.run_until_parked();
+    let handles: Vec<gpui::AnyWindowHandle> = wb.read_with(vcx, |wb, _| wb.chrome.view_windows.iter().map(|w| w.window.into()).collect());
+    assert_eq!(handles.len(), 2);
+    let weak = wb.downgrade();
+    drop(wb);
+    vcx.update(|window, _| window.remove_window());
+    let app: &mut gpui::TestAppContext = vcx;
+    app.run_until_parked();
+    // Closing the main window alone releases the workbench, which closes its view windows: nothing in them keeps it.
+    assert!(weak.upgrade().is_none(), "the workbench was released with its window");
+    assert!(app.update(|cx| cx.windows().is_empty()), "its view windows closed with it");
+    for handle in handles {
+        // Closing one that is already gone is harmless.
+        app.update(|cx| handle.update(cx, |_, window, _| window.remove_window()).ok());
+    }
+    app.run_until_parked();
+    assert!(weak.upgrade().is_none(), "the workbench was released");
+}
+
 #[test]
 fn saved_view_windows_are_versioned_and_bounded() {
     let saved = SavedViewWindows::parse(r#"{"version":1,"windows":[{"view":"scm","secondary":true,"at":[1,2,300,400]},{"view":"nope"},{"view":"scm"}]}"#)
