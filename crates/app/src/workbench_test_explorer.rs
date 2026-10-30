@@ -532,7 +532,12 @@ impl Workbench {
                         "test-rows",
                         rows.len(),
                         cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
-                            range.filter_map(|ix| Some(this.test_row(ix, rows.get(ix)?, &p, cx))).collect()
+                            range
+                                .filter_map(|ix| {
+                                    let row = this.test_row(ix, rows.get(ix)?, &p, cx);
+                                    Some(a11y::framed_row(a11y::RowFrame::Test, ix, row, cx))
+                                })
+                                .collect()
                         }),
                     )
                     .track_scroll(t.scroll.clone())

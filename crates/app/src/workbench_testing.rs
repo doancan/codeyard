@@ -792,7 +792,7 @@ impl Workbench {
         if install {
             self.confirm_consent(window, cx);
         } else {
-            self.cancel_consent(cx);
+            self.cancel_consent(window, cx);
         }
     }
 

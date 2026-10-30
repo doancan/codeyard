@@ -188,7 +188,7 @@ impl Workbench {
         }
     }
 
-    fn open_host_menu(&mut self, alias: &str, group: Group, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_host_menu(&mut self, alias: &str, group: Group, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
         let connected = self.connected_to(alias);
         let mut items = vec![
             MenuItem::new(if connected { crate::i18n::t("Open Folder…") } else { crate::i18n::t("Connect in Current Window") }),
@@ -260,7 +260,12 @@ impl Workbench {
                         "remote-rows",
                         rows.len(),
                         cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
-                            range.filter_map(|ix| Some(this.remote_row(ix, rows.get(ix)?, &p, cx))).collect()
+                            range
+                                .filter_map(|ix| {
+                                    let row = this.remote_row(ix, rows.get(ix)?, &p, cx);
+                                    Some(a11y::framed_row(a11y::RowFrame::Remote, ix, row, cx))
+                                })
+                                .collect()
                         }),
                     )
                     .track_scroll(self.remote.view.scroll.clone())

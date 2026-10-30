@@ -268,7 +268,14 @@ impl Workbench {
         }
     }
 
-    fn open_variable_menu(&mut self, parent: i64, name: String, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(in crate::workbench) fn open_variable_menu(
+        &mut self,
+        parent: i64,
+        name: String,
+        position: gpui::Point<gpui::Pixels>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let stopped = self.dbg.cur().is_some_and(|d| matches!(d.status, DebugStatus::Stopped(_)));
         let can_set = self.dbg.cur().and_then(|d| d.session.as_ref()).is_some_and(|s| s.supports("supportsSetVariable") || s.supports("supportsSetExpression"));
         let items = vec![
@@ -282,7 +289,7 @@ impl Workbench {
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);
     }
 
-    fn open_frame_menu(&mut self, index: usize, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(in crate::workbench) fn open_frame_menu(&mut self, index: usize, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
         let can_restart = self
             .dbg
             .cur()
@@ -302,7 +309,7 @@ impl Workbench {
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);
     }
 
-    fn open_breakpoint_menu(
+    pub(in crate::workbench) fn open_breakpoint_menu(
         &mut self,
         path: String,
         line: usize,
@@ -552,10 +559,12 @@ impl Workbench {
                         let reference = r.reference;
                         let watch = r.watch;
                         let group = SharedString::from(format!("{id}-{ix}"));
+                        let frame = a11y::row_frame(if watch.is_some() { a11y::RowFrame::DebugWatch } else { a11y::RowFrame::DebugVariable }, ix, cx);
                         if let Some(paged) = r.more {
                             return Some(
                                 div()
                                     .id((id, ix))
+                                    .relative()
                                     .h(px(layout::ROW_H))
                                     .w_full()
                                     .flex()
@@ -565,6 +574,7 @@ impl Workbench {
                                     .cursor_pointer()
                                     .hover(|d| d.bg(c(p.surface_hover)))
                                     .child(r.name.clone())
+                                    .child(frame)
                                     .on_click(cx.listener(move |this, _, _, cx| this.load_more_variables(paged, cx)))
                                     .into_any_element(),
                             );
@@ -613,6 +623,7 @@ impl Workbench {
                                         )),
                                     ))
                                 })
+                                .child(frame)
                                 .when(reference > 0, |d| d.cursor_pointer().on_click(cx.listener(move |this, _, _, cx| this.toggle_variable(reference, cx))))
                                 .when_some(menu, |d, (parent, name)| {
                                     d.on_mouse_down(
@@ -648,6 +659,8 @@ impl Workbench {
                         let row = rows.get(ix)?;
                         let base = div()
                             .id(("dbg-stack", ix))
+                            .relative()
+                            .child(a11y::row_frame(a11y::RowFrame::DebugStack, ix, cx))
                             .h(px(layout::ROW_H))
                             .w_full()
                             .flex()
@@ -778,6 +791,7 @@ impl Workbench {
                             .id(("dbg-bp", ix))
                             .group(group.clone())
                             .relative()
+                            .child(a11y::row_frame(a11y::RowFrame::DebugBreakpoint, ix, cx))
                             .h(px(layout::ROW_H))
                             .w_full()
                             .flex()

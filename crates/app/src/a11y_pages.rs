@@ -3,6 +3,7 @@
 //! its row by what it is (setting key, command, server port and its forward), never only by position, so an action from
 //! an outdated tree does nothing when that row changed or went away.
 
+use super::row_menus::{MenuRow, add_menu, menu_request};
 use super::*;
 use crate::settings_page::{AccessControl, AccessPage, SettingsEvent};
 use crate::workbench::ports_glue::{RowState, port_rows};
@@ -259,7 +260,7 @@ impl ShortcutsSnap {
 }
 
 impl PortsSnap {
-    fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>) -> NodeId {
+    fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>, geometry: &Geometry) -> NodeId {
         let mut kids = Vec::new();
         if let Some((text, _)) = &self.field {
             let mut field = Node::new(Role::TextInput);
@@ -300,6 +301,8 @@ impl PortsSnap {
                 add(3, t("Stop Forwarding"));
             }
             n.set_children(buttons);
+            add_menu(nodes, &mut n, MenuRow::Port, i, &row.label);
+            geometry.apply_row(RowFrame::Port, i, &mut n);
             nodes.push((NodeId(base), n));
         }
         let mut list = Node::new(Role::List);
@@ -320,10 +323,10 @@ pub(crate) struct PagesSnap {
 }
 
 impl PagesSnap {
-    pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>, kids: &mut Vec<NodeId>) {
+    pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>, kids: &mut Vec<NodeId>, geometry: &Geometry) {
         kids.extend(self.settings.as_ref().map(|s| s.append_tree(nodes)));
         kids.extend(self.shortcuts.as_ref().map(|s| s.append_tree(nodes)));
-        kids.extend(self.ports.as_ref().map(|p| p.append_tree(nodes)));
+        kids.extend(self.ports.as_ref().map(|p| p.append_tree(nodes, geometry)));
     }
 
     /// The focused field of these views, if one has focus.
@@ -408,7 +411,7 @@ impl Workbench {
             self.a11y_settings_action(req, last.settings.as_ref(), window, cx);
         } else if id == SHORTCUTS_SEARCH || (SHORTCUT_ROW..PORT_ROW).contains(&id.0) {
             self.a11y_shortcuts_action(req, last.shortcuts.as_ref(), window, cx);
-        } else if id == PORTS_FIELD || (PORT_ROW..PAGE_ROW + BLOCK).contains(&id.0) {
+        } else if id == PORTS_FIELD || (PORT_ROW..PAGE_ROW + BLOCK).contains(&id.0) || menu_request(req, MenuRow::Port, |_| None).is_some() {
             self.a11y_ports_action(req, last.ports.as_ref(), window, cx);
         } else {
             return false;
@@ -483,6 +486,11 @@ impl Workbench {
             }
             return;
         }
+        let row_index = |id: u64| (id >= PORT_ROW && (id - PORT_ROW).is_multiple_of(PORT_IDS)).then(|| ((id - PORT_ROW) / PORT_IDS) as usize);
+        if let Some(i) = menu_request(req, MenuRow::Port, row_index) {
+            self.a11y_port_menu(last.rows.get(i), window, cx);
+            return;
+        }
         let (index, part) = (((req.target_node.0 - PORT_ROW) / PORT_IDS) as usize, (req.target_node.0 - PORT_ROW) % PORT_IDS);
         let Some(old) = last.rows.get(index) else { return };
         // The row of the same server port, still showing the same forward.
@@ -499,6 +507,19 @@ impl Workbench {
             3 if row.forward.is_some() => self.stop_forward(row.port, cx),
             4 if row.listening_only => self.forward_port(row.port, cx),
             _ => {}
+        }
+    }
+
+    /// The row's menu, as a right click on it opens it: only for the same server port, still showing the same forward
+    /// in the same state (the menu's items depend on it).
+    fn a11y_port_menu(&mut self, old: Option<&PortSnap>, window: &mut Window, cx: &mut Context<Self>) {
+        let (Some(old), Some(alias)) = (old, self.ssh_alias()) else { return };
+        let now = self.a11y_ports(window, cx);
+        let Some(i) = now.rows.iter().position(|r| r == old) else { return };
+        let rows = port_rows(&self.ports.set, &self.ports.listening, &alias);
+        if let Some(row) = rows.get(i).filter(|r| r.port == old.port) {
+            let at = self.row_menu_anchor(MenuRow::Port, i, window);
+            self.open_port_menu(row, at, window, cx);
         }
     }
 }

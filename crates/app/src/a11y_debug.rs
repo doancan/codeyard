@@ -4,8 +4,10 @@
 //! `select_frame`, `toggle_variable`, `set_breakpoint_enabled`, …). A row is named by what it shows (session id,
 //! variable reference, frame, breakpoint place), so an action from an outdated tree does nothing when that row changed.
 
+use super::super::row_menus::{MenuRow, add_menu, menu_request};
 use super::*;
 use crate::debug_model::{BpRow, Verified};
+use crate::workbench::a11y::{Geometry, RowFrame};
 use crate::workbench::debug::{DebugStatus, StackRow, VarRow, stack_rows, status_text, variable_rows};
 
 const DEBUG: NodeId = NodeId(70);
@@ -136,7 +138,7 @@ fn bp_detail(meta: &crate::debug_model::BpMeta) -> String {
 }
 
 impl DebugViewSnap {
-    fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>) -> NodeId {
+    fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>, geometry: &Geometry) -> NodeId {
         let start = self.start.clone().unwrap_or_else(|| t("Auto-detect project").into());
         let mut kids = vec![push_button(nodes, DEBUG_START, t("Start Debugging (F5)"), Some(start), true)];
         if !self.configs.is_empty() {
@@ -184,12 +186,17 @@ impl DebugViewSnap {
             if let Some(ty) = &r.ty {
                 n.set_description(ty.clone());
             }
+            geometry.apply_row(RowFrame::DebugVariable, i, &mut n);
             if r.more.is_some() {
                 n.add_action(Action::Click);
             } else if r.reference > 0 {
                 n.set_expanded(r.open);
                 n.add_action(Action::Click);
                 n.add_action(if r.open { Action::Collapse } else { Action::Expand });
+            }
+            // Variables (not scopes) have the view's menu.
+            if r.parent != 0 && r.more.is_none() {
+                add_menu(nodes, &mut n, MenuRow::Variable, i, &r.name);
             }
             nodes.push((id, n));
             ids.push(id);
@@ -210,6 +217,7 @@ impl DebugViewSnap {
             n.set_label(expr.clone());
             n.set_value(value.clone());
             n.set_children(vec![push_button(nodes, NodeId(id.0 + 1), t("Remove Expression"), Some(expr.clone()), true)]);
+            geometry.apply_row(RowFrame::DebugWatch, i, &mut n);
             nodes.push((id, n));
             ids.push(id);
         }
@@ -247,6 +255,7 @@ impl DebugViewSnap {
                     n.set_level(3);
                     n.set_selected(*current);
                     n.add_action(Action::Click);
+                    add_menu(nodes, &mut n, MenuRow::Frame, i, name);
                 }
                 StackRow::LoadMore => {
                     n.set_label(t("Load More Stack Frames"));
@@ -258,6 +267,7 @@ impl DebugViewSnap {
                     n.set_label(text.clone());
                 }
             }
+            geometry.apply_row(RowFrame::DebugStack, i, &mut n);
             nodes.push((id, n));
             ids.push(id);
         }
@@ -287,7 +297,11 @@ impl DebugViewSnap {
                 n.set_description(detail.clone());
             }
             n.add_action(Action::Click);
-            n.set_children(vec![push_button(nodes, NodeId(id.0 + 1), t("Remove Breakpoint"), Some(label), true)]);
+            n.set_children(vec![push_button(nodes, NodeId(id.0 + 1), t("Remove Breakpoint"), Some(label.clone()), true)]);
+            if matches!(bp, BpSnap::Line { .. }) {
+                add_menu(nodes, &mut n, MenuRow::Breakpoint, i, &label);
+            }
+            geometry.apply_row(RowFrame::DebugBreakpoint, i, &mut n);
             nodes.push((id, n));
             ids.push(id);
         }
@@ -331,8 +345,8 @@ impl ToolbarSnap {
 }
 
 impl DebugSnap {
-    pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>, kids: &mut Vec<NodeId>) {
-        kids.extend(self.view.as_ref().map(|v| v.append_tree(nodes)));
+    pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>, kids: &mut Vec<NodeId>, geometry: &Geometry) {
+        kids.extend(self.view.as_ref().map(|v| v.append_tree(nodes, geometry)));
         kids.extend(self.toolbar.as_ref().map(|b| b.append_tree(nodes)));
     }
 }
@@ -403,7 +417,8 @@ impl Workbench {
             }
             return true;
         }
-        if !(FIXED[..12].contains(&id) || (DEBUG_ROW..DEBUG_ROW + BLOCK).contains(&id.0)) {
+        let menu_button = [MenuRow::Variable, MenuRow::Frame, MenuRow::Breakpoint].into_iter().any(|k| menu_request(req, k, |_| None).is_some());
+        if !(FIXED[..12].contains(&id) || (DEBUG_ROW..DEBUG_ROW + BLOCK).contains(&id.0) || menu_button) {
             return false;
         }
         let Some(old) = last.view.as_ref() else { return true };
@@ -411,6 +426,9 @@ impl Workbench {
             return true;
         }
         let now = self.a11y_debug_view(cx);
+        if self.a11y_debug_menu(req, old, &now, window, cx) {
+            return true;
+        }
         let click = req.action == Action::Click;
         match id {
             // Start only what the tree said Start would start.
@@ -458,6 +476,33 @@ impl Workbench {
                 }
             }
             _ => {}
+        }
+        true
+    }
+
+    /// A row menu (`ShowContextMenu` or "More Actions…"): opened only for the same variable, frame or breakpoint, still at
+    /// that place in the same session, as a right click on the row opens it.
+    fn a11y_debug_menu(&mut self, req: &ActionRequest, old: &DebugViewSnap, now: &DebugViewSnap, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let rows = |from: u64, to: u64| move |id: u64| (from..to).contains(&id).then(|| (id - from) as usize);
+        let same_session = old.session.as_ref().map(|s| s.0) == now.session.as_ref().map(|s| s.0);
+        if let Some(i) = menu_request(req, MenuRow::Variable, rows(VAR_ROW, WATCH_ROW)) {
+            if let Some(r) = old.vars.get(i).filter(|r| same_session && r.parent != 0 && r.more.is_none() && now.vars.get(i) == Some(*r)) {
+                let at = self.row_menu_anchor(MenuRow::Variable, i, window);
+                self.open_variable_menu(r.parent, r.name.clone(), at, window, cx);
+            }
+        } else if let Some(i) = menu_request(req, MenuRow::Frame, rows(STACK_ROW, BP_ROW)) {
+            if let Some(StackRow::Frame { index, .. }) = old.stack.get(i).filter(|r| same_session && now.stack.get(i) == Some(*r)) {
+                let at = self.row_menu_anchor(MenuRow::Frame, i, window);
+                self.open_frame_menu(*index, at, window, cx);
+            }
+        } else if let Some(i) = menu_request(req, MenuRow::Breakpoint, |id| rows(BP_ROW, DEBUG_ROW + BLOCK)(id).filter(|k| k.is_multiple_of(2)).map(|k| k / 2))
+        {
+            if let Some(BpSnap::Line { path, line, enabled, .. }) = old.bps.get(i).filter(|b| now.bps.get(i) == Some(*b)) {
+                let at = self.row_menu_anchor(MenuRow::Breakpoint, i, window);
+                self.open_breakpoint_menu(path.clone(), *line, !enabled, at, window, cx);
+            }
+        } else {
+            return false;
         }
         true
     }

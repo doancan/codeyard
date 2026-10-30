@@ -4,8 +4,10 @@
 //! row by what it is (test file and id, host alias, menu and item), so an action from an outdated tree does nothing
 //! when that row changed or went away.
 
+use super::row_menus::{MenuRow, add_menu, menu_request};
 use super::*;
 use crate::testexp::{self, Kind, Outcome, Row};
+use crate::workbench::a11y::{Geometry, RowFrame};
 use crate::workbench::remote_glue::RemoteMenuCmd;
 use crate::workbench::remote_glue::tree::{Group, HostStatus, RemoteRow};
 
@@ -112,7 +114,7 @@ fn wants_toggle(action: Action, open: bool) -> bool {
 }
 
 impl TestingSnap {
-    fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>) -> NodeId {
+    fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>, geometry: &Geometry) -> NodeId {
         let mut kids = Vec::new();
         let mut push = |nodes: &mut Vec<(NodeId, Node)>, id: NodeId, label: &str| {
             let mut b = Node::new(Role::Button);
@@ -176,6 +178,7 @@ impl TestingSnap {
                     n.add_action(Action::Click);
                 }
             }
+            geometry.apply_row(RowFrame::Test, i, &mut n);
             nodes.push((NodeId(base), n));
             ids.push(NodeId(base));
         }
@@ -190,7 +193,7 @@ impl TestingSnap {
     }
 }
 
-fn remote_tree(rows: &[RemoteRow], nodes: &mut Vec<(NodeId, Node)>) -> NodeId {
+fn remote_tree(rows: &[RemoteRow], nodes: &mut Vec<(NodeId, Node)>, geometry: &Geometry) -> NodeId {
     let mut ids = Vec::new();
     for (i, row) in rows.iter().enumerate() {
         let base = REMOTE_ROW + i as u64 * REMOTE_IDS;
@@ -229,6 +232,7 @@ fn remote_tree(rows: &[RemoteRow], nodes: &mut Vec<(NodeId, Node)>) -> NodeId {
                     buttons.push(button(nodes, base + 3, t("Disconnect"), alias));
                 }
                 n.set_children(buttons);
+                add_menu(nodes, &mut n, MenuRow::Host, i, alias);
             }
             RemoteRow::Folder { path, current, .. } => {
                 n.set_label(crate::ui::file_name(path).to_string());
@@ -271,6 +275,7 @@ fn remote_tree(rows: &[RemoteRow], nodes: &mut Vec<(NodeId, Node)>) -> NodeId {
                 n.set_level(2);
             }
         }
+        geometry.apply_row(RowFrame::Remote, i, &mut n);
         nodes.push((NodeId(base), n));
         ids.push(NodeId(base));
     }
@@ -316,10 +321,10 @@ impl MenuSnap {
 }
 
 impl SideSnap {
-    pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>, kids: &mut Vec<NodeId>) {
-        self.debug.append_tree(nodes, kids);
-        kids.extend(self.testing.as_ref().map(|s| s.append_tree(nodes)));
-        kids.extend(self.remote.as_ref().map(|rows| remote_tree(rows, nodes)));
+    pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>, kids: &mut Vec<NodeId>, geometry: &Geometry) {
+        self.debug.append_tree(nodes, kids, geometry);
+        kids.extend(self.testing.as_ref().map(|s| s.append_tree(nodes, geometry)));
+        kids.extend(self.remote.as_ref().map(|rows| remote_tree(rows, nodes, geometry)));
         kids.extend(self.menu.as_ref().map(|m| m.append_tree(nodes)));
     }
 
@@ -414,7 +419,7 @@ impl Workbench {
         let id = req.target_node;
         if FIXED[..7].contains(&id) || (TEST_ROW..TEST_ROW + BLOCK).contains(&id.0) {
             self.a11y_testing_action(req, last.testing.as_ref(), window, cx);
-        } else if id == REMOTE || (REMOTE_ROW..REMOTE_ROW + BLOCK).contains(&id.0) {
+        } else if id == REMOTE || (REMOTE_ROW..REMOTE_ROW + BLOCK).contains(&id.0) || menu_request(req, MenuRow::Host, |_| None).is_some() {
             self.a11y_remote_action(req, last.remote.as_deref(), window, cx);
         } else if id == MENU || (MENU_ITEM..MENU_ITEM + BLOCK).contains(&id.0) {
             self.a11y_menu_action(req, last.menu.as_ref(), cx);
@@ -490,6 +495,18 @@ impl Workbench {
 
     fn a11y_remote_action(&mut self, req: &ActionRequest, last: Option<&[RemoteRow]>, window: &mut Window, cx: &mut Context<Self>) {
         let Some(old) = last.filter(|_| self.chrome.panel == Some(Panel::Remote)) else { return };
+        let row_index =
+            |id: u64| (REMOTE_ROW..REMOTE_ROW + BLOCK).contains(&id).then(|| (id - REMOTE_ROW) / REMOTE_IDS).filter(|i| i * REMOTE_IDS + REMOTE_ROW == id);
+        if let Some(i) = menu_request(req, MenuRow::Host, |id| row_index(id).map(|i| i as usize)) {
+            // The same host at the same place, still connected or not as the tree showed it (the menu offers Disconnect
+            // only while connected).
+            let now = self.remote_rows(cx);
+            if let Some(RemoteRow::Host { alias, group, .. }) = old.get(i).filter(|r| now.get(i) == Some(*r)) {
+                let at = self.row_menu_anchor(MenuRow::Host, i, window);
+                self.open_host_menu(alias, *group, at, window, cx);
+            }
+            return;
+        }
         if req.target_node.0 < REMOTE_ROW {
             return;
         }

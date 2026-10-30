@@ -28,6 +28,8 @@ const _: () = {
         super::problems_access::TEST_ROW,
         super::problems_access::REMOTE_ROW,
         super::problems_access::MENU_ITEM,
+        super::problems_access::ROW_MENU,
+        super::problems_access::DIALOG_LINE,
         ROW_BASE,
     ];
     let mut i = 1;
@@ -93,6 +95,7 @@ const _: () = {
         &super::problems_access::PAGE_FIXED,
         &super::problems_access::DEBUG_FIXED,
         &super::problems_access::SIDE_FIXED,
+        &super::problems_access::DIALOG_FIXED,
     ]);
     // Rows are ROW_BASE | 32-bit hash; editor and terminal runs sit above them.
     assert!(ROW_BASE + 0xffff_ffff < RUN_BASE && RUN_BASE + 0xffff_ffff < TERM_RUN_BASE);

@@ -50,6 +50,8 @@ pub(super) struct ExtViewState {
     pub(super) pending: Option<Pending>,
     /// Install and Cancel on the consent sheet, so the safe answer can take the keyboard first.
     pub(super) consent_focus: Option<(FocusHandle, FocusHandle)>,
+    /// What had the keyboard when the sheet opened; it gets it back when the sheet is answered.
+    pub(super) consent_return: Option<FocusHandle>,
     pub(super) tab: super::market_glue::ExtTab,
     pub(super) market: super::market_glue::MarketState,
     pub(super) updates: super::updates_glue::UpdateState,
@@ -391,28 +393,41 @@ impl Workbench {
     fn show_consent(&mut self, pending: Pending, window: &mut Window, cx: &mut Context<Self>) {
         let high = high_risk_line(&pending.manifest).is_some() || !pending.warnings.is_empty();
         let (install, cancel) = self.cfg.exts.consent_focus.get_or_insert_with(|| (cx.focus_handle().tab_stop(true), cx.focus_handle().tab_stop(true))).clone();
+        // A sheet that replaces another keeps the first one's place to return to.
+        if self.cfg.exts.pending.is_none() {
+            self.cfg.exts.consent_return = window.focused(cx).filter(|f| *f != install && *f != cancel);
+        }
         self.cfg.exts.pending = Some(pending);
         self.open_extension_page(cx);
         // Install is never the default answer for a High-risk set: Enter on the sheet cancels.
         window.focus(if high { &cancel } else { &install });
     }
 
-    pub(super) fn cancel_consent_key(&mut self, _: &CancelExtensionConsent, _: &mut Window, cx: &mut Context<Self>) {
-        self.cancel_consent(cx);
+    pub(super) fn cancel_consent_key(&mut self, _: &CancelExtensionConsent, window: &mut Window, cx: &mut Context<Self>) {
+        self.cancel_consent(window, cx);
     }
 
-    pub(super) fn cancel_consent(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn cancel_consent(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.cfg.exts.pending = None;
         if self.cfg.exts.selected.is_none() && self.cfg.exts.market.page.is_none() {
             self.close_page(cx);
         }
+        self.return_consent_focus(window);
         cx.notify();
+    }
+
+    /// The keyboard goes back to what had it before the sheet (Escape, Cancel and Install alike).
+    fn return_consent_focus(&mut self, window: &mut Window) {
+        if let Some(f) = self.cfg.exts.consent_return.take() {
+            window.focus(&f);
+        }
     }
 
     /// "Install" on the consent sheet.
     pub(super) fn confirm_consent(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(store) = self.extension_store(cx) else { return };
         let Some(p) = self.cfg.exts.pending.take() else { return };
+        self.return_consent_focus(window);
         match store.install(&p.bytes, p.source) {
             Ok(i) => {
                 self.cfg.exts.selected = Some(i.manifest.id.to_string());

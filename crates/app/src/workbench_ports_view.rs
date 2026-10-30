@@ -5,7 +5,7 @@
 use gpui::{AnyElement, Context, MouseButton, SharedString, div, prelude::*, px};
 use host::forward::LocalBind;
 
-use super::super::{MenuCmd, MenuTarget, Workbench, center};
+use super::super::{MenuCmd, MenuTarget, Workbench, a11y, center};
 use crate::menu::MenuItem;
 use crate::port_forwards::{ForwardSet, ForwardState, Origin, Protocol, failure_text};
 use crate::ports::ListeningPort;
@@ -108,7 +108,13 @@ const W_ACTIONS: f32 = 104.;
 
 impl Workbench {
     /// Right-click or "…" on a row.
-    fn open_port_menu(&mut self, row: &PortRow, position: gpui::Point<gpui::Pixels>, window: &mut gpui::Window, cx: &mut Context<Self>) {
+    pub(in crate::workbench) fn open_port_menu(
+        &mut self,
+        row: &PortRow,
+        position: gpui::Point<gpui::Pixels>,
+        window: &mut gpui::Window,
+        cx: &mut Context<Self>,
+    ) {
         let active = row.state == RowState::Active;
         if row.state == RowState::Listening {
             let items = vec![MenuItem::new(crate::i18n::t("Forward Port"))];
@@ -283,7 +289,12 @@ impl Workbench {
                 "port-rows",
                 rows.len(),
                 cx.processor(move |this, range: std::ops::Range<usize>, _window, cx| {
-                    range.filter_map(|ix| Some(this.port_row(ix, rows.get(ix)?, &p, cx))).collect()
+                    range
+                        .filter_map(|ix| {
+                            let row = this.port_row(ix, rows.get(ix)?, &p, cx);
+                            Some(a11y::framed_row(a11y::RowFrame::Port, ix, row, cx))
+                        })
+                        .collect()
                 }),
             )
             .size_full();
