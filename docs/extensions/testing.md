@@ -44,6 +44,8 @@ mod tests {
 | `host.view_event("view", json!(…))` | sends an event to a view |
 | `host.format(doc, range, options)` | runs the formatter |
 | `host.code_actions(doc, range, diagnostics)`, `host.run_code_action(id)` | asks the code action provider, runs a chosen action |
+| `host.code_lenses(doc, range)`, `host.resolve_code_lens(doc, lens)`, `host.click_code_lens(&lens)` | asks for the lenses of the lines in `range`, resolves one, runs a lens's command with its arguments |
+| `host.inlay_hints(doc, range)` | asks for the inlay hints of the lines in `range` |
 | `host.change_setting(key, json)` | changes a setting and tells the extension |
 | `host.advance(Duration::from_secs(90))` | moves the virtual clock, firing timers that fall due |
 | `host.cancel_progress(id)` | presses Cancel on a progress notice |

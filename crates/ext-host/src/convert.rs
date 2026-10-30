@@ -183,11 +183,29 @@ impl From<g::responses::Response> for v::Response {
             ),
             R::Tasks(t) => v::Response::Tasks(t.into_iter().map(|t| v::Task { id: t.id, label: t.label, detail: t.detail, group: t.group }).collect()),
             R::Ranges(r) => v::Response::Ranges(r.into_iter().map(Into::into).collect()),
+            R::CodeLenses(l) => v::Response::CodeLenses(l.into_iter().map(Into::into).collect()),
+            R::InlayHints(h) => {
+                v::Response::InlayHints(h.into_iter().map(|h| v::InlayHint { position: h.position.into(), label: h.label, tooltip: h.tooltip }).collect())
+            }
         }
     }
 }
 
+impl From<g::responses::CodeLens> for v::CodeLens {
+    fn from(l: g::responses::CodeLens) -> Self {
+        let command = l.command.map(|c| v::LensCommand { title: c.title, command: c.command, args_json: c.args_json });
+        v::CodeLens { id: l.id, range: l.range.into(), command }
+    }
+}
+
 // --- app → guest
+
+impl From<v::CodeLens> for g::responses::CodeLens {
+    fn from(l: v::CodeLens) -> Self {
+        let command = l.command.map(|c| g::responses::LensCommand { title: c.title, command: c.command, args_json: c.args_json });
+        g::responses::CodeLens { id: l.id, range: l.range.into(), command }
+    }
+}
 
 impl From<v::Position> for g::types::Position {
     fn from(p: v::Position) -> Self {
@@ -307,6 +325,9 @@ impl From<v::Request> for g::host_requests::Request {
             v::Request::Timer { id } => R::Timer(id),
             v::Request::CancelProgress { id } => R::CancelProgress(id),
             v::Request::OpenUri { uri } => R::OpenUri(uri),
+            v::Request::CodeLens { document, range } => R::CodeLens((document.into(), range.into())),
+            v::Request::ResolveCodeLens { document, lens } => R::ResolveCodeLens((document.into(), lens.into())),
+            v::Request::InlayHints { document, range } => R::InlayHints((document.into(), range.into())),
         }
     }
 }

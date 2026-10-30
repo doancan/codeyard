@@ -2896,6 +2896,7 @@ withdrawn
 withdrawn by its publisher	
 workbench.colorCustomizations: unknown color role {0} (see crates/theme/design/tokens.json: {1})	
 your words	
+{0} (from {1})	
 {0} (line {1}, column {2})	
 {0} (saved) ↔ {1} (editor)	
 {0} (stopped at {1})	

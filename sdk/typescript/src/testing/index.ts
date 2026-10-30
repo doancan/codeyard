@@ -18,8 +18,8 @@ import { join } from "node:path";
 import { CodeyardError, DeniedError, fromWit } from "../errors.ts";
 import { installGlobals, start, type ExtensionModule } from "../guest.ts";
 import { hostOf } from "../fetch.ts";
-import type { CodeAction, Diagnostic, Document, FormatOptions, LogLevel, Range, Severity, StatusItem, TextEdit } from "../types.ts";
-import { fromWitDiagnostic, toWitDiagnostic } from "../types.ts";
+import type { CodeAction, CodeLens, Diagnostic, Document, FormatOptions, InlayHint, LogLevel, Range, Severity, StatusItem, TextEdit } from "../types.ts";
+import { fromWitCodeLens, fromWitDiagnostic, toWitCodeLens, toWitDiagnostic } from "../types.ts";
 import type * as W from "../wit.ts";
 import { allowsNet, allowsRead, allowsWrite, globMatch, permissionsOf, type Permissions } from "./permissions.ts";
 import { parseToml, type Table } from "./toml.ts";
@@ -316,6 +316,32 @@ export class MockHost {
 
   async runCodeAction(id: string): Promise<void> {
     await this.request({ tag: "run-code-action", val: id });
+  }
+
+  /** The code lenses for the lines of `document` in `range`, as the editor asks for the lines in view. */
+  async codeLenses(document: Document, range: Range): Promise<CodeLens[]> {
+    const r = await this.request({ tag: "code-lens", val: [document, range] });
+    if (r.tag !== "code-lenses") throw CodeyardError.other(`the code lens provider answered ${r.tag}`);
+    return r.val.map(fromWitCodeLens);
+  }
+
+  /** Resolve a lens without a command, as the editor does once it is on screen. */
+  async resolveCodeLens(document: Document, lens: CodeLens): Promise<CodeLens> {
+    const r = await this.request({ tag: "resolve-code-lens", val: [document, toWitCodeLens(lens)] });
+    if (r.tag !== "code-lenses" || r.val.length !== 1) throw CodeyardError.other(`resolving a code lens answered ${r.tag}`);
+    return fromWitCodeLens(r.val[0]!);
+  }
+
+  /** Click a lens: run its command with its arguments, as the editor does (the extension's own commands here). */
+  async clickCodeLens(lens: CodeLens): Promise<any> {
+    if (!lens.command) throw CodeyardError.invalid("the lens has no command yet; resolve it first");
+    return this.command(lens.command.command, lens.command.args);
+  }
+
+  async inlayHints(document: Document, range: Range): Promise<InlayHint[]> {
+    const r = await this.request({ tag: "inlay-hints", val: [document, range] });
+    if (r.tag !== "inlay-hints") throw CodeyardError.other(`the inlay hint provider answered ${r.tag}`);
+    return r.val.map((h) => (h.tooltip === undefined ? { position: h.position, label: h.label } : { position: h.position, label: h.label, tooltip: h.tooltip }));
   }
 
   async openUri(uri: string): Promise<void> {

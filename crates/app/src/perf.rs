@@ -10,6 +10,9 @@
 //! - `CODEYARD_PERF_DECORATIONS=<n>`: after the first frame settles, run `decorate` in every extension that decorates
 //!   the open file's language, wait for their decorations, then type `n` characters and record keystroke → frame under
 //!   `typing.keystroke_frame_decorations_ms`.
+//! - `CODEYARD_PERF_LENSES=<n>`: after the first frame settles, wait for the code lenses and inlay hints of the
+//!   extension that provides them for the open file's language, then type `n` characters and record keystroke → frame
+//!   under `typing.keystroke_frame_lenses_ms` (each edit asks the provider again once typing pauses).
 //! - `CODEYARD_PERF_PROVIDERS=<n>`: ask the task providers for their tasks `n` times, one round after the other;
 //!   each answer records `extensions.provider_overhead_ms` (requests to a running extension only).
 //! - `CODEYARD_PERF_EXIT=1`: quit when the scenario is done.
@@ -155,6 +158,19 @@ async fn extension_scenario(handle: WindowHandle<Workbench>, decorations: usize,
     }
 }
 
+/// `CODEYARD_PERF_LENSES`: the lens and hint provider answers for the lines in view (up to 30 s for it to start), then
+/// the keys are typed.
+async fn lens_scenario(handle: WindowHandle<Workbench>, keys: usize, cx: &mut gpui::AsyncApp) {
+    cx.background_executor().timer(SETTLE).await;
+    for _ in 0..300 {
+        if handle.read_with(cx, |wb, cx| wb.lens_marks_for_perf(cx)).unwrap_or(1) > 0 {
+            break;
+        }
+        cx.background_executor().timer(Duration::from_millis(100)).await;
+    }
+    type_keys(handle, keys, "typing.keystroke_frame_lenses_ms", cx).await;
+}
+
 /// Called once the first workbench window is open: records startup marks and runs the scripted scenario.
 pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
     if !enabled() {
@@ -165,6 +181,7 @@ pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
     let market: usize = std::env::var("CODEYARD_PERF_MARKET").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let decorations: usize = std::env::var("CODEYARD_PERF_DECORATIONS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let providers: usize = std::env::var("CODEYARD_PERF_PROVIDERS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    let lenses: usize = std::env::var("CODEYARD_PERF_LENSES").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let exit = std::env::var_os("CODEYARD_PERF_EXIT").is_some();
     handle
         .update(cx, |_, window, _| {
@@ -177,6 +194,9 @@ pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
                     }
                     if decorations > 0 || providers > 0 {
                         extension_scenario(handle, decorations, providers, cx).await;
+                    }
+                    if lenses > 0 {
+                        lens_scenario(handle, lenses, cx).await;
                     }
                     if market > 0 {
                         cx.background_executor().timer(SETTLE).await;

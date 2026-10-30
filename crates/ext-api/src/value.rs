@@ -308,6 +308,30 @@ pub struct Task {
     pub group: String,
 }
 
+/// `responses.lens-command`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LensCommand {
+    pub title: String,
+    pub command: String,
+    pub args_json: String,
+}
+
+/// `responses.code-lens`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CodeLens {
+    pub id: String,
+    pub range: Range,
+    pub command: Option<LensCommand>,
+}
+
+/// `responses.inlay-hint`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InlayHint {
+    pub position: Position,
+    pub label: String,
+    pub tooltip: Option<String>,
+}
+
 /// `responses.response`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Response {
@@ -319,6 +343,8 @@ pub enum Response {
     CodeActions(Vec<CodeAction>),
     Tasks(Vec<Task>),
     Ranges(Vec<Range>),
+    CodeLenses(Vec<CodeLens>),
+    InlayHints(Vec<InlayHint>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -342,6 +368,9 @@ pub enum Request {
     Timer { id: u64 },
     CancelProgress { id: u64 },
     OpenUri { uri: String },
+    CodeLens { document: Document, range: Range },
+    ResolveCodeLens { document: Document, lens: CodeLens },
+    InlayHints { document: Document, range: Range },
 }
 
 impl Request {

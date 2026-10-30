@@ -194,6 +194,12 @@ languages = ["toml"]            # request.format; `editor.formatters` lets users
 [[code-actions]]
 languages = ["toml"]            # request.code-actions; shown in Quick Fix next to the language server's
 
+[[code-lens]]
+languages = ["rust"]            # request.code-lens for the lines in view; a click runs the lens's command
+
+[[inlay-hints]]
+languages = ["rust"]            # request.inlay-hints for the lines in view; shown at the end of the line
+
 [[diagnostics]]
 id        = "todos"
 languages = ["rust"]            # you push them with languages.set-diagnostics
@@ -214,6 +220,11 @@ the user picks it, then its `command` runs; an action with neither gets `request
 starts when a file of one of these languages opens or a provider is first asked. Providers have one second
 (`PROVIDER_DEADLINE_MILLIS`) to answer, plus the start-up time on the first request; a later
 answer is dropped and noted in your log, and a request about a document is cancelled as soon as the user types in it.
+Code lenses and inlay hints are asked for the lines in view only, again once typing pauses after an edit and once the
+view stops after a scroll; the question before is cancelled. They show at the end of their line with the language
+server's, and the tooltip names your extension. Clicking a lens runs its command with the lens's arguments: one of
+your commands, a dependency's, or a `core:` command your manifest lists in `permissions.commands`. A lens returned
+without a command gets `request.resolve-code-lens` once it is on screen.
 A task runs in your extension: start processes with `process.spawn` and show progress. Everything you showed goes when
 the user disables or uninstalls the extension, or when it crashes.
 

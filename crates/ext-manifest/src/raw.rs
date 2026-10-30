@@ -59,6 +59,10 @@ pub struct RawManifest {
     pub decorations: Vec<S<RawNamedLanguages>>,
     #[serde(default)]
     pub tasks: Vec<S<RawTasks>>,
+    #[serde(default)]
+    pub code_lens: Vec<S<RawLanguages>>,
+    #[serde(default)]
+    pub inlay_hints: Vec<S<RawLanguages>>,
 }
 
 #[derive(Deserialize)]
@@ -226,7 +230,7 @@ pub struct RawStatusItem {
     pub command: Option<S<String>>,
 }
 
-/// `[[formatters]]`, `[[code-actions]]`.
+/// `[[formatters]]`, `[[code-actions]]`, `[[code-lens]]`, `[[inlay-hints]]`.
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct RawLanguages {

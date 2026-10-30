@@ -308,6 +308,7 @@ impl Render for EditorView {
                                         let rope = this.buffer.rope().clone();
                                         let first_line = this.display.line_at_row(range.start).0;
                                         let last_line = (this.display.line_at_row(range.end - 1).0 + 1).min(n_lines);
+                                        this.note_ext_view(first_line..last_line, cx);
                                         let spans =
                                             this.syntax.as_ref().map(|s| s.highlights(&rope, rope.line_to_byte(first_line)..rope.line_to_byte(last_line)));
                                         let folded = this.fold_headers();
@@ -341,6 +342,11 @@ impl Render for EditorView {
                                                         strikethrough: None,
                                                     };
                                                     let code = window.text_system().shape_line(text.clone().into(), px(font_size), &[run], None).width;
+                                                    // Extension lenses and hints name their extension.
+                                                    let tip: SharedString = match this.ext_eol_tooltip(ix).filter(|_| id == "line-end-hint") {
+                                                        Some(t) => format!("{hint}\n{t}").into(),
+                                                        None => hint.clone(),
+                                                    };
                                                     // Current layout clips to the space after code, including during a pane resize.
                                                     div()
                                                         .id((id, ix))
@@ -358,7 +364,7 @@ impl Render for EditorView {
                                                         .text_size(px(font_size * 0.85))
                                                         .text_color(ui::ca(color, opacity))
                                                         .child(div().min_w_0().max_w(px(480.)).truncate().child(hint.clone()))
-                                                        .tooltip(move |_, cx| cx.new(|_| crate::workbench::Tooltip(hint.clone())).into())
+                                                        .tooltip(move |_, cx| cx.new(|_| crate::workbench::Tooltip(tip.clone())).into())
                                                 };
                                                 // A cursor at the end of a segment is drawn at the start of the next segment.
                                                 let here = |c: usize| c >= start && (c < end || (c == end && last_seg));
@@ -605,7 +611,19 @@ impl Render for EditorView {
                                                     )
                                                     .when_some(
                                                         this.eol_hint(ix).filter(|_| seg == 0 && inline_blame.as_ref().is_none_or(|(l, ..)| *l != ix)),
-                                                        |d, hint| d.child(annotation("line-end-hint", hint.into(), p.text_muted, 0.65)),
+                                                        |d, hint| {
+                                                            let a = annotation("line-end-hint", hint.into(), p.text_muted, 0.65);
+                                                            // A line with an extension lens runs it on click.
+                                                            d.child(a.when(this.ext_lenses_on(ix).next().is_some(), |a| {
+                                                                a.cursor_pointer().on_mouse_down(
+                                                                    MouseButton::Left,
+                                                                    cx.on(move |e, _: &MouseDownEvent, _, cx| {
+                                                                        cx.stop_propagation();
+                                                                        e.click_ext_lens(ix, cx);
+                                                                    }),
+                                                                )
+                                                            }))
+                                                        },
                                                     )
                                                     // Extension text after the line, when nothing of the editor's own is there.
                                                     .when_some(

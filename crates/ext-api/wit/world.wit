@@ -4,6 +4,7 @@ package codeyard:api@0.1.0;
 @since(version = 0.1.0)
 interface host-requests {
   use types.{document, range, diagnostic};
+  use responses.{code-lens};
 
   record format-options {
     tab-size: u32,
@@ -35,6 +36,13 @@ interface host-requests {
     cancel-progress(u64),
     /// A `codeyard://ext/<id>/…` link was opened: its path and query.
     open-uri(string),
+    /// Code lenses for the lines of a document in view: the range starts at the first and ends at the start of the line
+    /// after the last. Answer with `response.code-lenses`.
+    code-lens(tuple<document, range>),
+    /// A lens answered without a command is on screen: answer with `response.code-lenses` holding it with its command.
+    resolve-code-lens(tuple<document, code-lens>),
+    /// Inlay hints for the lines of a document in view (the range, as for `code-lens`); answer with `response.inlay-hints`.
+    inlay-hints(tuple<document, range>),
   }
 }
 

@@ -76,6 +76,8 @@ mod ext_fetch;
 mod ext_inspector;
 #[cfg(test)]
 mod ext_inspector_ui_tests;
+#[cfg(test)]
+mod ext_lenses_tests;
 mod ext_memory;
 mod ext_prompts;
 #[cfg(test)]

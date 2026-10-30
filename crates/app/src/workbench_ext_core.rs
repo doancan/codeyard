@@ -30,6 +30,9 @@ pub(super) fn task_program(command: &str) -> Option<String> {
     (!program.is_empty() && !matches!(program, "cd" | "exec" | "env" | "sudo" | "command" | "builtin")).then(|| program.to_string())
 }
 
+/// What runs once a core command an extension asked for finished (or was refused).
+pub(super) type CoreDone = Box<dyn FnOnce(&mut Workbench, Completion, &mut Context<Workbench>)>;
+
 impl Workbench {
     /// `commands.execute("core:…")` for `caller`: check what the command implies, run it, and complete the ticket.
     #[allow(clippy::too_many_arguments)]
@@ -46,27 +49,46 @@ impl Workbench {
     ) {
         let record = self.cfg.exts.code.record.clone();
         let who = caller.to_string();
-        let done = move |c: Completion| {
+        let done: CoreDone = Box::new(move |_, c, _| {
             record.lock().unwrap_or_else(|p| p.into_inner()).ticket_done(&who, ticket, &c, None);
             let _ = proc.send(&ToHost::Complete { ticket, completion: c });
-        };
+        });
+        self.run_core_for_extension(caller, scope, command, args_json, done, window, cx);
+    }
+
+    /// Run `core:…` for `caller` (a `commands.execute` call, or a click on its code lens) after `Scope::may_execute`
+    /// allowed it: check what the command implies, run it, then `done`.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn run_core_for_extension(
+        &mut self,
+        caller: &str,
+        scope: Scope,
+        command: &str,
+        args_json: &str,
+        done: CoreDone,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(core) = ext_manifest::core_command(command) else {
-            return done(Completion::Failed(v::Error::Invalid(format!("{command} is not a core command extensions may run"))));
+            return done(self, Completion::Failed(v::Error::Invalid(format!("{command} is not a core command extensions may run"))), cx);
         };
         let arg: serde_json::Value = serde_json::from_str(args_json).unwrap_or(serde_json::Value::Null);
         match self.run_core_command(core, &scope, &arg, window, cx) {
-            Ok(Some(c)) => done(c),
+            Ok(Some(c)) => done(self, c, cx),
             Err(e) => {
                 self.log_extension(caller, ext_api::value::LogLevel::Warn, format!("core:{} refused: {}", core.id, super::code_glue::explain(&e)));
-                done(Completion::Failed(e));
+                done(self, Completion::Failed(e), cx);
             }
-            Ok(None) if self.active_root(cx).is_none() => done(Completion::Failed(v::Error::NotFound("no folder is open, so there are no tasks".into()))),
+            Ok(None) if self.active_root(cx).is_none() => {
+                done(self, Completion::Failed(v::Error::NotFound("no folder is open, so there are no tasks".into())), cx)
+            }
             // `tasks.run` with a label: the task list is read first.
             Ok(None) => {
                 let label = arg.as_str().unwrap_or_default().to_string();
                 self.detect_tasks(cx, move |this, tasks, window, cx| {
                     this.with_extension_tasks(tasks, window, cx, move |this, tasks, window, cx| {
-                        done(this.run_task_for_extension(&scope, &label, tasks, window, cx));
+                        let c = this.run_task_for_extension(&scope, &label, tasks, window, cx);
+                        done(this, c, cx);
                     })
                 });
             }

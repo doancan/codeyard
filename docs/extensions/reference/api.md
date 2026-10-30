@@ -92,7 +92,10 @@ Needs no permission. Since 0.1.0.
 
 - type `code-action`: record `{ id: string, title: string, edits: list<tuple<string, list<text-edit>>>, command: option<string>, preferred: bool, fixes: list<diagnostic> }`
 - type `task`: record `{ id: string, label: string, detail: option<string>, group: string }`
-- type `response`: variant `none | json(string) | view(string) | edits(list<text-edit>) | code-actions(list<code-action>) | tasks(list<task>) | ranges(list<range>)`
+- type `lens-command`: record `{ title: string, command: string, args-json: string }`. What a code lens shows and the command a click runs.
+- type `code-lens`: record `{ id: string, range: range, command: option<lens-command> }`
+- type `inlay-hint`: record `{ position: position, label: string, tooltip: option<string> }`
+- type `response`: variant `none | json(string) | view(string) | edits(list<text-edit>) | code-actions(list<code-action>) | tasks(list<task>) | ranges(list<range>) | code-lenses(list<code-lens>) | inlay-hints(list<inlay-hint>)`
 
 ## `requests`
 
@@ -258,7 +261,7 @@ What the host asks the extension.
 Needs no permission. Since 0.1.0.
 
 - type `format-options`: record `{ tab-size: u32, insert-spaces: bool }`
-- type `request`: variant `command(tuple<string, string>) | render(string) | ui-event(tuple<string, string>) | format(tuple<document, option<range>, format-options>) | code-actions(tuple<document, range, list<diagnostic>>) | run-code-action(string) | provide-tasks | run-task(string) | settings-changed(list<string>) | timer(u64) | cancel-progress(u64) | open-uri(string)`
+- type `request`: variant `command(tuple<string, string>) | render(string) | ui-event(tuple<string, string>) | format(tuple<document, option<range>, format-options>) | code-actions(tuple<document, range, list<diagnostic>>) | run-code-action(string) | provide-tasks | run-task(string) | settings-changed(list<string>) | timer(u64) | cancel-progress(u64) | open-uri(string) | code-lens(tuple<document, range>) | resolve-code-lens(tuple<document, code-lens>) | inlay-hints(tuple<document, range>)`
 
 ## `guest`
 

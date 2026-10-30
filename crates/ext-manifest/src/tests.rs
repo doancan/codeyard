@@ -699,3 +699,17 @@ fn providers_declare_languages_and_start_the_extension_for_them() {
     assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[diagnostics]]\nid = \"Bad\"\nlanguages = [\"rust\"]\n")), vec![Code::BadContribution]);
     assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[formatters]]\nlanguage = \"toml\"\n")), vec![Code::Syntax]);
 }
+
+#[test]
+fn code_lenses_and_inlay_hints_declare_languages_and_start_the_extension_for_them() {
+    let m = parse(&with("[code]\nentry = \"Cargo.toml\"\n[[code-lens]]\nlanguages = [\"rust\"]\n[[inlay-hints]]\nlanguages = [\"toml\", \"rust\"]\n")).unwrap();
+    let c = &m.contributions;
+    assert!(c.code_lenses[0].handles("rust") && !c.code_lenses[0].handles("toml"));
+    assert_eq!(c.inlay_hints[0].languages, ["toml", "rust"]);
+    assert!(c.needs_code());
+    assert_eq!(m.activation, [Activation::Language("rust".into()), Activation::Language("toml".into())]);
+    assert_eq!(codes(&with("[[code-lens]]\nlanguages = [\"rust\"]\n")), vec![Code::NeedsCode]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[inlay-hints]]\nlanguages = []\n")), vec![Code::BadContribution, Code::NeverActivates]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[code-lens]]\nlanguages = [\"rust\", \"C++\"]\n")), vec![Code::BadContribution]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[code-lens]]\nlanguage = \"rust\"\n")), vec![Code::Syntax]);
+}

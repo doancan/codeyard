@@ -189,7 +189,7 @@ mod display_glue;
 mod edit_glue;
 #[path = "editor_ext.rs"]
 mod ext_glue;
-pub use ext_glue::{FormatJob, LineDecoration, SaveFormatter, tone_color};
+pub use ext_glue::{ExtEvent, ExtHint, ExtLens, FormatJob, LineDecoration, SaveFormatter, tone_color};
 #[path = "editor_find.rs"]
 mod find_glue;
 #[path = "editor_git.rs"]
@@ -249,6 +249,8 @@ pub enum EditorEvent {
     OpenMergeEditor,
     /// The "Send Request" link of a request in an `.http` file (request line, 0-based).
     SendRequest(usize),
+    /// Code lenses and inlay hints of extensions (workbench_ext_lenses.rs).
+    Extension(ExtEvent),
 }
 
 /// Open completion list.

@@ -68,6 +68,7 @@ interface requests {
 @since(version = 0.1.0)
 interface responses {
   use types.{text-edit, diagnostic, range};
+  use types.{position};
 
   record code-action {
     /// Passed back in `request.run-code-action`.
@@ -90,6 +91,32 @@ interface responses {
     group: string,
   }
 
+  /// What a code lens shows and the command a click runs.
+  record lens-command {
+    title: string,
+    /// The extension's own command (local or full id), a dependency's full id, or a `core:` command the manifest
+    /// lists in `permissions.commands`.
+    command: string,
+    /// The command's arguments as JSON; `null` for none.
+    args-json: string,
+  }
+
+  record code-lens {
+    /// Passed back in `request.resolve-code-lens`.
+    id: string,
+    /// The lens shows above the range's first line.
+    range: range,
+    /// None until resolved: the host sends `request.resolve-code-lens` once the lens is on screen.
+    command: option<lens-command>,
+  }
+
+  record inlay-hint {
+    /// Where the hint belongs; it shows at the end of its line.
+    position: position,
+    label: string,
+    tooltip: option<string>,
+  }
+
   variant response {
     /// Nothing to return (a command that finished, an event handled).
     none,
@@ -102,6 +129,8 @@ interface responses {
     tasks(list<task>),
     /// The ranges a task's problem matcher should look at, or a formatter's changed ranges.
     ranges(list<range>),
+    code-lenses(list<code-lens>),
+    inlay-hints(list<inlay-hint>),
   }
 }
 

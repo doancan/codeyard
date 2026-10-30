@@ -3,7 +3,7 @@ id          = "codeyard.todo-actions"
 version     = "0.1.0"
 name        = "TODO Actions"
 license     = "MIT"
-description = "Mark TODO comments done, or collect them."
+description = "Mark TODO comments done, or collect them; a lens and a count on each TODO."
 
 [code]
 entry = "Cargo.toml"
@@ -12,6 +12,18 @@ entry = "Cargo.toml"
 [[code-actions]]
 languages = ["rust", "markdown"]
 
+# A "Collect" lens above each TODO in view, and a hint after it with its place among the file's TODOs.
+[[code-lens]]
+languages = ["rust", "markdown"]
+
+[[inlay-hints]]
+languages = ["rust", "markdown"]
+
 [[commands]]
 id    = "list"
 title = "TODO Actions: Show Collected TODOs"
+
+# What the lens runs, with the TODO as its argument.
+[[commands]]
+id    = "collect"
+title = "TODO Actions: Collect TODO"

@@ -376,11 +376,11 @@ pub struct StatusItem {
     pub command: Option<String>,
 }
 
-/// A provider for some languages: `[[formatters]]`, `[[code-actions]]`, and with an id `[[diagnostics]]`,
-/// `[[decorations]]`.
+/// A provider for some languages: `[[formatters]]`, `[[code-actions]]`, `[[code-lens]]`, `[[inlay-hints]]`, and with an
+/// id `[[diagnostics]]`, `[[decorations]]`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Provider {
-    /// Full id, or empty for formatters and code actions.
+    /// Full id, or empty for formatters, code actions, code lenses and inlay hints.
     pub id: String,
     /// Language ids as Codeyard names them (`rust`, `toml`, `typescriptreact`, or a language an extension adds).
     pub languages: Vec<String>,
@@ -414,6 +414,10 @@ pub struct Contributions {
     pub decorations: Vec<Provider>,
     /// Ids (full) of the extension's task providers.
     pub tasks: Vec<String>,
+    #[serde(default)]
+    pub code_lenses: Vec<Provider>,
+    #[serde(default)]
+    pub inlay_hints: Vec<Provider>,
 }
 
 impl Contributions {
@@ -427,12 +431,15 @@ impl Contributions {
             || !self.diagnostics.is_empty()
             || !self.decorations.is_empty()
             || !self.tasks.is_empty()
+            || !self.code_lenses.is_empty()
+            || !self.inlay_hints.is_empty()
     }
 
     /// Languages a provider of this extension handles, each once.
     pub fn provider_languages(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
-        for p in self.formatters.iter().chain(&self.code_actions).chain(&self.diagnostics).chain(&self.decorations) {
+        let providers = self.formatters.iter().chain(&self.code_actions).chain(&self.diagnostics).chain(&self.decorations);
+        for p in providers.chain(&self.code_lenses).chain(&self.inlay_hints) {
             for l in &p.languages {
                 if !out.contains(l) {
                     out.push(l.clone());

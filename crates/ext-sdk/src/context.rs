@@ -131,6 +131,46 @@ impl Context {
         guest::with(|h| h.run_code_action = Some(string_fn(f)));
     }
 
+    /// Code lenses for the lines of `document` in view (`range`): clickable text above a line that runs a command
+    /// with arguments. Asked again after an edit (debounced) and when the view scrolls; a slow answer is dropped.
+    pub fn code_lenses<F>(&self, f: F)
+    where
+        F: AsyncFn(Context, Document, Range) -> Result<Vec<CodeLens>> + 'static,
+    {
+        let f = Rc::new(f);
+        let cb: guest::CodeLensFn = Rc::new(move |ctx, doc, range| {
+            let f = f.clone();
+            Box::pin(async move { f(ctx, doc, range).await })
+        });
+        guest::with(|h| h.code_lenses = Some(cb));
+    }
+
+    /// Give a lens made with [`CodeLens::unresolved`] its command, once it is on screen.
+    pub fn resolve_code_lens<F>(&self, f: F)
+    where
+        F: AsyncFn(Context, Document, CodeLens) -> Result<CodeLens> + 'static,
+    {
+        let f = Rc::new(f);
+        let cb: guest::ResolveLensFn = Rc::new(move |ctx, doc, lens| {
+            let f = f.clone();
+            Box::pin(async move { f(ctx, doc, lens).await })
+        });
+        guest::with(|h| h.resolve_code_lens = Some(cb));
+    }
+
+    /// Inlay hints for the lines of `document` in view (`range`): short text at the end of a line, such as a type.
+    pub fn inlay_hints<F>(&self, f: F)
+    where
+        F: AsyncFn(Context, Document, Range) -> Result<Vec<InlayHint>> + 'static,
+    {
+        let f = Rc::new(f);
+        let cb: guest::InlayHintsFn = Rc::new(move |ctx, doc, range| {
+            let f = f.clone();
+            Box::pin(async move { f(ctx, doc, range).await })
+        });
+        guest::with(|h| h.inlay_hints = Some(cb));
+    }
+
     /// A `codeyard://ext/<id>/…` link was opened: its path and query.
     pub fn on_uri<F>(&self, f: F)
     where

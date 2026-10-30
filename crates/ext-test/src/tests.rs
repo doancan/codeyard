@@ -100,6 +100,22 @@ impl Extension for Probe {
             Ok(())
         });
         ctx.formatter(async |_ctx, doc, _range, _options| Ok(vec![TextEdit::replace(Range::line(0, 0, doc.text.len() as u32), doc.text.trim())]));
+        // A lens on each `fn` line in view that echoes its line, and one resolved later; a hint with each line's length.
+        ctx.code_lenses(async |_ctx, doc, range| {
+            let lines = doc.text.lines().enumerate().skip(range.start.line as usize).take((range.end.line - range.start.line) as usize);
+            let mut out: Vec<CodeLens> =
+                lines.filter(|(_, l)| l.starts_with("fn ")).map(|(n, _)| CodeLens::new(n as u32, "Run", "echo", json!({ "line": n }))).collect();
+            out.push(CodeLens::unresolved(range.start.line, "later"));
+            Ok(out)
+        });
+        ctx.resolve_code_lens(async |_ctx, _doc, mut lens| {
+            lens.command = Some(LensCommand { title: format!("Resolved {}", lens.id), command: "echo".into(), args: json!(lens.id) });
+            Ok(lens)
+        });
+        ctx.inlay_hints(async |_ctx, doc, range| {
+            let lines = doc.text.lines().enumerate().skip(range.start.line as usize).take((range.end.line - range.start.line) as usize);
+            Ok(lines.map(|(n, l)| InlayHint::new(Position::new(n as u32, l.len() as u32), format!("{} chars", l.len()))).collect())
+        });
         let ticks = TICKS.with(Rc::clone);
         ctx.every(60, async move |_ctx| ticks.set(ticks.get() + 1));
         Ok(())
@@ -212,6 +228,23 @@ fn errors_views_formatters_and_timers() {
     // The virtual clock fires the 60 s timer twice in 150 s.
     h.advance(Duration::from_secs(150));
     assert_eq!(TICKS.with(|t| t.get()), 2);
+}
+
+#[test]
+fn code_lenses_resolve_and_run_their_command_and_hints_cover_the_range() {
+    let h = host();
+    let doc = Document { uri: h.uri("a.rs"), language: "rust".into(), version: 1, text: "fn a() {}\nlet x = 1;\nfn b() {}\n".into() };
+    let lenses = h.code_lenses(doc.clone(), Range::new(Position::new(1, 0), Position::new(3, 0))).unwrap();
+    assert_eq!(lenses.len(), 2, "only the lines asked for: {lenses:?}");
+    assert_eq!(lenses[0].range.start.line, 2);
+    assert_eq!(h.click_code_lens(&lenses[0]).unwrap(), json!({ "line": 2 }), "the command runs with the lens's arguments");
+    assert!(h.click_code_lens(&lenses[1]).is_err(), "an unresolved lens has nothing to run");
+    let resolved = h.resolve_code_lens(doc.clone(), lenses[1].clone()).unwrap();
+    assert_eq!(resolved.command.as_ref().map(|c| c.title.as_str()), Some("Resolved later"));
+    assert_eq!(h.click_code_lens(&resolved).unwrap(), json!("later"));
+    let hints = h.inlay_hints(doc, Range::new(Position::new(0, 0), Position::new(2, 0))).unwrap();
+    assert_eq!(hints.iter().map(|h| h.label.as_str()).collect::<Vec<_>>(), ["9 chars", "10 chars"]);
+    assert_eq!(hints[1].position, Position::new(1, 10));
 }
 
 #[test]
