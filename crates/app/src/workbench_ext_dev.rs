@@ -162,6 +162,42 @@ impl Workbench {
     }
 }
 
+// --- performance scenario (crate::perf) ---
+impl Workbench {
+    /// `CODEYARD_PERF_RELOAD`: run the first command of the extension in development (starting it, or asking the new
+    /// build after a swap). False without one.
+    pub fn run_dev_command_for_perf(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let Some(dir) = crate::ext::dev_dir() else { return false };
+        let reg = crate::ext::current();
+        let Some(active) = reg.active.iter().find(|e| e.dir == dir && e.manifest.code.is_some()) else { return false };
+        let id = active.id().to_string();
+        let Some(local) = active.manifest.contributions.commands.first().and_then(|c| c.id.strip_prefix(&format!("{id}."))).map(str::to_string) else {
+            return false;
+        };
+        self.run_extension_command(&id, &local, window, cx);
+        true
+    }
+
+    /// The extension in development is running and no hot reload waits for its first answer.
+    pub fn dev_settled_for_perf(&self) -> bool {
+        let code = &self.cfg.exts.code;
+        code.dev.since.is_none() && crate::ext::current().active.iter().any(|e| Some(&e.dir) == crate::ext::dev_dir().as_ref() && code.running(e.id()))
+    }
+
+    /// Put `build` in place of the dev extension's component the way `cyx dev` does (written beside, renamed over),
+    /// swap it in as the watch would, and ask the new build its first command. The time measured starts when the swap
+    /// notices the build, as with the watch.
+    pub fn hot_reload_for_perf(&mut self, build: &[u8], window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let Some(dir) = crate::ext::dev_dir() else { return false };
+        let tmp = dir.join(".extension.wasm.tmp");
+        if std::fs::write(&tmp, build).and_then(|_| std::fs::rename(&tmp, dir.join(ext_pkg::COMPONENT))).is_err() {
+            return false;
+        }
+        self.reload_dev_code(window, cx);
+        self.run_dev_command_for_perf(window, cx)
+    }
+}
+
 #[cfg(test)]
 impl Workbench {
     /// Why the extension's exthost last started, and how many times it has.

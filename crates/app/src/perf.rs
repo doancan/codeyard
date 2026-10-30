@@ -12,6 +12,12 @@
 //!   `typing.keystroke_frame_decorations_ms`.
 //! - `CODEYARD_PERF_PROVIDERS=<n>`: ask the task providers for their tasks `n` times, one round after the other;
 //!   each answer records `extensions.provider_overhead_ms` (requests to a running extension only).
+//! - `CODEYARD_PERF_VIEWS=<n>`: after the first frame settles, open the first declared extension view, wait until it is
+//!   drawn and holds the keyboard, then press PageDown `n` times (`views.keystroke_frame_ms`, below).
+//! - `CODEYARD_PERF_RELOAD=<n>`: with `--extension-dev <folder>`, run the extension's first command, then `n` times put
+//!   the other of two builds in place (`a.wasm` and `b.wasm` beside the folder) and run the command again; each new
+//!   build's first answer records `extensions.hot_reload_ms` (workbench_ext_dev.rs). The first fills the incremental
+//!   compile cache.
 //! - `CODEYARD_PERF_EXIT=1`: quit when the scenario is done.
 //!
 //! Whenever `CODEYARD_PERF` is set, a key that reaches an extension view is recorded as `views.keystroke_frame_ms`.
@@ -155,6 +161,61 @@ async fn extension_scenario(handle: WindowHandle<Workbench>, decorations: usize,
     }
 }
 
+/// `CODEYARD_PERF_VIEWS`: open the view, wait for its tree and focus (up to 30 s for its extension to start and draw
+/// 10 000 rows), then press PageDown `n` times; the view records each key.
+async fn views_scenario(handle: WindowHandle<Workbench>, n: usize, cx: &mut gpui::AsyncApp) {
+    cx.background_executor().timer(SETTLE).await;
+    let Some(id) = handle.update(cx, |wb, window, cx| wb.open_ext_view_for_perf(window, cx)).ok().flatten() else { return };
+    for _ in 0..300 {
+        if cx.update_window(handle.into(), |_, window, cx| handle.read(cx).is_ok_and(|wb| wb.ext_view_focused_for_perf(&id, window))).unwrap_or(true) {
+            break;
+        }
+        cx.background_executor().timer(Duration::from_millis(100)).await;
+    }
+    // The first frame of 10 000 rows, and the layout of the list, settle before the keys.
+    cx.background_executor().timer(SETTLE).await;
+    for _ in 0..n {
+        let pressed = cx.update_window(handle.into(), |_, window, cx| {
+            window.dispatch_keystroke(Keystroke::parse("pagedown").expect("valid keystroke"), cx);
+        });
+        if pressed.is_err() {
+            break;
+        }
+        cx.background_executor().timer(TYPING_GAP).await;
+    }
+}
+
+/// `CODEYARD_PERF_RELOAD`: start the extension in development, then swap in its two builds by turns, `n` times, each
+/// time waiting for the new build's first answer (up to 30 s).
+async fn reload_scenario(handle: WindowHandle<Workbench>, n: usize, cx: &mut gpui::AsyncApp) {
+    let Some(parent) = crate::ext::dev_dir().and_then(|d| d.parent().map(std::path::Path::to_path_buf)) else { return };
+    let (Ok(a), Ok(b)) = (std::fs::read(parent.join("a.wasm")), std::fs::read(parent.join("b.wasm"))) else {
+        eprintln!("CODEYARD_PERF_RELOAD: a.wasm and b.wasm must be beside {}", parent.display());
+        return;
+    };
+    cx.background_executor().timer(SETTLE).await;
+    let settled = async |cx: &mut gpui::AsyncApp| {
+        for _ in 0..300 {
+            if handle.read_with(cx, |wb, _| wb.dev_settled_for_perf()).unwrap_or(true) {
+                return;
+            }
+            cx.background_executor().timer(Duration::from_millis(100)).await;
+        }
+    };
+    if !handle.update(cx, |wb, window, cx| wb.run_dev_command_for_perf(window, cx)).unwrap_or(false) {
+        return;
+    }
+    settled(cx).await;
+    for i in 0..n {
+        let build = if i % 2 == 0 { &b } else { &a };
+        if !handle.update(cx, |wb, window, cx| wb.hot_reload_for_perf(build, window, cx)).unwrap_or(false) {
+            break;
+        }
+        settled(cx).await;
+        cx.background_executor().timer(TYPING_GAP).await;
+    }
+}
+
 /// Called once the first workbench window is open: records startup marks and runs the scripted scenario.
 pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
     if !enabled() {
@@ -165,6 +226,8 @@ pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
     let market: usize = std::env::var("CODEYARD_PERF_MARKET").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let decorations: usize = std::env::var("CODEYARD_PERF_DECORATIONS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let providers: usize = std::env::var("CODEYARD_PERF_PROVIDERS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    let views: usize = std::env::var("CODEYARD_PERF_VIEWS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    let reload: usize = std::env::var("CODEYARD_PERF_RELOAD").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let exit = std::env::var_os("CODEYARD_PERF_EXIT").is_some();
     handle
         .update(cx, |_, window, _| {
@@ -177,6 +240,12 @@ pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
                     }
                     if decorations > 0 || providers > 0 {
                         extension_scenario(handle, decorations, providers, cx).await;
+                    }
+                    if views > 0 {
+                        views_scenario(handle, views, cx).await;
+                    }
+                    if reload > 0 {
+                        reload_scenario(handle, reload, cx).await;
                     }
                     if market > 0 {
                         cx.background_executor().timer(SETTLE).await;

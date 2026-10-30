@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Measure startup, typing latency and memory of a Codeyard build, optionally side by side with a baseline (macOS only).
+# Measure startup, typing latency, extension scenarios and memory of a Codeyard build, optionally side by side with a baseline (macOS only).
 #   scripts/perf/run.sh                          the working tree, written to target/perf/candidate.json
 #   scripts/perf/run.sh --baseline v0.5.0        also build v0.5.0 and run both builds interleaved
 #   scripts/perf/run.sh --aa                     A/A: the working tree against itself, to see the noise
@@ -119,6 +119,23 @@ for n in a b; do
   deco_args+=(--install-extension "$d")
 done
 CODEYARD_CONFIG_DIR="$DECO_PROFILE/config" CODEYARD_STATE_DIR="$DECO_PROFILE/state" "$OUT/codeyard-candidate" "${deco_args[@]}" >/dev/null
+# A sidebar view with a list of 10 000 rows (crates/ext-host/testdata/viewlist.wasm, code with no permissions), installed
+# from a folder: PageDown in the view.
+VIEW_PROFILE="$TMP/view-profile"
+mkdir -p "$VIEW_PROFILE/config" "$VIEW_PROFILE/state" "$TMP/gen/viewlist"
+printf '{"update.check":"manual"}\n' > "$VIEW_PROFILE/config/settings.jsonc"
+cp crates/ext-host/testdata/viewlist.wasm "$TMP/gen/viewlist/extension.wasm"
+: > "$TMP/gen/viewlist/Cargo.toml"
+printf '[extension]\nid = "perf.viewlist"\nversion = "1.0.0"\nname = "View List"\nlicense = "MIT"\n\n[code]\nentry = "Cargo.toml"\n\n[[views]]\nid = "rows"\ntitle = "Perf: Rows"\nlocation = "sidebar"\n' > "$TMP/gen/viewlist/codeyard-extension.toml"
+CODEYARD_CONFIG_DIR="$VIEW_PROFILE/config" CODEYARD_STATE_DIR="$VIEW_PROFILE/state" "$OUT/codeyard-candidate" --install-extension "$TMP/gen/viewlist" >/dev/null
+# An extension in development (`--extension-dev`, as `cyx dev` starts it): a 2 MB Rust component and a second build of
+# it that differs in one constant (crates/ext-host/testdata/reload-a.wasm and reload-b.wasm), swapped in place by turns.
+RELOAD_DIR="$TMP/gen/reload"
+mkdir -p "$RELOAD_DIR/ext"
+cp crates/ext-host/testdata/reload-a.wasm "$RELOAD_DIR/a.wasm"
+cp crates/ext-host/testdata/reload-b.wasm "$RELOAD_DIR/b.wasm"
+: > "$RELOAD_DIR/ext/Cargo.toml"
+printf '[extension]\nid = "perf.reload"\nversion = "1.0.0"\nname = "Reload"\nlicense = "MIT"\n\n[code]\nentry = "Cargo.toml"\n\n[[commands]]\nid = "count"\ntitle = "Perf: Count"\n' > "$RELOAD_DIR/ext/codeyard-extension.toml"
 launch() { # app args... (background; $! is the pid)
   local app=$1; shift
   CODEYARD_STATE_DIR="$TMP/state" CODEYARD_CONFIG_DIR="$TMP/config" CODEYARD_NO_DOCK_ICON=1 "$app" "$@" >/dev/null 2>&1 &
@@ -200,6 +217,24 @@ for i in $(seq 1 "$runs"); do
       exit 1
     fi
     grep -e '"typing\.keystroke_frame_decorations_ms"' -e '"extensions\.provider_overhead_ms"' "$TMP/deco.jsonl" >> "$CODEYARD_PERF" || true
+    # The view with 10 000 rows: 40 PageDown keys, keystroke to frame.
+    : > "$TMP/views.jsonl"
+    CODEYARD_PERF="$TMP/views.jsonl" CODEYARD_PERF_VIEWS=40 PROFILE_FROM="$VIEW_PROFILE" run_scripted "$OUT/codeyard-${names[$k]}"
+    if [ "${names[$k]}" = candidate ] && [ "$(count views.keystroke_frame_ms "$TMP/views.jsonl")" != 40 ]; then
+      echo "perf: the view run of ${names[$k]} did not press 40 keys in the extension view; is codeyard-exthost built and the window visible?" >&2
+      exit 1
+    fi
+    grep '"views\.keystroke_frame_ms"' "$TMP/views.jsonl" >> "$CODEYARD_PERF" || true
+    # Hot reload: 11 new builds swapped in, each to its first answer; the first fills the incremental cache and is
+    # dropped.
+    cp "$RELOAD_DIR/a.wasm" "$RELOAD_DIR/ext/extension.wasm"
+    : > "$TMP/reload.jsonl"
+    CODEYARD_PERF="$TMP/reload.jsonl" CODEYARD_PERF_RELOAD=11 run_scripted "$OUT/codeyard-${names[$k]}" --extension-dev "$RELOAD_DIR/ext"
+    if [ "${names[$k]}" = candidate ] && [ "$(count extensions.hot_reload_ms "$TMP/reload.jsonl")" != 11 ]; then
+      echo "perf: the hot reload run of ${names[$k]} did not swap in 11 builds; is codeyard-exthost built?" >&2
+      exit 1
+    fi
+    grep '"extensions\.hot_reload_ms"' "$TMP/reload.jsonl" | tail -n +2 >> "$CODEYARD_PERF" || true
   done
   printf '\rperf: timing run %s/%s' "$i" "$runs" >&2
 done

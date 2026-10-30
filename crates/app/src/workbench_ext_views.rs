@@ -816,6 +816,22 @@ pub(super) fn find_item<'a>(tree: &'a Node, item: &Key) -> Option<&'a Node> {
     None
 }
 
+// --- performance scenario (crate::perf) ---
+impl Workbench {
+    /// `CODEYARD_PERF_VIEWS`: open the first declared extension view (scripts/perf/run.sh installs one, a list of
+    /// 10 000 rows); its id, or `None` without one.
+    pub fn open_ext_view_for_perf(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<String> {
+        let id = declared_views().into_iter().next()?.id;
+        self.open_ext_view(&id, window, cx);
+        Some(id)
+    }
+
+    /// The view has its tree and holds the keyboard: keys pressed now reach it.
+    pub fn ext_view_focused_for_perf(&self, id: &str, window: &Window) -> bool {
+        self.ext_view(id).is_some_and(|h| h.tree.is_some() && h.focus.values().any(|f| f.is_focused(window)))
+    }
+}
+
 #[cfg(test)]
 impl Workbench {
     /// Record requests and events instead of sending them, so a test can hand the view its tree.

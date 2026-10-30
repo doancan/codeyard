@@ -1,7 +1,8 @@
 //! View-title menus and core commands (#104), end to end with the probe extension (crates/ext-host/testdata/probe.wasm)
 //! in a real codeyard-exthost: a view's title menu runs the extension's command with the view id, or a core command;
 //! `commands.execute("core:…")` from code runs a listed core command only when the manifest lists it and the extension
-//! holds what the command implies. Skipped when code extensions cannot run here (no codeyard-exthost or sandbox).
+//! holds what the command implies; and the extensions of the performance scenarios. Skipped when code extensions cannot
+//! run here (no codeyard-exthost or sandbox).
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -92,6 +93,11 @@ fn setup<'a>(cx: &'a mut TestAppContext, cfg: &Path) -> (Entity<Workbench>, &'a 
     ];
     let (bytes, _) = ext_pkg::write(entries).expect("the probe passes the import check");
     crate::ext::store(cfg).install(&bytes, ext_core::Source::File { path: "/downloads/probe.cyx".into() }).expect("installs");
+    open_window(cx, cfg)
+}
+
+/// A window on `cfg` with what is installed there.
+fn open_window<'a>(cx: &'a mut TestAppContext, cfg: &Path) -> (Entity<Workbench>, &'a mut VisualTestContext) {
     std::fs::write(cfg.join("keybindings.jsonc"), "[]").unwrap();
     cx.update(|cx| {
         crate::bind_keys(cx);
@@ -282,4 +288,34 @@ fn the_perf_decoration_providers_decorate_and_answer(cx: &mut TestAppContext) {
     wait_for(cx, &wb, "both decoration sets", |wb| wb.decoration_sets_any_file_for_test() == 2);
     let done = wb.update_in(cx, |wb, window, cx| wb.ask_tasks_for_perf(window, cx));
     wait_for(cx, &wb, "the task providers", |_| done.get());
+}
+
+/// The performance scenarios' view (crates/ext-host/testdata/viewlist.wasm, scripts/perf/run.sh): installed from a
+/// folder, its sidebar view opens with 10 000 rows and holds the keyboard, so PageDown reaches the list.
+#[gpui::test]
+fn the_perf_view_lists_ten_thousand_rows(cx: &mut TestAppContext) {
+    if skipped() {
+        return;
+    }
+    let cfg = config_dir("perf-view");
+    let dir = cfg.join("viewlist");
+    std::fs::create_dir_all(&dir).unwrap();
+    let manifest = "[extension]\nid = \"perf.viewlist\"\nversion = \"1.0.0\"\nname = \"View List\"\nlicense = \"MIT\"\n[code]\nentry = \"Cargo.toml\"\n\
+                    [[views]]\nid = \"rows\"\ntitle = \"Perf: Rows\"\nlocation = \"sidebar\"\n";
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), manifest).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "").unwrap();
+    std::fs::write(dir.join(ext_pkg::COMPONENT), include_bytes!("../../ext-host/testdata/viewlist.wasm")).unwrap();
+    crate::ext::install_file(&crate::ext::store(&cfg), &dir).expect("installs from the folder");
+    let (wb, cx) = open_window(cx, &cfg);
+    let id = wb.update_in(cx, |wb, window, cx| wb.open_ext_view_for_perf(window, cx)).expect("a view");
+    assert_eq!(id, "perf.viewlist.rows");
+    let deadline = Instant::now() + Duration::from_secs(20 * crate::test_sshd::timeout_scale());
+    while !wb.update_in(cx, |wb, window, _| wb.ext_view_focused_for_perf(&id, window)) {
+        assert!(Instant::now() < deadline, "the view was not drawn: {:?}", wb.read_with(cx, |wb, _| wb.ext_view_error_for_test(&id)));
+        cx.run_until_parked();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(wb.read_with(cx, |wb, _| wb.ext_view_texts_for_test(&id)).len(), 10_000);
+    cx.simulate_keystrokes("pagedown pagedown");
+    assert_eq!(wb.update_in(cx, |wb, window, _| wb.ext_view_focused_for_test(&id, window)).as_deref(), Some("rows"));
 }
