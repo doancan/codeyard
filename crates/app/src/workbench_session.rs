@@ -144,6 +144,7 @@ impl Workbench {
         }
         self.persist_moved_terminals(cx);
         self.persist_search_editors(cx);
+        self.persist_terminals(cx);
     }
 
     pub(super) fn restore_group_views(&self, saved: SavedEditorSession, cx: &mut App) {
@@ -250,6 +251,7 @@ impl Workbench {
             return false;
         }
         self.restore_search_editors(ws, window, cx);
+        self.restore_terminals(ws, window, cx);
         // Terminals that were in the editor area or in windows of their own: new shells, once the groups exist.
         let moved = self.saved_moved_terminals(ws);
         let Some(s) = &self.persist.state else { return false };

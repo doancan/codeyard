@@ -274,6 +274,35 @@ fn a_restart_starts_a_new_shell_in_the_group_without_replaying_anything(cx: &mut
     wb.update(vcx, |wb, cx| wb.close_all_terminals(cx));
 }
 
+/// One restart brings back both kinds: the panel's terminal in the panel and the moved one in its group. A task's
+/// output terminal moved into the editor area has no shell, so it is not started again as one.
+#[gpui::test]
+fn a_restart_restores_panel_and_moved_terminals_but_not_task_output(cx: &mut gpui::TestAppContext) {
+    let home = crate::qa_workbench_tests::fresh("term-both-home");
+    let dir = crate::qa_workbench_tests::fresh("term-both-project");
+    let (wb, vcx) = crate::qa_workbench_tests::setup_persistent(cx, &home);
+    crate::qa_workbench_tests::open(&wb, &dir, vcx);
+    wb.update_in(vcx, |wb, window, cx| {
+        wb.new_terminal(&NewTerminal, window, cx);
+        wb.move_terminal_into_editor(window, cx);
+        let host = wb.remote.host.clone();
+        let task = cx.new(|cx| crate::terminal::TerminalView::output_only(host, "build task".into(), cx));
+        wb.terminals.push(task);
+        wb.active_terminal = wb.terminals.len() - 1;
+        wb.move_terminal_into_editor(window, cx);
+        wb.new_terminal(&NewTerminal, window, cx);
+    });
+    wb.read_with(vcx, |wb, _| assert_eq!((wb.terminals.len(), wb.editor_terminal_count()), (1, 2)));
+
+    let wb = restart_with_saved(wb, vcx, &home, None);
+    let back = |vcx: &mut gpui::VisualTestContext| wb.read_with(vcx, |wb, _| (wb.terminals.len(), wb.editor_terminal_count()));
+    assert!(wait(vcx, |vcx| back(vcx) == (1, 1)), "one terminal in the panel and one in the editor area: {:?}", back(vcx));
+    let moved = wb.read_with(vcx, |wb, _| wb.editor_terminals_for_test()[0].clone());
+    assert_ne!(vcx.update(|_, cx| moved.read(cx).title.to_string()), "build task", "the task output did not come back");
+    assert!(wait(vcx, |vcx| vcx.update(|_, cx| moved.read(cx).pty_handle().is_some())), "the moved terminal is a new shell");
+    wb.update(vcx, |wb, cx| wb.close_all_terminals(cx));
+}
+
 /// AC6: a damaged saved arrangement restores nothing and startup goes on; a group that is gone and a window off every
 /// display fall back to the focused group and a window clamped onto a display.
 #[gpui::test]

@@ -104,6 +104,10 @@ impl Workbench {
         let fits = |s: Option<String>, max: usize| s.filter(|s| s.len() <= max && !s.contains('\0'));
         let mut entry = |term: &Entity<TerminalView>, place: Place, cx: &App| {
             let t = term.read(cx);
+            // A task's output has no shell to start again.
+            if !t.has_shell() {
+                return;
+            }
             let color = t.color.clone().filter(|c| crate::terminal_profiles::COLORS.contains(&c.as_str()));
             let cwd = fits(t.live_cwd().or_else(|| t.start_dir()), MAX_CWD);
             terminals.push(SavedTerminal { place, title: fits(t.fixed_title(), MAX_TITLE), color, cwd });
@@ -130,12 +134,13 @@ impl Workbench {
         SavedTerminals::parse(&text)
     }
 
-    /// Start a new shell in each saved place. Only when no terminal is open (a start, not a folder switch whose
-    /// terminals are still running); a group that no longer exists gives its terminals to the focused group, and a
-    /// window that cannot open gives its terminal to the panel.
+    /// Start a new shell in each saved place. Only when no terminal is outside the panel (a start, not a folder switch
+    /// whose terminals are still running; the panel's own terminals are restored separately and may already be back);
+    /// a group that no longer exists gives its terminals to the focused group, and a window that cannot open gives its
+    /// terminal to the panel.
     pub(in crate::workbench) fn restore_moved_terminals(&mut self, saved: Option<SavedTerminals>, window: &mut Window, cx: &mut Context<Self>) {
         let Some(saved) = saved else { return };
-        if !self.terminals.is_empty() || !self.chrome.detached.is_empty() || self.editor_terminal_count() > 0 {
+        if !self.chrome.detached.is_empty() || self.editor_terminal_count() > 0 {
             return;
         }
         let root = self.active_root(cx);

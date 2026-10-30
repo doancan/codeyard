@@ -1174,6 +1174,7 @@ Line {} after the change
 Line {}: not committed yet	
 Line {}: {} · {}, {} · {}	
 Lines kept in terminal history	
+Lines of each terminal's history kept for the next start, as plain text on this computer (0: none)	
 Link copied.	
 List	
 Listen address (local: 127.0.0.1 or ::1; network: 0.0.0.0 or ::)	
@@ -1881,6 +1882,7 @@ Save user@host to ~/.ssh/config and connect
 Saved a copy to {}	
 Saved as {}. You kept typing while it was saving, so the original tab stays open with your latest changes.	
 Saved project “{}” (⌃R to switch)	
+Saved terminal history cleared	
 Saved to ~/.ssh/config. Connecting uses your SSH keys and ssh-agent; a password prompt appears in this window if needed.	
 Saved without formatting: {0}: {1}	
 Saved {} (edit the colors in that file)	
@@ -2125,9 +2127,11 @@ Tasks: Terminate Task
 Terminal	
 Terminal colour	
 Terminal row height, as a multiple of the font size	
+Terminal session could not be restored: {}	
 Terminal {0} of {1}	
 Terminal: Change Color…	
 Terminal: Clear	
+Terminal: Clear Saved Terminal History	
 Terminal: Close	
 Terminal: Configure Terminal Settings	
 Terminal: Copy Last Command Output	
@@ -2770,6 +2774,7 @@ the file is too large
 the folder cannot be read on the left	
 the folder cannot be read on the right	
 the folder is not trusted	
+the folder {} no longer exists; started a new shell in the workspace folder	
 the header “{}” is not valid	
 the keychain did not answer	
 the keychain refused the account: {}	
@@ -2781,6 +2786,7 @@ the regular expression is invalid ({})
 the repository may be private: sign in with `gh auth login` or set GITHUB_TOKEN	
 the response body is not JSON	
 the response of “{}” has no header {}	
+the saved state is damaged	
 the sign-in expired; sign in again	
 the sign-in failed: {}	
 the sign-in was refused ({})	

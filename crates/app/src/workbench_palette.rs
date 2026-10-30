@@ -425,6 +425,7 @@ impl Workbench {
             Command::action("Terminal: Move Terminals Back to Panel", MoveTerminalsBackToPanel),
             Command::action("Terminal: Move Terminal into Editor Area", MoveTerminalIntoEditorArea),
             Command::action("Terminal: Move Terminal Back to Panel", MoveTerminalBackToPanelFromEditor),
+            Command::action("Terminal: Clear Saved Terminal History", ClearSavedTerminalHistory),
             Command::action("View: Toggle Maximized Panel", ToggleMaximizedPanel),
         ];
         for h in self.remote.ssh_hosts.iter().filter(|h| h.alias != "github.com" && h.alias != "gitlab.com") {

@@ -3275,3 +3275,10 @@ Terminal: Move Terminal Back to Panel	Terminal: Terminali Panele Geri Taşı
 Terminal: Move Terminal into Editor Area	Terminal: Terminali Düzenleyici Alanına Taşı
 Previous session ended; started a new shell	Önceki oturum sona erdi; yeni bir kabuk başlatıldı
 {} (terminal)	{} (terminal sekmesi)
+# ---- Terminal restore ----
+Lines of each terminal's history kept for the next start, as plain text on this computer (0: none)	Her terminalin geçmişinden bir sonraki açılış için bu bilgisayarda düz metin olarak saklanan satır sayısı (0: hiç)
+Saved terminal history cleared	Kaydedilen terminal geçmişi temizlendi
+Terminal session could not be restored: {}	Terminal oturumu geri yüklenemedi: {}
+Terminal: Clear Saved Terminal History	Terminal: Kaydedilen Terminal Geçmişini Temizle
+the folder {} no longer exists; started a new shell in the workspace folder	{} klasörü artık yok; çalışma alanı klasöründe yeni bir kabuk başlatıldı
+the saved state is damaged	kaydedilen durum bozuk

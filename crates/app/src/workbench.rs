@@ -340,6 +340,7 @@ actions!(
         MoveTerminalsBackToPanel,
         MoveTerminalIntoEditorArea,
         MoveTerminalBackToPanelFromEditor,
+        ClearSavedTerminalHistory,
         ToggleMaximizedPanel,
         GitCheckout,
         GitCreateBranch,

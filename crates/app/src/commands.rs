@@ -236,6 +236,7 @@ registry! {
     "terminal.moveBackToPanel" => wb::MoveTerminalsBackToPanel,
     "terminal.moveIntoEditorArea" => wb::MoveTerminalIntoEditorArea,
     "terminal.moveBackToPanelFromEditor" => wb::MoveTerminalBackToPanelFromEditor,
+    "terminal.clearSavedHistory" => wb::ClearSavedTerminalHistory,
     "workbench.toggleMaximizedPanel" => wb::ToggleMaximizedPanel,
     "tasks.build" => wb::RunBuildTask,
     "tasks.rerun" => wb::RerunLastTask,

@@ -160,6 +160,7 @@ impl Render for Workbench {
             .on_action(cx.listener(|this, _: &MoveTerminalsBackToPanel, _, cx| this.return_detached_terminals(cx)))
             .on_action(cx.listener(|this, _: &MoveTerminalIntoEditorArea, window, cx| this.move_terminal_into_editor(window, cx)))
             .on_action(cx.listener(|this, _: &MoveTerminalBackToPanelFromEditor, window, cx| this.move_terminal_back_to_panel(window, cx)))
+            .on_action(cx.listener(|this, _: &ClearSavedTerminalHistory, _, cx| this.clear_saved_terminal_history(cx)))
             .on_action(cx.listener(Self::kill_all_terminals))
             .on_action(cx.listener(Self::kill_other_terminals))
             .on_action(cx.listener(Self::focus_next_terminal))

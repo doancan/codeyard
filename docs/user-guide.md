@@ -198,6 +198,14 @@ to the front. At the next start, each terminal that was in an editor group or in
 same place as a new shell, with its name, colour and folder, and the line "Previous session ended; started a new
 shell"; nothing from the previous session runs again. A window whose display is gone opens on an attached display, made
 to fit; a saved arrangement that cannot be read is ignored.
+**Terminals after a restart.** With `window.restoreSession` on (the default), the panel's terminals come back when
+the folder opens again: same order, folder, title, color and program. Each one is a **new shell**: nothing that ran before
+is started or typed again, and a line says *Previous session ended; started a new shell*. If a terminal's folder is gone,
+it starts in the workspace folder and says so. `"terminal.persistentScrollback": 1000` also keeps the last lines of each
+terminal's history (plain text, with colors and control sequences removed) and shows them above that line; it is 0 (off) by
+default, because history can contain secrets. "Terminal: Clear Saved Terminal History" removes the saved history now.
+Environment variables from terminal profiles are not saved. Task and test output terminals are not restored. Over SSH, a
+dropped connection reconnects to the shells that are still running on the server (they are not restarted).
 
 Terminal line editing works as in Terminal.app: ⌘← / ⌘→ jump to the start / end of the line, ⌥← / ⌥→ move by word,
 ⌘⌫ deletes to the start of the line, ⌘⌦ to its end and ⌥⌦ the next word (these are the shell's own keys, Ctrl+A, Ctrl+E,

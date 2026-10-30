@@ -175,6 +175,9 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Row height as a multiple of the font size (1 to 2).
   "terminal.lineHeight": 1.2,
   "terminal.scrollback": 2000,
+  // Lines of each terminal's history kept for the next start, as plain text (0: none). Terminals always come back as
+  // new shells: nothing is run again.
+  // "terminal.persistentScrollback": 0,
   "terminal.scrollSensitivity": 2,
   // Let programs in the terminal write to the clipboard (OSC 52). Off by default: a program you run, or a file you cat, could replace
   // what you copied.
