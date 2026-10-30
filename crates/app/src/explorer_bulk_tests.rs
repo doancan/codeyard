@@ -121,7 +121,6 @@ fn explorer_bulk_delete_has_one_confirmation_and_preserves_dirty_buffers(cx: &mu
         std::fs::write(dir.join(name), name).unwrap();
     }
     let (wb, cx) = setup(cx);
-    cx.update(|_, cx| cx.global_mut::<crate::settings::Settings>().enable_trash = false);
     open(&wb, &dir, cx);
     open(&wb, &dir.join("a.txt"), cx);
     cx.simulate_input("unsaved-");

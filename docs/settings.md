@@ -91,7 +91,7 @@ status bar reports it.
 | --- | --- | --- | --- |
 | `files.autoSave` | `off`, `afterDelay`, `onFocusChange` | `off` | Save files automatically |
 | `files.autoSaveDelay` | number 100–600000 | `1000` | Delay for afterDelay (ms) |
-| `files.enableTrash` | `true` / `false` | `true` | Move deleted local files to the Trash |
+| `files.enableTrash` | `true` / `false` | `false` | Move deleted local files to the Trash |
 | `files.fallbackEncoding` | `windows1254`, `iso88599`, `iso88591`, `utf8` | `windows1254` | Encoding for files that are not UTF-8 |
 | `files.hotExit` | `true` / `false` | `true` | Keep unsaved changes across restarts |
 | `files.insertFinalNewline` | `true` / `false` | `false` | End files with a newline when saving |

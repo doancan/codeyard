@@ -1,6 +1,6 @@
 # Crate Version Ts
 
-The `crate-version` example in TypeScript: a command that asks for a Rust crate's name and shows its latest version from crates.io, with the global `fetch` and the `net` permission. The unit test answers the request with a fixture.
+The `crate-version` example in TypeScript: a command that asks for a Rust crate's name and shows its latest version from crates.io, with the global `fetch` and the `net` permission. Resting the mouse on a dependency in `Cargo.toml` shows the same, next to the language server's hover; each crate is looked up once, since a hover must answer quickly. The unit tests answer the requests with fixtures.
 
 ```sh
 npm install

@@ -268,7 +268,7 @@ fn qa_delete_file_with_unsaved_changes_keeps_the_text(cx: &mut TestAppContext) {
     assert!(wb.read_with(cx, |wb, cx| wb.any_dirty(cx)));
     wb.update_in(cx, |wb, window, cx| wb.focus_tree(window, cx));
     cx.simulate_keystrokes("down cmd-backspace");
-    cx.simulate_prompt_answer("Move to Trash");
+    cx.simulate_prompt_answer("Delete");
     cx.run_until_parked();
     assert!(!dir.join("a.txt").exists());
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity());

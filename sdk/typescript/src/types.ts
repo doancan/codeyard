@@ -2,6 +2,7 @@
 // optional fields that may be left out.
 
 import type {
+  CompletionKind,
   DecorationPlace,
   Diagnostic as WitDiagnostic,
   DiagnosticSeverity,
@@ -16,7 +17,7 @@ import type {
   Why,
 } from "./wit.ts";
 
-export type { DecorationPlace, DiagnosticSeverity, Document, FormatOptions, LogLevel, Position, Range, Severity, TextEdit, Tone, Why };
+export type { CompletionKind, DecorationPlace, DiagnosticSeverity, Document, FormatOptions, LogLevel, Position, Range, Severity, TextEdit, Tone, Why };
 
 /** A file or folder. Opaque: the same code works on local and SSH folders. */
 export type Uri = string;
@@ -160,4 +161,42 @@ export interface SearchOptions {
   /** Only files matching these globs; empty means all the extension may read. */
   include?: string[];
   max?: number;
+}
+
+/** What a hover provider describes, shown next to the language server's under the extension's name. */
+export interface Hover {
+  /** Markdown; Codeyard shows it as plain text. */
+  contents: string;
+  /** The range described; the word at the position when left out. */
+  range?: Range;
+}
+
+/** A completion a provider offers. */
+export interface CompletionItem {
+  /** Shown in the list, and inserted when `insertText` is left out. */
+  label: string;
+  /** The icon; `text` when left out. */
+  kind?: CompletionKind;
+  /** One line shown next to the label, such as a type. */
+  detail?: string;
+  /** Markdown shown beside the list while the item is selected. */
+  documentation?: string;
+  insertText?: string;
+  /** `insertText` is a snippet: `$1`, `${1:default}` and `$0` are tab stops. */
+  snippet?: boolean;
+  /** The text replaced; the word before the cursor when left out. */
+  range?: Range;
+  /** More edits made when the item is chosen, such as an import. */
+  additionalEdits?: TextEdit[];
+  /** Matched against what the user typed; the label when left out. */
+  filterText?: string;
+  /** Orders items that match equally well; the label when left out. */
+  sortText?: string;
+}
+
+/** A completion provider's answer: a list of items, or the items and whether more typing changes them. */
+export interface CompletionList {
+  items: CompletionItem[];
+  /** More typing changes the answer: Codeyard asks again as the user types, instead of only filtering. */
+  incomplete?: boolean;
 }

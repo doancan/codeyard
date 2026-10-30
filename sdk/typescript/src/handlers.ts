@@ -12,6 +12,8 @@ export interface Handlers {
   codeActions: Fn | undefined;
   runCodeAction: Fn | undefined;
   openUri: Fn | undefined;
+  hover: Fn | undefined;
+  completion: Fn | undefined;
   settingsChanged: Fn[];
   timers: Map<bigint, Fn>;
   /** Progress the user cancelled. */
@@ -32,6 +34,8 @@ function empty(): Handlers {
     codeActions: undefined,
     runCodeAction: undefined,
     openUri: undefined,
+    hover: undefined,
+    completion: undefined,
     settingsChanged: [],
     timers: new Map(),
     cancelledProgress: new Set(),

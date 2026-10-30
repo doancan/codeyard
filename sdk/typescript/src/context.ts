@@ -12,6 +12,8 @@ import {
   type Chunk,
   type CodeAction,
   type Command,
+  type CompletionItem,
+  type CompletionList,
   type Decoration,
   type Diagnostic,
   type Document,
@@ -19,11 +21,13 @@ import {
   type Env,
   type FileStat,
   type FormatOptions,
+  type Hover,
   type InputOptions,
   type LogLevel,
   type Output,
   type PickItem,
   type PickOptions,
+  type Position,
   type Range,
   type SearchMatch,
   type SearchOptions,
@@ -105,6 +109,25 @@ export class Context {
   /** The user chose a code action that has a `command`: its `id`. */
   onCodeAction(f: (ctx: Context, id: string) => Awaitable<void>): void {
     handlers.runCodeAction = f;
+  }
+
+  /**
+   * Describe what is at a position of a document of the manifest's `[[hover]]` languages: shown in the hover popup
+   * next to the language server's, under the extension's name. Answer within the provider deadline.
+   */
+  hover(f: (ctx: Context, document: Document, position: Position) => Awaitable<Hover | undefined>): void {
+    handlers.hover = f;
+  }
+
+  /**
+   * Offer completions at a position of a document of the manifest's `[[completion]]` languages: they join the
+   * language server's in the list. `trigger` is the character typed when one of the manifest's `trigger-characters`
+   * asked, undefined when the user typed a word or asked. Answer within the provider deadline: a late answer is dropped.
+   */
+  completion(
+    f: (ctx: Context, document: Document, position: Position, trigger: string | undefined) => Awaitable<CompletionItem[] | CompletionList>,
+  ): void {
+    handlers.completion = f;
   }
 
   /** A `codeyard://ext/<id>/…` link was opened: its path and query. */

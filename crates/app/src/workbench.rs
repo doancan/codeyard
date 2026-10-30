@@ -645,7 +645,7 @@ fn folder_settings_paths(root: &str) -> Vec<String> {
 }
 
 /// Separator between extra folder name and path in the Go to file list (never occurs in file names).
-pub(super) const ROOT_SEP: &str = " › ";
+pub(crate) const ROOT_SEP: &str = " › ";
 
 /// ID of the extra folder section (header drawing needs `&'static str`; IDs are created once).
 fn extra_folder_id(i: usize) -> &'static str {

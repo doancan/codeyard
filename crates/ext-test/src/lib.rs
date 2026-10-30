@@ -249,6 +249,22 @@ impl MockHost {
         }
     }
 
+    /// Ask the hover provider about `position`, as the mouse resting there does.
+    pub fn hover(&self, document: Document, position: Position) -> Result<Option<Hover>> {
+        match self.request(Request::Hover { document, position })? {
+            Response::Hover(h) => Ok(h),
+            other => Err(Error::Other(format!("the hover provider answered {other:?}"))),
+        }
+    }
+
+    /// Ask the completion provider at `position`; `trigger` is the trigger character typed, if one asked.
+    pub fn completion(&self, document: Document, position: Position, trigger: Option<&str>) -> Result<CompletionList> {
+        match self.request(Request::Completion { document, position, trigger: trigger.map(str::to_string) })? {
+            Response::Completions(l) => Ok(l),
+            other => Err(Error::Other(format!("the completion provider answered {other:?}"))),
+        }
+    }
+
     pub fn run_code_action(&self, id: &str) -> Result<()> {
         self.request(Request::RunCodeAction(id.to_string())).map(|_| ())
     }
