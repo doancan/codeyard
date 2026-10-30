@@ -1348,6 +1348,7 @@ No debug session.
 No debug session. F5 starts one.	
 No definition found	
 No differences.	
+No editor is in a window of its own.	
 No edits yet in this session.	
 No enclosing brackets	
 No expressions: + adds one.	
@@ -1501,6 +1502,7 @@ Open a Markdown file (.md) to preview it.
 Open a Rust file first	
 Open a file first	
 Open a file first.	
+Open a file in the editor first.	
 Open a file inside a folder to run its tests.	
 Open a file to see its history.	
 Open a file to see its structure.	
@@ -2211,6 +2213,7 @@ The debug adapter stopped
 The debug adapter stopped (exit code {})	
 The debugger could not bind this breakpoint.	
 The download finished but js-debug was not found in it.	
+The editor could not move to a new window: {}	
 The element can't be renamed.	
 The file changed during the write ({})	
 The file changed on disk while you were editing. Nothing was saved.	
@@ -2401,6 +2404,7 @@ Unsupported encoding: the file would not be written back exactly, so it is not c
 Unterminated quote in the Cargo test command	
 Untracked files will be deleted. This can't be undone.	
 Unwrapped lines	
+Up to {} editors can be in windows of their own.	
 Update	
 Update Now	
 Update available	
@@ -2449,13 +2453,16 @@ View: Close Empty Editor Group
 View: Close Other Editors	
 View: Close Saved Editors	
 View: Containers	
+View: Copy Editor into New Window	
 View: Files	
 View: Focus Left Editor Group	
 View: Focus Lower Editor Group	
 View: Focus Right Editor Group	
 View: Focus Upper Editor Group	
 View: Keep Editor	
+View: Move Editor into New Window	
 View: Move Editor into Other Group	
+View: Move Editors Back to Main Window	
 View: Move Panel (bottom ⇄ right)	
 View: Move View to Primary Side Bar	
 View: Move View to Secondary Side Bar	

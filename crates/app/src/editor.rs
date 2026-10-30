@@ -1076,9 +1076,14 @@ impl EditorView {
         self.slot == slot || self.parked.get(slot).is_some_and(Option::is_some)
     }
 
-    /// Opened in another group: that group's view (cursor and scroll same as the current one).
+    /// The keyboard focus of the `slot` view (a window of its own focuses its view, not the group's).
+    pub fn slot_focus(&self, slot: usize) -> Option<FocusHandle> {
+        if slot == self.slot { Some(self.focus_handle.clone()) } else { self.parked.get(slot)?.as_ref()?.focus_handle.clone() }
+    }
+
+    /// Opened in another group or a window of its own: that view (cursor and scroll same as the current one).
     pub fn open_slot(&mut self, slot: usize, cx: &mut Context<Self>) {
-        if self.has_slot(slot) || slot >= crate::editor_layout::MAX_GROUPS {
+        if self.has_slot(slot) || slot >= crate::editor_layout::MAX_VIEW_SLOTS {
             return;
         }
         self.parked.resize_with(self.parked.len().max(slot + 1), || None);

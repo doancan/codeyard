@@ -37,9 +37,15 @@ impl Workbench {
         if self.active_editor().is_some_and(|e| e.read(cx).path != path) {
             self.record_nav(cx);
         }
-        // If open in the other group, the same document shows in this group too (no second copy is loaded).
+        // If open in another group or window, the same document shows in this group too (no second copy is loaded).
         if !self.tabs.editors.iter().any(|e| e.read(cx).path == path)
-            && let Some(ed) = self.tabs.groups.values().flat_map(|g| &g.editors).find(|e| e.read(cx).path == path && e.read(cx).uses_host(&host)).cloned()
+            && let Some(ed) = self
+                .tabs
+                .groups
+                .values()
+                .flat_map(|g| g.editors.iter().cloned())
+                .chain(self.window_editors())
+                .find(|e| e.read(cx).path == path && e.read(cx).uses_host(&host))
         {
             ed.update(cx, |e, _| e.preview = e.preview && preview);
             self.tabs.editors.push(ed);
@@ -279,6 +285,7 @@ impl Workbench {
         self.shutdown_lsp(cx);
         self.persist.backed_up.clear();
         self.return_all_editor_terminals();
+        self.close_editor_windows(cx);
         self.tabs = Default::default();
         self.tabs.active = None;
         self.tabs.diff = None;

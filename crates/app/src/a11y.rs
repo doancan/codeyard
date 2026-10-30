@@ -254,6 +254,8 @@ mod services_access;
 pub(crate) use ext_views_access::Act as ExtViewAct;
 #[path = "a11y_term_tabs.rs"]
 mod term_tab_access;
+#[path = "a11y_windows.rs"]
+pub(in crate::workbench) mod windows_access;
 use search_access::SEARCH_ED_TAB;
 pub(crate) use search_access::{SearchEdSnap, SearchTabSnap};
 pub(crate) use term_tab_access::TermTabSnap;
@@ -1106,6 +1108,8 @@ impl Workbench {
 
 #[cfg(any(target_os = "macos", windows))]
 pub use platform::attach;
+#[cfg(any(target_os = "macos", windows))]
+pub(in crate::workbench) use platform::attach_with;
 
 /// The AccessKit adapter: `accesskit_macos` (NSAccessibility, VoiceOver) or `accesskit_windows` (UI Automation: NVDA,
 /// JAWS, Narrator). Both subclass the native view or window; the tree and the actions are the same.
@@ -1119,7 +1123,7 @@ mod platform {
     use accesskit_windows::SubclassingAdapter;
     use futures::StreamExt as _;
     use futures::channel::mpsc::{UnboundedSender, unbounded};
-    use gpui::{AsyncApp, WindowHandle};
+    use gpui::{AnyWindowHandle, AsyncApp, WindowHandle};
     use std::cell::RefCell;
     use std::rc::Rc;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -1134,7 +1138,8 @@ mod platform {
 
     struct Activate {
         cx: AsyncApp,
-        handle: WindowHandle<Workbench>,
+        handle: AnyWindowHandle,
+        hooks: windows_access::Hooks,
         ctl: Rc<RefCell<Ctl>>,
         started: Rc<AtomicBool>,
     }
@@ -1144,8 +1149,8 @@ mod platform {
             // The assistive technology asked for the first time: start the loop once. We can't build the tree here
             // (no GPUI context); the first TreeUpdate goes out on the next turn, without waiting for the timer.
             if !self.started.swap(true, Ordering::SeqCst) {
-                let (cx, handle, ctl) = (self.cx.clone(), self.handle, self.ctl.clone());
-                self.cx.spawn(async move |_| pump(cx, handle, ctl).await).detach();
+                let (cx, handle, hooks, ctl) = (self.cx.clone(), self.handle, self.hooks, self.ctl.clone());
+                self.cx.spawn(async move |_| pump(cx, handle, hooks, ctl).await).detach();
             }
             None
         }
@@ -1161,13 +1166,10 @@ mod platform {
     }
 
     /// While active: take a snapshot, send it if changed, report window focus (Windows' adapter follows focus itself).
-    async fn pump(mut cx: AsyncApp, handle: WindowHandle<Workbench>, ctl: Rc<RefCell<Ctl>>) {
+    async fn pump(mut cx: AsyncApp, handle: AnyWindowHandle, hooks: windows_access::Hooks, ctl: Rc<RefCell<Ctl>>) {
         let mut first = true;
         loop {
-            let got = cx.update_window(handle.into(), |root, window, cx| {
-                let wb = root.downcast::<Workbench>().ok()?;
-                Some((wb.read(cx).a11y_snapshot(window, cx), window.is_window_active()))
-            });
+            let got = cx.update_window(handle, |root, window, cx| Some(((hooks.snapshot)(root, window, cx)?, window.is_window_active())));
             let Ok(Some((snap, active))) = got else { return };
             // Don't hold the borrow across the await (the action task reads `ctl`).
             let events: Vec<_> = {
@@ -1208,6 +1210,11 @@ mod platform {
     /// just a few hundred bytes and the subclass; the tree and loop start then. On Windows the window must not be
     /// visible yet (open it with `show: false` and activate it after this).
     pub fn attach(handle: WindowHandle<Workbench>, cx: &mut App) {
+        attach_with(handle.into(), windows_access::WORKBENCH, cx);
+    }
+
+    /// Attach the adapter to any window whose tree `hooks` builds (an editor's or a terminal's own window).
+    pub(in crate::workbench) fn attach_with(handle: AnyWindowHandle, hooks: windows_access::Hooks, cx: &mut App) {
         // The GPUI test window has `unimplemented!()` for `window_handle()`; no real native window.
         if cfg!(test) || std::env::var_os("CODEYARD_NO_A11Y").is_some() {
             return;
@@ -1220,7 +1227,7 @@ mod platform {
             focused: false,
         }));
         let started = Rc::new(AtomicBool::new(false));
-        let raw = handle.update(cx, |_, window, _| {
+        let raw = cx.update_window(handle, |_, window, _| {
             use raw_window_handle::{HasWindowHandle, RawWindowHandle};
             match HasWindowHandle::window_handle(window).ok()?.as_raw() {
                 #[cfg(target_os = "macos")]
@@ -1241,7 +1248,7 @@ mod platform {
             }
         }
         let (tx, mut rx) = unbounded::<ActionRequest>();
-        let activate = Activate { cx: async_cx.clone(), handle, ctl: ctl.clone(), started };
+        let activate = Activate { cx: async_cx.clone(), handle, hooks, ctl: ctl.clone(), started };
         // SAFETY: `raw` is the live NSView / HWND GPUI holds; the adapter drops with the window
         // (ctl is released with the task and closures when the window closes).
         #[cfg(target_os = "macos")]
@@ -1254,11 +1261,7 @@ mod platform {
             .spawn(async move |_| {
                 while let Some(request) = rx.next().await {
                     let last = ctl.borrow().last.clone();
-                    let window = action_cx.update_window(handle.into(), |root, window, cx| {
-                        if let Ok(wb) = root.downcast::<Workbench>() {
-                            wb.update(cx, |wb, cx| wb.a11y_action(&request, &last, window, cx));
-                        }
-                    });
+                    let window = action_cx.update_window(handle, |root, window, cx| (hooks.action)(root, &request, &last, window, cx));
                     if window.is_err() {
                         return;
                     }

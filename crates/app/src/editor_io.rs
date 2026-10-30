@@ -212,6 +212,16 @@ impl EditorView {
         view
     }
 
+    /// Runs `f` in the `slot` view (its cursors, find bar and popups) without changing the input home.
+    #[cfg_attr(not(any(test, target_os = "macos", windows)), allow(dead_code))]
+    pub fn in_slot<R>(&mut self, slot: usize, f: impl FnOnce(&mut Self) -> R) -> R {
+        let home = self.slot;
+        self.enter(slot);
+        let r = f(self);
+        self.enter(home);
+        r
+    }
+
     pub fn set_view_for_slot(&mut self, slot: usize, view: state::View) {
         let home = self.slot;
         self.enter(slot);

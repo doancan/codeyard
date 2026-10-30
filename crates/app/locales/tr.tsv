@@ -3311,3 +3311,11 @@ It wants to run {0} on the remote host {1}, with your account there.	{0} program
 Your answer holds until Codeyard quits.	Yanıtınız Codeyard kapanana kadar geçerli.
 Allow for this session	Bu oturum için izin ver
 it used {0} MB of memory, over the limit of {1} MB, and was stopped	{0} MB bellek kullandı, {1} MB sınırını aştı ve durduruldu
+
+View: Move Editor into New Window	Görünüm: Düzenleyiciyi Yeni Pencereye Taşı
+View: Copy Editor into New Window	Görünüm: Düzenleyiciyi Yeni Pencereye Kopyala
+View: Move Editors Back to Main Window	Görünüm: Düzenleyicileri Ana Pencereye Geri Taşı
+Open a file in the editor first.	Önce düzenleyicide bir dosya açın.
+Up to {} editors can be in windows of their own.	Kendi penceresinde en fazla {} düzenleyici olabilir.
+The editor could not move to a new window: {}	Düzenleyici yeni bir pencereye taşınamadı: {}
+No editor is in a window of its own.	Kendi penceresinde açık düzenleyici yok.

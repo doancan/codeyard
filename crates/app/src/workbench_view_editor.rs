@@ -129,7 +129,7 @@ impl Workbench {
                     .children(self.data_query_bar(p, cx))
                 })
                 .child(div().relative().flex_1().min_w_0().min_h_0().child(body).when(
-                    focused && self.active_editor().is_some() && !state.diff_active && !state.large_active && !state.page_active && state.open_error.is_none(),
+                    focused && self.tab_editor().is_some() && !state.diff_active && !state.large_active && !state.page_active && state.open_error.is_none(),
                     |d| d.child(a11y::landmark(a11y::Landmark::Editor, cx)),
                 ))
                 .on_mouse_down(
@@ -701,7 +701,7 @@ impl Workbench {
     /// File path relative to the root folder: src › app › main.rs
     /// The path above the editor. A folder item shows that folder in the explorer, a file item shows the file.
     pub(super) fn breadcrumbs(&self, p: &Palette, cx: &mut Context<Self>) -> Option<impl IntoElement> {
-        let path = self.active_editor()?.read(cx).path.clone();
+        let path = self.tab_editor()?.read(cx).path.clone();
         let root = self.roots.primary.read(cx).root().map(str::to_string);
         let crumbs = crumb_paths(root.as_deref(), &path);
         let last = crumbs.len().saturating_sub(1);

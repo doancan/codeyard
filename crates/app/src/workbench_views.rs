@@ -22,6 +22,14 @@ pub(super) struct DetachedTerminal {
     term: Entity<TerminalView>,
 }
 
+impl DetachedTerminal {
+    /// The terminal it shows (accessibility).
+    #[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
+    pub(super) fn term(&self) -> Entity<TerminalView> {
+        self.term.clone()
+    }
+}
+
 impl Render for DetachedTerminal {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = *palette(cx);
@@ -168,11 +176,13 @@ impl Workbench {
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: Some(gpui::TitlebarOptions { title: Some(title), appears_transparent: false, traffic_light_position: None }),
+            // Windows: the UI Automation adapter must be attached before the window is first shown.
+            show: !cfg!(windows),
             ..Default::default()
         };
         let home = cx.entity().downgrade();
         let t = term;
-        cx.open_window(options, move |window, cx| {
+        let opened = cx.open_window(options, move |window, cx| {
             let view = cx.new(|_| DetachedTerminal { term: t.clone() });
             let focus = t.read(cx).focus_handle(cx);
             window.focus(&focus);
@@ -185,7 +195,14 @@ impl Workbench {
                 true
             });
             view
-        })
+        });
+        if let Ok(handle) = &opened {
+            #[cfg(any(target_os = "macos", windows))]
+            a11y::attach_with((*handle).into(), a11y::windows_access::TERMINAL_WINDOW, cx);
+            #[cfg(windows)]
+            handle.update(cx, |_, window, _| window.activate_window()).ok();
+        }
+        opened
     }
 
     /// The panel's list without `term`, without ending it.
