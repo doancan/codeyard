@@ -23,6 +23,31 @@ location = "sidebar"          # sidebar | bottom | editor
 Every view is also in the command palette as **Open View: Deployments (you)**. Opening a view starts your extension
 (the activation reason is `view:deployments`), so a view costs nothing until someone looks at it.
 
+### Only when it fits
+
+```toml
+[[views]]
+id       = "crates"
+title    = "Crates"
+location = "sidebar"
+when     = "editor.language == 'rust'"
+```
+
+With `when`, the view is offered (activity bar button, panel tab, **Open View**) only while the condition holds, and an
+open view closes when it turns false. The keys describe what the window shows:
+
+| Key | True when |
+| --- | --- |
+| `editor` | a file is open in an editor tab |
+| `editor.language` | the language id of that file (`rust`, `toml`, …) |
+| `terminal` | the bottom panel shows the terminal |
+| `file-tree`, `scm`, `search` | that view is in a side bar |
+| `panel` | the bottom panel is open |
+| `workspace.trusted` | every folder of the window is trusted |
+
+`ext.<key>` is always false in this version. A sidebar view replaces the view that was in the side bar, so
+`when = "file-tree"` on a sidebar view closes it as soon as it opens.
+
 ## Draw it
 
 When the view opens, your extension gets `render("deployments")` and answers with `response.view`: the tree as JSON.
@@ -78,8 +103,23 @@ children yet (or reaches "Load more"), you get `expand` with that token. Add the
 - Take the keyboard while one of Codeyard's sheets or pickers waits for the user.
 - Load remote images in `markdown`. Links in Markdown and `link` elements open only after the user sees and confirms
   the full address.
-- Show an `image` from a URL in this version: only `bytes` images are drawn until fetching through your `net`
-  permission lands; a URL image shows its `alt` text.
+- Load an `image` from a host that is not in your `net` permission, or from any host in a folder the user has not
+  trusted. Such an image shows its `alt` text, and the refusal is listed under **Recent denials** in the Inspector.
+
+## Images from the web
+
+An `image` with `{"url": "https://…"}` is fetched by Codeyard, not by your extension, through your `net` permission:
+
+```toml
+[permissions]
+net = ["avatars.example.com"]
+```
+
+The rules are those of `net.fetch`: https only, the host must be in `net`, the address it resolves to must be public,
+and redirects are checked again. The image may be at most 1 MB and must be PNG, JPEG, GIF, WebP or SVG. Codeyard
+fetches only while the view is on screen, two images at a time, and keeps each image by URL until the view closes, so
+drawing the view again does not fetch it again. A view fetches at most 64 different URLs; later ones show their `alt`
+text. A failed image shows its `alt` text and a line in your log.
 
 ## Accessibility
 

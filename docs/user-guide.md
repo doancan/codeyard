@@ -763,7 +763,10 @@ in the bottom panel, or a page in the editor area (also *Open View: …* in the 
 with your theme, so they follow theme and zoom changes, and they work with the keyboard (Tab between controls, arrows
 in lists and trees) and screen readers. Each view names its publisher at the top. A view stays in its place: it cannot
 cover Codeyard's install, trust or sign-in sheets, or take the keyboard while one of them waits for you. Images in its
-text are not loaded, and a link opens in your browser only after you confirm its address.
+text are not loaded, and a link opens in your browser only after you confirm its address. An image element with a web
+address is loaded by Codeyard, only from a site the extension asked for on its install sheet, never in a folder you have
+not trusted, and only while the view is on screen; anything else shows the image's description. A view can also be
+offered only in some situations, for example while a Rust file is open; it closes by itself when that stops.
 **What extensions with code add.** Everything they put on screen names the extension.
 
 - *Commands* in the palette, in the editor's and the file tree's right-click menus (after the built-in entries, greyed
