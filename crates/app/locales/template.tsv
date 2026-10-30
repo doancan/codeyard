@@ -163,6 +163,7 @@ Cancel “{}”?
 Cancelling…	
 Cannot check out #{}: you have uncommitted changes that would be overwritten. Commit or stash them, then try again	
 Cannot check whether {0} has a key of type {1}	
+Cannot copy {0} to {1}: {2}	
 Cannot index {0} with {1}	
 Cannot index {0} with “{1}”	
 Cannot index {} with object	
@@ -1116,6 +1117,7 @@ Interface scale: {}%
 Into a folder on this computer or the connected host	
 Invalid pattern	
 Invalid string	
+It brings its own programs, built for each platform. They run on the computer that holds the workspace (this one, or the SSH server) with your rights.	
 It can't be moved to the Trash ({}). Deleting it permanently can't be undone.	
 It declares no permissions.	
 It wants to read the text you copied, here or in other apps.	
@@ -1297,6 +1299,7 @@ Name with an extension: the extension picks the language (scratch.md, notes.json
 Names can't contain / or be . or ..	
 Names only	
 Native program (C, C++, Rust, Swift)	
+Native programs	
 Needs attention	
 Network I/O total	
 Network RX / TX rate	
@@ -2396,6 +2399,7 @@ Type a query and press Enter to search.
 Type a query. Esc closes the bar.	
 Type into terminals	
 Type the shortcut for {} (e.g. cmd-shift-d), then save	
+Type {} to install it.	
 TypeScript {} · TypeScript Language Server {} · HTML/CSS {}	
 UI font of the whole window (empty: system font)	
 Unavailable	
@@ -2922,6 +2926,7 @@ your words
 {0} errors, {1} warnings	
 {0} failed to start: {1}	
 {0} files and {1} folders go from {2} ({3}) to {4} ({5}). Files that exist there are replaced; anything that changed since the scan is left alone.	
+{0} has no package for {1}	
 {0} is back at version {1}.	
 {0} is now published by {1}, not {2} as before; review it with Extensions: Install from Registry…	
 {0} is signed in to {1} as {2}.	
@@ -2942,11 +2947,13 @@ your words
 {0} of {1} changes	
 {0} of {1} changes in {2} files selected. Nothing is written before Apply.	
 {0} of {1}{2}	
+{0} on {1} does not match the hash in its package; it was not run	
 {0} on {1} is deleted for good, with everything in it. It is not moved to the Trash.	
 {0} only on the left, {1} only on the right, {2} changed, {3} identical, {4} errors	
 {0} result in {1} files|{0} results in {1} files	
 {0} says why: “{1}”	
 {0} was left alone: {1}|{0} were left alone, the first one {1}	
+{0} was not installed from a registry, so it has no package for {1}; install the package built for {1}	
 {0} was stopped: it needs {1}, which was stopped	
 {0} was stopped: the registry revoked this version ({1})	
 {0} was updated to version {1}.	
@@ -3011,6 +3018,7 @@ your words
 {} cannot be parsed as JSON	
 {} cannot be parsed as a number	
 {} cannot be rounded	
+{} cannot receive native programs	
 {} cannot run: codeyard-exthost is missing beside Codeyard.	
 {} changed no files (merge or empty commit).	
 {} change|{} changes	
@@ -3044,6 +3052,7 @@ your words
 {} has no keys	
 {} has no length	
 {} has no newer version	
+{} has no valid hash in its package	
 {} holds no changes to tracked files.	
 {} hour ago|{} hours ago	
 {} implementation|{} implementations	
@@ -3063,6 +3072,7 @@ your words
 {} is not an array	
 {} is not in HEAD yet.	
 {} is not in any of your registries	
+{} is not in the package	
 {} is not in the registry	
 {} is not installed	
 {} is not installed. Open the setup instructions, then try again.	

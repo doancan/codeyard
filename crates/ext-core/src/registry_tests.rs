@@ -174,6 +174,7 @@ fn pins_come_from_the_same_registry() {
         source,
         disabled: false,
         pre_release: false,
+        targets: Default::default(),
     };
     let me = github(7, 42);
     let from_test = locked(crate::Source::Registry { registry: "test".into(), publisher: me.clone() });
@@ -257,4 +258,29 @@ fn a_changed_page_or_one_for_another_package_is_refused() {
     let mut none = old.clone();
     none.details = None;
     assert!(matches!(page(&reg, &dir, &id("you.night"), &none, &s.fetch), Err(Error::NotFound(_))));
+}
+
+/// #146: a release with native programs has one package per platform; the client takes the workspace host's and gets
+/// every platform's digest for the lock.
+#[test]
+fn a_native_release_is_downloaded_for_one_platform() {
+    let (linux, mac) = ("x86_64-unknown-linux-musl", "aarch64-apple-darwin");
+    let mut s = setup("native");
+    s.yard.publish(&crate::testing::native_package("you.hello", "1.0.0", linux), &github(7, 42), NOW);
+    let r = s.yard.publish(&crate::testing::native_package("you.hello", "1.0.0", mac), &github(7, 42), NOW);
+    assert_eq!(r.targets.len(), 2);
+    let reg = s.yard.registry();
+    let v = index(&reg, &s.cache, &s.fetch, NOW, true).unwrap();
+    let d = download_for(&reg, &v, &id("you.hello"), None, false, mac, &s.fetch, NOW).unwrap();
+    assert_eq!(ext_pkg::read(&d.bytes).unwrap().target.as_deref(), Some(mac));
+    assert_eq!(d.targets.len(), 2);
+    assert_eq!(d.targets[linux].hex(), r.targets[linux].digest);
+    let e = download_for(&reg, &v, &id("you.hello"), None, false, "x86_64-pc-windows-msvc", &s.fetch, NOW).unwrap_err();
+    assert!(matches!(e, Error::NotFound(_)) && e.to_string().contains("not built for"), "{e}");
+    // The index lists the Linux package under the Mac: its TARGET says otherwise, so nothing is installed.
+    let swapped = r.targets[linux].clone();
+    s.yard.edit_release("you.hello", "1.0.0", NOW, |r| drop(r.targets.insert(mac.into(), swapped)));
+    let v = index(&reg, &s.cache, &s.fetch, NOW, true).unwrap();
+    let e = download_for(&reg, &v, &id("you.hello"), None, false, mac, &s.fetch, NOW).unwrap_err();
+    assert!(e.to_string().contains("platform"), "{e}");
 }

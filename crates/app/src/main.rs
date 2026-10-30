@@ -79,6 +79,7 @@ mod ext_inspector;
 #[cfg(test)]
 mod ext_inspector_ui_tests;
 mod ext_memory;
+mod ext_programs;
 mod ext_prompts;
 #[cfg(test)]
 mod ext_prompts_ui_tests;

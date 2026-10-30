@@ -723,3 +723,27 @@ fn hover_and_completion_declare_languages_and_trigger_characters() {
     }
     assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[completion]]\nlanguages = [\"toml\"]\ntrigger = [\".\"]\n")), vec![Code::Syntax]);
 }
+
+/// #146: a `run` entry inside the package is a native program, built per platform.
+#[test]
+fn native_programs_are_run_entries_inside_the_package() {
+    let m = parse(&format!(
+        "{}\n[permissions]\nrun = [\"./bin/server\", \"git\"]\nwhy = \"Runs its server.\"\n",
+        "[extension]\nid = \"you.lsp\"\nversion = \"1.0.0\"\nname = \"Lsp\"\nlicense = \"MIT\""
+    ))
+    .unwrap();
+    assert!(m.has_native_programs());
+    assert_eq!(m.permissions.package_programs().collect::<Vec<_>>(), ["./bin/server"]);
+    assert_eq!(crate::program_file("./bin/server", "x86_64-unknown-linux-musl"), "bin/server");
+    assert_eq!(crate::program_file("bin/server", "aarch64-pc-windows-msvc"), "bin/server.exe");
+    assert_eq!(crate::program_file("bin/server.exe", "x86_64-pc-windows-msvc"), "bin/server.exe");
+    assert!(crate::TARGETS.iter().all(|t| crate::is_target(t)));
+    assert_eq!(crate::target_for("x86_64", "linux"), Some("x86_64-unknown-linux-musl"));
+    assert_eq!(crate::target_for("aarch64", "macos"), Some("aarch64-apple-darwin"));
+    assert_eq!(crate::target_for("riscv64", "linux"), None);
+    assert!(crate::this_target().is_none_or(crate::is_target));
+    let path_only =
+        parse("[extension]\nid = \"you.lsp\"\nversion = \"1.0.0\"\nname = \"Lsp\"\nlicense = \"MIT\"\n[permissions]\nrun = [\"git\"]\nwhy = \"Runs git.\"\n")
+            .unwrap();
+    assert!(!path_only.has_native_programs());
+}

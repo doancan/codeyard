@@ -47,7 +47,7 @@ fn problems(dir: &Path, text: &str) -> Result<Vec<Diagnostic>, String> {
     if let Err(errors) = ext_manifest::parse_with(text, ext_manifest::Options { require_why: false }) {
         return Ok(errors);
     }
-    let files = ext_pkg::collect_dir(dir).map_err(|e| format!("error: {e}"))?;
+    let files = ext_pkg::collect_dir_for(dir, ext_pkg::folder_target(dir).as_deref()).map_err(|e| format!("error: {e}"))?;
     let files = files
         .into_iter()
         .map(|mut e| {

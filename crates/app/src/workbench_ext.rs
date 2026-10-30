@@ -36,6 +36,15 @@ pub(super) struct Pending {
     pub(super) source: ExtSource,
     /// Reasons to look twice, shown in red above the buttons (a new publisher, a stale registry); Cancel takes the keys.
     pub(super) warnings: Vec<String>,
+    /// Native programs: every platform's content digest (for the lock), and the other platforms' packages of a folder.
+    targets: std::collections::BTreeMap<String, ext_pkg::ContentDigest>,
+    others: Vec<Vec<u8>>,
+}
+
+impl Pending {
+    fn new(manifest: Manifest, bytes: Vec<u8>, source: ExtSource) -> Pending {
+        Pending { manifest: Arc::new(manifest), bytes, source, warnings: Vec::new(), targets: Default::default(), others: Vec::new() }
+    }
 }
 
 /// State of the Extensions view (kept while the window lives).
@@ -52,6 +61,8 @@ pub(super) struct ExtViewState {
     pub(super) consent_focus: Option<(FocusHandle, FocusHandle)>,
     /// What had the keyboard when the sheet opened; it gets it back when the sheet is answered.
     pub(super) consent_return: Option<FocusHandle>,
+    /// Where the user types the extension's id to install one with native programs (§6.3).
+    pub(super) consent_typed: Option<Entity<TextField>>,
     pub(super) tab: super::market_glue::ExtTab,
     pub(super) market: super::market_glue::MarketState,
     pub(super) updates: super::updates_glue::UpdateState,
@@ -141,19 +152,44 @@ pub(super) fn contribution_lines(m: &Manifest) -> Vec<String> {
 /// Read and check a package file, or package a folder, off the main thread. Errors from `ext-pkg` and `ext-manifest` are
 /// written for authors and shown as they are.
 fn read_package(source: &ExtSource) -> Result<Pending, String> {
-    let bytes = match source {
-        ExtSource::File { path } => std::fs::read(path).map_err(|e| crate::i18n::tf("Cannot read {0}: {1}", &[path, &e]))?,
-        ExtSource::Folder { path } => {
-            let files = ext_pkg::collect_dir(std::path::Path::new(path)).map_err(|e| e.to_string())?;
-            ext_pkg::write(files).map_err(|e| e.to_string())?.0
-        }
+    let mut packages = match source {
+        ExtSource::File { path } => vec![std::fs::read(path).map_err(|e| crate::i18n::tf("Cannot read {0}: {1}", &[path, &e]))?],
+        ExtSource::Folder { path } => folder_packages(std::path::Path::new(path))?,
         ExtSource::Registry { .. } => return Err("a registry package is downloaded by review_registry_extension".into()),
     };
+    let bytes = packages.remove(0);
     let pkg = ext_pkg::read(&bytes).map_err(|e| e.to_string())?;
     if pkg.manifest.code.is_some() {
         crate::ext_runtime::code_runs_here(&pkg.manifest.id)?;
     }
-    Ok(Pending { manifest: Arc::new(pkg.manifest), bytes, source: source.clone(), warnings: Vec::new() })
+    let mut pending = Pending::new(pkg.manifest, bytes, source.clone());
+    for other in packages {
+        let o = ext_pkg::read(&other).map_err(|e| e.to_string())?;
+        pending.targets.extend(o.target.map(|t| (t, o.digest)));
+        pending.others.push(other);
+    }
+    pending.targets.extend(pkg.target.map(|t| (t, pkg.digest)));
+    Ok(pending)
+}
+
+/// A folder packaged as install does it: one package, or one per platform in `native/` with this machine's first.
+fn folder_packages(dir: &std::path::Path) -> Result<Vec<Vec<u8>>, String> {
+    let mut targets = ext_pkg::native_targets(dir);
+    let manifest = std::fs::read_to_string(dir.join(ext_manifest::FILE_NAME)).ok().and_then(|t| ext_manifest::parse(&t).ok());
+    if targets.is_empty() || !manifest.is_some_and(|m| m.has_native_programs()) {
+        let files = ext_pkg::collect_dir(dir).map_err(|e| e.to_string())?;
+        return Ok(vec![ext_pkg::write(files).map_err(|e| e.to_string())?.0]);
+    }
+    if let Some(i) = targets.iter().position(|t| Some(t.as_str()) == ext_manifest::this_target()) {
+        targets.swap(0, i);
+    }
+    targets
+        .iter()
+        .map(|t| {
+            let files = ext_pkg::collect_dir_for(dir, Some(t)).map_err(|e| e.to_string())?;
+            Ok(ext_pkg::write(files).map_err(|e| e.to_string())?.0)
+        })
+        .collect()
 }
 
 /// A package found in a registry and checked, as the consent sheet shows it.
@@ -173,7 +209,10 @@ fn registry_pending(found: crate::ext_registry::Found) -> Result<Pending, String
         ));
     }
     let source = ExtSource::Registry { registry: found.registry.name, publisher: found.download.signed.publisher };
-    Ok(Pending { manifest: Arc::new(m), bytes: found.download.bytes, source, warnings })
+    let mut pending = Pending::new(m, found.download.bytes, source);
+    pending.warnings = warnings;
+    pending.targets = found.download.targets;
+    Ok(pending)
 }
 
 impl Workbench {
@@ -336,9 +375,11 @@ impl Workbench {
         let spec = spec.trim().to_string();
         self.notice = Some(Notice::Info(crate::i18n::tf("Looking for {} in your registries…", &[&spec]).into()));
         cx.notify();
+        // Native programs run on the workspace's host: its platform's package is the one to install.
+        let target = crate::ext_programs::host_target(self.remote.host.as_ref()).or(ext_manifest::this_target()).unwrap_or("unknown");
         let task = cx
             .background_executor()
-            .spawn(async move { crate::ext_registry::find(&dir, &registries, &spec, crate::ext_registry::now()).and_then(registry_pending) });
+            .spawn(async move { crate::ext_registry::find(&dir, &registries, &spec, target, crate::ext_registry::now()).and_then(registry_pending) });
         cx.spawn_in(window, async move |this, cx| {
             let found = task.await;
             this.update_in(cx, |this, window, cx| {
@@ -397,14 +438,31 @@ impl Workbench {
     fn show_consent(&mut self, pending: Pending, window: &mut Window, cx: &mut Context<Self>) {
         let high = high_risk_line(&pending.manifest).is_some() || !pending.warnings.is_empty();
         let (install, cancel) = self.cfg.exts.consent_focus.get_or_insert_with(|| (cx.focus_handle().tab_stop(true), cx.focus_handle().tab_stop(true))).clone();
+        let typed = self.cfg.exts.consent_typed.get_or_insert_with(|| cx.new(|cx| TextField::new("", cx))).clone();
+        let typed_focus = typed.focus_handle(cx);
         // A sheet that replaces another keeps the first one's place to return to.
         if self.cfg.exts.pending.is_none() {
-            self.cfg.exts.consent_return = window.focused(cx).filter(|f| *f != install && *f != cancel);
+            self.cfg.exts.consent_return = window.focused(cx).filter(|f| *f != install && *f != cancel && *f != typed_focus);
         }
+        let native = pending.manifest.has_native_programs();
+        typed.update(cx, |f, cx| f.set_text("", cx));
         self.cfg.exts.pending = Some(pending);
         self.open_extension_page(cx);
-        // Install is never the default answer for a High-risk set: Enter on the sheet cancels.
-        window.focus(if high { &cancel } else { &install });
+        // Install is never the default answer for a High-risk set: Enter on the sheet cancels. Native programs need the
+        // id typed first, so the field takes the keyboard.
+        window.focus(if native {
+            &typed_focus
+        } else if high {
+            &cancel
+        } else {
+            &install
+        });
+    }
+
+    /// An extension with native programs installs only once its id is typed on the sheet (§6.3).
+    pub(super) fn consent_typed_ok(&self, cx: &App) -> bool {
+        let Some(p) = &self.cfg.exts.pending else { return false };
+        !p.manifest.has_native_programs() || self.cfg.exts.consent_typed.as_ref().is_some_and(|f| f.read(cx).text().trim() == p.manifest.id.as_str())
     }
 
     pub(super) fn cancel_consent_key(&mut self, _: &CancelExtensionConsent, window: &mut Window, cx: &mut Context<Self>) {
@@ -430,9 +488,23 @@ impl Workbench {
     /// "Install" on the consent sheet.
     pub(super) fn confirm_consent(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(store) = self.extension_store(cx) else { return };
+        if !self.consent_typed_ok(cx) {
+            if let Some(p) = &self.cfg.exts.pending {
+                self.notice = Some(Notice::Error(crate::i18n::tf("Type {} to install it.", &[&p.manifest.id]).into()));
+            }
+            if let Some(f) = &self.cfg.exts.consent_typed {
+                window.focus(&f.focus_handle(cx));
+            }
+            cx.notify();
+            return;
+        }
         let Some(p) = self.cfg.exts.pending.take() else { return };
         self.return_consent_focus(window);
-        match store.install(&p.bytes, p.source) {
+        let id = p.manifest.id.clone();
+        let installed = store
+            .install_with_targets(&p.bytes, p.source, p.targets)
+            .and_then(|i| p.others.iter().try_for_each(|o| store.add_target(&id, o).map(drop)).map(|()| i));
+        match installed {
             Ok(i) => {
                 self.cfg.exts.selected = Some(i.manifest.id.to_string());
                 self.cfg.exts.market.page = None;

@@ -4,6 +4,16 @@
 
 use serde::{Deserialize, Serialize};
 
+/// A `run` entry that names a program inside the package (`./bin/server` or `bin/server`) rather than one on PATH.
+pub fn is_package_program(run: &str) -> bool {
+    run.contains('/') && !run.starts_with('/') && !run.contains(['\\', ':'])
+}
+
+/// The same program however it is written: `./bin/server` and `bin/server` are one entry.
+pub fn package_program_path(run: &str) -> &str {
+    run.trim_start_matches("./")
+}
+
 /// Programs that run whatever script or command line they are given. Allowed in `run` only when the script ships inside
 /// the package (checked by `ext-pkg`), so a language server wrapper is a normal high-risk extension, not a way around
 /// review. Matched on the file name without `.exe`/`.cmd`/`.bat`/`.com`, ignoring case.
@@ -106,6 +116,12 @@ impl Permissions {
     /// Whether `net` lets the extension connect to `host`. See [`net_allows`].
     pub fn allows_host(&self, host: &str) -> bool {
         net_allows(&self.net, host)
+    }
+
+    /// Programs in `run` that ship inside the package (`./bin/server`), as written. Such an extension is built per
+    /// platform and its programs run on the workspace's host (docs/plugin-architecture.md §7).
+    pub fn package_programs(&self) -> impl Iterator<Item = &str> {
+        self.run.iter().map(String::as_str).filter(|p| is_package_program(p))
     }
 
     /// Interpreters in `run`; each needs its script inside the package.

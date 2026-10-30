@@ -3353,3 +3353,13 @@ Breaks when the value is written; for this debug session only.	Değer yazıldı�
 Save the file first: a tab with unsaved changes cannot move to another window.	Önce dosyayı kaydedin: kaydedilmemiş değişiklikleri olan bir sekme başka bir pencereye taşınamaz.
 This tab cannot move to that window: its folder is on another machine.	Bu sekme o pencereye taşınamaz: klasörü başka bir makinede.
 The destination window is no longer available.	Hedef pencere artık yok.
+{} is not in the package	{} pakette yok
+{0} has no package for {1}	{0} için {1} paketi yok
+{} has no valid hash in its package	{} için pakette geçerli bir özet yok
+Cannot copy {0} to {1}: {2}	{0}, {1} üzerine kopyalanamıyor: {2}
+{0} on {1} does not match the hash in its package; it was not run	{1} üzerindeki {0}, paketindeki özetle eşleşmiyor; çalıştırılmadı
+{} cannot receive native programs	{} yerel programları alamaz
+{0} was not installed from a registry, so it has no package for {1}; install the package built for {1}	{0} bir kayıttan kurulmadığı için {1} paketi yok; {1} için derlenmiş paketi kurun
+Type {} to install it.	Kurmak için {} yazın.
+Native programs	Yerel programlar
+It brings its own programs, built for each platform. They run on the computer that holds the workspace (this one, or the SSH server) with your rights.	Her platform için derlenmiş kendi programlarını getirir. Bu programlar çalışma alanının bulunduğu bilgisayarda (bu bilgisayar ya da SSH sunucusu) sizin yetkilerinizle çalışır.

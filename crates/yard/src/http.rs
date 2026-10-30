@@ -25,7 +25,7 @@ use crate::{Error, MAX_UPLOAD_BYTES, Yard};
 
 /// How often the index is signed again with nothing changed; it expires after 72 h.
 pub const RESIGN_EVERY: Duration = Duration::from_secs(24 * 3600);
-/// Uploads held in memory at once (each up to 65 MiB); more wait their turn.
+/// Uploads held in memory at once (each up to 129 MiB, a per-platform package); more wait their turn.
 const UPLOADS_AT_ONCE: usize = 4;
 /// A slow client cannot hold a connection: headers within 30 s, an upload within 5 minutes.
 const HEADER_TIMEOUT: Duration = Duration::from_secs(30);

@@ -398,7 +398,7 @@ fn declarative_extensions_never_run_code() {
 }
 
 #[test]
-fn the_lock_is_format_1_until_a_registry_source_needs_2_and_a_pre_release_channel_3() {
+fn the_lock_is_format_1_until_a_registry_source_needs_2_a_pre_release_channel_3_and_platforms_4() {
     let locked = |source: Source| Locked {
         version: ext_manifest::Version::parse("1.0.0").unwrap(),
         digest: ContentDigest([1; 32]),
@@ -406,6 +406,7 @@ fn the_lock_is_format_1_until_a_registry_source_needs_2_and_a_pre_release_channe
         source,
         disabled: false,
         pre_release: false,
+        targets: Default::default(),
     };
     let mut lock = Lock { format: lock::FORMAT, ..Default::default() };
     lock.extensions.insert(ExtId::parse("you.a").unwrap(), locked(Source::File { path: "a.cyx".into() }));
@@ -422,8 +423,15 @@ fn the_lock_is_format_1_until_a_registry_source_needs_2_and_a_pre_release_channe
     let text = lock.render();
     assert!(text.contains("\"format\": 3") && text.contains("\"pre-release\": true"), "{text}");
     assert!(Lock::parse(&text).unwrap().extensions[&ExtId::parse("you.b").unwrap()].pre_release);
+    // Per-platform digests of an extension with native programs need format 4.
+    let t = "x86_64-unknown-linux-musl".to_string();
+    lock.extensions.get_mut(&ExtId::parse("you.b").unwrap()).unwrap().targets.insert(t.clone(), ContentDigest([2; 32]));
+    let text = lock.render();
+    assert!(text.contains("\"format\": 4") && text.contains(&format!("\"{t}\": \"{}\"", ContentDigest([2; 32]).hex())), "{text}");
+    assert_eq!(Lock::parse(&text).unwrap().extensions[&ExtId::parse("you.b").unwrap()].targets[&t], ContentDigest([2; 32]));
+    assert!(Lock::parse(&text.replace(&t, "x86_64-unknown-plan9")).is_err(), "an unknown target is refused");
     // What an older Codeyard says about a newer format.
-    assert_eq!(Lock::parse(&text.replace("\"format\": 3", "\"format\": 4")).unwrap_err(), LockError::Newer(4));
+    assert_eq!(Lock::parse(&text.replace("\"format\": 4", "\"format\": 5")).unwrap_err(), LockError::Newer(5));
 }
 
 #[test]
@@ -451,4 +459,71 @@ fn revocations_and_the_pre_release_channel_are_kept_and_follow_the_lock() {
     s.rollback(&id("you.a")).unwrap();
     assert!(s.locked().unwrap()[&id("you.a")].pre_release, "and so does a rollback");
     assert!(matches!(s.set_pre_release(&id("you.zz"), true), Err(Error::NotInstalled(_))));
+}
+
+const LINUX: &str = "x86_64-unknown-linux-musl";
+const MAC: &str = "aarch64-apple-darwin";
+
+/// #146: one platform's package installs with the other platforms' digests in the lock; another platform's package is
+/// added later only if it is the one the lock lists.
+#[test]
+fn platform_packages_are_kept_by_their_digests() {
+    let d = Dir::new("targets");
+    let s = d.store();
+    let (linux, mac) = (crate::testing::native_package("you.hello", "1.0.0", LINUX), crate::testing::native_package("you.hello", "1.0.0", MAC));
+    let mac_digest = ext_pkg::read(&mac).unwrap().digest;
+    let listed = BTreeMap::from([(MAC.to_string(), mac_digest)]);
+    let i = s.install_with_targets(&linux, src(), listed).unwrap();
+    let l = &s.locked().unwrap()[&id("you.hello")];
+    assert_eq!(l.targets.len(), 2, "its own platform is added: {:?}", l.targets);
+    assert_eq!(l.targets[LINUX], i.digest);
+    assert_eq!(s.target_dir(&id("you.hello"), LINUX), Some(s.store_dir(&i.digest)));
+    assert_eq!(s.target_dir(&id("you.hello"), MAC), None, "listed, not fetched yet");
+    // Another package for the Mac (another version's, or a changed one) is refused; the listed one is kept.
+    let other = crate::testing::native_package("you.hello", "1.0.1", MAC);
+    assert!(s.add_target(&id("you.hello"), &other).is_err());
+    let changed = {
+        let mut files: Vec<ext_pkg::Entry> = ext_pkg::read(&mac).unwrap().files.into_values().filter(|e| e.path != ext_pkg::CONTENTS).collect();
+        files.iter_mut().find(|e| e.path == "bin/hello").unwrap().data.extend_from_slice(b"# changed\n");
+        ext_pkg::write(files).unwrap().0
+    };
+    assert!(s.add_target(&id("you.hello"), &changed).unwrap_err().to_string().contains("does not match"));
+    let dir = s.add_target(&id("you.hello"), &mac).unwrap();
+    assert_eq!(s.target_dir(&id("you.hello"), MAC), Some(dir.clone()));
+    assert!(dir.join("bin/hello").is_file());
+    // Garbage collection keeps every platform of the current version.
+    s.set_disabled(&id("you.hello"), true).unwrap();
+    assert!(dir.is_dir());
+    // A package whose own digest differs from the one listed for its platform is refused at install.
+    let wrong = BTreeMap::from([(LINUX.to_string(), mac_digest)]);
+    assert!(s.install_with_targets(&linux, src(), wrong).is_err());
+}
+
+/// A folder with native programs installs every platform in `native/`.
+#[test]
+fn a_native_folder_installs_every_platform() {
+    let d = Dir::new("native-folder");
+    let s = d.store();
+    let folder = d.0.join("src");
+    for t in [LINUX, MAC] {
+        let bin = folder.join("native").join(t).join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("hello"), format!("#!/bin/sh\necho {t}\n")).unwrap();
+        #[cfg(unix)]
+        std::fs::set_permissions(bin.join("hello"), std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    }
+    std::fs::write(folder.join(ext_manifest::FILE_NAME), crate::testing::native_manifest("you.hello", "1.0.0")).unwrap();
+    if !cfg!(unix) {
+        return; // No executable bit to read from the folder.
+    }
+    let i = s.install_dir(&folder).unwrap();
+    let l = &s.locked().unwrap()[&id("you.hello")];
+    assert_eq!(l.targets.keys().map(String::as_str).collect::<Vec<_>>(), [MAC, LINUX]);
+    for t in [LINUX, MAC] {
+        let dir = s.target_dir(&id("you.hello"), t).unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join("bin/hello")).unwrap(), format!("#!/bin/sh\necho {t}\n"));
+    }
+    if let Some(here) = ext_manifest::this_target().filter(|t| [LINUX, MAC].contains(t)) {
+        assert_eq!(l.targets[here], i.digest, "this machine's platform is the one installed");
+    }
 }

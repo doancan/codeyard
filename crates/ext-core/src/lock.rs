@@ -9,9 +9,9 @@ use ext_pkg::ContentDigest;
 use serde::{Deserialize, Serialize};
 
 /// The format of the lock file. A newer format is refused rather than rewritten, as the state database does. Format 2
-/// adds registry sources and format 3 the pre-release channel; a lock is written in the lowest format that holds it, so
-/// an older Codeyard keeps reading it.
-pub const FORMAT: u32 = 3;
+/// adds registry sources, format 3 the pre-release channel and format 4 per-platform digests; a lock is written in the
+/// lowest format that holds it, so an older Codeyard keeps reading it.
+pub const FORMAT: u32 = 4;
 
 const HEADER: &str = "// Installed extensions. Written by Codeyard; change it with the Extensions view or `codeyard ext`.\n";
 
@@ -30,6 +30,11 @@ pub struct Locked {
     /// The user opted into the registry's pre-releases of this extension (on its page).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub pre_release: bool,
+    /// An extension with native programs: the content digest of each platform's package of this version, by target
+    /// triple, as the registry's index listed them (or as packaged from a folder). `digest` is one of them; another
+    /// platform's package is fetched when a workspace on that platform needs it, and must match its digest here.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty", with = "targets_hex")]
+    pub targets: BTreeMap<String, ContentDigest>,
 }
 
 /// Where a package came from: shown in the Extensions view and used to update it.
@@ -96,7 +101,9 @@ impl Lock {
 
     pub fn render(&self) -> String {
         let mut out = String::from(HEADER);
-        let needs = if self.extensions.values().any(|l| l.pre_release) {
+        let needs = if self.extensions.values().any(|l| !l.targets.is_empty()) {
+            4
+        } else if self.extensions.values().any(|l| l.pre_release) {
             3
         } else if self.extensions.values().any(|l| l.source.registry().is_some()) {
             2
@@ -109,9 +116,10 @@ impl Lock {
         out
     }
 
-    /// Every digest the store must keep: current and previous of each extension.
+    /// Every digest the store must keep: current and previous of each extension, and the current version's other
+    /// platforms.
     pub fn digests(&self) -> impl Iterator<Item = ContentDigest> + '_ {
-        self.extensions.values().flat_map(|l| std::iter::once(l.digest).chain(l.previous))
+        self.extensions.values().flat_map(|l| std::iter::once(l.digest).chain(l.previous).chain(l.targets.values().copied()))
     }
 }
 
@@ -194,5 +202,28 @@ mod opt_digest_hex {
             None => Ok(None),
             Some(s) => ContentDigest::parse(&s).map(Some).ok_or_else(|| serde::de::Error::custom(format!("'{s}' is not a sha256 digest"))),
         }
+    }
+}
+
+mod targets_hex {
+    use std::collections::BTreeMap;
+
+    use ext_pkg::ContentDigest;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(m: &BTreeMap<String, ContentDigest>, s: S) -> Result<S::Ok, S::Error> {
+        s.collect_map(m.iter().map(|(t, d)| (t, d.hex())))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<BTreeMap<String, ContentDigest>, D::Error> {
+        let raw = BTreeMap::<String, String>::deserialize(d)?;
+        raw.into_iter()
+            .map(|(t, s)| {
+                if !ext_manifest::is_target(&t) {
+                    return Err(serde::de::Error::custom(format!("'{t}' is not a target triple")));
+                }
+                ContentDigest::parse(&s).map(|d| (t, d)).ok_or_else(|| serde::de::Error::custom(format!("'{s}' is not a sha256 digest")))
+            })
+            .collect()
     }
 }
