@@ -201,8 +201,10 @@ show a highlighted drop zone, and the view opens in the side bar you drop it on.
 Output) docks below the editor or beside it: "View: Move Panel Left", "View: Move Panel Right" and "View: Move Panel
 to Bottom" (or the button in the panel's header); a panel docked beside the editor is resized from its edge towards the
 editor, and the dock is kept for the next start. Screen readers read which view each side bar shows and where the panel
-is in the window's description. Dragging an editor tab out of the window is not supported (the interface toolkit has no
-drag and drop between windows); use "View: Move Editor into New Window".
+is in the window's description. Drag an editor tab out of the window and release it outside: over another Codeyard
+window, the file opens there and its tab here closes (a file with unsaved changes, or one on another machine than that
+window's folder, stays where it is and the status bar says why); anywhere else, the tab becomes a window of its own at
+that place, showing the same document (as "View: Move Editor into New Window" does).
 "View: Move View into New Window" moves the open side view (Explorer, Search, Source Control, Run and Debug, Testing,
 Remote Explorer, Extensions) into a window of its own, for example on another display. It is the same view: what you
 select, expand or type there is what the side bar would have shown. Its activity bar icon and commands then bring that

@@ -11,7 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Windows: terminals of a local folder are taken back after Codeyard quits, crashes or is killed, as on macOS and
   Linux. They run in the terminal daemon, which listens on a named pipe only the current user can open.
-
+- An editor tab dragged out of the window and released outside it becomes a window of its own at that place, showing
+  the same document; released over another Codeyard window, the file opens there instead and its tab here closes (a
+  file with unsaved changes or on another machine stays, with a message).
 - A code extension's side bar view can move into a window of its own ("View: Move View into New Window") and to the
   secondary side bar. It stays the same view: the extension's updates reach the window and what you do there goes to
   the extension. The window is restored with the folder while the extension is installed, closes when the extension

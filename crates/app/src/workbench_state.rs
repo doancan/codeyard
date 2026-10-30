@@ -152,6 +152,8 @@ pub(super) struct ChromeLayout {
     pub(super) panel_dock: super::docks_glue::PanelDock,
     /// A side view being dragged by its activity bar icon (the side bars are drop zones meanwhile).
     pub(super) view_drag: Option<Panel>,
+    /// The editor tab being dragged and the group it left (a release outside the window takes it out).
+    pub(super) tab_drag: Option<(Entity<EditorView>, super::GroupKey)>,
     pub(super) panel_w: f32,
     pub(super) panel_max: bool,
     /// A running maximize/restore animation: when it started and whether it maximizes.
