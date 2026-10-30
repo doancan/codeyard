@@ -79,6 +79,8 @@ pub(crate) fn setup<'a>(cx: &'a mut TestAppContext, name: &str, offline: bool) -
     let (wb, cx) = cx.add_window_view(move |window, cx| Workbench::with_state(state::State::in_memory().ok(), Some(cfg), window, cx));
     cx.simulate_resize(gpui::size(gpui::px(1280.), gpui::px(800.)));
     wb.update_in(cx, |wb, window, cx| {
+        // Offline, the probe never runs: it is loaded even where the exthost or its sandbox is missing.
+        let _guard = offline.then(crate::ext_runtime::load_without_exthost_for_test);
         wb.reload_config_for_test(window, cx);
         if offline {
             wb.ext_views_offline_for_test();
