@@ -93,6 +93,7 @@ impl MockHost {
             s.settings.entry(setting.key.clone()).or_insert(json);
         }
         s.permissions = Some(m.permissions);
+        s.oauth = m.oauth.into_iter().map(|o| (o.id, (o.name, o.hosts))).collect();
         drop(s);
         self
     }
@@ -428,6 +429,11 @@ impl MockHost {
 
     pub fn storage(&self) -> BTreeMap<String, Vec<u8>> {
         self.state.borrow().storage.clone()
+    }
+
+    /// The extension's keychain entries (`secrets`), as it left them.
+    pub fn secrets(&self) -> BTreeMap<String, String> {
+        self.state.borrow().secrets.clone()
     }
 
     pub fn status_items(&self) -> BTreeMap<String, StatusItem> {

@@ -86,6 +86,7 @@ host.status_items()
 host.diagnostics("src/main.rs")
 host.invalidated()        // views asked to draw again
 host.applied_edits()
+host.secrets()            // the keychain entries (`secrets`), as the extension left them
 host.timers(), host.progress(), host.logs(), host.clipboard(), host.terminal()
 host.calls(), host.notes() // everything, as the SDK sent it
 host.denied()             // every refused call
@@ -93,7 +94,7 @@ host.denied()             // every refused call
 
 ## Permissions in tests
 
-`MockHost::new()` reads the `codeyard-extension.toml` next to your `Cargo.toml` and refuses what it does not allow, the way Codeyard does: a request to an undeclared host, a read outside the `read` globs, a program not in `run`. The refusal is the same `Error::Denied` the extension gets in Codeyard, with the fix:
+`MockHost::new()` reads the `codeyard-extension.toml` next to your `Cargo.toml` and refuses what it does not allow, the way Codeyard does: a request to an undeclared host, a read outside the `read` globs, a program not in `run`, an `auth.fetch` to a host that is not one of the account's (`[[oauth]] hosts`, or GitHub's API hosts). The refusal is the same `Error::Denied` the extension gets in Codeyard, with the fix:
 
 ```
 denied: the manifest does not declare net = ["api.github.com"]
