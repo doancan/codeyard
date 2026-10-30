@@ -17,7 +17,7 @@ pub(crate) fn dir(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("codeyard-lsp-settings-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
-    std::fs::canonicalize(d).unwrap()
+    crate::ui::canonical_for_test(d)
 }
 
 /// `settings.jsonc` with the fake server as the `rust` server; `entry` adds keys to that entry, `top` to the file.
@@ -48,7 +48,7 @@ pub(crate) fn open_project(wb: &Entity<Workbench>, cx: &mut VisualTestContext, r
     if !file.exists() {
         std::fs::write(&file, "pub fn f() {}\n").unwrap();
     }
-    let (root, file) = (root.to_string_lossy().into_owned(), file.to_string_lossy().into_owned());
+    let (root, file) = (crate::ui::local_path(root), crate::ui::local_path(&file));
     wb.update_in(cx, |wb, window, cx| wb.open_path(&root, window, cx));
     cx.run_until_parked();
     // `open_path` on a file makes its folder the root; this keeps the project's.
@@ -263,7 +263,7 @@ fn qa_lsp_an_untrusted_project_cannot_configure_a_server(cx: &mut TestAppContext
     let entry = json!({ "lsp.servers": { "rust": { "command": command, "args": args, "settings": clippy(), "initializationOptions": {} } } });
     std::fs::write(project.join(".codeyard/settings.jsonc"), entry.to_string()).unwrap();
     let (wb, cx) = setup_with_config(cx, &cfg);
-    let root = project.to_string_lossy().into_owned();
+    let root = crate::ui::local_path(&project);
     wb.update_in(cx, |wb, window, cx| wb.open_path(&root, window, cx));
     cx.run_until_parked();
     let n = notice(&wb, cx);
@@ -294,7 +294,7 @@ fn qa_lsp_settings_over_ssh(cx: &mut TestAppContext) {
     let project = d.join("project");
     std::fs::create_dir_all(project.join("src")).unwrap();
     std::fs::write(project.join("src/lib.rs"), "pub fn f() {}\n").unwrap();
-    let root = project.to_string_lossy().into_owned();
+    let root = crate::ui::local_path(&project);
     wb.update_in(cx, |wb, window, cx| wb.open_path(&root, window, cx));
     cx.run_until_parked();
     ssh_open_file(&wb, cx, &project.join("src/lib.rs"));

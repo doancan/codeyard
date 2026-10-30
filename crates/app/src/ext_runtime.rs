@@ -53,6 +53,33 @@ pub fn load_without_exthost_for_test() -> impl Drop {
     Reset
 }
 
+/// For a test that runs an extension's code: whether codeyard-exthost is built (`cargo test --workspace` builds it) and
+/// its OS sandbox works here. When not, the test prints a SKIPPED line with the reason and returns;
+/// `CODEYARD_REQUIRE_TOOLS=codeyard-exthost` turns that into a failure on machines that must run them.
+#[cfg(test)]
+pub fn code_runs_for_test() -> bool {
+    if !exthost_built_for_test() {
+        return false;
+    }
+    match sandbox() {
+        Ok(()) => true,
+        Err(why) => {
+            crate::test_sshd::skip_unusable("codeyard-exthost", &format!("its OS sandbox is unavailable: {why}"));
+            false
+        }
+    }
+}
+
+/// For a test that needs the codeyard-exthost binary but not its sandbox; skips like `code_runs_for_test`.
+#[cfg(test)]
+pub fn exthost_built_for_test() -> bool {
+    let built = exthost_path().is_some();
+    if !built {
+        crate::test_sshd::skip_missing("codeyard-exthost");
+    }
+    built
+}
+
 /// Whether code extensions can run in this app: `Err` says why not, naming the extension.
 pub fn code_runs_here(id: &dyn std::fmt::Display) -> Result<(), String> {
     #[cfg(test)]

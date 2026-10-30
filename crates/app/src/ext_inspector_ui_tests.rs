@@ -97,13 +97,9 @@ fn wait_for(cx: &mut VisualTestContext, wb: &Entity<Workbench>, done: impl Fn(&W
     );
 }
 
-/// Extensions with code are active only where codeyard-exthost is beside the app (the test binary).
+/// Extensions with code run only where codeyard-exthost is beside the app (the test binary) and its OS sandbox works.
 pub(crate) fn exthost_built() -> bool {
-    let built = crate::ext_runtime::exthost_path().is_some();
-    if !built {
-        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
-    }
-    built
+    crate::ext_runtime::code_runs_for_test()
 }
 
 fn answer(wb: &Workbench) -> String {

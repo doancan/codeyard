@@ -437,6 +437,16 @@ pub fn local_path(path: &std::path::Path) -> String {
     path
 }
 
+/// Tests: `std::fs::canonicalize` in the form the workbench keeps a local folder (`local_path`): on Windows without
+/// the `\\?\` prefix and with `/`, so an expected path compares equal to the app's and git accepts it. The same as
+/// `canonicalize` elsewhere.
+#[cfg(test)]
+pub fn canonical_for_test(path: impl AsRef<std::path::Path>) -> std::path::PathBuf {
+    let path = path.as_ref();
+    let canonical = std::fs::canonicalize(path).unwrap_or_else(|e| panic!("canonicalize {}: {e}", path.display()));
+    std::path::PathBuf::from(local_path(&canonical))
+}
+
 /// Bridge a blocking channel to an async channel: a small separate thread does the receiving,
 /// the UI side `await`s. Doesn't block the executor thread (the test executor either).
 pub fn bridge<T: Send + 'static>(rx: std::sync::mpsc::Receiver<T>) -> futures::channel::mpsc::UnboundedReceiver<T> {

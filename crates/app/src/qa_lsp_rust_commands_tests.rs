@@ -139,7 +139,7 @@ fn qa_rust_parent_module_opens_the_only_result(cx: &mut TestAppContext) {
     std::fs::write(&parent, "fn main() {}\n\nmod a;\nmod lib;\n").unwrap();
     let Some(mut f) = fixture(cx, "ac3-one", json!({ "experimental/parentModule": { "result": [location(&parent, 3)] } })) else { return };
     f.run(PARENT);
-    let p = parent.to_string_lossy().into_owned();
+    let p = crate::ui::local_path(&parent);
     f.wait_active("the parent module at its mod line", |e| e.path == p && e.cursor_position().0 == 4);
 }
 
@@ -179,7 +179,7 @@ fn qa_rust_open_cargo_toml_opens_the_manifest(cx: &mut TestAppContext) {
     let fake = &f.fake;
     wait_ticking(f.cx, "the restart", |_| fake.starts() == 2 && fake.received("textDocument/didOpen").len() == 2);
     f.run(CARGO);
-    let m = manifest.to_string_lossy().into_owned();
+    let m = crate::ui::local_path(&manifest);
     f.wait_active("Cargo.toml at line 3", |e| e.path == m && e.cursor_position().0 == 3);
 }
 
@@ -226,7 +226,7 @@ fn qa_rust_command_failures_have_notices_in_turkish(cx: &mut TestAppContext) {
 fn qa_rust_commands_in_a_python_file_send_nothing(cx: &mut TestAppContext) {
     let _en = crate::i18n::LangGuard::set("en");
     let Some(mut f) = fixture(cx, "ac7", json!({})) else { return };
-    let py = f.root.join("tool.py").to_string_lossy().into_owned();
+    let py = crate::ui::local_path(&f.root.join("tool.py"));
     std::fs::write(&py, "print('merhaba')\n").unwrap();
     f.wb.update_in(f.cx, |wb, window, cx| wb.open_file_in_root(py.clone(), window, cx));
     f.wait_active("the Python file", |e| e.path == py);
@@ -260,7 +260,7 @@ fn qa_rust_commands_against_a_real_rust_analyzer(cx: &mut TestAppContext) {
     let (wb, cx) = setup_with_config(cx, &cfg);
     open_project(&wb, cx, &ws);
     let open = |wb: &Entity<Workbench>, cx: &mut VisualTestContext, path: &Path, line: usize, col: usize| {
-        let p = path.to_string_lossy().into_owned();
+        let p = crate::ui::local_path(path);
         wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(p.clone(), window, cx));
         wait_ticking(cx, "the file", |cx| wb.read_with(cx, |wb, cx| wb.active_path(cx)).as_deref() == Some(&p));
         let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -278,7 +278,7 @@ fn qa_rust_commands_against_a_real_rust_analyzer(cx: &mut TestAppContext) {
     wait_checked(&wb, cx, "the expansion", |cx| {
         n += 1;
         if n % 20 == 1 {
-            let p = lib_rs.to_string_lossy().into_owned();
+            let p = crate::ui::local_path(&lib_rs);
             if wb.read_with(cx, |wb, cx| wb.active_path(cx)).as_deref() == Some(&p) {
                 run(&wb, cx, EXPAND);
             }
@@ -289,13 +289,13 @@ fn qa_rust_commands_against_a_real_rust_analyzer(cx: &mut TestAppContext) {
     // The parent module of src/foo.rs: the `mod foo;` line (3) of src/lib.rs.
     open(&wb, cx, &a.join("src/foo.rs"), 0, 4);
     run(&wb, cx, PARENT);
-    let lib_path = lib_rs.to_string_lossy().into_owned();
+    let lib_path = crate::ui::local_path(&lib_rs);
     wait_ticking(cx, "src/lib.rs at mod foo;", |cx| active(&wb, cx).is_some_and(|(p, (line, _), _)| p == lib_path && line == 3));
 
     // The Cargo.toml of member b, not the workspace's.
     open(&wb, cx, &ws.join("b/src/lib.rs"), 0, 4);
     run(&wb, cx, CARGO);
-    let manifest = ws.join("b/Cargo.toml").to_string_lossy().into_owned();
+    let manifest = crate::ui::local_path(&ws.join("b/Cargo.toml"));
     wait_ticking(cx, "b/Cargo.toml", |cx| active(&wb, cx).is_some_and(|(p, _, _)| p == manifest));
 }
 
@@ -320,7 +320,7 @@ fn qa_rust_parent_module_over_ssh(cx: &mut TestAppContext) {
         cx.executor().advance_clock(std::time::Duration::from_secs(1));
         wb.read_with(cx, |wb, _| wb.ports_ready())
     });
-    let r = root.to_string_lossy().into_owned();
+    let r = crate::ui::local_path(&root);
     wb.update_in(cx, |wb, window, cx| wb.open_path(&r, window, cx));
     cx.run_until_parked();
     let ed = crate::qa_integration_tests::ssh_open_file(&wb, cx, &root.join("src/foo.rs"));
@@ -329,7 +329,7 @@ fn qa_rust_parent_module_over_ssh(cx: &mut TestAppContext) {
         ed.read_with(cx, |e, _| e.lsp_client().is_some())
     });
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test(PARENT, window, cx));
-    let lib = root.join("src/lib.rs").to_string_lossy().into_owned();
+    let lib = crate::ui::local_path(&root.join("src/lib.rs"));
     crate::qa_integration_tests::wait_secs(cx, 30, "src/lib.rs opened on the host", |cx| {
         cx.executor().advance_clock(std::time::Duration::from_millis(500));
         wb.read_with(cx, |wb, cx| wb.active_path(cx)).as_deref() == Some(&lib)

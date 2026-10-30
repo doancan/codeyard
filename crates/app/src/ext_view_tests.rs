@@ -277,8 +277,7 @@ fn escape_cancels_the_consent_sheet(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn a_package_with_code_shows_the_consent_sheet(cx: &mut TestAppContext) {
-    if let Err(why) = crate::ext_runtime::code_runs_here(&"tests") {
-        eprintln!("skipped: {why}");
+    if !crate::ext_runtime::code_runs_for_test() {
         return;
     }
     let cfg = config_dir("code");

@@ -127,8 +127,7 @@ fn reply(wb: &Entity<Workbench>, cx: &mut VisualTestContext, button: &str) -> St
 }
 
 fn skip() -> bool {
-    if let Err(why) = crate::ext_runtime::code_runs_here(&"tests") {
-        eprintln!("skipped: {why}");
+    if !crate::ext_runtime::code_runs_for_test() {
         return true;
     }
     false

@@ -67,6 +67,8 @@ jobs:
         env:
           CODEYARD_REQUIRE_SSHD: "1"
           CODEYARD_TEST_TIMEOUT_SCALE: "3"
+          # Code extensions run in codeyard-exthost inside the OS sandbox, which this runner has: their tests must run.
+          CODEYARD_REQUIRE_TOOLS: codeyard-exthost
 
   macos-budgets:
     runs-on: macos-latest
@@ -250,6 +252,8 @@ jobs:
         env:
           CODEYARD_REQUIRE_SSHD: "1"
           CODEYARD_TEST_TIMEOUT_SCALE: "3"
+          # Code extensions run in codeyard-exthost inside the OS sandbox, which this runner has: their tests must run.
+          CODEYARD_REQUIRE_TOOLS: codeyard-exthost
 
   # The same checks run locally with scripts/check-windows.ps1.
   windows:
@@ -269,7 +273,8 @@ jobs:
 
   windows-tests:
     runs-on: windows-2022
-    timeout-minutes: 60
+    # Every test of the workspace, one at a time, after a release build: about twice the old filtered run.
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable, 2026-10-16
@@ -282,6 +287,9 @@ jobs:
       - name: Windows native checks
         shell: pwsh
         run: ./scripts/check-windows.ps1 -SkipStandalone
+        # The wall-clock budgets of the tests get the same allowance for a shared runner as on macOS and Linux.
+        env:
+          CODEYARD_TEST_TIMEOUT_SCALE: "3"
 
   windows-standalone:
     runs-on: windows-2022

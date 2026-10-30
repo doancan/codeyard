@@ -40,18 +40,14 @@ trigger-characters = ["."]
 "#;
 
 fn exthost_missing() -> bool {
-    let missing = crate::ext_runtime::exthost_path().is_none();
-    if missing {
-        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
-    }
-    missing
+    !crate::ext_runtime::code_runs_for_test()
 }
 
 fn config_dir(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("codeyard-exthover-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
-    std::fs::canonicalize(d).unwrap()
+    crate::ui::canonical_for_test(d)
 }
 
 fn install(cfg: &Path) {

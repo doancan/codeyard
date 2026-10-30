@@ -35,7 +35,7 @@ fn pair(name: &str) -> (PathBuf, PathBuf) {
 }
 
 fn open_pair(wb: &Entity<Workbench>, l: &Path, r: &Path, cx: &mut VisualTestContext) -> Entity<CompareView> {
-    let (l, r) = (l.to_string_lossy().into_owned(), r.to_string_lossy().into_owned());
+    let (l, r) = (crate::ui::local_path(l), crate::ui::local_path(r));
     wb.update_in(cx, |wb, window, cx| wb.open_folder_compare_for_test((true, &l), (true, &r), window, cx));
     let view = wb.read_with(cx, |wb, _| wb.compare_view_for_test()).expect("the compare tab is open");
     wait_secs(cx, 20, "the comparison finishes", |cx| !view.read_with(cx, |v, _| v.scanning()));
@@ -226,7 +226,7 @@ fn stopping_a_scan_keeps_it_from_producing_more(cx: &mut TestAppContext) {
         write(&l, &format!("d{}/f{i}.txt", i % 10), "x");
     }
     let (wb, cx) = setup_with(cx, with_trust(false));
-    let (ls, rs) = (l.to_string_lossy().into_owned(), r.to_string_lossy().into_owned());
+    let (ls, rs) = (crate::ui::local_path(&l), crate::ui::local_path(&r));
     wb.update_in(cx, |wb, window, cx| wb.open_folder_compare_for_test((true, &ls), (true, &rs), window, cx));
     let view = wb.read_with(cx, |wb, _| wb.compare_view_for_test()).unwrap();
     view.update(cx, |v, _| v.stop());
@@ -247,7 +247,7 @@ fn a_local_folder_is_compared_with_one_on_the_ssh_host(cx: &mut TestAppContext) 
     let (wb, cx) = setup_with(cx, with_trust(false));
     wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
     wait_ticking(cx, "connected", |cx| wb.read_with(cx, |wb, _| wb.ports_ready()));
-    let (ls, rs) = (local.to_string_lossy().into_owned(), remote.to_string_lossy().into_owned());
+    let (ls, rs) = (crate::ui::local_path(&local), crate::ui::local_path(&remote));
     wb.update_in(cx, |wb, window, cx| wb.open_folder_compare_for_test((true, &ls), (false, &rs), window, cx));
     let view = wb.read_with(cx, |wb, _| wb.compare_view_for_test()).unwrap();
     wait_secs(cx, 30, "the comparison finishes", |cx| !view.read_with(cx, |v, _| v.scanning()));

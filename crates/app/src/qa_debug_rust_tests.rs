@@ -31,8 +31,11 @@ enum Toolchain {
 
 /// rustup is what makes `rust-toolchain.toml` pick the fake toolchain; without it the test cannot choose `rustc`.
 fn have_tools() -> bool {
+    if !crate::test_sshd::posix_shell() {
+        return false;
+    }
     let ok = |c: &str, a: &str| std::process::Command::new(c).arg(a).output().is_ok_and(|o| o.status.success());
-    if ok("python3", "-V") && ok("rustup", "--version") {
+    if ok(crate::test_lsp::python(), "-V") && ok("rustup", "--version") {
         return true;
     }
     crate::test_sshd::skip_missing("python3,rustup");
@@ -69,9 +72,10 @@ fn rust_project(name: &str, ty: &str, extra: &str, toolchain: Toolchain) -> (Pat
         dir.join(".codeyard/launch.jsonc"),
         format!(
             r#"{{ "configurations": [ {{ "name": "Fake", "type": "{ty}", "request": "launch", "program": "/bin/true", "source": "${{workspaceFolder}}/main.c",
-                "debugAdapter": {{ "command": "{}", "args": ["{}"] }} {extra} }} ] }}"#,
-            script.display(),
-            log.display()
+                "debugAdapter": {{ "command": "{}", "args": ["{}", "{}"] }} {extra} }} ] }}"#,
+            crate::test_lsp::python(),
+            crate::ui::local_path(&script),
+            crate::ui::local_path(&log)
         ),
     )
     .unwrap();
@@ -246,7 +250,7 @@ fn stopped_in_values<'a>(cx: &'a mut TestAppContext, name: &str, launch: Option<
     let home = project(&format!("{name}-home"));
     let (wb, cx) = setup_persistent(cx, &home);
     open(&wb, &dir, cx);
-    let main = std::fs::canonicalize(dir.join("src/main.rs")).unwrap().to_string_lossy().into_owned();
+    let main = crate::ui::canonical_for_test(dir.join("src/main.rs")).to_string_lossy().into_owned();
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(main.clone(), window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();

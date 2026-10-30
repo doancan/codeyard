@@ -172,7 +172,9 @@ codeyard_extension::export!(Fetcher);
     std::fs::remove_dir_all(&root).unwrap();
 }
 
-/// `cyx dev` with a stand-in for Codeyard that exits once `extension.wasm` is replaced: saving a source file rebuilds it.
+/// `cyx dev` with a stand-in for Codeyard that exits once `extension.wasm` holds the edited code: saving a source file
+/// rebuilds it. The edit is made as soon as the first build is in place, however long cyx then takes to start the
+/// stand-in: a save at any moment after `cyx dev` started must be built.
 #[cfg(unix)]
 #[test]
 fn cyx_dev_rebuilds_on_save() {
@@ -185,27 +187,39 @@ fn cyx_dev_rebuilds_on_save() {
     scaffold::create_with(&dir, Kind::Command, "live", "you", Some(&repo().to_string_lossy())).unwrap();
     std::fs::copy(repo().join("examples/extensions/hello-command/Cargo.lock"), dir.join("Cargo.lock")).unwrap();
     let bin = root.join("codeyard");
-    let script = "#!/bin/sh\nw=\"$2/extension.wasm\"\nbefore=$(cksum < \"$w\")\ni=0\nwhile [ $i -lt 1200 ]; do\n  sleep 0.1\n  [ \"$(cksum < \"$w\")\" != \"$before\" ] && exit 0\n  i=$((i+1))\ndone\nexit 3\n";
+    // The rebuild may wait for cargo's lock on the target folder the other tests build in: a generous limit, longer on
+    // slow runners.
+    let limit = 120 * timeout_scale();
+    let script = format!(
+        "#!/bin/sh\nw=\"$2/extension.wasm\"\nend=$(( $(date +%s) + {limit} ))\nwhile [ \"$(date +%s)\" -lt \"$end\" ]; do\n  grep -q 'Rebuilt on save' \"$w\" && exit 0\n  sleep 0.1\ndone\nexit 3\n"
+    );
     std::fs::write(&bin, script).unwrap();
     std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
     let src = dir.join("src/lib.rs");
+    let code = std::fs::read_to_string(&src).unwrap();
+    assert!(code.contains("Hello, {name}!"), "{code}");
     let edit = {
         let (wasm, src) = (dir.join(ext_pkg::COMPONENT), src.clone());
         std::thread::spawn(move || {
+            // The first build is in place (it is renamed there whole).
             while !wasm.exists() {
-                std::thread::sleep(std::time::Duration::from_millis(50));
+                std::thread::sleep(std::time::Duration::from_millis(20));
             }
-            // After cyx has started the stand-in and looked at the sources once.
-            std::thread::sleep(std::time::Duration::from_millis(800));
-            let code = std::fs::read_to_string(&src).unwrap().replace("Hello, {name}!", "Hi, {name}!");
-            std::fs::write(&src, code).unwrap();
+            std::fs::write(&src, code.replace("Hello, {name}!", "Rebuilt on save, {name}!")).unwrap();
         })
     };
+    // The stand-in exits 3 when the edited code did not arrive within the limit.
     dev::run_with(&dir, &bin, &[], Some(&target_dir())).unwrap();
     edit.join().unwrap();
     // Nothing half-written is left behind.
     assert!(!dir.join(build::PARTIAL).exists());
     std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// Slow runners multiply wall-clock limits with `CODEYARD_TEST_TIMEOUT_SCALE` (default 1), as the app's tests do.
+#[cfg(unix)]
+fn timeout_scale() -> u64 {
+    std::env::var("CODEYARD_TEST_TIMEOUT_SCALE").ok().and_then(|v| v.parse().ok()).filter(|&n| n >= 1).unwrap_or(1)
 }
 
 #[test]

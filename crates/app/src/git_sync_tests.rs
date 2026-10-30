@@ -24,7 +24,7 @@ struct Fixture {
 impl Fixture {
     fn new(name: &str) -> Fixture {
         let (dir, bare, other) = repo_with_remote(name);
-        let dir = std::fs::canonicalize(dir).unwrap();
+        let dir = crate::ui::canonical_for_test(dir);
         Fixture { dir, bare, other }
     }
 
