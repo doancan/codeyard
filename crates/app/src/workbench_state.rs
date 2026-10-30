@@ -231,6 +231,15 @@ pub(super) struct PersistState {
     /// This window's session on the terminal daemon, and the daemon socket to use (workbench_term_daemon.rs).
     pub(super) term_daemon: Option<super::term_daemon_glue::TermDaemon>,
     pub(super) term_socket: Option<std::path::PathBuf>,
+    /// The window's session is being taken back; terminals outside the panel wait in `pending_moved` until it is.
+    pub(super) term_restoring: bool,
+    pub(super) pending_moved: Option<super::term_tabs_glue::restore::SavedTerminals>,
+    /// Terminals outside the panel taken back before their places were restored (by position), waiting for them.
+    pub(super) moved_back: Vec<(usize, host::Pty, u64)>,
+    /// The app is quitting and this window's terminals are kept for the next start: nothing ends them on the way out.
+    pub(super) keeping_terminals: bool,
+    /// The SSH session id this window resumed, so no other window of the app takes it.
+    pub(super) remote_claim: Option<super::term_daemon_glue::Claim>,
 }
 
 /// Connection: host machine, SSH details and pending questions (see workbench_folder.rs).

@@ -1117,11 +1117,16 @@ impl Workbench {
                 crate::scm::ScmEvent::Rediscover => this.rediscover(cx),
                 crate::scm::ScmEvent::RefreshInventory => this.refresh_inventory(cx),
             }),
-            // Terminals in windows of their own or in the editor area belong to this window: they end with it.
+            // Terminals in windows of their own or in the editor area belong to this window: they end with it, unless the
+            // app is quitting with them kept for the next start (`keep_terminals_for_restart`).
             cx.on_release(|this, cx| {
-                this.close_detached_terminals(cx);
+                if !this.persist.keeping_terminals {
+                    this.close_detached_terminals(cx);
+                }
                 this.close_editor_windows(cx);
-                this.close_editor_terminals(cx);
+                if !this.persist.keeping_terminals {
+                    this.close_editor_terminals(cx);
+                }
             }),
             // A download in progress is cancelled and its partial file removed before the process ends.
             cx.on_app_quit(|this, cx| {
@@ -1338,6 +1343,11 @@ impl Workbench {
                 opening_recent: None,
                 term_daemon: None,
                 term_socket: None,
+                term_restoring: false,
+                pending_moved: None,
+                moved_back: Vec::new(),
+                keeping_terminals: false,
+                remote_claim: None,
             },
             remote: state_glue::RemoteState {
                 docker: Default::default(),

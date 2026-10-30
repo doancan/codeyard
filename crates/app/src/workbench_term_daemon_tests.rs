@@ -60,7 +60,7 @@ fn close(wb: Entity<Workbench>, cx: &mut gpui::VisualTestContext) {
 
 /// The app quits (what `on_app_quit` does to every window, then the windows go): the session stays for the next start.
 fn quit(wb: Entity<Workbench>, cx: &mut gpui::VisualTestContext) {
-    wb.update(cx, |wb, _| wb.keep_terminals_for_restart());
+    wb.update(cx, |wb, cx| wb.keep_terminals_for_restart(cx));
     close(wb, cx);
 }
 
@@ -176,7 +176,7 @@ fn a_session_held_by_another_instance_is_not_taken_over(cx: &mut gpui::TestAppCo
     let closer = stream.try_clone().unwrap();
     let transport = host::Transport::pipes(Box::new(stream.try_clone().unwrap()), Box::new(stream));
     let close_other = Box::new(move || drop(closer.shutdown(std::net::Shutdown::Both)));
-    let (other, resumed, _) = host::RemoteHost::attach_session(transport, close_other, &session, &[], "Local").unwrap();
+    let (other, resumed) = host::RemoteHost::attach_session(transport, close_other, &session, "Local").unwrap();
     assert!(resumed);
 
     let (wb, cx) = window(cx, &home, &dir, &sock);
@@ -186,4 +186,157 @@ fn a_session_held_by_another_instance_is_not_taken_over(cx: &mut gpui::TestAppCo
     assert_ne!(wb.read_with(cx, |wb, _| wb.persist.term_daemon.as_ref().map(|d| d.session.clone())), Some(session), "a session of its own");
     assert!(alive(&pid), "the other instance keeps its terminal");
     other.end_session();
+}
+
+/// The pid a terminal's shell writes to `file`.
+fn pid_of(term: &Entity<crate::terminal::TerminalView>, cx: &mut gpui::VisualTestContext, file: &std::path::Path) -> String {
+    let line = format!("echo $$ > {}\n", file.display());
+    term.update(cx, |t, _| t.send(&line));
+    wait_ticking(cx, "the shell wrote its pid", |_| std::fs::read_to_string(file).is_ok_and(|s| s.ends_with('\n')));
+    std::fs::read_to_string(file).unwrap().trim().to_string()
+}
+
+/// Every window of the app goes, as at quit (the main one marked to keep its terminals first).
+fn quit_all(wb: Entity<Workbench>, cx: &mut gpui::VisualTestContext) {
+    wb.update(cx, |wb, cx| {
+        wb.persist_session(cx);
+        wb.keep_terminals_for_restart(cx);
+    });
+    drop(wb);
+    cx.update(|window, _| window.remove_window());
+    cx.run_until_parked();
+}
+
+/// A terminal moved into an editor group comes back into that group as the same shell, next to the panel's own.
+/// (A window of its own goes through the same placing code; it is not used here because a closed test window that held
+/// a detached terminal keeps the workbench alive in this process, see the PR.)
+#[gpui::test]
+fn terminals_outside_the_panel_are_taken_back_into_their_places(cx: &mut gpui::TestAppContext) {
+    let home = crate::qa_workbench_tests::fresh("termd-moved-home");
+    let dir = crate::qa_workbench_tests::project("termd-moved");
+    let sock = daemon("moved");
+    let (in_group, in_panel) = {
+        let (wb, vcx) = window(cx, &home, &dir, &sock);
+        for _ in 0..2 {
+            wb.update_in(vcx, |wb, window, cx| wb.new_terminal_launch(None, crate::terminal::Launch::default(), window, cx));
+        }
+        wait_ticking(vcx, "their tokens", |cx| wb.read_with(cx, |wb, cx| wb.terminals.iter().all(|t| t.read(cx).token().is_some())));
+        let (first, second) = wb.read_with(vcx, |wb, _| (wb.terminals[0].clone(), wb.terminals[1].clone()));
+        let pids = (pid_of(&first, vcx, &dir.join("pid-group")), pid_of(&second, vcx, &dir.join("pid-panel")));
+        wb.update_in(vcx, |wb, window, cx| {
+            wb.active_terminal = 0;
+            wb.move_terminal_into_editor(window, cx);
+        });
+        wait_ticking(vcx, "in the editor area", |cx| wb.read_with(cx, |wb, _| wb.editor_terminal_count() == 1 && wb.terminals.len() == 1));
+        quit_all(wb, vcx);
+        pids
+    };
+    let (wb, cx) = window(cx, &home, &dir, &sock);
+    wait_ticking(cx, "both back in their places", |cx| wb.read_with(cx, |wb, _| wb.editor_terminal_count() == 1 && wb.terminals.len() == 1));
+    let (group_term, panel_term) = wb.read_with(cx, |wb, _| (wb.editor_terminals_for_test()[0].clone(), wb.terminals[0].clone()));
+    for term in [&group_term, &panel_term] {
+        let shown = cx.update(|_, cx| term.read(cx).scrollback_text() + &term.read(cx).screen_text());
+        assert!(shown.contains("Reconnected to terminal session") && !shown.contains("Previous session ended"), "{shown}");
+    }
+    assert_eq!(pid_of(&group_term, cx, &dir.join("pid-group-2")), in_group, "the editor group's terminal is the same shell");
+    assert_eq!(pid_of(&panel_term, cx, &dir.join("pid-panel-2")), in_panel, "the panel's terminal is the same shell");
+}
+
+/// `terminal.persistentSessionTimeout: 0`: quitting does not keep the terminals; the next start has a new shell.
+#[gpui::test]
+fn a_timeout_of_zero_does_not_keep_terminals(cx: &mut gpui::TestAppContext) {
+    let home = crate::qa_workbench_tests::fresh("termd-zero-home");
+    let dir = crate::qa_workbench_tests::project("termd-zero");
+    let sock = daemon("zero");
+    let (wb, vcx, pid) = window_with_terminal(cx, &home, &dir, &sock);
+    vcx.update(|_, cx| {
+        let mut s = cx.global::<Settings>().clone();
+        s.terminal_persistent_session_timeout = 0;
+        cx.set_global(s);
+    });
+    quit(wb, vcx);
+    wait_ticking(vcx, "the shell ended with the app", |_| !alive(&pid));
+}
+
+/// A window of the SSH folder `path` on the test host, connected with the folder's saved session if there is one.
+fn ssh_window<'a>(cx: &'a mut gpui::TestAppContext, home: &std::path::Path, path: &str) -> (Entity<Workbench>, &'a mut gpui::VisualTestContext) {
+    let (wb, vcx) = crate::qa_workbench_tests::setup_persistent(cx, home);
+    restore_on(vcx);
+    let p = path.to_string();
+    wb.update_in(vcx, |wb, window, cx| {
+        wb.remote.pending_path = Some(p);
+        wb.connect(crate::test_sshd::ALIAS.into(), window, cx);
+    });
+    crate::qa_integration_tests::wait_secs(vcx, 60, "connected", |cx| wb.read_with(cx, |wb, cx| wb.remote.host.is_remote() && wb.root(cx).is_some()));
+    (wb, vcx)
+}
+
+/// An SSH folder: after a restart, the window resumes its session on the host's agent daemon and takes its terminal
+/// back, the same process; the window it replaced was gone (no `Bye`), so the session was kept.
+#[gpui::test]
+fn an_ssh_folders_terminal_is_taken_back_after_a_restart(cx: &mut gpui::TestAppContext) {
+    let Some(sshd) = crate::test_sshd::start("term-reattach-ssh") else { return };
+    let home = crate::qa_workbench_tests::fresh("termd-ssh-home");
+    let dir = sshd.dir.join("project");
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.to_string_lossy().into_owned();
+    let first = {
+        let (wb, vcx) = ssh_window(cx, &home, &path);
+        wb.update_in(vcx, |wb, window, cx| wb.new_terminal_launch(None, crate::terminal::Launch::default(), window, cx));
+        crate::qa_integration_tests::wait_secs(vcx, 30, "its token", |cx| {
+            wb.read_with(cx, |wb, cx| wb.terminals.first().is_some_and(|t| t.read(cx).token().is_some()))
+        });
+        let term = wb.read_with(vcx, |wb, _| wb.terminals[0].clone());
+        let pid = pid_of(&term, vcx, &dir.join("pid-1"));
+        quit_all(wb, vcx);
+        pid
+    };
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    let (wb, cx) = ssh_window(cx, &home, &path);
+    // (What the shell printed while no window was attached is checked without windows, below: in this test process the
+    // first window's connection is not torn down the way a quitting app's is.)
+    crate::qa_integration_tests::wait_secs(cx, 30, "the terminal taken back", |cx| text(&wb, cx).contains("Reconnected to terminal session"));
+    let shown = text(&wb, cx);
+    assert!(!shown.contains("Previous session ended"), "{shown}");
+    let term = wb.read_with(cx, |wb, _| wb.terminals[0].clone());
+    assert_eq!(pid_of(&term, cx, &dir.join("pid-2")), first, "the same shell process on the host");
+}
+
+/// The host side of an SSH restart, without a window: a connection kept for the next start (no `Bye`) leaves its shell
+/// and that shell's output to the host's agent daemon; a new connection to the same session adopts the shell with its
+/// token and gets what it printed meanwhile.
+#[test]
+fn an_ssh_session_kept_for_a_restart_hands_its_shell_to_the_next_connection() {
+    let Some(sshd) = crate::test_sshd::start("term-adopt-ssh") else { return };
+    let bundle = crate::bundled_agents::discover();
+    let session = host::random_token();
+    let marker = sshd.dir.join("adopt-marker");
+    let read_until = |pty: &host::Pty, want: &str| {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        let mut seen = String::new();
+        while !seen.contains(want) {
+            assert!(std::time::Instant::now() < deadline, "waited for {want:?}, got {seen:?}");
+            if let Ok(host::PtyEvent::Output(d)) = pty.events.recv_timeout(std::time::Duration::from_millis(200)) {
+                seen.push_str(&String::from_utf8_lossy(&d));
+            }
+        }
+    };
+    let spec = || host::PtySpec { cols: 80, rows: 24, shell: Some("/bin/sh".into()), ..Default::default() };
+    let (id, token) = {
+        let first = host::ssh::connect_session(crate::test_sshd::ALIAS, &bundle, Some(session.clone()), |_| {}).unwrap();
+        let pty = first.pty_spawn_ex(spec()).unwrap();
+        let token = first.pty_token(pty.id).unwrap();
+        first.pty_input(pty.id, format!("echo $$ > {}; sleep 1; echo printed-while-away\n", marker.display()).into_bytes());
+        read_until(&pty, "sleep 1");
+        first.keep_for(300);
+        first.keep_session();
+        (pty.id, token)
+    };
+    std::thread::sleep(std::time::Duration::from_secs(2));
+    let second = host::ssh::connect_session(crate::test_sshd::ALIAS, &bundle, Some(session), |_| {}).unwrap();
+    let (back, _) = second.pty_adopt(id, token.0, token.1).unwrap();
+    read_until(&back, "printed-while-away");
+    let pid = std::fs::read_to_string(&marker).unwrap().trim().to_string();
+    second.pty_input(id, b"echo still-the-same-$$\n".to_vec());
+    read_until(&back, &format!("still-the-same-{pid}"));
 }

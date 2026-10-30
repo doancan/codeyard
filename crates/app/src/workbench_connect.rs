@@ -45,11 +45,14 @@ impl Workbench {
     pub fn connect(&mut self, alias: String, window: &mut Window, cx: &mut Context<Self>) {
         let bundle = self.remote.bundle.clone();
         let target = alias.clone();
+        // The folder's saved session, so the terminals kept in it can be taken back (restore on).
+        let pending = self.remote.pending_path.clone();
+        let session = cx.global::<Settings>().restore_session.then(|| self.claim_remote_session(&alias, pending.as_deref())).flatten();
         self.connect_using(alias, window, cx, move |progress| async move {
             let remote = if target == LOCAL_AGENT_ALIAS {
                 host::ssh::spawn_local_agent(&bundle)
             } else {
-                host::ssh::connect(&target, &bundle, |s| progress.store(s as u8, Ordering::Relaxed))
+                host::ssh::connect_session(&target, &bundle, session, |s| progress.store(s as u8, Ordering::Relaxed))
             }?;
             Ok(Arc::new(remote) as Arc<dyn Host>)
         });

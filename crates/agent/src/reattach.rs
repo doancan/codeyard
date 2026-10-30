@@ -63,6 +63,10 @@ impl Session {
                     Response::Error(Error::PermissionDenied(format!("terminal {pty}: the token is not this session's")))
                 }
             }
+            Request::KeepFor { secs } => {
+                self.keep_for.store(secs, std::sync::atomic::Ordering::Relaxed);
+                return Ok(());
+            }
             Request::PtyList => {
                 let mut ids: Vec<u32> = self.ptys.locked().keys().copied().collect();
                 ids.sort_unstable();
