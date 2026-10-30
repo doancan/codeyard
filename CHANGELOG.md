@@ -98,6 +98,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Linux agent's size budget is 1664 KB (was 1600 KB): running tasks as processes on the server needs its own
   request in the protocol.
 
+### Fixed
+
+- On macOS and Linux, a task, test run, language server or terminal no longer keeps running when Codeyard is killed or
+  crashes. A small guard process started with the app ends every task's process group at once and hangs up every
+  terminal, killing it after two seconds if it is still there. Windows already ends them through job objects and the
+  pseudo console.
+
 ## [0.6.0] - 2026-10-29
 
 ### Added

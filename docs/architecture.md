@@ -215,6 +215,57 @@ truncating `fs::write`.
 - **GPUI upgrades** are deliberate: the version is pinned, local patches are listed in `vendor/gpui/PATCHES.md`
   and re-applied on every upgrade.
 
+## Who owns local processes
+
+Locally the agent is a thread of the app (`host::local()`), so the app is the parent of every task, test run, language
+server, debug adapter and terminal shell it starts. Each task leads its own process group on Unix (so Stop reaches its
+descendants) and runs in a kill-on-close job object on Windows; each terminal shell leads its own session. A normal
+quit or a closed terminal ends them through `Drop`. A signal or a crash runs no destructor, though. On Windows the system
+still closes the job handles and pseudo consoles, which ends their processes. On Unix nothing did: a process group or
+session has no tie to the process that created it.
+
+**Today: a process guard (`agent::guard`).** Before the first window opens, the app starts the same binary again as
+`codeyard --process-guard`, in a process group of its own and with only a pipe for standard input. The app keeps the pipe's
+write end; Rust opens pipes close-on-exec, so no task, shell or helper inherits it. Every spawn in `agent::proc` and
+`agent::pty` sends the guard one line: `t <pgid>` for a task's group, `p <pgid>` for a terminal's session. Before a
+leader is reaped the app sends `- <pgid>`: after reaping, the id may be reused, so the guard never holds one that is
+free. However the app ends, the kernel closes the pipe. On end of input the guard:
+
+- sends SIGKILL to every task group at once (an orphaned build or test run has no one to report to);
+- sends SIGHUP and SIGCONT to every terminal group, then SIGKILL to whatever is still there after `PTY_GRACE` (2 s), so a
+  shell can save its history and end its jobs.
+
+Then it exits. The guard ignores SIGHUP and SIGINT meant for the app's terminal. A pipe works the same on macOS, which has
+no `PR_SET_PDEATHSIG`. On Linux a death signal would also only follow the creating thread, and it reaches the leader but
+not its descendants. The guard costs one process that reads one line per spawn, and starting it takes one `fork`/`exec`
+before the first window. It runs the app binary, which branches off before any app or GPUI set-up. Measured on macOS
+with a debug build, it uses a 4.7 MB physical footprint and 11.7 MB resident, mostly the binary's shared pages. The same
+mode of the much smaller agent binary uses 1.5 MB, so a dedicated helper is the way to shrink it if that matters. The agent binary has the same `--process-guard` mode (4 KB of the static Linux agent: 1620 → 1624 KB, budget
+1664 KB). The protocol is unchanged: the guard lives on the owner's side of the connection.
+
+What the guard does not cover:
+
+- A descendant that moves to a process group or session of its own (`setsid`, a daemonizing tool), on any platform.
+- A group whose leader was already reaped while descendants still ran.
+- The instant between `spawn` and the registration line.
+- Remote hosts: there the daemon (`docs/remote.md`) owns the processes and ties them to the connection.
+
+**Next: terminals that survive an app restart (#82).** Locally there is nothing to reattach to today, because terminals
+end with the app. The SSH daemon is the model for that work:
+
+1. Run the local agent as a child process: `codeyard --local-agent`, or `--daemon` on a per-user socket as over SSH,
+   instead of a thread. It speaks the same protocol over pipes. Tasks then get the immediate kill above when the connection
+   ends, and PTYs get the daemon's grace window.
+2. Give each PTY an opaque random token scoped to the host and to the daemon's own random instance id, plus an output
+   sequence number for gap detection. Persist only the token, never a pid. A token from another host, another daemon
+   instance or one already attached is refused, so a reused pid can never be attached.
+3. Reattaching on restart sends `Hello{session}` and the tokens. Whatever comes back is reconnected; the rest is shown as
+   ended and revived as a new shell, with nothing replayed.
+
+The costs to weigh first: one more resident process per user (the SSH daemon idles at about 8 MB) and one more process
+start on launch. Local file reads and saves would also go through the pipe instead of a function call: measure typing and
+large-file latency before switching.
+
 ## Opening files from the system
 
 Finder's *Open With*, dropping a file or folder on the Dock icon and `open -a Codeyard x` arrive as `file://` URLs through
