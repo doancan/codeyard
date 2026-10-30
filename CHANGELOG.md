@@ -245,6 +245,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Source Control builds only the change rows on screen, so a repository with thousands of changes (generated files,
+  a large merge) scrolls and refreshes without delay. The list keeps its scroll position and focus when the status
+  refreshes.
 - Deleting a file or folder deletes it permanently after asking, instead of moving it to the Trash:
   `files.enableTrash` is now off by default. Turn it on to keep using the Trash for local files.
 - The settings and shortcuts import is "Preferences: Import Settings and Shortcuts from Another Editor", and its
