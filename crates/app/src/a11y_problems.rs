@@ -292,7 +292,7 @@ mod tests {
     fn problems_are_listed_and_opened_and_an_outdated_row_opens_nothing(cx: &mut gpui::TestAppContext) {
         let dir = crate::qa_workbench_tests::project("a11y-problems");
         std::fs::write(dir.join("src/main.rs"), "fn main() {\n    let a = 1;\n    let b: u8 = \"x\";\n}\n").unwrap();
-        let file = dir.join("src/main.rs").to_string_lossy().into_owned();
+        let file = crate::ui::local_path(&dir.join("src/main.rs"));
         let (wb, cx) = crate::qa_workbench_tests::setup(cx);
         crate::qa_workbench_tests::open(&wb, &dir, cx);
         wb.update(cx, |wb, cx| {
@@ -368,7 +368,7 @@ mod tests {
     fn search_results_in_the_side_panel_are_listed_and_open_their_match(cx: &mut gpui::TestAppContext) {
         let dir = crate::qa_workbench_tests::project("a11y-search-side");
         std::fs::write(dir.join("src/main.rs"), "fn main() {\n    let needle = 1;\n}\n").unwrap();
-        let file = dir.join("src/main.rs").to_string_lossy().into_owned();
+        let file = crate::ui::local_path(&dir.join("src/main.rs"));
         let (wb, cx) = crate::qa_workbench_tests::setup(cx);
         crate::qa_workbench_tests::open(&wb, &dir, cx);
         wb.update_in(cx, |wb, window, cx| wb.search_for("needle", window, cx));
