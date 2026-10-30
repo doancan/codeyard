@@ -213,6 +213,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- `wasmtime` and `wasmtime-wasi` 50.0.1 in `codeyard-exthost` (RUSTSEC-2026-0420, RUSTSEC-2026-0422,
+  RUSTSEC-2026-0423, RUSTSEC-2026-0424): fixes for typed functions with `i31` or `nullref` arguments, cross-engine
+  struct types, resources passed between components and the WASI host. Each extension still runs in its own exthost
+  process inside the OS sandbox.
 - `wasmtime` and `wasmtime-wasi` 50.0.1 for the extension host (RUSTSEC-2026-0420, RUSTSEC-2026-0422,
   RUSTSEC-2026-0423, RUSTSEC-2026-0424): type confusion between engines, a panic on typed functions with `i31` or
   `nullref` arguments, and a UDP send to an address only allowed for receiving.
