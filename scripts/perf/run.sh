@@ -36,6 +36,8 @@ trap 'exit 130' INT TERM
 . scripts/perf/footprint.sh
 
 cargo build --release -q -p app -p cyx -p ext-host
+# New files, not the old ones overwritten: macOS kills a binary rewritten in place (its cached code signature).
+rm -f "$OUT/codeyard-candidate" "$OUT/codeyard-exthost" "$OUT/codeyard-baseline"
 cp target/release/codeyard "$OUT/codeyard-candidate"
 # Code extensions run in codeyard-exthost beside the app; both builds use this one.
 cp target/release/codeyard-exthost "$OUT/codeyard-exthost"
