@@ -17,6 +17,13 @@ pub(super) struct Detached {
 /// The size a terminal's own window opens at.
 pub(super) const DETACHED_SIZE: gpui::Size<gpui::Pixels> = gpui::size(px(720.), px(440.));
 
+/// Where a window of its own is, to open it in the same place next time: the frame's top-left corner and the size of
+/// its content. A window opens with its content at the given size (on macOS the title bar is added around it), so
+/// saving the frame's size would make the window taller at every start.
+pub(super) fn reopen_bounds(window: &Window) -> gpui::Bounds<gpui::Pixels> {
+    gpui::Bounds::new(window.bounds().origin, window.viewport_size())
+}
+
 /// The root view of a detached terminal's window.
 pub(super) struct DetachedTerminal {
     term: Entity<TerminalView>,

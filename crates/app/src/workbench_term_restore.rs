@@ -130,7 +130,7 @@ impl Workbench {
             }
         }
         for d in &self.chrome.detached {
-            let at = d.window.update(cx, |_, window, _| window.bounds()).ok();
+            let at = d.window.update(cx, |_, window, _| views_glue::reopen_bounds(window)).ok();
             let at = at.map(|b| [b.origin.x, b.origin.y, b.size.width, b.size.height].map(f32::from));
             entry(&d.term, Place::Window(at), cx);
         }

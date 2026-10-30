@@ -202,6 +202,37 @@ fn a_restart_brings_editor_windows_back_on_a_display(cx: &mut gpui::TestAppConte
     assert!(display.contains(&at.origin) && at.size.width <= display.size.width, "{at:?} on {display:?}");
 }
 
+/// A file moved into its own window stays only there across restarts, also when the app is killed: the tab loaded to
+/// show it at a restart is not saved as a tab, so the next start does not bring it back in the main window too.
+#[gpui::test]
+fn a_moved_editor_stays_only_in_its_window_across_two_kills(cx: &mut gpui::TestAppContext) {
+    let home = fresh("edwin-twice-home");
+    let dir = fresh("edwin-twice-project");
+    std::fs::write(dir.join("a.txt"), "a\n").unwrap();
+    std::fs::write(dir.join("b.txt"), "b\n").unwrap();
+    let (wb, vcx) = setup_persistent(cx, &home);
+    open(&wb, &dir, vcx);
+    open_in(&wb, &dir.join("a.txt"), vcx);
+    open_in(&wb, &dir.join("b.txt"), vcx);
+    wb.update_in(vcx, |wb, window, cx| wb.editor_into_new_window(false, window, cx));
+    vcx.run_until_parked();
+    let mut wb = wb;
+    for restart in 1..=2 {
+        // Killed, as a crash would: what the restore saved is all the next start has.
+        wb = crate::qa_workbench_tests::restart_after_kill(wb, vcx, &home);
+        let start = std::time::Instant::now();
+        while wb.read_with(vcx, |wb, _| wb.chrome.editor_windows.is_empty()) && start.elapsed() < std::time::Duration::from_secs(10) {
+            vcx.run_until_parked();
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        wb.read_with(vcx, |wb, cx| {
+            let name = |e: &Entity<EditorView>| ui::file_name(&e.read(cx).path).to_string();
+            assert_eq!(wb.chrome.editor_windows.iter().map(|d| name(&d.editor)).collect::<Vec<_>>(), vec!["b.txt"], "restart {restart}");
+            assert_eq!(wb.tabs.editors.iter().map(name).collect::<Vec<_>>(), vec!["a.txt"], "b.txt is only in its window after restart {restart}");
+        });
+    }
+}
+
 fn moved_into_window<'a>(
     name: &str,
     file_name: &str,

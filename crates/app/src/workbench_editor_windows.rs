@@ -76,7 +76,7 @@ impl Render for EditorWindow {
             window.set_window_title(&title);
             self.title = title;
         }
-        self.bounds.set(Some(window.bounds()));
+        self.bounds.set(Some(super::views_glue::reopen_bounds(window)));
         let p = *palette(cx);
         let root = div().id("editor-window");
         let (root, layers) = match self.home.upgrade().filter(|_| self.ready) {
@@ -336,7 +336,7 @@ impl Workbench {
             cx.new(|cx| {
                 let mut subs = vec![
                     cx.observe(&e, |_, _, cx| cx.notify()),
-                    cx.observe_window_bounds(window, |this: &mut EditorWindow, window, _| this.bounds.set(Some(window.bounds()))),
+                    cx.observe_window_bounds(window, |this: &mut EditorWindow, window, _| this.bounds.set(Some(super::views_glue::reopen_bounds(window)))),
                     // Coming to the front makes it the window commands act on.
                     cx.observe_window_activation(window, |this: &mut EditorWindow, window, cx| {
                         if window.is_window_active() {
@@ -610,8 +610,9 @@ impl Workbench {
         }
         self.sync_slots(cx);
         self.refresh_active_flags(cx);
-        // Restoring the tabs saved a session without these windows; save it again with them.
-        self.persist_editor_windows(cx);
+        // Restoring the tabs saved a session without these windows and with the tabs loaded only for them; save it again
+        // as it is now, or a crash before the next save brings those files back as tabs too.
+        self.persist_session(cx);
         cx.notify();
     }
 }
