@@ -160,6 +160,7 @@ impl Workbench {
 
     pub(super) fn sync_slots(&self, cx: &mut App) {
         let ids = self.tabs.layout.groups();
+        let host = self.chrome.editor_host;
         for ed in self.all_editors() {
             let slots: Vec<usize> = ids.iter().copied().filter(|id| self.tabs.group(*id).is_some_and(|g| g.editors.contains(&ed))).map(usize::from).collect();
             ed.update(cx, |e, cx| {
@@ -173,6 +174,10 @@ impl Workbench {
                 let focused = self.focused_slot();
                 if let Some(home) = slots.iter().copied().find(|slot| *slot == focused).or_else(|| slots.first().copied()) {
                     e.set_home(home);
+                }
+                // While its own window is in use, calls from outside go to that window's view.
+                if let Some(slot) = host.filter(|s| e.has_slot(*s)) {
+                    e.set_home(slot);
                 }
             });
         }
@@ -208,6 +213,9 @@ impl Workbench {
     }
 
     pub(super) fn focus_group_key(&mut self, key: GroupKey, window: &mut Window, cx: &mut Context<Self>) {
+        if self.run_in_main_window(window, cx, move |this, window, cx| this.focus_group_key(key, window, cx)) {
+            return;
+        }
         if !self.ensure_group(key) {
             return;
         }
@@ -222,7 +230,7 @@ impl Workbench {
                 window.focus(&view.focus_handle(cx));
             }
         } else if !self.tabs.page_active {
-            if let Some(ed) = self.active_editor() {
+            if let Some(ed) = self.tab_editor() {
                 window.focus(&ed.focus_handle(cx));
             } else {
                 window.focus(&self.focus_handle);
@@ -308,7 +316,7 @@ impl Workbench {
     }
 
     fn split_direction(&mut self, direction: Direction, window: &mut Window, cx: &mut Context<Self>) {
-        let active = self.active_editor().cloned();
+        let active = self.tab_editor().cloned();
         let key = match self.tabs.split(direction) {
             Ok(key) => key,
             Err(_) => {
@@ -366,7 +374,7 @@ impl Workbench {
 
     pub(super) fn move_editor_to_other_group(&mut self, _: &MoveEditorToOtherGroup, window: &mut Window, cx: &mut Context<Self>) {
         let from = self.tabs.current_key();
-        let ed = self.active_editor().cloned();
+        let ed = self.tab_editor().cloned();
         let was_single = self.tabs.layout.groups().len() == 1;
         let target = self
             .tabs

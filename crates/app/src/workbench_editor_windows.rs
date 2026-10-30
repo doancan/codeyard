@@ -29,13 +29,17 @@ pub(super) struct DetachedEditor {
     bounds: std::rc::Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
 }
 
-/// The root view of an editor's own window.
+/// The root view of an editor's own window. It carries the workbench's actions, so commands and shortcuts work there
+/// and act on this editor; the context menu and pickers opened from it are drawn here.
 pub(super) struct EditorWindow {
     editor: Entity<EditorView>,
     slot: usize,
     home: WeakEntity<Workbench>,
     title: String,
     bounds: std::rc::Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
+    /// Set once the window exists: its first frame is drawn while the workbench is still opening it, so the
+    /// workbench's actions and layers join from the next frame on.
+    ready: bool,
     _subs: Vec<Subscription>,
 }
 
@@ -47,6 +51,18 @@ impl EditorWindow {
         cx.defer(move |cx| {
             main.update(cx, |_, window, cx| home.update(cx, |wb, cx| f(wb, window, cx))).ok();
         });
+    }
+
+    /// This window is in use: commands act on its editor.
+    fn in_use(&self, cx: &mut App) {
+        let slot = self.slot;
+        self.home.update(cx, |wb, cx| wb.use_editor_window(slot, cx)).ok();
+    }
+
+    /// The editor, its view and the workbench (accessibility).
+    #[cfg_attr(not(any(target_os = "macos", windows)), allow(dead_code))]
+    pub(super) fn parts(&self) -> (Entity<EditorView>, usize, WeakEntity<Workbench>) {
+        (self.editor.clone(), self.slot, self.home.clone())
     }
 }
 
@@ -62,26 +78,46 @@ impl Render for EditorWindow {
         }
         self.bounds.set(Some(window.bounds()));
         let p = *palette(cx);
-        div()
-            .id("editor-window")
-            .key_context("EditorWindow")
+        let root = div().id("editor-window");
+        let (root, layers) = match self.home.upgrade().filter(|_| self.ready) {
+            Some(home) => home.update(cx, |wb, cx| {
+                let hosted = wb.chrome.editor_host == Some(self.slot);
+                let layers: Vec<AnyElement> =
+                    if hosted { wb.menu_layer(0., cx).into_iter().chain(wb.picker_layer(theme::SPACE[4], cx)).collect() } else { Vec::new() };
+                (wb.with_actions(root, cx), layers)
+            }),
+            None => (root, Vec::new()),
+        };
+        root.key_context("EditorWindow")
             .size_full()
-            .flex()
-            .flex_col()
+            .relative()
             .bg(c(p.bg))
-            .on_action(cx.listener(|this, _: &CloseEditor, window, cx| {
-                let (ed, slot) = (this.editor.clone(), this.slot);
-                if let Some(home) = this.home.upgrade() {
-                    home.update(cx, |wb, cx| wb.close_editor_window(&ed, slot, window, cx));
-                }
-            }))
-            .on_action(cx.listener(|this, _: &MoveEditorsBackToMainWindow, _, cx| {
-                let (ed, slot) = (this.editor.clone(), this.slot);
-                this.in_main(cx, move |wb, window, cx| wb.editor_window_returned(&ed, slot, true, window, cx));
-            }))
-            .on_action(cx.listener(|this, _: &SaveAll, _, cx| this.in_main(cx, |wb, window, cx| wb.save_all(&SaveAll, window, cx))))
-            .on_action(cx.listener(|this, _: &Quit, _, cx| this.in_main(cx, |wb, window, cx| wb.confirm_quit(window, cx))))
-            .child(editor::slot_view(self.editor.clone(), self.slot))
+            .text_color(c(p.text))
+            .font_family(cx.global::<Settings>().ui_font.clone().map_or(SharedString::from(ui::UI_FONT), SharedString::from))
+            .text_size(px(text::SM.0))
+            .line_height(px(text::SM.1))
+            // Input here makes this the window commands act on.
+            .capture_key_down(cx.listener(|this, _, _, cx| this.in_use(cx)))
+            .capture_any_mouse_down(cx.listener(|this, _, _, cx| this.in_use(cx)))
+            .child(
+                div()
+                    .size_full()
+                    .flex()
+                    .flex_col()
+                    // Before the workbench's own: ⌘W closes this view, and "Move Editors Back" returns this one.
+                    .on_action(cx.listener(|this, _: &CloseEditor, window, cx| {
+                        let (ed, slot) = (this.editor.clone(), this.slot);
+                        if let Some(home) = this.home.upgrade() {
+                            home.update(cx, |wb, cx| wb.close_editor_window(&ed, slot, window, cx));
+                        }
+                    }))
+                    .on_action(cx.listener(|this, _: &MoveEditorsBackToMainWindow, _, cx| {
+                        let (ed, slot) = (this.editor.clone(), this.slot);
+                        this.in_main(cx, move |wb, window, cx| wb.editor_window_returned(&ed, slot, true, window, cx));
+                    }))
+                    .child(editor::slot_view(self.editor.clone(), self.slot)),
+            )
+            .children(layers)
     }
 }
 
@@ -147,33 +183,89 @@ impl Workbench {
         self.tabs.editors.contains(ed) || self.tabs.groups.values().any(|g| g.editors.contains(ed))
     }
 
-    /// The editor's window that is in front, if `ed` is shown there: its events (go to definition, a list of
-    /// references) came from that window.
-    pub(super) fn front_editor_window(&self, ed: &Entity<EditorView>, cx: &App) -> Option<(usize, gpui::WindowHandle<EditorWindow>)> {
-        let active = cx.active_window()?;
-        self.chrome.editor_windows.iter().find(|d| d.editor == *ed && gpui::AnyWindowHandle::from(d.window) == active).map(|d| (d.slot, d.window))
+    /// The editor of the window in use, if one is (see `active_editor`).
+    pub(super) fn hosted_editor(&self) -> Option<&Entity<EditorView>> {
+        let slot = self.chrome.editor_host?;
+        self.chrome.editor_windows.iter().find(|d| d.slot == slot).map(|d| &d.editor)
+    }
+
+    /// The editor window with view `slot` is in use: commands act on its editor (in that view), and its menus and
+    /// pickers are drawn there.
+    pub(super) fn use_editor_window(&mut self, slot: usize, cx: &mut Context<Self>) {
+        let Some(ed) = self.chrome.editor_windows.iter().find(|d| d.slot == slot).map(|d| d.editor.clone()) else { return };
+        if self.chrome.editor_host != Some(slot) {
+            self.chrome.editor_host = Some(slot);
+            cx.notify();
+        }
+        ed.update(cx, |e, _| e.set_home(slot));
+    }
+
+    /// The main window is in use again.
+    pub(super) fn leave_editor_window(&mut self) {
+        self.chrome.editor_host = None;
+    }
+
+    /// Something is shown in the main window's tabs (a file opened from an editor's window, a group focused): the
+    /// main window is in use again. When `window` is another window, `f` runs in the main window instead, which comes
+    /// to the front, and `true` is returned.
+    pub(super) fn run_in_main_window(
+        &mut self,
+        window: &Window,
+        cx: &mut Context<Self>,
+        f: impl FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
+    ) -> bool {
+        if self.chrome.editor_host.take().is_some() {
+            self.sync_slots(cx);
+        }
+        if window.window_handle() == self.window_handle {
+            return false;
+        }
+        let (main, wb) = (self.window_handle, cx.entity());
+        cx.defer(move |cx| {
+            main.update(cx, |_, window, cx| {
+                window.activate_window();
+                wb.update(cx, |wb, cx| f(wb, window, cx));
+            })
+            .ok();
+        });
+        true
+    }
+
+    /// The window in use, when it shows `ed`: events of `ed` (a context menu, go to definition) came from there.
+    pub(super) fn host_window_of(&self, ed: &Entity<EditorView>) -> Option<(usize, gpui::WindowHandle<EditorWindow>)> {
+        let slot = self.chrome.editor_host?;
+        self.chrome.editor_windows.iter().find(|d| d.slot == slot && d.editor == *ed).map(|d| (d.slot, d.window))
+    }
+
+    /// Runs `f` on the workbench in the editor window `handle` (after the current event).
+    pub(super) fn run_in_editor_window(
+        &self,
+        handle: gpui::WindowHandle<EditorWindow>,
+        cx: &mut Context<Self>,
+        f: impl FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
+    ) {
+        let wb = cx.entity();
+        cx.defer(move |cx| {
+            handle.update(cx, |_, window, cx| wb.update(cx, |wb, cx| f(wb, window, cx))).ok();
+        });
     }
 
     /// Go to definition inside the same file, asked in an editor's own window: it moves there, not in a tab.
     pub(super) fn reveal_in_editor_window(&mut self, ed: &Entity<EditorView>, path: &str, line: u32, col: u32, cx: &mut Context<Self>) -> bool {
-        let Some((slot, handle)) = self.front_editor_window(ed, cx).filter(|_| ed.read(cx).path == path) else { return false };
+        let Some((slot, handle)) = self.host_window_of(ed).filter(|_| ed.read(cx).path == path) else { return false };
         let ed = ed.clone();
-        cx.defer(move |cx| {
-            handle
-                .update(cx, |_, window, cx| {
-                    ed.update(cx, |e, cx| {
-                        e.set_home(slot);
-                        e.reveal_lsp(line, col, window, cx);
-                    })
-                })
-                .ok();
+        self.run_in_editor_window(handle, cx, move |_, window, cx| {
+            ed.update(cx, |e, cx| {
+                e.set_home(slot);
+                e.reveal_lsp(line, col, window, cx);
+            })
         });
         true
     }
 
     /// "View: Move Editor into New Window" (`keep_tab`: "View: Copy Editor into New Window").
     pub(super) fn editor_into_new_window(&mut self, keep_tab: bool, window: &mut Window, cx: &mut Context<Self>) {
-        let ed = self.active_editor().filter(|_| !self.tabs.diff_active && !self.tabs.large_active && !self.tabs.page_active).cloned();
+        let ed = self.tab_editor().filter(|_| !self.tabs.diff_active && !self.tabs.large_active && !self.tabs.page_active).cloned();
         let Some(ed) = ed else {
             self.notice = Some(Notice::Info(crate::i18n::t("Open a file in the editor first.").into()));
             return cx.notify();
@@ -216,6 +308,8 @@ impl Workbench {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: Some(gpui::TitlebarOptions { title: Some(title.clone().into()), appears_transparent: false, traffic_light_position: None }),
             window_min_size: Some(gpui::size(px(240.), px(160.))),
+            // Windows: the UI Automation adapter must be attached before the window is first shown.
+            show: !cfg!(windows),
             ..Default::default()
         };
         let home = cx.entity().downgrade();
@@ -238,16 +332,45 @@ impl Workbench {
                 true
             });
             cx.new(|cx| {
-                let subs = vec![
+                let mut subs = vec![
                     cx.observe(&e, |_, _, cx| cx.notify()),
                     cx.observe_window_bounds(window, |this: &mut EditorWindow, window, _| this.bounds.set(Some(window.bounds()))),
+                    // Coming to the front makes it the window commands act on.
+                    cx.observe_window_activation(window, |this: &mut EditorWindow, window, cx| {
+                        if window.is_window_active() {
+                            this.in_use(cx);
+                        }
+                    }),
                 ];
-                EditorWindow { editor: e.clone(), slot, home, title, bounds: cell, _subs: subs }
+                // So does the keyboard coming back into its editor.
+                if let Some(focus) = e.read(cx).slot_focus(slot) {
+                    subs.push(cx.on_focus_in(&focus, window, |this: &mut EditorWindow, _, cx| this.in_use(cx)));
+                }
+                // Its menus and pickers are drawn here while it is in use.
+                if let Some(wb) = home.upgrade() {
+                    subs.push(cx.observe(&wb, move |this: &mut EditorWindow, wb, cx| {
+                        let wb = wb.read(cx);
+                        if wb.chrome.editor_host == Some(this.slot) || wb.menu.is_some() || wb.overlay.is_some() {
+                            cx.notify();
+                        }
+                    }));
+                }
+                cx.defer_in(window, |this: &mut EditorWindow, _, cx| {
+                    this.ready = true;
+                    cx.notify();
+                });
+                EditorWindow { editor: e.clone(), slot, home, title, bounds: cell, ready: false, _subs: subs }
             })
         });
         match opened {
             Ok(handle) => {
+                #[cfg(any(target_os = "macos", windows))]
+                a11y::attach_with(handle.into(), a11y::windows_access::EDITOR_WINDOW, cx);
+                #[cfg(windows)]
+                handle.update(cx, |_, window, _| window.activate_window()).ok();
                 self.chrome.editor_windows.push(DetachedEditor { editor: ed, slot, window: handle, bounds: shared });
+                // It opens in front, with the keyboard: the window in use.
+                self.use_editor_window(slot, cx);
                 Ok(())
             }
             Err(e) => {
@@ -262,6 +385,9 @@ impl Workbench {
     fn drop_editor_window(&mut self, ed: &Entity<EditorView>, slot: usize, close: bool, cx: &mut Context<Self>) -> bool {
         let Some(ix) = self.chrome.editor_windows.iter().position(|d| d.editor == *ed && d.slot == slot) else { return false };
         let handle = self.chrome.editor_windows.remove(ix).window;
+        if self.chrome.editor_host == Some(slot) {
+            self.chrome.editor_host = None;
+        }
         if close {
             cx.defer(move |cx| {
                 handle.update(cx, |_, window, _| window.remove_window()).ok();
@@ -391,6 +517,7 @@ impl Workbench {
     /// The folder or the connection changes, or the main window closes: the editors' windows close with it. Unsaved
     /// changes were already asked about or backed up like the tabs'.
     pub(super) fn close_editor_windows(&mut self, cx: &mut App) {
+        self.chrome.editor_host = None;
         for d in std::mem::take(&mut self.chrome.editor_windows) {
             let handle = d.window;
             cx.defer(move |cx| {
@@ -435,9 +562,16 @@ impl Workbench {
     }
 
     /// After the tabs are back: each saved window opens again on its file, on the display that shows most of it (or
-    /// the first one, made to fit). A file that was only in a window leaves the tab it was loaded into; a file that
-    /// could not be opened is skipped. Only at a start (no editor window is open).
-    pub(super) fn restore_editor_windows(&mut self, saved: Option<SavedEditorWindows>, window: &mut Window, cx: &mut Context<Self>) {
+    /// the first one, made to fit). A file in `loaded_for_windows` (relative paths loaded only for their windows) leaves
+    /// the tab it was loaded into; any other file keeps its tabs and the window shows the same document, so restoring
+    /// never closes a tab. A file that could not be opened is skipped. Only at a start (no editor window is open).
+    pub(super) fn restore_editor_windows(
+        &mut self,
+        saved: Option<SavedEditorWindows>,
+        loaded_for_windows: &[String],
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let (Some(saved), Some(root)) = (saved, self.root(cx)) else { return };
         if !self.chrome.editor_windows.is_empty() {
             return;
@@ -457,7 +591,7 @@ impl Workbench {
             if self.show_in_editor_window(ed.clone(), bounds, view, cx).is_err() {
                 continue;
             }
-            if w.only_here {
+            if w.only_here && loaded_for_windows.contains(&w.path) {
                 // It was loaded as a tab only to be shown here: whichever group took it lets it go.
                 for id in self.tabs.layout.groups() {
                     let Some(group) = self.tabs.group_mut(id) else { continue };

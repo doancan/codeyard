@@ -207,8 +207,11 @@ own cursor, selection, scroll and find bar. Completion, hover, diagnostics and g
 group with any unsaved changes; ⌘W in it closes the file instead, and asks whether to save when no other tab or window
 shows it. "View: Move Editors Back to Main Window" returns all of them. The windows belong to their folder: they close
 when the folder or the connection changes or the main window closes (unsaved changes are kept by hot exit or asked
-about, as for tabs), and come back in place at the next start. The right-click menu is not offered in a file's own
-window yet; use the main window's commands.
+about, as for tabs), and come back in place at the next start; a file you also open as a tab keeps its tab. In a file's
+own window the command palette, Quick Open, Go to Line, the right-click menu and the other commands and shortcuts work
+as in the main window and act on that window's editor; a command that shows something in the main window (another
+file, a side view) brings it to the front. Screen readers see the editor in its own window, and the terminal in its
+own window, the same way as in the main window.
 **Terminals after a restart.** With `window.restoreSession` on (the default), the panel's terminals come back when
 the folder opens again: same order, folder, title, color and program. Each one is a **new shell**: nothing that ran before
 is started or typed again, and a line says *Previous session ended; started a new shell*. If a terminal's folder is gone,

@@ -151,6 +151,8 @@ pub mod settings_ui;
 #[path = "workbench_spell.rs"]
 mod spell_glue;
 // --- git-sync ---
+#[path = "workbench_actions.rs"]
+mod actions_glue;
 #[path = "workbench_editor_windows.rs"]
 mod editor_windows_glue;
 #[path = "workbench_state.rs"]
@@ -1132,6 +1134,10 @@ impl Workbench {
             cx.observe_window_activation(window, |this, window, cx| {
                 #[cfg(target_os = "macos")]
                 crate::menus::refresh_dock_windows(cx);
+                // Back in this window: commands act on its tabs again, not on an editor's own window.
+                if window.is_window_active() {
+                    this.leave_editor_window();
+                }
                 // Reduce motion / Increase contrast may have changed in System Settings meanwhile.
                 if window.is_window_active() && crate::system_prefs::refresh(cx) {
                     let choice = this.theme_choice.clone();
@@ -1275,6 +1281,7 @@ impl Workbench {
                 last_primary: Some(Panel::Explorer),
                 detached: Vec::new(),
                 editor_windows: Vec::new(),
+                editor_host: None,
                 panel_right,
                 panel_w,
                 panel_max: false,
@@ -1745,7 +1752,13 @@ impl Workbench {
         self.all_editors().iter().any(|e| e.read(cx).is_dirty())
     }
 
+    /// The editor commands act on: the one in its own window while that window is in use, else the focused tab.
     fn active_editor(&self) -> Option<&Entity<EditorView>> {
+        self.hosted_editor().or_else(|| self.tab_editor())
+    }
+
+    /// The focused group's editor tab in front (what this window shows).
+    fn tab_editor(&self) -> Option<&Entity<EditorView>> {
         self.tabs.active.and_then(|i| self.tabs.editors.get(i))
     }
 
@@ -1974,6 +1987,9 @@ impl Workbench {
     }
 
     fn activate(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if self.run_in_main_window(window, cx, move |this, window, cx| this.activate(ix, window, cx)) {
+            return;
+        }
         self.chrome.panel_max = false;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;
@@ -2320,7 +2336,7 @@ impl Workbench {
     /// "● file — folder" (window title and drawn title bar).
     fn title_text(&self, cx: &App) -> Option<String> {
         let root = self.roots.primary.read(cx).root().map(|r| ui::file_name(r).to_string());
-        let file = self.active_editor().map(|e| {
+        let file = self.tab_editor().map(|e| {
             let e = e.read(cx);
             format!("{}{}", if e.is_dirty() { "● " } else { "" }, e.name)
         });
@@ -2404,7 +2420,8 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
                 if this.reveal_in_editor_window(ed, path, *line, *col, cx) {
                     return;
                 }
-                if this.front_editor_window(ed, cx).is_some() {
+                if this.host_window_of(ed).is_some() {
+                    this.leave_editor_window();
                     window.activate_window();
                 }
                 return this.open_location(path.clone(), *line, *col, window, cx);
@@ -2420,10 +2437,11 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
                 return;
             }
             EditorEvent::ShowLocations { locs, what } => {
-                if this.front_editor_window(ed, cx).is_some() {
-                    window.activate_window();
+                let (locs, what) = (locs.clone(), *what);
+                if let Some((_, handle)) = this.host_window_of(ed) {
+                    return this.run_in_editor_window(handle, cx, move |this, window, cx| this.show_locations(locs, what, window, cx));
                 }
-                return this.show_locations(locs.clone(), what, window, cx);
+                return this.show_locations(locs, what, window, cx);
             }
             EditorEvent::BreakpointsChanged => {
                 this.on_breakpoints_changed(ed, cx);
@@ -2434,9 +2452,14 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
                 cx.notify();
                 return;
             }
-            // The menu belongs to this window: not offered for an editor's own window (its position is in that window).
-            EditorEvent::ContextMenu(_) if this.front_editor_window(ed, cx).is_some() => return,
-            EditorEvent::ContextMenu(position) => return this.open_editor_menu(*position, window, cx),
+            // From an editor's own window, the menu opens there (its position is in that window).
+            EditorEvent::ContextMenu(position) => {
+                let position = *position;
+                if let Some((_, handle)) = this.host_window_of(ed) {
+                    return this.run_in_editor_window(handle, cx, move |this, window, cx| this.open_editor_menu(position, window, cx));
+                }
+                return this.open_editor_menu(position, window, cx);
+            }
             EditorEvent::OpenMergeEditor => return this.open_merge_editor(&OpenMergeEditor, window, cx),
             EditorEvent::SendRequest(line) => return this.send_request_at(Some(*line), window, cx),
             EditorEvent::Changed => {

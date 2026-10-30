@@ -52,6 +52,12 @@ impl Geometry {
         }
     }
 
+    /// A window that shows one editor and nothing else: the editor fills it.
+    pub(super) fn whole_window(window: &Window) -> Self {
+        let whole = physical_bounds(Bounds::new(point(px(0.), px(0.)), window.viewport_size()), window.scale_factor());
+        Self { window: whole, editor: whole, ..Default::default() }
+    }
+
     pub(super) fn apply(&self, id: NodeId, node: &mut Node) {
         let bounds = match id {
             ROOT => self.window,

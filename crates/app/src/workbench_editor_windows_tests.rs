@@ -161,7 +161,8 @@ fn a_location_in_the_same_file_is_revealed_in_the_editors_own_window(cx: &mut gp
     wb.update_in(vcx, |wb, window, cx| wb.editor_into_new_window(true, window, cx));
     vcx.run_until_parked();
     let (handle, slot) = window_of(&wb, vcx);
-    vcx.update(|_, cx| handle.update(cx, |_, window, _| window.activate_window()).unwrap());
+    let _ = handle;
+    wb.update(vcx, |wb, cx| wb.use_editor_window(slot, cx));
     vcx.run_until_parked();
     let path = ed.read_with(vcx, |e, _| e.path.clone());
     assert!(wb.update(vcx, |wb, cx| wb.reveal_in_editor_window(&ed, &path, 3, 0, cx)));
@@ -199,6 +200,136 @@ fn a_restart_brings_editor_windows_back_on_a_display(cx: &mut gpui::TestAppConte
     let display = vcx.update(|_, cx| cx.primary_display().unwrap().bounds());
     let at = vcx.update(|_, cx| handle.update(cx, |_, window, _| window.bounds()).unwrap());
     assert!(display.contains(&at.origin) && at.size.width <= display.size.width, "{at:?} on {display:?}");
+}
+
+fn moved_into_window<'a>(
+    name: &str,
+    file_name: &str,
+    text: &str,
+    cx: &'a mut gpui::TestAppContext,
+) -> (Entity<Workbench>, &'a mut VisualTestContext, Entity<EditorView>, std::path::PathBuf) {
+    let dir = fresh(name);
+    let file = dir.join(file_name);
+    std::fs::write(&file, text).unwrap();
+    let (wb, vcx) = setup(cx);
+    open(&wb, &dir, vcx);
+    open_in(&wb, &file, vcx);
+    let ed = wb.read_with(vcx, |wb, _| wb.active_editor().cloned()).expect("an editor");
+    wb.update_in(vcx, |wb, window, cx| wb.editor_into_new_window(true, window, cx));
+    vcx.run_until_parked();
+    (wb, vcx, ed, file)
+}
+
+/// Right-click in the editor's window opens the editor's context menu there, and its commands act on that window's
+/// view.
+#[gpui::test]
+fn the_context_menu_opens_in_the_editors_window_and_acts_on_it(cx: &mut gpui::TestAppContext) {
+    let (wb, vcx, ed, _) = moved_into_window("edwin-menu", "e.rs", "one\ntwo\n", cx);
+    let (handle, slot) = window_of(&wb, vcx);
+    let mut win = VisualTestContext::from_window(handle.into(), vcx);
+    win.simulate_keystrokes("down");
+    let at = gpui::point(px(200.), px(8.));
+    win.simulate_mouse_down(at, gpui::MouseButton::Right, gpui::Modifiers::none());
+    win.simulate_mouse_up(at, gpui::MouseButton::Right, gpui::Modifiers::none());
+    win.run_until_parked();
+    wb.read_with(vcx, |wb, _| {
+        assert!(wb.menu.is_some(), "the editor's menu is open");
+        assert_eq!(wb.chrome.editor_host, Some(slot), "for this window");
+        assert_eq!(wb.hosted_editor(), Some(&ed));
+    });
+    wb.update(vcx, |wb, cx| wb.select_menu_for_test(crate::i18n::t("Toggle Line Comment"), cx));
+    vcx.run_until_parked();
+    let text = ed.read_with(vcx, |e, _| e.text());
+    assert!(text.contains("// "), "a line of this window was commented: {text:?}");
+}
+
+/// The command palette and Go to Line open in the editor's window and act on its view; ⌘F opens that view's find bar
+/// and ⌘S saves the shared document.
+#[gpui::test]
+fn workbench_commands_work_in_the_editors_window(cx: &mut gpui::TestAppContext) {
+    let (wb, vcx, ed, file) = moved_into_window("edwin-commands", "e.txt", "1\n2\n3\n4\n", cx);
+    let (handle, slot) = window_of(&wb, vcx);
+    let mut win = VisualTestContext::from_window(handle.into(), vcx);
+    win.simulate_keystrokes("cmd-shift-p");
+    win.run_until_parked();
+    let picker = wb.read_with(vcx, |wb, _| wb.overlay.as_ref().map(|o| o.picker.clone())).expect("the palette is open");
+    let mut win = VisualTestContext::from_window(handle.into(), vcx);
+    assert!(win.update(|window, cx| picker.focus_handle(cx).is_focused(window)), "with the keyboard in this window");
+    assert_eq!(wb.read_with(vcx, |wb, _| wb.hosted_editor().cloned()), Some(ed.clone()), "drawn in this window");
+    let mut win = VisualTestContext::from_window(handle.into(), vcx);
+    win.simulate_keystrokes("escape");
+    win.run_until_parked();
+    win.simulate_keystrokes("ctrl-g");
+    win.simulate_input("3");
+    win.simulate_keystrokes("enter");
+    win.run_until_parked();
+    let (tab_view, window_view) = ed.update(vcx, |e, _| (e.view_for_slot(0), e.view_for_slot(slot)));
+    assert_eq!((tab_view.line, window_view.line), (0, 2), "Go to Line moved this window's view");
+    let mut win = VisualTestContext::from_window(handle.into(), vcx);
+    win.simulate_keystrokes("cmd-f");
+    win.run_until_parked();
+    assert!(ed.update(vcx, |e, _| e.in_slot(slot, |e| e.find_open())), "the find bar of this window's view");
+    assert!(!ed.update(vcx, |e, _| e.in_slot(0, |e| e.find_open())));
+    let mut win = VisualTestContext::from_window(handle.into(), vcx);
+    win.simulate_keystrokes("escape");
+    win.simulate_input("x");
+    win.simulate_keystrokes("cmd-s");
+    win.run_until_parked();
+    assert!(!ed.read_with(vcx, |e, _| e.is_dirty()));
+    assert!(std::fs::read_to_string(&file).unwrap().contains('x'), "saved from the window");
+}
+
+/// A file restored into its window and also opened from the command line keeps its tab: both show one document.
+#[gpui::test]
+fn a_restored_window_never_takes_the_tab_of_a_file_opened_from_the_command_line(cx: &mut gpui::TestAppContext) {
+    let home = fresh("edwin-cli-home");
+    let dir = fresh("edwin-cli-project");
+    std::fs::write(dir.join("a.txt"), "a\n").unwrap();
+    std::fs::write(dir.join("b.txt"), "b\n").unwrap();
+    let (wb, vcx) = setup_persistent(cx, &home);
+    open(&wb, &dir, vcx);
+    open_in(&wb, &dir.join("a.txt"), vcx);
+    open_in(&wb, &dir.join("b.txt"), vcx);
+    wb.update_in(vcx, |wb, window, cx| wb.editor_into_new_window(false, window, cx));
+    vcx.run_until_parked();
+    assert!(wb.update(vcx, |wb, cx| wb.prepare_quit(cx)));
+    drop(wb);
+    let db = home.join("state.db");
+    let data = home.to_path_buf();
+    let wb = vcx.update(|window, cx| {
+        window.replace_root(cx, |window, cx| {
+            let mut w = Workbench::with_state(state::State::open(&db).ok(), None, window, cx);
+            w.set_data_dir(data);
+            w
+        })
+    });
+    vcx.update(|_, cx| cx.global_mut::<crate::settings::Settings>().startup = crate::settings::Startup::Continue);
+    let b = dir.join("b.txt").to_string_lossy().into_owned();
+    wb.update_in(vcx, |wb, window, cx| wb.open_path(&b, window, cx));
+    let start = std::time::Instant::now();
+    while wb.read_with(vcx, |wb, _| wb.chrome.editor_windows.is_empty()) && start.elapsed() < std::time::Duration::from_secs(10) {
+        vcx.run_until_parked();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    vcx.run_until_parked();
+    wb.read_with(vcx, |wb, cx| {
+        let name = |e: &Entity<EditorView>| ui::file_name(&e.read(cx).path).to_string();
+        assert_eq!(wb.chrome.editor_windows.len(), 1, "the window is back");
+        assert_eq!(name(&wb.chrome.editor_windows[0].editor), "b.txt");
+        assert!(wb.tabs.editors.iter().any(|e| name(e) == "b.txt"), "and the file asked for is a tab");
+        assert_eq!(wb.all_editors().iter().filter(|e| name(e) == "b.txt").count(), 1, "one document");
+    });
+    // Restoring again over a file that is already a tab (it was open before the restore) attaches a window to it.
+    wb.update_in(vcx, |wb, window, cx| wb.return_editor_windows(window, cx));
+    vcx.run_until_parked();
+    let saved = SavedEditorWindows::parse(r#"{"version":1,"windows":[{"path":"b.txt","only_here":true}]}"#);
+    wb.update_in(vcx, |wb, window, cx| wb.restore_editor_windows(saved, &[], window, cx));
+    vcx.run_until_parked();
+    wb.read_with(vcx, |wb, cx| {
+        let name = |e: &Entity<EditorView>| ui::file_name(&e.read(cx).path).to_string();
+        assert_eq!(wb.chrome.editor_windows.len(), 1);
+        assert!(wb.tabs.editors.iter().any(|e| name(e) == "b.txt"), "the tab stays");
+    });
 }
 
 #[test]
