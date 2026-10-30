@@ -95,6 +95,8 @@ for f in "$TMP"/gen/*.cyx; do install_args+=(--install-extension "$f"); done
 CODEYARD_CONFIG_DIR="$EXT_PROFILE/config" CODEYARD_STATE_DIR="$EXT_PROFILE/state" "$OUT/codeyard-candidate" "${install_args[@]}" >/dev/null
 installed=$(grep -c '"digest"' "$EXT_PROFILE/config/extensions.lock.jsonc" 2>/dev/null || echo 0)
 [ "$installed" = 100 ] || { echo "perf: the extension profile has $installed extensions, not 100" >&2; exit 1; }
+# Installing makes each extension's (empty) data folder; without them, one made at startup shows below.
+rm -rf "$EXT_PROFILE/state/extensions/data"
 # A registry of 10 000 made-up extensions (`cyx yard fixture`) served on this machine, and a profile that lists it.
 # Each run starts without its cached index, so the Market fetches it once (not measured) before the typing.
 MARKET_PROFILE="$TMP/market-profile"
