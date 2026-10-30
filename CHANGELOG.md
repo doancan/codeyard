@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Terminals in editor groups and in windows of their own, and the terminals of SSH folders, are taken back after a
+  restart the same way as a local folder's panel terminals: the same shells, in their places, with "Reconnected to
+  terminal session". SSH folders resume their session on the server's agent, which already kept the shells.
+- Setting `terminal.persistentSessionTimeout`: how many minutes terminals keep running for the next start after
+  Codeyard quits, crashes or is killed (default 5, at most 1440; 0: they end with the app). The agent protocol is
+  version 17.
 - "Break on Value Change" in a variable's right-click menu sets a data breakpoint on it (when the debugger supports
   them). Data breakpoints are listed in the Breakpoints section, where each can be turned off or removed by mouse,
   keyboard (Enter, Shift+F10) or screen reader; they last for their debug session.
@@ -152,6 +158,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Windows: a shell task's arguments run through cmd.exe reach the program unchanged when they contain `%` (a value like
+  `%PATH%` is no longer expanded) or end with a backslash (`C:\dir\` no longer swallows the closing quote).
 - Screen readers find the Search results in the secondary side bar too, not only in the primary one.
 - On macOS and Linux, a task, test run, language server or terminal no longer keeps running when Codeyard is killed or
   crashes. A small guard process started with the app ends every task's process group at once and hangs up every

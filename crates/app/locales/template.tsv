@@ -1256,6 +1256,7 @@ Minified
 Minimal	
 Minimize	
 Minimize window	
+Minutes the terminals keep running for the next start after Codeyard quits, crashes or is killed (0: not kept)	
 Missing value for Cargo option {}	
 Modified	
 Modules	

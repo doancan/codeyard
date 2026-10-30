@@ -11,6 +11,8 @@ const VERSION: u32 = 1;
 /// Terminals saved per window (the panel opens at most this many anyway).
 pub const MAX_TERMINALS: usize = 8;
 const MAX_TITLE: usize = 256;
+/// Longest `terminal.persistentSessionTimeout` (a day).
+pub const MAX_SESSION_MINUTES: u64 = 24 * 60;
 /// History kept per terminal, at most, whatever the setting says.
 pub const MAX_HISTORY_LINES: usize = 10_000;
 const MAX_HISTORY_BYTES: usize = 512 * 1024;

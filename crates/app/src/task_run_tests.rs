@@ -260,3 +260,113 @@ fn a_malformed_matcher_fails_before_anything_runs() {
     let message = Run::new(1, prepare(group, Platform::Linux, "a").unwrap()).err().unwrap();
     assert!(message.ends_with("a field refers to a group the regular expression does not have"), "{message}");
 }
+
+/// cmd.exe words follow the usual Windows argument rules: quotes doubled, backslashes before a quote or the end doubled,
+/// and `%` taken out of the quotes as `^%` so `%NAME%` is not expanded (weak quoting keeps variables live).
+#[test]
+fn cmd_words_survive_the_windows_argument_rules_and_percent_expansion() {
+    assert_eq!(quote(r"C:\dir\", Some(Quoting::Strong), Family::Cmd), r#""C:\dir\\""#);
+    assert_eq!(quote(r"C:\a b\", None, Family::Cmd), r#""C:\a b\\""#);
+    assert_eq!(quote(r#"a\"b"#, None, Family::Cmd), r#""a\\""b""#);
+    assert_eq!(quote("%PATH%", None, Family::Cmd), r#"""^%"PATH"^%"""#);
+    assert_eq!(quote("%PATH%", Some(Quoting::Weak), Family::Cmd), r#""%PATH%""#);
+    assert_eq!(quote(r"x\%y", None, Family::Cmd), r#""x\\"^%"y""#);
+    assert_eq!(quote("", None, Family::Cmd), r#""""#);
+    // Inside the user's own quotes the same rules hold.
+    assert_eq!(place("50% \"x\"", crate::workbench::tasks::Quote::Double, Family::Cmd), r#"50"^%" ""x"""#);
+}
+
+/// Words every Windows shell must hand to a program unchanged.
+#[cfg(windows)]
+const WINDOWS_VALUES: &[&str] = &[
+    "plain",
+    "a b",
+    "it's",
+    "\"q\"",
+    "say \"hi\" now",
+    "%PATH%",
+    "100%",
+    "%",
+    "a^b",
+    "x&y",
+    "a|b",
+    "<in>",
+    "a>b",
+    "(paren)",
+    "semi;colon",
+    "Türkçe ıİşğ é ü",
+    r"C:\dir\",
+    r"C:\a b\",
+    r"\\server\share\",
+    r#"back\"slash"#,
+    "",
+];
+
+/// Values PowerShell 5.1 (`powershell.exe`) cannot pass to a program unchanged: its legacy native-argument passing
+/// drops empty arguments and does not escape quotes or trailing backslashes. PowerShell 7 (`pwsh`) passes them all.
+#[cfg(windows)]
+fn legacy_powershell_breaks(value: &str) -> bool {
+    value.is_empty() || value.contains('"') || value.ends_with('\\')
+}
+
+/// Run `command` as a task (through the agent, as the app does) and read the arguments the program received.
+#[cfg(windows)]
+fn received(command: proto::TaskCommand) -> Vec<String> {
+    use std::io::Read;
+    let (mut task, mut out) = agent::proc::spawn_task(&command, None, &[]).unwrap();
+    let mut text = String::new();
+    out.read_to_string(&mut text).unwrap();
+    assert_eq!(task.wait(), Some(0), "{command:?}: {text}");
+    let line = text.lines().rev().find(|l| l.starts_with('[')).unwrap_or_else(|| panic!("{command:?}: no argument list in {text:?}"));
+    serde_json::from_str(line).unwrap()
+}
+
+/// A task that runs Python with `values` as its arguments; Python prints the list it got as JSON.
+#[cfg(windows)]
+fn echo_task(kind: &str, values: &[&str], shell: Option<(&str, &[&str])>, quoting: Option<&str>) -> proto::TaskCommand {
+    const ECHO: &str = "import sys,json;print(json.dumps(sys.argv[1:]))";
+    let mut args = vec![serde_json::json!("-c"), serde_json::json!(ECHO)];
+    args.extend(values.iter().map(|v| match quoting {
+        Some(q) => serde_json::json!({ "value": v, "quoting": q }),
+        None => serde_json::json!(v),
+    }));
+    let mut task = serde_json::json!({ "label": "echo", "type": kind, "command": "python", "args": args });
+    if let Some((exe, shell_args)) = shell {
+        task["options"] = serde_json::json!({ "shell": { "executable": exe, "args": shell_args } });
+    }
+    let text = serde_json::json!({ "version": "2.0.0", "tasks": [task] }).to_string();
+    spawn(&text, "echo", Platform::Windows, &[]).unwrap().command
+}
+
+/// Whether `program` can be started (PowerShell 7 is not on every machine).
+#[cfg(windows)]
+fn available(program: &str) -> bool {
+    std::process::Command::new(program).args(["-NoProfile", "-Command", "exit 0"]).output().is_ok_and(|o| o.status.success())
+}
+
+/// A process task gets every argument as it was; a cmd.exe shell task too, with automatic and strong quoting.
+#[cfg(windows)]
+#[test]
+fn windows_task_arguments_reach_the_program_unchanged_through_cmd() {
+    let want: Vec<String> = WINDOWS_VALUES.iter().map(|v| v.to_string()).collect();
+    assert_eq!(received(echo_task("process", WINDOWS_VALUES, None, None)), want, "process task");
+    assert_eq!(received(echo_task("shell", WINDOWS_VALUES, None, None)), want, "cmd.exe, automatic quoting");
+    assert_eq!(received(echo_task("shell", WINDOWS_VALUES, None, Some("strong"))), want, "cmd.exe, strong quoting");
+}
+
+/// PowerShell shell tasks: PowerShell 7 hands every value over unchanged; Windows PowerShell 5.1 every value its own
+/// argument passing can carry.
+#[cfg(windows)]
+#[test]
+fn windows_task_arguments_reach_the_program_unchanged_through_powershell() {
+    let shell_args: &[&str] = &["-NoProfile", "-Command"];
+    if available("pwsh") {
+        let want: Vec<String> = WINDOWS_VALUES.iter().map(|v| v.to_string()).collect();
+        assert_eq!(received(echo_task("shell", WINDOWS_VALUES, Some(("pwsh", shell_args)), None)), want, "pwsh");
+    } else {
+        eprintln!("SKIPPED pwsh: PowerShell 7 is not installed");
+    }
+    let values: Vec<&str> = WINDOWS_VALUES.iter().copied().filter(|v| !legacy_powershell_breaks(v)).collect();
+    let want: Vec<String> = values.iter().map(|v| v.to_string()).collect();
+    assert_eq!(received(echo_task("shell", &values, Some(("powershell", shell_args)), None)), want, "powershell.exe 5.1");
+}

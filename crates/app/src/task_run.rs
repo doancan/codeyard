@@ -140,7 +140,8 @@ fn quote(value: &str, quoting: Option<Quoting>, family: Family) -> String {
             out.push(c);
             out
         }),
-        (Family::Cmd, Quoting::Strong | Quoting::Weak) => format!("\"{}\"", value.replace('"', "\"\"")),
+        (Family::Cmd, Quoting::Strong) => format!("\"{}\"", cmd_inner(value, false)),
+        (Family::Cmd, Quoting::Weak) => format!("\"{}\"", cmd_inner(value, true)),
         (Family::Cmd, Quoting::Escape) => value.chars().fold(String::new(), |mut out, c| {
             if c == ' ' || needs_quotes(&c.to_string(), Family::Cmd) {
                 out.push('^');
@@ -158,6 +159,39 @@ fn quote(value: &str, quoting: Option<Quoting>, family: Family) -> String {
             out
         }),
     }
+}
+
+/// `value` inside a cmd.exe double-quoted word, so the program started gets it back as it was (the usual Windows
+/// argument rules, which C and Rust programs follow): a quote is doubled; backslashes before a quote, or before the end
+/// of the word, are doubled (otherwise they would escape it); and, unless `variables` should stay live, each `%` is put
+/// outside the quotes as `^%`, the one way to stop cmd.exe from expanding `%NAME%` on a command line.
+fn cmd_inner(value: &str, variables: bool) -> String {
+    let mut out = String::with_capacity(value.len() + 2);
+    let mut slashes = 0;
+    for c in value.chars() {
+        match c {
+            '\\' => {
+                slashes += 1;
+                out.push(c);
+            }
+            '"' => {
+                out.extend(std::iter::repeat_n('\\', slashes));
+                out.push_str("\"\"");
+                slashes = 0;
+            }
+            '%' if !variables => {
+                out.extend(std::iter::repeat_n('\\', slashes));
+                out.push_str("\"^%\"");
+                slashes = 0;
+            }
+            c => {
+                out.push(c);
+                slashes = 0;
+            }
+        }
+    }
+    out.extend(std::iter::repeat_n('\\', slashes));
+    out
 }
 
 /// Where a variable lands in a shell line, as that shell reads it.
@@ -198,7 +232,7 @@ fn place(value: &str, at: crate::workbench::tasks::Quote, family: Family) -> Str
         (Family::Posix, at) => crate::workbench::tasks::for_shell(value, at),
         (_, Quote::Bare) if !needs_quotes(value, family) => value.to_string(),
         (_, Quote::Bare) => quote(value, Some(Quoting::Strong), family),
-        (Family::Cmd, _) => value.replace('"', "\"\""),
+        (Family::Cmd, _) => cmd_inner(value, false),
         (Family::PowerShell, Quote::Single) => value.replace('\'', "''"),
         (Family::PowerShell, Quote::Double) => value.chars().fold(String::new(), |mut out, c| {
             if matches!(c, '`' | '"' | '$') {

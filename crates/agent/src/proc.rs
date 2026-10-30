@@ -472,3 +472,7 @@ fn exit_code(status: std::process::ExitStatus) -> Option<i32> {
 #[cfg(test)]
 #[path = "proc_tests.rs"]
 mod tests;
+
+#[cfg(all(test, windows))]
+#[path = "proc_windows_tests.rs"]
+mod windows_tests;
