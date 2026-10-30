@@ -1,0 +1,17 @@
+[extension]
+id          = "codeyard.todo-actions"
+version     = "0.1.0"
+name        = "TODO Actions"
+license     = "MIT"
+description = "Mark TODO comments done, or collect them."
+
+[code]
+entry = "Cargo.toml"
+
+# Codeyard asks for actions (the light bulb, Cmd+.) in files of these languages.
+[[code-actions]]
+languages = ["rust", "markdown"]
+
+[[commands]]
+id    = "list"
+title = "TODO Actions: Show Collected TODOs"

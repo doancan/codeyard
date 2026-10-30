@@ -234,7 +234,12 @@ ctx.on_settings_changed(async |ctx, keys| { /* restart the timer */ });
 
 let timer = ctx.every(seconds, async |ctx| { /* poll */ });      // at least 30 s, paused while unfocused
 timer.clear();
+
+let clicks: u32 = ctx.state().get("clicks").unwrap_or(0);       // in memory; kept across a hot reload in cyx dev
+ctx.state().set("clicks", &(clicks + 1))?;
 ```
+
+`ctx.state()` holds JSON values in memory. When `cyx dev` swaps in a new build, the SDK saves them as the old build stops and the new one gets them back (it starts with `ctx.activation_reason() == "reload"`); any other start begins empty. They pass through storage under the reserved key `codeyard.reload-state`.
 
 ## Errors and refused calls
 

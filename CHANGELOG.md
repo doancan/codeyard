@@ -11,6 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Windows: terminals of a local folder are taken back after Codeyard quits, crashes or is killed, as on macOS and
   Linux. They run in the terminal daemon, which listens on a named pipe only the current user can open.
+- `cyx dev` hot-reloads code extensions: saving a source file rebuilds `extension.wasm` (cargo or the TypeScript
+  pipeline), and the dev window stops the running build, compiles the new one with Cranelift's incremental cache,
+  activates it with the reason `reload` and draws its open views again; calls made meanwhile wait for it. A failed
+  build leaves the last good one running. `ctx.state` (Rust and TypeScript SDKs) keeps in-memory values across the
+  reload, through the reserved storage key `codeyard.reload-state`; the mock hosts have `reload`. On an M1 Max a reload
+  takes 30 / 33 ms (p50 / p95) for a 0.2 MB Rust component, 168 / 180 ms for a 1.9 MB one and 616 / 655 ms
+  for a TypeScript one.
+- `cyx check --fix` adds the missing permissions that the manifest checks and the component's import check report
+  (`CY0201`) to `codeyard-extension.toml`, keeping its comments and layout, prints the lines it changed and lists the
+  fixes that need the author (placeholders, which sign-in provider, `why`).
+- `cyx publish` no longer refuses code extensions itself: the registry marks them as code in its index from the
+  package. A registry that takes data-only extensions (the public one, for now) gets a clear message instead of its
+  raw refusal.
+- Example extensions: `trim-formatter` (a formatter), `todo-actions` (code actions), `crate-version` and
+  `crate-version-ts` (`fetch`), and `branch-status` (a program, with `run`), built, unit-tested and run with
+  `cyx test` in CI.
+- `scripts/check-five-minutes.sh` scripts the "a command in under 5 minutes" goal: `cyx new command`, its unit tests
+  and `cyx test` from an empty folder, Rust and TypeScript, each step timed; CI's Linux job runs it.
 - An editor tab dragged out of the window and released outside it becomes a window of its own at that place, showing
   the same document; released over another Codeyard window, the file opens there instead and its tab here closes (a
   file with unsaved changes or on another machine stays, with a message).

@@ -70,6 +70,8 @@ mod ext_broker;
 mod ext_code_tests;
 #[cfg(test)]
 mod ext_core_commands_tests;
+#[cfg(test)]
+mod ext_dev_tests;
 mod ext_fetch;
 mod ext_inspector;
 #[cfg(test)]

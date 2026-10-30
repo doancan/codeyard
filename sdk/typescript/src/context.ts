@@ -60,6 +60,12 @@ export class Context {
   /** The extension's persisted key-value store (50 MiB in all). */
   readonly storage: Storage = new Storage();
 
+  /**
+   * In-memory values that survive a hot reload in `cyx dev`: the SDK saves them when the old build stops and gives them
+   * back to the new one. Any other start begins empty. Use `storage` for what must outlast the session.
+   */
+  readonly state: State = new State();
+
   // ---- registration ------------------------------------------------------------------------------------------------
 
   /**
@@ -481,6 +487,26 @@ export class Storage {
 
   keys(): string[] {
     return host().storage.keys();
+  }
+}
+
+/** The extension's in-memory state (`ctx.state`), JSON values by key. */
+export class State {
+  get<T = unknown>(key: string): T | undefined {
+    return handlers.state.get(key) as T | undefined;
+  }
+
+  set(key: string, value: unknown): void {
+    // Kept as JSON, so what comes back after a reload is what was set.
+    handlers.state.set(key, value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
+  }
+
+  delete(key: string): void {
+    handlers.state.delete(key);
+  }
+
+  keys(): string[] {
+    return [...handlers.state.keys()];
   }
 }
 

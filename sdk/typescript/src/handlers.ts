@@ -19,6 +19,8 @@ export interface Handlers {
   /** Requests the host stopped waiting for. */
   cancelledRequests: Set<bigint>;
   reason: string;
+  /** `ctx.state`: kept across a hot reload in `cyx dev` (`RELOAD_STATE_KEY`). */
+  state: Map<string, unknown>;
 }
 
 function empty(): Handlers {
@@ -35,6 +37,7 @@ function empty(): Handlers {
     cancelledProgress: new Set(),
     cancelledRequests: new Set(),
     reason: "",
+    state: new Map(),
   };
 }
 

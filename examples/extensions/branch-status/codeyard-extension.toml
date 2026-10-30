@@ -1,0 +1,18 @@
+[extension]
+id          = "codeyard.branch-status"
+version     = "0.1.0"
+name        = "Branch Status"
+license     = "MIT"
+description = "The current Git branch in the status bar."
+
+[code]
+entry = "Cargo.toml"
+
+# Programs the code may start. Running one is high risk, so users see why on the install sheet.
+[permissions]
+run = ["git"]
+why = "Runs git branch --show-current in your workspace to show the branch."
+
+[[commands]]
+id    = "show"
+title = "Branch Status: Show the Current Branch"

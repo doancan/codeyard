@@ -81,9 +81,27 @@ pub fn build_in(dir: &Path, target_dir: Option<&Path>) -> Result<Option<PathBuf>
     let wasm = wasm.ok_or_else(|| {
         format!("error: the build made no .wasm library\n   = fix: set `crate-type = [\"cdylib\"]` under [lib] in {}", crate_manifest.display())
     })?;
+    let bytes = std::fs::read(&wasm).map_err(|e| format!("error: cannot read {}: {e}", wasm.display()))?;
+    install(dir, &bytes).map(Some)
+}
+
+/// Where a build writes the component before `install` moves it into place.
+pub const PARTIAL: &str = ".extension.wasm.tmp";
+
+/// Put a newly built component at `dir/extension.wasm`: renamed into place, so `cyx dev`'s Codeyard never reads half a
+/// file, and left alone when the build is the same (a reload only when the code changed).
+pub fn install(dir: &Path, wasm: &[u8]) -> Result<PathBuf, String> {
     let out = dir.join(ext_pkg::COMPONENT);
-    std::fs::copy(&wasm, &out).map_err(|e| format!("error: cannot copy {} to {}: {e}", wasm.display(), out.display()))?;
-    Ok(Some(out))
+    if std::fs::read(&out).is_ok_and(|old| old == wasm) {
+        let _ = std::fs::remove_file(dir.join(PARTIAL));
+        return Ok(out);
+    }
+    let tmp = dir.join(PARTIAL);
+    std::fs::write(&tmp, wasm).and_then(|()| std::fs::rename(&tmp, &out)).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("error: cannot write {}: {e}", out.display())
+    })?;
+    Ok(out)
 }
 
 /// The `.wasm` of a cdylib in one line of cargo's JSON messages.

@@ -342,6 +342,7 @@ impl Workbench {
         if self.cfg.dir.is_none() {
             return;
         }
+        self.watch_dev_code(window, cx);
         cx.spawn_in(window, async move |this, cx| {
             loop {
                 cx.background_executor().timer(std::time::Duration::from_secs(1)).await;

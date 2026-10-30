@@ -52,8 +52,9 @@ pub use wasm as __wasm;
 #[cfg(target_arch = "wasm32")]
 use wasm as sys;
 
-pub use context::{Context, Progress, Storage, Timer};
+pub use context::{Context, Progress, State, Storage, Timer};
 pub use error::{Denied, Error, Result, Why};
+pub use guest::{RELOAD, RELOAD_STATE_KEY};
 pub use serde_json::{Value, json};
 
 /// An extension. `activate` registers its commands, views and providers; Codeyard calls it once, before anything else.

@@ -145,6 +145,11 @@ pub fn deactivate<E: Extension>() {
     guest::deactivate::<E>();
 }
 
+/// Forget what the extension registered and its running tasks, keeping the host (a hot reload).
+pub fn forget() {
+    guest::reset();
+}
+
 pub fn handle(id: u64, request: Request) {
     guest::handle(id, request);
 }
