@@ -878,8 +878,8 @@ Opening an extension's page in the Market fetches that page once.
 From a terminal or a script, `codeyard --install-extension FILE.cyx` or `--install-extension publisher.name[@1.2.0]`
 (repeat the flag for several) installs without opening a window; running it is your consent, and the same checks
 apply. A folder with a built extension (its manifest and, for code, `extension.wasm`) installs the same way, packaged
-as it is, without building it. A changed publisher or an old registry list is refused there, with the reason: use the
-Extensions view.
+as it is, without building it. A changed publisher, an old registry list, and a package file or folder with code that
+asks for permissions are refused there, with the reason: use the Extensions view, which shows the permissions first.
 
 **Manage.** Choose an extension in the list to open its page: contributions, permissions and these actions:
 
