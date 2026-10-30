@@ -79,6 +79,55 @@ impl Workbench {
         self.answer_launch_input(value.into(), window, cx);
     }
 
+    /// A session without an adapter, paused on a breakpoint in `main` (src/main.rs:3, called from `start`), with the
+    /// scope `Locals` holding `point` (whose child `x` is loaded but closed) and `n`. It becomes the current session.
+    pub fn push_paused_session_for_test(&mut self, name: &str, cx: &mut Context<Self>) -> u64 {
+        self.dbg.next_id += 1;
+        let id = self.dbg.next_id;
+        let config = LaunchConfig {
+            name: name.into(),
+            adapter: Err(String::new()),
+            request: "launch".into(),
+            args: serde_json::Value::Null,
+            pre_launch: None,
+            pre_launch_task: None,
+            cargo_target: None,
+            post_debug: None,
+            no_debug: false,
+            inputs: Vec::new(),
+        };
+        let frame = |id: i64, name: &str, line: u32| Frame { id, name: name.into(), path: Some("/p/src/main.rs".into()), line, column: 1, can_restart: false };
+        let var = |name: &str, value: &str, reference: i64| Variable { name: name.into(), value: value.into(), reference, ..Default::default() };
+        let input = cx.new(|cx| TextField::new(crate::i18n::tr("Evaluate an expression (↵)"), cx));
+        self.dbg.sessions.push(DebugState {
+            id,
+            config,
+            session: None,
+            status: DebugStatus::Stopped("breakpoint".into()),
+            thread: 1,
+            frames: vec![frame(1, "main", 3), frame(2, "start", 9)],
+            frame: 0,
+            scopes: vec![Scope { name: "Locals".into(), reference: 1 }],
+            children: HashMap::from([(1, vec![var("point", "Point", 2), var("n", "1", 0)]), (2, vec![var("x", "4", 0)])]),
+            expanded: HashSet::from([1]),
+            console: Vec::new(),
+            partial: None,
+            stopped_once: true,
+            breakpoints_set: 0,
+            location: Some(("/p/src/main.rs".into(), 2)),
+            input,
+            watch_values: Vec::new(),
+            threads: vec![(1, "main".into())],
+            data_breakpoints: Vec::new(),
+            total_frames: None,
+            pages: HashMap::new(),
+            group: None,
+        });
+        self.dbg.focused = Some(id);
+        cx.notify();
+        id
+    }
+
     pub fn debug_catalog_for_test(&self) -> Vec<String> {
         self.dbg.catalog.clone()
     }

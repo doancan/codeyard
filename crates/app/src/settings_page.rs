@@ -21,6 +21,45 @@ pub enum SettingsEvent {
     OpenKeybindings,
 }
 
+/// The page as assistive technology reads it ([`SettingsPage::access_view`]).
+#[derive(Clone, PartialEq, Debug)]
+pub struct AccessPage {
+    pub query: String,
+    /// (label, count, selected) in `CATEGORIES` order.
+    pub categories: Vec<(&'static str, usize, bool)>,
+    pub heading: String,
+    pub rows: Vec<AccessSetting>,
+    /// Visible settings (`rows` holds the first ones).
+    pub total: usize,
+    /// Why there are no rows.
+    pub empty: Option<&'static str>,
+    /// `Some(None)`: the search field; `Some(Some(key))`: that setting's field.
+    pub focused: Option<Option<&'static str>>,
+}
+
+/// A setting's row: its title, description, value and error.
+#[derive(Clone, PartialEq, Debug)]
+pub struct AccessSetting {
+    pub key: &'static str,
+    pub title: String,
+    pub about: String,
+    pub control: AccessControl,
+    pub modified: bool,
+    pub error: Option<String>,
+    pub source: Option<&'static str>,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub enum AccessControl {
+    /// The theme button and the theme it shows.
+    Theme(String),
+    Toggle(bool),
+    /// The options and the one chosen.
+    Choice(&'static [&'static str], Option<String>),
+    /// The text in a number or text field.
+    Field(String),
+}
+
 pub const CATEGORIES: &[&str] =
     &["Commonly Used", "Modified", "Modules", "Editor", "Workbench", "Files", "Explorer", "Search", "Git", "Terminal", "Window", "Remote & Languages"];
 
@@ -158,6 +197,15 @@ pub fn source_note(key: &str, cx: &App) -> Option<&'static str> {
     }
 }
 
+/// The title a setting's row shows.
+fn row_title(key: &str) -> String {
+    match key {
+        "modules.containers.enabled" => crate::i18n::t("Container Environments").to_string(),
+        "modules.webPreview.enabled" => crate::i18n::t("Web Preview").to_string(),
+        _ => title_of(key),
+    }
+}
+
 fn shown(v: &Value) -> String {
     match v {
         Value::Null => String::new(),
@@ -218,8 +266,22 @@ impl SettingsPage {
         self.query.update(cx, |f, cx| f.set_text(q, cx));
     }
 
-    #[cfg(test)]
-    pub fn submit_field_for_test(&mut self, key: &'static str, text: &str, cx: &mut Context<Self>) {
+    /// Shows a category (the search is cleared), as clicking it does.
+    pub fn select_category(&mut self, i: usize, cx: &mut Context<Self>) {
+        self.category = i.min(CATEGORIES.len() - 1);
+        self.query.update(cx, |q, cx| q.set_text("", cx));
+        cx.notify();
+    }
+
+    /// Focuses a number or text setting's field.
+    pub fn focus_field(&self, key: &str, window: &mut Window, cx: &App) {
+        if let Some(f) = self.fields.get(key) {
+            window.focus(&f.focus_handle(cx));
+        }
+    }
+
+    /// Puts `text` into a number or text setting's field and submits it as Enter does (checked, then written).
+    pub fn submit_field(&mut self, key: &str, text: &str, cx: &mut Context<Self>) {
         if let Some(f) = self.fields.get(key).cloned() {
             f.update(cx, |f, cx| {
                 f.set_text(text, cx);
@@ -284,6 +346,69 @@ impl SettingsPage {
             keys.sort_by_key(|key| *key != "modules.containers.enabled");
         }
         keys
+    }
+
+    /// What assistive technology is told about the page: the same categories, rows, values and errors as on screen,
+    /// at most `max` rows.
+    pub fn access_view(&self, max: usize, window: &Window, cx: &App) -> AccessPage {
+        let s = cx.global::<Settings>();
+        let query = self.query.read(cx).text().to_string();
+        let searching = !query.is_empty();
+        let keys = self.visible_keys(cx);
+        let rows = keys
+            .iter()
+            .take(max)
+            .map(|&key| {
+                let entry = CATALOG.iter().find(|e| e.key == key);
+                let about = entry.map_or("Color theme of the whole window and the editor", |e| e.about);
+                let now = if key == "theme" { Value::String(s.theme.clone()) } else { current(s, key) };
+                let control = match entry.map(|e| e.kind) {
+                    None => AccessControl::Theme(theme_label(&shown(&now))),
+                    Some(Kind::Bool) => AccessControl::Toggle(now.as_bool().unwrap_or(false)),
+                    Some(Kind::Choice(opts)) => AccessControl::Choice(opts, now.as_str().map(str::to_string)),
+                    Some(Kind::Number { .. } | Kind::Text) => {
+                        AccessControl::Field(self.fields.get(key).map(|f| f.read(cx).text().to_string()).unwrap_or_default())
+                    }
+                };
+                AccessSetting {
+                    key,
+                    title: row_title(key),
+                    about: crate::i18n::t(about).to_string(),
+                    control,
+                    modified: Self::is_modified(s, key),
+                    error: self.errors.get(key).cloned(),
+                    source: source_note(key, cx),
+                }
+            })
+            .collect();
+        let focused = if self.query.focus_handle(cx).is_focused(window) {
+            Some(None)
+        } else {
+            self.fields.iter().find(|(_, f)| f.focus_handle(cx).is_focused(window)).map(|(key, _)| Some(*key))
+        };
+        AccessPage {
+            categories: CATEGORIES
+                .iter()
+                .enumerate()
+                .map(|(i, name)| (category_label(name), Self::category_count(name, s), i == self.category && !searching))
+                .collect(),
+            heading: if searching {
+                crate::i18n::tn("{} result", "{} results", keys.len(), &[])
+            } else {
+                category_label(CATEGORIES[self.category]).to_string()
+            },
+            empty: keys.is_empty().then(|| {
+                if CATEGORIES[self.category] == "Modified" && !searching {
+                    crate::i18n::t("Nothing changed: every setting has its default value.")
+                } else {
+                    crate::i18n::t("No setting matches.")
+                }
+            }),
+            query,
+            rows,
+            total: keys.len(),
+            focused,
+        }
     }
 
     fn entry_view(&self, key: &'static str, ix: usize, s: &Settings, cx: &mut Context<Self>) -> gpui::AnyElement {
@@ -412,15 +537,7 @@ impl SettingsPage {
                                     .items_center()
                                     .gap(px(theme::SPACE[3]))
                                     .children(modified.then(|| div().flex_none().size(px(6.)).rounded_full().bg(c(p.accent))))
-                                    .child(div().font_weight(gpui::FontWeight::SEMIBOLD).text_size(px(text::SM.0)).child(
-                                        if key == "modules.containers.enabled" {
-                                            crate::i18n::t("Container Environments").to_string()
-                                        } else if key == "modules.webPreview.enabled" {
-                                            crate::i18n::t("Web Preview").to_string()
-                                        } else {
-                                            title_of(key)
-                                        },
-                                    ))
+                                    .child(div().font_weight(gpui::FontWeight::SEMIBOLD).text_size(px(text::SM.0)).child(row_title(key)))
                                     .children(reset),
                             )
                             .child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(crate::i18n::t(about).to_string()))
@@ -461,11 +578,7 @@ impl Render for SettingsPage {
                 .when(!active, |d| d.text_color(c(p.text_muted)).hover(|d| d.bg(c(p.surface_hover))))
                 .child(div().flex_1().child(category_label(name)))
                 .child(div().flex_none().text_size(px(text::XXS.0)).text_color(c(if hot { p.accent } else { p.line_number })).child(count.to_string()))
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.category = i;
-                    this.query.update(cx, |q, cx| q.set_text("", cx));
-                    cx.notify();
-                }))
+                .on_click(cx.listener(move |this, _, _, cx| this.select_category(i, cx)))
         });
         let heading =
             if searching { crate::i18n::tn("{} result", "{} results", rows.len(), &[]) } else { category_label(CATEGORIES[self.category]).to_string() };

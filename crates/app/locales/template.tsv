@@ -131,6 +131,7 @@ Bookmarks: List…
 Bookmarks: Toggle	
 Both sides are the same folder.	
 Both, Incoming First	
+Bottom panel	
 Box invisible and look-alike Unicode characters (zero-width spaces, bidi controls, Cyrillic letters inside Latin words)	
 Branch {}	
 Breaking on: {}	
@@ -181,6 +182,7 @@ Cargo package has no name
 Cargo package has no targets	
 Cargo reported {0} executables for target {1}	
 Cargo target has no name	
+Categories	
 Change	
 Change All Occurrences	
 Change Color…	
@@ -363,6 +365,7 @@ Container port / protocol
 Container setup required	
 Containers	
 Containers and Service Logs…	
+Context menu	
 Context: {} line|Context: {} lines	
 Continue	
 Continue (F5)	
@@ -525,6 +528,7 @@ Debug Test
 Debug Test: {}	
 Debug session ended	
 Debug session stopped	
+Debug toolbar	
 Debug: Add Configuration…	
 Debug: Add Function Breakpoint…	
 Debug: Add Watch Expression…	
@@ -1073,6 +1077,7 @@ Index ↔ Working Tree
 Indexing files…	
 Indexing lines…	
 Info	
+Information	
 Inline	
 Insert a snippet (or type its prefix in the editor and press Tab)	
 Insert the closing bracket or quote	
@@ -1389,6 +1394,7 @@ No running containers.
 No saved copies yet. Save the file to start its local history.	
 No setting matches.	
 No settings folder on this machine.	
+No shortcut	
 No subtypes found	
 No supertypes found	
 No symbols found.	
@@ -1423,6 +1429,7 @@ Not changed: {0} ({1})
 Not compared	
 Not connected yet	
 Not deleted: {}	
+Not forwarded	
 Not in a git repository	
 Not installed; open setup instructions	
 Not paused	
@@ -1570,6 +1577,8 @@ Pop Stash…
 Popped {}	
 Port forwarding works while connected to an SSH host.	
 Port mappings	
+Port {0}, {1}	
+Port {}	
 Port {} is forwarded to localhost:{} ({} was busy here)	
 Port {} is forwarded: localhost:{}	
 Ports	
@@ -1600,6 +1609,7 @@ Previous result (⇧F4)
 Previous session ended; started a new shell	
 Problems	
 Problems: Copy Full Diagnostic	
+Problems: {}	
 Process ended. Press any key to close.	
 Process exited with code {}	
 Process exited with code {}. Press any key to close.	
@@ -2680,6 +2690,7 @@ no “{}” in the response
 not UTF-8	
 not available	
 not declared	
+not run	
 not run: a dependency failed	
 not run: too many tasks in the background	
 not running	
@@ -2692,6 +2703,7 @@ only the first {} files were looked at (search.structural.maxFiles)
 operator	
 package	
 partly selected	
+passed	
 path branch (new branch is created if it does not exist)	
 pause	
 paused on {}	
@@ -2725,6 +2737,7 @@ send the request named “{}” first
 sends {} to {}	
 setting	
 size differs	
+skipped	
 source	
 split input and separator must be strings	
 starting	
@@ -2888,6 +2901,9 @@ your words
 {0}, from {1}	
 {0}, in development from {1}	
 {0}, installed from {1} (not verified by a registry)	
+{0}, line {1}	
+{0}, line {1}, column {2}	
+{0}, problems: {1}	
 {0}, signed by {1} in the {2} registry	
 {0}, {1} {2} {3}	
 {0}. The search stopped at the result limit, so the results are incomplete.	
@@ -3016,6 +3032,7 @@ your words
 {} supertype|{} supertypes	
 {} tab with unsaved changes stayed open.|{} tabs with unsaved changes stayed open.	
 {} terminals have programs running. Close them anyway?	
+{} test|{} tests	
 {} type definition|{} type definitions	
 {} was not installed from a registry	
 {} week ago|{} weeks ago	

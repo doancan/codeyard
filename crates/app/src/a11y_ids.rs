@@ -22,6 +22,12 @@ const _: () = {
         SCM_REPO,
         EXT_VIEW_NODE,
         INSPECTOR_LINE,
+        super::problems_access::PAGE_ROW,
+        super::problems_access::PROBLEM_ROW,
+        super::problems_access::DEBUG_ROW,
+        super::problems_access::TEST_ROW,
+        super::problems_access::REMOTE_ROW,
+        super::problems_access::MENU_ITEM,
         ROW_BASE,
     ];
     let mut i = 1;
@@ -81,16 +87,36 @@ const _: () = {
         EXT_PAGE_INSTALL,
         INSPECTOR,
     ];
-    let mut i = 0;
-    while i < fixed.len() {
-        assert!(fixed[i].0 < STATUS_ITEM);
-        let mut j = i + 1;
-        while j < fixed.len() {
-            assert!(fixed[i].0 != fixed[j].0);
-            j += 1;
-        }
-        i += 1;
-    }
+    unique(&[
+        &fixed,
+        &super::problems_access::FIXED,
+        &super::problems_access::PAGE_FIXED,
+        &super::problems_access::DEBUG_FIXED,
+        &super::problems_access::SIDE_FIXED,
+    ]);
     // Rows are ROW_BASE | 32-bit hash; editor and terminal runs sit above them.
     assert!(ROW_BASE + 0xffff_ffff < RUN_BASE && RUN_BASE + 0xffff_ffff < TERM_RUN_BASE);
 };
+
+/// Every id of every list is below the blocks and appears once across all the lists.
+const fn unique(lists: &[&[NodeId]]) {
+    let mut a = 0;
+    while a < lists.len() {
+        let mut i = 0;
+        while i < lists[a].len() {
+            let id = lists[a][i].0;
+            assert!(id < STATUS_ITEM);
+            let mut b = a;
+            while b < lists.len() {
+                let mut j = if b == a { i + 1 } else { 0 };
+                while j < lists[b].len() {
+                    assert!(id != lists[b][j].0);
+                    j += 1;
+                }
+                b += 1;
+            }
+            i += 1;
+        }
+        a += 1;
+    }
+}
