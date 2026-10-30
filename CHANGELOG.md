@@ -135,6 +135,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Windows: a shell task's arguments run through cmd.exe reach the program unchanged when they contain `%` (a value like
+  `%PATH%` is no longer expanded) or end with a backslash (`C:\dir\` no longer swallows the closing quote).
 - On macOS and Linux, a task, test run, language server or terminal no longer keeps running when Codeyard is killed or
   crashes. A small guard process started with the app ends every task's process group at once and hangs up every
   terminal, killing it after two seconds if it is still there. Windows already ends them through job objects and the
