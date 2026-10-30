@@ -138,8 +138,9 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   "files.exclude": [".git", ".DS_Store"],
   // Unsaved changes survive quitting and crashes.
   "files.hotExit": true,
-  // Deleted local files go to the Trash (SSH hosts have none: deletes are permanent).
-  "files.enableTrash": true,
+  // Deleted local files go to the Trash instead of being deleted for good (SSH hosts have none: deletes there are
+  // always permanent). Off by default: a delete is permanent and asks first.
+  "files.enableTrash": false,
   // Files that are not UTF-8 (and have no BOM) are read as: "windows1254"
   // (Turkish), "iso88599" or "iso88591". They are saved back the same way.
   "files.fallbackEncoding": "windows1254",

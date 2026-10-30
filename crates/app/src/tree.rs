@@ -540,6 +540,11 @@ impl FileTree {
     }
 
     #[cfg(test)]
+    pub fn row_errors(&self) -> Vec<(String, String)> {
+        self.rows.iter().filter_map(|r| r.error.as_ref().map(|e| (r.name.to_string(), e.to_string()))).collect()
+    }
+
+    #[cfg(test)]
     pub fn row_names(&self) -> Vec<String> {
         self.rows.iter().map(|r| r.name.to_string()).collect()
     }
@@ -672,6 +677,18 @@ impl FileTree {
             return;
         }
         self.load_epochs.remove(&path);
+        // The folder is gone (deleted, here or outside Codeyard): forget it and read its parent again, which drops its
+        // row. The watcher may report only the folder's own change, so this is the only read that sees it.
+        if matches!(&result, Err(host::HostError::Op(proto::Error::NotFound(_)))) && self.root.as_deref() != Some(path.as_str()) {
+            self.forget(&path);
+            if let Some((parent, _)) = path.rsplit_once('/') {
+                let parent = if parent.is_empty() { "/" } else { parent };
+                self.reload(parent, cx);
+            }
+            self.rebuild();
+            cx.notify();
+            return;
+        }
         let loaded = result.is_ok();
         let load = match result {
             Ok(mut entries) => {
@@ -717,6 +734,16 @@ impl FileTree {
             self.load(path, cx);
         }
         cx.notify();
+    }
+
+    /// Drop a folder that no longer exists, with everything under it, from what the tree holds.
+    fn forget(&mut self, dir: &str) {
+        let under = format!("{dir}/");
+        let gone = |p: &String| p == dir || p.starts_with(&under);
+        self.children.retain(|p, _| !gone(p));
+        self.expanded.retain(|p| !gone(p));
+        self.reload_queued.retain(|p| !gone(p));
+        self.recursive.retain(|p| !gone(p));
     }
 
     /// Rebuild the visible rows from scratch (expanded folders, depth first).

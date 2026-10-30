@@ -198,6 +198,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Deleting a file or folder deletes it permanently after asking, instead of moving it to the Trash:
+  `files.enableTrash` is now off by default. Turn it on to keep using the Trash for local files.
 - The settings and shortcuts import is "Preferences: Import Settings and Shortcuts from Another Editor", and its
   messages no longer name another product. A shortcut block written by an earlier import is still replaced by a new one.
 - Installed extensions with code start no process when Codeyard opens: the check that the system sandbox works now
@@ -210,6 +212,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A folder deleted while it was open in the file tree no longer stays there with "not found" beside it. When a
+  folder's read finds it gone, the tree drops it and reads its parent again, so this also covers folders deleted
+  outside Codeyard, where the watcher may report only the folder itself.
 - Quick Open in a workspace with several folders finds a file by its folder's name and path, as in `repoB/src/lib.rs`,
   for every folder. Before, typing a folder's name found nothing, so files with the same relative path in two folders
   could not be told apart.
