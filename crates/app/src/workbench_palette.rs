@@ -292,7 +292,7 @@ impl Workbench {
             Command::action("Go: Last Edit Location", GoToLastEdit),
             Command::action("Git: Clone Repository…", CloneRepository),
             Command::action("Preferences: Open Keyboard Shortcuts", OpenKeybindings),
-            Command::action("Preferences: Import VS Code Settings and Shortcuts", ImportVsCode),
+            Command::action("Preferences: Import Settings and Shortcuts from Another Editor", ImportVsCode),
             Command::action("View: Problems", ShowProblems),
             Command::action("Problems: Copy Full Diagnostic", CopyFullDiagnostic),
             Command::action("Rust: Expand Macro Recursively", RustExpandMacro),

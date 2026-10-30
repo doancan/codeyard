@@ -553,10 +553,10 @@ in your own `settings.jsonc` turns the check off; a project file can never chang
 ]
 ```
 
-Unknown command ids get a "did you mean" hint. Coming from VS Code? ⇧⌘P → "Preferences:
-Import VS Code Settings and Shortcuts" copies the settings that have an equivalent here and
-your shortcuts (into a marked block of `keybindings.jsonc`, so importing again replaces it);
-it reports what had no equivalent. Your VS Code files are only read. Open tabs, cursors and unsaved changes are
+Unknown command ids get a "did you mean" hint. Coming from another editor? ⇧⌘P → "Preferences:
+Import Settings and Shortcuts from Another Editor" copies the settings that have an equivalent here and
+your shortcuts (into a marked block of `keybindings.jsonc`, so importing again replaces it, also a block an earlier
+version wrote); it reports what had no equivalent. The other editor's files are only read. Open tabs, cursors and unsaved changes are
 restored on the next start (hot exit).
 
 ## Interface scale

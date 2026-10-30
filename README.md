@@ -100,7 +100,8 @@ codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TE
 
 - `⇧⌘P` opens the command palette, `⌘P` goes to a file, `⌃R` opens the workspace switcher (recent folders, SSH hosts).
 - `⌘,` opens Settings; `⌘K ⌘T` picks a theme. Nothing needs to be configured to start.
-- Coming from VS Code? *Preferences: Import VS Code Settings and Shortcuts* converts what has an equivalent.
+- Coming from another editor? *Preferences: Import Settings and Shortcuts from Another Editor* converts what has an
+  equivalent.
 
 ## Documentation
 

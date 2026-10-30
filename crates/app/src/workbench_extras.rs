@@ -183,7 +183,7 @@ impl Workbench {
         let _ = std::fs::create_dir_all(&dir);
         #[cfg(all(target_os = "macos", not(test)))]
         let _ = std::process::Command::new("open").arg(&dir).spawn();
-        self.notice = Some(Notice::Info(crate::i18n::tf("Themes live in {}: drop VS Code or native theme .json files there", &[&dir.display()]).into()));
+        self.notice = Some(Notice::Info(crate::i18n::tf("Themes live in {}: drop theme .json files there", &[&dir.display()]).into()));
         cx.notify();
     }
 
