@@ -262,7 +262,7 @@ Needs no permission. Since 0.1.0.
 - type `completion-kind`: enum `text | method | function | constructor | field | variable | class | interface | module | property | unit | value | enum | keyword | snippet | color | file | reference | folder | enum-member | constant | struct | event | operator | type-parameter`. The icon a completion item shows, as in the Language Server Protocol.
 - type `completion-item`: record `{ label: string, kind: completion-kind, detail: option<string>, documentation: option<string>, insert-text: option<string>, snippet: bool, range: option<range>, additional-edits: list<text-edit>, filter-text: option<string>, sort-text: option<string> }`
 - type `completion-list`: record `{ items: list<completion-item>, incomplete: bool }`
-- type `response`: variant `none | json(string) | view(string) | edits(list<text-edit>) | code-actions(list<code-action>) | tasks(list<task>) | ranges(list<range>) | hover(option<hover>) | completions(completion-list) | scm(scm-state) | text(option<string>) | code-lenses(list<code-lens>) | inlay-hints(list<inlay-hint>)`
+- type `response`: variant `none | json(string) | view(string) | edits(list<text-edit>) | code-actions(list<code-action>) | tasks(list<task>) | ranges(list<range>) | hover(option<hover>) | completions(completion-list) | code-lenses(list<code-lens>) | inlay-hints(list<inlay-hint>) | scm(scm-state) | text(option<string>)`
 
 ## `requests`
 

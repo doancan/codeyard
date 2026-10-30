@@ -134,12 +134,12 @@ interface responses {
     hover(option<hover>),
     /// The answer to `request.completion`.
     completions(completion-list),
+    code-lenses(list<code-lens>),
+    inlay-hints(list<inlay-hint>),
     /// A folder's source control state (`request.scm-status`).
     scm(scm-state),
     /// Some text, or none: a file's original text (`request.scm-original`), a validation message (`request.scm-validate`).
     text(option<string>),
-    code-lenses(list<code-lens>),
-    inlay-hints(list<inlay-hint>),
   }
 
   /// Shown in the hover popup next to the language server's, under the extension's name.
