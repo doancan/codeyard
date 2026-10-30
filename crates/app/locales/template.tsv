@@ -1415,6 +1415,7 @@ No timestamp
 No type definition found	
 No unsaved changes: the file matches what is on disk.	
 No version of this extension can be installed: they were withdrawn or revoked.	
+No view is in a window of its own.	
 No view is in the secondary side bar. Use View: Move View to Secondary Side Bar.	
 No workspace file is open.	
 No workspace file is open. Use File: Save Workspace As… to create one.	
@@ -1517,6 +1518,7 @@ Open a folder to find its tests.
 Open a folder to search in it.	
 Open a project, connect to a host, or switch workspace	
 Open a terminal with…	
+Open a view in a side bar first.	
 Open a view in the side bar first.	
 Open an HTML file or a project folder to start Web Preview.	
 Open as Hex	
@@ -2278,6 +2280,7 @@ The update couldn't be verified
 The update failed part-way and Codeyard couldn't put the previous version back. It may be at {0}. If Codeyard doesn't start, move it back to {1}.	
 The update failed. Click for details.	
 The version that was on disk has been kept in Local History.	
+The view could not move to a new window: {}	
 The workspace changed. Open the source project and review its container configuration again.	
 The workspace file lists no folder that exists on this computer.	
 The workspace file no longer exists on this computer.	
@@ -2472,6 +2475,8 @@ View: Move Panel (bottom ⇄ right)
 View: Move Panel Left	
 View: Move Panel Right	
 View: Move Panel to Bottom	
+View: Move View Back to Side Bar	
+View: Move View into New Window	
 View: Move View to Primary Side Bar	
 View: Move View to Secondary Side Bar	
 View: Open Next Editor	

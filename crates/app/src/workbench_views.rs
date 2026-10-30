@@ -38,7 +38,7 @@ impl Render for DetachedTerminal {
 }
 
 /// The id a view is saved under.
-fn view_id(panel: Panel) -> &'static str {
+pub(super) fn view_id(panel: Panel) -> &'static str {
     match panel {
         Panel::Explorer => "explorer",
         Panel::Search => "search",
@@ -52,7 +52,7 @@ fn view_id(panel: Panel) -> &'static str {
     }
 }
 
-fn view_of(id: &str) -> Option<Panel> {
+pub(super) fn view_of(id: &str) -> Option<Panel> {
     [Panel::Explorer, Panel::Search, Panel::Scm, Panel::Debug, Panel::Testing, Panel::Remote, Panel::Containers, Panel::Extensions, Panel::ExtView]
         .into_iter()
         .find(|p| view_id(*p) == id)
@@ -73,7 +73,7 @@ pub(super) fn parse_secondary(text: &str) -> Vec<Panel> {
 impl Workbench {
     /// Whether `panel` is on screen, in either side bar.
     pub(super) fn view_shown(&self, panel: Panel) -> bool {
-        self.chrome.panel == Some(panel) || self.chrome.secondary == Some(panel)
+        self.chrome.panel == Some(panel) || self.chrome.secondary == Some(panel) || self.in_view_window(panel)
     }
 
     /// Asking for a view (`chrome.panel = Some(view)`) that lives in the secondary side bar opens it there; the primary
@@ -84,8 +84,9 @@ impl Workbench {
                 self.chrome.secondary = Some(view);
                 self.chrome.panel = self.chrome.last_primary.filter(|v| !self.chrome.in_secondary.contains(v));
             }
-            Some(view) => self.chrome.last_primary = Some(view),
-            None => {}
+            // A view with a window of its own is not kept as the side bar's view (`place_window_views` sends it there).
+            Some(view) if !self.in_view_window(view) => self.chrome.last_primary = Some(view),
+            _ => {}
         }
         if self.chrome.secondary.is_some_and(|v| !self.chrome.in_secondary.contains(&v)) {
             self.chrome.secondary = None;

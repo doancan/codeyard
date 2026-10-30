@@ -174,6 +174,8 @@ pub mod tasks;
 mod term_daemon_glue;
 #[path = "workbench_term_tabs.rs"]
 mod term_tabs_glue;
+#[path = "workbench_view_windows.rs"]
+mod view_windows_glue;
 #[cfg(unix)]
 pub use term_daemon_glue::{enable_terminal_daemon, terminal_daemon_socket};
 #[path = "workbench_terminals.rs"]
@@ -580,6 +582,7 @@ pub use terminals_glue::{
     RenameTerminal, SelectDefaultTerminalProfile,
 };
 pub use tests_glue::{DebugTestAtCursor, RefreshTests, RunAllTests, RunFailedTests, ShowTesting, StopTests};
+pub use view_windows_glue::{MoveViewBackToSideBar, MoveViewIntoNewWindow};
 pub type AskReply = std::sync::mpsc::Sender<Option<String>>;
 
 /// Options in the status bar pickers.
@@ -1124,6 +1127,7 @@ impl Workbench {
             cx.on_release(|this, cx| {
                 this.close_detached_terminals(cx);
                 this.close_editor_windows(cx);
+                this.close_view_windows(cx);
                 this.close_editor_terminals(cx);
             }),
             // A download in progress is cancelled and its partial file removed before the process ends.
@@ -1293,6 +1297,8 @@ impl Workbench {
                 detached: Vec::new(),
                 editor_windows: Vec::new(),
                 editor_host: None,
+                view_windows: Vec::new(),
+                view_host: None,
                 panel_dock,
                 view_drag: None,
                 panel_w,
@@ -1490,6 +1496,11 @@ impl Workbench {
     }
 
     fn show_overlay(&mut self, picker: Entity<Picker>, kind: OverlayKind, window: &mut Window, cx: &mut Context<Self>) {
+        // Asked for from a view in a window of its own (its command, its tree's menu): the picker opens there.
+        if self.view_host_window().is_some_and(|h| h != window.window_handle()) {
+            self.reroute_to_view_window(window, cx, move |this, window, cx| this.show_overlay(picker, kind, window, cx));
+            return;
+        }
         let sub = cx.subscribe_in(&picker, window, |this, _, event: &PickerEvent, window, cx| {
             this.on_overlay_event(event, window, cx);
         });
@@ -1841,6 +1852,7 @@ impl Workbench {
         self.persist.backed_up.clear();
         self.return_all_editor_terminals();
         self.close_editor_windows(cx);
+        self.close_view_windows(cx);
         self.tabs = Default::default();
         self.tabs.active = None;
         self.tabs.open_error = None;

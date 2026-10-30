@@ -68,7 +68,7 @@ impl Workbench {
     }
 
     /// A side view's content, for whichever side bar shows it.
-    fn side_view(&mut self, panel: Panel, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn side_view(&mut self, panel: Panel, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
         match panel {
             Panel::Explorer => self.explorer_panel(p, cx),
             Panel::Search => div()
@@ -236,6 +236,7 @@ impl Render for Workbench {
         };
         // A view asked for in the primary side bar that lives in the secondary one opens there.
         self.place_views();
+        self.place_window_views(window, cx);
         let sidebar = self.chrome.panel.map(|panel| self.side_view(panel, &p, cx));
         let secondary = self.chrome.secondary.map(|panel| self.side_view(panel, &p, cx));
         // While a view is dragged: drop zones over each side (at least `ZONE_MIN` wide, also where no side bar is open).
@@ -437,7 +438,7 @@ impl Render for Workbench {
             .children(self.error_toast(&p, cx))
             .children(self.update_dialog(&p, cx))
             // A menu or picker opened from an editor's own window is drawn there.
-            .when(self.hosted_editor().is_none(), |d| {
+            .when(self.hosted_editor().is_none() && self.view_host_window().is_none(), |d| {
                 let menu_top = if self.menu.as_ref().is_some_and(|m| m.app_path.is_some()) { self.application_menu_bottom(window) } else { 0. };
                 let picker_top = if cfg!(target_os = "macos") {
                     layout::TITLEBAR_H + 4.

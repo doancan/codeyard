@@ -116,6 +116,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   save when no other tab or window shows it. "View: Move Editors Back to Main Window" returns all of them, and the
   windows come back in place after a restart (a file that is also opened as a tab keeps its tab). The command palette,
   the right-click menu, Go to Line and the other commands and shortcuts work in that window and act on its editor.
+- "View: Move View into New Window" shows the open side view (Explorer, Search, Source Control, Run and Debug,
+  Testing, Remote Explorer, Extensions) in a window of its own, the same view with the same state. Its icon and
+  commands bring that window forward; the command palette, shortcuts, menus and pickers work there. Closing the window
+  or "View: Move View Back to Side Bar" puts it back in the side bar it came from. The windows are saved with the
+  folder and come back with it, on an attached display; screen readers find the view in its window.
 - A side view moves to the other side bar by dragging its activity bar icon there; while it is dragged, both sides
   show a highlighted drop zone. The panel docks left of, right of or below the editor ("View: Move Panel Left",
   "View: Move Panel Right", "View: Move Panel to Bottom"), and the dock is restored at the next start. Screen readers
@@ -137,6 +142,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Windows: a shell task's arguments run through cmd.exe reach the program unchanged when they contain `%` (a value like
   `%PATH%` is no longer expanded) or end with a backslash (`C:\dir\` no longer swallows the closing quote).
+- Screen readers find the Search results in the secondary side bar too, not only in the primary one.
 - On macOS and Linux, a task, test run, language server or terminal no longer keeps running when Codeyard is killed or
   crashes. A small guard process started with the app ends every task's process group at once and hangs up every
   terminal, killing it after two seconds if it is still there. Windows already ends them through job objects and the
