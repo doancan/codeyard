@@ -17,7 +17,8 @@ It is used through `[patch.crates-io]` in the root `Cargo.toml`. The patches bel
 | src/text_system.rs | `raster_bounds` cache bounded by `MAX_RASTER_BOUNDS` (cleared when full) | Glyphs are keyed by scale factor, so each interface or display scale adds entries for the life of the process. Sprite-atlas tiles are not evicted: `PlatformAtlas::remove` keeps keys whose texture is still referenced and decrements again on a repeated call, so per-scale eviction would risk freeing textures in use. The app rounds `ui.scale` to whole percent instead, which bounds the number of scales. |
 | src/app/test_context.rs, src/platform/test/window.rs, src/platform.rs | Test support: `platform_bounds_for_range`, `platform_character_index_for_point`, `simulate_display_scale`, `platform_client_inset`, `atlas_tile_count`, `raster_bounds_count` | Lets the app's tests check the platform side of the interface scale. |
 
-`vendor/xattr` is patched the same way (`libc::ENOATTR` does not exist on Linux, `ENODATA` is used); it has nothing to do with
+`vendor/xattr` is patched the same way (`libc::ENOATTR` does not exist on Linux, `ENODATA` is used; the deprecated
+`libc::uint32_t` alias is written `u32` in `sys/linux_macos/macos.rs`); it has nothing to do with
 GPUI, but the same script checks it. Update the table and `scripts/check-gpui-patches.sh` together; the script runs from
 `scripts/arch-check.sh` (and so in CI) and goes red when a patch is lost.
 
