@@ -329,6 +329,7 @@ actions!(
         ShowDebugPanel,
         ConfigureTasks,
         TogglePanelPosition,
+        ClearSavedTerminalHistory,
         ToggleMaximizedPanel,
         GitCheckout,
         GitCreateBranch,

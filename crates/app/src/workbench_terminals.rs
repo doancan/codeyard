@@ -208,6 +208,8 @@ impl Workbench {
             }
         }));
         self.terminals.push(term);
+        // Saved right away: a crash or a killed app must not lose a terminal opened since the last save.
+        self.persist_terminals(cx);
         self.active_terminal = self.terminals.len() - 1;
         self.chrome.panel_open = true;
         self.focus_terminal(window, cx);
@@ -360,6 +362,7 @@ impl Workbench {
                 cx.notify();
             });
         }
+        self.persist_terminals(cx);
     }
 
     /// "Terminal: Change Color…".
@@ -617,6 +620,7 @@ impl Workbench {
         let term = self.terminals.remove(ix);
         term.read(cx).kill();
         self.task_terminal_closed(&term, cx);
+        self.persist_terminals(cx);
         if self.term_split.as_ref().is_some_and(|(l, r)| *l == term || *r == term) {
             self.term_split = None;
         }
@@ -758,3 +762,130 @@ mod tests {
         assert_eq!(row(Activity::Failed(2), None).tooltip(), "zsh\n/srv/app\nThe last command exited with code 2");
     }
 }
+
+// --- Restoring terminals ---
+
+fn saved_terminals_key(ws: i64) -> String {
+    format!("terminals:{ws}")
+}
+
+impl Workbench {
+    /// Save the panel's terminals for the next start (with `window.restoreSession`; history only with
+    /// `terminal.persistentScrollback`). Output-only terminals (tasks, tests) are not saved.
+    pub(super) fn persist_terminals(&self, cx: &App) {
+        let (Some(ws), Some(s)) = (self.persist.workspace_id, &self.persist.state) else { return };
+        let settings = cx.global::<Settings>();
+        if !settings.restore_session {
+            let _ = s.set(&saved_terminals_key(ws), "");
+            return;
+        }
+        let lines = settings.terminal_persistent_scrollback;
+        let mut active = 0;
+        let mut terminals = Vec::new();
+        for (ix, t) in self.terminals.iter().enumerate() {
+            if let Some(saved) = t.read(cx).saved(lines) {
+                if ix == self.active_terminal {
+                    active = terminals.len();
+                }
+                terminals.push(saved);
+            }
+        }
+        let saved = crate::terminal_session::SavedTerminals { version: 1, active, terminals };
+        if let Some(json) = saved.to_json() {
+            let _ = s.set(&saved_terminals_key(ws), &json);
+        }
+    }
+
+    /// Bring the saved terminals back as new shells in their folders. Nothing saved is sent to them as input: a saved
+    /// history is shown as output, followed by a line saying the previous session ended.
+    pub(super) fn restore_terminals(&mut self, ws: i64, window: &mut Window, cx: &mut Context<Self>) {
+        if !cx.global::<Settings>().restore_session || !self.terminals.is_empty() {
+            return;
+        }
+        let Some(text) = self.persist.state.as_ref().and_then(|s| s.get(&saved_terminals_key(ws))).filter(|t| !t.is_empty()) else { return };
+        let lines = cx.global::<Settings>().terminal_persistent_scrollback;
+        let Some(saved) = crate::terminal_session::SavedTerminals::parse(&text, lines) else {
+            self.notice =
+                Some(Notice::Error(crate::i18n::tf("Terminal session could not be restored: {}", &[&crate::i18n::t("the saved state is damaged")]).into()));
+            return cx.notify();
+        };
+        if saved.terminals.is_empty() {
+            return;
+        }
+        let host = self.remote.host.clone();
+        let cwds: Vec<Option<String>> = saved.terminals.iter().map(|t| t.cwd.clone()).collect();
+        // Which saved folders still exist, asked off the UI thread (over SSH each is a round trip).
+        let present = cx
+            .background_executor()
+            .spawn(async move { cwds.iter().map(|c| c.as_ref().is_none_or(|c| host.stat(c).is_ok_and(|m| m.kind == proto::Kind::Dir))).collect::<Vec<_>>() });
+        let asked = (self.remote.host.clone(), self.persist.workspace_id);
+        cx.spawn_in(window, async move |this, cx| {
+            let present = present.await;
+            this.update_in(cx, |this, window, cx| {
+                // Another folder or connection by now: these terminals belonged to the previous one.
+                if !Arc::ptr_eq(&asked.0, &this.remote.host) || asked.1 != this.persist.workspace_id || !this.terminals.is_empty() {
+                    return;
+                }
+                let panel_open = this.chrome.panel_open;
+                let fallback = this.root(cx);
+                for (t, here) in saved.terminals.iter().zip(present) {
+                    let cwd = if here { t.cwd.clone() } else { fallback.clone() };
+                    let before = this.terminals.len();
+                    let launch = crate::terminal::Launch { shell: t.shell.clone(), args: t.args.clone(), env: Vec::new(), color: t.color.clone() };
+                    this.new_terminal_launch(cwd, launch, window, cx);
+                    let Some(term) = this.terminals.get(before).cloned() else { break };
+                    let mut shown = String::new();
+                    if let Some(history) = &t.history {
+                        shown.push_str(history);
+                        shown.push('\n');
+                    }
+                    let status = if here {
+                        crate::i18n::t("Previous session ended; started a new shell").to_string()
+                    } else {
+                        crate::i18n::tf(
+                            "Terminal session could not be restored: {}",
+                            &[&crate::i18n::tf(
+                                "the folder {} no longer exists; started a new shell in the workspace folder",
+                                &[&t.cwd.clone().unwrap_or_default()],
+                            )],
+                        )
+                    };
+                    shown.push_str(&format!("\x1b[2m{status}\x1b[0m\n"));
+                    term.update(cx, |term, cx| {
+                        if let Some(title) = &t.title {
+                            term.set_fixed_title(title.clone());
+                        }
+                        // Output only: shown in the terminal, never sent to the shell.
+                        term.append(shown.as_bytes(), cx);
+                    });
+                }
+                this.active_terminal = saved.active.min(this.terminals.len().saturating_sub(1));
+                // Restoring does not open the panel on its own.
+                this.chrome.panel_open = panel_open;
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// "Terminal: Clear Saved Terminal History": the saved histories of this folder are removed now (terminals are still
+    /// restored; history is saved again at the next save only while `terminal.persistentScrollback` is above 0).
+    pub(super) fn clear_saved_terminal_history(&mut self, cx: &mut Context<Self>) {
+        let (Some(ws), Some(s)) = (self.persist.workspace_id, &self.persist.state) else { return };
+        if let Some(mut saved) = s.get(&saved_terminals_key(ws)).and_then(|t| crate::terminal_session::SavedTerminals::parse(&t, 0)) {
+            for t in &mut saved.terminals {
+                t.history = None;
+            }
+            if let Some(json) = saved.to_json() {
+                let _ = s.set(&saved_terminals_key(ws), &json);
+            }
+        }
+        self.notice = Some(Notice::Info(crate::i18n::t("Saved terminal history cleared").into()));
+        cx.notify();
+    }
+}
+
+#[cfg(all(test, unix))]
+#[path = "workbench_terminal_restore_tests.rs"]
+mod restore_tests;

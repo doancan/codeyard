@@ -229,6 +229,7 @@ registry! {
     "bookmarks.list" => wb::ListBookmarks,
     "tasks.run" => wb::RunTask,
     "workbench.togglePanelPosition" => wb::TogglePanelPosition,
+    "terminal.clearSavedHistory" => wb::ClearSavedTerminalHistory,
     "workbench.toggleMaximizedPanel" => wb::ToggleMaximizedPanel,
     "tasks.build" => wb::RunBuildTask,
     "tasks.rerun" => wb::RerunLastTask,
