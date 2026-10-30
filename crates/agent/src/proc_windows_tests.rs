@@ -50,23 +50,36 @@ fn fixture_leader() {
 #[ignore = "task process-tree fixture"]
 fn fixture_owner() {
     let (_task, out) = spawn_task(&fixture("fixture_leader"), None, &[]).unwrap();
-    for line in BufReader::new(out).lines() {
-        let Ok(line) = line else { break };
-        println!("{line}");
-        io::stdout().flush().unwrap();
-        if line.starts_with("grandchild:") {
-            break;
+    // Read to the end: a closed pipe would make the grandchild's next write fail and end it on its own.
+    std::thread::spawn(move || {
+        for line in BufReader::new(out).lines() {
+            let Ok(line) = line else { break };
+            println!("{line}");
+            let _ = io::stdout().flush();
         }
-    }
+    });
     std::thread::sleep(Duration::from_secs(60));
 }
 
-/// The grandchild's id from a fixture's output.
-fn grandchild_of(out: impl Read) -> u32 {
-    BufReader::new(out)
-        .lines()
-        .find_map(|line| line.ok()?.split_once("grandchild:").map(|(_, id)| id.trim().parse::<u32>().unwrap()))
-        .expect("the leader names its grandchild")
+/// The grandchild's id from a fixture's output. The output is read to its end on a thread of its own: a closed pipe
+/// would make the grandchild's next write fail and end it on its own, which would hide what Stop does.
+fn grandchild_of(out: impl Read + Send + 'static) -> u32 {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        for line in BufReader::new(out).lines() {
+            let Ok(line) = line else { break };
+            if let Some((_, id)) = line.split_once("grandchild:") {
+                let _ = tx.send(id.trim().parse::<u32>().unwrap());
+            }
+        }
+    });
+    rx.recv_timeout(Duration::from_secs(30)).expect("the leader names its grandchild")
+}
+
+/// Whether the process is still running.
+fn running(process: &OwnedHandle) -> bool {
+    // SAFETY: the handle is owned; a zero wait only polls.
+    unsafe { WaitForSingleObject(process.as_raw_handle(), 0) == WAIT_TIMEOUT }
 }
 
 /// A handle to a process this test started (held before anything is stopped, so its identity cannot be reused).
@@ -99,19 +112,16 @@ fn windows_stopping_a_task_ends_its_whole_tree_with_a_live_or_exited_leader() {
     for leader_exits in [false, true] {
         let env = if leader_exits { vec![(LEADER_EXITS.to_string(), Some("1".to_string()))] } else { Vec::new() };
         let (mut task, out) = spawn_task(&fixture("fixture_leader"), None, &env).unwrap();
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let _ = tx.send(grandchild_of(out));
-        });
-        let grandchild = open(rx.recv_timeout(Duration::from_secs(30)).expect("the grandchild's id"));
+        let grandchild = open(grandchild_of(out));
         if leader_exits {
             let deadline = Instant::now() + Duration::from_secs(10);
             while task.try_wait().unwrap().is_none() {
                 assert!(Instant::now() < deadline, "the leader did not exit");
                 std::thread::sleep(Duration::from_millis(20));
             }
-            // SAFETY: the grandchild handle is owned; a zero wait only polls.
-            assert_eq!(unsafe { WaitForSingleObject(grandchild.as_raw_handle(), 0) }, WAIT_TIMEOUT, "the grandchild outlives its leader");
+            assert!(running(&grandchild), "the grandchild outlives its leader");
+        } else {
+            assert!(running(&grandchild));
         }
         drop(task);
         assert!(ends_within(&grandchild, Duration::from_secs(5)), "the grandchild outlived Stop (leader exited first: {leader_exits})");
@@ -129,12 +139,9 @@ fn windows_killing_the_owner_ends_its_task_trees() {
         .stdout(Stdio::piped())
         .spawn()
         .unwrap();
-    let out = owner.stdout.take().unwrap();
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let _ = tx.send(grandchild_of(out));
-    });
-    let grandchild = open(rx.recv_timeout(Duration::from_secs(30)).expect("the grandchild's id"));
+    let grandchild = open(grandchild_of(owner.stdout.take().unwrap()));
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(running(&grandchild), "the grandchild runs while its owner lives");
     owner.kill().unwrap();
     owner.wait().unwrap();
     assert!(ends_within(&grandchild, Duration::from_secs(5)), "the grandchild outlived its killed owner");
