@@ -18,7 +18,21 @@ import { join } from "node:path";
 import { CodeyardError, DeniedError, fromWit } from "../errors.ts";
 import { installGlobals, start, type ExtensionModule } from "../guest.ts";
 import { hostOf } from "../fetch.ts";
-import type { CodeAction, Diagnostic, Document, FormatOptions, LogLevel, Range, Severity, StatusItem, TextEdit } from "../types.ts";
+import type {
+  CodeAction,
+  CompletionItem,
+  CompletionList,
+  Diagnostic,
+  Document,
+  FormatOptions,
+  Hover,
+  LogLevel,
+  Position,
+  Range,
+  Severity,
+  StatusItem,
+  TextEdit,
+} from "../types.ts";
 import { fromWitDiagnostic, toWitDiagnostic } from "../types.ts";
 import type * as W from "../wit.ts";
 import { allowsNet, allowsRead, allowsWrite, globMatch, permissionsOf, type Permissions } from "./permissions.ts";
@@ -312,6 +326,28 @@ export class MockHost {
       preferred: a.preferred,
       fixes: a.fixes.map(fromWitDiagnostic),
     }));
+  }
+
+  /** Ask the hover provider about `position`, as the mouse resting there does. */
+  async hover(document: Document, position: Position): Promise<Hover | undefined> {
+    const r = await this.request({ tag: "hover", val: [document, position] });
+    if (r.tag !== "hover") throw CodeyardError.other(`the hover provider answered ${r.tag}`);
+    if (!r.val) return undefined;
+    return r.val.range === undefined ? { contents: r.val.contents } : { contents: r.val.contents, range: r.val.range };
+  }
+
+  /** Ask the completion provider at `position`; `trigger` is the trigger character typed, if one asked. */
+  async completion(document: Document, position: Position, trigger?: string): Promise<Required<CompletionList>> {
+    const r = await this.request({ tag: "completion", val: [document, position, trigger] });
+    if (r.tag !== "completions") throw CodeyardError.other(`the completion provider answered ${r.tag}`);
+    const items: CompletionItem[] = r.val.items.map((i) => {
+      const item: CompletionItem = { label: i.label, kind: i.kind, snippet: i.snippet, additionalEdits: i.additionalEdits };
+      for (const k of ["detail", "documentation", "insertText", "range", "filterText", "sortText"] as const) {
+        if (i[k] !== undefined) Object.assign(item, { [k]: i[k] });
+      }
+      return item;
+    });
+    return { items, incomplete: r.val.incomplete };
   }
 
   async runCodeAction(id: string): Promise<void> {

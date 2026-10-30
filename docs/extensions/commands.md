@@ -13,6 +13,7 @@ The SDK is **pre-release**: it is not on crates.io yet, so a new extension takes
 - [Talking to the user](#talking-to-the-user)
 - [Documents, diagnostics and decorations](#documents-diagnostics-and-decorations)
 - [Formatters and code actions](#formatters-and-code-actions)
+- [Hover and completion](#hover-and-completion)
 - [Network, files and programs](#network-files-and-programs)
 - [Storage, settings and timers](#storage-settings-and-timers)
 - [Errors and refused calls](#errors-and-refused-calls)
@@ -84,7 +85,7 @@ Anything that reaches Codeyard, such as a notice with buttons, a file read or an
 Under the hood every async call returns a ticket at once, and the SDK resumes your code when Codeyard delivers the result. The extension never blocks while it waits, so it can answer other requests at the same time. You don't manage any of this; two rules are enough:
 
 - **Don't block.** There are no threads and no `std::thread::sleep`. A handler that computes for more than 2 seconds without awaiting is stopped. Long work awaits calls, and shows progress.
-- **Answer fast.** Providers (views, formatters, code actions) are cancelled when the user moves on. The SDK drops a cancelled handler, which cancels the calls it was waiting on.
+- **Answer fast.** Providers (views, formatters, code actions, hover, completion) are cancelled when the user moves on. The SDK drops a cancelled handler, which cancels the calls it was waiting on.
 
 `ctx.background(async move { … })` runs a task that no request waits for, such as work started from `activate`.
 
@@ -192,6 +193,27 @@ ctx.code_actions(async |ctx, doc, range, diagnostics| {
 });
 ctx.on_code_action(async |ctx, id| Ok(()));   // for actions with a `command` instead of edits
 ```
+
+## Hover and completion
+
+Declare `[[hover]]` and `[[completion]]` with their languages (and, for completion, optional `trigger-characters`).
+What you return shows next to the language server's, under your extension's id. Answer from the document you are
+given, within the provider deadline (one second): a later answer is dropped and noted in your log.
+
+```rust
+ctx.hover(async |ctx, doc, position| {
+    Ok(Some(Hover::new("**TODO**: work left to do.")))   // Markdown, shown as plain text; `None` for nothing
+});
+
+ctx.completion(async |ctx, doc, position, trigger| {
+    // `trigger` is the trigger character typed, `None` when the user typed a word or asked.
+    Ok(vec![CompletionItem { insert_text: Some("TODO: $0".into()), snippet: true, ..CompletionItem::new("TODO", CompletionKind::Keyword) }])
+});
+```
+
+A completion answer is a `Vec<CompletionItem>`, or a `CompletionList` with `incomplete: true` when more typing changes
+it (you are asked again on each key instead of the list only being filtered). An item may set its `range`,
+`filter_text`, `sort_text`, `documentation` and `additional_edits` (an import, say).
 
 ## Network, files and programs
 

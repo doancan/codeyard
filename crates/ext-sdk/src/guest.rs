@@ -20,6 +20,8 @@ pub(crate) type ViewFn = Rc<dyn Fn(Context) -> BoxFuture<Result<Value>>>;
 pub(crate) type ViewEventFn = Rc<dyn Fn(Context, Value) -> BoxFuture<Result<()>>>;
 pub(crate) type FormatFn = Rc<dyn Fn(Context, Document, Option<Range>, FormatOptions) -> BoxFuture<Result<Vec<TextEdit>>>>;
 pub(crate) type CodeActionsFn = Rc<dyn Fn(Context, Document, Range, Vec<Diagnostic>) -> BoxFuture<Result<Vec<CodeAction>>>>;
+pub(crate) type HoverFn = Rc<dyn Fn(Context, Document, Position) -> BoxFuture<Result<Option<Hover>>>>;
+pub(crate) type CompletionFn = Rc<dyn Fn(Context, Document, Position, Option<String>) -> BoxFuture<Result<CompletionList>>>;
 pub(crate) type StringFn = Rc<dyn Fn(Context, String) -> BoxFuture<Result<()>>>;
 pub(crate) type KeysFn = Rc<dyn Fn(Context, Vec<String>) -> BoxFuture<()>>;
 pub(crate) type TickFn = Rc<dyn Fn(Context) -> BoxFuture<()>>;
@@ -36,6 +38,8 @@ pub(crate) struct Handlers {
     pub open_uri: Option<StringFn>,
     pub settings_changed: Vec<KeysFn>,
     pub timers: HashMap<u64, TickFn>,
+    pub hover: Option<HoverFn>,
+    pub completion: Option<CompletionFn>,
     /// Progress the user cancelled.
     pub cancelled_progress: HashSet<u64>,
     pub reason: String,
@@ -169,6 +173,15 @@ pub fn handle(id: u64, request: Request) {
             with(|h| h.cancelled_progress.insert(p));
             sys::respond(id, Ok(Response::None));
         }
+        // Without a provider, nothing to add: the language server's answer shows alone.
+        Request::Hover { document, position } => match with(|h| h.hover.clone()) {
+            Some(f) => answer(id, async move { f(ctx, document, position).await.map(Response::Hover) }),
+            None => sys::respond(id, Ok(Response::Hover(None))),
+        },
+        Request::Completion { document, position, trigger } => match with(|h| h.completion.clone()) {
+            Some(f) => answer(id, async move { f(ctx, document, position, trigger).await.map(Response::Completions) }),
+            None => sys::respond(id, Ok(Response::Completions(CompletionList::default()))),
+        },
         Request::ProvideTasks | Request::RunTask(_) => sys::respond(id, Err(Error::Invalid("this SDK does not provide tasks yet".into()))),
     }
     runtime::run();

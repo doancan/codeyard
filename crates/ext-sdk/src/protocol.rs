@@ -66,6 +66,16 @@ pub enum Request {
     Timer(u64),
     CancelProgress(u64),
     OpenUri(String),
+    Hover {
+        document: Document,
+        position: Position,
+    },
+    /// The trigger character typed, when one of the manifest's `trigger-characters` asked.
+    Completion {
+        document: Document,
+        position: Position,
+        trigger: Option<String>,
+    },
 }
 
 /// An answer to a request (`responses.response`), as far as the SDK makes them.
@@ -77,4 +87,6 @@ pub enum Response {
     View(String),
     Edits(Vec<TextEdit>),
     CodeActions(Vec<CodeAction>),
+    Hover(Option<Hover>),
+    Completions(CompletionList),
 }
