@@ -34,6 +34,14 @@ pub use tar::Entry;
 /// The list of file hashes inside every package.
 pub const CONTENTS: &str = "CONTENTS.sha256";
 
+/// In a per-platform package (one whose `run` names programs inside it), the target triple it was built for, on one
+/// line. It is a file like any other, so the content digest covers it and a package cannot pass for another platform.
+pub const TARGET: &str = "TARGET";
+
+/// The folder of an extension's source that holds native programs, one subfolder per target triple:
+/// `native/x86_64-unknown-linux-musl/bin/server` is `bin/server` in that platform's package. Never packaged as such.
+pub const NATIVE_DIR: &str = "native";
+
 /// Folder and file names `pack_dir` leaves out: version control, build output, dependencies, OS litter.
 pub const EXCLUDED: &[&str] = &[".git", ".github", ".hg", ".svn", "target", "node_modules", ".DS_Store", "Thumbs.db", "desktop.ini"];
 
@@ -139,6 +147,28 @@ pub struct Package {
     pub digest: ContentDigest,
     /// What a code extension's component imports; none for declarative extensions.
     pub component: Option<Component>,
+    /// The target triple of a per-platform package (its `TARGET` file); none for a package without native programs.
+    pub target: Option<String>,
+}
+
+impl Package {
+    /// The bytes of a native program (`run = ["./bin/server"]`) for this package's platform.
+    pub fn program(&self, run: &str) -> Option<&Entry> {
+        self.files.get(&ext_manifest::program_file(run, self.target.as_deref()?))
+    }
+}
+
+/// The file name `cyx package` writes: `<id>-<version>.cyx`, or `<id>-<version>-<triple>.cyx` for one platform.
+pub fn file_name(m: &Manifest, target: Option<&str>) -> String {
+    match target {
+        Some(t) => format!("{}-{}-{t}.cyx", m.id, m.version),
+        None => format!("{}-{}.cyx", m.id, m.version),
+    }
+}
+
+/// The compressed size limit of a package: per-platform packages may be larger (registry policy, §8).
+fn size_limit(target: Option<&str>) -> u64 {
+    if target.is_some() { limits::TARGET_PACKAGE_BYTES } else { limits::PACKAGE_BYTES }
 }
 
 /// A path allowed inside a package: the manifest's portable-path rules, printable ASCII only (one spelling per name,
@@ -219,16 +249,49 @@ fn check_references(m: &Manifest, files: &BTreeMap<String, Entry>) -> Result<(),
             return Err(Error::MissingFile { field: field.into(), path: path.into() });
         }
     }
-    // A program inside the package (`run = ["bin/server"]`) must be there and be executable.
-    for p in m.permissions.run.iter().filter(|p| p.contains('/')) {
-        let p = p.trim_start_matches("./");
-        match files.get(p) {
-            None => return Err(Error::MissingFile { field: "permissions.run".into(), path: p.into() }),
-            Some(e) if !e.executable => return Err(Error::Path { path: p.into(), reason: "is in permissions.run but not executable (mode 755)".into() }),
-            Some(_) => {}
+    // A program inside the package (`run = ["./bin/server"]`) is built per platform: the package says which one, and
+    // the program for it must be there and be executable (Windows has no executable bit).
+    let target = target_of(files)?;
+    let mut programs = m.permissions.package_programs().peekable();
+    match (&target, programs.peek()) {
+        (None, Some(p)) => {
+            return Err(Error::Path {
+                path: (*p).into(),
+                reason: format!(
+                    "is a program inside the package, so the extension is packaged per platform: put it in {NATIVE_DIR}/<triple>/ and run `cyx package --target <triple>`"
+                ),
+            });
+        }
+        (Some(t), None) => {
+            return Err(Error::Path { path: TARGET.into(), reason: format!("names {t}, but permissions.run lists no program inside the package") });
+        }
+        _ => {}
+    }
+    if let Some(t) = &target {
+        for p in programs {
+            let file = ext_manifest::program_file(p, t);
+            match files.get(&file) {
+                None => return Err(Error::MissingFile { field: "permissions.run".into(), path: file }),
+                Some(e) if !e.executable && !t.contains("-windows-") => {
+                    return Err(Error::Path { path: file, reason: "is in permissions.run but not executable (mode 755)".into() });
+                }
+                Some(_) => {}
+            }
         }
     }
     Ok(())
+}
+
+/// The `TARGET` file: one known triple and a newline, nothing else.
+fn target_of(files: &BTreeMap<String, Entry>) -> Result<Option<String>, Error> {
+    let Some(e) = files.get(TARGET) else { return Ok(None) };
+    let text = std::str::from_utf8(&e.data).unwrap_or_default();
+    let triple = text.strip_suffix('\n').unwrap_or_default();
+    if !ext_manifest::is_target(triple) || e.executable {
+        let known = ext_manifest::TARGETS.join(", ");
+        return Err(Error::Path { path: TARGET.into(), reason: format!("must be one target triple and a newline, one of: {known}") });
+    }
+    Ok(Some(triple.to_string()))
 }
 
 /// Build a package from files (`CONTENTS.sha256` is added). The bytes depend only on the paths, contents and
@@ -247,8 +310,9 @@ pub fn write(entries: Vec<Entry>) -> Result<(Vec<u8>, ContentDigest), Error> {
     let mut gz = flate2::GzBuilder::new().mtime(0).operating_system(255).write(Vec::new(), flate2::Compression::best());
     std::io::Write::write_all(&mut gz, &tar).map_err(Error::Io)?;
     let bytes = gz.finish().map_err(Error::Io)?;
-    if bytes.len() as u64 > limits::PACKAGE_BYTES {
-        return Err(Error::TooLarge(format!("the package is larger than {} MiB compressed", limits::PACKAGE_BYTES >> 20)));
+    let limit = size_limit(target_of(&files)?.as_deref());
+    if bytes.len() as u64 > limit {
+        return Err(Error::TooLarge(format!("the package is larger than {} MiB compressed", limit >> 20)));
     }
     Ok((bytes, digest))
 }
@@ -277,8 +341,9 @@ fn manifest_of(files: &BTreeMap<String, Entry>) -> Result<Manifest, Error> {
 /// field is checked, and the digest is computed from the canonical form, so two archives with the same files have the
 /// same digest and no archive can carry anything the digest does not cover.
 pub fn read(bytes: &[u8]) -> Result<Package, Error> {
-    if bytes.len() as u64 > limits::PACKAGE_BYTES {
-        return Err(Error::TooLarge(format!("the package is larger than {} MiB compressed", limits::PACKAGE_BYTES >> 20)));
+    // The larger per-platform limit first; a package without a `TARGET` is held to the smaller one once it is read.
+    if bytes.len() as u64 > limits::TARGET_PACKAGE_BYTES {
+        return Err(Error::TooLarge(format!("the package is larger than {} MiB compressed", limits::TARGET_PACKAGE_BYTES >> 20)));
     }
     if !bytes.starts_with(&[0x1f, 0x8b]) {
         return Err(Error::Format("not a .cyx package (no gzip header)".into()));
@@ -323,20 +388,79 @@ pub fn read(bytes: &[u8]) -> Result<Package, Error> {
     }
     let manifest = manifest_of(&files)?;
     check_references(&manifest, &files)?;
+    let target = target_of(&files)?;
+    let limit = size_limit(target.as_deref());
+    if bytes.len() as u64 > limit {
+        return Err(Error::TooLarge(format!("the package is larger than {} MiB compressed", limit >> 20)));
+    }
     let component = component_of(&manifest, &files)?;
     let digest = ContentDigest(sha256(&canonical_tar(&entries)?));
-    Ok(Package { manifest, files, digest, component })
+    Ok(Package { manifest, files, digest, component, target })
 }
 
-/// Collect an extension folder for `write`: every regular file except `EXCLUDED` names, with its executable bit.
-/// Symlinks are refused rather than followed: a package must not depend on what a link points to on the author's disk.
+/// Collect an extension folder for `write`: every regular file except `EXCLUDED` names and the `native/` folder, with
+/// its executable bit. Symlinks are refused rather than followed: a package must not depend on what a link points to on
+/// the author's disk.
 pub fn collect_dir(root: &Path) -> Result<Vec<Entry>, Error> {
-    fn walk(root: &Path, dir: &Path, out: &mut Vec<Entry>) -> Result<(), Error> {
+    collect_dir_for(root, None)
+}
+
+/// [`collect_dir`] for one platform: with `target`, the files of `native/<target>/` join the package at their path
+/// inside that folder, and a `TARGET` file names the platform.
+pub fn collect_dir_for(root: &Path, target: Option<&str>) -> Result<Vec<Entry>, Error> {
+    let mut out = collect_tree(root, true)?;
+    if let Some(t) = target {
+        if !ext_manifest::is_target(t) {
+            return Err(Error::Path {
+                path: t.into(),
+                reason: format!("is not a target Codeyard builds for; use one of {}", ext_manifest::TARGETS.join(", ")),
+            });
+        }
+        let dir = root.join(NATIVE_DIR).join(t);
+        if !dir.is_dir() {
+            return Err(Error::MissingFile { field: "--target".into(), path: format!("{NATIVE_DIR}/{t}/") });
+        }
+        for mut e in collect_tree(&dir, false)? {
+            if out.iter().any(|o| o.path == e.path) {
+                return Err(Error::Path { path: format!("{NATIVE_DIR}/{t}/{}", e.path), reason: "is also outside native/; keep one of them".into() });
+            }
+            // Windows has no executable bit to read; a program built for Windows is one by its target.
+            e.executable |= t.contains("-windows-") && e.path.to_ascii_lowercase().ends_with(".exe");
+            out.push(e);
+        }
+        out.push(Entry { path: TARGET.into(), data: format!("{t}\n").into_bytes(), executable: false });
+    }
+    if out.len() > limits::PACKAGE_FILES {
+        return Err(Error::TooLarge(format!("the folder has more than {} files", limits::PACKAGE_FILES)));
+    }
+    Ok(out)
+}
+
+/// The target triples an extension folder has programs for (`native/<triple>/`), sorted.
+pub fn native_targets(root: &Path) -> Vec<String> {
+    let mut out: Vec<String> = std::fs::read_dir(root.join(NATIVE_DIR))
+        .map(|d| d.flatten().filter(|e| e.path().is_dir()).map(|e| e.file_name().to_string_lossy().into_owned()).collect())
+        .unwrap_or_default();
+    out.retain(|t| ext_manifest::is_target(t));
+    out.sort();
+    out
+}
+
+/// The platform to check or load an extension folder for: none without `native/`, else this machine's when the
+/// folder has it, else the first.
+pub fn folder_target(root: &Path) -> Option<String> {
+    let targets = native_targets(root);
+    let here = ext_manifest::this_target();
+    targets.iter().find(|t| Some(t.as_str()) == here).or(targets.first()).cloned()
+}
+
+fn collect_tree(root: &Path, skip_native: bool) -> Result<Vec<Entry>, Error> {
+    fn walk(root: &Path, dir: &Path, out: &mut Vec<Entry>, skip_native: bool) -> Result<(), Error> {
         let mut names: Vec<_> = std::fs::read_dir(dir).map_err(Error::Io)?.collect::<Result<_, _>>().map_err(Error::Io)?;
         names.sort_by_key(|e| e.file_name());
         for item in names {
             let name = item.file_name();
-            if EXCLUDED.iter().any(|x| name == *x) {
+            if EXCLUDED.iter().any(|x| name == *x) || (skip_native && dir == root && name == NATIVE_DIR) {
                 continue;
             }
             let path = item.path();
@@ -346,7 +470,7 @@ pub fn collect_dir(root: &Path) -> Result<Vec<Entry>, Error> {
                 return Err(Error::Path { path: rel, reason: "is a symbolic link; copy the file into the extension instead".into() });
             }
             if meta.is_dir() {
-                walk(root, &path, out)?;
+                walk(root, &path, out, skip_native)?;
             } else if meta.is_file() {
                 if meta.len() > limits::PACKAGE_FILE_BYTES {
                     return Err(Error::TooLarge(format!("'{rel}' is larger than {} MiB", limits::PACKAGE_FILE_BYTES >> 20)));
@@ -363,7 +487,7 @@ pub fn collect_dir(root: &Path) -> Result<Vec<Entry>, Error> {
         Ok(())
     }
     let mut out = Vec::new();
-    walk(root, root, &mut out)?;
+    walk(root, root, &mut out, skip_native)?;
     Ok(out)
 }
 

@@ -29,6 +29,8 @@ pub struct Publish<'a> {
     pub registry: &'a str,
     pub dry_run: bool,
     pub pre_release: bool,
+    /// The platform of an extension with native programs (`native/<triple>/`); each is published as its own package.
+    pub target: Option<&'a str>,
 }
 
 /// What the install sheet will show for this manifest: permissions in plain words, the red line, the author's reason.
@@ -40,6 +42,9 @@ pub fn sheet(m: &Manifest) -> String {
     }
     for l in lines {
         out.push_str(&format!("  • {l}\n"));
+    }
+    if m.has_native_programs() {
+        out.push_str(&format!("  It ships native programs: users type {} to install it.\n", m.id));
     }
     if let Some(h) = m.risk().headline() {
         out.push_str(&format!("  {h}\n"));
@@ -53,10 +58,16 @@ pub fn sheet(m: &Manifest) -> String {
 /// Publish the folder; the report to print.
 pub fn publish(p: &Publish, ep: &Endpoints, token: impl FnOnce() -> Result<String, String>, now: u64) -> Result<String, String> {
     let report = crate::check(p.dir)?;
-    let files = ext_pkg::collect_dir(p.dir).map_err(|e| format!("error: {e}"))?;
+    let files = ext_pkg::collect_dir_for(p.dir, p.target).map_err(|e| format!("error: {e}"))?;
     let (bytes, digest) = ext_pkg::write(files).map_err(|e| format!("error: {e}"))?;
     let m = ext_pkg::read(&bytes).map_err(|e| format!("error: {e}"))?.manifest;
     let mut notes = report.warnings;
+    if let Some(t) = p.target {
+        notes.push(format!(
+            "note: {} ships native programs: this is its package for {t}. Registries take native programs from invited publishers only, and a publisher's first one waits for a human review before it is listed",
+            m.id
+        ));
+    }
     match (p.pre_release, m.version.pre.is_some()) {
         (true, false) => {
             return Err(format!(
@@ -81,9 +92,10 @@ pub fn publish(p: &Publish, ep: &Endpoints, token: impl FnOnce() -> Result<Strin
     }
     if p.dry_run {
         out.push_str(&format!(
-            "Would publish {} {} to {} (content digest {}).\n\nThe install sheet will show:\n{}\nNothing was signed or sent.",
+            "Would publish {} {}{} to {} (content digest {}).\n\nThe install sheet will show:\n{}\nNothing was signed or sent.",
             m.id,
             m.version,
+            p.target.map(|t| format!(" for {t}")).unwrap_or_default(),
             p.registry,
             digest.hex(),
             sheet(&m)
@@ -108,6 +120,13 @@ pub fn publish(p: &Publish, ep: &Endpoints, token: impl FnOnce() -> Result<Strin
         return Err(format!("error: the registry refused {} {}: {why}", m.id, m.version));
     }
     let published: serde_json::Value = serde_json::from_slice(&res.body).map_err(|e| format!("error: the registry's answer: {e}"))?;
+    if published["review"].as_bool() == Some(true) {
+        out.push_str(&format!(
+            "Uploaded {} {} as {}. It is your first native program on this registry, so it stays unlisted until a reviewer approves it; users get it after that.",
+            m.id, m.version, signed.publisher
+        ));
+        return Ok(out);
+    }
     let available = published["available"].as_u64().unwrap_or(now);
     // The registry's clock decides; a few minutes either way is still "now".
     let when = if available <= now + 600 { "now".to_string() } else { format!("in {} hours (code waits 48 h)", (available - now).div_ceil(3600)) };

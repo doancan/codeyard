@@ -9,6 +9,9 @@
 //! yard resign CONFIG                           sign a fresh index once (for a scheduler instead of serve's timer)
 //! yard revoke CONFIG ID VERSION REASON…        stop a version on every client, with the reason users see
 //! yard immediate CONFIG ID VERSION             let clients update to an advisory fix at once
+//! yard review list CONFIG                      first native programs waiting for a reviewer
+//! yard review approve CONFIG ID VERSION        list one (and trust its publisher's later native programs)
+//! yard review reject CONFIG ID VERSION REASON… refuse one; its files are deleted
 //! ```
 
 use std::path::Path;
@@ -30,6 +33,12 @@ usage:
   yard resign CONFIG                       sign a fresh index once
   yard revoke CONFIG ID VERSION REASON…    revoke a version everywhere
   yard immediate CONFIG ID VERSION         let clients update to an advisory fix at once
+  yard review list CONFIG                  first native programs waiting for a reviewer
+  yard review approve CONFIG ID VERSION    list it; the publisher's later native programs are not held
+  yard review reject CONFIG ID VERSION REASON…
+                                           refuse it; its files are deleted, its version stays used
+
+Code and native programs are taken from the publishers listed in yard.json's \"invited\" only.
 
 Docs: docs/registry.md";
 
@@ -132,6 +141,34 @@ fn run(args: &[String]) -> Result<(), String> {
             let (id, version) = id_version(id, version)?;
             open(config)?.clear_for_immediate_update(&id, &version, http::now()).map_err(|e| e.to_string())?;
             println!("Clients may update to {id} {version} at once");
+            Ok(())
+        }
+        ["review", "list", config] => {
+            let queue = open(config)?.review_queue().map_err(|e| e.to_string())?;
+            if queue.is_empty() {
+                println!("Nothing waits for review.");
+            }
+            for w in queue {
+                println!("{} {}  published by {}  (submitted at {}, Unix time)", w.id, w.version, w.publisher, w.submitted);
+                for line in &w.permissions {
+                    println!("    • {line}");
+                }
+                for (target, path) in &w.packages {
+                    println!("    {target}: {}", path.display());
+                }
+            }
+            Ok(())
+        }
+        ["review", "approve", config, id, version] => {
+            let (id, version) = id_version(id, version)?;
+            open(config)?.approve(&id, &version, http::now()).map_err(|e| e.to_string())?;
+            println!("Approved {id} {version}: it is listed now, and its publisher's later native programs are listed without review");
+            Ok(())
+        }
+        ["review", "reject", config, id, version, reason @ ..] if !reason.is_empty() => {
+            let (id, version) = id_version(id, version)?;
+            open(config)?.reject(&id, &version, &reason.join(" ")).map_err(|e| e.to_string())?;
+            println!("Rejected {id} {version}; it will not be listed and its files are deleted");
             Ok(())
         }
         ["-h" | "--help" | "help"] => {

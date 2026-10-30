@@ -25,6 +25,8 @@ pub struct Scope {
     pub dependencies: Vec<String>,
     /// What the user turned off on the extension page, so a denial says `revoked-by-user` and names the entry.
     pub revoked: Permissions,
+    /// Native programs inside the extension's package (`run = ["./bin/server"]`), for the workspace host's platform.
+    pub programs: Option<crate::ext_programs::Programs>,
 }
 
 fn denied(permission: String, why: v::Why) -> v::Error {
@@ -90,11 +92,10 @@ impl Scope {
     }
 
     pub fn may_run(&self, program: &str) -> Result<(), v::Error> {
-        if self.permissions.run.iter().any(|p| p == program) {
-            Ok(())
-        } else {
-            Err(self.refuse("run", program, &self.revoked.run, |p| p == program, self.why(true)))
-        }
+        let same = |p: &str| {
+            p == program || (ext_manifest::is_package_program(p) && ext_manifest::package_program_path(p) == ext_manifest::package_program_path(program))
+        };
+        if self.permissions.run.iter().any(|p| same(p)) { Ok(()) } else { Err(self.refuse("run", program, &self.revoked.run, same, self.why(true))) }
     }
 
     /// A command the extension may run: its own, a dependency's, or a core command extensions may run
@@ -301,10 +302,11 @@ fn search(host: &dyn Host, scope: &Scope, q: &v::SearchQuery, sink: &dyn Sink, c
 }
 
 /// A program from `run`, resolved to an absolute path on the workspace's host, refused when it lives inside the
-/// workspace (a repository could otherwise plant `vercel` next to its files).
+/// workspace (a repository could otherwise plant `vercel` next to its files). A program inside the package runs from
+/// the copy pushed to the host, after its hash is checked there.
 fn spawn(host: &dyn Host, scope: &Scope, c: &v::Command, sink: &dyn Sink, cancel: &AtomicBool) -> Result<Completion, v::Error> {
     scope.may_run(&c.program)?;
-    let program = resolve(host, &c.program)?;
+    let program = if ext_manifest::is_package_program(&c.program) { package_program(host, scope, &c.program)? } else { resolve(host, &c.program)? };
     if scope.relative(&program).is_some() {
         return Err(v::Error::Denied(v::Denied { permission: format!("a program outside the workspace ({program} is inside it)"), why: v::Why::NotDeclared }));
     }
@@ -329,6 +331,16 @@ fn spawn(host: &dyn Host, scope: &Scope, c: &v::Command, sink: &dyn Sink, cancel
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return Ok(Completion::Exit(None)),
         }
     }
+}
+
+/// `./bin/server` → the copy of the package's program for the host's platform, pushed to the host and checked by hash
+/// there (`ext_programs::push`).
+fn package_program(host: &dyn Host, scope: &Scope, program: &str) -> Result<String, v::Error> {
+    let programs = scope.programs.as_ref().ok_or_else(|| v::Error::NotFound(format!("{program} is not in the extension's package")))?;
+    let target = crate::ext_programs::host_target(host)
+        .ok_or_else(|| v::Error::Other(format!("{} is a platform extension programs are not built for", host.label())))?;
+    let p = (programs.0)(target, program).map_err(v::Error::NotFound)?;
+    crate::ext_programs::push(host, &scope.extension, &p).map_err(v::Error::Other)
 }
 
 /// `vercel` → `/usr/local/bin/vercel` on the workspace's host: an executable on the login shell's PATH, never a builtin

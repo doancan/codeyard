@@ -13,6 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with a list of 10 000 rows (`CODEYARD_PERF_VIEWS`, `views.keystroke_frame_ms`) and a 2 MB Rust component swapped in
   place in a dev window (`CODEYARD_PERF_RELOAD`, `extensions.hot_reload_ms`), each with a fixture extension that needs
   no permission and no WebAssembly toolchain at run time. Both rows stay warn-only until a baseline has them.
+- Native programs from packages (#146): an extension's `run` may name a program inside its package (`./bin/hello`),
+  built per platform under `native/<triple>/` (static musl on Linux). `cyx package` writes one
+  `<id>-<version>-<triple>.cyx` per platform (`--target` for one; up to 128 MiB each) and `cyx publish` uploads each.
+  The registry index and `extensions.lock.jsonc` (format 4) carry every platform's digest; Codeyard installs the
+  workspace host's platform, fetches another one when a window on that platform needs it, copies the program to the
+  host with the agent install's temporary file, `sha256sum` and `mv` steps, and checks its hash before every run,
+  locally and over SSH. The consent sheet asks for the extension's id to be typed before it installs one. Yard takes
+  code and native programs only from publishers listed in `yard.json`'s `invited`, and a publisher's first native
+  program stays unlisted until a reviewer runs `yard review approve` (`yard review list | approve | reject`).
+
 - Code extensions can describe and complete: `[[hover]]` and `[[completion]]` (with optional `trigger-characters`)
   in the manifest, `request.hover` and `request.completion` in `codeyard:api` 0.1, `ctx.hover` and `ctx.completion`
   in the Rust and TypeScript SDKs, and `hover` / `completion` in both mock hosts. Their text shows in the hover popup

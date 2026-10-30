@@ -735,6 +735,15 @@ For those, the keyboard starts on *Cancel*, so Enter never installs by accident;
 that is not valid is not installed; the error says what is wrong, as the packaging tool would. A new extension
 applies at once, in every open window, without a restart.
 
+**Native programs.** Some extensions bring their own programs (a language server or a command-line tool), built for
+each platform. Their sheet has a *Native programs* section, and *Install* does nothing until you type the extension's
+id (for example `you.hello`) into the field there. The programs run on the computer that holds the workspace: this
+one, or the SSH server. Codeyard installs the package for that computer's platform, copies the program there itself
+(the server downloads nothing) and checks its SHA-256 before every run, so a copy changed on disk is replaced, never
+run. A window on another platform fetches that platform's package the first time it needs it, checked against what
+was recorded at install. Registries take native programs only from publishers they invited, after a person reviewed
+the publisher's first one.
+
 **Extensions with code.** Their commands appear in the command palette. The first one you run starts the extension in
 its own process (`codeyard-exthost`, beside Codeyard): it reaches only the files, programs
 and commands its sheet listed, and only through Codeyard, which checks every call, the same way for local and SSH

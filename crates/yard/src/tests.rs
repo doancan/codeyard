@@ -452,3 +452,92 @@ fn the_http_service_end_to_end() {
 fn the_production_pins_load() {
     Pins::from_pem(SIGSTORE_FULCIO, SIGSTORE_REKOR).unwrap();
 }
+
+const LINUX: &str = "x86_64-unknown-linux-musl";
+const MAC: &str = "aarch64-apple-darwin";
+
+impl Test {
+    /// A registry whose policy invites the publisher names `invited` to publish code and native programs.
+    fn inviting(name: &str, invited: &[&str]) -> Test {
+        let mut t = Test::new(name);
+        let path = t.dir.join("yard.json");
+        let mut cfg: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        cfg["invited"] = serde_json::json!(invited);
+        std::fs::write(&path, serde_json::to_vec_pretty(&cfg).unwrap()).unwrap();
+        t.yard = Yard::open(Config::load(&path).unwrap()).unwrap();
+        t
+    }
+
+    fn native(&self, version: &str, target: &str) -> Result<Published, Error> {
+        let bytes = ext_core::testing::native_package("you.hello", version, target);
+        let digest = ext_pkg::read(&bytes).unwrap().digest;
+        self.publish(&(bytes, digest), &github(7, 42))
+    }
+
+    fn listed(&self, version: &str) -> Option<y::Release> {
+        self.index().index.release(&ExtId::parse("you.hello").unwrap(), &Version::parse(version).unwrap()).cloned()
+    }
+}
+
+/// #146: without an invitation the registry keeps Phase 1's policy: no code, and no native programs either.
+#[test]
+fn native_programs_need_an_invitation() {
+    let t = Test::new("native-default");
+    let e = t.native("1.0.0", LINUX).unwrap_err();
+    assert!(matches!(&e, Error::Forbidden(m) if m.contains("invited publishers")), "{e:?}");
+    // Another publisher name is invited: still refused.
+    let t = Test::inviting("native-other", &["someone"]);
+    assert!(matches!(t.native("1.0.0", LINUX), Err(Error::Forbidden(_))));
+    // Data-only publishing is open to everyone as before.
+    assert!(t.publish(&package("you.theme", "1.0.0", "Theme"), &github(7, 42)).is_ok());
+}
+
+/// AC3: a publisher's first native program stays unlisted, and out of the public folder, until a reviewer approves it.
+#[test]
+fn a_first_native_program_waits_for_review() {
+    let t = Test::inviting("native-review", &["you"]);
+    let p = t.native("1.0.0", LINUX).unwrap();
+    assert!(p.review, "the first native upload is held");
+    assert!(p.available >= NOW + CODE_WAIT_SECS, "native programs are code: updates wait");
+    assert!(t.native("1.0.0", MAC).unwrap().review, "its other platform waits with it");
+    assert!(t.listed("1.0.0").is_none());
+    assert!(!t.index().index.extensions.contains_key(&ExtId::parse("you.hello").unwrap()), "an extension with nothing listed is not in the index");
+    assert!(!t.dir.join(format!("public/packages/{}.cyx", p.digest)).exists());
+    assert!(t.yard.download(&p.digest, NOW).is_err(), "a waiting package is not served");
+    // The reviewer's queue shows it with both platforms and what the install sheet will say.
+    let queue = t.yard.review_queue().unwrap();
+    assert_eq!(queue.len(), 1);
+    assert_eq!((queue[0].id.as_str(), queue[0].version.to_string()), ("you.hello", "1.0.0".to_string()));
+    assert_eq!(queue[0].packages.iter().map(|(t, _)| t.as_str()).collect::<Vec<_>>(), [MAC, LINUX]);
+    assert!(queue[0].packages.iter().all(|(_, path)| path.is_file()));
+    assert!(queue[0].permissions.iter().any(|l| l.contains("./bin/hello")), "{:?}", queue[0].permissions);
+    // Approved: listed with both platforms, served, and the queue is empty.
+    t.yard.approve(&ExtId::parse("you.hello").unwrap(), &Version::parse("1.0.0").unwrap(), NOW + 60).unwrap();
+    let r = t.listed("1.0.0").unwrap();
+    assert_eq!(r.targets.keys().map(String::as_str).collect::<Vec<_>>(), [MAC, LINUX]);
+    assert!(t.dir.join(format!("public/packages/{}.cyx", r.targets[MAC].digest)).is_file());
+    assert!(t.yard.download(&r.targets[MAC].digest, NOW).is_ok(), "each platform's package counts its downloads");
+    assert!(t.yard.review_queue().unwrap().is_empty());
+    assert!(t.yard.approve(&ExtId::parse("you.hello").unwrap(), &Version::parse("1.0.0").unwrap(), NOW).is_err());
+    // The publisher's later native programs are listed without review.
+    let next = t.native("1.1.0", LINUX).unwrap();
+    assert!(!next.review);
+    assert!(t.listed("1.1.0").is_some());
+    // A platform once published is never replaced, and a version without native programs takes none.
+    assert!(matches!(t.native("1.1.0", LINUX), Err(Error::Conflict(_))));
+}
+
+#[test]
+fn a_rejected_native_program_is_never_listed() {
+    let t = Test::inviting("native-reject", &["you"]);
+    let p = t.native("1.0.0", LINUX).unwrap();
+    let (id, v) = (ExtId::parse("you.hello").unwrap(), Version::parse("1.0.0").unwrap());
+    assert!(t.yard.reject(&id, &v, "").is_err(), "a reason is required");
+    t.yard.reject(&id, &v, "The program downloads code at run time.").unwrap();
+    assert!(t.yard.review_queue().unwrap().is_empty());
+    assert!(t.listed("1.0.0").is_none());
+    assert!(!t.dir.join(format!("review/{}.cyx", p.digest)).exists(), "its files are deleted");
+    // Its version number stays used, for every platform; the publisher is still not trusted for native programs.
+    assert!(matches!(t.native("1.0.0", MAC), Err(Error::Forbidden(_))));
+    assert!(t.native("1.0.1", LINUX).unwrap().review);
+}
