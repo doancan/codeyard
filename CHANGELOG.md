@@ -221,6 +221,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Over SSH, the terminals of a workspace file with several folders were not taken back after a restart: their session was
+  kept under the first folder while the next start reopened the workspace file. It is kept under the workspace file now.
 - A folder deleted while it was open in the file tree no longer stays there with "not found" beside it. When a
   folder's read finds it gone, the tree drops it and reads its parent again, so this also covers folders deleted
   outside Codeyard, where the watcher may report only the folder itself.
