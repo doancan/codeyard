@@ -49,6 +49,7 @@ fn check_runs_the_import_check_on_the_component() {
     std::fs::write(dir.join("Cargo.toml"), "").unwrap();
     let e = check(&dir).unwrap_err();
     assert!(e.contains("error[CY0700]: the manifest has [code] but there is no extension.wasm"), "{e}");
+    assert!(e.contains("= fix: run `cyx package` or `cyx test` first"), "{e}");
     std::fs::write(dir.join(ext_pkg::COMPONENT), ext_pkg::testing::COMPONENT).unwrap();
     check(&dir).unwrap();
     std::fs::write(dir.join(ext_pkg::COMPONENT), b"\0asm\x01\0\0\0").unwrap();

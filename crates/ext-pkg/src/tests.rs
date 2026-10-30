@@ -293,6 +293,8 @@ fn folders_are_collected_without_litter_or_links() {
     std::fs::write(dir.join(".git/objects/a"), "x").unwrap();
     std::fs::write(dir.join("node_modules/x/i.js"), "x").unwrap();
     std::fs::write(dir.join(".DS_Store"), "x").unwrap();
+    // The package `cyx package` wrote last time is not packaged again.
+    std::fs::write(dir.join("you.theme-0.1.0.cyx"), "x").unwrap();
     let files = collect_dir(&dir).unwrap();
     let paths: Vec<_> = files.iter().map(|e| e.path.as_str()).collect();
     assert_eq!(paths, vec![ext_manifest::FILE_NAME, "themes/midnight.json"]);

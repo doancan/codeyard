@@ -259,7 +259,7 @@ fn component_of(manifest: &Manifest, files: &BTreeMap<String, Entry>) -> Result<
         (Some(_), Some(wasm)) => check_component(&wasm.data, manifest).map(Some).map_err(Error::Component),
         (Some(_), None) => Err(Error::Component(vec![
             Diagnostic::new(ext_manifest::Code::BadComponent, format!("the manifest has [code] but there is no {COMPONENT}"))
-                .fix("build the extension with its SDK, which writes extension.wasm"),
+                .fix("run `cyx package` or `cyx test` first: they build extension.wasm (Rust with cargo, TypeScript with esbuild and ComponentizeJS)"),
         ])),
         (None, _) => Ok(None),
     }
@@ -328,7 +328,8 @@ pub fn read(bytes: &[u8]) -> Result<Package, Error> {
     Ok(Package { manifest, files, digest, component })
 }
 
-/// Collect an extension folder for `write`: every regular file except `EXCLUDED` names, with its executable bit.
+/// Collect an extension folder for `write`: every regular file except `EXCLUDED` names and packages (`*.cyx`, such as
+/// the one `cyx package` wrote last time), with its executable bit.
 /// Symlinks are refused rather than followed: a package must not depend on what a link points to on the author's disk.
 pub fn collect_dir(root: &Path) -> Result<Vec<Entry>, Error> {
     fn walk(root: &Path, dir: &Path, out: &mut Vec<Entry>) -> Result<(), Error> {
@@ -340,6 +341,9 @@ pub fn collect_dir(root: &Path) -> Result<Vec<Entry>, Error> {
                 continue;
             }
             let path = item.path();
+            if path.extension().is_some_and(|x| x.eq_ignore_ascii_case("cyx")) && item.file_type().is_ok_and(|t| t.is_file()) {
+                continue;
+            }
             let rel = path.strip_prefix(root).expect("walked under root").to_string_lossy().replace('\\', "/");
             let meta = std::fs::symlink_metadata(&path).map_err(Error::Io)?;
             if meta.file_type().is_symlink() {
