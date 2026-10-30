@@ -725,8 +725,8 @@ fn reload_follows_the_files_folders_order_and_settings(cx: &mut TestAppContext) 
     assert_eq!(read(&file), next, "reloading writes nothing");
 }
 
-/// AC3: the workspace file's tasks are found for the active folder and run there, after the folder and the workspace
-/// file's own folder are trusted.
+/// AC3: the workspace file's tasks are found for the active folder and run there, after one question trusts the
+/// workspace (the file's own folder and its folders).
 #[gpui::test]
 #[cfg(unix)] // `/bin/sh` and `touch`
 fn shared_tasks_run_in_the_active_folder_behind_trust(cx: &mut TestAppContext) {
@@ -738,7 +738,34 @@ fn shared_tasks_run_in_the_active_folder_behind_trust(cx: &mut TestAppContext) {
         r#"{ "folders": [ { "path": "app" } ], "tasks": { "version": "2.0.0", "tasks": [ { "label": "ws build", "command": "touch ran-here.txt" } ] } }"#,
     )
     .unwrap();
-    let config = dir("tasks-config");
+    let (wb, cx) = setup_trust_gate(cx, "tasks-config");
+    open(&wb, &file, cx);
+    wait(cx, "open", |cx| labels(&wb, cx) == ["app"]);
+    wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Tasks: Run Build Task", window, cx));
+    cx.run_until_parked();
+    assert!(cx.has_pending_prompt(), "the workspace is asked about");
+    cx.simulate_prompt_answer("Cancel");
+    cx.run_until_parked();
+    assert_eq!(wb.read_with(cx, |wb, _| wb.terminal_count()), 0, "Cancel runs nothing");
+
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Tasks: Run Build Task", window, cx));
+    cx.run_until_parked();
+    // One answer trusts the workspace: its file's folder and its folder; nothing else is asked.
+    cx.simulate_prompt_answer("Trust Workspace and Continue");
+    cx.run_until_parked();
+    assert!(!cx.has_pending_prompt(), "asked once for the whole workspace");
+    wait_secs(cx, 15, "the shared task ran in the folder", |cx| {
+        cx.executor().advance_clock(Duration::from_millis(300));
+        base.join("app/ran-here.txt").exists()
+    });
+    assert!(!base.join("ran-here.txt").exists(), "not next to the workspace file");
+}
+
+/// A window with the trust gate on and its own in-memory state.
+fn setup_trust_gate<'a>(cx: &'a mut TestAppContext, name: &str) -> (Entity<Workbench>, &'a mut VisualTestContext) {
+    let config = dir(name);
     std::fs::write(config.join("settings.jsonc"), r#"{ "security.workspaceTrust.enabled": true }"#).unwrap();
     cx.update(|cx| {
         crate::bind_keys(cx);
@@ -747,28 +774,83 @@ fn shared_tasks_run_in_the_active_folder_behind_trust(cx: &mut TestAppContext) {
     });
     let (wb, cx) = cx.add_window_view(move |window, cx| Workbench::with_state(state::State::in_memory().ok(), Some(config), window, cx));
     wb.update_in(cx, |wb, window, cx| window.focus(&wb.focus_handle(cx)));
+    (wb, cx)
+}
+
+/// A workspace with two folders and the file one level up is trusted as a whole: running its shared task asks once, by
+/// the workspace's name, and the answer covers the file's folder and both folders. A folder outside it stays untrusted.
+#[gpui::test]
+#[cfg(unix)] // `/bin/sh` and `touch`
+fn one_answer_trusts_the_whole_workspace(cx: &mut TestAppContext) {
+    let (base, file) = mono("trust-scope");
+    std::fs::create_dir_all(base.join("outside")).unwrap();
+    std::fs::write(
+        &file,
+        MONO.replace(
+            r#""unknownSection""#,
+            r#""tasks": { "version": "2.0.0", "tasks": [ { "label": "ws build", "command": "touch ran.txt", "group": "build" } ] }, "unknownSection""#,
+        ),
+    )
+    .unwrap();
+    let (wb, cx) = setup_trust_gate(cx, "trust-scope-config");
     open(&wb, &file, cx);
-    wait(cx, "open", |cx| labels(&wb, cx) == ["app"]);
+    wait(cx, "open", |cx| labels(&wb, cx) == ["Backend", "web"]);
     wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
+    let trusted = |cx: &mut VisualTestContext, p: &Path| wb.read_with(cx, |wb, cx| wb.is_trusted_root_for_test(&s(p), cx));
+    assert!(!trusted(cx, &base) && !trusted(cx, &base.join("api")) && !trusted(cx, &base.join("web")));
 
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Tasks: Run Build Task", window, cx));
     cx.run_until_parked();
-    assert!(cx.has_pending_prompt(), "the folder is asked about first");
-    cx.simulate_prompt_answer("Trust Folder and Continue");
+    cx.simulate_prompt_answer("Trust Workspace and Continue");
     cx.run_until_parked();
-    assert!(cx.has_pending_prompt(), "then the workspace file's folder, which defines the task");
-    cx.simulate_prompt_answer("Cancel");
-    cx.run_until_parked();
-    assert_eq!(wb.read_with(cx, |wb, _| wb.terminal_count()), 0, "Cancel runs nothing");
-
-    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Tasks: Run Build Task", window, cx));
-    cx.run_until_parked();
-    cx.simulate_prompt_answer("Trust Folder and Continue");
-    wait_secs(cx, 15, "the shared task ran in the folder", |cx| {
+    assert!(!cx.has_pending_prompt(), "one question for the workspace");
+    for d in [base.clone(), base.join("api"), base.join("web")] {
+        assert!(trusted(cx, &d), "{} is part of the workspace", d.display());
+    }
+    assert!(!trusted(cx, &base.join("outside")), "a folder the workspace does not list");
+    assert!(notice(&wb, cx).contains("mono.code-workspace"), "{}", notice(&wb, cx));
+    wait_secs(cx, 15, "the task ran", |cx| {
         cx.executor().advance_clock(Duration::from_millis(300));
-        base.join("app/ran-here.txt").exists()
+        base.join("api/ran.txt").exists()
     });
-    assert!(!base.join("ran-here.txt").exists(), "not next to the workspace file");
+}
+
+/// Over a connection, "Workspace: Trust This Folder" trusts the workspace on that host only: the same paths on another
+/// host stay untrusted.
+#[gpui::test]
+fn trusting_a_remote_workspace_stays_on_its_host(cx: &mut TestAppContext) {
+    let (base, file) = mono("trust-host");
+    let (wb, cx) = setup_trust_gate(cx, "trust-host-config");
+    let remote = |name: &str| -> std::sync::Arc<dyn host::Host> {
+        let (req_r, req_w) = std::io::pipe().unwrap();
+        let (resp_r, resp_w) = std::io::pipe().unwrap();
+        std::thread::spawn(move || agent::serve(req_r, resp_w));
+        std::sync::Arc::new(host::RemoteHost::from_streams(Box::new(resp_r), Box::new(req_w), format!("ssh://{name}")).unwrap())
+    };
+    let first = remote("first");
+    let root = s(&base);
+    wb.update_in(cx, |wb, window, cx| {
+        wb.attach_host(first, "first".into(), window, cx);
+        wb.set_root(root, cx);
+    });
+    let ws_path = s(&file);
+    wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(ws_path.clone(), window, cx));
+    wait(cx, "file open", |cx| wb.read_with(cx, |wb, cx| wb.active_editor_entity().is_some_and(|e| e.read(cx).path == ws_path)));
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("File: Open Active File as Workspace", window, cx));
+    wait(cx, "opened on the host", |cx| labels(&wb, cx) == ["Backend", "web"]);
+    assert!(wb.read_with(cx, |wb, _| wb.workspace_on_remote_for_test()));
+
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Workspace: Trust This Folder", window, cx));
+    let dirs = [base.clone(), base.join("api"), base.join("web")];
+    let trusted = |cx: &mut VisualTestContext, p: &Path| wb.read_with(cx, |wb, cx| wb.is_trusted_root_for_test(&s(p), cx));
+    for d in &dirs {
+        assert!(trusted(cx, d), "{} on the first host", d.display());
+    }
+    let second = remote("second");
+    wb.update_in(cx, |wb, window, cx| wb.attach_host(second, "second".into(), window, cx));
+    for d in &dirs {
+        assert!(!trusted(cx, d), "{}: same path, other host", d.display());
+    }
 }
 
 /// AC8: after a restart the named workspace, its folder order and names come back from the file.

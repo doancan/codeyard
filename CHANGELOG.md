@@ -218,9 +218,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a variable can never become more shell code, and Stop ends the processes it started.
 - The Linux agent's size budget is 1664 KB (was 1600 KB): running tasks as processes on the server needs its own
   request in the protocol.
+- In a workspace file with several folders, trust is asked once for the workspace: "Do you trust the authors of this
+  workspace?" names the workspace file, and the answer (or "Workspace: Trust This Folder" while the workspace is open)
+  trusts the file's folder and every folder it lists, on that host only. Before, the file's folder and each folder were
+  asked about one by one.
 
 ### Fixed
 
+- A debug configuration with `"stopOnEntry": true` run with lldb-dap said "Paused on exception: signal SIGSTOP": the
+  adapter reports the stop on entry as a signal. The first stop of such a session now reads "Paused on entry"; a
+  SIGSTOP later on is still reported as an exception.
+- A task stopped with "Tasks: Terminate Task" was reported as an error ("Task 'watch': cancelled"). A stop the user
+  asked for is reported as information now; a failed task is still an error.
 - A workspace file's debug configurations understand `${workspaceFolder:name}` and `${workspaceFolderBasename:name}`, as
   its tasks already did. Before, the program path kept the variable as written and debugging failed to start with
   "Expected process to be stopped".
