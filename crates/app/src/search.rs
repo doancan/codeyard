@@ -573,6 +573,42 @@ impl SearchPanel {
         }
     }
 
+    /// For assistive technology: the status line, at most `max` rows (file, or match with its position) and the row
+    /// count. A match row's key is (path, line, column): it opens only while that match is still a result.
+    pub(crate) fn access_rows(&self, max: usize) -> (String, Vec<(String, Option<(String, u32, u32)>)>, usize) {
+        let status = match &self.status {
+            Status::Idle => crate::i18n::t("Type a query and press Enter to search.").to_string(),
+            Status::Searching => crate::i18n::t("Searching…").to_string(),
+            Status::Done { files, matches, .. } => crate::i18n::tn("{0} result in {1} files", "{0} results in {1} files", *matches as usize, &[files]),
+            Status::Failed(e) => e.to_string(),
+        };
+        let rows = self
+            .rows
+            .iter()
+            .take(max)
+            .filter_map(|row| match *row {
+                Row::File(fi) => self.results.get(fi).map(|f| (format!("{} ({})", f.path, f.matches.len()), None)),
+                Row::Match(fi, mi) => {
+                    let f = self.results.get(fi)?;
+                    let m = f.matches.get(mi)?;
+                    Some((format!("{}: {}", m.line, m.preview.trim()), Some((f.path.clone(), m.line, m.column))))
+                }
+            })
+            .collect();
+        (status, rows, self.rows.len())
+    }
+
+    pub(crate) fn open_access_row(&mut self, key: &(String, u32, u32), cx: &mut Context<Self>) -> bool {
+        let found =
+            self.results.iter().enumerate().find_map(|(fi, f)| {
+                (f.path == key.0).then(|| f.matches.iter().position(|m| m.line == key.1 && m.column == key.2).map(|mi| (fi, mi))).flatten()
+            });
+        if let Some((fi, mi)) = found {
+            self.open(fi, mi, cx);
+        }
+        found.is_some()
+    }
+
     fn open(&mut self, fi: usize, mi: usize, cx: &mut Context<Self>) {
         let Some(f) = self.results.get(fi).filter(|_| self.root.is_some()) else { return };
         let m = &f.matches[mi];

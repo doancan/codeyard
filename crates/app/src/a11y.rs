@@ -242,6 +242,8 @@ mod ext_views_access;
 mod ids;
 #[path = "a11y_inspector.rs"]
 mod inspector_access;
+#[path = "a11y_problems.rs"]
+mod problems_access;
 #[path = "a11y_scm.rs"]
 mod scm_access;
 #[path = "a11y_search_editor.rs"]
@@ -278,6 +280,7 @@ pub struct Snapshot {
     pub completion: Option<ListSnap>,
     pub terminal: Option<TerminalSnap>,
     pub(crate) scm: Option<ScmSnap>,
+    pub(crate) views: problems_access::ViewsSnap,
     pub(crate) services: Option<crate::language_services_page::AccessView>,
     pub(crate) exts: Option<ext_access::ExtSnap>,
     pub(crate) ext_page: Option<ext_access::ExtPageSnap>,
@@ -465,6 +468,7 @@ impl Snapshot {
             scm.append_tree(&mut nodes);
             kids.push(SCM);
         }
+        self.views.append_tree(&mut nodes, &mut kids);
 
         if let Some(view) = &self.exts {
             ext_access::append_tree(view, &mut nodes);
@@ -740,6 +744,7 @@ impl Snapshot {
             _ if self.search_editor.as_ref().and_then(SearchEdSnap::focus_node).is_some() => {
                 self.search_editor.as_ref().and_then(SearchEdSnap::focus_node).expect("focused search editor")
             }
+            _ if self.views.focus_node().is_some() => self.views.focus_node().expect("focused view"),
             FocusSnap::Picker if self.picker.is_some() => PICKER_INPUT,
             FocusSnap::Find(0) if self.find.is_some() => FIND_QUERY,
             FocusSnap::Find(_) if self.find.as_ref().is_some_and(|f| f.replacement.is_some()) => FIND_REPLACE,
@@ -940,6 +945,7 @@ impl Workbench {
             completion,
             terminal,
             scm,
+            views: self.a11y_views(window, cx),
             exts,
             ext_page: self.a11y_extension_page(),
             inspector: self.a11y_inspector(),
@@ -964,6 +970,10 @@ impl Workbench {
             return;
         }
         if self.a11y_scm_action(req, last, window, cx) {
+            cx.notify();
+            return;
+        }
+        if self.a11y_views_action(req, last, window, cx) {
             cx.notify();
             return;
         }
@@ -1311,6 +1321,7 @@ mod tests {
             completion: None,
             terminal: None,
             scm: None,
+            views: Default::default(),
             search_editor: None,
             search_tabs: Vec::new(),
             term_tabs: Vec::new(),

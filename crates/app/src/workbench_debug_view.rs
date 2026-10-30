@@ -48,7 +48,7 @@ const SECTIONS: [(&str, &str, f32); 4] = [
 
 /// A row of Variables or Watch.
 #[derive(Clone, Debug, PartialEq)]
-pub(super) struct VarRow {
+pub(in crate::workbench) struct VarRow {
     pub depth: usize,
     pub name: String,
     pub value: String,
@@ -65,7 +65,7 @@ pub(super) struct VarRow {
 }
 
 /// Scopes and their open children, depth first (depth capped like the old panel).
-pub(super) fn variable_rows(d: &DebugState) -> Vec<VarRow> {
+pub(in crate::workbench) fn variable_rows(d: &DebugState) -> Vec<VarRow> {
     fn walk(d: &DebugState, out: &mut Vec<VarRow>, reference: i64, depth: usize) {
         if depth >= 8 || !d.expanded.contains(&reference) {
             return;
@@ -113,7 +113,7 @@ pub(super) fn variable_rows(d: &DebugState) -> Vec<VarRow> {
 
 /// A row of Call Stack.
 #[derive(Clone, Debug, PartialEq)]
-pub(super) enum StackRow {
+pub(in crate::workbench) enum StackRow {
     /// Shown when there is more than one session.
     Session {
         id: u64,
@@ -137,7 +137,7 @@ pub(super) enum StackRow {
     Note(String),
 }
 
-pub(super) fn stack_rows(sessions: &[DebugState], current: Option<u64>) -> Vec<StackRow> {
+pub(in crate::workbench) fn stack_rows(sessions: &[DebugState], current: Option<u64>) -> Vec<StackRow> {
     let mut out = Vec::new();
     let many = sessions.len() > 1;
     for d in sessions {
@@ -186,7 +186,7 @@ fn frame_rows(d: &DebugState) -> impl Iterator<Item = StackRow> + '_ {
 }
 
 /// Short status of a session.
-pub(super) fn status_text(s: &DebugStatus) -> String {
+pub(in crate::workbench) fn status_text(s: &DebugStatus) -> String {
     match s {
         DebugStatus::Starting => crate::i18n::t("starting").into(),
         DebugStatus::Running => crate::i18n::t("running").into(),

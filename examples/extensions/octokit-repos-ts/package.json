@@ -1,0 +1,19 @@
+{
+  "name": "octokit-repos-ts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"test/*.test.ts\"",
+    "check": "tsc"
+  },
+  "dependencies": {
+    "@octokit/core": "7.0.8",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@codeyard/extension": "file:../../../sdk/typescript",
+    "@types/node": "24.19.2",
+    "typescript": "6.0.3"
+  }
+}

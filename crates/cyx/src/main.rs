@@ -1,7 +1,7 @@
 //! `cyx`: the one command extension authors need.
 //!
 //! ```text
-//! cyx new <theme|snippets|keymap|language|language-server|command|view> <name> [--publisher NAME] [--sdk PATH]
+//! cyx new <theme|snippets|keymap|language|language-server|command|view> <name> [--lang ts] [--publisher NAME] [--sdk PATH]
 //! cyx dev [FOLDER] [-- CODEYARD ARGS…]   run Codeyard with the extension loaded from FOLDER; it reloads on save
 //! cyx check [FOLDER]                     every problem with its file, line and fix
 //! cyx package [FOLDER] [-o FILE]         build the code (build.rs), then a reproducible .cyx
@@ -23,6 +23,8 @@ mod oidc;
 mod publish;
 mod scaffold;
 mod sigstore;
+mod sourcemap;
+mod typescript;
 mod vscode;
 mod yard;
 
@@ -38,8 +40,9 @@ const HELP: &str = "cyx: build Codeyard extensions
 
 usage:
   cyx new <kind> <name> [--publisher NAME]   start an extension (kind: theme, snippets, keymap, language,
-                                             language-server, command, view; --sdk PATH takes the Rust SDK from a
-                                             Codeyard checkout)
+                                             language-server, command, view; command and view are Rust, or
+                                             TypeScript with --lang ts; --sdk PATH takes the SDK from a Codeyard
+                                             checkout)
   cyx dev [FOLDER] [-- CODEYARD ARGS…]       run Codeyard with it loaded; it reloads when you save
   cyx check [FOLDER]                         list every problem with its file, line and fix
   cyx package [FOLDER] [-o FILE]             build the code, then write a .cyx to install or publish
@@ -81,11 +84,20 @@ fn run(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         "new" => {
-            let (kind, name, publisher, sdk) = parse_new(rest)?;
+            let (kind, name, publisher, sdk, lang) = parse_new(rest)?;
             let dir = PathBuf::from(&name);
-            scaffold::create_with(&dir, kind, &name, &publisher, sdk.as_deref())?;
-            let next = if kind.is_code() { "cargo test\n  cyx test\n  cyx dev" } else { "cyx dev" };
-            println!("Created {}/ ({} extension, id {publisher}.{name}).\n\nNext:\n  cd {name}\n  {next}", name, kind.word());
+            scaffold::create_in(&dir, kind, &name, &publisher, sdk.as_deref(), lang)?;
+            let (word, next) = match (kind.is_code(), lang) {
+                (false, _) => (kind.word().to_string(), "cyx dev"),
+                (true, scaffold::Lang::Rust) => (format!("Rust {}", kind.word()), "cargo test\n  cyx test\n  cyx dev"),
+                (true, scaffold::Lang::TypeScript) => (format!("TypeScript {}", kind.word()), "npm install\n  npm test\n  cyx test\n  cyx dev"),
+            };
+            println!("Created {}/ ({word} extension, id {publisher}.{name}).\n\nNext:\n  cd {name}\n  {next}", name);
+            if lang == scaffold::Lang::TypeScript && sdk.is_none() {
+                println!(
+                    "\n@codeyard/extension is pre-release and not on npm yet: until it is, `npm install` fails. Pass --sdk with a\nCodeyard checkout to use its sdk/typescript; `cyx test` and `cyx package` work either way."
+                );
+            }
             Ok(())
         }
         "test" => {
@@ -234,7 +246,7 @@ pub enum Kind {
     Keymap,
     Language,
     LanguageServer,
-    /// Rust code extensions.
+    /// Code extensions, in Rust or TypeScript.
     Command,
     View,
 }
@@ -260,8 +272,8 @@ impl Kind {
             Kind::Keymap => "keymap",
             Kind::Language => "language",
             Kind::LanguageServer => "language server",
-            Kind::Command => "Rust command",
-            Kind::View => "Rust view",
+            Kind::Command => "command",
+            Kind::View => "view",
         }
     }
 
@@ -270,20 +282,29 @@ impl Kind {
     }
 }
 
-fn parse_new(rest: &[String]) -> Result<(Kind, String, String, Option<String>), String> {
-    let usage = "usage: cyx new <theme|snippets|keymap|language|language-server|command|view> <name> [--publisher NAME] [--sdk PATH]";
+type NewArgs = (Kind, String, String, Option<String>, scaffold::Lang);
+
+fn parse_new(rest: &[String]) -> Result<NewArgs, String> {
+    let usage = "usage: cyx new <theme|snippets|keymap|language|language-server|command|view> <name> [--lang rust|ts] [--publisher NAME] [--sdk PATH]";
     let mut positional = Vec::new();
-    let (mut publisher, mut sdk) = (None, None);
+    let (mut publisher, mut sdk, mut lang) = (None, None, scaffold::Lang::Rust);
     let mut it = rest.iter();
     while let Some(a) = it.next() {
         match a.as_str() {
             "--publisher" => publisher = Some(it.next().ok_or(usage)?.clone()),
             "--sdk" => sdk = Some(it.next().ok_or(usage)?.clone()),
+            "--lang" => {
+                let l = it.next().ok_or(usage)?;
+                lang = scaffold::Lang::parse(l).ok_or_else(|| format!("cyx: unknown language '{l}' (rust or ts)\n{usage}"))?;
+            }
             _ => positional.push(a.clone()),
         }
     }
     let [kind, name] = positional.as_slice() else { return Err(usage.into()) };
     let kind = Kind::parse(kind).ok_or_else(|| format!("cyx: unknown kind '{kind}'\n{usage}"))?;
+    if lang != scaffold::Lang::Rust && !kind.is_code() {
+        return Err(format!("error: --lang is for code extensions (command, view); a {} has no code", kind.word()));
+    }
     ext_manifest::check_id_part(name).map_err(|e| format!("error: the name '{name}' {e}\n   = fix: use lowercase letters, digits and -, like my-theme"))?;
     let publisher = publisher.unwrap_or_else(default_publisher);
     ext_manifest::check_id_part(&publisher)
@@ -291,7 +312,7 @@ fn parse_new(rest: &[String]) -> Result<(Kind, String, String, Option<String>), 
     if Path::new(name).exists() {
         return Err(format!("error: {name}/ already exists\n   = fix: pick another name or remove the folder"));
     }
-    Ok((kind, name.clone(), publisher, sdk))
+    Ok((kind, name.clone(), publisher, sdk, lang))
 }
 
 /// The publisher part of new ids: `git config user.name` made into an id, or `me`.

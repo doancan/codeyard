@@ -20,6 +20,66 @@ The tree, in the order a screen reader walks it:
   a correctly labeled/enabled commit button, change groups with expand/collapse buttons, file diff buttons and
   Stage/Unstage buttons. Operation errors are assertive live regions; successful results are polite. The message
   field's real focus is exposed. The graph, worktrees and sync controls are not exposed yet.
+- While the Problems panel is open, a `List` labeled with the number of problems: a `Heading` per file and a `ListItem`
+  per problem ("Error: …", with file, line and column as its description) or related location, each with `Click` to open
+  it. At most 2,000 rows are exposed. With nothing to show, a polite `Status` says "No problems.". An activation from an
+  outdated tree opens nothing unless the same row is still at the same place.
+- While the bottom panel is open, a `TabList` with its tabs (Problems, Output, Debug Console while debugging, Ports,
+  Terminal), the selected one marked and counts as descriptions; `Click` switches tabs. While Output is shown, a polite
+  `Log` holds its last 400 lines.
+- While the Search side bar is visible, a polite `Status` with its result line (the same words as on screen) and a `List`
+  of up to 500 rows: a `Heading` per file and a `ListItem` per match (`line: text`). `Click` opens the match; it is
+  found by file, line and column, so an activation after the results changed opens it only if it is still a result.
+- While the Ports tab of the bottom panel is shown, a `List` "Ports": the `TextInput` "Forward a port:" (`Focus`), and a
+  `ListItem` per row ("Port 8000, label"; the forwarded address or the state as its value; process and origin as its
+  description) with the row's buttons: Open in Browser, Copy Address, Stop Forwarding, or Forward Port for a port that is
+  only listening. At most 500 rows. Without an SSH connection or with nothing listening, a polite `Status` says so. A
+  button acts only while the same server port still shows the same forward (and, for Open and Copy, the same address).
+- The Settings page in front is a `Group`: its `SearchInput` (`Focus`, `SetValue`), a `TabList` of categories with
+  their counts (`Click` selects, as on screen), and a `Group` named like the list's heading with up to 256 settings:
+  title as label, description (with where the value comes from and a rejected value's error, marked invalid) and the
+  value as a `CheckBox` (toggled), a `RadioGroup` of `RadioButton`s, a `TextInput` (`Focus`; `SetValue` is checked
+  and written as Enter in the field is) or the theme `Button`. A changed setting adds its Reset button; the buttons
+  "Open settings.jsonc", "Keyboard Shortcuts" and "File icon theme…" follow. Actions send the page's own events, so
+  writing is the pointer's path; a switch from an outdated tree that showed another state, a setting no longer on the
+  page or a closed or reopened page changes nothing. With no rows, a polite `Status` says why.
+- The Keyboard Shortcuts page in front is a `Group` with its `SearchInput` and a `List` ("{n} commands") of up to
+  2,000 rows: command as label, its key (or "No shortcut") as description, set position. `Click` runs the command as a
+  click on the row does, only while the page still lists it. The page is read-only otherwise: keys are assigned in the
+  "Preferences: Open Keyboard Shortcuts" picker, which is exposed as a picker.
+- While Run and Debug is visible, a `Group` "Run and Debug": the "Start Debugging (F5)" `Button` (the configuration it
+  starts as description), a `RadioGroup` of the launch configurations (`Click` selects, as the selector's menu does),
+  "Open Launch Configuration", a polite `Status` with the current session and its state ("app: paused on breakpoint",
+  or "No debug session."), a `Tree` "Variables" (name as label, value as value, type as description, level for the
+  nesting, `Expand`/`Collapse`/`Click` on a value with children, `Click` on "… n more"), a `List` "Watch" (expression
+  and value, a Remove Expression button each) with "Add Expression…", a `Tree` "Call Stack" (sessions with their state
+  when there are several, threads, frames with their place; the current ones selected; `Click` makes current, as a
+  click on the row does) and a `List` "Breakpoints" of `CheckBox`es ("main.rs, line 3" or "name()", checked while
+  enabled, condition and binding failure as description, a Remove Breakpoint button each), then "Add Function
+  Breakpoint…" and "Activate/Deactivate Breakpoints". At most 2,000 variables, frames and breakpoints. While a session
+  is live (whichever view is shown), a `Toolbar` "Debug toolbar" with the floating toolbar's buttons: Continue or
+  Pause, Step Over, Step Into, Step Out (disabled while not paused), Restart and Stop. Every action calls what the
+  pointer calls. A toolbar button acts only while the session it showed is still the current one; a variable, frame,
+  thread or breakpoint acts only while it is still listed as the tree showed it (an outdated toggle is not repeated);
+  Start starts only the configuration the tree showed.
+- While Testing is visible, a `Group` "Testing": Run All Tests (Stop while a run is going), Run Failed Tests, Refresh
+  Tests, the `Switch` "Show Only Failed Tests", a polite `Status` with the view's summary ("1/2 passed · 1 failed") or
+  why there are no tests, and a `Tree` of up to 5,000 rows: files (name, outcome as value, folder and test count as
+  description, `Expand`/`Collapse`/`Click`, a Run Tests in File button), tests (outcome and time as value, Run Test
+  and, except JavaScript, Debug Test buttons; `Click` opens the test) and failure lines (`Click` opens the failure).
+  Rows are found again by file and test id, so a test that is gone or renamed runs and opens nothing. Running and
+  debugging go through the pointer's path, with the same Workspace Trust prompt.
+- While Remote Explorer is visible, a `Tree` "Remote Explorer" of up to 2,000 rows: groups (SSH Hosts, Containers,
+  WSL Targets; expandable), hosts (`user@host` as description, the connection state as value: Connected,
+  Connecting…, the failure, Connected before, Not connected yet; Connect in Current Window or Open Folder…, Connect in
+  New Window and, while connected, Disconnect buttons), recent folders (`Click` opens; the current one selected),
+  the forwarded ports. A host's buttons act only while the same host is listed in the same connected state.
+- While a context menu is open (row, tab, editor, application and Manage menus), a `Menu` "Context menu" of
+  `MenuItem`s (a `MenuItemCheckBox` for a toggle or choice, toggled when checked): label, shortcut as description,
+  disabled items marked disabled, submenus marked as having a popup, set position. The highlighted item, else the
+  menu, has the focus. `Click` chooses the item through the menu itself, exactly as a click on it does (the menu
+  closes, focus returns, the command runs); it acts only on the same menu with the same item at that place. Escape
+  is unchanged.
 - While Extensions is visible, a `Group` with a `TabList` (Installed, Market), a `SearchInput` that controls the list
   and points at the highlighted row as its active descendant, a polite live `Status` that says how many extensions
   match (an `Alert` when the list cannot be read), and a `ListBox` of the rows (name; version, id and description).
@@ -141,11 +201,15 @@ macOS. The CPU cost of the 250 ms snapshot loop has not been measured.
   file offsets in long files. Primary selection only; no multi-cursor, folding, wrapped lines, RTL or CRLF handling.
 - The terminal exposes the screen only, not the scrollback, and cannot be written to from the tree (typing goes through
   the keyboard as usual).
-- Not exposed: the search sidebar (its results can be opened in a Search Editor), debug, testing and remote sidebars, an installed extension's page and the consent sheet, the Source Control graph, worktrees and sync controls, the bottom
-  panel's other views (problems, output, ports), hover and signature popups, the Settings and Keyboard Shortcuts pages,
-  context menus, and dialogs other than the update dialog. Only the tabs of the focused editor group are listed, and
+- Not exposed: an installed extension's page and the consent sheet, the Source Control graph, worktrees and sync
+  controls, hover and signature popups, the Ports rows' "…" menu (label, local port, protocol, retry), the bounds of
+  Settings, Keyboard Shortcuts, Ports, Run and Debug, Testing and Remote Explorer rows and of menu items, the Run and
+  Debug view's data breakpoints, row menus (Set Value, Copy, Edit Condition, Restart Frame: reachable through the
+  context menu only by pointer), opening a breakpoint's place, the Testing filter field, the Remote Explorer's Add,
+  SSH config and Refresh buttons and a host's "…" menu, the Debug Console, and dialogs other than the update dialog. Only the tabs of the focused editor group are listed, and
   diff, large-file and page tabs are not.
-- No scroll actions, no `Blur`, no explicit expand/collapse action (Click toggles).
+- No scroll actions, no `Blur`. Explicit `Expand`/`Collapse` only in the Run and Debug, Testing and Remote Explorer
+  trees (elsewhere Click toggles).
 - The update window on macOS has no adapter of its own.
 - Linux (AT-SPI) is not implemented: it needs bounds, window events and an async D-Bus runtime.
 - Interface scale (`ui.scale`, zoom) is applied by GPUI at the window: the bounds reported to AccessKit are logical

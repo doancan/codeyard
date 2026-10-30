@@ -599,7 +599,7 @@ type NavPos = (String, u32, u32);
 const MAX_TERMINALS: usize = 8;
 
 /// What the bottom panel shows.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Bottom {
     Terminal,
     Problems,

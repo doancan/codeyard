@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The Run and Debug, Testing and Remote Explorer views and open context menus are available to screen readers:
+  configurations and Start, the session's state, variables (expandable), watches, call stack and breakpoints with
+  their enabled state, the debug toolbar's buttons; test files and tests with their outcome and Run and Debug Test;
+  hosts with their connection state and Connect and Disconnect; menu items with their shortcut and disabled state.
+  Every action goes through the pointer's path, and an action from an outdated tree does not reach another session,
+  test, host or menu.
+- The Search side bar's results, the bottom panel's tabs and the Output text are available to screen readers.
+- The Settings page, the Keyboard Shortcuts page and the Ports panel are available to screen readers: settings with
+  their values, switches, options and fields (changed and checked as with the pointer), commands with their keys, and
+  forwarded ports with their state and Open in Browser, Copy Address, Stop Forwarding and Forward Port buttons. An
+  action from an outdated tree does not reach another setting, command or port.
+- The Problems panel is available to screen readers: each problem with its severity, file, line and column, opened by
+  activating it, and a spoken "No problems." when there are none.
 - Accounts for extensions: `auth.session` and `auth.fetch` with the built-in GitHub provider (the GitHub CLI sign-in
   Codeyard already uses) or an `[[oauth]]` provider from the manifest (browser sign-in with PKCE through
   `codeyard://ext/<id>/callback`, refresh tokens). The first use asks in a system dialog that names the publisher and
@@ -46,6 +59,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The extension API `codeyard:api` 0.1.0 (docs/extensions/reference/api.md) and its import check: `cyx check`, the
   registry and the installer refuse a code extension whose `extension.wasm` imports an interface its manifest has no
   permission for, with the line to add.
+- TypeScript code extensions (docs/extensions/typescript.md): `@codeyard/extension` (`sdk/typescript`) with the same
+  API as the Rust SDK, every call returning a Promise, and a global `fetch` mapped to the host's `net` with streamed
+  bodies, so npm packages such as Octokit and zod work once bundled. `cyx package`, `cyx test` and `cyx dev` build a
+  `.ts`/`.js` entry with esbuild and ComponentizeJS, which `cyx` installs at pinned versions in its cache; Node.js is
+  the only requirement. A Node.js built-in import fails the build at its line. `cyx test` shows TypeScript files and
+  lines in stack traces. `@codeyard/extension/testing` is the mock host for `npm test`. `cyx new command|view --lang
+  ts` and three examples in `examples/extensions/`.
+- `codeyard-exthost --compile --cache FILE` reuses Cranelift's compiled functions from the last compile; `cyx test`
+  uses it, and a rebuilt TypeScript extension compiles in about half the time.
 - Tasks run as their task file describes them, locally and over SSH: process tasks keep each argument as written, shell
   tasks quote for their shell, `dependsOn` runs in parallel or in sequence with a shared dependency once, `promptString`
   and `pickString` inputs are asked first, background tasks release their dependents when their `endsPattern` matches,
@@ -286,6 +308,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The extension host's idle memory for a TypeScript extension drops from 54 MB to 22 MB on macOS: it hashes the
+  compiled code in pieces and copies the code to executable memory without a heap buffer, so 32 MB of freed memory no
+  longer stays with the allocator.
 - The divider between editor groups no longer jumps away from the pointer when the interface scale or the window size
   changes while it is being dragged.
 - The publish workflow that `cyx new` writes pins `actions/checkout` and the Codeyard publish action to commit SHAs. It

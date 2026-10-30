@@ -179,10 +179,13 @@ never waits on I/O and providers stay responsive; the SDKs turn tickets into asy
 extension's package carries its component as `extension.wasm`.
 
 - **Rust:** `codeyard-extension`, target `wasm32-wasip2`, plain cargo.
-- **TypeScript:** `@codeyard/extension`, componentized with ComponentizeJS (StarlingMonkey). All calls return
-  Promises. Global `fetch` is provided and mapped to `net`, including streamed response bodies. Pure-JS npm
-  packages that use `fetch` work (Octokit, zod); Node built-ins (`fs`, `child_process`, `net`) do not.
-  Source maps are applied to traces in the Inspector.
+- **TypeScript:** `@codeyard/extension` (`sdk/typescript`), bundled with esbuild and componentized with
+  ComponentizeJS (StarlingMonkey) by `cyx`, which installs both at pinned versions in its cache: Node.js is the
+  only requirement. All calls return Promises. Global `fetch` is provided and mapped to `net`, including streamed
+  response bodies. Pure-JS npm packages that use `fetch` work (Octokit, zod); Node built-ins (`fs`,
+  `child_process`, `net`) fail the build at the import. A ComponentizeJS component imports every interface of its
+  world, so `cyx` builds against the world narrowed to what the manifest grants, and the SDK refuses a call to
+  anything else with the fix. Source maps are applied to traces in `cyx test`, and packaged for the Inspector.
 - **No permission needed for:** log, notices, quick-pick, input box, progress (all show the publisher), the
   extension's own views, status items, storage and settings, `env` (version, language, theme kind, platform),
   commands of dependencies, and `open-external` for `https:` URLs from a user action (command or link click).

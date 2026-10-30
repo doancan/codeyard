@@ -26,18 +26,18 @@ pub(super) struct TestingState {
     pub(super) files: Vec<TestFile>,
     pub(super) results: testexp::Results,
     /// Folder the files were found in.
-    root: Option<String>,
+    pub(super) root: Option<String>,
     js_runner: Option<&'static str>,
     /// Files shown open (they start closed; a run opens the ones with failures).
-    expanded: HashSet<String>,
-    only_failed: bool,
-    filter: Option<Entity<TextField>>,
-    scanning: bool,
+    pub(super) expanded: HashSet<String>,
+    pub(super) only_failed: bool,
+    pub(super) filter: Option<Entity<TextField>>,
+    pub(super) scanning: bool,
     /// The running process, to stop it.
     running: Option<(Arc<dyn Host>, u32)>,
     /// Results from before the run, put back for tests the run did not report (or did not reach).
     before: testexp::Results,
-    run: Option<gpui::Task<()>>,
+    pub(super) run: Option<gpui::Task<()>>,
     output: Option<Entity<TerminalView>>,
     scroll: gpui::UniformListScrollHandle,
 }
@@ -323,7 +323,7 @@ impl Workbench {
     }
 
     /// Runs one file's tests, or one test.
-    fn run_test_item(&mut self, file: usize, test: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn run_test_item(&mut self, file: usize, test: Option<usize>, window: &mut Window, cx: &mut Context<Self>) {
         let job = self.jobs.tests.files.get(file).and_then(|f| testexp::job_for(f, test));
         self.run_test_jobs(job.into_iter().collect(), window, cx);
     }
@@ -353,7 +353,7 @@ impl Workbench {
 
     /// Starts a test under the debugger. Building a Rust test runs the project's build scripts, so trust is asked for
     /// the test's folder before anything runs.
-    fn debug_test(&mut self, file: TestFile, test: TestItem, root: String, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn debug_test(&mut self, file: TestFile, test: TestItem, root: String, window: &mut Window, cx: &mut Context<Self>) {
         self.require_trust_for(Some(root.clone()), window, cx, move |this, window, cx| this.debug_test_trusted(file, test, root, window, cx));
     }
 
@@ -440,7 +440,7 @@ impl Workbench {
     }
 
     /// Opens where a test is defined, or where it failed when the runner said.
-    fn open_test(&mut self, file: usize, test: usize, at_failure: bool, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn open_test(&mut self, file: usize, test: usize, at_failure: bool, window: &mut Window, cx: &mut Context<Self>) {
         let t = &self.jobs.tests;
         let (Some(root), Some(f)) = (t.root.clone(), t.files.get(file)) else { return };
         let Some(item) = f.tests.get(test) else { return };

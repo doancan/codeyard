@@ -3275,6 +3275,26 @@ Terminal: Move Terminal Back to Panel	Terminal: Terminali Panele Geri Taşı
 Terminal: Move Terminal into Editor Area	Terminal: Terminali Düzenleyici Alanına Taşı
 Previous session ended; started a new shell	Önceki oturum sona erdi; yeni bir kabuk başlatıldı
 {} (terminal)	{} (terminal sekmesi)
+# ---- Problems accessibility ----
+Information	Bilgi
+Problems: {}	Sorunlar: {}
+{0}, line {1}	{0}, satır {1}
+{0}, line {1}, column {2}	{0}, satır {1}, sütun {2}
+{0}, problems: {1}	{0}, sorun: {1}
+Bottom panel	Alt panel
+
+# ---- Settings, Keyboard Shortcuts and Ports accessibility ----
+Categories	Kategoriler
+No shortcut	Kısayol yok
+Not forwarded	Yönlendirilmedi
+Port {0}, {1}	Bağlantı noktası {0}, {1}
+Port {}	Bağlantı noktası {}
+Context menu	Bağlam menüsü
+Debug toolbar	Hata ayıklama araç çubuğu
+not run	çalıştırılmadı
+passed	başarılı
+skipped	atlandı
+{} test|{} tests	{} test
 # ---- Terminal restore ----
 Lines of each terminal's history kept for the next start, as plain text on this computer (0: none)	Her terminalin geçmişinden bir sonraki açılış için bu bilgisayarda düz metin olarak saklanan satır sayısı (0: hiç)
 Saved terminal history cleared	Kaydedilen terminal geçmişi temizlendi

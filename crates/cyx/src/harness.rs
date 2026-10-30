@@ -60,7 +60,16 @@ pub fn run(dir: &Path, manifest: &Manifest, exthost: &Path) -> Result<Report, St
     std::fs::create_dir_all(work.join("data")).map_err(|e| format!("error: {}: {e}", work.display()))?;
     let result = run_in(&work, dir, manifest, exthost, &wasm, component.interfaces);
     let _ = std::fs::remove_dir_all(&work);
-    result
+    // A TypeScript extension's stack traces name its bundle; show the .ts file and line instead.
+    let map = manifest.code.as_ref().filter(|c| c.language != ext_manifest::CodeLanguage::Rust).and_then(|_| crate::sourcemap::load(dir));
+    result.map(|mut report| {
+        if let Some(map) = map {
+            let apply = |s: &mut String| *s = map.apply(crate::typescript::BUNDLE, s);
+            report.lines.iter_mut().for_each(apply);
+            report.failures.iter_mut().for_each(apply);
+        }
+        report
+    })
 }
 
 fn run_in(work: &Path, dir: &Path, manifest: &Manifest, exthost: &Path, wasm: &[u8], granted: Vec<String>) -> Result<Report, String> {
@@ -155,8 +164,16 @@ fn fix(d: &Denied) -> String {
 }
 
 fn compile(exthost: &Path, wasm: &[u8]) -> Result<Vec<u8>, String> {
-    let mut c = Command::new(exthost)
-        .arg("--compile")
+    let mut cmd = Command::new(exthost);
+    cmd.arg("--compile");
+    // Cranelift's incremental cache: a rebuilt extension recompiles only what changed (a TypeScript one embeds the
+    // same JavaScript engine every time, so a second run compiles in about half the time).
+    if let Ok(dir) = crate::typescript::cache_dir()
+        && std::fs::create_dir_all(&dir).is_ok()
+    {
+        cmd.arg("--cache").arg(dir.join("exthost-incremental.bin"));
+    }
+    let mut c = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -253,7 +270,14 @@ impl App {
                     let completion = self.answer(report, call);
                     self.send(&ToHost::Complete { ticket, completion });
                 }
-                ToApp::Notify(Notify::Log { message, .. }) => report.lines.push(format!("    log: {message}")),
+                ToApp::Notify(Notify::Log { message, .. }) => {
+                    // The TypeScript SDK refuses a call to an interface the manifest does not grant (the component
+                    // does not import it) and logs it; it counts as a refusal.
+                    if message.starts_with("denied: ") {
+                        self.denied.push(message.clone());
+                    }
+                    report.lines.push(format!("    log: {message}"));
+                }
                 ToApp::Trap(t) => {
                     let mut msg = format!("the extension trapped: {}", t.message);
                     for f in t.frames.iter().take(8) {
@@ -293,7 +317,7 @@ impl App {
             self.denied.push(d.render(ext_manifest::FILE_NAME, ""));
             return Completion::Failed(ApiError::Denied(Denied { permission: line, why: Why::NotDeclared }));
         }
-        let offline = |what: &str| Completion::Failed(ApiError::Other(format!("cyx test does not {what}; use codeyard-extension-test fixtures in unit tests")));
+        let offline = |what: &str| Completion::Failed(ApiError::Other(format!("cyx test does not {what}; use the mock host's fixtures in unit tests")));
         match call {
             Start::ShowNotice { message, .. } => {
                 report.lines.push(format!("    notice: {message}"));

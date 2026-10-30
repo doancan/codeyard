@@ -1,0 +1,11 @@
+{
+  "name": "codeyard-typescript-toolchain",
+  "private": true,
+  "type": "module",
+  "description": "What cyx installs (npm ci, in its cache folder) to build TypeScript extensions. Not part of any extension.",
+  "license": "MIT OR Apache-2.0",
+  "dependencies": {
+    "@bytecodealliance/componentize-js": "0.23.0",
+    "esbuild": "0.28.2"
+  }
+}

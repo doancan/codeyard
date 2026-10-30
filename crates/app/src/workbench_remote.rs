@@ -11,7 +11,7 @@ use super::projects::ConnSummary;
 use super::*;
 
 #[path = "remote_tree.rs"]
-mod tree;
+pub(super) mod tree;
 use tree::{Group, HostStatus, RemoteRow, RemoteTreeInput, Targets};
 
 gpui::actions!(workbench, [ShowRemoteExplorer]);
@@ -126,7 +126,7 @@ impl Workbench {
         .detach();
     }
 
-    fn toggle_remote(&mut self, key: String, cx: &mut Context<Self>) {
+    pub(super) fn toggle_remote(&mut self, key: String, cx: &mut Context<Self>) {
         if !self.remote.view.toggled.remove(&key) {
             self.remote.view.toggled.insert(key.clone());
         }
@@ -140,7 +140,7 @@ impl Workbench {
         cx.notify();
     }
 
-    fn remote_rows(&self, cx: &App) -> Vec<RemoteRow> {
+    pub(super) fn remote_rows(&self, cx: &App) -> Vec<RemoteRow> {
         let hosts = self.ssh_host_rows();
         let root = self.root(cx);
         let ports = self.ssh_alias().map(|alias| ports_glue::port_rows(&self.ports.set, &self.ports.listening, &alias));
@@ -171,7 +171,7 @@ impl Workbench {
         .ok();
     }
 
-    fn connected_to(&self, alias: &str) -> bool {
+    pub(super) fn connected_to(&self, alias: &str) -> bool {
         matches!(&self.remote.conn, Conn::Connected { alias: a } if a == alias) && self.remote.host.is_remote()
     }
 
