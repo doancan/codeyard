@@ -55,8 +55,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   10,000 rows draw only the rows on screen, and trees load one page at a time. The tree arrives as JSON
   (docs/extensions/reference/ui.md), is checked, and is diffed by key so typed text, ticks, selections and expanded
   items survive a re-render. Every element is reachable by keyboard and announced with its role and label. Each view
-  names its publisher, and none can cover the consent sheet or take the keyboard from it. Images from URLs are not
-  drawn yet (they wait for `net` fetching).
+  names its publisher, and none can cover the consent sheet or take the keyboard from it.
+- Extension views show `image` elements with an `https` URL: Codeyard fetches them through the extension's `net`
+  permission (declared hosts only, ext-net's address checks, at most 1 MB, formats GPUI decodes), only while the view
+  is on screen and never in an untrusted folder, and keeps them by URL until the view closes. A refused image shows
+  its alt text and the denial is listed in the Inspector.
+- A view's `when` in the manifest: a view is offered in the activity bar, the panel tabs and *Open View* only while
+  its `when` holds, and an open view closes when it turns false.
+- `views.keystroke_frame_ms` (`CODEYARD_PERF`): a key that reaches an extension view, to the frame that shows it. The
+  row in `perf/metrics.json` is `warn` until `scripts/perf/run.sh` has a scenario for it.
 - What code extensions contribute reaches the same places as the core's: commands in the editor and file-tree menus
   (with `when` and `enablement`), on key bindings and on status bar items; formatters for *Format Document* and format
   on save (chosen per language with `editor.formatters`); code actions in *Quick Fix…*, whose edits change the document they were asked for and other files only within the

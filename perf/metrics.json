@@ -6,6 +6,7 @@
     {"id": "startup.extensions_ms", "what": "loading 100 installed, inactive extensions at startup", "stat": "p95", "budget": 0.10, "budget_abs": 1.0, "ceiling": 5, "gate": "block"},
     {"id": "typing.keystroke_frame_ms", "what": "key press to the drawn frame, 10k-line Rust file with highlighting", "stat": "p95", "budget": 0.10, "ceiling": null, "gate": "block"},
     {"id": "typing.keystroke_frame_decorations_ms", "what": "key press to the drawn frame, 10k-line Rust file with highlighting and 2 decoration providers active (warn until the scenario is in run.sh)", "stat": "p95", "budget": 0.10, "ceiling": 8, "gate": "warn"},
+    {"id": "views.keystroke_frame_ms", "what": "key press in an extension view to the drawn frame, a list of 10 000 rows open (warn until the scenario is in run.sh)", "stat": "p95", "budget": 0.10, "ceiling": 8, "gate": "warn"},
     {"id": "extensions.provider_overhead_ms", "what": "provider platform overhead: request sent to an extension to its answer back in the window, trivial local provider (warn until the scenario is in run.sh)", "stat": "p95", "budget": 0.10, "ceiling": 3, "gate": "warn"},
     {"id": "market.search_ms", "what": "Market search with 10 000 extensions: key press to the results in the view (searched off the UI thread)", "stat": "p95", "budget": 0.10, "budget_abs": 1.0, "ceiling": 16, "gate": "block"},
     {"id": "market.search_frame_ms", "what": "Market search with 10 000 extensions: key press to the drawn frame showing the results", "stat": "p95", "budget": 0.10, "ceiling": null, "gate": "warn"},
