@@ -25,6 +25,7 @@ fn acme() -> OAuthProvider {
         scopes: vec!["read".into(), "deploy:write".into()],
         hosts: vec!["api.acme.example.com".into()],
         account_url: None,
+        instances: false,
     }
 }
 

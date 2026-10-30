@@ -167,6 +167,11 @@ pub fn fix_line(d: &Denial, revoked: &Permissions) -> Option<String> {
     let p = d.permission.trim();
     match d.why {
         v::Why::UntrustedWorkspace | v::Why::RevokedExtension => None,
+        // A host outside the account's: the line goes into that `[[oauth]]` table; GitHub's hosts are fixed.
+        _ if p.starts_with("[[oauth]] ") => {
+            let (provider, host) = ext_manifest::parse_oauth_host_line(p)?;
+            (!ext_manifest::BUILTIN_PROVIDERS.contains(&provider)).then(|| format!("hosts = [{host:?}]  # in the [[oauth]] table with id = {provider:?}"))
+        }
         _ if p.contains(" = ") => Some(p.to_string()),
         v::Why::NotDeclared => None,
         v::Why::RevokedByUser => {

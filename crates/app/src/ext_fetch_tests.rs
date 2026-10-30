@@ -127,7 +127,7 @@ fn auth_fetch_signs_only_the_providers_hosts_and_never_returns_the_token() {
         "[extension]\nid = \"you.deploy\"\nversion = \"1.0.0\"\nname = \"D\"\nlicense = \"MIT\"\n[permissions]\nauth = [\"github\"]\nnet = [\"example.com\"]\nwhy = \"x\"\n",
     )
     .unwrap();
-    let github = crate::ext_accounts::provider(&m, "github").unwrap();
+    let github = crate::ext_accounts::provider(&m, &[], "github").unwrap();
     let t = Fake::default().route("https://api.github.com/user", 200, "{\"login\":\"ada\"}");
     let s = scope(m.permissions.clone(), true);
     let token = Token { access: "gho_SECRET_1234".into(), refresh: None, expires: None, label: "ada".into(), scopes: Vec::new() };
@@ -142,6 +142,9 @@ fn auth_fetch_signs_only_the_providers_hosts_and_never_returns_the_token() {
         let c = auth_fetch(&t, &s, &github, &token, &get(url), &Events::default(), &no_cancel());
         assert_eq!(why(&c), Some(v::Why::NotDeclared), "{url}: {c:?}");
     }
+    // #183: the refusal names the host and the account's hosts, not the `auth` line that is already there.
+    let c = auth_fetch(&t, &s, &github, &token, &get("https://example.com/x"), &Events::default(), &no_cancel());
+    assert!(matches!(&c, Completion::Failed(v::Error::Denied(d)) if d.permission == r#"[[oauth]] github hosts = ["example.com"]"#), "{c:?}");
     assert_eq!(t.sent().len(), 1);
     // The extension cannot set its own authorization, or use an account it did not declare.
     let mut forged = get("https://api.github.com/user");
@@ -155,6 +158,39 @@ fn auth_fetch_signs_only_the_providers_hosts_and_never_returns_the_token() {
     assert_eq!(t.sent().len(), 1);
 }
 
+/// #184: a self-managed instance the user added signs requests to its own host only, with its own token, and is
+/// granted by its provider's `auth` entry.
+#[test]
+fn an_instance_signs_only_its_own_host() {
+    let m = ext_manifest::parse(
+        "[extension]\nid = \"you.forge\"\nversion = \"1.0.0\"\nname = \"F\"\nlicense = \"MIT\"\n[code]\nentry = \"Cargo.toml\"\n[permissions]\nauth = [\"forge\"]\nwhy = \"x\"\n\
+         [[pull-requests]]\nid = \"forge\"\nlabel = \"F\"\nhosts = [\"forge.example.com\"]\nauth = \"forge\"\n\
+         [[oauth]]\nid = \"forge\"\nname = \"Forge\"\nauthorize-url = \"https://forge.example.com/oauth/authorize\"\ntoken-url = \"https://forge.example.com/oauth/token\"\nclient-id = \"cy-1\"\nhosts = [\"forge.example.com\"]\ninstances = true\n",
+    )
+    .unwrap();
+    let mine = ext_core::instances::Instance::new(&m, "forge", "git.corp.example", "abc").unwrap();
+    assert!(crate::ext_accounts::provider(&m, &[], "forge@git.corp.example").is_none(), "only an instance the user added");
+    let p = crate::ext_accounts::provider(&m, std::slice::from_ref(&mine), "forge@git.corp.example").unwrap();
+    assert_eq!((p.name.as_str(), p.hosts.as_slice()), ("Forge (git.corp.example)", ["git.corp.example".to_string()].as_slice()));
+    assert_eq!(p.oauth.as_ref().unwrap().client_id, "abc");
+    let t = Fake::default().route("https://git.corp.example/api/v4/user", 200, "{}");
+    let s = scope(m.permissions.clone(), true);
+    let token = Token { access: "corp_SECRET".into(), refresh: None, expires: None, label: "ada".into(), scopes: Vec::new() };
+    assert_eq!(auth_fetch(&t, &s, &p, &token, &get("https://git.corp.example/api/v4/user"), &Events::default(), &no_cancel()), Completion::Done);
+    assert_eq!(t.sent()[0].hosts, ["git.corp.example"]);
+    // The provider's own host is not the instance's: its token never goes there.
+    let c = auth_fetch(&t, &s, &p, &token, &get("https://forge.example.com/api/v4/user"), &Events::default(), &no_cancel());
+    assert!(
+        matches!(&c, Completion::Failed(v::Error::Denied(d)) if d.permission == r#"[[oauth]] forge@git.corp.example hosts = ["forge.example.com"]"#),
+        "{c:?}"
+    );
+    // Turning `auth = ["forge"]` off turns its instances off too.
+    let off = scope(Permissions::default(), true);
+    let c = auth_fetch(&t, &off, &p, &token, &get("https://git.corp.example/api/v4/user"), &Events::default(), &no_cancel());
+    assert!(matches!(&c, Completion::Failed(v::Error::Denied(d)) if d.permission == r#"auth = ["forge"]"#), "{c:?}");
+    assert_eq!(t.sent().len(), 1);
+}
+
 fn acme() -> OAuthProvider {
     OAuthProvider {
         id: "acme".into(),
@@ -165,6 +201,7 @@ fn acme() -> OAuthProvider {
         scopes: vec!["read".into()],
         hosts: vec!["api.acme.example.com".into()],
         account_url: Some("https://api.acme.example.com/me".into()),
+        instances: false,
     }
 }
 
@@ -213,7 +250,7 @@ fn a_vault_and_a_transport_together_keep_the_token_on_the_app_side() {
     vault.save_account("github", &Token { access: "gho_VAULT".into(), refresh: None, expires: None, label: "ada".into(), scopes: Vec::new() }).unwrap();
     let m = ext_manifest::parse("[extension]\nid = \"you.deploy\"\nversion = \"1.0.0\"\nname = \"D\"\nlicense = \"MIT\"\n[permissions]\nauth = [\"github\"]\n")
         .unwrap();
-    let github = crate::ext_accounts::provider(&m, "github").unwrap();
+    let github = crate::ext_accounts::provider(&m, &[], "github").unwrap();
     let t = Fake::default().route("https://api.github.com/", 200, "[]");
     let ev = Events::default();
     let tok = vault.account("github").unwrap().unwrap();

@@ -20,6 +20,7 @@
 
 mod der;
 pub mod grants;
+pub mod instances;
 pub mod lock;
 pub mod market;
 pub mod publisher;
@@ -363,6 +364,7 @@ impl Store {
         self.commit_lock(&lock)?;
         let _ = remove_tree(&self.data_dir(id));
         self.forget_permissions(id);
+        self.forget_instances(id);
         Ok(())
     }
 

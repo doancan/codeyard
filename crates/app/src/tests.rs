@@ -1097,6 +1097,22 @@ fn command_palette_puts_recently_used_commands_first(cx: &mut TestAppContext) {
     assert_eq!(wb.read_with(cx, |wb, cx| wb.overlay_details(cx)).unwrap()[0], "recently used");
 }
 
+/// #186: the Pull Requests view is forge-neutral; its old GitHub name and "merge requests" still find it.
+#[gpui::test]
+fn command_palette_finds_the_pull_requests_view_by_any_forge_word(cx: &mut TestAppContext) {
+    let dir = project("pullcmd");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    for query in ["pull requests", "merge requests", "github pull"] {
+        cx.simulate_keystrokes("cmd-shift-p");
+        cx.simulate_input(query);
+        let labels = wb.read_with(cx, |wb, cx| wb.overlay_labels(cx)).unwrap();
+        assert_eq!(labels.first().map(String::as_str), Some("Pull Requests: Show…"), "{query}: {:?}", &labels[..3.min(labels.len())]);
+        cx.simulate_keystrokes("escape");
+        cx.run_until_parked();
+    }
+}
+
 /// Fuzz: random commands + key sequences (many file types, pages, overlays, split groups).
 /// Must not crash in any order; at each step Esc closes the overlays.
 #[gpui::test]

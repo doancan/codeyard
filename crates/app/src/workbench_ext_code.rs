@@ -127,7 +127,15 @@ impl Workbench {
         let trusted = roots.iter().all(|r| self.is_trusted_root(r, cx));
         let trust = if trusted { ext_core::trust::Trust::Trusted } else { ext_core::trust::Trust::Untrusted };
         let revoked = self.extension_revoked(active.id());
-        let eff = ext_core::trust::effective(&active.manifest, &revoked, trust);
+        let mut eff = ext_core::trust::effective(&active.manifest, &revoked, trust);
+        // A self-managed instance stands in for its provider's host (#184): where `net` allows that host (still on, in
+        // a trusted folder), it allows the instance's too.
+        for i in self.extension_instances(active.id()) {
+            let home = active.manifest.oauth_provider(&i.provider).and_then(|o| o.home());
+            if home.is_some_and(|h| eff.permissions.allows_net(&h)) && !eff.permissions.net.contains(&i.host) {
+                eff.permissions.net.push(i.host);
+            }
+        }
         Scope {
             extension: active.id().to_string(),
             permissions: eff.permissions,

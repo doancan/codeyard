@@ -53,10 +53,20 @@ export class DeniedError extends CodeyardError {
   }
 }
 
+/** The provider and host of a refused `auth.fetch` to a host outside the account's: `[[oauth]] gitlab hosts = ["h"]`. */
+function oauthHost(permission: string): [string, string] | undefined {
+  const m = /^\[\[oauth\]\] (\S+) hosts = \["(.*)"\]$/.exec(permission);
+  return m ? [m[1]!, m[2]!] : undefined;
+}
+
 function fixFor(permission: string, why: Why): string {
   switch (why) {
-    case "not-declared":
+    case "not-declared": {
+      const o = oauthHost(permission);
+      if (o?.[0] === "github") return `the built-in github account signs requests only to its own API hosts; send the request to ${o[1]} with fetch (net) instead`;
+      if (o) return `add "${o[1]}" to hosts in the [[oauth]] table with id = "${o[0]}"`;
       return `add to [permissions]:  ${permission}`;
+    }
     case "revoked-by-user":
       return `the user turned off \`${permission}\` on the extension page; tell them what stops working without it`;
     case "untrusted-workspace":
@@ -66,11 +76,14 @@ function fixFor(permission: string, why: Why): string {
   }
 }
 
-/** `types.error` from the host as an Error. A denial that names only the permission (`net`) gets its line from `line`. */
+/**
+ * `types.error` from the host as an Error. A denial that names only the permission (`net`) gets its line from `line`;
+ * any other text from the host is kept, since it knows more than the call does.
+ */
 export function fromWit(e: WitError, line: () => string = () => ""): CodeyardError {
   switch (e.tag) {
     case "denied": {
-      const permission = e.val.permission.includes("=") || !line() ? e.val.permission : line();
+      const permission = /^[a-z-]+$/.test(e.val.permission) && line() ? line() : e.val.permission;
       return new DeniedError(permission, e.val.why);
     }
     case "not-found":

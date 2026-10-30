@@ -515,8 +515,43 @@ impl PullRequestProvider {
     }
 }
 
+/// What a refused `auth.fetch` to a host outside the account's hosts carries as its permission:
+/// `[[oauth]] gitlab hosts = ["evil.example.org"]`. It has a `=`, so the SDKs keep it, and [`oauth_host_fix`] reads it.
+pub fn oauth_host_line(provider: &str, host: &str) -> String {
+    format!("[[oauth]] {provider} hosts = [{host:?}]")
+}
+
+/// The provider and host of an [`oauth_host_line`].
+pub fn parse_oauth_host_line(permission: &str) -> Option<(&str, &str)> {
+    let (provider, rest) = permission.strip_prefix("[[oauth]] ")?.split_once(" hosts = [\"")?;
+    Some((provider, rest.strip_suffix("\"]")?))
+}
+
+/// The fix for an [`oauth_host_line`]: the host goes into `hosts` of that `[[oauth]]` table. GitHub's account is built
+/// in, so its hosts are fixed.
+pub fn oauth_host_fix(permission: &str) -> Option<String> {
+    let (provider, host) = parse_oauth_host_line(permission)?;
+    Some(if BUILTIN_PROVIDERS.contains(&provider) {
+        format!("the built-in {provider} account signs requests only to its own API hosts; send the request to {host} with fetch (net) instead")
+    } else {
+        format!("add \"{host}\" to hosts in the [[oauth]] table with id = \"{provider}\"")
+    })
+}
+
 /// Account providers built into Codeyard; `[permissions] auth` may name them without an `[[oauth]]` table.
 pub const BUILTIN_PROVIDERS: &[&str] = &["github"];
+
+/// The hosts the built-in `github` account signs requests to.
+pub const GITHUB_HOSTS: &[&str] = &["api.github.com", "uploads.github.com"];
+
+/// The hosts `auth.fetch` signs requests to for `provider`: GitHub's API hosts, or the `[[oauth]]` table's `hosts`.
+pub fn account_hosts(m: &Manifest, provider: &str) -> Option<Vec<String>> {
+    match m.oauth_provider(provider) {
+        Some(o) => Some(o.hosts.clone()),
+        None if provider == "github" => Some(GITHUB_HOSTS.iter().map(|h| h.to_string()).collect()),
+        None => None,
+    }
+}
 
 /// `[[oauth]]`: an OAuth 2 provider declared by the extension. Codeyard runs the browser sign-in (authorization code
 /// with PKCE, returning through `codeyard://ext/<id>/callback`), keeps the token in the keychain and signs requests to
@@ -538,6 +573,50 @@ pub struct OAuthProvider {
     pub hosts: Vec<String>,
     /// An `https://` URL that answers JSON about the signed-in account; its name is shown to the user.
     pub account_url: Option<String>,
+    /// The user may add self-managed instances (`instances = true`, #184): the same endpoints on another host, with the
+    /// user's own OAuth application. The URLs are then all on [`OAuthProvider::home`], which `hosts` lists.
+    #[serde(default)]
+    pub instances: bool,
+}
+
+impl OAuthProvider {
+    /// The host the authorize URL is on: for a provider with `instances`, the one an instance replaces.
+    pub fn home(&self) -> Option<String> {
+        check_https_url(&self.authorize_url).ok()
+    }
+
+    /// This provider on the self-managed `host`, signed in with the user's `client_id`: the URLs on `host` instead of
+    /// [`home`](Self::home), `hosts` only that host, and the id `<id>@<host>` (an account of its own). `None` when the
+    /// manifest does not offer instances.
+    pub fn instance(&self, host: &str, client_id: &str) -> Option<OAuthProvider> {
+        let home = self.home().filter(|_| self.instances)?;
+        let on = |url: &str| url.replacen(&format!("https://{home}"), &format!("https://{host}"), 1);
+        Some(OAuthProvider {
+            id: instance_account(&self.id, host),
+            name: format!("{} ({host})", self.name),
+            authorize_url: on(&self.authorize_url),
+            token_url: on(&self.token_url),
+            client_id: client_id.to_string(),
+            scopes: self.scopes.clone(),
+            hosts: vec![host.to_string()],
+            account_url: self.account_url.as_deref().map(on),
+            instances: false,
+        })
+    }
+}
+
+/// The account id of a self-managed instance: `gitlab@git.example.com`. It is what remotes on that host carry and what
+/// the extension passes to `auth.session` and `auth.fetch`.
+pub fn instance_account(provider: &str, host: &str) -> String {
+    format!("{provider}@{host}")
+}
+
+/// `gitlab@git.example.com` → (`gitlab`, Some(`git.example.com`)); a plain provider id has no host.
+pub fn split_account(account: &str) -> (&str, Option<&str>) {
+    match account.split_once('@') {
+        Some((p, h)) => (p, Some(h)),
+        None => (account, None),
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

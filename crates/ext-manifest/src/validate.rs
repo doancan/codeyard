@@ -351,7 +351,20 @@ fn oauth(cx: &mut Ctx, raw: &[S<RawOAuth>], perms_raw: Option<&RawPermissions>, 
                 Some("add  hosts = [\"api.example.com\"]: the hosts whose requests Codeyard signs".into());
         }
         let hosts = list(cx, "oauth hosts", &r.hosts, check_host);
-        out.push(OAuthProvider { id, name, authorize_url, token_url, client_id, scopes, hosts, account_url });
+        let instances = r.instances.as_ref().is_some_and(|i| *i.get_ref());
+        if instances {
+            // An instance swaps one host for another in every URL: they must all be on it, and it must be signed.
+            let on: Vec<Option<String>> =
+                [Some(&authorize_url), Some(&token_url), account_url.as_ref()].into_iter().flatten().map(|u| check_https_url(u).ok()).collect();
+            let home = on.first().cloned().flatten();
+            let same = home.is_some() && on.iter().all(|h| *h == home);
+            if !same || !home.as_ref().is_some_and(|h| hosts.contains(h)) {
+                let span = r.instances.as_ref().map_or(span.clone(), |i| i.span());
+                cx.err(C::BadContribution, span, format!("oauth provider '{id}' has instances = true, so its URLs must all be on one host that hosts lists"))
+                    .fix = Some("put authorize-url, token-url and account-url on the same host, and list that host in hosts".into());
+            }
+        }
+        out.push(OAuthProvider { id, name, authorize_url, token_url, client_id, scopes, hosts, account_url, instances });
     }
     if let Some(p) = perms_raw {
         for a in &p.auth {

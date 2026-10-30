@@ -41,7 +41,13 @@ impl Denied {
     /// What to do about it, in one line.
     pub fn fix(&self) -> String {
         match self.why {
-            Why::NotDeclared => format!("add to [permissions]:  {}", self.permission),
+            Why::NotDeclared => match oauth_host(&self.permission) {
+                Some(("github", host)) => {
+                    format!("the built-in github account signs requests only to its own API hosts; send the request to {host} with fetch (net) instead")
+                }
+                Some((provider, host)) => format!("add \"{host}\" to hosts in the [[oauth]] table with id = \"{provider}\""),
+                None => format!("add to [permissions]:  {}", self.permission),
+            },
             Why::RevokedByUser => {
                 format!("the user turned off `{}` on the extension page; tell them what stops working without it", self.permission)
             }
@@ -50,9 +56,10 @@ impl Denied {
         }
     }
 
-    /// Fill in the manifest line from the call when the host sent only the permission's name (`net`).
+    /// Fill in the manifest line from the call when the host sent only the permission's name (`net`). Any other text
+    /// from the host is kept: it knows more than the call does.
     pub(crate) fn detailed(mut self, line: &dyn Fn() -> String) -> Denied {
-        if !self.permission.contains('=') {
+        if !self.permission.is_empty() && self.permission.bytes().all(|b| b.is_ascii_lowercase() || b == b'-') {
             self.permission = line();
         }
         self
@@ -153,6 +160,12 @@ impl From<fmt::Error> for Error {
     }
 }
 
+/// The provider and host of a refused `auth.fetch` to a host outside the account's: `[[oauth]] gitlab hosts = ["h"]`.
+fn oauth_host(permission: &str) -> Option<(&str, &str)> {
+    let (provider, rest) = permission.strip_prefix("[[oauth]] ")?.split_once(" hosts = [\"")?;
+    Some((provider, rest.strip_suffix("\"]")?))
+}
+
 /// The manifest line for a permission when the call gives nothing more specific.
 pub(crate) fn line_for(permission: &str) -> String {
     match permission {
@@ -184,6 +197,22 @@ mod tests {
         // A line the host already made is kept.
         let e = Error::Denied(Denied { permission: r#"run = ["git"]"#.into(), why: Why::NotDeclared }).detailed(&|| "x".into());
         assert!(e.to_string().contains(r#"run = ["git"]"#));
+    }
+
+    /// #183: a host outside the account's is fixed in the `[[oauth]]` table, not with the `auth` line.
+    #[test]
+    fn a_host_outside_the_account_names_the_oauth_table() {
+        let host = r#"[[oauth]] gitlab hosts = ["evil.example.org"]"#;
+        let e = Error::Denied(Denied { permission: host.into(), why: Why::NotDeclared }).detailed(&|| r#"auth = ["gitlab"]"#.into());
+        let s = e.to_string();
+        assert!(s.contains(host), "{s}");
+        assert!(s.contains(r#"= fix: add "evil.example.org" to hosts in the [[oauth]] table with id = "gitlab""#), "{s}");
+        assert!(!s.contains("auth = "), "{s}");
+        let gh = Denied { permission: r#"[[oauth]] github hosts = ["example.com"]"#.into(), why: Why::NotDeclared };
+        assert!(gh.fix().contains("with fetch (net) instead"), "{}", gh.fix());
+        // Text without `=` that is more than a permission's name is kept too.
+        let e = Error::Denied(Denied { permission: "a path inside the workspace".into(), why: Why::NotDeclared }).detailed(&|| "x".into());
+        assert!(e.to_string().contains("a path inside the workspace"));
     }
 
     #[test]
