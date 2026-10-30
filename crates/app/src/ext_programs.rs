@@ -82,15 +82,11 @@ pub fn package_dir(cfg_dir: Option<&Path>, registries: &[ext_core::registry::Reg
     crate::ext_registry::fetch_target(cfg, registries, id, target)
 }
 
-/// Where `extension`'s program goes on the host: under the agent's folder (`CODEYARD_REMOTE_DIR`, default
-/// `~/.cache/codeyard`), by its hash, so versions never overwrite each other.
+/// Where `extension`'s program goes on the host: `~/.cache/codeyard/programs/<id>/<hash>/`, beside the agent's
+/// default folder, by its hash, so versions never overwrite each other.
 pub fn pushed_path(host: &dyn Host, extension: &str, p: &Program) -> String {
     let home = host.info().home.trim_end_matches(['/', '\\']).to_string();
-    let base = match std::env::var("CODEYARD_REMOTE_DIR") {
-        Ok(d) if host.is_remote() && !d.is_empty() => d,
-        _ => format!("{home}/.cache/{}", host::ssh::APP_DIR),
-    };
-    format!("{base}/programs/{extension}/{}/{}", &p.sha256[..16.min(p.sha256.len())], p.name)
+    format!("{home}/.cache/{}/programs/{extension}/{}/{}", host::ssh::APP_DIR, &p.sha256[..16.min(p.sha256.len())], p.name)
 }
 
 /// Make sure the host has `p` at its [`pushed_path`] with the right hash, pushing it if not; the absolute path to run.
