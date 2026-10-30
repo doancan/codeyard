@@ -149,6 +149,7 @@ impl Workbench {
             InputPurpose::AddWatch => self.finish_add_watch(name, cx),
             InputPurpose::FunctionBreakpoint => self.finish_function_breakpoint(name, cx),
             InputPurpose::LaunchInput => self.answer_launch_input(name, window, cx),
+            InputPurpose::TaskInput => self.answer_task_input(name, window, cx),
             InputPurpose::RenameTerminal => self.finish_rename_terminal(name, cx),
             InputPurpose::SetVariable { parent, name: var } => self.finish_set_variable(parent, var, name, cx),
             InputPurpose::PortLabel { remote } => self.finish_port_label(remote, name, cx),

@@ -274,8 +274,8 @@ impl Workbench {
 
     /// The session's `postDebugTask`, in a terminal like any task.
     pub(super) fn run_post_debug_task(&mut self, label: String, command: String, cx: &mut Context<Self>) {
-        let task = super::super::tasks::Task { label, command, source: "launch" };
-        cx.spawn(async move |this, cx| with_window(&this, cx, move |this, window, cx| this.run_task(task, window, cx))).detach();
+        let after = super::super::task_run_glue::After::Nothing;
+        cx.spawn(async move |this, cx| with_window(&this, cx, move |this, window, cx| this.run_task_named(label, Some(command), after, window, cx))).detach();
     }
 
     /// "Debug: Stop All".

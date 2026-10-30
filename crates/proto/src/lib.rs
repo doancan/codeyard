@@ -15,7 +15,7 @@ use std::io::{self, Read, Write};
 use serde::{Deserialize, Serialize};
 
 /// Compared in the handshake; on mismatch the agent is reinstalled.
-pub const VERSION: u32 = 14;
+pub const VERSION: u32 = 15;
 
 /// Max size of one frame. Larger files are read in chunks.
 pub const MAX_FRAME: usize = 64 * 1024 * 1024;
@@ -182,6 +182,25 @@ pub enum Request {
         from: String,
         to: String,
     },
+    /// Run a task: answered with `ProcSpawned`, then `ProcOutput` (stdout and stderr in one stream, as written) and
+    /// `ProcExit`. It leads its own process group (a job object on Windows), so `ProcKill` stops what it started too;
+    /// the `ProcExit` after a kill has `code: None`. Standard input is closed.
+    TaskSpawn {
+        command: TaskCommand,
+        cwd: Option<String>,
+        /// Set (`Some`) or remove (`None`) variables, in order, on top of the agent's environment.
+        env: Vec<(String, Option<String>)>,
+    },
+}
+
+/// What `TaskSpawn` runs.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum TaskCommand {
+    /// `program` with exactly these arguments; a bare name is looked up on the user's PATH (login shell on Unix).
+    Process { program: String, args: Vec<String> },
+    /// `line` passed to a shell as one argument: `shell` (default: the user's login shell, `cmd.exe` on Windows) with
+    /// `args` before it (default: `-l -c`, `/d /s /c` for cmd.exe).
+    Shell { shell: Option<String>, args: Option<Vec<String>>, line: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]

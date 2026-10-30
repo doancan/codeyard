@@ -217,8 +217,8 @@ jobs:
       - name: Agent size budget
         run: |
           SIZE=$(du -k target/x86_64-unknown-linux-musl/release-agent/codeyard-agent | cut -f1)
-          echo "agent: ${SIZE} KB (budget 1600 KB)"
-          test "$SIZE" -le 1600
+          echo "agent: ${SIZE} KB (budget 1664 KB)"
+          test "$SIZE" -le 1664
 
   # Full workspace and GPUI on Linux. Promoted after four consecutive successful
   # workspace test runs; failures now fail CI instead of being converted to warnings.

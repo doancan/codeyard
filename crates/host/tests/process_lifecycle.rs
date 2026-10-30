@@ -20,3 +20,33 @@ fn cancellation_remains_available_after_the_process_closes_stdout() {
     host.done(proto::Request::ProcKill { proc: process.id }).unwrap();
     assert!(start.elapsed() < Duration::from_secs(2), "cancellation waited for natural exit: {:?}", start.elapsed());
 }
+
+/// A task through the local host: typed argv, environment, merged output and exit code; a kill ends with `Exit(None)`.
+#[test]
+fn tasks_run_through_the_host_and_stop_on_request() {
+    let host = host::local();
+    let command = proto::TaskCommand::Process {
+        program: "/bin/sh".into(),
+        args: vec!["-c".into(), "echo \"$1 $X\"; echo e >&2; exit 4".into(), "sh".into(), "a b".into()],
+    };
+    let task = host.task_spawn(command, None, vec![("X".into(), Some("y".into()))]).unwrap();
+    let mut output = Vec::new();
+    let code = loop {
+        match task.events.recv_timeout(Duration::from_secs(5)).unwrap() {
+            ProcEvent::Output(bytes) => output.extend(bytes),
+            ProcEvent::Exit(code) => break code,
+        }
+    };
+    assert_eq!((String::from_utf8_lossy(&output).as_ref(), code), ("a b y\ne\n", Some(4)));
+
+    let command = proto::TaskCommand::Shell { shell: Some("/bin/sh".into()), args: Some(vec!["-c".into()]), line: "echo up; exec sleep 30".into() };
+    let task = host.task_spawn(command, None, Vec::new()).unwrap();
+    assert!(matches!(task.events.recv_timeout(Duration::from_secs(5)).unwrap(), ProcEvent::Output(_)));
+    host.proc_kill(task.id);
+    let end = loop {
+        if let ProcEvent::Exit(code) = task.events.recv_timeout(Duration::from_secs(5)).unwrap() {
+            break code;
+        }
+    };
+    assert_eq!(end, None);
+}

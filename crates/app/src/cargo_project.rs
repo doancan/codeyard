@@ -190,6 +190,7 @@ pub fn launch_configs(targets: Vec<CargoTarget>, root: &str) -> Vec<crate::debug
                 request: "launch".into(),
                 args: serde_json::json!({"args": args, "cwd": root}),
                 pre_launch: None,
+                pre_launch_task: None,
                 cargo_target: Some(target),
                 post_debug: None,
                 no_debug: false,

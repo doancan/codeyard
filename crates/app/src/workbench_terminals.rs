@@ -616,6 +616,7 @@ impl Workbench {
     pub(super) fn close_terminal(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         let term = self.terminals.remove(ix);
         term.read(cx).kill();
+        self.task_terminal_closed(&term, cx);
         if self.term_split.as_ref().is_some_and(|(l, r)| *l == term || *r == term) {
             self.term_split = None;
         }
@@ -638,6 +639,7 @@ impl Workbench {
 
     /// Connection changed: the terminals belong to the old machine, close them.
     pub(super) fn close_all_terminals(&mut self, cx: &mut Context<Self>) {
+        self.stop_all_task_runs(cx);
         self.term_split = None;
         for t in self.terminals.drain(..) {
             t.read(cx).kill();
