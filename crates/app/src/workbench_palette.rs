@@ -499,6 +499,8 @@ impl Workbench {
         match &root {
             None => picker.update(cx, |p, cx| p.set_paths(0, Vec::new(), false, cx)),
             Some(root) => {
+                let first = (!self.roots.extra_roots.is_empty()).then(|| ui::file_name(root).to_string());
+                picker.update(cx, |p, _| p.set_first_folder(first));
                 // Cached list first (instant), then a fresh one in the background.
                 if let Some(ix) = self.roots.file_index.as_ref().filter(|ix| ix.root == *root) {
                     let (ordered, recent) = self.mru_first(root, &ix.paths, cx);

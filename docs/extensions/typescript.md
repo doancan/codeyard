@@ -66,7 +66,7 @@ A call that reaches Codeyard (a notice with buttons, a file read, an HTTPS reque
 Under the hood every such call returns a ticket at once, and the SDK settles the Promise when Codeyard delivers the result. The extension never blocks while it waits, so it can answer other requests at the same time. Two rules are enough:
 
 - **Don't block.** A handler that computes for more than 2 seconds without awaiting is stopped. Poll with `ctx.every`, not with timers of your own.
-- **Answer fast.** Providers (views, formatters, code actions) are cancelled when the user moves on; the answer of a cancelled request is dropped.
+- **Answer fast.** Providers (views, formatters, code actions, hover, completion, code lenses, inlay hints) are cancelled when the user moves on; the answer of a cancelled request is dropped.
 
 `ctx.background(promise)` runs work that no request waits for, such as work started from `activate`; a failure is logged with its stack. A handler may also return a value directly instead of a Promise.
 
@@ -79,6 +79,8 @@ The same calls as the Rust SDK, in camelCase:
 | `ctx.command(id, async \|ctx, args\| …)` | `ctx.command(id, async (ctx, args) => …)`; the return value is sent as JSON |
 | `ctx.view(id, …)`, `ctx.on_view_event(id, …)`, `ctx.invalidate(id)` | `ctx.view(id, async (ctx) => tree)`, `ctx.onViewEvent(id, …)`, `ctx.invalidate(id)` |
 | `ctx.formatter`, `ctx.code_actions`, `ctx.on_code_action`, `ctx.on_uri` | `ctx.formatter`, `ctx.codeActions`, `ctx.onCodeAction`, `ctx.onUri` |
+| `ctx.hover(async \|ctx, doc, position\| …)`, `ctx.completion(async \|ctx, doc, position, trigger\| …)` | `ctx.hover(async (ctx, doc, position) => ({ contents: "…" }))`, `ctx.completion(async (ctx, doc, position, trigger) => [{ label: "…" }])` (an array, or `{ items, incomplete }`) |
+| `ctx.code_lenses`, `ctx.resolve_code_lens`, `ctx.inlay_hints` | `ctx.codeLenses`, `ctx.resolveCodeLens`, `ctx.inlayHints`: a lens is `{ range, command: { title, command, args } }` |
 | `ctx.every(seconds, …)` → `Timer` | `ctx.every(seconds, async (ctx) => …)` → `Timer` with `clear()` |
 | `ctx.notice`, `ctx.notify`, `ctx.quick_pick`, `ctx.quick_pick_many`, `ctx.input` | `ctx.notice`, `ctx.notify`, `ctx.quickPick`, `ctx.quickPickMany`, `ctx.input` |
 | `ctx.progress(title, cancellable)` | `ctx.progress(title)`, or `await ctx.withProgress(title, async (p) => …)`, which ends it |

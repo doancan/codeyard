@@ -169,7 +169,8 @@ Codeyard version from the API items and contribution points used (each has a `si
 | `scm` | yes | Claims trusted folders that have a marker (`.hg`, `.jj`): Source Control and the gutter ask the provider there and its buttons run its commands; Git keeps the others |
 | `commands`, `menus`, `status-bar`, `views` | yes | |
 | `formatters`, `code-actions`, `diagnostics`, `decorations`, `tasks` | yes | |
-| `hover`, `completion`, `code-lens`, `inlay-hints`, SCM and PR providers | yes | Phase 3 |
+| `code-lens`, `inlay-hints` | yes | Asked for the lines in view, again after an edit (debounced) and a scroll; a lens runs its command through the broker |
+| `hover`, `completion`, SCM and PR providers | yes | Phase 3 |
 
 ### 5.2 The API
 

@@ -60,6 +60,14 @@ pub struct RawManifest {
     #[serde(default)]
     pub tasks: Vec<S<RawTasks>>,
     #[serde(default)]
+    pub hover: Vec<S<RawLanguages>>,
+    #[serde(default)]
+    pub completion: Vec<S<RawCompletion>>,
+    #[serde(default)]
+    pub code_lens: Vec<S<RawLanguages>>,
+    #[serde(default)]
+    pub inlay_hints: Vec<S<RawLanguages>>,
+    #[serde(default)]
     pub scm: Vec<S<RawScm>>,
 }
 
@@ -228,7 +236,7 @@ pub struct RawStatusItem {
     pub command: Option<S<String>>,
 }
 
-/// `[[formatters]]`, `[[code-actions]]`.
+/// `[[formatters]]`, `[[code-actions]]`, `[[hover]]`, `[[code-lens]]`, `[[inlay-hints]]`.
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct RawLanguages {
@@ -247,6 +255,15 @@ pub struct RawNamedLanguages {
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct RawTasks {
     pub id: S<String>,
+}
+
+/// `[[completion]]`.
+#[derive(Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct RawCompletion {
+    pub languages: Vec<S<String>>,
+    #[serde(default)]
+    pub trigger_characters: Vec<S<String>>,
 }
 
 /// `[[scm]]`: a source control provider for folders that contain one of `markers`.

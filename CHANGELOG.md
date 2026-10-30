@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Code extensions can describe and complete: `[[hover]]` and `[[completion]]` (with optional `trigger-characters`)
+  in the manifest, `request.hover` and `request.completion` in `codeyard:api` 0.1, `ctx.hover` and `ctx.completion`
+  in the Rust and TypeScript SDKs, and `hover` / `completion` in both mock hosts. Their text shows in the hover popup
+  under the language server's, and their items join the completion list, each tagged with the extension. They have
+  the provider deadline; a completion request is cancelled when its word is left, a hover request when the mouse
+  moves on, and a late answer is dropped and noted in the extension's log. Typing never waits for them, and turning
+  an extension off or uninstalling it removes its items at once. Over SSH the document comes from the editor. The
+  `todo-actions` and `crate-version-ts` examples use them; `typing.keystroke_frame_completion_ms` (warn) measures
+  typing with one completion provider.
+- Code lenses and inlay hints from code extensions: `[[code-lens]]` and `[[inlay-hints]]` in the manifest,
+  `request.code-lens` (each lens with a command and its arguments, `request.resolve-code-lens` for one left without)
+  and `request.inlay-hints` in `codeyard:api` 0.1, `ctx.code_lenses` / `ctx.codeLenses` and friends in both SDKs and
+  their mock hosts. They show at the end of their line with the language server's, name the extension in the tooltip,
+  are asked for the lines in view only (again once typing pauses or the view stops scrolling, cancelling the question
+  before), and typing never waits for them. Clicking a lens, or *Editor: Run Code Lens on This Line*, runs its command
+  through the broker: the extension's own, a dependency's, or a `core:` command its manifest lists. The `todo-actions`
+  example shows both; `crate-version-ts` hints the latest version after each dependency in a `Cargo.toml`. New perf
+  metric `typing.keystroke_frame_lenses_ms` (warn).
 - Source control providers from code extensions (`[[scm]]`, #144): an extension claims the workspace folders that
   have one of its markers (a `.hg` or `.jj` folder) and Source Control shows its head, input box and groups of changed
   files there, with the extension's own commands on each file, group and the input box; the gutter's change marks
@@ -18,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   untrusted folders are not claimed, and the programs a provider runs go through `run` on the workspace host, also over
   SSH. Screen readers reach a provider's section, input box, files and buttons as they do Git's. New example:
   `jj-scm`, a provider for Jujutsu.
+
 - Windows: terminals of a local folder are taken back after Codeyard quits, crashes or is killed, as on macOS and
   Linux. They run in the terminal daemon, which listens on a named pipe only the current user can open.
 - `cyx dev` hot-reloads code extensions: saving a source file rebuilds `extension.wasm` (cargo or the TypeScript
@@ -207,6 +226,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Deleting a file or folder deletes it permanently after asking, instead of moving it to the Trash:
+  `files.enableTrash` is now off by default. Turn it on to keep using the Trash for local files.
 - The settings and shortcuts import is "Preferences: Import Settings and Shortcuts from Another Editor", and its
   messages no longer name another product. A shortcut block written by an earlier import is still replaced by a new one.
 - Installed extensions with code start no process when Codeyard opens: the check that the system sandbox works now
@@ -219,6 +240,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A folder deleted while it was open in the file tree no longer stays there with "not found" beside it. When a
+  folder's read finds it gone, the tree drops it and reads its parent again, so this also covers folders deleted
+  outside Codeyard, where the watcher may report only the folder itself.
+- Quick Open in a workspace with several folders finds a file by its folder's name and path, as in `repoB/src/lib.rs`,
+  for every folder. Before, typing a folder's name found nothing, so files with the same relative path in two folders
+  could not be told apart.
 - Windows of their own (editors, side views, terminals) on macOS came back 32 pixels taller at every start: the frame's
   height was saved and the content was opened at that height. The content's size is saved now.
 - A file moved into a window of its own came back as a tab of the main window too after the second start when Codeyard

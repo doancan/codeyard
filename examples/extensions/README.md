@@ -10,9 +10,9 @@ Working extensions built with the SDKs: Rust (`crates/ext-sdk`, [docs/extensions
 | `hello-view-ts` | TypeScript: the same view |
 | `octokit-repos-ts` | TypeScript with npm packages: Octokit lists your GitHub repositories through `auth`, zod checks the answer |
 | `trim-formatter` | Rust: a formatter for Markdown and text (trailing spaces, one final newline), with UTF-16 columns |
-| `todo-actions` | Rust: code actions, one with edits and one that runs the extension's handler |
+| `todo-actions` | Rust: code actions, one with edits and one that runs the extension's handler; a code lens that runs a command with arguments and an inlay hint on each TODO in view |
 | `crate-version` | Rust: `fetch` with the `net` permission, tested with an HTTP fixture |
-| `crate-version-ts` | TypeScript: the same with the global `fetch` |
+| `crate-version-ts` | TypeScript: the same with the global `fetch`, and inlay hints with the latest version after each dependency in a `Cargo.toml` in view |
 | `branch-status` | Rust: runs `git` (the `run` permission, with its `why`) and shows the branch in the status bar |
 | `jj-scm` | Rust: a source control provider (`[[scm]]`) for Jujutsu: changes in Source Control, gutter marks, commit and restore through `jj` |
 

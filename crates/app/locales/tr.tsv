@@ -3354,3 +3354,4 @@ Breaks when the value is written; for this debug session only.	Değer yazıldı�
 Save the file first: a tab with unsaved changes cannot move to another window.	Önce dosyayı kaydedin: kaydedilmemiş değişiklikleri olan bir sekme başka bir pencereye taşınamaz.
 This tab cannot move to that window: its folder is on another machine.	Bu sekme o pencereye taşınamaz: klasörü başka bir makinede.
 The destination window is no longer available.	Hedef pencere artık yok.
+{0} (from {1})	{0} ({1} eklentisinden)

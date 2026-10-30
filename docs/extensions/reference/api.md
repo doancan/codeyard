@@ -255,7 +255,14 @@ Needs no permission. Since 0.1.0.
 
 - type `code-action`: record `{ id: string, title: string, edits: list<tuple<string, list<text-edit>>>, command: option<string>, preferred: bool, fixes: list<diagnostic> }`
 - type `task`: record `{ id: string, label: string, detail: option<string>, group: string }`
-- type `response`: variant `none | json(string) | view(string) | edits(list<text-edit>) | code-actions(list<code-action>) | tasks(list<task>) | ranges(list<range>) | scm(scm-state) | text(option<string>)`
+- type `lens-command`: record `{ title: string, command: string, args-json: string }`. What a code lens shows and the command a click runs.
+- type `code-lens`: record `{ id: string, range: range, command: option<lens-command> }`
+- type `inlay-hint`: record `{ position: position, label: string, tooltip: option<string> }`
+- type `hover`: record `{ contents: string, range: option<range> }`. Shown in the hover popup next to the language server's, under the extension's name.
+- type `completion-kind`: enum `text | method | function | constructor | field | variable | class | interface | module | property | unit | value | enum | keyword | snippet | color | file | reference | folder | enum-member | constant | struct | event | operator | type-parameter`. The icon a completion item shows, as in the Language Server Protocol.
+- type `completion-item`: record `{ label: string, kind: completion-kind, detail: option<string>, documentation: option<string>, insert-text: option<string>, snippet: bool, range: option<range>, additional-edits: list<text-edit>, filter-text: option<string>, sort-text: option<string> }`
+- type `completion-list`: record `{ items: list<completion-item>, incomplete: bool }`
+- type `response`: variant `none | json(string) | view(string) | edits(list<text-edit>) | code-actions(list<code-action>) | tasks(list<task>) | ranges(list<range>) | hover(option<hover>) | completions(completion-list) | scm(scm-state) | text(option<string>) | code-lenses(list<code-lens>) | inlay-hints(list<inlay-hint>)`
 
 ## `requests`
 
@@ -272,7 +279,7 @@ What the host asks the extension.
 Needs no permission. Since 0.1.0.
 
 - type `format-options`: record `{ tab-size: u32, insert-spaces: bool }`
-- type `request`: variant `command(tuple<string, string>) | render(string) | ui-event(tuple<string, string>) | format(tuple<document, option<range>, format-options>) | code-actions(tuple<document, range, list<diagnostic>>) | run-code-action(string) | provide-tasks | run-task(string) | settings-changed(list<string>) | timer(u64) | cancel-progress(u64) | open-uri(string) | scm-status(tuple<string, uri>) | scm-original(tuple<string, uri>) | scm-validate(tuple<string, uri, string>)`
+- type `request`: variant `command(tuple<string, string>) | render(string) | ui-event(tuple<string, string>) | format(tuple<document, option<range>, format-options>) | code-actions(tuple<document, range, list<diagnostic>>) | run-code-action(string) | provide-tasks | run-task(string) | settings-changed(list<string>) | timer(u64) | cancel-progress(u64) | open-uri(string) | hover(tuple<document, position>) | completion(tuple<document, position, option<string>>) | code-lens(tuple<document, range>) | resolve-code-lens(tuple<document, code-lens>) | inlay-hints(tuple<document, range>) | scm-status(tuple<string, uri>) | scm-original(tuple<string, uri>) | scm-validate(tuple<string, uri, string>)`
 
 ## `guest`
 

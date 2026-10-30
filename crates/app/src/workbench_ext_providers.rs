@@ -1,5 +1,6 @@
 //! Workbench: what code extensions contribute besides palette commands (docs/plugin-architecture.md §5.1): menus, key
-//! bindings and status items that run their commands; formatters, code actions, diagnostics, decorations and tasks.
+//! bindings and status items that run their commands; formatters, code actions, diagnostics, decorations and tasks
+//! (hover and completion in workbench_ext_hover.rs, code lenses and inlay hints in workbench_ext_lenses.rs).
 //!
 //! Providers are asked with a deadline (`limits::PROVIDER_DEADLINE_MILLIS`, plus `ACTIVATE_MILLIS` while the
 //! extension starts). Nothing the user does waits for them: a request about a document is cancelled when the document
@@ -32,6 +33,14 @@ pub struct RunExtensionCommand {
     pub args: String,
 }
 
+/// Hover and completion (workbench_ext_hover.rs).
+#[path = "workbench_ext_hover.rs"]
+mod hover;
+
+/// Code lenses and inlay hints (workbench_ext_lenses.rs).
+#[path = "workbench_ext_lenses.rs"]
+mod lenses;
+
 /// How long a late answer is still listened for (to note it in the log) before the request is forgotten.
 const LATE_GRACE: Duration = Duration::from_secs(30);
 
@@ -46,6 +55,10 @@ pub(super) struct ProviderState {
     status: Vec<(String, v::StatusItem)>,
     /// Requests about a file, cancelled when it changes: (path, extension, request id).
     waiting: Vec<(String, String, u64)>,
+    /// Hover and completion: how editors ask (workbench_ext_hover.rs).
+    lang: hover::LangState,
+    /// Code lenses and inlay hints asked for each editor (workbench_ext_lenses.rs).
+    lenses: lenses::LensState,
 }
 
 /// One row of the quick-fix list: a language server's action or an extension's.
@@ -138,6 +151,19 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> oneshot::Receiver<Result<Response, v::Error>> {
+        self.ask_provider_with_id(active, reason, request, about, window, cx).1
+    }
+
+    /// `ask_provider`, with the request's id (to cancel it: `cancel_provider_request`).
+    fn ask_provider_with_id(
+        &mut self,
+        active: &Active,
+        reason: &str,
+        request: Request,
+        about: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> (u64, oneshot::Receiver<Result<Response, v::Error>>) {
         let ext = active.id().to_string();
         let running = self.cfg.exts.code.procs.contains_key(&ext);
         let deadline = Duration::from_millis(limits::PROVIDER_DEADLINE_MILLIS + if running { 0 } else { limits::ACTIVATE_MILLIS });
@@ -190,7 +216,7 @@ impl Workbench {
             }
         })
         .detach();
-        out
+        (id, out)
     }
 
     /// The user moved on (`path` changed): requests about it are cancelled, and their answers will be dropped.
@@ -199,11 +225,16 @@ impl Workbench {
         self.cfg.exts.providers.waiting = keep;
         let gone: Vec<(String, String, u64)> = gone;
         for (_, ext, id) in gone {
-            if let Some(p) = self.cfg.exts.code.procs.get(&ext) {
-                let _ = p.send(&ToHost::Cancel { id });
-            }
-            self.cfg.exts.code.pending.lock().unwrap_or_else(|p| p.into_inner()).answer(&ext, id, Err(v::Error::Cancelled));
+            self.cancel_provider_request(&ext, id);
         }
+    }
+
+    /// Stop waiting for request `id` of `ext`: the extension is told, and its answer will be dropped.
+    fn cancel_provider_request(&mut self, ext: &str, id: u64) {
+        if let Some(p) = self.cfg.exts.code.procs.get(ext) {
+            let _ = p.send(&ToHost::Cancel { id });
+        }
+        self.cfg.exts.code.pending.lock().unwrap_or_else(|p| p.into_inner()).answer(ext, id, Err(v::Error::Cancelled));
     }
 
     // --- formatters ---
@@ -849,8 +880,10 @@ impl Workbench {
             !list.is_empty()
         });
         p.waiting.retain(|(_, e, _)| e != id);
+        self.forget_extension_lenses(id, cx);
         self.refresh_diagnostics(&touched, cx);
         self.refresh_decorations(&decorated, cx);
+        self.drop_ext_language_items(&|e| e != id, cx);
     }
 
     /// After a settings reload: what extensions that are no longer active (disabled, uninstalled) showed goes.
@@ -865,6 +898,8 @@ impl Workbench {
         for id in owners.into_iter().filter(|id| !reg.active.iter().any(|e| e.id() == id.as_str())) {
             self.forget_extension_marks(&id, cx);
         }
+        self.sync_ext_language(cx);
+        self.forget_inactive_lenses(cx);
     }
 
     /// An exthost ended. A crash takes what the extension showed with it (it would be stale); an idle stop keeps it.
@@ -885,10 +920,13 @@ impl Workbench {
         let path = ed.read(cx).path.clone();
         let decorations = self.line_decorations(&path);
         let diagnostics = self.extension_diagnostics_for(&path);
+        let offer = self.ext_language_offer(&path, window, cx);
         ed.update(cx, |e, cx| {
             e.set_save_formatter(Some(formatter));
             e.set_ext_decorations(decorations, cx);
+            e.set_ext_language(offer);
         });
+        self.attach_lenses(ed, window, cx);
         if !diagnostics.is_empty() {
             let d = self.diagnostics_for(&path);
             ed.update(cx, |e, cx| e.set_diagnostics(d, cx));

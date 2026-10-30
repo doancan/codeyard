@@ -112,6 +112,11 @@ export type Request =
   | { tag: "timer"; val: bigint }
   | { tag: "cancel-progress"; val: bigint }
   | { tag: "open-uri"; val: string }
+  | { tag: "hover"; val: [Document, Position] }
+  | { tag: "completion"; val: [Document, Position, string | undefined] }
+  | { tag: "code-lens"; val: [Document, Range] }
+  | { tag: "resolve-code-lens"; val: [Document, WitCodeLens] }
+  | { tag: "inlay-hints"; val: [Document, Range] }
   | { tag: "scm-status"; val: [string, string] }
   | { tag: "scm-original"; val: [string, string] }
   | { tag: "scm-validate"; val: [string, string, string] };
@@ -137,6 +142,18 @@ export interface WitScmState {
   }[];
 }
 
+export interface WitCodeLens {
+  id: string;
+  range: Range;
+  command: { title: string; command: string; argsJson: string } | undefined;
+}
+
+export interface WitInlayHint {
+  position: Position;
+  label: string;
+  tooltip: string | undefined;
+}
+
 export interface WitCodeAction {
   id: string;
   title: string;
@@ -154,8 +171,57 @@ export type Response =
   | { tag: "code-actions"; val: WitCodeAction[] }
   | { tag: "tasks"; val: { id: string; label: string; detail: string | undefined; group: string }[] }
   | { tag: "ranges"; val: Range[] }
+  | { tag: "hover"; val: WitHover | undefined }
+  | { tag: "completions"; val: { items: WitCompletionItem[]; incomplete: boolean } }
+  | { tag: "code-lenses"; val: WitCodeLens[] }
+  | { tag: "inlay-hints"; val: WitInlayHint[] }
   | { tag: "scm"; val: WitScmState }
   | { tag: "text"; val: string | undefined };
+
+export interface WitHover {
+  contents: string;
+  range: Range | undefined;
+}
+
+export type CompletionKind =
+  | "text"
+  | "method"
+  | "function"
+  | "constructor"
+  | "field"
+  | "variable"
+  | "class"
+  | "interface"
+  | "module"
+  | "property"
+  | "unit"
+  | "value"
+  | "enum"
+  | "keyword"
+  | "snippet"
+  | "color"
+  | "file"
+  | "reference"
+  | "folder"
+  | "enum-member"
+  | "constant"
+  | "struct"
+  | "event"
+  | "operator"
+  | "type-parameter";
+
+export interface WitCompletionItem {
+  label: string;
+  kind: CompletionKind;
+  detail: string | undefined;
+  documentation: string | undefined;
+  insertText: string | undefined;
+  snippet: boolean;
+  range: Range | undefined;
+  additionalEdits: TextEdit[];
+  filterText: string | undefined;
+  sortText: string | undefined;
+}
 
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
 
