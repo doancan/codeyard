@@ -121,6 +121,16 @@ is the complete list and always matches your key bindings; every setting is in [
 | Go to last edit location | ⌘K ⌘Q | Ctrl+K Ctrl+Q |
 | Open / close everything inside a folder (file tree) | ⇧→ / ⇧← | Shift+→ / Shift+← |
 | Expand snippet / next tab stop / previous | Tab / Tab / ⇧Tab | Tab / Tab / Shift+Tab |
+| Context menu of the focused row, the Explorer selection or the editor | ⇧F10 | Shift+F10, Menu key |
+| Run and Debug, Testing, Remote Explorer and Ports lists: move / first / last / open | ↑ ↓ / Home / End / ↵ | ↑ ↓ / Home / End / Enter |
+
+The lists of the Run and Debug view (variables, watches, call stack, breakpoints), the Testing view, the Remote
+Explorer and the Ports panel take the keyboard as a whole: Tab reaches them (a click on a row does too), a frame in the
+focus colour marks the list and the row under the cursor, and Enter does what a click on the row does. Shift+F10 (or the
+Menu key on Windows keyboards) opens the menu a right click opens, under the row; Escape closes it and the keyboard goes
+back to the row. The same key opens the Explorer's menu for the selected row and the editor's menu at the caret. The
+keys are commands like any other (`rows.previous`, `rows.next`, `rows.first`, `rows.last`, `rows.activate`,
+`list.showContextMenu`), so `keybindings.jsonc` can change them.
 
 Right-click in the file tree for new file/folder, cut/copy/paste, rename, delete, copy path,
 favorites. Drag files and folders onto a folder to move them (an existing file is never
