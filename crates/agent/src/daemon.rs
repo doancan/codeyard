@@ -55,6 +55,11 @@ impl Registry {
         let (sess, resumed) = {
             let mut map = self.sessions.locked();
             match map.get_mut(&key) {
+                // An exclusive session is not taken from a connection that is still there.
+                Some(e) if key.starts_with(proto::EXCLUSIVE_SESSION) && e.session.out.is_attached() => {
+                    let refused = Response::Error(Error::PermissionDenied("the session is in use by another connection".into()));
+                    return proto::write_frame(&mut output, &Frame { id, body: &refused });
+                }
                 Some(e) => {
                     e.detached_since = None;
                     (e.session.clone(), true)
@@ -204,27 +209,27 @@ mod unix {
         }
     }
 
+    /// A connection to the daemon on `socket`, started first (this executable with `--daemon`, a detached process) if
+    /// none answers.
+    pub fn connect_or_start(socket: &Path) -> io::Result<UnixStream> {
+        if let Ok(s) = connect(socket) {
+            return Ok(s);
+        }
+        spawn_daemon(socket)?;
+        let mut last = None;
+        for _ in 0..100 {
+            match connect(socket) {
+                Ok(s) => return Ok(s),
+                Err(e) => last = Some(e),
+            }
+            std::thread::sleep(Duration::from_millis(30));
+        }
+        Err(last.unwrap_or_else(|| io::Error::other("daemon did not start")))
+    }
+
     /// Bridge: stdio <-> socket. Starts the daemon if missing (detached process, doesn't die with ssh).
     pub fn attach(socket: &Path) -> io::Result<()> {
-        let stream = match connect(socket) {
-            Ok(s) => s,
-            Err(_) => {
-                spawn_daemon(socket)?;
-                let mut last = None;
-                let mut found = None;
-                for _ in 0..100 {
-                    match connect(socket) {
-                        Ok(s) => {
-                            found = Some(s);
-                            break;
-                        }
-                        Err(e) => last = Some(e),
-                    }
-                    std::thread::sleep(Duration::from_millis(30));
-                }
-                found.ok_or_else(|| last.unwrap_or_else(|| io::Error::other("daemon did not start")))?
-            }
-        };
+        let stream = connect_or_start(socket)?;
         let mut from_daemon = stream.try_clone()?;
         std::thread::spawn(move || {
             // stdout is line-buffered: flush after every chunk for binary frames.
@@ -271,7 +276,7 @@ mod unix {
 }
 
 #[cfg(unix)]
-pub use unix::{attach, run};
+pub use unix::{attach, connect_or_start, run};
 
 #[cfg(test)]
 mod tests {

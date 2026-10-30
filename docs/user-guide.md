@@ -196,6 +196,13 @@ Opening a file from Explorer or Quick Open restores a maximized terminal panel t
 Control, Run and Debug, Testing, Remote, Extensions) to a second side bar on the right of the editor; its activity bar
 icon and commands then open it there, next to whatever the left side bar shows. "View: Move View to Primary Side Bar"
 moves it back and "View: Toggle Secondary Side Bar" hides or shows it; the arrangement comes back at the next start.
+You can also drag a view's activity bar icon to the other side: while you drag, the left and right edges of the window
+show a highlighted drop zone, and the view opens in the side bar you drop it on. The panel (terminal, Problems,
+Output) docks below the editor or beside it: "View: Move Panel Left", "View: Move Panel Right" and "View: Move Panel
+to Bottom" (or the button in the panel's header); a panel docked beside the editor is resized from its edge towards the
+editor, and the dock is kept for the next start. Screen readers read which view each side bar shows and where the panel
+is in the window's description. Dragging an editor tab out of the window is not supported (the interface toolkit has no
+drag and drop between windows); use "View: Move Editor into New Window".
 "Terminal: Move Terminal into New Window" moves the active terminal, with its running program, into a window of its own
 (the same terminal, not a copy). Closing that window puts the terminal back in the panel, still running;
 "Terminal: Move Terminals Back to Panel" does it for all of them. A detached terminal belongs to its editor window and
@@ -208,9 +215,33 @@ to the front. At the next start, each terminal that was in an editor group or in
 same place as a new shell, with its name, colour and folder, and the line "Previous session ended; started a new
 shell"; nothing from the previous session runs again. A window whose display is gone opens on an attached display, made
 to fit; a saved arrangement that cannot be read is ignored.
+
+"View: Move Editor into New Window" shows the active file in a window of its own, for example on a second display;
+"View: Copy Editor into New Window" does the same and keeps its tab. Both windows show one document: what you type in
+one appears in the other at once, undo takes back edits made in either, and one save writes it. Each window keeps its
+own cursor, selection, scroll and find bar. Completion, hover, diagnostics and go to definition work there as in a tab
+(a definition in another file opens in the main window). Closing the file's window puts it back as a tab of the focused
+group with any unsaved changes; ⌘W in it closes the file instead, and asks whether to save when no other tab or window
+shows it. "View: Move Editors Back to Main Window" returns all of them. The windows belong to their folder: they close
+when the folder or the connection changes or the main window closes (unsaved changes are kept by hot exit or asked
+about, as for tabs), and come back in place at the next start; a file you also open as a tab keeps its tab. In a file's
+own window the command palette, Quick Open, Go to Line, the right-click menu and the other commands and shortcuts work
+as in the main window and act on that window's editor; a command that shows something in the main window (another
+file, a side view) brings it to the front. Screen readers see the editor in its own window, and the terminal in its
+own window, the same way as in the main window.
 **Terminals after a restart.** With `window.restoreSession` on (the default), the panel's terminals come back when
-the folder opens again: same order, folder, title, color and program. Each one is a **new shell**: nothing that ran before
-is started or typed again, and a line says *Previous session ended; started a new shell*. If a terminal's folder is gone,
+the folder opens again: same order, folder, title, color and program. On macOS and Linux, terminals of a local folder
+run in a small background process of Codeyard's (the terminal daemon). They are kept running only when you are expected
+to come back: when you **quit** Codeyard (⌘Q, Quit in the menu, an update's restart), or when it crashes or is killed.
+Leaving on purpose ends them at once, as always: **closing the window** (even the last one), *Close Folder*, opening
+another folder in the window or switching to an SSH folder. Open the folder again within 5 minutes and you get **the
+same shells back**, still running, with what they printed meanwhile and a line *Reconnected to terminal session* (also
+announced in the status bar). If another Codeyard instance already has those terminals open, they stay with it: this
+window starts new shells and says so in the status bar. If more than the last 256 KB
+of a terminal's output came while no window was open, the line says how much was lost. A terminal no window takes back
+within 5 minutes is ended, and the daemon stops 10 minutes after its last terminal. Any terminal that cannot be taken
+back (it ended, the daemon was restarted, `window.restoreSession` is off, an SSH folder) is a **new shell**: nothing that
+ran before is started or typed again, and a line says *Previous session ended; started a new shell*. If a terminal's folder is gone,
 it starts in the workspace folder and says so. `"terminal.persistentScrollback": 1000` also keeps the last lines of each
 terminal's history (plain text, with colors and control sequences removed) and shows them above that line; it is 0 (off) by
 default, because history can contain secrets. "Terminal: Clear Saved Terminal History" removes the saved history now.

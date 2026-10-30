@@ -43,6 +43,8 @@ actions!(
     ]
 );
 
+#[path = "terminal_attach.rs"]
+mod attach;
 #[path = "terminal_colors.rs"]
 mod colors;
 #[path = "terminal_find.rs"]
@@ -81,6 +83,8 @@ pub enum TerminalEvent {
     OpenLink(crate::links::Link),
     /// Right click (window coordinates): copy, paste, select all, find, clear.
     ContextMenu(Point<Pixels>),
+    /// The terminal daemon gave the token to take this terminal back after a restart: save it.
+    Kept,
 }
 
 /// Most scrollback lines (`terminal.scrollback`): 50,000 lines of 200 columns already take about 200 MB, times up to
@@ -192,6 +196,8 @@ pub struct TerminalView {
     launched: (Option<String>, Option<Vec<String>>),
     /// Started with a shell (not an output-only terminal): saved for the next start from the moment it opens.
     has_shell: bool,
+    /// The token to take this terminal back after a restart (a terminal kept by the terminal daemon).
+    token: Option<crate::terminal_session::SavedPty>,
     term: Term<Listener>,
     parser: Processor<StdSyncHandler>,
     events: Listener,
@@ -244,94 +250,7 @@ impl TerminalView {
 
     /// A terminal running `launch` (a profile or a picked shell).
     pub fn new_with(host: Arc<dyn Host>, cwd: Option<String>, launch: Launch, cx: &mut Context<Self>) -> Self {
-        let Launch { shell, args, env, color } = launch;
-        let mut view = Self::blank(host.clone(), cwd.clone(), color, cx);
-        view.launched = (shell.clone(), args.clone());
-        view.has_shell = true;
-        let (cols, rows) = (view.size.cols as u16, view.size.rows as u16);
-        let integration = cx.global::<crate::settings::Settings>().terminal_shell_integration;
-        let spawn = cx.background_executor().spawn(async move {
-            match (&args, env.is_empty(), integration) {
-                (None, true, false) => host.pty_spawn(cols, rows, cwd, shell),
-                _ => host.pty_spawn_ex(host::PtySpec { cols, rows, cwd, shell, args, env, integration }),
-            }
-        });
-        cx.spawn(async move |this, cx| {
-            let pty = match spawn.await {
-                Ok(p) => p,
-                Err(e) => {
-                    this.update(cx, |t, cx| {
-                        t.error = Some(crate::i18n::tf("Could not start a shell: {}", &[&e]).into());
-                        cx.notify();
-                    })
-                    .ok();
-                    return;
-                }
-            };
-            let id = pty.id;
-            let ok = this
-                .update(cx, |t, cx| {
-                    t.pty = Some(id);
-                    // Report it if the view got its size in the meantime.
-                    t.host.pty_resize(id, t.size.cols as u16, t.size.rows as u16);
-                    let pending = std::mem::take(&mut t.pending_input);
-                    if !pending.is_empty() {
-                        t.host.pty_input(id, pending);
-                    }
-                    cx.notify();
-                })
-                .is_ok();
-            if !ok {
-                return;
-            }
-            // Output pump: wait, then parse whatever piled up in one go (no frame per chunk).
-            use futures::StreamExt;
-            // If the UI lags (e.g. `yes` output), pending output must not grow without bound: whatever exceeds 32 MB is dropped and a note
-            // is left (the terminal's scrollback is only 2,000 lines anyway). The exit event is never dropped.
-            let backlog = Arc::new(OutputBacklog::default());
-            let gate = backlog.clone();
-            let mut events = crate::ui::bridge_with(pty.events, move |ev| match ev {
-                PtyEvent::Output(d) => gate.admit(d.len()),
-                PtyEvent::Exit(_) => true,
-            });
-            while let Some(first) = events.next().await {
-                let mut batch = vec![first];
-                while let Ok(more) = events.try_recv() {
-                    batch.push(more);
-                    if batch.len() > 256 {
-                        break;
-                    }
-                }
-                let mut exited = false;
-                let alive = this
-                    .update(cx, |t, cx| {
-                        for ev in batch {
-                            match ev {
-                                PtyEvent::Output(data) => {
-                                    backlog.consumed(data.len());
-                                    t.feed(&data);
-                                    if backlog.take_dropped() {
-                                        t.feed(b"\r\n\x1b[2m[output was dropped: the terminal could not keep up]\x1b[0m\r\n");
-                                    }
-                                }
-                                PtyEvent::Exit(code) => {
-                                    t.on_exit(code, cx);
-                                    exited = true;
-                                }
-                            }
-                        }
-                        t.drain_events(cx);
-                        cx.notify();
-                    })
-                    .is_ok();
-                if !alive || exited {
-                    return;
-                }
-            }
-            this.update(cx, |t, cx| t.on_exit(None, cx)).ok();
-        })
-        .detach();
-        view
+        Self::start(host, cwd, launch, false, cx)
     }
 
     /// A terminal that only shows output given to it (test runs): no shell, keys go nowhere.
@@ -378,6 +297,7 @@ impl TerminalView {
             title_locked: false,
             launched: (None, None),
             has_shell: false,
+            token: None,
             term,
             parser: Processor::new(),
             events,

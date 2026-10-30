@@ -154,6 +154,12 @@ pub mod settings_ui;
 #[path = "workbench_spell.rs"]
 mod spell_glue;
 // --- git-sync ---
+#[path = "workbench_actions.rs"]
+mod actions_glue;
+#[path = "workbench_docks.rs"]
+mod docks_glue;
+#[path = "workbench_editor_windows.rs"]
+mod editor_windows_glue;
 #[path = "workbench_state.rs"]
 mod state_glue;
 #[path = "workbench_structural.rs"]
@@ -164,8 +170,12 @@ mod sync_glue;
 mod task_run_glue;
 #[path = "workbench_tasks.rs"]
 pub mod tasks;
+#[path = "workbench_term_daemon.rs"]
+mod term_daemon_glue;
 #[path = "workbench_term_tabs.rs"]
 mod term_tabs_glue;
+#[cfg(unix)]
+pub use term_daemon_glue::{enable_terminal_daemon, terminal_daemon_socket};
 #[path = "workbench_terminals.rs"]
 mod terminals_glue;
 #[cfg(test)]
@@ -557,6 +567,8 @@ pub use debug::{
     AddDebugConfiguration, AddFunctionBreakpoint, ConsoleComplete, ConsoleHistoryNext, ConsoleHistoryPrev, DisableAllBreakpoints, EnableAllBreakpoints,
     OpenLaunchConfiguration, RunToCursor, RunWithoutDebugging, ShowRunAndDebug, StopAllDebugging, ToggleBreakpointEnabled, ToggleBreakpointsActive,
 };
+pub use docks_glue::{MovePanelLeft, MovePanelRight, MovePanelToBottom};
+pub use editor_windows_glue::{CopyEditorIntoNewWindow, MoveEditorIntoNewWindow, MoveEditorsBackToMainWindow};
 pub use ext_glue::{CancelExtensionConsent, InstallExtensionFromFile, InstallExtensionFromFolder, InstallExtensionFromRegistry, ShowExtensions};
 pub use host::askpass::{AskKind, AskRequest};
 pub use inspector_glue::ShowExtensionInspector;
@@ -1111,6 +1123,7 @@ impl Workbench {
             // Terminals in windows of their own or in the editor area belong to this window: they end with it.
             cx.on_release(|this, cx| {
                 this.close_detached_terminals(cx);
+                this.close_editor_windows(cx);
                 this.close_editor_terminals(cx);
             }),
             // A download in progress is cancelled and its partial file removed before the process ends.
@@ -1131,6 +1144,10 @@ impl Workbench {
             cx.observe_window_activation(window, |this, window, cx| {
                 #[cfg(target_os = "macos")]
                 crate::menus::refresh_dock_windows(cx);
+                // Back in this window: commands act on its tabs again, not on an editor's own window.
+                if window.is_window_active() {
+                    this.leave_editor_window();
+                }
                 // Reduce motion / Increase contrast may have changed in System Settings meanwhile.
                 if window.is_window_active() && crate::system_prefs::refresh(cx) {
                     let choice = this.theme_choice.clone();
@@ -1161,7 +1178,7 @@ impl Workbench {
             .unwrap_or(layout::SIDEBAR_W)
             .clamp(layout::SIDEBAR_MIN, layout::SIDEBAR_MAX);
         let panel_h = state.as_ref().and_then(|s| s.get("panel_h")).and_then(|v| v.parse::<f32>().ok()).unwrap_or(layout::PANEL_H).max(PANEL_MIN);
-        let panel_right = state.as_ref().and_then(|s| s.get("panel_right")).is_some_and(|v| v == "1");
+        let panel_dock = docks_glue::PanelDock::load(state.as_ref());
         let in_secondary = state.as_ref().and_then(|s| s.get("secondary_views")).map(|v| views_glue::parse_secondary(&v)).unwrap_or_default();
         let secondary = state
             .as_ref()
@@ -1274,7 +1291,10 @@ impl Workbench {
                 secondary_last: secondary,
                 last_primary: Some(Panel::Explorer),
                 detached: Vec::new(),
-                panel_right,
+                editor_windows: Vec::new(),
+                editor_host: None,
+                panel_dock,
+                view_drag: None,
                 panel_w,
                 panel_max: false,
                 panel_anim: None,
@@ -1320,6 +1340,8 @@ impl Workbench {
                 recent,
                 pinned,
                 opening_recent: None,
+                term_daemon: None,
+                term_socket: None,
             },
             remote: state_glue::RemoteState {
                 docker: Default::default(),
@@ -1518,7 +1540,7 @@ impl Workbench {
 
     fn panel(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
         let resizing = self.chrome.resizing_panel;
-        let (right, max) = (self.chrome.panel_right, self.chrome.panel_max);
+        let (beside, left, max) = (self.chrome.panel_dock.beside(), self.chrome.panel_dock == docks_glue::PanelDock::Left, self.chrome.panel_max);
         div()
             .debug_selector(|| "panel".into())
             .relative()
@@ -1526,13 +1548,16 @@ impl Workbench {
             .flex_col()
             .bg(c(p.bg))
             .border_color(c(p.border))
-            .map(|d| match (self.animated_panel_size(), max, right) {
-                (Some(size), _, true) => d.w(px(size)).flex_none().h_full().border_l_1(),
+            .map(|d| match (self.animated_panel_size(), max, beside) {
+                (Some(size), _, true) => d.w(px(size)).flex_none().h_full(),
                 (Some(size), _, false) => d.h(px(size)).flex_none().border_t_1(),
                 (None, true, _) => d.flex_1().min_h_0().min_w_0(),
-                (None, false, true) => d.w(px(self.chrome.panel_w)).flex_none().h_full().border_l_1(),
+                (None, false, true) => d.w(px(self.chrome.panel_w)).flex_none().h_full(),
                 (None, false, false) => d.h(px(self.chrome.panel_h)).flex_none().border_t_1(),
             })
+            // Beside the editor, the border is on the editor's side.
+            .when(beside && (!max || self.chrome.panel_anim.is_some()) && left, |d| d.border_r_1())
+            .when(beside && (!max || self.chrome.panel_anim.is_some()) && !left, |d| d.border_l_1())
             .child(
                 div()
                     .id("panel-sash")
@@ -1541,7 +1566,10 @@ impl Workbench {
                     .occlude()
                     .when(max, |d| d.invisible())
                     .map(|d| {
-                        if right {
+                        // Docked left, the sash is on the panel's right edge (towards the editor).
+                        if beside && left {
+                            d.right(px(-layout::SASH / 2.)).top_0().bottom_0().w(px(layout::SASH)).cursor(gpui::CursorStyle::ResizeLeftRight)
+                        } else if beside {
                             d.left(px(-layout::SASH / 2.)).top_0().bottom_0().w(px(layout::SASH)).cursor(gpui::CursorStyle::ResizeLeftRight)
                         } else {
                             d.top(px(-layout::SASH / 2.)).left_0().right_0().h(px(layout::SASH)).cursor(gpui::CursorStyle::ResizeUpDown)
@@ -1639,8 +1667,8 @@ impl Workbench {
                     .child(
                         ui::icon_button(
                             "panel-move",
-                            if self.chrome.panel_right { "tb-panel-bottom" } else { "tb-panel-right" },
-                            if self.chrome.panel_right { crate::i18n::t("Move Panel to Bottom") } else { crate::i18n::t("Move Panel Right") },
+                            if self.chrome.panel_dock.beside() { "tb-panel-bottom" } else { "tb-panel-right" },
+                            if self.chrome.panel_dock.beside() { crate::i18n::t("Move Panel to Bottom") } else { crate::i18n::t("Move Panel Right") },
                             p,
                         )
                         .on_click(cx.listener(|this, _, w, cx| this.dispatch_now(&TogglePanelPosition, w, cx))),
@@ -1726,14 +1754,13 @@ impl Workbench {
         }
     }
 
-    /// All editors in both groups (focused group first; one open in both counts once).
+    /// Every open document: the tabs of all groups (focused group first; one open in several counts once) and the editors
+    /// in windows of their own.
     fn all_editors(&self) -> Vec<Entity<EditorView>> {
         let mut v = self.tabs.editors.clone();
-        for g in self.tabs.groups.values() {
-            for ed in &g.editors {
-                if !v.contains(ed) {
-                    v.push(ed.clone());
-                }
+        for ed in self.tabs.groups.values().flat_map(|g| g.editors.iter().cloned()).chain(self.window_editors()) {
+            if !v.contains(&ed) {
+                v.push(ed);
             }
         }
         v
@@ -1745,7 +1772,13 @@ impl Workbench {
         self.all_editors().iter().any(|e| e.read(cx).is_dirty())
     }
 
+    /// The editor commands act on: the one in its own window while that window is in use, else the focused tab.
     fn active_editor(&self) -> Option<&Entity<EditorView>> {
+        self.hosted_editor().or_else(|| self.tab_editor())
+    }
+
+    /// The focused group's editor tab in front (what this window shows).
+    fn tab_editor(&self) -> Option<&Entity<EditorView>> {
         self.tabs.active.and_then(|i| self.tabs.editors.get(i))
     }
 
@@ -1807,6 +1840,7 @@ impl Workbench {
         self.persist.pending_restore_workspace = None;
         self.persist.backed_up.clear();
         self.return_all_editor_terminals();
+        self.close_editor_windows(cx);
         self.tabs = Default::default();
         self.tabs.active = None;
         self.tabs.open_error = None;
@@ -1973,6 +2007,9 @@ impl Workbench {
     }
 
     fn activate(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if self.run_in_main_window(window, cx, move |this, window, cx| this.activate(ix, window, cx)) {
+            return;
+        }
         self.chrome.panel_max = false;
         self.tabs.diff_active = false;
         self.tabs.large_active = false;
@@ -2018,67 +2055,19 @@ impl Workbench {
     }
 
     fn close_editor_at(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(ed) = self.tabs.editors.get(ix) else { return };
-        if !ed.read(cx).is_dirty() || self.also_in_other(ed) {
-            self.remove_editor(ix, window, cx);
-            return;
-        }
-        let name = ed.read(cx).name.clone();
-        let answer = window.prompt(
-            PromptLevel::Warning,
-            &crate::i18n::tf("Do you want to save the changes you made to {}?", &[&name]),
-            Some(crate::i18n::t("Your changes will be lost if you don't save them.")),
-            &[crate::i18n::t("Save"), crate::i18n::t("Don't Save"), crate::i18n::t("Cancel")],
-            cx,
-        );
-        let ed = ed.downgrade();
-        cx.spawn_in(window, async move |this, cx| {
-            let choice = answer.await;
-            this.update_in(cx, |this, window, cx| {
-                let Some(entity) = ed.upgrade() else { return };
-                match choice {
-                    // Save: closes when the write finishes (and succeeds); stays open on conflict/error.
-                    Ok(0) => {
-                        let done = std::rc::Rc::new(std::cell::Cell::new(false));
-                        cx.subscribe_in(&entity, window, move |this, e, ev: &EditorEvent, window, cx| {
-                            if done.get() || !matches!(ev, EditorEvent::Saved) {
-                                return;
-                            }
-                            done.set(true);
-                            if let Some(ix) = this.tabs.editors.iter().position(|x| x == e) {
-                                this.remove_editor(ix, window, cx);
-                            }
-                        })
-                        .detach();
-                        entity.update(cx, |e, cx| e.save_now(cx));
-                    }
-                    Ok(1) => {
-                        if let Some(ix) = this.tabs.editors.iter().position(|e| *e == entity) {
-                            this.remove_editor(ix, window, cx);
-                        }
-                    }
-                    _ => {}
-                }
-            })
-            .ok();
-        })
-        .detach();
+        let Some(ed) = self.tabs.editors.get(ix).cloned() else { return };
+        let last = !self.also_in_other(&ed);
+        self.close_view_asking(ed, last, window, cx, |this, ed, window, cx| {
+            if let Some(ix) = this.tabs.editors.iter().position(|e| e == ed) {
+                this.remove_editor(ix, window, cx);
+            }
+        });
     }
 
     fn remove_editor(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         let ed = self.tabs.editors.remove(ix);
-        // If also open in the other group, only this view closes; the backup stays.
-        if !self.also_in_other(&ed) {
-            let path = ed.read(cx).path.clone();
-            self.discard_response_file(&path);
-            self.drop_backup(&path, cx);
-            let (line, col) = ed.read(cx).cursor_position();
-            self.nav.closed.retain(|c| c.0 != path);
-            self.nav.closed.push((path, line as u32, col.saturating_sub(1) as u32));
-            if self.nav.closed.len() > 20 {
-                self.nav.closed.remove(0);
-            }
-        }
+        // If also open in another group or window, only this view closes; the backup stays.
+        self.forget_closed_view(&ed, cx);
         self.sync_slots(cx);
         // When a split group's last tab closes, the group closes too and the other becomes the only one.
         let group_key = self.tabs.current_key();
@@ -2367,7 +2356,7 @@ impl Workbench {
     /// "● file — folder" (window title and drawn title bar).
     fn title_text(&self, cx: &App) -> Option<String> {
         let root = self.roots.primary.read(cx).root().map(|r| ui::file_name(r).to_string());
-        let file = self.active_editor().map(|e| {
+        let file = self.tab_editor().map(|e| {
             let e = e.read(cx);
             format!("{}{}", if e.is_dirty() { "● " } else { "" }, e.name)
         });
@@ -2447,6 +2436,14 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
             }
             EditorEvent::Overwrote(text) => return this.keep_overwritten(ed, text, cx),
             EditorEvent::OpenLocation { path, line, col } => {
+                // From an editor's own window: the same file moves there; another file opens in this window, in front.
+                if this.reveal_in_editor_window(ed, path, *line, *col, cx) {
+                    return;
+                }
+                if this.host_window_of(ed).is_some() {
+                    this.leave_editor_window();
+                    window.activate_window();
+                }
                 return this.open_location(path.clone(), *line, *col, window, cx);
             }
             EditorEvent::Log(line) => {
@@ -2460,7 +2457,11 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
                 return;
             }
             EditorEvent::ShowLocations { locs, what } => {
-                return this.show_locations(locs.clone(), what, window, cx);
+                let (locs, what) = (locs.clone(), *what);
+                if let Some((_, handle)) = this.host_window_of(ed) {
+                    return this.run_in_editor_window(handle, cx, move |this, window, cx| this.show_locations(locs, what, window, cx));
+                }
+                return this.show_locations(locs, what, window, cx);
             }
             EditorEvent::BreakpointsChanged => {
                 this.on_breakpoints_changed(ed, cx);
@@ -2471,7 +2472,14 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
                 cx.notify();
                 return;
             }
-            EditorEvent::ContextMenu(position) => return this.open_editor_menu(*position, window, cx),
+            // From an editor's own window, the menu opens there (its position is in that window).
+            EditorEvent::ContextMenu(position) => {
+                let position = *position;
+                if let Some((_, handle)) = this.host_window_of(ed) {
+                    return this.run_in_editor_window(handle, cx, move |this, window, cx| this.open_editor_menu(position, window, cx));
+                }
+                return this.open_editor_menu(position, window, cx);
+            }
             EditorEvent::OpenMergeEditor => return this.open_merge_editor(&OpenMergeEditor, window, cx),
             EditorEvent::SendRequest(line) => return this.send_request_at(Some(*line), window, cx),
             EditorEvent::Changed => {

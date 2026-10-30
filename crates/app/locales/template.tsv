@@ -796,6 +796,7 @@ Explorer (⇧⌘E)
 Export as Text…	
 Exposed only; not published on the server.	
 Extension Inspector	
+Extension View	
 Extension id, like publisher.name or publisher.name@1.2.0	
 Extension in development not loaded: {}	
 Extension in development: it reloads when you save a file in its folder	
@@ -1065,6 +1066,7 @@ Import VS Code Settings and Shortcuts
 Imported {0} settings and {1} shortcuts from VS Code ({2} settings and {3} shortcuts have no equivalent here)	
 In Privacy & Security, press + and add Codeyard, then turn it on.	
 In the file tree, type to jump to a name; ⇧→ opens everything inside a folder, ⇧← closes it.	
+In the secondary side bar: {}	
 Incoming	
 Indent of each folder level in the explorer (px)	
 Indent using 2 spaces	
@@ -1343,6 +1345,7 @@ No debug session.
 No debug session. F5 starts one.	
 No definition found	
 No differences.	
+No editor is in a window of its own.	
 No edits yet in this session.	
 No enclosing brackets	
 No expressions: + adds one.	
@@ -1496,6 +1499,7 @@ Open a Markdown file (.md) to preview it.
 Open a Rust file first	
 Open a file first	
 Open a file first.	
+Open a file in the editor first.	
 Open a file inside a folder to run its tests.	
 Open a file to see its history.	
 Open a file to see its structure.	
@@ -1542,6 +1546,9 @@ Output
 Output: Clear	
 Overview	
 Overwrite	
+Panel: below the editor	
+Panel: left of the editor	
+Panel: right of the editor	
 Passphrase	
 Password	
 Paste	
@@ -1610,6 +1617,8 @@ Previous Problem
 Previous match (⇧↵)	
 Previous result (⇧F4)	
 Previous session ended; started a new shell	
+Primary Side Bar	
+Primary side bar: {}	
 Problems	
 Problems: Copy Full Diagnostic	
 Problems: {}	
@@ -1699,6 +1708,7 @@ Recent
 Recent denials	
 Reconnect	
 Reconnect to {}	
+Reconnected to terminal session	
 Reconnected, but the server session had expired: terminals were closed.	
 Reconnected. Terminals kept running.	
 Reconnecting to {0} (attempt {1})	
@@ -1929,6 +1939,8 @@ Search: Structural Search…
 Search: Undo Last Replace	
 Search: {}	
 Searching…	
+Secondary Side Bar	
+Secondary side bar: {}	
 Seconds between background fetches	
 Select All	
 Select All Occurrences	
@@ -2206,6 +2218,7 @@ The debug adapter stopped
 The debug adapter stopped (exit code {})	
 The debugger could not bind this breakpoint.	
 The download finished but js-debug was not found in it.	
+The editor could not move to a new window: {}	
 The element can't be renamed.	
 The file changed during the write ({})	
 The file changed on disk while you were editing. Nothing was saved.	
@@ -2396,6 +2409,7 @@ Unsupported encoding: the file would not be written back exactly, so it is not c
 Unterminated quote in the Cargo test command	
 Untracked files will be deleted. This can't be undone.	
 Unwrapped lines	
+Up to {} editors can be in windows of their own.	
 Update	
 Update Now	
 Update available	
@@ -2444,14 +2458,20 @@ View: Close Empty Editor Group
 View: Close Other Editors	
 View: Close Saved Editors	
 View: Containers	
+View: Copy Editor into New Window	
 View: Files	
 View: Focus Left Editor Group	
 View: Focus Lower Editor Group	
 View: Focus Right Editor Group	
 View: Focus Upper Editor Group	
 View: Keep Editor	
+View: Move Editor into New Window	
 View: Move Editor into Other Group	
+View: Move Editors Back to Main Window	
 View: Move Panel (bottom ⇄ right)	
+View: Move Panel Left	
+View: Move Panel Right	
+View: Move Panel to Bottom	
 View: Move View to Primary Side Bar	
 View: Move View to Secondary Side Bar	
 View: Open Next Editor	
@@ -2554,6 +2574,7 @@ a program
 a string is not closed	
 a theme must be a JSON object	
 about {0} MB · {1}	
+another Codeyard window has them; started new shells	
 approved	
 args must be a list of texts	
 at {}	
@@ -2963,6 +2984,7 @@ your words
 {} already exists. Choose another name.	
 {} asks for permissions: install it from the Extensions view to review them	
 {} bookmark|{} bookmarks	
+{} bytes of output were lost while no window was attached	
 {} cannot be negated	
 {} cannot be parsed as JSON	
 {} cannot be parsed as a number	

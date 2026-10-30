@@ -40,7 +40,7 @@ passphrase-protected key stands in for a password because a non-root `sshd` cann
 ## Agent and protocol
 
 `crates/proto` defines the messages; frames are length-prefixed `postcard`, requests carry an id, so many calls and
-streams are multiplexed. Current protocol version: **15**.
+streams are multiplexed. Current protocol version: **16**.
 
 | Group | Requests | Notes |
 | --- | --- | --- |
@@ -49,7 +49,7 @@ streams are multiplexed. Current protocol version: **15**.
 | preview | `ReadPreview` | Version 12 adds one bounded read beneath a root through directory handles. Symlinks, reparse points, hidden paths and special files are refused; the opened file supplies both metadata and content. No per-component SSH requests are needed. Older agents are replaced on reconnect. |
 | search | `Search`, `Cancel` | `ignore` + `regex`, results streamed in chunks, cancellable; `Cancel` also interrupts staged copies, which acknowledge cleanup with `Cancelled` |
 | watch | `Watch` | polls the given path set once a second; change events are pushed |
-| terminals | `PtySpawn`, `PtySpawnEx`, `PtyInput`, `PtyResize`, `PtyKill`, `PtyStatus`, `ListShells` | output is a pushed event; the agent keeps 256 KB of scrollback per pty for resume. `PtySpawnEx` (version 11) takes a profile's shell, arguments and environment and turns on shell integration; `PtyStatus` names the foreground program and the shell's folder (asked before closing a busy terminal and for splits); `ListShells` reads `/etc/shells` for the profile picker |
+| terminals | `PtySpawn`, `PtySpawnEx`, `PtyInput`, `PtyResize`, `PtyKill`, `PtyStatus`, `ListShells`, `PtyToken`, `PtyAttach`, `PtyList` | output is a pushed event; the agent keeps 256 KB of scrollback per pty for resume. `PtySpawnEx` (version 11) takes a profile's shell, arguments and environment and turns on shell integration; `PtyStatus` names the foreground program and the shell's folder (asked before closing a busy terminal and for splits); `ListShells` reads `/etc/shells` for the profile picker; `PtyToken`, `PtyAttach` and `PtyList` (version 16) let a restarted client take a daemon session's terminals back with a per-terminal token and learn how much output it missed (docs/architecture.md, "Who owns local processes") |
 | processes | `Exec`, `ProcSpawn`, `TaskSpawn`, `ProcInput`, `ProcKill` | `Exec` runs a one-shot command with bounded output (git, curl for `.http`, helper scripts); `Proc*` runs long-lived processes (language servers, debug adapters); `TaskSpawn` runs a task with literal arguments or a shell line, its own environment changes and stdout and stderr in one stream |
 | folders | `HashTree`, `Cancel` | Compare Folders: one pass walks a folder (`.gitignore` and extra globs, symlinks never followed) and streams size, mtime and link target; a second pass hashes only the files the client names. Version 10 added it, so agents from earlier releases are replaced on the next connect |
 | big files | `LineIndex`, `ReadLines` | the agent samples a byte offset every 4096 lines and extends the index incrementally; used by the large-file view and log follow |
