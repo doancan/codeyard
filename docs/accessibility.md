@@ -189,7 +189,8 @@ repository, branch and file state, and committing checks the reviewed status and
    bar, suggestions and the picker opened there, or the terminal's text and cursor. The editor fills the window, so its
    bounds are the window's. Actions go to the workbench with that window, after making it the window commands act on.
    A side view's own window holds that view's part of the workbench's tree (taken with that window, so focus and row
-   frames are its own), named after the view; the main window's tree leaves it out.
+   frames are its own), named after the view; the main window's tree leaves it out. An extension view's window holds
+   that view's nodes, and clicks and focus from the screen reader go to the extension as in the side bar.
 
 7. **Layout.** The main window's description says which view each side bar shows, which views live in the secondary
    side bar and where the panel is docked, so moving a view by drag and drop is reflected without reading the screen.

@@ -147,7 +147,7 @@ pub(super) struct ChromeLayout {
     pub(super) editor_host: Option<usize>,
     /// Side views in windows of their own, and the one in use (its menus and pickers are drawn there).
     pub(super) view_windows: Vec<super::view_windows_glue::ViewWindowEntry>,
-    pub(super) view_host: Option<Panel>,
+    pub(super) view_host: Option<gpui::AnyWindowHandle>,
     /// Panel on the right (next to the editor) and its width; maximized (covers the editor).
     pub(super) panel_dock: super::docks_glue::PanelDock,
     /// A side view being dragged by its activity bar icon (the side bars are drop zones meanwhile).

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A code extension's side bar view can move into a window of its own ("View: Move View into New Window") and to the
+  secondary side bar. It stays the same view: the extension's updates reach the window and what you do there goes to
+  the extension. The window is restored with the folder while the extension is installed, closes when the extension
+  is removed or turned off, and gives the view back to the side bar when the extension crashes.
 - Terminals in editor groups and in windows of their own, and the terminals of SSH folders, are taken back after a
   restart the same way as a local folder's panel terminals: the same shells, in their places, with "Reconnected to
   terminal session". SSH folders resume their session on the server's agent, which already kept the shells.
@@ -157,6 +161,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Windows: a shell task's arguments run through cmd.exe reach the program unchanged when they contain `%` (a value like
   `%PATH%` is no longer expanded) or end with a backslash (`C:\dir\` no longer swallows the closing quote).
 - Screen readers find the Search results in the secondary side bar too, not only in the primary one.
+- Screen readers find an extension's side bar view when it is in the secondary side bar.
 - On macOS and Linux, a task, test run, language server or terminal no longer keeps running when Codeyard is killed or
   crashes. A small guard process started with the app ends every task's process group at once and hangs up every
   terminal, killing it after two seconds if it is still there. Windows already ends them through job objects and the

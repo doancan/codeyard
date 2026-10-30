@@ -817,6 +817,8 @@ impl Workbench {
     pub(super) fn on_extension_exited(&mut self, id: &str, crashed: bool, cx: &mut Context<Self>) {
         if crashed {
             self.forget_extension_marks(id, cx);
+            // Its views in windows of their own go back to the side bar, which shows what happened.
+            self.return_ext_view_windows(id, cx);
         }
     }
 

@@ -34,8 +34,31 @@ pub fn exthost_path() -> Option<PathBuf> {
     [dir.join(name), dir.parent()?.join(name)].into_iter().find(|p| p.is_file())
 }
 
+#[cfg(test)]
+thread_local! {
+    static LOAD_WITHOUT_EXTHOST: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Tests whose extension never runs (its requests are recorded, not sent) load code extensions on a machine without
+/// the exthost or its sandbox, such as a Windows test runner, while the returned guard lives.
+#[cfg(test)]
+pub fn load_without_exthost_for_test() -> impl Drop {
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            LOAD_WITHOUT_EXTHOST.with(|c| c.set(false));
+        }
+    }
+    LOAD_WITHOUT_EXTHOST.with(|c| c.set(true));
+    Reset
+}
+
 /// Whether code extensions can run in this app: `Err` says why not, naming the extension.
 pub fn code_runs_here(id: &dyn std::fmt::Display) -> Result<(), String> {
+    #[cfg(test)]
+    if LOAD_WITHOUT_EXTHOST.with(|c| c.get()) {
+        return Ok(());
+    }
     match (exthost_path(), sandbox()) {
         (None, _) => Err(crate::i18n::tf("{} contains code, but codeyard-exthost is missing beside Codeyard", &[id])),
         (Some(_), Err(why)) => Err(crate::i18n::tf("{0} contains code, which needs a sandbox this system does not provide: {1}", &[id, &why])),

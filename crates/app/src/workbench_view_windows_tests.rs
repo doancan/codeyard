@@ -10,7 +10,7 @@ fn window_count(cx: &mut VisualTestContext) -> usize {
 }
 
 fn view_window(wb: &Entity<Workbench>, panel: Panel, cx: &mut VisualTestContext) -> gpui::WindowHandle<ViewWindow> {
-    wb.read_with(cx, |wb, _| wb.chrome.view_windows.iter().find(|w| w.panel == panel).map(|w| w.window)).expect("the view has a window")
+    wb.read_with(cx, |wb, _| wb.chrome.view_windows.iter().find(|w| w.view.panel == panel).map(|w| w.window)).expect("the view has a window")
 }
 
 /// AC1: the open view moves into a window of its own (the same view: the side bar lets go of it) and closing that
@@ -32,7 +32,7 @@ fn a_side_view_moves_into_its_own_window_and_back_when_that_closes(cx: &mut gpui
     assert_eq!(window_count(vcx), windows + 1);
     let handle = view_window(&wb, Panel::Scm, vcx);
     let mut win = VisualTestContext::from_window(handle.into(), vcx);
-    assert_eq!(handle.update(&mut win, |root, _, _| root.panel).unwrap(), Panel::Scm, "the window draws Source Control");
+    assert_eq!(handle.update(&mut win, |root, _, _| root.view.panel).unwrap(), Panel::Scm, "the window draws Source Control");
     assert!(win.simulate_close());
     vcx.run_until_parked();
     wb.read_with(vcx, |wb, _| {
@@ -79,7 +79,8 @@ fn asking_for_a_windowed_view_brings_its_window_forward(cx: &mut gpui::TestAppCo
     vcx.run_until_parked();
     wb.read_with(vcx, |wb, _| {
         assert_eq!(wb.chrome.panel, Some(Panel::Explorer), "the side bar kept its view");
-        assert_eq!(wb.chrome.view_host, Some(Panel::Scm), "the view's window is the one in use");
+        assert!(wb.chrome.view_host == wb.view_window_of(Panel::Scm), "the view's window is the one in use");
+        assert!(wb.chrome.view_host.is_some());
     });
     assert!(vcx.debug_bounds("act-scm").is_some());
 }
@@ -96,7 +97,7 @@ fn menus_and_the_palette_open_in_the_views_window(cx: &mut gpui::TestAppContext)
     let handle = view_window(&wb, Panel::Explorer, vcx);
     // A menu asked for through the main window (as the tree's events arrive) opens in the view's window.
     wb.update_in(vcx, |wb, window, cx| {
-        wb.use_view_window(Panel::Explorer, cx);
+        wb.use_view_window(handle.into(), cx);
         wb.show_action_menu(vec![("Copy", Box::new(crate::editor::Copy), false)], gpui::point(px(20.), px(20.)), window, cx);
     });
     vcx.run_until_parked();
@@ -258,11 +259,129 @@ fn closing_the_windows_releases_the_workbench(cx: &mut gpui::TestAppContext) {
     assert!(weak.upgrade().is_none(), "the workbench was released");
 }
 
+/// An extension's side bar view moves into a window of its own as the same hosted view: the extension's new trees
+/// reach the window, a screen reader's click there goes to the extension, the window's tree holds the view (the main
+/// window's does not), and the view goes back to the side bar with its tree.
+#[gpui::test]
+fn an_extension_view_moves_into_its_own_window_with_its_state(cx: &mut gpui::TestAppContext) {
+    use crate::ext_views_tests as probe;
+    let (wb, vcx) = probe::setup(cx, "extwin-move", true);
+    probe::open(&wb, vcx, probe::SIDE);
+    probe::render(&wb, vcx, probe::SIDE, &probe::column([probe::text("one"), probe::button("go", "Go")]));
+    wb.update_in(vcx, |wb, window, cx| wb.view_into_new_window(window, cx));
+    vcx.run_until_parked();
+    let handle = wb.read_with(vcx, |wb, _| {
+        assert_eq!(wb.ext_views_in_windows(), vec![probe::SIDE.to_string()]);
+        assert_eq!((wb.chrome.panel, wb.cfg.exts.views.sidebar.clone()), (None, None), "the side bar let go of it");
+        assert!(wb.ext_view(probe::SIDE).is_some_and(|h| h.tree.is_some()), "the same hosted view, with its tree");
+        wb.chrome.view_windows[0].window
+    });
+    let mut win = VisualTestContext::from_window(handle.into(), vcx);
+    let root = handle.update(&mut win, |_, _, cx| cx.entity()).unwrap();
+    let snapshot =
+        |win: &mut VisualTestContext| win.update(|window, cx| (a11y::windows_access::VIEW_WINDOW.snapshot)(root.clone().into(), window, cx)).unwrap();
+    // The extension draws again: the window shows the new tree.
+    probe::render(&wb, vcx, probe::SIDE, &probe::column([probe::text("two"), probe::button("go", "Go")]));
+    let mut win = VisualTestContext::from_window(handle.into(), vcx);
+    let snap = snapshot(&mut win);
+    let labels: Vec<String> = snap.ext_views.iter().flat_map(|v| v.nodes.iter().map(|n| n.label.clone())).collect();
+    assert!(labels.iter().any(|l| l == "two"), "the extension's update reached the window: {labels:?}");
+    let main = vcx.update(|window, cx| (a11y::windows_access::WORKBENCH.snapshot)(wb.clone().into(), window, cx)).unwrap();
+    assert!(main.ext_views.is_empty(), "the main window's tree leaves it out");
+    accesskit_consumer::Tree::new(snap.to_tree(), true);
+    // A screen reader clicks the button in the window: the extension hears it.
+    let i = snap.ext_views[0].nodes.iter().position(|n| n.label == "Go").expect("the button is in the tree");
+    let req = accesskit::ActionRequest {
+        action: accesskit::Action::Click,
+        target_tree: accesskit::TreeId::ROOT,
+        target_node: a11y::windows_access::ext_view_node(0, i),
+        data: None,
+    };
+    let mut win = VisualTestContext::from_window(handle.into(), vcx);
+    win.update(|window, cx| (a11y::windows_access::VIEW_WINDOW.action)(root.clone().into(), &req, &snap, window, cx));
+    vcx.run_until_parked();
+    let events = wb.read_with(vcx, |wb, _| wb.ext_view_events_for_test());
+    assert!(events.iter().any(|e| e.contains("click") && e.contains("go")), "{events:?}");
+    // Back to the side bar, with its tree.
+    wb.update_in(vcx, |wb, _, cx| wb.return_view_windows(cx));
+    vcx.run_until_parked();
+    wb.read_with(vcx, |wb, _| {
+        assert!(wb.ext_views_in_windows().is_empty());
+        assert_eq!((wb.chrome.panel, wb.cfg.exts.views.sidebar.as_deref()), (Some(Panel::ExtView), Some(probe::SIDE)));
+        assert!(wb.ext_view(probe::SIDE).is_some_and(|h| h.tree.is_some()));
+    });
+}
+
+/// An extension view also moves to the secondary side bar (by command), where a screen reader finds it; from there it
+/// moves into a window and back to the secondary side bar.
+#[gpui::test]
+fn an_extension_view_moves_to_the_secondary_side_bar_and_back_from_its_window(cx: &mut gpui::TestAppContext) {
+    use crate::ext_views_tests as probe;
+    let (wb, vcx) = probe::setup(cx, "extwin-secondary", true);
+    probe::open(&wb, vcx, probe::SIDE);
+    probe::render(&wb, vcx, probe::SIDE, &probe::column([probe::text("side")]));
+    wb.update(vcx, |wb, cx| wb.move_view_to_secondary(cx));
+    vcx.run_until_parked();
+    assert_eq!(wb.read_with(vcx, |wb, _| wb.chrome.secondary), Some(Panel::ExtView));
+    let main = vcx.update(|window, cx| (a11y::windows_access::WORKBENCH.snapshot)(wb.clone().into(), window, cx)).unwrap();
+    assert_eq!(main.ext_views.len(), 1, "in the secondary side bar, a screen reader finds it");
+    wb.update_in(vcx, |wb, window, cx| wb.view_into_new_window(window, cx));
+    vcx.run_until_parked();
+    assert_eq!(wb.read_with(vcx, |wb, _| wb.ext_views_in_windows()), vec![probe::SIDE.to_string()]);
+    wb.update_in(vcx, |wb, _, cx| wb.return_view_windows(cx));
+    vcx.run_until_parked();
+    wb.read_with(vcx, |wb, _| {
+        assert_eq!(wb.chrome.secondary, Some(Panel::ExtView), "back in the secondary side bar");
+        assert_eq!(wb.cfg.exts.views.sidebar.as_deref(), Some(probe::SIDE));
+    });
+}
+
+/// The window closes when the extension is gone, gives the view back when its host crashed, and a saved window comes
+/// back only for an extension that still declares the view.
+#[gpui::test]
+fn extension_view_windows_follow_their_extension(cx: &mut gpui::TestAppContext) {
+    use crate::ext_views_tests as probe;
+    let (wb, vcx) = probe::setup(cx, "extwin-gone", true);
+    probe::open(&wb, vcx, probe::SIDE);
+    probe::render(&wb, vcx, probe::SIDE, &probe::column([probe::text("x")]));
+    wb.update_in(vcx, |wb, window, cx| wb.view_into_new_window(window, cx));
+    vcx.run_until_parked();
+    // Its host stopped after a crash: back to the side bar.
+    wb.update(vcx, |wb, cx| wb.return_ext_view_windows("you.probe", cx));
+    vcx.run_until_parked();
+    wb.read_with(vcx, |wb, _| {
+        assert!(wb.ext_views_in_windows().is_empty());
+        assert_eq!(wb.cfg.exts.views.sidebar.as_deref(), Some(probe::SIDE));
+    });
+    // Uninstalled or turned off: the window closes.
+    let windows = vcx.update(|_, cx| cx.windows().len());
+    wb.update_in(vcx, |wb, window, cx| wb.view_into_new_window(window, cx));
+    vcx.run_until_parked();
+    wb.update(vcx, |wb, cx| wb.close_gone_ext_view_windows(&std::collections::HashSet::new(), cx));
+    vcx.run_until_parked();
+    assert!(wb.read_with(vcx, |wb, _| wb.ext_views_in_windows().is_empty()));
+    assert_eq!(vcx.update(|_, cx| cx.windows().len()), windows, "its window closed");
+    // Restoring: a view that is no longer declared is dropped, a declared one comes back with its extension view.
+    let gone = SavedViewWindows::parse(r#"{"version":1,"windows":[{"view":"extension-view","ext":"you.gone.view"}]}"#);
+    wb.update_in(vcx, |wb, window, cx| wb.restore_view_windows(gone, window, cx));
+    vcx.run_until_parked();
+    assert!(wb.read_with(vcx, |wb, _| wb.chrome.view_windows.is_empty()), "dropped cleanly");
+    let saved = SavedViewWindows::parse(&format!(r#"{{"version":1,"windows":[{{"view":"extension-view","ext":"{}"}}]}}"#, probe::SIDE));
+    wb.update_in(vcx, |wb, window, cx| wb.restore_view_windows(saved, window, cx));
+    vcx.run_until_parked();
+    assert_eq!(wb.read_with(vcx, |wb, _| wb.ext_views_in_windows()), vec![probe::SIDE.to_string()]);
+}
+
 #[test]
 fn saved_view_windows_are_versioned_and_bounded() {
     let saved = SavedViewWindows::parse(r#"{"version":1,"windows":[{"view":"scm","secondary":true,"at":[1,2,300,400]},{"view":"nope"},{"view":"scm"}]}"#)
         .expect("valid");
     assert_eq!(saved.windows.len(), 1, "unknown and repeated views are dropped");
+    let ext = SavedViewWindows::parse(
+        r#"{"version":1,"windows":[{"view":"extension-view","ext":"a.b.c"},{"view":"extension-view","ext":"a.b.d"},{"view":"extension-view","ext":"a.b.c"},{"view":"extension-view"},{"view":"scm","ext":"a.b.c"}]}"#,
+    )
+    .expect("valid");
+    assert_eq!(ext.windows.len(), 2, "two extension views; a repeat, one without an id and a built-in view with one are dropped");
     for bad in ["", "{", r#"{"version":2,"windows":[]}"#, r#"{"version":1,"windows":[{"view":"scm","x":1}]}"#] {
         assert!(SavedViewWindows::parse(bad).is_none(), "{bad}");
     }
