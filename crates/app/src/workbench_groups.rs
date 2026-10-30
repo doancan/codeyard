@@ -191,14 +191,16 @@ impl Workbench {
                 }
                 group.active.and_then(|ix| group.editors.get(ix)).cloned()
             })
+            .chain(self.window_editors())
             .collect();
         for ed in self.all_editors() {
             ed.update(cx, |e, _| e.set_active(front.contains(&ed)));
         }
     }
 
+    /// Whether `ed` is also shown outside the focused group: in another group or in a window of its own.
     pub(super) fn also_in_other(&self, ed: &Entity<EditorView>) -> bool {
-        self.tabs.groups.values().any(|g| g.editors.contains(ed))
+        self.tabs.groups.values().any(|g| g.editors.contains(ed)) || self.in_editor_window(ed)
     }
 
     pub(super) fn ensure_group(&mut self, key: GroupKey) -> bool {

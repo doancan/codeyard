@@ -139,6 +139,8 @@ pub(super) struct ChromeLayout {
     pub(super) last_primary: Option<Panel>,
     /// Terminals in windows of their own.
     pub(super) detached: Vec<super::views_glue::Detached>,
+    /// Editors in windows of their own (see workbench_editor_windows.rs).
+    pub(super) editor_windows: Vec<super::editor_windows_glue::DetachedEditor>,
     /// Panel on the right (next to the editor) and its width; maximized (covers the editor).
     pub(super) panel_right: bool,
     pub(super) panel_w: f32,

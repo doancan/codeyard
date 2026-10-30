@@ -151,6 +151,8 @@ pub mod settings_ui;
 #[path = "workbench_spell.rs"]
 mod spell_glue;
 // --- git-sync ---
+#[path = "workbench_editor_windows.rs"]
+mod editor_windows_glue;
 #[path = "workbench_state.rs"]
 mod state_glue;
 #[path = "workbench_structural.rs"]
@@ -554,6 +556,7 @@ pub use debug::{
     AddDebugConfiguration, AddFunctionBreakpoint, ConsoleComplete, ConsoleHistoryNext, ConsoleHistoryPrev, DisableAllBreakpoints, EnableAllBreakpoints,
     OpenLaunchConfiguration, RunToCursor, RunWithoutDebugging, ShowRunAndDebug, StopAllDebugging, ToggleBreakpointEnabled, ToggleBreakpointsActive,
 };
+pub use editor_windows_glue::{CopyEditorIntoNewWindow, MoveEditorIntoNewWindow, MoveEditorsBackToMainWindow};
 pub use ext_glue::{CancelExtensionConsent, InstallExtensionFromFile, InstallExtensionFromFolder, InstallExtensionFromRegistry, ShowExtensions};
 pub use host::askpass::{AskKind, AskRequest};
 pub use inspector_glue::ShowExtensionInspector;
@@ -1108,6 +1111,7 @@ impl Workbench {
             // Terminals in windows of their own or in the editor area belong to this window: they end with it.
             cx.on_release(|this, cx| {
                 this.close_detached_terminals(cx);
+                this.close_editor_windows(cx);
                 this.close_editor_terminals(cx);
             }),
             // A download in progress is cancelled and its partial file removed before the process ends.
@@ -1270,6 +1274,7 @@ impl Workbench {
                 secondary_last: secondary,
                 last_primary: Some(Panel::Explorer),
                 detached: Vec::new(),
+                editor_windows: Vec::new(),
                 panel_right,
                 panel_w,
                 panel_max: false,
@@ -1722,14 +1727,13 @@ impl Workbench {
         }
     }
 
-    /// All editors in both groups (focused group first; one open in both counts once).
+    /// Every open document: the tabs of all groups (focused group first; one open in several counts once) and the editors
+    /// in windows of their own.
     fn all_editors(&self) -> Vec<Entity<EditorView>> {
         let mut v = self.tabs.editors.clone();
-        for g in self.tabs.groups.values() {
-            for ed in &g.editors {
-                if !v.contains(ed) {
-                    v.push(ed.clone());
-                }
+        for ed in self.tabs.groups.values().flat_map(|g| g.editors.iter().cloned()).chain(self.window_editors()) {
+            if !v.contains(&ed) {
+                v.push(ed);
             }
         }
         v
@@ -1803,6 +1807,7 @@ impl Workbench {
         self.persist.pending_restore_workspace = None;
         self.persist.backed_up.clear();
         self.return_all_editor_terminals();
+        self.close_editor_windows(cx);
         self.tabs = Default::default();
         self.tabs.active = None;
         self.tabs.open_error = None;
@@ -2014,67 +2019,19 @@ impl Workbench {
     }
 
     fn close_editor_at(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(ed) = self.tabs.editors.get(ix) else { return };
-        if !ed.read(cx).is_dirty() || self.also_in_other(ed) {
-            self.remove_editor(ix, window, cx);
-            return;
-        }
-        let name = ed.read(cx).name.clone();
-        let answer = window.prompt(
-            PromptLevel::Warning,
-            &crate::i18n::tf("Do you want to save the changes you made to {}?", &[&name]),
-            Some(crate::i18n::t("Your changes will be lost if you don't save them.")),
-            &[crate::i18n::t("Save"), crate::i18n::t("Don't Save"), crate::i18n::t("Cancel")],
-            cx,
-        );
-        let ed = ed.downgrade();
-        cx.spawn_in(window, async move |this, cx| {
-            let choice = answer.await;
-            this.update_in(cx, |this, window, cx| {
-                let Some(entity) = ed.upgrade() else { return };
-                match choice {
-                    // Save: closes when the write finishes (and succeeds); stays open on conflict/error.
-                    Ok(0) => {
-                        let done = std::rc::Rc::new(std::cell::Cell::new(false));
-                        cx.subscribe_in(&entity, window, move |this, e, ev: &EditorEvent, window, cx| {
-                            if done.get() || !matches!(ev, EditorEvent::Saved) {
-                                return;
-                            }
-                            done.set(true);
-                            if let Some(ix) = this.tabs.editors.iter().position(|x| x == e) {
-                                this.remove_editor(ix, window, cx);
-                            }
-                        })
-                        .detach();
-                        entity.update(cx, |e, cx| e.save_now(cx));
-                    }
-                    Ok(1) => {
-                        if let Some(ix) = this.tabs.editors.iter().position(|e| *e == entity) {
-                            this.remove_editor(ix, window, cx);
-                        }
-                    }
-                    _ => {}
-                }
-            })
-            .ok();
-        })
-        .detach();
+        let Some(ed) = self.tabs.editors.get(ix).cloned() else { return };
+        let last = !self.also_in_other(&ed);
+        self.close_view_asking(ed, last, window, cx, |this, ed, window, cx| {
+            if let Some(ix) = this.tabs.editors.iter().position(|e| e == ed) {
+                this.remove_editor(ix, window, cx);
+            }
+        });
     }
 
     fn remove_editor(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
         let ed = self.tabs.editors.remove(ix);
-        // If also open in the other group, only this view closes; the backup stays.
-        if !self.also_in_other(&ed) {
-            let path = ed.read(cx).path.clone();
-            self.discard_response_file(&path);
-            self.drop_backup(&path, cx);
-            let (line, col) = ed.read(cx).cursor_position();
-            self.nav.closed.retain(|c| c.0 != path);
-            self.nav.closed.push((path, line as u32, col.saturating_sub(1) as u32));
-            if self.nav.closed.len() > 20 {
-                self.nav.closed.remove(0);
-            }
-        }
+        // If also open in another group or window, only this view closes; the backup stays.
+        self.forget_closed_view(&ed, cx);
         self.sync_slots(cx);
         // When a split group's last tab closes, the group closes too and the other becomes the only one.
         let group_key = self.tabs.current_key();
@@ -2443,6 +2400,13 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
             }
             EditorEvent::Overwrote(text) => return this.keep_overwritten(ed, text, cx),
             EditorEvent::OpenLocation { path, line, col } => {
+                // From an editor's own window: the same file moves there; another file opens in this window, in front.
+                if this.reveal_in_editor_window(ed, path, *line, *col, cx) {
+                    return;
+                }
+                if this.front_editor_window(ed, cx).is_some() {
+                    window.activate_window();
+                }
                 return this.open_location(path.clone(), *line, *col, window, cx);
             }
             EditorEvent::Log(line) => {
@@ -2456,6 +2420,9 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
                 return;
             }
             EditorEvent::ShowLocations { locs, what } => {
+                if this.front_editor_window(ed, cx).is_some() {
+                    window.activate_window();
+                }
                 return this.show_locations(locs.clone(), what, window, cx);
             }
             EditorEvent::BreakpointsChanged => {
@@ -2467,6 +2434,8 @@ fn this_subscribe(wb: &mut Workbench, ed: &Entity<EditorView>, window: &mut Wind
                 cx.notify();
                 return;
             }
+            // The menu belongs to this window: not offered for an editor's own window (its position is in that window).
+            EditorEvent::ContextMenu(_) if this.front_editor_window(ed, cx).is_some() => return,
             EditorEvent::ContextMenu(position) => return this.open_editor_menu(*position, window, cx),
             EditorEvent::OpenMergeEditor => return this.open_merge_editor(&OpenMergeEditor, window, cx),
             EditorEvent::SendRequest(line) => return this.send_request_at(Some(*line), window, cx),

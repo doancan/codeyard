@@ -556,6 +556,7 @@ impl Workbench {
                 });
             }
         }
+        self.close_editor_windows_of_deleted(gone, cx);
         for group in self.tabs.groups.values_mut() {
             let active = group.active.and_then(|index| group.editors.get(index)).cloned();
             group.editors.retain(|ed| !gone(ed, cx) || ed.read(cx).is_dirty());

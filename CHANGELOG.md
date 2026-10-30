@@ -87,6 +87,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Terminals that were in the editor area or in their own window come back in the same place after a restart, as new
   shells with their name, colour and folder and a dimmed notice; no command of the previous session runs again.
   Windows whose display was removed open on an attached display.
+- "View: Move Editor into New Window" shows the active file in a window of its own, and "View: Copy Editor into New
+  Window" does so while keeping its tab. It is the same document as in the tabs: edits, undo, unsaved changes and saving
+  are shared, while each window keeps its own cursor and scroll. Language features, file watching, hot exit backups and
+  renames cover it like a tab. Closing that window puts the file back as a tab; ⌘W in it closes the file and asks to
+  save when no other tab or window shows it. "View: Move Editors Back to Main Window" returns all of them, and the
+  windows come back in place after a restart.
 - Terminals come back after a restart as new shells in their folders, with their titles, colors and programs, and say
   so; nothing runs again. `terminal.persistentScrollback` (off by default) also keeps the last lines of their history as
   plain text; "Terminal: Clear Saved Terminal History" removes it.

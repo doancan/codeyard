@@ -143,6 +143,7 @@ impl Workbench {
             let _ = s.save_tabs_with_layout(ws, &tabs, Some(&json));
         }
         self.persist_moved_terminals(cx);
+        self.persist_editor_windows(cx);
         self.persist_search_editors(cx);
         self.persist_terminals(cx);
     }
@@ -254,6 +255,8 @@ impl Workbench {
         self.restore_terminals(ws, window, cx);
         // Terminals that were in the editor area or in windows of their own: new shells, once the groups exist.
         let moved = self.saved_moved_terminals(ws);
+        // Files in windows of their own: loaded with the tabs, then shown in their windows again.
+        let windows = self.saved_editor_windows(ws);
         let Some(s) = &self.persist.state else { return false };
         let mut tabs = s.tabs(ws).unwrap_or_default();
         let saved = s.tab_layout(ws).as_deref().and_then(SavedEditorSession::parse);
@@ -264,6 +267,11 @@ impl Workbench {
         for b in &backups {
             if !tabs.iter().any(|t| t.rel_path == b.rel_path) {
                 tabs.push(state::Tab { rel_path: b.rel_path.clone(), active: false, pinned: false, group: 0 });
+            }
+        }
+        for rel in windows.iter().flat_map(|w| w.only_here()) {
+            if !tabs.iter().any(|t| t.rel_path == rel) {
+                tabs.push(state::Tab { rel_path: rel.to_string(), active: false, pinned: false, group: 0 });
             }
         }
         if tabs.is_empty() {
@@ -283,6 +291,7 @@ impl Workbench {
         tabs.retain(|t| !busy(&t.rel_path));
         if tabs.is_empty() {
             self.restore_moved_terminals(moved, window, cx);
+            self.restore_editor_windows(windows, window, cx);
             return false;
         }
         let request = request.filter(|(path, _)| tabs.iter().any(|tab| ui::join(&root, &tab.rel_path) == *path));
@@ -353,6 +362,7 @@ impl Workbench {
                 }
                 this.restore_layout(&layout, saved, focus_left, window, cx);
                 this.restore_moved_terminals(moved, window, cx);
+                this.restore_editor_windows(windows, window, cx);
                 if let Some((path, preview)) = request {
                     this.open_file_as(restore_host, path, preview, window, cx);
                 }

@@ -198,6 +198,17 @@ to the front. At the next start, each terminal that was in an editor group or in
 same place as a new shell, with its name, colour and folder, and the line "Previous session ended; started a new
 shell"; nothing from the previous session runs again. A window whose display is gone opens on an attached display, made
 to fit; a saved arrangement that cannot be read is ignored.
+
+"View: Move Editor into New Window" shows the active file in a window of its own, for example on a second display;
+"View: Copy Editor into New Window" does the same and keeps its tab. Both windows show one document: what you type in
+one appears in the other at once, undo takes back edits made in either, and one save writes it. Each window keeps its
+own cursor, selection, scroll and find bar. Completion, hover, diagnostics and go to definition work there as in a tab
+(a definition in another file opens in the main window). Closing the file's window puts it back as a tab of the focused
+group with any unsaved changes; ⌘W in it closes the file instead, and asks whether to save when no other tab or window
+shows it. "View: Move Editors Back to Main Window" returns all of them. The windows belong to their folder: they close
+when the folder or the connection changes or the main window closes (unsaved changes are kept by hot exit or asked
+about, as for tabs), and come back in place at the next start. The right-click menu is not offered in a file's own
+window yet; use the main window's commands.
 **Terminals after a restart.** With `window.restoreSession` on (the default), the panel's terminals come back when
 the folder opens again: same order, folder, title, color and program. Each one is a **new shell**: nothing that ran before
 is started or typed again, and a line says *Previous session ended; started a new shell*. If a terminal's folder is gone,
