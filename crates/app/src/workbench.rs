@@ -1445,7 +1445,7 @@ impl Workbench {
     /// are left alone). If the theme isn't here, copy it from the installed VS Code theme.
     fn import_vscode(&mut self, _: &ImportVsCode, window: &mut Window, cx: &mut Context<Self>) {
         let Some(dir) = crate::vscode::user_dir() else {
-            self.notice = Some(Notice::Info(crate::i18n::t("No VS Code settings found on this machine").into()));
+            self.notice = Some(Notice::Info(crate::i18n::t("No settings from another editor found on this machine").into()));
             cx.notify();
             return;
         };
@@ -1503,7 +1503,7 @@ impl Workbench {
             skipped_keys = skipped;
         }
         let mut msg = crate::i18n::tf(
-            "Imported {0} settings and {1} shortcuts from VS Code ({2} settings and {3} shortcuts have no equivalent here)",
+            "Imported {0} settings and {1} shortcuts ({2} settings and {3} shortcuts have no equivalent here)",
             &[&n_settings, &n_keys, &skipped_settings, &skipped_keys],
         );
         if let Some(n) = notes.first() {

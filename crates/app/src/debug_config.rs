@@ -338,7 +338,7 @@ pub fn install_js_debug_archive(dir: &std::path::Path, archive: &std::path::Path
 fn node_adapter(server: Option<std::path::PathBuf>) -> Result<Adapter, String> {
     match server {
         Some(server) => Ok(Adapter { id: "pwa-node".into(), command: "node".into(), args: vec![server.to_string_lossy().into_owned(), "${port}".into(), "127.0.0.1".into()], connect: None }),
-        None => Err(crate::i18n::t("JavaScript debugging needs Microsoft's js-debug adapter: run “Debug: Install JavaScript Debugger” (a one-time download, MIT licensed), or install VS Code (its copy is used).").into()),
+        None => Err(crate::i18n::t("JavaScript debugging needs Microsoft's js-debug adapter: run “Debug: Install JavaScript Debugger” (a one-time download, MIT licensed), or install an editor that ships it (its copy is used).").into()),
     }
 }
 
