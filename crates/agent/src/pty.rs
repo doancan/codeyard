@@ -231,6 +231,8 @@ mod imp {
             });
         }
         let child = cmd.spawn()?;
+        // `setsid` made the shell the leader of its own session and process group.
+        crate::guard::pty_started(child.id());
         let master = File::from(master);
         let reader = master.try_clone()?;
         let mut writer = master.try_clone()?;
@@ -303,6 +305,8 @@ impl Pty {
     pub fn wait(&mut self) -> Option<i32> {
         #[cfg(unix)]
         {
+            // The shell leaves the process guard before it is reaped (its group id may be reused after that).
+            crate::guard::forget(self.child.id());
             self.child.wait().ok().and_then(|s| s.code())
         }
         #[cfg(windows)]
@@ -316,6 +320,8 @@ impl Drop for Pty {
     fn drop(&mut self) {
         // Without waiting, every closed session would leave a zombie shell.
         self.kill();
+        #[cfg(unix)]
+        crate::guard::forget(self.child.id());
         #[cfg(unix)]
         let _ = self.child.wait();
         #[cfg(windows)]

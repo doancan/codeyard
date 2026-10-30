@@ -6,6 +6,7 @@
 pub mod bigfile;
 pub mod daemon;
 mod fileops;
+pub mod guard;
 pub mod hashtree;
 mod preview;
 pub mod proc;
