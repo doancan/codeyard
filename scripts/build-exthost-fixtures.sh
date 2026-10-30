@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Rebuild codeyard-exthost's test extension: crates/ext-host/tests/guests/probe → crates/ext-host/testdata/probe.wasm
-# (and probe-escape.wasm, with the sandbox escape attempts).
+# (and probe-escape.wasm, with the sandbox escape attempts), and the performance scenarios' decoration provider:
+# crates/ext-host/tests/guests/decorator → crates/ext-host/testdata/decorator.wasm.
 #   scripts/build-exthost-fixtures.sh
 # Needs the wasm32-wasip2 Rust target (rustup target add wasm32-wasip2). The .wasm is committed, so tests need no
 # WebAssembly toolchain; run this after changing the guest or the WIT.
@@ -13,4 +14,6 @@ cp "$target/wasm32-wasip2/release/probe.wasm" crates/ext-host/testdata/probe.was
 # The same guest with the `escape` command, whose socket imports a package could never carry (the import check).
 (cd crates/ext-host/tests/guests/probe && CARGO_TARGET_DIR="$target" cargo build --release --target wasm32-wasip2 --quiet --features escape)
 cp "$target/wasm32-wasip2/release/probe.wasm" crates/ext-host/testdata/probe-escape.wasm
-ls -l crates/ext-host/testdata/probe.wasm crates/ext-host/testdata/probe-escape.wasm
+(cd crates/ext-host/tests/guests/decorator && CARGO_TARGET_DIR="$target" cargo build --release --target wasm32-wasip2 --quiet)
+cp "$target/wasm32-wasip2/release/decorator.wasm" crates/ext-host/testdata/decorator.wasm
+ls -l crates/ext-host/testdata/probe.wasm crates/ext-host/testdata/probe-escape.wasm crates/ext-host/testdata/decorator.wasm

@@ -383,7 +383,7 @@ fn check_workspace_glob(g: &str) -> Result<(), String> {
 
 /// `core:` followed by a command id as the command palette lists it: ASCII letters, digits and `-`, in dot-separated
 /// parts (`core:workbench.openSettings`).
-fn check_core_command(c: &str) -> Result<(), String> {
+pub(crate) fn check_core_command(c: &str) -> Result<(), String> {
     let ok = c.strip_prefix("core:").is_some_and(|id| {
         !id.is_empty()
             && id.len() <= limits::ID_LEN
@@ -753,6 +753,22 @@ fn own_or_dependency(cx: &mut Ctx, what: &str, v: &S<String>, id: &ExtId, comman
     }
 }
 
+/// A menu's `core:` command: one extensions may run (crate::core_commands) that needs no argument.
+fn menu_core_command(cx: &mut Ctx, v: &S<String>) -> String {
+    let cmd = v.get_ref();
+    match crate::core_commands::core_command(cmd) {
+        Some(c) if c.argument.optional() => {}
+        Some(_) => {
+            cx.err(C::BadContribution, v.span(), format!("menu command '{cmd}' needs an argument, which a menu cannot pass"));
+        }
+        None => {
+            cx.err(C::BadContribution, v.span(), format!("menu command '{cmd}' is not a core command extensions may run")).fix =
+                Some("pick one from docs/extensions/reference/core-commands.md".into());
+        }
+    }
+    cmd.clone()
+}
+
 /// Language ids of a provider: at least one, each like a language id (`rust`, `typescriptreact`, `my-lang`).
 fn languages(cx: &mut Ctx, what: &str, items: &[S<String>], span: Range<usize>) -> Vec<String> {
     if items.is_empty() {
@@ -782,7 +798,11 @@ fn code_contributions(
     cx.count("menus", &raw.menus);
     for m in &raw.menus {
         let m = m.get_ref();
-        let command = own_or_dependency(cx, "menu", &m.command, id, commands, deps);
+        let command = if m.command.get_ref().starts_with("core:") {
+            menu_core_command(cx, &m.command)
+        } else {
+            own_or_dependency(cx, "menu", &m.command, id, commands, deps)
+        };
         let location = match m.location.get_ref().as_str() {
             "editor-context" => MenuLocation::EditorContext,
             "file-tree" => MenuLocation::FileTree,

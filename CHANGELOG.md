@@ -84,6 +84,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a late answer is dropped and noted in the extension's log. What an extension showed goes when it is disabled,
   uninstalled or crashes. The manifest gains `[[menus]]`, `[[status-bar]]`, `[[formatters]]`, `[[code-actions]]`,
   `[[diagnostics]]`, `[[decorations]]` and `[[tasks]]`, checked like the other contributions.
+- View-title menus: `[[menus]]` entries with `location = "view-title"` appear under a **…** button in the title bar
+  of that extension view (sidebar, bottom panel or editor), with `when` and `enablement`, and run the command with the
+  view's id as its argument.
+- Core commands for extensions: a public list (docs/extensions/reference/core-commands.md, generated from
+  `ext_manifest::core_commands`) of Codeyard commands an extension may run with `commands.execute("core:…")`: Zen mode,
+  Settings, the file explorer, reveal the active file, Problems, Save All, Format Document, open a file and run a task.
+  Each names the permission it implies, which the extension must hold too (Save All: `write` on every unsaved file;
+  opening a file: `read` on it; a task: its program in `run`, and a single program, not a shell line), checked with the
+  permissions in effect in that window. A command not in the list is refused with the fix, and `cyx check` warns about
+  one in `permissions.commands`. Menus may name listed core commands that take no argument.
+- `codeyard --install-extension FOLDER` installs a built extension folder as it is, without building it.
+- Performance scenarios for typing with two decoration providers and for the provider platform overhead
+  (`CODEYARD_PERF_DECORATIONS`, `CODEYARD_PERF_PROVIDERS`, run by `scripts/perf/run.sh` with a small decoration
+  provider installed twice); both rows stay warn-only until a baseline has them.
 - Code extensions run: their commands appear in the command palette, and the first one starts the extension in its
   own `codeyard-exthost` process. Every file, search and process call is checked against the extension's declared
   permissions and the folder's trust before it reaches the folder, locally and over SSH; a denial says which line to

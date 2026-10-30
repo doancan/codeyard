@@ -415,3 +415,23 @@ fn extension_language_and_server_work_over_ssh(cx: &mut TestAppContext) {
     assert!(open["params"]["textDocument"]["uri"].as_str().unwrap_or_default().ends_with("/a.foo"), "{open}");
     crate::ext::set_for_test(Vec::new());
 }
+
+/// `--install-extension FOLDER`: the folder is packaged as it is, without building, with the same checks as a file. The
+/// performance scenarios' decoration provider (scripts/perf/run.sh) installs this way: code with no permissions.
+#[test]
+fn a_built_folder_installs_like_a_package() {
+    let cfg = config_dir("folder");
+    let dir = cfg.join("src-decorations");
+    std::fs::create_dir_all(&dir).unwrap();
+    let code = "[code]\nentry = \"Cargo.toml\"\n[[commands]]\nid = \"decorate\"\ntitle = \"Decorate\"\n[[decorations]]\nid = \"lines\"\nlanguages = [\"rust\"]\n[[tasks]]\nid = \"noop\"\n";
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), manifest("perf.decorations", code)).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "").unwrap();
+    std::fs::write(dir.join(ext_pkg::COMPONENT), include_bytes!("../../ext-host/testdata/decorator.wasm")).unwrap();
+    let store = crate::ext::store(&cfg);
+    let m = crate::ext::install_file(&store, &dir).expect("installs");
+    assert_eq!(m.id.to_string(), "perf.decorations");
+    // Code that asks for a permission needs the consent sheet, from a folder as from a file.
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), manifest("perf.decorations", &format!("[permissions]\nread = [\"a.txt\"]\n{code}"))).unwrap();
+    let e = crate::ext::install_file(&store, &dir).unwrap_err();
+    assert!(e.contains("asks for permissions"), "{e}");
+}
