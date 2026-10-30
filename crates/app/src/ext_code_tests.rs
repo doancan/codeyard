@@ -31,6 +31,9 @@ entry = "Cargo.toml"
 [permissions]
 read = ["a.txt"]
 net = ["api.example.com"]
+auth = ["github", "acme"]
+secrets = true
+why = "Tests every part of the host."
 
 [[commands]]
 id = "notice"
@@ -55,6 +58,16 @@ title = "Probe: Ask"
 [[commands]]
 id = "doc"
 title = "Probe: Document"
+
+[[oauth]]
+id = "acme"
+name = "Acme"
+authorize-url = "https://acme.example.com/oauth/authorize"
+token-url = "https://acme.example.com/oauth/token"
+client-id = "cy-123"
+scopes = ["read"]
+hosts = ["api.acme.example.com"]
+account-url = "https://api.acme.example.com/me"
 "#;
 
 fn install(cfg: &Path) {

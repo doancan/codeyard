@@ -60,6 +60,10 @@ Name: "{group}\Codeyard"; Filename: "{app}\Codeyard.exe"; IconFilename: "{app}\c
 Name: "{autodesktop}\Codeyard"; Filename: "{app}\Codeyard.exe"; IconFilename: "{app}\codeyard.ico"; Tasks: desktopicon
 
 [Registry]
+; codeyard:// addresses (an extension's browser sign-in returning) open Codeyard, which hands them to the running one.
+Root: HKA; Subkey: "Software\Classes\codeyard"; ValueType: string; ValueName: ""; ValueData: "URL:Codeyard"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\codeyard"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\codeyard\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\Codeyard.exe"" ""%1"""
 ; Explorer right-click > "Open with Codeyard" on folders and files (per user or all users, by install mode).
 Root: HKA; Subkey: "Software\Classes\Directory\shell\Codeyard"; ValueType: string; ValueName: ""; ValueData: "Open with Codeyard"; Tasks: contextmenu; Flags: uninsdeletekey
 Root: HKA; Subkey: "Software\Classes\Directory\shell\Codeyard"; ValueType: string; ValueName: "Icon"; ValueData: "{app}\Codeyard.exe"; Tasks: contextmenu

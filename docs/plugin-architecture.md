@@ -294,6 +294,33 @@ generic OAuth 2 PKCE flow: the manifest declares the authorize and token URLs, t
 through `codeyard://ext/<id>/callback`, keeps the token in the keychain, and signs requests to the declared
 hosts. The extension never sees the token. Pasting a raw token into `secrets` stays possible and is High risk.
 
+How it works (`ext_accounts.rs`, `ext_fetch.rs` and `workbench_ext_accounts.rs` in the app):
+
+- **Providers.** `github` is built in and signs requests to `api.github.com` and `uploads.github.com`. It uses the
+  sign-in Codeyard already has for pull requests (`gh auth token`, else `GH_TOKEN` / `GITHUB_TOKEN`); Codeyard has no
+  OAuth app of its own yet. Any other provider is an `[[oauth]]` table: `id`, `name`, `authorize-url`, `token-url`,
+  `client-id`, `scopes`, `hosts` and an optional `account-url`. URLs must be `https://` to a host name; every
+  `[[oauth]]` id must be in `auth`, and every `auth` entry must be built in or declared.
+- **First use asks.** `auth.session` returns the stored account, or asks in a system dialog that no extension UI can
+  draw over. The dialog names the extension, its publisher identity (or that it was sideloaded) and, for GitHub, the
+  account. For `[[oauth]]` the browser opens the authorize URL with a PKCE challenge (S256) and a random `state`.
+- **Callbacks.** `codeyard://ext/<id>/callback?code&state` completes only the sign-in with that `state`, and only if
+  `<id>` is the extension that started it. macOS registers the scheme in Info.plist, Windows in the installer and Linux
+  with a `.desktop` file at the first sign-in. On Windows and Linux the system starts a second Codeyard, which hands the
+  address to the running one on a loopback port and exits. The code is traded at the token URL with the verifier.
+- **Keychain.** Tokens and `secrets` are entries in the macOS Keychain, Windows Credential Manager or the Secret
+  Service (GPUI's credential store, so no new dependency). The key is a hash of the publisher identity (registry,
+  issuer, account, owner id, repository id, workflow; or the sideload path, or the dev folder), then the extension id
+  and the entry, so a sideloaded package with the same id finds nothing. A `secrets` value is at most 2048 bytes, the
+  same on every platform.
+- **Signing.** `auth.fetch` is checked before the keychain is read: the provider must be in `auth`, the folder trusted,
+  the URL's host one of the provider's `hosts`, and the request must not set `authorization`. The app adds
+  `Authorization: Bearer <token>` and sends through `ext-net` with the provider's hosts as the allowed list, so a
+  redirect cannot leave them and ext-net drops the header on any cross-origin redirect. The extension receives the
+  `http-head` and `data` events, never the token. A token that expires within a minute is refreshed first.
+- **Sign out.** The extension page lists each `auth` provider with the signed-in account and **Sign Out**, which
+  deletes the keychain entry.
+
 ## 7. Remote
 
 > Wasm runs on the UI machine. Files, processes and git go through the window's `Host`. `net` requests leave

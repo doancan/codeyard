@@ -180,6 +180,8 @@ impl Workbench {
     pub(super) fn reinstall_previous_extension(&mut self, id: ExtId, window: &mut Window, cx: &mut Context<Self>) {
         self.cfg.exts.code.disabled.remove(id.as_str());
         self.roll_back_extension(id, window, cx);
+        // The crash card goes now, whatever the rollback still does in the background.
+        cx.notify();
     }
 
     /// Recent denials of one extension, newest first, with their fix.

@@ -440,3 +440,22 @@ fn redirect_locations_resolve_like_browsers() {
     assert_eq!(target::parse("https://api.x.test").unwrap().path, "/");
     assert_eq!(target::parse("javascript:alert(1)").unwrap_err().code(), "invalid");
 }
+
+#[test]
+fn a_request_from_api_parts_carries_the_header_the_app_sets() {
+    run(async {
+        let port = server().await;
+        let c = serving(&["api.example.test"], map(&[("api.example.test", "127.0.0.1")]));
+        let url = format!("https://api.example.test:{port}/echo");
+        let headers = vec![("Accept".to_string(), "application/json".to_string()), ("authorization".to_string(), "Bearer guest".to_string())];
+        let mut req = Request::from_parts("post", url, &headers, b"body".to_vec()).unwrap();
+        assert!(req.has_header("authorization"));
+        // The app's value replaces the caller's.
+        req.set_header("authorization", "Bearer app").unwrap();
+        assert!(!format!("{req:?}").contains("Bearer app"), "the token stays out of Debug output");
+        assert_eq!(text(&c, req).await.unwrap().1, "POST auth=Bearer app body");
+        assert!(matches!(Request::from_parts("G ET", "https://x.test/", &[], Vec::new()), Err(Error::Invalid(_))));
+        let bad = vec![("x-a".to_string(), "line\nbreak".to_string())];
+        assert!(matches!(Request::from_parts("GET", "https://x.test/", &bad, Vec::new()), Err(Error::Invalid(_))));
+    });
+}

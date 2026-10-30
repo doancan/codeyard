@@ -23,6 +23,7 @@ A pattern is one expression or statement, not several.
 A pattern that is only a variable would match everything.	
 A rebase is already in progress: use Git: Continue Rebase or Git: Abort Rebase	
 A request is still being sent; wait for its answer first.	
+A sign-in answer for {0} carried the code of {1}'s sign-in; it was ignored.	
 A sync is already running.	
 A transfer is already running. Wait for it to finish or click it in the status bar to cancel.	
 A window supports up to {} editor groups.	
@@ -42,6 +43,7 @@ Accept Current
 Accept Current Change	
 Accept Incoming	
 Accept Incoming Change	
+Accounts	
 Act as your {} account	
 Actions	
 Activate Breakpoints	
@@ -259,9 +261,11 @@ Codeyard can't update itself on this system. Download the new version yourself.
 Codeyard could not start the new version: {}. The update is installed; open Codeyard again to use it.	
 Codeyard couldn't reach the update server. Check your internet connection and try again.	
 Codeyard couldn't set up a secure connection to the update server. Check that your date and time are right and that no proxy or security software is blocking it, then try again.	
+Codeyard is not signed in to GitHub: run `gh auth login` in a terminal, then try again.	
 Codeyard is still installing an update	
 Codeyard is up to date	
 Codeyard memory	
+Codeyard signs its requests to {} with this account. The extension never sees your password or token. You can sign out on its page in Extensions.	
 Codeyard will reopen your windows.	
 Codeyard {} is available	
 Codeyard {} is available.	
@@ -465,6 +469,7 @@ Could not save your dictionary: {}
 Could not save: {}	
 Could not set up key login for {}: {}	
 Could not set {}: {}	
+Could not sign out: {}	
 Could not start Web Preview: {}	
 Could not start a shell: {}	
 Could not start debugging: {}	
@@ -975,6 +980,7 @@ Git: Stash with Name…
 Git: Sync	
 Git: Undo Last Commit	
 Git: View File History	
+GitHub did not accept Codeyard's sign-in: run `gh auth login` in a terminal, then try again.	
 GitHub has no release with a checksum list yet, so there is nothing to compare this version with. You can look at the release page.	
 GitHub's rate limit for anonymous requests: sign in with `gh auth login` or set GITHUB_TOKEN	
 GitHub: Pull Requests…	
@@ -1155,6 +1161,8 @@ Left is writable
 Left ↔ Right	
 Let programs in the terminal write to the clipboard	
 Let the language server format while typing }, ; or Enter	
+Let {0} act as your GitHub account {1}?	
+Let {0} sign in to your {1} account?	
 Lifecycle: {}	
 Lightweight editing, on this machine or over SSH.	
 Line endings for this file (applied on save)	
@@ -1988,6 +1996,8 @@ Showing the first 100,000 files of a very large folder
 Showing the last successful snapshot.	
 Shrink Selection	
 Side by side	
+Sign In…	
+Sign Out	
 Signature not verified: the token is only decoded, not checked	
 Skip This Version	
 Skip Those Files	
@@ -2483,6 +2493,7 @@ Zoom Out
 `{}` did not answer within {} seconds; check the network connection and try again	
 `{}` is not installed or not on PATH	
 a comment is not closed	
+a host of the {0} account ({1}), not {2}	
 a key binding condition needs a context, not a constant	
 a program	
 a string is not closed	
@@ -2635,6 +2646,7 @@ not declared
 not running	
 not selected	
 not set	
+not signed in to {0}; call auth.session with “{1}” first	
 now	
 of {}	
 only the first {} files were looked at (search.structural.maxFiles)	
@@ -2707,14 +2719,23 @@ the folder cannot be read on the left
 the folder cannot be read on the right	
 the folder is not trusted	
 the header “{}” is not valid	
+the keychain did not answer	
+the keychain refused the account: {}	
 the launch file is not an object	
 the launch file is not valid JSON: {}	
 the path is now a folder, not a file	
 the repository may be private: sign in with `gh auth login` or set GITHUB_TOKEN	
 the response body is not JSON	
 the response of “{}” has no header {}	
+the sign-in expired; sign in again	
+the sign-in failed: {}	
+the sign-in was refused ({})	
+the token endpoint answered {}	
+the token endpoint sent a {} token; only bearer tokens can sign requests	
+the token endpoint sent no access_token	
 the token was rejected: it may be expired or revoked — renew GITHUB_TOKEN/GH_TOKEN or run `gh auth login`	
 the variable {} refers to itself	
+the window closed	
 the {} registry is no longer in your settings	
 the {} registry's list is more than 3 days old; install from the Extensions view to confirm	
 theme {} isn't installed here: copy its .json into ~/.config/codeyard/themes to use it	
@@ -2761,6 +2782,7 @@ your words
 {0} (saved) ↔ {1} (editor)	
 {0} (stopped at {1})	
 {0} (while parsing {1})	
+{0} ({1}) is published by {2}.	
 {0} / {1} containers	
 {0} / {1} lines · {2} errors · {3} warnings	
 {0} and {1} cannot be added	
@@ -2781,6 +2803,8 @@ your words
 {0} files and {1} folders go from {2} ({3}) to {4} ({5}). Files that exist there are replaced; anything that changed since the scan is left alone.	
 {0} is back at version {1}.	
 {0} is now published by {1}, not {2} as before; review it with Extensions: Install from Registry…	
+{0} is signed in to {1} as {2}.	
+{0} is signed out of {1}.	
 {0} isn't available ({1}). Or set “lsp.servers” in settings.	
 {0} isn't available on {1} ({2}). Or set “lsp.servers” in settings.	
 {0} isn't available on {1}. Or set “lsp.servers” in settings.	
@@ -2813,6 +2837,9 @@ your words
 {0} · version {1} · {2} license	
 {0}, by {1}	
 {0}, from {1}	
+{0}, in development from {1}	
+{0}, installed from {1} (not verified by a registry)	
+{0}, signed by {1} in the {2} registry	
 {0}, {1} {2} {3}	
 {0}. The search stopped at the result limit, so the results are incomplete.	
 {0}. The search was cancelled, so the results are incomplete.	
@@ -2827,7 +2854,9 @@ your words
 {0}: expected {1}	
 {0}: expected {1} or a list of kinds	
 {0}: expected {1} or null	
+{0}: finish signing in to {1} in your browser.	
 {0}: no answer from {1}	
+{0}: signed in as {1}	
 {0}: {1} cannot be written in TOML	
 {0}: {1} does not fit in a TOML integer (64 bits, signed)	
 {0}: {1} to pull, {2} to push. Click to sync.	
@@ -2841,6 +2870,7 @@ your words
 {} (empty removes the setting)	
 {} (exited)	
 {} (modified)	
+{} (not verified by a registry)	
 {} (previous settings kept)	
 {} (saved {}) ↔ editor	
 {} (“{}” failed; {} of {} items were transferred before it)	
@@ -2964,6 +2994,7 @@ your words
 {}: invalid color {}	
 {}: no answer from the debug adapter	
 {}: no open pull requests.	
+{}: not signed in	
 {}: path must not contain control characters	
 {}: reachable ({}), but this app has no agent for {}	
 {}: reachable in {} ms · {} · ready	
