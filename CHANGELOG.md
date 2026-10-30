@@ -66,7 +66,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   drawn yet (they wait for `net` fetching).
 - What code extensions contribute reaches the same places as the core's: commands in the editor and file-tree menus
   (with `when` and `enablement`), on key bindings and on status bar items; formatters for *Format Document* and format
-  on save (chosen per language with `editor.formatters`); code actions in *Quick Fix…*; diagnostics in the Problems view
+  on save (chosen per language with `editor.formatters`); code actions in *Quick Fix…*, whose edits change the document they were asked for and other files only within the
+  extension's `write` (one refused file refuses the whole action); diagnostics in the Problems view
   and the editor, tagged with the extension; gutter, line and after-the-line decorations in theme tones; and tasks in
   *Tasks: Run Task…*. Providers answer within a deadline and are cancelled when you type, so they never hold up typing;
   a late answer is dropped and noted in the extension's log. What an extension showed goes when it is disabled,
@@ -122,6 +123,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   save when no other tab or window shows it. "View: Move Editors Back to Main Window" returns all of them, and the
   windows come back in place after a restart (a file that is also opened as a tab keeps its tab). The command palette,
   the right-click menu, Go to Line and the other commands and shortcuts work in that window and act on its editor.
+- "View: Move View into New Window" shows the open side view (Explorer, Search, Source Control, Run and Debug,
+  Testing, Remote Explorer, Extensions) in a window of its own, the same view with the same state. Its icon and
+  commands bring that window forward; the command palette, shortcuts, menus and pickers work there. Closing the window
+  or "View: Move View Back to Side Bar" puts it back in the side bar it came from. The windows are saved with the
+  folder and come back with it, on an attached display; screen readers find the view in its window.
+- A side view moves to the other side bar by dragging its activity bar icon there; while it is dragged, both sides
+  show a highlighted drop zone. The panel docks left of, right of or below the editor ("View: Move Panel Left",
+  "View: Move Panel Right", "View: Move Panel to Bottom"), and the dock is restored at the next start. Screen readers
+  read which view each side bar shows and where the panel is from the window's description.
 - Screen readers see the editor in its own window (title, text, caret and selection, find bar, suggestions, the
   picker opened there) and the terminal in its own window, as in the main window.
 - Terminals come back after a restart as new shells in their folders, with their titles, colors and programs, and say
@@ -137,6 +147,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Screen readers find the Search results in the secondary side bar too, not only in the primary one.
 - On macOS and Linux, a task, test run, language server or terminal no longer keeps running when Codeyard is killed or
   crashes. A small guard process started with the app ends every task's process group at once and hangs up every
   terminal, killing it after two seconds if it is still there. Windows already ends them through job objects and the

@@ -194,6 +194,7 @@ impl Workbench {
     pub(super) fn use_editor_window(&mut self, slot: usize, cx: &mut Context<Self>) {
         let Some(ed) = self.chrome.editor_windows.iter().find(|d| d.slot == slot).map(|d| d.editor.clone()) else { return };
         if self.chrome.editor_host != Some(slot) {
+            self.chrome.view_host = None;
             self.chrome.editor_host = Some(slot);
             cx.notify();
         }
@@ -203,6 +204,7 @@ impl Workbench {
     /// The main window is in use again.
     pub(super) fn leave_editor_window(&mut self) {
         self.chrome.editor_host = None;
+        self.chrome.view_host = None;
     }
 
     /// Something is shown in the main window's tabs (a file opened from an editor's window, a group focused): the
@@ -365,7 +367,7 @@ impl Workbench {
         match opened {
             Ok(handle) => {
                 #[cfg(any(target_os = "macos", windows))]
-                a11y::attach_with(handle.into(), a11y::windows_access::EDITOR_WINDOW, cx);
+                a11y::platform::attach_with(handle.into(), a11y::windows_access::EDITOR_WINDOW, cx);
                 #[cfg(windows)]
                 handle.update(cx, |_, window, _| window.activate_window()).ok();
                 self.chrome.editor_windows.push(DetachedEditor { editor: ed, slot, window: handle, bounds: shared });

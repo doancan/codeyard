@@ -268,6 +268,10 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if self.view_host_window().is_some_and(|h| h != window.window_handle()) {
+            self.reroute_to_view_window(window, cx, move |this, window, cx| this.show_menu(items, commands, actions, target, position, window, cx));
+            return;
+        }
         let menu = cx.new(|cx| ContextMenu::new(items, cx));
         let sub = cx.subscribe_in(&menu, window, |this, _, event: &MenuEvent, window, cx| {
             if let MenuEvent::Horizontal(forward) = event {

@@ -286,6 +286,7 @@ impl Workbench {
         self.persist.backed_up.clear();
         self.return_all_editor_terminals();
         self.close_editor_windows(cx);
+        self.close_view_windows(cx);
         self.tabs = Default::default();
         self.tabs.active = None;
         self.tabs.diff = None;

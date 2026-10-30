@@ -196,6 +196,21 @@ Opening a file from Explorer or Quick Open restores a maximized terminal panel t
 Control, Run and Debug, Testing, Remote, Extensions) to a second side bar on the right of the editor; its activity bar
 icon and commands then open it there, next to whatever the left side bar shows. "View: Move View to Primary Side Bar"
 moves it back and "View: Toggle Secondary Side Bar" hides or shows it; the arrangement comes back at the next start.
+You can also drag a view's activity bar icon to the other side: while you drag, the left and right edges of the window
+show a highlighted drop zone, and the view opens in the side bar you drop it on. The panel (terminal, Problems,
+Output) docks below the editor or beside it: "View: Move Panel Left", "View: Move Panel Right" and "View: Move Panel
+to Bottom" (or the button in the panel's header); a panel docked beside the editor is resized from its edge towards the
+editor, and the dock is kept for the next start. Screen readers read which view each side bar shows and where the panel
+is in the window's description. Dragging an editor tab out of the window is not supported (the interface toolkit has no
+drag and drop between windows); use "View: Move Editor into New Window".
+"View: Move View into New Window" moves the open side view (Explorer, Search, Source Control, Run and Debug, Testing,
+Remote Explorer, Extensions) into a window of its own, for example on another display. It is the same view: what you
+select, expand or type there is what the side bar would have shown. Its activity bar icon and commands then bring that
+window to the front instead of opening it in a side bar; the command palette, shortcuts, its right-click menus and
+pickers work in that window. Closing the window, ⌘W in it, or "View: Move View Back to Side Bar" puts the view back in
+the side bar it came from. The windows belong to the folder: they are saved with it, close when the folder or the
+connection changes (their views going back to the side bars), and come back when the folder opens again, on an
+attached display. Screen readers find the view in its own window, named after the view.
 "Terminal: Move Terminal into New Window" moves the active terminal, with its running program, into a window of its own
 (the same terminal, not a copy). Closing that window puts the terminal back in the panel, still running;
 "Terminal: Move Terminals Back to Panel" does it for all of them. A detached terminal belongs to its editor window and

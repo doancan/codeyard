@@ -156,6 +156,8 @@ mod spell_glue;
 // --- git-sync ---
 #[path = "workbench_actions.rs"]
 mod actions_glue;
+#[path = "workbench_docks.rs"]
+mod docks_glue;
 #[path = "workbench_editor_windows.rs"]
 mod editor_windows_glue;
 #[path = "workbench_state.rs"]
@@ -172,6 +174,8 @@ pub mod tasks;
 mod term_daemon_glue;
 #[path = "workbench_term_tabs.rs"]
 mod term_tabs_glue;
+#[path = "workbench_view_windows.rs"]
+mod view_windows_glue;
 #[cfg(unix)]
 pub use term_daemon_glue::{enable_terminal_daemon, terminal_daemon_socket};
 #[path = "workbench_terminals.rs"]
@@ -565,6 +569,7 @@ pub use debug::{
     AddDebugConfiguration, AddFunctionBreakpoint, ConsoleComplete, ConsoleHistoryNext, ConsoleHistoryPrev, DisableAllBreakpoints, EnableAllBreakpoints,
     OpenLaunchConfiguration, RunToCursor, RunWithoutDebugging, ShowRunAndDebug, StopAllDebugging, ToggleBreakpointEnabled, ToggleBreakpointsActive,
 };
+pub use docks_glue::{MovePanelLeft, MovePanelRight, MovePanelToBottom};
 pub use editor_windows_glue::{CopyEditorIntoNewWindow, MoveEditorIntoNewWindow, MoveEditorsBackToMainWindow};
 pub use ext_glue::{CancelExtensionConsent, InstallExtensionFromFile, InstallExtensionFromFolder, InstallExtensionFromRegistry, ShowExtensions};
 pub use host::askpass::{AskKind, AskRequest};
@@ -577,6 +582,7 @@ pub use terminals_glue::{
     RenameTerminal, SelectDefaultTerminalProfile,
 };
 pub use tests_glue::{DebugTestAtCursor, RefreshTests, RunAllTests, RunFailedTests, ShowTesting, StopTests};
+pub use view_windows_glue::{MoveViewBackToSideBar, MoveViewIntoNewWindow};
 pub type AskReply = std::sync::mpsc::Sender<Option<String>>;
 
 /// Options in the status bar pickers.
@@ -1124,6 +1130,7 @@ impl Workbench {
                     this.close_detached_terminals(cx);
                 }
                 this.close_editor_windows(cx);
+                this.close_view_windows(cx);
                 if !this.persist.keeping_terminals {
                     this.close_editor_terminals(cx);
                 }
@@ -1180,7 +1187,7 @@ impl Workbench {
             .unwrap_or(layout::SIDEBAR_W)
             .clamp(layout::SIDEBAR_MIN, layout::SIDEBAR_MAX);
         let panel_h = state.as_ref().and_then(|s| s.get("panel_h")).and_then(|v| v.parse::<f32>().ok()).unwrap_or(layout::PANEL_H).max(PANEL_MIN);
-        let panel_right = state.as_ref().and_then(|s| s.get("panel_right")).is_some_and(|v| v == "1");
+        let panel_dock = docks_glue::PanelDock::load(state.as_ref());
         let in_secondary = state.as_ref().and_then(|s| s.get("secondary_views")).map(|v| views_glue::parse_secondary(&v)).unwrap_or_default();
         let secondary = state
             .as_ref()
@@ -1295,7 +1302,10 @@ impl Workbench {
                 detached: Vec::new(),
                 editor_windows: Vec::new(),
                 editor_host: None,
-                panel_right,
+                view_windows: Vec::new(),
+                view_host: None,
+                panel_dock,
+                view_drag: None,
                 panel_w,
                 panel_max: false,
                 panel_anim: None,
@@ -1496,6 +1506,11 @@ impl Workbench {
     }
 
     fn show_overlay(&mut self, picker: Entity<Picker>, kind: OverlayKind, window: &mut Window, cx: &mut Context<Self>) {
+        // Asked for from a view in a window of its own (its command, its tree's menu): the picker opens there.
+        if self.view_host_window().is_some_and(|h| h != window.window_handle()) {
+            self.reroute_to_view_window(window, cx, move |this, window, cx| this.show_overlay(picker, kind, window, cx));
+            return;
+        }
         let sub = cx.subscribe_in(&picker, window, |this, _, event: &PickerEvent, window, cx| {
             this.on_overlay_event(event, window, cx);
         });
@@ -1546,7 +1561,7 @@ impl Workbench {
 
     fn panel(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
         let resizing = self.chrome.resizing_panel;
-        let (right, max) = (self.chrome.panel_right, self.chrome.panel_max);
+        let (beside, left, max) = (self.chrome.panel_dock.beside(), self.chrome.panel_dock == docks_glue::PanelDock::Left, self.chrome.panel_max);
         div()
             .debug_selector(|| "panel".into())
             .relative()
@@ -1554,13 +1569,16 @@ impl Workbench {
             .flex_col()
             .bg(c(p.bg))
             .border_color(c(p.border))
-            .map(|d| match (self.animated_panel_size(), max, right) {
-                (Some(size), _, true) => d.w(px(size)).flex_none().h_full().border_l_1(),
+            .map(|d| match (self.animated_panel_size(), max, beside) {
+                (Some(size), _, true) => d.w(px(size)).flex_none().h_full(),
                 (Some(size), _, false) => d.h(px(size)).flex_none().border_t_1(),
                 (None, true, _) => d.flex_1().min_h_0().min_w_0(),
-                (None, false, true) => d.w(px(self.chrome.panel_w)).flex_none().h_full().border_l_1(),
+                (None, false, true) => d.w(px(self.chrome.panel_w)).flex_none().h_full(),
                 (None, false, false) => d.h(px(self.chrome.panel_h)).flex_none().border_t_1(),
             })
+            // Beside the editor, the border is on the editor's side.
+            .when(beside && (!max || self.chrome.panel_anim.is_some()) && left, |d| d.border_r_1())
+            .when(beside && (!max || self.chrome.panel_anim.is_some()) && !left, |d| d.border_l_1())
             .child(
                 div()
                     .id("panel-sash")
@@ -1569,7 +1587,10 @@ impl Workbench {
                     .occlude()
                     .when(max, |d| d.invisible())
                     .map(|d| {
-                        if right {
+                        // Docked left, the sash is on the panel's right edge (towards the editor).
+                        if beside && left {
+                            d.right(px(-layout::SASH / 2.)).top_0().bottom_0().w(px(layout::SASH)).cursor(gpui::CursorStyle::ResizeLeftRight)
+                        } else if beside {
                             d.left(px(-layout::SASH / 2.)).top_0().bottom_0().w(px(layout::SASH)).cursor(gpui::CursorStyle::ResizeLeftRight)
                         } else {
                             d.top(px(-layout::SASH / 2.)).left_0().right_0().h(px(layout::SASH)).cursor(gpui::CursorStyle::ResizeUpDown)
@@ -1667,8 +1688,8 @@ impl Workbench {
                     .child(
                         ui::icon_button(
                             "panel-move",
-                            if self.chrome.panel_right { "tb-panel-bottom" } else { "tb-panel-right" },
-                            if self.chrome.panel_right { crate::i18n::t("Move Panel to Bottom") } else { crate::i18n::t("Move Panel Right") },
+                            if self.chrome.panel_dock.beside() { "tb-panel-bottom" } else { "tb-panel-right" },
+                            if self.chrome.panel_dock.beside() { crate::i18n::t("Move Panel to Bottom") } else { crate::i18n::t("Move Panel Right") },
                             p,
                         )
                         .on_click(cx.listener(|this, _, w, cx| this.dispatch_now(&TogglePanelPosition, w, cx))),
@@ -1841,6 +1862,7 @@ impl Workbench {
         self.persist.backed_up.clear();
         self.return_all_editor_terminals();
         self.close_editor_windows(cx);
+        self.close_view_windows(cx);
         self.tabs = Default::default();
         self.tabs.active = None;
         self.tabs.open_error = None;
