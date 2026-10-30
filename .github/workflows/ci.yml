@@ -209,6 +209,9 @@ jobs:
           CODEYARD_REQUIRE_WASM: "1"
       - name: Example extensions (unit tests against the mock host)
         run: for d in examples/extensions/*/; do if [ -f "$d/Cargo.toml" ]; then cargo test --locked --manifest-path "$d/Cargo.toml" --target-dir target/examples || exit 1; fi; done
+      # "A command in under 5 minutes" (docs/plugin-architecture.md §9): cyx new, unit tests and cyx test from an empty
+      # folder, Rust and TypeScript, each step timed; fails past 300 s.
+      - run: scripts/check-five-minutes.sh
       # The shipped Linux agents are built with cargo-zigbuild (release.yml, docs/releasing.md), so the size gate builds
       # the same way. A plain `cargo build` with the system linker produces a static-PIE (+170 KB of relocations) and
       # measures ~1.7 MB: not the artifact users get. pip installs cargo-zigbuild together with zig.

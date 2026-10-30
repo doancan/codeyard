@@ -201,7 +201,8 @@ extension's package carries its component as `extension.wasm`.
   `untrusted-workspace`, `revoked-extension`; the SDK formats it with the fix. Others: `not-found`,
   `cancelled`, `timeout`, `invalid`, `other`.
 - **State.** `storage` is a persisted key-value store and the only persistence concept. In `cyx dev`, hot
-  reload keeps in-memory state automatically.
+  reload keeps the in-memory values of `ctx.state`: the SDK saves them on `deactivate` under the reserved storage
+  key `codeyard.reload-state` and restores them when the new build activates with the reason `reload`.
 - **Versioning.** `0.x` during beta, each break with a `cyx` error and migration note. From `1.0`, minors only
   add, items carry `@since`, and a major stays supported for 24 months after the next ships.
 

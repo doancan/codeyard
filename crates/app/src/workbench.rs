@@ -58,6 +58,8 @@ mod core_commands_glue;
 mod data_glue;
 #[path = "workbench_debug.rs"]
 mod debug;
+#[path = "workbench_ext_dev.rs"]
+mod dev_glue;
 #[cfg(test)]
 #[path = "editor_grid_tests.rs"]
 mod editor_grid_tests;

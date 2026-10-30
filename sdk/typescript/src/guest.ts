@@ -18,6 +18,37 @@ export interface ExtensionModule {
 
 const ctx = new Context();
 
+/** The storage key under which `ctx.state` waits for the next activation during a hot reload. Reserved. */
+export const RELOAD_STATE_KEY = "codeyard.reload-state";
+
+/** The activation reason of a hot reload (`cyx dev` swapped in a new build). */
+export const RELOAD = "reload";
+
+/** The snapshot is for the activation right after a reload; any other start forgets it. */
+function restoreState(reason: string): void {
+  const storage = host().storage;
+  const saved = storage?.get(RELOAD_STATE_KEY);
+  if (saved === undefined) return;
+  storage.delete(RELOAD_STATE_KEY);
+  if (reason !== RELOAD) return;
+  try {
+    const obj = JSON.parse(new TextDecoder().decode(saved)) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(obj)) handlers.state.set(k, v);
+  } catch {
+    // A snapshot that does not parse is dropped.
+  }
+}
+
+function saveState(): void {
+  if (handlers.state.size === 0) return;
+  try {
+    host().storage.set(RELOAD_STATE_KEY, new TextEncoder().encode(JSON.stringify(Object.fromEntries(handlers.state))));
+  } catch (e) {
+    host().log.log("warn", `the state was not kept for the reload: ${describe(e)}`);
+  }
+  handlers.state.clear();
+}
+
 /** Make `fetch` (and `Headers`, `Response` where the engine has none) the SDK's, mapped to the host's `net`. */
 export function installGlobals(): () => void {
   const g = globalThis as Record<string, unknown>;
@@ -41,6 +72,7 @@ export function start(extension: ExtensionModule, bindings: Bindings): Guest {
   return {
     activate({ reason }) {
       handlers.reason = reason;
+      restoreState(reason);
       let r: unknown;
       try {
         r = extension.activate(ctx);
@@ -58,6 +90,7 @@ export function start(extension: ExtensionModule, bindings: Bindings): Guest {
       } catch (e) {
         host().log.log("error", `deactivate failed: ${describe(e)}`);
       }
+      saveState();
     },
     handle(id, request) {
       handle(id, request);

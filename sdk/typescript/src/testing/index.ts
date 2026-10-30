@@ -261,6 +261,15 @@ export class MockHost {
     await this.#pump();
   }
 
+  /**
+   * A hot reload as `cyx dev` does it: `deactivate`, then `activate` with the reason `reload`. Storage is kept, and with
+   * it what `ctx.state` held.
+   */
+  async reload(extension: ExtensionModule): Promise<void> {
+    await this.deactivate();
+    await this.activate(extension, "reload");
+  }
+
   /** Stop being the global `fetch`. */
   dispose(): void {
     this.#restore?.();

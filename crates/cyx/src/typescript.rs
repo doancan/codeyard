@@ -60,7 +60,8 @@ pub fn build(dir: &Path, m: &Manifest, entry: &str) -> Result<PathBuf, String> {
         let text = if name == "world.wit" { narrow_world(text, &interfaces) } else { text.to_string() };
         std::fs::write(wit.join(name), text).map_err(|e| format!("error: cannot write {}: {e}", wit.display()))?;
     }
-    let out = dir.join(ext_pkg::COMPONENT);
+    // Written beside and moved into place by `build::install`.
+    let partial = dir.join(crate::build::PARTIAL);
     let job = serde_json::json!({
         "entry": entry_path,
         "dir": dir,
@@ -68,7 +69,7 @@ pub fn build(dir: &Path, m: &Manifest, entry: &str) -> Result<PathBuf, String> {
         "wit": wit,
         "interfaces": interfaces,
         "bundle": work.join(BUNDLE),
-        "out": out,
+        "out": partial,
         "map": dir.join(SOURCE_MAP),
     });
     let job_path = work.join("job.json");
@@ -84,9 +85,11 @@ pub fn build(dir: &Path, m: &Manifest, entry: &str) -> Result<PathBuf, String> {
         .map_err(|e| format!("error: cannot run node: {e}\n   = fix: install Node.js {NODE_MAJOR} or newer from https://nodejs.org"))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let _ = std::fs::remove_file(&partial);
         return Err(if stderr.starts_with("error") { stderr } else { format!("error: the TypeScript build failed\n{stderr}") });
     }
-    Ok(out)
+    let wasm = std::fs::read(&partial).map_err(|e| format!("error: cannot read {}: {e}", partial.display()))?;
+    crate::build::install(&dir, &wasm)
 }
 
 /// The interfaces the component may import: the free ones and those the manifest's permissions grant. ComponentizeJS

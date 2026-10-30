@@ -70,8 +70,10 @@ pub fn publish(p: &Publish, ep: &Endpoints, token: impl FnOnce() -> Result<Strin
         (false, true) => notes.push(format!("note: {} is a pre-release (it has a suffix): users get it only when they opt in to pre-releases", m.version)),
         _ => {}
     }
-    if !m.is_declarative() {
-        return Err("error: this extension runs code; the registry accepts data-only extensions until code extensions ship".into());
+    // The registry reads the `code` flag of its index from the package (a code extension waits 48 h); nothing to send.
+    let code = !m.is_declarative();
+    if code {
+        notes.push(format!("note: {} runs code: the index marks it as code, and users get each version 48 hours after it is published", m.id));
     }
     let mut out = notes.join("\n");
     if !out.is_empty() {
@@ -95,7 +97,15 @@ pub fn publish(p: &Publish, ep: &Endpoints, token: impl FnOnce() -> Result<Strin
         .map_err(|e| format!("{e}\n   = note: the signature does not verify against the registry's Sigstore roots; nothing was uploaded"))?;
     let res = net::request("POST", &format!("{}/v1/publish", p.registry), &[("content-type", "application/octet-stream")], yard::frame(&bundle, &bytes))?;
     if !res.ok() {
-        return Err(format!("error: the registry refused {} {}: {}", m.id, m.version, res.text()));
+        let why = res.text();
+        // Phase 1 registries take themes, snippets, keymaps and languages only (docs/registry.md).
+        if code && why.contains("accepts data-only extensions") {
+            return Err(format!(
+                "error: {} accepts data-only extensions; {} {} runs code, so it was not published\n   = note: code extensions open on the registry in a later phase; until then share the .cyx from `cyx package`, which installs from a file",
+                p.registry, m.id, m.version
+            ));
+        }
+        return Err(format!("error: the registry refused {} {}: {why}", m.id, m.version));
     }
     let published: serde_json::Value = serde_json::from_slice(&res.body).map_err(|e| format!("error: the registry's answer: {e}"))?;
     let available = published["available"].as_u64().unwrap_or(now);
