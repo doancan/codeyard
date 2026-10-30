@@ -380,6 +380,8 @@ impl Workbench {
             .on_action(cx.listener(Self::open_settings))
             .on_action(cx.listener(Self::open_keybindings))
             .on_action(cx.listener(Self::import_vscode))
+            .on_action(cx.listener(Self::apply_rust_setup))
+            .on_action(cx.listener(Self::reset_rust_setup))
             .on_action(cx.listener(Self::toggle_panel))
             .on_action(cx.listener(|this, _: &crate::resource_monitor::ToggleResources, window, cx| {
                 this.chrome.resources.update(cx, |monitor, cx| monitor.toggle(window, cx));
