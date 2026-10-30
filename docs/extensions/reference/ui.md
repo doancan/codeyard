@@ -85,8 +85,10 @@ skip it.
 Properties: `source`, `alt`. `source` is `{"bytes": "<base64>"}` (PNG, JPEG, GIF, WebP or SVG, at most 1 MB) or
 `{"url": "https://…"}`. An empty `alt` marks the image as decorative.
 
-URL images are fetched through your `net` permission. In this version Codeyard draws only `bytes` images; a URL image
-shows its `alt` text until fetching through `net` lands.
+URL images are fetched by Codeyard through your `net` permission: the host must be in `net` and the folder trusted.
+The response may be at most 1 MB and must be one of the formats above. Images are fetched only while the view is on
+screen and kept by URL until it closes, at most 64 URLs per view. Until an image arrives, and when it is refused or
+fails, the `alt` text is shown; a refusal is listed in the Inspector.
 
 ### `button`
 

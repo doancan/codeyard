@@ -50,6 +50,9 @@ const SIDE: &str = "you.probe.counter";
 const BOTTOM: &str = "you.probe.log";
 const EDITOR: &str = "you.probe.board";
 
+#[path = "ext_views_when_images_tests.rs"]
+mod when_images;
+
 fn config_dir(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("codeyard-extviews-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
@@ -57,9 +60,9 @@ fn config_dir(name: &str) -> PathBuf {
     d
 }
 
-fn install(cfg: &Path) {
+fn install(cfg: &Path, manifest: &str) {
     let entries = vec![
-        ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: MANIFEST.as_bytes().to_vec(), executable: false },
+        ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: manifest.as_bytes().to_vec(), executable: false },
         ext_pkg::Entry { path: "Cargo.toml".into(), data: Vec::new(), executable: false },
         ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: PROBE.to_vec(), executable: false },
     ];
@@ -69,8 +72,22 @@ fn install(cfg: &Path) {
 
 /// A window with the probe installed. `offline`: requests and events are recorded instead of sent.
 fn setup<'a>(cx: &'a mut TestAppContext, name: &str, offline: bool) -> (Entity<Workbench>, &'a mut VisualTestContext) {
+    setup_with(cx, name, offline, MANIFEST, None)
+}
+
+/// `setup` with another manifest for the probe, and a `settings.jsonc`.
+fn setup_with<'a>(
+    cx: &'a mut TestAppContext,
+    name: &str,
+    offline: bool,
+    manifest: &str,
+    settings: Option<&str>,
+) -> (Entity<Workbench>, &'a mut VisualTestContext) {
     let cfg = config_dir(name);
-    install(&cfg);
+    install(&cfg, manifest);
+    if let Some(s) = settings {
+        std::fs::write(cfg.join("settings.jsonc"), s).unwrap();
+    }
     cx.update(|cx| {
         crate::bind_keys(cx);
         cx.set_global(ActiveTheme(theme::DARK));

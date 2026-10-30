@@ -8,6 +8,8 @@
 //!   keys into its search (a word, then erasing it, over and over) and record keystroke → results in the view, and
 //!   keystroke → the frame that shows them.
 //! - `CODEYARD_PERF_EXIT=1`: quit when the scenario is done.
+//!
+//! Whenever `CODEYARD_PERF` is set, a key that reaches an extension view is recorded as `views.keystroke_frame_ms`.
 
 use std::fs::File;
 use std::io::Write;
@@ -85,6 +87,16 @@ pub fn market_results_shown(window: &Window) {
         sample("market.search_ms", ms(t0.elapsed()));
         after_next_frame(window, move |_, _| sample("market.search_frame_ms", ms(t0.elapsed())));
     }
+}
+
+/// A key reached an extension view: `views.keystroke_frame_ms` is the time to the frame after the one that shows its
+/// effect, like `typing.keystroke_frame_ms`.
+pub fn view_key(window: &Window) {
+    if !enabled() {
+        return;
+    }
+    let t0 = Instant::now();
+    after_next_frame(window, move |_, _| sample("views.keystroke_frame_ms", ms(t0.elapsed())));
 }
 
 /// Keys the Market scenario types: a word letter by letter, then erased, so every key changes the query.

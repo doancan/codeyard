@@ -87,6 +87,8 @@ pub const UI_DOCUMENT_BYTES: usize = 64 * 1024;
 pub const UI_KEY_LEN: usize = 128;
 /// An `image` given as bytes.
 pub const UI_IMAGE_BYTES: usize = 1024 * 1024;
+/// Different `image` URLs one open view fetches; the rest show their alt text.
+pub const UI_IMAGE_URLS: usize = 64;
 /// Options of a `select`, pairs of a `key-value`.
 pub const UI_CHOICES: usize = 256;
 /// Columns of a `table`.
