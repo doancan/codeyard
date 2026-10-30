@@ -878,6 +878,13 @@ fn code_contributions(
             if formatters { out.formatters.push(p) } else { out.code_actions.push(p) }
         }
     }
+    for (what, items, lenses) in [("code-lens", &raw.code_lens, true), ("inlay-hints", &raw.inlay_hints, false)] {
+        cx.count(what, items);
+        for p in items {
+            let p = Provider { id: String::new(), languages: languages(cx, what, &p.get_ref().languages, p.span()) };
+            if lenses { out.code_lenses.push(p) } else { out.inlay_hints.push(p) }
+        }
+    }
     for (what, items, diagnostics) in [("diagnostics", &raw.diagnostics, true), ("decorations", &raw.decorations, false)] {
         cx.count(what, items);
         let mut seen = HashSet::new();

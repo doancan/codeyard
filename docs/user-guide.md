@@ -803,12 +803,16 @@ offered only in some situations, for example while a Rust file is open; it close
 - *Hover and completion.* What an extension says about the word under the mouse (or *Editor: Show Hover*) shows in
   the hover popup under the language server's, with the extension's id above it. Its completions join the list as
   you type, with its id at the right of each item. An extension that takes more than a second is left out.
+- *Code lenses and inlay hints* at the end of their line, with the language server's (`editor.codeLens` and
+  `editor.inlayHints.enabled` turn them off). Hover to see which extension gave them; click a line with a lens, or use
+  *Editor: Run Code Lens on This Line*, to run it. Extensions are asked only about the lines you see, again once you stop
+  typing or scrolling.
 - *Problems* in the Problems view and the editor, with the extension's id as their source, and *decorations*: a dot in
   the gutter, a tinted line or a note after the line, in theme colours.
 - *Tasks* in *Tasks: Run Task…*, which the extension runs itself when you pick one.
 
 Typing never waits for an extension. When one is disabled, uninstalled or crashes, its status items, problems,
-decorations, hover text and completion items go with it. The same works in SSH windows: the extension runs on your computer and sees the remote files
+decorations, hover text, completion items, lenses and hints go with it. The same works in SSH windows: the extension runs on your computer and sees the remote files
 through Codeyard.
 
 **Accounts.** An extension that declares `auth` can act as your GitHub account, or as an account at a service it

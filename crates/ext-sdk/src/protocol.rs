@@ -76,6 +76,21 @@ pub enum Request {
         position: Position,
         trigger: Option<String>,
     },
+    /// Code lenses for the lines in view (the range).
+    CodeLens {
+        document: Document,
+        range: Range,
+    },
+    /// A lens without a command is on screen.
+    ResolveCodeLens {
+        document: Document,
+        lens: CodeLens,
+    },
+    /// Inlay hints for the lines in view (the range).
+    InlayHints {
+        document: Document,
+        range: Range,
+    },
 }
 
 /// An answer to a request (`responses.response`), as far as the SDK makes them.
@@ -89,4 +104,6 @@ pub enum Response {
     CodeActions(Vec<CodeAction>),
     Hover(Option<Hover>),
     Completions(CompletionList),
+    CodeLenses(Vec<CodeLens>),
+    InlayHints(Vec<InlayHint>),
 }

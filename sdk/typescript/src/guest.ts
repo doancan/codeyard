@@ -7,7 +7,19 @@ import { CodeyardError, describe, toWit } from "./errors.ts";
 import { fetch, FetchHeaders, FetchResponse } from "./fetch.ts";
 import { handlers, resetHandlers } from "./handlers.ts";
 import { background, complete, event, host, install } from "./runtime.ts";
-import { fromWitDiagnostic, toWitDiagnostic, type CodeAction, type CompletionItem, type CompletionList, type Hover } from "./types.ts";
+import {
+  fromWitCodeLens,
+  fromWitDiagnostic,
+  toWitCodeLens,
+  toWitDiagnostic,
+  toWitInlayHint,
+  type CodeAction,
+  type CodeLens,
+  type CompletionItem,
+  type CompletionList,
+  type Hover,
+  type InlayHint,
+} from "./types.ts";
 import type { Bindings, Guest, Request, Response, WitCodeAction, WitCompletionItem } from "./wit.ts";
 
 /** An extension module: `export function activate(ctx) { … }`, optionally `export function deactivate(ctx) { … }`. */
@@ -250,6 +262,37 @@ function handle(id: bigint, request: Request): void {
       if (!f) return respond(id, { tag: "ok", val: completions(undefined) });
       const [document, position, trigger] = request.val;
       return answer(id, () => f(ctx, document, position, trigger) as CompletionItem[] | CompletionList, completions);
+    }
+    case "code-lens": {
+      const f = handlers.codeLenses;
+      if (!f) return respond(id, { tag: "ok", val: { tag: "code-lenses", val: [] } });
+      const [document, range] = request.val;
+      return answer(
+        id,
+        () => f(ctx, document, range) as CodeLens[],
+        (lenses) => ({ tag: "code-lenses", val: (lenses ?? []).map(toWitCodeLens) }),
+      );
+    }
+    case "resolve-code-lens": {
+      const [document, lens] = request.val;
+      const f = handlers.resolveCodeLens;
+      // Without a resolver, the lens comes back as it was (and stays hidden).
+      if (!f) return respond(id, { tag: "ok", val: { tag: "code-lenses", val: [lens] } });
+      return answer(
+        id,
+        () => f(ctx, document, fromWitCodeLens(lens)) as CodeLens,
+        (resolved) => ({ tag: "code-lenses", val: [toWitCodeLens(resolved ?? fromWitCodeLens(lens))] }),
+      );
+    }
+    case "inlay-hints": {
+      const f = handlers.inlayHints;
+      if (!f) return respond(id, { tag: "ok", val: { tag: "inlay-hints", val: [] } });
+      const [document, range] = request.val;
+      return answer(
+        id,
+        () => f(ctx, document, range) as InlayHint[],
+        (hints) => ({ tag: "inlay-hints", val: (hints ?? []).map(toWitInlayHint) }),
+      );
     }
     case "provide-tasks":
     case "run-task":

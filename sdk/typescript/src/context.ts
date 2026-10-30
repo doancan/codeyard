@@ -11,6 +11,8 @@ import {
   type Account,
   type Chunk,
   type CodeAction,
+  type CodeLens,
+  type InlayHint,
   type Command,
   type CompletionItem,
   type CompletionList,
@@ -128,6 +130,24 @@ export class Context {
     f: (ctx: Context, document: Document, position: Position, trigger: string | undefined) => Awaitable<CompletionItem[] | CompletionList>,
   ): void {
     handlers.completion = f;
+  }
+
+  /**
+   * Code lenses for the lines of `document` in view: `range` starts at the first and ends at the start of the line
+   * after the last. Asked again after an edit (once typing pauses) and after a scroll; a slow answer is dropped.
+   */
+  codeLenses(f: (ctx: Context, document: Document, range: Range) => Awaitable<CodeLens[]>): void {
+    handlers.codeLenses = f;
+  }
+
+  /** Give a lens returned without `command` its command, once it is on screen. */
+  resolveCodeLens(f: (ctx: Context, document: Document, lens: CodeLens) => Awaitable<CodeLens>): void {
+    handlers.resolveCodeLens = f;
+  }
+
+  /** Inlay hints for the lines of `document` in view (`range`, as for `codeLenses`): short text at the end of a line. */
+  inlayHints(f: (ctx: Context, document: Document, range: Range) => Awaitable<InlayHint[]>): void {
+    handlers.inlayHints = f;
   }
 
   /** A `codeyard://ext/<id>/…` link was opened: its path and query. */

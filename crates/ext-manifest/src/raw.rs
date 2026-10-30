@@ -63,6 +63,10 @@ pub struct RawManifest {
     pub hover: Vec<S<RawLanguages>>,
     #[serde(default)]
     pub completion: Vec<S<RawCompletion>>,
+    #[serde(default)]
+    pub code_lens: Vec<S<RawLanguages>>,
+    #[serde(default)]
+    pub inlay_hints: Vec<S<RawLanguages>>,
 }
 
 #[derive(Deserialize)]
@@ -230,7 +234,7 @@ pub struct RawStatusItem {
     pub command: Option<S<String>>,
 }
 
-/// `[[formatters]]`, `[[code-actions]]`, `[[hover]]`.
+/// `[[formatters]]`, `[[code-actions]]`, `[[hover]]`, `[[code-lens]]`, `[[inlay-hints]]`.
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct RawLanguages {

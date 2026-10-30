@@ -7,12 +7,18 @@
 //! - Formatting and code actions also lint the document: each `TODO` becomes a warning and a gutter decoration.
 //! - Hover names the position; completion offers `probe-item` (and `probe-dot` after `.`). In a document containing
 //!   `slow`, completion is never answered until the host cancels it: then a late `probe-late` comes, to be dropped.
+//! - Code lenses (#143), for the lines asked about only: a `[section]` line gets "Run <section>", which runs `echo` with
+//!   `{"section": …, "line": …}`; a `#core` line gets a lens running `core:workbench.saveAll` (which the manifest does
+//!   not list); a `#later` line gets a lens resolved on demand. A document containing `slow` is never answered, like
+//!   formatting. Inlay hints: `: int`, `: string` or `: value` after each `key = value` line asked about.
 
 use std::cell::RefCell;
 use std::collections::HashSet;
 
 use crate::codeyard::api::host_requests::Request;
-use crate::codeyard::api::responses::{CodeAction, CompletionItem, CompletionKind, CompletionList, Hover, Response, Task};
+use crate::codeyard::api::responses::{
+    CodeAction, CodeLens, CompletionItem, CompletionKind, CompletionList, Hover, InlayHint, LensCommand, Response, Task,
+};
 use crate::codeyard::api::types::{Diagnostic, DiagnosticSeverity, Document, Position, Range, TextEdit, Tone};
 use crate::codeyard::api::{languages, requests, window};
 
@@ -85,9 +91,64 @@ fn lint(doc: &Document) {
     languages::set_decorations(&doc.uri, "todos", &decorations);
 }
 
+/// The lines of `text` in `range` (which ends at the start of the line after the last), with their numbers.
+fn lines_in(text: &str, range: Range) -> impl Iterator<Item = (u32, &str)> {
+    let (first, last) = (range.start.line, range.end.line);
+    text.split('\n').enumerate().map(|(n, l)| (n as u32, l)).filter(move |(n, _)| first <= *n && *n < last)
+}
+
+fn lenses(doc: &Document, range: Range) -> Vec<CodeLens> {
+    let at = |n: u32| Range { start: Position { line: n, character: 0 }, end: Position { line: n, character: 0 } };
+    let lens = |n: u32, title: String, command: &str, args_json: String| CodeLens {
+        id: format!("lens-{n}"),
+        range: at(n),
+        command: Some(LensCommand { title, command: command.into(), args_json }),
+    };
+    let mut out = Vec::new();
+    for (n, line) in lines_in(&doc.text, range) {
+        if let Some(section) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
+            out.push(lens(n, format!("Run {section}"), "echo", format!(r#"{{"section":"{section}","line":{n}}}"#)));
+        } else if line.starts_with("#core") {
+            out.push(lens(n, "Save all".into(), "core:workbench.saveAll", "null".into()));
+        } else if line.starts_with("#later") {
+            out.push(CodeLens { id: format!("later-{n}"), range: at(n), command: None });
+        }
+    }
+    out
+}
+
+fn hints(doc: &Document, range: Range) -> Vec<InlayHint> {
+    let mut out = Vec::new();
+    for (n, line) in lines_in(&doc.text, range) {
+        let Some((_, value)) = line.split_once('=') else { continue };
+        let value = value.trim();
+        let label = if value.parse::<i64>().is_ok() {
+            ": int"
+        } else if value.starts_with('"') {
+            ": string"
+        } else {
+            ": value"
+        };
+        out.push(InlayHint { position: Position { line: n, character: utf16_len(line) }, label: label.into(), tooltip: Some("Probe's guess".into()) });
+    }
+    out
+}
+
 /// Every request that is not a command.
 pub fn handle(id: u64, request: Request) {
     match request {
+        Request::CodeLens((doc, range)) => {
+            if doc.text.contains("slow") {
+                SLOW.with(|s| s.borrow_mut().insert(id));
+                return;
+            }
+            requests::respond(id, Ok(&Response::CodeLenses(lenses(&doc, range))));
+        }
+        Request::ResolveCodeLens((_doc, mut lens)) => {
+            lens.command = Some(LensCommand { title: "Resolved".into(), command: "echo".into(), args_json: format!("\"{}\"", lens.id) });
+            requests::respond(id, Ok(&Response::CodeLenses(vec![lens])));
+        }
+        Request::InlayHints((doc, range)) => requests::respond(id, Ok(&Response::InlayHints(hints(&doc, range)))),
         Request::Format((doc, _range, _options)) => {
             lint(&doc);
             if doc.text.contains("slow") {
@@ -99,14 +160,8 @@ pub fn handle(id: u64, request: Request) {
         }
         Request::CodeActions((doc, _range, _diagnostics)) => {
             lint(&doc);
-            let mut actions = vec![CodeAction {
-                id: "hello".into(),
-                title: "Probe: Say hello".into(),
-                edits: vec![],
-                command: None,
-                preferred: false,
-                fixes: vec![],
-            }];
+            let mut actions =
+                vec![CodeAction { id: "hello".into(), title: "Probe: Say hello".into(), edits: vec![], command: None, preferred: false, fixes: vec![] }];
             if let Some((n, line)) = doc.text.split('\n').enumerate().find(|(_, l)| l.contains("TODO")) {
                 let col = utf16_len(&line[..line.find("TODO").unwrap_or(0)]);
                 let range = Range { start: Position { line: n as u32, character: col }, end: Position { line: n as u32, character: col + 4 } };

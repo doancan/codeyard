@@ -33,13 +33,20 @@ impl EditorView {
     }
 
     /// Dim text at the line end: code lenses first, then hints.
-    pub(super) fn eol_hint(&self, line: usize) -> Option<String> {
+    pub(crate) fn eol_hint(&self, line: usize) -> Option<String> {
         // Values from the stopped program replace the hints (both on one line would be crowded).
         if let Some(v) = self.debug_values.get(&line) {
             return Some(v.clone());
         }
-        let lens = self.lenses.get(&line).map(|l| l.iter().map(|x| x.title.as_str()).collect::<Vec<_>>().join(" | "));
-        match (lens, self.inlays.get(&line)) {
+        // The language server's lenses and hints first, then the extensions' (editor_ext.rs).
+        let mut titles: Vec<&str> = self.lenses.get(&line).map(|l| l.iter().map(|x| x.title.as_str()).collect()).unwrap_or_default();
+        titles.extend(self.ext_lenses_on(line).map(|l| l.title.as_str()));
+        let lens = (!titles.is_empty()).then(|| titles.join(" | "));
+        let mut labels: Vec<&str> = self.inlays.get(&line).map(|h| vec![h.as_str()]).unwrap_or_default();
+        let ext_hints = self.ext_hints_on(line);
+        labels.extend(ext_hints.iter().map(|h| h.label.as_str()));
+        let hints = (!labels.is_empty()).then(|| labels.join("  "));
+        match (lens, hints.as_ref()) {
             (Some(l), Some(h)) => Some(format!("{l}   {h}")),
             (Some(l), None) => Some(l),
             (None, Some(h)) => Some(h.clone()),
@@ -51,6 +58,9 @@ impl EditorView {
     pub(super) fn run_code_lens(&mut self, _: &RunCodeLens, _: &mut Window, cx: &mut Context<Self>) {
         let line = self.buffer.char_to_line(self.buffer.cursor());
         let Some(lens) = self.lenses.get(&line).and_then(|l| l.first()).cloned() else {
+            if self.click_ext_lens(line, cx) {
+                return;
+            }
             return cx.emit(EditorEvent::Message(t("No code lens on this line").into()));
         };
         let Some(client) = self.lsp.clone() else { return };

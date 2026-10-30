@@ -113,7 +113,22 @@ export type Request =
   | { tag: "cancel-progress"; val: bigint }
   | { tag: "open-uri"; val: string }
   | { tag: "hover"; val: [Document, Position] }
-  | { tag: "completion"; val: [Document, Position, string | undefined] };
+  | { tag: "completion"; val: [Document, Position, string | undefined] }
+  | { tag: "code-lens"; val: [Document, Range] }
+  | { tag: "resolve-code-lens"; val: [Document, WitCodeLens] }
+  | { tag: "inlay-hints"; val: [Document, Range] };
+
+export interface WitCodeLens {
+  id: string;
+  range: Range;
+  command: { title: string; command: string; argsJson: string } | undefined;
+}
+
+export interface WitInlayHint {
+  position: Position;
+  label: string;
+  tooltip: string | undefined;
+}
 
 export interface WitCodeAction {
   id: string;
@@ -133,7 +148,9 @@ export type Response =
   | { tag: "tasks"; val: { id: string; label: string; detail: string | undefined; group: string }[] }
   | { tag: "ranges"; val: Range[] }
   | { tag: "hover"; val: WitHover | undefined }
-  | { tag: "completions"; val: { items: WitCompletionItem[]; incomplete: boolean } };
+  | { tag: "completions"; val: { items: WitCompletionItem[]; incomplete: boolean } }
+  | { tag: "code-lenses"; val: WitCodeLens[] }
+  | { tag: "inlay-hints"; val: WitInlayHint[] };
 
 export interface WitHover {
   contents: string;

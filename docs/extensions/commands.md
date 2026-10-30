@@ -14,6 +14,7 @@ The SDK is **pre-release**: it is not on crates.io yet, so a new extension takes
 - [Documents, diagnostics and decorations](#documents-diagnostics-and-decorations)
 - [Formatters and code actions](#formatters-and-code-actions)
 - [Hover and completion](#hover-and-completion)
+- [Code lenses and inlay hints](#code-lenses-and-inlay-hints)
 - [Network, files and programs](#network-files-and-programs)
 - [Storage, settings and timers](#storage-settings-and-timers)
 - [Errors and refused calls](#errors-and-refused-calls)
@@ -214,6 +215,33 @@ ctx.completion(async |ctx, doc, position, trigger| {
 A completion answer is a `Vec<CompletionItem>`, or a `CompletionList` with `incomplete: true` when more typing changes
 it (you are asked again on each key instead of the list only being filtered). An item may set its `range`,
 `filter_text`, `sort_text`, `documentation` and `additional_edits` (an import, say).
+
+## Code lenses and inlay hints
+
+A code lens is clickable text shown with its line; a click runs a command with the arguments you gave. An inlay hint is
+short text at the end of its line, such as a type. Declare `[[code-lens]]` and `[[inlay-hints]]` with their languages
+(see the [developer guide](developer-guide.md#contributions-that-run-your-code)). Codeyard asks only for the lines in view: `range`
+starts at the first one and ends at the start of the line after the last. It asks again once typing pauses after an
+edit and once the view stops after a scroll, and cancels the question before; typing never waits for the answer.
+
+```rust
+ctx.code_lenses(async |ctx, doc, range| {
+    // Runs `run-test` (one of your [[commands]]) with { "name": "parses" } when clicked.
+    Ok(vec![CodeLens::new(12, "Run test", "run-test", json!({ "name": "parses" }))])
+});
+ctx.inlay_hints(async |ctx, doc, range| Ok(vec![InlayHint::new(Position::new(3, 18), ": u32")]));
+```
+
+A lens's command is one of your commands (local or full id), a dependency's full id, or a `core:` command your
+manifest lists in `permissions.commands`; anything else is refused when clicked. When working out a lens is costly,
+return `CodeLens::unresolved(line, id)` and fill it in when it is on screen:
+
+```rust
+ctx.resolve_code_lens(async |ctx, doc, mut lens| {
+    lens.command = Some(LensCommand { title: "3 references".into(), command: "refs".into(), args: json!(lens.id) });
+    Ok(lens)
+});
+```
 
 ## Network, files and programs
 

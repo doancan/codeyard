@@ -18,6 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   an extension off or uninstalling it removes its items at once. Over SSH the document comes from the editor. The
   `todo-actions` and `crate-version-ts` examples use them; `typing.keystroke_frame_completion_ms` (warn) measures
   typing with one completion provider.
+- Code lenses and inlay hints from code extensions: `[[code-lens]]` and `[[inlay-hints]]` in the manifest,
+  `request.code-lens` (each lens with a command and its arguments, `request.resolve-code-lens` for one left without)
+  and `request.inlay-hints` in `codeyard:api` 0.1, `ctx.code_lenses` / `ctx.codeLenses` and friends in both SDKs and
+  their mock hosts. They show at the end of their line with the language server's, name the extension in the tooltip,
+  are asked for the lines in view only (again once typing pauses or the view stops scrolling, cancelling the question
+  before), and typing never waits for them. Clicking a lens, or *Editor: Run Code Lens on This Line*, runs its command
+  through the broker: the extension's own, a dependency's, or a `core:` command its manifest lists. The `todo-actions`
+  example shows both; `crate-version-ts` hints the latest version after each dependency in a `Cargo.toml`. New perf
+  metric `typing.keystroke_frame_lenses_ms` (warn).
+
 - Windows: terminals of a local folder are taken back after Codeyard quits, crashes or is killed, as on macOS and
   Linux. They run in the terminal daemon, which listens on a named pipe only the current user can open.
 - `cyx dev` hot-reloads code extensions: saving a source file rebuilds `extension.wasm` (cargo or the TypeScript

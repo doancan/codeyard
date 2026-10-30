@@ -196,6 +196,55 @@ pub struct CodeAction {
     pub fixes: Vec<Diagnostic>,
 }
 
+/// A code lens: clickable text above a line, from `ctx.code_lenses`. A lens without a command is shown once
+/// `ctx.resolve_code_lens` gave it one, asked only for lenses on screen.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CodeLens {
+    /// Passed back to `resolve_code_lens`.
+    pub id: String,
+    /// The lens shows above the range's first line.
+    pub range: Range,
+    pub command: Option<LensCommand>,
+}
+
+impl CodeLens {
+    /// A lens on `line` that runs `command` with `args` when clicked: the extension's own command (local or full id), a
+    /// dependency's full id, or a `core:` command the manifest lists in `permissions.commands`.
+    pub fn new(line: u32, title: impl Into<String>, command: impl Into<String>, args: serde_json::Value) -> CodeLens {
+        let command = LensCommand { title: title.into(), command: command.into(), args };
+        CodeLens { id: String::new(), range: Range::line(line, 0, 0), command: Some(command) }
+    }
+
+    /// A lens on `line` whose title and command come later, from `resolve_code_lens` (for work worth doing only for
+    /// lenses on screen).
+    pub fn unresolved(line: u32, id: impl Into<String>) -> CodeLens {
+        CodeLens { id: id.into(), range: Range::line(line, 0, 0), command: None }
+    }
+}
+
+/// What a code lens shows and runs.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LensCommand {
+    pub title: String,
+    pub command: String,
+    /// The command's argument, as its handler receives it.
+    pub args: serde_json::Value,
+}
+
+/// An inlay hint: short text shown at the end of its line, such as a type, from `ctx.inlay_hints`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct InlayHint {
+    pub position: Position,
+    pub label: String,
+    pub tooltip: Option<String>,
+}
+
+impl InlayHint {
+    pub fn new(position: Position, label: impl Into<String>) -> InlayHint {
+        InlayHint { position, label: label.into(), tooltip: None }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ThemeKind {
     Light,

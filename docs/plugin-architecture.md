@@ -168,7 +168,8 @@ Codeyard version from the API items and contribution points used (each has a `si
 | `language-servers` | no | Start a program from `PATH` where the files are (so also over SSH), so they need `run` and a trusted workspace. Entered before the user's `lsp.servers`; the user's entry for the same language wins |
 | `commands`, `menus`, `status-bar`, `views` | yes | |
 | `formatters`, `code-actions`, `diagnostics`, `decorations`, `tasks` | yes | |
-| `hover`, `completion`, `code-lens`, `inlay-hints`, SCM and PR providers | yes | Phase 3 |
+| `code-lens`, `inlay-hints` | yes | Asked for the lines in view, again after an edit (debounced) and a scroll; a lens runs its command through the broker |
+| `hover`, `completion`, SCM and PR providers | yes | Phase 3 |
 
 ### 5.2 The API
 
