@@ -6,6 +6,7 @@ import { Context } from "./context.ts";
 import { CodeyardError, describe, toWit } from "./errors.ts";
 import { fetch, FetchHeaders, FetchResponse } from "./fetch.ts";
 import { handlers, resetHandlers } from "./handlers.ts";
+import { answerPullRequests } from "./pulls.ts";
 import { background, complete, event, host, install } from "./runtime.ts";
 import { toWitScmState, type ScmState } from "./scm.ts";
 import {
@@ -231,6 +232,8 @@ function handle(id: bigint, request: Request): void {
       if (!f) return respond(id, { tag: "ok", val: none });
       return answer(id, () => f(ctx, request.val), () => none);
     }
+    case "pull-requests":
+      return answer(id, () => answerPullRequests(ctx, request.val), (val) => ({ tag: "pull-requests", val }));
     case "settings-changed": {
       // Answered at once; the handlers run in the background.
       respond(id, { tag: "ok", val: none });

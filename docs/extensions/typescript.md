@@ -95,6 +95,50 @@ The same calls as the Rust SDK, in camelCase:
 
 Quick picks answer with the index of the item picked (or `undefined` when dismissed), as in Rust. A view's tree is a plain object: `{ type: "column", children: [{ type: "text", text: "3 clicks" }, { type: "button", key: "add", label: "Add one" }] }` ([commands.md](commands.md#views) has the elements). `console.log` goes to the extension's log, as `ctx.log` does.
 
+## Pull request providers
+
+A `[[pull-requests]]` entry in the manifest makes the extension a pull (merge) request provider for the remotes on its `hosts`. Register it in `activate` with the entry's `id`:
+
+```toml
+[permissions]
+auth = ["gitea"]
+
+[[pull-requests]]
+id    = "gitea"
+label = "Gitea"
+hosts = ["codeberg.org"]
+auth  = "gitea"
+```
+
+```ts
+ctx.pullRequests("gitea", {
+  async list(ctx, remote) {
+    const r = await ctx.fetchAs(remote.account!, `https://${remote.host}/api/v1/repos/${remote.path}/pulls?state=open`);
+    return (await r.json()).map((p: any) => ({
+      id: String(p.number),
+      reference: `#${p.number}`,
+      title: p.title,
+      author: p.user.login,
+      state: p.draft ? "draft" : "open",
+      sourceBranch: p.head.ref,
+      targetBranch: p.base.ref,
+      updated: Date.parse(p.updated_at),
+      url: p.html_url,
+    }));
+  },
+  details: async (ctx, remote, id) => ({ summary: …, description: "…", checks: [], labels: [] }),
+  files: async (ctx, remote, id) => [{ path: "src/a.ts", status: "modified" }],
+  contents: async (ctx, remote, id, file) => ({ base: "…", head: "…" }),
+  comments: async (ctx, remote, id) => [],
+  addComment: async (ctx, remote, id, body) => { … },
+  checkout: async (ctx, remote, id) => ({ ref: `refs/pull/${id}/head`, branch: `pr-${id}` }),
+});
+```
+
+`remote` is a `Remote`: the remote's `name`, `url`, `host`, `path` (such as `group/app`) and `account`, the manifest's `auth` provider. Call the forge with `ctx.fetchAs(remote.account, …)`: Codeyard signs the request, and the extension never sees the token. A request is signed only once the user has signed in, so call `ctx.session(remote.account)` first; it asks on first use and returns at once after that. `list`, `details`, `files` and `contents` are required. `comments` is optional: without it a request has no comments. Without `addComment` or `checkout`, Codeyard refuses those actions. Times (`updated`, `created`) are Unix milliseconds; leave them out when unknown.
+
+In tests, `host.listPullRequests(remote)`, `host.pullRequestDetails(remote, id)`, `host.pullRequestFiles`, `host.pullRequestContents`, `host.pullRequestComments`, `host.addPullRequestComment` and `host.checkoutPullRequest` send the queries, and `host.http(…)` answers the signed requests. `host.fetched()` shows each request with the `auth` provider that signed it.
+
 ## fetch and npm packages
 
 The global `fetch` is the SDK's, mapped to Codeyard's `net`: the request leaves from the machine Codeyard runs on, to a host the manifest lists. The Promise resolves when the response head arrives; the body streams in (`response.body`, or `for await (const chunk of response.chunks())`), and `json()`, `text()`, `bytes()` and `arrayBuffer()` read it whole. `signal` cancels a request. One option is Codeyard's own: `auth` signs the request for an account, and the extension never sees the token.

@@ -60,6 +60,8 @@ Add SSH Host…
 Add SSH host…	
 Add a debug configuration	
 Add a host	
+Add comment	
+Add comment…	
 Add remote	
 Add to .gitignore	
 Add to Favorites	
@@ -73,6 +75,7 @@ Added {} to .gitignore
 Added “{}”	
 Added “{}” for this session only: there is no settings folder to keep your dictionary in.	
 Added “{}” to your dictionary.	
+Adding comment…	
 Adding remote…	
 Adding worktree…	
 All	
@@ -195,6 +198,7 @@ Change all files in the workspace
 Change the URL of which remote?	
 Change {}	
 Changed	
+Changed files	
 Changed {0} file ({1} file operations skipped)|Changed {0} files ({1} file operations skipped)	
 Changed {0} in {1}	
 Changed {} file|Changed {} files	
@@ -204,11 +208,13 @@ Check JSON and YAML files against their schema (problems, hover, suggestions)
 Check comments in code files too (prose files are always checked)	
 Check for Updates…	
 Check for updates automatically?	
+Check out	
 Check out #{} as pr-{}	
 Check out detached…	
 Check out which branch, tag or commit (detached)?	
 Checked out #{} as pr-{}	
 Checked out {} (detached HEAD)	
+Checked out {} as {}	
 Checking for updates…	
 Checking installed language services…	
 Checking out pull request #{}…	
@@ -218,6 +224,7 @@ Checking whitespace…
 Checking…	
 Checkout (Detached)	
 Checkout to…	
+Checks	
 Cherry-pick	
 Cherry-pick in progress	
 Cherry-pick stopped and was undone: {}	
@@ -296,6 +303,9 @@ Command Palette
 Command Palette…	
 Command palette	
 Command: {}	
+Comment added to {}.	
+Comment on {} (Markdown)	
+Comments ({})	
 Comments are not kept.	
 Commit	
 Commit & Push	
@@ -592,6 +602,7 @@ Deny
 Deprecated	
 Deprecated by its publisher.	
 Deprecated by its publisher: use {} instead.	
+Description	
 Destination: {0} on {1}. Existing files are never overwritten.	
 Destination: {}	
 Dev Container configuration: {}	
@@ -1151,6 +1162,7 @@ Keymap preset from an installed extension, as publisher.name/label (empty: Codey
 Keymap preset: {}	
 Kill All Terminals	
 Kill Terminal	
+Labels	
 Language	
 Language Badges	
 Language Services	
@@ -1206,6 +1218,7 @@ Load more
 Loading container details…	
 Loading image…	
 Loading pull requests…	
+Loading {}…	
 Loading…	
 Local	
 Local history	
@@ -1355,6 +1368,7 @@ No debug configuration: add .vscode/launch.json, or open a Cargo / Go project or
 No debug session.	
 No debug session. F5 starts one.	
 No definition found	
+No description.	
 No differences.	
 No editor is in a window of its own.	
 No edits yet in this session.	
@@ -1388,6 +1402,7 @@ No merge conflicts in this file.
 No merges	
 No misspelled word at the cursor.	
 No mounted storage	
+No open pull requests.	
 No outgoing calls found	
 No outline for this file type.	
 No output yet. Language server logs appear here.	
@@ -1541,6 +1556,7 @@ Open in Integrated Terminal
 Open in New Window	
 Open in a Search Editor tab	
 Open on GitHub	
+Open on {}	
 Open recent, or connect to a host… (⌃R)	
 Open settings.jsonc	
 Open the active file with…	
@@ -1666,6 +1682,7 @@ Pull failed: {}
 Pull from…	
 Pull has conflicts: resolve them in Source Control (or Git: Abort Merge)	
 Pull request #{} has no head on {} (it may have been closed or deleted); refresh the list	
+Pull request changes	
 Pull requests	
 Pull with rebase instead of a merge commit	
 Pulled	
@@ -2018,7 +2035,9 @@ Show Output
 Show Stash…	
 Show a color swatch next to #rrggbb values	
 Show a tooltip when the mouse rests on a word	
+Show changed files	
 Show code lenses (reference counts, run/debug) above symbols	
+Show details and comments	
 Show every change before anything is written (↵ in the field)	
 Show file icons on tabs	
 Show fold arrows in the gutter	
@@ -2599,6 +2618,7 @@ a program
 a string is not closed	
 a theme must be a JSON object	
 about {0} MB · {1}	
+added	
 another Codeyard window has them; started new shells	
 approved	
 args must be a list of texts	
@@ -2618,6 +2638,7 @@ cannot read “{}” of the response
 changes requested	
 class	
 click to open · Esc to close	
+closed	
 color “{}” is not one of accent, success, warning, danger, info, muted	
 condition  ·  log: message with {expr}  ·  hit: 5  ·  empty: plain breakpoint	
 connected	
@@ -2643,6 +2664,7 @@ data breakpoint
 debug output was dropped: the debugger could not keep up	
 decoded as {}	
 default	
+deleted	
 denied ({0}); add to [permissions]: {1}	
 deprecated	
 deprecated, use {}	
@@ -2734,8 +2756,10 @@ lines {0}–{1}
 link target differs	
 local agent, protocol test	
 local port, e.g. 8080	
+merged	
 method	
 milliseconds	
+modified	
 module	
 more than {} folders	
 name url (e.g. origin https://host/repo.git)	
@@ -2761,6 +2785,7 @@ not signed in to {0}; call auth.session with “{1}” first
 now	
 of {}	
 only the first {} files were looked at (search.structural.maxFiles)	
+open	
 operator	
 package	
 partly selected	
@@ -2785,6 +2810,8 @@ recently used
 reconnecting	
 redirects to {}; not followed, send a request to that address to continue	
 remote	
+renamed	
+renamed from {}	
 render must answer with response.view	
 request failed	
 review needed	
@@ -3041,6 +3068,7 @@ your words
 {} failed	
 {} file skipped, binary or too large|{} files skipped, binary or too large	
 {} file skipped, parse errors|{} files skipped, parse errors	
+{} files	
 {} forwarded	
 {} gets pre-releases from now on.	
 {} gets releases only; the pre-release you have stays until a release passes it.	
@@ -3063,6 +3091,7 @@ your words
 {} is disabled.	
 {} is enabled.	
 {} is loaded as an extension in development: save a file to reload it	
+{} is no longer active.	
 {} is not a setting of an installed extension	
 {} is not a trusted folder, so nothing is deleted from it. Open it as a folder and trust it first.	
 {} is not a trusted folder, so nothing is written to it. Open it as a folder and trust it first.	
@@ -3126,6 +3155,7 @@ your words
 {}: expected true or false	
 {}: invalid color {}	
 {}: no answer from the debug adapter	
+{}: no changed files.	
 {}: no open pull requests.	
 {}: not signed in	
 {}: path must not contain control characters	

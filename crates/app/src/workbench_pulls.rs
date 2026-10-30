@@ -1,5 +1,6 @@
-//! Workbench: GitHub pull requests (read-only list). "GitHub: Pull Requests…" lists open requests; picking one
-//! fetches its branch (`pull/N/head` → `pr-N`), opens it on GitHub, or copies the link or branch name.
+//! Workbench: the Pull Requests view. "GitHub: Pull Requests…" lists GitHub's open requests (read-only) and those of
+//! code extensions' `[[pull-requests]]` providers for the repository's remotes (`workbench_ext_pulls.rs`). Picking a
+//! GitHub request fetches its branch (`pull/N/head` → `pr-N`), opens it on GitHub, or copies the link or branch name.
 
 use super::*;
 use crate::git;
@@ -13,8 +14,26 @@ pub(super) enum PullAction {
     CopyBranch,
 }
 
+/// GitHub's answer: the remote, the repository, its open requests and where they came from.
+type GitHubListing = Result<(String, github::Repo, Vec<Pull>, github::Source), String>;
+
+/// What the view says above its rows: one line per list shown, then the lists with nothing open, then failures.
+#[derive(Default)]
+pub(super) struct Notes {
+    pub lines: Vec<String>,
+    pub empty: Vec<String>,
+    pub failed: Vec<String>,
+}
+
 fn token() -> Option<String> {
     ["GITHUB_TOKEN", "GH_TOKEN"].iter().find_map(|k| std::env::var(k).ok()).filter(|t| !t.trim().is_empty())
+}
+
+/// One row of the Pull Requests view: GitHub's, or a code extension's (`workbench_ext_pulls.rs`).
+#[derive(Clone)]
+pub(super) enum PullRow {
+    GitHub { remote: String, pull: Pull },
+    Extension(ext_pulls_glue::ExtPull),
 }
 
 impl Workbench {
@@ -23,29 +42,65 @@ impl Workbench {
         self.notice = Some(Notice::Info(crate::i18n::t("Loading pull requests…").into()));
         cx.notify();
         let host = self.remote.host.clone();
-        let task = cx.background_executor().spawn(async move {
-            let remotes = git::remotes(host.as_ref(), &root)?;
-            // `origin` first, then the first GitHub remote.
-            let found = remotes.iter().filter(|(n, _)| n == "origin").chain(remotes.iter()).find_map(|(n, u)| github::parse_remote(u).map(|r| (n.clone(), r)));
-            let (remote, repo) = found.ok_or_else(|| crate::i18n::t("None of this repository's remotes is on github.com.").to_string())?;
-            let (pulls, source) = github::list_pulls(&github::SystemRunner, &repo, token().as_deref())?;
-            Ok::<_, String>((remote, repo, pulls, source))
+        let remotes = cx.background_executor().spawn(async move { git::remotes(host.as_ref(), &root) });
+        cx.spawn_in(window, async move |this, cx| {
+            let remotes = remotes.await;
+            this.update_in(cx, |this, window, cx| this.list_pull_requests(remotes, window, cx)).ok();
+        })
+        .detach();
+    }
+
+    /// GitHub's open requests for the first GitHub remote (`origin` first), and those of every extension provider that
+    /// claims one of `remotes`, in one list.
+    fn list_pull_requests(&mut self, remotes: Result<Vec<(String, String)>, String>, window: &mut Window, cx: &mut Context<Self>) {
+        let remotes = match remotes {
+            Ok(r) => r,
+            Err(e) => {
+                self.notice = Some(Notice::Error(e.lines().next().unwrap_or(crate::i18n::t("could not load pull requests")).to_string().into()));
+                cx.notify();
+                return;
+            }
+        };
+        // `origin` first, then the first GitHub remote.
+        let found = remotes.iter().filter(|(n, _)| n == "origin").chain(remotes.iter()).find_map(|(n, u)| github::parse_remote(u).map(|r| (n.clone(), r)));
+        let asked = self.ask_pull_providers(&remotes, window, cx);
+        if found.is_none() && asked.is_empty() {
+            self.notice = Some(Notice::Error(crate::i18n::t("None of this repository's remotes is on github.com.").into()));
+            cx.notify();
+            return;
+        }
+        let github = found.map(|(remote, repo)| {
+            cx.background_executor().spawn(async move {
+                let (pulls, source) = github::list_pulls(&github::SystemRunner, &repo, token().as_deref())?;
+                Ok::<_, String>((remote, repo, pulls, source))
+            })
         });
         cx.spawn_in(window, async move |this, cx| {
-            let result = task.await;
-            this.update_in(cx, |this, window, cx| match result {
-                Ok((remote, repo, pulls, source)) => {
-                    this.notice = None;
-                    if pulls.is_empty() {
-                        this.notice = Some(Notice::Info(crate::i18n::tf("{}: no open pull requests.", &[&repo.slug()]).into()));
-                        cx.notify();
-                        return;
-                    }
-                    let now = now_secs();
-                    let items: Vec<PickItem> = pulls
-                        .iter()
-                        .map(|p| PickItem { label: format!("#{} {}", p.number, p.title).into(), detail: Some(github::detail(p, now).into()), keys: None })
-                        .collect();
+            let github = match github {
+                Some(task) => Some(task.await),
+                None => None,
+            };
+            let listed = ext_pulls_glue::listed(asked).await;
+            this.update_in(cx, |this, window, cx| this.show_pull_list(github, listed, window, cx)).ok();
+        })
+        .detach();
+    }
+
+    fn show_pull_list(&mut self, github: Option<GitHubListing>, listed: Vec<ext_pulls_glue::Listed>, window: &mut Window, cx: &mut Context<Self>) {
+        let now = now_secs();
+        let mut rows = Vec::new();
+        let mut items = Vec::new();
+        let mut notes = Notes::default();
+        match github {
+            Some(Ok((remote, repo, pulls, source))) => {
+                items.extend(pulls.iter().map(|p| PickItem {
+                    label: format!("#{} {}", p.number, p.title).into(),
+                    detail: Some(github::detail(p, now).into()),
+                    keys: None,
+                }));
+                if pulls.is_empty() {
+                    notes.empty.push(crate::i18n::tf("{}: no open pull requests.", &[&repo.slug()]));
+                } else {
                     let via = match source {
                         github::Source::Cli => crate::i18n::t("via the gh CLI"),
                         github::Source::Api { authenticated: true } => crate::i18n::t("via the GitHub API"),
@@ -58,19 +113,29 @@ impl Workbench {
                     } else {
                         crate::i18n::tf("{} open", &[&pulls.len()])
                     };
-                    let title = format!("{} · {shown} · {via}", repo.slug());
-                    let picker = cx
-                        .new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Pull requests"), "", None, cx).with_message(title));
-                    this.show_overlay(picker, OverlayKind::PullRequests { remote, pulls }, window, cx);
+                    notes.lines.push(format!("{} · {shown} · {via}", repo.slug()));
                 }
-                Err(e) => {
-                    this.notice = Some(Notice::Error(e.lines().next().unwrap_or(crate::i18n::t("could not load pull requests")).to_string().into()));
-                    cx.notify();
-                }
-            })
-            .ok();
-        })
-        .detach();
+                rows.extend(pulls.into_iter().map(|pull| PullRow::GitHub { remote: remote.clone(), pull }));
+            }
+            Some(Err(e)) => notes.failed.push(e.lines().next().unwrap_or(crate::i18n::t("could not load pull requests")).to_string()),
+            None => {}
+        }
+        self.add_extension_pulls(listed, &mut rows, &mut items, &mut notes, now);
+        if rows.is_empty() {
+            // Nothing open anywhere is news, not an error; a failure is.
+            let said = notes.failed.iter().chain(&notes.empty).cloned().collect::<Vec<_>>().join(" · ");
+            self.notice = Some(match (notes.failed.is_empty(), said.is_empty()) {
+                (true, true) => Notice::Info(crate::i18n::t("No open pull requests.").into()),
+                (true, false) => Notice::Info(said.into()),
+                (false, _) => Notice::Error(said.into()),
+            });
+            cx.notify();
+            return;
+        }
+        self.notice = None;
+        let title = notes.lines.into_iter().chain(notes.empty).chain(notes.failed).collect::<Vec<_>>().join(" — ");
+        let picker = cx.new(|cx| Picker::new(vec![PickSource::List { prefix: "", items }], crate::i18n::t("Pull requests"), "", None, cx).with_message(title));
+        self.show_overlay(picker, OverlayKind::PullRequests(rows), window, cx);
     }
 
     pub(super) fn pick_pull_request(&mut self, remote: String, pull: Pull, window: &mut Window, cx: &mut Context<Self>) {

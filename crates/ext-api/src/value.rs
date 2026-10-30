@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 #[path = "value_scm.rs"]
 mod scm;
 pub use scm::*;
+mod pulls;
+pub use pulls::*;
 
 pub type Ticket = u64;
 pub type Uri = String;
@@ -353,6 +355,7 @@ pub enum Response {
     InlayHints(Vec<InlayHint>),
     Scm(ScmState),
     Text(Option<String>),
+    PullRequests(PullAnswer),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -384,12 +387,14 @@ pub enum Request {
     ScmStatus { provider: String, root: Uri },
     ScmOriginal { provider: String, uri: Uri },
     ScmValidate { provider: String, root: Uri, value: String },
+    PullRequests { query: PullQuery },
 }
 
 impl Request {
     /// Started by a user action, so it may use the active document (Chrome's `activeTab`) and `open-external`.
     pub fn is_user_action(&self) -> bool {
         matches!(self, Request::Command { .. } | Request::UiEvent { .. } | Request::RunCodeAction { .. } | Request::RunTask { .. } | Request::OpenUri { .. })
+            || matches!(self, Request::PullRequests { query } if query.is_user_action())
     }
 }
 

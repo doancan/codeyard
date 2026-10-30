@@ -36,6 +36,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   untrusted folders are not claimed, and the programs a provider runs go through `run` on the workspace host, also over
   SSH. Screen readers reach a provider's section, input box, files and buttons as they do Git's. New example:
   `jj-scm`, a provider for Jujutsu.
+- Pull request providers from code extensions (`[[pull-requests]]`: `id`, `label`, the remote `hosts` it claims and the
+  `auth` provider it uses). The Pull Requests view lists their open pull (merge) requests next to GitHub's, per
+  repository remote; picking one shows its details and comments as a Markdown page, its changed files as diffs, adds a
+  comment, or checks it out (git runs on the workspace's host after the provider's answer is checked). Providers call
+  their forge with `auth.fetch`, so they never see the token; they have 20 s per query
+  (`PULL_REQUEST_DEADLINE_MILLIS`), are cancelled after it, and their errors and late answers go to the Inspector. API
+  `codeyard:api@0.1.0` gains the `pull-requests` interface, `request.pull-requests` and `response.pull-requests`
+  (additive); the Rust SDK has `ctx.pull_requests(id)`, the TypeScript SDK `ctx.pullRequests(id, provider)`, both mock
+  hosts can send the queries, and `cyx test` asks each provider for a list. Example: `examples/extensions/gitea-pulls`.
 
 - Windows: terminals of a local folder are taken back after Codeyard quits, crashes or is killed, as on macOS and
   Linux. They run in the terminal daemon, which listens on a named pipe only the current user can open.

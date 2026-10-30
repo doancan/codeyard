@@ -5,6 +5,8 @@ use ext_api::value as v;
 use crate::bindings::codeyard::api as g;
 use crate::bindings::exports::codeyard::api::guest as gx;
 
+mod pulls;
+
 // --- guest → app
 
 impl From<g::types::Position> for v::Position {
@@ -191,6 +193,7 @@ impl From<g::responses::Response> for v::Response {
             }
             R::Scm(s) => v::Response::Scm(s.into()),
             R::Text(t) => v::Response::Text(t),
+            R::PullRequests(a) => v::Response::PullRequests(a.into()),
         }
     }
 }
@@ -379,6 +382,7 @@ impl From<v::Request> for g::host_requests::Request {
             v::Request::ScmStatus { provider, root } => R::ScmStatus((provider, root)),
             v::Request::ScmOriginal { provider, uri } => R::ScmOriginal((provider, uri)),
             v::Request::ScmValidate { provider, root, value } => R::ScmValidate((provider, root, value)),
+            v::Request::PullRequests { query } => R::PullRequests(query.into()),
         }
     }
 }

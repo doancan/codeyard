@@ -107,6 +107,7 @@ fn the_examples_build_package_and_pass_cyx_test() {
         ("crate-version", "net"),
         ("branch-status", "process"),
         ("jj-scm", "process"),
+        ("gitea-pulls", "auth"),
     ];
     for (name, needs) in examples {
         let dir = repo().join("examples/extensions").join(name);

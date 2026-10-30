@@ -141,15 +141,21 @@ pub(super) enum OverlayKind {
         rebuild: bool,
     },
     /// "Remove SSH Host…" / "Test Connection…": host aliases.
-    /// "GitHub: Pull Requests…": open requests and actions for the selected request.
-    PullRequests {
-        remote: String,
-        pulls: Vec<crate::github::Pull>,
-    },
+    /// "GitHub: Pull Requests…": open requests (GitHub's and extensions') and actions for the selected request.
+    PullRequests(Vec<pulls_glue::PullRow>),
     PullRequestActions {
         remote: String,
         pull: crate::github::Pull,
         choices: Vec<pulls_glue::PullAction>,
+    },
+    /// An extension's request: its actions, and its changed files.
+    ExtPullActions {
+        pull: Box<ext_pulls_glue::ExtPull>,
+        choices: Vec<ext_pulls_glue::ExtPullAction>,
+    },
+    ExtPullFiles {
+        pull: Box<ext_pulls_glue::ExtPull>,
+        files: Vec<ext_api::value::ChangedFile>,
     },
     /// Spell check: list of corrections for a misspelled word.
     SpellFix {
@@ -263,6 +269,8 @@ pub(super) enum InputPurpose {
     SaveTheme,
     /// "Clone Git Repository…": URL first, then the target folder.
     CloneUrl,
+    /// A comment on an extension's pull request.
+    PullComment(Box<ext_pulls_glue::ExtPull>),
     /// Workspace switcher: connect to the typed host name (or `user@host`).
     ConnectHost,
     /// `user@host[:port] [as name]` -> ~/.ssh/config.

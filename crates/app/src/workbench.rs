@@ -130,6 +130,8 @@ pub use panels_glue::ProblemRow;
 pub(crate) use panels_glue::interface_scale_notice;
 #[path = "workbench_cyx.rs"]
 mod cyx_glue;
+#[path = "workbench_ext_pulls.rs"]
+mod ext_pulls_glue;
 #[path = "workbench_ports.rs"]
 mod ports_glue;
 #[path = "workbench_projects.rs"]

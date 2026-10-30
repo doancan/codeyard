@@ -167,7 +167,7 @@ impl Workbench {
         let asked: Vec<(String, u64, oneshot::Receiver<Result<Response, v::Error>>)> = providers
             .iter()
             .map(|a| {
-                let (id, answer) = self.ask_provider_with_id(a, &reason, request.clone(), about.clone(), window, cx);
+                let (id, answer) = self.ask_provider_with_id(a, &reason, request.clone(), about.clone(), limits::PROVIDER_DEADLINE_MILLIS, window, cx);
                 (a.id().to_string(), id, answer)
             })
             .collect();

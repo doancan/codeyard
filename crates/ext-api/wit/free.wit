@@ -70,6 +70,7 @@ interface responses {
   use types.{text-edit, diagnostic, range};
   use scm.{scm-state};
   use types.{position};
+  use pull-requests.{answer};
 
   record code-action {
     /// Passed back in `request.run-code-action`.
@@ -140,6 +141,8 @@ interface responses {
     scm(scm-state),
     /// Some text, or none: a file's original text (`request.scm-original`), a validation message (`request.scm-validate`).
     text(option<string>),
+    /// The answer to `request.pull-requests`.
+    pull-requests(answer),
   }
 
   /// Shown in the hover popup next to the language server's, under the extension's name.

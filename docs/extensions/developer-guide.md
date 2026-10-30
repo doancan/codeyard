@@ -222,7 +222,17 @@ trigger-characters = ["."]      # optional: these characters ask too, besides ty
 id      = "hg"                  # a source control provider (see Source control below)
 label   = "Mercurial"
 markers = [".hg"]               # it claims workspace folders that have one of these at the top
+
+[[pull-requests]]
+id    = "codeberg"
+label = "Codeberg"
+hosts = ["codeberg.org"]        # the repository remotes it claims, merged into the Pull Requests view
+auth  = "codeberg"              # optional; must be in [permissions] auth
 ```
+
+A `[[pull-requests]]` provider lists, describes, diffs, comments on and checks out the pull (merge) requests of the
+remotes on its hosts ([commands.md](commands.md#pull-request-providers)); it calls the forge with `auth.fetch`, so it
+never sees the token.
 
 A file-tree menu entry passes the file's URI to the command as its argument, and a view-title entry the view's full id
 (`you.ext.deployments`): view-title entries appear under the **…** button in that view's title bar. A menu entry may

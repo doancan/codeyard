@@ -105,6 +105,7 @@ pub enum Request {
         root: Uri,
         value: String,
     },
+    PullRequests(crate::pulls::PullQuery),
 }
 
 /// An answer to a request (`responses.response`), as far as the SDK makes them.
@@ -124,4 +125,5 @@ pub enum Response {
     Scm(ScmState),
     /// A file's original text, or a validation message.
     Text(Option<String>),
+    PullRequests(crate::pulls::PullAnswer),
 }

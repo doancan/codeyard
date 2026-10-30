@@ -17,6 +17,7 @@ export function activate(ctx: Context) {
 | --- | --- |
 | `src/index.ts` | The public API: `Context`, `DeniedError`, `CodeyardError`, `fetch` and the types |
 | `src/guest.ts`, `src/runtime.ts` | The component's exports (`activate`, `handle`, `cancel`, `complete`, `event`, `deactivate`) and the ticket → Promise table |
+| `src/pulls.ts` | Pull request providers (`ctx.pullRequests`): their types and the conversions to and from the WIT |
 | `src/wit.ts` | The `codeyard:api` WIT as ComponentizeJS shows it to JavaScript |
 | `src/testing/` | `@codeyard/extension/testing`: the mock host for `npm test` |
 | `toolchain/` | What `cyx` installs in its cache folder to build TypeScript extensions: esbuild and ComponentizeJS at pinned versions (`package-lock.json`), and `build.mjs` |

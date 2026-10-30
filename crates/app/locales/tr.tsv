@@ -3359,3 +3359,34 @@ Save the file first: a tab with unsaved changes cannot move to another window.	�
 This tab cannot move to that window: its folder is on another machine.	Bu sekme o pencereye taşınamaz: klasörü başka bir makinede.
 The destination window is no longer available.	Hedef pencere artık yok.
 {0} (from {1})	{0} ({1} eklentisinden)
+# ---- Pull requests from code extensions ----
+No open pull requests.	Açık pull request yok.
+{} is no longer active.	{} artık etkin değil.
+Show details and comments	Ayrıntıları ve yorumları göster
+Show changed files	Değişen dosyaları göster
+Add comment…	Yorum ekle…
+Check out	Checkout et
+Open on {}	{} üzerinde aç
+Add comment	Yorum ekle
+Comment on {} (Markdown)	{} için yorum (Markdown)
+Loading {}…	{} yükleniyor…
+{}: no changed files.	{}: değişen dosya yok.
+{} files	{} dosya
+Changed files	Değişen dosyalar
+Pull request changes	Pull request değişiklikleri
+Adding comment…	Yorum ekleniyor…
+Comment added to {}.	{} için yorum eklendi.
+Checked out {} as {}	{0}, {1} olarak checkout edildi
+renamed from {}	{} adından değiştirildi
+renamed	adı değiştirildi
+added	eklendi
+deleted	silindi
+modified	değiştirildi
+open	açık
+merged	birleştirildi
+closed	kapalı
+Labels	Etiketler
+Checks	Denetimler
+Description	Açıklama
+No description.	Açıklama yok.
+Comments ({})	Yorumlar ({})

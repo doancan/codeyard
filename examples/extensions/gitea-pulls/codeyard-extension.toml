@@ -1,0 +1,33 @@
+[extension]
+id          = "codeyard.gitea-pulls"
+version     = "0.1.0"
+name        = "Gitea Pull Requests"
+license     = "MIT"
+description = "Pull requests of Codeberg (Gitea and Forgejo) repositories in the Pull Requests view."
+
+[code]
+entry = "Cargo.toml"
+
+# Requests are signed by Codeyard with the Codeberg account; the extension never sees the token.
+[permissions]
+auth = ["codeberg"]
+why  = "Lists and comments on pull requests of your Codeberg repositories."
+
+# Register an OAuth application on Codeberg (Settings › Applications) with the redirect URI
+# codeyard://ext/codeyard.gitea-pulls/callback, and put its client id here.
+[[oauth]]
+id            = "codeberg"
+name          = "Codeberg"
+authorize-url = "https://codeberg.org/login/oauth/authorize"
+token-url     = "https://codeberg.org/login/oauth/access_token"
+client-id     = "your-client-id"
+scopes        = ["read:repository", "write:issue"]
+hosts         = ["codeberg.org"]
+account-url   = "https://codeberg.org/api/v1/user"
+
+# The remotes this provider answers for, and the account its requests use.
+[[pull-requests]]
+id    = "codeberg"
+label = "Codeberg"
+hosts = ["codeberg.org"]
+auth  = "codeberg"

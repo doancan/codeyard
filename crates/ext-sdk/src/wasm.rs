@@ -487,6 +487,7 @@ impl From<w::host_requests::Request> for Request {
             R::ScmStatus((provider, root)) => Request::ScmStatus { provider, root },
             R::ScmOriginal((provider, uri)) => Request::ScmOriginal { provider, uri },
             R::ScmValidate((provider, root, value)) => Request::ScmValidate { provider, root, value },
+            R::PullRequests(q) => Request::PullRequests(crate::pulls::wasm::query(q)),
         }
     }
 }
@@ -534,6 +535,7 @@ impl From<Response> for w::responses::Response {
             }
             Response::Scm(s) => R::Scm(s.into()),
             Response::Text(t) => R::Text(t),
+            Response::PullRequests(a) => R::PullRequests(crate::pulls::wasm::answer(a)),
         }
     }
 }

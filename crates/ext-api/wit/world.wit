@@ -5,6 +5,7 @@ package codeyard:api@0.1.0;
 interface host-requests {
   use types.{document, range, diagnostic, uri, position};
   use responses.{code-lens};
+  use pull-requests.{query};
 
   record format-options {
     tab-size: u32,
@@ -57,6 +58,8 @@ interface host-requests {
     /// Check the input box's text: the provider's local id, the folder and the text; answer with `response.text`, a
     /// message shown under the box (none when the text is fine).
     scm-validate(tuple<string, uri, string>),
+    /// A `[[pull-requests]]` provider's query; answer with `response.pull-requests`.
+    pull-requests(query),
   }
 }
 

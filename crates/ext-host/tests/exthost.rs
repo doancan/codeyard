@@ -243,6 +243,62 @@ fn an_untrusted_folder_refuses_sending() {
 }
 
 #[test]
+fn pull_request_queries_reach_the_provider_and_its_forge_calls_go_through_auth() {
+    use ext_api::value::{ChangedFile, FileStatus, PullAnswer, PullQuery, PullRemote, StreamEvent};
+    let d = dir("pulls");
+    let (c, sha) = compile(&d);
+    let mut h = Host::start(hello(&d, &c, sha, &["auth"], false)).ready();
+    let remote = PullRemote {
+        provider: "acme".into(),
+        name: "origin".into(),
+        url: "git@git.acme.example.com:team/app.git".into(),
+        host: "git.acme.example.com".into(),
+        path: "team/app".into(),
+        account: Some("acme".into()),
+    };
+    let ask = |h: &mut Host, query: PullQuery| {
+        let id = h.next_id;
+        h.next_id += 1;
+        h.send(&ToHost::Handle { id, deadline_ms: 20_000, request: Request::PullRequests { query } });
+        id
+    };
+    // `list` calls the forge through `auth.fetch`: the app signs it, the guest gets the body.
+    let id = ask(&mut h, PullQuery::List { remote: remote.clone() });
+    let ticket = match h.next() {
+        ToApp::Start { ticket, call: Start::AuthFetch { provider, request } } => {
+            assert_eq!((provider.as_str(), request.url.as_str()), ("acme", "https://api.acme.example.com/repos/team/app/pulls"));
+            assert!(request.headers.iter().all(|(k, _)| !k.eq_ignore_ascii_case("authorization")));
+            ticket
+        }
+        other => panic!("{other:?}"),
+    };
+    h.send(&ToHost::Event { ticket, event: StreamEvent::Data(b"7|Fix it|ada|topic|main\n".to_vec()) });
+    h.send(&ToHost::Complete { ticket, completion: Completion::Done });
+    match h.answer(id).0 {
+        Ok(Response::PullRequests(PullAnswer::List(l))) => {
+            assert_eq!((l[0].id.as_str(), l[0].reference.as_str(), l[0].title.as_str(), l[0].source_branch.as_str()), ("7", "!7", "Fix it", "topic"))
+        }
+        other => panic!("{other:?}"),
+    }
+    // Files and contents come back as typed answers.
+    let id = ask(&mut h, PullQuery::Files { remote: remote.clone(), id: "7".into() });
+    assert!(matches!(h.answer(id).0, Ok(Response::PullRequests(PullAnswer::Files(f))) if f.len() == 2 && f[1].status == FileStatus::Added));
+    let file = ChangedFile { path: "a.txt".into(), old_path: None, status: FileStatus::Modified };
+    let id = ask(&mut h, PullQuery::Contents { remote: remote.clone(), id: "7".into(), file });
+    match h.answer(id).0 {
+        Ok(Response::PullRequests(PullAnswer::Contents(c))) => {
+            assert_eq!((c.base.as_deref(), c.head.as_deref()), (Some("one\n"), Some("one\ntwo from a.txt\n")))
+        }
+        other => panic!("{other:?}"),
+    }
+    let id = ask(&mut h, PullQuery::Checkout { remote, id: "7".into() });
+    match h.answer(id).0 {
+        Ok(Response::PullRequests(PullAnswer::Checkout(c))) => assert_eq!((c.r#ref.as_str(), c.branch.as_str()), ("refs/pull/7/head", "pr-7")),
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
 fn storage_persists_and_prints_reach_the_log() {
     let d = dir("storage");
     let (c, sha) = compile(&d);
