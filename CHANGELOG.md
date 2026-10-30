@@ -210,6 +210,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A workspace file's debug configurations understand `${workspaceFolder:name}` and `${workspaceFolderBasename:name}`, as
+  its tasks already did. Before, the program path kept the variable as written and debugging failed to start with
+  "Expected process to be stopped".
 - Windows of their own (editors, side views, terminals) on macOS came back 32 pixels taller at every start: the frame's
   height was saved and the content was opened at that height. The content's size is saved now.
 - A file moved into a window of its own came back as a tab of the main window too after the second start when Codeyard
