@@ -158,6 +158,15 @@ impl Workbench {
     }
 
     pub(super) fn new_terminal(&mut self, _: &NewTerminal, window: &mut Window, cx: &mut Context<Self>) {
+        // Asked for while the window's terminals are being restored (`--terminal`, or quickly by hand): it opens once they
+        // are back, on the window's session; opening it now would make the restore give up and run it outside the session.
+        let restore_ahead = self.persist.pending_restore.is_some() && cx.global::<Settings>().restore_session;
+        if self.persist.panel_restoring || restore_ahead {
+            self.persist.terminal_wanted = true;
+            self.chrome.panel_open = true;
+            self.chrome.bottom = Bottom::Terminal;
+            return cx.notify();
+        }
         let cwd = self.active_root(cx);
         self.new_terminal_in(cwd, window, cx);
     }

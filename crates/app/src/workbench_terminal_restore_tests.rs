@@ -98,3 +98,55 @@ fn a_terminal_is_saved_as_soon_as_it_opens(cx: &mut gpui::TestAppContext) {
     let parsed = crate::terminal_session::SavedTerminals::parse(&saved, 0).unwrap();
     assert_eq!(parsed.terminals.len(), 1, "{saved}");
 }
+
+/// `--terminal` (or a new terminal asked for by hand) while the folder's terminals are being restored: they still come
+/// back, and the request waits for them instead of making the restore give up.
+#[gpui::test]
+fn a_terminal_asked_for_during_the_restore_does_not_drop_it(cx: &mut gpui::TestAppContext) {
+    let home = crate::qa_workbench_tests::fresh("term-restore-asked-home");
+    let dir = crate::qa_workbench_tests::project("term-restore-asked");
+    {
+        let (wb, cx) = crate::qa_workbench_tests::setup_persistent(cx, &home);
+        with_history(cx, 0);
+        crate::qa_workbench_tests::open(&wb, &dir, cx);
+        wb.update_in(cx, |wb, window, cx| wb.new_terminal(&NewTerminal, window, cx));
+        wait_ticking(cx, "the shell running", |cx| wb.read_with(cx, |wb, cx| wb.terminals.first().is_some_and(|t| t.read(cx).pty_handle().is_some())));
+        wb.update(cx, |wb, cx| {
+            wb.terminals[0].update(cx, |t, _| t.set_fixed_title("build".into()));
+            wb.persist_session(cx);
+        });
+    }
+
+    let (wb, cx) = crate::qa_workbench_tests::setup_persistent(cx, &home);
+    with_history(cx, 0);
+    let p = dir.to_string_lossy().into_owned();
+    // As `codeyard FOLDER --terminal` does: the terminal is asked for right after the folder starts opening.
+    wb.update_in(cx, |wb, window, cx| {
+        wb.open_path(&p, window, cx);
+        wb.open_terminal(window, cx);
+    });
+    wait_ticking(cx, "the saved terminal back", |cx| {
+        wb.read_with(cx, |wb, cx| wb.terminals.first().is_some_and(|t| t.read(cx).title.as_ref() == "build" && t.read(cx).pty_handle().is_some()))
+    });
+    wb.read_with(cx, |wb, _| {
+        assert_eq!(wb.terminals.len(), 1, "the restored terminal answers the request; no second shell");
+        assert!(wb.chrome.panel_open && wb.chrome.bottom == Bottom::Terminal, "the terminal is shown");
+        assert!(!wb.persist.terminal_wanted);
+    });
+}
+
+/// With nothing to restore, a terminal asked for during the (empty) restore still opens once it is done.
+#[gpui::test]
+fn a_terminal_asked_for_during_an_empty_restore_opens(cx: &mut gpui::TestAppContext) {
+    let home = crate::qa_workbench_tests::fresh("term-restore-empty-home");
+    let dir = crate::qa_workbench_tests::project("term-restore-empty");
+    let (wb, cx) = crate::qa_workbench_tests::setup_persistent(cx, &home);
+    with_history(cx, 0);
+    let p = dir.to_string_lossy().into_owned();
+    wb.update_in(cx, |wb, window, cx| {
+        wb.open_path(&p, window, cx);
+        wb.open_terminal(window, cx);
+    });
+    wait_ticking(cx, "a new terminal", |cx| wb.read_with(cx, |wb, cx| wb.terminals.len() == 1 && wb.terminals[0].read(cx).pty_handle().is_some()));
+    wb.update(cx, |wb, cx| wb.close_all_terminals(cx));
+}

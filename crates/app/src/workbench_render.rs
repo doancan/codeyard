@@ -198,6 +198,10 @@ impl Render for Workbench {
         self.chrome.resources.update(cx, |monitor, cx| monitor.set_project(project, remote, cx));
         if let Some(ws) = self.persist.pending_restore.take() {
             self.restore_tabs(ws, window, cx);
+            // A terminal asked for before the restore started, when no restore of the panel followed after all.
+            if !self.persist.panel_restoring {
+                self.open_wanted_terminal(window, cx);
+            }
         }
         let p = *palette(cx);
         let main: AnyElement = match (self.tab_editor(), &self.tabs.open_error) {
