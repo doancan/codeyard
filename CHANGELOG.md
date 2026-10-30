@@ -199,6 +199,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Opening a folder with `--terminal`, or asking for a new terminal while the folder's terminals were being restored,
+  made the restore give up: the saved terminals did not come back and the new shell ran outside the terminal session,
+  so it was not kept for the next start. The new terminal now waits for the restore.
 - Windows: a shell task's arguments run through cmd.exe reach the program unchanged when they contain `%` (a value like
   `%PATH%` is no longer expanded) or end with a backslash (`C:\dir\` no longer swallows the closing quote).
 - Screen readers find the Search results in the secondary side bar too, not only in the primary one.

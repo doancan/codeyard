@@ -240,6 +240,11 @@ pub(super) struct PersistState {
     pub(super) term_socket: Option<std::path::PathBuf>,
     /// The window's session is being taken back; terminals outside the panel wait in `pending_moved` until it is.
     pub(super) term_restoring: bool,
+    /// The panel's terminals are being restored (any kind of restore, until it lands), and a new terminal was asked for
+    /// meanwhile or before the restore started: it opens after them, so the restore is not dropped and the new shell
+    /// runs where the window's do.
+    pub(super) panel_restoring: bool,
+    pub(super) terminal_wanted: bool,
     pub(super) pending_moved: Option<super::term_tabs_glue::restore::SavedTerminals>,
     /// Terminals outside the panel taken back before their places were restored (by position), waiting for them.
     pub(super) moved_back: Vec<(usize, host::Pty, u64)>,

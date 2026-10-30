@@ -329,6 +329,7 @@ impl Workbench {
             None
         };
         self.persist.term_restoring = taking.is_some();
+        self.persist.panel_restoring = true;
         let host = self.remote.host.clone();
         let cwds: Vec<Option<String>> = saved.terminals.iter().map(|t| t.cwd.clone()).collect();
         // Which saved folders still exist, asked off the UI thread (over SSH each is a round trip).
@@ -344,9 +345,11 @@ impl Workbench {
             let present = present.await;
             this.update_in(cx, |this, window, cx| {
                 this.persist.term_restoring = false;
+                this.persist.panel_restoring = false;
                 // Another folder or connection by now: these terminals belonged to the previous one.
                 if !Arc::ptr_eq(&asked.0, &this.remote.host) || asked.1 != this.persist.workspace_id || !this.terminals.is_empty() {
                     this.persist.pending_moved = None;
+                    this.open_wanted_terminal(window, cx);
                     return;
                 }
                 let (mut back, mut in_use) = (Vec::new(), false);
@@ -377,11 +380,26 @@ impl Workbench {
                     let why = crate::i18n::t("another Codeyard window has them; started new shells");
                     this.notice = Some(Notice::Info(crate::i18n::tf("Terminal session could not be restored: {}", &[&why]).into()));
                 }
+                this.open_wanted_terminal(window, cx);
                 cx.notify();
             })
             .ok();
         })
         .detach();
+    }
+
+    /// The terminal asked for while the restore ran: a new one if none came back, else the panel's active one in front.
+    pub(super) fn open_wanted_terminal(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !std::mem::take(&mut self.persist.terminal_wanted) {
+            return;
+        }
+        if self.terminals.is_empty() {
+            self.new_terminal(&NewTerminal, window, cx);
+        } else {
+            self.chrome.panel_open = true;
+            self.chrome.bottom = Bottom::Terminal;
+            self.focus_terminal(window, cx);
+        }
     }
 
     /// Put the saved terminals in the panel: the ones taken back, the others as new shells.
