@@ -805,9 +805,9 @@ impl FileTree {
         let bounds = self.bounds.unwrap_or_default();
         let (path, is_dir, position) = match self.selected.filter(|_| !self.root_selected).and_then(|ix| Some((ix, self.rows.get(ix)?))) {
             Some((ix, row)) => {
+                // Scrolled to the top first, so the menu opens just under the first visible row.
                 self.scroll.scroll_to_item(ix, ScrollStrategy::Top);
-                let top = self.scroll.logical_scroll_top_index().min(ix);
-                let y = (bounds.top() + px(ROW_H * (ix - top + 1) as f32)).min(bounds.bottom());
+                let y = (bounds.top() + px(ROW_H)).min(bounds.bottom());
                 (row.path.clone(), row.is_dir, gpui::point(bounds.left() + px(ROW_PAD_L), y))
             }
             None => match self.root.clone() {
