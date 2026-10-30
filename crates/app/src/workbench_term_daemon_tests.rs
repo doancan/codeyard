@@ -321,6 +321,40 @@ fn an_ssh_folders_terminal_is_taken_back_after_a_restart(cx: &mut gpui::TestAppC
     assert_eq!(pid_of(&term, cx, &dir.join("pid-2")), first, "the same shell process on the host");
 }
 
+/// An SSH workspace file with two folders: after a restart, reopening the workspace file (as Recents and a restart do)
+/// resumes the session its terminals were kept in, not only reopening a single folder.
+#[gpui::test]
+fn an_ssh_workspaces_terminal_is_taken_back_after_a_restart(cx: &mut gpui::TestAppContext) {
+    let Some(sshd) = crate::test_sshd::start("term-reattach-ssh-ws") else { return };
+    let home = crate::qa_workbench_tests::fresh("termd-ssh-ws-home");
+    let dir = sshd.dir.join("wsproject");
+    for d in ["a", "b"] {
+        std::fs::create_dir_all(dir.join(d)).unwrap();
+    }
+    let file = dir.join("both.code-workspace");
+    std::fs::write(&file, "{ \"folders\": [ { \"path\": \"a\" }, { \"path\": \"b\" } ] }\n").unwrap();
+    let path = file.to_string_lossy().into_owned();
+    let both_open = |wb: &Entity<Workbench>, cx: &mut gpui::VisualTestContext| wb.read_with(cx, |wb, cx| wb.all_roots(cx).len() == 2);
+    let first = {
+        let (wb, vcx) = ssh_window(cx, &home, &path);
+        crate::qa_integration_tests::wait_secs(vcx, 30, "both folders", |cx| both_open(&wb, cx));
+        wb.update_in(vcx, |wb, window, cx| wb.new_terminal_launch(None, crate::terminal::Launch::default(), window, cx));
+        crate::qa_integration_tests::wait_secs(vcx, 30, "its token", |cx| {
+            wb.read_with(cx, |wb, cx| wb.terminals.first().is_some_and(|t| t.read(cx).token().is_some()))
+        });
+        let term = wb.read_with(vcx, |wb, _| wb.terminals[0].clone());
+        let pid = pid_of(&term, vcx, &dir.join("pid-1"));
+        drop(term);
+        quit_all(wb, vcx);
+        pid
+    };
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    let (wb, cx) = ssh_window(cx, &home, &path);
+    crate::qa_integration_tests::wait_secs(cx, 30, "the terminal taken back", |cx| text(&wb, cx).contains("Reconnected to terminal session"));
+    let term = wb.read_with(cx, |wb, _| wb.terminals[0].clone());
+    assert_eq!(pid_of(&term, cx, &dir.join("pid-2")), first, "the same shell process on the host");
+}
+
 /// The host side of an SSH restart, without a window: a connection kept for the next start (no `Bye`) leaves its shell
 /// and that shell's output to the host's agent daemon; a new connection to the same session adopts the shell with its
 /// token and gets what it printed meanwhile.
