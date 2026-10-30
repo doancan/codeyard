@@ -235,8 +235,8 @@ fn wait(cx: &mut gpui::VisualTestContext, mut done: impl FnMut(&mut gpui::Visual
 /// and a notice; the command the old shell ran is not run again.
 #[gpui::test]
 fn a_restart_starts_a_new_shell_in_the_group_without_replaying_anything(cx: &mut gpui::TestAppContext) {
-    let home = crate::qa_workbench_tests::fresh("term-restore-home");
-    let dir = crate::qa_workbench_tests::fresh("term-restore-project");
+    let home = crate::qa_workbench_tests::fresh("moved-term-restore-home");
+    let dir = crate::qa_workbench_tests::fresh("moved-term-restore-project");
     let marker = dir.join("marker");
     let (wb, vcx) = crate::qa_workbench_tests::setup_persistent(cx, &home);
     crate::qa_workbench_tests::open(&wb, &dir, vcx);
@@ -307,8 +307,8 @@ fn a_restart_restores_panel_and_moved_terminals_but_not_task_output(cx: &mut gpu
 /// display fall back to the focused group and a window clamped onto a display.
 #[gpui::test]
 fn a_damaged_or_out_of_range_saved_arrangement_falls_back_safely(cx: &mut gpui::TestAppContext) {
-    let home = crate::qa_workbench_tests::fresh("term-restore-bad-home");
-    let dir = crate::qa_workbench_tests::fresh("term-restore-bad-project");
+    let home = crate::qa_workbench_tests::fresh("moved-term-restore-bad-home");
+    let dir = crate::qa_workbench_tests::fresh("moved-term-restore-bad-project");
     std::fs::write(dir.join("a.txt"), "a\n").unwrap();
     let (wb, vcx) = crate::qa_workbench_tests::setup_persistent(cx, &home);
     crate::qa_workbench_tests::open(&wb, &dir, vcx);
