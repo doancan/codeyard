@@ -513,7 +513,7 @@ impl Workbench {
                 cx.update_window(handle, |_, window, cx| {
                     this.update(cx, |this, cx| {
                         for p in paths {
-                            let p = std::fs::canonicalize(&p).unwrap_or(p).to_string_lossy().into_owned();
+                            let p = ui::local_path(&std::fs::canonicalize(&p).unwrap_or(p));
                             this.add_workspace_folder_now(p, window, cx);
                         }
                     })
