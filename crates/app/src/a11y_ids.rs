@@ -28,6 +28,7 @@ const _: () = {
         super::problems_access::TEST_ROW,
         super::problems_access::REMOTE_ROW,
         super::problems_access::MENU_ITEM,
+        super::term_tab_access::TERM_TAB,
         ROW_BASE,
     ];
     let mut i = 1;

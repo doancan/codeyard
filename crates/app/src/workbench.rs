@@ -161,6 +161,8 @@ mod sync_glue;
 mod task_run_glue;
 #[path = "workbench_tasks.rs"]
 pub mod tasks;
+#[path = "workbench_term_tabs.rs"]
+mod term_tabs_glue;
 #[path = "workbench_terminals.rs"]
 mod terminals_glue;
 #[cfg(test)]
@@ -168,6 +170,8 @@ mod terminals_glue;
 mod testing_glue;
 #[path = "workbench_test_explorer.rs"]
 mod tests_glue;
+#[path = "workbench_views.rs"]
+mod views_glue;
 #[cfg(test)]
 pub(crate) use testing_glue::DialogView;
 #[path = "workbench_theme.rs"]
@@ -329,6 +333,13 @@ actions!(
         ShowDebugPanel,
         ConfigureTasks,
         TogglePanelPosition,
+        MoveViewToSecondarySideBar,
+        MoveViewToPrimarySideBar,
+        ToggleSecondarySideBar,
+        MoveTerminalIntoNewWindow,
+        MoveTerminalsBackToPanel,
+        MoveTerminalIntoEditorArea,
+        MoveTerminalBackToPanelFromEditor,
         ClearSavedTerminalHistory,
         ToggleMaximizedPanel,
         GitCheckout,
@@ -527,6 +538,8 @@ enum Page {
     Search(Entity<crate::search_editor::SearchEditor>),
     /// An extension view in the editor area, by its full id (workbench_ext_views.rs).
     ExtView(String),
+    /// A terminal moved into the editor area in front; every one is also listed in its group's `terminals`.
+    Terminal(Entity<crate::terminal::TerminalView>),
 }
 
 /// Floating picker on top: theme picker or palette (files / commands / line).
@@ -678,7 +691,7 @@ pub fn user_theme_dir() -> Option<std::path::PathBuf> {
 /// Dev only: fake host name that exercises the remote code path without ssh.
 pub const LOCAL_AGENT_ALIAS: &str = "agent-stdio";
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Panel {
     Explorer,
     Search,
@@ -1092,6 +1105,11 @@ impl Workbench {
                 crate::scm::ScmEvent::Rediscover => this.rediscover(cx),
                 crate::scm::ScmEvent::RefreshInventory => this.refresh_inventory(cx),
             }),
+            // Terminals in windows of their own or in the editor area belong to this window: they end with it.
+            cx.on_release(|this, cx| {
+                this.close_detached_terminals(cx);
+                this.close_editor_terminals(cx);
+            }),
             // A download in progress is cancelled and its partial file removed before the process ends.
             cx.on_app_quit(|this, cx| {
                 this.discard_response_on_quit();
@@ -1141,6 +1159,12 @@ impl Workbench {
             .clamp(layout::SIDEBAR_MIN, layout::SIDEBAR_MAX);
         let panel_h = state.as_ref().and_then(|s| s.get("panel_h")).and_then(|v| v.parse::<f32>().ok()).unwrap_or(layout::PANEL_H).max(PANEL_MIN);
         let panel_right = state.as_ref().and_then(|s| s.get("panel_right")).is_some_and(|v| v == "1");
+        let in_secondary = state.as_ref().and_then(|s| s.get("secondary_views")).map(|v| views_glue::parse_secondary(&v)).unwrap_or_default();
+        let secondary = state
+            .as_ref()
+            .and_then(|s| s.get("secondary_open"))
+            .and_then(|v| views_glue::parse_secondary(&v).first().copied())
+            .filter(|v| in_secondary.contains(v));
         let panel_w = state.as_ref().and_then(|s| s.get("panel_w")).and_then(|v| v.parse::<f32>().ok()).unwrap_or(480.).max(PANEL_MIN * 2.);
         let term_list_w = state
             .as_ref()
@@ -1241,6 +1265,11 @@ impl Workbench {
                 resizing_sidebar: false,
                 panel_open: false,
                 panel_h,
+                in_secondary,
+                secondary,
+                secondary_last: secondary,
+                last_primary: Some(Panel::Explorer),
+                detached: Vec::new(),
                 panel_right,
                 panel_w,
                 panel_max: false,
@@ -1773,6 +1802,7 @@ impl Workbench {
         self.cfg.folder_texts.clear();
         self.persist.pending_restore_workspace = None;
         self.persist.backed_up.clear();
+        self.return_all_editor_terminals();
         self.tabs = Default::default();
         self.tabs.active = None;
         self.tabs.open_error = None;
@@ -2075,6 +2105,9 @@ impl Workbench {
         if let Some(Page::Search(ed)) = self.tabs.page.clone().filter(|_| self.tabs.page_active) {
             return self.close_search_editor(&ed, cx);
         }
+        if let Some(Page::Terminal(term)) = self.tabs.page.clone().filter(|_| self.tabs.page_active) {
+            return self.return_editor_terminal(&term, window, cx);
+        }
         if self.tabs.diff_active {
             return self.close_diff(window, cx);
         }
@@ -2363,70 +2396,6 @@ impl Workbench {
             })),
             _ => None,
         };
-    }
-
-    /// Error card: bottom right, above the status bar; closed with ×.
-    fn error_toast(&self, p: &Palette, cx: &mut Context<Self>) -> Option<impl IntoElement> {
-        let Some(Notice::Error(message)) = &self.notice else { return None };
-        Some(
-            div()
-                .id("error-toast")
-                .absolute()
-                .right(px(theme::SPACE[6]))
-                .bottom(px(layout::STATUSBAR_H + theme::SPACE[4]))
-                .w(px(420.))
-                .flex()
-                .items_start()
-                .gap(px(theme::SPACE[3]))
-                .p(px(theme::SPACE[4]))
-                .bg(c(p.surface_raised))
-                .border_1()
-                .border_color(c(p.border))
-                .rounded(px(theme::radius::MD))
-                .shadow_lg()
-                .text_size(px(text::SM.0))
-                .text_color(c(p.text))
-                .occlude()
-                .child(div().flex_none().pt(px(1.)).child(icon("circle-x", 16., p.danger)))
-                .child(div().flex_1().min_w_0().child(message.clone()))
-                .when(matches!(self.remote.conn, Conn::Failed { .. }), |d| {
-                    d.child(
-                        div()
-                            .id("error-toast-reconnect")
-                            .flex_none()
-                            .h(px(22.))
-                            .px(px(theme::SPACE[4]))
-                            .flex()
-                            .items_center()
-                            .rounded(px(theme::radius::SM))
-                            .bg(c(p.accent))
-                            .text_color(c(p.on_accent))
-                            .text_size(px(text::XS.0))
-                            .cursor_pointer()
-                            .hover(|d| d.opacity(0.9))
-                            .child(crate::i18n::t("Reconnect"))
-                            .on_click(cx.listener(|this, _, window, cx| this.reconnect_lost(window, cx))),
-                    )
-                })
-                .child(
-                    div()
-                        .id("error-toast-close")
-                        .flex_none()
-                        .size(px(20.))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .rounded(px(theme::radius::SM))
-                        .cursor_pointer()
-                        .hover(|d| d.bg(c(p.surface_hover)))
-                        .child(icon("x", 14., p.text_muted))
-                        .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Close").into())).into())
-                        .on_click(cx.listener(|this, _, _, cx| {
-                            this.notice = None;
-                            cx.notify();
-                        })),
-                ),
-        )
     }
 
     /// Title layout: `● file — folder — ssh-host` (● unsaved).

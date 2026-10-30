@@ -131,6 +131,14 @@ pub(super) struct ChromeLayout {
     pub(super) resizing_sidebar: bool,
     pub(super) panel_open: bool,
     pub(super) panel_h: f32,
+    /// Views moved to the secondary side bar (right of the editor), the one it shows, the one it showed last, and the
+    /// primary side bar's last view (where it goes back to when a moved view is asked for).
+    pub(super) in_secondary: Vec<Panel>,
+    pub(super) secondary: Option<Panel>,
+    pub(super) secondary_last: Option<Panel>,
+    pub(super) last_primary: Option<Panel>,
+    /// Terminals in windows of their own.
+    pub(super) detached: Vec<super::views_glue::Detached>,
     /// Panel on the right (next to the editor) and its width; maximized (covers the editor).
     pub(super) panel_right: bool,
     pub(super) panel_w: f32,

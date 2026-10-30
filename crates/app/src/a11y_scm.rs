@@ -134,7 +134,7 @@ impl Workbench {
             return false;
         }
         let Some(snap) = &last.scm else { return true };
-        if self.chrome.panel != Some(Panel::Scm) || snap.generation != self.lsp.generation {
+        if !self.view_shown(Panel::Scm) || snap.generation != self.lsp.generation {
             return true;
         }
         let current = self.scm.read(cx).a11y_view(window, cx);

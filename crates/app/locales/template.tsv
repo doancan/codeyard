@@ -1402,6 +1402,7 @@ No symbols in this file
 No symbols matching “{}”	
 No task is running.	
 No tasks found. “Tasks: Configure Tasks” creates .codeyard/tasks.jsonc.	
+No terminal is in front in the editor area.	
 No terminal profiles yet: add them under terminal.profiles in settings.jsonc.	
 No test at the cursor: put it inside a test function.	
 No tests found for this file type.	
@@ -1411,6 +1412,7 @@ No timestamp
 No type definition found	
 No unsaved changes: the file matches what is on disk.	
 No version of this extension can be installed: they were withdrawn or revoked.	
+No view is in the secondary side bar. Use View: Move View to Secondary Side Bar.	
 No workspace file is open.	
 No workspace file is open. Use File: Save Workspace As… to create one.	
 No worktrees found.	
@@ -1511,6 +1513,7 @@ Open a folder to find its tests.
 Open a folder to search in it.	
 Open a project, connect to a host, or switch workspace	
 Open a terminal with…	
+Open a view in the side bar first.	
 Open an HTML file or a project folder to start Web Preview.	
 Open as Hex	
 Open files	
@@ -2148,6 +2151,10 @@ Terminal: Go to Next Command
 Terminal: Go to Previous Command	
 Terminal: Kill All Terminals	
 Terminal: Kill Other Terminals	
+Terminal: Move Terminal Back to Panel	
+Terminal: Move Terminal into Editor Area	
+Terminal: Move Terminal into New Window	
+Terminal: Move Terminals Back to Panel	
 Terminal: New	
 Terminal: New Terminal with Profile…	
 Terminal: Rename…	
@@ -2239,6 +2246,7 @@ The result would not parse in {0} file: {1}|The result would not parse in {0} fi
 The runtime checksum did not match. Nothing was activated. Check the connection and retry.	
 The search failed.	
 The search or the connection changed while the preview was being made. Preview again.	
+The secondary side bar shows no view.	
 The selection is neither a JWT nor a Unix timestamp	
 The server did not answer within 60 seconds.	
 The server wants credentials: run the command once in the terminal (or set up an SSH key).	
@@ -2249,6 +2257,7 @@ The tag disappears from the remote repository for everyone. Your local copy is k
 The task file has an invalid “{}”.	
 The task file is not valid JSON.	
 The task file is too large or has too many tasks.	
+The terminal could not move to a new window: {}	
 The test runner stopped without reporting this test. See Test Results for build or runner errors.	
 The token has no signature.	
 The update couldn't be installed	
@@ -2279,6 +2288,7 @@ There is no commit to undo
 There is no replacement to undo.	
 There is no request here. Write METHOD URL on a line, separate requests with ###.	
 There is no task called “{}”.	
+There is no terminal to move.	
 There is nothing to copy.	
 There is nothing to ignore here	
 There isn't enough free disk space for the download. Free some space and try again.	
@@ -2442,6 +2452,8 @@ View: Focus Upper Editor Group
 View: Keep Editor	
 View: Move Editor into Other Group	
 View: Move Panel (bottom ⇄ right)	
+View: Move View to Primary Side Bar	
+View: Move View to Secondary Side Bar	
 View: Open Next Editor	
 View: Open Previous Editor	
 View: Output	
@@ -2464,6 +2476,7 @@ View: Toggle Maximized Panel
 View: Toggle Minimap	
 View: Toggle Panel	
 View: Toggle Render Whitespace	
+View: Toggle Secondary Side Bar	
 View: Toggle Sidebar	
 View: Toggle Sticky Scroll	
 View: Toggle Word Wrap	
@@ -2938,6 +2951,7 @@ your words
 {} (not verified by a registry)	
 {} (previous settings kept)	
 {} (saved {}) ↔ editor	
+{} (terminal)	
 {} (“{}” failed; {} of {} items were transferred before it)	
 {} KB · image preview	
 {} MB · image preview	

@@ -87,6 +87,7 @@ impl Workbench {
                     Some(Page::Compare(view)) => view.into_any_element(),
                     Some(Page::Search(view)) => view.into_any_element(),
                     Some(Page::ExtView(id)) => self.ext_view_frame(&id, p, cx),
+                    Some(Page::Terminal(view)) => self.editor_terminal_view(view, p),
                     Some(Page::Welcome) => self.welcome_view(p, cx).into_any_element(),
                     Some(Page::Containers) => self.container_dashboard_view(p, cx).into_any_element(),
                     Some(Page::Extension) => self.extension_page(p, cx),
@@ -115,7 +116,8 @@ impl Workbench {
                         || state.diff.is_some()
                         || state.large.is_some()
                         || state.page.is_some()
-                        || !state.searches.is_empty(),
+                        || !state.searches.is_empty()
+                        || !state.terminals.is_empty(),
                     |d| d.child(self.tabs(key, p, cx)),
                 )
                 .when(focused, |d| {
@@ -294,6 +296,9 @@ impl Workbench {
             // Dropping on the empty area right of the tabs: goes to the end.
             .on_drop(cx.listener(move |this, d: &DraggedTab, window, cx| {
                 this.drop_tab(d.editor.clone(), d.from, key, None, window, cx);
+            }))
+            .on_drop(cx.listener(move |this, d: &term_tabs_glue::DraggedTerminalTab, window, cx| {
+                this.drop_terminal_tab(d.term.clone(), d.from, key, window, cx);
             }))
             .bg(c(p.surface))
             .border_b_1()
@@ -511,6 +516,7 @@ impl Workbench {
                         this.show_search_editor(show.clone(), window, cx);
                     }))
             }))
+            .children(self.editor_terminal_tabs(key, state, p, cx))
             .when_some(state.large.clone(), |d, view| {
                 let active = state.large_active;
                 let name = view.read(cx).name.clone();
@@ -619,7 +625,7 @@ impl Workbench {
                         })),
                 )
             })
-            .when_some(state.page.clone().filter(|page| !matches!(page, Page::Search(_))), |d, page| {
+            .when_some(state.page.clone().filter(|page| !matches!(page, Page::Search(_) | Page::Terminal(_))), |d, page| {
                 let active = state.page_active;
                 let (glyph, title): (&str, String) = match &page {
                     Page::Welcome => ("rocket", crate::i18n::t("Welcome").into()),
@@ -635,6 +641,7 @@ impl Workbench {
                     Page::Compare(v) => ("git-compare", v.read(cx).title()),
                     Page::Search(v) => ("search", v.read(cx).title()),
                     Page::ExtView(id) => ("plug", self.ext_view_title(id)),
+                    Page::Terminal(v) => ("terminal", v.read(cx).title.to_string()),
                 };
                 d.child(
                     div()
