@@ -39,13 +39,26 @@ pub fn parse_remote(url: &str) -> Option<(String, String)> {
     (parts.len() >= 2 && parts.len() <= 20 && parts.iter().all(valid)).then(|| (host, path.to_string()))
 }
 
+/// A remote URL without the user and password a `scheme://user:token@host/…` URL may carry: those stay on this machine.
+fn without_credentials(url: &str) -> String {
+    let url = url.trim();
+    match url.split_once("://") {
+        Some((scheme, rest)) => {
+            let (authority, path) = rest.split_once('/').map_or((rest, ""), |(a, p)| (a, p));
+            let host = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
+            format!("{scheme}://{host}/{path}")
+        }
+        None => url.to_string(),
+    }
+}
+
 /// The remote as `provider` gets it, when the provider claims its host. `local` is the provider's local id.
 pub fn claimed(provider: &PullRequestProvider, local: &str, name: &str, url: &str) -> Option<v::PullRemote> {
     let (host, path) = parse_remote(url)?;
     provider.claims(&host).then(|| v::PullRemote {
         provider: local.to_string(),
         name: name.to_string(),
-        url: url.to_string(),
+        url: without_credentials(url),
         host,
         path,
         account: provider.auth.clone(),

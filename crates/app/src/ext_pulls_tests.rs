@@ -27,6 +27,9 @@ fn a_provider_claims_remotes_on_its_hosts_and_gets_its_account() {
     let r = claimed(&forge, "forge", "origin", "git@codeberg.org:ada/app.git").unwrap();
     assert_eq!((r.provider.as_str(), r.host.as_str(), r.path.as_str(), r.account.as_deref()), ("forge", "codeberg.org", "ada/app", Some("forge")));
     assert!(claimed(&forge, "forge", "up", "https://git.forge.example.com/a/b").is_some());
+    // A token in the remote's URL stays here.
+    let r = claimed(&forge, "forge", "origin", "https://ada:glpat-SECRET@codeberg.org:8443/ada/app.git").unwrap();
+    assert_eq!(r.url, "https://codeberg.org:8443/ada/app.git");
     assert!(claimed(&forge, "forge", "gh", "https://github.com/a/b").is_none());
 }
 
