@@ -40,6 +40,8 @@ pub(super) struct Group {
     pub(super) _page_sub: Option<Subscription>,
     /// Search Editor tabs of this group; the one in front is also `page`.
     pub(super) searches: Vec<Entity<crate::search_editor::SearchEditor>>,
+    /// Terminals moved into this group (the panel no longer lists them); the one in front is also `page`.
+    pub(super) terminals: Vec<Entity<crate::terminal::TerminalView>>,
     /// Match to show in the file opened from a search result: (path, line, column, length).
     pub(super) pending_reveal: Option<(String, u32, u32, u32)>,
     /// Tab bar scroll (so the active tab stays visible).
@@ -63,6 +65,7 @@ impl Default for Group {
             page_active: false,
             _page_sub: None,
             searches: Vec::new(),
+            terminals: Vec::new(),
             pending_reveal: None,
             tab_scroll: gpui::ScrollHandle::new(),
         }
@@ -140,7 +143,13 @@ impl state_glue::TabsState {
 
 impl Group {
     pub(super) fn is_empty(&self) -> bool {
-        self.editors.is_empty() && self.diff.is_none() && self.large.is_none() && self.page.is_none() && self.opening.is_none() && self.searches.is_empty()
+        self.editors.is_empty()
+            && self.diff.is_none()
+            && self.large.is_none()
+            && self.page.is_none()
+            && self.opening.is_none()
+            && self.searches.is_empty()
+            && self.terminals.is_empty()
     }
 }
 
@@ -225,6 +234,7 @@ impl Workbench {
                 Some(Page::Merge(view)) => view.focus_handle(cx),
                 Some(Page::Compare(view)) => view.focus_handle(cx),
                 Some(Page::Search(view)) => view.focus_handle(cx),
+                Some(Page::Terminal(view)) => view.focus_handle(cx),
                 _ => self.focus_handle.clone(),
             };
             window.focus(&handle);

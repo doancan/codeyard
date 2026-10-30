@@ -67,19 +67,19 @@ impl Workbench {
                         return;
                     }
                     this.chrome.panel = if this.chrome.panel == Some(panel) { None } else { Some(panel) };
-                    if this.chrome.panel == Some(Panel::Explorer) {
+                    if this.view_shown(Panel::Explorer) {
                         window.focus(&this.roots.primary.focus_handle(cx));
                     }
-                    if this.chrome.panel == Some(Panel::Remote) {
+                    if this.view_shown(Panel::Remote) {
                         this.refresh_remote_view(cx);
                     }
-                    if this.chrome.panel == Some(Panel::Debug) {
+                    if this.view_shown(Panel::Debug) {
                         this.load_launch_catalog(cx);
                     }
-                    if this.chrome.panel == Some(Panel::Testing) {
+                    if this.view_shown(Panel::Testing) {
                         this.testing_opened(window, cx);
                     }
-                    if this.chrome.panel == Some(Panel::Extensions) {
+                    if this.view_shown(Panel::Extensions) {
                         this.extensions_opened(window, cx);
                     }
                     cx.notify();
@@ -662,7 +662,7 @@ impl Workbench {
 
     /// Re-extract the active file's outline (if needed).
     pub(super) fn sync_outline(&mut self, cx: &mut Context<Self>) {
-        if self.chrome.panel != Some(Panel::Explorer) || !self.sections.is_open("outline", true) {
+        if !self.view_shown(Panel::Explorer) || !self.sections.is_open("outline", true) {
             return;
         }
         let Some(ed) = self

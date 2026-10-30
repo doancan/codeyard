@@ -418,6 +418,13 @@ impl Workbench {
             Command::action("View: Toggle Panel", TogglePanel),
             Command::action("View: Resources", crate::resource_monitor::ToggleResources),
             Command::action("View: Move Panel (bottom ⇄ right)", TogglePanelPosition),
+            Command::action("View: Move View to Secondary Side Bar", MoveViewToSecondarySideBar),
+            Command::action("View: Move View to Primary Side Bar", MoveViewToPrimarySideBar),
+            Command::action("View: Toggle Secondary Side Bar", ToggleSecondarySideBar),
+            Command::action("Terminal: Move Terminal into New Window", MoveTerminalIntoNewWindow),
+            Command::action("Terminal: Move Terminals Back to Panel", MoveTerminalsBackToPanel),
+            Command::action("Terminal: Move Terminal into Editor Area", MoveTerminalIntoEditorArea),
+            Command::action("Terminal: Move Terminal Back to Panel", MoveTerminalBackToPanelFromEditor),
             Command::action("Terminal: Clear Saved Terminal History", ClearSavedTerminalHistory),
             Command::action("View: Toggle Maximized Panel", ToggleMaximizedPanel),
         ];

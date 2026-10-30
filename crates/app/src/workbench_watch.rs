@@ -186,7 +186,7 @@ impl Workbench {
                 self.tabs.page_active = false;
                 self.chrome.panel = Some(Panel::Explorer);
             }
-            if self.chrome.panel == Some(Panel::Containers) {
+            if self.view_shown(Panel::Containers) {
                 self.chrome.panel = Some(Panel::Explorer);
             }
             if matches!(&self.remote.conn, Conn::Connecting { alias, .. } if crate::docker::is_target(alias)) {
@@ -320,7 +320,7 @@ impl Workbench {
                             this.refresh_git(0, cx);
                         }
                         // The other repositories' rows are only on screen while Source Control is.
-                        if active && this.chrome.panel == Some(Panel::Scm) {
+                        if active && this.view_shown(Panel::Scm) {
                             this.refresh_repos(cx);
                         }
                     })

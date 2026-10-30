@@ -278,6 +278,7 @@ impl Workbench {
         self.invalidate_file_operation();
         self.shutdown_lsp(cx);
         self.persist.backed_up.clear();
+        self.return_all_editor_terminals();
         self.tabs = Default::default();
         self.tabs.active = None;
         self.tabs.diff = None;

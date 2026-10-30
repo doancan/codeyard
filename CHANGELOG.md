@@ -90,6 +90,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   terminal; "Tasks: Terminate Task" stops everything a run started and "Tasks: Restart Running Task" starts it again.
 - A debug configuration's `preLaunchTask` from a task file must succeed (or a background task become ready) before the
   debugger starts; a failure never starts debugging.
+- A side view (Explorer, Search, Source Control, Run and Debug, Testing, Remote, Extensions) can move to a secondary side
+  bar on the right of the editor and back ("View: Move View to Secondary Side Bar"); its icon and commands then open
+  it there, and the arrangement is restored at the next start.
+- "Terminal: Move Terminal into New Window" moves the active terminal, with its running process, into a window of its
+  own; closing that window returns it to the panel instead of ending it.
+- "Terminal: Move Terminal into Editor Area" moves the active terminal, with its running process, into the focused
+  editor group as a tab; closing that tab or "Terminal: Move Terminal Back to Panel" returns it to the panel still
+  running.
+- Terminal tabs can be dragged to another editor group, and screen readers list them with the focused group's tabs.
+- Terminals that were in the editor area or in their own window come back in the same place after a restart, as new
+  shells with their name, colour and folder and a dimmed notice; no command of the previous session runs again.
+  Windows whose display was removed open on an attached display.
 - Terminals come back after a restart as new shells in their folders, with their titles, colors and programs, and say
   so; nothing runs again. `terminal.persistentScrollback` (off by default) also keeps the last lines of their history as
   plain text; "Terminal: Clear Saved Terminal History" removes it.

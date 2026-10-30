@@ -3257,6 +3257,24 @@ the pattern cannot be evaluated	desen değerlendirilemiyor
 the regular expression is invalid ({})	düzenli ifade geçersiz ({})
 there is no built-in matcher called “{}”	“{}” adında yerleşik bir eşleştirici yok
 too many or too large patterns	çok fazla ya da çok büyük desen
+# ---- Movable views ----
+No view is in the secondary side bar. Use View: Move View to Secondary Side Bar.	İkincil kenar çubuğunda görünüm yok. Görünüm: Görünümü İkincil Kenar Çubuğuna Taşı komutunu kullanın.
+Open a view in the side bar first.	Önce kenar çubuğunda bir görünüm açın.
+Terminal: Move Terminal into New Window	Terminal: Terminali Yeni Pencereye Taşı
+Terminal: Move Terminals Back to Panel	Terminal: Terminalleri Panele Geri Taşı
+The secondary side bar shows no view.	İkincil kenar çubuğu bir görünüm göstermiyor.
+The terminal could not move to a new window: {}	Terminal yeni bir pencereye taşınamadı: {}
+There is no terminal to move.	Taşınacak bir terminal yok.
+View: Move View to Primary Side Bar	Görünüm: Görünümü Birincil Kenar Çubuğuna Taşı
+View: Move View to Secondary Side Bar	Görünüm: Görünümü İkincil Kenar Çubuğuna Taşı
+View: Toggle Secondary Side Bar	Görünüm: İkincil Kenar Çubuğunu Aç/Kapat
+
+# ---- Terminals in the editor area ----
+No terminal is in front in the editor area.	Düzenleyici alanında önde bir terminal yok.
+Terminal: Move Terminal Back to Panel	Terminal: Terminali Panele Geri Taşı
+Terminal: Move Terminal into Editor Area	Terminal: Terminali Düzenleyici Alanına Taşı
+Previous session ended; started a new shell	Önceki oturum sona erdi; yeni bir kabuk başlatıldı
+{} (terminal)	{} (terminal sekmesi)
 # ---- Problems accessibility ----
 Information	Bilgi
 Problems: {}	Sorunlar: {}
@@ -3279,7 +3297,6 @@ skipped	atlandı
 {} test|{} tests	{} test
 # ---- Terminal restore ----
 Lines of each terminal's history kept for the next start, as plain text on this computer (0: none)	Her terminalin geçmişinden bir sonraki açılış için bu bilgisayarda düz metin olarak saklanan satır sayısı (0: hiç)
-Previous session ended; started a new shell	Önceki oturum sona erdi; yeni bir kabuk başlatıldı
 Saved terminal history cleared	Kaydedilen terminal geçmişi temizlendi
 Terminal session could not be restored: {}	Terminal oturumu geri yüklenemedi: {}
 Terminal: Clear Saved Terminal History	Terminal: Kaydedilen Terminal Geçmişini Temizle

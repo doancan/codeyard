@@ -65,7 +65,7 @@ impl Workbench {
         if let Some(c) = self.vcs.repos.cancel.take() {
             c.store(true, Ordering::Relaxed);
         }
-        if self.chrome.panel != Some(Panel::Scm) {
+        if !self.view_shown(Panel::Scm) {
             // A search already running for the old roots is dropped; the next one starts when the panel is shown.
             self.vcs.repos.inventory.begin();
             self.vcs.repos.inventory.discovering = false;

@@ -192,6 +192,22 @@ use ⌘J or bind `terminal.toggle` yourself (below).
 
 Opening a file from Explorer or Quick Open restores a maximized terminal panel to its previous size and shows the editor.
 
+**Arranging views.** "View: Move View to Secondary Side Bar" moves the open side view (Explorer, Search, Source
+Control, Run and Debug, Testing, Remote, Extensions) to a second side bar on the right of the editor; its activity bar
+icon and commands then open it there, next to whatever the left side bar shows. "View: Move View to Primary Side Bar"
+moves it back and "View: Toggle Secondary Side Bar" hides or shows it; the arrangement comes back at the next start.
+"Terminal: Move Terminal into New Window" moves the active terminal, with its running program, into a window of its own
+(the same terminal, not a copy). Closing that window puts the terminal back in the panel, still running;
+"Terminal: Move Terminals Back to Panel" does it for all of them. A detached terminal belongs to its editor window and
+ends with it, or when the connection changes. "Terminal: Move Terminal into Editor Area" moves the active terminal into
+the focused editor group as a tab, next to your files; "Terminal: Move Terminal Back to Panel" returns it, and so does
+closing its tab (closing a terminal's tab never ends what runs in it). Opening another folder also returns
+it to the panel; a connection change ends it like a panel terminal. Drag a terminal's tab onto another group's tab bar
+to move it there; screen readers list terminal tabs with the other tabs of the focused group, and selecting one brings it
+to the front. At the next start, each terminal that was in an editor group or in a window of its own comes back in the
+same place as a new shell, with its name, colour and folder, and the line "Previous session ended; started a new
+shell"; nothing from the previous session runs again. A window whose display is gone opens on an attached display, made
+to fit; a saved arrangement that cannot be read is ignored.
 **Terminals after a restart.** With `window.restoreSession` on (the default), the panel's terminals come back when
 the folder opens again: same order, folder, title, color and program. Each one is a **new shell**: nothing that ran before
 is started or typed again, and a line says *Previous session ended; started a new shell*. If a terminal's folder is gone,

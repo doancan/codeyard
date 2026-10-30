@@ -252,8 +252,11 @@ mod search_access;
 mod services_access;
 #[cfg(test)]
 pub(crate) use ext_views_access::Act as ExtViewAct;
+#[path = "a11y_term_tabs.rs"]
+mod term_tab_access;
 use search_access::SEARCH_ED_TAB;
 pub(crate) use search_access::{SearchEdSnap, SearchTabSnap};
+pub(crate) use term_tab_access::TermTabSnap;
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) struct ScmSnap {
@@ -286,6 +289,8 @@ pub struct Snapshot {
     /// The Search Editor in front, and every Search Editor tab of the focused group.
     pub(crate) search_editor: Option<SearchEdSnap>,
     pub(crate) search_tabs: Vec<SearchTabSnap>,
+    /// The terminal tabs of the focused group.
+    pub(crate) term_tabs: Vec<TermTabSnap>,
     pub picker: Option<PickerSnap>,
     pub notice: Option<NoticeSnap>,
     pub status: Vec<String>,
@@ -482,7 +487,8 @@ impl Snapshot {
         }
 
         // Tabs
-        if !self.tabs.is_empty() || self.about.is_some() || !self.search_tabs.is_empty() {
+        if !self.tabs.is_empty() || self.about.is_some() || !self.search_tabs.is_empty() || !self.term_tabs.is_empty() {
+            let total = self.tabs.len() + usize::from(self.about.is_some()) + self.search_tabs.len() + self.term_tabs.len();
             let mut list = Node::new(Role::TabList);
             list.set_label(t("Editor tabs"));
             let mut tab_ids = Vec::new();
@@ -492,7 +498,7 @@ impl Snapshot {
                 n.set_label(if tab.dirty { tf("{} (modified)", &[&tab.name]) } else { tab.name.clone() });
                 n.set_selected(self.active_tab == Some(i));
                 n.set_position_in_set(i + 1);
-                n.set_size_of_set(self.tabs.len() + usize::from(self.about.is_some()) + self.search_tabs.len());
+                n.set_size_of_set(total);
                 n.add_action(Action::Click);
                 n.add_action(Action::Focus);
                 tab_ids.push(id);
@@ -503,7 +509,7 @@ impl Snapshot {
                 tab.set_label(t("About Codeyard"));
                 tab.set_selected(about.active);
                 tab.set_position_in_set(self.tabs.len() + 1);
-                tab.set_size_of_set(self.tabs.len() + 1 + self.search_tabs.len());
+                tab.set_size_of_set(total);
                 tab.add_action(Action::Click);
                 tab.add_action(Action::Focus);
                 tab_ids.push(ABOUT_TAB);
@@ -516,12 +522,13 @@ impl Snapshot {
                 tab.set_label(s.title.clone());
                 tab.set_selected(s.active);
                 tab.set_position_in_set(before + i + 1);
-                tab.set_size_of_set(before + self.search_tabs.len());
+                tab.set_size_of_set(total);
                 tab.add_action(Action::Click);
                 tab.add_action(Action::Focus);
                 tab_ids.push(id);
                 nodes.push((id, tab));
             }
+            term_tab_access::append_tabs(&self.term_tabs, before + self.search_tabs.len(), total, &mut tab_ids, &mut nodes);
             list.set_children(tab_ids);
             nodes.push((TABS, list));
             kids.push(TABS);
@@ -760,7 +767,7 @@ impl Snapshot {
 impl Workbench {
     /// Flat summary of the current view (the tree is only built while AT is active).
     pub(crate) fn a11y_snapshot(&self, window: &Window, cx: &App) -> Snapshot {
-        let trees = if self.chrome.panel == Some(Panel::Explorer) { self.all_trees() } else { Vec::new() };
+        let trees = if self.view_shown(Panel::Explorer) { self.all_trees() } else { Vec::new() };
         let explorers = trees
             .iter()
             .map(|tree| {
@@ -871,23 +878,9 @@ impl Workbench {
             selected: Some(selected),
             rows,
         });
-        let term = self.active_terminal().filter(|_| self.chrome.panel_open && self.chrome.bottom == Bottom::Terminal);
-        let terminal = term.as_ref().map(|term| {
-            let (rows, cursor) = term.read(cx).a11y_view();
-            let mut starts = Vec::with_capacity(rows.len());
-            let mut at = 0;
-            for row in &rows {
-                starts.push(at);
-                at += row.chars().count() + 1;
-            }
-            let total = rows.len();
-            let cursor = cursor.and_then(|(row, col)| starts.get(row).map(|s| s + col.min(rows[row].chars().count())));
-            TerminalSnap {
-                label: tf("Terminal {0} of {1}", &[&(self.active_terminal + 1), &self.terminals.len()]),
-                runs: runs_for(starts.into_iter().zip(rows).collect(), total, 0),
-                cursor,
-            }
-        });
+        let shown = self.a11y_terminal(window, cx);
+        let term = shown.as_ref().map(|(t, _, _)| t.clone());
+        let terminal = shown.as_ref().map(|(term, ix, count)| term_tab_access::terminal_snap(term, *ix, *count, cx));
         let picker_entity = self.overlay.as_ref().map(|o| o.picker.clone());
         let picker = picker_entity.as_ref().map(|p| {
             let v = p.read(cx).a11y_view(MAX_OPTIONS);
@@ -901,7 +894,7 @@ impl Workbench {
         });
 
         let (search_editor, search_tabs) = self.a11y_search_snap(window, cx);
-        let scm = (self.chrome.panel == Some(Panel::Scm)).then(|| ScmSnap { generation: self.lsp.generation, view: self.scm.read(cx).a11y_view(window, cx) });
+        let scm = (self.view_shown(Panel::Scm)).then(|| ScmSnap { generation: self.lsp.generation, view: self.scm.read(cx).a11y_view(window, cx) });
         let exts = self.a11y_extensions(window, cx);
         let focus = if self.tabs.page_active && about_view.is_some_and(|view| view.focus_handle(cx).is_focused(window)) {
             FocusSnap::AboutCopy
@@ -948,6 +941,7 @@ impl Workbench {
             ext_views: self.a11y_ext_views(window),
             search_editor,
             search_tabs,
+            term_tabs: self.a11y_term_tabs(cx),
             picker,
             notice,
             status,
@@ -976,7 +970,7 @@ impl Workbench {
             cx.notify();
             return;
         }
-        if self.a11y_search_action(req, last, window, cx) {
+        if self.a11y_search_action(req, last, window, cx) || self.a11y_term_tab_action(req, last, window, cx) {
             return;
         }
         match (req.action, req.target_node) {
@@ -1003,7 +997,7 @@ impl Workbench {
                 }
             }
             (Action::Focus, id) if id == EXPLORER || (id.0 >= EXTRA_TREE && id.0 < EXTRA_TREE + BLOCK) => {
-                if self.chrome.panel != Some(Panel::Explorer) {
+                if !self.view_shown(Panel::Explorer) {
                     return;
                 }
                 let k = if id == EXPLORER { 0 } else { (id.0 - EXTRA_TREE) as usize };
@@ -1012,7 +1006,7 @@ impl Workbench {
                 }
             }
             (Action::Focus | Action::Click, id) if id.0 & !0xffff_ffff == ROW_BASE => {
-                if self.chrome.panel != Some(Panel::Explorer) {
+                if !self.view_shown(Panel::Explorer) {
                     return;
                 }
                 let Some((k, ix)) = last.explorers.iter().enumerate().find_map(|(k, ex)| ex.rows.iter().position(|r| r.id == id.0).map(|ix| (k, ix))) else {
@@ -1065,7 +1059,7 @@ impl Workbench {
                 e.update(cx, |e, cx| e.a11y_choose_completion(index, req.action == Action::Click, window, cx));
             }
             (Action::Focus, TERMINAL) => {
-                if let Some(term) = self.active_terminal() {
+                if let Some(term) = self.a11y_terminal(window, cx).map(|(t, _, _)| t).or_else(|| self.active_terminal()) {
                     window.focus(&term.focus_handle(cx));
                 }
             }
@@ -1319,6 +1313,7 @@ mod tests {
             views: Default::default(),
             search_editor: None,
             search_tabs: Vec::new(),
+            term_tabs: Vec::new(),
             picker: None,
             status: vec!["Local".into(), "Ln 1, Col 4 (4 selected)".into()],
             dialog: None,

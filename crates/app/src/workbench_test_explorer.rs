@@ -139,7 +139,7 @@ impl Workbench {
             this.update(cx, |this, cx| {
                 this.jobs.tests.scanning = false;
                 if this.root(cx).as_deref() != Some(&root) || this.lsp.generation != generation {
-                    if this.chrome.panel == Some(Panel::Testing) {
+                    if this.view_shown(Panel::Testing) {
                         this.refresh_tests(cx);
                     }
                     return;

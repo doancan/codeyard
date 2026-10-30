@@ -197,7 +197,7 @@ impl Workbench {
     /// Settings were reloaded (which includes a change of the lock file by another window): the list follows while
     /// it is on screen.
     pub(super) fn sync_extensions_view(&mut self) {
-        if self.chrome.panel == Some(Panel::Extensions) || matches!(self.tabs.page, Some(Page::Extension)) {
+        if self.view_shown(Panel::Extensions) || matches!(self.tabs.page, Some(Page::Extension)) {
             self.refresh_extension_list();
         }
     }
