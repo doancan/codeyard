@@ -80,14 +80,14 @@ The tree, in the order a screen reader walks it:
   menu, has the focus. `Click` chooses the item through the menu itself, exactly as a click on it does (the menu
   closes, focus returns, the command runs); it acts only on the same menu with the same item at that place. Escape
   is unchanged.
-- Row menus: a Run and Debug variable (not a scope), call stack frame and line breakpoint, a Remote Explorer host and a
+- Row menus (for assistive technology): a Run and Debug variable (not a scope), call stack frame and line breakpoint, a Remote Explorer host and a
   Ports row have the `ShowContextMenu` action and a "More Actions…" `Button` (a menu popup, the row's name as
   description) among their children. Both open the menu a right click on the row opens (Set Value…, Copy Value, Add to
   Watch; Restart Frame, Copy Call Stack; Edit Condition…, Disable Breakpoint; Connect, Edit Host…, Remove Host…;
   Change Local Port…, Protocol, Retry, Stop Forwarding), at the bottom left of the row as last painted (the middle of
   the window when the row is scrolled out of its list). The menu then takes the focus as described above and returns
   it when it closes. The macOS and Windows adapters do not forward `ShowContextMenu` yet, so the button is the way in
-  for VoiceOver and Narrator today. The request is refused unless the row is still the same variable, frame, breakpoint
+  for VoiceOver and Narrator today (with the keyboard alone, Shift+F10 on the focused row does the same). The request is refused unless the row is still the same variable, frame, breakpoint
   (in the same enabled state), host (in the same state) or port forward at that place, in the same debug session.
 - While the extension consent sheet is open and in front: a modal `AlertDialog` named "Install {name}?", described by where the
   package comes from, the High-risk line and the warnings, with one `Label` per line of the sheet (id, version and
@@ -228,8 +228,13 @@ macOS. The CPU cost of the 250 ms snapshot loop has not been measured.
   breakpoints and the configuration selector's menu, opening a breakpoint's place, the Testing filter field, the Remote
   Explorer's Add, SSH config and Refresh buttons, and the Debug Console. Only the tabs of the focused editor group are
   listed, and diff, large-file and page tabs are not.
-- Row menus are reached through the tree only: the Run and Debug, Testing, Remote Explorer and Ports rows cannot take
-  the keyboard focus themselves yet, so there is no Shift+F10 or Menu key path to their menus without a screen reader.
+- Keyboard: the Run and Debug lists (variables, watches, call stack, breakpoints), the Testing tree, the Remote
+  Explorer and the Ports list are tab stops with a cursor row (Up/Down/Home/End, Enter as a click on the row, the focus
+  colour on the list and the row). Shift+F10 and the Menu key (`list.showContextMenu`) open the row's menu under it; the
+  menu returns the keyboard to the list. While such a list has the focus, the tree's focus is its cursor row. The same
+  key opens the Explorer's menu for the selection and the editor's at the caret. The cursor always names a row of the
+  list as it is now: when rows change under it, it stays inside the list and the key acts on the row it is on (a row
+  without a menu opens none).
 - System confirmation dialogs on Linux are drawn by GPUI inside the window (there is no Linux adapter, see below).
 - No scroll actions, no `Blur`. Explicit `Expand`/`Collapse` only in the Run and Debug, Testing and Remote Explorer
   trees (elsewhere Click toggles).

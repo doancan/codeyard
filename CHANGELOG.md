@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The lists of the Run and Debug view, the Testing view, the Remote Explorer and the Ports panel work with the keyboard:
+  Tab reaches them, Up/Down/Home/End move a cursor row shown in the focus colour, and Enter does what a click on the
+  row does. Shift+F10 (and the Menu key) opens the focused row's menu under it and Escape returns to the row; the same
+  key opens the Explorer's menu for the selection and the editor's menu at the caret. The keys are rebindable
+  (`rows.*`, `list.showContextMenu`).
 - Screen readers reach the row menus of the Run and Debug view (variables, call stack frames, line breakpoints), the
   Remote Explorer's hosts and the Ports panel: each such row offers "More Actions…" (and the Show Menu action), which
   opens the same menu a right click opens, under the row; the menu takes the keyboard and gives it back when it
