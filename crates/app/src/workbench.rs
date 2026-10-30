@@ -168,6 +168,7 @@ pub mod tasks;
 mod term_daemon_glue;
 #[path = "workbench_term_tabs.rs"]
 mod term_tabs_glue;
+#[cfg(unix)]
 pub use term_daemon_glue::{enable_terminal_daemon, terminal_daemon_socket};
 #[path = "workbench_terminals.rs"]
 mod terminals_glue;

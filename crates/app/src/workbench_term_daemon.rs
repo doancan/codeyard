@@ -24,11 +24,13 @@ static SOCKET: OnceLock<PathBuf> = OnceLock::new();
 static IN_USE: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 
 /// Use the terminal daemon on `socket` (called once by `main`).
+#[cfg(unix)]
 pub fn enable_terminal_daemon(socket: PathBuf) {
     let _ = SOCKET.set(socket);
 }
 
 /// The socket the app uses: `terminals/d.sock` in the state folder.
+#[cfg(unix)]
 pub fn terminal_daemon_socket() -> Option<PathBuf> {
     state_path()?.parent().map(|d| d.join("terminals").join("d.sock"))
 }
@@ -90,12 +92,8 @@ enum Refused {
 
 /// Connect to (starting if needed) the daemon and open or take back `session`; take back the saved terminals whose
 /// tokens it accepts, and end the session's other terminals (no window could ever reach them again). Blocking.
-#[cfg(unix)]
 fn take_session(socket: &std::path::Path, session: String, saved: &[(usize, crate::terminal_session::SavedPty)], workspace: i64) -> Result<Taken, Refused> {
-    let stream = agent::daemon::connect_or_start(socket).map_err(|_| Refused::Failed)?;
-    let closer = stream.try_clone().map_err(|_| Refused::Failed)?;
-    let transport = host::Transport::pipes(Box::new(stream.try_clone().map_err(|_| Refused::Failed)?), Box::new(stream));
-    let close = Box::new(move || drop(closer.shutdown(std::net::Shutdown::Both)));
+    let (transport, close) = connect(socket).ok_or(Refused::Failed)?;
     let ids: Vec<u32> = saved.iter().map(|(_, t)| t.pty).collect();
     let (host, resumed, ptys) = match host::RemoteHost::attach_session(transport, close, &session, &ids, "Local") {
         Ok(v) => v,
@@ -121,9 +119,19 @@ fn take_session(socket: &std::path::Path, session: String, saved: &[(usize, crat
     Ok(Taken { daemon: TermDaemon { host, session, workspace, keep: false }, back, in_use: false })
 }
 
+/// A connection to the daemon on `socket` (started if none answers), and what ends it at once.
+#[cfg(unix)]
+fn connect(socket: &std::path::Path) -> Option<(host::Transport, Box<dyn FnOnce() + Send>)> {
+    let stream = agent::daemon::connect_or_start(socket).ok()?;
+    let closer = stream.try_clone().ok()?;
+    let transport = host::Transport::pipes(Box::new(stream.try_clone().ok()?), Box::new(stream));
+    Some((transport, Box::new(move || drop(closer.shutdown(std::net::Shutdown::Both)))))
+}
+
+/// Windows runs no terminal daemon (`terminal_daemon_for` never asks for one there).
 #[cfg(not(unix))]
-fn take_session(_: &std::path::Path, _: String, _: &[(usize, crate::terminal_session::SavedPty)], _: i64) -> Result<Taken, Refused> {
-    Err(Refused::Failed)
+fn connect(_: &std::path::Path) -> Option<(host::Transport, Box<dyn FnOnce() + Send>)> {
+    None
 }
 
 /// The saved session (retried briefly while its previous owner's connection is still closing: a killed app's socket
@@ -353,7 +361,7 @@ impl Workbench {
     }
 
     /// Use a terminal daemon on `socket` in this window (tests; the app sets it once for every window).
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) fn use_terminal_daemon_for_test(&mut self, socket: PathBuf) {
         self.persist.term_socket = Some(socket);
     }
