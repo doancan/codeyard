@@ -8,7 +8,7 @@
 
 use super::*;
 use crate::workbench::editor_windows_glue::EditorWindow;
-use crate::workbench::view_windows_glue::ViewWindow;
+use crate::workbench::view_windows_glue::{ViewRef, ViewWindow};
 use crate::workbench::views_glue::DetachedTerminal;
 
 /// What a window's tree is made of: how its snapshot is taken and how its actions are carried out.
@@ -24,8 +24,8 @@ pub(in crate::workbench) const WORKBENCH: Hooks = Hooks {
         let wb = root.downcast::<Workbench>().ok()?;
         let wb = wb.read(cx);
         let mut snap = wb.a11y_snapshot(window, cx);
-        for panel in wb.chrome.view_windows.iter().map(|w| w.panel) {
-            take_view(&mut snap, panel);
+        for entry in &wb.chrome.view_windows {
+            take_view(&mut snap, &entry.view);
         }
         Some(snap)
     },
@@ -56,21 +56,21 @@ pub(in crate::workbench) const VIEW_WINDOW: Hooks = Hooks {
     snapshot: |root, window, cx| Some(view_window_snapshot(&root.downcast::<ViewWindow>().ok()?, window, cx)),
     action: |root, req, last, window, cx| {
         let Ok(root) = root.downcast::<ViewWindow>() else { return };
-        let (panel, home) = root.read(cx).parts();
+        let (_, home) = root.read(cx).parts();
         if let Some(wb) = home.upgrade() {
             wb.update(cx, |wb, cx| {
-                wb.use_view_window(panel, cx);
+                wb.use_view_window(window.window_handle(), cx);
                 wb.a11y_action(req, last, window, cx);
             });
         }
     },
 };
 
-/// Moves the part of `snap` that belongs to `panel` into a snapshot of its own (Run and Debug, Testing and Remote
+/// Moves the part of `snap` that belongs to `view` into a snapshot of its own (Run and Debug, Testing and Remote
 /// Explorer share one part, which stays in both).
-fn take_view(snap: &mut Snapshot, panel: Panel) -> Snapshot {
+fn take_view(snap: &mut Snapshot, view: &ViewRef) -> Snapshot {
     let mut part = Snapshot::default();
-    match panel {
+    match view.panel {
         Panel::Explorer => {
             part.explorers = std::mem::take(&mut snap.explorers);
             if matches!(snap.focus, FocusSnap::Explorer(_)) {
@@ -94,7 +94,12 @@ fn take_view(snap: &mut Snapshot, panel: Panel) -> Snapshot {
             part.views.side = snap.views.side.clone();
             part.views.row_focus = snap.views.row_focus;
         }
-        Panel::Containers | Panel::ExtView => {}
+        Panel::ExtView => {
+            let (mine, rest) = std::mem::take(&mut snap.ext_views).into_iter().partition(|v| Some(&v.id) == view.ext.as_ref());
+            part.ext_views = mine;
+            snap.ext_views = rest;
+        }
+        Panel::Containers => {}
     }
     part
 }
@@ -102,21 +107,27 @@ fn take_view(snap: &mut Snapshot, panel: Panel) -> Snapshot {
 /// The view in its own window: its part of the workbench's tree, taken with this window (focus and row frames are
 /// this window's), the window's name, and the picker opened there.
 pub(super) fn view_window_snapshot(root: &Entity<ViewWindow>, window: &Window, cx: &mut App) -> Snapshot {
-    let (panel, home) = root.read(cx).parts();
+    let (view, home) = root.read(cx).parts();
     let Some(wb) = home.upgrade() else { return Snapshot::default() };
     let wb = wb.read(cx);
     let mut full = wb.a11y_snapshot(window, cx);
-    let mut snap = take_view(&mut full, panel);
+    let mut snap = take_view(&mut full, &view);
     snap.generation = full.generation;
     snap.geometry = Geometry::whole_window(window);
-    snap.title = docks_glue::view_name(panel);
-    if wb.chrome.view_host == Some(panel) {
+    snap.title = wb.view_window_title(&view);
+    if wb.chrome.view_host == Some(window.window_handle()) {
         snap.picker = full.picker.take();
         if full.focus == FocusSnap::Picker {
             snap.focus = FocusSnap::Picker;
         }
     }
     snap
+}
+
+/// The node of element `i` of the extension view at `slot` (tests).
+#[cfg(test)]
+pub(in crate::workbench) fn ext_view_node(slot: usize, i: usize) -> NodeId {
+    ext_views_access::ViewSnap::node_id(slot, i)
 }
 
 /// A terminal's own window.

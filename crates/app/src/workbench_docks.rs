@@ -123,8 +123,8 @@ impl Workbench {
             return cx.notify();
         }
         // A view in a window of its own leaves it for the side bar it is dropped on.
-        if self.in_view_window(view) {
-            self.view_window_returned(view, true, cx);
+        if let Some(handle) = self.view_window_of(view) {
+            self.view_window_returned(handle, true, cx);
         }
         if secondary {
             if self.chrome.panel == Some(view) {

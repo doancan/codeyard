@@ -224,6 +224,17 @@ impl Workbench {
         cx.notify();
     }
 
+    /// Hosts `decl` (a view shown in a window of its own after a restart) and asks for its tree if it has none.
+    pub(super) fn ensure_ext_view(&mut self, decl: Declared, window: &mut Window, cx: &mut Context<Self>) {
+        let id = decl.id.clone();
+        if self.ext_view(&id).is_none() {
+            self.cfg.exts.views.hosted.push(HostedView::new(decl));
+        }
+        if self.ext_view(&id).is_some_and(|h| h.tree.is_none() && !h.in_flight) {
+            self.request_ext_view_render(&id, window, cx);
+        }
+    }
+
     /// `ui.invalidate(view)` from an extension: draw it again if it is open. A view that was never opened is not
     /// started by it.
     pub(super) fn on_ext_view_invalidate(&mut self, extension: &str, local: &str, window: &mut Window, cx: &mut Context<Self>) {
@@ -696,6 +707,7 @@ impl Workbench {
     /// After a settings reload: views whose extension is gone are closed.
     pub(super) fn sync_ext_views(&mut self, cx: &mut Context<Self>) {
         let declared: HashSet<String> = declared_views().into_iter().map(|d| d.id).collect();
+        self.close_gone_ext_view_windows(&declared, cx);
         let views = &mut self.cfg.exts.views;
         views.hosted.retain(|h| declared.contains(&h.decl.id));
         if views.sidebar.as_ref().is_some_and(|s| !declared.contains(s)) {

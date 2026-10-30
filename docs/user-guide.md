@@ -210,7 +210,10 @@ window to the front instead of opening it in a side bar; the command palette, sh
 pickers work in that window. Closing the window, ⌘W in it, or "View: Move View Back to Side Bar" puts the view back in
 the side bar it came from. The windows belong to the folder: they are saved with it, close when the folder or the
 connection changes (their views going back to the side bars), and come back when the folder opens again, on an
-attached display. Screen readers find the view in its own window, named after the view.
+attached display. Screen readers find the view in its own window, named after the view. A code extension's side bar
+view moves the same way (and to the secondary side bar): it stays the same view, so what the extension draws reaches
+the window and what you do there goes to the extension. Its window comes back only while the extension is installed;
+it closes when you remove or turn off the extension, and the view returns to the side bar if the extension crashes.
 "Terminal: Move Terminal into New Window" moves the active terminal, with its running program, into a window of its own
 (the same terminal, not a copy). Closing that window puts the terminal back in the panel, still running;
 "Terminal: Move Terminals Back to Panel" does it for all of them. A detached terminal belongs to its editor window and
