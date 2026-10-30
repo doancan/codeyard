@@ -1,0 +1,69 @@
+package codeyard:api@0.1.0;
+
+/// Source control providers (`[[scm]]`): what the Source Control view and the gutter show for a folder the provider
+/// claims. The host asks with `request.scm-status`, `request.scm-original` and `request.scm-validate`; buttons run the
+/// extension's own commands.
+@since(version = 0.1.0)
+interface scm {
+  use types.{uri};
+
+  /// How a file differs from what the provider last recorded.
+  enum file-state {
+    modified,
+    added,
+    deleted,
+    renamed,
+    untracked,
+    ignored,
+    conflicted,
+  }
+
+  /// A button: one of the extension's own commands. It runs with the JSON arguments
+  /// `{"provider": "<local id>", "root": "<folder uri>", "uris": ["<file uri>", …], "message": "<input box text>"}`.
+  record scm-action {
+    /// The command's local id, from `[[commands]]`.
+    command: string,
+    /// The tooltip and the screen reader's name.
+    title: string,
+    /// An icon name (reference/ui.md), such as `plus`, `minus`, `undo-2` or `check`.
+    icon: option<string>,
+  }
+
+  record scm-resource {
+    uri: uri,
+    state: file-state,
+    /// Shown after the file name, such as the old name of a renamed file.
+    detail: option<string>,
+  }
+
+  record scm-group {
+    /// Local to the provider; keeps the group open or closed between refreshes.
+    id: string,
+    label: string,
+    resources: list<scm-resource>,
+    /// Buttons on each file of the group; they get that file's uri.
+    resource-actions: list<scm-action>,
+    /// Buttons on the group's header; they get every uri of the group.
+    group-actions: list<scm-action>,
+    /// Leave the group out while it has no files.
+    hide-when-empty: bool,
+  }
+
+  record scm-input {
+    placeholder: string,
+    /// Replaces the box's text when set, such as a template or an empty box after a commit.
+    value: option<string>,
+    /// The button under the box and Ctrl+Enter (Cmd+Enter on macOS): commit, describe, submit. None hides the box.
+    accept: option<scm-action>,
+  }
+
+  record scm-state {
+    /// Where the folder stands, shown above the box: a branch, a change id.
+    head: option<string>,
+    input: scm-input,
+    groups: list<scm-group>,
+  }
+
+  /// Ask the host for `request.scm-status` again now, after the extension changed something itself.
+  refresh: func(provider: string);
+}

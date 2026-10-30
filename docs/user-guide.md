@@ -134,8 +134,8 @@ keys are commands like any other (`rows.previous`, `rows.next`, `rows.first`, `r
 
 Right-click in the file tree for new file/folder, cut/copy/paste, rename, delete, copy path,
 favorites. Drag files and folders onto a folder to move them (an existing file is never
-overwritten). Deleting a local file moves it to the Trash (`"files.enableTrash": false` deletes
-permanently; on SSH hosts there is no Trash, so it asks). Right-click a tab for close others /
+overwritten). Deleting a file or folder deletes it permanently after asking; with
+`"files.enableTrash": true` local files go to the Trash instead (SSH hosts have no Trash). Right-click a tab for close others /
 to the right / saved, pin, copy path; drag tabs to reorder them or onto the other group.
 Right-click in the editor for go to definition / references, rename, cut/copy/paste,
 file history and blame. A single click in the tree opens a preview tab (italic) that the next
@@ -529,7 +529,11 @@ a test or the debugger first asks "Do you trust the authors of this folder?". A 
 program (a filter, diff or merge driver, an ssh or credential command, a hooks folder) gets **no Git at all** until it is
 trusted: `git status` alone would run its filters. A notice names the settings. Folders you had already opened before this
 rule existed are trusted once. Trusting is remembered per folder (per host over SSH) and starts the language servers at once;
-`Workspace: Trust This Folder` does it without a question. `security.workspaceTrust.enabled: false`
+`Workspace: Trust This Folder` does it without a question. With a workspace file open, trust covers the workspace as a
+whole: the question becomes "Do you trust the authors of this workspace?" and names the file, and the answer (or
+`Workspace: Trust This Folder`) trusts the file's own folder and every folder it lists in one step. A folder the
+workspace does not list is still asked about on its own, and over SSH the trust only holds on that host.
+`security.workspaceTrust.enabled: false`
 in your own `settings.jsonc` turns the check off; a project file can never change that key.
 
 ```jsonc
@@ -553,10 +557,10 @@ in your own `settings.jsonc` turns the check off; a project file can never chang
 ]
 ```
 
-Unknown command ids get a "did you mean" hint. Coming from VS Code? ⇧⌘P → "Preferences:
-Import VS Code Settings and Shortcuts" copies the settings that have an equivalent here and
-your shortcuts (into a marked block of `keybindings.jsonc`, so importing again replaces it);
-it reports what had no equivalent. Your VS Code files are only read. Open tabs, cursors and unsaved changes are
+Unknown command ids get a "did you mean" hint. Coming from another editor? ⇧⌘P → "Preferences:
+Import Settings and Shortcuts from Another Editor" copies the settings that have an equivalent here and
+your shortcuts (into a marked block of `keybindings.jsonc`, so importing again replaces it, also a block an earlier
+version wrote); it reports what had no equivalent. The other editor's files are only read. Open tabs, cursors and unsaved changes are
 restored on the next start (hot exit).
 
 ## Interface scale
@@ -796,12 +800,27 @@ offered only in some situations, for example while a Rust file is open; it close
   `{ "toml": "you.taplo" }`, or `"lsp"` to keep the language server. If you type while it works, its answer is dropped,
   and a formatter that takes more than a second is skipped: the file is saved as it is.
 - *Code actions* in *Quick Fix…* (⌘.), next to the language server's.
+- *Hover and completion.* What an extension says about the word under the mouse (or *Editor: Show Hover*) shows in
+  the hover popup under the language server's, with the extension's id above it. Its completions join the list as
+  you type, with its id at the right of each item. An extension that takes more than a second is left out.
+- *Code lenses and inlay hints* at the end of their line, with the language server's (`editor.codeLens` and
+  `editor.inlayHints.enabled` turn them off). Hover to see which extension gave them; click a line with a lens, or use
+  *Editor: Run Code Lens on This Line*, to run it. Extensions are asked only about the lines you see, again once you stop
+  typing or scrolling.
 - *Problems* in the Problems view and the editor, with the extension's id as their source, and *decorations*: a dot in
   the gutter, a tinted line or a note after the line, in theme colours.
 - *Tasks* in *Tasks: Run Task…*, which the extension runs itself when you pick one.
+- *Source control* for a version control system other than Git (Mercurial, Jujutsu, Perforce …). The extension
+  claims a workspace folder that has its marker, such as a `.hg` or `.jj` folder; there Source Control shows the
+  extension's name, where the folder stands, its message box and its groups of changed files, and the gutter's change
+  marks compare open files with the text the extension gives. Clicking a file opens its changes; the buttons on a file,
+  on a group and under the message box run the extension's commands (stage, discard, commit …), and the message box
+  shows the extension's note about your message, if any. The list is read again when files change, with **Refresh**,
+  and after each button. Git keeps every other folder. In a folder you have not trusted the extension is not asked,
+  and over SSH the programs it runs (`hg`, `jj` …) run on the remote host.
 
-Typing never waits for an extension. When one is disabled, uninstalled or crashes, its status items, problems and
-decorations go with it. The same works in SSH windows: the extension runs on your computer and sees the remote files
+Typing never waits for an extension. When one is disabled, uninstalled or crashes, its status items, problems,
+decorations, hover text, completion items, lenses and hints go with it. The same works in SSH windows: the extension runs on your computer and sees the remote files
 through Codeyard.
 
 **Accounts.** An extension that declares `auth` can act as your GitHub account, or as an account at a service it
@@ -1069,7 +1088,9 @@ a logpoint (`log: i is {i}`) or a hit-count one (`hit: >= 5`). Node needs Micros
 `Debug: Install JavaScript Debugger` fetches it once (VS Code's copy is used when installed).
 Over SSH the adapter runs on the server; Go and Node adapters talk TCP and are reached through a
 port forward on the shared SSH connection. `CODEYARD_DAP_TRACE=1` prints the protocol when a
-configuration misbehaves. Rust values and the standard library's sources: see [Working in Rust](#working-in-rust).
+configuration misbehaves. `"stopOnEntry": true` pauses the program before it runs and the Debug Console says
+"Paused on entry", also with `lldb-dap`, which reports that stop as a SIGSTOP signal; a SIGSTOP after that is shown as
+an exception. Rust values and the standard library's sources: see [Working in Rust](#working-in-rust).
 
 To debug a program that is already running, start it with its debug server and attach:
 `python -m debugpy --listen 5678 --wait-for-client app.py`, then a configuration
@@ -1167,8 +1188,9 @@ each under its `name` if it has one. Relative paths are resolved against the fil
   a program (`terminal.shell`, `lsp.servers`, …) apply from a workspace file only when the folder that holds the
   file is trusted, and user-only keys never do.
 - **Tasks and debugging:** the file's tasks join *Tasks: Run Task* (source `workspace`) and its launch
-  configurations join Run and Debug. They run in the active file's folder, on that folder's host. If the workspace
-  file sits outside that folder, its own folder must be trusted as well, so you may be asked twice.
+  configurations join Run and Debug. They run in the active file's folder, on that folder's host. Before the first
+  one runs you are asked once whether you trust the workspace; trusting it trusts the workspace file's own folder
+  and all of its folders (see *Workspace Trust* above).
 - **Saving:** *Add Folder to Workspace…* and *Remove Folder from Workspace…* write the folder list back to the
   file. Only the folder list changes: comments, unknown fields and sections Codeyard does not use stay as they
   were. If nothing changed, nothing is written. *File: Save Workspace* writes on demand. *File: Save Workspace As…*
@@ -1451,6 +1473,16 @@ results and review state. Pick one to *check it out* (`git fetch origin pull/N/h
 open it on GitHub, or copy its link or branch name. It uses the `gh` CLI when it is installed and signed in (private repositories,
 checks, reviews); otherwise the public GitHub API, with `GITHUB_TOKEN` / `GH_TOKEN` if set. Read-only: reviewing and commenting stay on GitHub.
 Lists show the latest 50 open pull requests. Errors say what to do (sign in with `gh auth login`, commit or stash local changes, check the remote); calls time out after 30 seconds and never wait for a prompt.
+
+Extensions add other forges (GitLab, Gitea, Forgejo, Bitbucket): an extension with a pull request provider claims the
+remotes on its hosts, and their open requests appear in the same list, after GitHub's, each named with the provider
+and the extension. Pick one to see its details and comments (a Markdown page, kept as a scratch file), its changed
+files (each opens as a diff), to add a comment, to check it out (git fetches what the provider names into a local
+branch, on the machine the repository is on, so over SSH too), or to open or copy its link or branch name. The
+extension signs in to the forge
+with the account you allow on first use; Codeyard keeps the token in the system keychain and signs its requests, so the
+extension never sees it. A provider that does not answer within 20 seconds is left out, and its error is shown above
+the list and in its log in the Extension Inspector.
 
 ## HTTP files
 

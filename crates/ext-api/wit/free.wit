@@ -68,6 +68,9 @@ interface requests {
 @since(version = 0.1.0)
 interface responses {
   use types.{text-edit, diagnostic, range};
+  use scm.{scm-state};
+  use types.{position};
+  use pull-requests.{answer};
 
   record code-action {
     /// Passed back in `request.run-code-action`.
@@ -90,6 +93,32 @@ interface responses {
     group: string,
   }
 
+  /// What a code lens shows and the command a click runs.
+  record lens-command {
+    title: string,
+    /// The extension's own command (local or full id), a dependency's full id, or a `core:` command the manifest
+    /// lists in `permissions.commands`.
+    command: string,
+    /// The command's arguments as JSON; `null` for none.
+    args-json: string,
+  }
+
+  record code-lens {
+    /// Passed back in `request.resolve-code-lens`.
+    id: string,
+    /// The lens shows above the range's first line.
+    range: range,
+    /// None until resolved: the host sends `request.resolve-code-lens` once the lens is on screen.
+    command: option<lens-command>,
+  }
+
+  record inlay-hint {
+    /// Where the hint belongs; it shows at the end of its line.
+    position: position,
+    label: string,
+    tooltip: option<string>,
+  }
+
   variant response {
     /// Nothing to return (a command that finished, an event handled).
     none,
@@ -102,6 +131,82 @@ interface responses {
     tasks(list<task>),
     /// The ranges a task's problem matcher should look at, or a formatter's changed ranges.
     ranges(list<range>),
+    /// What `request.hover` describes, or none.
+    hover(option<hover>),
+    /// The answer to `request.completion`.
+    completions(completion-list),
+    code-lenses(list<code-lens>),
+    inlay-hints(list<inlay-hint>),
+    /// A folder's source control state (`request.scm-status`).
+    scm(scm-state),
+    /// Some text, or none: a file's original text (`request.scm-original`), a validation message (`request.scm-validate`).
+    text(option<string>),
+    /// The answer to `request.pull-requests`.
+    pull-requests(answer),
+  }
+
+  /// Shown in the hover popup next to the language server's, under the extension's name.
+  record hover {
+    /// Markdown; Codeyard shows it as plain text.
+    contents: string,
+    /// The range described; the word at the position when none.
+    range: option<range>,
+  }
+
+  /// The icon a completion item shows, as in the Language Server Protocol.
+  enum completion-kind {
+    text,
+    method,
+    function,
+    %constructor,
+    field,
+    variable,
+    class,
+    %interface,
+    module,
+    property,
+    unit,
+    value,
+    %enum,
+    keyword,
+    snippet,
+    color,
+    file,
+    reference,
+    folder,
+    enum-member,
+    constant,
+    struct,
+    event,
+    operator,
+    type-parameter,
+  }
+
+  record completion-item {
+    /// Shown in the list, and inserted when `insert-text` is none.
+    label: string,
+    kind: completion-kind,
+    /// One line shown next to the label, such as a type.
+    detail: option<string>,
+    /// Markdown shown beside the list while the item is selected.
+    documentation: option<string>,
+    insert-text: option<string>,
+    /// `insert-text` is a snippet: `$1`, `${1:default}` and `$0` are tab stops.
+    snippet: bool,
+    /// The text replaced; the word before the cursor when none. On the line of the position.
+    range: option<range>,
+    /// More edits made when the item is chosen, such as an import; they may not overlap `range`.
+    additional-edits: list<text-edit>,
+    /// Matched against what the user typed; the label when none.
+    filter-text: option<string>,
+    /// Orders items that match equally well; the label when none.
+    sort-text: option<string>,
+  }
+
+  record completion-list {
+    items: list<completion-item>,
+    /// More typing changes the answer: Codeyard asks again as the user types, instead of only filtering.
+    incomplete: bool,
   }
 }
 

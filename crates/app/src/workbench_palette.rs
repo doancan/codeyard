@@ -292,7 +292,7 @@ impl Workbench {
             Command::action("Go: Last Edit Location", GoToLastEdit),
             Command::action("Git: Clone Repository…", CloneRepository),
             Command::action("Preferences: Open Keyboard Shortcuts", OpenKeybindings),
-            Command::action("Preferences: Import VS Code Settings and Shortcuts", ImportVsCode),
+            Command::action("Preferences: Import Settings and Shortcuts from Another Editor", ImportVsCode),
             Command::action("View: Problems", ShowProblems),
             Command::action("Problems: Copy Full Diagnostic", CopyFullDiagnostic),
             Command::action("Rust: Expand Macro Recursively", RustExpandMacro),
@@ -499,6 +499,8 @@ impl Workbench {
         match &root {
             None => picker.update(cx, |p, cx| p.set_paths(0, Vec::new(), false, cx)),
             Some(root) => {
+                let first = (!self.roots.extra_roots.is_empty()).then(|| ui::file_name(root).to_string());
+                picker.update(cx, |p, _| p.set_first_folder(first));
                 // Cached list first (instant), then a fresh one in the background.
                 if let Some(ix) = self.roots.file_index.as_ref().filter(|ix| ix.root == *root) {
                     let (ordered, recent) = self.mru_first(root, &ix.paths, cx);
@@ -872,10 +874,23 @@ impl Workbench {
                 self.close_overlay(window, cx);
                 self.apply_spell_choice(editor, range, word, choice, cx);
             }
-            (OverlayKind::PullRequests { remote, pulls }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
-                let (remote, pull) = (remote.clone(), pulls[*index].clone());
+            (OverlayKind::PullRequests(rows), PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let row = rows[*index].clone();
                 self.close_overlay(window, cx);
-                self.pick_pull_request(remote, pull, window, cx);
+                match row {
+                    pulls_glue::PullRow::GitHub { remote, pull } => self.pick_pull_request(remote, pull, window, cx),
+                    pulls_glue::PullRow::Extension(pull) => self.pick_ext_pull(pull, window, cx),
+                }
+            }
+            (OverlayKind::ExtPullActions { pull, choices }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let (pull, action) = (pull.clone(), choices[*index]);
+                self.close_overlay(window, cx);
+                self.run_ext_pull_action(*pull, action, window, cx);
+            }
+            (OverlayKind::ExtPullFiles { pull, files }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
+                let (pull, file) = (pull.clone(), files[*index].clone());
+                self.close_overlay(window, cx);
+                self.open_ext_pull_file(*pull, file, window, cx);
             }
             (OverlayKind::PullRequestActions { remote, pull, choices, .. }, PickerEvent::Confirm(Pick::Item { index, .. })) => {
                 let (remote, pull, action) = (remote.clone(), pull.clone(), choices[*index]);
@@ -931,8 +946,10 @@ impl Workbench {
                 | OverlayKind::HostMenu(_)
                 | OverlayKind::SpellFix { .. }
                 | OverlayKind::Dictionaries
-                | OverlayKind::PullRequests { .. }
+                | OverlayKind::PullRequests(_)
                 | OverlayKind::PullRequestActions { .. }
+                | OverlayKind::ExtPullActions { .. }
+                | OverlayKind::ExtPullFiles { .. }
                 | OverlayKind::EditorOption(_)
                 | OverlayKind::Projects(_)
                 | OverlayKind::ForgetRecent(_)

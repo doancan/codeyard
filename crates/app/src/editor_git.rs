@@ -50,6 +50,9 @@ impl EditorView {
     /// `changed`: git sees this file as modified; if not and the buffer is clean,
     /// the HEAD content is the buffer itself.
     pub fn set_git_root(&mut self, root: Option<String>, changed: bool, cx: &mut Context<Self>) {
+        if self.scm_owned {
+            return;
+        }
         self.git_root = root.clone();
         self.blame = None;
         self.schedule_blame(cx);
@@ -71,6 +74,9 @@ impl EditorView {
         self.git_task = Some(cx.spawn(async move |this, cx| {
             let base = task.await;
             this.update(cx, |e, cx| {
+                if e.scm_owned {
+                    return;
+                }
                 // Untracked or new file: not in HEAD, so no marker (as VS Code does).
                 e.git_base = base.map(|b| buffer::Rope::from_str(&b));
                 e.git_marks.clear();
@@ -78,6 +84,44 @@ impl EditorView {
             })
             .ok();
         }));
+    }
+
+    /// An extension's source control provider owns this file (#144): `base` is its original text (none for a new file:
+    /// no marks). Git's blame and hunk actions are off for it.
+    pub fn set_scm_base(&mut self, base: Option<String>, cx: &mut Context<Self>) {
+        self.take_scm(cx);
+        self.git_base = base.map(|b| buffer::Rope::from_str(&b.replace("\r\n", "\n")));
+        self.git_marks.clear();
+        self.schedule_git_marks(0, Some(cx));
+        cx.notify();
+    }
+
+    /// As `set_scm_base`, with the file as saved: the provider does not list it as changed.
+    pub fn set_scm_base_saved(&mut self, cx: &mut Context<Self>) {
+        self.take_scm(cx);
+        if !self.is_dirty() {
+            self.git_base = Some(self.buffer.rope().clone());
+            self.git_marks.clear();
+            cx.notify();
+        }
+    }
+
+    fn take_scm(&mut self, cx: &mut Context<Self>) {
+        if !self.scm_owned {
+            self.scm_owned = true;
+            self.git_root = None;
+            self.git_task = None;
+            self.schedule_blame(cx);
+        }
+    }
+
+    /// The provider no longer owns the file: no marks until git's are read.
+    pub fn release_scm_base(&mut self, cx: &mut Context<Self>) {
+        if std::mem::take(&mut self.scm_owned) {
+            self.git_base = None;
+            self.git_marks.clear();
+            cx.notify();
+        }
     }
 
     /// Compute line markers in the background (after waiting `delay` ms, so not on every keystroke while typing).

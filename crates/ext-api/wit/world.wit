@@ -3,7 +3,9 @@ package codeyard:api@0.1.0;
 /// What the host asks the extension.
 @since(version = 0.1.0)
 interface host-requests {
-  use types.{document, range, diagnostic};
+  use types.{document, range, diagnostic, uri, position};
+  use responses.{code-lens};
+  use pull-requests.{query};
 
   record format-options {
     tab-size: u32,
@@ -35,6 +37,29 @@ interface host-requests {
     cancel-progress(u64),
     /// A `codeyard://ext/<id>/…` link was opened: its path and query.
     open-uri(string),
+    /// Describe what is at a position (the mouse rests there, or Show Hover); answer with `response.hover`.
+    hover(tuple<document, position>),
+    /// Offer completions at a position; answer with `response.completions`. The string is the character that was
+    /// typed when it is one of the manifest's `trigger-characters`, none when the user typed a word or asked.
+    completion(tuple<document, position, option<string>>),
+    /// Code lenses for the lines of a document in view: the range starts at the first and ends at the start of the line
+    /// after the last. Answer with `response.code-lenses`.
+    code-lens(tuple<document, range>),
+    /// A lens answered without a command is on screen: answer with `response.code-lenses` holding it with its command.
+    resolve-code-lens(tuple<document, code-lens>),
+    /// Inlay hints for the lines of a document in view (the range, as for `code-lens`); answer with `response.inlay-hints`.
+    inlay-hints(tuple<document, range>),
+    /// The source control state of a folder a `[[scm]]` provider claims: the provider's local id and the folder;
+    /// answer with `response.scm`.
+    scm-status(tuple<string, uri>),
+    /// The text of a file as the provider last recorded it, for the gutter's change marks: the provider's local id
+    /// and the file; answer with `response.text`, none for a file the provider does not track.
+    scm-original(tuple<string, uri>),
+    /// Check the input box's text: the provider's local id, the folder and the text; answer with `response.text`, a
+    /// message shown under the box (none when the text is fine).
+    scm-validate(tuple<string, uri, string>),
+    /// A `[[pull-requests]]` provider's query; answer with `response.pull-requests`.
+    pull-requests(query),
   }
 }
 
@@ -45,7 +70,8 @@ interface guest {
   use host-requests.{request};
 
   record activation {
-    /// Why the extension started: `command:<id>`, `view:<id>`, `language:<id>`, `workspace-contains`, `uri`, `auth`.
+    /// Why the extension started: `command:<id>`, `view:<id>`, `language:<id>`, `workspace-contains`, `uri`, `auth`,
+    /// `scm:<id>`.
     reason: string,
   }
 
@@ -64,7 +90,7 @@ interface guest {
 }
 
 /// Everything an extension may import. Each interface outside `types`, `log`, `env`, `tickets`, `requests`,
-/// `responses`, `window`, `commands`, `storage`, `settings`, `timers`, `ui`, `documents`, `languages` and
+/// `responses`, `window`, `commands`, `storage`, `settings`, `timers`, `ui`, `documents`, `languages`, `scm` and
 /// `host-requests` needs its permission in the manifest.
 world extension {
   import log;
@@ -88,6 +114,7 @@ world extension {
   import clipboard-read;
   import clipboard-write;
   import terminal;
+  import scm;
 
   export guest;
 }

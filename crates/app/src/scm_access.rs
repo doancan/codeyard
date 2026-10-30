@@ -38,6 +38,22 @@ pub(crate) struct AccessView {
     pub groups: Vec<AccessGroup>,
     /// The repositories of the workspace (empty with a single repository, as the panel shows none then).
     pub repos: Vec<AccessRepo>,
+    /// Folders extensions' source control providers claim (#144).
+    pub ext: Vec<AccessExt>,
+}
+
+/// A folder a provider claims, as its section shows it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct AccessExt {
+    pub root: String,
+    pub title: String,
+    pub state: Option<Arc<ext_api::value::ScmState>>,
+    pub message: String,
+    pub validation: Option<String>,
+    pub error: Option<String>,
+    pub busy: bool,
+    /// Ids of the groups that are open.
+    pub open: Vec<String>,
 }
 
 /// A repository of the inventory: what it is, where it stands, whether it is the one Source Control acts on.
@@ -62,7 +78,8 @@ impl ScmPanel {
 
     pub(crate) fn a11y_view(&self, window: &Window, cx: &App) -> AccessView {
         let mut groups = Vec::new();
-        if let Some(status) = &self.status {
+        let git = self.status.as_ref().filter(|_| !self.git_hidden());
+        if let Some(status) = git {
             for (id, label, staged, conflict) in [
                 ("scm-merge", crate::i18n::t("Merge Changes"), false, true),
                 ("scm-staged", crate::i18n::t("Staged Changes"), true, false),
@@ -104,9 +121,24 @@ impl ScmPanel {
         if let Some(repo) = repos.iter().find(|r| r.selected) {
             branch = format!("{} · {branch}", repo.label);
         }
+        let ext = self
+            .ext_sources()
+            .iter()
+            .map(|s| AccessExt {
+                root: s.root.clone(),
+                title: s.title.clone(),
+                state: s.state.clone(),
+                message: self.ext_message(&s.root, cx),
+                validation: s.validation.clone(),
+                error: s.error.clone(),
+                busy: s.busy,
+                open: s.state.iter().flat_map(|st| &st.groups).filter(|g| self.ext_group_open(&s.root, &g.id)).map(|g| g.id.clone()).collect(),
+            })
+            .collect();
         AccessView {
+            ext,
             revision: self.status.clone(),
-            root: self.status.as_ref().map(|s| s.root.clone()),
+            root: git.map(|s| s.root.clone()),
             branch,
             repos,
 

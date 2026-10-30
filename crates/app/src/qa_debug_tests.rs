@@ -285,6 +285,30 @@ fn run_to_cursor_stops_there_once(cx: &mut TestAppContext) {
     run(&wb, cx, "Debug: Stop");
 }
 
+/// lldb-dap reports `stopOnEntry` as an exception "signal SIGSTOP": the console says it paused on entry.
+#[gpui::test]
+fn the_stop_on_entry_is_not_reported_as_an_exception(cx: &mut TestAppContext) {
+    if !have_python() {
+        return;
+    }
+    let home = project("dbg-entry-home");
+    let (dir, log) = fake_project("dbg-entry");
+    write_launch(&dir, &log, &[("Fake", r#", "stopOnEntry": true"#)], "");
+    let (wb, cx) = setup_persistent(cx, &home);
+    open(&wb, &dir, cx);
+    let (main, ed) = open_main(&wb, &dir, cx);
+    ed.update(cx, |e, cx| e.toggle_breakpoint_at(4, cx));
+    run(&wb, cx, "Debug: Start Debugging");
+    let snap = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, _| wb.debug_snapshot());
+    wait_secs(cx, 10, "paused on entry", |cx| snap(cx).is_some_and(|s| s.0 == "stopped:entry"));
+    let console = snap(cx).unwrap().3;
+    assert!(console.iter().any(|l| l == "Paused on entry"), "{console:?}");
+    assert!(!console.iter().any(|l| l.contains("exception")), "{console:?}");
+    run(&wb, cx, "Debug: Continue");
+    wait_secs(cx, 10, "the breakpoint", |cx| snap(cx).is_some_and(|s| s.0 == "stopped:breakpoint" && s.2 == Some((main.clone(), 4))));
+    run(&wb, cx, "Debug: Stop");
+}
+
 #[gpui::test]
 fn a_compound_starts_its_sessions_together_and_stop_all_stops_them(cx: &mut TestAppContext) {
     if !have_python() {

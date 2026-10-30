@@ -151,7 +151,13 @@ pub fn parse_task_file(text: &str, source: &'static str) -> Vec<Task> {
 /// `${relativeFile}`, `${env:AD}`. With no active file, `${file…}` and unknown variables stay
 /// as written (the shell won't expand them either, and the user sees it).
 pub fn expand_variables(command: &str, root: &str, file: Option<&str>) -> String {
-    expand(command, root, file)
+    expand(command, root, file, &[])
+}
+
+/// `expand_variables` in a workspace with several folders: `${workspaceFolder:name}` and
+/// `${workspaceFolderBasename:name}` name one of `folders` (name, path).
+pub fn expand_variables_in(command: &str, root: &str, file: Option<&str>, folders: &[(String, String)]) -> String {
+    expand(command, root, file, folders)
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -196,7 +202,7 @@ pub(crate) fn for_shell(value: &str, at: Quote) -> String {
     }
 }
 
-fn expand(command: &str, root: &str, file: Option<&str>) -> String {
+fn expand(command: &str, root: &str, file: Option<&str>, folders: &[(String, String)]) -> String {
     let root = root.trim_end_matches('/');
     let name = |p: &str| p.rsplit('/').next().unwrap_or(p).to_string();
     let mut out = String::with_capacity(command.len());
@@ -218,6 +224,11 @@ fn expand(command: &str, root: &str, file: Option<&str>) -> String {
             "fileExtname" => file.map(|f| name(f).rsplit_once('.').map_or(String::new(), |(_, e)| format!(".{e}"))),
             "fileDirname" => file.map(|f| f.rsplit_once('/').map_or(String::new(), |(d, _)| d.to_string())),
             "relativeFile" => file.map(|f| f.strip_prefix(&format!("{root}/")).unwrap_or(f).to_string()),
+            v if v.starts_with("workspaceFolder:") || v.starts_with("workspaceFolderBasename:") => {
+                let (kind, wanted) = v.split_once(':').unwrap_or((v, ""));
+                let path = folders.iter().find(|(n, _)| n == wanted).map(|(_, p)| p.trim_end_matches('/'));
+                path.map(|p| if kind == "workspaceFolder" { p.to_string() } else { name(p) })
+            }
             v => v.strip_prefix("env:").map(|n| std::env::var(n).unwrap_or_default()),
         };
         match value {

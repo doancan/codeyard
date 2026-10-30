@@ -22,6 +22,7 @@ const _: () = {
         SCM_REPO,
         EXT_VIEW_NODE,
         INSPECTOR_LINE,
+        super::scm_access::ext::SCM_EXT,
         super::problems_access::PAGE_ROW,
         super::problems_access::PROBLEM_ROW,
         super::problems_access::DEBUG_ROW,

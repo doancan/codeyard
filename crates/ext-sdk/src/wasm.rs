@@ -24,6 +24,10 @@ pub use wit_bindgen;
 use bindings::codeyard::api as w;
 use bindings::exports::codeyard::api::guest as g;
 
+#[path = "wasm_scm.rs"]
+mod scm;
+pub(crate) use scm::scm_refresh;
+
 /// The exports for extension `E`; `export!` names it.
 #[doc(hidden)]
 pub struct Glue<E>(std::marker::PhantomData<E>);
@@ -475,7 +479,31 @@ impl From<w::host_requests::Request> for Request {
             R::Timer(id) => Request::Timer(id),
             R::CancelProgress(id) => Request::CancelProgress(id),
             R::OpenUri(u) => Request::OpenUri(u),
+            R::Hover((document, position)) => Request::Hover { document: document.into(), position: position.into() },
+            R::Completion((document, position, trigger)) => Request::Completion { document: document.into(), position: position.into(), trigger },
+            R::CodeLens((document, range)) => Request::CodeLens { document: document.into(), range: range.into() },
+            R::ResolveCodeLens((document, lens)) => Request::ResolveCodeLens { document: document.into(), lens: lens.into() },
+            R::InlayHints((document, range)) => Request::InlayHints { document: document.into(), range: range.into() },
+            R::ScmStatus((provider, root)) => Request::ScmStatus { provider, root },
+            R::ScmOriginal((provider, uri)) => Request::ScmOriginal { provider, uri },
+            R::ScmValidate((provider, root, value)) => Request::ScmValidate { provider, root, value },
+            R::PullRequests(q) => Request::PullRequests(crate::pulls::wasm::query(q)),
         }
+    }
+}
+
+impl From<w::responses::CodeLens> for CodeLens {
+    fn from(l: w::responses::CodeLens) -> Self {
+        let command =
+            l.command.map(|c| LensCommand { title: c.title, command: c.command, args: serde_json::from_str(&c.args_json).unwrap_or(serde_json::Value::Null) });
+        CodeLens { id: l.id, range: l.range.into(), command }
+    }
+}
+
+impl From<CodeLens> for w::responses::CodeLens {
+    fn from(l: CodeLens) -> Self {
+        let command = l.command.map(|c| w::responses::LensCommand { title: c.title, command: c.command, args_json: c.args.to_string() });
+        w::responses::CodeLens { id: l.id, range: l.range.into(), command }
     }
 }
 
@@ -499,6 +527,63 @@ impl From<Response> for w::responses::Response {
                     })
                     .collect(),
             ),
+            Response::Hover(h) => R::Hover(h.map(|h| w::responses::Hover { contents: h.contents, range: h.range.map(Into::into) })),
+            Response::Completions(l) => R::Completions(completion_list(l)),
+            Response::CodeLenses(l) => R::CodeLenses(l.into_iter().map(Into::into).collect()),
+            Response::InlayHints(h) => {
+                R::InlayHints(h.into_iter().map(|h| w::responses::InlayHint { position: h.position.into(), label: h.label, tooltip: h.tooltip }).collect())
+            }
+            Response::Scm(s) => R::Scm(s.into()),
+            Response::Text(t) => R::Text(t),
+            Response::PullRequests(a) => R::PullRequests(crate::pulls::wasm::answer(a)),
         }
     }
+}
+
+fn completion_list(l: CompletionList) -> w::responses::CompletionList {
+    use w::responses::CompletionKind as K;
+    let kind = |k: CompletionKind| match k {
+        CompletionKind::Text => K::Text,
+        CompletionKind::Method => K::Method,
+        CompletionKind::Function => K::Function,
+        CompletionKind::Constructor => K::Constructor,
+        CompletionKind::Field => K::Field,
+        CompletionKind::Variable => K::Variable,
+        CompletionKind::Class => K::Class,
+        CompletionKind::Interface => K::Interface,
+        CompletionKind::Module => K::Module,
+        CompletionKind::Property => K::Property,
+        CompletionKind::Unit => K::Unit,
+        CompletionKind::Value => K::Value,
+        CompletionKind::Enum => K::Enum,
+        CompletionKind::Keyword => K::Keyword,
+        CompletionKind::Snippet => K::Snippet,
+        CompletionKind::Color => K::Color,
+        CompletionKind::File => K::File,
+        CompletionKind::Reference => K::Reference,
+        CompletionKind::Folder => K::Folder,
+        CompletionKind::EnumMember => K::EnumMember,
+        CompletionKind::Constant => K::Constant,
+        CompletionKind::Struct => K::Struct,
+        CompletionKind::Event => K::Event,
+        CompletionKind::Operator => K::Operator,
+        CompletionKind::TypeParameter => K::TypeParameter,
+    };
+    let items = l
+        .items
+        .into_iter()
+        .map(|i| w::responses::CompletionItem {
+            label: i.label,
+            kind: kind(i.kind),
+            detail: i.detail,
+            documentation: i.documentation,
+            insert_text: i.insert_text,
+            snippet: i.snippet,
+            range: i.range.map(Into::into),
+            additional_edits: i.additional_edits.into_iter().map(Into::into).collect(),
+            filter_text: i.filter_text,
+            sort_text: i.sort_text,
+        })
+        .collect();
+    w::responses::CompletionList { items, incomplete: l.incomplete }
 }

@@ -5,6 +5,8 @@ use ext_api::value as v;
 use crate::bindings::codeyard::api as g;
 use crate::bindings::exports::codeyard::api::guest as gx;
 
+mod pulls;
+
 // --- guest → app
 
 impl From<g::types::Position> for v::Position {
@@ -183,11 +185,76 @@ impl From<g::responses::Response> for v::Response {
             ),
             R::Tasks(t) => v::Response::Tasks(t.into_iter().map(|t| v::Task { id: t.id, label: t.label, detail: t.detail, group: t.group }).collect()),
             R::Ranges(r) => v::Response::Ranges(r.into_iter().map(Into::into).collect()),
+            R::Hover(h) => v::Response::Hover(h.map(|h| v::Hover { contents: h.contents, range: h.range.map(Into::into) })),
+            R::Completions(l) => v::Response::Completions(completion_list(l)),
+            R::CodeLenses(l) => v::Response::CodeLenses(l.into_iter().map(Into::into).collect()),
+            R::InlayHints(h) => {
+                v::Response::InlayHints(h.into_iter().map(|h| v::InlayHint { position: h.position.into(), label: h.label, tooltip: h.tooltip }).collect())
+            }
+            R::Scm(s) => v::Response::Scm(s.into()),
+            R::Text(t) => v::Response::Text(t),
+            R::PullRequests(a) => v::Response::PullRequests(a.into()),
         }
     }
 }
 
+impl From<g::scm::ScmAction> for v::ScmAction {
+    fn from(a: g::scm::ScmAction) -> Self {
+        v::ScmAction { command: a.command, title: a.title, icon: a.icon }
+    }
+}
+
+impl From<g::scm::ScmState> for v::ScmState {
+    fn from(s: g::scm::ScmState) -> Self {
+        use g::scm::FileState as F;
+        let resource = |r: g::scm::ScmResource| v::ScmResource {
+            uri: r.uri,
+            state: match r.state {
+                F::Modified => v::FileState::Modified,
+                F::Added => v::FileState::Added,
+                F::Deleted => v::FileState::Deleted,
+                F::Renamed => v::FileState::Renamed,
+                F::Untracked => v::FileState::Untracked,
+                F::Ignored => v::FileState::Ignored,
+                F::Conflicted => v::FileState::Conflicted,
+            },
+            detail: r.detail,
+        };
+        let actions = |a: Vec<g::scm::ScmAction>| a.into_iter().map(Into::into).collect();
+        v::ScmState {
+            head: s.head,
+            input: v::ScmInput { placeholder: s.input.placeholder, value: s.input.value, accept: s.input.accept.map(Into::into) },
+            groups: s
+                .groups
+                .into_iter()
+                .map(|g| v::ScmGroup {
+                    id: g.id,
+                    label: g.label,
+                    resources: g.resources.into_iter().map(resource).collect(),
+                    resource_actions: actions(g.resource_actions),
+                    group_actions: actions(g.group_actions),
+                    hide_when_empty: g.hide_when_empty,
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<g::responses::CodeLens> for v::CodeLens {
+    fn from(l: g::responses::CodeLens) -> Self {
+        let command = l.command.map(|c| v::LensCommand { title: c.title, command: c.command, args_json: c.args_json });
+        v::CodeLens { id: l.id, range: l.range.into(), command }
+    }
+}
+
 // --- app → guest
+
+impl From<v::CodeLens> for g::responses::CodeLens {
+    fn from(l: v::CodeLens) -> Self {
+        let command = l.command.map(|c| g::responses::LensCommand { title: c.title, command: c.command, args_json: c.args_json });
+        g::responses::CodeLens { id: l.id, range: l.range.into(), command }
+    }
+}
 
 impl From<v::Position> for g::types::Position {
     fn from(p: v::Position) -> Self {
@@ -307,6 +374,15 @@ impl From<v::Request> for g::host_requests::Request {
             v::Request::Timer { id } => R::Timer(id),
             v::Request::CancelProgress { id } => R::CancelProgress(id),
             v::Request::OpenUri { uri } => R::OpenUri(uri),
+            v::Request::Hover { document, position } => R::Hover((document.into(), position.into())),
+            v::Request::Completion { document, position, trigger } => R::Completion((document.into(), position.into(), trigger)),
+            v::Request::CodeLens { document, range } => R::CodeLens((document.into(), range.into())),
+            v::Request::ResolveCodeLens { document, lens } => R::ResolveCodeLens((document.into(), lens.into())),
+            v::Request::InlayHints { document, range } => R::InlayHints((document.into(), range.into())),
+            v::Request::ScmStatus { provider, root } => R::ScmStatus((provider, root)),
+            v::Request::ScmOriginal { provider, uri } => R::ScmOriginal((provider, uri)),
+            v::Request::ScmValidate { provider, root, value } => R::ScmValidate((provider, root, value)),
+            v::Request::PullRequests { query } => R::PullRequests(query.into()),
         }
     }
 }
@@ -335,4 +411,53 @@ pub fn environment(e: &v::EnvInfo) -> g::env::Environment {
 
 pub fn activation(reason: &str) -> gx::Activation {
     gx::Activation { reason: reason.to_string() }
+}
+
+/// `responses.completion-list`, guest → app.
+fn completion_list(l: g::responses::CompletionList) -> v::CompletionList {
+    use g::responses::CompletionKind as K;
+    let kind = |k: K| match k {
+        K::Text => v::CompletionKind::Text,
+        K::Method => v::CompletionKind::Method,
+        K::Function => v::CompletionKind::Function,
+        K::Constructor => v::CompletionKind::Constructor,
+        K::Field => v::CompletionKind::Field,
+        K::Variable => v::CompletionKind::Variable,
+        K::Class => v::CompletionKind::Class,
+        K::Interface => v::CompletionKind::Interface,
+        K::Module => v::CompletionKind::Module,
+        K::Property => v::CompletionKind::Property,
+        K::Unit => v::CompletionKind::Unit,
+        K::Value => v::CompletionKind::Value,
+        K::Enum => v::CompletionKind::Enum,
+        K::Keyword => v::CompletionKind::Keyword,
+        K::Snippet => v::CompletionKind::Snippet,
+        K::Color => v::CompletionKind::Color,
+        K::File => v::CompletionKind::File,
+        K::Reference => v::CompletionKind::Reference,
+        K::Folder => v::CompletionKind::Folder,
+        K::EnumMember => v::CompletionKind::EnumMember,
+        K::Constant => v::CompletionKind::Constant,
+        K::Struct => v::CompletionKind::Struct,
+        K::Event => v::CompletionKind::Event,
+        K::Operator => v::CompletionKind::Operator,
+        K::TypeParameter => v::CompletionKind::TypeParameter,
+    };
+    let items = l
+        .items
+        .into_iter()
+        .map(|i| v::CompletionItem {
+            label: i.label,
+            kind: kind(i.kind),
+            detail: i.detail,
+            documentation: i.documentation,
+            insert_text: i.insert_text,
+            snippet: i.snippet,
+            range: i.range.map(Into::into),
+            additional_edits: i.additional_edits.into_iter().map(Into::into).collect(),
+            filter_text: i.filter_text,
+            sort_text: i.sort_text,
+        })
+        .collect();
+    v::CompletionList { items, incomplete: l.incomplete }
 }

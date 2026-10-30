@@ -1185,8 +1185,13 @@ while True:
             event('output', {'category': 'stdout', 'output': 'hello from the program\n'})
             src = launch['arguments'].get('source')
             lines = bps.get(src, [])
-            cur = lines[0] if lines else 3
-            stop('breakpoint')
+            if launch['arguments'].get('stopOnEntry'):
+                # As lldb-dap does: the stop on entry is reported as an exception "signal SIGSTOP".
+                cur = 1
+                event('stopped', {'reason': 'exception', 'description': 'signal SIGSTOP', 'threadId': 1, 'allThreadsStopped': True})
+            else:
+                cur = lines[0] if lines else 3
+                stop('breakpoint')
     elif cmd == 'setExceptionBreakpoints':
         ok(m, {})
     elif cmd == 'dataBreakpointInfo':

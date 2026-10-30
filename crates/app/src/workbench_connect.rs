@@ -437,16 +437,32 @@ impl Workbench {
 
     /// Trust the folder: stored permanently, project settings (terminal.shell, lsp.servers) are reapplied.
     pub(super) fn trust_root(&mut self, root: &str, window: &mut Window, cx: &mut Context<Self>) {
-        self.cfg.trusted.insert(self.trust_key(root));
-        if let Some(s) = &self.persist.state {
-            let _ = s.set(&self.trust_key(root), "1");
+        self.trust_roots(&[root.to_string()], ui::file_name(root), window, cx);
+    }
+
+    /// Trust several folders in one step (a workspace: its file's folder and its folders), named `name` in the notice.
+    fn trust_roots(&mut self, roots: &[String], name: &str, window: &mut Window, cx: &mut Context<Self>) {
+        for root in roots {
+            self.cfg.trusted.insert(self.trust_key(root));
+            if let Some(s) = &self.persist.state {
+                let _ = s.set(&self.trust_key(root), "1");
+            }
+            // Start the language servers held back by the missing trust.
+            self.lsp.restricted_notified.remove(root);
         }
         self.reload_config(window, cx);
-        // Start the language servers held back by the missing trust.
-        self.lsp.restricted_notified.remove(root);
         self.restart_lsp(cx);
-        self.notice = Some(Notice::Info(crate::i18n::tf("Trusted “{}”", &[&ui::file_name(root)]).into()));
+        self.notice = Some(Notice::Info(crate::i18n::tf("Trusted “{}”", &[&name]).into()));
         cx.notify();
+    }
+
+    /// What answering yes about `root` trusts: the whole open workspace when `root` is its file's folder or one of its
+    /// folders, otherwise that folder alone.
+    fn trust_scope(&self, root: &str) -> (Option<String>, Vec<String>) {
+        match self.workspace_trust_scope().filter(|(_, dirs)| dirs.iter().any(|d| d == root)) {
+            Some((name, dirs)) => (Some(name), dirs),
+            None => (None, vec![root.to_string()]),
+        }
     }
 
     /// Before an action that runs commands in an untrusted folder (task, test, debug):
@@ -472,21 +488,33 @@ impl Workbench {
         then: impl FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
     ) {
         let Some(root) = root.filter(|r| !self.is_trusted_root(r, cx)) else { return then(self, window, cx) };
-        let detail = crate::i18n::tf(
-            "“{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.",
-            &[&ui::file_name(&root)],
-        );
-        let answer = window.prompt(
-            PromptLevel::Warning,
-            crate::i18n::t("Do you trust the authors of this folder?"),
-            Some(&detail),
-            &[crate::i18n::t("Trust Folder and Continue"), crate::i18n::t("Cancel")],
-            cx,
-        );
+        // A folder of the open workspace is asked about as the workspace, once for all of its folders.
+        let (workspace, roots) = self.trust_scope(&root);
+        let (title, detail, button, name) = match workspace {
+            Some(name) => (
+                crate::i18n::t("Do you trust the authors of this workspace?"),
+                crate::i18n::tf(
+                    "“{}” and its folders can run programs through their tasks, debug configurations and project settings. Only continue if you trust where this workspace came from.",
+                    &[&name],
+                ),
+                crate::i18n::t("Trust Workspace and Continue"),
+                name,
+            ),
+            None => (
+                crate::i18n::t("Do you trust the authors of this folder?"),
+                crate::i18n::tf(
+                    "“{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.",
+                    &[&ui::file_name(&root)],
+                ),
+                crate::i18n::t("Trust Folder and Continue"),
+                ui::file_name(&root).to_string(),
+            ),
+        };
+        let answer = window.prompt(PromptLevel::Warning, title, Some(&detail), &[button, crate::i18n::t("Cancel")], cx);
         cx.spawn_in(window, async move |this, cx| {
             if answer.await == Ok(0) {
                 this.update_in(cx, |this, window, cx| {
-                    this.trust_root(&root, window, cx);
+                    this.trust_roots(&roots, &name, window, cx);
                     then(this, window, cx);
                 })
                 .ok();
@@ -495,8 +523,16 @@ impl Workbench {
         .detach();
     }
 
-    /// "Workspace: Trust This Folder": trust without asking (opened from here when settings blocked it).
+    /// "Workspace: Trust This Folder": trust without asking (opened from here when settings blocked it). With a
+    /// workspace file open it trusts the workspace: the file's folder and every folder it lists (and the active folder,
+    /// should the file not list it).
     pub(super) fn trust_this_folder(&mut self, _: &TrustWorkspace, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some((name, mut roots)) = self.workspace_trust_scope() {
+            if let Some(root) = self.active_root(cx).filter(|r| !roots.contains(r)) {
+                roots.push(root);
+            }
+            return self.trust_roots(&roots, &name, window, cx);
+        }
         match self.active_root(cx) {
             Some(root) => self.trust_root(&root, window, cx),
             None => {

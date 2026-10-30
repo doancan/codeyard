@@ -73,19 +73,28 @@ mod ext_core_commands_tests;
 #[cfg(test)]
 mod ext_dev_tests;
 mod ext_fetch;
+#[cfg(test)]
+mod ext_hover_tests;
 mod ext_inspector;
 #[cfg(test)]
 mod ext_inspector_ui_tests;
+#[cfg(test)]
+mod ext_lenses_tests;
 mod ext_memory;
 mod ext_prompts;
 #[cfg(test)]
 mod ext_prompts_ui_tests;
 #[cfg(test)]
 mod ext_providers_tests;
+mod ext_pulls;
+#[cfg(test)]
+mod ext_pulls_ui_tests;
 mod ext_registry;
 #[cfg(test)]
 mod ext_registry_tests;
 mod ext_runtime;
+#[cfg(test)]
+mod ext_scm_tests;
 #[cfg(test)]
 mod ext_tests;
 mod ext_updates;

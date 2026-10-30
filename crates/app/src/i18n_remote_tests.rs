@@ -145,8 +145,8 @@ fn schema_trash_and_vscode_texts() {
     let e = crate::trash::move_to_trash(std::path::Path::new("/")).unwrap_err();
     assert_eq!(e.to_string(), "dosya adı yok");
     assert_eq!(
-        tf("Imported {0} settings and {1} shortcuts from VS Code ({2} settings and {3} shortcuts have no equivalent here)", &[&4, &2, &1, &0]),
-        "VS Code'dan 4 ayar ve 2 kısayol içe aktarıldı (1 ayarın ve 0 kısayolun burada karşılığı yok)"
+        tf("Imported {0} settings and {1} shortcuts ({2} settings and {3} shortcuts have no equivalent here)", &[&4, &2, &1, &0]),
+        "4 ayar ve 2 kısayol içe aktarıldı (1 ayarın ve 0 kısayolun burada karşılığı yok)"
     );
     let c = crate::vscode::convert_settings("{ \"workbench.colorTheme\": \"Monokai\" }", &[]);
     assert!(

@@ -188,6 +188,7 @@ impl Render for Workbench {
         self.sync_manage_menu(window, cx);
         self.track_notice(cx);
         self.sync_watches(cx);
+        self.sync_ext_scm(window, cx);
         self.sync_slots(cx);
         self.sync_timeline(cx);
         self.sync_outline(cx);
@@ -196,6 +197,11 @@ impl Render for Workbench {
         let remote = self.remote.host.is_remote();
         let project = self.root(cx).map(std::path::PathBuf::from);
         self.chrome.resources.update(cx, |monitor, cx| monitor.set_project(project, remote, cx));
+        // Whatever had the keyboard went away (a tab closed with the old folder when a workspace opened, for one): the
+        // keyboard stays in the window, or no shortcut works until something is clicked.
+        if window.focused(cx).is_none() {
+            window.focus(&self.focus_handle);
+        }
         if let Some(ws) = self.persist.pending_restore.take() {
             self.restore_tabs(ws, window, cx);
             // A terminal asked for before the restore started, when no restore of the panel followed after all.

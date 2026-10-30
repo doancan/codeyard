@@ -182,6 +182,32 @@ test("timers fire on the virtual clock; views draw and handle events", async () 
   h.dispose();
 });
 
+test("hover and completion answer for a position", async () => {
+  const h = host();
+  await h.activate({
+    activate(ctx) {
+      ctx.hover(async (_ctx, doc, pos) => {
+        const line = doc.text.split("\n")[pos.line] ?? "";
+        return line.includes("TODO") ? { contents: `**TODO** on line ${pos.line + 1}` } : undefined;
+      });
+      ctx.completion(async (_ctx, _doc, _pos, trigger) =>
+        trigger === "." ? { items: [{ label: "len", kind: "method", insertText: "len()$0", snippet: true }], incomplete: true } : [{ label: "todo" }],
+      );
+    },
+  });
+  const doc = { uri: "file:///work/a.ts", language: "typescript", version: 1, text: "let a = 1;\n// TODO\n" };
+  assert.deepEqual(await h.hover(doc, { line: 1, character: 3 }), { contents: "**TODO** on line 2" });
+  assert.equal(await h.hover(doc, { line: 0, character: 3 }), undefined);
+  assert.deepEqual(await h.completion(doc, { line: 0, character: 0 }), {
+    items: [{ label: "todo", kind: "text", snippet: false, additionalEdits: [] }],
+    incomplete: false,
+  });
+  const dot = await h.completion(doc, { line: 0, character: 0 }, ".");
+  assert.equal(dot.incomplete, true);
+  assert.deepEqual(dot.items[0], { label: "len", kind: "method", insertText: "len()$0", snippet: true, additionalEdits: [] });
+  h.dispose();
+});
+
 test("files, processes and progress go through the permissions", async () => {
   const h = host();
   h.file("apps/vercel.json", '{"a":1}');
@@ -203,6 +229,42 @@ test("files, processes and progress go through the permissions", async () => {
   assert.deepEqual(
     h.denied().map((d) => d.permission),
     ['read = [".env"]', 'run = ["rm"]'],
+  );
+  h.dispose();
+});
+
+test("code lenses run their command with their arguments; hints cover the range asked", async () => {
+  const h = host();
+  const lines = (text: string, from: number, to: number) => text.split("\n").map((l, n) => [n, l] as const).slice(from, to);
+  await h.activate({
+    activate(ctx) {
+      ctx.command("echo", (_ctx, args) => args);
+      ctx.codeLenses((_ctx, doc, range) => [
+        ...lines(doc.text, range.start.line, range.end.line)
+          .filter(([, l]) => l.startsWith("fn "))
+          .map(([n]) => ({ range: { start: { line: n, character: 0 }, end: { line: n, character: 0 } }, command: { title: "Run", command: "echo", args: { line: n } } })),
+        { id: "later", range: range },
+      ]);
+      ctx.resolveCodeLens((_ctx, _doc, lens) => ({ ...lens, command: { title: `Resolved ${lens.id}`, command: "echo", args: lens.id } }));
+      ctx.inlayHints((_ctx, doc, range) =>
+        lines(doc.text, range.start.line, range.end.line).map(([n, l]) => ({ position: { line: n, character: l.length }, label: `${l.length} chars` })),
+      );
+    },
+  });
+  const doc = { uri: "file:///work/a.rs", language: "rust", version: 1, text: "fn a() {}\nlet x = 1;\nfn b() {}\n" };
+  const range = (from: number, to: number) => ({ start: { line: from, character: 0 }, end: { line: to, character: 0 } });
+  const lenses = await h.codeLenses(doc, range(1, 3));
+  assert.equal(lenses.length, 2, "only the lines asked for");
+  assert.equal(lenses[0]!.range.start.line, 2);
+  assert.deepEqual(await h.clickCodeLens(lenses[0]!), { line: 2 }, "the command runs with the lens's arguments");
+  await assert.rejects(h.clickCodeLens(lenses[1]!), /resolve it first/);
+  const resolved = await h.resolveCodeLens(doc, lenses[1]!);
+  assert.equal(resolved.command?.title, "Resolved later");
+  assert.equal(await h.clickCodeLens(resolved), "later");
+  const hints = await h.inlayHints(doc, range(0, 2));
+  assert.deepEqual(
+    hints.map((x) => x.label),
+    ["9 chars", "10 chars"],
   );
   h.dispose();
 });
@@ -257,4 +319,151 @@ test("the manifest reader", () => {
   assert.equal(((m.commands as unknown[])[0] as Record<string, unknown>).id, "a");
   assert.deepEqual(parseToml('a = { b = [1, 2,], c = "\\u00e9" }\n'), { a: { b: [1, 2], c: "é" } });
   assert.ok(globMatch("**/*.json", "apps/vercel.json") && globMatch("*.json", "a/b.json") && !globMatch("src/*.ts", "src/a/b.ts"));
+});
+
+test("a pull request provider answers every query through the signed fetch", async () => {
+  const h = new MockHost({
+    manifest: `
+[extension]
+id = "you.gitea"
+version = "0.1.0"
+name = "Gitea"
+license = "MIT"
+
+[code]
+entry = "src/extension.ts"
+
+[permissions]
+auth = ["gitea"]
+
+[[pull-requests]]
+id    = "gitea"
+label = "Gitea"
+hosts = ["codeberg.org"]
+auth  = "gitea"
+`,
+  });
+  const api = "https://codeberg.org/api/v1/repos/ada/app";
+  h.http("GET", `${api}/pulls?state=open`, 200, [
+    { number: 7, title: "Fix it", user: { login: "ada" }, draft: true, head: { ref: "fix" }, base: { ref: "main" }, updated_at: "2026-01-02T00:00:00Z", html_url: "https://codeberg.org/ada/app/pulls/7" },
+  ]);
+  h.http("POST", `${api}/issues/7/comments`, 201, {});
+  const comments: string[] = [];
+  await h.activate({
+    activate(ctx: Context) {
+      ctx.pullRequests("gitea", {
+        async list(ctx, remote) {
+          const r = await ctx.fetchAs(remote.account!, `https://${remote.host}/api/v1/repos/${remote.path}/pulls?state=open`);
+          const pulls = (await r.json()) as any[];
+          return pulls.map((p) => ({
+            id: String(p.number),
+            reference: `#${p.number}`,
+            title: p.title,
+            author: p.user.login,
+            state: p.draft ? "draft" : "open",
+            sourceBranch: p.head.ref,
+            targetBranch: p.base.ref,
+            updated: Date.parse(p.updated_at),
+            url: p.html_url,
+          }));
+        },
+        details: (_ctx, _remote, id) => ({
+          summary: { id, reference: `#${id}`, title: "Fix it", author: "ada", state: "open", sourceBranch: "fix", targetBranch: "main" },
+          description: "It **was** broken.",
+          checks: [{ name: "ci", state: "success" }],
+        }),
+        files: () => [
+          { path: "src/a.ts", status: "modified" },
+          { path: "src/b.ts", oldPath: "src/old.ts", status: "renamed" },
+        ],
+        contents: (_ctx, _remote, _id, file) => (file.status === "added" ? { head: "new\n" } : { base: "old\n", head: "new\n" }),
+        comments: () => [{ author: "bob", body: "Looks good", created: 1000, path: "src/a.ts", line: 3 }],
+        async addComment(ctx, remote, id, body) {
+          await ctx.fetchAs(remote.account!, `https://${remote.host}/api/v1/repos/${remote.path}/issues/${id}/comments`, { method: "POST", body: JSON.stringify({ body }) });
+          comments.push(body);
+        },
+        checkout: (_ctx, _remote, id) => ({ ref: `refs/pull/${id}/head`, branch: `pr-${id}` }),
+      });
+    },
+  });
+  const remote = { provider: "gitea", name: "origin", url: "git@codeberg.org:ada/app.git", host: "codeberg.org", path: "ada/app", account: "gitea" };
+
+  assert.deepEqual(await h.listPullRequests(remote), [
+    { id: "7", reference: "#7", title: "Fix it", author: "ada", state: "draft", sourceBranch: "fix", targetBranch: "main", updated: Date.parse("2026-01-02T00:00:00Z"), url: "https://codeberg.org/ada/app/pulls/7" },
+  ]);
+  // The host signs the request; the SDK adds no authorization header of its own.
+  const [listed] = h.fetched();
+  assert.equal(listed?.auth, "gitea");
+  assert.ok(!listed?.headers.some(([k]) => k.toLowerCase() === "authorization"));
+
+  // The raw answer is WIT: u64 as BigInt.
+  const raw = await h.pullRequests({ tag: "list", remote });
+  assert.equal(raw.tag === "list" && raw.val[0]?.updated, BigInt(Date.parse("2026-01-02T00:00:00Z")));
+
+  assert.deepEqual(await h.pullRequestDetails(remote, "7"), {
+    summary: { id: "7", reference: "#7", title: "Fix it", author: "ada", state: "open", sourceBranch: "fix", targetBranch: "main", updated: 0 },
+    description: "It **was** broken.",
+    checks: [{ name: "ci", state: "success" }],
+    labels: [],
+  });
+  assert.deepEqual(await h.pullRequestFiles(remote, "7"), [
+    { path: "src/a.ts", status: "modified" },
+    { path: "src/b.ts", oldPath: "src/old.ts", status: "renamed" },
+  ]);
+  assert.deepEqual(await h.pullRequestContents(remote, "7", { path: "src/c.ts", status: "added" }), { head: "new\n" });
+  assert.deepEqual(await h.pullRequestContents(remote, "7", { path: "src/a.ts", status: "modified" }), { base: "old\n", head: "new\n" });
+  assert.deepEqual(await h.pullRequestComments(remote, "7"), [{ author: "bob", body: "Looks good", created: 1000, path: "src/a.ts", line: 3 }]);
+  await h.addPullRequestComment(remote, "7", "Thanks!");
+  assert.deepEqual(comments, ["Thanks!"]);
+  assert.deepEqual(
+    h.fetched().map((f) => [f.method, f.url, f.body, f.auth]),
+    [
+      ["GET", `${api}/pulls?state=open`, "", "gitea"],
+      ["GET", `${api}/pulls?state=open`, "", "gitea"],
+      ["POST", `${api}/issues/7/comments`, '{"body":"Thanks!"}', "gitea"],
+    ],
+  );
+  assert.deepEqual(await h.checkoutPullRequest(remote, "7"), { ref: "refs/pull/7/head", branch: "pr-7" });
+
+  // A provider id nothing registered.
+  await assert.rejects(
+    h.listPullRequests({ ...remote, provider: "gitlab" }),
+    (e: unknown) =>
+      e instanceof CodeyardError && e.kind === "not-found" && e.message.includes(`no pull request provider 'gitlab' is registered; call ctx.pullRequests("gitlab", …) in activate`),
+  );
+  assert.deepEqual(h.denied(), []);
+  h.dispose();
+});
+
+test("a pull request provider without its optional handlers", async () => {
+  const h = MockHost.allowAll();
+  await h.activate({
+    activate(ctx: Context) {
+      ctx.pullRequests("bare", {
+        list: () => [],
+        details: () => ({ summary: { id: "1", reference: "!1", title: "T", author: "a", state: "merged", sourceBranch: "x", targetBranch: "main" }, description: "" }),
+        files: () => [],
+        contents: () => ({}),
+      });
+    },
+  });
+  const remote = { provider: "bare", name: "origin", url: "https://git.example.com/a/b.git", host: "git.example.com", path: "a/b" };
+  assert.deepEqual(await h.listPullRequests(remote), []);
+  assert.deepEqual(await h.pullRequestContents(remote, "1", { path: "a", status: "deleted" }), {});
+  assert.deepEqual(await h.pullRequestComments(remote, "1"), []);
+  await assert.rejects(h.addPullRequestComment(remote, "1", "hi"), (e: unknown) => e instanceof CodeyardError && e.kind === "invalid" && /'bare' does not take comments/.test(e.message));
+  await assert.rejects(h.checkoutPullRequest(remote, "1"), (e: unknown) => e instanceof CodeyardError && e.kind === "invalid" && /'bare' has no checkout handler/.test(e.message));
+  h.dispose();
+
+  // The required handlers are checked when the provider is registered.
+  const h2 = MockHost.allowAll();
+  await assert.rejects(
+    h2.activate({
+      activate(ctx: Context) {
+        ctx.pullRequests("half", { list: () => [] } as never);
+      },
+    }),
+    /the pull request provider 'half' needs a details\(ctx, …\) handler/,
+  );
+  h2.dispose();
 });

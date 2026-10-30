@@ -699,3 +699,62 @@ fn providers_declare_languages_and_start_the_extension_for_them() {
     assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[diagnostics]]\nid = \"Bad\"\nlanguages = [\"rust\"]\n")), vec![Code::BadContribution]);
     assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[formatters]]\nlanguage = \"toml\"\n")), vec![Code::Syntax]);
 }
+
+#[test]
+fn hover_and_completion_declare_languages_and_trigger_characters() {
+    let m = parse(&with(
+        "[code]\nentry = \"Cargo.toml\"\n[[hover]]\nlanguages = [\"toml\"]\n[[completion]]\nlanguages = [\"toml\", \"rust\"]\ntrigger-characters = [\".\", \":\", \".\"]\n",
+    ))
+    .unwrap();
+    let c = &m.contributions;
+    assert!(c.hover[0].handles("toml") && !c.hover[0].handles("rust"));
+    assert!(c.completion[0].handles("rust"));
+    assert_eq!(c.completion[0].trigger_characters, ['.', ':'], "a character named twice counts once");
+    assert_eq!(m.activation, [Activation::Language("toml".into()), Activation::Language("rust".into())]);
+    // Without trigger characters, typing a word or asking still works.
+    let m = parse(&with("[code]\nentry = \"Cargo.toml\"\n[[completion]]\nlanguages = [\"toml\"]\n")).unwrap();
+    assert!(m.contributions.completion[0].trigger_characters.is_empty());
+    assert_eq!(codes(&with("[[hover]]\nlanguages = [\"toml\"]\n")), vec![Code::NeedsCode]);
+    assert_eq!(codes(&with("[[completion]]\nlanguages = [\"toml\"]\n")), vec![Code::NeedsCode]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[hover]]\nlanguages = []\n")), vec![Code::BadContribution, Code::NeverActivates]);
+    for bad in ["\"ab\"", "\"a\"", "\" \"", "\"\"", "\"_\"", "\"\\u202e\""] {
+        let toml = format!("[code]\nentry = \"Cargo.toml\"\n[[completion]]\nlanguages = [\"toml\"]\ntrigger-characters = [{bad}]\n");
+        assert_eq!(codes(&with(&toml)), vec![Code::BadContribution], "{bad}");
+    }
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[completion]]\nlanguages = [\"toml\"]\ntrigger = [\".\"]\n")), vec![Code::Syntax]);
+}
+
+#[test]
+fn code_lenses_and_inlay_hints_declare_languages_and_start_the_extension_for_them() {
+    let m = parse(&with("[code]\nentry = \"Cargo.toml\"\n[[code-lens]]\nlanguages = [\"rust\"]\n[[inlay-hints]]\nlanguages = [\"toml\", \"rust\"]\n")).unwrap();
+    let c = &m.contributions;
+    assert!(c.code_lenses[0].handles("rust") && !c.code_lenses[0].handles("toml"));
+    assert_eq!(c.inlay_hints[0].languages, ["toml", "rust"]);
+    assert!(c.needs_code());
+    assert_eq!(m.activation, [Activation::Language("rust".into()), Activation::Language("toml".into())]);
+    assert_eq!(codes(&with("[[code-lens]]\nlanguages = [\"rust\"]\n")), vec![Code::NeedsCode]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[inlay-hints]]\nlanguages = []\n")), vec![Code::BadContribution, Code::NeverActivates]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[code-lens]]\nlanguages = [\"rust\", \"C++\"]\n")), vec![Code::BadContribution]);
+    assert_eq!(codes(&with("[code]\nentry = \"Cargo.toml\"\n[[code-lens]]\nlanguage = \"rust\"\n")), vec![Code::Syntax]);
+}
+
+#[test]
+fn scm_providers_claim_folders_by_marker_and_start_the_extension_there() {
+    let code = "[code]\nentry = \"Cargo.toml\"\n";
+    let m = parse(&with(&format!("{code}[[scm]]\nid = \"hg\"\nlabel = \"Mercurial\"\nmarkers = [\".hg\", \".hg\", \".hg/store\"]\n"))).unwrap();
+    let s = &m.contributions.scm[0];
+    assert_eq!((s.id.as_str(), s.label.as_str()), ("a.b.hg", "Mercurial"));
+    assert_eq!(s.markers, [".hg", ".hg/store"], "a marker named twice counts once");
+    assert_eq!(m.activation, [Activation::Scm("a.b.hg".into())]);
+    assert!(m.contributions.needs_code());
+    assert_eq!(codes(&with("[[scm]]\nid = \"hg\"\nlabel = \"Mercurial\"\nmarkers = [\".hg\"]\n")), vec![Code::NeedsCode]);
+    assert_eq!(codes(&with(&format!("{code}[[scm]]\nid = \"hg\"\nlabel = \"Mercurial\"\nmarkers = []\n"))), vec![Code::BadContribution]);
+    for bad in ["*.hg", "../.hg", "/repo/.hg", ".hg/"] {
+        let text = with(&format!("{code}[[scm]]\nid = \"hg\"\nlabel = \"Mercurial\"\nmarkers = [\"{bad}\"]\n"));
+        assert_eq!(codes(&text), vec![Code::BadPath], "{bad}");
+    }
+    let twice = format!("{code}[[scm]]\nid = \"hg\"\nlabel = \"A\"\nmarkers = [\".hg\"]\n[[scm]]\nid = \"hg\"\nlabel = \"B\"\nmarkers = [\".hg\"]\n");
+    assert_eq!(codes(&with(&twice)), vec![Code::DuplicateId]);
+    assert_eq!(codes(&with(&format!("{code}[[scm]]\nid = \"hg\"\nlabel = \"\"\nmarkers = [\".hg\"]\n"))), vec![Code::BadText]);
+    assert_eq!(codes(&with(&format!("{code}[[scm]]\nid = \"hg\"\nmarkers = [\".hg\"]\n"))), vec![Code::Syntax]);
+}

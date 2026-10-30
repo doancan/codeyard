@@ -196,6 +196,55 @@ pub struct CodeAction {
     pub fixes: Vec<Diagnostic>,
 }
 
+/// A code lens: clickable text above a line, from `ctx.code_lenses`. A lens without a command is shown once
+/// `ctx.resolve_code_lens` gave it one, asked only for lenses on screen.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CodeLens {
+    /// Passed back to `resolve_code_lens`.
+    pub id: String,
+    /// The lens shows above the range's first line.
+    pub range: Range,
+    pub command: Option<LensCommand>,
+}
+
+impl CodeLens {
+    /// A lens on `line` that runs `command` with `args` when clicked: the extension's own command (local or full id), a
+    /// dependency's full id, or a `core:` command the manifest lists in `permissions.commands`.
+    pub fn new(line: u32, title: impl Into<String>, command: impl Into<String>, args: serde_json::Value) -> CodeLens {
+        let command = LensCommand { title: title.into(), command: command.into(), args };
+        CodeLens { id: String::new(), range: Range::line(line, 0, 0), command: Some(command) }
+    }
+
+    /// A lens on `line` whose title and command come later, from `resolve_code_lens` (for work worth doing only for
+    /// lenses on screen).
+    pub fn unresolved(line: u32, id: impl Into<String>) -> CodeLens {
+        CodeLens { id: id.into(), range: Range::line(line, 0, 0), command: None }
+    }
+}
+
+/// What a code lens shows and runs.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LensCommand {
+    pub title: String,
+    pub command: String,
+    /// The command's argument, as its handler receives it.
+    pub args: serde_json::Value,
+}
+
+/// An inlay hint: short text shown at the end of its line, such as a type, from `ctx.inlay_hints`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct InlayHint {
+    pub position: Position,
+    pub label: String,
+    pub tooltip: Option<String>,
+}
+
+impl InlayHint {
+    pub fn new(position: Position, label: impl Into<String>) -> InlayHint {
+        InlayHint { position, label: label.into(), tooltip: None }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ThemeKind {
     Light,
@@ -254,4 +303,94 @@ pub struct ProcessCommand {
     pub cwd: Option<Uri>,
     pub env: Vec<(String, String)>,
     pub stdin: Option<Vec<u8>>,
+}
+
+/// What a hover provider describes (`responses.hover`), shown next to the language server's under the extension's
+/// name.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Hover {
+    /// Markdown; Codeyard shows it as plain text.
+    pub contents: String,
+    /// The range described; the word at the position when none.
+    pub range: Option<Range>,
+}
+
+impl Hover {
+    pub fn new(contents: impl Into<String>) -> Hover {
+        Hover { contents: contents.into(), range: None }
+    }
+}
+
+/// The icon a completion item shows, as in the Language Server Protocol (`responses.completion-kind`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum CompletionKind {
+    #[default]
+    Text,
+    Method,
+    Function,
+    Constructor,
+    Field,
+    Variable,
+    Class,
+    Interface,
+    Module,
+    Property,
+    Unit,
+    Value,
+    Enum,
+    Keyword,
+    Snippet,
+    Color,
+    File,
+    Reference,
+    Folder,
+    EnumMember,
+    Constant,
+    Struct,
+    Event,
+    Operator,
+    TypeParameter,
+}
+
+/// A completion a provider offers (`responses.completion-item`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CompletionItem {
+    /// Shown in the list, and inserted when `insert_text` is none.
+    pub label: String,
+    pub kind: CompletionKind,
+    /// One line shown next to the label, such as a type.
+    pub detail: Option<String>,
+    /// Markdown shown beside the list while the item is selected.
+    pub documentation: Option<String>,
+    pub insert_text: Option<String>,
+    /// `insert_text` is a snippet: `$1`, `${1:default}` and `$0` are tab stops.
+    pub snippet: bool,
+    /// The text replaced; the word before the cursor when none.
+    pub range: Option<Range>,
+    /// More edits made when the item is chosen, such as an import.
+    pub additional_edits: Vec<TextEdit>,
+    /// Matched against what the user typed; the label when none.
+    pub filter_text: Option<String>,
+    /// Orders items that match equally well; the label when none.
+    pub sort_text: Option<String>,
+}
+
+impl CompletionItem {
+    pub fn new(label: impl Into<String>, kind: CompletionKind) -> CompletionItem {
+        CompletionItem { label: label.into(), kind, ..CompletionItem::default() }
+    }
+}
+
+/// A completion provider's answer (`responses.completion-list`). A `Vec<CompletionItem>` converts into one.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CompletionList {
+    pub items: Vec<CompletionItem>,
+    /// More typing changes the answer: Codeyard asks again as the user types, instead of only filtering.
+    pub incomplete: bool,
+}
+
+impl From<Vec<CompletionItem>> for CompletionList {
+    fn from(items: Vec<CompletionItem>) -> CompletionList {
+        CompletionList { items, incomplete: false }
+    }
 }

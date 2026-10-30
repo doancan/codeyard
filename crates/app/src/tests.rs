@@ -323,7 +323,7 @@ fn delete_asks_first_and_closes_tab(cx: &mut TestAppContext) {
     assert!(dir.join("a.txt").exists(), "cancelling must not delete");
 
     cx.simulate_keystrokes("cmd-backspace");
-    cx.simulate_prompt_answer("Move to Trash");
+    cx.simulate_prompt_answer("Delete");
     cx.run_until_parked();
     assert!(!dir.join("a.txt").exists());
     assert_eq!(wb.read_with(cx, |wb, cx| wb.active_path(cx)), None, "deleted file's tab should close");

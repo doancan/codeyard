@@ -56,6 +56,9 @@ pub const ACTIVATE_MILLIS: u64 = 10_000;
 /// How long the app waits for a provider (formatter, code actions, tasks) to answer a request. A later answer is dropped
 /// and noted in the extension's log; the user's typing never waits for it.
 pub const PROVIDER_DEADLINE_MILLIS: u64 = 1_000;
+/// How long the Pull Requests view waits for a `[[pull-requests]]` provider, whose answers come from the network. A
+/// later answer is dropped like any provider's.
+pub const PULL_REQUEST_DEADLINE_MILLIS: u64 = 20_000;
 /// Text of a status bar item.
 pub const STATUS_TEXT_LEN: usize = 64;
 /// Diagnostics or decorations one extension may set on one file; the rest are dropped.
@@ -95,3 +98,13 @@ pub const UI_CHOICES: usize = 256;
 pub const UI_COLUMNS: usize = 32;
 /// An `https:` URL of an image or link.
 pub const UI_URL_LEN: usize = 2048;
+
+/// Markers of one `[[scm]]` provider.
+pub const SCM_MARKERS: usize = 8;
+/// Files one source control provider may list for one folder, over all its groups; the rest are dropped.
+pub const SCM_RESOURCES: usize = 10_000;
+/// The text of a file a source control provider returns for the gutter's change marks; a longer one shows no marks.
+pub const SCM_ORIGINAL_BYTES: usize = 8 * 1024 * 1024;
+/// How long the app waits for a source control provider's state, a file's original text or a check of the input box.
+/// Longer than other providers: they usually run a program. A later answer is dropped and noted in the log.
+pub const SCM_DEADLINE_MILLIS: u64 = 10_000;

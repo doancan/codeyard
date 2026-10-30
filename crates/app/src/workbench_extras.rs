@@ -183,7 +183,7 @@ impl Workbench {
         let _ = std::fs::create_dir_all(&dir);
         #[cfg(all(target_os = "macos", not(test)))]
         let _ = std::process::Command::new("open").arg(&dir).spawn();
-        self.notice = Some(Notice::Info(crate::i18n::tf("Themes live in {}: drop VS Code or native theme .json files there", &[&dir.display()]).into()));
+        self.notice = Some(Notice::Info(crate::i18n::tf("Themes live in {}: drop theme .json files there", &[&dir.display()]).into()));
         cx.notify();
     }
 
@@ -336,6 +336,14 @@ impl Workbench {
 
     /// Scratch file with the given content (e.g. search results). Returns the path it opens under; the tab itself appears once loaded.
     pub(super) fn create_scratch_with(&mut self, name: String, content: &str, window: &mut Window, cx: &mut Context<Self>) -> Option<String> {
+        let path = self.write_scratch(name, content, cx)?;
+        let host = self.remote.local_host.clone();
+        self.open_file_on(host, path.clone(), window, cx);
+        Some(path)
+    }
+
+    /// A new scratch file (owner-only) holding `content`; `None` with a notice when it cannot be written.
+    pub(super) fn write_scratch(&mut self, name: String, content: &str, cx: &mut Context<Self>) -> Option<String> {
         let name = ui::file_name(name.trim()).to_string();
         if name.is_empty() {
             return None;
@@ -354,12 +362,7 @@ impl Workbench {
             path
         });
         match result.and_then(|p| crate::fsutil::create_private(&p)?.write_all(content.as_bytes()).map(|_| p)) {
-            Ok(path) => {
-                let host = self.remote.local_host.clone();
-                let path = ui::local_path(&path);
-                self.open_file_on(host, path.clone(), window, cx);
-                Some(path)
-            }
+            Ok(path) => Some(ui::local_path(&path)),
             Err(e) => {
                 self.notice = Some(Notice::Error(crate::i18n::tf("Could not create the scratch file: {}", &[&e]).into()));
                 cx.notify();

@@ -6,9 +6,23 @@ import { Context } from "./context.ts";
 import { CodeyardError, describe, toWit } from "./errors.ts";
 import { fetch, FetchHeaders, FetchResponse } from "./fetch.ts";
 import { handlers, resetHandlers } from "./handlers.ts";
+import { answerPullRequests } from "./pulls.ts";
 import { background, complete, event, host, install } from "./runtime.ts";
-import { fromWitDiagnostic, toWitDiagnostic, type CodeAction } from "./types.ts";
-import type { Bindings, Guest, Request, Response, WitCodeAction } from "./wit.ts";
+import { toWitScmState, type ScmState } from "./scm.ts";
+import {
+  fromWitCodeLens,
+  fromWitDiagnostic,
+  toWitCodeLens,
+  toWitDiagnostic,
+  toWitInlayHint,
+  type CodeAction,
+  type CodeLens,
+  type CompletionItem,
+  type CompletionList,
+  type Hover,
+  type InlayHint,
+} from "./types.ts";
+import type { Bindings, Guest, Request, Response, WitCodeAction, WitCompletionItem } from "./wit.ts";
 
 /** An extension module: `export function activate(ctx) { … }`, optionally `export function deactivate(ctx) { … }`. */
 export interface ExtensionModule {
@@ -140,6 +154,26 @@ function codeAction(a: CodeAction): WitCodeAction {
   };
 }
 
+function completionItem(i: CompletionItem): WitCompletionItem {
+  return {
+    label: i.label,
+    kind: i.kind ?? "text",
+    detail: i.detail,
+    documentation: i.documentation,
+    insertText: i.insertText,
+    snippet: i.snippet ?? false,
+    range: i.range,
+    additionalEdits: i.additionalEdits ?? [],
+    filterText: i.filterText,
+    sortText: i.sortText,
+  };
+}
+
+function completions(r: CompletionItem[] | CompletionList | undefined): Response {
+  const list = Array.isArray(r) ? { items: r } : (r ?? { items: [] });
+  return { tag: "completions", val: { items: list.items.map(completionItem), incomplete: list.incomplete ?? false } };
+}
+
 function handle(id: bigint, request: Request): void {
   const missing = (what: string) => respond(id, { tag: "err", val: toWit(CodeyardError.notFound(what)) });
   switch (request.tag) {
@@ -198,6 +232,8 @@ function handle(id: bigint, request: Request): void {
       if (!f) return respond(id, { tag: "ok", val: none });
       return answer(id, () => f(ctx, request.val), () => none);
     }
+    case "pull-requests":
+      return answer(id, () => answerPullRequests(ctx, request.val), (val) => ({ tag: "pull-requests", val }));
     case "settings-changed": {
       // Answered at once; the handlers run in the background.
       respond(id, { tag: "ok", val: none });
@@ -214,8 +250,74 @@ function handle(id: bigint, request: Request): void {
       handlers.cancelledProgress.add(request.val);
       return respond(id, { tag: "ok", val: none });
     }
+    // Without a provider, nothing to add: the language server's answer shows alone.
+    case "hover": {
+      const f = handlers.hover;
+      if (!f) return respond(id, { tag: "ok", val: { tag: "hover", val: undefined } });
+      const [document, position] = request.val;
+      return answer(
+        id,
+        () => f(ctx, document, position) as Hover | undefined,
+        (h) => ({ tag: "hover", val: h ? { contents: h.contents, range: h.range } : undefined }),
+      );
+    }
+    case "completion": {
+      const f = handlers.completion;
+      if (!f) return respond(id, { tag: "ok", val: completions(undefined) });
+      const [document, position, trigger] = request.val;
+      return answer(id, () => f(ctx, document, position, trigger) as CompletionItem[] | CompletionList, completions);
+    }
+    case "code-lens": {
+      const f = handlers.codeLenses;
+      if (!f) return respond(id, { tag: "ok", val: { tag: "code-lenses", val: [] } });
+      const [document, range] = request.val;
+      return answer(
+        id,
+        () => f(ctx, document, range) as CodeLens[],
+        (lenses) => ({ tag: "code-lenses", val: (lenses ?? []).map(toWitCodeLens) }),
+      );
+    }
+    case "resolve-code-lens": {
+      const [document, lens] = request.val;
+      const f = handlers.resolveCodeLens;
+      // Without a resolver, the lens comes back as it was (and stays hidden).
+      if (!f) return respond(id, { tag: "ok", val: { tag: "code-lenses", val: [lens] } });
+      return answer(
+        id,
+        () => f(ctx, document, fromWitCodeLens(lens)) as CodeLens,
+        (resolved) => ({ tag: "code-lenses", val: [toWitCodeLens(resolved ?? fromWitCodeLens(lens))] }),
+      );
+    }
+    case "inlay-hints": {
+      const f = handlers.inlayHints;
+      if (!f) return respond(id, { tag: "ok", val: { tag: "inlay-hints", val: [] } });
+      const [document, range] = request.val;
+      return answer(
+        id,
+        () => f(ctx, document, range) as InlayHint[],
+        (hints) => ({ tag: "inlay-hints", val: (hints ?? []).map(toWitInlayHint) }),
+      );
+    }
     case "provide-tasks":
     case "run-task":
       return respond(id, { tag: "err", val: toWit(CodeyardError.invalid("this SDK does not provide tasks yet")) });
+    case "scm-status": {
+      const [provider, root] = request.val;
+      const f = handlers.scmStatus.get(provider);
+      if (!f) return missing(`no source control state for '${provider}' is registered; call ctx.scmStatus("${provider}", …) in activate`);
+      return answer(id, () => f(ctx, root) as ScmState, (s) => ({ tag: "scm", val: toWitScmState(s) }));
+    }
+    case "scm-original": {
+      const [provider, uri] = request.val;
+      const f = handlers.scmOriginal.get(provider);
+      if (!f) return respond(id, { tag: "ok", val: { tag: "text", val: undefined } });
+      return answer(id, () => f(ctx, uri) as string | undefined, (t) => ({ tag: "text", val: t ?? undefined }));
+    }
+    case "scm-validate": {
+      const [provider, root, text] = request.val;
+      const f = handlers.scmValidate.get(provider);
+      if (!f) return respond(id, { tag: "ok", val: { tag: "text", val: undefined } });
+      return answer(id, () => f(ctx, root, text) as string | undefined, (t) => ({ tag: "text", val: t ?? undefined }));
+    }
   }
 }

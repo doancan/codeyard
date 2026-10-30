@@ -60,6 +60,8 @@ Add SSH Host…
 Add SSH host…	
 Add a debug configuration	
 Add a host	
+Add comment	
+Add comment…	
 Add remote	
 Add to .gitignore	
 Add to Favorites	
@@ -73,6 +75,7 @@ Added {} to .gitignore
 Added “{}”	
 Added “{}” for this session only: there is no settings folder to keep your dictionary in.	
 Added “{}” to your dictionary.	
+Adding comment…	
 Adding remote…	
 Adding worktree…	
 All	
@@ -111,6 +114,7 @@ Ask before moving a file or folder by dragging it in the explorer
 Ask before moving a file to the Trash	
 Ask before pasting several lines into the terminal	
 Ask before running tasks, tests or the debugger of an untrusted folder	
+Asking the source control provider…	
 At most {} extra folders fit in one workspace.	
 Attach to a native process	
 Aug	
@@ -194,6 +198,7 @@ Change all files in the workspace
 Change the URL of which remote?	
 Change {}	
 Changed	
+Changed files	
 Changed {0} file ({1} file operations skipped)|Changed {0} files ({1} file operations skipped)	
 Changed {0} in {1}	
 Changed {} file|Changed {} files	
@@ -203,11 +208,13 @@ Check JSON and YAML files against their schema (problems, hover, suggestions)
 Check comments in code files too (prose files are always checked)	
 Check for Updates…	
 Check for updates automatically?	
+Check out	
 Check out #{} as pr-{}	
 Check out detached…	
 Check out which branch, tag or commit (detached)?	
 Checked out #{} as pr-{}	
 Checked out {} (detached HEAD)	
+Checked out {} as {}	
 Checking for updates…	
 Checking installed language services…	
 Checking out pull request #{}…	
@@ -217,6 +224,7 @@ Checking whitespace…
 Checking…	
 Checkout (Detached)	
 Checkout to…	
+Checks	
 Cherry-pick	
 Cherry-pick in progress	
 Cherry-pick stopped and was undone: {}	
@@ -295,6 +303,9 @@ Command Palette
 Command Palette…	
 Command palette	
 Command: {}	
+Comment added to {}.	
+Comment on {} (Markdown)	
+Comments ({})	
 Comments are not kept.	
 Commit	
 Commit & Push	
@@ -591,6 +602,7 @@ Deny
 Deprecated	
 Deprecated by its publisher.	
 Deprecated by its publisher: use {} instead.	
+Description	
 Destination: {0} on {1}. Existing files are never overwritten.	
 Destination: {}	
 Dev Container configuration: {}	
@@ -627,6 +639,7 @@ Disk size includes the writable layer and virtual image size; volumes are exclud
 Disk write	
 Dismiss this file from the results	
 Do you trust the authors of this folder?	
+Do you trust the authors of this workspace?	
 Do you want to save the changes you made to {}?	
 Docker, then open a folder inside it	
 Docker: Cancel Operation	
@@ -1059,14 +1072,15 @@ Ignore case unless the query has capital letters
 Ignore line endings	
 Ignore whitespace	
 Ignore “{}” in this session	
+Ignored	
 Ignored the language server's edit to {} file outside the open folders|Ignored the language server's edit to {} files outside the open folders	
 Image	
 Image exceeds 20 MB.	
 Image unavailable	
 Image: {}	
 Images are not shown here.	
-Import VS Code Settings and Shortcuts	
-Imported {0} settings and {1} shortcuts from VS Code ({2} settings and {3} shortcuts have no equivalent here)	
+Import Settings and Shortcuts from Another Editor	
+Imported {0} settings and {1} shortcuts ({2} settings and {3} shortcuts have no equivalent here)	
 In Privacy & Security, press + and add Codeyard, then turn it on.	
 In the file tree, type to jump to a name; ⇧→ opens everything inside a folder, ⇧← closes it.	
 In the secondary side bar: {}	
@@ -1128,7 +1142,7 @@ JSON schema for {}
 JSON: Minify Document	
 Jan	
 JavaScript debugger installed: F5 now works for Node.	
-JavaScript debugging needs Microsoft's js-debug adapter: run “Debug: Install JavaScript Debugger” (a one-time download, MIT licensed), or install VS Code (its copy is used).	
+JavaScript debugging needs Microsoft's js-debug adapter: run “Debug: Install JavaScript Debugger” (a one-time download, MIT licensed), or install an editor that ships it (its copy is used).	
 JavaScript tests can be run here, not debugged: add a launch configuration for the runner.	
 Jul	
 Jump to latest and follow	
@@ -1148,6 +1162,7 @@ Keymap preset from an installed extension, as publisher.name/label (empty: Codey
 Keymap preset: {}	
 Kill All Terminals	
 Kill Terminal	
+Labels	
 Language	
 Language Badges	
 Language Services	
@@ -1203,6 +1218,7 @@ Load more
 Loading container details…	
 Loading image…	
 Loading pull requests…	
+Loading {}…	
 Loading…	
 Local	
 Local history	
@@ -1254,6 +1270,7 @@ Merge {}
 Merge {} into {}?	
 Merged {}	
 Merging {}…	
+Message	
 Message (↵ to commit)	
 Milliseconds between live preview checks	
 Mine	
@@ -1324,7 +1341,6 @@ No Cargo.toml found for this file
 No Docker contexts found. Install Docker and start its engine.	
 No SSH host connected	
 No SSH hosts yet. Use Remote: Add SSH Host…	
-No VS Code settings found on this machine	
 No WSL distributions found.	
 No active debug session.	
 No block comment syntax for this file type	
@@ -1352,6 +1368,7 @@ No debug configuration: add .vscode/launch.json, or open a Cargo / Go project or
 No debug session.	
 No debug session. F5 starts one.	
 No definition found	
+No description.	
 No differences.	
 No editor is in a window of its own.	
 No edits yet in this session.	
@@ -1385,6 +1402,7 @@ No merge conflicts in this file.
 No merges	
 No misspelled word at the cursor.	
 No mounted storage	
+No open pull requests.	
 No outgoing calls found	
 No outline for this file type.	
 No output yet. Language server logs appear here.	
@@ -1405,6 +1423,7 @@ No running containers.
 No saved copies yet. Save the file to start its local history.	
 No setting matches.	
 No settings folder on this machine.	
+No settings from another editor found on this machine	
 No shortcut	
 No subtypes found	
 No supertypes found	
@@ -1537,6 +1556,7 @@ Open in Integrated Terminal
 Open in New Window	
 Open in a Search Editor tab	
 Open on GitHub	
+Open on {}	
 Open recent, or connect to a host… (⌃R)	
 Open settings.jsonc	
 Open the active file with…	
@@ -1575,6 +1595,7 @@ Pause (F6)
 Pause the program first (a breakpoint or ⏸): the variable has to be in scope.	
 Pause updates	
 Paused	
+Paused on entry	
 Paused on exception: {}	
 Payload	
 Permission switches	
@@ -1606,7 +1627,7 @@ Ports and storage
 Ports below 1024 need extra privileges on this computer	
 Ports: {}	
 Preferences: Configure User Snippets	
-Preferences: Import VS Code Settings and Shortcuts	
+Preferences: Import Settings and Shortcuts from Another Editor	
 Preferences: Keyboard Shortcuts	
 Preferences: Open Keyboard Shortcuts	
 Preferences: Open Settings	
@@ -1661,6 +1682,7 @@ Pull failed: {}
 Pull from…	
 Pull has conflicts: resolve them in Source Control (or Git: Abort Merge)	
 Pull request #{} has no head on {} (it may have been closed or deleted); refresh the list	
+Pull request changes	
 Pull requests	
 Pull with rebase instead of a merge commit	
 Pulled	
@@ -2013,7 +2035,9 @@ Show Output
 Show Stash…	
 Show a color swatch next to #rrggbb values	
 Show a tooltip when the mouse rests on a word	
+Show changed files	
 Show code lenses (reference counts, run/debug) above symbols	
+Show details and comments	
 Show every change before anything is written (↵ in the field)	
 Show file icons on tabs	
 Show fold arrows in the gutter	
@@ -2055,6 +2079,7 @@ Source Control
 Source Control (⌃⇧G)	
 Source Control graph view: graph (branch lanes), compact (one line per commit) or dates (grouped by day)	
 Source control	
+Source control: {0} (folders with {1})	
 Source on server	
 Spaces per indent level (empty: detect per file)	
 Spaces per level in the JSON and YAML written by Data: Convert To… and Data: Query…	
@@ -2250,10 +2275,12 @@ The managed installation is incomplete or belongs to another catalogue. Reinstal
 The new version couldn't be installed from here. You can download it from the release page instead.	
 The number {} cannot be written in JSON	
 The open folder is no longer listed in the workspace file.	
+The other editor's settings.json could not be read	
 The pattern does not parse: {0} (line {1}, column {2})	
 The preLaunchTask “{0}” did not succeed ({1}), so debugging was not started. Check its terminal, then start debugging again.	
 The program finished without stopping at any breakpoint. The debugger matches breakpoints to the debug info by file path: build with debug info (-g) from this folder, and check that the breakpoint is on a line with code.	
 The program is running: pause it first, or set a breakpoint.	
+The provider answered with something else: {}	
 The query ends too early	
 The query is nested too deeply	
 The query is too long	
@@ -2304,7 +2331,7 @@ Theme: Open User Themes Folder
 Theme: Pick Color Theme…	
 Theme: Pick File Icon Theme…	
 Theme: Save Current Colors as User Theme…	
-Themes live in {}: drop VS Code or native theme .json files there	
+Themes live in {}: drop theme .json files there	
 Themes, languages, language servers, snippets and key bindings that come with Codeyard are built in and always on.	
 There are no local changes to stash	
 There are no staged changes to stash	
@@ -2377,6 +2404,7 @@ Track which remote branch?
 Transfer cancelled.	
 Transfer failed: {}	
 Trust Folder and Continue	
+Trust Workspace and Continue	
 Trust this host and connect	
 Trusted “{}”	
 Try Again	
@@ -2449,7 +2477,6 @@ Uploading needs the connection to {}, which failed: use Reconnect first.
 Uploading works with a connected SSH host: connect first (⌃R).	
 User Forwarded	
 User: {}	
-VS Code settings.json could not be read	
 Variables	
 Variables are not supported	
 Verify Files	
@@ -2591,6 +2618,7 @@ a program
 a string is not closed	
 a theme must be a JSON object	
 about {0} MB · {1}	
+added	
 another Codeyard window has them; started new shells	
 approved	
 args must be a list of texts	
@@ -2610,6 +2638,7 @@ cannot read “{}” of the response
 changes requested	
 class	
 click to open · Esc to close	
+closed	
 color “{}” is not one of accent, success, warning, danger, info, muted	
 condition  ·  log: message with {expr}  ·  hit: 5  ·  empty: plain breakpoint	
 connected	
@@ -2635,6 +2664,7 @@ data breakpoint
 debug output was dropped: the debugger could not keep up	
 decoded as {}	
 default	
+deleted	
 denied ({0}); add to [permissions]: {1}	
 deprecated	
 deprecated, use {}	
@@ -2726,8 +2756,10 @@ lines {0}–{1}
 link target differs	
 local agent, protocol test	
 local port, e.g. 8080	
+merged	
 method	
 milliseconds	
+modified	
 module	
 more than {} folders	
 name url (e.g. origin https://host/repo.git)	
@@ -2753,6 +2785,7 @@ not signed in to {0}; call auth.session with “{1}” first
 now	
 of {}	
 only the first {} files were looked at (search.structural.maxFiles)	
+open	
 operator	
 package	
 partly selected	
@@ -2777,6 +2810,8 @@ recently used
 reconnecting	
 redirects to {}; not followed, send a request to that address to continue	
 remote	
+renamed	
+renamed from {}	
 render must answer with response.view	
 request failed	
 review needed	
@@ -2896,6 +2931,7 @@ withdrawn
 withdrawn by its publisher	
 workbench.colorCustomizations: unknown color role {0} (see crates/theme/design/tokens.json: {1})	
 your words	
+{0} (from {1})	
 {0} (line {1}, column {2})	
 {0} (saved) ↔ {1} (editor)	
 {0} (stopped at {1})	
@@ -3032,6 +3068,7 @@ your words
 {} failed	
 {} file skipped, binary or too large|{} files skipped, binary or too large	
 {} file skipped, parse errors|{} files skipped, parse errors	
+{} files	
 {} forwarded	
 {} gets pre-releases from now on.	
 {} gets releases only; the pre-release you have stays until a release passes it.	
@@ -3054,6 +3091,7 @@ your words
 {} is disabled.	
 {} is enabled.	
 {} is loaded as an extension in development: save a file to reload it	
+{} is no longer active.	
 {} is not a setting of an installed extension	
 {} is not a trusted folder, so nothing is deleted from it. Open it as a folder and trust it first.	
 {} is not a trusted folder, so nothing is written to it. Open it as a folder and trust it first.	
@@ -3096,8 +3134,8 @@ your words
 {} week ago|{} weeks ago	
 {} year ago|{} years ago	
 {} · Color theme (opens the theme picker)	
-{} · VS Code import	
 {} · extension {}	
+{} · imported	
 {} · user	
 {} ↔ Clipboard	
 {}+ results	
@@ -3117,6 +3155,7 @@ your words
 {}: expected true or false	
 {}: invalid color {}	
 {}: no answer from the debug adapter	
+{}: no changed files.	
 {}: no open pull requests.	
 {}: not signed in	
 {}: path must not contain control characters	
@@ -3146,6 +3185,7 @@ your words
 “{0}” cannot be written in {1}: not changed.	
 “{0}” is not a valid regular expression ({1}). Escape special characters with a backslash.	
 “{}” already exists. Replace it?	
+“{}” and its folders can run programs through their tasks, debug configurations and project settings. Only continue if you trust where this workspace came from.	
 “{}” asks for inputs, which a compound cannot ask for: start it on its own.	
 “{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.	
 “{}” can't be opened	

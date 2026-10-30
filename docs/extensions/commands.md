@@ -13,6 +13,8 @@ The SDK is **pre-release**: it is not on crates.io yet, so a new extension takes
 - [Talking to the user](#talking-to-the-user)
 - [Documents, diagnostics and decorations](#documents-diagnostics-and-decorations)
 - [Formatters and code actions](#formatters-and-code-actions)
+- [Hover and completion](#hover-and-completion)
+- [Code lenses and inlay hints](#code-lenses-and-inlay-hints)
 - [Network, files and programs](#network-files-and-programs)
 - [Storage, settings and timers](#storage-settings-and-timers)
 - [Errors and refused calls](#errors-and-refused-calls)
@@ -84,7 +86,7 @@ Anything that reaches Codeyard, such as a notice with buttons, a file read or an
 Under the hood every async call returns a ticket at once, and the SDK resumes your code when Codeyard delivers the result. The extension never blocks while it waits, so it can answer other requests at the same time. You don't manage any of this; two rules are enough:
 
 - **Don't block.** There are no threads and no `std::thread::sleep`. A handler that computes for more than 2 seconds without awaiting is stopped. Long work awaits calls, and shows progress.
-- **Answer fast.** Providers (views, formatters, code actions) are cancelled when the user moves on. The SDK drops a cancelled handler, which cancels the calls it was waiting on.
+- **Answer fast.** Providers (views, formatters, code actions, hover, completion) are cancelled when the user moves on. The SDK drops a cancelled handler, which cancels the calls it was waiting on.
 
 `ctx.background(async move { … })` runs a task that no request waits for, such as work started from `activate`.
 
@@ -192,6 +194,107 @@ ctx.code_actions(async |ctx, doc, range, diagnostics| {
 });
 ctx.on_code_action(async |ctx, id| Ok(()));   // for actions with a `command` instead of edits
 ```
+
+## Hover and completion
+
+Declare `[[hover]]` and `[[completion]]` with their languages (and, for completion, optional `trigger-characters`).
+What you return shows next to the language server's, under your extension's id. Answer from the document you are
+given, within the provider deadline (one second): a later answer is dropped and noted in your log.
+
+```rust
+ctx.hover(async |ctx, doc, position| {
+    Ok(Some(Hover::new("**TODO**: work left to do.")))   // Markdown, shown as plain text; `None` for nothing
+});
+
+ctx.completion(async |ctx, doc, position, trigger| {
+    // `trigger` is the trigger character typed, `None` when the user typed a word or asked.
+    Ok(vec![CompletionItem { insert_text: Some("TODO: $0".into()), snippet: true, ..CompletionItem::new("TODO", CompletionKind::Keyword) }])
+});
+```
+
+A completion answer is a `Vec<CompletionItem>`, or a `CompletionList` with `incomplete: true` when more typing changes
+it (you are asked again on each key instead of the list only being filtered). An item may set its `range`,
+`filter_text`, `sort_text`, `documentation` and `additional_edits` (an import, say).
+
+## Code lenses and inlay hints
+
+A code lens is clickable text shown with its line; a click runs a command with the arguments you gave. An inlay hint is
+short text at the end of its line, such as a type. Declare `[[code-lens]]` and `[[inlay-hints]]` with their languages
+(see the [developer guide](developer-guide.md#contributions-that-run-your-code)). Codeyard asks only for the lines in view: `range`
+starts at the first one and ends at the start of the line after the last. It asks again once typing pauses after an
+edit and once the view stops after a scroll, and cancels the question before; typing never waits for the answer.
+
+```rust
+ctx.code_lenses(async |ctx, doc, range| {
+    // Runs `run-test` (one of your [[commands]]) with { "name": "parses" } when clicked.
+    Ok(vec![CodeLens::new(12, "Run test", "run-test", json!({ "name": "parses" }))])
+});
+ctx.inlay_hints(async |ctx, doc, range| Ok(vec![InlayHint::new(Position::new(3, 18), ": u32")]));
+```
+
+A lens's command is one of your commands (local or full id), a dependency's full id, or a `core:` command your
+manifest lists in `permissions.commands`; anything else is refused when clicked. When working out a lens is costly,
+return `CodeLens::unresolved(line, id)` and fill it in when it is on screen:
+
+```rust
+ctx.resolve_code_lens(async |ctx, doc, mut lens| {
+    lens.command = Some(LensCommand { title: "3 references".into(), command: "refs".into(), args: json!(lens.id) });
+    Ok(lens)
+});
+```
+
+## Pull request providers
+
+A `[[pull-requests]]` entry makes the extension a pull (merge) request provider. Codeyard asks it for the open requests
+of each repository remote on its `hosts`, and shows them in the Pull Requests view next to GitHub's. Picking one offers
+its details, its changed files as diffs, adding a comment and checking it out.
+
+```toml
+[permissions]
+auth = ["codeberg"]             # declared in an [[oauth]] table, or built in
+
+[[pull-requests]]
+id    = "codeberg"
+label = "Codeberg"              # shown next to each request
+hosts = ["codeberg.org"]        # the remotes it claims; `*.example.com` works as in `net`
+auth  = "codeberg"              # passed to you as `remote.account`
+```
+
+```rust
+ctx.pull_requests("codeberg")
+    .list(async |ctx, remote| {
+        let account = remote.account.clone().unwrap_or_default();
+        ctx.session(&account, &[]).await?;   // asks on first use
+        let url = format!("https://{}/api/v1/repos/{}/pulls?state=open", remote.host, remote.path);
+        let list: Vec<Value> = ctx.fetch_as(&account, Request::get(url)).await?.error_for_status()?.json()?;
+        Ok(list.iter().map(to_pull_request).collect())
+    })
+    .details(async |ctx, remote, id| Ok(PullRequestDetails { /* summary, description, checks, labels */ ..Default::default() }))
+    .files(async |ctx, remote, id| Ok(vec![ChangedFile { path: "src/main.rs".into(), ..Default::default() }]))
+    .contents(async |ctx, remote, id, file| Ok(FileContents { base: Some(old), head: Some(new) }))
+    .comments(async |ctx, remote, id| Ok(vec![]))
+    .on_comment(async |ctx, remote, id, body| Ok(()))
+    .checkout(async |ctx, remote, id| Ok(Checkout { fetch_url: None, reference: format!("refs/pull/{id}/head"), branch: format!("pr-{id}") }));
+```
+
+- `remote` is the repository remote: its `name` (`origin`), `url`, `host`, `path` (`group/sub/app`) and `account`, the
+  entry's `auth`. Call the forge with `ctx.fetch_as(account, …)`: Codeyard adds the token, so your code never sees it.
+  A request is signed only after the user signed in, so call `ctx.session` first.
+- `list`, `details`, `files` and `contents` are needed. Without `comments` a request shows none; without `on_comment`
+  or `checkout` those actions fail and say so.
+- `PullRequest::id` is yours: Codeyard passes it back in every other query. `reference` is shown before the title
+  (`#42`, `!42`), times are Unix milliseconds (0 when unknown), and `url` must be `https:`.
+- `description` and comment bodies are Markdown, shown on the request's details page; file contents are shown as plain
+  text in a diff. Codeyard cuts long text and drops control and invisible characters.
+- `checkout` says what git should fetch: `reference` from `fetch_url` (a fork's `https://` or ssh URL) or from the
+  remote itself, into the local branch `branch`. Codeyard checks the names and runs `git fetch` and `git checkout -B`
+  on the machine the repository is on, so it works the same over SSH.
+- Commenting and checking out are user actions. Every query has `PULL_REQUEST_DEADLINE_MILLIS` (20 s) to answer, plus
+  the start-up time; a later answer is dropped and noted in your log in the Inspector.
+
+`cyx test` asks each provider for the list of a remote on its first host; without network an error counts as an answer.
+In unit tests, `host.list_pull_requests(remote)` and `host.pull_requests(PullQuery::…)` send the queries and
+`host.http(…)` answers the signed requests ([examples/extensions/gitea-pulls](../../examples/extensions/gitea-pulls)).
 
 ## Network, files and programs
 
