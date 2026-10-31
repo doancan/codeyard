@@ -1211,6 +1211,7 @@ dependencies = [
 name = "codeyard-extension"
 version = "0.6.0"
 dependencies = [
+ "ext-ui",
  "serde",
  "serde_json",
  "wit-bindgen 0.63.0",
@@ -1222,6 +1223,7 @@ version = "0.6.0"
 dependencies = [
  "codeyard-extension",
  "ext-manifest",
+ "ext-ui",
  "serde_json",
 ]
 
@@ -1751,6 +1753,7 @@ dependencies = [
  "ext-manifest",
  "ext-pkg",
  "ext-proto",
+ "ext-ui",
  "http-body-util",
  "hyper",
  "hyper-rustls",

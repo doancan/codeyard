@@ -250,6 +250,17 @@ jobs:
         env:
           CODEYARD_REQUIRE_SSHD: "1"
           CODEYARD_TEST_TIMEOUT_SCALE: "3"
+      # #182 end to end: `cyx new view` (Rust and TypeScript) built by cyx, installed and drawn by the window with the
+      # real exthost (ext_template_views_tests.rs). After the workspace tests, so only this test sees the wasm32-wasip2
+      # target; with CODEYARD_REQUIRE_WASM a missing target, cyx, exthost or Node.js fails it instead of skipping it.
+      - run: rustup target add wasm32-wasip2
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - run: cargo build --locked -p cyx -p ext-host && cargo test --locked -p app --bin codeyard -- ext_template_views
+        env:
+          CODEYARD_REQUIRE_WASM: "1"
+          CODEYARD_TEST_TIMEOUT_SCALE: "3"
 
   # The same checks run locally with scripts/check-windows.ps1.
   windows:

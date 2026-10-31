@@ -20,7 +20,6 @@ import {
   type Decoration,
   type Diagnostic,
   type Document,
-  type Element,
   type Env,
   type FileStat,
   type FormatOptions,
@@ -38,6 +37,7 @@ import {
   type StatusItem,
   type TextEdit,
   type Uri,
+  type ViewNode,
 } from "./types.ts";
 import type { ScmState } from "./scm.ts";
 import type { Completion, StreamEvent } from "./wit.ts";
@@ -90,12 +90,15 @@ export class Context {
     handlers.commands.set(id, f);
   }
 
-  /** Draw the manifest's view `id`: `f` returns its element tree. The view is drawn again after `invalidate(id)`. */
-  view(id: string, f: (ctx: Context) => Awaitable<Element>): void {
+  /**
+   * Draw the manifest's view `id`: `f` returns its tree, built with `ui` or written in the form of
+   * docs/extensions/reference/ui.md. The view is drawn again after `invalidate(id)`.
+   */
+  view(id: string, f: (ctx: Context) => Awaitable<ViewNode>): void {
     handlers.views.set(id, f);
   }
 
-  /** Handle what happens in view `id` (a click, a changed input). */
+  /** Handle what happens in view `id` (a click, a changed input): the event as Codeyard sends it, `{ click: { path: ["add"] } }`. */
   onViewEvent(id: string, f: (ctx: Context, event: any) => Awaitable<void>): void {
     handlers.viewEvents.set(id, f);
   }

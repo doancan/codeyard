@@ -70,21 +70,23 @@ impl Context {
         guest::with(|h| h.commands.insert(id.to_string(), cb));
     }
 
-    /// Draw the manifest's view `id`: `f` returns its element tree (docs/extensions/reference/ui.md) as JSON. The
-    /// view is drawn again after [`invalidate`](Self::invalidate).
-    pub fn view<F>(&self, id: &str, f: F)
+    /// Draw the manifest's view `id`: `f` returns its element tree, built with [`ui`](crate::ui) (or JSON in the form
+    /// of docs/extensions/reference/ui.md). The view is drawn again after [`invalidate`](Self::invalidate).
+    pub fn view<F, R>(&self, id: &str, f: F)
     where
-        F: AsyncFn(Context) -> Result<Value> + 'static,
+        F: AsyncFn(Context) -> Result<R> + 'static,
+        R: Serialize,
     {
         let f = Rc::new(f);
         let cb: guest::ViewFn = Rc::new(move |ctx| {
             let f = f.clone();
-            Box::pin(async move { f(ctx).await })
+            Box::pin(async move { Ok(serde_json::to_value(f(ctx).await?)?) })
         });
         guest::with(|h| h.views.insert(id.to_string(), cb));
     }
 
-    /// Handle what happens in view `id` (a click, a changed input): the event as JSON.
+    /// Handle what happens in view `id` (a click, a changed input): the event as JSON, as Codeyard sends it
+    /// (`{"click": {"path": ["add"]}}`, docs/extensions/reference/ui.md#events).
     pub fn on_view_event<F>(&self, id: &str, f: F)
     where
         F: AsyncFn(Context, Value) -> Result<()> + 'static,

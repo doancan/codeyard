@@ -23,6 +23,7 @@ ext-core = { version = "0.6.0", path = "../ext-core" }
 ext-manifest = { version = "0.6.0", path = "../ext-manifest" }
 ext-pkg = { version = "0.6.0", path = "../ext-pkg" }
 ext-proto = { version = "0.6.0", path = "../ext-proto" }
+ext-ui = { version = "0.6.0", path = "../ext-ui" }
 serde_json = "1.0.154"
 
 [dev-dependencies]

@@ -22,6 +22,7 @@ export { fetch, FetchHeaders, FetchResponse, hostOf, type FetchInit } from "./fe
 export { RELOAD, RELOAD_STATE_KEY, type ExtensionModule } from "./guest.ts";
 export { scmArgs, type FileState, type ScmAction, type ScmArgs, type ScmGroup, type ScmInput, type ScmResource, type ScmState } from "./scm.ts";
 export * from "./types.ts";
+export * as ui from "./ui.ts";
 export type {
   ChangedFile,
   Check,

@@ -3,7 +3,7 @@
 There are two kinds of test, and a new extension from `cyx new command` or `cyx new view` comes with both set up:
 
 - **Unit tests** with `cargo test` (Rust) or `npm test` (TypeScript, [below](#typescript)). They run on your computer, in milliseconds, against a mock Codeyard: fake files, fixture HTTP responses, recorded processes, scripted answers and a virtual clock.
-- **`cyx test`** builds the real component and runs it in Codeyard's extension host: it activates the extension, runs every command and draws every view.
+- **`cyx test`** builds the real component and runs it in Codeyard's extension host: it activates the extension, runs every command and draws every view, checking each tree as Codeyard does.
 
 <!-- toc -->
 - [Unit tests](#unit-tests)
@@ -40,8 +40,8 @@ mod tests {
 
 | Call | Does |
 | --- | --- |
-| `host.render("view")` | draws a view and returns its element tree |
-| `host.view_event("view", json!(…))` | sends an event to a view |
+| `host.render("view")` | draws a view and returns its element tree, checked as Codeyard checks it |
+| `host.view_event("view", json!(…))` | sends an event to a view, in the form Codeyard sends: `json!({"click": {"path": ["add"]}})` |
 | `host.format(doc, range, options)` | runs the formatter |
 | `host.code_actions(doc, range, diagnostics)`, `host.run_code_action(id)` | asks the code action provider, runs a chosen action |
 | `host.hover(doc, position)`, `host.completion(doc, position, trigger)` | asks the hover or completion provider (`trigger`: `Some(".")` for a trigger character) |
@@ -51,6 +51,12 @@ mod tests {
 | `host.advance(Duration::from_secs(90))` | moves the virtual clock, firing timers that fall due |
 | `host.cancel_progress(id)` | presses Cancel on a progress notice |
 | `host.deactivate::<Hello>()` | stops the extension |
+
+`render` checks the tree with Codeyard's own code (crates/ext-ui), so a tree Codeyard would refuse fails the test
+with the reason Codeyard would show in place of the view, for example ``Codeyard would not draw view main: the view is
+malformed: unknown field `type` ``. `view_event` refuses an event Codeyard never sends, such as `{"click": "add"}`. The
+tree comes back as JSON in the form of the [views reference](reference/ui.md):
+`host.render("main")?.pointer("/children/1/element/text/text")`.
 
 Each test runs on its own thread with its own mock, so tests run in parallel without seeing each other.
 
@@ -132,6 +138,7 @@ ok
 It fails when:
 
 - `activate` returns an error, or a command or view does not answer within 20 seconds;
+- a view draws a tree Codeyard would refuse; the reason is printed as Codeyard shows it;
 - the extension traps (a panic, running out of memory, computing too long); the trap is printed with its frames;
 - **any call is refused**, even if the extension handles the error. The refusal is printed with its fix:
 
@@ -175,6 +182,10 @@ test("says hello", async () => {
 
 Everything is the Rust mock's, in camelCase, and the calls that drive the extension return Promises: `await host.command(id, args)`, `await host.render(view)`, `await host.viewEvent(view, event)`, `await host.changeSetting(key, value)`, `await host.advance(seconds)`, `await host.hover(doc, position)`,
 `await host.completion(doc, position, trigger)`. Fixtures take plain values: `host.http("GET", url, 200, { deployments: [] })` sends an object as JSON, `host.setting("interval", 120)`, `host.process("vercel", ["ls"], { stdout: "web  ready\n" })`. The checks are `host.notices()`, `host.fetched()`, `host.ran()`, `host.readText(path)`, `host.storage()`, `host.denied()` and the rest of the list above.
+
+`render` and `viewEvent` check trees and events as the Rust mock does. The TypeScript mock cannot call Codeyard's code,
+so it checks with a copy of its rules generated from crates/ext-ui; a test in Codeyard's repository runs both on the
+same few hundred trees and requires the same verdicts.
 
 `new MockHost()` reads `codeyard-extension.toml` from the folder `npm test` runs in; `new MockHost({ manifest })` takes the text, and `MockHost.allowAll()` allows everything. While a mock is active it is the global `fetch`, so npm packages such as Octokit reach its fixtures and never the network; `host.dispose()` gives `fetch` back.
 
