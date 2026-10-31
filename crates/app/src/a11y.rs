@@ -1457,6 +1457,10 @@ mod chrome_tests;
 mod side_controls_tests;
 
 #[cfg(test)]
+#[path = "a11y_page_controls_tests.rs"]
+mod page_controls_tests;
+
+#[cfg(test)]
 #[path = "a11y_confirm_tests.rs"]
 mod confirm_tests;
 

@@ -326,11 +326,7 @@ impl Workbench {
         cx: &mut Context<Self>,
         f: impl Fn(&mut Self, &mut Window, &mut Context<Self>) + 'static,
     ) -> gpui::Stateful<gpui::Div> {
-        let f = Rc::new(f);
-        let press = f.clone();
-        el.relative()
-            .child(control(c.on_entity(cx.entity().downgrade(), move |this: &mut Self, w, cx| press(this, w, cx))))
-            .on_click(cx.listener(move |this, _, w, cx| f(this, w, cx)))
+        press_on(el, c, cx, f)
     }
 
     pub(crate) fn ctl<L: Into<String>, F: Fn(&mut Self, &mut Window, &mut Context<Self>) + 'static>(
@@ -355,4 +351,38 @@ pub(crate) fn button_on<T: 'static, L: Into<String>, F: Fn(&mut T, &mut Window, 
     f: F,
 ) -> impl IntoElement + use<T, L, F> {
     control(Control::button(surface, key, label, |_, _| {}).on_entity(cx.entity().downgrade(), f))
+}
+
+/// A drawn button `el` of any view with its control `c` for the tree: the click and the tree's press run the same `f`.
+pub(crate) fn press_on<T: 'static>(
+    el: gpui::Stateful<gpui::Div>,
+    c: Control,
+    cx: &Context<T>,
+    f: impl Fn(&mut T, &mut Window, &mut Context<T>) + 'static,
+) -> gpui::Stateful<gpui::Div> {
+    let f = Rc::new(f);
+    let press = f.clone();
+    el.relative()
+        .child(control(c.on_entity(cx.entity().downgrade(), move |this: &mut T, w, cx| press(this, w, cx))))
+        .on_click(cx.listener(move |this, _, w, cx| f(this, w, cx)))
+}
+
+/// Text a page draws, for the tree: a label (or heading, document) of `surface` where it is drawn.
+pub(crate) fn said(surface: impl Into<String>, key: impl Into<String>, role: Role, text: impl Into<String>) -> gpui::AnyElement {
+    control(Control::text(surface, key, role, text)).into_any_element()
+}
+
+/// A drawn button `el` of any view whose click handler takes the click event, with its control `c` for the tree: the
+/// tree's press runs the same handler with a default event (no pointer position, no modifiers).
+pub(crate) fn click_on<T: 'static>(
+    el: gpui::Stateful<gpui::Div>,
+    c: Control,
+    cx: &Context<T>,
+    f: impl Fn(&mut T, &gpui::ClickEvent, &mut Window, &mut Context<T>) + 'static,
+) -> gpui::Stateful<gpui::Div> {
+    let f = Rc::new(f);
+    let press = f.clone();
+    el.relative()
+        .child(control(c.on_entity(cx.entity().downgrade(), move |this: &mut T, w, cx| press(this, &gpui::ClickEvent::default(), w, cx))))
+        .on_click(cx.listener(move |this, e, w, cx| f(this, e, w, cx)))
 }

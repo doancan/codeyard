@@ -51,36 +51,57 @@ impl Workbench {
                     .when_some(state.field.clone(), |d, field| {
                         d.child(div().w_full().min_w_0().child(super::container_monitor_glue::search_field("container-log-search", field, p, cx)))
                     })
-                    .child(
+                    .child(crate::a11y_controls::click_on(
                         button("logs-problems", if state.problems_only { crate::i18n::t("Errors and warnings") } else { crate::i18n::t("All levels") }, p)
-                            .flex_none()
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                let s = &mut this.remote.docker.monitor.browser.log_view;
-                                s.problems_only = !s.problems_only;
-                                if s.follow {
-                                    s.scroll.scroll_to_bottom();
-                                }
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        button("logs-wrap", if state.wrap { crate::i18n::t("Wrapped lines") } else { crate::i18n::t("Unwrapped lines") }, p)
-                            .flex_none()
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                let s = &mut this.remote.docker.monitor.browser.log_view;
-                                s.wrap = !s.wrap;
-                                if s.follow {
-                                    s.scroll.scroll_to_bottom();
-                                }
-                                cx.notify();
-                            })),
-                    )
-                    .child(button("logs-copy", crate::i18n::t("Copy visible logs"), p).flex_none().when(copy.is_empty(), |d| d.opacity(0.5)).on_click(
-                        cx.listener(move |_, _, _, cx| {
+                            .flex_none(),
+                        crate::a11y_controls::Control::button(
+                            crate::i18n::t("Containers"),
+                            "logs-problems",
+                            if state.problems_only { crate::i18n::t("Errors and warnings") } else { crate::i18n::t("All levels") }.to_string(),
+                            |_, _| {},
+                        ),
+                        cx,
+                        |this, _, _, cx| {
+                            let s = &mut this.remote.docker.monitor.browser.log_view;
+                            s.problems_only = !s.problems_only;
+                            if s.follow {
+                                s.scroll.scroll_to_bottom();
+                            }
+                            cx.notify();
+                        },
+                    ))
+                    .child(crate::a11y_controls::click_on(
+                        button("logs-wrap", if state.wrap { crate::i18n::t("Wrapped lines") } else { crate::i18n::t("Unwrapped lines") }, p).flex_none(),
+                        crate::a11y_controls::Control::button(
+                            crate::i18n::t("Containers"),
+                            "logs-wrap",
+                            if state.wrap { crate::i18n::t("Wrapped lines") } else { crate::i18n::t("Unwrapped lines") }.to_string(),
+                            |_, _| {},
+                        ),
+                        cx,
+                        |this, _, _, cx| {
+                            let s = &mut this.remote.docker.monitor.browser.log_view;
+                            s.wrap = !s.wrap;
+                            if s.follow {
+                                s.scroll.scroll_to_bottom();
+                            }
+                            cx.notify();
+                        },
+                    ))
+                    .child(crate::a11y_controls::click_on(
+                        button("logs-copy", crate::i18n::t("Copy visible logs"), p).flex_none().when(copy.is_empty(), |d| d.opacity(0.5)),
+                        crate::a11y_controls::Control::button(
+                            crate::i18n::t("Containers"),
+                            "logs-copy",
+                            crate::i18n::t("Copy visible logs").to_string(),
+                            |_, _| {},
+                        ),
+                        cx,
+                        move |_, _, _, cx| {
                             if !copy.is_empty() {
                                 cx.write_to_clipboard(gpui::ClipboardItem::new_string(copy.clone()));
                             }
-                        }),
+                        },
                     )),
             )
             .child(
@@ -97,22 +118,29 @@ impl Workbench {
                             .text_color(c(p.text_muted))
                             .child(crate::i18n::tf("{0} / {1} lines · {2} errors · {3} warnings", &[&visible.len(), &lines.len(), &errors, &warnings])),
                     )
-                    .child(
+                    .child(crate::a11y_controls::click_on(
                         button(
                             "logs-follow",
                             if state.follow { crate::i18n::t("Following latest logs") } else { crate::i18n::t("Jump to latest and follow") },
                             p,
                         )
-                        .when(state.follow, |s| s.bg(c(p.surface_active)))
-                        .on_click(cx.listener(|this, _, _, cx| {
+                        .when(state.follow, |s| s.bg(c(p.surface_active))),
+                        crate::a11y_controls::Control::button(
+                            crate::i18n::t("Containers"),
+                            "logs-follow",
+                            if state.follow { crate::i18n::t("Following latest logs") } else { crate::i18n::t("Jump to latest and follow") }.to_string(),
+                            |_, _| {},
+                        ),
+                        cx,
+                        |this, _, _, cx| {
                             let s = &mut this.remote.docker.monitor.browser.log_view;
                             s.follow = !s.follow;
                             if s.follow {
                                 s.scroll.scroll_to_bottom();
                             }
                             cx.notify();
-                        })),
-                    ),
+                        },
+                    )),
             );
         if browser.loading && browser.logs.is_empty() {
             view = view
@@ -146,9 +174,12 @@ impl Workbench {
                 .unwrap_or_default();
             let timestamp = line.timestamp.clone();
             let time = timestamp.as_ref().map(|t| format!("{}Z", &t[11..19])).unwrap_or_else(|| "—".into());
+            let heard = format!("#{} {} {}: {}", line.number, time, label, line.message);
             rows = rows.child(
                 div()
                     .id(("container-log-line", line.number))
+                    .relative()
+                    .child(crate::a11y_controls::said(crate::i18n::t("Containers"), format!("log{}", line.number), accesskit::Role::ListItem, heard))
                     .debug_selector({
                         let n = line.number;
                         move || format!("container-log-line-{n}")

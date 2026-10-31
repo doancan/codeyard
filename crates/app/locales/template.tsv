@@ -1838,6 +1838,7 @@ Remove which remote?
 Remove which worktree?	
 Remove worktree {}?	
 Remove “{}” from ~/.ssh/config?	
+Removed	
 Removed from favorites: {}	
 Removed remote {}	
 Removed worktree {}	
@@ -2088,6 +2089,7 @@ Show indent guides
 Show line numbers in search results	
 Show lines matching (regular expression, case-insensitive), e.g. {}	
 Show spaces and tabs as marks	
+Show the Markdown source	
 Show the Open Editors list in the explorer	
 Show the activity bar	
 Show the author name on Source Control graph rows	
@@ -2116,6 +2118,7 @@ Snippets: Insert Snippet…
 Software Update	
 Solid blue folders like Finder, outline files with a language dot like GitHub	
 Solid folders colored and marked by purpose, solid files colored by language	
+Sort by {}	
 Sort object keys alphabetically in the output of Data: Convert To… and Data: Query… (off: keep the file's order)	
 Source Control	
 Source Control (⌃⇧G)	
@@ -2471,6 +2474,7 @@ Type {} to install it.
 TypeScript {} · TypeScript Language Server {} · HTML/CSS {}	
 UI font of the whole window (empty: system font)	
 Unavailable	
+Unchanged	
 Underline misspelled words in prose files and in code comments	
 Undid commit “{}”	
 Undo	
@@ -3098,6 +3102,7 @@ your words
 {} MB · image preview	
 {} YAML documents became one list.	
 {} accepted the connection but sent no reply.	
+{} added	
 {} already exists. Choose another name.	
 {} asks for permissions: install it from the Extensions view to review them	
 {} bookmark|{} bookmarks	
@@ -3188,6 +3193,7 @@ your words
 {} parent module|{} parent modules	
 {} ports are forwarded	
 {} reference|{} references	
+{} removed	
 {} result in 1 file|{} results in 1 file	
 {} result|{} results	
 {} skipped	

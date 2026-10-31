@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Screen readers read and drive the pages: the merge editor (each conflict, both sides' text and every accept
+  button), the folder comparison (options, rows with their status and the copy and delete buttons), the diff and the
+  large-file view line by line, the Markdown preview's headings, paragraphs and links, the Welcome page's tiles and
+  recent folders, the data query bar and the containers' overview, details and logs.
+
 - Screen readers reach every button drawn in the side views: the Explorer's header buttons, section headers, open
   editors, favorites, outline and timeline; Source Control's Refresh, More Actions and stashes; the Search view's
   result buttons and structural language; Run and Debug's Remove All Breakpoints and launch link; the Testing filter;

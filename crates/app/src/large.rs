@@ -571,6 +571,8 @@ impl LargeFileView {
                     .text_size(px(text::XS.0))
                     .text_color(c(if self.error.is_some() { p.danger } else { p.text_muted }))
                     .child(icon("file-image", 14., p.text_muted))
+                    .relative()
+                    .child(crate::a11y_controls::said(self.path.clone(), "header", accesskit::Role::Label, header.clone()))
                     .child(header),
             )
             .child(div().flex_1().min_h_0().p(px(theme::SPACE[8])).flex().items_center().justify_center().children(
@@ -622,8 +624,27 @@ impl Render for LargeFileView {
                 .border_b_1()
                 .border_color(c(p.border))
                 .text_size(px(text::SM.0))
-                .child(ui::input_box("large-goto-box", &p, p.bg, f.field.focus_handle(cx).is_focused(window)).w(px(320.)).child(f.field.clone()))
-                .child(div().text_size(px(text::XS.0)).text_color(c(if failed { p.danger } else { p.text_muted })).child(status))
+                .child({
+                    let handle = f.field.focus_handle(cx);
+                    let press = handle.clone();
+                    ui::input_box("large-goto-box", &p, p.bg, handle.is_focused(window)).w(px(320.)).child(f.field.clone()).relative().child(
+                        crate::a11y_controls::control(
+                            crate::a11y_controls::Control::new(self.path.clone(), "find", accesskit::Role::SearchInput, crate::i18n::t("Find"))
+                                .value(f.field.read(cx).text().to_string())
+                                .description(crate::i18n::t("↵ next · ⇧↵ previous · Esc"))
+                                .focus(handle)
+                                .on_entity(cx.entity().downgrade(), move |_: &mut Self, w, _| w.focus(&press)),
+                        ),
+                    )
+                })
+                .child(
+                    div()
+                        .relative()
+                        .text_size(px(text::XS.0))
+                        .text_color(c(if failed { p.danger } else { p.text_muted }))
+                        .child(crate::a11y_controls::said(self.path.clone(), "find-status", accesskit::Role::Status, status.clone()))
+                        .child(status),
+                )
                 .child(div().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(crate::i18n::t("↵ next · ⇧↵ previous · Esc")))
         });
         div()
@@ -650,11 +671,29 @@ impl Render for LargeFileView {
                     .text_size(px(text::XS.0))
                     .text_color(c(if self.error.is_some() || self.stale.is_some() { p.danger } else { p.text_muted }))
                     .child(icon("file-text", 14., p.text_muted))
-                    .child(div().flex_1().min_w_0().overflow_hidden().child(header))
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .relative()
+                            .child(crate::a11y_controls::said(self.path.clone(), "header", accesskit::Role::Label, header.clone()))
+                            .child(header),
+                    )
                     .when(!follow && unseen > 0, |d| {
                         d.child(
                             div()
                                 .id("large-unseen")
+                                .relative()
+                                .child(crate::a11y_controls::control(
+                                    crate::a11y_controls::Control::button(
+                                        self.path.clone(),
+                                        "unseen",
+                                        crate::i18n::tn("↓ {} new line", "↓ {} new lines", unseen as usize, &[]),
+                                        |_, _| {},
+                                    )
+                                    .on_entity(cx.entity().downgrade(), |this: &mut Self, _, cx| this.set_follow(true, cx)),
+                                ))
                                 .cursor_pointer()
                                 .px(px(theme::SPACE[3]))
                                 .rounded(px(theme::radius::MD))
@@ -674,6 +713,13 @@ impl Render for LargeFileView {
                             &p,
                             p.bg,
                         )
+                        .relative()
+                        .child(crate::a11y_controls::control(
+                            crate::a11y_controls::Control::new(self.path.clone(), "follow", accesskit::Role::CheckBox, crate::i18n::t("Follow"))
+                                .toggled(follow)
+                                .description(crate::i18n::t("Follow the end of the file as it grows (tail -f). Scrolling up pauses."))
+                                .on_entity(cx.entity().downgrade(), |this: &mut Self, _, cx| this.set_follow(!this.follow, cx)),
+                        ))
                         .on_click(cx.listener(|this, _, _, cx| this.set_follow(!this.follow, cx))),
                     ),
             )
@@ -712,9 +758,16 @@ impl Render for LargeFileView {
                                             Level::Quiet => p.text_muted,
                                             Level::Plain => p.text,
                                         };
+                                        let heard =
+                                            format!("{}: {}", crate::i18n::tf("line {}", &[&(ix + 1)]), text.as_deref().unwrap_or(crate::i18n::t("Loading…")));
                                         div()
                                             .h(px(line_h))
                                             .flex()
+                                            .relative()
+                                            .child(crate::a11y_controls::control(
+                                                crate::a11y_controls::Control::text(this.path.clone(), format!("line{ix}"), accesskit::Role::ListItem, heard)
+                                                    .selected(hit),
+                                            ))
                                             .when(hit, |d| d.bg(ui::ca(p.warning, 0.22)))
                                             .whitespace_nowrap()
                                             .overflow_hidden()
