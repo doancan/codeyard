@@ -460,6 +460,18 @@ impl TerminalView {
 
     /// For the accessibility tree (a11y.rs): the rows on screen (trailing blanks trimmed) and the cursor (row, column),
     /// if it is on screen.
+    /// For the accessibility tree: how far the view is scrolled back and how many lines of history there are.
+    pub fn a11y_scroll(&self) -> (usize, usize) {
+        let grid = self.term.grid();
+        (grid.display_offset(), grid.history_size())
+    }
+
+    /// A page through the history from the accessibility tree (up: older lines), as Shift+Page Up/Down do.
+    pub fn a11y_scroll_page(&mut self, up: bool, cx: &mut Context<Self>) {
+        self.term.scroll_display(if up { Scroll::PageUp } else { Scroll::PageDown });
+        cx.notify();
+    }
+
     pub fn a11y_view(&self) -> (Vec<String>, Option<(usize, usize)>) {
         let content = self.term.renderable_content();
         let offset = content.display_offset as i32;

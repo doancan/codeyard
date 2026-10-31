@@ -147,10 +147,12 @@ Branch {}
 Breadcrumbs	
 Break on Value Change	
 Breaking on: {}	
+Breakpoint on line {}	
 Breakpoints	
 Breakpoints are active.	
 Breakpoints are deactivated: the program runs past them.	
 Breaks when the value is written; for this debug session only.	
+Brightness	
 Bring a folder's tabs and unsaved changes back when you open it	
 Build and Open	
 Build failed: {}	
@@ -299,6 +301,7 @@ Collapse all results
 Color Theme	
 Color Theme…	
 Color matching brackets by nesting depth	
+Color picker	
 Color symbols by their meaning, from the language server	
 Color theme	
 Color theme of the whole window and the editor	
@@ -354,6 +357,7 @@ Compound “{}” has no configurations
 Configure Tasks…	
 Configure Terminal Settings	
 Conflict	
+Conflict at line {}	
 Conflict {0} of {1}	
 Connect	
 Connect in Current Window	
@@ -921,6 +925,7 @@ Find
 Find All References	
 Find in Files	
 Find in Folder…	
+Find in Terminal	
 Find in file (searched on the host)	
 Find in files	
 Find in selection (⌥⌘L)	
@@ -930,6 +935,7 @@ Focus Previous Terminal
 Focus Right Editor Group	
 Fold	
 Fold All	
+Fold line {}	
 Folder to clone into	
 Folders colored by purpose (src, tests, docs…) and colored file glyphs	
 Follow	
@@ -1086,6 +1092,7 @@ Host and client id of your {} server, such as git.example.com 3f2a9c
 Host name (from ~/.ssh/config) or user@host	
 Hover	
 Hover an option to preview the result.	
+Hue	
 Identical	
 Ignore Case	
 Ignore case unless the query has capital letters	
@@ -1224,9 +1231,12 @@ Line height in pixels
 Line numbers in the gutter	
 Line {0}: {1}	
 Line {0}: {1} → {2}	
+Line {} added	
 Line {} after the change	
+Line {} changed	
 Line {}: not committed yet	
 Line {}: {} · {}, {} · {}	
+Lines deleted above line {}	
 Lines kept in terminal history	
 Lines of each terminal's history kept for the next start, as plain text on this computer (0: none)	
 Link copied.	
@@ -1535,6 +1545,7 @@ Only send it if you trust this file.
 Only the connection is removed; the remote repository itself is untouched.	
 Only the local tag is removed. A copy on a remote stays until you delete it there (Git: Delete Remote Tag…).	
 Only this host's entry is removed. The previous file is kept as config.codeyard-bak.	
+Opacity	
 Open	
 Open Changes	
 Open Editors	
@@ -1958,6 +1969,7 @@ SSH Hosts
 SSH host	
 SSH {0}: {1}. Docker must be installed and accessible to the SSH user on the remote host.	
 Same apart from whitespace	
+Saturation	
 Saturday	
 Save	
 Save All	
@@ -2486,6 +2498,7 @@ Unexpected text after the closing quote
 Unexpected “{}”	
 Unfold	
 Unfold All	
+Unfold line {}	
 Unhealthy	
 Uninstall	
 Uninstall {}?	
@@ -2726,6 +2739,7 @@ detached HEAD
 diff	
 different kinds	
 differs only in letter case	
+disabled	
 download failed	
 draft	
 e.g. 3000	

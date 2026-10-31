@@ -20,6 +20,18 @@ pub(crate) const CONTROL_GROUP: u64 = 0x11_0000_0000;
 /// What runs when the control is pressed (its click handler's work), after the tree's request has finished.
 pub(crate) type ControlAction = Rc<dyn Fn(&mut Window, &mut App)>;
 
+/// A slider's setter: the new value, already clamped to its range.
+pub(crate) type SliderAction = Rc<dyn Fn(f64, &mut Window, &mut App)>;
+
+/// A slider's range: value, minimum, maximum and the step of Increment and Decrement.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Range {
+    pub value: f64,
+    pub min: f64,
+    pub max: f64,
+    pub step: f64,
+}
+
 /// A control as the view that draws it describes it.
 #[derive(Clone)]
 pub(crate) struct Control {
@@ -36,6 +48,8 @@ pub(crate) struct Control {
     pub expanded: Option<bool>,
     pub disabled: bool,
     pub focus: Option<FocusHandle>,
+    /// A slider: its range, and what setting a value does.
+    pub range: Option<(Range, SliderAction)>,
     pub action: Option<ControlAction>,
 }
 
@@ -68,6 +82,7 @@ impl Control {
             expanded: None,
             disabled: false,
             focus: None,
+            range: None,
             action: None,
         }
     }
@@ -102,6 +117,12 @@ impl Control {
 
     pub(crate) fn expanded(mut self, open: bool) -> Self {
         self.expanded = Some(open);
+        self
+    }
+
+    /// A slider over `range`: Increment, Decrement and a value set from the tree call `set` with the new value.
+    pub(crate) fn slider(mut self, range: Range, set: impl Fn(f64, &mut Window, &mut App) + 'static) -> Self {
+        self.range = Some((range, Rc::new(set)));
         self
     }
 
@@ -196,6 +217,7 @@ pub(crate) struct ControlSnap {
     pub pressable: bool,
     pub focusable: bool,
     pub focused: bool,
+    pub range: Option<Range>,
     pub bounds: Option<accesskit::Rect>,
 }
 
@@ -221,6 +243,7 @@ pub(crate) fn snapshot(window: &Window, cx: &App) -> Vec<ControlSnap> {
                 pressable: c.action.is_some() && !c.disabled,
                 focusable: c.focus.is_some(),
                 focused: c.focus.as_ref().is_some_and(|f| f.is_focused(window)),
+                range: c.range.as_ref().map(|(r, _)| *r),
                 bounds: crate::painted::physical_scaled(*bounds, scale),
             })
         })
@@ -253,9 +276,24 @@ pub(crate) fn append_nodes(controls: &[ControlSnap], nodes: &mut Vec<(NodeId, No
         }
         if c.pressable {
             n.add_action(Action::Click);
+            // A control that folds: Expand or Collapse is its click, offered only toward the other state.
+            match c.expanded {
+                Some(true) => n.add_action(Action::Collapse),
+                Some(false) => n.add_action(Action::Expand),
+                None => {}
+            }
         }
         if c.focusable {
             n.add_action(Action::Focus);
+        }
+        if let Some(r) = c.range {
+            n.set_numeric_value(r.value);
+            n.set_min_numeric_value(r.min);
+            n.set_max_numeric_value(r.max);
+            n.set_numeric_value_step(r.step);
+            n.add_action(Action::Increment);
+            n.add_action(Action::Decrement);
+            n.add_action(Action::SetValue);
         }
         if let Some(b) = c.bounds {
             n.set_bounds(b);
@@ -279,6 +317,23 @@ pub(crate) fn group(surface: String, ids: Vec<NodeId>, nodes: &mut Vec<(NodeId, 
     id
 }
 
+/// UI Automation offers Expand and Collapse on every node with an expanded state. For a node that folds on Click only,
+/// they mean that click when the node is in the other state: `Some(Some(click))`; `None` when there is nothing to do
+/// (already in the state asked for); `Some(None)` for any other request, handled as it is. `tree` is the tree the
+/// request was made from, built only for these two actions.
+pub(crate) fn fold_as_click(req: &ActionRequest, tree: impl FnOnce() -> accesskit::TreeUpdate) -> Option<Option<ActionRequest>> {
+    if !matches!(req.action, Action::Expand | Action::Collapse) {
+        return Some(None);
+    }
+    let tree = tree();
+    let Some((_, n)) = tree.nodes.iter().find(|(id, _)| *id == req.target_node) else { return Some(None) };
+    if n.supports_action(req.action) {
+        return Some(None);
+    }
+    (n.is_expanded() == Some(req.action == Action::Collapse) && n.supports_action(Action::Click))
+        .then(|| Some(ActionRequest { action: Action::Click, ..req.clone() }))
+}
+
 /// The focused painted control, if one has the keyboard.
 pub(crate) fn focus_node(controls: &[ControlSnap]) -> Option<NodeId> {
     controls.iter().find(|c| c.focused).map(|c| c.id)
@@ -299,6 +354,11 @@ impl Workbench {
             .map(|(c, _)| c.clone());
         let Some(now) = now else { return true };
         match req.action {
+            Action::Expand | Action::Collapse if !now.disabled && now.expanded == Some(req.action == Action::Collapse) => {
+                if let Some(action) = now.action {
+                    window.defer(cx, move |window, cx| action(window, cx));
+                }
+            }
             Action::Click if !now.disabled => {
                 if let Some(action) = now.action {
                     window.defer(cx, move |window, cx| action(window, cx));
@@ -308,6 +368,21 @@ impl Workbench {
                 if let Some(f) = now.focus {
                     window.focus(&f);
                 }
+            }
+            Action::Increment | Action::Decrement | Action::SetValue if !now.disabled => {
+                let Some((r, set)) = now.range else { return true };
+                let to = match (req.action, &req.data) {
+                    (Action::Increment, _) => r.value + r.step,
+                    (Action::Decrement, _) => r.value - r.step,
+                    (_, Some(accesskit::ActionData::NumericValue(v))) => *v,
+                    (_, Some(accesskit::ActionData::Value(v))) => match v.trim().parse::<f64>() {
+                        Ok(v) => v,
+                        Err(_) => return true,
+                    },
+                    _ => return true,
+                };
+                let to = to.clamp(r.min, r.max);
+                window.defer(cx, move |window, cx| set(to, window, cx));
             }
             _ => {}
         }

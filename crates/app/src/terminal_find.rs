@@ -186,23 +186,54 @@ impl TerminalView {
                 .shadow_md()
                 .font_family(ui::UI_FONT)
                 .text_size(px(text::XS.0))
-                .child(
+                .child({
+                    let handle = find.field.focus_handle(cx);
+                    let press = handle.clone();
                     ui::input_box("term-find-box", p, p.bg, focused)
                         .flex_1()
                         .min_w_0()
                         .when(none, |d| d.border_color(c(p.danger)))
-                        .child(div().flex_1().min_w_0().child(find.field.clone())),
-                )
-                .child(div().flex_none().min_w(px(64.)).text_color(c(if none { p.danger } else { p.text_muted })).child(label))
+                        .child(div().flex_1().min_w_0().child(find.field.clone()))
+                        .relative()
+                        .child(crate::a11y_controls::control(
+                            crate::a11y_controls::Control::new(
+                                crate::i18n::t("Find in Terminal"),
+                                "field",
+                                accesskit::Role::SearchInput,
+                                crate::i18n::t("Find"),
+                            )
+                            .value(find.field.read(cx).text().to_string())
+                            .focus(handle)
+                            .on_entity(cx.entity().downgrade(), move |_: &mut Self, w, _| w.focus(&press)),
+                        ))
+                })
                 .child(
-                    button("term-find-prev", "arrow-up", crate::i18n::t("Previous Match"))
-                        .on_click(cx.listener(|this, _, _, cx| this.find_step(Direction::Left, cx))),
+                    div()
+                        .flex_none()
+                        .min_w(px(64.))
+                        .text_color(c(if none { p.danger } else { p.text_muted }))
+                        .relative()
+                        .child(crate::a11y_controls::said(crate::i18n::t("Find in Terminal"), "count", accesskit::Role::Status, label.to_string()))
+                        .child(label),
                 )
-                .child(
-                    button("term-find-next", "arrow-down", crate::i18n::t("Next Match"))
-                        .on_click(cx.listener(|this, _, _, cx| this.find_step(Direction::Right, cx))),
-                )
-                .child(button("term-find-close", "x", crate::i18n::t("Close")).on_click(cx.listener(|this, _, window, cx| this.close_find(window, cx)))),
+                .child(crate::a11y_controls::press_on(
+                    button("term-find-prev", "arrow-up", crate::i18n::t("Previous Match")),
+                    crate::a11y_controls::Control::button(crate::i18n::t("Find in Terminal"), "prev", crate::i18n::t("Previous Match"), |_, _| {}),
+                    cx,
+                    |this, _, cx| this.find_step(Direction::Left, cx),
+                ))
+                .child(crate::a11y_controls::press_on(
+                    button("term-find-next", "arrow-down", crate::i18n::t("Next Match")),
+                    crate::a11y_controls::Control::button(crate::i18n::t("Find in Terminal"), "next", crate::i18n::t("Next Match"), |_, _| {}),
+                    cx,
+                    |this, _, cx| this.find_step(Direction::Right, cx),
+                ))
+                .child(crate::a11y_controls::press_on(
+                    button("term-find-close", "x", crate::i18n::t("Close")),
+                    crate::a11y_controls::Control::button(crate::i18n::t("Find in Terminal"), "close", crate::i18n::t("Close"), |_, _| {}),
+                    cx,
+                    |this, window, cx| this.close_find(window, cx),
+                )),
         )
     }
 

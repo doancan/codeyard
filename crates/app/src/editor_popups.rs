@@ -142,14 +142,27 @@ impl EditorView {
             let Some(v) = self.visible.iter().find(|v| v.line == conflict.start && v.start == head) else { continue };
             let x = v.text_left + v.layout.width + px(theme::SPACE[8]) - self.surface_origin.x;
             let y = v.bounds.top() - self.surface_origin.y;
+            let at = t("Conflict at line {}").replace("{}", &(conflict.start + 1).to_string());
             let link = |id: &'static str, label: &'static str, choice: crate::conflict::Choice| {
-                div().id((id, ix)).cursor_pointer().text_color(c(p.text_muted)).hover(|d| d.text_color(c(p.accent)).underline()).child(label).on_mouse_down(
-                    MouseButton::Left,
-                    cx.on(move |e, _, _, cx| {
-                        cx.stop_propagation();
-                        e.resolve_conflict(ix, choice, cx);
-                    }),
-                )
+                div()
+                    .id((id, ix))
+                    .relative()
+                    .child(crate::a11y_controls::control(
+                        crate::a11y_controls::Control::new(self.name.to_string(), format!("{id}{ix}"), accesskit::Role::Link, label)
+                            .description(at.clone())
+                            .on_entity(cx.entity().downgrade(), move |e: &mut Self, _, cx| e.resolve_conflict(ix, choice, cx)),
+                    ))
+                    .cursor_pointer()
+                    .text_color(c(p.text_muted))
+                    .hover(|d| d.text_color(c(p.accent)).underline())
+                    .child(label)
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.on(move |e, _, _, cx| {
+                            cx.stop_propagation();
+                            e.resolve_conflict(ix, choice, cx);
+                        }),
+                    )
             };
             let bar = || div().text_color(c(p.border)).child("|");
             use crate::conflict::Choice;
@@ -173,6 +186,17 @@ impl EditorView {
                     .child(
                         div()
                             .id(("cf-merge", ix))
+                            .relative()
+                            .child(crate::a11y_controls::control(
+                                crate::a11y_controls::Control::new(
+                                    self.name.to_string(),
+                                    format!("cf-merge{ix}"),
+                                    accesskit::Role::Link,
+                                    t("Open Merge Editor"),
+                                )
+                                .description(at.clone())
+                                .on_entity(cx.entity().downgrade(), |_: &mut Self, _, cx| cx.emit(EditorEvent::OpenMergeEditor)),
+                            ))
                             .cursor_pointer()
                             .text_color(c(p.accent))
                             .hover(|d| d.underline())
@@ -196,6 +220,11 @@ impl EditorView {
             out.push(
                 div()
                     .id(("http-send", line))
+                    .child(crate::a11y_controls::control(
+                        crate::a11y_controls::Control::button(self.name.to_string(), format!("http-send{line}"), t("Send Request"), |_, _| {})
+                            .description(t("line {}").replace("{}", &(line + 1).to_string()))
+                            .on_entity(cx.entity().downgrade(), move |_: &mut Self, _, cx| cx.emit(EditorEvent::SendRequest(line))),
+                    ))
                     .absolute()
                     .left(v.text_left + v.layout.width + px(theme::SPACE[8]) - self.surface_origin.x)
                     .top(v.bounds.top() - self.surface_origin.y)
