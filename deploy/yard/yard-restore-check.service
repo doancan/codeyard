@@ -1,0 +1,8 @@
+# Weekly proof that the backup restores (deploy/yard/restore --check): into a temporary folder, checked, deleted.
+[Unit]
+Description=Check that the extension registry's backup restores
+OnFailure=yard-alert@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/yard-restore --check

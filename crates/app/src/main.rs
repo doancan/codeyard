@@ -1,6 +1,6 @@
 //! codeyard: lightweight, native code editor. Local + SSH.
 //!
-//!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|FOLDER|ID[@VERSION]]
+//!     codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|FOLDER|ID[@VERSION]] [--update-extensions]
 
 // Normal Windows launches are GUI applications in every profile. Test harnesses keep their console.
 #![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
@@ -779,6 +779,8 @@ struct Args {
     extension_dev: Option<String>,
     /// `--install-extension FILE.cyx` or `FOLDER` (repeatable): install these packages and exit, without a window.
     install: Vec<String>,
+    /// `--update-extensions`: check the registries of installed extensions now, act as the update check does, and exit.
+    update_extensions: bool,
 }
 
 /// `--install-extension`: install each package into the user's store, as the Extensions view does after its consent
@@ -808,6 +810,37 @@ fn install_extensions(files: &[String]) -> i32 {
         }
     }
     status
+}
+
+/// `--update-extensions`: what the daily update check does for extensions installed from a registry (update, roll
+/// back a yanked version, stop a revoked one), asking those registries now, without a window. One line per change;
+/// exit status 1 when a registry could not be read.
+fn update_extensions() -> i32 {
+    let Some(cfg) = settings::config_dir() else {
+        eprintln!("codeyard: no settings folder");
+        return 1;
+    };
+    let settings =
+        std::fs::read_to_string(cfg.join("settings.jsonc")).ok().and_then(|t| settings::parse_layers(&t, &[]).ok()).map(|(s, _)| s).unwrap_or_default();
+    let registries = ext_registry::registries(&settings);
+    let report = ext_updates::check_now(&cfg, &registries, settings.extension_auto_update, ext_registry::now());
+    for line in report.done.iter().chain(&report.stopped) {
+        println!("{line}");
+    }
+    for (id, s) in &report.status {
+        let Some(offer) = &s.offer else { continue };
+        let v = offer.version();
+        match offer {
+            ext_updates::Offer::Waiting { .. } => println!("{id} {v} runs code: it installs by itself 48 h after it was published"),
+            ext_updates::Offer::Available { .. } => println!("{id} {v} is available"),
+            ext_updates::Offer::Failed { error, .. } => println!("{id} {v} could not be installed: {error}"),
+            _ => println!("{id} {v} needs your review in the Extensions view"),
+        }
+    }
+    for e in &report.errors {
+        eprintln!("{e}");
+    }
+    i32::from(!report.errors.is_empty())
 }
 
 /// The windows an update restart left for this process; the file is consumed here. Anything wrong with it is logged and means
@@ -859,6 +892,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
         no_extensions: false,
         extension_dev: None,
         install: Vec::new(),
+        update_extensions: false,
     };
     let mut it = argv;
     while let Some(a) = it.next() {
@@ -869,6 +903,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
             "--no-extensions" => args.no_extensions = true,
             "--extension-dev" => args.extension_dev = it.next(),
             "--install-extension" => args.install.extend(it.next()),
+            "--update-extensions" => args.update_extensions = true,
             update_restart::FLAG => args.after_update = true,
             "--search" => args.search = it.next(),
             "--panel" => args.panel = it.next(),
@@ -887,7 +922,7 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
             }
             "-h" | "--help" => {
                 println!(
-                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|FOLDER|ID[@VERSION]]"
+                    "usage: codeyard [FOLDER | FILE] [--connect HOST] [--theme ID] [--terminal] [--search TEXT] [--panel explorer|search|scm|debug|testing|remote|welcome|settings] [--no-extensions] [--extension-dev FOLDER] [--install-extension FILE.cyx|FOLDER|ID[@VERSION]] [--update-extensions]"
                 );
                 std::process::exit(0);
             }
@@ -927,6 +962,8 @@ mod args_tests {
         assert_eq!((dev.extension_dev.as_deref(), dev.path.as_deref()), (Some("/ext"), Some("/work")), "its value is not the folder to open");
         let inst = parse(false, &["--install-extension", "a.cyx", "--install-extension", "b.cyx"]);
         assert_eq!((inst.install.as_slice(), inst.path.as_deref()), (&["a.cyx".to_string(), "b.cyx".to_string()][..], None));
+        let up = parse(false, &["--update-extensions"]);
+        assert!(up.update_extensions && up.path.is_none());
     }
 }
 
@@ -1117,8 +1154,15 @@ fn main() {
     if let Some(url) = args.path.as_deref().filter(|p| p.starts_with("codeyard://")) {
         std::process::exit(workbench::forward_callback_from_command_line(url));
     }
-    if !args.install.is_empty() {
-        std::process::exit(install_extensions(&args.install));
+    if !args.install.is_empty() || args.update_extensions {
+        let mut status = 0;
+        if !args.install.is_empty() {
+            status = install_extensions(&args.install);
+        }
+        if args.update_extensions {
+            status = status.max(update_extensions());
+        }
+        std::process::exit(status);
     }
     if args.no_extensions {
         ext::turn_off();

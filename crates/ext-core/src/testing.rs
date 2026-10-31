@@ -482,6 +482,91 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// An identity token for the stand-in Fulcio ([`serve_sigstore`]): `sub` is what the key proves it holds, and the
+/// publisher the certificate names travels in the claims. Only the stand-in reads it; a real Fulcio refuses it.
+pub fn identity_token(sub: &str, publisher: &Publisher) -> String {
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64URL;
+    let claims = json!({ "sub": sub, "test_publisher": publisher });
+    format!("h.{}.s", B64URL.encode(claims.to_string()))
+}
+
+/// A stand-in Fulcio and Rekor on a local port, answering in their real formats from `authority`: `POST
+/// /api/v2/signingCert` like Fulcio, `POST /api/v1/log/entries` like Rekor. Returns its base URL (for both
+/// `CODEYARD_FULCIO_URL` and `CODEYARD_REKOR_URL`). Serves on a thread until the process ends; one request at a time.
+pub fn serve_sigstore(authority: std::sync::Arc<Authority>) -> String {
+    serve_sigstore_on(authority, "127.0.0.1:0").expect("a local port")
+}
+
+/// [`serve_sigstore`] on a given address.
+pub fn serve_sigstore_on(authority: std::sync::Arc<Authority>, addr: &str) -> std::io::Result<String> {
+    use std::io::{BufRead as _, BufReader, Read as _, Write as _};
+    let listener = std::net::TcpListener::bind(addr)?;
+    let url = format!("http://127.0.0.1:{}", listener.local_addr()?.port());
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let Ok(read) = stream.try_clone() else { continue };
+            let mut reader = BufReader::new(read);
+            let mut line = String::new();
+            if reader.read_line(&mut line).is_err() {
+                continue;
+            }
+            let path = line.split(' ').nth(1).unwrap_or_default().to_string();
+            let mut len = 0;
+            loop {
+                let mut h = String::new();
+                if reader.read_line(&mut h).is_err() || h.trim().is_empty() {
+                    break;
+                }
+                if let Some(v) = h.to_ascii_lowercase().strip_prefix("content-length:") {
+                    len = v.trim().parse().unwrap_or(0);
+                }
+            }
+            let mut body = vec![0; len];
+            if reader.read_exact(&mut body).is_err() {
+                continue;
+            }
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+            let (status, answer) = match path.as_str() {
+                "/api/v2/signingCert" => fulcio(&authority, &body, now),
+                "/api/v1/log/entries" => (201, authority.rekor_response(&body, now).to_string()),
+                _ => (404, "not found".into()),
+            };
+            let _ = write!(
+                stream,
+                "HTTP/1.1 {status} X\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{answer}",
+                answer.len()
+            );
+        }
+    });
+    Ok(url)
+}
+
+/// Fulcio's checks, in short: a token naming a publisher, a P-256 key, and proof that the key signed the subject.
+fn fulcio(a: &Authority, body: &[u8], now: u64) -> (u16, String) {
+    use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64URL;
+    let bad = |why: &str| (400, why.to_string());
+    let Ok(req) = serde_json::from_slice::<serde_json::Value>(body) else { return bad("not JSON") };
+    let Some(token) = req["credentials"]["oidcIdentityToken"].as_str() else { return bad("no token") };
+    let Some(claims) = token.split('.').nth(1).and_then(|c| B64URL.decode(c).ok()).and_then(|c| serde_json::from_slice::<serde_json::Value>(&c).ok()) else {
+        return bad("not a token");
+    };
+    let Ok(publisher) = serde_json::from_value::<Publisher>(claims["test_publisher"].clone()) else { return bad("no test publisher in the token") };
+    let key_pem = req["publicKeyRequest"]["publicKey"]["content"].as_str().unwrap_or_default();
+    let Ok(der) = B64.decode(key_pem.lines().filter(|l| !l.starts_with("-----")).collect::<String>()) else { return bad("not a PEM key") };
+    if der.len() < 65 {
+        return bad("not a P-256 key");
+    }
+    let point = &der[der.len() - 65..];
+    let Ok(proof) = B64.decode(req["publicKeyRequest"]["proofOfPossession"].as_str().unwrap_or_default()) else { return bad("no proof") };
+    let sub = claims["sub"].as_str().unwrap_or_default();
+    if ring::signature::UnparsedPublicKey::new(&ring::signature::ECDSA_P256_SHA256_ASN1, point).verify(sub.as_bytes(), &proof).is_err() {
+        return bad("proof of possession does not verify");
+    }
+    let cert = a.certificate_for(point, &publisher, now);
+    (201, json!({ "signedCertificateEmbeddedSct": { "chain": { "certificates": [pem("CERTIFICATE", &cert)] } } }).to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -265,6 +265,36 @@ fn the_security_role_revokes_and_clears_advisory_fixes() {
     assert!(matches!(t.yard.revoke(&id, &Version::parse("3.0.0").unwrap(), "x", NOW), Err(Error::NotFound(_))));
 }
 
+/// What `yard status` and the hourly alert check read: the served index, the online key and the review queue.
+#[test]
+fn health_reports_expiry_and_counts_and_names_the_problem() {
+    let t = Test::new("health");
+    let me = github(7, 42);
+    t.publish(&package("you.night", "1.0.0", "Night"), &me).unwrap();
+    t.publish(&package("you.night", "1.0.1", "Night"), &me).unwrap();
+    t.yard.revoke(&ExtId::parse("you.night").unwrap(), &Version::parse("1.0.0").unwrap(), "Bad.", NOW).unwrap();
+    let h = t.yard.health().unwrap();
+    assert_eq!((h.extensions, h.versions, h.revoked, h.waiting_for_review), (1, 2, 1, 0));
+    assert_eq!(h.index_expires, NOW + y::INDEX_LIFETIME_SECS);
+    assert_eq!(h.online_expires, NOW + ONLINE_KEY_LIFETIME_SECS);
+    assert_eq!(h.problem(NOW, 24, 14), None);
+    // Signed daily, so with 48 h or less left a signing was missed; the alert fires inside the last 24 h.
+    assert_eq!(h.problem(NOW + 47 * 3600, 24, 14), None);
+    assert!(h.problem(NOW + 49 * 3600, 24, 14).unwrap().contains("expires in 23 h"));
+    assert!(h.problem(NOW + y::INDEX_LIFETIME_SECS, 24, 14).unwrap().contains("has expired"));
+    // A signing as of 73 h ago (`yard resign --expired`) is already expired.
+    t.yard.resign(NOW - y::INDEX_LIFETIME_SECS - 3600).unwrap();
+    assert!(t.yard.health().unwrap().problem(NOW, 24, 14).unwrap().contains("has expired"));
+    // 13 days before the online key expires, with the index signed that day: rotate.
+    let day77 = NOW + ONLINE_KEY_LIFETIME_SECS - 13 * 86400;
+    t.yard.resign(day77).unwrap();
+    let h = t.yard.health().unwrap();
+    assert!(h.problem(day77, 24, 14).unwrap().contains("online key expires in 13 days"), "{h:?}");
+    let text = h.metrics();
+    assert!(text.contains(&format!("\nyard_index_version {}\n", h.index_version)), "{text}");
+    assert!(text.contains("\nyard_versions_revoked 1\n") && text.contains("\nyard_reviews_waiting 0\n"), "{text}");
+}
+
 #[test]
 fn every_signing_raises_the_index_version_and_counts_downloads() {
     let t = Test::new("counter");
@@ -434,6 +464,11 @@ fn the_http_service_end_to_end() {
     assert_eq!(request(addr, "GET", "/packages/zz.cyx", b"").0, 404);
     assert_eq!(request(addr, "GET", "/yard.sqlite", b"").0, 404, "only the public files are served");
     assert_eq!(request(addr, "DELETE", "/index.json", b"").0, 405);
+    // Monitoring on the server: the metrics name the served index.
+    let (status, metrics) = request(addr, "GET", "/metrics", b"");
+    let metrics = String::from_utf8(metrics).unwrap();
+    assert_eq!(status, 200);
+    assert!(metrics.contains("# TYPE yard_index_expires_timestamp_seconds gauge\n") && metrics.contains("\nyard_versions 1\n"), "{metrics}");
 
     let statement = StatusChange::Yank.statement(&p.id, &p.version);
     let (status, body) = request(addr, "POST", "/v1/status", &y::frame(&t.authority.sign(&statement, &me, http::now()), &statement));

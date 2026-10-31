@@ -16,7 +16,93 @@ use ext_core::registry::{self, Download, Fetch, Got, Registry};
 
 /// The public registry: (name, URL, root public keys, threshold). The keys come from the root key ceremony
 /// (docs/registry.md, "Root key ceremony"); until it has run, only registries in `extensions.registries` are used.
+/// After the ceremony it reads, with the three public keys from `yard-ceremony-record.txt`:
+///
+/// ```text
+/// pub const PUBLIC: Option<(&str, &str, &[&str], usize)> = Some(("yard.<domain>", "https://yard.<domain>", &["<A>", "<B>", "<C>"], 2));
+/// ```
 pub const PUBLIC: Option<(&str, &str, &[&str], usize)> = None;
+
+// No build, release or not, ships a public registry with placeholder or malformed keys.
+const _: () = if let Some(problem) = public_problem(PUBLIC) {
+    panic!("{}", problem)
+};
+
+/// Why `public` cannot ship, if it cannot: an address that is not https or is an example, a threshold below 2 or
+/// above the number of keys, a key that is not 64 lowercase hex digits, the same key twice, or a placeholder key (one
+/// with fewer than 8 different digits, which 64 random ones never have in practice).
+pub const fn public_problem(public: Option<(&str, &str, &[&str], usize)>) -> Option<&'static str> {
+    let Some((name, url, keys, threshold)) = public else { return None };
+    if name.is_empty() || !starts_with(url.as_bytes(), b"https://") || contains(url.as_bytes(), b"example") || contains(url.as_bytes(), b"<") {
+        return Some("ext_registry::PUBLIC: the registry's name and https address from the ceremony record");
+    }
+    if threshold < 2 || threshold > keys.len() {
+        return Some("ext_registry::PUBLIC: the threshold is at least 2 and at most the number of root keys");
+    }
+    let mut i = 0;
+    while i < keys.len() {
+        let k = keys[i].as_bytes();
+        if k.len() != 64 {
+            return Some("ext_registry::PUBLIC: each root key is 64 lowercase hex digits from the ceremony record");
+        }
+        let mut seen = [false; 16];
+        let (mut distinct, mut j) = (0, 0);
+        while j < 64 {
+            let d = match k[j] {
+                b'0'..=b'9' => k[j] - b'0',
+                b'a'..=b'f' => k[j] - b'a' + 10,
+                _ => return Some("ext_registry::PUBLIC: each root key is 64 lowercase hex digits from the ceremony record"),
+            } as usize;
+            if !seen[d] {
+                seen[d] = true;
+                distinct += 1;
+            }
+            j += 1;
+        }
+        if distinct < 8 {
+            return Some("ext_registry::PUBLIC: a placeholder root key; use the public keys from the ceremony record");
+        }
+        let mut other = i + 1;
+        while other < keys.len() {
+            if equal(k, keys[other].as_bytes()) {
+                return Some("ext_registry::PUBLIC: the same root key twice");
+            }
+            other += 1;
+        }
+        i += 1;
+    }
+    None
+}
+
+const fn starts_with(s: &[u8], prefix: &[u8]) -> bool {
+    if s.len() < prefix.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < prefix.len() {
+        if s[i] != prefix[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
+const fn contains(s: &[u8], part: &[u8]) -> bool {
+    let mut i = 0;
+    while i + part.len() <= s.len() {
+        let (_, rest) = s.split_at(i);
+        if starts_with(rest, part) {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
+const fn equal(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && starts_with(a, b)
+}
 
 /// Every registry this user installs from: the public one first, then their own, in settings order.
 pub fn registries(settings: &crate::settings::Settings) -> Vec<Registry> {

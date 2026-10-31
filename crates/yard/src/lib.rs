@@ -153,6 +153,55 @@ pub struct Published {
     pub review: bool,
 }
 
+/// What [`Yard::health`] reports; `yard status` and `GET /metrics` print it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Health {
+    pub index_version: u64,
+    /// Unix seconds; clients wait for the user before installing after it.
+    pub index_expires: u64,
+    pub online_expires: u64,
+    pub extensions: usize,
+    pub versions: usize,
+    pub revoked: usize,
+    pub waiting_for_review: usize,
+}
+
+impl Health {
+    /// The problem to alert on at `now`: the index expires within `index_hours`, or the online key within `key_days`.
+    pub fn problem(&self, now: u64, index_hours: u64, key_days: u64) -> Option<String> {
+        if self.index_expires <= now {
+            return Some("the index has expired: clients wait for the user before installing. Is `yard serve` running? Run `yard resign`".into());
+        }
+        if self.index_expires < now + index_hours * 3600 {
+            return Some(format!(
+                "the index expires in {} h (it is signed daily). Is `yard serve` running? Run `yard resign`",
+                (self.index_expires - now) / 3600
+            ));
+        }
+        if self.online_expires < now + key_days * 86400 {
+            return Some(format!(
+                "the online key expires in {} days: rotate it (docs/registry.md, Rotate the online key)",
+                self.online_expires.saturating_sub(now) / 86400
+            ));
+        }
+        None
+    }
+
+    /// The Prometheus text format, for `GET /metrics`.
+    pub fn metrics(&self) -> String {
+        let rows: [(&str, &str, u64); 7] = [
+            ("yard_index_version", "The version of the signed index being served.", self.index_version),
+            ("yard_index_expires_timestamp_seconds", "When the served index expires (Unix seconds).", self.index_expires),
+            ("yard_online_key_expires_timestamp_seconds", "When the online key expires (Unix seconds).", self.online_expires),
+            ("yard_extensions", "Extensions in the index.", self.extensions as u64),
+            ("yard_versions", "Versions in the index.", self.versions as u64),
+            ("yard_versions_revoked", "Revoked versions in the index.", self.revoked as u64),
+            ("yard_reviews_waiting", "First native programs waiting for a reviewer.", self.waiting_for_review as u64),
+        ];
+        rows.iter().map(|(name, help, v)| format!("# HELP {name} {help}\n# TYPE {name} gauge\n{name} {v}\n")).collect()
+    }
+}
+
 pub struct Yard {
     cfg: Config,
     root: Root,
@@ -441,6 +490,23 @@ impl Yard {
     /// When the online key expires (Unix seconds); the index cannot be signed past it.
     pub fn online_expires(&self) -> u64 {
         self.root.online.expires
+    }
+
+    /// The registry's state as monitoring sees it: the signed index on disk, the online key, the review queue.
+    pub fn health(&self) -> Result<Health, Error> {
+        let path = self.cfg.public.join(yard::INDEX_FILE);
+        let bytes = std::fs::read(&path).map_err(|e| Error::Internal(format!("cannot read {}: {e}", path.display())))?;
+        let index: Index = serde_json::from_slice(&bytes).map_err(|e| Error::Internal(format!("{}: {e}", path.display())))?;
+        let releases = index.extensions.values().flat_map(|e| &e.versions);
+        Ok(Health {
+            index_version: index.version,
+            index_expires: index.expires,
+            online_expires: self.root.online.expires,
+            extensions: index.extensions.len(),
+            versions: releases.clone().count(),
+            revoked: releases.filter(|r| matches!(r.status, Status::Revoked { .. })).count(),
+            waiting_for_review: self.review_queue()?.len(),
+        })
     }
 
     /// Sign a new index with nothing changed: run daily so it never expires while the service is up.

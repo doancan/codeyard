@@ -891,6 +891,9 @@ From a terminal or a script, `codeyard --install-extension FILE.cyx` or `--insta
 apply. A folder with a built extension (its manifest and, for code, `extension.wasm`) installs the same way, packaged
 as it is, without building it. A changed publisher, an old registry list, and a package file or folder with code that
 asks for permissions are refused there, with the reason: use the Extensions view, which shows the permissions first.
+`codeyard --update-extensions` runs the update check now, without a window: it asks the registries your extensions
+came from, applies what would apply by itself (updates, going back from a withdrawn version, stopping a revoked one)
+and prints one line for each change and for each update that waits for you.
 
 **Manage.** Choose an extension in the list to open its page: contributions, permissions and these actions:
 

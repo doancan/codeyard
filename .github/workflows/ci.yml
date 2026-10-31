@@ -261,6 +261,9 @@ jobs:
         env:
           CODEYARD_REQUIRE_WASM: "1"
           CODEYARD_TEST_TIMEOUT_SCALE: "3"
+      # The public registry end to end on this runner (#70, docs/registry.md "Rehearsal"): ceremony with throwaway keys,
+      # publish, install with the app, revoke, expired index.
+      - run: deploy/rehearse.sh
 
   # The same checks run locally with scripts/check-windows.ps1.
   windows:

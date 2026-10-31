@@ -1,14 +1,21 @@
-# TLS for the registry's address (certificates renew by themselves), in front of yard on 127.0.0.1:8080.
+# The registry behind Cloudflare: TLS with the Cloudflare Origin CA certificate (Cloudflare's SSL mode "Full
+# (strict)"), in front of yard on 127.0.0.1:8080. Port 443 only takes Cloudflare's addresses (yard-firewall).
 # setup.sh writes the address into /etc/caddy/yard.env as YARD_DOMAIN.
 {
-	email {$YARD_EMAIL}
+	# No certificates from Let's Encrypt and no port 80: Cloudflare holds the public certificate.
+	auto_https off
 }
 
-{$YARD_DOMAIN} {
-	# A package is at most 64 MiB, plus its signature.
+{$YARD_DOMAIN}:443 {
+	tls /etc/caddy/origin.pem /etc/caddy/origin.key
+	# A per-platform package is at most 128 MiB, plus its signature. (Cloudflare's free plan stops uploads at 100 MB;
+	# docs/registry.md, "Hosting".)
 	request_body {
-		max_size 66MB
+		max_size 130MB
 	}
+	# For the server's own monitoring only (yard-watch); never through the proxy.
+	@internal path /metrics
+	respond @internal 404
 	encode zstd gzip
 	reverse_proxy 127.0.0.1:8080
 	# Nothing about who asks is kept.
