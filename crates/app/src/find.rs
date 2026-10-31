@@ -42,8 +42,22 @@ pub struct FindBar {
     /// "3 of 12", "No results" or a pattern error (written by the editor).
     status: Option<(SharedString, bool)>,
     focus_handle: FocusHandle,
+    /// Where the fields, the status and each control were painted in the last frame, for the accessibility tree.
+    painted: crate::painted::RowBounds<FindFrame>,
     _subs: Vec<Subscription>,
 }
+
+/// A part of the find bar with a frame in the accessibility tree; `Control(i)` is control `i` of `a11y_controls`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FindFrame {
+    Query,
+    Replace,
+    Status,
+    Control(usize),
+}
+
+/// The ids of the controls in the order of `a11y_controls`.
+const CONTROL_IDS: [&str; 11] = ["f-case", "f-word", "f-regex", "f-prev", "f-next", "f-insel", "f-all", "f-close", "f-preserve", "f-replace", "f-replace-all"];
 
 impl EventEmitter<FindEvent> for FindBar {}
 
@@ -82,6 +96,7 @@ impl FindBar {
             show_replace: false,
             status: None,
             focus_handle: cx.focus_handle(),
+            painted: Default::default(),
             _subs: subs,
         }
     }
@@ -138,6 +153,24 @@ impl FindBar {
             out.extend([(t("Preserve case (⌥P)"), Some(self.preserve_case)), (t("Replace (↵)"), None), (t("Replace all (⌥⌘↵)"), None)]);
         }
         out
+    }
+
+    /// For the accessibility tree: the physical frames of what was painted in the last frame, in `window`.
+    pub fn a11y_frames(&self, window: &Window) -> Vec<(FindFrame, accesskit::Rect)> {
+        let scale = window.scale_factor();
+        let mut frames: Vec<_> = self.painted.borrow().iter().filter_map(|(k, b)| Some((*k, crate::painted::physical_scaled(*b, scale)?))).collect();
+        frames.sort_by_key(|(k, _)| match k {
+            FindFrame::Query => 0,
+            FindFrame::Replace => 1,
+            FindFrame::Status => 2,
+            FindFrame::Control(i) => 3 + i,
+        });
+        frames
+    }
+
+    /// Records where control `id` is painted.
+    fn probe(&self, id: &'static str) -> Option<impl IntoElement + use<>> {
+        CONTROL_IDS.iter().position(|c| *c == id).map(|i| crate::painted::probe(&self.painted, FindFrame::Control(i)))
     }
 
     /// Accessibility action: press control `i` of `a11y_controls` (toggle an option or run a button).
@@ -242,7 +275,7 @@ impl FindBar {
 
     fn toggle(&self, id: &'static str, label: &'static str, on: bool, tip: &'static str, cx: &mut Context<Self>, set: fn(&mut Self)) -> impl IntoElement {
         let p = *palette(cx);
-        ui::option_toggle(id, label, on, tip, &p, p.bg).on_click(cx.listener(move |this, _, _, cx| {
+        ui::option_toggle(id, label, on, tip, &p, p.bg).relative().children(self.probe(id)).on_click(cx.listener(move |this, _, _, cx| {
             set(this);
             cx.emit(FindEvent::Changed);
             cx.notify();
@@ -269,6 +302,8 @@ impl FindBar {
             .cursor_pointer()
             .hover(|d| d.bg(c(p.surface_hover)))
             .child(content)
+            .relative()
+            .children(self.probe(id))
             .tooltip(move |_, cx| cx.new(|_| crate::workbench::Tooltip(tip.into())).into())
             .on_click(cx.listener(move |_, _, _, cx| cx.emit(event())))
     }
@@ -277,6 +312,8 @@ impl FindBar {
 impl Render for FindBar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = *palette(cx);
+        self.painted.borrow_mut().clear();
+        let probe = |part: FindFrame| crate::painted::probe(&self.painted, part);
         let (q_focus, r_focus) = (self.query.focus_handle(cx).is_focused(window), self.replacement.focus_handle(cx).is_focused(window));
         let field_box = |id: &'static str, focused: bool, child: gpui::AnyElement| {
             crate::ui::input_box(id, &p, p.bg, focused)
@@ -356,7 +393,7 @@ impl Render for FindBar {
                                     .items_center()
                                     .gap(px(theme::SPACE[2]))
                                     .child(crate::ui::search_icon(&p))
-                                    .child(div().flex_1().min_w(px(64.)).child(self.query.clone()))
+                                    .child(div().flex_1().min_w(px(64.)).relative().child(self.query.clone()).child(probe(FindFrame::Query)))
                                     .child(self.toggle("f-case", "Aa", self.case_sensitive, crate::i18n::t("Match case (⌥C)"), cx, |s| {
                                         s.case_sensitive = !s.case_sensitive
                                     }))
@@ -373,7 +410,10 @@ impl Render for FindBar {
                                     .text_size(px(text::XS.0))
                                     .whitespace_nowrap()
                                     .overflow_hidden()
-                                    .when_some(status, |d, (s, err)| d.text_color(c(if err { p.danger } else { p.text_muted })).child(s)),
+                                    .relative()
+                                    .when_some(status, |d, (s, err)| {
+                                        d.text_color(c(if err { p.danger } else { p.text_muted })).child(s).child(probe(FindFrame::Status))
+                                    }),
                             )
                             .child(self.tool("f-prev", "arrow-up", crate::i18n::t("Previous match (⇧↵)"), || FindEvent::Prev, cx))
                             .child(self.tool("f-next", "arrow-down", crate::i18n::t("Next match (↵)"), || FindEvent::Next, cx))
@@ -398,7 +438,7 @@ impl Render for FindBar {
                                         .flex_1()
                                         .min_w_0()
                                         .items_center()
-                                        .child(div().flex_1().min_w_0().child(self.replacement.clone()))
+                                        .child(div().flex_1().min_w_0().relative().child(self.replacement.clone()).child(probe(FindFrame::Replace)))
                                         .child(self.toggle("f-preserve", "AB", self.preserve_case, crate::i18n::t("Preserve case (⌥P)"), cx, |s| {
                                             s.preserve_case = !s.preserve_case
                                         }))

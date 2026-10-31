@@ -1,12 +1,12 @@
 //! `cyx`: the one command extension authors need.
 //!
 //! ```text
-//! cyx new <theme|snippets|keymap|language|language-server|command|view> <name> [--lang ts] [--publisher NAME] [--sdk PATH]
+//! cyx new <theme|snippets|keymap|language|language-server|command|view|pull-requests> <name> [--lang ts] [--publisher NAME] [--sdk PATH]
 //! cyx dev [FOLDER] [-- CODEYARD ARGS…]   run Codeyard with the extension loaded from FOLDER; rebuilt and reloaded on save (dev.rs)
 //! cyx check [FOLDER] [--fix]             every problem with its file, line and fix; --fix adds missing permissions (fix.rs)
 //! cyx package [FOLDER] [-o FILE] [--no-build] [--target TRIPLE]  build the code (build.rs), then a reproducible .cyx
 //!                                        (one per platform in native/ when the extension ships native programs)
-//! cyx test [FOLDER]                      the built extension in codeyard-exthost against a scripted app (harness.rs)
+//! cyx test [FOLDER] [--fixtures FILE]    the built extension in codeyard-exthost against a scripted app (harness.rs)
 //! cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]
 //! cyx publish [FOLDER] [--dry-run] [--pre-release] [--registry URL] [--target TRIPLE]
 //! cyx yank | restore VERSION [FOLDER]    hide a version from installs, or bring it back
@@ -20,6 +20,7 @@
 mod build;
 mod dev;
 mod fix;
+mod fixtures;
 mod harness;
 mod net;
 mod oidc;
@@ -43,8 +44,8 @@ const HELP: &str = "cyx: build Codeyard extensions
 
 usage:
   cyx new <kind> <name> [--publisher NAME]   start an extension (kind: theme, snippets, keymap, language,
-                                             language-server, command, view; command and view are Rust, or
-                                             TypeScript with --lang ts; --sdk PATH takes the SDK from a Codeyard
+                                             language-server, command, view, pull-requests; the code ones are Rust,
+                                             or TypeScript with --lang ts; --sdk PATH takes the SDK from a Codeyard
                                              checkout)
   cyx dev [FOLDER] [-- CODEYARD ARGS…]       run Codeyard with it loaded; it reloads when you save
   cyx check [FOLDER] [--fix]                 list every problem with its file, line and fix; --fix adds the
@@ -53,7 +54,8 @@ usage:
                                              (--no-build: package the extension.wasm already there;
                                              --target TRIPLE: one platform's package of an extension with
                                              native programs in native/<TRIPLE>/; without it, every platform)
-  cyx test [FOLDER]                          build the code and run each command and view in the extension host
+  cyx test [FOLDER] [--fixtures FILE]        build the code and run each command and view in the extension host;
+                                             FILE (default test/fixtures.json) answers its HTTP requests
   cyx import-vscode <FOLDER | FILE.vsix> [-o FOLDER]
                                              convert a VS Code theme, snippets, keymap or language
   cyx publish [FOLDER] [--dry-run] [--pre-release] [--registry URL] [--target TRIPLE]
@@ -109,8 +111,15 @@ fn run(args: &[String]) -> Result<(), String> {
             Ok(())
         }
         "test" => {
-            let dir = folder(rest.first())?;
-            test(&dir)
+            let mut it = rest.iter();
+            let (mut dir, mut fixtures) = (None, None);
+            while let Some(a) = it.next() {
+                match a.as_str() {
+                    "--fixtures" => fixtures = Some(PathBuf::from(it.next().ok_or("usage: cyx test [FOLDER] [--fixtures FILE]")?)),
+                    _ => dir = Some(a),
+                }
+            }
+            test(&folder(dir)?, fixtures.as_deref())
         }
         "check" => {
             let fix = rest.iter().any(|a| a == "--fix");
@@ -123,6 +132,9 @@ fn run(args: &[String]) -> Result<(), String> {
                 eprintln!("{w}");
             }
             println!("{} {} is ready to package.", report.id, report.version);
+            if let Some(r) = &report.requires {
+                println!("{r}");
+            }
             Ok(())
         }
         "package" => {
@@ -297,6 +309,8 @@ pub enum Kind {
     /// Code extensions, in Rust or TypeScript.
     Command,
     View,
+    /// A `[[pull-requests]]` provider with its `[[oauth]]` account.
+    PullRequests,
 }
 
 impl Kind {
@@ -309,6 +323,7 @@ impl Kind {
             "language-server" | "lsp" => Kind::LanguageServer,
             "command" => Kind::Command,
             "view" => Kind::View,
+            "pull-requests" => Kind::PullRequests,
             _ => return None,
         })
     }
@@ -322,18 +337,20 @@ impl Kind {
             Kind::LanguageServer => "language server",
             Kind::Command => "command",
             Kind::View => "view",
+            Kind::PullRequests => "pull request provider",
         }
     }
 
     pub fn is_code(self) -> bool {
-        matches!(self, Kind::Command | Kind::View)
+        matches!(self, Kind::Command | Kind::View | Kind::PullRequests)
     }
 }
 
 type NewArgs = (Kind, String, String, Option<String>, scaffold::Lang);
 
 fn parse_new(rest: &[String]) -> Result<NewArgs, String> {
-    let usage = "usage: cyx new <theme|snippets|keymap|language|language-server|command|view> <name> [--lang rust|ts] [--publisher NAME] [--sdk PATH]";
+    let usage =
+        "usage: cyx new <theme|snippets|keymap|language|language-server|command|view|pull-requests> <name> [--lang rust|ts] [--publisher NAME] [--sdk PATH]";
     let mut positional = Vec::new();
     let (mut publisher, mut sdk, mut lang) = (None, None, scaffold::Lang::Rust);
     let mut it = rest.iter();
@@ -351,7 +368,7 @@ fn parse_new(rest: &[String]) -> Result<NewArgs, String> {
     let [kind, name] = positional.as_slice() else { return Err(usage.into()) };
     let kind = Kind::parse(kind).ok_or_else(|| format!("cyx: unknown kind '{kind}'\n{usage}"))?;
     if lang != scaffold::Lang::Rust && !kind.is_code() {
-        return Err(format!("error: --lang is for code extensions (command, view); a {} has no code", kind.word()));
+        return Err(format!("error: --lang is for code extensions (command, view, pull-requests); a {} has no code", kind.word()));
     }
     ext_manifest::check_id_part(name).map_err(|e| format!("error: the name '{name}' {e}\n   = fix: use lowercase letters, digits and -, like my-theme"))?;
     let publisher = publisher.unwrap_or_else(default_publisher);
@@ -405,6 +422,8 @@ pub struct CheckReport {
     pub id: String,
     pub version: String,
     pub warnings: Vec<String>,
+    /// For a built code extension: the oldest Codeyard it runs on, worked out from the API items its component uses.
+    pub requires: Option<String>,
 }
 
 /// Everything install and publish check, printed the way the guide shows: code, file:line, fix.
@@ -435,6 +454,15 @@ fn check_with(dir: &Path, options: ext_manifest::Options) -> Result<CheckReport,
             ext_manifest::FILE_NAME
         ));
     }
+    // A client id left as the template wrote it passes every check and fails at the first sign-in (#187).
+    for o in placeholder_client_ids(&m) {
+        warnings.push(format!(
+            "warning: the client id of [[oauth]] {} looks like a placeholder: {:?}\n  --> {} [[oauth]] client-id\n   = fix: register an OAuth application with the provider and put its client id here; `cyx publish` refuses a placeholder",
+            o.id,
+            o.client_id,
+            ext_manifest::FILE_NAME
+        ));
+    }
     // The package rules (files the manifest names, paths, sizes) as a full package build would apply them: for each
     // platform of an extension with native programs.
     if m.has_native_programs() {
@@ -444,7 +472,33 @@ fn check_with(dir: &Path, options: ext_manifest::Options) -> Result<CheckReport,
     } else {
         check_files(dir, None, &m, &text)?;
     }
-    Ok(CheckReport { id: m.id.to_string(), version: m.version.to_string(), warnings })
+    let requires = match (&m.code, std::fs::read(dir.join(ext_pkg::COMPONENT))) {
+        (Some(_), Ok(wasm)) => ext_pkg::check_component(&wasm, &m).ok().map(|c| {
+            if c.in_transition() {
+                warnings.push(transition_warning(&c));
+            }
+            requires(&c)
+        }),
+        _ => None,
+    };
+    Ok(CheckReport { id: m.id.to_string(), version: m.version.to_string(), warnings, requires })
+}
+
+/// "It needs Codeyard 0.7.0 or newer (API 1.0.0: …)." for a component that passed the import check.
+pub(crate) fn requires(c: &ext_pkg::Component) -> String {
+    let codeyard = ext_api::codeyard_for(c.min_api).unwrap_or("(unreleased)");
+    format!("It needs Codeyard {codeyard} or newer (API {}, from the API items its code uses).", c.min_api)
+}
+
+/// A component built against a 0.x API, which Codeyard still runs during the move to 1.0.
+pub(crate) fn transition_warning(c: &ext_pkg::Component) -> String {
+    format!(
+        "warning: {} was built against API {}; Codeyard {} still runs it, but registries no longer take it and a later Codeyard will refuse it\n  --> {}\n   = fix: rebuild with the current SDK (`cyx package`); docs/extensions/migrating-to-1.0.md lists what changed",
+        ext_pkg::COMPONENT,
+        c.built_for,
+        env!("CARGO_PKG_VERSION"),
+        ext_pkg::COMPONENT
+    )
 }
 
 /// The platforms an extension with native programs has in `native/`; none is an error that says what to do.
@@ -484,6 +538,19 @@ fn check_files(dir: &Path, target: Option<&str>, m: &ext_manifest::Manifest, tex
         Err(ext_pkg::Error::Component(errors)) => Err(errors.iter().map(|d| d.render(ext_pkg::COMPONENT, "")).collect::<Vec<_>>().join("\n")),
         Err(e) => Err(format!("error{platform}: {e}")),
     }
+}
+
+/// `[[oauth]]` tables whose `client-id` is still a placeholder: `your-client-id`, `<client id>`, `example-…`.
+pub(crate) fn placeholder_client_ids(m: &ext_manifest::Manifest) -> Vec<&ext_manifest::OAuthProvider> {
+    m.oauth
+        .iter()
+        .filter(|o| {
+            let id = o.client_id.to_ascii_lowercase();
+            id.starts_with("your")
+                || id.contains('<')
+                || ["example", "placeholder", "changeme", "change-me", "replace", "todo", "xxx"].iter().any(|w| id.contains(w))
+        })
+        .collect()
 }
 
 pub(crate) fn with_placeholder_why(manifest: &str) -> String {
@@ -563,7 +630,8 @@ pub fn package_built(dir: &Path, out: Option<&Path>) -> Result<(PathBuf, ext_pkg
 }
 
 /// `cyx test`: build, check, then run the component in the extension host. Fails on any refused call.
-fn test(dir: &Path) -> Result<(), String> {
+fn test(dir: &Path, fixtures: Option<&Path>) -> Result<(), String> {
+    let fixtures = fixtures::Fixtures::load(dir, fixtures)?;
     if build::build(dir)?.is_none() {
         check_dev(dir)?;
         return Err("error: this extension has no code to test\n   = fix: `cyx check` covers themes, snippets and other no-code extensions".into());
@@ -573,7 +641,7 @@ fn test(dir: &Path) -> Result<(), String> {
         "error: codeyard-exthost was not found\n   = fix: install Codeyard (cyx finds the extension host beside itself), or set CODEYARD_EXTHOST to its path",
     )?;
     let manifest = build::manifest(dir)?;
-    let report = harness::run(dir, &manifest, &exthost)?;
+    let report = harness::run(dir, &manifest, &exthost, &fixtures)?;
     println!("{} {}", manifest.id, manifest.version);
     for line in &report.lines {
         println!("{line}");

@@ -25,6 +25,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   moving hosts) and docs/registry-setup-checklist.md what the owner provides and the go-live order.
 - `codeyard --update-extensions`: the extension update check without a window, asking the registries of installed
   extensions now; it updates, rolls back and stops revoked versions as the daily check does, and prints what changed.
+- Screen readers and magnifiers get where things are drawn, not only the main areas: Explorer rows, the editor tabs,
+  the status bar's items, the find bar's fields and buttons, Source Control's message field, commit button, groups,
+  files and their buttons, and the buttons inside Run and Debug, Testing, Remote Explorer and Ports rows each report
+  their own frame, and every character of the editor and the terminal on screen has its position, so the caret and the
+  selection have bounds (VoiceOver's and Zoom's `AXBoundsForRange`, UI Automation's text ranges). Frames follow the
+  interface scale and stay right in an editor's or a view's own window; a side view in its own window no longer leaves
+  its rows' frames in the main window's tree, and Testing and Remote Explorer are in the tree when they are shown in the
+  secondary side bar or a window of their own. `scripts/a11y-probe/axframes.swift` prints and draws one process's
+  frames.
+- Source Control's change list opens a file's right-click menu from the keyboard: Shift+F10 or the Menu key on the
+  cursor row shows it under the row, the arrows and Enter drive it, and Escape gives the keyboard back to the same row.
+  Screen readers get `ShowContextMenu` and a "More Actions…" button on each file, as the other lists' rows have.
 - Performance scenarios for extension views and hot reload, run by `scripts/perf/run.sh`: PageDown in a sidebar view
   with a list of 10 000 rows (`CODEYARD_PERF_VIEWS`, `views.keystroke_frame_ms`) and a 2 MB Rust component swapped in
   place in a dev window (`CODEYARD_PERF_RELOAD`, `extensions.hot_reload_ms`), each with a fixture extension that needs
@@ -127,8 +139,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (with `window.restoreSession`, the default). Opening the folder again within 5 minutes brings the same shells back,
   with their output from meanwhile, and says "Reconnected to terminal session". A terminal that cannot be taken back is
   a new shell as before, and nothing is ever typed into it. Terminals no window takes back are ended after 5 minutes.
-  Closing the window or the folder, or opening another one, still ends them at once. Terminals another Codeyard
-  instance has open stay with it: the window starts new shells and says so. The agent protocol is version 16.
+  Closing the window still ends them at once; opening another folder or closing the folder keeps the panel's
+  terminals, as without the daemon, until the window closes. Terminals another Codeyard instance has open stay with it:
+  the window starts new shells and says so. The agent protocol is version 16.
 - The lists of the Run and Debug view, the Testing view, the Remote Explorer and the Ports panel work with the keyboard:
   Tab reaches them, Up/Down/Home/End move a cursor row shown in the focus colour, and Enter does what a click on the
   row does. Shift+F10 (and the Menu key) opens the focused row's menu under it and Escape returns to the row; the same
@@ -278,15 +291,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Both mock hosts: `secrets()` returns the keychain entries the extension left. An `auth.fetch` to a host outside the
   account's `[[oauth]] hosts` (or GitHub's API hosts) is refused, and one with its own `authorization` header fails, as
   in Codeyard.
+- Self-managed forges without repackaging (#184): an `[[oauth]]` table with `instances = true` lets the user add a
+  server of their own (a company GitLab, a Gitea or Forgejo) on the extension's page, Accounts › **Add Instance…**,
+  with the client id of the OAuth application they registered there. A system dialog names the extension, its
+  publisher, the host, the client id and the redirect URI first, as for a permission; instances are kept per
+  extension and publisher identity next to the permission switches, and only that page adds them. Each is an account
+  of its own (`gitlab@git.example.com`) that signs requests to its host only; the extension's `[[pull-requests]]`
+  provider claims its remotes, and `net` covers its host where it covers the table's. The `gitlab` and `gitea-pulls`
+  examples use it. The manifest change is additive (#147).
+- Sign-in outcomes in both mock hosts (#185): `decline_sign_in` / `declineSignIn` (the user cancels, `auth.session`
+  fails with `cancelled`), `signed_out` / `signedOut` (`auth.fetch` fails with Codeyard's "not signed in" error until
+  the next `auth.session`), `sign_in` / `signIn` with an account name, and `instance` for a self-managed instance.
+- `cyx test` answers `net.fetch` and `auth.fetch` from HTTP fixtures (#185): `test/fixtures.json`, or
+  `--fixtures FILE` (method, URL, status, headers, body; docs/extensions/testing.md), after the usual permission and
+  host checks, so a provider's success path runs in the real extension host. `cyx test` now also refuses an
+  `auth.fetch` to a host outside the account's, as Codeyard does.
+- `cyx new pull-requests <name> [--lang ts]` (#187): a pull request provider with its `[[oauth]]` account
+  (`instances = true`), unit tests and `cyx test` fixtures, and a README on registering the OAuth application.
+- `cyx check` warns about a placeholder OAuth `client-id` (`your-client-id`, `<…>`, `example…`), and `cyx publish`
+  refuses one (#187).
 
 ### Changed
 
+- The extension API is `codeyard:api` 1.0.0 (#147), with the TypeScript SDK `@codeyard/extension` 1.0.0. From 1.0
+  a minor only adds: every interface, function and type carries `@since(version = …)`, the API reference shows it,
+  and a test in ext-api compares the WIT with the released copy in `crates/ext-api/released/1.0.0` and fails on a
+  removed or changed item (a new field or case counts as a change) or a new one without `@since`. `cyx check` prints
+  the oldest Codeyard an extension needs, worked out from the functions and types its component imports; a component
+  built against a newer 1.x runs when every item it uses is there, and one that uses an item this Codeyard lacks gets
+  `CY0701`. Components built against API 0.1 keep running (the exthost renames their imports to 1.0.0 before
+  compiling; the shape is the same), with a warning from `cyx check`; `cyx publish` and Yard refuse them. The API
+  review before the freeze kept the WIT's shape: its docs now say what a `denied` permission and an instance's
+  `remote.account` hold (#183, #184), and `code-action.edits` names its `uri`. In the Rust SDK `ctx.state().remove`
+  is now `delete`, and `keys` is new. Migration guide: docs/extensions/migrating-to-1.0.md.
+- The Pull Requests view's command is **Pull Requests: Show…** (was "GitHub: Pull Requests…"), since it lists every
+  provider's requests; the palette still finds it by its old name and by "merge requests" (#186). When no remote is
+  claimed, the message names the providers there are.
+- An `auth.fetch` to a host outside the account's is refused with `[[oauth]] <id> hosts = ["<host>"]`, and both SDKs,
+  both mock hosts, `cyx test` and the Inspector's **Copy fix** now say to add the host to that `[[oauth]]` table instead
+  of the `auth` line the manifest already has (#183). The SDKs fill in a manifest line only when Codeyard names just
+  a permission (`net`); any other text it sends is kept.
+- `cyx package` leaves the `test/` and `tests/` folders at the top of an extension out of the package (#187).
+- Deleting in the Explorer on an SSH host says it is permanent: one entry asks "Permanently delete “name” on
+  host?", a selection "Permanently delete N items on host?", both say the host has no Trash, and the button is
+  "Delete Permanently" (a critical alert, Escape cancels). File questions name the connection's host. Bulk copy,
+  move and delete over SSH are covered by tests against a real `sshd`, including a name already taken in the
+  destination and a file that cannot be removed.
 - Source Control's change list is fully accessible: each file is a row with its change, its place in the group and its
   own Stage/Unstage (Mark as resolved) and Discard buttons (Discard asks first, as the painted button does), the commit
   button says why it is disabled, and a large status exposes a scrollable range of 500 lines instead of every row. The
   list has a keyboard cursor (↑/↓/Home/End, ↵ opens the diff, Space stages or unstages, ←/→ fold and unfold groups,
   Delete or ⌘⌫ discards) that screen readers see as the focus. Actions from an old tree do nothing once the file has
   changed state or another repository is shown.
+- Right Arrow in the Explorer is now covered by tests for open folders that are empty, still loading, unreadable or
+  have children, and for a file, both for the selection and the accessibility focus (no behavior change: it enters a
+  child only when one is shown). Tests also cover the Rust command notices for a restricted workspace and an unavailable
+  language server.
 - Source Control builds only the change rows on screen, so a repository with thousands of changes (generated files,
   a large merge) scrolls and refreshes without delay. The list keeps its scroll position and focus when the status
   refreshes.
@@ -312,6 +372,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Unit tests no longer start an installed language server from generic editor and workbench fixtures: under test
+  `lsp.enabled` defaults to off and LSP integration tests turn it on explicitly. The shipped default stays on.
+- On a busy machine, closing a window could leave its terminals running for 5 minutes, and the last keys typed into a
+  terminal before quitting could be lost: the connection to the terminal daemon was closed before the window's `Bye`
+  (or those keys) had been written. The connection now closes only after everything queued has gone out (at most 5
+  seconds for a daemon that stopped reading).
 - Views made from `cyx new view` (Rust and TypeScript) and the `hello-view` examples drew an error instead of their
   content: they wrote a `{ "type": "column", … }` shorthand that Codeyard refuses ("unknown field `type`"), while
   `cyx test` said "view main draws" (#182). Both SDKs now have `ui` functions that write the documented form
@@ -319,6 +385,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ViewNode` types the tree element by element (`Element`, which typed the shorthand, is now one element). The mock
   hosts' `render` and `cyx test` check a tree with Codeyard's own rules (the TypeScript mock with a copy generated
   from them and tested against the same cases), and `view_event` / `viewEvent` refuse an event Codeyard never sends, such as `{"click": "add"}`.
+- Zen mode no longer leaves a view of the secondary side bar (such as the Explorer) in the accessibility tree, or its
+  refreshes running, while it is not drawn; actions from an older tree on a hidden Explorer do nothing.
 - `cyx package` no longer puts the `.cyx` it wrote last time into the new package (it doubled in size on every run).
   New extensions from `cyx new` ignore `*.cyx` in git.
 - `cyx check` on a code extension that is not built yet says to run `cyx package` or `cyx test`, which build it.

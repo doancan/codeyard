@@ -136,6 +136,17 @@ fn wait_for(cx: &mut VisualTestContext, what: &str, mut done: impl FnMut(&mut Vi
     }
 }
 
+/// Generic fixtures test editing and workbench behaviour; they must never launch an installed language server
+/// (rust-analyzer would build the scratch project). LSP integration tests turn `lsp_enabled` on explicitly.
+#[gpui::test]
+fn generic_fixtures_start_no_language_server(cx: &mut TestAppContext) {
+    let dir = project("no-lsp-in-fixtures");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir.join("src/main.rs"), cx);
+    assert_eq!(wb.read_with(cx, |wb, _| wb.lsp_server_keys_for_test()), Vec::<String>::new(), "no language server was attempted");
+    assert!(!cx.update(|_, cx| cx.global::<crate::settings::Settings>().lsp_enabled), "LSP is off by default under test");
+}
+
 // ---------------------------------------------------------------------------
 // Settings / customization
 // ---------------------------------------------------------------------------

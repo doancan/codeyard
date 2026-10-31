@@ -82,6 +82,8 @@ impl Workbench {
             .child(
                 item()
                     .id("remote-indicator")
+                    .relative()
+                    .child(a11y::part_frame(a11y::Part::Status(a11y::StatusPart::Remote), cx))
                     .flex_shrink()
                     .cursor_pointer()
                     .when_some(remote_bg, |d, bg| d.bg(c(bg)))
@@ -115,6 +117,8 @@ impl Workbench {
                 d.child(
                     item()
                         .id("sb-branch")
+                        .relative()
+                        .child(a11y::part_frame(a11y::Part::Status(a11y::StatusPart::Branch), cx))
                         .flex_shrink()
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
@@ -158,6 +162,8 @@ impl Workbench {
                 };
                 item()
                     .id("problems-indicator")
+                    .relative()
+                    .child(a11y::part_frame(a11y::Part::Status(a11y::StatusPart::Problems), cx))
                     .gap(px(SB_PAD))
                     .cursor_pointer()
                     .hover(|d| d.bg(c(p.surface_hover)))
@@ -295,6 +301,8 @@ impl Workbench {
                     d.child(
                         item()
                             .id("sb-position")
+                            .relative()
+                            .child(a11y::part_frame(a11y::Part::Status(a11y::StatusPart::Position), cx))
                             .cursor_pointer()
                             .hover(|d| d.bg(c(p.surface_hover)))
                             .child(div().max_w(px(180.)).truncate().child(pos))
@@ -306,15 +314,19 @@ impl Workbench {
                     d.child(
                         item()
                             .id("sb-indent")
+                            .relative()
+                            .child(a11y::part_frame(a11y::Part::Status(a11y::StatusPart::Indent), cx))
                             .cursor_pointer()
                             .hover(|d| d.bg(c(p.surface_hover)))
                             .child(indent)
                             .on_click(cx.listener(|this, _, window, cx| this.show_indent_picker(window, cx))),
                     )
-                    .child(item().child(encoding))
+                    .child(item().relative().child(a11y::part_frame(a11y::Part::Status(a11y::StatusPart::Encoding), cx)).child(encoding))
                     .child(
                         item()
                             .id("sb-eol")
+                            .relative()
+                            .child(a11y::part_frame(a11y::Part::Status(a11y::StatusPart::LineEnding), cx))
                             .cursor_pointer()
                             .hover(|d| d.bg(c(p.surface_hover)))
                             .child(eol)
@@ -325,6 +337,8 @@ impl Workbench {
                     d.child(
                         item()
                             .id("sb-language")
+                            .relative()
+                            .child(a11y::part_frame(a11y::Part::Status(a11y::StatusPart::Language), cx))
                             .cursor_pointer()
                             .hover(|d| d.bg(c(p.surface_hover)))
                             .child(div().max_w(px(120.)).truncate().child(language))

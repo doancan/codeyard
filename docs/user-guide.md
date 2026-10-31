@@ -28,7 +28,7 @@ is the complete list and always matches your key bindings; every setting is in [
 - [Spell check](#spell-check)
 - [Merge editor](#merge-editor)
 - [Compare folders](#compare-folders)
-- [GitHub pull requests](#github-pull-requests)
+- [Pull requests](#pull-requests)
 - [HTTP files](#http-files)
 - [Terminal](#terminal)
 - [Port forwarding](#port-forwarding)
@@ -135,7 +135,8 @@ keys are commands like any other (`rows.previous`, `rows.next`, `rows.first`, `r
 Right-click in the file tree for new file/folder, cut/copy/paste, rename, delete, copy path,
 favorites. Drag files and folders onto a folder to move them (an existing file is never
 overwritten). Deleting a file or folder deletes it permanently after asking; with
-`"files.enableTrash": true` local files go to the Trash instead (SSH hosts have no Trash). Right-click a tab for close others /
+`"files.enableTrash": true` local files go to the Trash instead. SSH hosts have no Trash: there the question says
+"Permanently delete … on <host>?" and the button is *Delete Permanently*. Right-click a tab for close others /
 to the right / saved, pin, copy path; drag tabs to reorder them or onto the other group.
 Right-click in the editor for go to definition / references, rename, cut/copy/paste,
 file history and blame. A single click in the tree opens a preview tab (italic) that the next
@@ -839,7 +840,8 @@ happens until you choose **Allow** (GitHub) or **Sign In…** (the service's pag
 to Codeyard). GitHub uses the sign-in you already have with the GitHub CLI (`gh auth login`). The token is kept in
 your system keychain (Keychain on macOS, Credential Manager on Windows, the Secret Service on Linux) and Codeyard adds
 it to the extension's requests itself, only to that account's own hosts; the extension never sees it. The extension's
-page lists its accounts with **Sign Out**, which removes the token from the keychain. A sideloaded copy of an extension
+page lists its accounts with **Sign Out**, which removes the token from the keychain, and **Add Instance…** where the
+extension lets you add a server of your own (see [Pull requests](#pull-requests)). A sideloaded copy of an extension
 does not get the accounts or secrets of the registry one with the same id.
 
 **Rules that keep them predictable.** An extension key binding never takes a key a built-in shortcut uses (the
@@ -925,8 +927,9 @@ between changes. Commits made in the terminal show up on their own.
 
 The change list also works from the keyboard: Tab moves to it from the message box, ↑/↓/Home/End
 move its cursor, ↵ opens the file's diff (or folds the group), Space stages or unstages the file,
-← goes to the file's group (and folds it), → unfolds it and goes in, and Delete (⌘⌫ on macOS)
-discards the file's changes after asking.
+← goes to the file's group (and folds it), → unfolds it and goes in, Delete (⌘⌫ on macOS)
+discards the file's changes after asking, and Shift+F10 or the Menu key opens the file's right-click
+menu under it (Escape closes it and leaves the cursor on the file).
 
 **Graph:** the GRAPH section under the changes draws the history of every branch as lanes,
 with branch (blue), remote (green), tag (yellow) and HEAD labels; merges are hollow dots.
@@ -1490,9 +1493,9 @@ modification time is shown but never decides whether two files match.
 
 `compare.folders.maxFiles` (50000) is the number of entries read per side before the scan stops and says so. Times are shown in UTC.
 
-## GitHub pull requests
+## Pull requests
 
-**GitHub: Pull Requests…** lists the open pull requests of the `origin` (or first GitHub) remote with author, branches, age, check
+**Pull Requests: Show…** (the palette also finds it as "GitHub: Pull Requests" or "merge requests") lists the open pull requests of the `origin` (or first GitHub) remote with author, branches, age, check
 results and review state. Pick one to *check it out* (`git fetch origin pull/N/head` into the local branch `pr-N`, again to update it),
 open it on GitHub, or copy its link or branch name. It uses the `gh` CLI when it is installed and signed in (private repositories,
 checks, reviews); otherwise the public GitHub API, with `GITHUB_TOKEN` / `GH_TOKEN` if set. Read-only: reviewing and commenting stay on GitHub.
@@ -1506,7 +1509,14 @@ branch, on the machine the repository is on, so over SSH too), or to open or cop
 extension signs in to the forge
 with the account you allow on first use; Codeyard keeps the token in the system keychain and signs its requests, so the
 extension never sees it. A provider that does not answer within 20 seconds is left out, and its error is shown above
-the list and in its log in the Extension Inspector.
+the list and in its log in the Extension Inspector. When none of the remotes is GitHub's or claimed, the message names
+the providers there are.
+
+For a forge on a server of your own (a company GitLab, a Gitea or Forgejo), register an OAuth application there and
+choose **Add Instance…** next to the account on the extension's page in Extensions, if the extension offers it: type
+the server's host and the application's client id. Codeyard shows what that allows (the host, the client id and the
+address the sign-in comes back to) and asks before it adds it. The instance is an account of its own, used only for
+that host, and **Remove** takes it away again.
 
 ## HTTP files
 

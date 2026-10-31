@@ -18,8 +18,14 @@ use accesskit::{Action, ActionData, ActionRequest, Live, Node, NodeId, Role, Tex
 
 #[path = "a11y_geometry.rs"]
 mod geometry;
+#[path = "a11y_text.rs"]
+mod text;
 pub use geometry::Geometry;
-pub(super) use geometry::{Landmark, PaintedBounds, RowFrame, landmark, row_frame};
+pub(super) use geometry::{Landmark, MENU_BUTTON, PaintedBounds, Part, RowFrame, StatusPart, landmark, part_frame, row_button, row_frame};
+pub use text::RunFrame;
+#[cfg(test)]
+use text::runs_for;
+use text::{char_of, position_of, run_nodes, runs_painted};
 
 const ROOT: NodeId = NodeId(1);
 const EXPLORER: NodeId = NodeId(2);
@@ -126,6 +132,8 @@ pub struct RowSnap {
     pub is_dir: bool,
     pub expanded: bool,
     pub selected: bool,
+    /// Where the row was painted (`None`: scrolled out of view).
+    pub frame: Option<accesskit::Rect>,
 }
 
 /// A text run: a slice of a single line (at most RUN_CHARS characters).
@@ -136,6 +144,8 @@ pub struct RunSnap {
     /// Character count including the line ending.
     pub chars: usize,
     pub text: String,
+    /// Where it was painted (`None`: not on screen).
+    pub frame: Option<RunFrame>,
 }
 
 #[derive(Clone, PartialEq, Debug, Default)]
@@ -159,6 +169,16 @@ pub struct FindSnap {
     pub status: Option<String>,
     /// Options (with their state) and buttons, in visual order.
     pub controls: Vec<(String, Option<bool>)>,
+    /// Where its parts were painted.
+    pub frames: Vec<(crate::find::FindFrame, accesskit::Rect)>,
+}
+
+impl FindSnap {
+    fn place(&self, part: crate::find::FindFrame, node: &mut Node) {
+        if let Some((_, bounds)) = self.frames.iter().find(|(k, _)| *k == part) {
+            node.set_bounds(*bounds);
+        }
+    }
 }
 
 /// A list of options: picker rows or suggestions.
@@ -328,104 +348,21 @@ fn set_scroll(node: &mut Node, first: usize, shown: usize, total: usize) {
 }
 
 impl EditorSnap {
-    /// The lines around the caret, or the visible ones after a scroll; run offsets are document-relative.
-    pub(super) fn of(e: &crate::editor::EditorView) -> EditorSnap {
+    /// The lines around the caret, or the visible ones after a scroll; run offsets are document-relative. Runs on lines
+    /// painted in the editor's last frame (drawn at `scale`) carry where their characters are.
+    pub(super) fn of(e: &crate::editor::EditorView, scale: f32) -> EditorSnap {
         let line = e.cursor_position().0.saturating_sub(1);
         let first = window_start(e.line_count(), EDITOR_WINDOW, Some(line), e.visible_lines());
         let (selection, total_lines, lines) = e.a11y_view(first, first + EDITOR_WINDOW);
-        EditorSnap { name: e.name.to_string(), dirty: e.is_dirty(), runs: runs_for(lines, total_lines, first), selection, total_lines, first_line: first }
-    }
-}
-
-/// Split into runs: each line into runs of at most RUN_CHARS characters, the line ending in the last run.
-fn runs_for(lines: Vec<(usize, String)>, total_lines: usize, first_line: usize) -> Vec<RunSnap> {
-    let mut runs = Vec::new();
-    for (i, (start, line)) in lines.into_iter().enumerate() {
-        let last_in_doc = first_line + i + 1 >= total_lines;
-        let chars: Vec<char> = line.chars().collect();
-        let n = chars.len();
-        let mut off = 0;
-        loop {
-            let end = (off + RUN_CHARS).min(n);
-            let mut text: String = chars[off..end].iter().collect();
-            let mut count = end - off;
-            if end == n && !last_in_doc {
-                text.push('\n');
-                count += 1;
-            }
-            runs.push(RunSnap { start: start + off, chars: count, text });
-            if end == n {
-                break;
-            }
-            off = end;
+        EditorSnap {
+            name: e.name.to_string(),
+            dirty: e.is_dirty(),
+            runs: runs_painted(lines, total_lines, first, &e.a11y_layout(), scale),
+            selection,
+            total_lines,
+            first_line: first,
         }
     }
-    runs
-}
-
-fn word_starts(text: &str) -> Vec<u8> {
-    #[derive(PartialEq, Clone, Copy)]
-    enum K {
-        Word,
-        Space,
-        Punct,
-    }
-    let kind = |c: char| {
-        if c.is_alphanumeric() || c == '_' {
-            K::Word
-        } else if c.is_whitespace() {
-            K::Space
-        } else {
-            K::Punct
-        }
-    };
-    let mut out = Vec::new();
-    let mut prev: Option<K> = None;
-    for (i, c) in text.chars().enumerate() {
-        let k = kind(c);
-        // Each punctuation character is its own word; words and whitespace as clusters.
-        if (prev != Some(k) || k == K::Punct) && i > 0 && i < 256 {
-            out.push(i as u8);
-        }
-        prev = Some(k);
-    }
-    out
-}
-
-/// Convert a character index to a (run, char index within run) position; clamp to the edge if outside the window.
-/// `base`: id of the first run.
-fn position_of(runs: &[RunSnap], base: u64, ix: usize) -> Option<TextPosition> {
-    let first = runs.first()?;
-    if ix <= first.start {
-        return Some(TextPosition { node: NodeId(base), character_index: 0 });
-    }
-    for (i, r) in runs.iter().enumerate() {
-        if ix < r.start + r.chars {
-            return Some(TextPosition { node: NodeId(base + i as u64), character_index: ix - r.start });
-        }
-    }
-    let i = runs.len() - 1;
-    Some(TextPosition { node: NodeId(base + i as u64), character_index: runs[i].text.chars().count() })
-}
-
-fn char_of(runs: &[RunSnap], p: TextPosition) -> Option<usize> {
-    let i = p.node.0.checked_sub(RUN_BASE)? as usize;
-    runs.get(i).map(|r| r.start + p.character_index.min(r.chars))
-}
-
-/// Text run nodes (one per run) with ids from `base`.
-fn run_nodes(runs: &[RunSnap], base: u64, nodes: &mut Vec<(NodeId, Node)>) -> Vec<NodeId> {
-    let mut ids = Vec::new();
-    for (i, r) in runs.iter().enumerate() {
-        let id = NodeId(base + i as u64);
-        let mut run = Node::new(Role::TextRun);
-        run.set_value(r.text.clone());
-        run.set_character_lengths(r.text.chars().map(|c| c.len_utf8() as u8).collect::<Vec<u8>>());
-        run.set_word_starts(word_starts(&r.text));
-        ids.push(id);
-        nodes.push((id, run));
-    }
-    ids
 }
 
 /// A list box with one option per row (ids from `base`); options can be focused and clicked.
@@ -490,6 +427,9 @@ impl Snapshot {
                 n.set_selected(r.selected);
                 n.set_position_in_set(ex.first + i + 1);
                 n.set_size_of_set(ex.rows_total);
+                if let Some(bounds) = r.frame {
+                    n.set_bounds(bounds);
+                }
                 if r.is_dir {
                     n.set_expanded(r.expanded);
                     n.set_description(t("folder"));
@@ -540,6 +480,9 @@ impl Snapshot {
                 n.set_selected(self.active_tab == Some(i));
                 n.set_position_in_set(i + 1);
                 n.set_size_of_set(total);
+                if let Some(bounds) = self.geometry.part(Part::EditorTab(i)) {
+                    n.set_bounds(bounds);
+                }
                 n.add_action(Action::Click);
                 n.add_action(Action::Focus);
                 tab_ids.push(id);
@@ -604,49 +547,6 @@ impl Snapshot {
             kids.push(SearchEdSnap::id());
         }
 
-        // Find bar (above the editor, as on screen)
-        if let Some(f) = &self.find {
-            let mut bar = Node::new(Role::Group);
-            bar.set_label(t("Find"));
-            let mut children = Vec::new();
-            let mut query = Node::new(Role::SearchInput);
-            query.set_label(t("Find"));
-            query.set_value(f.query.clone());
-            query.add_action(Action::Focus);
-            children.push(FIND_QUERY);
-            nodes.push((FIND_QUERY, query));
-            if let Some(rep) = &f.replacement {
-                let mut field = Node::new(Role::TextInput);
-                field.set_label(t("Replace"));
-                field.set_value(rep.clone());
-                field.add_action(Action::Focus);
-                children.push(FIND_REPLACE);
-                nodes.push((FIND_REPLACE, field));
-            }
-            if let Some(st) = &f.status {
-                // A live region: "3 of 12" is spoken while typing and moving between matches.
-                let mut label = Node::new(Role::Status);
-                label.set_label(st.clone());
-                label.set_live(Live::Polite);
-                children.push(FIND_STATUS);
-                nodes.push((FIND_STATUS, label));
-            }
-            for (i, (name, on)) in f.controls.iter().enumerate() {
-                let id = NodeId(FIND_CONTROL + i as u64);
-                let mut b = Node::new(if on.is_some() { Role::CheckBox } else { Role::Button });
-                b.set_label(name.clone());
-                if let Some(on) = on {
-                    b.set_toggled(Toggled::from(*on));
-                }
-                b.add_action(Action::Click);
-                children.push(id);
-                nodes.push((id, b));
-            }
-            bar.set_children(children);
-            nodes.push((FIND, bar));
-            kids.push(FIND);
-        }
-
         // Editor
         if let Some(e) = &self.editor {
             let mut ed = Node::new(Role::MultilineTextInput);
@@ -678,6 +578,54 @@ impl Snapshot {
             kids.push(EDITOR);
         }
 
+        // Find bar: drawn over the top of the editor, so it comes after it (hit testing takes the last sibling as the
+        // one on top); the screen reader reaches it from the editor or through its focus.
+        if let Some(f) = &self.find {
+            let mut bar = Node::new(Role::Group);
+            bar.set_label(t("Find"));
+            let mut children = Vec::new();
+            let mut query = Node::new(Role::SearchInput);
+            query.set_label(t("Find"));
+            query.set_value(f.query.clone());
+            query.add_action(Action::Focus);
+            f.place(crate::find::FindFrame::Query, &mut query);
+            children.push(FIND_QUERY);
+            nodes.push((FIND_QUERY, query));
+            if let Some(rep) = &f.replacement {
+                let mut field = Node::new(Role::TextInput);
+                field.set_label(t("Replace"));
+                field.set_value(rep.clone());
+                field.add_action(Action::Focus);
+                f.place(crate::find::FindFrame::Replace, &mut field);
+                children.push(FIND_REPLACE);
+                nodes.push((FIND_REPLACE, field));
+            }
+            if let Some(st) = &f.status {
+                // A live region: "3 of 12" is spoken while typing and moving between matches.
+                let mut label = Node::new(Role::Status);
+                label.set_label(st.clone());
+                label.set_live(Live::Polite);
+                f.place(crate::find::FindFrame::Status, &mut label);
+                children.push(FIND_STATUS);
+                nodes.push((FIND_STATUS, label));
+            }
+            for (i, (name, on)) in f.controls.iter().enumerate() {
+                let id = NodeId(FIND_CONTROL + i as u64);
+                let mut b = Node::new(if on.is_some() { Role::CheckBox } else { Role::Button });
+                b.set_label(name.clone());
+                if let Some(on) = on {
+                    b.set_toggled(Toggled::from(*on));
+                }
+                b.add_action(Action::Click);
+                f.place(crate::find::FindFrame::Control(i), &mut b);
+                children.push(id);
+                nodes.push((id, b));
+            }
+            bar.set_children(children);
+            nodes.push((FIND, bar));
+            kids.push(FIND);
+        }
+
         // Terminal: the rows on screen, read-only, with the cursor as the caret.
         if let Some(term) = &self.terminal {
             let mut node = Node::new(Role::Terminal);
@@ -702,6 +650,9 @@ impl Snapshot {
             let id = NodeId(STATUS_ITEM + i as u64);
             let mut l = Node::new(Role::Label);
             l.set_value(t.clone());
+            if let Some(bounds) = self.geometry.status_item(i) {
+                l.set_bounds(bounds);
+            }
             items.push(id);
             nodes.push((id, l));
         }
@@ -828,6 +779,7 @@ impl Workbench {
                     .map(|(path, name, depth, is_dir, expanded)| RowSnap {
                         id: row_id(&path).0,
                         selected: tree.path_is_selected(&path),
+                        frame: tree.a11y_row_frame(&path, window),
                         path,
                         name,
                         depth,
@@ -847,10 +799,11 @@ impl Workbench {
 
         let editor_visible = !self.tabs.diff_active && !self.tabs.large_active && !self.tabs.page_active;
         let ed = self.active_editor().filter(|_| editor_visible);
-        let editor = ed.map(|e| EditorSnap::of(e.read(cx)));
+        let mut editor = ed.map(|e| EditorSnap::of(e.read(cx), window.scale_factor()));
 
         // Same texts as the status bar (status_bar() elements; should move into a shared function later).
         let mut status = Vec::new();
+        let mut status_parts = vec![StatusPart::Remote];
         status.push(match &self.remote.conn {
             Conn::Local => t("Local").to_string(),
             Conn::Connecting { alias, .. } => tf("Connecting to {}", &[alias]),
@@ -860,9 +813,11 @@ impl Workbench {
         });
         if let Some(b) = &self.vcs.branch {
             status.push(tf("Branch {}", &[b]));
+            status_parts.push(StatusPart::Branch);
         }
         let (errors, warnings) = self.problem_counts();
         status.push(tf("{0} errors, {1} warnings", &[&errors, &warnings]));
+        status_parts.push(StatusPart::Problems);
         if let Some(e) = ed {
             let e = e.read(cx);
             let (l, col) = e.cursor_position();
@@ -875,9 +830,17 @@ impl Workbench {
             status.push(e.line_ending().to_string());
             status.push(e.language_label().to_string());
             status.push(e.encoding().label().to_string());
+            status_parts.extend([StatusPart::Position, StatusPart::Indent, StatusPart::LineEnding, StatusPart::Language, StatusPart::Encoding]);
         }
         if let Some(item) = self.update_status_item() {
             status.push(item.tip.to_string());
+            status_parts.push(StatusPart::Update);
+        }
+        let mut geometry = Geometry::new(&self.chrome.a11y_bounds, window);
+        geometry.set_status_items(&status_parts);
+        // Character positions are those of the editor's last paint: only while it is drawn in this window's frame.
+        if !geometry.editor_painted() {
+            editor.iter_mut().flat_map(|e| e.runs.iter_mut()).for_each(|r| r.frame = None);
         }
         let notice = match (&self.notice, &self.tabs.open_error) {
             (Some(Notice::Error(m)), _) => Some(NoticeSnap { text: m.to_string(), error: true }),
@@ -912,6 +875,7 @@ impl Workbench {
                 replacement: b.show_replace.then(|| b.replacement(cx)),
                 status: b.status_text().map(str::to_string),
                 controls: b.a11y_controls().into_iter().map(|(l, on)| (l.to_string(), on)).collect(),
+                frames: b.a11y_frames(window),
             }
         });
         let completion = ed.and_then(|e| e.read(cx).a11y_completion(MAX_OPTIONS)).map(|(rows, selected)| ListSnap {
@@ -921,7 +885,7 @@ impl Workbench {
         });
         let shown = self.a11y_terminal(window, cx);
         let term = shown.as_ref().map(|(t, _, _)| t.clone());
-        let terminal = shown.as_ref().map(|(term, ix, count)| term_tab_access::terminal_snap(term, *ix, *count, cx));
+        let terminal = shown.as_ref().map(|(term, ix, count)| term_tab_access::terminal_snap(term, *ix, *count, window.scale_factor(), cx));
         let picker_entity = self.overlay.as_ref().map(|o| o.picker.clone());
         let picker = picker_entity.as_ref().map(|p| {
             let v = p.read(cx).a11y_view(MAX_OPTIONS);
@@ -966,7 +930,7 @@ impl Workbench {
                 Page::LanguageServices(page) => Some(page.read(cx).access_view(window, cx)),
                 _ => None,
             }),
-            geometry: Geometry::new(&self.chrome.a11y_bounds, window),
+            geometry,
             title,
             layout: self.a11y_layout(),
             explorers,
@@ -1333,9 +1297,21 @@ mod tests;
 mod geometry_tests;
 
 #[cfg(test)]
+#[path = "a11y_frames_tests.rs"]
+mod frames_tests;
+
+#[cfg(test)]
+#[path = "a11y_row_frames_tests.rs"]
+mod row_frames_tests;
+
+#[cfg(test)]
 #[path = "a11y_range_tests.rs"]
 mod range_tests;
 
 #[cfg(test)]
 #[path = "a11y_scm_tests.rs"]
 mod scm_tests;
+
+#[cfg(test)]
+#[path = "a11y_visibility_tests.rs"]
+mod visibility_tests;

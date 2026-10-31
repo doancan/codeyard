@@ -57,7 +57,8 @@ fn run_and_debug_rows_are_driven_by_the_keyboard(cx: &mut gpui::TestAppContext) 
     // Shift+F10 opens the frame's menu under the row; the menu has the keys, Escape gives them back to the list.
     keys(cx, "shift-f10");
     assert_eq!(menu(&wb, cx).as_deref(), Some(&["Restart Frame", "Copy Call Stack"].map(String::from)[..]));
-    let row = wb.read_with(cx, |wb, _| wb.chrome.a11y_bounds.row(RowFrame::DebugStack, start)).expect("the painted row");
+    let row =
+        cx.update(|window, cx| wb.read(cx).chrome.a11y_bounds.row(window.window_handle().window_id(), RowFrame::DebugStack, start)).expect("the painted row");
     assert_eq!(wb.read_with(cx, |wb, _| wb.menu_position_for_test()), Some(row.bottom_left()));
     keys(cx, "down");
     assert_eq!(focused(&wb, cx), None, "the menu has the keyboard, not the list");

@@ -123,8 +123,81 @@ fn auth_fetch_signs_only_for_the_providers_hosts_and_without_an_authorization_of
 
     let err = host.command("elsewhere", Value::Null).unwrap_err();
     assert!(matches!(&err, Error::Denied(_)), "{err}");
-    assert_eq!(host.denied()[0].permission, "a host of the Forge account (forge.example.com), not evil.example.org");
+    assert_eq!(host.denied()[0].permission, r#"[[oauth]] forge hosts = ["evil.example.org"]"#);
+    // #183: the fix names the `[[oauth]]` table, not the `auth` line the manifest already has.
+    assert!(err.to_string().contains(r#"fix: add "evil.example.org" to hosts in the [[oauth]] table with id = "forge""#), "{err}");
     let err = host.command("own-header", Value::Null).unwrap_err();
     assert!(matches!(&err, Error::Invalid(m) if m.contains("authorization header is added by Codeyard")), "{err}");
     assert!(host.fetched().is_empty(), "neither request was sent");
+}
+
+struct Signer;
+
+impl Extension for Signer {
+    fn activate(ctx: Context) -> Result<()> {
+        ctx.command("me", async |ctx, _args| {
+            let who = ctx.session("forge", &[]).await?;
+            let res = ctx.fetch_as("forge", Request::get("https://forge.example.com/api/me")).await?;
+            Ok(json!({ "label": who.label, "status": res.status }))
+        });
+        ctx.command("fetch-only", async |ctx, _args| Ok(json!(ctx.fetch_as("forge", Request::get("https://forge.example.com/api/me")).await?.status)));
+        Ok(())
+    }
+}
+
+/// #185: a declined sign-in and a signed-out account, as Codeyard reports them.
+#[test]
+fn sign_in_outcomes() {
+    let host = MockHost::new();
+    host.manifest(MANIFEST);
+    host.http("GET", "https://forge.example.com/api/me", 200, "{}");
+    host.activate::<Signer>().unwrap();
+    assert_eq!(host.command("me", Value::Null).unwrap(), json!({ "label": "test-user", "status": 200 }));
+
+    host.decline_sign_in("forge");
+    assert!(matches!(host.command("me", Value::Null), Err(Error::Cancelled)), "the user picked Cancel");
+    assert!(matches!(host.command("fetch-only", Value::Null), Err(Error::Invalid(m)) if m == "not signed in to Forge; call auth.session with “forge” first"));
+
+    host.signed_out("forge");
+    let err = host.command("fetch-only", Value::Null).unwrap_err();
+    assert!(err.to_string().contains("not signed in to Forge"), "{err}");
+    // The next session asks again, and this time the user agrees.
+    assert_eq!(host.command("me", Value::Null).unwrap(), json!({ "label": "test-user", "status": 200 }));
+
+    host.sign_in("forge", "ada");
+    assert_eq!(host.command("me", Value::Null).unwrap(), json!({ "label": "ada", "status": 200 }));
+    assert!(host.denied().is_empty());
+}
+
+/// #184: an instance's account (`forge@git.corp.example`) is granted by `auth = ["forge"]` once the user added it, and
+/// signs requests to its own host only.
+#[test]
+fn an_instance_account_signs_its_own_host_only() {
+    let host = MockHost::new();
+    host.manifest(MANIFEST);
+    host.http("GET", "https://git.corp.example/api/me", 200, "{}");
+    host.http("GET", "https://forge.example.com/api/me", 200, "{}");
+    host.activate::<Instance>().unwrap();
+    let get = |url: &str| host.command("get", json!(["forge@git.corp.example", url]));
+    // Not added yet: Codeyard refuses the account.
+    assert!(matches!(get("https://git.corp.example/api/me"), Err(Error::Denied(d)) if d.permission == r#"auth = ["forge"]"#));
+    host.instance("forge", "git.corp.example");
+    assert_eq!(get("https://git.corp.example/api/me").unwrap(), json!(200));
+    assert!(
+        matches!(get("https://forge.example.com/api/me"), Err(Error::Denied(d)) if d.permission == r#"[[oauth]] forge@git.corp.example hosts = ["forge.example.com"]"#)
+    );
+    assert_eq!(host.fetched().len(), 1);
+}
+
+struct Instance;
+
+impl Extension for Instance {
+    fn activate(ctx: Context) -> Result<()> {
+        ctx.command("get", async |ctx, args| {
+            let (account, url) = (args[0].as_str().unwrap_or_default().to_string(), args[1].as_str().unwrap_or_default().to_string());
+            ctx.session(&account, &[]).await?;
+            Ok(json!(ctx.fetch_as(&account, Request::get(url)).await?.status))
+        });
+        Ok(())
+    }
 }

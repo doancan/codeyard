@@ -11,10 +11,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, channel};
 use std::time::{Duration, Instant};
 
-use ext_api::value::{Completion, Denied, EnvInfo, Error as ApiError, Notify, Platform, Request, Response, Start, ThemeKind, Why};
+use ext_api::value::{Completion, Denied, EnvInfo, Error as ApiError, HttpHead, Notify, Platform, Request, Response, Start, StreamEvent, ThemeKind, Why};
 use ext_manifest::{Code, Diagnostic, Manifest};
 use ext_proto::{Hello, Reader, ToApp, ToHost};
 use sha2::{Digest, Sha256};
+
+use crate::fixtures::Fixtures;
 
 /// How long one request (or `activate`) may take before the test fails.
 const WAIT: Duration = Duration::from_secs(20);
@@ -48,8 +50,9 @@ impl Report {
     }
 }
 
-/// Run the built component of the extension in `dir` (`extension.wasm`) with `exthost`.
-pub fn run(dir: &Path, manifest: &Manifest, exthost: &Path) -> Result<Report, String> {
+/// Run the built component of the extension in `dir` (`extension.wasm`) with `exthost`; `fixtures` answer its
+/// requests.
+pub fn run(dir: &Path, manifest: &Manifest, exthost: &Path, fixtures: &Fixtures) -> Result<Report, String> {
     let dir = &std::fs::canonicalize(dir).map_err(|e| format!("error: {}: {e}", dir.display()))?;
     let wasm = std::fs::read(dir.join(ext_pkg::COMPONENT)).map_err(|e| format!("error: cannot read {}: {e}", ext_pkg::COMPONENT))?;
     let component =
@@ -59,7 +62,7 @@ pub fn run(dir: &Path, manifest: &Manifest, exthost: &Path) -> Result<Report, St
     let run = RUNS.fetch_add(1, Ordering::Relaxed);
     let work = std::env::temp_dir().join(format!("cyx-test-{}-{}-{run}", std::process::id(), crate::now()));
     std::fs::create_dir_all(work.join("data")).map_err(|e| format!("error: {}: {e}", work.display()))?;
-    let result = run_in(&work, dir, manifest, exthost, &wasm, component.interfaces);
+    let result = run_in(&work, dir, manifest, exthost, &wasm, component.interfaces, fixtures);
     let _ = std::fs::remove_dir_all(&work);
     // A TypeScript extension's stack traces name its bundle; show the .ts file and line instead.
     let map = manifest.code.as_ref().filter(|c| c.language != ext_manifest::CodeLanguage::Rust).and_then(|_| crate::sourcemap::load(dir));
@@ -73,7 +76,7 @@ pub fn run(dir: &Path, manifest: &Manifest, exthost: &Path) -> Result<Report, St
     })
 }
 
-fn run_in(work: &Path, dir: &Path, manifest: &Manifest, exthost: &Path, wasm: &[u8], granted: Vec<String>) -> Result<Report, String> {
+fn run_in(work: &Path, dir: &Path, manifest: &Manifest, exthost: &Path, wasm: &[u8], granted: Vec<String>, fixtures: &Fixtures) -> Result<Report, String> {
     let compiled = compile(exthost, wasm)?;
     let compiled_path = work.join("extension.cwasm");
     std::fs::write(&compiled_path, &compiled).map_err(|e| format!("error: {e}"))?;
@@ -123,7 +126,7 @@ fn run_in(work: &Path, dir: &Path, manifest: &Manifest, exthost: &Path, wasm: &[
         sandbox: !cfg!(windows),
     };
 
-    let mut app = App::start(exthost, hello, manifest.clone(), folder)?;
+    let mut app = App::start(exthost, hello, manifest.clone(), folder, fixtures.clone())?;
     let mut report = Report::default();
     match app.wait(&mut report, |m| matches!(m, ToApp::Activated(_))) {
         Some(ToApp::Activated(Ok(()))) => report.pass(format!("activates ({first})")),
@@ -155,7 +158,8 @@ fn run_in(work: &Path, dir: &Path, manifest: &Manifest, exthost: &Path, wasm: &[
             (_, Some(Ok(other))) => report.fail(format!("{what} answered {other:?}")),
         }
     }
-    // Each pull request provider lists a remote on its first host; without network, an error is an answer too.
+    // Each pull request provider lists a remote on its first host (`https://<host>/example/repo.git`); without a fixture
+    // for its request, an error is an answer too.
     for p in &manifest.contributions.pull_requests {
         if app.dead || !report.failures.is_empty() {
             break;
@@ -191,7 +195,7 @@ fn run_in(work: &Path, dir: &Path, manifest: &Manifest, exthost: &Path, wasm: &[
 
 fn fix(d: &Denied) -> String {
     match d.why {
-        Why::NotDeclared => format!("add to [permissions]:  {}", d.permission),
+        Why::NotDeclared => ext_manifest::oauth_host_fix(&d.permission).unwrap_or_else(|| format!("add to [permissions]:  {}", d.permission)),
         why => format!("{} ({})", d.permission, why.as_str()),
     }
 }
@@ -227,6 +231,7 @@ struct App {
     frames: Receiver<Result<ToApp, String>>,
     manifest: Manifest,
     folder: String,
+    fixtures: Fixtures,
     next_id: u64,
     /// Refusals, rendered with their fix.
     denied: Vec<String>,
@@ -235,7 +240,7 @@ struct App {
 }
 
 impl App {
-    fn start(exthost: &Path, hello: Hello, manifest: Manifest, folder: String) -> Result<App, String> {
+    fn start(exthost: &Path, hello: Hello, manifest: Manifest, folder: String, fixtures: Fixtures) -> Result<App, String> {
         let mut child = Command::new(exthost)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -255,7 +260,7 @@ impl App {
             }
         });
         ext_proto::write(&mut stdin, &ToHost::Hello(Box::new(hello))).map_err(|e| format!("error: {e}"))?;
-        let app = App { child, stdin, frames, manifest, folder, next_id: 1, denied: Vec::new(), dead: false };
+        let app = App { child, stdin, frames, manifest, folder, fixtures, next_id: 1, denied: Vec::new(), dead: false };
         match app.frames.recv_timeout(WAIT) {
             Ok(Ok(ToApp::Ready { .. })) => Ok(app),
             Ok(Ok(ToApp::Mismatch { build, .. })) => Err(format!(
@@ -300,7 +305,10 @@ impl App {
             }
             match frame {
                 ToApp::Start { ticket, call } => {
-                    let completion = self.answer(report, call);
+                    let (events, completion) = self.answer(report, call);
+                    for event in events {
+                        self.send(&ToHost::Event { ticket, event });
+                    }
                     self.send(&ToHost::Complete { ticket, completion });
                 }
                 ToApp::Notify(Notify::Log { message, .. }) => {
@@ -325,8 +333,9 @@ impl App {
         }
     }
 
-    /// What the app's broker would answer, in a sandbox: no network, files or programs.
-    fn answer(&mut self, report: &mut Report, call: Start) -> Completion {
+    /// What the app's broker would answer, in a sandbox: no files or programs, and the network only through the
+    /// fixtures. The events streamed before the completion come first.
+    fn answer(&mut self, report: &mut Report, call: Start) -> (Vec<StreamEvent>, Completion) {
         let p = &self.manifest.permissions;
         let rel = |uri: &str| uri.strip_prefix(&self.folder).unwrap_or(uri).trim_start_matches('/').to_string();
         let refused = match &call {
@@ -340,18 +349,47 @@ impl App {
                 (!p.allows_net(&host)).then(|| format!(r#"net = ["{host}"]"#))
             }
             Start::Session { provider, .. } | Start::AuthFetch { provider, .. } if !p.auth.contains(provider) => Some(format!(r#"auth = ["{provider}"]"#)),
+            // As the app does: an account signs requests to its own hosts only.
+            Start::AuthFetch { provider, request } => {
+                let host = host_of(&request.url);
+                ext_manifest::account_hosts(&self.manifest, provider)
+                    .filter(|hosts| !ext_manifest::net_allows(hosts, &host))
+                    .map(|_| ext_manifest::oauth_host_line(provider, &host))
+            }
             Start::Spawn { command } if !p.allows_run(&command.program) => Some(format!(r#"run = ["{}"]"#, command.program)),
             _ => None,
         };
         if let Some(line) = refused {
             let what = call.wit_name();
-            let d = Diagnostic::new(Code::NotDeclared, format!("{what} needs a permission the manifest does not declare"))
-                .fix(format!("add to [permissions]:  {line}"));
+            let denied = Denied { permission: line, why: Why::NotDeclared };
+            let d = Diagnostic::new(Code::NotDeclared, format!("{what} needs a permission the manifest does not declare")).fix(fix(&denied));
             self.denied.push(d.render(ext_manifest::FILE_NAME, ""));
-            return Completion::Failed(ApiError::Denied(Denied { permission: line, why: Why::NotDeclared }));
+            return (Vec::new(), Completion::Failed(ApiError::Denied(denied)));
         }
         let offline = |what: &str| Completion::Failed(ApiError::Other(format!("cyx test does not {what}; use the mock host's fixtures in unit tests")));
-        match call {
+        let request = match &call {
+            Start::Fetch { request } | Start::AuthFetch { request, .. } => Some(request),
+            _ => None,
+        };
+        if let Some(r) = request {
+            if matches!(call, Start::AuthFetch { .. }) && r.headers.iter().any(|(n, _)| n.trim().eq_ignore_ascii_case("authorization")) {
+                let msg = "the authorization header is added by Codeyard; remove it from the request".to_string();
+                return (Vec::new(), Completion::Failed(ApiError::Invalid(msg)));
+            }
+            return match self.fixtures.find(&r.method, &r.url) {
+                Some(f) => {
+                    let events = vec![StreamEvent::HttpHead(HttpHead { status: f.status, headers: f.headers.clone() }), StreamEvent::Data(f.body.clone())];
+                    (events, Completion::Done)
+                }
+                None => {
+                    let file = self.fixtures.source.as_ref().map_or_else(|| crate::fixtures::DEFAULT.to_string(), |p| p.display().to_string());
+                    let msg = format!("cyx test does not reach the network and has no fixture for {} {}; add one to {file}", r.method, r.url);
+                    (Vec::new(), Completion::Failed(ApiError::Other(msg)))
+                }
+            };
+        }
+        let done = |c: Completion| (Vec::new(), c);
+        done(match call {
             Start::ShowNotice { message, .. } => {
                 report.lines.push(format!("    notice: {message}"));
                 Completion::Chosen(Vec::new())
@@ -367,10 +405,9 @@ impl App {
             }
             Start::FindFiles { .. } => Completion::Uris(Vec::new()),
             Start::Session { provider, .. } => Completion::Account(ext_api::value::Account { provider, label: "cyx-test".into() }),
-            Start::Fetch { .. } | Start::AuthFetch { .. } => offline("reach the network"),
             Start::Spawn { .. } => offline("run programs"),
             _ => Completion::Done,
-        }
+        })
     }
 
     fn shutdown(&mut self) {

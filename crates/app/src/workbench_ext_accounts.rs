@@ -22,6 +22,7 @@ use crate::ext_accounts::{self as acc, Keychain, Provider, Publisher, Token, Vau
 use crate::ext_broker::{Scope, Sink};
 use crate::ext_fetch::{self, Transport};
 use crate::ext_runtime::Process;
+use ext_core::instances::Instance;
 
 /// GitHub's account endpoint, for the account's name.
 const GITHUB_USER: &str = "https://api.github.com/user";
@@ -39,6 +40,9 @@ pub(super) struct AccountsState {
     flows: acc::Flows,
     /// Signed-in accounts seen in this window: (extension, provider) → the account's name.
     pub(super) known: BTreeMap<(String, String), String>,
+    /// The self-managed instances the user added, by extension id (#184): read from the store on first use and after
+    /// every change.
+    instances: std::cell::RefCell<Option<BTreeMap<String, Vec<Instance>>>>,
 }
 
 impl Default for AccountsState {
@@ -53,6 +57,7 @@ impl Default for AccountsState {
             github_token: Arc::new(github_cli_token),
             flows: acc::Flows::default(),
             known: BTreeMap::new(),
+            instances: Default::default(),
         }
     }
 }
@@ -199,8 +204,10 @@ impl Workbench {
             }
             Start::Session { provider, scopes } => self.extension_session(active, &scope, ticket, &provider, &scopes, proc, window, cx),
             Start::AuthFetch { provider, request } => {
-                let Some(p) = acc::provider(&active.manifest, &provider).filter(|_| scope.permissions.auth.contains(&provider)) else {
-                    complete(&proc, denied(format!("auth = [\"{provider}\"]"), &scope));
+                let granted = acc::granted_as(&provider);
+                let instances = self.extension_instances(active.id());
+                let Some(p) = acc::provider(&active.manifest, &instances, &provider).filter(|_| scope.permissions.auth.iter().any(|a| a == granted)) else {
+                    complete(&proc, denied(format!("auth = [\"{granted}\"]"), &scope));
                     return;
                 };
                 // Checked before the keychain is touched: a request to another host is never signed.
@@ -225,11 +232,33 @@ impl Workbench {
     /// Who the extension is: its lock entry's source, or the folder in development.
     pub(super) fn extension_publisher(&self, active: &crate::ext::Active) -> Publisher {
         let dev = crate::ext::dev_dir().filter(|d| *d == active.dir);
-        let source = match (&dev, &self.cfg.dir) {
-            (None, Some(dir)) => crate::ext::store(dir).locked().ok().and_then(|l| l.get(&active.manifest.id).map(|e| e.source.clone())),
-            _ => None,
-        };
-        Publisher::of(active.id(), source.as_ref(), dev.as_deref())
+        Publisher::of(active.id(), self.extension_source(active).as_ref(), dev.as_deref())
+    }
+
+    /// Where the extension was installed from; `None` for the one in development.
+    pub(super) fn extension_source(&self, active: &crate::ext::Active) -> Option<ext_core::Source> {
+        if crate::ext::dev_dir().is_some_and(|d| d == active.dir) {
+            return None;
+        }
+        let dir = self.cfg.dir.as_ref()?;
+        crate::ext::store(dir).locked().ok().and_then(|l| l.get(&active.manifest.id).map(|e| e.source.clone()))
+    }
+
+    /// The self-managed instances the user added to `id`'s providers (#184).
+    pub(super) fn extension_instances(&self, id: &str) -> Vec<Instance> {
+        let mut cache = self.cfg.exts.accounts.instances.borrow_mut();
+        let map = cache.get_or_insert_with(|| match self.cfg.dir.as_deref().filter(|_| !crate::ext::turned_off()) {
+            Some(dir) => crate::ext::store(dir).all_instances(),
+            None => BTreeMap::new(),
+        });
+        map.get(id).cloned().unwrap_or_default()
+    }
+
+    /// Every account the extension may use: its `auth` providers, then the instances the user added.
+    pub(super) fn extension_accounts(&self, m: &ext_manifest::Manifest) -> Vec<String> {
+        let mut out = m.permissions.auth.clone();
+        out.extend(self.extension_instances(m.id.as_str()).iter().filter(|i| i.oauth(m).is_some()).map(Instance::account));
+        out
     }
 
     /// `auth.session`: the stored account, else ask (the first use) and sign in.
@@ -250,8 +279,10 @@ impl Workbench {
             record.lock().unwrap_or_else(|p| p.into_inner()).ticket_done(&who, ticket, &c, None);
             let _ = proc.send(&ToHost::Complete { ticket, completion: c });
         };
-        let Some(p) = acc::provider(&active.manifest, provider).filter(|_| scope.permissions.auth.iter().any(|a| a == provider)) else {
-            complete(denied(format!("auth = [\"{provider}\"]"), scope));
+        let granted = acc::granted_as(provider);
+        let instances = self.extension_instances(active.id());
+        let Some(p) = acc::provider(&active.manifest, &instances, provider).filter(|_| scope.permissions.auth.iter().any(|a| a == granted)) else {
+            complete(denied(format!("auth = [\"{granted}\"]"), scope));
             return;
         };
         let scopes = match &p.oauth {
@@ -390,7 +421,7 @@ impl Workbench {
         };
         let reg = crate::ext::current();
         let Some(active) = reg.active.iter().find(|e| e.id() == flow.extension).cloned() else { return true };
-        let Some(provider) = acc::provider(&active.manifest, &flow.provider) else { return true };
+        let Some(provider) = acc::provider(&active.manifest, &self.extension_instances(active.id()), &flow.provider) else { return true };
         let Some(o) = provider.oauth.clone() else { return true };
         let ask = Ask {
             id: flow.extension.clone(),
@@ -445,7 +476,7 @@ impl Workbench {
         self.ensure_keychain_pump(cx);
         let keychain = self.cfg.exts.accounts.keychain.clone();
         let publisher = self.extension_publisher(&active);
-        let providers = active.manifest.permissions.auth.clone();
+        let providers = self.extension_accounts(&active.manifest);
         let ext = id.to_string();
         let read = off_thread(move || {
             let vault = Vault { keychain: keychain.as_ref(), publisher: &publisher, extension: &ext };
@@ -474,7 +505,7 @@ impl Workbench {
         self.ensure_keychain_pump(cx);
         let keychain = self.cfg.exts.accounts.keychain.clone();
         let publisher = self.extension_publisher(&active);
-        let name = acc::provider(&active.manifest, &provider).map_or_else(|| provider.clone(), |p| p.name);
+        let name = acc::provider(&active.manifest, &self.extension_instances(&ext), &provider).map_or_else(|| provider.clone(), |p| p.name);
         let (e, p) = (ext.clone(), provider.clone());
         let done = off_thread(move || Vault { keychain: keychain.as_ref(), publisher: &publisher, extension: &e }.sign_out(&p));
         cx.spawn(async move |this, cx| {
@@ -493,26 +524,104 @@ impl Workbench {
         .detach();
     }
 
-    /// The Accounts section of an extension's page: each provider it may use, with **Sign Out** for signed-in ones.
+    /// The Accounts section of an extension's page: each provider it may use and each self-managed instance the user
+    /// added, with **Sign Out** for signed-in ones, **Add Instance…** on a provider that offers instances and
+    /// **Remove** on an instance (#184).
     pub(super) fn extension_accounts_section(&self, m: &ext_manifest::Manifest, p: &Palette, cx: &mut Context<Self>) -> Option<gpui::Div> {
         if m.permissions.auth.is_empty() {
             return None;
         }
-        let rows = m.permissions.auth.iter().enumerate().map(|(i, provider)| {
-            let name = acc::provider(m, provider).map_or_else(|| provider.clone(), |p| p.name);
-            let row = div().id(("ext-account", i)).flex().items_center().gap(px(theme::SPACE[2]));
-            match self.cfg.exts.accounts.known.get(&(m.id.to_string(), provider.clone())) {
+        let instances = self.extension_instances(m.id.as_str());
+        let rows = self.extension_accounts(m).into_iter().enumerate().map(|(i, provider)| {
+            let found = acc::provider(m, &instances, &provider);
+            let name = found.as_ref().map_or_else(|| provider.clone(), |p| p.name.clone());
+            let mut row = div().id(("ext-account", i)).flex().items_center().gap(px(theme::SPACE[2]));
+            let ext = m.id.to_string();
+            row = match self.cfg.exts.accounts.known.get(&(ext.clone(), provider.clone())) {
                 Some(label) => {
-                    let (ext, prov) = (m.id.to_string(), provider.clone());
+                    let (ext, prov) = (ext.clone(), provider.clone());
                     row.child(div().child(crate::i18n::tf("{0}: signed in as {1}", &[&name, label]))).child(
                         action_button("ext-sign-out", crate::i18n::t("Sign Out"), p)
                             .on_click(cx.listener(move |this, _, _, cx| this.sign_out_extension_account(ext.clone(), prov.clone(), cx))),
                     )
                 }
                 None => row.child(div().text_color(c(p.text_muted)).child(crate::i18n::tf("{}: not signed in", &[&name]))),
+            };
+            let (ext, prov) = (ext.clone(), provider.clone());
+            if ext_manifest::split_account(&provider).1.is_some() {
+                row = row.child(
+                    action_button("ext-remove-instance", crate::i18n::t("Remove"), p)
+                        .on_click(cx.listener(move |this, _, _, cx| this.remove_extension_instance(ext.clone(), prov.clone(), cx))),
+                );
+            } else if found.and_then(|f| f.oauth).is_some_and(|o| o.instances) {
+                row = row.child(
+                    action_button("ext-add-instance", crate::i18n::t("Add Instance…"), p)
+                        .on_click(cx.listener(move |this, _, window, cx| this.start_add_extension_instance(ext.clone(), prov.clone(), window, cx))),
+                );
             }
+            row
         });
         Some(div().flex().flex_col().gap(px(theme::SPACE[1])).child(section_title(crate::i18n::t("Accounts"), p)).children(rows))
+    }
+
+    /// **Add Instance…**: ask for the host and the client id of the OAuth application the user registered there.
+    pub(super) fn start_add_extension_instance(&mut self, extension: String, provider: String, window: &mut Window, cx: &mut Context<Self>) {
+        let placeholder = crate::i18n::tf("Host and client id of your {} server, such as git.example.com 3f2a9c", &[&provider]);
+        self.show_input(InputPurpose::AddInstance { extension, provider }, crate::i18n::t("Add"), &placeholder, "", window, cx);
+    }
+
+    /// The typed `host client-id`: checked, then the user agrees in a system dialog that names the extension, its
+    /// publisher and the host, as for a permission (docs/plugin-architecture.md §6.3). Nothing is stored before that.
+    pub(super) fn finish_add_extension_instance(&mut self, extension: String, provider: String, typed: String, window: &mut Window, cx: &mut Context<Self>) {
+        let reg = crate::ext::current();
+        let Some(active) = reg.active.iter().find(|e| e.id() == extension).cloned() else { return };
+        let mut words = typed.split_whitespace();
+        let (host, client_id) = (words.next().unwrap_or_default(), words.next().unwrap_or_default());
+        let checked = match (self.extension_source(&active), words.next()) {
+            (None, _) => Err(crate::i18n::t("Install the extension to add an instance; one in development has none.").to_string()),
+            (_, Some(_)) => Err(crate::i18n::t("Type the host and the client id, separated by a space.").to_string()),
+            (Some(source), None) => Instance::new(&active.manifest, &provider, host, client_id).map(|i| (source, i)),
+        };
+        let (source, instance) = match checked {
+            Ok(x) => x,
+            Err(e) => {
+                self.notice = Some(Notice::Error(e.into()));
+                cx.notify();
+                return;
+            }
+        };
+        let ask = AddInstance { name: active.manifest.name.clone(), id: extension, publisher: self.extension_publisher(&active), instance };
+        let title = crate::i18n::tf("Let {0} use your account on {1}?", &[&ask.name, &ask.instance.host]);
+        let answer = window.prompt(PromptLevel::Warning, &title, Some(&ask.detail()), &[crate::i18n::t("Add Instance"), crate::i18n::t("Cancel")], cx);
+        cx.spawn_in(window, async move |this, cx| {
+            if answer.await != Ok(0) {
+                return;
+            }
+            let _ = this.update(cx, |this, cx| {
+                let Some(dir) = this.cfg.dir.clone() else { return };
+                let Ok(id) = ext_manifest::ExtId::parse(&ask.id) else { return };
+                this.notice = Some(match crate::ext::store(&dir).add_instance(&id, &source, ask.instance.clone()) {
+                    Ok(()) => {
+                        *this.cfg.exts.accounts.instances.borrow_mut() = None;
+                        Notice::Info(crate::i18n::tf("{0} can now sign in to {1}.", &[&ask.id, &ask.instance.host]).into())
+                    }
+                    Err(e) => Notice::Error(crate::i18n::tf("Could not add the instance: {}", &[&e]).into()),
+                });
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// **Remove** on an instance: it goes from the store, and its account from the keychain.
+    pub(super) fn remove_extension_instance(&mut self, extension: String, account: String, cx: &mut Context<Self>) {
+        let (Some(dir), Ok(id)) = (self.cfg.dir.clone(), ext_manifest::ExtId::parse(&extension)) else { return };
+        self.sign_out_extension_account(extension.clone(), account.clone(), cx);
+        if let Err(e) = crate::ext::store(&dir).remove_instance(&id, &account) {
+            self.notice = Some(Notice::Error(crate::i18n::tf("Could not remove the instance: {}", &[&e]).into()));
+        }
+        *self.cfg.exts.accounts.instances.borrow_mut() = None;
+        cx.notify();
     }
 
     /// Answer keychain requests from background threads with GPUI's credential store.
@@ -565,6 +674,27 @@ fn off_thread<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> impl
 
 fn detached(f: impl FnOnce() + Send + 'static) {
     let _ = std::thread::Builder::new().name("ext-accounts".into()).spawn(f);
+}
+
+/// A self-managed instance waiting for the user's consent.
+struct AddInstance {
+    id: String,
+    name: String,
+    publisher: Publisher,
+    instance: Instance,
+}
+
+impl AddInstance {
+    /// The dialog's text: who asks, what the instance lets it do, how to undo it.
+    fn detail(&self) -> String {
+        let who = crate::i18n::tf("{0} ({1}) is published by {2}.", &[&self.name, &self.id, &self.publisher.shown]);
+        let i = &self.instance;
+        let what = crate::i18n::tf(
+            "It may sign in to your account on {0} with the OAuth application you registered there (client id {1}, redirect URI {2}). Codeyard signs its requests to {0} with that account; the extension never sees the token. Remove it on the extension's page in Extensions.",
+            &[&i.host, &i.client_id, &acc::redirect_uri(&self.id)],
+        );
+        format!("{who}\n\n{what}")
+    }
 }
 
 /// A first use of an account, waiting for the user.
@@ -655,6 +785,21 @@ impl Workbench {
 
     pub(crate) fn sign_out_for_test(&mut self, extension: &str, provider: &str, cx: &mut Context<Self>) {
         self.sign_out_extension_account(extension.to_string(), provider.to_string(), cx);
+    }
+
+    /// **Add Instance…** on the extension page, for `provider` of `extension`.
+    pub(crate) fn add_instance_for_test(&mut self, extension: &str, provider: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.start_add_extension_instance(extension.to_string(), provider.to_string(), window, cx);
+    }
+
+    /// The accounts the extension page lists for `extension`: its providers, then its instances.
+    pub(crate) fn extension_accounts_for_test(&self, extension: &str) -> Vec<String> {
+        let reg = crate::ext::current();
+        reg.active.iter().find(|e| e.id() == extension).map(|a| self.extension_accounts(&a.manifest)).unwrap_or_default()
+    }
+
+    pub(crate) fn remove_instance_for_test(&mut self, extension: &str, account: &str, cx: &mut Context<Self>) {
+        self.remove_extension_instance(extension.to_string(), account.to_string(), cx);
     }
 
     pub(crate) fn accounts_known_for_test(&self) -> Vec<(String, String, String)> {

@@ -160,6 +160,35 @@ impl MockHost {
         self
     }
 
+    // ---- accounts (`auth`): every provider starts signed in as `test-user` -------------------------------------------
+
+    /// Signed in to `provider` as `label`: `auth.session` returns it at once.
+    pub fn sign_in(&self, provider: &str, label: &str) -> &Self {
+        self.state.borrow_mut().accounts.insert(provider.to_string(), host::Account::SignedIn(label.to_string()));
+        self
+    }
+
+    /// Not signed in to `provider`, as after **Sign Out** on the extension page: `auth.fetch` fails with Codeyard's
+    /// "not signed in" error until `auth.session` signs in again (the user agrees, as `test-user`).
+    pub fn signed_out(&self, provider: &str) -> &Self {
+        self.state.borrow_mut().accounts.insert(provider.to_string(), host::Account::SignedOut);
+        self
+    }
+
+    /// Not signed in to `provider`, and the user declines every sign-in: `auth.session` fails with `cancelled`, as in
+    /// Codeyard when the user picks **Cancel**, and `auth.fetch` fails as for [`signed_out`](Self::signed_out).
+    pub fn decline_sign_in(&self, provider: &str) -> &Self {
+        self.state.borrow_mut().accounts.insert(provider.to_string(), host::Account::Declines);
+        self
+    }
+
+    /// A self-managed instance of the `[[oauth]]` provider `provider` on `host`, as the user adds one on the extension's
+    /// page (#184): its account is `<provider>@<host>`, signs requests to `host` only, and starts signed in.
+    pub fn instance(&self, provider: &str, host: &str) -> &Self {
+        self.state.borrow_mut().instances.push((provider.to_string(), host.to_ascii_lowercase()));
+        self
+    }
+
     pub fn clipboard_text(&self, text: &str) -> &Self {
         self.state.borrow_mut().clipboard = Some(text.to_string());
         self

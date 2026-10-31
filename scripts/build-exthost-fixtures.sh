@@ -9,6 +9,8 @@
 #   scripts/build-exthost-fixtures.sh
 # Needs the wasm32-wasip2 Rust target (rustup target add wasm32-wasip2). The .wasm is committed, so tests need no
 # WebAssembly toolchain; run this after changing the guest or the WIT.
+# testdata/probe-0.1.wasm is not rebuilt: it is the probe as built against API 0.1.0, kept to show that the exthost
+# still runs 0.x components during the move to 1.0 (tests/exthost.rs, a_component_built_against_0_1_still_runs).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 target=$(mktemp -d "${TMPDIR:-/tmp}/exthost-fixtures.XXXXXX")

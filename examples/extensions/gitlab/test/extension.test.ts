@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { afterEach, test } from "node:test";
 
 import type { Remote } from "@codeyard/extension";
@@ -156,17 +155,24 @@ test("checks out the merge request's head ref, forks included", async () => {
 });
 
 test("a self-managed instance uses its host and its own account", async () => {
-  // The manifest's commented-out block, uncommented with a real host.
-  const manifest = readFileSync("codeyard-extension.toml", "utf8")
-    .replace('auth = ["gitlab"]', 'auth = ["gitlab", "gitlab-self-managed"]')
-    .replace(/^# (?=\[\[|[a-z-]+ += )/gm, "")
-    .replaceAll("gitlab.example.com", "git.acme.example.com");
-  host = new MockHost({ manifest });
-  await host.activate(extension, "pull-requests:gitlab-self-managed");
-  const own: Remote = { ...remote, provider: "gitlab-self-managed", host: "git.acme.example.com", account: "gitlab-self-managed" };
+  // As after Accounts › Add Instance… on the extension's page: remotes on the host carry `gitlab@<host>`.
+  const host = await started();
+  host.instance("gitlab", "git.acme.example.com");
+  const own: Remote = { ...remote, host: "git.acme.example.com", account: "gitlab@git.acme.example.com" };
   host.http("GET", "https://git.acme.example.com/api/v4/projects/acme%2Fweb%2Fapp/merge_requests?state=opened&order_by=updated_at&sort=desc&per_page=100", 200, [mr]);
   assert.equal((await host.listPullRequests(own))[0]?.reference, "!7");
-  assert.equal(host.fetched()[0]?.auth, "gitlab-self-managed");
+  assert.equal(host.fetched()[0]?.auth, "gitlab@git.acme.example.com");
+  assert.deepEqual(host.denied(), []);
+});
+
+test("a declined sign-in and a signed-out account fail the list as Codeyard reports them", async () => {
+  const host = await started();
+  host.declineSignIn("gitlab");
+  await assert.rejects(host.listPullRequests(remote), (e: unknown) => e instanceof Error && /cancelled/.test(e.message));
+  host.signedOut("gitlab");
+  host.http("GET", `${PROJECT}/merge_requests?state=opened&order_by=updated_at&sort=desc&per_page=100`, 200, [mr]);
+  // The list signs in again first, so it works once the user agrees.
+  assert.equal((await host.listPullRequests(remote))[0]?.reference, "!7");
   assert.deepEqual(host.denied(), []);
 });
 

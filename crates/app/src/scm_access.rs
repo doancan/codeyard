@@ -8,6 +8,21 @@ use super::*;
 /// is on screen, otherwise around the rows on screen, so a huge status stays a small tree.
 pub(crate) const ACCESS_LINES: usize = 500;
 
+/// What of the panel has a frame in the accessibility tree: the message field, the commit button, a line of the change
+/// list (a group header or a file) and a file's button (`STAGE_BUTTON`, `DISCARD_BUTTON`).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum AccessFrame {
+    Message,
+    Commit,
+    Line(ChangeKey),
+    Button(ChangeKey, u64),
+}
+
+/// A file's Stage (Unstage, Mark as resolved) button.
+pub(crate) const STAGE_BUTTON: u64 = 1;
+/// A file's Discard changes button.
+pub(crate) const DISCARD_BUTTON: u64 = 2;
+
 /// A file row of the change list.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AccessFile {
@@ -52,7 +67,7 @@ pub(crate) struct AccessGroup {
     pub files: Vec<AccessFile>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct AccessView {
     pub revision: Option<Arc<Status>>,
     pub root: Option<String>,
@@ -77,6 +92,8 @@ pub(crate) struct AccessView {
     pub repos: Vec<AccessRepo>,
     /// Folders extensions' source control providers claim (#144).
     pub ext: Vec<AccessExt>,
+    /// Physical frames of what was painted (see `AccessFrame`).
+    pub frames: HashMap<AccessFrame, accesskit::Rect>,
 }
 
 /// A folder a provider claims, as its section shows it.
@@ -152,8 +169,11 @@ impl ScmPanel {
                 open: s.state.iter().flat_map(|st| &st.groups).filter(|g| self.ext_group_open(&s.root, &g.id)).map(|g| g.id.clone()).collect(),
             })
             .collect();
+        let scale = window.scale_factor();
+        let frames = self.a11y_frames.borrow().iter().filter_map(|(k, b)| Some((k.clone(), crate::painted::physical_scaled(*b, scale)?))).collect();
         AccessView {
             ext,
+            frames,
             revision: self.status.clone(),
             root: git.map(|s| s.root.clone()),
             branch,

@@ -146,6 +146,13 @@ const COMMAND_TS: &str = include_str!("../templates/command.ts");
 const COMMAND_TEST_TS: &str = include_str!("../templates/command.test.ts");
 const VIEW_TS: &str = include_str!("../templates/view.ts");
 const VIEW_TEST_TS: &str = include_str!("../templates/view.test.ts");
+const PULLS_RS: &str = include_str!("../templates/pulls.rs");
+const PULLS_TS: &str = include_str!("../templates/pulls.ts");
+const PULLS_TEST_TS: &str = include_str!("../templates/pulls.test.ts");
+const PULLS_FIXTURES: &str = include_str!("../templates/pulls.fixtures.json");
+
+/// The pull request provider's README: what to register before the first sign-in.
+const PULLS_README: &str = "\n## Before you run it\n\nThe provider speaks the Gitea and Forgejo API on `forge.example.com`. Put your forge's host in `codeyard-extension.toml` (the `[[oauth]]` URLs and `hosts`, and `hosts` of `[[pull-requests]]`), then register an OAuth application there: a public client (no secret: Codeyard signs in with PKCE) with the redirect URI `codeyard://ext/ID/callback`. Put its client id in `client-id`; `cyx check` warns while it is still `your-client-id`, and `cyx publish` refuses it.\n\nUsers with a server of their own add it on the extension's page in Codeyard (Accounts › Add Instance…), with an OAuth application they register there: `instances = true` in `[[oauth]]` allows it.\n\n`cyx test` lists the pull requests of a remote on the first host, `https://forge.example.com/example/repo.git`, and answers its requests from `test/fixtures.json`. Tests stay out of the package.\n";
 
 /// The language of a code extension's template.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -174,7 +181,7 @@ fn npm_sdk(sdk: Option<&str>) -> String {
 }
 
 /// The `@codeyard/extension` version a new TypeScript extension asks npm for.
-pub const NPM_SDK_VERSION: &str = "0.1.0";
+pub const NPM_SDK_VERSION: &str = "1.0.0";
 
 /// Where a generated code extension gets the SDK: the Codeyard repository (the SDK is pre-release and not on
 /// crates.io yet), or a local checkout of it.
@@ -266,6 +273,17 @@ pub fn create_in(dir: &Path, kind: Kind, name: &str, publisher: &str, sdk: Optio
             ),
             code(COMMAND_RS, COMMAND_TS, COMMAND_TEST_TS),
         ),
+        Kind::PullRequests => (
+            format!(
+                "{}\n[code]\nentry = \"{entry}\"\n\n# Codeyard signs every request to the forge with the user's account; the extension never sees the token.\n[permissions]\nauth = [\"forge\"]\nwhy  = \"Lists the pull requests of your repositories on the forge.\"\n\n# The forge's OAuth application (README.md): a public client with the redirect URI codeyard://ext/{publisher}.{name}/callback.\n[[oauth]]\nid            = \"forge\"\nname          = \"Forge\"\nauthorize-url = \"https://forge.example.com/login/oauth/authorize\"\ntoken-url     = \"https://forge.example.com/login/oauth/access_token\"\nclient-id     = \"your-client-id\"\nscopes        = [\"read:repository\"]\nhosts         = [\"forge.example.com\"]\naccount-url   = \"https://forge.example.com/api/v1/user\"\n# Users add servers of their own on the extension's page (Accounts › Add Instance…): these URLs on another host.\ninstances     = true\n\n# The remotes this provider answers for (origin = git@forge.example.com:owner/repo.git), and the account they use.\n[[pull-requests]]\nid    = \"pulls\"\nlabel = \"{t}\"\nhosts = [\"forge.example.com\"]\nauth  = \"forge\"\n",
+                header(publisher, name, &t, "Pull requests of a forge in the Pull Requests view.")
+            ),
+            {
+                let mut files = code(PULLS_RS, PULLS_TS, PULLS_TEST_TS);
+                files.push(("test/fixtures.json".to_string(), PULLS_FIXTURES.to_string()));
+                files
+            },
+        ),
         Kind::View => (
             format!(
                 "{}\n[code]\nentry = \"{entry}\"\n\n[[views]]\nid       = \"main\"\ntitle    = \"{t}\"\nlocation = \"sidebar\"\n\n[[commands]]\nid    = \"reset\"\ntitle = \"{t}: Reset\"\n",
@@ -275,10 +293,11 @@ pub fn create_in(dir: &Path, kind: Kind, name: &str, publisher: &str, sdk: Optio
         ),
     };
     let readme = match (kind.is_code(), rust) {
-        (false, _) => README,
-        (true, true) => CODE_README,
-        (true, false) => TS_README,
+        (false, _) => README.to_string(),
+        (true, true) => CODE_README.to_string(),
+        (true, false) => TS_README.to_string(),
     };
+    let readme = if kind == Kind::PullRequests { readme + &PULLS_README.replace("ID", &format!("{publisher}.{name}")) } else { readme };
     std::fs::create_dir_all(dir).map_err(|e| format!("error: cannot create {}: {e}", dir.display()))?;
     let mut all = vec![
         (ext_manifest::FILE_NAME.to_string(), manifest),

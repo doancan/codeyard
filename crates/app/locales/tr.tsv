@@ -286,7 +286,6 @@ Test: Run Test at Cursor	Test: İmlecin Altındaki Testi Çalıştır
 Test: Run Tests in File	Test: Dosyadaki Testleri Çalıştır
 Tasks: Configure Tasks	Görevler: Görevleri Yapılandır
 Merge Conflict: Open Merge Editor	Birleştirme Çakışması: Birleştirme Düzenleyicisini Aç
-GitHub: Pull Requests…	GitHub: Pull Request'ler…
 HTTP: Send Request	HTTP: İstek Gönder
 HTTP: Show Last Response Headers	HTTP: Son Yanıtın Üstbilgilerini Göster
 Merge Conflict: Accept Current	Birleştirme Çakışması: Geçerli Olanı Kabul Et
@@ -1751,7 +1750,6 @@ changes requested	değişiklik istendi
 review needed	inceleme gerekli
 draft	taslak
 Loading pull requests…	Pull request'ler yükleniyor…
-None of this repository's remotes is on github.com.	Bu deponun uzak depolarından hiçbiri github.com üzerinde değil.
 {}: no open pull requests.	{}: açık pull request yok.
 via the gh CLI	gh CLI ile
 via the GitHub API	GitHub API ile
@@ -2764,6 +2762,10 @@ Copy the files again on the current host before pasting.	Yapıştırmadan önce 
 Wait for the file operation to finish, or cancel it from the status bar.	Dosya işleminin bitmesini bekleyin veya durum çubuğundan iptal edin.
 Apply a file operation to {} entry?|Apply a file operation to {} entries?	{} öğeye dosya işlemi uygulansın mı?
 Destination: {0} on {1}. Existing files are never overwritten.	Hedef: {1} üzerindeki {0}. Mevcut dosyaların üzerine yazılmaz.
+Permanently delete {0} item on {1}?|Permanently delete {0} items on {1}?	{1} üzerindeki {0} öğe kalıcı olarak silinsin mi?
+{} has no Trash: the items are deleted at once and can't be restored.	{} üzerinde Çöp Kutusu yok: öğeler hemen silinir ve geri yüklenemez.
+Permanently delete “{0}” on {1}?	{1} üzerindeki “{0}” kalıcı olarak silinsin mi?
+{} has no Trash: it is deleted at once and can't be restored.	{} üzerinde Çöp Kutusu yok: hemen silinir ve geri yüklenemez.
 The complete file list is available in Output.	Dosyaların tam listesi Çıktı bölümünde bulunur.
 File operation: {0} completed, {1} failed, {2} not processed.	Dosya işlemi: {0} tamamlandı, {1} başarısız, {2} işlenmedi.
 Files: {0}/{1}	Dosyalar: {0}/{1}
@@ -3132,7 +3134,6 @@ Let {0} act as your GitHub account {1}?	{0}, GitHub hesabınız {1} adına işle
 Let {0} sign in to your {1} account?	{0}, {1} hesabınızla oturum açabilsin mi?
 Sign In…	Oturum Aç…
 Sign Out	Oturumu Kapat
-a host of the {0} account ({1}), not {2}	{0} hesabının bir sunucusu ({1}), {2} değil
 not signed in to {0}; call auth.session with “{1}” first	{0} hesabında oturum açılmamış; önce auth.session'ı “{1}” ile çağırın
 the keychain did not answer	anahtar zinciri yanıt vermedi
 the keychain refused the account: {}	anahtar zinciri hesabı kabul etmedi: {}
@@ -3399,6 +3400,19 @@ Checks	Denetimler
 Description	Açıklama
 No description.	Açıklama yok.
 Comments ({})	Yorumlar ({})
+Pull Requests: Show…	Pull Request'ler: Göster…
+None of this repository's remotes is on github.com or on a host of {}.	Bu deponun uzak depolarından hiçbiri github.com veya {} sunucularından birinde değil.
+None of this repository's remotes is on github.com, and no installed extension provides pull requests for their hosts.	Bu deponun uzak depolarından hiçbiri github.com üzerinde değil ve kurulu hiçbir eklenti bunların sunucuları için pull request sağlamıyor.
+Add Instance…	Sunucu Ekle…
+Add Instance	Sunucu Ekle
+Host and client id of your {} server, such as git.example.com 3f2a9c	{} sunucunuzun adresi ve istemci kimliği, örneğin git.example.com 3f2a9c
+Install the extension to add an instance; one in development has none.	Sunucu eklemek için eklentiyi kurun; geliştirilmekte olan bir eklentinin sunucusu olmaz.
+Type the host and the client id, separated by a space.	Sunucu adresini ve istemci kimliğini aralarında bir boşlukla yazın.
+Let {0} use your account on {1}?	{0}, {1} üzerindeki hesabınızı kullanabilsin mi?
+It may sign in to your account on {0} with the OAuth application you registered there (client id {1}, redirect URI {2}). Codeyard signs its requests to {0} with that account; the extension never sees the token. Remove it on the extension's page in Extensions.	Orada kaydettiğiniz OAuth uygulamasıyla (istemci kimliği {1}, yönlendirme adresi {2}) {0} üzerindeki hesabınızda oturum açabilir. Codeyard, {0} adresine giden isteklerini bu hesapla imzalar; eklenti belirteci hiç görmez. Eklentiler'deki eklenti sayfasından kaldırabilirsiniz.
+{0} can now sign in to {1}.	{0} artık {1} üzerinde oturum açabilir.
+Could not add the instance: {}	Sunucu eklenemedi: {}
+Could not remove the instance: {}	Sunucu kaldırılamadı: {}
 {} is a platform extension programs are not built for	{}, eklenti programlarının derlenmediği bir platform
 Version {} adds native programs; review it and type its id to install it:	{} sürümü yerel programlar ekliyor; kurmak için gözden geçirip kimliğini yazın:
 features: {}	özellikler: {}

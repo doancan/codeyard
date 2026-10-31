@@ -262,3 +262,102 @@ fn scm_in_its_own_window_keeps_its_tree_and_focus(cx: &mut TestAppContext) {
     let main = vcx.update(|window, cx| (windows_access::WORKBENCH.snapshot)(wb.clone().into(), window, cx)).unwrap();
     assert_ne!(main.focus, FocusSnap::ScmChanges);
 }
+
+/// The cursor file's menu by keyboard (Shift+F10, the Menu key) and from the tree ("More Actions…", `ShowContextMenu`):
+/// the right click's menu, driven by the arrows and Enter, and Escape gives the keyboard back to the same row.
+#[gpui::test]
+fn scm_file_menu_opens_from_the_keyboard_and_the_tree(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let Some((dir, wb, cx)) = repo("a11y-scm-menu", cx) else { return };
+    let menu = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, cx| wb.menu_labels(cx));
+    let on_row = |id: NodeId, cx: &mut VisualTestContext| {
+        let snap = snapshot(&wb, cx);
+        (snap.focus, snap.to_tree().focus) == (FocusSnap::ScmChanges, id)
+    };
+    let snap = snapshot(&wb, cx);
+    let (tracked, _) = node(&snap, "tracked.txt").expect("the tracked row");
+    act_on(&wb, cx, &snap, tracked, Action::Focus);
+
+    // Shift+F10: the right click's menu, which has the focus (a screen reader reads the menu).
+    cx.simulate_keystrokes("shift-f10");
+    cx.run_until_parked();
+    let items = ["Open Changes", "Open File", "Stage", "Discard changes", "Copy Path", "Copy Relative Path"].map(String::from);
+    assert_eq!(menu(cx).as_deref(), Some(&items[..]));
+    let open = snapshot(&wb, cx);
+    let consumer = accesskit_consumer::Tree::new(open.to_tree(), true);
+    let focus = consumer.state().focus().map(|n| n.role());
+    assert!(matches!(focus, Some(Role::Menu | Role::MenuItem)), "the menu has the focus: {focus:?}");
+    assert!(!on_row(tracked, cx));
+    // Escape: closed, and the keyboard is back on the same row.
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+    assert_eq!(menu(cx), None);
+    assert!(on_row(tracked, cx), "focus is back on the row");
+
+    // The Menu key, then the arrows and Enter choose Stage: the file is staged.
+    cx.simulate_keystrokes("menu");
+    cx.run_until_parked();
+    assert!(menu(cx).is_some());
+    cx.simulate_keystrokes("down down down enter");
+    idle(&wb, cx, "staging", |s| row(s, "tracked.txt") == [true]);
+    assert_eq!(git_in(&dir, &["diff", "--cached", "--name-only"]).trim(), "tracked.txt");
+    assert_eq!(menu(cx), None);
+
+    // From the tree: each file has ShowContextMenu and a "More Actions…" button described by its path.
+    let snap = snapshot(&wb, cx);
+    let tree = snap.to_tree();
+    let (untracked, file) = node(&snap, "untracked.txt").expect("the untracked row");
+    assert!(file.supports_action(Action::ShowContextMenu));
+    let (more, button) = tree
+        .nodes
+        .iter()
+        .find(|(_, n)| n.label() == Some("More Actions…") && n.description() == Some("untracked.txt"))
+        .cloned()
+        .expect("the file's More Actions… button");
+    assert_eq!((button.role(), button.has_popup()), (Role::Button, Some(accesskit::HasPopup::Menu)));
+    act_on(&wb, cx, &snap, more, Action::Click);
+    let labels = menu(cx).expect("the file's menu");
+    assert!(labels.contains(&"Add to .gitignore".to_string()), "{labels:?}");
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+    assert!(on_row(untracked, cx), "the menu leaves the keyboard on the file it was opened for");
+    // ShowContextMenu on the staged row: the staged side's menu.
+    let snap = snapshot(&wb, cx);
+    let (staged, _) = node(&snap, "tracked.txt").expect("the staged row");
+    act_on(&wb, cx, &snap, staged, Action::ShowContextMenu);
+    assert!(menu(cx).is_some_and(|m| m.contains(&"Unstage".to_string())));
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+    assert!(on_row(staged, cx));
+}
+
+/// Source Control's message field, commit button, group header, file rows and their buttons have the frames they are
+/// painted at; a row's Stage and Discard buttons (shown while the pointer is over the row) are inside it and a hit
+/// test finds each where it is drawn. The menu button has no control of its own on screen and so no frame.
+#[gpui::test]
+fn scm_controls_and_rows_have_their_painted_frames(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let Some((_dir, wb, cx)) = repo("a11y-scm-frames", cx) else { return };
+    let snap = snapshot(&wb, cx);
+    let tree = accesskit_consumer::Tree::new(snap.to_tree(), true);
+    let state = tree.state();
+    let bounds = |label: &str| node(&snap, label).and_then(|(_, n)| n.bounds()).unwrap_or_else(|| panic!("{label} has a frame"));
+    let hit = |rect: accesskit::Rect| {
+        let at = accesskit::Point::new((rect.x0 + rect.x1) / 2., (rect.y0 + rect.y1) / 2.);
+        state.root().node_at_point(at, &|_| accesskit_consumer::FilterResult::Include).and_then(|n| n.label())
+    };
+    let message = snap.to_tree().nodes.into_iter().find(|(id, _)| *id == SCM_MESSAGE).and_then(|(_, n)| n.bounds()).expect("message frame");
+    let commit = bounds("Commit All (1)");
+    assert!(message.y1 <= commit.y0 + 0.01, "the field is above the button: {message:?} {commit:?}");
+    assert_eq!(hit(commit).as_deref(), Some("Commit All (1)"));
+    let header = bounds("Changes (2)");
+    let row = bounds("untracked.txt");
+    assert!(header.y1 <= row.y0 + 0.01, "the header is above its files");
+    assert_eq!(hit(row).as_deref(), Some("untracked.txt"));
+    for button in ["Stage untracked.txt", "Discard changes in untracked.txt"] {
+        let b = bounds(button);
+        assert!(b.x0 >= row.x0 - 0.01 && b.x1 <= row.x1 + 0.01 && b.y0 >= row.y0 - 0.01 && b.y1 <= row.y1 + 0.01, "{button} {b:?} in {row:?}");
+        assert_eq!(hit(b).as_deref(), Some(button));
+    }
+    assert!(snap.to_tree().nodes.iter().filter(|(_, n)| n.label() == Some("More Actions…")).all(|(_, n)| n.bounds().is_none()));
+}

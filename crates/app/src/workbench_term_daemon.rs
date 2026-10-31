@@ -8,7 +8,8 @@
 //!
 //! A session is kept only when the user is expected to come back: when the app quits (every window is told so), crashes
 //! or is killed, and for `terminal.persistentSessionTimeout` minutes (0: not at all). Leaving on purpose (closing the
-//! window, Close Folder, another folder, another connection) ends it and its shells at once. At the next start the
+//! window, another connection) ends it and its shells at once. Close Folder and another folder keep the panel's
+//! terminals, as without the daemon, and with them their session until the window closes. At the next start the
 //! window takes the session back and each saved terminal, in the panel, in an editor group or in a window of its own,
 //! with its token: those are the same processes, shown with "Reconnected to terminal session". Anything else (a refused
 //! or missing token, a restarted daemon, restore off) comes back as a new shell as before, and nothing saved is ever
@@ -52,7 +53,8 @@ pub(super) struct TermDaemon {
     pub(super) session: String,
     workspace: i64,
     /// The app is quitting: leave the session to the daemon for the next start. Otherwise (the window closes, another
-    /// folder opens, Close Folder) the session ends with this value and its shells with it.
+    /// connection, another folder opens with no terminal left in the panel) the session ends with this value and its
+    /// shells with it.
     keep: bool,
 }
 

@@ -45,7 +45,7 @@ fn project<'a>(cx: &'a mut TestAppContext, name: &str) -> Option<(Entity<Workben
     ] } });
     let clear = json!({ "method": "textDocument/publishDiagnostics", "params": { "uri": ua, "diagnostics": [] } });
     let fake = FakeServer::new(&d.join("server"), &json!({ "on_open": [publish], "after": { "textDocument/didChange": [clear] } }))?;
-    let (wb, cx) = setup_with(cx, Settings { lsp_servers: vec![("rust".into(), Some(fake.command().into()))], ..Settings::default() });
+    let (wb, cx) = setup_with(cx, Settings { lsp_enabled: true, lsp_servers: vec![("rust".into(), Some(fake.command().into()))], ..Settings::default() });
     open_project(&wb, cx, &root);
     let file = a.clone();
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(file, window, cx));
@@ -178,7 +178,7 @@ fn qa_diag_real_rust_analyzer_explains_a_use_after_move(cx: &mut TestAppContext)
     }
     let lib = "pub fn f() {\n    let s = String::new();\n    let t = s;\n    println!(\"{s}\");\n    drop(t);\n}\n";
     let (project, cfg) = cargo_project("cy_moved", lib, "");
-    std::fs::write(cfg.join("settings.jsonc"), "{}").unwrap();
+    std::fs::write(cfg.join("settings.jsonc"), r#"{ "lsp.enabled": true }"#).unwrap();
     let (wb, cx) = crate::qa_workbench_tests::setup_with_config(cx, &cfg);
     let file = open_project(&wb, cx, &project);
     let e0382 = |d: &crate::lsp::Diagnostic| d.code.as_deref() == Some("E0382") && d.severity == 1;
@@ -210,7 +210,7 @@ fn qa_diag_related_locations_over_ssh(cx: &mut TestAppContext) {
           "relatedInformation": [related(&path_to_uri(&b), 11, 4, "borrow later used here")] },
     ] } });
     let Some(fake) = FakeServer::new(&d.join("server"), &json!({ "on_open": [publish] })) else { return };
-    let (wb, cx) = setup_with(cx, Settings { lsp_servers: vec![("rust".into(), Some(fake.command().into()))], ..Settings::default() });
+    let (wb, cx) = setup_with(cx, Settings { lsp_enabled: true, lsp_servers: vec![("rust".into(), Some(fake.command().into()))], ..Settings::default() });
     wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
     crate::qa_integration_tests::wait_secs(cx, 30, "connected", |cx| {
         cx.executor().advance_clock(std::time::Duration::from_secs(1));

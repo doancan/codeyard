@@ -1097,6 +1097,22 @@ fn command_palette_puts_recently_used_commands_first(cx: &mut TestAppContext) {
     assert_eq!(wb.read_with(cx, |wb, cx| wb.overlay_details(cx)).unwrap()[0], "recently used");
 }
 
+/// #186: the Pull Requests view is forge-neutral; its old GitHub name and "merge requests" still find it.
+#[gpui::test]
+fn command_palette_finds_the_pull_requests_view_by_any_forge_word(cx: &mut TestAppContext) {
+    let dir = project("pullcmd");
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    for query in ["pull requests", "merge requests", "github pull"] {
+        cx.simulate_keystrokes("cmd-shift-p");
+        cx.simulate_input(query);
+        let labels = wb.read_with(cx, |wb, cx| wb.overlay_labels(cx)).unwrap();
+        assert_eq!(labels.first().map(String::as_str), Some("Pull Requests: Show…"), "{query}: {:?}", &labels[..3.min(labels.len())]);
+        cx.simulate_keystrokes("escape");
+        cx.run_until_parked();
+    }
+}
+
 /// Fuzz: random commands + key sequences (many file types, pages, overlays, split groups).
 /// Must not crash in any order; at each step Esc closes the overlays.
 #[gpui::test]
@@ -2097,7 +2113,7 @@ fn language_server_diagnostics_follow_edits(cx: &mut TestAppContext) {
     std::fs::create_dir_all(&dir).unwrap();
     let dir = std::fs::canonicalize(dir).unwrap();
     std::fs::write(dir.join("main.c"), "int main(void) {\n    return yok;\n}\n").unwrap();
-    let (wb, cx) = setup_with_settings(cx, crate::settings::Settings::default());
+    let (wb, cx) = setup_with_settings(cx, crate::settings::Settings { lsp_enabled: true, ..Default::default() });
     open(&wb, &dir.join("main.c"), cx);
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
     wait_for(cx, "tanı", |cx| ed.read_with(cx, |e, _| !e.diagnostics().is_empty()));
@@ -2132,7 +2148,7 @@ fn language_server_completion_hover_definition(cx: &mut TestAppContext) {
     let dir = std::fs::canonicalize(dir).unwrap();
     let src = "struct nokta { int xeksen; int yeksen; };\n/* iki sayıyı toplar */\nint topla(int a, int b) { return a + b; }\nint main(void) {\n    struct nokta n = {1, 2};\n    return topla(n.xeksen, 0);\n}\n";
     std::fs::write(dir.join("main.c"), src).unwrap();
-    let (wb, cx) = setup_with_settings(cx, crate::settings::Settings::default());
+    let (wb, cx) = setup_with_settings(cx, crate::settings::Settings { lsp_enabled: true, ..Default::default() });
     open(&wb, &dir.join("main.c"), cx);
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
     wait_for(cx, "sunucu bağlandı", |cx| ed.read_with(cx, |e, _| e.lsp_client().is_some()));
@@ -2889,7 +2905,7 @@ fn language_server_rename_references_symbols_fix_format_signature(cx: &mut TestA
         format!(r#"[{{"directory":"{d}","file":"{d}/main.c","arguments":["cc","-I.","-c","main.c"]}},{{"directory":"{d}","file":"{d}/lib.c","arguments":["cc","-I.","-c","lib.c"]}}]"#),
     )
     .unwrap();
-    let (wb, cx) = setup_with_settings(cx, crate::settings::Settings::default());
+    let (wb, cx) = setup_with_settings(cx, crate::settings::Settings { lsp_enabled: true, ..Default::default() });
     open(&wb, &dir.join("main.c"), cx);
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
     let text = |cx: &mut VisualTestContext| ed.read_with(cx, |e, _| e.text());
@@ -3240,7 +3256,7 @@ fn workspace_symbols_find_rust_functions(cx: &mut TestAppContext) {
     std::fs::write(dir.join("src/main.rs"), "mod yardim;\nfn main() { yardim::hesapla_toplam(1); }\n").unwrap();
     std::fs::write(dir.join("src/yardim.rs"), "pub struct Kutu;\n\npub fn hesapla_toplam(x: i32) -> i32 {\n    x + 1\n}\n").unwrap();
     // `setup` turns language servers off for every other test; this one needs rust-analyzer running.
-    let (wb, cx) = setup_with_settings(cx, crate::settings::Settings::default());
+    let (wb, cx) = setup_with_settings(cx, crate::settings::Settings { lsp_enabled: true, ..Default::default() });
     open(&wb, &dir, cx);
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(dir.join("src/main.rs").to_string_lossy().into_owned(), window, cx));
     cx.run_until_parked();

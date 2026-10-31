@@ -51,7 +51,16 @@ fn check_runs_the_import_check_on_the_component() {
     assert!(e.contains("error[CY0700]: the manifest has [code] but there is no extension.wasm"), "{e}");
     assert!(e.contains("= fix: run `cyx package` or `cyx test` first"), "{e}");
     std::fs::write(dir.join(ext_pkg::COMPONENT), ext_pkg::testing::COMPONENT).unwrap();
-    check(&dir).unwrap();
+    let report = check(&dir).unwrap();
+    assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+    // The minimum Codeyard comes from the API items the component uses (#147).
+    assert_eq!(report.requires.as_deref(), Some("It needs Codeyard 0.7.0 or newer (API 1.0.0, from the API items its code uses)."));
+    // A 0.1 build still passes, with a warning that says to rebuild.
+    std::fs::write(dir.join(ext_pkg::COMPONENT), ext_pkg::testing::COMPONENT_0_1).unwrap();
+    let report = check(&dir).unwrap();
+    assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
+    assert!(report.warnings[0].starts_with("warning: extension.wasm was built against API 0.1.0;"), "{}", report.warnings[0]);
+    assert!(report.warnings[0].contains("migrating-to-1.0.md"), "{}", report.warnings[0]);
     std::fs::write(dir.join(ext_pkg::COMPONENT), b"\0asm\x01\0\0\0").unwrap();
     let e = check(&dir).unwrap_err();
     assert!(e.contains("error[CY0700]: extension.wasm is a core WebAssembly module, not a component"), "{e}");
@@ -359,6 +368,25 @@ fn dev_watches_sources_but_not_build_output() {
     build::install(&d, b"y").unwrap();
     assert_eq!(std::fs::read(d.join("extension.wasm")).unwrap(), b"y");
     std::fs::remove_dir_all(&d).unwrap();
+}
+
+/// #187: a client id the template or a README left in place is flagged; a real one is not.
+#[test]
+fn placeholder_client_ids_are_flagged() {
+    let with = |id: &str| {
+        ext_manifest::parse(&format!(
+            "[extension]\nid = \"you.forge\"\nversion = \"0.1.0\"\nname = \"F\"\nlicense = \"MIT\"\n[code]\nentry = \"Cargo.toml\"\n[permissions]\nauth = [\"forge\"]\nwhy = \"x\"\n\
+             [[pull-requests]]\nid = \"forge\"\nlabel = \"F\"\nhosts = [\"forge.example.com\"]\nauth = \"forge\"\n\
+             [[oauth]]\nid = \"forge\"\nname = \"Forge\"\nauthorize-url = \"https://forge.example.com/a\"\ntoken-url = \"https://forge.example.com/t\"\nclient-id = \"{id}\"\nhosts = [\"forge.example.com\"]\n"
+        ))
+        .unwrap()
+    };
+    for id in ["your-client-id", "your-gitlab-application-id", "YOUR_CLIENT_ID", "<client-id>", "example-id", "changeme", "xxxxxxxx"] {
+        assert_eq!(placeholder_client_ids(&with(id)).len(), 1, "{id}");
+    }
+    for id in ["3f2a9c1b7d", "Iv1.8a61f9b3a7aba766", "cy-123", "0oa1b2c3d4"] {
+        assert!(placeholder_client_ids(&with(id)).is_empty(), "{id}");
+    }
 }
 
 /// #146: a program inside the package is built per platform: `cyx check` checks each one in `native/`, and `cyx

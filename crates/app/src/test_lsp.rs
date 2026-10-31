@@ -10,7 +10,7 @@
 //! - `after`: method → messages the server sends each time it receives that method (after answering it), e.g. a
 //!   `workspace/configuration` request after `workspace/didChangeConfiguration`.
 //!
-//! Use it as a server: `Settings { lsp_servers: vec![("rust".into(), Some(fake.command().into()))], .. }`.
+//! Use it as a server: `Settings { lsp_enabled: true, lsp_servers: vec![("rust".into(), Some(fake.command().into()))], .. }`.
 
 use std::path::{Path, PathBuf};
 
@@ -248,7 +248,7 @@ mod tests {
             { "range": { "start": { "line": 0, "character": 3 }, "end": { "line": 0, "character": 7 } }, "severity": 1, "message": "fake problem" }
         ] } }] });
         let Some(fake) = FakeServer::new(&d.join("server"), &scenario) else { return };
-        let (wb, cx) = setup_with(cx, Settings { lsp_servers: vec![("rust".into(), Some(fake.command().into()))], ..Settings::default() });
+        let (wb, cx) = setup_with(cx, Settings { lsp_enabled: true, lsp_servers: vec![("rust".into(), Some(fake.command().into()))], ..Settings::default() });
         let file = d.join("lib.rs").to_string_lossy().into_owned();
         wb.update_in(cx, |wb, window, cx| wb.open_path(&file, window, cx));
         wait_ticking(cx, "the fake server's diagnostic in Problems", |cx| wb.read_with(cx, |wb, _| wb.problems().iter().any(|(p, n)| p == &file && *n == 1)));

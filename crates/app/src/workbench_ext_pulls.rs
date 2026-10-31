@@ -98,13 +98,28 @@ impl Workbench {
             .collect()
     }
 
+    /// Every pull request provider of an active extension, as `Label (host, host)`: what the view names when no remote
+    /// is GitHub's or claimed.
+    pub(super) fn pull_provider_names(&self) -> Vec<String> {
+        self.pull_providers()
+            .into_iter()
+            .map(|(e, p)| {
+                let mut hosts = p.hosts.clone();
+                let mine = self.extension_instances(e.id()).into_iter().filter(|i| p.auth.as_deref() == Some(i.provider.as_str()));
+                hosts.extend(mine.map(|i| i.host));
+                format!("{} ({})", p.label, hosts.join(", "))
+            })
+            .collect()
+    }
+
     /// Ask every provider that claims one of `remotes` (`(name, url)`) for its open requests.
     pub(super) fn ask_pull_providers(&mut self, remotes: &[(String, String)], window: &mut Window, cx: &mut Context<Self>) -> Vec<Asked> {
         let mut asked = Vec::new();
         for (active, provider) in self.pull_providers() {
             let local = local_id(active.id(), &provider.id).to_string();
+            let instances = self.extension_instances(active.id());
             for (name, url) in remotes {
-                let Some(remote) = ext_pulls::claimed(&provider, &local, name, url) else { continue };
+                let Some(remote) = ext_pulls::claimed(&provider, &instances, &local, name, url) else { continue };
                 let answer = self.ask_pull(&active, PullQuery::List { remote: remote.clone() }, window, cx);
                 asked.push(Asked { extension: active.id().to_string(), label: provider.label.clone(), remote, answer });
             }

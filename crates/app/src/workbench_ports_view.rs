@@ -176,34 +176,56 @@ impl Workbench {
         let menu_row = row.clone();
         let mut actions = div().w(px(W_ACTIONS)).flex_none().flex().items_center().justify_end().gap(px(theme::SPACE[1]));
         if let Some(url) = row.url() {
-            actions = actions.child(
+            actions = actions.child(a11y::row_button(
                 ui::icon_button(("port-open", ix), "external-link", crate::i18n::t("Open in Browser"), p)
                     .on_click(cx.listener(move |_, _, _, cx| cx.open_url(&url))),
-            );
+                a11y::RowFrame::Port,
+                ix,
+                1,
+                cx,
+            ));
         }
         if row.state == RowState::Listening {
-            actions = actions.child(
+            actions = actions.child(a11y::row_button(
                 ui::icon_button(("port-fwd", ix), "plug", crate::i18n::t("Forward Port"), p)
                     .on_click(cx.listener(move |this, _, _, cx| this.forward_port(port, cx))),
-            );
+                a11y::RowFrame::Port,
+                ix,
+                4,
+                cx,
+            ));
         } else {
             if let Some(a) = row.address.clone().filter(|_| row.state == RowState::Active) {
-                actions = actions.child(
+                actions = actions.child(a11y::row_button(
                     ui::icon_button(("port-copy", ix), "copy", crate::i18n::t("Copy Address"), p)
                         .on_click(cx.listener(move |_, _, _, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(a.clone())))),
-                );
+                    a11y::RowFrame::Port,
+                    ix,
+                    2,
+                    cx,
+                ));
             }
             actions = actions
-                .child(
+                .child(a11y::row_button(
                     ui::icon_button(("port-stop", ix), "x", crate::i18n::t("Stop Forwarding"), p)
                         .on_click(cx.listener(move |this, _, _, cx| this.stop_forward(port, cx))),
-                )
-                .child(ui::icon_button(("port-more", ix), "ellipsis", crate::i18n::t("More Actions…"), p).on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |this, ev: &gpui::MouseDownEvent, window, cx| {
-                        cx.stop_propagation();
-                        this.open_port_menu(&menu_row, ev.position, window, cx);
-                    }),
+                    a11y::RowFrame::Port,
+                    ix,
+                    3,
+                    cx,
+                ))
+                .child(a11y::row_button(
+                    ui::icon_button(("port-more", ix), "ellipsis", crate::i18n::t("More Actions…"), p).on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |this, ev: &gpui::MouseDownEvent, window, cx| {
+                            cx.stop_propagation();
+                            this.open_port_menu(&menu_row, ev.position, window, cx);
+                        }),
+                    ),
+                    a11y::RowFrame::Port,
+                    ix,
+                    a11y::MENU_BUTTON,
+                    cx,
                 ));
         }
         div()

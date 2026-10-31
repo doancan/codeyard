@@ -113,6 +113,10 @@ export class MockHost {
   #permissions: Permissions | undefined;
   /** The manifest's `[[oauth]]` providers: the name and the hosts `auth.fetch` may sign requests to. */
   #oauth = new Map<string, { name: string; hosts: string[] }>();
+  /** Accounts by provider; one not in the map is signed in as `test-user`. */
+  #accounts = new Map<string, { signedIn: string } | "signed-out" | "declines">();
+  /** Self-managed instances the user added (#184), as `<provider>@<host>`. */
+  #instances = new Set<string>();
   #untrusted = false;
   #nextTicket = 0n;
   #nextId = 0n;
@@ -254,6 +258,41 @@ export class MockHost {
 
   secret(key: string, value: string): this {
     this.#secrets.set(key, value);
+    return this;
+  }
+
+  // ---- accounts (`auth`): every provider starts signed in as `test-user` -------------------------------------------
+
+  /** Signed in to `provider` as `label`: `ctx.session` returns it at once. */
+  signIn(provider: string, label: string): this {
+    this.#accounts.set(provider, { signedIn: label });
+    return this;
+  }
+
+  /**
+   * Not signed in to `provider`, as after **Sign Out** on the extension page: `ctx.fetchAs` fails with Codeyard's
+   * "not signed in" error until `ctx.session` signs in again (the user agrees, as `test-user`).
+   */
+  signedOut(provider: string): this {
+    this.#accounts.set(provider, "signed-out");
+    return this;
+  }
+
+  /**
+   * Not signed in to `provider`, and the user declines every sign-in: `ctx.session` rejects with `cancelled`, as in
+   * Codeyard when the user picks **Cancel**, and `ctx.fetchAs` fails as for `signedOut`.
+   */
+  declineSignIn(provider: string): this {
+    this.#accounts.set(provider, "declines");
+    return this;
+  }
+
+  /**
+   * A self-managed instance of the `[[oauth]]` provider `provider` on `host`, as the user adds one on the extension's
+   * page (#184): its account is `<provider>@<host>`, signs requests to `host` only, and starts signed in.
+   */
+  instance(provider: string, host: string): this {
+    this.#instances.add(`${provider}@${host.toLowerCase()}`);
     return this;
   }
 
@@ -697,10 +736,11 @@ export class MockHost {
         const host = hostOf((args[0] as W.HttpRequest).url);
         return check((p) => allowsNet(p, host), `net = ["${host}"]`, true);
       }
+      // An instance's account (`gitlab@git.example.com`) is granted by its provider's entry, once the user added it.
       case "auth/session":
-        return check((p) => p.auth.includes(uri), `auth = ["${uri}"]`, true);
+        return this.#accountRefusal(uri);
       case "auth/fetch":
-        return check((p) => p.auth.includes(uri), `auth = ["${uri}"]`, true) ?? this.#unsignedHost(uri, (args[1] as W.HttpRequest).url);
+        return this.#accountRefusal(uri) ?? this.#unsignedHost(uri, (args[1] as W.HttpRequest).url);
       case "process/spawn": {
         const program = (args[0] as W.ProcessCommand).program;
         return check((p) => p.run.includes(program), `run = ["${program}"]`, true);
@@ -726,12 +766,21 @@ export class MockHost {
    * `auth.fetch` signs requests only to the hosts of the provider (`[[oauth]] hosts`, GitHub's API hosts), as Codeyard
    * does: a request to any other host is refused and not sent.
    */
+  #accountRefusal(account: string): DeniedError | undefined {
+    const base = account.split("@")[0]!;
+    const line = `auth = ["${base}"]`;
+    const declared = (!this.#permissions || this.#permissions.auth.includes(base)) && (!account.includes("@") || this.#instances.has(account));
+    if (!declared) return new DeniedError(line, "not-declared");
+    return this.#untrusted ? new DeniedError(line, "untrusted-workspace") : undefined;
+  }
+
   #unsignedHost(provider: string, url: string): DeniedError | undefined {
     if (!this.#permissions) return undefined;
-    const o = this.#oauth.get(provider) ?? (provider === "github" ? { name: "GitHub", hosts: GITHUB_HOSTS } : undefined);
+    const instance = provider.includes("@") ? { name: provider, hosts: [provider.slice(provider.indexOf("@") + 1)] } : undefined;
+    const o = instance ?? this.#oauth.get(provider) ?? (provider === "github" ? { name: "GitHub", hosts: GITHUB_HOSTS } : undefined);
     const host = hostOf(url);
     if (!o || allowsNet({ net: o.hosts } as Permissions, host)) return undefined;
-    return new DeniedError(`a host of the ${o.name} account (${o.hosts.join(", ")}), not ${host}`, "not-declared");
+    return new DeniedError(`[[oauth]] ${provider} hosts = ["${host}"]`, "not-declared");
   }
 
   /** Start a call: record it, refuse it or answer it, and queue the answer for after the call returns. */
@@ -754,6 +803,12 @@ export class MockHost {
     return this.#start(name, provider === undefined ? [r] : [provider, r], () => {
       if (provider !== undefined && r.headers.some(([n]) => n.trim().toLowerCase() === "authorization")) {
         return [[], { tag: "failed", val: { tag: "invalid", val: "the authorization header is added by Codeyard; remove it from the request" } }];
+      }
+      const account = provider === undefined ? undefined : this.#accounts.get(provider);
+      if (account === "signed-out" || account === "declines") {
+        // Codeyard's words when the keychain has no account for the provider.
+        const name = this.#oauth.get(provider!)?.name ?? (provider === "github" ? "GitHub" : provider);
+        return [[], { tag: "failed", val: { tag: "invalid", val: `not signed in to ${name}; call auth.session with “${provider}” first` } }];
       }
       this.#fetched.push({ method: r.method, url: r.url, headers: r.headers, body: text(r.body), ...(provider ? { auth: provider } : {}) });
       const f = this.#http.find((f) => (f.method === "*" || f.method.toUpperCase() === r.method.toUpperCase()) && f.url === r.url);
@@ -780,7 +835,7 @@ export class MockHost {
       env: {
         info: () => ({
           codeyardVersion: "0.5.0",
-          apiVersion: "0.1.0",
+          apiVersion: "1.0.0",
           language: "en",
           theme: "dark",
           platform: process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux",
@@ -924,7 +979,16 @@ export class MockHost {
       },
       net: { fetch: (r) => this.#fetch("net/fetch", undefined, r) },
       auth: {
-        session: (provider, scopes) => this.#start("auth/session", [provider, scopes], () => [[], { tag: "account", val: { provider, label: "test-user" } }]),
+        // The first use asks; the user agrees (as `test-user`) unless the test said they decline, which Codeyard reports
+        // as `cancelled`.
+        session: (provider, scopes) =>
+          this.#start("auth/session", [provider, scopes], () => {
+            const a = this.#accounts.get(provider);
+            if (a === "declines") return [[], { tag: "failed", val: { tag: "cancelled" } }];
+            const label = typeof a === "object" ? a.signedIn : "test-user";
+            this.#accounts.set(provider, { signedIn: label });
+            return [[], { tag: "account", val: { provider, label } }];
+          }),
         fetch: (provider, r) => this.#fetch("auth/fetch", provider, r),
       },
       secrets: {

@@ -1,6 +1,6 @@
 {
   "name": "@codeyard/extension",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Write Codeyard extensions in TypeScript: the typed API, fetch mapped to the host, and a mock host for npm test",
   "license": "MIT OR Apache-2.0",
   "repository": {

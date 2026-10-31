@@ -122,18 +122,18 @@ pub fn net_fetch(t: &dyn Transport, scope: &Scope, req: &v::HttpRequest, sink: &
 /// The checks of `auth.fetch` that need no token: the permission, the folder's trust, and that the URL's host is one
 /// the provider declares. A request that fails them is not signed and not sent.
 pub fn may_sign(scope: &Scope, provider: &Provider, req: &v::HttpRequest) -> Result<(), v::Error> {
+    // A self-managed instance (`gitlab@git.example.com`) is granted by its provider's entry.
+    let granted = acc::granted_as(&provider.id);
     if !scope.trusted {
-        return Err(untrusted(&format!("auth = [\"{}\"]", provider.id)));
+        return Err(untrusted(&format!("auth = [\"{granted}\"]")));
     }
-    if !scope.permissions.auth.contains(&provider.id) {
-        return Err(v::Error::Denied(v::Denied { permission: format!("auth = [\"{}\"]", provider.id), why: v::Why::NotDeclared }));
+    if !scope.permissions.auth.iter().any(|a| a == granted) {
+        return Err(v::Error::Denied(v::Denied { permission: format!("auth = [\"{granted}\"]"), why: v::Why::NotDeclared }));
     }
     let host = https_host(&req.url)?;
     if !ext_manifest::net_allows(&provider.hosts, &host) {
-        return Err(v::Error::Denied(v::Denied {
-            permission: crate::i18n::tf("a host of the {0} account ({1}), not {2}", &[&provider.name, &provider.hosts.join(", "), &host]),
-            why: v::Why::NotDeclared,
-        }));
+        // `[[oauth]] gitlab hosts = ["evil.example.org"]`: the SDKs keep a line with `=` and name the real fix.
+        return Err(v::Error::Denied(v::Denied { permission: ext_manifest::oauth_host_line(&provider.id, &host), why: v::Why::NotDeclared }));
     }
     if req.headers.iter().any(|(n, _)| n.trim().eq_ignore_ascii_case("authorization")) {
         return Err(v::Error::Invalid("the authorization header is added by Codeyard; remove it from the request".into()));

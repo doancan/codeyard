@@ -1,7 +1,8 @@
 # GitLab
 
 A pull request provider (`[[pull-requests]]`) for GitLab, in TypeScript. Open a repository whose remote is on
-`gitlab.com` and run **GitHub: Pull Requests…**: its open merge requests appear in the list next to GitHub's. Picking
+`gitlab.com` and run **Pull Requests: Show…** (the palette finds it as "merge requests" too): its open merge requests
+appear in the list next to GitHub's. Picking
 one shows its description, head pipeline, labels and comments, its changed files as diffs, adds a comment, or checks it
 out (`refs/merge-requests/<iid>/head` into a branch `mr-<iid>`, forks included). **GitLab: Sign In** signs in ahead of
 time; otherwise the first list asks.
@@ -17,18 +18,16 @@ requests and posting comments), redirect URI `codeyard://ext/codeyard.gitlab/cal
 
 ## A self-managed GitLab
 
-The OAuth endpoints, the application id and the hosts are part of the manifest, so a self-managed instance is a second
-provider in it. The code already registers one under the id `gitlab-self-managed`:
+The `[[oauth]]` table says `instances = true`, so a self-managed GitLab needs no change to the extension:
 
 1. Register an OAuth application on your instance as above.
-2. In `codeyard-extension.toml`, uncomment the `[[oauth]]` and `[[pull-requests]]` tables at the end, replace
-   `gitlab.example.com` with your instance's host and put in the application id.
-3. Add it to the permission: `auth = ["gitlab", "gitlab-self-managed"]`.
-4. `cyx package`, then install the `.cyx` with **Install from File…** in the Extensions view, which shows its
-   permissions first (`codeyard --install-extension` refuses a code extension that asks for any).
+2. In Codeyard, open the extension's page in Extensions and choose **Add Instance…** next to GitLab under Accounts.
+   Type the instance's host and the application id (`gitlab.example.com 3f2a…`). Codeyard shows what it allows, like a
+   permission, and asks before it adds it.
 
-The API calls use the remote's host (`https://<host>/api/v4/…`), so nothing else changes. A user setting for more
-hosts, without repackaging, is not there yet.
+Remotes on that host then come to this provider with an account of their own (`gitlab@gitlab.example.com`), which signs
+in to the instance with your application and signs requests to that host only. The API calls use the remote's host
+(`https://<host>/api/v4/…`), so the code is the same. **Remove** on the page takes the instance away again.
 
 ## Run it
 

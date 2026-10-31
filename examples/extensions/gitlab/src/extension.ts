@@ -3,13 +3,10 @@
 // `ctx.fetchAs(remote.account, …)`: Codeyard signs it with the user's GitLab account, so the extension never sees the
 // token, and only the hosts of the account's `[[oauth]]` table get it.
 //
-// The API is GitLab's REST API v4 on the remote's host, so the same code serves gitlab.com and a self-managed
-// instance declared as another provider (README.md).
+// The API is GitLab's REST API v4 on the remote's host, so the same code serves gitlab.com and the self-managed
+// instances the user adds (README.md): a remote on an instance carries that instance's account, `gitlab@<host>`.
 
 import type { ChangedFile, CheckState, Comment, Context, PullRequest, PullRequestProvider, Remote } from "@codeyard/extension";
-
-/** The provider ids the manifest may declare: gitlab.com, and a self-managed instance (commented out there). */
-export const PROVIDERS = ["gitlab", "gitlab-self-managed"];
 
 // ---- GitLab's answers (the fields used here) ---------------------------------------------------------------------
 
@@ -193,7 +190,7 @@ export const provider: PullRequestProvider = {
 };
 
 export function activate(ctx: Context) {
-  for (const id of PROVIDERS) ctx.pullRequests(id, provider);
+  ctx.pullRequests("gitlab", provider);
   ctx.command("sign-in", async (ctx) => {
     const account = await ctx.session("gitlab");
     ctx.notice(`GitLab: signed in as ${account.label}.`);

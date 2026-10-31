@@ -205,8 +205,26 @@ extension's package carries its component as `extension.wasm`.
 - **State.** `storage` is a persisted key-value store and the only persistence concept. In `cyx dev`, hot
   reload keeps the in-memory values of `ctx.state`: the SDK saves them on `deactivate` under the reserved storage
   key `codeyard.reload-state` and restores them when the new build activates with the reason `reload`.
-- **Versioning.** `0.x` during beta, each break with a `cyx` error and migration note. From `1.0`, minors only
-  add, items carry `@since`, and a major stays supported for 24 months after the next ships.
+- **Versioning.** `codeyard:api` is 1.0.0 (#147); `0.x` was the beta, where a minor could break. From 1.0 a minor
+  only adds interfaces, functions and types, and a major stays supported for 24 months after the next ships.
+  - *Items carry `@since`.* Every interface, function and type has a WIT `@since(version = …)` gate; the reference
+    shows an item newer than its interface. `ext_api::since` reads the gates, and `ext_pkg::check_component` takes
+    the newest one among the functions and types a component imports as its minimum API (`Component::min_api`);
+    `ext_api::RELEASES` maps that to the first Codeyard release with it, which `cyx check` prints. A component built
+    against a newer minor runs when every item it uses is here (wasmtime binds `@1.y` imports to the host's `@1.x`);
+    an item this build lacks is `CY0701`.
+  - *The compatibility check.* `crates/ext-api/released/<version>/` holds the WIT of the last released API.
+    `compat_tests` in ext-api fails when an item of it was removed, changed shape (a record field, a variant or enum
+    case, a parameter or result) or changed its `@since`, and when a new item has no `@since` or one outside (released,
+    current]. A new major may change anything. The component model has no optional fields or cases, so data grows by
+    new types and functions; a request kind added in a minor comes as a new exported interface that the host calls only
+    when the component has it.
+  - *0.x components.* API 0.1 has the same shape as 1.0, so the host keeps running 0.1 builds during a transition
+    (`ext_api::TRANSITION`): the exthost renames their `codeyard:api/…@0.1.0` imports and exports to `@1.0.0` before
+    compiling (`ext_api::transition::upgrade`, same-length names, nothing else in the binary moves) and wasmtime
+    type-checks them as usual. `cyx check` warns, and `cyx publish` and Yard refuse 0.1 builds. The transition lasts
+    at least six months after Codeyard 0.7.0 and its end is announced one release ahead. Authors follow
+    [migrating-to-1.0.md](extensions/migrating-to-1.0.md).
 
 ### 5.3 Declarative UI
 
@@ -305,6 +323,17 @@ How it works (`ext_accounts.rs`, `ext_fetch.rs` and `workbench_ext_accounts.rs` 
   OAuth app of its own yet. Any other provider is an `[[oauth]]` table: `id`, `name`, `authorize-url`, `token-url`,
   `client-id`, `scopes`, `hosts` and an optional `account-url`. URLs must be `https://` to a host name; every
   `[[oauth]]` id must be in `auth`, and every `auth` entry must be built in or declared.
+- **Self-managed instances** (#184). An `[[oauth]]` table with `instances = true` (its URLs all on one host that
+  `hosts` lists) lets the user add servers of their own, such as a company GitLab, without repackaging. Only the
+  extension page adds one (Accounts › **Add Instance…**): the user types the host and the client id of the OAuth
+  application they registered there, and a system dialog names the extension, its publisher, the host, the client id
+  and the redirect URI before anything is stored, as for a permission. Instances live in
+  `<data>/extensions/instances.json`, keyed like the permission switches by extension id and publisher identity
+  (`ext_core::instances`); no extension, workspace or setting can write them. An instance is the table's URLs on the
+  new host, signing requests to that host only, under an account of its own, `<id>@<host>`, with its own keychain
+  entry; the `auth` entry `<id>` grants it, so turning that switch off turns it off. A `[[pull-requests]]` provider
+  whose `auth` is `<id>` claims the instance's remotes, which carry its account, and where `net` allows the table's
+  host it allows the instance's too. **Remove** on the page deletes it and its token.
 - **First use asks.** `auth.session` returns the stored account, or asks in a system dialog that no extension UI can
   draw over. The dialog names the extension, its publisher identity (or that it was sideloaded) and, for GitHub, the
   account. For `[[oauth]]` the browser opens the authorize URL with a PKCE challenge (S256) and a random `state`.
@@ -318,7 +347,8 @@ How it works (`ext_accounts.rs`, `ext_fetch.rs` and `workbench_ext_accounts.rs` 
   and the entry, so a sideloaded package with the same id finds nothing. A `secrets` value is at most 2048 bytes, the
   same on every platform.
 - **Signing.** `auth.fetch` is checked before the keychain is read: the provider must be in `auth`, the folder trusted,
-  the URL's host one of the provider's `hosts`, and the request must not set `authorization`. The app adds
+  the URL's host one of the provider's `hosts` (refused as `denied` with `[[oauth]] <id> hosts = ["<host>"]`, which
+  the SDKs and the Inspector turn into "add the host to that table"), and the request must not set `authorization`. The app adds
   `Authorization: Bearer <token>` and sends through `ext-net` with the provider's hosts as the allowed list, so a
   redirect cannot leave them and ext-net drops the header on any cross-origin redirect. The extension receives the
   `http-head` and `data` events, never the token. A token that expires within a minute is refreshed first.

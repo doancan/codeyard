@@ -1,9 +1,10 @@
-package codeyard:api@0.1.0;
+package codeyard:api@1.0.0;
 
 /// Types shared by every interface. Importing it needs no permission.
-@since(version = 0.1.0)
+@since(version = 1.0.0)
 interface types {
   /// Why a call was refused.
+  @since(version = 1.0.0)
   enum why {
     /// The manifest does not declare the permission.
     not-declared,
@@ -15,12 +16,16 @@ interface types {
     revoked-extension,
   }
 
+  @since(version = 1.0.0)
   record denied {
-    /// The permission that would allow the call, as written in the manifest (`net = ["api.example.com"]`).
+    /// What would allow the call, as a manifest line: `net = ["api.example.com"]`, or for a host outside an
+    /// `[[oauth]]` account `[[oauth]] gitlab hosts = ["git.example.com"]`. When the host knows only the permission, it
+    /// sends its bare name (`net`, `auth`) and the SDK fills in the line from the call.
     permission: string,
     why: why,
   }
 
+  @since(version = 1.0.0)
   variant error {
     denied(denied),
     not-found(string),
@@ -34,27 +39,33 @@ interface types {
 
   /// A host call that finishes later. Its result arrives at `guest.complete`, streamed data before that at
   /// `guest.event`.
+  @since(version = 1.0.0)
   type ticket = u64;
 
   /// Zero-based line and UTF-16 column, as in JavaScript strings and the Language Server Protocol.
+  @since(version = 1.0.0)
   record position {
     line: u32,
     character: u32,
   }
 
+  @since(version = 1.0.0)
   record range {
     start: position,
     end: position,
   }
 
+  @since(version = 1.0.0)
   record text-edit {
     range: range,
     new-text: string,
   }
 
   /// A file or folder. Opaque to extensions: the same code works on local and SSH folders.
+  @since(version = 1.0.0)
   type uri = string;
 
+  @since(version = 1.0.0)
   enum tone {
     neutral,
     accent,
@@ -65,6 +76,7 @@ interface types {
   }
 
   /// An HTTPS request (`net.fetch`, `auth.fetch`). The body is sent in one piece, up to the call limit.
+  @since(version = 1.0.0)
   record http-request {
     method: string,
     url: string,
@@ -74,11 +86,13 @@ interface types {
   }
 
   /// Arrives as `stream-event.http-head` before the body's `data` events.
+  @since(version = 1.0.0)
   record http-head {
     status: u16,
     headers: list<tuple<string, string>>,
   }
 
+  @since(version = 1.0.0)
   enum diagnostic-severity {
     error,
     warning,
@@ -86,6 +100,7 @@ interface types {
     hint,
   }
 
+  @since(version = 1.0.0)
   record diagnostic {
     range: range,
     severity: diagnostic-severity,
@@ -93,6 +108,7 @@ interface types {
     code: option<string>,
   }
 
+  @since(version = 1.0.0)
   record document {
     uri: uri,
     language: string,
@@ -101,6 +117,7 @@ interface types {
     text: string,
   }
 
+  @since(version = 1.0.0)
   record file-stat {
     is-dir: bool,
     size: u64,
@@ -108,6 +125,7 @@ interface types {
     modified: u64,
   }
 
+  @since(version = 1.0.0)
   record search-match {
     uri: uri,
     range: range,
@@ -116,11 +134,13 @@ interface types {
   }
 
   /// A file read by `workspace.read-many`: its bytes, or why it could not be read.
+  @since(version = 1.0.0)
   record file-result {
     uri: uri,
     contents: result<list<u8>, error>,
   }
 
+  @since(version = 1.0.0)
   record account {
     provider: string,
     /// What the user sees, such as the account name.
@@ -128,6 +148,7 @@ interface types {
   }
 
   /// The result of a ticket.
+  @since(version = 1.0.0)
   variant completion {
     /// Finished with nothing to return.
     done,
@@ -148,6 +169,7 @@ interface types {
   }
 
   /// Streamed data for a ticket, before its completion.
+  @since(version = 1.0.0)
   variant stream-event {
     http-head(http-head),
     data(list<u8>),

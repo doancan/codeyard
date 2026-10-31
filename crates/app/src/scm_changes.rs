@@ -3,7 +3,9 @@
 //! status refresh keeps the position. The list takes the keyboard focus as a whole and keeps a cursor row: Up/Down/
 //! Home/End move it, Enter opens a file's diff or folds a group, Space stages or unstages the file (or folds the group),
 //! Left/Right go out to the group and back in, Delete (⌘⌫ on macOS) discards the file's changes after the usual
-//! question. The cursor names its row by identity, so a refresh never moves it onto another file.
+//! question, and Shift+F10 or the Menu key (`menu::ShowContextMenu`) opens a file's menu under it, as a right click
+//! does (the menu gives the keyboard back to the list when it closes). The cursor names its row by identity, so a
+//! refresh never moves it onto another file.
 
 use std::sync::Arc;
 
@@ -43,7 +45,7 @@ pub(crate) fn change_lines(st: &Status, open: impl Fn(&str) -> bool) -> Vec<Chan
 }
 
 /// The row the cursor is on: a group, or a file of a group (the same path can be both staged and changed).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum ChangeKey {
     Group(Group),
     File(Group, String),
@@ -109,6 +111,9 @@ impl ScmPanel {
                 {
                     cx.stop_propagation();
                 }
+            }))
+            .on_action(cx.listener(|this, _: &crate::menu::ShowContextMenu, window, cx| {
+                this.open_row_menu(None, window, cx);
             }))
             .child(
                 uniform_list(
@@ -255,6 +260,37 @@ impl ScmPanel {
             _ => {}
         }
         true
+    }
+
+    /// The menu of the file row `key` names (else of the cursor row), under the row, as a right click on it opens it;
+    /// false if that row is not listed now or has no menu (a group header). The menu returns the focus to whatever had
+    /// it, so a caller that wants the keyboard back on the list focuses the list first.
+    pub(crate) fn open_row_menu(&mut self, key: Option<&ChangeKey>, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let Some(st) = self.listed_status() else { return false };
+        let lines = self.current_lines(&st);
+        let ix = match key {
+            Some(key) => lines.iter().position(|l| ChangeKey::of(*l, &st).as_ref() == Some(key)),
+            None => self.cursor_in(&lines, &st),
+        };
+        let Some((ix, ChangeLine::File(g, i))) = ix.and_then(|ix| Some((ix, *lines.get(ix)?))) else { return false };
+        let Some(change) = st.changes.get(i) else { return false };
+        let at = self.line_anchor(ix).unwrap_or_else(|| {
+            let size = window.viewport_size();
+            gpui::point(size.width / 2., size.height / 2.)
+        });
+        cx.emit(ScmEvent::FileMenu(change.path.clone(), g.staged(), at));
+        true
+    }
+
+    /// The bottom left of line `ix` as last painted, if it is on screen.
+    fn line_anchor(&self, ix: usize) -> Option<gpui::Point<gpui::Pixels>> {
+        let state = self.change_scroll.0.borrow();
+        let bounds = state.base_handle.bounds();
+        if bounds.size.height <= px(0.) {
+            return None;
+        }
+        let bottom = bounds.top() + state.base_handle.offset().y + px(layout::ROW_H * (ix + 1) as f32);
+        (bottom > bounds.top() && bottom - px(layout::ROW_H) < bounds.bottom()).then(|| gpui::point(bounds.left(), bottom.min(bounds.bottom())))
     }
 
     /// First and last line of the change list on screen in the last layout.

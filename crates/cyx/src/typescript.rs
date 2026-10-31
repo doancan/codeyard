@@ -72,6 +72,7 @@ pub fn build(dir: &Path, m: &Manifest, entry: &str) -> Result<PathBuf, String> {
         "sdk": sdk,
         "wit": wit,
         "interfaces": interfaces,
+        "api": ext_api::VERSION.to_string(),
         "bundle": work.join(BUNDLE),
         "out": partial,
         "map": dir.join(SOURCE_MAP),

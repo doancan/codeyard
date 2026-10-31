@@ -1,0 +1,25 @@
+{
+  "http": [
+    {
+      "method": "GET",
+      "url": "https://gitlab.com/api/v4/projects/example%2Frepo/merge_requests?state=opened&order_by=updated_at&sort=desc&per_page=100",
+      "status": 200,
+      "body": [
+        {
+          "iid": 7,
+          "title": "Add the merge request list",
+          "description": "Lists open merge requests.",
+          "state": "opened",
+          "draft": false,
+          "author": { "username": "ada" },
+          "source_branch": "mr-list",
+          "target_branch": "main",
+          "created_at": "2026-10-01T10:00:00Z",
+          "updated_at": "2026-10-02T10:00:00Z",
+          "web_url": "https://gitlab.com/example/repo/-/merge_requests/7",
+          "labels": []
+        }
+      ]
+    }
+  ]
+}

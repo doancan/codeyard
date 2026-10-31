@@ -650,12 +650,16 @@ impl Workbench {
                     .child(label(dir).text_color(c(p.text_muted)).text_size(px(text::XS.0)))
                     .child(div().flex_1())
                     .child(muted(f.tests.len().to_string()))
-                    .child(hover_actions().child(ui::icon_button(("test-file-run", ix), "play", crate::i18n::t("Run Tests in File"), p).on_click(cx.listener(
-                        move |this, _, w, cx| {
+                    .child(hover_actions().child(a11y::row_button(
+                        ui::icon_button(("test-file-run", ix), "play", crate::i18n::t("Run Tests in File"), p).on_click(cx.listener(move |this, _, w, cx| {
                             cx.stop_propagation();
                             this.run_test_item(fi, None, w, cx);
-                        },
-                    ))))
+                        })),
+                        a11y::RowFrame::Test,
+                        ix,
+                        1,
+                        cx,
+                    )))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         let c = &mut this.jobs.tests.expanded;
                         if !c.remove(&rel) {
@@ -676,20 +680,32 @@ impl Workbench {
                     .children(millis.map(|ms| muted(if ms >= 1000 { format!("{:.1} s", ms as f64 / 1000.) } else { format!("{ms} ms") })))
                     .child(
                         hover_actions()
-                            .child(ui::icon_button(("test-run", ix), "play", crate::i18n::t("Run Test"), p).on_click(cx.listener(move |this, _, w, cx| {
-                                cx.stop_propagation();
-                                this.run_test_item(fi, Some(ti), w, cx);
-                            })))
+                            .child(a11y::row_button(
+                                ui::icon_button(("test-run", ix), "play", crate::i18n::t("Run Test"), p).on_click(cx.listener(move |this, _, w, cx| {
+                                    cx.stop_propagation();
+                                    this.run_test_item(fi, Some(ti), w, cx);
+                                })),
+                                a11y::RowFrame::Test,
+                                ix,
+                                1,
+                                cx,
+                            ))
                             .when(debuggable, |d| {
-                                d.child(ui::icon_button(("test-debug", ix), "bug-play", crate::i18n::t("Debug Test"), p).on_click(cx.listener(
-                                    move |this, _, w, cx| {
-                                        cx.stop_propagation();
-                                        let t = &this.jobs.tests;
-                                        let (Some(root), Some(f)) = (t.root.clone(), t.files.get(fi).cloned()) else { return };
-                                        let Some(item) = f.tests.get(ti).cloned() else { return };
-                                        this.debug_test(f, item, root, w, cx);
-                                    },
-                                )))
+                                d.child(a11y::row_button(
+                                    ui::icon_button(("test-debug", ix), "bug-play", crate::i18n::t("Debug Test"), p).on_click(cx.listener(
+                                        move |this, _, w, cx| {
+                                            cx.stop_propagation();
+                                            let t = &this.jobs.tests;
+                                            let (Some(root), Some(f)) = (t.root.clone(), t.files.get(fi).cloned()) else { return };
+                                            let Some(item) = f.tests.get(ti).cloned() else { return };
+                                            this.debug_test(f, item, root, w, cx);
+                                        },
+                                    )),
+                                    a11y::RowFrame::Test,
+                                    ix,
+                                    2,
+                                    cx,
+                                ))
                             }),
                     )
                     .on_click(cx.listener(move |this, _, w, cx| this.open_test(fi, ti, false, w, cx)))

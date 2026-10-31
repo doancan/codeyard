@@ -113,7 +113,10 @@ fn the_examples_build_package_and_pass_cyx_test() {
         let dir = repo().join("examples/extensions").join(name);
         build::build_in(&dir, Some(&target_dir())).unwrap_or_else(|e| panic!("{name}: {e}"));
         let report = check(&dir).unwrap_or_else(|e| panic!("{name}: {e}"));
-        assert!(report.warnings.is_empty(), "{name}: {:?}", report.warnings);
+        // The forge examples keep a placeholder client id for the reader to replace; `cyx check` says so (#187).
+        let placeholder = |w: &String| w.contains("looks like a placeholder");
+        assert!(report.warnings.iter().all(placeholder), "{name}: {:?}", report.warnings);
+        assert_eq!(report.warnings.is_empty(), !["gitea-pulls", "gitlab"].contains(&name), "{name}: {:?}", report.warnings);
         let files = ext_pkg::collect_dir(&dir).unwrap();
         let (bytes, _) = ext_pkg::write(files).unwrap();
         let pkg = ext_pkg::read(&bytes).unwrap();
@@ -123,7 +126,8 @@ fn the_examples_build_package_and_pass_cyx_test() {
             interfaces.iter().map(String::as_str).filter(|i| ext_api::interface(i).is_some_and(|i| i.need != ext_api::Need::Nothing)).collect();
         assert_eq!(with_permission.join(","), needs, "{name}: {interfaces:?}");
         let manifest = build::manifest(&dir).unwrap();
-        let run = harness::run(&dir, &manifest, &exthost).unwrap();
+        let fixtures = crate::fixtures::Fixtures::load(&dir, None).unwrap();
+        let run = harness::run(&dir, &manifest, &exthost, &fixtures).unwrap();
         assert!(run.failures.is_empty(), "{name}: {:#?}", run.lines);
         assert!(run.lines.iter().any(|l| l.contains("activates")), "{:?}", run.lines);
         for v in &manifest.contributions.views {
@@ -167,7 +171,7 @@ codeyard_extension::export!(Fetcher);
     std::fs::copy(repo().join("examples/extensions/hello-command/Cargo.lock"), dir.join("Cargo.lock")).unwrap();
     build::build_in(&dir, Some(&target_dir())).unwrap();
     let manifest = build::manifest(&dir).unwrap();
-    let run = harness::run(&dir, &manifest, &exthost).unwrap();
+    let run = harness::run(&dir, &manifest, &exthost, &Default::default()).unwrap();
     let all = run.failures.join("\n");
     assert!(all.contains(r#"= fix: add to [permissions]:  net = ["other.example.org"]"#), "{all}");
     assert!(all.contains("net/fetch"), "{all}");
@@ -201,7 +205,7 @@ codeyard_extension::export!(Counter);
     std::fs::copy(repo().join("examples/extensions/hello-view/Cargo.lock"), dir.join("Cargo.lock")).unwrap();
     build::build_in(&dir, Some(&target_dir())).unwrap();
     let manifest = build::manifest(&dir).unwrap();
-    let run = harness::run(&dir, &manifest, &exthost).unwrap();
+    let run = harness::run(&dir, &manifest, &exthost, &crate::fixtures::Fixtures::load(&dir, None).unwrap()).unwrap();
     let all = run.failures.join("\n");
     assert!(all.contains("view main is refused by Codeyard: the view is malformed: unknown field"), "{all}");
     assert!(!run.lines.iter().any(|l| l.contains("view main draws")), "{:?}", run.lines);
@@ -296,7 +300,10 @@ fn the_typescript_examples_build_package_and_pass_cyx_test() {
         let dir = repo().join("examples/extensions").join(name);
         build::build(&dir).unwrap_or_else(|e| panic!("{name}: {e}"));
         let report = check(&dir).unwrap_or_else(|e| panic!("{name}: {e}"));
-        assert!(report.warnings.is_empty(), "{name}: {:?}", report.warnings);
+        // The forge examples keep a placeholder client id for the reader to replace; `cyx check` says so (#187).
+        let placeholder = |w: &String| w.contains("looks like a placeholder");
+        assert!(report.warnings.iter().all(placeholder), "{name}: {:?}", report.warnings);
+        assert_eq!(report.warnings.is_empty(), !["gitea-pulls", "gitlab"].contains(&name), "{name}: {:?}", report.warnings);
         let (bytes, _) = ext_pkg::write(ext_pkg::collect_dir(&dir).unwrap()).unwrap();
         let pkg = ext_pkg::read(&bytes).unwrap();
         // The component imports the free interfaces and what the manifest grants, nothing more.
@@ -306,9 +313,14 @@ fn the_typescript_examples_build_package_and_pass_cyx_test() {
         assert_eq!(with_permission.join(","), needs, "{name}: {interfaces:?}");
         assert!(pkg.files.contains_key(typescript::SOURCE_MAP), "{name}: the source map is packaged");
         let manifest = build::manifest(&dir).unwrap();
-        let run = harness::run(&dir, &manifest, &exthost).unwrap();
+        let fixtures = crate::fixtures::Fixtures::load(&dir, None).unwrap();
+        let run = harness::run(&dir, &manifest, &exthost, &fixtures).unwrap();
         assert!(run.failures.is_empty(), "{name}: {:#?}", run.lines);
         assert!(run.lines.iter().any(|l| l.contains("activates")), "{:?}", run.lines);
+        if name == "gitlab" {
+            // #185: test/fixtures.json answers the provider's signed request, so its list runs in the real exthost.
+            assert!(run.lines.iter().any(|l| l.contains("pull requests gitlab lists (1 open)")), "{:#?}", run.lines);
+        }
         for v in &manifest.contributions.views {
             let draws = format!("view {} draws", v.id.rsplit('.').next().unwrap_or(&v.id));
             assert!(run.lines.iter().any(|l| l.contains(&draws)), "{name}: {:#?}", run.lines);
@@ -350,7 +362,7 @@ export function activate(ctx: Context) {
     std::fs::write(dir.join("src/extension.ts"), code).unwrap();
     build::build(&dir).unwrap();
     let manifest = build::manifest(&dir).unwrap();
-    let run = harness::run(&dir, &manifest, &exthost).unwrap();
+    let run = harness::run(&dir, &manifest, &exthost, &Default::default()).unwrap();
     let all = run.failures.join("\n");
     assert!(all.contains(r#"= fix: add to [permissions]:  net = ["other.example.org"]"#), "{all}");
     assert!(all.contains(r#"= fix: add to [permissions]:  read = ["**/a.json"]"#), "{all}");
@@ -374,5 +386,39 @@ fn typescript_builds_refuse_node_built_ins() {
     let e = build::build(&dir).unwrap_err();
     assert!(e.contains(r#"error: "node:fs" is a Node.js built-in module, which Codeyard extensions do not have"#), "{e}");
     assert!(e.contains("--> src/extension.ts:1:30") && e.contains("= fix: use ctx.readFile"), "{e}");
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// #187: `cyx new pull-requests`, in Rust and TypeScript: it builds, `cyx check` flags the placeholder client id, its
+/// test folder stays out of the package, and `cyx test` lists through the account with `test/fixtures.json` (#185).
+#[test]
+fn the_pull_request_templates_build_and_list_with_their_fixtures() {
+    let Some(exthost) = toolchain() else { return };
+    let root = tmp("pulls");
+    let sdk = repo().to_string_lossy().into_owned();
+    for (name, lang) in [("forge-pulls", scaffold::Lang::Rust), ("forge-pulls-ts", scaffold::Lang::TypeScript)] {
+        if lang == scaffold::Lang::TypeScript && !node() {
+            continue;
+        }
+        let dir = root.join(name);
+        scaffold::create_in(&dir, Kind::PullRequests, name, "you", Some(&sdk), lang).unwrap();
+        assert!(std::fs::read_to_string(dir.join("README.md")).unwrap().contains(&format!("codeyard://ext/you.{name}/callback")));
+        match lang {
+            scaffold::Lang::Rust => build::build_in(&dir, Some(&target_dir())).map(|_| ()),
+            scaffold::Lang::TypeScript => build::build(&dir).map(|_| ()),
+        }
+        .unwrap_or_else(|e| panic!("{name}: {e}"));
+        let report = check(&dir).unwrap_or_else(|e| panic!("{name}: {e}"));
+        assert_eq!(report.warnings.len(), 1, "{name}: {:?}", report.warnings);
+        assert!(report.warnings[0].contains("[[oauth]] forge looks like a placeholder"), "{:?}", report.warnings);
+        let (bytes, _) = ext_pkg::write(ext_pkg::collect_dir(&dir).unwrap()).unwrap();
+        let pkg = ext_pkg::read(&bytes).unwrap();
+        assert!(!pkg.files.keys().any(|f| f.starts_with("test/")), "{name}: {:?}", pkg.files.keys().collect::<Vec<_>>());
+        let manifest = build::manifest(&dir).unwrap();
+        let fixtures = crate::fixtures::Fixtures::load(&dir, None).unwrap();
+        let run = harness::run(&dir, &manifest, &exthost, &fixtures).unwrap();
+        assert!(run.failures.is_empty(), "{name}: {:#?}", run.lines);
+        assert!(run.lines.iter().any(|l| l.contains("pull requests pulls lists (1 open)")), "{name}: {:#?}", run.lines);
+    }
     std::fs::remove_dir_all(&root).unwrap();
 }

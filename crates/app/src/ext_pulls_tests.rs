@@ -24,13 +24,29 @@ fn remotes_in_every_common_form() {
 #[test]
 fn a_provider_claims_remotes_on_its_hosts_and_gets_its_account() {
     let forge = provider(&["codeberg.org", "*.forge.example.com"]);
-    let r = claimed(&forge, "forge", "origin", "git@codeberg.org:ada/app.git").unwrap();
+    let r = claimed(&forge, &[], "forge", "origin", "git@codeberg.org:ada/app.git").unwrap();
     assert_eq!((r.provider.as_str(), r.host.as_str(), r.path.as_str(), r.account.as_deref()), ("forge", "codeberg.org", "ada/app", Some("forge")));
-    assert!(claimed(&forge, "forge", "up", "https://git.forge.example.com/a/b").is_some());
+    assert!(claimed(&forge, &[], "forge", "up", "https://git.forge.example.com/a/b").is_some());
     // A token in the remote's URL stays here.
-    let r = claimed(&forge, "forge", "origin", "https://ada:glpat-SECRET@codeberg.org:8443/ada/app.git").unwrap();
+    let r = claimed(&forge, &[], "forge", "origin", "https://ada:glpat-SECRET@codeberg.org:8443/ada/app.git").unwrap();
     assert_eq!(r.url, "https://codeberg.org:8443/ada/app.git");
-    assert!(claimed(&forge, "forge", "gh", "https://github.com/a/b").is_none());
+    assert!(claimed(&forge, &[], "forge", "gh", "https://github.com/a/b").is_none());
+}
+
+/// #184: a self-managed instance the user added claims its host for the provider, with an account of its own.
+#[test]
+fn an_instance_claims_its_host_with_its_own_account() {
+    let forge = provider(&["codeberg.org"]);
+    let mine = Instance { provider: "forge".into(), host: "git.corp.example".into(), client_id: "abc".into() };
+    let other = Instance { provider: "other".into(), host: "git.other.example".into(), client_id: "abc".into() };
+    let instances = [mine, other];
+    let r = claimed(&forge, &instances, "forge", "origin", "git@git.corp.example:team/app.git").unwrap();
+    assert_eq!((r.host.as_str(), r.account.as_deref()), ("git.corp.example", Some("forge@git.corp.example")));
+    // The provider's own host keeps its account; another provider's instance is not this one's.
+    assert_eq!(claimed(&forge, &instances, "forge", "origin", "git@codeberg.org:ada/app.git").unwrap().account.as_deref(), Some("forge"));
+    assert!(claimed(&forge, &instances, "forge", "origin", "git@git.other.example:a/b.git").is_none());
+    let unsigned = PullRequestProvider { auth: None, ..forge };
+    assert!(claimed(&unsigned, &instances, "forge", "origin", "git@git.corp.example:team/app.git").is_none());
 }
 
 fn summary() -> v::PullSummary {

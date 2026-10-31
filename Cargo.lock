@@ -9224,6 +9224,7 @@ dependencies = [
 name = "yard"
 version = "0.6.0"
 dependencies = [
+ "ext-api",
  "ext-core",
  "ext-manifest",
  "ext-pkg",
