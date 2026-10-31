@@ -45,7 +45,7 @@ pub(crate) fn change_lines(st: &Status, open: impl Fn(&str) -> bool) -> Vec<Chan
 }
 
 /// The row the cursor is on: a group, or a file of a group (the same path can be both staged and changed).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum ChangeKey {
     Group(Group),
     File(Group, String),

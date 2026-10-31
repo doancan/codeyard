@@ -57,7 +57,8 @@ fn run_and_debug_rows_open_their_menu_without_a_pointer(cx: &mut gpui::TestAppCo
 
     act(&wb, &snap, point, Action::ShowContextMenu, cx);
     assert_eq!(menu(&wb, cx).as_deref(), Some(&["Set Value…", "Copy Value", "Copy as Expression", "Add to Watch"].map(String::from)[..]));
-    let row = wb.read_with(cx, |wb, _| wb.chrome.a11y_bounds.row(RowFrame::DebugVariable, 1)).expect("the painted row");
+    let row =
+        cx.update(|window, cx| wb.read(cx).chrome.a11y_bounds.row(window.window_handle().window_id(), RowFrame::DebugVariable, 1)).expect("the painted row");
     assert_eq!(wb.read_with(cx, |wb, _| wb.menu_position_for_test()), Some(row.bottom_left()), "under the row");
     let (open, items) = nodes(&wb, cx);
     assert!(items.iter().any(|(_, n)| n.role() == Role::MenuItem && n.label() == Some("Copy Value")));
@@ -168,7 +169,7 @@ fn side_view_rows_have_painted_bounds(cx: &mut gpui::TestAppContext) {
         cx.notify();
     });
     cx.run_until_parked();
-    assert!(wb.read_with(cx, |wb, _| wb.chrome.a11y_bounds.row(RowFrame::DebugStack, 1)).is_none());
+    assert!(cx.update(|window, cx| wb.read(cx).chrome.a11y_bounds.row(window.window_handle().window_id(), RowFrame::DebugStack, 1)).is_none());
     let (_, tree) = nodes(&wb, cx);
     let (_, group) = find(&tree, Role::TreeItem, "SSH Hosts");
     assert!(group.bounds().is_some(), "a Remote Explorer row is painted");

@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Screen readers and magnifiers get where things are drawn, not only the main areas: Explorer rows, the editor tabs,
+  the status bar's items, the find bar's fields and buttons, Source Control's message field, commit button, groups,
+  files and their buttons, and the buttons inside Run and Debug, Testing, Remote Explorer and Ports rows each report
+  their own frame, and every character of the editor and the terminal on screen has its position, so the caret and the
+  selection have bounds (VoiceOver's and Zoom's `AXBoundsForRange`, UI Automation's text ranges). Frames follow the
+  interface scale and stay right in an editor's or a view's own window; a side view in its own window no longer leaves
+  its rows' frames in the main window's tree, and Testing and Remote Explorer are in the tree when they are shown in the
+  secondary side bar or a window of their own. `scripts/a11y-probe/axframes.swift` prints and draws one process's
+  frames.
 - Source Control's change list opens a file's right-click menu from the keyboard: Shift+F10 or the Menu key on the
   cursor row shows it under the row, the arrows and Enter drive it, and Escape gives the keyboard back to the same row.
   Screen readers get `ShowContextMenu` and a "More Actions…" button on each file, as the other lists' rows have.

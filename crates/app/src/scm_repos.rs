@@ -13,7 +13,7 @@ use crate::i18n::t;
 use crate::repos::{Repo, RepoKey};
 use crate::ui::{self, c, icon, layout, palette, text};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Group {
     Merge,
     Staged,
@@ -41,6 +41,15 @@ impl Group {
 
     pub(crate) fn staged(self) -> bool {
         self == Group::Staged
+    }
+
+    /// The group a row of `c` is in: its staged side, or its unstaged side (a conflict, or another change).
+    pub(crate) fn of(c: &Change, staged: bool) -> Group {
+        match (staged, c.unstaged == Some(Mark::Conflict)) {
+            (true, _) => Group::Staged,
+            (false, true) => Group::Merge,
+            (false, false) => Group::Changes,
+        }
     }
 
     pub(crate) fn holds(self, c: &Change) -> bool {

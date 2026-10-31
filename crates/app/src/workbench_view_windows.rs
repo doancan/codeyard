@@ -56,10 +56,15 @@ pub(super) struct ViewBody {
 }
 
 impl Render for ViewBody {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         #[cfg(test)]
         {
             self.renders += 1;
+        }
+        // What the workbench drew here is drawn again now: its accessibility frames start over.
+        let me = window.window_handle().window_id();
+        if let Some(home) = self.home.upgrade() {
+            home.update(cx, |wb, _| wb.chrome.a11y_bounds.clear(me));
         }
         let p = *palette(cx);
         let body = match self.view.panel {

@@ -235,6 +235,8 @@ pub struct FileTree {
     budget: usize,
     /// The list's visible area in the last frame, to put a menu opened by keyboard under the selected row.
     bounds: Option<gpui::Bounds<gpui::Pixels>>,
+    /// Where each row (by path) was painted in the last frame, for the accessibility tree.
+    painted: crate::painted::RowBounds<String>,
 }
 
 impl EventEmitter<TreeEvent> for FileTree {}
@@ -267,6 +269,7 @@ impl FileTree {
             next_load: 0,
             focus_handle: cx.focus_handle(),
             scroll: UniformListScrollHandle::new(),
+            painted: Default::default(),
             git: Arc::default(),
             opts: cx
                 .try_global::<crate::settings::Settings>()
@@ -528,6 +531,11 @@ impl FileTree {
     pub fn a11y_rows(&self) -> (Vec<(String, String, usize, bool, bool)>, Option<usize>) {
         let rows = self.rows.iter().map(|r| (r.path.clone(), r.name.to_string(), r.depth, r.is_dir, r.is_dir && self.expanded.contains(&r.path))).collect();
         (rows, self.selected)
+    }
+
+    /// The physical frame of the row of `path` as last painted in `window` (`None` while it is scrolled out of view).
+    pub fn a11y_row_frame(&self, path: &str, window: &Window) -> Option<accesskit::Rect> {
+        crate::painted::physical(&self.painted, &path.to_string(), window)
     }
 
     /// First and last row on screen in the last layout.
@@ -963,6 +971,8 @@ impl Render for FileTree {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = *palette(cx);
         let focused = self.focus_handle.is_focused(window);
+        self.painted.borrow_mut().clear();
+        let painted = self.painted.clone();
         let root_state = self.root.as_ref().and_then(|r| self.children.get(r));
 
         let body = match root_state {
@@ -1049,6 +1059,7 @@ impl Render for FileTree {
                                     cx.emit(TreeEvent::DropFiles { paths: d.paths().to_vec(), to_dir: drop_dir.clone() });
                                 }))
                                 .relative()
+                                .child(crate::painted::probe(&painted, row.path.clone()))
                                 .w_full()
                                 .h(px(ROW_H))
                                 .flex()

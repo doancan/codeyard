@@ -645,14 +645,20 @@ impl Workbench {
                             })
                             .when_some(r.ty.clone(), |d, t| d.child(div().flex_none().text_color(c(p.text_muted)).text_size(px(text::XS.0)).child(t)))
                             .when_some(watch, |d, i| {
-                                d.child(div().absolute().right(px(theme::SPACE[3])).invisible().group_hover(group.clone(), |d| d.visible()).child(
-                                    ui::icon_button(("dbg-watch-x", i), "x", crate::i18n::t("Remove Expression"), &p).on_click(cx.listener(
-                                        move |this, _, _, cx| {
-                                            cx.stop_propagation();
-                                            this.remove_watch(i, cx);
-                                        },
-                                    )),
-                                ))
+                                d.child(
+                                    div()
+                                        .absolute()
+                                        .right(px(theme::SPACE[3]))
+                                        .invisible()
+                                        .group_hover(group.clone(), |d| d.visible())
+                                        .child(a11y::part_frame(a11y::Part::RowButton(kind, ix, 1), cx))
+                                        .child(ui::icon_button(("dbg-watch-x", i), "x", crate::i18n::t("Remove Expression"), &p).on_click(cx.listener(
+                                            move |this, _, _, cx| {
+                                                cx.stop_propagation();
+                                                this.remove_watch(i, cx);
+                                            },
+                                        ))),
+                                )
                             })
                             .when(reference > 0, |d| d.cursor_pointer().on_click(cx.listener(move |this, _, _, cx| this.toggle_variable(reference, cx))))
                             .when_some(menu, |d, (parent, name)| {
@@ -828,14 +834,20 @@ impl Workbench {
                                 .child(div().flex_none().size(px(8.)).rounded(px(1.)).bg(c(dot)))
                                 .child(div().flex_none().text_color(c(p.text_muted)).child(crate::i18n::t("breaks when written:")))
                                 .child(div().flex_shrink().min_w_0().overflow_hidden().child(bp.desc.clone()))
-                                .child(div().absolute().right(px(theme::SPACE[3])).invisible().group_hover(group.clone(), |d| d.visible()).child(
-                                    ui::icon_button(("dbg-dbp-x", ix), "x", crate::i18n::t("Remove Breakpoint"), &p).on_click(cx.listener(
-                                        move |this, _, _, cx| {
-                                            cx.stop_propagation();
-                                            this.remove_data_breakpoint(index, cx);
-                                        },
-                                    )),
-                                ))
+                                .child(
+                                    div()
+                                        .absolute()
+                                        .right(px(theme::SPACE[3]))
+                                        .invisible()
+                                        .group_hover(group.clone(), |d| d.visible())
+                                        .child(a11y::part_frame(a11y::Part::RowButton(kind, ix, 1), cx))
+                                        .child(ui::icon_button(("dbg-dbp-x", ix), "x", crate::i18n::t("Remove Breakpoint"), &p).on_click(cx.listener(
+                                            move |this, _, _, cx| {
+                                                cx.stop_propagation();
+                                                this.remove_data_breakpoint(index, cx);
+                                            },
+                                        ))),
+                                )
                                 .on_mouse_down(
                                     MouseButton::Right,
                                     cx.listener(move |this, ev: &gpui::MouseDownEvent, w, cx| {
@@ -867,19 +879,25 @@ impl Workbench {
                                     d.child(div().flex_shrink().min_w_0().overflow_hidden().text_color(c(p.text_muted)).text_size(px(text::XS.0)).child(detail))
                                 })
                                 .when_some(tip, |d, tip| d.tooltip(move |_, cx| cx.new(|_| Tooltip(tip.clone())).into()))
-                                .child(div().absolute().right(px(theme::SPACE[3])).invisible().group_hover(group.clone(), |d| d.visible()).child(
-                                    ui::icon_button(("dbg-bp-x", ix), "x", crate::i18n::t("Remove Breakpoint"), &p).on_click(cx.listener(
-                                        move |this, _, w, cx| {
-                                            cx.stop_propagation();
-                                            this.run_debug_menu(
-                                                DebugMenuCmd::RemoveBreakpoint,
-                                                MenuTarget { path: format!("{p2}\t{line}"), is_dir: false, tab: None },
-                                                w,
-                                                cx,
-                                            );
-                                        },
-                                    )),
-                                ))
+                                .child(
+                                    div()
+                                        .absolute()
+                                        .right(px(theme::SPACE[3]))
+                                        .invisible()
+                                        .group_hover(group.clone(), |d| d.visible())
+                                        .child(a11y::part_frame(a11y::Part::RowButton(kind, ix, 1), cx))
+                                        .child(ui::icon_button(("dbg-bp-x", ix), "x", crate::i18n::t("Remove Breakpoint"), &p).on_click(cx.listener(
+                                            move |this, _, w, cx| {
+                                                cx.stop_propagation();
+                                                this.run_debug_menu(
+                                                    DebugMenuCmd::RemoveBreakpoint,
+                                                    MenuTarget { path: format!("{p2}\t{line}"), is_dir: false, tab: None },
+                                                    w,
+                                                    cx,
+                                                );
+                                            },
+                                        ))),
+                                )
                                 .on_mouse_down(
                                     MouseButton::Right,
                                     cx.listener(move |this, ev: &gpui::MouseDownEvent, w, cx| {
@@ -899,14 +917,18 @@ impl Workbench {
                                 .child(div().flex_none().size(px(8.)).rounded(px(2.)).bg(c(dot)))
                                 .child(div().flex_shrink().min_w_0().overflow_hidden().font_family(ui::MONO_FONT).child(format!("{}()", bp.name)))
                                 .child(
-                                    div().absolute().right(px(theme::SPACE[3])).invisible().group_hover(group.clone(), |d| d.visible()).child(
-                                        ui::icon_button(("dbg-fbp-x", ix), "x", crate::i18n::t("Remove Breakpoint"), &p).on_click(cx.listener(
+                                    div()
+                                        .absolute()
+                                        .right(px(theme::SPACE[3]))
+                                        .invisible()
+                                        .group_hover(group.clone(), |d| d.visible())
+                                        .child(a11y::part_frame(a11y::Part::RowButton(kind, ix, 1), cx))
+                                        .child(ui::icon_button(("dbg-fbp-x", ix), "x", crate::i18n::t("Remove Breakpoint"), &p).on_click(cx.listener(
                                             move |this, _, _, cx| {
                                                 cx.stop_propagation();
                                                 this.remove_function_breakpoint(index, cx);
                                             },
-                                        )),
-                                    ),
+                                        ))),
                                 )
                             }
                         };

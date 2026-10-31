@@ -382,7 +382,7 @@ impl Workbench {
                     )
                     .child(
                         hover_actions()
-                            .child(
+                            .child(a11y::row_button(
                                 ui::icon_button(
                                     ("remote-connect", ix),
                                     if connected { "folder-open" } else { "plug" },
@@ -393,19 +393,35 @@ impl Workbench {
                                     cx.stop_propagation();
                                     this.run_remote_menu(RemoteMenuCmd::Connect, a1.clone(), w, cx);
                                 })),
-                            )
-                            .child(ui::icon_button(("remote-window", ix), "external-link", crate::i18n::t("Connect in New Window"), p).on_click(cx.listener(
-                                move |this, _, _, cx| {
-                                    cx.stop_propagation();
-                                    this.connect_in_new_window(a2.clone(), None, cx);
-                                },
-                            )))
-                            .child(ui::icon_button(("remote-more", ix), "ellipsis", crate::i18n::t("More Actions…"), p).on_mouse_down(
-                                MouseButton::Left,
-                                cx.listener(move |this, ev: &gpui::MouseDownEvent, w, cx| {
-                                    cx.stop_propagation();
-                                    this.open_host_menu(&a3, g, ev.position, w, cx);
-                                }),
+                                a11y::RowFrame::Remote,
+                                ix,
+                                1,
+                                cx,
+                            ))
+                            .child(a11y::row_button(
+                                ui::icon_button(("remote-window", ix), "external-link", crate::i18n::t("Connect in New Window"), p).on_click(cx.listener(
+                                    move |this, _, _, cx| {
+                                        cx.stop_propagation();
+                                        this.connect_in_new_window(a2.clone(), None, cx);
+                                    },
+                                )),
+                                a11y::RowFrame::Remote,
+                                ix,
+                                2,
+                                cx,
+                            ))
+                            .child(a11y::row_button(
+                                ui::icon_button(("remote-more", ix), "ellipsis", crate::i18n::t("More Actions…"), p).on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |this, ev: &gpui::MouseDownEvent, w, cx| {
+                                        cx.stop_propagation();
+                                        this.open_host_menu(&a3, g, ev.position, w, cx);
+                                    }),
+                                ),
+                                a11y::RowFrame::Remote,
+                                ix,
+                                a11y::MENU_BUTTON,
+                                cx,
                             )),
                     )
                     .on_click(cx.listener(move |this, _, _, cx| this.toggle_remote(key.clone(), cx)))
