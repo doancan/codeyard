@@ -160,6 +160,21 @@ fn commands_run_and_tickets_complete() {
     assert!(d.join("data/storage").join(hex("deactivated")).exists());
 }
 
+/// A component built against API 0.1.0 (the probe as it was before 1.0, kept as testdata/probe-0.1.wasm) still runs:
+/// `--compile` renames its imports to the current version and it links, activates and answers like a 1.0 build.
+#[test]
+fn a_component_built_against_0_1_still_runs() {
+    let old = include_bytes!("../testdata/probe-0.1.wasm");
+    assert!(old.windows(b"codeyard:api/net@0.1.0".len()).any(|w| w == b"codeyard:api/net@0.1.0"), "the fixture is a 0.1.0 build");
+    let d = dir("transition");
+    let (c, sha) = compile_wasm(&d, old);
+    let mut h = Host::start(hello(&d, &c, sha, &[], false)).ready();
+    assert_eq!(h.json("echo", "[1,2]"), "[1,2]");
+    assert_eq!(h.json("env", ""), ext_api::VERSION.to_string());
+    h.send(&ToHost::Shutdown);
+    assert!(h.exit().success());
+}
+
 /// `request.hover` and `request.completion` cross the component boundary both ways, with every field of an item.
 #[test]
 fn hover_and_completion_answer_through_the_guest() {

@@ -135,7 +135,7 @@ fn http() -> value::HttpRequest {
 
 #[test]
 fn imports_are_classified() {
-    assert_eq!(classify("codeyard:api/net@0.1.0"), Import::Api { interface: "net", version: Some(Version(0, 1, 0)) });
+    assert_eq!(classify("codeyard:api/net@1.0.0"), Import::Api { interface: "net", version: Some(Version(1, 0, 0)) });
     assert_eq!(classify("codeyard:api/net"), Import::Api { interface: "net", version: None });
     assert_eq!(classify("codeyard:api/net@x"), Import::Unknown("codeyard:api/net@x"));
     assert_eq!(classify("wasi:io/streams@0.2.6"), Import::Wasi("wasi:io/streams@0.2.6"));
@@ -155,6 +155,18 @@ fn versions() {
     assert!(!Version(0, 1, 0).runs_on(Version(0, 2, 0)), "a 0.x minor may break");
     assert!(Version(1, 0, 0).runs_on(Version(1, 4, 0)));
     assert!(!Version(1, 0, 0).runs_on(Version(2, 0, 0)));
+    assert!(Version(1, 3, 0).same_line(Version(1, 0, 0)));
+    assert!(!Version(0, 1, 0).same_line(Version(1, 0, 0)));
+    assert!(Version(0, 1, 0).in_transition());
+    assert!(!Version(0, 1, 1).runs_on(VERSION) && !Version(0, 2, 0).in_transition());
+}
+
+#[test]
+fn every_api_version_has_its_codeyard_release() {
+    assert_eq!(codeyard_for(Version(1, 0, 0)), Some("0.7.0"));
+    assert!(codeyard_for(VERSION).is_some(), "add {VERSION} to RELEASES");
+    assert_eq!(codeyard_for(Version(VERSION.0, VERSION.1 + 1, 0)), None);
+    assert!(RELEASES.windows(2).all(|w| w[0].0 < w[1].0));
 }
 
 #[test]
@@ -177,7 +189,9 @@ fn render_reference(r: &Resolve, pkg: wit_parser::PackageId) -> String {
         "# API reference\n\n<!-- Generated from crates/ext-api/wit: run `UPDATE_DOCS=1 cargo test -p ext-api reference` after \
          changing it. -->\n\n`{PACKAGE}@{VERSION}`. Authors use an SDK, which wraps these calls; this page says what each one does \
          and which permission it needs. Calls that return a `ticket` finish later: the SDK turns them into async functions \
-         (Rust) or Promises (TypeScript).\n"
+         (Rust) or Promises (TypeScript).\n\nEvery item has the API version that added it. Within a major version a minor only adds: an \
+         extension that uses only items of 1.0 runs on every 1.x. An item newer than its interface says so with \
+         *since*; `cyx` works out the oldest Codeyard an extension needs from the items it uses.\n"
     );
     for i in interfaces(r, pkg) {
         let name = i.name.as_deref().unwrap_or_default();
@@ -186,9 +200,15 @@ fn render_reference(r: &Resolve, pkg: wit_parser::PackageId) -> String {
             out.push_str(&one_paragraph(d));
             out.push_str("\n\n");
         }
-        let since = match &i.stability {
+        let stable = |s: &Stability| match s {
             Stability::Stable { since, .. } => since.to_string(),
             _ => String::new(),
+        };
+        let since = stable(&i.stability);
+        // An item added after its interface says when.
+        let newer = |s: &Stability| {
+            let s = stable(s);
+            if s == since { String::new() } else { format!(" *Since {s}.*") }
         };
         match interface(name) {
             Some(t) if t.need != Need::Nothing => out.push_str(&format!("Needs `{}` in `[permissions]`. Since {since}.\n", t.need.manifest_line())),
@@ -207,6 +227,7 @@ fn render_reference(r: &Resolve, pkg: wit_parser::PackageId) -> String {
             if let Some(d) = &td.docs.contents {
                 out.push_str(&format!(". {}", one_paragraph(d)));
             }
+            out.push_str(&newer(&td.stability));
         }
         for (fname, f) in &i.functions {
             let params: Vec<String> = f.params.iter().map(|p| format!("{}: {}", p.name, ty(r, &p.ty))).collect();
@@ -215,6 +236,7 @@ fn render_reference(r: &Resolve, pkg: wit_parser::PackageId) -> String {
             if let Some(d) = &f.docs.contents {
                 out.push_str(&format!(": {}", one_paragraph(d)));
             }
+            out.push_str(&newer(&f.stability));
         }
         out.push('\n');
     }

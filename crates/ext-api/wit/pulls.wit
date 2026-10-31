@@ -1,11 +1,12 @@
-package codeyard:api@0.1.0;
+package codeyard:api@1.0.0;
 
 /// Pull (merge) request providers: `[[pull-requests]]` in the manifest. The host asks with `request.pull-requests`
 /// and the extension answers with `response.pull-requests`. The provider calls its forge with `auth.fetch`, so it never
 /// sees the account's token.
-@since(version = 0.1.0)
+@since(version = 1.0.0)
 interface pull-requests {
   /// A repository remote whose host the provider claims.
+  @since(version = 1.0.0)
   record remote {
     /// The provider's local id from the manifest.
     provider: string,
@@ -17,10 +18,12 @@ interface pull-requests {
     host: string,
     /// The repository's path on the host, without slashes around it and without `.git`: `group/sub/app`.
     path: string,
-    /// The contribution's `auth` provider, to pass to `auth.fetch`; none when it declares none.
+    /// The account to pass to `auth.fetch`: the contribution's `auth` provider, or `<id>@<host>` for a self-managed
+    /// instance the user added. Opaque: pass it on as it is. None when the contribution declares no `auth`.
     account: option<string>,
   }
 
+  @since(version = 1.0.0)
   enum state {
     open,
     draft,
@@ -28,6 +31,7 @@ interface pull-requests {
     closed,
   }
 
+  @since(version = 1.0.0)
   record summary {
     /// The provider's id for the request, passed back in later queries: `42`, or anything else.
     id: string,
@@ -46,6 +50,7 @@ interface pull-requests {
     url: option<string>,
   }
 
+  @since(version = 1.0.0)
   enum check-state {
     pending,
     success,
@@ -53,6 +58,7 @@ interface pull-requests {
     neutral,
   }
 
+  @since(version = 1.0.0)
   record check {
     name: string,
     state: check-state,
@@ -60,6 +66,7 @@ interface pull-requests {
     url: option<string>,
   }
 
+  @since(version = 1.0.0)
   record details {
     summary: summary,
     /// Markdown.
@@ -69,6 +76,7 @@ interface pull-requests {
     labels: list<string>,
   }
 
+  @since(version = 1.0.0)
   enum file-status {
     added,
     modified,
@@ -76,6 +84,7 @@ interface pull-requests {
     renamed,
   }
 
+  @since(version = 1.0.0)
   record changed-file {
     /// The path in the source branch (in the target branch for a deleted file).
     path: string,
@@ -85,6 +94,7 @@ interface pull-requests {
   }
 
   /// One changed file's text on both sides, for a diff.
+  @since(version = 1.0.0)
   record file-contents {
     /// In the target branch: none for an added or binary file.
     base: option<string>,
@@ -92,6 +102,7 @@ interface pull-requests {
     head: option<string>,
   }
 
+  @since(version = 1.0.0)
   record comment {
     author: string,
     /// Markdown.
@@ -105,6 +116,7 @@ interface pull-requests {
 
   /// How to check a request out. The host runs `git fetch <from> <ref>` and creates or resets `branch` on what it
   /// fetched, on the machine the repository is on.
+  @since(version = 1.0.0)
   record checkout {
     /// A clone URL to fetch from (a fork), or none for the remote itself.
     fetch-url: option<string>,
@@ -114,6 +126,7 @@ interface pull-requests {
     branch: string,
   }
 
+  @since(version = 1.0.0)
   variant query {
     /// Open requests of the remote's repository, newest first: answer with `answer.list`.
     %list(remote),
@@ -131,6 +144,7 @@ interface pull-requests {
     checkout(tuple<remote, string>),
   }
 
+  @since(version = 1.0.0)
   variant answer {
     %list(list<summary>),
     details(details),

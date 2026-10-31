@@ -1,13 +1,14 @@
-package codeyard:api@0.1.0;
+package codeyard:api@1.0.0;
 
 /// Source control providers (`[[scm]]`): what the Source Control view and the gutter show for a folder the provider
 /// claims. The host asks with `request.scm-status`, `request.scm-original` and `request.scm-validate`; buttons run the
 /// extension's own commands.
-@since(version = 0.1.0)
+@since(version = 1.0.0)
 interface scm {
   use types.{uri};
 
   /// How a file differs from what the provider last recorded.
+  @since(version = 1.0.0)
   enum file-state {
     modified,
     added,
@@ -20,6 +21,7 @@ interface scm {
 
   /// A button: one of the extension's own commands. It runs with the JSON arguments
   /// `{"provider": "<local id>", "root": "<folder uri>", "uris": ["<file uri>", …], "message": "<input box text>"}`.
+  @since(version = 1.0.0)
   record scm-action {
     /// The command's local id, from `[[commands]]`.
     command: string,
@@ -29,6 +31,7 @@ interface scm {
     icon: option<string>,
   }
 
+  @since(version = 1.0.0)
   record scm-resource {
     uri: uri,
     state: file-state,
@@ -36,6 +39,7 @@ interface scm {
     detail: option<string>,
   }
 
+  @since(version = 1.0.0)
   record scm-group {
     /// Local to the provider; keeps the group open or closed between refreshes.
     id: string,
@@ -49,6 +53,7 @@ interface scm {
     hide-when-empty: bool,
   }
 
+  @since(version = 1.0.0)
   record scm-input {
     placeholder: string,
     /// Replaces the box's text when set, such as a template or an empty box after a commit.
@@ -57,6 +62,7 @@ interface scm {
     accept: option<scm-action>,
   }
 
+  @since(version = 1.0.0)
   record scm-state {
     /// Where the folder stands, shown above the box: a branch, a change id.
     head: option<string>,
@@ -65,5 +71,6 @@ interface scm {
   }
 
   /// Ask the host for `request.scm-status` again now, after the extension changed something itself.
+  @since(version = 1.0.0)
   refresh: func(provider: string);
 }

@@ -835,7 +835,7 @@ export class MockHost {
       env: {
         info: () => ({
           codeyardVersion: "0.5.0",
-          apiVersion: "0.1.0",
+          apiVersion: "1.0.0",
           language: "en",
           theme: "dark",
           platform: process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux",

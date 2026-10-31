@@ -1,8 +1,9 @@
-package codeyard:api@0.1.0;
+package codeyard:api@1.0.0;
 
 /// Messages for the extension's log, shown in the Inspector.
-@since(version = 0.1.0)
+@since(version = 1.0.0)
 interface log {
+  @since(version = 1.0.0)
   enum level {
     trace,
     debug,
@@ -11,12 +12,14 @@ interface log {
     error,
   }
 
+  @since(version = 1.0.0)
   log: func(level: level, message: string);
 }
 
 /// What the extension runs in. Known at activation, so these calls are cheap.
-@since(version = 0.1.0)
+@since(version = 1.0.0)
 interface env {
+  @since(version = 1.0.0)
   enum theme-kind {
     light,
     dark,
@@ -24,12 +27,14 @@ interface env {
     high-contrast-dark,
   }
 
+  @since(version = 1.0.0)
   enum platform {
     macos,
     linux,
     windows,
   }
 
+  @since(version = 1.0.0)
   record environment {
     codeyard-version: string,
     api-version: string,
@@ -42,48 +47,52 @@ interface env {
     workspace-trusted: bool,
   }
 
+  @since(version = 1.0.0)
   info: func() -> environment;
 }
 
 /// Calls the host has not answered yet.
-@since(version = 0.1.0)
+@since(version = 1.0.0)
 interface tickets {
   use types.{ticket};
 
   /// Stop waiting: the ticket completes with `cancelled`, and a running process is killed.
+  @since(version = 1.0.0)
   cancel: func(ticket: ticket);
 }
 
 /// Answers to `guest.handle`.
-@since(version = 0.1.0)
+@since(version = 1.0.0)
 interface requests {
   use types.{error};
   use responses.{response};
 
   /// Answer request `id`. A request is answered once; late answers (after `guest.cancel`) are dropped.
+  @since(version = 1.0.0)
   respond: func(id: u64, %result: result<response, error>);
 }
 
 /// What `guest.handle` answers with.
-@since(version = 0.1.0)
+@since(version = 1.0.0)
 interface responses {
-  use types.{text-edit, diagnostic, range};
+  use types.{text-edit, diagnostic, range, position, uri};
   use scm.{scm-state};
-  use types.{position};
   use pull-requests.{answer};
 
+  @since(version = 1.0.0)
   record code-action {
     /// Passed back in `request.run-code-action`.
     id: string,
     title: string,
     /// Edits applied when chosen; a command runs instead when empty and `command` is set.
-    edits: list<tuple<string, list<text-edit>>>,
+    edits: list<tuple<uri, list<text-edit>>>,
     command: option<string>,
     preferred: bool,
     /// The diagnostics this action fixes.
     fixes: list<diagnostic>,
   }
 
+  @since(version = 1.0.0)
   record task {
     /// Passed back in `request.run-task`.
     id: string,
@@ -94,6 +103,7 @@ interface responses {
   }
 
   /// What a code lens shows and the command a click runs.
+  @since(version = 1.0.0)
   record lens-command {
     title: string,
     /// The extension's own command (local or full id), a dependency's full id, or a `core:` command the manifest
@@ -103,6 +113,7 @@ interface responses {
     args-json: string,
   }
 
+  @since(version = 1.0.0)
   record code-lens {
     /// Passed back in `request.resolve-code-lens`.
     id: string,
@@ -112,6 +123,7 @@ interface responses {
     command: option<lens-command>,
   }
 
+  @since(version = 1.0.0)
   record inlay-hint {
     /// Where the hint belongs; it shows at the end of its line.
     position: position,
@@ -119,6 +131,7 @@ interface responses {
     tooltip: option<string>,
   }
 
+  @since(version = 1.0.0)
   variant response {
     /// Nothing to return (a command that finished, an event handled).
     none,
@@ -146,6 +159,7 @@ interface responses {
   }
 
   /// Shown in the hover popup next to the language server's, under the extension's name.
+  @since(version = 1.0.0)
   record hover {
     /// Markdown; Codeyard shows it as plain text.
     contents: string,
@@ -154,6 +168,7 @@ interface responses {
   }
 
   /// The icon a completion item shows, as in the Language Server Protocol.
+  @since(version = 1.0.0)
   enum completion-kind {
     text,
     method,
@@ -182,6 +197,7 @@ interface responses {
     type-parameter,
   }
 
+  @since(version = 1.0.0)
   record completion-item {
     /// Shown in the list, and inserted when `insert-text` is none.
     label: string,
@@ -203,6 +219,7 @@ interface responses {
     sort-text: option<string>,
   }
 
+  @since(version = 1.0.0)
   record completion-list {
     items: list<completion-item>,
     /// More typing changes the answer: Codeyard asks again as the user types, instead of only filtering.
@@ -211,10 +228,11 @@ interface responses {
 }
 
 /// Notices, picks, input, progress, status items and links. Every one shows the publisher.
-@since(version = 0.1.0)
+@since(version = 1.0.0)
 interface window {
   use types.{ticket, tone, error};
 
+  @since(version = 1.0.0)
   enum severity {
     info,
     warning,
@@ -222,14 +240,17 @@ interface window {
   }
 
   /// Completes with `chosen`: the index of the action clicked, or empty when dismissed.
+  @since(version = 1.0.0)
   show-notice: func(severity: severity, message: string, actions: list<string>) -> ticket;
 
+  @since(version = 1.0.0)
   record pick-item {
     label: string,
     detail: option<string>,
     picked: bool,
   }
 
+  @since(version = 1.0.0)
   record pick-options {
     title: option<string>,
     placeholder: option<string>,
@@ -237,8 +258,10 @@ interface window {
   }
 
   /// Completes with `chosen`: the picked indices, or empty when dismissed.
+  @since(version = 1.0.0)
   quick-pick: func(items: list<pick-item>, options: pick-options) -> ticket;
 
+  @since(version = 1.0.0)
   record input-options {
     title: option<string>,
     prompt: option<string>,
@@ -248,13 +271,18 @@ interface window {
   }
 
   /// Completes with `text`: what the user typed, or none when dismissed.
+  @since(version = 1.0.0)
   input-box: func(options: input-options) -> ticket;
 
   /// Shows progress until `end-progress`. Cancelling it from the UI arrives as `request.cancel-progress`.
+  @since(version = 1.0.0)
   start-progress: func(title: string, cancellable: bool) -> u64;
+  @since(version = 1.0.0)
   report-progress: func(id: u64, message: option<string>, percent: option<u8>);
+  @since(version = 1.0.0)
   end-progress: func(id: u64);
 
+  @since(version = 1.0.0)
   record status-item {
     /// Local to the extension.
     id: string,
@@ -265,85 +293,105 @@ interface window {
     tone: tone,
   }
 
+  @since(version = 1.0.0)
   set-status-item: func(item: status-item) -> result<_, error>;
+  @since(version = 1.0.0)
   remove-status-item: func(id: string);
 
   /// Opens an `https:` URL in the browser. Only while handling a user action (a command or a link click): the host
   /// checks that, so the ticket completes with `done` or `failed(denied)`.
+  @since(version = 1.0.0)
   open-external: func(url: string) -> ticket;
 }
 
 /// Running commands.
-@since(version = 0.1.0)
+@since(version = 1.0.0)
 interface commands {
   use types.{ticket};
 
   /// The extension's own command, a dependency's, or a core command (`core:…`) the manifest lists.
   /// Arguments and result are JSON; completes with `json`.
+  @since(version = 1.0.0)
   execute: func(command: string, args-json: string) -> ticket;
 }
 
 /// A persisted key-value store in the extension's data folder (50 MiB in all). Answered by the exthost itself.
-@since(version = 0.1.0)
+@since(version = 1.0.0)
 interface storage {
   use types.{error};
 
+  @since(version = 1.0.0)
   get: func(key: string) -> option<list<u8>>;
   /// Fails with `invalid` when the store would grow past its limit.
+  @since(version = 1.0.0)
   set: func(key: string, value: list<u8>) -> result<_, error>;
+  @since(version = 1.0.0)
   delete: func(key: string);
+  @since(version = 1.0.0)
   keys: func() -> list<string>;
 }
 
 /// The extension's own settings, as declared in its manifest.
-@since(version = 0.1.0)
+@since(version = 1.0.0)
 interface settings {
   /// The value as JSON, or none when unset and without a default. Changes arrive as `request.settings-changed`.
+  @since(version = 1.0.0)
   get: func(key: string) -> option<string>;
 }
 
 /// Repeating timers. An active timer keeps the exthost running.
-@since(version = 0.1.0)
+@since(version = 1.0.0)
 interface timers {
   /// Delivers `request.timer(id)` every `seconds` (at least 30), paused while the window is unfocused.
+  @since(version = 1.0.0)
   every: func(seconds: u32) -> u64;
+  @since(version = 1.0.0)
   clear: func(id: u64);
 }
 
 /// The extension's views.
-@since(version = 0.1.0)
+@since(version = 1.0.0)
 interface ui {
   /// Ask for the view to be drawn again: the host sends `request.render` and diffs the result by key.
+  @since(version = 1.0.0)
   invalidate: func(view: string);
 }
 
 /// Open documents. A command the user started may read and edit the active document and its selections until it
 /// returns; anything else needs `read` (and `write` for edits) on the document's path.
-@since(version = 0.1.0)
+@since(version = 1.0.0)
 interface documents {
   use types.{ticket, uri, range, text-edit};
 
   /// Completes with `document`: the active editor's document, or none.
+  @since(version = 1.0.0)
   active: func() -> ticket;
   /// Completes with `ranges`: the active editor's selections.
+  @since(version = 1.0.0)
   selections: func() -> ticket;
   /// Completes with `document`: an open document, or none when it is not open.
+  @since(version = 1.0.0)
   read: func(uri: uri) -> ticket;
   /// Applies edits made against `version`. Completes with `done`, or `failed(invalid)` when the document changed.
+  @since(version = 1.0.0)
   apply-edits: func(uri: uri, version: u32, edits: list<text-edit>) -> ticket;
+  @since(version = 1.0.0)
   set-selections: func(uri: uri, selections: list<range>) -> ticket;
 }
 
 /// Diagnostics and decorations the extension shows on documents.
-@since(version = 0.1.0)
+@since(version = 1.0.0)
 interface languages {
   use types.{uri, range, diagnostic, tone};
 
   /// Replaces this extension's diagnostics for `uri`.
+  @since(version = 1.0.0)
   set-diagnostics: func(uri: uri, diagnostics: list<diagnostic>);
   /// Removes this extension's diagnostics for `uri`, or everywhere.
+  @since(version = 1.0.0)
   clear-diagnostics: func(uri: option<uri>);
 
+  @since(version = 1.0.0)
   enum decoration-place {
     gutter,
     line,
@@ -351,6 +399,7 @@ interface languages {
     after,
   }
 
+  @since(version = 1.0.0)
   record decoration {
     range: range,
     place: decoration-place,
@@ -360,5 +409,6 @@ interface languages {
   }
 
   /// Replaces one named set of decorations on `uri`.
+  @since(version = 1.0.0)
   set-decorations: func(uri: uri, set: string, decorations: list<decoration>);
 }

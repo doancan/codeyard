@@ -583,8 +583,15 @@ impl State {
         Ok(())
     }
 
-    pub fn remove(&self, key: &str) {
+    /// Forget the value under `key`. (Named `remove` before 1.0; `delete` as in [`Storage::delete`] and the
+    /// TypeScript SDK.)
+    pub fn delete(&self, key: &str) {
         guest::with(|h| h.state.remove(key));
+    }
+
+    /// The keys that have a value.
+    pub fn keys(&self) -> Vec<String> {
+        guest::with(|h| h.state.keys().cloned().collect())
     }
 }
 

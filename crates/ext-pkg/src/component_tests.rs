@@ -5,7 +5,7 @@ use wit_parser::{ManglingAndAbi, Resolve};
 
 use crate::component::check_component;
 
-/// A component that imports `imports` (`codeyard:api/net@0.1.0`, or an interface of the test package) and exports
+/// A component that imports `imports` (`codeyard:api/net@1.0.0`, or an interface of the test package) and exports
 /// `codeyard:api/guest` unless `export` is false. `extra` is WIT added to the test package.
 fn build(imports: &[&str], export: bool, extra: &str) -> Vec<u8> {
     let mut r = Resolve::new();
@@ -17,7 +17,7 @@ fn build(imports: &[&str], export: bool, extra: &str) -> Vec<u8> {
         world.push_str(&format!("  import {i};\n"));
     }
     if export {
-        world.push_str("  export codeyard:api/guest@0.1.0;\n");
+        world.push_str("  export codeyard:api/guest@1.0.0;\n");
     }
     world.push_str("}\n");
     let pkg = r.push_str("test.wit", &world).unwrap();
@@ -48,12 +48,19 @@ fn the_fixture_is_current() {
     assert!(std::fs::read(&path).unwrap_or_default() == want, "testdata/guest.wasm is out of date: run `UPDATE_FIXTURES=1 cargo test -p ext-pkg fixture`");
     let c = check_component(crate::testing::COMPONENT, &manifest("")).unwrap();
     assert_eq!(c.min_api, ext_api::VERSION);
+    let (want, _) = build_from(v0_1, &[], "codeyard:api/guest@0.1.0");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/guest-0.1.wasm");
+    if std::env::var_os("UPDATE_FIXTURES").is_some() {
+        std::fs::write(&path, &want).unwrap();
+    }
+    assert!(std::fs::read(&path).unwrap_or_default() == want, "testdata/guest-0.1.wasm is out of date: run `UPDATE_FIXTURES=1 cargo test -p ext-pkg fixture`");
+    assert!(check_component(crate::testing::COMPONENT_0_1, &manifest("")).unwrap().in_transition());
     assert!(c.interfaces.iter().all(|i| ext_api::interface(i).is_some_and(|i| i.need == ext_api::Need::Nothing)), "{c:?}");
 }
 
 #[test]
 fn an_import_needs_its_permission() {
-    let wasm = build(&["codeyard:api/net@0.1.0", "codeyard:api/process@0.1.0"], true, "");
+    let wasm = build(&["codeyard:api/net@1.0.0", "codeyard:api/process@1.0.0"], true, "");
     let errs = check_component(&wasm, &manifest("")).unwrap_err();
     assert_eq!(errs.iter().map(|d| d.code).collect::<Vec<_>>(), vec![Code::NotDeclared, Code::NotDeclared]);
     assert_eq!(
@@ -66,13 +73,13 @@ fn an_import_needs_its_permission() {
 
 #[test]
 fn free_interfaces_need_nothing() {
-    let wasm = build(&["codeyard:api/window@0.1.0", "codeyard:api/storage@0.1.0", "codeyard:api/documents@0.1.0"], true, "");
+    let wasm = build(&["codeyard:api/window@1.0.0", "codeyard:api/storage@1.0.0", "codeyard:api/documents@1.0.0"], true, "");
     check_component(&wasm, &manifest("")).unwrap();
 }
 
 #[test]
 fn clipboard_read_and_write_are_separate() {
-    let wasm = build(&["codeyard:api/clipboard-write@0.1.0"], true, "");
+    let wasm = build(&["codeyard:api/clipboard-write@1.0.0"], true, "");
     check_component(&wasm, &manifest("clipboard = \"write\"")).unwrap();
     assert_eq!(codes(check_component(&wasm, &manifest("clipboard = \"read\""))), vec![Code::NotDeclared]);
 }
@@ -86,20 +93,91 @@ fn foreign_imports_and_missing_exports_are_refused() {
     assert!(errs[0].message.contains("does not export codeyard:api/guest"), "{}", errs[0]);
 }
 
-#[test]
-fn a_newer_api_needs_a_newer_codeyard() {
+/// A component built from the API's WIT as another version: `wit` edits each file's text (the version, items added).
+fn build_from(wit: impl Fn(&str) -> String, imports: &[&str], export: &str) -> (Vec<u8>, ext_api::since::Items) {
+    let files: Vec<(String, String)> = ext_api::WIT.iter().map(|(n, t)| (n.to_string(), wit(t))).collect();
+    let mut map = wit_parser::SourceMap::new();
+    for (n, t) in &files {
+        map.push_str(n, t.clone());
+    }
     let mut r = Resolve::new();
-    r.push_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("../ext-api/wit")).unwrap();
-    let future = "package codeyard:api@0.2.0;\n@since(version = 0.2.0)\ninterface teleport { go: func(); }\n";
-    r.push_str("future.wit", future).unwrap();
-    let pkg = r.push_str("test.wit", "package test:ext;\nworld w { import codeyard:api/teleport@0.2.0; export codeyard:api/guest@0.1.0; }\n").unwrap();
+    r.push_group(map.parse().map_err(|(_, e)| e).unwrap()).unwrap();
+    let mut world = String::from("package test:ext;\nworld w {\n");
+    for i in imports {
+        world.push_str(&format!("  import {i};\n"));
+    }
+    world.push_str(&format!("  export {export};\n}}\n"));
+    let pkg = r.push_str("test.wit", &world).unwrap();
     let w = r.select_world(&[pkg], Some("w")).unwrap();
     let mut module = wit_component::dummy_module(&r, w, ManglingAndAbi::Standard32);
     wit_component::embed_component_metadata(&mut module, &r, w, wit_component::StringEncoding::UTF8, false).unwrap();
     let wasm = wit_component::ComponentEncoder::default().module(&module).unwrap().encode().unwrap();
-    let errs = check_component(&wasm, &manifest("")).unwrap_err();
+    (wasm, ext_api::since::Items::parse(files.iter().map(|(_, t)| t.as_str())))
+}
+
+/// API 1.1.0: `net` gains `teleport`.
+fn v1_1(text: &str) -> String {
+    let text = text.replace("codeyard:api@1.0.0;", "codeyard:api@1.1.0;");
+    text.replace(
+        "  fetch: func(request: http-request) -> ticket;\n",
+        "  fetch: func(request: http-request) -> ticket;\n  @since(version = 1.1.0)\n  teleport: func();\n",
+    )
+}
+
+#[test]
+fn an_item_this_codeyard_lacks_needs_a_newer_codeyard() {
+    let (wasm, _) = build_from(v1_1, &["codeyard:api/net@1.1.0"], "codeyard:api/guest@1.1.0");
+    let errs = check_component(&wasm, &manifest("net = [\"api.example.com\"]")).unwrap_err();
     assert_eq!(errs.iter().map(|d| d.code).collect::<Vec<_>>(), vec![Code::NeedsNewerCodeyard]);
-    assert!(errs[0].to_string().contains("uses API 0.2.0; this Codeyard has 0.1.0"), "{}", errs[0]);
+    assert!(errs[0].to_string().contains("uses `net.teleport`, which this Codeyard (API 1.0.0) does not have"), "{}", errs[0]);
+    // A Codeyard with 1.1 runs it, and the extension needs 1.1.
+    let (_, items) = build_from(v1_1, &[], "codeyard:api/guest@1.1.0");
+    let host = crate::component::Host { version: ext_api::Version(1, 1, 0), items: &items };
+    let c = crate::component::check_against(&wasm, &manifest("net = [\"api.example.com\"]"), &host).unwrap();
+    assert_eq!((c.min_api, c.built_for), (ext_api::Version(1, 1, 0), ext_api::Version(1, 1, 0)));
+}
+
+#[test]
+fn a_newer_minor_that_uses_only_older_items_runs() {
+    // Built with a 1.1 SDK, using nothing 1.1 added: it runs here, and needs only 1.0.
+    let (wasm, _) = build_from(v1_1, &["codeyard:api/window@1.1.0"], "codeyard:api/guest@1.1.0");
+    let c = check_component(&wasm, &manifest("")).unwrap();
+    assert_eq!((c.min_api, c.built_for), (ext_api::Version(1, 0, 0), ext_api::Version(1, 1, 0)));
+    assert!(!c.in_transition());
+}
+
+#[test]
+fn a_newer_major_needs_a_newer_codeyard() {
+    let v2 = |t: &str| t.replace("codeyard:api@1.0.0;", "codeyard:api@2.0.0;").replace("version = 1.0.0", "version = 2.0.0");
+    let (wasm, _) = build_from(v2, &["codeyard:api/log@2.0.0"], "codeyard:api/guest@2.0.0");
+    let errs = check_component(&wasm, &manifest("")).unwrap_err();
+    assert!(errs.iter().all(|d| d.code == Code::NeedsNewerCodeyard), "{errs:?}");
+    assert!(errs[0].to_string().contains("uses API 2.0.0; this Codeyard has 1.0.0"), "{}", errs[0]);
+}
+
+/// The API's WIT as it was at 0.1.0: the same shape under the old version.
+fn v0_1(text: &str) -> String {
+    text.replace("codeyard:api@1.0.0;", "codeyard:api@0.1.0;").replace("version = 1.0.0", "version = 0.1.0")
+}
+
+#[test]
+fn a_0_1_component_runs_during_the_transition() {
+    let (wasm, _) = build_from(v0_1, &["codeyard:api/net@0.1.0"], "codeyard:api/guest@0.1.0");
+    let c = check_component(&wasm, &manifest("net = [\"api.example.com\"]")).unwrap();
+    assert!(c.in_transition(), "{c:?}");
+    assert_eq!(c.built_for, ext_api::Version(0, 1, 0));
+    assert!(c.interfaces.contains(&"net".to_string()), "{c:?}");
+    // The exthost renames its imports to 1.0.0; the result is a 1.0 component to the check too.
+    let upgraded = ext_api::transition::upgrade(&wasm).unwrap();
+    let c = check_component(&upgraded, &manifest("net = [\"api.example.com\"]")).unwrap();
+    assert_eq!(c.built_for, ext_api::VERSION);
+    assert!(!c.in_transition());
+    // Another 0.x is refused with the migration guide.
+    let v02 = |t: &str| t.replace("codeyard:api@1.0.0;", "codeyard:api@0.2.0;").replace("version = 1.0.0", "version = 0.2.0");
+    let (wasm, _) = build_from(v02, &["codeyard:api/log@0.2.0"], "codeyard:api/guest@0.2.0");
+    let errs = check_component(&wasm, &manifest("")).unwrap_err();
+    assert!(errs[0].to_string().contains("built against API 0.2.0, which this Codeyard (1.0.0) no longer runs"), "{}", errs[0]);
+    assert!(errs[0].to_string().contains("migrating-to-1.0.md"), "{}", errs[0]);
 }
 
 #[test]

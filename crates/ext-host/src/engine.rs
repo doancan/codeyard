@@ -26,8 +26,12 @@ pub fn engine() -> Result<Engine> {
 }
 
 /// `.wasm` → compiled code, for the app's cache. With `cache`, Cranelift reuses the functions it compiled last time
-/// (`incremental.rs`); the result is the same code, and loads in an engine without the cache.
+/// (`incremental.rs`); the result is the same code, and loads in an engine without the cache. A component built against
+/// a 0.x API this build still runs (`ext_api::TRANSITION`) has its imports and exports renamed to the current version
+/// first; linking then type-checks it as usual.
 pub fn compile(wasm: &[u8], cache: Option<&Path>) -> Result<Vec<u8>> {
+    let upgraded = ext_api::transition::upgrade(wasm);
+    let wasm = upgraded.as_deref().unwrap_or(wasm);
     let Some(path) = cache else { return engine()?.precompile_component(wasm) };
     let store = std::sync::Arc::new(crate::incremental::FileCache::open(path));
     let mut c = config();

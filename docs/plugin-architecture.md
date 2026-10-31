@@ -205,8 +205,26 @@ extension's package carries its component as `extension.wasm`.
 - **State.** `storage` is a persisted key-value store and the only persistence concept. In `cyx dev`, hot
   reload keeps the in-memory values of `ctx.state`: the SDK saves them on `deactivate` under the reserved storage
   key `codeyard.reload-state` and restores them when the new build activates with the reason `reload`.
-- **Versioning.** `0.x` during beta, each break with a `cyx` error and migration note. From `1.0`, minors only
-  add, items carry `@since`, and a major stays supported for 24 months after the next ships.
+- **Versioning.** `codeyard:api` is 1.0.0 (#147); `0.x` was the beta, where a minor could break. From 1.0 a minor
+  only adds interfaces, functions and types, and a major stays supported for 24 months after the next ships.
+  - *Items carry `@since`.* Every interface, function and type has a WIT `@since(version = …)` gate; the reference
+    shows an item newer than its interface. `ext_api::since` reads the gates, and `ext_pkg::check_component` takes
+    the newest one among the functions and types a component imports as its minimum API (`Component::min_api`);
+    `ext_api::RELEASES` maps that to the first Codeyard release with it, which `cyx check` prints. A component built
+    against a newer minor runs when every item it uses is here (wasmtime binds `@1.y` imports to the host's `@1.x`);
+    an item this build lacks is `CY0701`.
+  - *The compatibility check.* `crates/ext-api/released/<version>/` holds the WIT of the last released API.
+    `compat_tests` in ext-api fails when an item of it was removed, changed shape (a record field, a variant or enum
+    case, a parameter or result) or changed its `@since`, and when a new item has no `@since` or one outside (released,
+    current]. A new major may change anything. The component model has no optional fields or cases, so data grows by
+    new types and functions; a request kind added in a minor comes as a new exported interface that the host calls only
+    when the component has it.
+  - *0.x components.* API 0.1 has the same shape as 1.0, so the host keeps running 0.1 builds during a transition
+    (`ext_api::TRANSITION`): the exthost renames their `codeyard:api/…@0.1.0` imports and exports to `@1.0.0` before
+    compiling (`ext_api::transition::upgrade`, same-length names, nothing else in the binary moves) and wasmtime
+    type-checks them as usual. `cyx check` warns, and `cyx publish` and Yard refuse 0.1 builds. The transition lasts
+    at least six months after Codeyard 0.7.0 and its end is announced one release ahead. Authors follow
+    [migrating-to-1.0.md](extensions/migrating-to-1.0.md).
 
 ### 5.3 Declarative UI
 

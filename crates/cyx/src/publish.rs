@@ -60,7 +60,16 @@ pub fn publish(p: &Publish, ep: &Endpoints, token: impl FnOnce() -> Result<Strin
     let report = crate::check(p.dir)?;
     let files = ext_pkg::collect_dir_for(p.dir, p.target).map_err(|e| format!("error: {e}"))?;
     let (bytes, digest) = ext_pkg::write(files).map_err(|e| format!("error: {e}"))?;
-    let m = ext_pkg::read(&bytes).map_err(|e| format!("error: {e}"))?.manifest;
+    let package = ext_pkg::read(&bytes).map_err(|e| format!("error: {e}"))?;
+    if let Some(c) = package.component.as_ref().filter(|c| c.in_transition()) {
+        return Err(format!(
+            "error: {} was built against API {}, and registries take only API {} builds\n   = fix: rebuild with the current SDK (`cyx package`); docs/extensions/migrating-to-1.0.md lists what changed",
+            ext_pkg::COMPONENT,
+            c.built_for,
+            ext_api::VERSION
+        ));
+    }
+    let m = package.manifest;
     if let Some(o) = crate::placeholder_client_ids(&m).first() {
         return Err(format!(
             "error: the client id of [[oauth]] {} is a placeholder ({:?}), so every sign-in would fail\n   = fix: register an OAuth application with the provider and put its client id in {}",

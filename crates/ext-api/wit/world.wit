@@ -1,17 +1,19 @@
-package codeyard:api@0.1.0;
+package codeyard:api@1.0.0;
 
 /// What the host asks the extension.
-@since(version = 0.1.0)
+@since(version = 1.0.0)
 interface host-requests {
   use types.{document, range, diagnostic, uri, position};
   use responses.{code-lens};
   use pull-requests.{query};
 
+  @since(version = 1.0.0)
   record format-options {
     tab-size: u32,
     insert-spaces: bool,
   }
 
+  @since(version = 1.0.0)
   variant request {
     /// A command from the manifest: its local id and JSON arguments.
     command(tuple<string, string>),
@@ -64,11 +66,12 @@ interface host-requests {
 }
 
 /// What the extension exports. The SDKs implement it; authors never see it.
-@since(version = 0.1.0)
+@since(version = 1.0.0)
 interface guest {
   use types.{ticket, completion, stream-event};
   use host-requests.{request};
 
+  @since(version = 1.0.0)
   record activation {
     /// Why the extension started: `command:<id>`, `view:<id>`, `language:<id>`, `workspace-contains`, `uri`, `auth`,
     /// `scm:<id>`.
@@ -76,22 +79,32 @@ interface guest {
   }
 
   /// Called once, before anything else.
+  @since(version = 1.0.0)
   activate: func(activation: activation) -> result<_, string>;
   /// Called before the exthost stops. Keep it short: the process exits after a deadline.
+  @since(version = 1.0.0)
   deactivate: func();
   /// A request; answer it now or later with `requests.respond(id, …)`. Must return quickly.
+  @since(version = 1.0.0)
   handle: func(id: u64, request: request);
   /// The host no longer waits for request `id` (the user moved on).
+  @since(version = 1.0.0)
   cancel: func(id: u64);
   /// A ticket finished.
+  @since(version = 1.0.0)
   complete: func(ticket: ticket, %result: completion);
   /// Streamed data for a ticket that has not finished.
+  @since(version = 1.0.0)
   event: func(ticket: ticket, event: stream-event);
 }
 
 /// Everything an extension may import. Each interface outside `types`, `log`, `env`, `tickets`, `requests`,
-/// `responses`, `window`, `commands`, `storage`, `settings`, `timers`, `ui`, `documents`, `languages`, `scm` and
-/// `host-requests` needs its permission in the manifest.
+/// `responses`, `window`, `commands`, `storage`, `settings`, `timers`, `ui`, `documents`, `languages`, `scm`,
+/// `pull-requests` and `host-requests` needs its permission in the manifest.
+///
+/// Within a major version, a minor only adds interfaces, functions and types, each with its `@since`; nothing
+/// released changes or goes away (`crates/ext-api/released` holds the released WIT, and a test compares).
+@since(version = 1.0.0)
 world extension {
   import log;
   import env;
