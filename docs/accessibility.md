@@ -16,11 +16,18 @@ The tree, in the order a screen reader walks it:
 - One `Tree` per folder of the workspace: "Explorer", or "Explorer: name" when there are several. One `TreeItem` per
   row in a range of 1,000 rows: name, level, selected, expanded, set position in the whole tree. The range is centred
   on the selection while it is on screen, otherwise on the visible rows; the tree reports its scroll position in rows
-  and supports scroll up/down by a page, which moves the range. These trees are omitted while Explorer is hidden. Row actions resolve the current path rather than reusing an old row index.
-- While Source Control is visible, a `Group` with the branch, a writable `MultilineTextInput` for the commit message,
-  a correctly labeled/enabled commit button, change groups with expand/collapse buttons, file diff buttons and
-  Stage/Unstage buttons. Operation errors are assertive live regions; successful results are polite. The message
-  field's real focus is exposed. The graph, worktrees and sync controls are not exposed yet.
+  and supports scroll up/down by a page, which moves the range. These trees are in the tree only while a side bar (or a window of its own) shows the Explorer: another view, a hidden side bar or zen mode takes them out, and focus, scroll and row actions from an older tree then do nothing. Row actions resolve the current path rather than reusing an old row index.
+- While Source Control is visible, a `Group` with the branch, a writable `MultilineTextInput` for the commit message
+  and the commit button, labeled with what it commits ("Commit (2)", "Commit All (3)") and disabled with "Nothing to
+  commit" as its description when there is nothing. Then a `List` "Changed files" of the change groups: each group a
+  `Group` with a header button ("Changes (12)", expanded or collapsed), each file a button that opens its diff (its
+  change, such as "Modified", as the description; its place in the group as set position and size) followed by a
+  "Stage …"/"Unstage …" button ("Mark … as resolved" for a conflict) and, for an unstaged change, "Discard changes in …",
+  which asks the same question as the painted button. The list exposes 500 lines (headers and files) around the
+  keyboard cursor while it is on screen, otherwise around the visible rows; it reports its scroll position in lines and
+  supports scroll up/down by a page. Operation errors are assertive live regions; successful results are polite. The
+  focus is exposed for the message field, the repository list and the change list, whose cursor row is the focused
+  node; `Focus` on a row puts the keyboard cursor there. The graph, worktrees and sync controls are not exposed yet.
 - While the Problems panel is open, a `List` labeled with the number of problems: a `Heading` per file and a `ListItem`
   per problem ("Error: …", with file, line and column as its description) or related location, each with `Click` to open
   it. At most 2,000 rows are exposed. With nothing to show, a polite `Status` says "No problems.". An activation from an
@@ -150,7 +157,8 @@ Actions: `Focus` on the explorer, a row, a tab, the editor, a find field, the te
 a suggestion or a dialog button; `Click` on a row (select and open), a tab (bring it to the front), a picker row (pick
 it), a suggestion (insert it), a find option (toggle) or button (run) and a dialog button; `SetTextSelection` on the
 editor, and `SetValue` on the Source Control message. Actions reject a changed workspace; Source Control also checks the
-repository, branch and file state, and committing checks the reviewed status and message. A tree may be a quarter of a second old.
+repository, branch and file state (a file action applies only to the same file in the same group and state), folding a
+group only toggles it from the state that was read, and committing checks the reviewed status and message. A tree may be a quarter of a second old.
 
 ### Without a tree
 
@@ -236,9 +244,11 @@ probe as the workbench's lists (`painted.rs`).
   what is visible; a row scrolled out of view has none), but individual Explorer rows, status items, Source Control
   controls, the buttons inside rows and text runs do not yet expose their painted frames. Text still needs `character_positions` and
   `character_widths`; precise character hit testing, caret highlighting and magnifier caret tracking remain unimplemented.
-- **Focus** was not observed live on macOS (`Focused="0"` in every dump: the test window was not key). The code path
-  (`TreeUpdate.focus`, `update_view_focus_state`) exists but is unverified.
-- The editor and the Explorer expose a bounded range, not the whole document or tree. Run offsets, the selection and
+- **Focus** was observed live on macOS only for Source Control: setting `AXFocused` on a change row of a dev build moved
+  the keyboard cursor there and the row reported `Focused="1"` as the application's `AXFocusedUIElement`. Other focus
+  paths (`TreeUpdate.focus`, `update_view_focus_state`) are covered by tests but not observed in a live window.
+- The editor, the Explorer and Source Control's change list expose a bounded range, not the whole document, tree or
+  list. Run offsets, the selection and
   set positions are document- or tree-relative, but the text value of the editor node starts at the range, so a
   client that counts characters from the node's value sees offsets relative to the first exposed line; the scroll
   position and description give that line. Primary selection only; no multi-cursor, folding, wrapped lines, RTL or CRLF handling.
@@ -249,14 +259,15 @@ probe as the workbench's lists (`painted.rs`).
   Explorer's Add, SSH config and Refresh buttons, and the Debug Console. Only the tabs of the focused editor group are
   listed, and diff, large-file and page tabs are not.
 - Keyboard: the Run and Debug lists (variables, watches, call stack, breakpoints), the Testing tree, the Remote
-  Explorer and the Ports list are tab stops with a cursor row (Up/Down/Home/End, Enter as a click on the row, the focus
+  Explorer, the Ports list and Source Control's change list are tab stops with a cursor row (Up/Down/Home/End, Enter as a click on the row, the focus
   colour on the list and the row). Shift+F10 and the Menu key (`list.showContextMenu`) open the row's menu under it; the
   menu returns the keyboard to the list. While such a list has the focus, the tree's focus is its cursor row. The same
   key opens the Explorer's menu for the selection and the editor's at the caret. The cursor always names a row of the
   list as it is now: when rows change under it, it stays inside the list and the key acts on the row it is on (a row
   without a menu opens none).
 - System confirmation dialogs on Linux are drawn by GPUI inside the window (there is no Linux adapter, see below).
-- No scroll actions, no `Blur`. Explicit `Expand`/`Collapse` only in the Run and Debug, Testing and Remote Explorer
+- Scroll actions only on the Explorer, the editor and Source Control's change list; no `Blur`. Source Control's change
+  list has no context menu key yet. Explicit `Expand`/`Collapse` only in the Run and Debug, Testing and Remote Explorer
   trees (elsewhere Click toggles).
 - The update window on macOS has no adapter of its own.
 - Linux (AT-SPI) is not implemented: it needs bounds, window events and an async D-Bus runtime.
