@@ -43,7 +43,6 @@ fn the_rust_setup_previews_its_exact_change_and_resets_to_the_original() {
     assert_eq!(rust_setup_change(&applied, &s, false).1, "", "applying twice changes nothing");
     let (reset, diff) = rust_setup_change(&applied, &s, true);
     assert!(diff.lines().any(|l| l.starts_with('-') && l.contains("clippy")), "{diff}");
-    let v: Value = serde_json::from_str(&theme::themes::strip_jsonc(&reset)).unwrap();
     assert_eq!(reset, USER, "reset removes exactly what the setup added");
 }
 
