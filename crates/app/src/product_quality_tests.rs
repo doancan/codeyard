@@ -32,6 +32,40 @@ fn product_explorer_right_arrow_stays_on_an_empty_expanded_folder(cx: &mut TestA
     assert_eq!(wb.read_with(cx, |wb, cx| wb.tree_selected(cx)), Some(crate::ui::local_path(&dir.join("empty"))));
 }
 
+/// The accessibility tree follows Right Arrow: into the first child of a folder that has one, and staying on the
+/// expanded empty folder (its row, expanded, keeps the focus) instead of jumping to the next sibling.
+#[gpui::test]
+fn product_explorer_right_arrow_focus_in_the_accessibility_tree(cx: &mut TestAppContext) {
+    let dir = fresh("product-right-arrow-ax");
+    std::fs::create_dir(dir.join("empty")).unwrap();
+    std::fs::create_dir(dir.join("full")).unwrap();
+    std::fs::write(dir.join("full/a.txt"), "a\n").unwrap();
+    std::fs::write(dir.join("full/b.txt"), "b\n").unwrap();
+    std::fs::write(dir.join("z.txt"), "z\n").unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    crate::qa_integration_tests::wait_ticking(cx, "the tree", |cx| wb.read_with(cx, |wb, cx| wb.tree_names(cx)).len() == 3);
+    wb.update_in(cx, |wb, window, cx| wb.focus_tree(window, cx));
+    let focused = |wb: &Entity<Workbench>, cx: &mut VisualTestContext| {
+        let snap = snapshot(wb, cx);
+        let tree = snap.to_tree();
+        let node = tree.nodes.iter().find(|(id, _)| *id == tree.focus).map(|(_, n)| n.clone()).expect("a focused node");
+        (node.label().map(str::to_string), node.is_expanded())
+    };
+    // The full folder: Right opens it (the focus stays on it), Right again goes to its first child.
+    cx.simulate_keystrokes("home down right");
+    crate::qa_integration_tests::wait_ticking(cx, "the open folder", |cx| wb.read_with(cx, |wb, cx| wb.tree_names(cx)).len() == 5);
+    assert_eq!(focused(&wb, cx), (Some("full".into()), Some(true)));
+    cx.simulate_keystrokes("right");
+    assert_eq!(focused(&wb, cx), (Some("a.txt".into()), None));
+    // The empty folder: open, and Right again keeps the focus on it.
+    cx.simulate_keystrokes("home right");
+    cx.run_until_parked();
+    cx.simulate_keystrokes("right");
+    assert_eq!(focused(&wb, cx), (Some("empty".into()), Some(true)));
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.tree_selected(cx)), Some(crate::ui::local_path(&dir.join("empty"))));
+}
+
 #[gpui::test]
 fn product_hidden_explorer_is_not_exposed_to_assistive_technology(cx: &mut TestAppContext) {
     let dir = fresh("product-hidden-explorer");
