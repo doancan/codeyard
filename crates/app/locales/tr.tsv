@@ -3428,3 +3428,7 @@ settings.jsonc has no Rust setup to reset.	settings.jsonc dosyasında sıfırlan
 the file changed; try again	dosya değişti; yeniden deneyin
 Discard changes in {}	{} içindeki değişiklikleri at
 Mark {} as resolved	{} dosyasını çözüldü olarak işaretle
+Files to include	Dahil edilecek dosyalar
+Structural pattern	Yapısal desen
+Structural search	Yapısal arama
+line {0}, column {1}	satır {0}, sütun {1}

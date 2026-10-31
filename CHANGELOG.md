@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Screen readers can use the whole Search view and fix problems from the Problems panel: the query (typing from the
+  screen reader searches), its options as check boxes, the replacement, Replace All, the include/exclude fields, the
+  result line (a search or pattern error is announced at once) and the results as a tree of files and matches that
+  expand, collapse, open, and offer Replace in this file and Dismiss. Each problem has a Quick Fix… button that opens it
+  and lists its fixes in a picker; the problem counts are announced as they change. Search and Problems rows report the
+  frames they are drawn at.
 - Running the public registry (#70, everything that needs no server): `deploy/yard/setup.sh` sets up a fresh Ubuntu
   24.04 server behind Cloudflare (origin certificate, HTTPS from Cloudflare's addresses only, SSH by key) with one
   secrets file (`yard.env.example`), a daily `yard resign` timer, an hourly check (`yard-watch`), alerts by webhook or

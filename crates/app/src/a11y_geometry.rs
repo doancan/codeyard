@@ -34,6 +34,8 @@ pub(in crate::workbench) enum Part {
     Status(StatusPart),
     /// A tab of the focused editor group, by its index among the group's editor tabs.
     EditorTab(usize),
+    /// A row of the Problems panel.
+    Problem(usize),
     /// A button inside a row of a side view list: the row, and which of the row's buttons (in the tree's order).
     RowButton(RowFrame, usize, u8),
 }
@@ -165,6 +167,13 @@ impl Geometry {
     /// Whether the focused editor was drawn in this window's last frame.
     pub(super) fn editor_painted(&self) -> bool {
         self.editor.is_some()
+    }
+
+    /// The bounds of a control, while it is drawn.
+    pub(super) fn apply_part(&self, which: Part, node: &mut Node) {
+        if let Some(bounds) = self.parts.get(&which) {
+            node.set_bounds(*bounds);
+        }
     }
 
     /// The physical frame of a control, while it is drawn.

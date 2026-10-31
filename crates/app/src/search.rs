@@ -18,8 +18,11 @@ gpui::actions!(search, [HistoryPrev, HistoryNext, NextResult, PrevResult]);
 // --- structural ---
 gpui::actions!(search, [StructuralSearch, StructuralReplace]);
 
+#[path = "search_access.rs"]
+mod access;
 #[path = "search_structural.rs"]
 mod structural_mode;
+pub(crate) use access::{AccessField, AccessFrame, AccessKey, AccessView, DISMISS_FILE, REPLACE_IN_FILE, SearchOption};
 pub(crate) use structural_mode::describe as describe_pattern_error;
 
 /// Number of remembered queries.
@@ -91,6 +94,8 @@ pub struct SearchPanel {
     current: Option<(usize, usize)>,
     // --- structural ---
     st: structural_mode::State,
+    /// Where the fields, options, status and rows were laid out in the last frame, for the accessibility tree.
+    painted: crate::painted::RowBounds<AccessFrame>,
     _subs: Vec<Subscription>,
 }
 
@@ -155,6 +160,7 @@ impl SearchPanel {
             history_ix: None,
             current: None,
             st,
+            painted: Default::default(),
             _subs: subs,
         }
     }
@@ -573,42 +579,6 @@ impl SearchPanel {
         }
     }
 
-    /// For assistive technology: the status line, at most `max` rows (file, or match with its position) and the row
-    /// count. A match row's key is (path, line, column): it opens only while that match is still a result.
-    pub(crate) fn access_rows(&self, max: usize) -> (String, Vec<(String, Option<(String, u32, u32)>)>, usize) {
-        let status = match &self.status {
-            Status::Idle => crate::i18n::t("Type a query and press Enter to search.").to_string(),
-            Status::Searching => crate::i18n::t("Searching…").to_string(),
-            Status::Done { files, matches, .. } => crate::i18n::tn("{0} result in {1} files", "{0} results in {1} files", *matches as usize, &[files]),
-            Status::Failed(e) => e.to_string(),
-        };
-        let rows = self
-            .rows
-            .iter()
-            .take(max)
-            .filter_map(|row| match *row {
-                Row::File(fi) => self.results.get(fi).map(|f| (format!("{} ({})", f.path, f.matches.len()), None)),
-                Row::Match(fi, mi) => {
-                    let f = self.results.get(fi)?;
-                    let m = f.matches.get(mi)?;
-                    Some((format!("{}: {}", m.line, m.preview.trim()), Some((f.path.clone(), m.line, m.column))))
-                }
-            })
-            .collect();
-        (status, rows, self.rows.len())
-    }
-
-    pub(crate) fn open_access_row(&mut self, key: &(String, u32, u32), cx: &mut Context<Self>) -> bool {
-        let found =
-            self.results.iter().enumerate().find_map(|(fi, f)| {
-                (f.path == key.0).then(|| f.matches.iter().position(|m| m.line == key.1 && m.column == key.2).map(|mi| (fi, mi))).flatten()
-            });
-        if let Some((fi, mi)) = found {
-            self.open(fi, mi, cx);
-        }
-        found.is_some()
-    }
-
     fn open(&mut self, fi: usize, mi: usize, cx: &mut Context<Self>) {
         let Some(f) = self.results.get(fi).filter(|_| self.root.is_some()) else { return };
         let m = &f.matches[mi];
@@ -618,7 +588,7 @@ impl SearchPanel {
 
     fn toggle(&self, id: &'static str, label: &'static str, on: bool, tip: &'static str, cx: &mut Context<Self>, set: fn(&mut Self)) -> impl IntoElement {
         let p = *palette(cx);
-        ui::option_toggle(id, label, on, tip, &p, p.bg).on_click(cx.listener(move |this, _, _, cx| {
+        ui::option_toggle(id, label, on, tip, &p, p.bg).relative().children(self.option_probe(id)).on_click(cx.listener(move |this, _, _, cx| {
             set(this);
             this.start(cx);
         }))
@@ -648,34 +618,16 @@ impl SearchPanel {
 impl Render for SearchPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = *palette(cx);
-        let status: Option<(String, u32)> = match &self.status {
-            Status::Idle if self.root.is_none() => Some((crate::i18n::t("Open a folder to search in it.").into(), p.text_muted)),
-            Status::Idle => None,
-            Status::Searching => Some((crate::i18n::t("Searching…").into(), p.text_muted)),
-            Status::Done { matches: 0, files, .. } => {
-                Some((crate::i18n::tn("No results in {} file.", "No results in {} files.", *files as usize, &[]), p.text_muted))
-            }
-            Status::Done { files: _, matches, truncated } => {
-                let n = self.results.len();
-                let mut s = if n == 1 {
-                    crate::i18n::tn("{} result in 1 file", "{} results in 1 file", *matches as usize, &[])
-                } else {
-                    crate::i18n::tn("{0} result in {1} files", "{0} results in {1} files", *matches as usize, &[&n])
-                };
-                if *truncated {
-                    s = crate::i18n::tf("{0} (stopped at {1})", &[&s, &cx.global::<crate::settings::Settings>().search_max_results]);
-                }
-                Some((s, p.text_muted))
-            }
-            Status::Failed(e) => Some((e.to_string(), p.danger)),
-        };
+        self.painted.borrow_mut().clear();
+        let status = self.status_line(cx).map(|(s, error)| (s, if error { p.danger } else { p.text_muted }));
         let (q_focus, r_focus, i_focus, e_focus) = (
             self.active_query().focus_handle(cx).is_focused(window),
             self.replace.focus_handle(cx).is_focused(window),
             self.include.focus_handle(cx).is_focused(window),
             self.exclude.focus_handle(cx).is_focused(window),
         );
-        let field_box = |id: &'static str, focused: bool, child: gpui::AnyElement| crate::ui::input_box(id, &p, p.bg, focused).child(child);
+        let field_box = |id: &'static str, focused: bool, child: gpui::AnyElement| crate::ui::input_box(id, &p, p.bg, focused).relative().child(child);
+        let field = |which: AccessField| self.probe(AccessFrame::Field(which));
 
         div()
             .id("search-panel")
@@ -700,7 +652,7 @@ impl Render for SearchPanel {
                     .items_center()
                     .gap(px(theme::SPACE[2]))
                     .child(crate::ui::search_icon(&p))
-                    .child(div().flex_1().min_w_0().child(self.active_query().clone()))
+                    .child(div().flex_1().min_w_0().relative().child(self.active_query().clone()).child(field(AccessField::Query)))
                     // Clear button while there's text (doesn't touch results; only empties the field).
                     .when(!self.active_query().read(cx).text().is_empty(), |d| {
                         d.child(
@@ -743,18 +695,22 @@ impl Render for SearchPanel {
                     .into_any_element(),
             ))
             .when_some(self.st.error.clone().filter(|_| self.st.on), |d, e| {
-                d.child(div().id("s-pattern-error").text_size(px(text::XS.0)).text_color(c(p.danger)).child(e))
+                d.child(
+                    div().id("s-pattern-error").relative().text_size(px(text::XS.0)).text_color(c(p.danger)).child(e).child(self.probe(AccessFrame::Status)),
+                )
             })
             .child(
                 div()
                     .flex()
                     .gap(px(theme::SPACE[2]))
                     .items_center()
-                    .child(field_box("search-replace-box", r_focus, self.replace.clone().into_any_element()).flex_1())
+                    .child(field_box("search-replace-box", r_focus, self.replace.clone().into_any_element()).child(field(AccessField::Replace)).flex_1())
                     .child({
                         let ready = matches!(self.status, Status::Done { matches, .. } if matches > 0);
                         div()
                             .id("s-replace-all")
+                            .relative()
+                            .child(self.probe(AccessFrame::ReplaceAll))
                             .h(px(28.))
                             .px(px(theme::SPACE[4]))
                             .flex()
@@ -779,6 +735,8 @@ impl Render for SearchPanel {
             .child(
                 div()
                     .id("s-globs")
+                    .relative()
+                    .child(self.probe(AccessFrame::Globs))
                     .flex()
                     .items_center()
                     .gap(px(theme::SPACE[2]))
@@ -794,11 +752,8 @@ impl Render for SearchPanel {
                     })),
             )
             .when(self.show_globs, |d| {
-                d.child(field_box("search-include-box", i_focus, self.include.clone().into_any_element())).child(field_box(
-                    "search-exclude-box",
-                    e_focus,
-                    self.exclude.clone().into_any_element(),
-                ))
+                d.child(field_box("search-include-box", i_focus, self.include.clone().into_any_element()).child(field(AccessField::Include)))
+                    .child(field_box("search-exclude-box", e_focus, self.exclude.clone().into_any_element()).child(field(AccessField::Exclude)))
             })
             .when_some(status, |d, (s, color)| {
                 let any = !self.results.is_empty();
@@ -808,7 +763,17 @@ impl Render for SearchPanel {
                         .flex()
                         .items_center()
                         .gap(px(theme::SPACE[1]))
-                        .child(div().flex_1().min_w_0().truncate().text_size(px(text::XS.0)).text_color(c(color)).child(s))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .relative()
+                                .truncate()
+                                .text_size(px(text::XS.0))
+                                .text_color(c(color))
+                                .child(s)
+                                .child(self.probe(AccessFrame::Status)),
+                        )
                         .when(any, |d| {
                             d.child(
                                 ui::icon_button("s-prev", "arrow-up", crate::i18n::t("Previous result (⇧F4)"), &p)
@@ -856,8 +821,11 @@ impl Render for SearchPanel {
                                     Row::File(fi) => {
                                         let f = &this.results[fi];
                                         let (dir, name) = f.path.rsplit_once('/').unwrap_or(("", &f.path));
+                                        let key = AccessKey::File(f.path.clone());
                                         div()
                                             .id(("s-file", ix))
+                                            .relative()
+                                            .child(this.probe(AccessFrame::Row(key.clone())))
                                             .group(format!("s-file-{ix}"))
                                             .w_full()
                                             .h(px(layout::ROW_H))
@@ -883,6 +851,8 @@ impl Render for SearchPanel {
                                             .child(
                                                 div()
                                                     .id(("s-file-replace", fi))
+                                                    .relative()
+                                                    .child(this.probe(AccessFrame::Button(key.clone(), REPLACE_IN_FILE)))
                                                     .flex_none()
                                                     .invisible()
                                                     .group_hover(format!("s-file-{ix}"), |s| s.visible())
@@ -904,6 +874,8 @@ impl Render for SearchPanel {
                                             .child(
                                                 div()
                                                     .id(("s-file-dismiss", fi))
+                                                    .relative()
+                                                    .child(this.probe(AccessFrame::Button(key.clone(), DISMISS_FILE)))
                                                     .flex_none()
                                                     .invisible()
                                                     .group_hover(format!("s-file-{ix}"), |s| s.visible())
@@ -947,8 +919,11 @@ impl Render for SearchPanel {
                                         let highlights = ranges
                                             .into_iter()
                                             .map(|r| (r, HighlightStyle { background_color: Some(ui::ca(p.warning, 0.28).into()), ..Default::default() }));
+                                        let key = AccessKey::Match(this.results[fi].path.clone(), m.line, m.column);
                                         div()
                                             .id(("s-match", ix))
+                                            .relative()
+                                            .child(this.probe(AccessFrame::Row(key)))
                                             .w_full()
                                             .h(px(layout::ROW_H))
                                             .flex()

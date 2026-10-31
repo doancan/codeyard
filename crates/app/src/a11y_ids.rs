@@ -22,6 +22,7 @@ const _: () = {
         SCM_REPO,
         EXT_VIEW_NODE,
         INSPECTOR_LINE,
+        super::problems_access::SEARCH_ROW,
         super::scm_access::ext::SCM_EXT,
         super::problems_access::PAGE_ROW,
         super::problems_access::PROBLEM_ROW,
@@ -99,6 +100,7 @@ const _: () = {
         &super::problems_access::DEBUG_FIXED,
         &super::problems_access::SIDE_FIXED,
         &super::problems_access::DIALOG_FIXED,
+        &super::problems_access::SEARCH_FIXED,
     ]);
     // Rows are ROW_BASE | 32-bit hash; editor and terminal runs sit above them.
     assert!(ROW_BASE + 0xffff_ffff < RUN_BASE && RUN_BASE + 0xffff_ffff < TERM_RUN_BASE);

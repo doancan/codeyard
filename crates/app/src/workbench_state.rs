@@ -73,7 +73,8 @@ pub(super) struct LspState {
     /// Pending `workspace/symbol` search (dropped, i.e. cancelled, when a newer one arrives).
     pub(super) symbol_task: Option<gpui::Task<()>>,
     /// Position supplied by the language server: (path, line, UTF-16 column), 0-based.
-    pub(super) pending_reveal: Option<(String, u32, u32)>,
+    /// A location to show once its file is in front, and whether to ask for the fixes there then (Problems' Quick Fix…).
+    pub(super) pending_reveal: Option<(String, u32, u32, bool)>,
     /// JSON/YAML schema service (set up on first use) and the pending check per file.
     pub(super) schema: Option<Arc<schema::ide::Service>>,
     pub(super) schema_tasks: std::collections::HashMap<String, gpui::Task<()>>,

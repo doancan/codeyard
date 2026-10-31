@@ -28,16 +28,29 @@ The tree, in the order a screen reader walks it:
   supports scroll up/down by a page. Operation errors are assertive live regions; successful results are polite. The
   focus is exposed for the message field, the repository list and the change list, whose cursor row is the focused
   node; `Focus` on a row puts the keyboard cursor there. The graph, worktrees and sync controls are not exposed yet.
-- While the Problems panel is open, a `List` labeled with the number of problems: a `Heading` per file and a `ListItem`
-  per problem ("Error: …", with file, line and column as its description) or related location, each with `Click` to open
-  it. At most 2,000 rows are exposed. With nothing to show, a polite `Status` says "No problems.". An activation from an
-  outdated tree opens nothing unless the same row is still at the same place.
+- While the Problems panel is open, a `List` labeled with the number of problems: first a polite `Status` with the
+  counts ("2 errors, 1 warnings", spoken when it changes), then a `Heading` per file and a `ListItem` per problem
+  ("Error: …", with file, line and column as its description) or related location, each with `Click` to open it and its
+  painted frame. A problem holds a "Quick Fix…" `Button` (a list popup): it opens the problem at its place and asks for
+  its fixes there, as Quick Fix at the caret does; they come as the picker below, whose option applies the fix, and the
+  keyboard is back in the editor afterwards. At most 2,000 rows are exposed. With nothing to show, a polite `Status`
+  says "No problems.". An activation from an outdated tree opens or fixes nothing unless the same row is still at the
+  same place.
 - While the bottom panel is open, a `TabList` with its tabs (Problems, Output, Debug Console while debugging, Ports,
   Terminal), the selected one marked and counts as descriptions; `Click` switches tabs. While Output is shown, a polite
   `Log` holds its last 400 lines.
-- While the Search side bar is visible, a polite `Status` with its result line (the same words as on screen) and a `List`
-  of up to 500 rows: a `Heading` per file and a `ListItem` per match (`line: text`). `Click` opens the match; it is
-  found by file, line and column, so an activation after the results changed opens it only if it is still a result.
+- While the Search view is shown (in a side bar or a window of its own), a `Group` "Search": the query as a
+  `SearchInput` ("Structural pattern" in structural mode; `Focus`, and `SetValue`, which searches as typing does), its
+  options as `CheckBox`es (Match case, Whole word, Regular expression, Preserve case when replacing, Structural search;
+  `Click` toggles from the state the tree showed), the replacement (`TextInput`), Replace All (disabled until there are
+  results; it opens the review as the button does), the "Files to include / exclude" disclosure `Button` (expanded
+  while the two fields show) and those fields, the status line as a polite `Status` and a search or pattern error as an
+  assertive `Alert`, then a `Tree` "Search results" of up to 500 rows around the current match (or the rows on screen;
+  scroll up/down by 100 rows moves the range): a file per level-1 `TreeItem` (folder as description, match count as
+  value, `Expand`/`Collapse`/`Click`, with "Replace in this file" and "Dismiss this file from the results") and its
+  matches at level 2 (line text, "line 2, column 9", the current one selected; `Click` opens it). Fields, options,
+  buttons and rows have their painted frames. Rows are named by file, line and column, so an action from an outdated
+  tree acts only on what is still a result. The focused field is the tree's focus.
 - While the Ports tab of the bottom panel is shown, a `List` "Ports": the `TextInput` "Forward a port:" (`Focus`), and a
   `ListItem` per row ("Port 8000, label"; the forwarded address or the state as its value; process and origin as its
   description) with the row's buttons: Open in Browser, Copy Address, Stop Forwarding, or Forward Port for a port that is
@@ -261,7 +274,7 @@ probe as the workbench's lists (`painted.rs`).
 - **No screen reader has been run.** VoiceOver (speech, rotor, VO cursor, "interact with text area") and NVDA, JAWS or
   Narrator on Windows. The Windows adapter builds and passes CI, but no UI Automation client has read its tree yet.
 - **Fine-grained bounds.** Rows, controls and text positions have their painted frames (see Geometry above). Not yet:
-  the buttons of the Settings page's rows, the Search, Problems and Extensions lists' rows, the Search Editor, pickers
+  the buttons of the Settings page's rows, the Extensions list's rows, the Search Editor, pickers
   and suggestion rows, the bottom panel's tabs, and the welcome and update dialogs' buttons keep only the bounds of
   their landmark or none. Bidirectional (RTL) text is reported left to right.
 - **Focus** was observed live on macOS only for Source Control: setting `AXFocused` on a change row of a dev build moved
@@ -300,7 +313,7 @@ probe as the workbench's lists (`painted.rs`).
 
 1. Screen-reader passes (VoiceOver, NVDA, Narrator) on real machines; fix what they find.
 2. Real focus tracking checked with screen readers, observer-driven updates.
-3. The remaining panels (search results, Source Control graph/worktrees/sync, problems), the Settings page, context menus and dialogs.
+3. The remaining panels (Source Control graph/worktrees/sync, the Debug Console).
 4. The editor proper: visible lines only with shaped character positions, correct absolute offsets, scroll actions,
    multi-cursor policy, diagnostics announcements.
 5. The Linux adapter and regression tests against a real accessibility client.
