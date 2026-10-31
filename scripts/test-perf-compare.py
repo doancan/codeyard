@@ -92,6 +92,26 @@ class CompareTests(unittest.TestCase):
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("over ceiling", r.stdout)
 
+    def test_a_relative_ceiling_follows_the_same_runs_reference(self):
+        # Keystroke rows: the extension scenario may be up to 10% slower than plain typing in the same candidate run.
+        typing = {"id": "plain", "stat": "p95", "budget": 0.10, "ceiling": None, "gate": "block"}
+        ext = self.metric(ceiling_vs={"metric": "plain", "margin": 0.10})
+        r = self.run_compare({}, {"plain": [20, 25, 29, 30], "t": [21, 26, 31, 32]}, [typing, ext])
+        self.assertEqual(r.returncode, 0, r.stdout)
+        r = self.run_compare({}, {"plain": [20, 25, 29, 30], "t": [21, 26, 31, 34]}, [typing, ext])
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("over ceiling 33.0 (plain +10%)", r.stdout)
+
+    def test_a_relative_ceiling_is_not_an_absolute_one(self):
+        # 30 ms of plain typing: an extension row at 31 ms passes even though an 8 ms ceiling never could.
+        r = self.run_compare({"t": [30, 31]}, {"plain": [30, 30, 30], "t": [31, 31, 31]}, [self.metric(ceiling_vs={"metric": "plain", "margin": 0.10})])
+        self.assertEqual(r.returncode, 0, r.stdout)
+
+    def test_a_relative_ceiling_without_its_reference_fails(self):
+        r = self.run_compare({}, {"t": [10, 10, 10]}, [self.metric(ceiling_vs={"metric": "plain", "margin": 0.10})])
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("no plain samples for its ceiling", r.stdout)
+
     def test_missing_samples_of_a_blocking_metric_fail(self):
         r = self.run_compare({"t": [10]}, {}, [self.metric()])
         self.assertEqual(r.returncode, 1, r.stdout)

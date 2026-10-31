@@ -210,6 +210,15 @@ for i in $(seq 1 "$runs"); do
       exit 1
     fi
     grep '"typing\.' "$TMP/typing.jsonl" >> "$CODEYARD_PERF" || true
+    # The completion scenario's keys (a new word every third key) with no extension: the completion row's reference.
+    cp crates/app/testdata/big.rs "$TMP/big.rs"
+    : > "$TMP/words.jsonl"
+    CODEYARD_PERF="$TMP/words.jsonl" CODEYARD_PERF_WORDS=40 run_scripted "$OUT/codeyard-${names[$k]}" "$TMP/big.rs"
+    if [ "${names[$k]}" = candidate ] && { [ "$(count typing.keystroke_frame_words_ms "$TMP/words.jsonl")" != 40 ] || ! grep -q "^\(ab \)\{13\}a" "$TMP/big.rs"; }; then
+      echo "perf: the words run of ${names[$k]} did not type and draw 40 keys; the window must be visible and nothing else may type into it" >&2
+      exit 1
+    fi
+    grep '"typing\.keystroke_frame_words_ms"' "$TMP/words.jsonl" >> "$CODEYARD_PERF" || true
     # 100 installed extensions: only the time to load them counts.
     : > "$TMP/ext.jsonl"
     CODEYARD_PERF="$TMP/ext.jsonl" PROFILE_FROM="$EXT_PROFILE" run_scripted "$OUT/codeyard-${names[$k]}"
@@ -228,7 +237,7 @@ for i in $(seq 1 "$runs"); do
     fi
     grep '"market\.' "$TMP/market.jsonl" >> "$CODEYARD_PERF" || true
     # Two extensions decorate the 10k-line file: 40 keys, keystroke to frame; then 40 rounds of asking both for their
-    # tasks, request to answer in the window. Warn-only rows until a baseline has them (perf/metrics.json).
+    # tasks, request to answer in the window.
     cp crates/app/testdata/big.rs "$TMP/big.rs"
     : > "$TMP/deco.jsonl"
     CODEYARD_PERF="$TMP/deco.jsonl" CODEYARD_PERF_DECORATIONS=40 CODEYARD_PERF_PROVIDERS=40 PROFILE_FROM="$DECO_PROFILE" \
@@ -239,7 +248,7 @@ for i in $(seq 1 "$runs"); do
       exit 1
     fi
     grep -e '"typing\.keystroke_frame_decorations_ms"' -e '"extensions\.provider_overhead_ms"' "$TMP/deco.jsonl" >> "$CODEYARD_PERF" || true
-    # One extension completes Rust: 40 keys, a new word every third, keystroke to frame. Warn-only until a baseline has it.
+    # One extension completes Rust: 40 keys, a new word every third, keystroke to frame.
     cp crates/app/testdata/big.rs "$TMP/big.rs"
     : > "$TMP/comp.jsonl"
     CODEYARD_PERF="$TMP/comp.jsonl" CODEYARD_PERF_COMPLETION=40 PROFILE_FROM="$COMP_PROFILE" run_scripted "$OUT/codeyard-${names[$k]}" "$TMP/big.rs"
@@ -249,7 +258,7 @@ for i in $(seq 1 "$runs"); do
     fi
     grep '"typing\.keystroke_frame_completion_ms"' "$TMP/comp.jsonl" >> "$CODEYARD_PERF" || true
     # One extension gives code lenses and inlay hints for the lines in view of the 10k-line file: 40 keys, keystroke
-    # to frame. Warn-only until a baseline has it.
+    # to frame.
     cp crates/app/testdata/big.rs "$TMP/big.rs"
     : > "$TMP/lens.jsonl"
     CODEYARD_PERF="$TMP/lens.jsonl" CODEYARD_PERF_LENSES=40 PROFILE_FROM="$LENS_PROFILE" run_scripted "$OUT/codeyard-${names[$k]}" "$TMP/big.rs"

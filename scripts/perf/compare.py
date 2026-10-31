@@ -6,7 +6,10 @@ change is not noise. Noise is judged on the same statistic: the candidate's valu
 a 95% bootstrap interval of the baseline's value. Small samples (memory has 3) have wide intervals, so for a median
 it is also a regression when every candidate sample is worse than the baseline's median by more than the budget.
 A blocking metric that the baseline has no samples for (a release before the hooks) is reported, not passed, and so
-is a comparison with fewer than MIN_SAMPLES on either side: one GPU texture spike is ±8 MB in a memory scene."""
+is a comparison with fewer than MIN_SAMPLES on either side: one GPU texture spike is ±8 MB in a memory scene.
+A metric with `ceiling_vs` has a ceiling relative to another metric of the same candidate run: that metric's statistic
+plus `margin` (0.10 = 10%). Keystroke-to-frame times include up to two display refreshes, so a fixed number in
+milliseconds cannot say "extensions add nothing visible over plain typing"; the same run's plain typing can."""
 import json, math, random, sys
 
 MIN_SAMPLES = 3
@@ -57,6 +60,12 @@ for m in catalogue:
     problems, notes = [], []
     if m["ceiling"] is not None and cv > m["ceiling"]:
         problems.append(f"over ceiling {m['ceiling']}")
+    if vs := m.get("ceiling_vs"):
+        ref = cand["runs"].get(vs["metric"])
+        if not ref:
+            problems.append(f"no {vs['metric']} samples for its ceiling")
+        elif cv > (limit := stat(ref, m["stat"]) * (1 + vs["margin"])):
+            problems.append(f"over ceiling {limit:.1f} ({vs['metric']} {vs['margin']:+.0%})")
     change, bshow = "", "-"
     if b:
         bv = stat(b, m["stat"])
