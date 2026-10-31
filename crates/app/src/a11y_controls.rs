@@ -105,6 +105,12 @@ impl Control {
         self
     }
 
+    /// A field's text.
+    pub(crate) fn value(mut self, text: impl Into<String>) -> Self {
+        self.value = Some(text.into());
+        self
+    }
+
     pub(crate) fn focus(mut self, handle: FocusHandle) -> Self {
         self.focus = Some(handle);
         self
@@ -312,6 +318,21 @@ impl Workbench {
 impl Workbench {
     /// A button of the workbench's own chrome for the tree (the element it is in must be `relative`): `surface`,
     /// keyed `key`, named `label`, pressing it runs `f` as the click does.
+    /// A drawn button `el` with its control `c` for the tree: the click and the tree's press run the same `f`.
+    pub(crate) fn pressable(
+        &self,
+        el: gpui::Stateful<gpui::Div>,
+        c: Control,
+        cx: &mut Context<Self>,
+        f: impl Fn(&mut Self, &mut Window, &mut Context<Self>) + 'static,
+    ) -> gpui::Stateful<gpui::Div> {
+        let f = Rc::new(f);
+        let press = f.clone();
+        el.relative()
+            .child(control(c.on_entity(cx.entity().downgrade(), move |this: &mut Self, w, cx| press(this, w, cx))))
+            .on_click(cx.listener(move |this, _, w, cx| f(this, w, cx)))
+    }
+
     pub(crate) fn ctl<L: Into<String>, F: Fn(&mut Self, &mut Window, &mut Context<Self>) + 'static>(
         &self,
         surface: &str,
@@ -322,4 +343,16 @@ impl Workbench {
     ) -> impl IntoElement + use<L, F> {
         control(Control::button(surface, key, label, |_, _| {}).on_entity(cx.entity().downgrade(), f))
     }
+}
+
+/// A button for the tree on any view `T` (the element it is in must be `relative`): pressing it runs `f` on the view
+/// as its click does.
+pub(crate) fn button_on<T: 'static, L: Into<String>, F: Fn(&mut T, &mut Window, &mut Context<T>) + 'static>(
+    cx: &Context<T>,
+    surface: &str,
+    key: String,
+    label: L,
+    f: F,
+) -> impl IntoElement + use<T, L, F> {
+    control(Control::button(surface, key, label, |_, _| {}).on_entity(cx.entity().downgrade(), f))
 }

@@ -36,6 +36,23 @@ The tree, in the order a screen reader walks it:
   tab's name as description); the large-file, diff and page tabs (Settings, Welcome, Merge, Compare, Markdown,
   Containers, the Inspector, Language Services…) as tabs of the "Editor tabs" list with their Close buttons; and
   every other editor group's tabs in a group "Editor group 2", whose `Click` brings that group forward with the tab.
+- The side views' drawn controls, declared the same way: the Explorer's empty-state buttons (Open Folder, Open
+  recent), header buttons (New File, New Folder, Refresh, Expand and Collapse Folders), each section's header (a
+  `Button` with its count, expanded while open; `Click` folds it), the open editors (a `ListItem` each, selected while
+  in front, with Close), favorites, the outline (`TreeItem`s with their line, selected at the caret) and the timeline
+  (saved copies and commits), and its notes as labels; Source Control's Refresh and More Actions…, the Stashes header
+  and each stash's Apply, Pop and Drop (the stash as description), a repository's fold button; the Search view's
+  Clear field, Previous and Next result, Expand or Collapse all, Open in a Search Editor tab, Run again, Clear and, in
+  structural search, the pattern's language (`Click` takes the next one); Run and Debug's Remove All Breakpoints and
+  "Create a launch configuration" (`Link`); the Testing view's filter field (`TextInput` with its text, `Focus` gives
+  it the keyboard) and Collapse All; the Remote Explorer's per-group Refresh, a recent folder's Open in New Window and
+  Remove from Recent, a port's Open in Browser, Forward Port and Stop Forwarding (the folder or port as description);
+  the Extensions header (Install from File…, Install from Folder…, Refresh), the Market page's Show Installed; and an
+  installed extension's page in a group named after it: its heading, source, state, description, contributions and
+  permissions as labels, Enable or Disable, Uninstall…, Roll Back, Verify Files, Get or Stop Pre-releases, the update
+  card's button, the permission switches (`Switch`, toggled while on), each recent denial with Copy fix, the crash
+  card's buttons and the accounts' Sign Out, Remove and Add Instance…. A button drawn only on hover is in the tree
+  while its row is laid out.
 - One `Tree` per folder of the workspace: "Explorer", or "Explorer: name" when there are several. One `TreeItem` per
   row in a range of 1,000 rows: name, level, selected, expanded, set position in the whole tree. The range is centred
   on the selection while it is on screen, otherwise on the visible rows; the tree reports its scroll position in rows
@@ -393,7 +410,6 @@ probe as the workbench's lists (`painted.rs`).
   line is split into a run per painted line; a folded line is in the text but has no frame.
 - The terminal exposes the screen only, not the scrollback, and cannot be written to from the tree (typing goes through
   the keyboard as usual).
-- Not exposed: an installed extension's page and the Testing filter field.
 - Keyboard: the Run and Debug lists (variables, watches, call stack, breakpoints), the Testing tree, the Remote
   Explorer, the Ports list and Source Control's change list are tab stops with a cursor row (Up/Down/Home/End, Enter as a click on the row, the focus
   colour on the list and the row). Shift+F10 and the Menu key (`list.showContextMenu`) open the row's menu under it; the
@@ -415,10 +431,9 @@ probe as the workbench's lists (`painted.rs`).
 
 1. Screen-reader passes (VoiceOver, NVDA, Narrator) on real machines; fix what they find.
 2. Real focus tracking checked with screen readers, observer-driven updates.
-3. The remaining controls listed under "Not exposed".
-4. The editor proper: visible lines only with shaped character positions, correct absolute offsets, scroll actions,
+3. The editor proper: visible lines only with shaped character positions, correct absolute offsets, scroll actions,
    multi-cursor policy, diagnostics announcements.
-5. The Linux adapter and regression tests against a real accessibility client.
+4. The Linux adapter and regression tests against a real accessibility client.
 
 ## Geometry verification
 

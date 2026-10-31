@@ -2,6 +2,7 @@
 # Copy this file to `<code>.tsv`, put the translation after the TAB (see docs/translating.md). A key containing `|` is a plural
 # entry: write one form per plural form of the language, separated by `|`. Do not edit the left column.
 (+{} more)	
+(modified)	
 (nothing)	
 (the lines are removed)	
 + Create new branch from…	
@@ -290,6 +291,7 @@ Codeyard {} is available
 Codeyard {} is available.	
 Codeyard {} is available. Click for details.	
 Codeyard {} is installed. Click for details.	
+Collapse	
 Collapse All	
 Collapse All Inside	
 Collapse Folders	
@@ -812,6 +814,7 @@ Every setting, with comments
 Everything resolved so far in this merge is discarded.	
 Existing custom server commands are preserved. Services start only in trusted folders. Closing this tab cancels an installation that has not reached activation.	
 Exit	
+Expand	
 Expand All Inside	
 Expand Emmet abbreviations (div.box>ul>li*3) with Tab	
 Expand Folders (the selected one, or the open file's folders)	
@@ -1534,6 +1537,7 @@ Only the local tag is removed. A copy on a remote stays until you delete it ther
 Only this host's entry is removed. The previous file is kept as config.codeyard-bak.	
 Open	
 Open Changes	
+Open Editors	
 Open Editors ({})	
 Open File	
 Open File (HEAD)	
@@ -2799,6 +2803,7 @@ light
 limit needs a whole number	
 line {0}, column {1}	
 line {0}: {1}	
+line {}	
 lines {0}–{1}	
 link target differs	
 local agent, protocol test	
