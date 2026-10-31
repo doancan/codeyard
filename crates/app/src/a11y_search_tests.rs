@@ -114,20 +114,19 @@ fn the_search_view_is_driven_from_the_tree(cx: &mut TestAppContext) {
 /// its fixes and apply one, all through the tree; the fixed file has no problem left, which is announced.
 #[gpui::test]
 fn search_result_to_diagnostic_to_fix(cx: &mut TestAppContext) {
-    if std::process::Command::new("python3").arg("-V").output().is_err() {
+    // The server is a Python script started by its interpreter (`python` on Windows runners, `python3` elsewhere).
+    let Some(python) = ["python3", "python"].into_iter().find(|p| std::process::Command::new(p).arg("-V").output().is_ok_and(|o| o.status.success())) else {
         crate::test_sshd::skip_missing("python3");
         return;
-    }
+    };
     let _en = crate::i18n::LangGuard::set("en");
     let dir = crate::qa_workbench_tests::fresh("a11y-search-fix");
     let script = dir.join("fix-ls.py");
     std::fs::write(&script, FIX_SERVER).unwrap();
-    #[cfg(unix)]
-    crate::test_files::make_executable(&script);
     std::fs::write(dir.join("a.c"), "int main(void) { return x; }\n").unwrap();
     let settings = Settings {
         lsp_enabled: true,
-        lsp_servers: vec![("c".into(), Some((script.to_string_lossy().into_owned(), Vec::new()).into()))],
+        lsp_servers: vec![("c".into(), Some((python.to_string(), vec![script.to_string_lossy().into_owned()]).into()))],
         ..Settings::default()
     };
     let (wb, cx) = crate::qa_integration_tests::setup_with(cx, settings);
