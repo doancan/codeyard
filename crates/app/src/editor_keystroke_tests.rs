@@ -1,6 +1,7 @@
 //! A keystroke never waits (#142): not for a completion provider that does not answer, and not for a reparse of the
 //! whole file. Typing stray words between the items of a large Rust file makes tree-sitter recover from the error
-//! across all of it, tens of milliseconds per key; that reparse finishes in the background.
+//! across all of it, tens of milliseconds per key; that reparse finishes in the background. Nor for a frame drawn for
+//! a completion answer that shows nothing.
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -109,4 +110,66 @@ fn a_keystroke_never_waits_for_a_reparse_of_the_whole_file(cx: &mut TestAppConte
     let full = syntax::Syntax::new(syntax::language_for_path("big.rs").unwrap(), &rope).unwrap();
     let range = 0..rope.line_to_byte(200);
     assert_eq!(ed.read_with(cx, |e, _| e.highlights_for_test(range.clone())), full.highlights(&rope, range));
+}
+
+fn item(label: &str) -> crate::lsp::CompletionItem {
+    crate::lsp::CompletionItem {
+        label: label.into(),
+        detail: None,
+        kind: 6,
+        filter: label.into(),
+        sort: label.into(),
+        insert: label.into(),
+        cursor: None,
+        stops: Vec::new(),
+        range: None,
+        extra: Vec::new(),
+        doc: None,
+        resolve: None,
+        source: None,
+    }
+}
+
+/// A completion answer none of whose items matches the word typed so far changes nothing on screen, so it asks for no
+/// frame: in a large file a frame takes the UI thread for a long while, and a key that comes meanwhile waits for it
+/// (`typing.keystroke_frame_completion_ms`). An answer that matches opens the list.
+#[gpui::test]
+fn a_completion_answer_that_shows_nothing_draws_no_frame(cx: &mut TestAppContext) {
+    let f = file("unmatched", "fn main() {\n    \n}\n");
+    let (wb, cx) = setup(cx);
+    let ed = open(&wb, &f, cx);
+    let asked: Rc<RefCell<Vec<mpsc::UnboundedSender<(String, ExtAnswer)>>>> = Rc::default();
+    let log = asked.clone();
+    let ask: ExtAsker = Rc::new(move |_: ExtQuery, _: &mut gpui::AsyncApp| {
+        let (tx, answers) = mpsc::unbounded();
+        let (alive, _) = oneshot::channel();
+        log.borrow_mut().push(tx);
+        Some(ExtReply { answers, _alive: alive })
+    });
+    ed.update(cx, |e, _| e.set_ext_language(Some(ExtLanguage { hover: false, completion: Some(Vec::new()), ask })));
+    ed.update(cx, |e, cx| e.set_cursor_for_test(16, cx));
+    cx.run_until_parked();
+    let notified = Rc::new(RefCell::new(0usize));
+    let count = notified.clone();
+    let _watch = cx.update(|_, cx| cx.observe(&ed, move |_, _| *count.borrow_mut() += 1));
+    let answer = |n: usize, labels: &[&str], cx: &mut VisualTestContext| {
+        *notified.borrow_mut() = 0;
+        let items = labels.iter().map(|l| item(l)).collect();
+        asked.borrow()[n].unbounded_send(("you.ext".into(), ExtAnswer::Completion { items, incomplete: false })).unwrap();
+        cx.run_until_parked();
+        *notified.borrow()
+    };
+
+    type_char(&ed, "a", cx);
+    cx.run_until_parked();
+    assert_eq!(asked.borrow().len(), 1);
+    assert_eq!(answer(0, &["perf_item_0", "perf_item_1"], cx), 0, "an answer that shows nothing drew a frame");
+    assert!(ed.read_with(cx, |e, _| e.completion_sources_for_test()).is_none());
+
+    type_char(&ed, " ", cx);
+    type_char(&ed, "p", cx);
+    cx.run_until_parked();
+    assert_eq!(asked.borrow().len(), 2);
+    assert!(answer(1, &["perf_item_0", "other"], cx) > 0, "the list opened without a frame");
+    assert_eq!(ed.read_with(cx, |e, _| e.completion_sources_for_test()), Some(vec![("perf_item_0".to_string(), Some("you.ext".to_string()))]));
 }

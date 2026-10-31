@@ -199,7 +199,14 @@ impl EditorView {
         match &mut self.completion {
             Some(c) if c.start == start => c.items.extend(items),
             Some(_) => return,
-            None => self.completion = Some(Completion { items, shown: Vec::new(), selected: 0, start, incomplete: false, prefix: String::new() }),
+            None => {
+                // Nothing is shown and none of these match what is typed: the screen does not change, so no redraw.
+                let typed = self.buffer.text_range(start..cursor);
+                if !typed.is_empty() && !items.iter().any(|i| crate::fuzzy::score(&typed, &i.filter).is_some()) {
+                    return;
+                }
+                self.completion = Some(Completion { items, shown: Vec::new(), selected: 0, start, incomplete: false, prefix: String::new() });
+            }
         }
         self.refilter_keeping_selection(cx);
     }
