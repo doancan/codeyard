@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   follows `main`, since no release has the SDK yet). The contributions reference lists the built-in language ids and
   key names.
 
+- Screen readers reach every button drawn in the side views: the Explorer's header buttons, section headers, open
+  editors, favorites, outline and timeline; Source Control's Refresh, More Actions and stashes; the Search view's
+  result buttons and structural language; Run and Debug's Remove All Breakpoints and launch link; the Testing filter;
+  the Remote Explorer's folder and port buttons; the Extensions header and an installed extension's whole page,
+  including its permission switches, denials, crash card and accounts. Each reports the frame it is drawn at and does
+  what its click does.
+
 - Screen readers reach the window's chrome and the controls drawn around the editor: the activity bar's views and its
   Manage button, the title bar's Back, Forward and file search, the caption buttons on Windows, every status bar
   item (each one does what its click does, including sync, ports, transfers, the terminal toggle, conflicts and the

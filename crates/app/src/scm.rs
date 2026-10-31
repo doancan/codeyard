@@ -676,6 +676,14 @@ impl Render for ScmPanel {
                 div()
                     .id("scm-refresh")
                     .debug_selector(|| "scm-refresh".into())
+                    .relative()
+                    .child(crate::a11y_controls::button_on(
+                        cx,
+                        crate::i18n::t("Source Control"),
+                        "scm-refresh".into(),
+                        crate::i18n::t("Refresh"),
+                        |this, _, cx| this.a11y_refresh(cx),
+                    ))
                     .size(px(22.))
                     .flex()
                     .items_center()
@@ -689,19 +697,22 @@ impl Render for ScmPanel {
                         icon("refresh-cw", 14., p.text_muted).into_any_element()
                     })
                     .tooltip(|_, cx| cx.new(|_| crate::workbench::Tooltip(crate::i18n::t("Refresh").into())).into())
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        // A remote added since the graph was read shows up here (HEAD did not move, so nothing else reloads it).
-                        this.load_graph(cx);
-                        this.refresh_worktrees(cx);
-                        cx.emit(ScmEvent::Refresh);
-                        // Repositories created or removed since the last search (searched again only after a while).
-                        cx.emit(ScmEvent::RefreshInventory);
-                        cx.emit(ScmEvent::Ext(ExtEvent::Refresh));
-                    })),
+                    .on_click(cx.listener(|this, _, _, cx| this.a11y_refresh(cx))),
             )
             .child(
                 div()
                     .id("scm-more")
+                    .relative()
+                    .child(crate::a11y_controls::button_on(
+                        cx,
+                        crate::i18n::t("Source Control"),
+                        "scm-more".into(),
+                        crate::i18n::t("More Actions…"),
+                        |_, window, cx| {
+                            let at = crate::a11y_controls::bounds_of(cx, window, "Source Control", "scm-more").map(|b| b.bottom_left());
+                            cx.emit(ScmEvent::MoreActions(at.unwrap_or_default()));
+                        },
+                    ))
                     .size(px(22.))
                     .flex()
                     .items_center()
@@ -1147,8 +1158,23 @@ impl ScmPanel {
         }
         let p = *palette(cx);
         let open = self.sections.is_open("stashes", false);
-        let header =
-            sections::header("scm-stash-header", crate::i18n::t("Stashes"), Some(self.stashes.len()), open, &p).on_click(cx.listener(|this, _, _, cx| {
+        let header = sections::header("scm-stash-header", crate::i18n::t("Stashes"), Some(self.stashes.len()), open, &p)
+            .relative()
+            .child(crate::a11y_controls::control(
+                crate::a11y_controls::Control::button(
+                    crate::i18n::t("Stashes"),
+                    "header",
+                    format!("{} ({})", crate::i18n::t("Stashes"), self.stashes.len()),
+                    |_, _| {},
+                )
+                .expanded(open)
+                .on_entity(cx.entity().downgrade(), |this: &mut Self, _, cx| {
+                    this.sections.toggle("stashes", false);
+                    this.emit_sections(cx);
+                    cx.notify();
+                }),
+            ))
+            .on_click(cx.listener(|this, _, _, cx| {
                 this.sections.toggle("stashes", false);
                 this.emit_sections(cx);
                 cx.notify();
@@ -1170,9 +1196,24 @@ impl ScmPanel {
                 let btn = |id: &'static str, glyph: &'static str, tip: &'static str| {
                     ui::icon_button((id, i), glyph, tip, &p).invisible().group_hover(group.clone(), |s| s.visible())
                 };
+                let stash_button = |key: &str, label: &'static str, action: StashAction| {
+                    let (pinned, name, msg) = (self.history.clone(), name.clone(), msg.clone());
+                    crate::a11y_controls::control(
+                        crate::a11y_controls::Control::button(crate::i18n::t("Stashes"), format!("{key}:{name}"), label, |_, _| {})
+                            .description(format!("{name}: {msg}"))
+                            .on_entity(cx.entity().downgrade(), move |this: &mut Self, _, cx| match pinned.clone() {
+                                Some(repo) => this.stash_action_in(Some(repo), name.clone(), Some(msg.clone()), action, cx),
+                                None => this.refuse(None, crate::i18n::t("Select a repository first").to_string(), cx),
+                            }),
+                    )
+                };
                 div()
                     .id(("scm-stash", i))
                     .group(group.clone())
+                    .relative()
+                    .child(stash_button("apply", crate::i18n::t("Apply (keep the stash)"), StashAction::Apply))
+                    .child(stash_button("pop", crate::i18n::t("Pop (apply and drop)"), StashAction::Pop))
+                    .child(stash_button("drop", crate::i18n::t("Drop"), StashAction::Drop))
                     .h(px(layout::ROW_H))
                     .w_full()
                     .flex()
