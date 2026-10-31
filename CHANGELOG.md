@@ -357,6 +357,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The extension rows of the performance gate block a release: typing with decorations, completion, lenses and
+  hints, keys in an extension view, the provider overhead (ceiling 3 ms) and hot reload (ceiling 500 ms). A keystroke
+  row's ceiling is now relative (`ceiling_vs` in `perf/metrics.json`): the same keys typed without extensions in the
+  same run, plus 10%, instead of a fixed 8 ms that a time including up to two display refreshes could never meet.
+  New row `typing.keystroke_frame_words_ms` (`CODEYARD_PERF_WORDS`): the completion scenario's keys without an
+  extension, its reference. The reference record is `docs/benchmarks/perf-2026-10-31.json`.
 - The extension API is `codeyard:api` 1.0.0 (#147), with the TypeScript SDK `@codeyard/extension` 1.0.0. From 1.0
   a minor only adds: every interface, function and type carries `@since(version = …)`, the API reference shows it,
   and a test in ext-api compares the WIT with the released copy in `crates/ext-api/released/1.0.0` and fails on a

@@ -18,6 +18,9 @@
 //! - `CODEYARD_PERF_COMPLETION=<n>`: after the first frame settles, type `n` keys into the focused editor, a new word
 //!   every third key, so the extensions that complete its language are asked again and again, and record keystroke
 //!   → frame under `typing.keystroke_frame_completion_ms`.
+//! - `CODEYARD_PERF_WORDS=<n>`: after the first frame settles, type the completion scenario's `n` keys into the focused
+//!   editor, with no extension asked, and record keystroke → frame under `typing.keystroke_frame_words_ms`: the
+//!   completion row's reference (words typed at the top of the file cost the editor more than one long word).
 //! - `CODEYARD_PERF_VIEWS=<n>`: after the first frame settles, open the first declared extension view, wait until it is
 //!   drawn and holds the keyboard, then press PageDown `n` times (`views.keystroke_frame_ms`, below).
 //! - `CODEYARD_PERF_RELOAD=<n>`: with `--extension-dev <folder>`, run the extension's first command, then `n + 1` times
@@ -129,6 +132,9 @@ pub fn view_key(window: &Window) {
     after_next_frame(window, move |_, _| sample("views.keystroke_frame_ms", ms(t0.elapsed())));
 }
 
+/// Keys the completion scenario types, and its reference without extensions: a new word every third key.
+const WORD_KEYS: [&str; 3] = ["a", "b", "space"];
+
 /// Keys the Market scenario types: a word letter by letter, then erased, so every key changes the query.
 fn market_key(i: usize) -> &'static str {
     const KEYS: [&str; 10] = ["n", "i", "g", "h", "t", "backspace", "backspace", "backspace", "backspace", "backspace"];
@@ -194,7 +200,7 @@ async fn completion_scenario(handle: WindowHandle<Workbench>, n: usize, cx: &mut
         }
         cx.background_executor().timer(Duration::from_millis(100)).await;
     }
-    type_these(handle, n, &["a", "b", "space"], "typing.keystroke_frame_completion_ms", cx).await;
+    type_these(handle, n, &WORD_KEYS, "typing.keystroke_frame_completion_ms", cx).await;
 }
 
 /// `CODEYARD_PERF_LENSES`: the lens and hint provider answers for the lines in view (up to 30 s for it to start), then
@@ -282,6 +288,7 @@ pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
     let decorations: usize = std::env::var("CODEYARD_PERF_DECORATIONS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let providers: usize = std::env::var("CODEYARD_PERF_PROVIDERS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let completion: usize = std::env::var("CODEYARD_PERF_COMPLETION").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    let words: usize = std::env::var("CODEYARD_PERF_WORDS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let lenses: usize = std::env::var("CODEYARD_PERF_LENSES").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let views: usize = std::env::var("CODEYARD_PERF_VIEWS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let reload: usize = std::env::var("CODEYARD_PERF_RELOAD").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
@@ -294,6 +301,10 @@ pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
                     if typing > 0 {
                         cx.background_executor().timer(SETTLE).await;
                         type_keys(handle, typing, "typing.keystroke_frame_ms", cx).await;
+                    }
+                    if words > 0 {
+                        cx.background_executor().timer(SETTLE).await;
+                        type_these(handle, words, &WORD_KEYS, "typing.keystroke_frame_words_ms", cx).await;
                     }
                     if decorations > 0 || providers > 0 {
                         extension_scenario(handle, decorations, providers, cx).await;

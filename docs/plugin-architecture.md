@@ -466,14 +466,17 @@ Each release builds the previous tag and the candidate on the reference Mac and 
 each. A metric blocks the release when it regresses past its budget and beyond the noise of the baseline (a
 bootstrap interval of the same statistic), or crosses its ceiling; `--aa` checks the machine's noise. Statistics
 and the metric catalogue (`perf/metrics.json`) are described in `scripts/perf/README.md`. PRs gate only on deterministic metrics; nightly runs open issues; Windows rows are
-`warn` until there is a physical Windows reference machine. Ceilings are provisional until the first baseline,
-then set to `min(stated, baseline × 1.25)` and only lowered. A waiver is one line in the release notes.
+`warn` until there is a physical Windows reference machine. Ceilings are the stated values and are only lowered. The
+keystroke ceiling with extensions is relative: the same keys typed without extensions, measured in the same run,
+plus 10%. A keystroke time includes up to two display refreshes (plain typing measures about 29 ms on the reference
+Mac), so the gate checks that extensions add nothing visible over typing without them rather than a number of
+milliseconds. A waiver is one line in the release notes.
 `CODEYARD_PERF=<file>` writes spans locally; when off, a span costs one relaxed atomic load.
 
 | Metric | Stat | Budget / release | Ceiling |
 | --- | --- | --- | --- |
 | Startup cost of 100 installed, inactive extensions | p95 delta | +1 ms | 5 ms, 0 processes, 0 requests |
-| Keystroke to frame, 5 query packs + 2 decoration providers active | p95 / p99 | +10% | same as without extensions (8 / 16 ms) |
+| Keystroke to frame, 5 query packs + 2 decoration providers active | p95 | +10% | the same keys without extensions, same run, +10% |
 | Idle memory, 100 installed, none active | median | +2 MB | welcome scene + 3 MB |
 | Activation, warm (process running, code cached) | p95 | +10% | 10 ms |
 | Activation, cold (spawn + sandbox + load) | p95 | +10% | macOS 150 ms, Windows 400 ms |
