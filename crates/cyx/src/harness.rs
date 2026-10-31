@@ -1,8 +1,8 @@
 //! `cyx test`: the built `extension.wasm` in the real `codeyard-exthost`, against a scripted app. It activates the
-//! extension, runs each declared command, draws each declared view, asks each pull request provider for a list, and
-//! answers every call the way the app's broker would: checked against the manifest's permissions, with dismissed
-//! pickers and no network, files or programs. A refused call fails the test with its fix; so do a trap, an error from
-//! `activate` and a request left unanswered.
+//! extension, runs each declared command, draws each declared view (checking its tree as Codeyard does), asks each
+//! pull request provider for a list, and answers every call the way the app's broker would: checked against the
+//! manifest's permissions, with dismissed pickers and no network, files or programs. A refused call fails the test with
+//! its fix; so do a trap, an error from `activate`, a view Codeyard would not draw and a request left unanswered.
 
 use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -149,9 +149,10 @@ fn run_in(work: &Path, dir: &Path, manifest: &Manifest, exthost: &Path, wasm: &[
             (true, Some(Ok(Response::Json(_) | Response::None))) => report.pass(format!("{what} answers")),
             // Without network, files or programs a command may fail; it still answered.
             (true, Some(Err(e))) => report.pass(format!("{what} answers (with an error: {e})")),
-            (false, Some(Ok(Response::View(tree)))) => match serde_json::from_str::<serde_json::Value>(&tree) {
+            // The same check Codeyard makes before drawing it, so "draws" means Codeyard draws it.
+            (false, Some(Ok(Response::View(tree)))) => match ext_ui::decode_json(&tree) {
                 Ok(_) => report.pass(format!("{what} draws")),
-                Err(e) => report.fail(format!("{what} drew something that is not JSON: {e}")),
+                Err(e) => report.fail(format!("{what} is refused by Codeyard: {e}")),
             },
             (false, Some(Err(e))) => report.fail(format!("{what} failed: {e}")),
             (_, Some(Ok(other))) => report.fail(format!("{what} answered {other:?}")),

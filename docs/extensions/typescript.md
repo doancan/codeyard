@@ -94,7 +94,7 @@ The same calls as the Rust SDK, in camelCase:
 | `ctx.secret`, `ctx.set_secret`, `ctx.delete_secret` | `ctx.secret`, `ctx.setSecret`, `ctx.deleteSecret`; ask for a secret with `ctx.input({ prompt, password: true })` |
 | `ctx.read_clipboard`, `ctx.send_to_terminal` | `ctx.readClipboard`, `ctx.sendToTerminal` |
 
-Quick picks answer with the index of the item picked (or `undefined` when dismissed), as in Rust. A view's tree is a plain object: `{ type: "column", children: [{ type: "text", text: "3 clicks" }, { type: "button", key: "add", label: "Add one" }] }` ([commands.md](commands.md#views) has the elements). `console.log` goes to the extension's log, as `ctx.log` does.
+Quick picks answer with the index of the item picked (or `undefined` when dismissed), as in Rust. A view's tree is built with `ui`, as in Rust: `ui.column([ui.text("3 clicks"), ui.button("add", "Add one")])` (see [Views](views.md#build-it-with-the-sdk)). It is a plain `ViewNode` object in the form of the [views reference](reference/ui.md), typed per element, so a hand-written tree type-checks too. `console.log` goes to the extension's log, as `ctx.log` does.
 
 ## Pull request providers
 

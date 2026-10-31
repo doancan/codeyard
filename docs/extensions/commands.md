@@ -117,7 +117,8 @@ permission you lack. `cyx check` warns about a `core:` entry in `permissions.com
 
 ## Views
 
-A view is a tree of built-in elements that Codeyard draws with the user's theme. Declare it, then return the tree as JSON:
+A view is a tree of built-in elements that Codeyard draws with the user's theme. Declare it, then build the tree with
+the SDK's `ui` functions:
 
 ```toml
 [[views]]
@@ -128,22 +129,20 @@ location = "sidebar"            # sidebar | bottom | editor
 
 ```rust
 ctx.view("main", async |ctx| {
-    Ok(json!({
-        "type": "column",
-        "children": [
-            { "type": "text", "text": "3 clicks" },
-            { "type": "button", "key": "add", "label": "Add one" }
-        ]
-    }))
+    Ok(ui::column().gap(2).child(ui::text("3 clicks")).child(ui::button("add", "Add one")))
 });
 ctx.on_view_event("main", async |ctx, event| {
-    // A click, a changed input, a selection: `event` says which element.
-    ctx.invalidate("main");     // draw the view again
+    // What the user did, as Codeyard sends it: {"click": {"path": ["add"]}}.
+    if event["click"]["path"] == json!(["add"]) {
+        ctx.invalidate("main");     // draw the view again
+    }
     Ok(())
 });
 ```
 
-The element format is being finalised with the view renderer; until then the JSON shape above may change, and a typed builder will replace hand-written JSON. There are no webviews.
+`ui` writes the tree in the form of the [views reference](reference/ui.md); a closure may also return that JSON
+itself (`json!({"element": {"text": {"text": "3 clicks"}}})`). Interactive elements take their key first, rows take
+one with `.key(…)`. [Views](views.md) is the guide. There are no webviews.
 
 ## Talking to the user
 

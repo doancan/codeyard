@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { CodeyardError, DeniedError, RELOAD_STATE_KEY, type Context } from "../src/index.ts";
+import { CodeyardError, DeniedError, RELOAD_STATE_KEY, ui, type Context, type ViewNode } from "../src/index.ts";
 import { describe as describeError, stackFrames } from "../src/errors.ts";
 import { start } from "../src/guest.ts";
 import { MockHost } from "../src/testing/index.ts";
@@ -166,7 +166,9 @@ test("timers fire on the virtual clock; views draw and handle events", async () 
       ctx.every(60, async () => {
         ticks++;
       });
-      ctx.view("main", async (ctx) => ({ type: "text", text: String(ctx.storage.getJson<number>("n") ?? 0) }));
+      ctx.view("main", async (ctx) => ui.text(String(ctx.storage.getJson<number>("n") ?? 0)));
+      // The `{ type: … }` shorthand the templates once wrote (#182), which Codeyard refuses.
+      ctx.view("shorthand", () => ({ type: "column", children: [{ type: "text", text: "2" }] }) as unknown as ViewNode);
       ctx.onViewEvent("main", async (ctx) => {
         ctx.storage.setJson("n", (ctx.storage.getJson<number>("n") ?? 0) + 1);
         ctx.invalidate("main");
@@ -176,8 +178,12 @@ test("timers fire on the virtual clock; views draw and handle events", async () 
   await h.advance(150);
   assert.equal(ticks, 2);
   assert.deepEqual(h.timers(), [[1, 60]]);
-  await h.viewEvent("main", { click: "add" });
-  assert.deepEqual(await h.render("main"), { type: "text", text: "1" });
+  await h.viewEvent("main", { click: { path: ["add"] } });
+  assert.deepEqual(await h.render("main"), { element: { text: { text: "1" } } });
+  assert.deepEqual(h.invalidated(), ["main"]);
+  // A tree or an event Codeyard would refuse fails the test, with Codeyard's reason.
+  await assert.rejects(h.render("shorthand"), /Codeyard would not draw view shorthand: the view is malformed: unknown field `type`/);
+  await assert.rejects(h.viewEvent("main", { click: "add" }), /Codeyard never sends \{"click":"add"\}/);
   assert.deepEqual(h.invalidated(), ["main"]);
   h.dispose();
 });

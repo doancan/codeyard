@@ -317,6 +317,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Views made from `cyx new view` (Rust and TypeScript) and the `hello-view` examples drew an error instead of their
+  content: they wrote a `{ "type": "column", … }` shorthand that Codeyard refuses ("unknown field `type`"), while
+  `cyx test` said "view main draws" (#182). Both SDKs now have `ui` functions that write the documented form
+  (`{"key", "element": {"<kind>": {…}}, "children"}`), the templates, examples and docs use them, and in TypeScript
+  `ViewNode` types the tree element by element (`Element`, which typed the shorthand, is now one element). The mock
+  hosts' `render` and `cyx test` check a tree with Codeyard's own rules (the TypeScript mock with a copy generated
+  from them and tested against the same cases), and `view_event` / `viewEvent` refuse an event Codeyard never sends, such as `{"click": "add"}`.
 - `cyx package` no longer puts the `.cyx` it wrote last time into the new package (it doubled in size on every run).
   New extensions from `cyx new` ignore `*.cyx` in git.
 - `cyx check` on a code extension that is not built yet says to run `cyx package` or `cyx test`, which build it.

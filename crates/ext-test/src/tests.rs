@@ -34,6 +34,11 @@ id       = "counter"
 title    = "Counter"
 location = "sidebar"
 
+[[views]]
+id       = "shorthand"
+title    = "Shorthand"
+location = "sidebar"
+
 [settings.interval]
 type        = "number"
 default     = 60
@@ -94,7 +99,9 @@ impl Extension for Probe {
             Ok(doc.text.split_whitespace().count())
         });
         ctx.command("fail", async |_ctx, _args| -> Result<()> { Err(Error::other("on purpose")) });
-        ctx.view("counter", async |ctx| Ok(json!({ "type": "text", "text": ctx.storage().get_json::<u32>("n")?.unwrap_or(0).to_string() })));
+        ctx.view("counter", async |ctx| Ok(ui::text(ctx.storage().get_json::<u32>("n")?.unwrap_or(0).to_string())));
+        // The `{ type: … }` shorthand the templates once wrote (#182): Codeyard refuses it.
+        ctx.view("shorthand", async |_ctx| Ok(json!({ "type": "column", "children": [{ "type": "text", "text": "2" }] })));
         ctx.on_view_event("counter", async |ctx, _event| {
             ctx.invalidate("counter");
             Ok(())
@@ -230,8 +237,14 @@ fn errors_views_formatters_and_timers() {
     let e = h.command("nope", Value::Null).unwrap_err();
     assert!(e.to_string().contains("no command 'nope'"), "{e}");
     h.command("count", Value::Null).unwrap();
-    assert_eq!(h.render("counter").unwrap(), json!({"type": "text", "text": "1"}));
-    h.view_event("counter", json!({"click": "inc"})).unwrap();
+    assert_eq!(h.render("counter").unwrap(), json!({"element": {"text": {"text": "1"}}}));
+    h.view_event("counter", json!({"click": {"path": ["inc"]}})).unwrap();
+    assert_eq!(h.invalidated(), ["counter"]);
+    // A tree or an event Codeyard would refuse fails the test, with Codeyard's reason.
+    let e = h.render("shorthand").unwrap_err().to_string();
+    assert!(e.contains("Codeyard would not draw view shorthand: the view is malformed: unknown field"), "{e}");
+    let e = h.view_event("counter", json!({"click": "inc"})).unwrap_err().to_string();
+    assert!(e.contains(r#"Codeyard never sends {"click":"inc"}"#), "{e}");
     assert_eq!(h.invalidated(), ["counter"]);
     let doc = Document { uri: h.uri("a.txt"), language: "text".into(), version: 1, text: "  x  ".into() };
     let edits = h.format(doc, None, FormatOptions { tab_size: 4, insert_spaces: true }).unwrap();

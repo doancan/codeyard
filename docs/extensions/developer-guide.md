@@ -442,21 +442,25 @@ location = "sidebar"          # sidebar | bottom | editor
 ```
 
 ```ts
-ctx.view("deployments", async (ctx) => ({
-  type: "list",
-  children: deployments.map((d) => ({
-    type: "text",
-    key: d.id,
-    text: d.name,
-    badge: { text: d.state, tone: d.state === "ready" ? "success" : "warning" },
-  })),
-}));
+import { ui } from "@codeyard/extension";
+
+ctx.view("deployments", async (ctx) =>
+  ui.list(
+    "deployments",
+    "Deployments",
+    deployments.map((d) =>
+      ui.row([ui.text(d.name), ui.badge(d.state, { tone: d.state === "ready" ? "success" : "warning" })], { key: d.id }),
+    ),
+  ),
+);
 
 // When data changes:
 ctx.invalidate("deployments");
 ```
 
-The SDK turns this into the JSON tree Codeyard draws (`response.view`) and loads tree levels one page at a time. There are no webviews, so you can't build HTML previews or charts in v1.
+`ui` writes the JSON tree Codeyard draws (`response.view`), in the form of the [views reference](reference/ui.md).
+For a `tree`, send one page of a level at a time with a `more` token; Codeyard asks for the next with an `expand`
+event. There are no webviews, so you can't build HTML previews or charts in v1.
 
 ### Diagnostics
 
