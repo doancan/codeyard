@@ -100,6 +100,8 @@ const EDITOR_WINDOW: usize = 300;
 const RUN_CHARS: usize = 200;
 /// Rows of an explorer tree shown to AT (see `window_start`).
 const EXPLORER_WINDOW: usize = 1000;
+/// The "More Actions…" button of Explorer row `i` of tree `k` (`EXPLORER_MENU + k * EXPLORER_WINDOW + i`).
+const EXPLORER_MENU: u64 = 0x1e0_0000;
 /// Max rows shown to AT in a picker or the suggestion list.
 const MAX_OPTIONS: usize = 500;
 
@@ -436,6 +438,18 @@ impl Snapshot {
                 }
                 n.add_action(Action::Click);
                 n.add_action(Action::Focus);
+                // Its menu, as Shift+F10 opens it: the action, and a button for the adapters that do not forward it.
+                n.add_action(Action::ShowContextMenu);
+                if i < EXPLORER_WINDOW {
+                    let id = NodeId(EXPLORER_MENU + (k * EXPLORER_WINDOW + i) as u64);
+                    let mut more = Node::new(Role::Button);
+                    more.set_label(t("More Actions…"));
+                    more.set_description(r.name.clone());
+                    more.set_has_popup(accesskit::HasPopup::Menu);
+                    more.add_action(Action::Click);
+                    nodes.push((id, more));
+                    n.set_children(vec![id]);
+                }
                 row_ids.push(NodeId(r.id));
                 nodes.push((NodeId(r.id), n));
             }
@@ -1013,17 +1027,29 @@ impl Workbench {
                     window.focus(&tree.read(cx).focus_handle(cx));
                 }
             }
-            (Action::Focus | Action::Click, id) if id.0 & !0xffff_ffff == ROW_BASE => {
+            (Action::Focus | Action::Click | Action::ShowContextMenu, id)
+                if id.0 & !0xffff_ffff == ROW_BASE || (EXPLORER_MENU..EXPLORER_MENU + BLOCK).contains(&id.0) =>
+            {
                 if !self.view_shown(Panel::Explorer) {
                     return;
                 }
-                let Some((k, ix)) = last.explorers.iter().enumerate().find_map(|(k, ex)| ex.rows.iter().position(|r| r.id == id.0).map(|ix| (k, ix))) else {
-                    return;
+                let menu = (EXPLORER_MENU..EXPLORER_MENU + BLOCK).contains(&id.0);
+                let found = if menu {
+                    let n = (id.0 - EXPLORER_MENU) as usize;
+                    Some((n / EXPLORER_WINDOW, n % EXPLORER_WINDOW)).filter(|(k, ix)| last.explorers.get(*k).is_some_and(|ex| *ix < ex.rows.len()))
+                } else {
+                    last.explorers.iter().enumerate().find_map(|(k, ex)| ex.rows.iter().position(|r| r.id == id.0).map(|ix| (k, ix)))
                 };
+                let Some((k, ix)) = found else { return };
                 let Some(tree) = self.all_trees().get(k).cloned() else { return };
                 window.focus(&tree.read(cx).focus_handle(cx));
                 let path = &last.explorers[k].rows[ix].path;
-                tree.update(cx, |t, cx| t.a11y_select(path, req.action == Action::Click, cx));
+                if menu || req.action == Action::ShowContextMenu {
+                    // Under the row, with the keyboard; closing it gives the keyboard back to the tree on that row.
+                    tree.update(cx, |t, cx| t.a11y_context_menu(path, window, cx));
+                } else {
+                    tree.update(cx, |t, cx| t.a11y_select(path, req.action == Action::Click, cx));
+                }
             }
             (Action::Focus, PICKER_INPUT) => {
                 if let Some(o) = &self.overlay {
@@ -1303,6 +1329,10 @@ mod frames_tests;
 #[cfg(test)]
 #[path = "a11y_row_frames_tests.rs"]
 mod row_frames_tests;
+
+#[cfg(test)]
+#[path = "a11y_confirm_tests.rs"]
+mod confirm_tests;
 
 #[cfg(test)]
 #[path = "a11y_range_tests.rs"]

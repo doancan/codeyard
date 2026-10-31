@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   moving hosts) and docs/registry-setup-checklist.md what the owner provides and the go-live order.
 - `codeyard --update-extensions`: the extension update check without a window, asking the registries of installed
   extensions now; it updates, rolls back and stops revoked versions as the daily check does, and prints what changed.
+- Screen readers open an Explorer row's menu from the row (`ShowContextMenu`, or its "More Actions…" button), as the
+  other lists' rows do, and the Settings page says a rejected value at once. Confirmations reached from the tree
+  (Delete from a row's menu, Discard, closing an unsaved editor, a settings change) leave the keyboard on the row or
+  field they came from when cancelled, and a failure after one is announced at once.
 - Screen readers and magnifiers get where things are drawn, not only the main areas: Explorer rows, the editor tabs,
   the status bar's items, the find bar's fields and buttons, Source Control's message field, commit button, groups,
   files and their buttons, and the buttons inside Run and Debug, Testing, Remote Explorer and Ports rows each report

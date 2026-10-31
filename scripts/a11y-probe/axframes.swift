@@ -2,7 +2,7 @@
 // main display) and, for text elements, the bounds of the selected range and of the character after the caret, as
 // VoiceOver and the zoom feature ask for them. Only the process given is read or acted on.
 //   swiftc -O scripts/a11y-probe/axframes.swift -o /tmp/axframes
-//   /tmp/axframes <pid> [--depth N] [--role AXRow] [--select LOC LEN] [--shot out.png]
+//   /tmp/axframes <pid> [--depth N] [--role AXRow] [--select LOC LEN] [--set-value TITLE TEXT] [--press TITLE] [--shot out.png]
 // --select sets the first text area's AXSelectedTextRange first (as a screen reader does). --shot captures the
 // process's largest window (screencapture -l) and draws every listed frame on it: elements in blue, the selection's
 // bounds in red, the caret character's in green, so the frames can be checked against what is drawn.
@@ -19,6 +19,8 @@ var maxDepth = 14
 var filter: String?
 var select: (Int, Int)?
 var shot: String?
+var setValue: (String, String)?
+var press: String?
 while !args.isEmpty {
   let flag = args.removeFirst()
   switch flag {
@@ -26,6 +28,8 @@ while !args.isEmpty {
   case "--role": filter = args.removeFirst()
   case "--select": select = (Int(args.removeFirst()) ?? 0, Int(args.removeFirst()) ?? 0)
   case "--shot": shot = args.removeFirst()
+  case "--set-value": setValue = (args.removeFirst(), args.removeFirst())
+  case "--press": press = args.removeFirst()
   default: print("unknown flag \(flag)"); exit(2)
   }
 }
@@ -127,6 +131,33 @@ func shotWindow(_ focus: CGRect?) -> (CGWindowID, CGRect)? {
 
 print("AXIsProcessTrusted:", AXIsProcessTrusted())
 let app = AXUIElementCreateApplication(pid)
+/// The first element titled `title` (AXTitle or AXDescription).
+func titled(_ e: AXUIElement, _ title: String) -> AXUIElement? {
+  if (attr(e, "AXTitle") as? String) == title || (attr(e, "AXDescription") as? String) == title { return e }
+  for k in attr(e, "AXChildren") as? [AXUIElement] ?? [] {
+    if let r = titled(k, title) { return r }
+  }
+  return nil
+}
+/// The first element titled `title` whose value can be set.
+func settable(_ e: AXUIElement, _ title: String) -> AXUIElement? {
+  var ok = DarwinBoolean(false)
+  if (attr(e, "AXTitle") as? String) == title && (attr(e, "AXRole") as? String) != "AXGroup" && AXUIElementIsAttributeSettable(e, "AXValue" as CFString, &ok) == .success && ok.boolValue { return e }
+  for k in attr(e, "AXChildren") as? [AXUIElement] ?? [] {
+    if let r = settable(k, title) { return r }
+  }
+  return nil
+}
+// Only the process's windows: the menu bar has fields of its own (Help's search).
+let windows = attr(app, "AXWindows") as? [AXUIElement] ?? []
+if let (title, text) = setValue, let e = windows.lazy.compactMap({ settable($0, title) }).first {
+  print("set AXValue of \(title) (\(attr(e, "AXRole") as? String ?? "?") \(fmt(frame(e)))) -> \(AXUIElementSetAttributeValue(e, "AXValue" as CFString, text as CFString).rawValue)")
+  Thread.sleep(forTimeInterval: 1.5)
+}
+if let title = press, let e = windows.lazy.compactMap({ titled($0, title) }).first {
+  print("AXPress \(title) -> \(AXUIElementPerformAction(e, kAXPressAction as CFString).rawValue)")
+  Thread.sleep(forTimeInterval: 1.0)
+}
 let focused = attr(app, "AXFocusedUIElement").map { $0 as! AXUIElement }
 let focusedArea = focused.flatMap { (attr($0, "AXRole") as? String) == "AXTextArea" ? $0 : nil }
 if let (loc, len) = select, let area = focusedArea ?? find(app, "AXTextArea") {

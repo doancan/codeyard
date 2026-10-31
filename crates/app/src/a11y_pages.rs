@@ -23,8 +23,10 @@ const SHORTCUTS_LIST: NodeId = NodeId(64);
 const PORTS: NodeId = NodeId(65);
 const PORTS_FIELD: NodeId = NodeId(66);
 const PORTS_EMPTY: NodeId = NodeId(67);
+/// A rejected setting value, as an assertive live region (said at once, as the field turns invalid).
+const SETTINGS_ERROR: NodeId = NodeId(118);
 /// This module's fixed nodes, for the id layout check.
-pub(in crate::workbench) const FIXED: [NodeId; 14] = [
+pub(in crate::workbench) const FIXED: [NodeId; 15] = [
     SETTINGS,
     SETTINGS_SEARCH,
     SETTINGS_CATEGORIES,
@@ -39,6 +41,7 @@ pub(in crate::workbench) const FIXED: [NodeId; 14] = [
     PORTS,
     PORTS_FIELD,
     PORTS_EMPTY,
+    SETTINGS_ERROR,
 ];
 
 /// The block of this module's rows; inside it: categories, settings (`ROW_IDS` ids each: the control, Reset, then one
@@ -216,6 +219,15 @@ impl SettingsSnap {
             list.set_children(ids);
             nodes.push((SETTINGS_LIST, list));
             kids.push(SETTINGS_LIST);
+            let errors: Vec<String> = v.rows.iter().filter_map(|row| row.error.as_ref().map(|e| format!("{}: {e}", row.title))).collect();
+            if !errors.is_empty() {
+                let mut alert = Node::new(Role::Alert);
+                alert.set_label(errors.join("\n"));
+                alert.set_live(Live::Assertive);
+                alert.set_live_atomic();
+                nodes.push((SETTINGS_ERROR, alert));
+                kids.push(SETTINGS_ERROR);
+            }
         }
         kids.push(button(nodes, SETTINGS_JSON, t("Open settings.jsonc"), None));
         kids.push(button(nodes, SETTINGS_KEYS, t("Keyboard Shortcuts"), None));

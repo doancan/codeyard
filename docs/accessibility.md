@@ -63,7 +63,9 @@ The tree, in the order a screen reader walks it:
   and written as Enter in the field is) or the theme `Button`. A changed setting adds its Reset button; the buttons
   "Open settings.jsonc", "Keyboard Shortcuts" and "File icon theme…" follow. Actions send the page's own events, so
   writing is the pointer's path; a switch from an outdated tree that showed another state, a setting no longer on the
-  page or a closed or reopened page changes nothing. With no rows, a polite `Status` says why.
+  page or a closed or reopened page changes nothing. With no rows, a polite `Status` says why. A rejected value is
+  also an assertive `Alert` ("Editor: Font Size: …"), so it is said as the field turns invalid; the keyboard stays in
+  the field.
 - The Keyboard Shortcuts page in front is a `Group` with its `SearchInput` and a `List` ("{n} commands") of up to
   2,000 rows: command as label, its key (or "No shortcut") as description, set position. `Click` runs the command as a
   click on the row does, only while the page still lists it. The page is read-only otherwise: keys are assigned in the
@@ -101,12 +103,13 @@ The tree, in the order a screen reader walks it:
   menu, has the focus. `Click` chooses the item through the menu itself, exactly as a click on it does (the menu
   closes, focus returns, the command runs); it acts only on the same menu with the same item at that place. Escape
   is unchanged.
-- Row menus (for assistive technology): a Run and Debug variable (not a scope), call stack frame and line breakpoint, a Remote Explorer host, a
-  Ports row and a file of Source Control's change list have the `ShowContextMenu` action and a "More Actions…" `Button` (a menu popup, the row's name as
+- Row menus (for assistive technology): an Explorer row, a Run and Debug variable (not a scope), call stack frame and
+  line breakpoint, a Remote Explorer host, a Ports row and a file of Source Control's change list have the `ShowContextMenu` action and a "More Actions…" `Button` (a menu popup, the row's name as
   description) among their children. Both open the menu a right click on the row opens (Set Value…, Copy Value, Add to
   Watch; Restart Frame, Copy Call Stack; Edit Condition…, Disable Breakpoint; Connect, Edit Host…, Remove Host…;
   Change Local Port…, Protocol, Retry, Stop Forwarding; Open Changes, Open File, Stage or Unstage, Discard changes,
-  Copy Path), at the bottom left of the row as last painted (the middle of
+  Copy Path; the Explorer's New File…, Rename…, Delete and the rest; an Explorer row's menu is opened for that row,
+  selected first, as Shift+F10 on it opens it), at the bottom left of the row as last painted (the middle of
   the window when the row is scrolled out of its list). The menu then takes the focus as described above and returns
   it when it closes. The macOS and Windows adapters do not forward `ShowContextMenu` yet, so the button is the way in
   for VoiceOver and Narrator today (with the keyboard alone, Shift+F10 on the focused row does the same). The request is refused unless the row is still the same variable, frame, breakpoint
@@ -120,9 +123,16 @@ The tree, in the order a screen reader walks it:
   warnings, and the focused button is the tree's focus. Escape answers Cancel. Escape, Cancel and Install give the
   keyboard back to whatever had it when the sheet opened. A button acts only on the package the tree showed (a newer
   sheet for another package is left alone).
-- Confirmations asked with a system dialog (discard changes, uninstall an extension, remove a host, delete files) are
-  native dialogs on macOS (a sheet) and Windows (a task dialog); the system exposes them to its screen reader and they
-  are not part of this tree.
+- Confirmations (discard changes, delete files, close an unsaved editor, apply a settings change, uninstall an
+  extension, remove a host and the rest) are system dialogs on macOS (a sheet) and Windows (a task dialog): the system
+  gives them to its screen reader, with their title, text and buttons, and they are not part of this tree. The tree
+  stays as it was while one is open. Cancel changes nothing and leaves the keyboard, and the tree's focus, where they
+  were (the row or field the question came from); the confirming button acts and leaves the keyboard in the same view
+  (on the list when its row is gone). A failure afterwards is an assertive `Alert`. `a11y_confirm_tests.rs` and the
+  Source Control and Settings tests drive these paths from the tree: an Explorer row's menu → Delete (Cancel, Delete,
+  and a delete that fails), a Source Control file's Discard, closing an unsaved editor (Cancel, Save) and applying the
+  Rust setup to settings.jsonc (Cancel). The other questions go through the same `window.prompt` call and their own
+  functional tests; each is asked from a command, a menu item or a button the tree exposes.
 - While Extensions is visible, a `Group` with a `TabList` (Installed, Market), a `SearchInput` that controls the list
   and points at the highlighted row as its active descendant, a polite live `Status` that says how many extensions
   match (an `Alert` when the list cannot be read), and a `ListBox` of the rows (name; version, id and description).
@@ -349,3 +359,8 @@ tall, the selection's bounds 57.8 × 36.0 points, again on the drawn highlight; 
 width had no frame. With the editor moved into a window of its own the selection's bounds were on the highlight in
 that window at 100% and 200%, and the main window's leftover text area reported none. The captures with the frames
 drawn on them were checked by eye. VoiceOver itself was not run.
+
+Search (Q06), natively on the same kind of dev build: `axframes --set-value Search café` set the query through
+`AXValue`, the view searched, and the tree listed the status ("2 results in 1 file") and an `AXOutline` with the file
+row (its Replace in this file and Dismiss buttons at the place they appear on hover) and both matches, each frame on
+its drawn row; `AXPress` on the second match opened `text.rs` with the match selected and the text area focused.
