@@ -148,17 +148,7 @@ pub(super) fn editor_window_snapshot(root: &Entity<EditorWindow>, window: &Windo
     let (ed, slot, home) = root.read(cx).parts();
     let (editor, find_bar, completion) = ed.update(cx, |e, _| {
         e.in_slot(slot, |e| {
-            let line = e.cursor_position().0.saturating_sub(1);
-            let first = line.saturating_sub(WINDOW_BEFORE);
-            let (selection, total_lines, lines) = e.a11y_view(first, line + WINDOW_AFTER);
-            let editor = EditorSnap {
-                name: e.name.to_string(),
-                dirty: e.is_dirty(),
-                runs: runs_for(lines, total_lines, first),
-                selection,
-                total_lines,
-                first_line: first,
-            };
+            let editor = EditorSnap::of(e);
             let completion = e.a11y_completion(MAX_OPTIONS).map(|(rows, selected)| ListSnap { rows_total: rows.len(), selected: Some(selected), rows });
             (editor, e.find_bar(), completion)
         })

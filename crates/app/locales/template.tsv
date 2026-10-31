@@ -2971,7 +2971,7 @@ your words
 {0} line matches “{1}”.|{0} lines match “{1}”.	
 {0} lines · {1}	
 {0} lines · {1} MB · read-only	
-{0} lines, showing from line {1}	
+{0} lines, showing lines {1}–{2}	
 {0} may again: {1}	
 {0} may no longer: {1}	
 {0} needs strings, got {1} and {2}	
