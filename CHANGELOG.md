@@ -265,6 +265,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Source Control's change list is fully accessible: each file is a row with its change, its place in the group and its
+  own Stage/Unstage (Mark as resolved) and Discard buttons (Discard asks first, as the painted button does), the commit
+  button says why it is disabled, and a large status exposes a scrollable range of 500 lines instead of every row. The
+  list has a keyboard cursor (↑/↓/Home/End, ↵ opens the diff, Space stages or unstages, ←/→ fold and unfold groups,
+  Delete or ⌘⌫ discards) that screen readers see as the focus. Actions from an old tree do nothing once the file has
+  changed state or another repository is shown.
 - Source Control builds only the change rows on screen, so a repository with thousands of changes (generated files,
   a large merge) scrolls and refreshes without delay. The list keeps its scroll position and focus when the status
   refreshes.

@@ -142,6 +142,9 @@ pub struct ScmPanel {
     repo_focus: FocusHandle,
     /// The single-repository change list: kept across status refreshes, reset for another repository.
     change_scroll: UniformListScrollHandle,
+    /// The change list's keyboard focus and cursor row (by identity, with the index it was last seen at).
+    change_focus: FocusHandle,
+    change_cursor: Option<(changes_ui::ChangeKey, usize)>,
     /// Result of the last operation: (text, is error).
     result: Option<(SharedString, bool)>,
     focus_handle: FocusHandle,
@@ -187,7 +190,10 @@ pub use graph_ui::GraphOption;
 
 #[path = "scm_access.rs"]
 mod access;
-pub(crate) use access::{AccessExt, AccessView};
+#[cfg(test)]
+pub(crate) use access::ACCESS_LINES;
+pub(crate) use access::{AccessExt, AccessFile, AccessView};
+pub(crate) use changes_ui::ChangeKey;
 
 #[path = "scm_changes.rs"]
 mod changes_ui;
@@ -215,6 +221,8 @@ impl Focusable for ScmPanel {
 impl ScmPanel {
     pub fn new(host: Arc<dyn Host>, cx: &mut Context<Self>) -> Self {
         let message = cx.new(|cx| TextField::new(crate::i18n::tr("Message (↵ to commit)"), cx).multiline());
+        // A stop of the panel's tab order, so Tab goes on from the message box to the change list.
+        let _ = message.focus_handle(cx).tab_stop(true);
         let subs = vec![cx.subscribe(&message, |this, _, ev: &FieldEvent, cx| {
             if matches!(ev, FieldEvent::Submit) {
                 this.commit(cx);
@@ -236,6 +244,8 @@ impl ScmPanel {
             collapsed_repos: HashSet::new(),
             repo_scroll: UniformListScrollHandle::new(),
             change_scroll: UniformListScrollHandle::new(),
+            change_focus: cx.focus_handle().tab_stop(true),
+            change_cursor: None,
             repo_focus: cx.focus_handle(),
             result: None,
             focus_handle: cx.focus_handle(),
@@ -282,6 +292,7 @@ impl ScmPanel {
             // must not be acted on; they go at once, and the new repository's load replaces them.
             self.clear_history();
             self.change_scroll = UniformListScrollHandle::new();
+            self.change_cursor = None;
         }
         // Switching between repositories of the inventory: each keeps its own commit message draft and last result.
         // The draft follows the repository it was typed for, also when that one disappeared in between (it comes back
@@ -853,7 +864,7 @@ impl Render for ScmPanel {
             .child(if self.multi() {
                 self.repo_list(self.repo_focus.is_focused(window), cx).into_any_element()
             } else {
-                self.change_list(st.clone(), graph_fills, cx).into_any_element()
+                self.change_list(st.clone(), graph_fills, self.change_focus.is_focused(window), cx).into_any_element()
             })
             .children(ext)
             .children(self.stash_section(cx))

@@ -80,6 +80,7 @@ const _: () = {
         SEARCH_ED_APPLY,
         SEARCH_ED_UNDO,
         SCM_REPOS,
+        SCM_CHANGES,
         EXT,
         EXT_TABS,
         EXT_TAB_INSTALLED,
