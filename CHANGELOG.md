@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Performance scenarios for extension views and hot reload, run by `scripts/perf/run.sh`: PageDown in a sidebar view
+  with a list of 10 000 rows (`CODEYARD_PERF_VIEWS`, `views.keystroke_frame_ms`) and a 2 MB Rust component swapped in
+  place in a dev window (`CODEYARD_PERF_RELOAD`, `extensions.hot_reload_ms`), each with a fixture extension that needs
+  no permission and no WebAssembly toolchain at run time. Both rows stay warn-only until a baseline has them.
 - Native programs from packages (#146): an extension's `run` may name a program inside its package (`./bin/hello`),
   built per platform under `native/<triple>/` (static musl on Linux). `cyx package` writes one
   `<id>-<version>-<triple>.cyx` per platform (`--target` for one; up to 128 MiB each) and `cyx publish` uploads each.
@@ -148,7 +152,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A view's `when` in the manifest: a view is offered in the activity bar, the panel tabs and *Open View* only while
   its `when` holds, and an open view closes when it turns false.
 - `views.keystroke_frame_ms` (`CODEYARD_PERF`): a key that reaches an extension view, to the frame that shows it. The
-  row in `perf/metrics.json` is `warn` until `scripts/perf/run.sh` has a scenario for it.
+  row in `perf/metrics.json` is `warn` until a baseline has it.
 - What code extensions contribute reaches the same places as the core's: commands in the editor and file-tree menus
   (with `when` and `enablement`), on key bindings and on status bar items; formatters for *Format Document* and format
   on save (chosen per language with `editor.formatters`); code actions in *Quick Fix…*, whose edits change the document they were asked for and other files only within the

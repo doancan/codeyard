@@ -18,6 +18,12 @@
 //! - `CODEYARD_PERF_COMPLETION=<n>`: after the first frame settles, type `n` keys into the focused editor, a new word
 //!   every third key, so the extensions that complete its language are asked again and again, and record keystroke
 //!   → frame under `typing.keystroke_frame_completion_ms`.
+//! - `CODEYARD_PERF_VIEWS=<n>`: after the first frame settles, open the first declared extension view, wait until it is
+//!   drawn and holds the keyboard, then press PageDown `n` times (`views.keystroke_frame_ms`, below).
+//! - `CODEYARD_PERF_RELOAD=<n>`: with `--extension-dev <folder>`, run the extension's first command, then `n + 1` times
+//!   put the other of two builds in place (`a.wasm` and `b.wasm` beside the folder) and run the command again. The first
+//!   swap fills the incremental compile cache and is not recorded; after a pause, each of the `n` others records its
+//!   new build's first answer under `extensions.hot_reload_ms` (workbench_ext_dev.rs).
 //! - `CODEYARD_PERF_EXIT=1`: quit when the scenario is done.
 //!
 //! Whenever `CODEYARD_PERF` is set, a key that reaches an extension view is recorded as `views.keystroke_frame_ms`.
@@ -37,11 +43,16 @@ static START: OnceLock<Instant> = OnceLock::new();
 static OUT: Mutex<Option<File>> = Mutex::new(None);
 /// When the Market key being measured was pressed; taken when its results are on screen.
 static MARKET_KEY: Mutex<Option<Instant>> = Mutex::new(None);
+/// The hot reload scenario's warm-up swap is under way: its time is not recorded.
+static RELOAD_WARMING: AtomicBool = AtomicBool::new(false);
 
 /// Time between typed characters: long enough for the previous frame to finish.
 const TYPING_GAP: Duration = Duration::from_millis(60);
 /// Wait after the first frame before typing: restored state, highlighting and the minimap settle.
 const SETTLE: Duration = Duration::from_millis(1500);
+/// Wait after the hot reload scenario's warm-up swap: longer than the once-a-second settings watcher of the dev
+/// folder, which notices the new build too and would restart a measured swap's build.
+const RELOAD_SETTLE: Duration = Duration::from_millis(2500);
 
 /// First thing in `main`: start the clock and open the output file.
 pub fn init() {
@@ -67,6 +78,14 @@ pub fn sample(metric: &str, value: f64) {
     }
     if let Some(f) = OUT.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
         let _ = writeln!(f, "{{\"metric\":\"{metric}\",\"value\":{value:.3}}}");
+    }
+}
+
+/// A new build of the extension in development answered its first request `ms` after it was noticed:
+/// `extensions.hot_reload_ms`, unless it is the hot reload scenario's warm-up swap.
+pub fn hot_reload(ms: f64) {
+    if !RELOAD_WARMING.load(Ordering::Relaxed) {
+        sample("extensions.hot_reload_ms", ms);
     }
 }
 
@@ -191,6 +210,67 @@ async fn lens_scenario(handle: WindowHandle<Workbench>, keys: usize, cx: &mut gp
     type_keys(handle, keys, "typing.keystroke_frame_lenses_ms", cx).await;
 }
 
+/// `CODEYARD_PERF_VIEWS`: open the view, wait for its tree and focus (up to 30 s for its extension to start and draw
+/// 10 000 rows), then press PageDown `n` times; the view records each key.
+async fn views_scenario(handle: WindowHandle<Workbench>, n: usize, cx: &mut gpui::AsyncApp) {
+    cx.background_executor().timer(SETTLE).await;
+    let Some(id) = handle.update(cx, |wb, window, cx| wb.open_ext_view_for_perf(window, cx)).ok().flatten() else { return };
+    let focus = |cx: &mut gpui::AsyncApp| handle.update(cx, |wb, window, cx| wb.focus_ext_view_for_perf(&id, window, cx)).unwrap_or(true);
+    for _ in 0..300 {
+        if focus(cx) {
+            break;
+        }
+        cx.background_executor().timer(Duration::from_millis(100)).await;
+    }
+    // The first frame of 10 000 rows, and the layout of the list, settle before the keys; on a fresh profile the
+    // welcome screen may have taken the keyboard back meanwhile.
+    cx.background_executor().timer(SETTLE).await;
+    focus(cx);
+    for _ in 0..n {
+        let pressed = cx.update_window(handle.into(), |_, window, cx| {
+            window.dispatch_keystroke(Keystroke::parse("pagedown").expect("valid keystroke"), cx);
+        });
+        if pressed.is_err() {
+            break;
+        }
+        cx.background_executor().timer(TYPING_GAP).await;
+    }
+}
+
+/// `CODEYARD_PERF_RELOAD`: start the extension in development, then swap in its two builds by turns, `n + 1` times, each
+/// time waiting for the new build's first answer (up to 30 s). The first swap fills the incremental compile cache and
+/// is not recorded; the measured ones start after a pause.
+async fn reload_scenario(handle: WindowHandle<Workbench>, n: usize, cx: &mut gpui::AsyncApp) {
+    let Some(parent) = crate::ext::dev_dir().and_then(|d| d.parent().map(std::path::Path::to_path_buf)) else { return };
+    let (Ok(a), Ok(b)) = (std::fs::read(parent.join("a.wasm")), std::fs::read(parent.join("b.wasm"))) else {
+        eprintln!("CODEYARD_PERF_RELOAD: a.wasm and b.wasm must be beside {}", parent.display());
+        return;
+    };
+    cx.background_executor().timer(SETTLE).await;
+    let settled = async |cx: &mut gpui::AsyncApp| {
+        for _ in 0..300 {
+            if handle.read_with(cx, |wb, _| wb.dev_settled_for_perf()).unwrap_or(true) {
+                return;
+            }
+            cx.background_executor().timer(Duration::from_millis(100)).await;
+        }
+    };
+    if !handle.update(cx, |wb, window, cx| wb.run_dev_command_for_perf(window, cx)).unwrap_or(false) {
+        return;
+    }
+    settled(cx).await;
+    for i in 0..=n {
+        RELOAD_WARMING.store(i == 0, Ordering::Relaxed);
+        let build = if i % 2 == 0 { &b } else { &a };
+        if !handle.update(cx, |wb, window, cx| wb.hot_reload_for_perf(build, window, cx)).unwrap_or(false) {
+            break;
+        }
+        settled(cx).await;
+        cx.background_executor().timer(if i == 0 { RELOAD_SETTLE } else { TYPING_GAP }).await;
+    }
+    RELOAD_WARMING.store(false, Ordering::Relaxed);
+}
+
 /// Called once the first workbench window is open: records startup marks and runs the scripted scenario.
 pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
     if !enabled() {
@@ -203,6 +283,8 @@ pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
     let providers: usize = std::env::var("CODEYARD_PERF_PROVIDERS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let completion: usize = std::env::var("CODEYARD_PERF_COMPLETION").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let lenses: usize = std::env::var("CODEYARD_PERF_LENSES").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    let views: usize = std::env::var("CODEYARD_PERF_VIEWS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    let reload: usize = std::env::var("CODEYARD_PERF_RELOAD").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let exit = std::env::var_os("CODEYARD_PERF_EXIT").is_some();
     handle
         .update(cx, |_, window, _| {
@@ -221,6 +303,12 @@ pub fn first_window(handle: WindowHandle<Workbench>, cx: &mut App) {
                     }
                     if lenses > 0 {
                         lens_scenario(handle, lenses, cx).await;
+                    }
+                    if views > 0 {
+                        views_scenario(handle, views, cx).await;
+                    }
+                    if reload > 0 {
+                        reload_scenario(handle, reload, cx).await;
                     }
                     if market > 0 {
                         cx.background_executor().timer(SETTLE).await;

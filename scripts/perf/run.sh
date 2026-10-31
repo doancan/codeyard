@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Measure startup, typing latency and memory of a Codeyard build, optionally side by side with a baseline (macOS only).
+# Measure startup, typing latency, extension scenarios and memory of a Codeyard build, optionally side by side with a baseline (macOS only).
 #   scripts/perf/run.sh                          the working tree, written to target/perf/candidate.json
 #   scripts/perf/run.sh --baseline v0.5.0        also build v0.5.0 and run both builds interleaved
 #   scripts/perf/run.sh --aa                     A/A: the working tree against itself, to see the noise
@@ -36,6 +36,8 @@ trap 'exit 130' INT TERM
 . scripts/perf/footprint.sh
 
 cargo build --release -q -p app -p cyx -p ext-host
+# New files, not the old ones overwritten: macOS kills a binary rewritten in place (its cached code signature).
+rm -f "$OUT/codeyard-candidate" "$OUT/codeyard-exthost" "$OUT/codeyard-baseline"
 cp target/release/codeyard "$OUT/codeyard-candidate"
 # Code extensions run in codeyard-exthost beside the app; both builds use this one.
 cp target/release/codeyard-exthost "$OUT/codeyard-exthost"
@@ -95,6 +97,8 @@ for f in "$TMP"/gen/*.cyx; do install_args+=(--install-extension "$f"); done
 CODEYARD_CONFIG_DIR="$EXT_PROFILE/config" CODEYARD_STATE_DIR="$EXT_PROFILE/state" "$OUT/codeyard-candidate" "${install_args[@]}" >/dev/null
 installed=$(grep -c '"digest"' "$EXT_PROFILE/config/extensions.lock.jsonc" 2>/dev/null || echo 0)
 [ "$installed" = 100 ] || { echo "perf: the extension profile has $installed extensions, not 100" >&2; exit 1; }
+# Installing makes each extension's (empty) data folder; without them, one made at startup shows below.
+rm -rf "$EXT_PROFILE/state/extensions/data"
 # A registry of 10 000 made-up extensions (`cyx yard fixture`) served on this machine, and a profile that lists it.
 # Each run starts without its cached index, so the Market fetches it once (not measured) before the typing.
 MARKET_PROFILE="$TMP/market-profile"
@@ -137,6 +141,23 @@ cp crates/ext-host/testdata/decorator.wasm "$TMP/gen/lenses/extension.wasm"
 : > "$TMP/gen/lenses/Cargo.toml"
 printf '[extension]\nid = "perf.lenses"\nversion = "1.0.0"\nname = "Lenses"\nlicense = "MIT"\n\n[code]\nentry = "Cargo.toml"\n\n[[commands]]\nid = "decorate"\ntitle = "Perf: Decorate"\n\n[[code-lens]]\nlanguages = ["rust"]\n\n[[inlay-hints]]\nlanguages = ["rust"]\n' > "$TMP/gen/lenses/codeyard-extension.toml"
 CODEYARD_CONFIG_DIR="$LENS_PROFILE/config" CODEYARD_STATE_DIR="$LENS_PROFILE/state" "$OUT/codeyard-candidate" --install-extension "$TMP/gen/lenses" >/dev/null
+# A sidebar view with a list of 10 000 rows (crates/ext-host/testdata/viewlist.wasm, code with no permissions), installed
+# from a folder: PageDown in the view.
+VIEW_PROFILE="$TMP/view-profile"
+mkdir -p "$VIEW_PROFILE/config" "$VIEW_PROFILE/state" "$TMP/gen/viewlist"
+printf '{"update.check":"manual"}\n' > "$VIEW_PROFILE/config/settings.jsonc"
+cp crates/ext-host/testdata/viewlist.wasm "$TMP/gen/viewlist/extension.wasm"
+: > "$TMP/gen/viewlist/Cargo.toml"
+printf '[extension]\nid = "perf.viewlist"\nversion = "1.0.0"\nname = "View List"\nlicense = "MIT"\n\n[code]\nentry = "Cargo.toml"\n\n[[views]]\nid = "rows"\ntitle = "Perf: Rows"\nlocation = "sidebar"\n' > "$TMP/gen/viewlist/codeyard-extension.toml"
+CODEYARD_CONFIG_DIR="$VIEW_PROFILE/config" CODEYARD_STATE_DIR="$VIEW_PROFILE/state" "$OUT/codeyard-candidate" --install-extension "$TMP/gen/viewlist" >/dev/null
+# An extension in development (`--extension-dev`, as `cyx dev` starts it): a 2 MB Rust component and a second build of
+# it that differs in one constant (crates/ext-host/testdata/reload-a.wasm and reload-b.wasm), swapped in place by turns.
+RELOAD_DIR="$TMP/gen/reload"
+mkdir -p "$RELOAD_DIR/ext"
+cp crates/ext-host/testdata/reload-a.wasm "$RELOAD_DIR/a.wasm"
+cp crates/ext-host/testdata/reload-b.wasm "$RELOAD_DIR/b.wasm"
+: > "$RELOAD_DIR/ext/Cargo.toml"
+printf '[extension]\nid = "perf.reload"\nversion = "1.0.0"\nname = "Reload"\nlicense = "MIT"\n\n[code]\nentry = "Cargo.toml"\n\n[[commands]]\nid = "count"\ntitle = "Perf: Count"\n' > "$RELOAD_DIR/ext/codeyard-extension.toml"
 launch() { # app args... (background; $! is the pid)
   local app=$1; shift
   CODEYARD_STATE_DIR="$TMP/state" CODEYARD_CONFIG_DIR="$TMP/config" CODEYARD_NO_DOCK_ICON=1 "$app" "$@" >/dev/null 2>&1 &
@@ -237,6 +258,24 @@ for i in $(seq 1 "$runs"); do
       exit 1
     fi
     grep '"typing\.keystroke_frame_lenses_ms"' "$TMP/lens.jsonl" >> "$CODEYARD_PERF" || true
+    # The view with 10 000 rows: 40 PageDown keys, keystroke to frame.
+    : > "$TMP/views.jsonl"
+    CODEYARD_PERF="$TMP/views.jsonl" CODEYARD_PERF_VIEWS=40 PROFILE_FROM="$VIEW_PROFILE" run_scripted "$OUT/codeyard-${names[$k]}"
+    if [ "${names[$k]}" = candidate ] && [ "$(count views.keystroke_frame_ms "$TMP/views.jsonl")" != 40 ]; then
+      echo "perf: the view run of ${names[$k]} did not press 40 keys in the extension view; is codeyard-exthost built and the window visible?" >&2
+      exit 1
+    fi
+    grep '"views\.keystroke_frame_ms"' "$TMP/views.jsonl" >> "$CODEYARD_PERF" || true
+    # Hot reload: 10 new builds swapped in, each to its first answer, after an unrecorded one that fills the
+    # incremental cache.
+    cp "$RELOAD_DIR/a.wasm" "$RELOAD_DIR/ext/extension.wasm"
+    : > "$TMP/reload.jsonl"
+    CODEYARD_PERF="$TMP/reload.jsonl" CODEYARD_PERF_RELOAD=10 run_scripted "$OUT/codeyard-${names[$k]}" --extension-dev "$RELOAD_DIR/ext"
+    if [ "${names[$k]}" = candidate ] && [ "$(count extensions.hot_reload_ms "$TMP/reload.jsonl")" != 10 ]; then
+      echo "perf: the hot reload run of ${names[$k]} did not swap in 10 builds; is codeyard-exthost built?" >&2
+      exit 1
+    fi
+    grep '"extensions\.hot_reload_ms"' "$TMP/reload.jsonl" >> "$CODEYARD_PERF" || true
   done
   printf '\rperf: timing run %s/%s' "$i" "$runs" >&2
 done
