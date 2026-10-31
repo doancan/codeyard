@@ -18,6 +18,8 @@ Working extensions built with the SDKs: Rust (`crates/ext-sdk`, [docs/extensions
 | `gitea-pulls` | Rust: a pull request provider for Codeberg (Gitea and Forgejo) that calls the forge with `auth`, tested with HTTP fixtures |
 | `vercel-status` | TypeScript: the latest Vercel deployment in the status bar, recent ones in a sidebar view, a refresh command and a timer; the token in `secrets`, `fetch` to one host |
 | `gitlab` | TypeScript: merge requests in the Pull Requests view (`[[pull-requests]]`) through a GitLab `[[oauth]]` account, gitlab.com or a self-managed instance |
+| `doc-snippets` | Rust: the snippets of docs/extensions that are not part of a full example, compiled and tested so the docs cannot drift (`crates/cyx/src/doc_tests.rs`) |
+| `doc-snippets-ts` | TypeScript: the same, type-checked |
 
 The `hello-*` examples are exactly what `cyx new` writes, with the SDK taken from this checkout; a test keeps them in step with the templates in `crates/cyx/templates`. After changing a template, delete the example and write it again from this folder:
 

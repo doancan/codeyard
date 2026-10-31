@@ -1,6 +1,6 @@
 # Writing Codeyard extensions
 
-Themes, snippets, keymaps, languages, schemas and language servers without code; commands, views and providers in TypeScript or Rust with code extensions. If you have built a VS Code extension, most of this will feel familiar. Parts marked **(draft)** may still change before API 1.0, and parts marked **(coming)** are not in this version yet.
+Themes, snippets, keymaps, languages, schemas and language servers without code; commands, views and providers in TypeScript or Rust with code extensions. If you have built a VS Code extension, most of this will feel familiar. Parts marked **(coming)** are not in this version yet. Start with the [index](README.md) for the guides and the generated references.
 
 <!-- toc -->
 - [Quick start](#quick-start)
@@ -83,7 +83,7 @@ The same goes for other no-code contributions: `keymap-preset`, `keybindings`, `
 
 ## Your first command
 
-Commands, views, formatters, code actions, hover and completion need code, which `cyx` builds into a WebAssembly component. Write it in TypeScript (you need Node.js 22.18 or newer) or in Rust (you need Rust and `rustup target add wasm32-wasip2`). Both SDKs are pre-release and have the same API; the full guides are [typescript.md](typescript.md) and [commands.md](commands.md).
+Commands, views, formatters, code actions, hover and completion need code, which `cyx` builds into a WebAssembly component. Write it in TypeScript (you need Node.js 22.18 or newer) or in Rust (you need Rust and `rustup target add wasm32-wasip2`). Both SDKs have the same API, 1.0; the full guides are [typescript.md](typescript.md) and [commands.md](commands.md).
 
 ```sh
 cyx new command hello --lang ts   # or: cyx new view hello --lang ts; leave out --lang ts for Rust
@@ -179,6 +179,10 @@ Never write an engine version, an API version, `*` or `startup`. `cyx` works out
 ### Contributions that run your code
 
 ```toml
+[[commands]]
+id    = "refresh"
+title = "Deploy: Refresh"
+
 [[menus]]
 command  = "refresh"            # one of your commands, a dependency's full id, or a core command
 location = "editor-context"     # editor-context | file-tree | view-title (with view = "<your view>")
@@ -336,8 +340,7 @@ At run time, undeclared access is refused, never asked. Codeyard asks the user o
 To see exactly what users will see:
 
 ```sh
-cyx dev --as-user        # run with the real consent sheet
-cyx publish --dry-run    # print the sheet without publishing
+cyx publish --dry-run    # print the install sheet without publishing
 ```
 
 If an update **removes** a permission, it installs silently. If it **adds** one, users see a card listing only the new ones and keep the old version until they accept.
@@ -349,6 +352,10 @@ The recipes use the TypeScript SDK; [commands.md](commands.md) shows the same th
 ### Status bar item
 
 ```toml
+[[commands]]
+id    = "refresh"
+title = "Deploy: Refresh"
+
 [[status-bar]]
 id      = "deploy"
 command = "refresh"
@@ -419,8 +426,8 @@ authorize-url = "https://acme.example.com/oauth/authorize"
 token-url     = "https://acme.example.com/oauth/token"   # https only
 client-id     = "your-public-client-id"                  # no client secret: PKCE replaces it
 scopes        = ["read", "deploy"]                       # auth.session may ask for fewer
-hosts         = ["api.acme.example.com"]                 # the hosts auth.fetch signs requests to
-account-url   = "https://api.acme.example.com/me"        # optional: JSON with the account's name
+hosts         = ["acme.example.com"]                     # the hosts auth.fetch signs requests to
+account-url   = "https://acme.example.com/api/me"        # optional: JSON with the account's name
 instances     = true                                     # optional: users may add self-managed servers (below)
 ```
 
@@ -642,7 +649,7 @@ Good to know:
 
 ## Troubleshooting
 
-Every error message shows a fix line. `cyx explain <CODE>` prints the full explanation, and `cyx doctor` checks your setup.
+Every error message shows a fix line. `cyx explain <CODE>` prints what a code means and how to fix it; [Errors](reference/errors.md) lists them all.
 
 | You see | Fix |
 | --- | --- |
