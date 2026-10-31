@@ -1645,23 +1645,41 @@ impl Workbench {
                                 .items_center()
                                 .child(
                                     ui::icon_button("panel-new", "tb-plus", crate::i18n::t("New Terminal (⌃⇧`)"), p)
+                                        .relative()
+                                        .child(self.ctl(crate::i18n::t("Panel"), "panel-new", crate::i18n::t("New Terminal (⌃⇧`)"), cx, |this, w, cx| {
+                                            this.new_terminal(&NewTerminal, w, cx)
+                                        }))
                                         .on_click(cx.listener(|this, _, w, cx| this.new_terminal(&NewTerminal, w, cx))),
                                 )
-                                .child(ui::icon_button("panel-launch", "tb-dropdown", crate::i18n::t("Launch Profile…"), p).w(px(16.)).on_click(cx.listener(
-                                    |this, ev: &gpui::ClickEvent, w, cx| {
-                                        // Below the button, right-aligned with it (a keyboard press has no position: under the pointer then).
-                                        let at = ev.position();
-                                        let at = gpui::point(at.x + px(8.), at.y + px(14.));
-                                        this.open_terminal_launch_menu(at, w, cx);
-                                    },
-                                ))),
+                                .child(
+                                    ui::icon_button("panel-launch", "tb-dropdown", crate::i18n::t("Launch Profile…"), p)
+                                        .w(px(16.))
+                                        .relative()
+                                        .child(self.ctl(crate::i18n::t("Panel"), "panel-launch", crate::i18n::t("Launch Profile…"), cx, |this, w, cx| {
+                                            this.terminal_launch_menu_at_button(w, cx)
+                                        }))
+                                        .on_click(cx.listener(|this, ev: &gpui::ClickEvent, w, cx| {
+                                            // Below the button, right-aligned with it (a keyboard press has no position: under the pointer then).
+                                            let at = ev.position();
+                                            let at = gpui::point(at.x + px(8.), at.y + px(14.));
+                                            this.open_terminal_launch_menu(at, w, cx);
+                                        })),
+                                ),
                         )
                         .child(
                             ui::icon_button("panel-split", "tb-split", crate::i18n::t("Split Terminal"), p)
+                                .relative()
+                                .child(self.ctl(crate::i18n::t("Panel"), "panel-split", crate::i18n::t("Split Terminal"), cx, |this, w, cx| {
+                                    this.split_terminal(&SplitTerminal, w, cx)
+                                }))
                                 .on_click(cx.listener(|this, _, w, cx| this.split_terminal(&SplitTerminal, w, cx))),
                         )
                         .child(
                             ui::icon_button("panel-kill", "tb-trash", crate::i18n::t("Kill Terminal"), p)
+                                .relative()
+                                .child(self.ctl(crate::i18n::t("Panel"), "panel-kill", crate::i18n::t("Kill Terminal"), cx, |this, w, cx| {
+                                    this.kill_terminal(&KillTerminal, w, cx)
+                                }))
                                 .on_click(cx.listener(|this, _, w, cx| this.kill_terminal(&KillTerminal, w, cx))),
                         )
                         .child(div().w(px(1.)).h(px(16.)).mx(px(theme::SPACE[2])).bg(c(p.border)))
@@ -1673,6 +1691,14 @@ impl Workbench {
                             if self.chrome.panel_dock.beside() { crate::i18n::t("Move Panel to Bottom") } else { crate::i18n::t("Move Panel Right") },
                             p,
                         )
+                        .relative()
+                        .child(self.ctl(
+                            crate::i18n::t("Panel"),
+                            "panel-move",
+                            if self.chrome.panel_dock.beside() { crate::i18n::t("Move Panel to Bottom") } else { crate::i18n::t("Move Panel Right") },
+                            cx,
+                            |this, w, cx| this.dispatch_now(&TogglePanelPosition, w, cx),
+                        ))
                         .on_click(cx.listener(|this, _, w, cx| this.dispatch_now(&TogglePanelPosition, w, cx))),
                     )
                     .child(
@@ -1683,10 +1709,22 @@ impl Workbench {
                             self.chrome.panel_max,
                             p,
                         )
+                        .relative()
+                        .child(self.ctl(
+                            crate::i18n::t("Panel"),
+                            "panel-max",
+                            if self.chrome.panel_max { crate::i18n::t("Restore Panel Size") } else { crate::i18n::t("Maximize Panel") },
+                            cx,
+                            |this, w, cx| this.dispatch_now(&ToggleMaximizedPanel, w, cx),
+                        ))
                         .on_click(cx.listener(|this, _, w, cx| this.dispatch_now(&ToggleMaximizedPanel, w, cx))),
                     )
                     .child(
                         ui::icon_button("panel-close", "tb-close", crate::i18n::t("Hide Panel (⌘J)"), p)
+                            .relative()
+                            .child(self.ctl(crate::i18n::t("Panel"), "panel-close", crate::i18n::t("Hide Panel (⌘J)"), cx, |this, w, cx| {
+                                this.toggle_panel(&TogglePanel, w, cx)
+                            }))
                             .on_click(cx.listener(|this, _, w, cx| this.toggle_panel(&TogglePanel, w, cx))),
                     ),
             )

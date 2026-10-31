@@ -30,6 +30,7 @@ mod crash;
 mod dap;
 mod debug_model;
 // --- data ---
+mod a11y_controls;
 #[cfg(test)]
 mod a11y_ui_tests;
 mod about_page;

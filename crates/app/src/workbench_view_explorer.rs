@@ -9,17 +9,75 @@ fn activity_hints(scroll: &gpui::ScrollHandle) -> (bool, bool) {
 }
 
 impl Workbench {
-    pub(super) fn activity_bar(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
+    /// The activity bar's own views in the order drawn: (view, label, badge, shown).
+    pub(super) fn activity_items(&self, cx: &App) -> Vec<(Panel, &'static str, usize, bool)> {
         let changes = self.vcs.status.as_ref().map_or(0, |g| g.changes.len());
-        let failed_tests = self.failed_test_count();
-        let item = |id: &'static str, name: &'static str, label: &'static str, panel: Panel, badge: usize, cx: &mut Context<Self>| {
-            let selected =
-                self.chrome.panel == Some(panel) || (panel == Panel::Containers && self.tabs.page_active && matches!(self.tabs.page, Some(Page::Containers)));
+        let mut items = vec![
+            (Panel::Explorer, crate::i18n::t("Explorer (⇧⌘E)"), 0),
+            (Panel::Search, crate::i18n::t("Search (⇧⌘F)"), 0),
+            (Panel::Scm, crate::i18n::t("Source Control (⌃⇧G)"), changes),
+            (Panel::Debug, crate::i18n::t("Run and Debug (⌃⇧D)"), 0),
+            (Panel::Testing, crate::i18n::t("Testing"), self.failed_test_count()),
+            (Panel::Remote, crate::i18n::t("Remote Explorer"), 0),
+            (Panel::Extensions, crate::i18n::t("Extensions"), 0),
+        ];
+        if cx.global::<Settings>().docker_enabled {
+            items.push((Panel::Containers, crate::i18n::t("Containers"), 0));
+        }
+        items
+            .into_iter()
+            .map(|(panel, label, badge)| {
+                let shown = self.chrome.panel == Some(panel)
+                    || (panel == Panel::Containers && self.tabs.page_active && matches!(self.tabs.page, Some(Page::Containers)));
+                (panel, label, badge, shown)
+            })
+            .collect()
+    }
+
+    /// A click on a view of the activity bar: it is shown, or hidden when it is the one shown.
+    pub(super) fn activity_click(&mut self, panel: Panel, window: &mut Window, cx: &mut Context<Self>) {
+        if panel == Panel::Containers {
+            self.show_containers(cx);
+            return;
+        }
+        self.chrome.panel = if self.chrome.panel == Some(panel) { None } else { Some(panel) };
+        if self.view_shown(Panel::Explorer) {
+            window.focus(&self.roots.primary.focus_handle(cx));
+        }
+        if self.view_shown(Panel::Remote) {
+            self.refresh_remote_view(cx);
+        }
+        if self.view_shown(Panel::Debug) {
+            self.load_launch_catalog(cx);
+        }
+        if self.view_shown(Panel::Testing) {
+            self.testing_opened(window, cx);
+        }
+        if self.view_shown(Panel::Extensions) {
+            self.extensions_opened(window, cx);
+        }
+        cx.notify();
+    }
+
+    pub(super) fn activity_bar(&self, p: &Palette, cx: &mut Context<Self>) -> impl IntoElement {
+        let item = |(panel, label, badge, selected): (Panel, &'static str, usize, bool), cx: &mut Context<Self>| {
+            let id = super::a11y::view_part(panel);
+            let name = match panel {
+                Panel::Explorer => "files",
+                Panel::Search => "search",
+                Panel::Scm => "git-branch",
+                Panel::Debug => "bug-play",
+                Panel::Testing => "flask-conical",
+                Panel::Remote => "screen-share",
+                Panel::Extensions => "blocks",
+                _ => "server",
+            };
             // Dragged onto the other side bar, the view moves there.
             self.view_drag(panel, div().id(id), cx)
                 .debug_selector(|| id.to_string())
                 .group(id)
                 .relative()
+                .child(super::a11y::part_frame(super::a11y::Part::Control(id), cx))
                 .flex_none()
                 .w(px(layout::ACTIVITYBAR_W))
                 .h(px(layout::ACTIVITYBAR_W))
@@ -61,36 +119,16 @@ impl Workbench {
                     )
                 })
                 .tooltip(move |_, cx| cx.new(|_| Tooltip(label.into())).into())
-                .on_click(cx.listener(move |this, _, window, cx| {
-                    if panel == Panel::Containers {
-                        this.show_containers(cx);
-                        return;
-                    }
-                    this.chrome.panel = if this.chrome.panel == Some(panel) { None } else { Some(panel) };
-                    if this.view_shown(Panel::Explorer) {
-                        window.focus(&this.roots.primary.focus_handle(cx));
-                    }
-                    if this.view_shown(Panel::Remote) {
-                        this.refresh_remote_view(cx);
-                    }
-                    if this.view_shown(Panel::Debug) {
-                        this.load_launch_catalog(cx);
-                    }
-                    if this.view_shown(Panel::Testing) {
-                        this.testing_opened(window, cx);
-                    }
-                    if this.view_shown(Panel::Extensions) {
-                        this.extensions_opened(window, cx);
-                    }
-                    cx.notify();
-                }))
+                .on_click(cx.listener(move |this, _, window, cx| this.activity_click(panel, window, cx)))
         };
         // `tip`: tooltip only while the menu is closed so it can't cover the open menu's last row (native apps hide it too).
-        let bottom = |id: &'static str, name: &'static str, label: &'static str, tip: bool| {
+        let bottom = |id: &'static str, name: &'static str, label: &'static str, tip: bool, cx: &Context<Self>| {
             div()
                 .id(id)
                 .debug_selector(|| id.to_string())
                 .group(id)
+                .relative()
+                .child(super::a11y::part_frame(super::a11y::Part::Control(id), cx))
                 .flex_none()
                 .w(px(layout::ACTIVITYBAR_W))
                 .h(px(layout::ACTIVITYBAR_W))
@@ -160,16 +198,13 @@ impl Workbench {
             .flex_col()
             .overflow_y_scroll()
             .track_scroll(scroll)
-            .child(item("act-explorer", "files", crate::i18n::t("Explorer (⇧⌘E)"), Panel::Explorer, 0, cx))
-            .child(item("act-search", "search", crate::i18n::t("Search (⇧⌘F)"), Panel::Search, 0, cx))
-            .child(item("act-scm", "git-branch", crate::i18n::t("Source Control (⌃⇧G)"), Panel::Scm, changes, cx))
-            .child(item("act-debug", "bug-play", crate::i18n::t("Run and Debug (⌃⇧D)"), Panel::Debug, 0, cx))
-            .child(item("act-testing", "flask-conical", crate::i18n::t("Testing"), Panel::Testing, failed_tests, cx))
-            .child(item("act-remote", "screen-share", crate::i18n::t("Remote Explorer"), Panel::Remote, 0, cx))
-            .child(item("act-extensions", "blocks", crate::i18n::t("Extensions"), Panel::Extensions, 0, cx))
-            .children(self.ext_view_activity_items(p, cx))
-            .when(cx.global::<Settings>().docker_enabled, |d| {
-                d.child(item("act-containers", "server", crate::i18n::t("Containers"), Panel::Containers, 0, cx))
+            .children({
+                let items = self.activity_items(cx);
+                let (own, containers): (Vec<_>, Vec<_>) = items.into_iter().partition(|i| i.0 != Panel::Containers);
+                let mut out: Vec<gpui::AnyElement> = own.into_iter().map(|i| item(i, cx).into_any_element()).collect();
+                out.extend(self.ext_view_activity_items(p, cx).into_iter().map(|e| e.into_any_element()));
+                out.extend(containers.into_iter().map(|i| item(i, cx).into_any_element()));
+                out
             });
         div()
             .w(px(layout::ACTIVITYBAR_W))
@@ -195,7 +230,7 @@ impl Workbench {
             )
             .child(
                 // A single "manage" button: the menu opens to the right of the icon, bottom edge aligned with it (see `open_manage_menu`).
-                bottom("act-manage", "settings", crate::i18n::t("Manage: About, Settings, Color Theme…"), self.menu.is_none()).on_mouse_down(
+                bottom("act-manage", "settings", crate::i18n::t("Manage: About, Settings, Color Theme…"), self.menu.is_none(), cx).on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|this, _: &gpui::MouseDownEvent, window, cx| {
                         cx.stop_propagation();

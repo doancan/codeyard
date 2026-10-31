@@ -68,6 +68,7 @@ impl EditorWindow {
 
 impl Render for EditorWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        crate::a11y_controls::Controls::clear(cx, window.window_handle().window_id());
         let title = {
             let e = self.editor.read(cx);
             format!("{}{}", if e.is_dirty() { "● " } else { "" }, e.name)

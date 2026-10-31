@@ -432,6 +432,17 @@ impl Workbench {
                 .id(("term-tab", i))
                 .group(group.clone())
                 .relative()
+                .child(crate::a11y_controls::control(
+                    crate::a11y_controls::Control::new(
+                        crate::i18n::t("Terminals"),
+                        format!("term:{}", term.entity_id()),
+                        accesskit::Role::Tab,
+                        row.label.to_string(),
+                    )
+                    .description(tip.to_string())
+                    .selected(active)
+                    .on_entity(cx.entity().downgrade(), move |this, window, cx| this.select_terminal(i, window, cx)),
+                ))
                 .w_full()
                 .h(px(TERM_ROW_H))
                 .flex()
@@ -448,10 +459,24 @@ impl Workbench {
                 .when(active, |d| d.child(div().absolute().left_0().top_0().bottom_0().w(px(2.)).bg(c(p.accent))))
                 .child(icon(if paired { "tb-split" } else { "terminal" }, layout::ICON, glyph_color))
                 .children(row.indicator(i, p))
-                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().when(row.exited, |d| d.italic()).child(row.label))
+                .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().when(row.exited, |d| d.italic()).child(row.label.clone()))
                 .child(
                     div()
                         .id(("term-close", i))
+                        .relative()
+                        .child(crate::a11y_controls::control(
+                            crate::a11y_controls::Control::button(
+                                crate::i18n::t("Terminals"),
+                                format!("kill:{}", term.entity_id()),
+                                crate::i18n::t("Kill Terminal"),
+                                |_, _| {},
+                            )
+                            .description(row.label.to_string())
+                            .on_entity(cx.entity().downgrade(), {
+                                let term = term.clone();
+                                move |this, window, cx| this.request_close(vec![term.clone()], window, cx)
+                            }),
+                        ))
                         .size(px(20.))
                         .flex_none()
                         .flex()

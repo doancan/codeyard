@@ -143,6 +143,7 @@ Both, Incoming First
 Bottom panel	
 Box invisible and look-alike Unicode characters (zero-width spaces, bidi controls, Cyrillic letters inside Latin words)	
 Branch {}	
+Breadcrumbs	
 Break on Value Change	
 Breaking on: {}	
 Breakpoints	
@@ -697,6 +698,7 @@ Edit “{}”: which setting?
 Edit, test, set up key login, remove	
 Editor	
 Editor font (empty: built-in monospace)	
+Editor group {}	
 Editor tabs	
 Editor: Add Cursor Above	
 Editor: Add Cursor Below	
@@ -1021,6 +1023,7 @@ Give the theme a name.
 Go	
 Go back to version {}	
 Go package	
+Go to Breakpoint	
 Go to Definition	
 Go to File	
 Go to File…	
@@ -1199,6 +1202,7 @@ Last trap: {}
 Later	
 Latest 300 lines; refreshed with resource snapshots.	
 Launch Profile…	
+Launch configuration	
 Learn	
 Leave out animations: the blinking cursor, spinners and sliding panels (auto: follow the system setting)	
 Left is writable	
@@ -1271,6 +1275,7 @@ Measuring…
 Memory	
 Memory usage (%)	
 Memory: {0} ({1})	
+Menu bar	
 Merge	
 Merge Changes	
 Merge Conflict: Accept All Current	
@@ -1598,6 +1603,7 @@ Output of {}
 Output: Clear	
 Overview	
 Overwrite	
+Panel	
 Panel: below the editor	
 Panel: left of the editor	
 Panel: right of the editor	
@@ -2073,6 +2079,7 @@ Show file icons on tabs
 Show fold arrows in the gutter	
 Show folders that only hold one folder as one row	
 Show identical	
+Show in the Explorer	
 Show indent guides	
 Show line numbers in search results	
 Show lines matching (regular expression, case-insensitive), e.g. {}	
@@ -2190,6 +2197,7 @@ Synced
 Syncing…	
 TOML dates were turned into text.	
 TOML needs a table at the top level, but this document is a {}	
+Tab actions	
 Tabs	
 Tag name, then an optional message for an annotated tag	
 Tag name, then an optional message for an annotated tag (at HEAD)	
@@ -2243,6 +2251,7 @@ Terminal: Run Selected Text
 Terminal: Select Default Profile…	
 Terminal: Split	
 Terminal: Toggle	
+Terminals	
 Test Connection	
 Test Results	
 Test a connection	
@@ -2583,6 +2592,7 @@ View: Toggle Zen Mode
 View: Zoom In	
 View: Zoom Out	
 View: {}	
+Views	
 Volume name	
 WSL Containers does not support Compose in this workflow. Choose Docker or Podman for a Compose project.	
 WSL Targets	

@@ -93,6 +93,9 @@ fn take_view(snap: &mut Snapshot, view: &ViewRef) -> Snapshot {
         Panel::Debug | Panel::Testing | Panel::Remote => {
             part.views.side = snap.views.side.clone();
             part.views.row_focus = snap.views.row_focus;
+            if view.panel == Panel::Remote {
+                part.chrome = snap.chrome.take_remote();
+            }
         }
         Panel::ExtView => {
             let (mine, rest) = std::mem::take(&mut snap.ext_views).into_iter().partition(|v| Some(&v.id) == view.ext.as_ref());
@@ -113,6 +116,7 @@ pub(super) fn view_window_snapshot(root: &Entity<ViewWindow>, window: &Window, c
     let mut full = wb.a11y_snapshot(window, cx);
     let mut snap = take_view(&mut full, &view);
     snap.generation = full.generation;
+    snap.controls = std::mem::take(&mut full.controls);
     // What the workbench drew in this window (its rows and buttons), in this window's coordinates.
     snap.geometry = std::mem::take(&mut full.geometry);
     snap.title = wb.view_window_title(&view);
@@ -192,6 +196,7 @@ pub(super) fn editor_window_snapshot(root: &Entity<EditorWindow>, window: &Windo
         find,
         completion,
         popups,
+        controls: crate::a11y_controls::snapshot(window, cx),
         picker,
         focus,
         ..Default::default()

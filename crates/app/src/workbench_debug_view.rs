@@ -320,7 +320,7 @@ impl Workbench {
         self.show_menu(items, commands, Vec::new(), target, position, window, cx);
     }
 
-    fn open_config_menu(&mut self, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
+    pub(in crate::workbench) fn open_config_menu(&mut self, position: gpui::Point<gpui::Pixels>, window: &mut Window, cx: &mut Context<Self>) {
         let mut items: Vec<MenuItem> = self.dbg.catalog.iter().map(|n| MenuItem::new(n).checked(self.dbg.last.as_ref() == Some(n))).collect();
         let mut commands: Vec<MenuCmd> = (0..items.len()).map(|i| MenuCmd::Debug(DebugMenuCmd::Select(i))).collect();
         items.push(MenuItem::new(crate::i18n::t("Open Launch Configuration")).separator());
@@ -419,6 +419,8 @@ impl Workbench {
             .child(
                 div()
                     .id("dbg-config")
+                    .relative()
+                    .child(a11y::part_frame(a11y::Part::Control("dbg-config"), cx))
                     .flex_1()
                     .min_w_0()
                     .h(px(24.))

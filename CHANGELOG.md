@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Screen readers reach the window's chrome and the controls drawn around the editor: the activity bar's views and its
+  Manage button, the title bar's Back, Forward and file search, the caption buttons on Windows, every status bar
+  item (each one does what its click does, including sync, ports, transfers, the terminal toggle, conflicts and the
+  resource monitor with its figures), the error card's Reconnect and Close, breadcrumbs, the menu bar on Windows and
+  Linux, the panel's buttons and its list of terminals, the editor tabs' Close, Unpin, Read and Preview buttons, the
+  diff, large-file and page tabs, the tabs of every other editor group, the Remote Explorer's Add, SSH config and
+  Refresh buttons, the Run and Debug configuration selector and a breakpoint's Go to Breakpoint. Each reports the
+  frame it is drawn at.
+
 - Every confirmation dialog marks its cancelling button for the system, whatever its wording or language, so Escape
   answers "Not Now", "Keep", "Keep Waiting", "Keep Going", "Deny" and a translated "Cancel" on macOS and Windows; if
   something took the keyboard while a question was open, cancelling gives it back to where it was.
