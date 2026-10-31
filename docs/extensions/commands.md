@@ -365,7 +365,7 @@ cyx package        # cargo build --release --target wasm32-wasip2, then extensio
 `cyx package --no-build` skips the build and packages the `extension.wasm` already in the folder, for a component
 built by another tool.
 
-`cyx dev` builds once when it starts. Rebuilding and reloading on save, with in-memory state kept, comes with the dev window's support for code extensions.
+`cyx dev` builds when it starts, and again each time you save a source file: Codeyard reloads the new build, and `ctx.state()` values are kept across the reload.
 
 ## The SDK dependency
 
@@ -374,10 +374,14 @@ built by another tool.
 ```toml
 # Cargo.toml
 [dependencies]
-codeyard-extension = { git = "https://github.com/doancan/codeyard" }
+codeyard-extension = { git = "https://github.com/doancan/codeyard", tag = "v0.7.0" }
 
 [dev-dependencies]
-codeyard-extension-test = { git = "https://github.com/doancan/codeyard" }
+codeyard-extension-test = { git = "https://github.com/doancan/codeyard", tag = "v0.7.0" }
 ```
+
+The tag is the release of the `cyx` that wrote it, so the extension keeps building against the SDK it was written for;
+move it when you move to a newer SDK. A preview `cyx` (built from `main` before 0.7.0, the first release with the SDK)
+writes `branch = "main"` instead.
 
 To work against a local Codeyard checkout instead, pass `cyx new command hello --sdk ../codeyard`, or change the lines to `{ path = "../codeyard/crates/ext-sdk" }` and `{ path = "../codeyard/crates/ext-test" }`. Once the SDK is on crates.io the template will use a version.

@@ -415,3 +415,52 @@ fn an_executable_contents_list_is_refused() {
     let (bytes, digest) = write(theme_files()).unwrap();
     assert_eq!(read(&bytes).unwrap().digest, digest);
 }
+
+/// A package holds what Codeyard reads, never the author's secrets or build input (e2e trial: `.env`, `signing.key`,
+/// `Cargo.lock` and a `package.json` with a local path were all published).
+#[test]
+fn secrets_and_build_input_stay_out_of_the_package() {
+    let dir = std::env::temp_dir().join(format!("ext-pkg-secrets-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("themes")).unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::create_dir_all(dir.join("drafts")).unwrap();
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), MANIFEST).unwrap();
+    std::fs::write(dir.join("themes/midnight.json"), "{}").unwrap();
+    for (name, text) in [
+        ("README.md", "# Midnight"),
+        ("LICENSE", "MIT"),
+        (".env", "TOKEN=x"),
+        (".env.production", "TOKEN=y"),
+        ("signing.key", "k"),
+        ("themes/id_ed25519", "k"),
+        ("src/tests.rs", ""),
+        ("Cargo.toml", "[package]"),
+        ("Cargo.lock", ""),
+        ("package.json", r#"{"dependencies":{"@codeyard/extension":"file:/Users/me/codeyard/sdk/typescript"}}"#),
+        ("package-lock.json", "{}"),
+        (".gitignore", "target"),
+        ("drafts/idea.json", "{}"),
+        ("notes.psd", "x"),
+        (IGNORE_FILE, "drafts/\n*.psd\n"),
+    ] {
+        std::fs::write(dir.join(name), text).unwrap();
+    }
+    let c = collect(&dir, None).unwrap();
+    let paths: Vec<_> = c.files.iter().map(|e| e.path.as_str()).collect();
+    assert_eq!(paths, vec!["LICENSE", "README.md", ext_manifest::FILE_NAME, "themes/midnight.json"]);
+    assert_eq!(c.secrets, vec![".env", ".env.production", "signing.key", "themes/id_ed25519"]);
+    assert!(read(&write(c.files).unwrap().0).is_ok());
+    // A private key under any name is refused, not quietly packaged.
+    std::fs::write(dir.join("themes/backup.txt"), "-----BEGIN OPENSSH PRIVATE KEY-----\nb3Bl\n-----END OPENSSH PRIVATE KEY-----\n").unwrap();
+    let e = collect_dir(&dir).unwrap_err().to_string();
+    assert!(e.contains("themes/backup.txt") && e.contains("private key"), "{e}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A file the manifest names but a rule leaves out says which rule.
+#[test]
+fn a_named_file_that_is_left_out_says_why() {
+    let e = Error::MissingFile { field: "themes.path".into(), path: "src/midnight.json".into() };
+    assert!(e.to_string().contains("src/, test/ and tests/"), "{e}");
+}

@@ -159,7 +159,7 @@ fn every_rule_is_refused_with_its_message() {
     refused(column([button("same", "A"), Node::new(Element::Row { gap: Space(0), pad: Space(0) }).child(button("same", "B"))]), "used twice");
     refused(column([text("t").child(text("u"))]), "a text has no children");
     refused(list("l", [text("row")]), "every row of a list needs a key");
-    refused(list("l", (0..=limits::UI_ROWS_PER_PAGE).map(|i| text("r").key(i.to_string().as_str()))), "has 10001 rows; send at most 10000");
+    refused(list("l", (0..=limits::UI_ROWS_PER_PAGE).map(|i| text("r").key(i.to_string().as_str()))), "has 10001 rows; a list takes at most 10000: show fewer");
 
     let table =
         |columns: Vec<String>, rows: Vec<Node>| Node::new(Element::Table { label: "T".into(), columns, selection: Selection::None }).key("t").children(rows);

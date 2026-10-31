@@ -91,7 +91,12 @@ fn templates_default_to_the_sdk_repository() {
     let root = tmp("git");
     scaffold::create_with(&root.join("tools"), Kind::Command, "my-tools", "you", None).unwrap();
     let cargo = std::fs::read_to_string(root.join("tools/Cargo.toml")).unwrap();
-    assert!(cargo.contains(&format!("codeyard-extension = {{ git = \"{}\" }}", scaffold::SDK_REPOSITORY)), "{cargo}");
+    let pin = scaffold::sdk_git_ref(env!("CARGO_PKG_VERSION"));
+    assert!(cargo.contains(&format!("codeyard-extension = {{ git = \"{}\", {pin} }}", scaffold::SDK_REPOSITORY)), "{cargo}");
+    // Pinned to the release of this cyx; before the first release with the SDK there is no tag to pin to (e2e trial).
+    assert_eq!(scaffold::sdk_git_ref("0.7.0"), "tag = \"v0.7.0\"");
+    assert_eq!(scaffold::sdk_git_ref("0.7.3"), "tag = \"v0.7.3\"");
+    assert_eq!(scaffold::sdk_git_ref("0.6.0"), "branch = \"main\"");
     assert!(std::fs::read_to_string(root.join("tools/src/lib.rs")).unwrap().contains("struct MyTools;"));
     std::fs::remove_dir_all(&root).unwrap();
 }

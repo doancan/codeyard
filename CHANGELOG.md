@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The Rust SDK has `read_many`, `search`, `rename` and `create_directory`, and the TypeScript SDK `readMany`, `rename`
+  and `createDirectory`, as the API has them. `read_many` reads many files in one round trip: 2000 reads one after
+  another take about 2.5 s.
+- `doancan/codeyard/actions/setup-cyx`: installs `cyx` and the extension host in CI, built from the action's commit.
+- `cyx new` pins a Rust extension's SDK to the tag of the `cyx` release that wrote it (a preview `cyx` before 0.7.0
+  follows `main`, since no release has the SDK yet). The contributions reference lists the built-in language ids and
+  key names.
+
 - Screen readers reach the window's chrome and the controls drawn around the editor: the activity bar's views and its
   Manage button, the title bar's Back, Forward and file search, the caption buttons on Windows, every status bar
   item (each one does what its click does, including sync, ports, transfers, the terminal toggle, conflicts and the
@@ -415,6 +423,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Extension authoring, from two outside-author trials: `cyx check` names the Codeyard release an extension needs
+  without claiming that this preview build cannot run it, and names the API in "this Codeyard (API 1.0.0)"; a
+  component built against an old API reports it once, not once per import. `cyx publish` says "in 48 hours", not 49,
+  and a pre-release of code installs at once for those who opted in (the registry said it waited). `cyx check`
+  refuses key bindings with unknown modifiers or keys (`hyper-banana`), warns about a key a built-in shortcut uses and
+  about a language id that is neither built in nor added by the extension (with the likely one: `rustt` → `rust`),
+  and reports every unknown manifest field at once. `cyx check --fix` lists every missing permission it cannot add,
+  and for TypeScript says what to add by hand. `cyx package -o` into a missing folder fails before the build. A list
+  or table with too many rows says to show fewer, not to "send at most 10000 at a time".
+
 - Unit tests no longer start an installed language server from generic editor and workbench fixtures: under test
   `lsp.enabled` defaults to off and LSP integration tests turn it on explicitly. The shipped default stays on.
 - On a busy machine, closing a window could leave its terminals running for 5 minutes, and the last keys typed into a
@@ -475,6 +493,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pseudo console.
 
 ### Security
+
+- `cyx package` and `cyx publish` no longer put secrets and build input in a package: `.env` files, keys (`*.key`,
+  `*.pem`, `*.p12`, SSH keys), `.npmrc` and other token files, hidden files, `src/`, Rust and TypeScript sources,
+  `Cargo.toml`, `Cargo.lock`, `package.json` (which held the author's local `--sdk` path) and lock files stay out.
+  `cyx` names each secret it left out, and a file holding a private key stops packaging whatever its name.
+  `.cyxignore` leaves out more, and `cyx package --dry-run` lists what a package would hold. The developer guide says
+  what goes into a package.
 
 - `wasmtime` and `wasmtime-wasi` 50.0.1 in `codeyard-exthost` (RUSTSEC-2026-0420, RUSTSEC-2026-0422,
   RUSTSEC-2026-0423, RUSTSEC-2026-0424): fixes for typed functions with `i31` or `nullref` arguments, cross-engine

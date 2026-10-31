@@ -100,7 +100,9 @@ pub fn publish(p: &Publish, ep: &Endpoints, token: impl FnOnce() -> Result<Strin
     }
     // The registry reads the `code` flag of its index from the package (a code extension waits 48 h); nothing to send.
     let code = !m.is_declarative();
-    if code {
+    if code && p.pre_release {
+        notes.push(format!("note: {} runs code: the index marks it as code; a pre-release installs at once for users who opted in", m.id));
+    } else if code {
         notes.push(format!("note: {} runs code: the index marks it as code, and users get each version 48 hours after it is published", m.id));
     }
     let mut out = notes.join("\n");
@@ -144,11 +146,19 @@ pub fn publish(p: &Publish, ep: &Endpoints, token: impl FnOnce() -> Result<Strin
         ));
         return Ok(out);
     }
-    let available = published["available"].as_u64().unwrap_or(now);
-    // The registry's clock decides; a few minutes either way is still "now".
-    let when = if available <= now + 600 { "now".to_string() } else { format!("in {} hours (code waits 48 h)", (available - now).div_ceil(3600)) };
+    let when = when_available(published["available"].as_u64().unwrap_or(now), now);
     out.push_str(&format!("Published {} {} as {}.\nUsers get it {when}.", m.id, m.version, signed.publisher));
     Ok(out)
+}
+
+/// When users get a version the registry makes available at `available`: "now", or "in 48 hours (…)". The registry's
+/// clock decides, so a few minutes either way is still "now", and hours are rounded to the nearest.
+fn when_available(available: u64, now: u64) -> String {
+    if available <= now + 600 {
+        return "now".into();
+    }
+    let hours = (available - now + 1800) / 3600;
+    format!("in {hours} hour{} (updates that run code wait 48 h)", if hours == 1 { "" } else { "s" })
 }
 
 /// Yank, restore or deprecate a version of the folder's extension.

@@ -44,8 +44,8 @@ test("the size, element, row and document caps are Codeyard's", () => {
   assert.deepEqual(checkView(JSON.stringify(rows(10_001))), {
     ok: false,
     reason: "invalid",
-    message: "list: has 10001 rows; send at most 10000 at a time",
-    problems: ["list: has 10001 rows; send at most 10000 at a time"],
+    message: "list: has 10001 rows; a list takes at most 10000: show fewer, such as the newest, or let the user filter them",
+    problems: ["list: has 10001 rows; a list takes at most 10000: show fewer, such as the newest, or let the user filter them"],
   });
   const many = node(undefined, { column: {} }, Array.from({ length: 5 }, (_, c) => rows(10_000)).map((l, c) => ({ ...l, key: `c${c}` })));
   const verdict = checkView(JSON.stringify(many));

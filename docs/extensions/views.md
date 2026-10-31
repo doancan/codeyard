@@ -117,7 +117,7 @@ same rules ([Testing](testing.md)), so a tree that passes there is drawn.
 
 ## Keep it current
 
-When your data changes, call `ui.invalidate("deployments")`. Codeyard asks for the tree again and compares it with the
+When your data changes, call `ctx.invalidate("deployments")`. Codeyard asks for the tree again and compares it with the
 one on screen by `key`. Give every interactive element and every row a key that stays the same across renders: then
 what the user typed into an input, ticked, chose, selected, expanded and how far they scrolled stays as it was. Send a
 different `value`, `checked` or `selected` only when you mean to replace what the user did.
@@ -139,7 +139,7 @@ A `ui-event` counts as a user action, like a command: your extension may open a 
 A `list` or `table` takes up to 10,000 rows, and Codeyard draws only those on screen, so scrolling stays smooth. A
 `tree` loads one page at a time: send the first page with a `more` token, and when the user opens an item that has no
 children yet (or reaches "Load more"), you get `expand` with that token. Add the next page to your tree and call
-`ui.invalidate`.
+`ctx.invalidate`.
 
 ## What views cannot do
 

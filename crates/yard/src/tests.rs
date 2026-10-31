@@ -544,6 +544,16 @@ fn native_programs_need_an_invitation() {
     assert!(t.publish(&package("you.theme", "1.0.0", "Theme"), &github(7, 42)).is_ok());
 }
 
+/// A pre-release is installed at once by those who opted in, code or not, so the registry does not say it waits
+/// (e2e trial: `cyx publish --pre-release` said "in 49 hours").
+#[test]
+fn a_code_pre_release_is_available_at_once() {
+    let t = Test::inviting("native-pre", &["you"]);
+    let p = t.native("1.0.0-beta.1", LINUX).unwrap();
+    assert!(p.available <= NOW + 60, "{} > {}", p.available, NOW + 60);
+    assert!(t.native("1.0.0-beta.1", MAC).unwrap().available <= NOW + 60, "its other platform too");
+}
+
 /// AC3: a publisher's first native program stays unlisted, and out of the public folder, until a reviewer approves it.
 #[test]
 fn a_first_native_program_waits_for_review() {
