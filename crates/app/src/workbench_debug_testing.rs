@@ -11,6 +11,14 @@ impl Workbench {
         self.start_debug(config, cx);
     }
 
+    /// Offers `configs` as F5 does and returns the picker's (label, detail) rows, closing it again.
+    pub fn debug_picker_rows_for_test(&mut self, configs: Vec<LaunchConfig>, window: &mut Window, cx: &mut Context<Self>) -> Vec<(String, String)> {
+        self.choose_debug_config_trusted(configs, window, cx);
+        let rows = self.overlay_labels(cx).unwrap_or_default().into_iter().zip(self.overlay_details(cx).unwrap_or_default()).collect();
+        self.close_overlay(window, cx);
+        rows
+    }
+
     /// Summary of state for tests: (state, frame names, stopped line, console).
     pub fn debug_snapshot(&self) -> Option<(String, Vec<String>, Option<(String, usize)>, Vec<String>)> {
         self.dbg.cur().map(|d| {

@@ -398,9 +398,9 @@ pub fn read(bytes: &[u8]) -> Result<Package, Error> {
     Ok(Package { manifest, files, digest, component, target })
 }
 
-/// Collect an extension folder for `write`: every regular file except `EXCLUDED` names, packages (`*.cyx`, such as
-/// the one `cyx package` wrote last time) and the `native/` folder, with its executable bit. Symlinks are refused rather
-/// than followed: a package must not depend on what a link points to on the author's disk.
+/// Collect an extension folder for `write`: every regular file except `EXCLUDED` names, the `native/` folder and
+/// packages (`*.cyx`, such as the one `cyx package` wrote last time), with its executable bit. Symlinks are refused
+/// rather than followed: a package must not depend on what a link points to on the author's disk.
 pub fn collect_dir(root: &Path) -> Result<Vec<Entry>, Error> {
     collect_dir_for(root, None)
 }

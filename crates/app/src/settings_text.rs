@@ -154,6 +154,11 @@ pub fn value_range(text: &str, path: &[Seg]) -> Option<std::ops::Range<usize>> {
 
 /// The members (decoded key, value range) of the object at `range`; `None` if it is not an object.
 pub fn members(text: &str, range: std::ops::Range<usize>) -> Option<Vec<(String, std::ops::Range<usize>)>> {
+    Some(member_spans(text, range)?.into_iter().map(|(k, _, v)| (k, v)).collect())
+}
+
+/// Like `members`, with where each key starts.
+fn member_spans(text: &str, range: std::ops::Range<usize>) -> Option<Vec<(String, usize, std::ops::Range<usize>)>> {
     let bytes = text.as_bytes();
     if bytes.get(range.start) != Some(&b'{') {
         return None;
@@ -169,7 +174,7 @@ pub fn members(text: &str, range: std::ops::Range<usize>) -> Option<Vec<(String,
         }
         let start = skip_trivia(bytes, colon + 1);
         let end = start + value_len(text.get(start..)?);
-        out.push((key, start..end));
+        out.push((key, i, start..end));
         i = skip_trivia(bytes, end);
         if bytes.get(i) != Some(&b',') {
             break;
@@ -177,6 +182,49 @@ pub fn members(text: &str, range: std::ops::Range<usize>) -> Option<Vec<(String,
         i = skip_trivia(bytes, i + 1);
     }
     Some(out)
+}
+
+/// Set the value at an object path (e.g. `["lsp.servers", "rust", "settings", "rust-analyzer.check.command"]`), creating
+/// the objects that are missing; `None` removes it and the objects that are left empty. Comments and other members stay.
+pub fn set_path_in(text: &str, path: &[&str], value: Option<&Value>) -> String {
+    let Some((last, parents)) = path.split_last() else { return text.to_string() };
+    let segs: Vec<Seg> = path.iter().map(|k| Seg::Key(k)).collect();
+    let is_object = |r: &std::ops::Range<usize>| text.as_bytes().get(r.start) == Some(&b'{');
+    let Some(value) = value else {
+        let Some(parent) = value_range(text, &segs[..parents.len()]) else { return text.to_string() };
+        let Some((_, key, val)) = member_spans(text, parent).and_then(|m| m.into_iter().rev().find(|(k, ..)| k == last)) else { return text.to_string() };
+        // The whole member: its own line(s) and its comma, when nothing else shares them.
+        let line_start = text[..key].rfind('\n').map_or(0, |i| i + 1);
+        let start = if text[line_start..key].trim().is_empty() { line_start } else { key };
+        let mut end = val.end + (text[val.end..].len() - text[val.end..].trim_start_matches([' ', '\t']).len());
+        if text[end..].starts_with(',') {
+            end += 1;
+        }
+        let line_end = text[end..].find('\n').map_or(text.len(), |i| end + i + 1);
+        if start == line_start && text[end..line_end].trim().is_empty() {
+            end = line_end;
+        }
+        let out = format!("{}{}", &text[..start], &text[end..]);
+        let emptied = !parents.is_empty() && value_range(&out, &segs[..parents.len()]).is_some_and(|r| out[r].split_whitespace().collect::<String>() == "{}");
+        return if emptied { set_path_in(&out, parents, None) } else { out };
+    };
+    // `path[..depth]` are objects; `path[depth]` is missing, not an object, or the value itself.
+    let mut depth = 0;
+    while depth < path.len() && value_range(text, &segs[..=depth]).is_some_and(|r| depth < parents.len() && is_object(&r)) {
+        depth += 1;
+    }
+    let nested = path[depth + 1..].iter().rev().fold(value.clone(), |inner, key| serde_json::json!({ *key: inner }));
+    let json = serde_json::to_string(&nested).unwrap_or_default();
+    if let Some(r) = value_range(text, &segs[..=depth]) {
+        format!("{}{json}{}", &text[..r.start], &text[r.end..])
+    } else if depth == 0 {
+        set_value_in(text, path[0], &nested)
+    } else {
+        let Some(obj) = value_range(text, &segs[..depth]) else { return text.to_string() };
+        let indent = "  ".repeat(depth + 1);
+        let key = serde_json::to_string(path[depth]).unwrap_or_default();
+        format!("{}\n{indent}{key}: {json},{}", &text[..=obj.start], &text[obj.start + 1..])
+    }
 }
 
 /// The element ranges of the array at `range`; `None` if it is not an array.
