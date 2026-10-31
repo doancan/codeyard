@@ -25,6 +25,9 @@ client-id     = "your-gitlab-application-id"
 scopes        = ["api"]
 hosts         = ["gitlab.com"]
 account-url   = "https://gitlab.com/api/v4/user"
+# A self-managed GitLab: the user adds its host and their own application id on the extension's page (Accounts ›
+# Add Instance…), and Codeyard uses these URLs on that host. Its remotes then come to the provider below.
+instances     = true
 
 [[commands]]
 id    = "sign-in"
@@ -36,23 +39,3 @@ id    = "gitlab"
 label = "GitLab"
 hosts = ["gitlab.com"]
 auth  = "gitlab"
-
-# A self-managed GitLab: its own OAuth application and provider, under the id `gitlab-self-managed`, which the code
-# also registers. Uncomment, put in the instance's host and application id, add "gitlab-self-managed" to
-# [permissions] auth, then `cyx package` and install the .cyx (README.md).
-#
-# [[oauth]]
-# id            = "gitlab-self-managed"
-# name          = "GitLab (gitlab.example.com)"
-# authorize-url = "https://gitlab.example.com/oauth/authorize"
-# token-url     = "https://gitlab.example.com/oauth/token"
-# client-id     = "your-instance-application-id"
-# scopes        = ["api"]
-# hosts         = ["gitlab.example.com"]
-# account-url   = "https://gitlab.example.com/api/v4/user"
-#
-# [[pull-requests]]
-# id    = "gitlab-self-managed"
-# label = "GitLab (gitlab.example.com)"
-# hosts = ["gitlab.example.com"]
-# auth  = "gitlab-self-managed"

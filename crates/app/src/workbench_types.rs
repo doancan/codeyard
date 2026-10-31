@@ -141,7 +141,7 @@ pub(super) enum OverlayKind {
         rebuild: bool,
     },
     /// "Remove SSH Host…" / "Test Connection…": host aliases.
-    /// "GitHub: Pull Requests…": open requests (GitHub's and extensions') and actions for the selected request.
+    /// "Pull Requests: Show…": open requests (GitHub's and extensions') and actions for the selected request.
     PullRequests(Vec<pulls_glue::PullRow>),
     PullRequestActions {
         remote: String,
@@ -271,6 +271,11 @@ pub(super) enum InputPurpose {
     CloneUrl,
     /// A comment on an extension's pull request.
     PullComment(Box<ext_pulls_glue::ExtPull>),
+    /// `host client-id` of a self-managed instance of an extension's `[[oauth]]` provider (#184).
+    AddInstance {
+        extension: String,
+        provider: String,
+    },
     /// Workspace switcher: connect to the typed host name (or `user@host`).
     ConnectHost,
     /// `user@host[:port] [as name]` -> ~/.ssh/config.

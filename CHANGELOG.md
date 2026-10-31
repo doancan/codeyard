@@ -257,9 +257,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Both mock hosts: `secrets()` returns the keychain entries the extension left. An `auth.fetch` to a host outside the
   account's `[[oauth]] hosts` (or GitHub's API hosts) is refused, and one with its own `authorization` header fails, as
   in Codeyard.
+- Self-managed forges without repackaging (#184): an `[[oauth]]` table with `instances = true` lets the user add a
+  server of their own (a company GitLab, a Gitea or Forgejo) on the extension's page, Accounts › **Add Instance…**,
+  with the client id of the OAuth application they registered there. A system dialog names the extension, its
+  publisher, the host, the client id and the redirect URI first, as for a permission; instances are kept per
+  extension and publisher identity next to the permission switches, and only that page adds them. Each is an account
+  of its own (`gitlab@git.example.com`) that signs requests to its host only; the extension's `[[pull-requests]]`
+  provider claims its remotes, and `net` covers its host where it covers the table's. The `gitlab` and `gitea-pulls`
+  examples use it. The manifest change is additive (#147).
+- Sign-in outcomes in both mock hosts (#185): `decline_sign_in` / `declineSignIn` (the user cancels, `auth.session`
+  fails with `cancelled`), `signed_out` / `signedOut` (`auth.fetch` fails with Codeyard's "not signed in" error until
+  the next `auth.session`), `sign_in` / `signIn` with an account name, and `instance` for a self-managed instance.
+- `cyx test` answers `net.fetch` and `auth.fetch` from HTTP fixtures (#185): `test/fixtures.json`, or
+  `--fixtures FILE` (method, URL, status, headers, body; docs/extensions/testing.md), after the usual permission and
+  host checks, so a provider's success path runs in the real extension host. `cyx test` now also refuses an
+  `auth.fetch` to a host outside the account's, as Codeyard does.
+- `cyx new pull-requests <name> [--lang ts]` (#187): a pull request provider with its `[[oauth]]` account
+  (`instances = true`), unit tests and `cyx test` fixtures, and a README on registering the OAuth application.
+- `cyx check` warns about a placeholder OAuth `client-id` (`your-client-id`, `<…>`, `example…`), and `cyx publish`
+  refuses one (#187).
 
 ### Changed
 
+- The Pull Requests view's command is **Pull Requests: Show…** (was "GitHub: Pull Requests…"), since it lists every
+  provider's requests; the palette still finds it by its old name and by "merge requests" (#186). When no remote is
+  claimed, the message names the providers there are.
+- An `auth.fetch` to a host outside the account's is refused with `[[oauth]] <id> hosts = ["<host>"]`, and both SDKs,
+  both mock hosts, `cyx test` and the Inspector's **Copy fix** now say to add the host to that `[[oauth]]` table instead
+  of the `auth` line the manifest already has (#183). The SDKs fill in a manifest line only when Codeyard names just
+  a permission (`net`); any other text it sends is kept.
+- `cyx package` leaves the `test/` and `tests/` folders at the top of an extension out of the package (#187).
 - Source Control builds only the change rows on screen, so a repository with thousands of changes (generated files,
   a large merge) scrolls and refreshes without delay. The list keeps its scroll position and focus when the status
   refreshes.

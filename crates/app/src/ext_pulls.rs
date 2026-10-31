@@ -3,6 +3,7 @@
 //! Markdown. The view itself is `workbench_ext_pulls.rs`.
 
 use ext_api::value as v;
+use ext_core::instances::Instance;
 use ext_manifest::PullRequestProvider;
 
 /// Longest title, author, branch or label shown; longer text is cut.
@@ -52,17 +53,18 @@ fn without_credentials(url: &str) -> String {
     }
 }
 
-/// The remote as `provider` gets it, when the provider claims its host. `local` is the provider's local id.
-pub fn claimed(provider: &PullRequestProvider, local: &str, name: &str, url: &str) -> Option<v::PullRemote> {
+/// The remote as `provider` gets it, when the provider claims its host: one of its `hosts`, or the host of a
+/// self-managed instance the user added to its `auth` provider (#184), whose account the remote then carries.
+/// `local` is the provider's local id.
+pub fn claimed(provider: &PullRequestProvider, instances: &[Instance], local: &str, name: &str, url: &str) -> Option<v::PullRemote> {
     let (host, path) = parse_remote(url)?;
-    provider.claims(&host).then(|| v::PullRemote {
-        provider: local.to_string(),
-        name: name.to_string(),
-        url: without_credentials(url),
-        host,
-        path,
-        account: provider.auth.clone(),
-    })
+    let account = if provider.claims(&host) {
+        provider.auth.clone()
+    } else {
+        let auth = provider.auth.as_deref()?;
+        Some(instances.iter().find(|i| i.provider == auth && i.host == host)?.account())
+    };
+    Some(v::PullRemote { provider: local.to_string(), name: name.to_string(), url: without_credentials(url), host, path, account })
 }
 
 /// Text from an extension as the view shows it: one line, no control or invisible characters, at most `max` characters.
