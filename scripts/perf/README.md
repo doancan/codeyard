@@ -13,7 +13,7 @@ scripts/perf/compare.py target/perf/baseline.json target/perf/candidate.json
 
 `--aa` runs the working tree against itself instead: every row must pass, otherwise the machine is too noisy (close
 other apps, plug in the power, let it cool). `--runs` and `--mem-runs` change the number of runs (default 20 and 5). A
-full run takes about 30 minutes. The measured windows open in the background and never take the keyboard, but they
+full run takes about 35 minutes. The measured windows open in the background and never take the keyboard, but they
 must be visible: keep the display awake and stay on the same Space. A run that draws no frame or loses a key stops
 with a message instead of producing numbers. The baseline is built once in `target/perf/worktree-<commit>` and reused.
 
@@ -69,9 +69,9 @@ The keystroke rows with extensions (`typing.keystroke_frame_decorations_ms`, `_c
 `typing.keystroke_frame_words_ms`, the same keys without the extension. A keystroke time includes up to two display
 refreshes, so plain typing itself measures about 29 ms on the reference Mac and a ceiling in milliseconds would only
 measure the display; what these rows must show is that extensions add nothing visible over typing the same keys
-without them. 10% is above the noise: in the 2026-10-31 reference session, two random sets of 20 plain typing runs
-differ at p95 by at most NOISE20 in 99.5% of splits; with 5 runs that is NOISE5, so a quick `--runs 5` run can cross it by
-noise alone.
+without them. 10% is above the noise: in the two reference sessions of 2026-10-31, two random sets of 20 plain typing
+runs differ at p95 by at most 4.4% in 99.5% of splits (6.8% at most); with 5 runs it is up to 11%, so a quick
+`--runs 5` run can cross the ceiling by noise alone.
 
 ## Release
 
