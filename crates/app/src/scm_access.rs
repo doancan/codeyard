@@ -16,6 +16,8 @@ pub(crate) enum AccessFrame {
     Commit,
     Line(ChangeKey),
     Button(ChangeKey, u64),
+    /// A part of the history sections (sync, worktrees, graph, details).
+    History(HistoryFrame),
 }
 
 /// A file's Stage (Unstage, Mark as resolved) button.
@@ -94,6 +96,8 @@ pub(crate) struct AccessView {
     pub ext: Vec<AccessExt>,
     /// Physical frames of what was painted (see `AccessFrame`).
     pub frames: HashMap<AccessFrame, accesskit::Rect>,
+    /// Sync, worktrees, the graph and the selected commit.
+    pub history: AccessHistory,
 }
 
 /// A folder a provider claims, as its section shows it.
@@ -172,6 +176,7 @@ impl ScmPanel {
         let scale = window.scale_factor();
         let frames = self.a11y_frames.borrow().iter().filter_map(|(k, b)| Some((k.clone(), crate::painted::physical_scaled(*b, scale)?))).collect();
         AccessView {
+            history: if git.is_some() { self.a11y_history(window, cx) } else { AccessHistory::default() },
             ext,
             frames,
             revision: self.status.clone(),

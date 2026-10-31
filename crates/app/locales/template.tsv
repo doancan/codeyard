@@ -323,6 +323,7 @@ Commit Signed Off
 Commit all tracked changes when nothing is staged	
 Commit or stash your changes first	
 Commit {}	
+Commits	
 Commits after it leave this branch and every uncommitted change is lost. This can't be undone.	
 Commits as {0} <{1}>	
 Commits drawn in the Source Control graph	
@@ -523,6 +524,7 @@ Created branch {0} at {1}
 Creating {}…	
 Current	
 Current branch	
+Current parameter: {}	
 Cursor animation	
 Customize	
 Cut	
@@ -801,6 +803,7 @@ Enter the remote as: name url
 Enter: path branch	
 Error	
 Errors and warnings	
+Evaluate	
 Evaluate an expression (↵)	
 Every file of {} matches its package.	
 Every setting, with comments	
@@ -904,6 +907,7 @@ Files with the same name are overwritten; other files in the folder are kept.
 Files: Collapse Folders in Explorer	
 Files: Open Folder…	
 Files: {0}/{1}	
+Files: {}	
 Filter	
 Filter (e.g. text, path)	
 Filtering needs sh, tail, grep and cut on the host (on Windows: Git Bash or WSL). {}	
@@ -1074,6 +1078,7 @@ History is collected while monitoring is active. CPU can exceed 100% across core
 History of {}	
 Host and client id of your {} server, such as git.example.com 3f2a9c	
 Host name (from ~/.ssh/config) or user@host	
+Hover	
 Hover an option to preview the result.	
 Identical	
 Ignore Case	
@@ -1589,6 +1594,7 @@ Opening…
 Order of files and folders in the explorer	
 Outline	
 Output	
+Output of {}	
 Output: Clear	
 Overview	
 Overwrite	
@@ -1696,6 +1702,7 @@ Publish failed: {}
 Published addresses belong to the SSH server. Use port forwarding to access remote services locally.	
 Published to {}	
 Publishing branch…	
+Pull	
 Pull (Rebase)	
 Pull Requests: Show…	
 Pull also fetches all tags	
@@ -1709,6 +1716,7 @@ Pull with rebase instead of a merge commit
 Pulled	
 Pulling, Pushing…	
 Pulling…	
+Push	
 Push Tags	
 Push failed: {}	
 Push to…	
@@ -2085,6 +2093,7 @@ Shrink Selection
 Side by side	
 Sign In…	
 Sign Out	
+Signature help	
 Signature not verified: the token is only decoded, not checked	
 Skip This Version	
 Skip Those Files	
@@ -2784,6 +2793,7 @@ lines {0}–{1}
 link target differs	
 local agent, protocol test	
 local port, e.g. 8080	
+merge	
 merged	
 method	
 milliseconds	
@@ -3086,6 +3096,7 @@ your words
 {} changed no files (merge or empty commit).	
 {} change|{} changes	
 {} command|{} commands	
+{} commit|{} commits	
 {} conflict left|{} conflicts left	
 {} conflict|{} conflicts	
 {} contains a request that:	

@@ -50,6 +50,7 @@ fn snap() -> Snapshot {
         editor: Some(EditorSnap { name: "main.rs".into(), dirty: false, runs, selection: (3, 7), total_lines: 3, first_line: 0 }),
         find: None,
         completion: None,
+        popups: None,
         terminal: None,
         scm: None,
         views: Default::default(),

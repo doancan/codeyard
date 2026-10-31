@@ -364,5 +364,12 @@ fn scm_controls_and_rows_have_their_painted_frames(cx: &mut TestAppContext) {
         assert!(b.x0 >= row.x0 - 0.01 && b.x1 <= row.x1 + 0.01 && b.y0 >= row.y0 - 0.01 && b.y1 <= row.y1 + 0.01, "{button} {b:?} in {row:?}");
         assert_eq!(hit(b).as_deref(), Some(button));
     }
-    assert!(snap.to_tree().nodes.iter().filter(|(_, n)| n.label() == Some("More Actions…")).all(|(_, n)| n.bounds().is_none()));
+    // A file's menu button (its menu opens with a right click on the row) has no control of its own on screen.
+    assert!(
+        snap.to_tree()
+            .nodes
+            .iter()
+            .filter(|(id, n)| n.label() == Some("More Actions…") && (SCM_FILE..SCM_FILE + BLOCK).contains(&id.0))
+            .all(|(_, n)| n.bounds().is_none())
+    );
 }

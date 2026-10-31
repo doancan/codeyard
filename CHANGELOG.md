@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Screen readers reach the rest of Source Control, the editor's popups and the Debug Console: the Sync / Publish
+  button; the Worktrees section, whose checkouts open from the tree; the Graph with its buttons (search, fetch, pull,
+  push with their counts, reload, its menu), filters, commit search and commits, which select, open and open their
+  menu; the selected commit's message and files, which open their diffs. The hover and signature help are read-only
+  tooltips under the editor (Show Hover from the screen reader shows the hover; its related locations are links), and
+  the Debug Console is a live log with its expression field and an Evaluate button. Every one of them reports the
+  frame it is drawn at.
+
 - Screen readers and magnifiers get the on-screen position of more of the interface: each Extensions row (Installed
   and Market), the picker's query box, list and rows, each suggestion, the Settings page's search field, categories,
   options, Reset buttons and page buttons, the bottom panel's tabs, the Search Editor's query, status, results and

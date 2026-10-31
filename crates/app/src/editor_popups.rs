@@ -9,6 +9,53 @@ pub enum PopupFrame {
     /// The suggestion list, and suggestion `i` (its index among all suggestions).
     Suggestions,
     Suggestion(usize),
+    /// The hover popup and its diagnostic line `i`, and the signature popup.
+    Hover,
+    HoverLine(usize),
+    Signature,
+}
+
+/// A line of the hover for the accessibility tree: its text, whether a click opens it (a related location) and where
+/// it was painted.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HoverLineA11y {
+    pub text: String,
+    pub opens: bool,
+    pub bounds: Option<accesskit::Rect>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct HoverA11y {
+    pub lines: Vec<HoverLineA11y>,
+    pub bounds: Option<accesskit::Rect>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SignatureA11y {
+    pub label: String,
+    /// The parameter being typed.
+    pub active: Option<String>,
+    pub bounds: Option<accesskit::Rect>,
+}
+
+/// The editor's hover and signature popups as the accessibility tree shows them (`a11y_popups.rs`).
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct PopupsA11y {
+    pub hover: Option<HoverA11y>,
+    pub signature: Option<SignatureA11y>,
+}
+
+impl PopupsA11y {
+    /// Drop the painted positions (the editor was not drawn in the window asking).
+    pub fn forget_frames(&mut self) {
+        if let Some(h) = &mut self.hover {
+            h.bounds = None;
+            h.lines.iter_mut().for_each(|l| l.bounds = None);
+        }
+        if let Some(s) = &mut self.signature {
+            s.bounds = None;
+        }
+    }
 }
 
 impl EditorView {
@@ -293,6 +340,7 @@ impl EditorView {
             out.push(
                 div()
                     .absolute()
+                    .child(probe(PopupFrame::Signature))
                     .left(x)
                     .top(y.max(px(0.)))
                     .max_w(px(640.))
@@ -381,30 +429,38 @@ impl EditorView {
         if let Some(h) = &self.hover {
             let x = h.position.x - self.surface_origin.x;
             let y = self.screen_pos(h.at).map_or(h.position.y, |(v, _)| v.bounds.bottom()) - self.surface_origin.y;
-            let diag_rows = hover_rows(&h.diagnostics, &self.path, self.lsp_root.as_deref()).into_iter().enumerate().map(|(i, row)| match row {
-                HoverRow::Diagnostic { severity, text } => {
-                    let (glyph, color) = match severity {
-                        1 => ("circle-x", p.danger),
-                        2 => ("alert", p.warning),
-                        _ => ("info", p.info),
-                    };
-                    div().flex().gap(px(theme::SPACE[2])).child(icon(glyph, 14., color)).child(div().flex_1().child(text))
-                }
-                HoverRow::Related { text, .. } => {
-                    div().pl(px(theme::SPACE[6])).text_color(c(p.text_muted)).cursor_pointer().hover(|d| d.text_color(c(p.accent))).child(text).on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |e, _, _, cx| {
-                            cx.stop_propagation();
-                            e.open_hover_row(i, cx);
-                        }),
-                    )
-                }
-                HoverRow::More(text) => div().pl(px(theme::SPACE[6])).text_color(c(p.text_muted)).child(text),
+            let diag_rows = hover_rows(&h.diagnostics, &self.path, self.lsp_root.as_deref()).into_iter().enumerate().map(|(i, row)| {
+                let line = match row {
+                    HoverRow::Diagnostic { severity, text } => {
+                        let (glyph, color) = match severity {
+                            1 => ("circle-x", p.danger),
+                            2 => ("alert", p.warning),
+                            _ => ("info", p.info),
+                        };
+                        div().flex().gap(px(theme::SPACE[2])).child(icon(glyph, 14., color)).child(div().flex_1().child(text))
+                    }
+                    HoverRow::Related { text, .. } => div()
+                        .pl(px(theme::SPACE[6]))
+                        .text_color(c(p.text_muted))
+                        .cursor_pointer()
+                        .hover(|d| d.text_color(c(p.accent)))
+                        .child(text)
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(move |e, _, _, cx| {
+                                cx.stop_propagation();
+                                e.open_hover_row(i, cx);
+                            }),
+                        ),
+                    HoverRow::More(text) => div().pl(px(theme::SPACE[6])).text_color(c(p.text_muted)).child(text),
+                };
+                line.relative().child(probe(PopupFrame::HoverLine(i)))
             });
             out.push(
                 div()
                     .id("hover")
                     .absolute()
+                    .child(probe(PopupFrame::Hover))
                     .left(x)
                     .top(y)
                     .max_w(px(560.))
@@ -481,6 +537,67 @@ impl EditorView {
             cx.emit(EditorEvent::OpenLocation { path, line, col });
             cx.notify();
         }
+    }
+
+    /// The hover and signature popups of this view, with where they were painted in its last frame (at `scale`).
+    pub fn a11y_popups(&self, scale: f32) -> PopupsA11y {
+        let painted = self.a11y_popups.borrow();
+        let frame = |part| painted.get(&(self.slot, part)).and_then(|b| crate::painted::physical_scaled(*b, scale));
+        let hover = self.hover.as_ref().map(|h| {
+            let mut lines: Vec<HoverLineA11y> = hover_rows(&h.diagnostics, &self.path, self.lsp_root.as_deref())
+                .into_iter()
+                .enumerate()
+                .map(|(i, row)| {
+                    let (text, opens) = match row {
+                        HoverRow::Diagnostic { severity, text } => {
+                            let kind = match severity {
+                                1 => t("Error"),
+                                2 => t("Warning"),
+                                _ => t("Information"),
+                            };
+                            (format!("{kind}: {text}"), false)
+                        }
+                        HoverRow::Related { text, .. } => (text, true),
+                        HoverRow::More(text) => (text, false),
+                    };
+                    HoverLineA11y { text, opens, bounds: frame(PopupFrame::HoverLine(i)) }
+                })
+                .collect();
+            let texts = h.text.iter().map(|t| t.to_string()).chain(h.ext.iter().map(|(ext, text)| format!("{ext}: {text}")));
+            lines.extend(texts.filter(|t| !t.trim().is_empty()).map(|text| HoverLineA11y { text, opens: false, bounds: None }));
+            HoverA11y { lines, bounds: frame(PopupFrame::Hover) }
+        });
+        let signature = self.signature.as_ref().filter(|_| self.completion.is_none()).map(|(label, active)| SignatureA11y {
+            label: label.clone(),
+            active: active.clone().and_then(|r| label.get(r)).map(str::to_string),
+            bounds: frame(PopupFrame::Signature),
+        });
+        PopupsA11y { hover, signature }
+    }
+
+    /// Accessibility `ShowTooltip`: the hover at the caret, as "Editor: Show Hover".
+    pub fn a11y_show_hover(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.show_hover(&ShowHover, window, cx);
+    }
+
+    /// Accessibility `HideTooltip`: the hover and the signature help close.
+    pub fn a11y_hide_popups(&mut self, cx: &mut Context<Self>) {
+        self.hover = None;
+        self.signature = None;
+        cx.notify();
+    }
+
+    /// Accessibility `Click` on hover line `i`, while it still reads `text`.
+    pub fn a11y_open_hover_line(&mut self, i: usize, text: &str, cx: &mut Context<Self>) {
+        if self.a11y_popups(1.).hover.and_then(|h| h.lines.into_iter().nth(i)).is_some_and(|l| l.opens && l.text == text) {
+            self.open_hover_row(i, cx);
+        }
+    }
+
+    #[cfg(test)]
+    pub fn set_signature_for_test(&mut self, label: &str, active: Option<std::ops::Range<usize>>, cx: &mut Context<Self>) {
+        self.signature = Some((label.to_string(), active));
+        cx.notify();
     }
 
     #[cfg(test)]

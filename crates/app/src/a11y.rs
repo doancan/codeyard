@@ -292,6 +292,8 @@ mod ext_views_access;
 mod ids;
 #[path = "a11y_inspector.rs"]
 mod inspector_access;
+#[path = "a11y_popups.rs"]
+mod popups_access;
 #[path = "a11y_problems.rs"]
 mod problems_access;
 #[path = "a11y_scm.rs"]
@@ -332,6 +334,8 @@ pub struct Snapshot {
     pub editor: Option<EditorSnap>,
     pub find: Option<FindSnap>,
     pub completion: Option<ListSnap>,
+    /// The editor's hover and signature popups.
+    pub(crate) popups: Option<crate::editor::PopupsA11y>,
     pub terminal: Option<TerminalSnap>,
     pub(crate) scm: Option<ScmSnap>,
     pub(crate) views: problems_access::ViewsSnap,
@@ -608,12 +612,19 @@ impl Snapshot {
             set_scroll(&mut ed, e.first_line, last - e.first_line, e.total_lines);
             ed.add_action(Action::Focus);
             ed.add_action(Action::SetTextSelection);
+            ed.add_action(Action::ShowTooltip);
+            if self.popups.as_ref().is_some_and(|p| p.hover.is_some() || p.signature.is_some()) {
+                ed.add_action(Action::HideTooltip);
+            }
             let mut children = run_nodes(&e.runs, RUN_BASE, &mut nodes);
             if let (Some(a), Some(f)) = (position_of(&e.runs, RUN_BASE, e.selection.0), position_of(&e.runs, RUN_BASE, e.selection.1)) {
                 ed.set_text_selection(TextSelection { anchor: a, focus: f });
             }
             // For clients that ask for AXValue (text range queries are still resolved from the runs).
             ed.set_value(e.runs.iter().map(|r| r.text.as_str()).collect::<String>());
+            if let Some(popups) = &self.popups {
+                popups_access::append(popups, &mut nodes, &mut children);
+            }
             // Suggestions: the editor keeps the keyboard focus, the selected suggestion is its active descendant.
             if let Some(list) = &self.completion {
                 let node = list_nodes(list, t("Suggestions"), COMPLETION_OPTION, &mut nodes);
@@ -798,6 +809,7 @@ impl Snapshot {
                 self.search_editor.as_ref().and_then(SearchEdSnap::focus_node).expect("focused search editor")
             }
             _ if self.views.focus_node().is_some() => self.views.focus_node().expect("focused view"),
+            _ if self.scm.as_ref().and_then(ScmSnap::history_focus).is_some() => self.scm.as_ref().and_then(ScmSnap::history_focus).expect("graph search"),
             FocusSnap::Picker if self.picker.is_some() => PICKER_INPUT,
             FocusSnap::Find(0) if self.find.is_some() => FIND_QUERY,
             FocusSnap::Find(_) if self.find.as_ref().is_some_and(|f| f.replacement.is_some()) => FIND_REPLACE,
@@ -938,11 +950,15 @@ impl Workbench {
             }
         });
         let mut completion = ed.and_then(|e| completion_snap(e.read(cx), window.scale_factor()));
+        let mut popups = ed.map(|e| e.read(cx).a11y_popups(window.scale_factor()));
         // Painted positions only while the editor was drawn in this window's last frame.
-        if !geometry.editor_painted()
-            && let Some(list) = completion.as_mut()
-        {
-            (list.frames, list.bounds) = (Vec::new(), None);
+        if !geometry.editor_painted() {
+            if let Some(list) = completion.as_mut() {
+                (list.frames, list.bounds) = (Vec::new(), None);
+            }
+            if let Some(p) = popups.as_mut() {
+                p.forget_frames();
+            }
         }
         let shown = self.a11y_terminal(window, cx);
         let term = shown.as_ref().map(|(t, _, _)| t.clone());
@@ -992,6 +1008,7 @@ impl Workbench {
             editor,
             find,
             completion,
+            popups,
             terminal,
             scm,
             views: self.a11y_views(window, cx),
@@ -1030,7 +1047,7 @@ impl Workbench {
             cx.notify();
             return;
         }
-        if self.a11y_search_action(req, last, window, cx) || self.a11y_term_tab_action(req, last, window, cx) {
+        if self.a11y_search_action(req, last, window, cx) || self.a11y_term_tab_action(req, last, window, cx) || self.a11y_popup_action(req, last, window, cx) {
             return;
         }
         match (req.action, req.target_node) {
@@ -1371,6 +1388,10 @@ mod row_frames_tests;
 #[cfg(test)]
 #[path = "a11y_list_frames_tests.rs"]
 mod list_frames_tests;
+
+#[cfg(test)]
+#[path = "a11y_views_tests.rs"]
+mod views_tests;
 
 #[cfg(test)]
 #[path = "a11y_confirm_tests.rs"]
