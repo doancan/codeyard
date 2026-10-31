@@ -499,10 +499,11 @@ impl TerminalView {
             .enumerate()
             .map(|(r, ((text, start), cells))| {
                 let n = text.chars().count().min(cells.len());
-                let mut xs: Vec<Pixels> = cells[..n].iter().map(|(col, _)| origin.x + cell_w * *col as f32).collect();
-                xs.push(origin.x + cell_w * cells[..n].last().map_or(0, |(col, w)| col + w) as f32);
+                let x = |col: usize| origin.x + cell_w * col as f32;
+                let end = x(cells[..n].last().map_or(0, |(col, w)| col + w));
+                let cells = cells[..n].iter().map(|&(col, w)| (x(col), x(col + w))).collect();
                 let top = origin.y + line_h * r as f32;
-                crate::painted::TextLine { start: *start, xs, top, bottom: top + line_h, line_break: px(0.) }
+                crate::painted::TextLine { start: *start, cells, end, top, bottom: top + line_h, line_break: px(0.) }
             })
             .collect()
     }

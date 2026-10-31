@@ -231,6 +231,7 @@ impl Workbench {
                 .on_drag(dragged, |d, _, _, cx| cx.new(|_| d.clone()))
                 .drag_over::<DraggedTerminalTab>(move |s, _, _, _| s.border_l_2().border_color(c(accent)))
                 .relative()
+                .children((key.id == self.tabs.layout.focused()).then(|| a11y::part_frame(a11y::Part::TermTab(ix), cx)))
                 .flex()
                 .flex_none()
                 .items_center()

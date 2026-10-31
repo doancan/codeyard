@@ -17,6 +17,8 @@ pub(crate) struct ExtSnap {
     /// nothing.
     keys: Vec<String>,
     pub search_focused: bool,
+    /// Where the Installed and Market tabs, the search field and the list were laid out.
+    controls: Vec<Option<accesskit::Rect>>,
 }
 
 /// A Market extension's page in the editor area.
@@ -45,6 +47,9 @@ pub(super) fn append_tree(view: &ExtSnap, nodes: &mut Vec<(NodeId, Node)>) {
         tab.set_label(label);
         tab.set_selected(on);
         tab.add_action(Action::Click);
+        if let Some(b) = view.controls.get(usize::from(id == EXT_TAB_MARKET)).copied().flatten() {
+            tab.set_bounds(b);
+        }
         nodes.push((id, tab));
     }
     tabs.set_children(vec![EXT_TAB_INSTALLED, EXT_TAB_MARKET]);
@@ -55,6 +60,9 @@ pub(super) fn append_tree(view: &ExtSnap, nodes: &mut Vec<(NodeId, Node)>) {
     search.set_value(view.query.clone());
     search.add_action(Action::Focus);
     search.set_controls(vec![EXT_LIST]);
+    if let Some(b) = view.controls.get(2).copied().flatten() {
+        search.set_bounds(b);
+    }
     if let Some(o) = selected_option(&view.list, EXT_ROW) {
         search.set_active_descendant(o);
     }
@@ -68,7 +76,10 @@ pub(super) fn append_tree(view: &ExtSnap, nodes: &mut Vec<(NodeId, Node)>) {
     nodes.push((EXT_STATUS, status));
 
     let label = if view.market { t("Market") } else { t("Installed") };
-    let list = list_nodes(&view.list, label, EXT_ROW, nodes);
+    let mut list = list_nodes(&view.list, label, EXT_ROW, nodes);
+    if let Some(b) = view.controls.get(3).copied().flatten() {
+        list.set_bounds(b);
+    }
     nodes.push((EXT_LIST, list));
 
     group.set_children(vec![EXT_TABS, EXT_SEARCH, EXT_STATUS, EXT_LIST]);
@@ -123,8 +134,10 @@ impl Workbench {
                     keys.push(market_key(&item.registry, &item.id));
                 }
             }
-            let list = ListSnap { rows, rows_total: m.results.len(), selected: (!m.results.is_empty()).then_some(m.cursor) };
-            return Some(ExtSnap { market, search_label: t("Search the Market").into(), query, status, error, list, keys, search_focused });
+            let frames = self.a11y_part_frames(Part::Market, rows.len(), window);
+            let list = ListSnap { rows, rows_total: m.results.len(), selected: (!m.results.is_empty()).then_some(m.cursor), frames, bounds: None };
+            let controls = self.a11y_part_frames(|k| Part::ExtControl(k as u8), 4, window);
+            return Some(ExtSnap { market, search_label: t("Search the Market").into(), query, status, error, list, keys, search_focused, controls });
         }
         let visible = self.visible_extensions(cx);
         let (status, error) = match &s.error {
@@ -148,8 +161,16 @@ impl Workbench {
             .collect();
         let keys = visible.iter().take(MAX_OPTIONS).map(|&i| s.list[i].manifest.id.to_string()).collect();
         let selected = s.selected.as_ref().and_then(|id| visible.iter().position(|&i| s.list[i].manifest.id.as_str() == id));
-        let list = ListSnap { rows, rows_total: visible.len(), selected };
-        Some(ExtSnap { market, search_label: t("Search installed extensions").into(), query, status, error, list, keys, search_focused })
+        let frames = self.a11y_part_frames(Part::Extension, visible.len().min(MAX_OPTIONS), window);
+        let list = ListSnap { rows, rows_total: visible.len(), selected, frames, bounds: None };
+        let controls = self.a11y_part_frames(|k| Part::ExtControl(k as u8), 4, window);
+        Some(ExtSnap { market, search_label: t("Search installed extensions").into(), query, status, error, list, keys, search_focused, controls })
+    }
+
+    /// Where the first `count` rows of a list the workbench draws (`part(i)` for row `i`) were laid out in `window`.
+    fn a11y_part_frames(&self, part: fn(usize) -> Part, count: usize, window: &Window) -> Vec<Option<accesskit::Rect>> {
+        let id = window.window_handle().window_id();
+        (0..count).map(|i| self.chrome.a11y_bounds.part_in(id, part(i)).and_then(|b| crate::painted::physical_scaled(b, window.scale_factor()))).collect()
     }
 
     /// A Market extension's page while it is in front.

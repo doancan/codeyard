@@ -98,6 +98,20 @@ pub struct PickerA11y {
     pub selected: Option<usize>,
     /// Shown instead of rows when there are none.
     pub empty: Option<String>,
+    /// Where the picker, its query box, its list and each of the first rows were painted (physical pixels).
+    pub bounds: Option<accesskit::Rect>,
+    pub input: Option<accesskit::Rect>,
+    pub list: Option<accesskit::Rect>,
+    pub frames: Vec<Option<accesskit::Rect>>,
+}
+
+/// A part of the picker whose painted bounds the accessibility tree reports.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+enum PickFrame {
+    Picker,
+    Input,
+    List,
+    Row(usize),
 }
 
 struct Row {
@@ -133,6 +147,8 @@ pub struct Picker {
     goto: Option<(usize, Option<usize>)>,
     focus_handle: FocusHandle,
     scroll: UniformListScrollHandle,
+    /// Where its parts were painted in the last frame (accessibility).
+    painted: crate::painted::WindowBounds<PickFrame>,
 }
 
 impl EventEmitter<PickerEvent> for Picker {}
@@ -165,6 +181,7 @@ impl Picker {
             goto: None,
             focus_handle: cx.focus_handle(),
             scroll: UniformListScrollHandle::new(),
+            painted: Default::default(),
         };
         p.initial_selected = !p.query.is_empty() && p.sources.iter().any(|s| matches!(s, Source::Input { .. }));
         p.refilter();
@@ -282,9 +299,14 @@ impl Picker {
         &self.query
     }
 
-    /// For the accessibility tree (a11y.rs): at most `limit` rows.
-    pub fn a11y_view(&self, limit: usize) -> PickerA11y {
+    /// For the accessibility tree (a11y.rs): at most `limit` rows, with where they were painted in `window`.
+    pub fn a11y_view(&self, limit: usize, window: &Window) -> PickerA11y {
+        let frame = |k: PickFrame| self.painted.physical(&k, window);
         PickerA11y {
+            bounds: frame(PickFrame::Picker),
+            input: frame(PickFrame::Input),
+            list: frame(PickFrame::List),
+            frames: (0..self.rows.len().min(limit)).map(|i| frame(PickFrame::Row(i))).collect(),
             placeholder: self.placeholder.to_string(),
             message: self.message.as_ref().map(|m| m.to_string()),
             query: if self.masked() { "•".repeat(self.query.chars().count()) } else { self.query.clone() },
@@ -675,9 +697,10 @@ impl EntityInputHandler for Picker {
 }
 
 impl Render for Picker {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = *palette(cx);
         let entity = cx.entity();
+        self.painted.begin(window);
         let focus = self.focus_handle.clone();
         let rows = self.rows.len().min(MAX_ROWS);
         let selected = self.selected;
@@ -695,6 +718,8 @@ impl Render for Picker {
             .on_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(Self::cut))
+            .relative()
+            .child(self.painted.probe(PickFrame::Picker))
             .w(px(layout::PALETTE_W))
             .flex()
             .flex_col()
@@ -733,6 +758,7 @@ impl Render for Picker {
                             }
                         }
                     })
+                    .child(self.painted.probe(PickFrame::Input))
                     .child(
                         canvas(
                             |_, _, _| {},
@@ -755,7 +781,7 @@ impl Render for Picker {
                     .child(self.empty_message())
                     .into_any_element()
             } else {
-                uniform_list(
+                let list = uniform_list(
                     "picker-rows",
                     self.rows.len(),
                     cx.processor(move |this, range: Range<usize>, _window, cx| {
@@ -767,6 +793,8 @@ impl Render for Picker {
                                 });
                                 div()
                                     .id(ix)
+                                    .relative()
+                                    .child(this.painted.probe(PickFrame::Row(ix)))
                                     .w_full()
                                     .h(px(ROW_H))
                                     .flex()
@@ -825,8 +853,8 @@ impl Render for Picker {
                     }),
                 )
                 .track_scroll(self.scroll.clone())
-                .h(px(rows as f32 * ROW_H))
-                .into_any_element()
+                .h(px(rows as f32 * ROW_H));
+                div().relative().child(list).child(self.painted.probe(PickFrame::List)).into_any_element()
             })
             .when_some(footer, |d, f| d.child(div().px(px(theme::SPACE[4])).text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(f)))
     }

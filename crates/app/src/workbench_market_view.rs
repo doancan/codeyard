@@ -50,6 +50,8 @@ impl Workbench {
                 .focus(|d| d.border_color(c(p.focus_ring)))
                 .child(label)
                 .on_click(cx.listener(move |this, _, w, cx| this.set_extensions_tab(which, w, cx)))
+                .relative()
+                .child(a11y::part_frame(a11y::Part::ExtControl(if which == ExtTab::Market { 1 } else { 0 }), cx))
         };
         div()
             .flex()
@@ -77,6 +79,8 @@ impl Workbench {
                 .border_color(c(p.border_input))
                 .bg(c(p.bg))
                 .child(f)
+                .relative()
+                .child(a11y::part_frame(a11y::Part::ExtControl(2), cx))
         });
         let (status, error) = market_status(m);
         let stale: Vec<String> = m
@@ -100,7 +104,7 @@ impl Workbench {
         if n > 0 && m.catalog.is_some() {
             let p = *p;
             col = col.child(
-                div().flex_1().min_h_0().child(
+                div().flex_1().min_h_0().relative().child(a11y::part_frame(a11y::Part::ExtControl(3), cx)).child(
                     gpui::uniform_list(
                         "market-rows",
                         n,
@@ -162,6 +166,8 @@ impl Workbench {
                     format!("{} — {second}", item.description)
                 }))
                 .on_click(cx.listener(move |this, _, w, cx| this.open_market_row(ix, w, cx)))
+                .relative()
+                .child(a11y::part_frame(a11y::Part::Market(ix), cx))
                 .into_any_element(),
         )
     }

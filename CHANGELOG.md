@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Screen readers and magnifiers get the on-screen position of more of the interface: each Extensions row (Installed
+  and Market), the picker's query box, list and rows, each suggestion, the Settings page's search field, categories,
+  options, Reset buttons and page buttons, the bottom panel's tabs, the Search Editor's query, status, results and
+  buttons, Search Editor and terminal tabs, and the update dialog's buttons. Right-to-left and mixed-direction text in
+  the editor reports each character where it is drawn, so a magnifier or a screen reader's cursor lands on the right
+  letters.
 - Screen readers can use the whole Search view and fix problems from the Problems panel: the query (typing from the
   screen reader searches), its options as check boxes, the replacement, Replace All, the include/exclude fields, the
   result line (a search or pattern error is announced at once) and the results as a tree of files and matches that

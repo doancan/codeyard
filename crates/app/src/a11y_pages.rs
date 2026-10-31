@@ -123,6 +123,13 @@ fn text_of(req: &ActionRequest) -> Option<&str> {
     }
 }
 
+/// Gives node `id` (already pushed) the bounds it was painted at.
+fn place(nodes: &mut [(NodeId, Node)], id: NodeId, bounds: Option<accesskit::Rect>) {
+    if let (Some(b), Some((_, n))) = (bounds, nodes.iter_mut().rev().find(|(i, _)| *i == id)) {
+        n.set_bounds(b);
+    }
+}
+
 fn search_field(nodes: &mut Vec<(NodeId, Node)>, id: NodeId, label: &str, value: &str) -> NodeId {
     let mut n = Node::new(Role::SearchInput);
     n.set_label(label.to_string());
@@ -137,6 +144,7 @@ impl SettingsSnap {
     fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>) -> NodeId {
         let v = &self.view;
         let mut kids = vec![search_field(nodes, SETTINGS_SEARCH, t("Search settings"), &v.query)];
+        place(nodes, SETTINGS_SEARCH, v.search_bounds);
         let mut cats = Node::new(Role::TabList);
         cats.set_label(t("Categories"));
         let mut cat_ids = Vec::new();
@@ -147,6 +155,9 @@ impl SettingsSnap {
             n.set_description(count.to_string());
             n.set_selected(*selected);
             n.add_action(Action::Click);
+            if let Some(b) = v.category_bounds.get(i).copied().flatten() {
+                n.set_bounds(b);
+            }
             nodes.push((id, n));
             cat_ids.push(id);
         }
@@ -199,6 +210,9 @@ impl SettingsSnap {
                             b.set_label(o.to_string());
                             b.set_toggled(Toggled::from(chosen.as_deref() == Some(*o)));
                             b.add_action(Action::Click);
+                            if let Some(r) = row.option_bounds.get(k).copied().flatten() {
+                                b.set_bounds(r);
+                            }
                             nodes.push((id, b));
                             opts.push(id);
                         }
@@ -214,6 +228,7 @@ impl SettingsSnap {
                 ids.push(NodeId(base));
                 if row.modified {
                     ids.push(button(nodes, NodeId(base + 1), t("Reset"), Some(row.title.clone())));
+                    place(nodes, NodeId(base + 1), row.reset_bounds);
                 }
             }
             list.set_children(ids);
@@ -232,6 +247,9 @@ impl SettingsSnap {
         kids.push(button(nodes, SETTINGS_JSON, t("Open settings.jsonc"), None));
         kids.push(button(nodes, SETTINGS_KEYS, t("Keyboard Shortcuts"), None));
         kids.push(button(nodes, SETTINGS_ICONS, t("File icon theme…"), None));
+        for (id, b) in [SETTINGS_JSON, SETTINGS_KEYS, SETTINGS_ICONS].into_iter().zip(v.button_bounds) {
+            place(nodes, id, b);
+        }
         let mut page = Node::new(Role::Group);
         page.set_label(t("Settings"));
         page.set_children(kids);

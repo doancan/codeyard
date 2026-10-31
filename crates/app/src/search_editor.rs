@@ -87,6 +87,8 @@ pub struct SearchEditor {
     /// Keyboard row in the list being shown.
     cursor: Option<usize>,
     scroll: UniformListScrollHandle,
+    /// Where its parts were painted in the last frame (accessibility).
+    painted: crate::painted::WindowBounds<AccessFrame>,
     focus_handle: FocusHandle,
     list_focus: FocusHandle,
     running: Option<(Vec<u32>, Task<()>)>,
@@ -155,6 +157,7 @@ impl SearchEditor {
             plan_rows: Vec::new(),
             cursor: None,
             scroll: UniformListScrollHandle::new(),
+            painted: Default::default(),
             focus_handle: cx.focus_handle(),
             list_focus: cx.focus_handle().tab_stop(true),
             running: None,
@@ -640,8 +643,19 @@ impl SearchEditor {
     pub fn access_view(&self, max: usize, window: &Window, cx: &App) -> AccessView {
         let total = self.row_count();
         let start = self.cursor.unwrap_or(0).saturating_sub(max / 2).min(total.saturating_sub(max));
-        let rows = (start..(start + max).min(total)).map(|i| self.row_label(i)).collect();
+        let rows: Vec<_> = (start..(start + max).min(total)).map(|i| self.row_label(i)).collect();
+        let frame = |k: AccessFrame| self.painted.physical(&k, window);
+        let status = (0..self.status_lines(cx).len()).filter_map(|i| frame(AccessFrame::Status(i))).reduce(|a, b| a.union(b));
         AccessView {
+            bounds: AccessBounds {
+                page: frame(AccessFrame::Page),
+                query: frame(AccessFrame::Query),
+                status,
+                list: frame(AccessFrame::List),
+                rows: (start..start + rows.len()).map(|i| frame(AccessFrame::Row(i))).collect(),
+                apply: frame(AccessFrame::Apply),
+                undo: frame(AccessFrame::Undo),
+            },
             title: self.title(),
             query: self.query.read(cx).text().to_string(),
             status: self.status_lines(cx).into_iter().map(|(s, _)| s).collect::<Vec<_>>().join(" "),
@@ -880,9 +894,37 @@ fn plan_rows(plan: &Plan) -> Vec<PlanRow> {
     rows
 }
 
+/// A part of a Search Editor whose painted bounds the accessibility tree reports.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+enum AccessFrame {
+    Page,
+    Query,
+    /// A line of the status.
+    Status(usize),
+    List,
+    /// A row, by its index among all rows.
+    Row(usize),
+    Apply,
+    Undo,
+}
+
+/// Where the parts of a Search Editor were painted in the last frame (physical pixels; `None`: not on screen in this
+/// window). `rows` are those of `AccessView::rows`.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct AccessBounds {
+    pub page: Option<accesskit::Rect>,
+    pub query: Option<accesskit::Rect>,
+    pub status: Option<accesskit::Rect>,
+    pub list: Option<accesskit::Rect>,
+    pub rows: Vec<Option<accesskit::Rect>>,
+    pub apply: Option<accesskit::Rect>,
+    pub undo: Option<accesskit::Rect>,
+}
+
 /// What the accessibility tree shows of a Search Editor.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AccessView {
+    pub bounds: AccessBounds,
     pub title: String,
     pub query: String,
     pub status: String,
@@ -958,9 +1000,12 @@ impl Render for SearchEditor {
         let blocker = self.apply_blocker();
         let can_apply = has_plan && !busy && blocker.is_none() && n_changes > 0;
         let running = self.is_running();
+        self.painted.begin(window);
 
         div()
             .id("search-editor")
+            .relative()
+            .child(self.painted.probe(AccessFrame::Page))
             .key_context("SearchEditor")
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(|this, _: &crate::search::NextResult, _, cx| this.step_match(1, cx)))
@@ -1006,6 +1051,8 @@ impl Render for SearchEditor {
                                         .child(toggle("se-regex", ".*", self.regex, crate::i18n::t("Regular expression"), cx, |s| s.regex = !s.regex))
                                         .into_any_element(),
                                 )
+                                .relative()
+                                .child(self.painted.probe(AccessFrame::Query))
                                 .flex_1(),
                             )
                             .child(if running {
@@ -1092,6 +1139,8 @@ impl Render for SearchEditor {
             .children(status.into_iter().enumerate().map(|(i, (s, warn))| {
                 div()
                     .id(("se-status", i))
+                    .relative()
+                    .child(self.painted.probe(AccessFrame::Status(i)))
                     .flex_none()
                     .px(px(theme::SPACE[6]))
                     .py(px(theme::SPACE[2]))
@@ -1133,13 +1182,18 @@ impl Render for SearchEditor {
                                 .child(crate::i18n::t("Each file is written on its own; files that were not changed keep their contents.")),
                         )
                         .when(self.can_undo, |d| {
-                            d.child(div().flex().child(button("se-undo", crate::i18n::t("Undo Replace").into(), !busy, false).on_click(cx.listener(
-                                |this, _, _, cx| {
-                                    if this.busy.is_none() {
-                                        cx.emit(SearchEditorEvent::Undo);
-                                    }
-                                },
-                            ))))
+                            d.child(
+                                div().flex().child(
+                                    button("se-undo", crate::i18n::t("Undo Replace").into(), !busy, false)
+                                        .relative()
+                                        .child(self.painted.probe(AccessFrame::Undo))
+                                        .on_click(cx.listener(|this, _, _, cx| {
+                                            if this.busy.is_none() {
+                                                cx.emit(SearchEditorEvent::Undo);
+                                            }
+                                        })),
+                                ),
+                            )
                         }),
                 )
             })
@@ -1155,11 +1209,13 @@ impl Render for SearchEditor {
                         .py(px(theme::SPACE[3]))
                         .border_b_1()
                         .border_color(c(p.border))
-                        .child(button("se-apply", self.apply_label(), can_apply, true).on_click(cx.listener(|this, _, _, cx| {
-                            if this.busy.is_none() && this.apply_blocker().is_none() && this.selected_counts().0 > 0 {
-                                cx.emit(SearchEditorEvent::Apply);
-                            }
-                        })))
+                        .child(button("se-apply", self.apply_label(), can_apply, true).relative().child(self.painted.probe(AccessFrame::Apply)).on_click(
+                            cx.listener(|this, _, _, cx| {
+                                if this.busy.is_none() && this.apply_blocker().is_none() && this.selected_counts().0 > 0 {
+                                    cx.emit(SearchEditorEvent::Apply);
+                                }
+                            }),
+                        ))
                         .child(if busy {
                             button("se-cancel-apply", crate::i18n::t("Stop").into(), true, false)
                                 .on_click(cx.listener(|_, _, _, cx| cx.emit(SearchEditorEvent::Cancel)))
@@ -1182,6 +1238,8 @@ impl Render for SearchEditor {
             .child(
                 div()
                     .id("se-list")
+                    .relative()
+                    .child(self.painted.probe(AccessFrame::List))
                     .key_context("SearchEditorList")
                     .track_focus(&self.list_focus)
                     .on_action(cx.listener(|this, _: &SelectNextRow, _, cx| this.move_cursor(1, cx)))
@@ -1220,6 +1278,8 @@ impl SearchEditor {
         let current = self.cursor == Some(ix);
         let base = div()
             .id(("se-row", ix))
+            .relative()
+            .child(self.painted.probe(AccessFrame::Row(ix)))
             .debug_selector(move || format!("se-row-{ix}"))
             .w_full()
             .h(px(layout::ROW_H))

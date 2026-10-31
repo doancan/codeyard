@@ -557,6 +557,8 @@ pub struct EditorView {
     signature: Option<(String, Option<Range<usize>>)>,
     signature_task: Option<gpui::Task<()>>,
     hover: Option<Hover>,
+    /// Where each view's popups were painted in its last frame (accessibility), by view slot.
+    a11y_popups: crate::painted::RowBounds<(usize, popups_glue::PopupFrame)>,
     peek: Option<Peek>,
     /// Peek request counter: when the cursor moves, the result of an in-flight request is discarded.
     peek_seq: u64,
@@ -978,6 +980,7 @@ impl EditorView {
             signature: None,
             signature_task: None,
             hover: None,
+            a11y_popups: Default::default(),
             peek: None,
             peek_seq: 0,
             hover_task: None,

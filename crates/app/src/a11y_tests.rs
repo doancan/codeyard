@@ -141,16 +141,21 @@ fn notices_are_live_regions_and_errors_interrupt() {
 }
 
 fn list(rows: &[&str], selected: usize) -> ListSnap {
-    ListSnap { rows: rows.iter().map(|r| (r.to_string(), None)).collect(), rows_total: rows.len(), selected: Some(selected) }
+    ListSnap { rows: rows.iter().map(|r| (r.to_string(), None)).collect(), rows_total: rows.len(), selected: Some(selected), ..Default::default() }
 }
 
 #[test]
 fn picker_is_a_combo_box_whose_active_descendant_is_the_selected_row() {
     let mut s = snap();
-    s.picker =
-        Some(PickerSnap {
-            label: "Type a command".into(), message: None, query: ">sav".into(), list: list(&["File: Save", "File: Save As…"], 1), empty: None
-        });
+    s.picker = Some(PickerSnap {
+        label: "Type a command".into(),
+        message: None,
+        query: ">sav".into(),
+        list: list(&["File: Save", "File: Save As…"], 1),
+        empty: None,
+        bounds: None,
+        input: None,
+    });
     s.focus = FocusSnap::Picker;
     let tree = accesskit_consumer::Tree::new(s.to_tree(), true);
     let state = tree.state();
@@ -235,4 +240,37 @@ fn the_range_centres_on_the_focus_while_it_is_on_screen() {
     assert_eq!(window_start(10_000, 1_000, Some(5_000), Some((8_000, 8_020))), 7_510);
     assert_eq!(window_start(10_000, 1_000, Some(9_990), None), 9_000, "clamped at the end");
     assert_eq!(window_start(50, 1_000, Some(40), None), 0, "everything fits");
+}
+
+/// Hebrew after Latin, as the platform draws it ("ab " then the Hebrew letters leftwards from the line's end): the
+/// line is cut into a left-to-right run and a right-to-left run, the line break (drawn at the right end, not after the
+/// last letter read) is a run of its own, and AccessKit's range bounds land on each letter where it is drawn.
+#[test]
+fn right_to_left_text_reports_where_each_character_is_drawn() {
+    use crate::painted::TextLine;
+    let p = |cells: &[(f32, f32)]| cells.iter().map(|&(a, b)| (gpui::px(a), gpui::px(b))).collect();
+    let painted = [TextLine {
+        start: 0,
+        cells: p(&[(0., 7.), (7., 14.), (14., 21.), (28., 35.), (21., 28.)]),
+        end: gpui::px(35.),
+        top: gpui::px(0.),
+        bottom: gpui::px(10.),
+        line_break: gpui::px(4.),
+    }];
+    let runs = runs_painted(vec![(0, "ab אב".into()), (6, "x".into())], 2, 0, &painted, 2.);
+    let texts: Vec<(&str, Option<bool>)> = runs.iter().map(|r| (r.text.as_str(), r.frame.as_ref().map(|f| f.rtl))).collect();
+    assert_eq!(texts, vec![("ab ", Some(false)), ("אב", Some(true)), ("\n", Some(false)), ("x", None)]);
+    let bounds = |selection: (usize, usize)| {
+        let mut s = snap();
+        s.editor = Some(EditorSnap { name: "he.txt".into(), dirty: false, runs: runs.clone(), selection, total_lines: 2, first_line: 0 });
+        let tree = accesskit_consumer::Tree::new(s.to_tree(), true);
+        let editor = tree.state().focus().unwrap();
+        editor.text_selection().unwrap().bounding_boxes().into_iter().map(|r| (r.x0, r.x1)).collect::<Vec<_>>()
+    };
+    // At 200%: א is drawn at 28–35, ב at 21–28 (logical pixels).
+    assert_eq!(bounds((3, 4)), vec![(56., 70.)]);
+    assert_eq!(bounds((4, 5)), vec![(42., 56.)]);
+    assert_eq!(bounds((3, 5)), vec![(42., 70.)]);
+    assert_eq!(bounds((1, 4)), vec![(14., 42.), (56., 70.)]);
+    assert_eq!(bounds((5, 6)), vec![(70., 78.)], "the line break, right of the line");
 }
