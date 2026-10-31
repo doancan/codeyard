@@ -7,6 +7,28 @@ use serde_json::{Map, Value, json};
 use crate::schema::{Property, Type, properties, schema};
 use crate::*;
 
+/// `v` as JSON text with every object's keys sorted, whether or not serde_json's `preserve_order` feature is on (a
+/// workspace build may turn it on), so the generated files are the same on every build.
+fn json_text(v: &Value) -> String {
+    canonical(v).to_string()
+}
+
+fn pretty(v: &Value) -> String {
+    serde_json::to_string_pretty(&canonical(v)).unwrap()
+}
+
+fn canonical(v: &Value) -> Value {
+    match v {
+        Value::Object(m) => {
+            let mut keys: Vec<&String> = m.keys().collect();
+            keys.sort();
+            Value::Object(keys.into_iter().map(|k| (k.clone(), canonical(&m[k]))).collect())
+        }
+        Value::Array(a) => Value::Array(a.iter().map(canonical).collect()),
+        other => other.clone(),
+    }
+}
+
 fn sample(ty: Type) -> Value {
     match ty {
         Type::Space => json!(1),
@@ -161,7 +183,7 @@ fn nested(depth: usize) -> Value {
 /// Views that are not one element with bad properties: the tree's own rules and the shapes around it. The row, element
 /// and size caps are left to the TypeScript tests, to keep the cases small.
 fn structure() -> Vec<(&'static str, String)> {
-    let v = |name, value: Value| (name, value.to_string());
+    let v = |name, value: Value| (name, json_text(&value));
     let raw = |name, text: &str| (name, text.to_string());
     let table = |rows: Vec<Value>| node(Some("t"), json!({"table": {"label": "T", "columns": ["A", "B"]}}), rows);
     let row = |key: Option<&str>, cells: usize| node(key, json!({"row": {}}), (0..cells).map(|_| text("c")).collect());
@@ -234,18 +256,18 @@ fn cases() -> Value {
     };
     for kind in Kind::ALL {
         let props = full(kind);
-        push(format!("{kind} with every property"), node(Some("k"), element(kind, props.clone()), vec![]).to_string());
+        push(format!("{kind} with every property"), json_text(&node(Some("k"), element(kind, props.clone()), vec![])));
         if kind == Kind::Divider {
             continue;
         }
         let required: Map<String, Value> = properties(kind).iter().filter(|p| p.required).map(|p| (p.name.to_string(), sample(p.ty))).collect();
-        push(format!("{kind} with only what it needs"), node(Some("k"), element(kind, required), vec![]).to_string());
+        push(format!("{kind} with only what it needs"), json_text(&node(Some("k"), element(kind, required), vec![])));
         let mut extra = props.clone();
         extra.insert("colour".into(), json!("red"));
-        push(format!("{kind} with an unknown property"), node(Some("k"), element(kind, extra), vec![]).to_string());
+        push(format!("{kind} with an unknown property"), json_text(&node(Some("k"), element(kind, extra), vec![])));
         for p in properties(kind) {
             let Property { name, required, .. } = *p;
-            let mut variants: Vec<(String, Option<Value>)> = bad(p.ty).into_iter().map(|b| (b.to_string(), Some(b))).collect();
+            let mut variants: Vec<(String, Option<Value>)> = bad(p.ty).into_iter().map(|b| (json_text(&b), Some(b))).collect();
             variants.push(("null".into(), Some(Value::Null)));
             if required {
                 variants.push(("left out".into(), None));
@@ -260,7 +282,7 @@ fn cases() -> Value {
                 if label.len() > 60 {
                     label = format!("{}… ({} bytes)", &label[..label.char_indices().nth(40).map_or(label.len(), |(i, _)| i)], label.len());
                 }
-                push(format!("{kind}.{name} = {label}"), node(Some("k"), element(kind, with), vec![]).to_string());
+                push(format!("{kind}.{name} = {label}"), json_text(&node(Some("k"), element(kind, with), vec![])));
             }
         }
     }
@@ -366,7 +388,7 @@ fn typescript() -> String {
          }\n\n\
          export const VIEW_SCHEMA: ViewSchema = ",
     );
-    out.push_str(&serde_json::to_string_pretty(&schema()).unwrap());
+    out.push_str(&pretty(&schema()));
     out.push_str(";\n");
     out
 }
@@ -385,7 +407,7 @@ fn current(path: &str, want: &str) {
 #[test]
 fn the_typescript_sdk_has_the_current_schema_and_cases() {
     current("sdk/typescript/src/view-schema.ts", &typescript());
-    current("sdk/typescript/test/view-cases.json", &(serde_json::to_string_pretty(&cases()).unwrap() + "\n"));
+    current("sdk/typescript/test/view-cases.json", &(pretty(&cases()) + "\n"));
 }
 
 #[test]
