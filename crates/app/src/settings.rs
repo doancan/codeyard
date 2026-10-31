@@ -445,10 +445,10 @@ impl Default for Settings {
 
 #[path = "settings_templates.rs"]
 mod templates;
-pub use templates::{KEYBINDINGS_TEMPLATE, TEMPLATE};
+pub use templates::{KEYBINDINGS_TEMPLATE, TEMPLATE, rust_setup};
 #[path = "settings_text.rs"]
 mod text;
-pub use text::{Seg, array_items, members, set_string_in, set_value_in, value_range};
+pub use text::{Seg, array_items, members, set_path_in, set_string_in, set_value_in, value_range};
 #[path = "settings_scope.rs"]
 mod scope;
 pub use scope::{Scope, ScopedLayer, Sources, is_user_only};

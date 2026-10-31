@@ -26,6 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hash-checked copy, locally and over SSH, and is refused when the hash does not match. An update that adds a native
   program opens the full sheet, which asks for the id to be typed as a first install does, instead of the permission
   card. Screen readers find the sheet's id field (a text field with what to type, what is typed and the focus).
+- "Preferences: Apply Rust Setup…" sets up a Rust project in one step: Clippy for checks, checks with the Cargo
+  features Run and Debug build with, a check folder of its own and rustfmt on save. It shows the exact changes to
+  `settings.jsonc` first, keeps your comments and other settings, and "Preferences: Reset Rust Setup…" removes it.
 - Rust debugging builds with your choice of Cargo features, profile and output folder: `rust.features`,
   `rust.noDefaultFeatures`, `rust.profile` and `rust.targetDir`. The target picker shows them next to each detected
   target, and a relative output folder is resolved in the workspace folder of the machine that builds, also over SSH.
