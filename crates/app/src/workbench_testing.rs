@@ -10,6 +10,11 @@ impl Workbench {
     pub fn file_clipboard_paths_for_test(&self) -> Vec<String> {
         self.roots.file_clip.as_ref().map_or_else(Vec::new, |c| c.paths.clone())
     }
+
+    /// The label of the host the workspace's files go through, when it is a remote one.
+    pub fn remote_host_label_for_test(&self) -> Option<String> {
+        self.remote.host.is_remote().then(|| self.remote.host.label())
+    }
     /// Recents in display order: (host, path, pinned).
     pub fn recent_for_test(&self) -> Vec<(Option<String>, String, bool)> {
         super::projects::ordered_recent(&self.persist.recent, &self.persist.pinned).into_iter().map(|(r, pinned)| (r.host, r.path, pinned)).collect()

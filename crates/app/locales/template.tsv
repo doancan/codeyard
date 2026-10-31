@@ -1605,6 +1605,8 @@ Paused
 Paused on entry	
 Paused on exception: {}	
 Payload	
+Permanently delete {0} item on {1}?|Permanently delete {0} items on {1}?	
+Permanently delete “{0}” on {1}?	
 Permission switches	
 Permissions	
 Permissions: none.	
@@ -3095,6 +3097,8 @@ your words
 {} gets pre-releases from now on.	
 {} gets releases only; the pre-release you have stays until a release passes it.	
 {} has more entries than compare.folders.maxFiles allows, so the result is partial.	
+{} has no Trash: it is deleted at once and can't be restored.	
+{} has no Trash: the items are deleted at once and can't be restored.	
 {} has no changes.	
 {} has no commits yet.	
 {} has no keys	
