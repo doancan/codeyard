@@ -55,6 +55,10 @@ animations* on Windows). `editor.cursorBlinking: "solid"` stops only the cursor.
   state, and the buttons;
 - the Search view: the query, its options, the replacement and the include/exclude fields, the result line (an error
   interrupts speech) and the results as a tree of files and matches. Activating a match opens it;
+- Source Control's Sync button, worktrees, graph (commits, search, filters, fetch, pull, push) and the selected commit's
+  files;
+- the hover and signature help (Show Hover reaches the hover without the pointer) and the Debug Console (its output is
+  spoken as it arrives; an expression can be typed and evaluated);
 - the Problems panel: the counts (spoken as they change), each problem with its file, line and column, opening it, and its
   Quick Fix, whose fixes come as a picker;
 - Run and Debug, Testing, Remote Explorer and Ports, the Settings and Keyboard Shortcuts pages (a rejected value is said
@@ -86,8 +90,6 @@ These are the important gaps, in rough order of how much they get in the way. Th
   text, right-to-left text included, have the bounds they are drawn at, at every zoom level and in windows of their
   own, so a magnifier can follow the caret. In right-to-left text the editor's own caret can be drawn away from the
   character a magnifier follows.
-- **Some views are still silent:** the Source Control graph, worktrees and sync controls, hover and signature popups and
-  the Debug Console.
 - The editor exposes about 300 lines around the caret, not the whole file. Only the primary selection is exposed, not extra
   cursors. Folding and wrapped lines are not reflected. The terminal exposes the screen, not the scrollback.
 - Only editor and terminal text can be enlarged. The rest of the interface (sidebar, tabs, status bar, menus, dialogs) keeps a

@@ -23,7 +23,9 @@ const _: () = {
         EXT_VIEW_NODE,
         INSPECTOR_LINE,
         super::problems_access::SEARCH_ROW,
+        super::popups_access::HOVER_LINE,
         super::scm_access::ext::SCM_EXT,
+        super::scm_access::history::HISTORY_ROW,
         super::problems_access::PAGE_ROW,
         super::problems_access::PROBLEM_ROW,
         super::problems_access::DEBUG_ROW,
@@ -34,6 +36,7 @@ const _: () = {
         super::problems_access::DIALOG_LINE,
         EXPLORER_MENU,
         super::term_tab_access::TERM_TAB,
+        super::scm_access::history::HISTORY_ITEM,
         ROW_BASE,
     ];
     let mut i = 1;
@@ -102,6 +105,9 @@ const _: () = {
         &super::problems_access::SIDE_FIXED,
         &super::problems_access::DIALOG_FIXED,
         &super::problems_access::SEARCH_FIXED,
+        &super::problems_access::CONSOLE_FIXED,
+        &super::popups_access::FIXED,
+        &super::scm_access::history::FIXED,
     ]);
     // Rows are ROW_BASE | 32-bit hash; editor and terminal runs sit above them.
     assert!(ROW_BASE + 0xffff_ffff < RUN_BASE && RUN_BASE + 0xffff_ffff < TERM_RUN_BASE);

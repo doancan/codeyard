@@ -27,7 +27,24 @@ The tree, in the order a screen reader walks it:
   keyboard cursor while it is on screen, otherwise around the visible rows; it reports its scroll position in lines and
   supports scroll up/down by a page. Operation errors are assertive live regions; successful results are polite. The
   focus is exposed for the message field, the repository list and the change list, whose cursor row is the focused
-  node; `Focus` on a row puts the keyboard cursor there. The graph, worktrees and sync controls are not exposed yet.
+  node; `Focus` on a row puts the keyboard cursor there.
+- Source Control's history (`a11y_scm_history.rs`): after the commit button, the "Sync Changes 1↑" / "Publish Branch"
+  button (busy while a sync runs; `Click` only while it still says the same). After the change list, a `Group`
+  "Worktrees": its header button ("Worktrees (3)", expanded or collapsed), Add worktree, Refresh, a polite `Status`
+  (loading, none found) or an assertive `Alert` (the error), and a `List` of checkouts (branch as label; path and
+  Current / Unavailable / locked as description; the current one selected; `Click` opens an available one in this
+  window as a click does, the others are disabled). Then a `Group` "Graph": its header ("Graph (300)"), the Search
+  commits toggle, Fetch from all remotes, Pull and Push (the number of commits to pull or push as description),
+  Reload history (busy while history loads), More Actions… (the graph's menu, opened under the button), the active
+  filters as buttons that remove them, the commit search field (`SearchInput`, `Focus`, `SetValue` filters as typing
+  does) and a `List` "Commits" of up to 500 rows around the selected commit (or the rows on screen): day headings as
+  `Heading`s and commits as `ListItem`s (subject; author, time, hash, branches and tags as description; the selected
+  one selected; `Click` selects it as a click does, `ShowContextMenu` and a "More Actions…" button open the commit's
+  menu under the row, "Open Changes" opens the commit as a double click does). The selected commit's details are a
+  `Group` "Commit 1a2b3c4" with its header, Close details, the message lines, author and hash, and a `List` of its files
+  (path; Added, Modified… as description; `Click` opens the file's diff in that commit). Every node has its painted
+  frame. Actions name the commit hash, worktree path, file of that commit or label the tree showed: from an outdated
+  tree they do nothing when it changed, and a header or the search toggle only acts from the state that was read.
 - While the Problems panel is open, a `List` labeled with the number of problems: first a polite `Status` with the
   counts ("2 errors, 1 warnings", spoken when it changes), then a `Heading` per file and a `ListItem` per problem
   ("Error: …", with file, line and column as its description) or related location, each with `Click` to open it and its
@@ -38,7 +55,12 @@ The tree, in the order a screen reader walks it:
   same place.
 - While the bottom panel is open, a `TabList` with its tabs (Problems, Output, Debug Console while debugging, Ports,
   Terminal), the selected one marked and counts as descriptions; `Click` switches tabs. While Output is shown, a polite
-  `Log` holds its last 400 lines.
+  `Log` holds its last 400 lines. While the Debug Console is shown (`a11y_console.rs`), a `Group` "Debug Console" (the
+  session's name as description) with a polite `Log` "Output of app" (its last 300 lines, so new output is spoken),
+  the expression field (`TextInput`, `Focus`, `SetValue`) and an "Evaluate" `Button` that evaluates the field's text
+  as Enter does and empties it (disabled while the field is empty; it acts only on the text and session the tree
+  showed). The button exists only in the tree: it has no control of its own on screen, so no frame. Without a session,
+  a polite `Status` says "No debug session. F5 starts one."
 - While the Search view is shown (in a side bar or a window of its own), a `Group` "Search": the query as a
   `SearchInput` ("Structural pattern" in structural mode; `Focus`, and `SetValue`, which searches as typing does), its
   options as `CheckBox`es (Match case, Whole word, Regular expression, Preserve case when replacing, Structural search;
@@ -154,7 +176,13 @@ The tree, in the order a screen reader walks it:
   while it is on screen, otherwise on the visible lines; scroll up/down by a page moves it), its scroll position in
   lines and "N lines, showing lines A–B" as description, text runs of at most 200 characters, the primary selection. While suggestions are open it holds a `ListBox` "Suggestions" (one
   `ListBoxOption` per suggestion with its detail, at most 500) and the selected suggestion is its active descendant, so a
-  screen reader speaks it as the selection moves while the keyboard stays in the editor.
+  screen reader speaks it as the selection moves while the keyboard stays in the editor. While the hover is shown, a
+  polite `Tooltip` "Hover" under the editor holds a line per diagnostic ("Error: …"), related location (a `Link`;
+  `Click` opens it as a click on it does, only while the same line is there), "(+3 more)" line, the language server's
+  text and each extension's text; while signature help is shown, a polite `Tooltip` "Signature help" has the
+  signature as value and "Current parameter: b: i32" as description. Both have the popup's painted frame. The editor
+  supports `ShowTooltip` (the hover at the caret, as Editor: Show Hover) and, while one is shown, `HideTooltip` (both
+  popups close), so the text is reachable without the pointer.
 - While the terminal panel is open, a read-only `Terminal`: one text run per row on screen and the cursor as a collapsed
   selection.
 - `Status` "Status bar" (one label per item).
@@ -322,9 +350,8 @@ probe as the workbench's lists (`painted.rs`).
   line is split into a run per painted line; a folded line is in the text but has no frame.
 - The terminal exposes the screen only, not the scrollback, and cannot be written to from the tree (typing goes through
   the keyboard as usual).
-- Not exposed: an installed extension's page, the Source Control graph, worktrees and sync controls, hover and
-  signature popups, the Run and Debug view's configuration selector's menu, opening a breakpoint's place, the Testing filter field, the Remote
-  Explorer's Add, SSH config and Refresh buttons, and the Debug Console. Only the tabs of the focused editor group are
+- Not exposed: an installed extension's page, the Run and Debug view's configuration selector's menu, opening a
+  breakpoint's place, the Testing filter field and the Remote Explorer's Add, SSH config and Refresh buttons. Only the tabs of the focused editor group are
   listed, and diff, large-file and page tabs are not.
 - Keyboard: the Run and Debug lists (variables, watches, call stack, breakpoints), the Testing tree, the Remote
   Explorer, the Ports list and Source Control's change list are tab stops with a cursor row (Up/Down/Home/End, Enter as a click on the row, the focus
@@ -347,7 +374,7 @@ probe as the workbench's lists (`painted.rs`).
 
 1. Screen-reader passes (VoiceOver, NVDA, Narrator) on real machines; fix what they find.
 2. Real focus tracking checked with screen readers, observer-driven updates.
-3. The remaining panels (Source Control graph/worktrees/sync, the Debug Console).
+3. The remaining controls listed under "Not exposed".
 4. The editor proper: visible lines only with shaped character positions, correct absolute offsets, scroll actions,
    multi-cursor policy, diagnostics announcements.
 5. The Linux adapter and regression tests against a real accessibility client.
@@ -399,3 +426,12 @@ bottom panel's tabs side by side; a Search Editor its tab, page, query, list and
 `AXBoundsForRange` for א (character 4) was 621.8 and for ג (character 6) 607.4 points from the left, each 7.2 wide:
 leftwards in reading order, and the capture showed the rectangle on ג. A range over "c אבג d" was one 50.5-point
 rectangle over those letters. The editor's own drawn selection in that line was elsewhere (see "Right-to-left caret").
+
+History, popups and the Debug Console, natively on a dev build (same rules): with this repository open, Source
+Control's tree listed the Worktrees section (header 259 × 21 points, Add worktree, Refresh, each checkout on screen
+with its frame), the Graph's header, Search commits (a check box), Fetch, Pull, Push, Reload history and More Actions…
+(22 × 22 each), and the commits on screen (259 × 22, one under the other) with Open Changes and More Actions….
+"Editor: Show Hover" over a misspelled word gave a "Hover" group (368 × 32) with the line "Information: “sentense” is
+not in the dictionary…" on its drawn text. With a C program paused by `lldb-dap`, `AXPress` on the Debug Console tab
+showed the console; `axframes --set-value` put "1+2" in the expression field and `AXPress` on Evaluate ran it: the log
+read "> 1+2" and "(int) $0 = 3".

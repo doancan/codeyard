@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use gpui::{Context, SharedString, div, prelude::*, px};
 
-use super::{ScmEvent, ScmPanel};
+use super::{AccessFrame, AccessWorktree, AccessWorktrees, HistoryFrame, ScmEvent, ScmPanel};
 use crate::git::{self, Worktree};
 use crate::i18n::{t, tf};
 use crate::ui::{self, c, icon, layout, palette, text};
@@ -86,6 +86,58 @@ impl ScmPanel {
         }));
     }
 
+    /// The section as assistive technology reads it: open or not, its rows, or why there are none.
+    pub(super) fn a11y_worktrees(&self) -> AccessWorktrees {
+        let w = &self.worktrees;
+        let note = match &w.error {
+            Some(error) => Some((tf("Could not list worktrees: {}", &[&error.lines().next().unwrap_or(error)]), true)),
+            None if w.entries.is_empty() => Some((if w.task.is_some() { t("Loading…") } else { t("No worktrees found.") }.to_string(), false)),
+            None => None,
+        };
+        let rows = w
+            .entries
+            .iter()
+            .map(|entry| {
+                let current = w.current_path.as_deref() == Some(entry.path.as_str());
+                let available = !entry.bare && entry.prunable.is_none() && w.error.is_none();
+                let title = entry.branch.clone().unwrap_or_else(|| if entry.bare { t("Bare repository") } else { t("detached HEAD") }.to_string());
+                let mut detail = vec![entry.path.clone()];
+                if current {
+                    detail.push(t("Current").to_string());
+                } else if !available {
+                    detail.push(t("Unavailable").to_string());
+                }
+                detail.extend(entry.locked.as_ref().map(|reason| tf("Worktree locked: {}", &[reason])));
+                detail.extend(entry.prunable.clone());
+                AccessWorktree { path: entry.path.clone(), title, detail: detail.join(", "), current, available }
+            })
+            .collect();
+        AccessWorktrees { open: self.sections.is_open("worktrees", true), rows, note }
+    }
+
+    pub(super) fn a11y_toggle_worktrees(&mut self, cx: &mut Context<Self>) {
+        self.toggle_worktrees(cx);
+    }
+
+    /// A worktree row from the tree: opened as a click opens it (only an available checkout other than this one).
+    pub(crate) fn a11y_open_worktree(&self, path: &str, cx: &mut Context<Self>) {
+        self.open_worktree(path, cx);
+    }
+
+    /// The Add and Refresh buttons from the tree, as a click on them.
+    pub(crate) fn a11y_worktree_button(&mut self, which: &str, cx: &mut Context<Self>) {
+        match which {
+            "worktree-add" => cx.emit(ScmEvent::AddWorktree),
+            "worktree-refresh" => {
+                self.sections.set_open("worktrees", true);
+                self.emit_sections(cx);
+                self.refresh_worktrees(cx);
+                cx.notify();
+            }
+            _ => {}
+        }
+    }
+
     fn toggle_worktrees(&mut self, cx: &mut Context<Self>) {
         self.sections.toggle("worktrees", true);
         self.refresh_worktrees(cx);
@@ -106,19 +158,29 @@ impl ScmPanel {
     pub(super) fn worktree_section(&self, cx: &mut Context<Self>) -> impl IntoElement + use<> {
         let p = *palette(cx);
         let open = self.sections.is_open("worktrees", true);
+        let probe = |part: HistoryFrame| crate::painted::probe(&self.a11y_frames, AccessFrame::History(part));
         let header = crate::sections::header("scm-worktree-header", t("Worktrees"), Some(self.worktrees.entries.len()), open, &p)
+            .relative()
+            .child(probe(HistoryFrame::Header("worktrees")))
             .debug_selector(|| "scm-worktree-header".into())
             .tab_index(0)
             .focus(|d| d.bg(c(p.surface_active)))
             .on_click(cx.listener(|this, _, _, cx| this.toggle_worktrees(cx)))
-            .child(ui::icon_button("scm-worktree-add", "plus", t("Add worktree"), &p).tab_index(0).focus(|d| d.bg(c(p.surface_active))).on_click(cx.listener(
-                |_, _, _, cx| {
-                    cx.stop_propagation();
-                    cx.emit(ScmEvent::AddWorktree);
-                },
-            )))
+            .child(
+                ui::icon_button("scm-worktree-add", "plus", t("Add worktree"), &p)
+                    .relative()
+                    .child(probe(HistoryFrame::Button("worktree-add")))
+                    .tab_index(0)
+                    .focus(|d| d.bg(c(p.surface_active)))
+                    .on_click(cx.listener(|_, _, _, cx| {
+                        cx.stop_propagation();
+                        cx.emit(ScmEvent::AddWorktree);
+                    })),
+            )
             .child(
                 ui::icon_button("scm-worktree-refresh", "refresh-cw", t("Refresh"), &p)
+                    .relative()
+                    .child(probe(HistoryFrame::Button("worktree-refresh")))
                     .debug_selector(|| "scm-worktree-refresh".into())
                     .tab_index(0)
                     .focus(|d| d.bg(c(p.surface_active)))
@@ -130,8 +192,15 @@ impl ScmPanel {
                         cx.notify();
                     })),
             );
-        div().flex().flex_col().min_h_0().child(header).when(open, |d| {
-            let mut body = div().id("scm-worktrees").debug_selector(|| "scm-worktrees".into()).min_h_0().max_h(px(layout::ROW_H * 8.)).overflow_y_scroll();
+        div().flex().flex_col().min_h_0().relative().child(probe(HistoryFrame::Section("worktrees"))).child(header).when(open, |d| {
+            let mut body = div()
+                .id("scm-worktrees")
+                .debug_selector(|| "scm-worktrees".into())
+                .min_h_0()
+                .max_h(px(layout::ROW_H * 8.))
+                .overflow_y_scroll()
+                .relative()
+                .child(probe(HistoryFrame::List("worktrees")));
             if let Some(error) = &self.worktrees.error {
                 body = body.child(
                     div()
@@ -183,6 +252,8 @@ impl ScmPanel {
         div()
             .id(SharedString::from(format!("scm-worktree-{}", entry.path)))
             .debug_selector(move || format!("scm-worktree-row-{index}"))
+            .relative()
+            .child(crate::painted::probe(&self.a11y_frames, AccessFrame::History(HistoryFrame::Worktree(entry.path.clone()))))
             .w_full()
             .h(px(layout::ROW_H * 2.))
             .flex_none()

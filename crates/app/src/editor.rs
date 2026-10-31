@@ -210,6 +210,7 @@ mod moves_glue;
 mod popups_glue;
 #[cfg(test)]
 pub use popups_glue::HoverRow;
+pub use popups_glue::PopupsA11y;
 #[path = "editor_render.rs"]
 mod render_glue;
 #[path = "editor_schema.rs"]

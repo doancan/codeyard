@@ -13,6 +13,8 @@ use crate::scm::{AccessFile, AccessFrame, ChangeKey};
 
 #[path = "a11y_scm_ext.rs"]
 pub(super) mod ext;
+#[path = "a11y_scm_history.rs"]
+pub(super) mod history;
 
 const STAGE: u64 = crate::scm::STAGE_BUTTON;
 const DISCARD: u64 = crate::scm::DISCARD_BUTTON;
@@ -67,6 +69,8 @@ impl ScmSnap {
             panel.set_busy();
         }
         let mut children = Vec::new();
+        // Worktrees, the graph and the selected commit, after the change list (and an extension's sections).
+        let mut history = Vec::new();
         if !view.repos.is_empty() {
             // Several repositories: a list to pick the one Source Control acts on, each with its state.
             let mut list = Node::new(Role::ListBox);
@@ -128,6 +132,7 @@ impl ScmSnap {
             }
             nodes.push((SCM_COMMIT, commit));
             children.push(SCM_COMMIT);
+            self.append_history(nodes, &mut children, &mut history);
 
             self.append_changes(nodes);
             children.push(SCM_CHANGES);
@@ -138,6 +143,7 @@ impl ScmSnap {
             children.push(SCM_EMPTY);
         }
         ext::append(&view.ext, nodes, &mut children);
+        children.extend(history);
         if let Some((text, error)) = &view.result {
             let mut result = Node::new(if *error { Role::Alert } else { Role::Status });
             result.set_label(text.clone());
@@ -238,7 +244,8 @@ impl Workbench {
         }
         let id = req.target_node;
         let is_repo = (SCM_REPO..SCM_REPO + BLOCK).contains(&id.0);
-        let is_scm = [SCM_MESSAGE, SCM_COMMIT, SCM_CHANGES].contains(&id) || (SCM_GROUP..SCM_FILE + BLOCK).contains(&id.0) || is_repo;
+        let is_scm =
+            [SCM_MESSAGE, SCM_COMMIT, SCM_CHANGES].contains(&id) || (SCM_GROUP..SCM_FILE + BLOCK).contains(&id.0) || is_repo || history::is_history(id);
         if !is_scm {
             return false;
         }
@@ -260,6 +267,10 @@ impl Workbench {
 
         // Another repository (or none) since the tree was read: nothing of the old one is acted on.
         if snap.view.root != current.root || snap.view.branch != current.branch || current.root.is_none() {
+            return true;
+        }
+        if history::is_history(id) {
+            self.a11y_history_action(req, &snap.view.history, window, cx);
             return true;
         }
         match (req.action, id) {

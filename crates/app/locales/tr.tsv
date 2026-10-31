@@ -3432,3 +3432,14 @@ Files to include	Dahil edilecek dosyalar
 Structural pattern	Yapısal desen
 Structural search	Yapısal arama
 line {0}, column {1}	satır {0}, sütun {1}
+Pull	Pull Et
+Push	Push Et
+Commits	Commit'ler
+merge	birleştirme
+Evaluate	Değerlendir
+Hover	Üzerine gelme bilgisi
+Signature help	İmza yardımı
+Current parameter: {}	Geçerli parametre: {}
+Output of {}	{} çıktısı
+{} commit|{} commits	{} commit
+Files: {}	Dosyalar: {}

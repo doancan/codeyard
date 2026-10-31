@@ -148,11 +148,11 @@ pub(in crate::workbench) const TERMINAL_WINDOW: Hooks = Hooks {
 pub(super) fn editor_window_snapshot(root: &Entity<EditorWindow>, window: &Window, cx: &mut App) -> Snapshot {
     let (ed, slot, home) = root.read(cx).parts();
     let scale = window.scale_factor();
-    let (editor, find_bar, completion) = ed.update(cx, |e, _| {
+    let (editor, find_bar, completion, popups) = ed.update(cx, |e, _| {
         e.in_slot(slot, |e| {
             let editor = EditorSnap::of(e, scale);
             let completion = completion_snap(e, scale);
-            (editor, e.find_bar(), completion)
+            (editor, e.find_bar(), completion, Some(e.a11y_popups(scale)))
         })
     });
     let find = find_bar.as_ref().map(|b| {
@@ -191,6 +191,7 @@ pub(super) fn editor_window_snapshot(root: &Entity<EditorWindow>, window: &Windo
         editor: Some(editor),
         find,
         completion,
+        popups,
         picker,
         focus,
         ..Default::default()

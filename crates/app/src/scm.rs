@@ -195,7 +195,10 @@ mod access;
 #[cfg(test)]
 pub(crate) use access::ACCESS_LINES;
 pub(crate) use access::{AccessExt, AccessFile, AccessFrame, AccessView, DISCARD_BUTTON, STAGE_BUTTON};
+#[path = "scm_access_history.rs"]
+mod history_access;
 pub(crate) use changes_ui::ChangeKey;
+pub(crate) use history_access::{AccessGraphRow, AccessHistory, AccessWorktree, AccessWorktrees, HISTORY_ROWS, HistoryFrame};
 
 #[path = "scm_changes.rs"]
 mod changes_ui;
@@ -983,6 +986,8 @@ impl ScmPanel {
         Some(
             div()
                 .id("scm-sync")
+                .relative()
+                .child(crate::painted::probe(&self.a11y_frames, AccessFrame::History(HistoryFrame::Sync)))
                 .h(px(26.))
                 .flex()
                 .items_center()
@@ -1208,13 +1213,21 @@ impl ScmPanel {
         let p = *palette(cx);
         let open = self.sections.is_open("details", true);
         let title = crate::i18n::tf("Commit {}", &[&commit.short]);
+        let probe = |part: HistoryFrame| crate::painted::probe(&self.a11y_frames, AccessFrame::History(part));
         let header = sections::header("scm-detail-header", &title, None, open, &p)
-            .child(ui::icon_button("scm-detail-close", "x", crate::i18n::t("Close details"), &p).on_click(cx.listener(|this, _, _, cx| {
-                cx.stop_propagation();
-                this.selected = None;
-                this.detail = None;
-                cx.notify();
-            })))
+            .relative()
+            .child(probe(HistoryFrame::Header("details")))
+            .child(
+                ui::icon_button("scm-detail-close", "x", crate::i18n::t("Close details"), &p)
+                    .relative()
+                    .child(probe(HistoryFrame::Button("details-close")))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.selected = None;
+                        this.detail = None;
+                        cx.notify();
+                    })),
+            )
             .on_click(cx.listener(|this, _, _, cx| this.toggle_section("details", cx)));
         let height = self.section_height("details", 170.);
         let hash = commit.hash.clone();
@@ -1312,6 +1325,8 @@ impl ScmPanel {
                             let dir = f.path.rsplit_once('/').map(|(d, _)| d.to_string()).unwrap_or_default();
                             div()
                                 .id(("scm-detail-file", i))
+                                .relative()
+                                .child(crate::painted::probe(&self.a11y_frames, AccessFrame::History(HistoryFrame::DetailFile(i))))
                                 .h(px(layout::ROW_H))
                                 .flex()
                                 .flex_none()
@@ -1361,6 +1376,8 @@ impl ScmPanel {
                 .flex_col()
                 .flex_shrink()
                 .min_h(px(layout::ROW_H + 4.))
+                .relative()
+                .child(probe(HistoryFrame::Section("details")))
                 .child(self.top_sash("details", &p, cx))
                 .child(header)
                 .when_some(body, |d, body| d.child(div().h(px(height)).flex_shrink().min_h(px(60.)).child(body))),

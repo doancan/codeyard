@@ -46,6 +46,10 @@ pub(in crate::workbench) enum Part {
     DialogButton(usize),
     /// A tab of the bottom panel.
     PanelTab(super::Bottom),
+    /// The Debug Console, its output and its expression field.
+    Console,
+    ConsoleLog,
+    ConsoleInput,
     /// The Extensions view's Installed tab, Market tab, search field and list (0 to 3).
     ExtControl(u8),
     /// A row of the Extensions view's Installed or Market list.

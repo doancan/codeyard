@@ -8,6 +8,9 @@ use crate::workbench::panels_glue::ProblemRow;
 #[path = "a11y_pages.rs"]
 mod pages;
 pub(super) use pages::{FIXED as PAGE_FIXED, PAGE_ROW};
+#[path = "a11y_console.rs"]
+mod console;
+pub(super) use console::FIXED as CONSOLE_FIXED;
 #[path = "a11y_dialogs.rs"]
 mod dialogs;
 pub(super) use dialogs::{DIALOG_LINE, FIXED as DIALOG_FIXED};
@@ -140,6 +143,7 @@ pub(crate) struct PanelSnap {
     tabs: Vec<(Bottom, String, usize)>,
     selected: Bottom,
     output: Option<String>,
+    console: Option<console::ConsoleSnap>,
 }
 
 const PANEL_TABS: NodeId = NodeId(50);
@@ -177,12 +181,15 @@ impl PanelSnap {
             nodes.push((OUTPUT_LOG, log));
             out.push(OUTPUT_LOG);
         }
+        if let Some(console) = &self.console {
+            out.push(console.append_tree(nodes, geometry));
+        }
         out
     }
 }
 
 impl Workbench {
-    pub(super) fn a11y_panel(&self) -> Option<PanelSnap> {
+    pub(super) fn a11y_panel(&self, window: &Window, cx: &App) -> Option<PanelSnap> {
         if !self.chrome.panel_open {
             return None;
         }
@@ -197,17 +204,20 @@ impl Workbench {
             let skip = self.lsp.output.len().saturating_sub(MAX_OUTPUT_LINES);
             self.lsp.output.iter().skip(skip).cloned().collect::<Vec<_>>().join("\n")
         });
-        Some(PanelSnap { tabs, selected: self.chrome.bottom, output })
+        Some(PanelSnap { tabs, selected: self.chrome.bottom, output, console: self.a11y_console(window, cx) })
     }
 
     /// A tab of the panel: switched to only if the panel still offers it.
-    pub(super) fn a11y_panel_action(&mut self, req: &ActionRequest, last: &Snapshot, cx: &mut Context<Self>) -> bool {
+    pub(super) fn a11y_panel_action(&mut self, req: &ActionRequest, last: &Snapshot, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if self.a11y_console_action(req, last.views.panel.as_ref().and_then(|p| p.console.as_ref()), window, cx) {
+            return true;
+        }
         let id = req.target_node.0;
         if !(PANEL_TAB..PANEL_TAB + 16).contains(&id) {
             return false;
         }
         let index = (id - PANEL_TAB) as usize;
-        let (Some(old), Some(current)) = (last.views.panel.as_ref(), self.a11y_panel()) else { return true };
+        let (Some(old), Some(current)) = (last.views.panel.as_ref(), self.a11y_panel(window, cx)) else { return true };
         if req.action == Action::Click
             && let Some((tab, ..)) = old.tabs.get(index)
             && current.tabs.iter().any(|(t, ..)| t == tab)
@@ -266,6 +276,7 @@ impl ViewsSnap {
             .or(row)
             .or_else(|| self.pages.focus_node())
             .or_else(|| self.search.as_ref().and_then(search_side::SearchSnap::focus_node))
+            .or_else(|| self.panel.as_ref().and_then(|p| p.console.as_ref()).and_then(console::ConsoleSnap::focus_node))
     }
 }
 
@@ -274,7 +285,7 @@ impl Workbench {
         let search = self.a11y_search_view(window, cx);
         ViewsSnap {
             problems: self.a11y_problems(cx),
-            panel: self.a11y_panel(),
+            panel: self.a11y_panel(window, cx),
             search,
             pages: self.a11y_pages(window, cx),
             side: self.a11y_side(window, cx),
@@ -286,7 +297,7 @@ impl Workbench {
     pub(super) fn a11y_views_action(&mut self, req: &ActionRequest, last: &Snapshot, window: &mut Window, cx: &mut Context<Self>) -> bool {
         self.a11y_search_view_action(req, last.views.search.as_ref(), window, cx)
             || self.a11y_consent_action(req, last.views.consent.as_ref(), window, cx)
-            || self.a11y_panel_action(req, last, cx)
+            || self.a11y_panel_action(req, last, window, cx)
             || self.a11y_problems_action(req, last, window, cx)
             || self.a11y_pages_action(req, &last.views.pages, window, cx)
             || self.a11y_side_action(req, &last.views.side, window, cx)

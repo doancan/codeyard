@@ -1137,7 +1137,7 @@ impl Workbench {
         .detach();
     }
 
-    fn debug_evaluate(&mut self, expression: String, cx: &mut Context<Self>) {
+    pub(super) fn debug_evaluate(&mut self, expression: String, cx: &mut Context<Self>) {
         let expression = expression.trim().to_string();
         let sid = self.dbg.cur_id();
         let Some(d) = self.dbg.cur_mut() else { return };
@@ -1389,7 +1389,18 @@ impl Workbench {
             .size_full()
             .flex()
             .flex_col()
-            .child(div().id("dbg-console-rows").flex_1().min_h_0().overflow_y_scroll().children(lines))
+            .relative()
+            .child(super::a11y::part_frame(super::a11y::Part::Console, cx))
+            .child(
+                div()
+                    .id("dbg-console-rows")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .relative()
+                    .child(super::a11y::part_frame(super::a11y::Part::ConsoleLog, cx))
+                    .children(lines),
+            )
             .child(
                 div()
                     .h(px(26.))
@@ -1404,6 +1415,8 @@ impl Workbench {
                     .on_action(cx.listener(|this, _: &ConsoleHistoryPrev, _, cx| this.console_history(true, cx)))
                     .on_action(cx.listener(|this, _: &ConsoleHistoryNext, _, cx| this.console_history(false, cx)))
                     .on_action(cx.listener(|this, _: &ConsoleComplete, _, cx| this.console_complete(cx)))
+                    .relative()
+                    .child(super::a11y::part_frame(super::a11y::Part::ConsoleInput, cx))
                     .child(icon("chevron-right", 12., p.accent))
                     .child(d.input.clone()),
             )
