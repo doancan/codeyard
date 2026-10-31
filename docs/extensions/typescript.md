@@ -91,9 +91,10 @@ The same calls as the Rust SDK, in camelCase:
 | `ctx.read_file`, `ctx.read_text`, `ctx.stat`, `ctx.find_files`, `ctx.write_file` | `ctx.readFile`, `ctx.readText`, `ctx.stat`, `ctx.findFiles`, `ctx.search`, `ctx.writeFile` |
 | `ctx.fetch`, `ctx.fetch_as`, `ctx.session` | the global `fetch` (or `ctx.fetch`), `fetch(url, { auth: "github" })`, `ctx.authFetch("github")`, `ctx.session` |
 | `ctx.spawn`, `ctx.run` | `ctx.spawn(command)` (`for await (const chunk of process)`, `await process.wait()`), `ctx.run(command)` |
-| `ctx.secret`, `ctx.read_clipboard`, `ctx.send_to_terminal` | `ctx.secret`, `ctx.readClipboard`, `ctx.sendToTerminal` |
+| `ctx.secret`, `ctx.set_secret`, `ctx.delete_secret` | `ctx.secret`, `ctx.setSecret`, `ctx.deleteSecret`; ask for a secret with `ctx.input({ prompt, password: true })` |
+| `ctx.read_clipboard`, `ctx.send_to_terminal` | `ctx.readClipboard`, `ctx.sendToTerminal` |
 
-Quick picks answer with the index of the item picked (or `undefined` when dismissed), as in Rust. A view's tree is a plain object: `{ type: "column", children: [{ type: "text", text: "3 clicks" }, { type: "button", key: "add", label: "Add one" }] }` ([commands.md](commands.md#views) has the elements). `console.log` goes to the extension's log, as `ctx.log` does.
+Quick picks answer with the index of the item picked (or `undefined` when dismissed), as in Rust. A view's tree is built with `ui`, as in Rust: `ui.column([ui.text("3 clicks"), ui.button("add", "Add one")])` (see [Views](views.md#build-it-with-the-sdk)). It is a plain `ViewNode` object in the form of the [views reference](reference/ui.md), typed per element, so a hand-written tree type-checks too. `console.log` goes to the extension's log, as `ctx.log` does.
 
 ## Pull request providers
 
@@ -137,7 +138,7 @@ ctx.pullRequests("gitea", {
 
 `remote` is a `Remote`: the remote's `name`, `url`, `host`, `path` (such as `group/app`) and `account`, the manifest's `auth` provider. Call the forge with `ctx.fetchAs(remote.account, …)`: Codeyard signs the request, and the extension never sees the token. A request is signed only once the user has signed in, so call `ctx.session(remote.account)` first; it asks on first use and returns at once after that. `list`, `details`, `files` and `contents` are required. `comments` is optional: without it a request has no comments. Without `addComment` or `checkout`, Codeyard refuses those actions. Times (`updated`, `created`) are Unix milliseconds; leave them out when unknown.
 
-In tests, `host.listPullRequests(remote)`, `host.pullRequestDetails(remote, id)`, `host.pullRequestFiles`, `host.pullRequestContents`, `host.pullRequestComments`, `host.addPullRequestComment` and `host.checkoutPullRequest` send the queries, and `host.http(…)` answers the signed requests. `host.fetched()` shows each request with the `auth` provider that signed it.
+In tests, `host.listPullRequests(remote)`, `host.pullRequestDetails(remote, id)`, `host.pullRequestFiles`, `host.pullRequestContents`, `host.pullRequestComments`, `host.addPullRequestComment` and `host.checkoutPullRequest` send the queries, and `host.http(…)` answers the signed requests. `host.fetched()` shows each request with the `auth` provider that signed it. As in Codeyard, the mock refuses a signed request to a host outside the provider's `[[oauth]] hosts`, and one that sets its own `authorization` header. [examples/extensions/gitlab](../../examples/extensions/gitlab) is a complete provider for GitLab in TypeScript.
 
 ## fetch and npm packages
 

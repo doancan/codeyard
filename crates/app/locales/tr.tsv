@@ -3401,3 +3401,16 @@ No description.	Açıklama yok.
 Comments ({})	Yorumlar ({})
 {} is a platform extension programs are not built for	{}, eklenti programlarının derlenmediği bir platform
 Version {} adds native programs; review it and type its id to install it:	{} sürümü yerel programlar ekliyor; kurmak için gözden geçirip kimliğini yazın:
+features: {}	özellikler: {}
+no default features	varsayılan özellikler yok
+output: {}	çıktı: {}
+Apply	Uygula
+Apply the Rust setup to settings.jsonc?	Rust kurulumu settings.jsonc dosyasına uygulansın mı?
+Preferences: Apply Rust Setup…	Tercihler: Rust Kurulumunu Uygula…
+Preferences: Reset Rust Setup…	Tercihler: Rust Kurulumunu Sıfırla…
+Reset the Rust setup in settings.jsonc?	settings.jsonc dosyasındaki Rust kurulumu sıfırlansın mı?
+settings.jsonc already has the Rust setup.	settings.jsonc dosyasında Rust kurulumu zaten var.
+settings.jsonc has no Rust setup to reset.	settings.jsonc dosyasında sıfırlanacak Rust kurulumu yok.
+the file changed; try again	dosya değişti; yeniden deneyin
+Discard changes in {}	{} içindeki değişiklikleri at
+Mark {} as resolved	{} dosyasını çözüldü olarak işaretle

@@ -39,6 +39,10 @@ pub mod pulls;
 mod runtime;
 pub mod scm;
 pub mod types;
+pub mod ui;
+
+#[cfg(test)]
+mod ui_tests;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod native;
@@ -74,7 +78,7 @@ pub mod prelude {
     pub use crate::pulls::{ChangedFile, Check, CheckState, Checkout, Comment, FileContents, FileStatus, PullRequest, PullRequestDetails, PullState, Remote};
     pub use crate::scm::{FileState, ScmAction, ScmArgs, ScmGroup, ScmInput, ScmResource, ScmState};
     pub use crate::types::*;
-    pub use crate::{Context, Denied, Error, Extension, Result, Value, Why, json};
+    pub use crate::{Context, Denied, Error, Extension, Result, Value, Why, json, ui};
 }
 
 /// Make `$ty` the extension this component runs. On the host target (unit tests) it expands to nothing: the mock host

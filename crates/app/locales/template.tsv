@@ -101,10 +101,12 @@ App: Quit
 Apple Container supports connecting, starting containers and viewing logs. Dev Container project creation is not supported by this adapter yet; connect to an existing Apple container.	
 Application details	
 Applied {}	
+Apply	
 Apply (keep the stash)	
 Apply .editorconfig files (indent, line endings, final newline…)	
 Apply Stash…	
 Apply a file operation to {} entry?|Apply a file operation to {} entries?	
+Apply the Rust setup to settings.jsonc?	
 Apply {0} {1}	
 Apr	
 Ask before .http requests and schema downloads leave this computer: never, remote (the first request to each new host per session) or always. Your own settings only; a folder cannot change it	
@@ -623,6 +625,7 @@ Discard
 Discard All Changes	
 Discard all changes	
 Discard changes	
+Discard changes in {}	
 Discard changes in {} files?	
 Discard changes in {}?	
 Discard mine, load from disk	
@@ -1241,6 +1244,7 @@ Mar
 Mark all as resolved (stage)	
 Mark as resolved (stage)	
 Mark prompts, commands and the folder in zsh, bash and fish	
+Mark {} as resolved	
 Markdown preview	
 Markdown: Open Preview	
 Market	
@@ -1629,6 +1633,7 @@ Ports
 Ports and storage	
 Ports below 1024 need extra privileges on this computer	
 Ports: {}	
+Preferences: Apply Rust Setup…	
 Preferences: Configure User Snippets	
 Preferences: Import Settings and Shortcuts from Another Editor	
 Preferences: Keyboard Shortcuts	
@@ -1636,6 +1641,7 @@ Preferences: Open Keyboard Shortcuts
 Preferences: Open Settings	
 Preferences: Open Settings (JSON)	
 Preferences: Open Workspace Settings	
+Preferences: Reset Rust Setup…	
 Preferences: Settings	
 Preserve case (⌥P)	
 Preserve case when replacing	
@@ -1851,6 +1857,7 @@ Reset Hard to Here…
 Reset Mixed to Here	
 Reset Soft to Here	
 Reset Zoom	
+Reset the Rust setup in settings.jsonc?	
 Reset to {0} ({1})	
 Resolve the file conflict before debugging.	
 Resolved {} conflict|Resolved {} conflicts	
@@ -2703,6 +2710,7 @@ expression to watch (e.g. total * 2, items.len())
 extensions.registries[{0}]: the name “{1}” is used twice	
 failed	
 failed (exit code {})	
+features: {}	
 fetches {} from {}	
 field	
 file	
@@ -2772,6 +2780,7 @@ namespace
 needs a path to a program	
 new value	
 no configuration directory	
+no default features	
 no file name	
 no item {} in the response	
 no upstream	
@@ -2792,6 +2801,7 @@ of {}
 only the first {} files were looked at (search.structural.maxFiles)	
 open	
 operator	
+output: {}	
 package	
 partly selected	
 passed	
@@ -2829,6 +2839,8 @@ selected
 send the request named “{}” first	
 sends {} to {}	
 setting	
+settings.jsonc already has the Rust setup.	
+settings.jsonc has no Rust setup to reset.	
 size differs	
 skipped	
 source	
@@ -2861,6 +2873,7 @@ the environment variable {} is not set
 the extension stopped	
 the extension was reloaded	
 the file cannot be read right now ({})	
+the file changed; try again	
 the file is gone (deleted or moved); following continues if it comes back	
 the file is no longer readable (permission denied)	
 the file is not UTF-8 text	

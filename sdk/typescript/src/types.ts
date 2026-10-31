@@ -160,16 +160,8 @@ export interface CodeAction {
   fixes?: Diagnostic[];
 }
 
-/**
- * A view's element tree (docs/extensions/reference/ui.md): `{ type: "column", children: [...] }`, `{ type: "text",
- * text: "…" }`, `{ type: "button", key: "add", label: "Add one" }` and the other built-in elements.
- */
-export interface Element {
-  type: string;
-  key?: string;
-  children?: Element[];
-  [field: string]: unknown;
-}
+// A view's tree: generated from crates/ext-ui, so it is exactly what Codeyard draws (docs/extensions/reference/ui.md).
+export type { Element, ElementProps, Kind as ElementKind, Selection, Space, ViewNode } from "./view-schema.ts";
 
 /** A program to run (`run = [...]`). */
 export interface Command {

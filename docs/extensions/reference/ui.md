@@ -7,6 +7,10 @@ A view is a tree of 22 elements that Codeyard draws itself, with the user's them
 are no webviews and no colour or font control: you pick tones and spacing steps, and themes and high contrast work
 without any effort from you. The guide is in [Views](../views.md); this page is the exact format.
 
+The `ui` functions of both SDKs write this format ([Views](../views.md#build-it-with-the-sdk)); this page is what they
+produce and what a hand-written tree must look like. The mock hosts and `cyx test` check a tree with the same code as
+Codeyard (crates/ext-ui).
+
 ## How a view is drawn
 
 1. You declare the view in the manifest (`[[views]]` with `id`, `title` and `location = "sidebar" | "bottom" | "editor"`).

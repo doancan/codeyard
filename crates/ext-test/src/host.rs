@@ -41,6 +41,8 @@ pub struct State {
     pub responses: HashMap<u64, Result<Response, Error>>,
     /// None: everything is allowed.
     pub permissions: Option<Permissions>,
+    /// The manifest's `[[oauth]]` providers: id, then the name and the hosts `auth.fetch` may sign requests to.
+    pub oauth: BTreeMap<String, (String, Vec<String>)>,
     pub untrusted: bool,
     pub files: BTreeMap<Uri, Vec<u8>>,
     pub http: Vec<HttpFixture>,
@@ -81,6 +83,9 @@ fn relative(uri: &str) -> String {
     }
 }
 
+/// The hosts `auth.fetch` signs requests to for the built-in GitHub account.
+const GITHUB_HOSTS: &[&str] = &["api.github.com", "uploads.github.com"];
+
 fn host_of(url: &str) -> String {
     let rest = url.split_once("://").map_or(url, |(_, r)| r);
     let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
@@ -111,9 +116,9 @@ impl State {
                 let host = host_of(&r.url);
                 check(&|p| p.allows_net(&host), format!(r#"net = ["{host}"]"#), true)
             }
-            Call::Session { provider, .. } | Call::AuthFetch { provider, .. } => {
-                check(&|p| p.auth.iter().any(|a| a == provider), format!(r#"auth = ["{provider}"]"#), true)
-            }
+            Call::Session { provider, .. } => check(&|p| p.auth.iter().any(|a| a == provider), format!(r#"auth = ["{provider}"]"#), true),
+            Call::AuthFetch { provider, request } => check(&|p| p.auth.iter().any(|a| a == provider), format!(r#"auth = ["{provider}"]"#), true)
+                .or_else(|| self.unsigned_host(provider, &request.url)),
             Call::Spawn(c) => check(&|p| p.allows_run(&c.program), format!(r#"run = ["{}"]"#, c.program), true),
             Call::SecretGet(_) | Call::SecretSet { .. } | Call::SecretDelete(_) => check(&|p| p.secrets, "secrets = true".into(), false),
             Call::ReadClipboard => check(&|p| p.clipboard.reads(), r#"clipboard = "read""#.into(), false),
@@ -124,6 +129,20 @@ impl State {
             }
             _ => None,
         }
+    }
+
+    /// `auth.fetch` signs requests only to the hosts of the provider (`[[oauth]] hosts`, GitHub's API hosts), as the
+    /// app does: a request to any other host is refused and not sent.
+    fn unsigned_host(&self, provider: &str, url: &str) -> Option<Denied> {
+        self.permissions.as_ref()?;
+        let (name, hosts) = match self.oauth.get(provider) {
+            Some((name, hosts)) => (name.clone(), hosts.clone()),
+            None if provider == "github" => ("GitHub".to_string(), GITHUB_HOSTS.iter().map(|h| (*h).to_string()).collect()),
+            None => return None,
+        };
+        let host = host_of(url);
+        (!ext_manifest::net_allows(&hosts, &host))
+            .then(|| Denied { permission: format!("a host of the {name} account ({}), not {host}", hosts.join(", ")), why: Why::NotDeclared })
     }
 
     /// The streamed events and the completion of an allowed call.
@@ -179,6 +198,9 @@ impl State {
                 Some(_) => (none, Completion::Done),
                 None => (none, not_found(uri)),
             },
+            Call::AuthFetch { request: r, .. } if r.headers.iter().any(|(n, _)| n.trim().eq_ignore_ascii_case("authorization")) => {
+                (none, Completion::Failed(Error::Invalid("the authorization header is added by Codeyard; remove it from the request".into())))
+            }
             Call::Fetch(r) | Call::AuthFetch { request: r, .. } => {
                 self.fetched.push(r.clone());
                 let fixture = self.http.iter().find(|f| (f.method == "*" || f.method.eq_ignore_ascii_case(&r.method)) && f.url == r.url);

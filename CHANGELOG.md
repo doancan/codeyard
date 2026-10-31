@@ -26,7 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hash-checked copy, locally and over SSH, and is refused when the hash does not match. An update that adds a native
   program opens the full sheet, which asks for the id to be typed as a first install does, instead of the permission
   card. Screen readers find the sheet's id field (a text field with what to type, what is typed and the focus).
-
+- "Preferences: Apply Rust Setup…" sets up a Rust project in one step: Clippy for checks, checks with the Cargo
+  features Run and Debug build with, a check folder of its own and rustfmt on save. It shows the exact changes to
+  `settings.jsonc` first, keeps your comments and other settings, and "Preferences: Reset Rust Setup…" removes it.
+- Rust debugging builds with your choice of Cargo features, profile and output folder: `rust.features`,
+  `rust.noDefaultFeatures`, `rust.profile` and `rust.targetDir`. The target picker shows them next to each detected
+  target, and a relative output folder is resolved in the workspace folder of the machine that builds, also over SSH.
 - Code extensions can describe and complete: `[[hover]]` and `[[completion]]` (with optional `trigger-characters`)
   in the manifest, `request.hover` and `request.completion` in `codeyard:api` 0.1, `ctx.hover` and `ctx.completion`
   in the Rust and TypeScript SDKs, and `hover` / `completion` in both mock hosts. Their text shows in the hover popup
@@ -251,9 +256,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - On macOS and Linux an extension process that uses more than 512 MB of memory is stopped and counted as a crash, with
   a message that says why (Windows already had the limit).
 - `cyx package --no-build` packages the `extension.wasm` already in the folder.
+- Example extensions built on the public API only, as an outside author would (#148): `vercel-status` (TypeScript: the
+  latest deployment in the status bar, recent deployments in a sidebar view, a refresh command and timer, the token in
+  `secrets`) and `gitlab` (TypeScript: merge requests in the Pull Requests view through a GitLab `[[oauth]]` account,
+  gitlab.com or a self-managed instance). CI builds both and runs their unit tests and `cyx test`.
+- Both mock hosts: `secrets()` returns the keychain entries the extension left. An `auth.fetch` to a host outside the
+  account's `[[oauth]] hosts` (or GitHub's API hosts) is refused, and one with its own `authorization` header fails, as
+  in Codeyard.
 
 ### Changed
 
+- Source Control's change list is fully accessible: each file is a row with its change, its place in the group and its
+  own Stage/Unstage (Mark as resolved) and Discard buttons (Discard asks first, as the painted button does), the commit
+  button says why it is disabled, and a large status exposes a scrollable range of 500 lines instead of every row. The
+  list has a keyboard cursor (↑/↓/Home/End, ↵ opens the diff, Space stages or unstages, ←/→ fold and unfold groups,
+  Delete or ⌘⌫ discards) that screen readers see as the focus. Actions from an old tree do nothing once the file has
+  changed state or another repository is shown.
 - Source Control builds only the change rows on screen, so a repository with thousands of changes (generated files,
   a large merge) scrolls and refreshes without delay. The list keeps its scroll position and focus when the status
   refreshes.
@@ -283,6 +301,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   terminal before quitting could be lost: the connection to the terminal daemon was closed before the window's `Bye`
   (or those keys) had been written. The connection now closes only after everything queued has gone out (at most 5
   seconds for a daemon that stopped reading).
+- Views made from `cyx new view` (Rust and TypeScript) and the `hello-view` examples drew an error instead of their
+  content: they wrote a `{ "type": "column", … }` shorthand that Codeyard refuses ("unknown field `type`"), while
+  `cyx test` said "view main draws" (#182). Both SDKs now have `ui` functions that write the documented form
+  (`{"key", "element": {"<kind>": {…}}, "children"}`), the templates, examples and docs use them, and in TypeScript
+  `ViewNode` types the tree element by element (`Element`, which typed the shorthand, is now one element). The mock
+  hosts' `render` and `cyx test` check a tree with Codeyard's own rules (the TypeScript mock with a copy generated
+  from them and tested against the same cases), and `view_event` / `viewEvent` refuse an event Codeyard never sends, such as `{"click": "add"}`.
+- `cyx package` no longer puts the `.cyx` it wrote last time into the new package (it doubled in size on every run).
+  New extensions from `cyx new` ignore `*.cyx` in git.
+- `cyx check` on a code extension that is not built yet says to run `cyx package` or `cyx test`, which build it.
 - Typing in a large file could wait 60 ms or more per key for the syntax tree: an edit that makes tree-sitter recover
   from an error across the whole file (stray words or a half-typed `->` between the items of a 10 000-line Rust file)
   reparsed all of it before the key was drawn. A key now reparses for at most 4 ms; a longer reparse finishes in the

@@ -56,6 +56,7 @@ import { fromWitCodeLens, fromWitDiagnostic, toWitCodeLens, toWitDiagnostic } fr
 import type * as W from "../wit.ts";
 import { allowsNet, allowsRead, allowsWrite, globMatch, permissionsOf, type Permissions } from "./permissions.ts";
 import { parseToml, type Table } from "./toml.ts";
+import { checkEvent, checkView } from "./view-check.ts";
 
 /** The workspace folder of every mock. */
 export const FOLDER = "file:///work";
@@ -104,9 +105,14 @@ function relative(uri: string): string {
   return (at >= 0 ? uri.slice(at + 3) : uri).replace(/^\/+/, "");
 }
 
+/** The hosts `auth.fetch` signs requests to for the built-in GitHub account. */
+const GITHUB_HOSTS = ["api.github.com", "uploads.github.com"];
+
 /** A mock Codeyard for one extension. Set it up and inspect it in any order. */
 export class MockHost {
   #permissions: Permissions | undefined;
+  /** The manifest's `[[oauth]]` providers: the name and the hosts `auth.fetch` may sign requests to. */
+  #oauth = new Map<string, { name: string; hosts: string[] }>();
   #untrusted = false;
   #nextTicket = 0n;
   #nextId = 0n;
@@ -170,6 +176,11 @@ export class MockHost {
   manifest(toml: string): this {
     const m: Table = parseToml(toml);
     this.#permissions = permissionsOf(m);
+    this.#oauth.clear();
+    for (const o of (Array.isArray(m.oauth) ? m.oauth : []) as Table[]) {
+      const hosts = Array.isArray(o.hosts) ? (o.hosts as unknown[]).map(String) : [];
+      this.#oauth.set(String(o.id), { name: String(o.name ?? o.id), hosts });
+    }
     for (const [key, s] of Object.entries((m.settings ?? {}) as Table)) {
       const def = (s as Table).default;
       if (!this.#settings.has(key)) this.#settings.set(key, def === undefined ? undefined : JSON.stringify(def));
@@ -317,16 +328,27 @@ export class MockHost {
     return r.val ? JSON.parse(r.val) : null;
   }
 
-  /** Draw view `id`: its element tree. */
+  /**
+   * Draw view `id`: its tree, checked as Codeyard checks it before drawing (crates/ext-ui), so a tree Codeyard would
+   * refuse fails the test with the reason Codeyard shows.
+   */
   async render(id: string): Promise<any> {
     const r = await this.request({ tag: "render", val: id });
     if (r.tag !== "view") throw CodeyardError.other(`view ${id} answered ${r.tag}`);
-    return JSON.parse(r.val);
+    const verdict = checkView(r.val);
+    if (!verdict.ok) throw CodeyardError.other(`Codeyard would not draw view ${id}: ${verdict.message}`);
+    return verdict.view;
   }
 
-  /** Send an event to view `id`. */
+  /**
+   * Send an event to view `id`, in the form Codeyard sends (docs/extensions/reference/ui.md#events):
+   * `{ click: { path: ["add"] } }`, `{ change: { path: ["name"], value: { text: "web" } } }`, …
+   */
   async viewEvent(id: string, event: unknown): Promise<void> {
-    await this.request({ tag: "ui-event", val: [id, JSON.stringify(event)] });
+    const json = JSON.stringify(event);
+    const why = checkEvent(json);
+    if (why !== undefined) throw CodeyardError.other(`Codeyard never sends ${json} (it sends events such as {"click": {"path": ["add"]}}): ${why}`);
+    await this.request({ tag: "ui-event", val: [id, json] });
   }
 
   async format(document: Document, range: Range | undefined, options: FormatOptions): Promise<TextEdit[]> {
@@ -603,6 +625,11 @@ export class MockHost {
     return Object.fromEntries([...this.#storage].map(([k, v]) => [k, text(v)]));
   }
 
+  /** The extension's keychain entries (`secrets`), as it left them. */
+  secrets(): Record<string, string> {
+    return Object.fromEntries(this.#secrets);
+  }
+
   statusItems(): Record<string, StatusItem> {
     return Object.fromEntries(this.#statusItems);
   }
@@ -671,8 +698,9 @@ export class MockHost {
         return check((p) => allowsNet(p, host), `net = ["${host}"]`, true);
       }
       case "auth/session":
-      case "auth/fetch":
         return check((p) => p.auth.includes(uri), `auth = ["${uri}"]`, true);
+      case "auth/fetch":
+        return check((p) => p.auth.includes(uri), `auth = ["${uri}"]`, true) ?? this.#unsignedHost(uri, (args[1] as W.HttpRequest).url);
       case "process/spawn": {
         const program = (args[0] as W.ProcessCommand).program;
         return check((p) => p.run.includes(program), `run = ["${program}"]`, true);
@@ -694,6 +722,18 @@ export class MockHost {
     }
   }
 
+  /**
+   * `auth.fetch` signs requests only to the hosts of the provider (`[[oauth]] hosts`, GitHub's API hosts), as Codeyard
+   * does: a request to any other host is refused and not sent.
+   */
+  #unsignedHost(provider: string, url: string): DeniedError | undefined {
+    if (!this.#permissions) return undefined;
+    const o = this.#oauth.get(provider) ?? (provider === "github" ? { name: "GitHub", hosts: GITHUB_HOSTS } : undefined);
+    const host = hostOf(url);
+    if (!o || allowsNet({ net: o.hosts } as Permissions, host)) return undefined;
+    return new DeniedError(`a host of the ${o.name} account (${o.hosts.join(", ")}), not ${host}`, "not-declared");
+  }
+
   /** Start a call: record it, refuse it or answer it, and queue the answer for after the call returns. */
   #start(name: string, args: unknown[], answer: () => [W.StreamEvent[], W.Completion]): bigint {
     const ticket = ++this.#nextTicket;
@@ -712,6 +752,9 @@ export class MockHost {
 
   #fetch(name: string, provider: string | undefined, r: W.HttpRequest): bigint {
     return this.#start(name, provider === undefined ? [r] : [provider, r], () => {
+      if (provider !== undefined && r.headers.some(([n]) => n.trim().toLowerCase() === "authorization")) {
+        return [[], { tag: "failed", val: { tag: "invalid", val: "the authorization header is added by Codeyard; remove it from the request" } }];
+      }
       this.#fetched.push({ method: r.method, url: r.url, headers: r.headers, body: text(r.body), ...(provider ? { auth: provider } : {}) });
       const f = this.#http.find((f) => (f.method === "*" || f.method.toUpperCase() === r.method.toUpperCase()) && f.url === r.url);
       if (!f) {

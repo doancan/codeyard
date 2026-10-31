@@ -100,7 +100,7 @@ strip = "debuginfo"
 [workspace]
 "#;
 
-const GITIGNORE: &str = "target/\nextension.wasm\n";
+const GITIGNORE: &str = "target/\nextension.wasm\n*.cyx\n";
 const COMMAND_RS: &str = include_str!("../templates/command.rs");
 const VIEW_RS: &str = include_str!("../templates/view.rs");
 
@@ -141,7 +141,7 @@ const TSCONFIG: &str = r#"{
 }
 "#;
 
-const TS_GITIGNORE: &str = "node_modules/\nextension.wasm\nextension.js.map\n";
+const TS_GITIGNORE: &str = "node_modules/\nextension.wasm\nextension.js.map\n*.cyx\n";
 const COMMAND_TS: &str = include_str!("../templates/command.ts");
 const COMMAND_TEST_TS: &str = include_str!("../templates/command.test.ts");
 const VIEW_TS: &str = include_str!("../templates/view.ts");

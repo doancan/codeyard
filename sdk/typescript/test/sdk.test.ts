@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { CodeyardError, DeniedError, RELOAD_STATE_KEY, type Context } from "../src/index.ts";
+import { CodeyardError, DeniedError, RELOAD_STATE_KEY, ui, type Context, type ViewNode } from "../src/index.ts";
 import { describe as describeError, stackFrames } from "../src/errors.ts";
 import { start } from "../src/guest.ts";
 import { MockHost } from "../src/testing/index.ts";
@@ -166,7 +166,9 @@ test("timers fire on the virtual clock; views draw and handle events", async () 
       ctx.every(60, async () => {
         ticks++;
       });
-      ctx.view("main", async (ctx) => ({ type: "text", text: String(ctx.storage.getJson<number>("n") ?? 0) }));
+      ctx.view("main", async (ctx) => ui.text(String(ctx.storage.getJson<number>("n") ?? 0)));
+      // The `{ type: … }` shorthand the templates once wrote (#182), which Codeyard refuses.
+      ctx.view("shorthand", () => ({ type: "column", children: [{ type: "text", text: "2" }] }) as unknown as ViewNode);
       ctx.onViewEvent("main", async (ctx) => {
         ctx.storage.setJson("n", (ctx.storage.getJson<number>("n") ?? 0) + 1);
         ctx.invalidate("main");
@@ -176,8 +178,12 @@ test("timers fire on the virtual clock; views draw and handle events", async () 
   await h.advance(150);
   assert.equal(ticks, 2);
   assert.deepEqual(h.timers(), [[1, 60]]);
-  await h.viewEvent("main", { click: "add" });
-  assert.deepEqual(await h.render("main"), { type: "text", text: "1" });
+  await h.viewEvent("main", { click: { path: ["add"] } });
+  assert.deepEqual(await h.render("main"), { element: { text: { text: "1" } } });
+  assert.deepEqual(h.invalidated(), ["main"]);
+  // A tree or an event Codeyard would refuse fails the test, with Codeyard's reason.
+  await assert.rejects(h.render("shorthand"), /Codeyard would not draw view shorthand: the view is malformed: unknown field `type`/);
+  await assert.rejects(h.viewEvent("main", { click: "add" }), /Codeyard never sends \{"click":"add"\}/);
   assert.deepEqual(h.invalidated(), ["main"]);
   h.dispose();
 });
@@ -466,4 +472,41 @@ test("a pull request provider without its optional handlers", async () => {
     /the pull request provider 'half' needs a details\(ctx, …\) handler/,
   );
   h2.dispose();
+});
+
+test("auth.fetch signs only for the provider's hosts, and never with an authorization of the extension's own", async () => {
+  const h = new MockHost({
+    manifest: `
+[permissions]
+auth = ["acme", "github"]
+
+[[oauth]]
+id            = "acme"
+name          = "Acme"
+authorize-url = "https://acme.example.com/oauth/authorize"
+token-url     = "https://acme.example.com/oauth/token"
+client-id     = "x"
+hosts         = ["*.acme.example.com"]
+`,
+  });
+  for (const url of ["https://api.acme.example.com/me", "https://evil.example.org/collect", "https://api.github.com/user", "https://example.com/x"]) h.http("GET", url, 200, {});
+  await h.activate({
+    activate(ctx: Context) {
+      ctx.command("get", async (ctx, [provider, url, headers]) => (await ctx.fetchAs(provider, url, { headers })).status);
+    },
+  });
+  assert.equal(await h.command("get", ["acme", "https://api.acme.example.com/me"]), 200);
+  assert.equal(await h.command("get", ["github", "https://api.github.com/user"]), 200);
+  await assert.rejects(h.command("get", ["acme", "https://evil.example.org/collect"]), (e: unknown) => e instanceof DeniedError);
+  await assert.rejects(h.command("get", ["github", "https://example.com/x"]), (e: unknown) => e instanceof DeniedError);
+  assert.deepEqual(
+    h.denied().map((d) => d.permission),
+    ["a host of the Acme account (*.acme.example.com), not evil.example.org", "a host of the GitHub account (api.github.com, uploads.github.com), not example.com"],
+  );
+  await assert.rejects(
+    h.command("get", ["acme", "https://api.acme.example.com/me", { authorization: "Bearer mine" }]),
+    (e: unknown) => e instanceof CodeyardError && e.kind === "invalid" && /added by Codeyard/.test(e.message),
+  );
+  assert.equal(h.fetched().length, 2, "only the two allowed requests were sent");
+  h.dispose();
 });

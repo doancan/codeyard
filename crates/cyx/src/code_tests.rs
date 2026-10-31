@@ -126,6 +126,10 @@ fn the_examples_build_package_and_pass_cyx_test() {
         let run = harness::run(&dir, &manifest, &exthost).unwrap();
         assert!(run.failures.is_empty(), "{name}: {:#?}", run.lines);
         assert!(run.lines.iter().any(|l| l.contains("activates")), "{:?}", run.lines);
+        for v in &manifest.contributions.views {
+            let draws = format!("view {} draws", v.id.rsplit('.').next().unwrap_or(&v.id));
+            assert!(run.lines.iter().any(|l| l.contains(&draws)), "{name}: {:#?}", run.lines);
+        }
         let _ = std::fs::remove_file(dir.join(ext_pkg::COMPONENT));
     }
 }
@@ -169,6 +173,38 @@ codeyard_extension::export!(Fetcher);
     assert!(all.contains("net/fetch"), "{all}");
     // A panic is a trap, reported with where it happened.
     assert!(all.contains("the extension trapped"), "{all}");
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn cyx_test_fails_on_a_view_codeyard_would_not_draw() {
+    // #182: the `{ "type": … }` shorthand the view template once wrote is refused by Codeyard, so `cyx test` refuses it.
+    let Some(exthost) = toolchain() else { return };
+    let root = tmp("shorthand");
+    let dir = root.join("counter");
+    scaffold::create_in(&dir, Kind::View, "counter", "you", Some(&repo().to_string_lossy()), scaffold::Lang::Rust).unwrap();
+    let code = r#"use codeyard_extension::prelude::*;
+
+struct Counter;
+
+impl Extension for Counter {
+    fn activate(ctx: Context) -> Result<()> {
+        ctx.view("main", async |_ctx| Ok(json!({ "type": "column", "children": [{ "type": "text", "text": "2" }] })));
+        ctx.command("reset", async |_ctx, _args| Ok(()));
+        Ok(())
+    }
+}
+
+codeyard_extension::export!(Counter);
+"#;
+    std::fs::write(dir.join("src/lib.rs"), code).unwrap();
+    std::fs::copy(repo().join("examples/extensions/hello-view/Cargo.lock"), dir.join("Cargo.lock")).unwrap();
+    build::build_in(&dir, Some(&target_dir())).unwrap();
+    let manifest = build::manifest(&dir).unwrap();
+    let run = harness::run(&dir, &manifest, &exthost).unwrap();
+    let all = run.failures.join("\n");
+    assert!(all.contains("view main is refused by Codeyard: the view is malformed: unknown field"), "{all}");
+    assert!(!run.lines.iter().any(|l| l.contains("view main draws")), "{:?}", run.lines);
     std::fs::remove_dir_all(&root).unwrap();
 }
 
@@ -249,7 +285,14 @@ fn the_typescript_examples_build_package_and_pass_cyx_test() {
     if !node() {
         return;
     }
-    for (name, needs) in [("hello-command-ts", ""), ("hello-view-ts", ""), ("octokit-repos-ts", "auth"), ("crate-version-ts", "net")] {
+    for (name, needs) in [
+        ("hello-command-ts", ""),
+        ("hello-view-ts", ""),
+        ("octokit-repos-ts", "auth"),
+        ("crate-version-ts", "net"),
+        ("vercel-status", "net,secrets,workspace"),
+        ("gitlab", "auth"),
+    ] {
         let dir = repo().join("examples/extensions").join(name);
         build::build(&dir).unwrap_or_else(|e| panic!("{name}: {e}"));
         let report = check(&dir).unwrap_or_else(|e| panic!("{name}: {e}"));
@@ -266,6 +309,10 @@ fn the_typescript_examples_build_package_and_pass_cyx_test() {
         let run = harness::run(&dir, &manifest, &exthost).unwrap();
         assert!(run.failures.is_empty(), "{name}: {:#?}", run.lines);
         assert!(run.lines.iter().any(|l| l.contains("activates")), "{:?}", run.lines);
+        for v in &manifest.contributions.views {
+            let draws = format!("view {} draws", v.id.rsplit('.').next().unwrap_or(&v.id));
+            assert!(run.lines.iter().any(|l| l.contains(&draws)), "{name}: {:#?}", run.lines);
+        }
         let _ = std::fs::remove_file(dir.join(ext_pkg::COMPONENT));
         let _ = std::fs::remove_file(dir.join(typescript::SOURCE_MAP));
     }

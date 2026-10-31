@@ -73,6 +73,48 @@ You pick tones (`neutral`, `accent`, `success`, `warning`, `danger`, `muted`) an
 or sizes. When the user changes the colour theme, turns on high contrast or zooms the interface, Codeyard draws your
 view again by itself; your extension is not called.
 
+### Build it with the SDK
+
+Both SDKs have `ui` functions that write exactly this form, one per element. What an element needs comes first (an
+interactive element's key, then its label), the optional properties after; containers take their children.
+
+```rust
+use codeyard_extension::prelude::*;
+
+ctx.view("deployments", async |_ctx| {
+    Ok(ui::column()
+        .gap(2)
+        .child(ui::heading("Deployments", 2))
+        .child(ui::button("refresh", "Refresh").icon("refresh-cw"))
+        .child(ui::list("list", "Deployments").selection(ui::Selection::One).children([
+            ui::text("web: ready").tone(Tone::Success).key("web"),
+            ui::text("api: building").tone(Tone::Warning).key("api"),
+        ])))
+});
+```
+
+```ts
+import { ui } from "@codeyard/extension";
+
+ctx.view("deployments", () =>
+  ui.column(
+    [
+      ui.heading("Deployments", 2),
+      ui.button("refresh", "Refresh", { icon: "refresh-cw" }),
+      ui.list("list", "Deployments", [ui.text("web: ready", { tone: "success", key: "web" }), ui.text("api: building", { tone: "warning", key: "api" })], {
+        selection: "one",
+      }),
+    ],
+    { gap: 2 },
+  ),
+);
+```
+
+Both draw the tree above. You may also return the JSON yourself, in the form of the reference: in TypeScript the
+`ViewNode` type checks it element by element. Codeyard refuses anything else, such as a `{ "type": "column", … }`
+shorthand, and shows the reason in place of the view. The mock hosts' `render` and `cyx test` check a tree with the
+same rules ([Testing](testing.md)), so a tree that passes there is drawn.
+
 ## Keep it current
 
 When your data changes, call `ui.invalidate("deployments")`. Codeyard asks for the tree again and compares it with the

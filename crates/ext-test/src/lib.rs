@@ -93,6 +93,7 @@ impl MockHost {
             s.settings.entry(setting.key.clone()).or_insert(json);
         }
         s.permissions = Some(m.permissions);
+        s.oauth = m.oauth.into_iter().map(|o| (o.id, (o.name, o.hosts))).collect();
         drop(s);
         self
     }
@@ -224,17 +225,26 @@ impl MockHost {
         }
     }
 
-    /// Draw view `id`: its element tree.
+    /// Draw view `id`: its element tree, checked as Codeyard checks it before drawing (`ext_ui::decode_json`), so a
+    /// tree Codeyard would refuse fails the test with the reason Codeyard shows.
     pub fn render(&self, id: &str) -> Result<Value> {
         match self.request(Request::Render(id.to_string()))? {
-            Response::View(v) => Ok(serde_json::from_str(&v)?),
+            Response::View(v) => match ext_ui::decode_json(&v) {
+                Ok(_) => Ok(serde_json::from_str(&v)?),
+                Err(e) => Err(Error::Other(format!("Codeyard would not draw view {id}: {e}"))),
+            },
             other => Err(Error::Other(format!("view {id} answered {other:?}"))),
         }
     }
 
-    /// Send an event to view `id`.
+    /// Send an event to view `id`, in the form Codeyard sends (docs/extensions/reference/ui.md#events):
+    /// `{"click": {"path": ["add"]}}`, `{"change": {"path": ["name"], "value": {"text": "web"}}}`, …
     pub fn view_event(&self, id: &str, event: Value) -> Result<()> {
-        self.request(Request::UiEvent { view: id.to_string(), event_json: event.to_string() }).map(|_| ())
+        let event_json = event.to_string();
+        if let Err(e) = ext_ui::Event::from_json(&event_json) {
+            return Err(Error::Other(format!("Codeyard never sends {event_json} (it sends events such as {{\"click\": {{\"path\": [\"add\"]}}}}): {e}")));
+        }
+        self.request(Request::UiEvent { view: id.to_string(), event_json }).map(|_| ())
     }
 
     pub fn format(&self, document: Document, range: Option<Range>, options: FormatOptions) -> Result<Vec<TextEdit>> {
@@ -428,6 +438,11 @@ impl MockHost {
 
     pub fn storage(&self) -> BTreeMap<String, Vec<u8>> {
         self.state.borrow().storage.clone()
+    }
+
+    /// The extension's keychain entries (`secrets`), as it left them.
+    pub fn secrets(&self) -> BTreeMap<String, String> {
+        self.state.borrow().secrets.clone()
     }
 
     pub fn status_items(&self) -> BTreeMap<String, StatusItem> {

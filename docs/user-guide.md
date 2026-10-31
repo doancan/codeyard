@@ -889,8 +889,8 @@ Opening an extension's page in the Market fetches that page once.
 From a terminal or a script, `codeyard --install-extension FILE.cyx` or `--install-extension publisher.name[@1.2.0]`
 (repeat the flag for several) installs without opening a window; running it is your consent, and the same checks
 apply. A folder with a built extension (its manifest and, for code, `extension.wasm`) installs the same way, packaged
-as it is, without building it. A changed publisher or an old registry list is refused there, with the reason: use the
-Extensions view.
+as it is, without building it. A changed publisher, an old registry list, and a package file or folder with code that
+asks for permissions are refused there, with the reason: use the Extensions view, which shows the permissions first.
 
 **Manage.** Choose an extension in the list to open its page: contributions, permissions and these actions:
 
@@ -919,6 +919,11 @@ staged. The panel also shows the last commit and who the commits will be made as
 (`user.name <user.email>` of that host's git); if the identity is missing it says so, and a
 refused commit explains how to set it. Clicking a file opens a side-by-side diff; F7 jumps
 between changes. Commits made in the terminal show up on their own.
+
+The change list also works from the keyboard: Tab moves to it from the message box, ↑/↓/Home/End
+move its cursor, ↵ opens the file's diff (or folds the group), Space stages or unstages the file,
+← goes to the file's group (and folds it), → unfolds it and goes in, and Delete (⌘⌫ on macOS)
+discards the file's changes after asking.
 
 **Graph:** the GRAPH section under the changes draws the history of every branch as lanes,
 with branch (blue), remote (green), tag (yellow) and HEAD labels; merges are hollow dots.
@@ -1314,6 +1319,11 @@ letters inside Latin words are boxed (`"editor.unicodeHighlight.enabled"`), whic
 A Cargo folder needs no setup. Install `rust-analyzer` (`rustup component add rust-analyzer`) for the editor and, so that
 the debugger can show the standard library's code, `rust-src` (`rustup component add rust-src`). In an SSH folder both are
 used from the server, with the toolchain the project's `rust-toolchain.toml` picks there.
+
+**Rust setup in one step.** "Preferences: Apply Rust Setup…" shows the exact lines it adds to `settings.jsonc` and
+writes them once you confirm: Clippy for checks, checks with the Cargo features Run and Debug build with
+(`rust.features`, `rust.noDefaultFeatures`), a check folder of its own, and rustfmt on save. Comments and other settings
+stay as they are; "Preferences: Reset Rust Setup…" removes exactly those lines again.
 
 **Check the way you build.** rust-analyzer runs `cargo check` when you save. Tell it to run Clippy instead, to analyse the
 code behind your Cargo features, or to keep a target folder of its own, in `lsp.servers` (no `command`: the default server

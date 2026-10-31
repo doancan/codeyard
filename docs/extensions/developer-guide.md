@@ -167,7 +167,7 @@ You don't have to write any activation code. The extension starts the first time
 | `code.entry` | for code | `Cargo.toml` means Rust, `.ts`/`.js` means TypeScript. Leave it out for themes and other no-code packs |
 | `permissions` | if used | `read`, `write`, `net`, `run`, `auth`, `secrets`, `clipboard`, `terminal`, `commands`, plus `why` ([details](#permissions)) |
 | `[[oauth]]` | for an OAuth account | An OAuth 2 provider named in `auth` ([details](#call-an-api-with-the-users-github-login)) |
-| `activation` | rarely | Codeyard works it out from your contributions. The only form you ever write is `workspace-contains = ["vercel.json"]` |
+| `activation` | rarely | Codeyard works it out from your contributions. The only form you ever write is `workspace-contains = ["vercel.json"]`: globs matched against the folder's files that `.gitignore` does not ignore |
 | `[[commands]]`, `[[views]]`, `[[status-bar]]`, … | — | Contributions. Ids are local: `refresh` becomes `you.ext.refresh` |
 | `when`, `enablement` | — | `editor.language == 'rust' && !terminal`. Keys: `editor`, `terminal`, `file-tree`, `scm`, `search`, `panel`, `workspace.trusted`, `editor.language`, `ext.<key>` |
 | `dependencies` | — | `{ "other.ext" = "1.2" }` is a minimum version. You can call that extension's commands by their full id. Core commands start with `core:` |
@@ -421,9 +421,9 @@ hosts         = ["api.acme.example.com"]                 # the hosts auth.fetch 
 account-url   = "https://api.acme.example.com/me"        # optional: JSON with the account's name
 ```
 
-Register `codeyard://ext/<your extension id>/callback` as the redirect URI with the provider. The user can sign out on your extension's page. The next `auth.fetch` then fails with "not signed in", and your extension calls `auth.session` again.
+Register `codeyard://ext/<your extension id>/callback` as the redirect URI with the provider. Codeyard signs in as a public client, so the provider must accept PKCE without a client secret; for a service whose OAuth needs a secret (Vercel's, for one), keep a token the user creates in `secrets` instead ([examples/extensions/vercel-status](../../examples/extensions/vercel-status)). The user can sign out on your extension's page. The next `auth.fetch` then fails with "not signed in", and your extension calls `auth.session` again.
 
-**Secrets.** If a service has no OAuth, `secrets = true` gives your extension its own keychain entries. Use `secrets.set(key, value)`, `secrets.get(key)` and `secrets.delete(key)`. Keys are `a-z A-Z 0-9 . _ -`, up to 128 characters. A value is at most 2048 bytes. The entries belong to your publisher identity, so a sideloaded copy of your extension cannot read them.
+**Secrets.** If a service has no OAuth, `secrets = true` gives your extension its own keychain entries. Use `secrets.set(key, value)`, `secrets.get(key)` and `secrets.delete(key)` (TypeScript: `ctx.setSecret`, `ctx.secret`, `ctx.deleteSecret`), and ask for the value with `ctx.input({ prompt, password: true })` so it is not shown as it is typed. Keys are `a-z A-Z 0-9 . _ -`, up to 128 characters. A value is at most 2048 bytes. The entries belong to your publisher identity, so a sideloaded copy of your extension cannot read them.
 
 ### Tree view
 
@@ -437,21 +437,25 @@ location = "sidebar"          # sidebar | bottom | editor
 ```
 
 ```ts
-ctx.view("deployments", async (ctx) => ({
-  type: "list",
-  children: deployments.map((d) => ({
-    type: "text",
-    key: d.id,
-    text: d.name,
-    badge: { text: d.state, tone: d.state === "ready" ? "success" : "warning" },
-  })),
-}));
+import { ui } from "@codeyard/extension";
+
+ctx.view("deployments", async (ctx) =>
+  ui.list(
+    "deployments",
+    "Deployments",
+    deployments.map((d) =>
+      ui.row([ui.text(d.name), ui.badge(d.state, { tone: d.state === "ready" ? "success" : "warning" })], { key: d.id }),
+    ),
+  ),
+);
 
 // When data changes:
 ctx.invalidate("deployments");
 ```
 
-The SDK turns this into the JSON tree Codeyard draws (`response.view`) and loads tree levels one page at a time. There are no webviews, so you can't build HTML previews or charts in v1.
+`ui` writes the JSON tree Codeyard draws (`response.view`), in the form of the [views reference](reference/ui.md).
+For a `tree`, send one page of a level at a time with a `more` token; Codeyard asks for the next with an `expand`
+event. There are no webviews, so you can't build HTML previews or charts in v1.
 
 ### Diagnostics
 
@@ -629,7 +633,7 @@ Good to know:
 | `fs`, `child_process` | `read`/`write` permissions with `ctx.readFile` / `ctx.writeFile`, `run` with `ctx.spawn` |
 | `extensionKind` | Not needed. The same extension works locally and over SSH |
 | Colour themes, snippets, language config | Work unchanged, or use `cyx import-vscode` |
-| Hover, completion, code lens, inlay hints | Coming with API 1.0 |
+| Hover, completion, code lens, inlay hints | `[[hover]]`, `[[completion]]`, `[[code-lens]]`, `[[inlay-hints]]` |
 
 ## Troubleshooting
 
