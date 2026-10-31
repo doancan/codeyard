@@ -201,7 +201,10 @@ fn menu_items_have_their_painted_bounds(cx: &mut gpui::TestAppContext) {
     wb.update_in(cx, |wb, window, cx| wb.open_tab_menu_for_test(0, window, cx));
     cx.run_until_parked();
     let (_, tree) = nodes(&wb, cx);
-    let items: Vec<&Node> = tree.iter().filter(|(_, n)| matches!(n.role(), Role::MenuItem | Role::MenuItemCheckBox)).map(|(_, n)| n).collect();
+    // The open menu's items (on Windows and Linux the menu bar the app draws has menu items of its own).
+    let menu = tree.iter().find(|(_, n)| n.role() == Role::Menu).map(|(_, n)| n.children().to_vec()).expect("the open menu");
+    let items: Vec<&Node> =
+        tree.iter().filter(|(id, n)| menu.contains(id) && matches!(n.role(), Role::MenuItem | Role::MenuItemCheckBox)).map(|(_, n)| n).collect();
     assert!(!items.is_empty());
     let (scale, size) = cx.update(|window, _| (f64::from(window.scale_factor()), window.viewport_size()));
     let (width, height) = (f64::from(size.width / px(1.)) * scale, f64::from(size.height / px(1.)) * scale);
