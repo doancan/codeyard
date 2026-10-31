@@ -317,7 +317,7 @@ fn rust_debug_builds_the_picked_target_with_the_chosen_features_profile_and_outp
     crate::qa_workbench_tests::open(&wb, &dir, cx);
     let program = debug_server_with_options(&wb, cx, &dir, python);
     let expected = dir.join("chosen out").join("fast").join(if cfg!(windows) { "server.exe" } else { "server" });
-    assert_eq!(std::path::Path::new(&program), expected);
+    assert_eq!(std::fs::canonicalize(&program).unwrap(), std::fs::canonicalize(expected).unwrap());
 }
 
 #[gpui::test]
