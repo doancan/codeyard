@@ -2491,6 +2491,7 @@ Version
 Version {0} could not be installed: {1}	
 Version {0} is published by {1}, not {2} as before.	
 Version {0} runs code, so it installs by itself after {1}.	
+Version {} adds native programs; review it and type its id to install it:	
 Version {} asks for more than the version you have, which keeps running until you agree:	
 Version {} is available.	
 Version {} is installed.	
@@ -2971,7 +2972,7 @@ your words
 {0} line matches “{1}”.|{0} lines match “{1}”.	
 {0} lines · {1}	
 {0} lines · {1} MB · read-only	
-{0} lines, showing from line {1}	
+{0} lines, showing lines {1}–{2}	
 {0} may again: {1}	
 {0} may no longer: {1}	
 {0} needs strings, got {1} and {2}	
@@ -3094,6 +3095,7 @@ your words
 {} incoming call|{} incoming calls	
 {} is a binary file: there is no text diff.	
 {} is a date:	
+{} is a platform extension programs are not built for	
 {} is a symbolic link; write the path it points to, so the upload can be confirmed	
 {} is already in .gitignore	
 {} is already in the workspace.	
@@ -3217,7 +3219,6 @@ your words
 “{}” is not supported	
 “{}” is not the command of an active extension	
 “{}” is still running in this terminal. Close it anyway?	
-“{}” ships inside the package; this version only starts language servers found on PATH	
 “{}” was not found in ~/.ssh/config	
 “{}”: {} = {}	
 … {} more	

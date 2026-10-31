@@ -936,7 +936,7 @@ Leave out animations: the blinking cursor, spinners and sliding panels (auto: fo
 Theme “{1}”: {0} colour pair is below WCAG AA contrast ({2} on {3}: {4}:1, needs {5}:1)|Theme “{1}”: {0} colour pairs are below WCAG AA contrast, for example {2} on {3}: {4}:1, needs {5}:1	“{1}” teması: {0} renk çifti WCAG AA kontrastının altında (örneğin {3} üzerinde {2}: {4}:1, en az {5}:1 olmalı)
 Terminal {0} of {1}	Terminal {0} / {1}
 {} (modified)	{} (değiştirildi)
-{0} lines, showing from line {1}	{0} satır, {1}. satırdan itibaren gösteriliyor
+{0} lines, showing lines {1}–{2}	{0} satır, {1}–{2}. satırlar gösteriliyor
 Connecting to {}	{} sunucusuna bağlanılıyor
 Reconnecting to {0} (attempt {1})	{0} sunucusuna yeniden bağlanılıyor (deneme {1})
 Branch {}	Dal {}
@@ -2832,7 +2832,6 @@ unknown command “{}”	bilinmeyen komut “{}”
 “{}” is a built-in shortcut; an extension cannot change it	“{}” yerleşik bir kısayol; eklentiler onu değiştiremez
 {} is not a setting of an installed extension	{} kurulu bir eklentinin ayarı değil
 {0}: expected {1}	{0}: {1} bekleniyordu
-“{}” ships inside the package; this version only starts language servers found on PATH	“{}” paketin içinde geliyor; bu sürüm yalnızca PATH üzerindeki dil sunucularını başlatır
 language “{0}” names grammar “{1}”, which Codeyard does not have	“{0}” dili “{1}” dil bilgisini istiyor, Codeyard’da bu yok
 keymap preset “{0}” is not installed (installed: {1})	“{0}” kısayol düzeni kurulu değil (kurulu olanlar: {1})
 Extension in development not loaded: {}	Geliştirilen eklenti yüklenemedi: {}
@@ -3400,3 +3399,5 @@ Checks	Denetimler
 Description	Açıklama
 No description.	Açıklama yok.
 Comments ({})	Yorumlar ({})
+{} is a platform extension programs are not built for	{}, eklenti programlarının derlenmediği bir platform
+Version {} adds native programs; review it and type its id to install it:	{} sürümü yerel programlar ekliyor; kurmak için gözden geçirip kimliğini yazın:

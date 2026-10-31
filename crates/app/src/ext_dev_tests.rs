@@ -55,6 +55,34 @@ fn a_new_build_replaces_the_running_exthost(cx: &mut TestAppContext) {
     crate::ext::set_dev(None);
 }
 
+/// The hot-reload scenario of scripts/perf/run.sh (`CODEYARD_PERF_RELOAD`): the first command starts the extension, a
+/// build put in place is swapped in and asked the command, and the window settles once the new build has answered.
+#[gpui::test]
+fn the_perf_reload_swaps_in_a_build_and_asks_it(cx: &mut TestAppContext) {
+    if let Err(why) = crate::ext_runtime::code_runs_here(&"tests") {
+        eprintln!("skipped: {why}");
+        return;
+    }
+    let cfg = config_dir("dev-perf");
+    let dev = cfg.join("probe");
+    std::fs::create_dir_all(&dev).unwrap();
+    std::fs::write(dev.join(ext_manifest::FILE_NAME), MANIFEST).unwrap();
+    std::fs::write(dev.join("Cargo.toml"), "").unwrap();
+    std::fs::write(dev.join(ext_pkg::COMPONENT), PROBE).unwrap();
+    crate::ext::set_dev(Some(dev.clone()));
+    let (wb, cx) = setup(cx, &cfg);
+    assert!(!wb.read_with(cx, |wb, _| wb.dev_settled_for_perf()), "not running yet");
+    assert!(wb.update_in(cx, |wb, window, cx| wb.run_dev_command_for_perf(window, cx)));
+    wait_for(cx, &wb, |wb| wb.dev_settled_for_perf());
+    // The same bytes count as a new build: the modification time moved.
+    std::thread::sleep(Duration::from_millis(20));
+    assert!(wb.update_in(cx, |wb, window, cx| wb.hot_reload_for_perf(PROBE, window, cx)));
+    assert!(!wb.read_with(cx, |wb, _| wb.dev_settled_for_perf()), "waits for the new build");
+    wait_for(cx, &wb, |wb| wb.dev_settled_for_perf());
+    assert_eq!(wb.read_with(cx, |wb, _| wb.extension_activation_for_test("you.probe")), Some(("reload".into(), 2)));
+    crate::ext::set_dev(None);
+}
+
 /// The hot-reload row of docs/plugin-architecture.md §10: new build in place → the first command answered (cyx's
 /// compiler excluded; the exthost's compile, the old exthost's stop and the new one's start included; the watch's
 /// 100 ms poll not). `CODEYARD_RELOAD_BENCH` names a folder with `ext/` (a dev

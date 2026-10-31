@@ -13,7 +13,7 @@ scripts/perf/compare.py target/perf/baseline.json target/perf/candidate.json
 
 `--aa` runs the working tree against itself instead: every row must pass, otherwise the machine is too noisy (close
 other apps, plug in the power, let it cool). `--runs` and `--mem-runs` change the number of runs (default 20 and 5). A
-full run takes about 25 minutes. The measured windows open in the background and never take the keyboard, but they
+full run takes about 30 minutes. The measured windows open in the background and never take the keyboard, but they
 must be visible: keep the display awake and stay on the same Space. A run that draws no frame or loses a key stops
 with a message instead of producing numbers. The baseline is built once in `target/perf/worktree-<commit>` and reused.
 
@@ -28,9 +28,9 @@ with a message instead of producing numbers. The baseline is built once in `targ
 | `typing.keystroke_frame_decorations_ms` | as `typing.keystroke_frame_ms`, with 2 installed extensions decorating the file (the decoration provider `crates/ext-host/testdata/decorator.wasm`, about 1000 marks each); 40 keys per run (warn only until a baseline has it) | p95 | +10%; ceiling 8 ms |
 | `typing.keystroke_frame_completion_ms` | as `typing.keystroke_frame_ms`, with 1 installed extension completing Rust (the same provider, `crates/ext-host/testdata/decorator.wasm`, answering 50 items at once); a new word every third key, so it is asked again and again; 40 keys per run (warn only until a baseline has it) | p95 | +10%; ceiling 8 ms |
 | `typing.keystroke_frame_lenses_ms` | as `typing.keystroke_frame_ms`, with 1 installed extension giving code lenses and inlay hints for the lines in view (`decorator.wasm` again: a lens on every fifth line and a hint on every line, asked again after each pause in typing); 40 keys per run (warn only until a baseline has it) | p95 | +10%; ceiling 8 ms |
-| `views.keystroke_frame_ms` | key press in an extension view (PageDown in a list of 10 000 rows) to the drawn frame (warn only until the scenario is added to `run.sh`) | p95 | +10%; ceiling 8 ms |
+| `views.keystroke_frame_ms` | key press in an extension view to the drawn frame: PageDown in a sidebar view with a list of 10 000 rows (the view of `crates/ext-host/testdata/viewlist.wasm`); 40 keys per run (warn only until a baseline has it) | p95 | +10%; ceiling 8 ms |
 | `extensions.provider_overhead_ms` | an extension provider request (format, code actions, tasks) to a running extension, sent to its answer back in the window, with a provider that answers at once: the same two extensions asked for their tasks, 40 rounds per run (warn only until a baseline has it) | p95 | +10%; ceiling 3 ms |
-| `extensions.hot_reload_ms` | `cyx dev`: a new `extension.wasm` noticed to the first request answered by the new build (the old exthost stopped, the new build compiled with the incremental cache and started), 2 MB Rust component (warn only until the scenario is added to `run.sh`; `cargo test -p app ext_dev_tests::reload_time -- --ignored` measures it meanwhile) | p95 | +15%; ceiling 500 ms |
+| `extensions.hot_reload_ms` | `cyx dev`: a new `extension.wasm` noticed to the first request answered by the new build (the old exthost stopped, the new build compiled with the incremental cache and started), 2 MB Rust component started with `--extension-dev` (`crates/ext-host/testdata/reload-a.wasm` and `reload-b.wasm`, two builds that differ in one constant, swapped in place by turns); 10 reloads per run after one that fills the incremental cache (warn only until a baseline has it) | p95 | +15%; ceiling 500 ms |
 | `market.search_ms` | key press in the Market's search to the results in the view (searched off the UI thread), 10 000 extensions (`cyx yard fixture`, served on this machine); 40 keys per run | p95 | +10% and +1 ms; ceiling 16 ms |
 | `market.search_frame_ms` | the same keys, to the drawn frame showing the results (warn only: like typing, it includes up to two display refreshes) | p95 | +10% |
 | `memory.empty_window_mb` | settled footprint, welcome screen | median | +5% |

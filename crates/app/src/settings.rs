@@ -621,7 +621,7 @@ fn server_entry(lang: &str, cfg: &Value, warnings: &mut Vec<String>) -> Option<O
         }
     };
     let init_options = o.get("initializationOptions").filter(|v| !v.is_null()).cloned();
-    Some(Some(crate::lsp::ServerSpec { command, args, settings: std::sync::Arc::new(settings), init_options }))
+    Some(Some(crate::lsp::ServerSpec { command, args, settings: std::sync::Arc::new(settings), init_options, program: None }))
 }
 
 fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<String>) {

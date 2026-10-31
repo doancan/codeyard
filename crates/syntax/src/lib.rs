@@ -1,11 +1,13 @@
 //! Syntax highlighting: tree-sitter, incremental. Only the visible byte range
 //! is queried; language queries compile on first use (an unused language costs no memory).
 
-use std::ops::Range;
+use std::ops::{ControlFlow, Range};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use ropey::Rope;
-use tree_sitter::{InputEdit, Parser, Point, Query, QueryCursor, StreamingIterator, TextProvider, Tree};
+use tree_sitter::{InputEdit, ParseOptions, Parser, Point, Query, QueryCursor, StreamingIterator, TextProvider, Tree};
 
 pub mod structural;
 
@@ -182,11 +184,55 @@ pub unsafe fn use_mimalloc() {
 /// All files share one parser so its internal buffers (megabytes on a large
 /// file) are paid once, not per file. Measurement: examples/parser_vs_tree.rs
 static PARSER: Mutex<Option<Parser>> = Mutex::new(None);
+/// The parser for parses that run off the UI thread (`ParseJob`), so they never hold up `PARSER`.
+static BACKGROUND_PARSER: Mutex<Option<Parser>> = Mutex::new(None);
+/// Numbers `ParseJob`s, so an answer only lands in the tree that asked for it.
+static NEXT_JOB: AtomicU64 = AtomicU64::new(1);
 
 pub struct Syntax {
     lang: &'static Language,
     /// `None`: dropped from memory for a background tab (`unload`).
     tree: Option<Tree>,
+    /// While a `ParseJob` runs: its number, and the edits made since it started (applied to its tree when it is back).
+    job: Option<(u64, Vec<Edit>)>,
+}
+
+/// A reparse that did not fit in the time it was given (`Syntax::reparse_within`): finish it off the UI thread with
+/// `run`, then hand the result to `Syntax::finish`. Until then the tree is the old one, moved by the edits, so
+/// highlighting and the rest keep working on it.
+pub struct ParseJob {
+    id: u64,
+    lang: &'static Language,
+    old: Tree,
+    rope: Rope,
+}
+
+/// The tree a `ParseJob` built.
+pub struct Parsed {
+    id: u64,
+    tree: Option<Tree>,
+}
+
+impl ParseJob {
+    /// Parse to the end (any thread).
+    pub fn run(self) -> Parsed {
+        let ParseJob { id, lang, old, rope } = self;
+        let mut guard = BACKGROUND_PARSER.lock().unwrap_or_else(|e| e.into_inner());
+        let parser = guard.get_or_insert_with(Parser::new);
+        let tree = parser.set_language(&lang.ts).ok().and_then(|_| parser.parse_with_options(&mut reader(&rope), Some(&old), None));
+        Parsed { id, tree }
+    }
+}
+
+/// The rope, read by tree-sitter chunk by chunk.
+fn reader<'a>(rope: &'a Rope) -> impl FnMut(usize, Point) -> &'a [u8] + 'a {
+    move |byte: usize, _: Point| -> &[u8] {
+        if byte >= rope.len_bytes() {
+            return &[];
+        }
+        let (chunk, start, _, _) = rope.chunk_at_byte(byte);
+        &chunk.as_bytes()[byte - start..]
+    }
 }
 
 /// (line, byte within line)
@@ -207,9 +253,20 @@ fn pt((row, column): Pos) -> Point {
     Point { row, column }
 }
 
+fn input_edit(e: &Edit) -> InputEdit {
+    InputEdit {
+        start_byte: e.start_byte,
+        old_end_byte: e.old_end_byte,
+        new_end_byte: e.new_end_byte,
+        start_position: pt(e.start),
+        old_end_position: pt(e.old_end),
+        new_end_position: pt(e.new_end),
+    }
+}
+
 impl Syntax {
     pub fn new(lang: &'static Language, rope: &Rope) -> Option<Self> {
-        let mut s = Syntax { lang, tree: None };
+        let mut s = Syntax { lang, tree: None, job: None };
         s.reparse(rope);
         s.tree.is_some().then_some(s)
     }
@@ -217,6 +274,7 @@ impl Syntax {
     /// Drop the tree (tab went to the background). A tree takes ~30x the source size.
     pub fn unload(&mut self) {
         self.tree = None;
+        self.job = None;
     }
 
     pub fn is_loaded(&self) -> bool {
@@ -235,34 +293,78 @@ impl Syntax {
     }
 
     pub fn edit(&mut self, e: &Edit) {
+        if let Some((_, since)) = &mut self.job {
+            since.push(*e);
+        }
         if let Some(tree) = &mut self.tree {
-            tree.edit(&InputEdit {
-                start_byte: e.start_byte,
-                old_end_byte: e.old_end_byte,
-                new_end_byte: e.new_end_byte,
-                start_position: pt(e.start),
-                old_end_position: pt(e.old_end),
-                new_end_position: pt(e.new_end),
-            });
+            tree.edit(&input_edit(e));
         }
     }
 
     /// Reparse using the previous tree (only the changed part is processed).
     pub fn reparse(&mut self, rope: &Rope) {
-        let mut read = |byte: usize, _: Point| -> &[u8] {
-            if byte >= rope.len_bytes() {
-                return &[];
-            }
-            let (chunk, start, _, _) = rope.chunk_at_byte(byte);
-            &chunk.as_bytes()[byte - start..]
-        };
+        self.job = None;
         let mut guard = PARSER.lock().unwrap_or_else(|e| e.into_inner());
         let parser = guard.get_or_insert_with(Parser::new);
         if parser.set_language(&self.lang.ts).is_err() {
             self.tree = None;
             return;
         }
-        self.tree = parser.parse_with_options(&mut read, self.tree.as_ref(), None);
+        self.tree = parser.parse_with_options(&mut reader(rope), self.tree.as_ref(), None);
+    }
+
+    /// `reparse`, but for at most `budget`. Mostly an edit reparses in a millisecond or two; one that unsettles the
+    /// whole file (a stray word between items makes tree-sitter recover from the error across all of it) can take
+    /// tens of milliseconds on a large file, and typing must not wait for that. Such a reparse is stopped and comes
+    /// back as a `ParseJob` to run elsewhere; until it is done, edits go on moving the old tree and this returns `None`.
+    pub fn reparse_within(&mut self, rope: &Rope, budget: Duration) -> Option<ParseJob> {
+        if self.job.is_some() {
+            return None;
+        }
+        let Some(old) = self.tree.as_ref() else {
+            // Dropped (a background tab): a parse from scratch, as `reparse` does.
+            self.reparse(rope);
+            return None;
+        };
+        let mut guard = PARSER.lock().unwrap_or_else(|e| e.into_inner());
+        let parser = guard.get_or_insert_with(Parser::new);
+        if parser.set_language(&self.lang.ts).is_err() {
+            self.tree = None;
+            return None;
+        }
+        let start = Instant::now();
+        let mut in_time = |_: &tree_sitter::ParseState| if start.elapsed() > budget { ControlFlow::Break(()) } else { ControlFlow::Continue(()) };
+        let options = ParseOptions::new().progress_callback(&mut in_time);
+        if let Some(tree) = parser.parse_with_options(&mut reader(rope), Some(old), Some(options)) {
+            self.tree = Some(tree);
+            return None;
+        }
+        // Stopped: the parser would resume this parse next time; it is done from the start elsewhere instead.
+        parser.reset();
+        let id = NEXT_JOB.fetch_add(1, Ordering::Relaxed);
+        self.job = Some((id, Vec::new()));
+        Some(ParseJob { id, lang: self.lang, old: old.clone(), rope: rope.clone() })
+    }
+
+    /// A `ParseJob` is back: its tree, moved by the edits made meanwhile, replaces the old one, and those edits are
+    /// reparsed (within `budget`, as `reparse_within`). An answer to a job this tree no longer waits for (the language
+    /// changed, the tab went to the background) is dropped.
+    pub fn finish(&mut self, parsed: Parsed, rope: &Rope, budget: Duration) -> Option<ParseJob> {
+        let since = match &self.job {
+            Some((id, _)) if *id == parsed.id => self.job.take().map(|(_, since)| since).unwrap_or_default(),
+            _ => return None,
+        };
+        let mut tree = parsed.tree?;
+        for e in &since {
+            tree.edit(&input_edit(e));
+        }
+        self.tree = Some(tree);
+        if since.is_empty() { None } else { self.reparse_within(rope, budget) }
+    }
+
+    /// A parse is running off the UI thread.
+    pub fn parsing(&self) -> bool {
+        self.job.is_some()
     }
 
     /// Smallest node strictly containing the range (for expanding the selection, bytes).
@@ -598,5 +700,70 @@ fun main() {
         let runs = line_runs(0, 10, &spans);
         assert_eq!(runs, vec![(2, None), (2, Some(Role::String)), (2, Some(Role::Number)), (2, Some(Role::String)), (2, None)]);
         assert_eq!(runs.iter().map(|r| r.0).sum::<usize>(), 10);
+    }
+
+    /// Insert `text` at byte `at` (ASCII on one line) into the rope and the tree.
+    fn type_at(s: &mut Syntax, rope: &mut Rope, at: usize, text: &str) {
+        let line = rope.byte_to_line(at);
+        let col = at - rope.line_to_byte(line);
+        rope.insert(rope.byte_to_char(at), text);
+        s.edit(&Edit {
+            start_byte: at,
+            old_end_byte: at,
+            new_end_byte: at + text.len(),
+            start: (line, col),
+            old_end: (line, col),
+            new_end: (line, col + text.len()),
+        });
+    }
+
+    /// 2000 Rust functions.
+    fn big_rust() -> String {
+        "/// Doc.\npub fn handler(req: &Request) -> Result<Response, Error> {\n    let id = req.param(\"id\")?;\n    Ok(Response::json(&id))\n}\n\n"
+            .repeat(2000)
+    }
+
+    /// A reparse that does not fit its budget comes back as a job and leaves the moved old tree in place; the job's
+    /// tree, with the edits made while it ran, ends where a full reparse would.
+    #[test]
+    fn a_reparse_over_budget_finishes_in_the_background() {
+        let src = big_rust();
+        let item = &src[..src.find("\n\n").unwrap() + 2];
+        let lang = language_for_path("a.rs").unwrap();
+        let mut rope = Rope::from_str(&src);
+        let mut s = Syntax::new(lang, &rope).unwrap();
+        // A small edit fits any sensible budget.
+        type_at(&mut s, &mut rope, item.len() + 30, "x");
+        assert!(s.reparse_within(&rope, Duration::from_secs(5)).is_none());
+        assert!(!s.parsing());
+        // Nothing fits no time at all: a job.
+        type_at(&mut s, &mut rope, 0, "ab ab ");
+        let job = s.reparse_within(&rope, Duration::ZERO).expect("over budget");
+        assert!(s.parsing());
+        assert!(s.is_loaded(), "the old tree stays for highlighting");
+        // Typing goes on while the job runs: the edits move the old tree and wait for the job.
+        type_at(&mut s, &mut rope, 6, "a");
+        assert!(s.reparse_within(&rope, Duration::from_secs(5)).is_none());
+        let parsed = std::thread::spawn(move || job.run()).join().unwrap();
+        assert!(s.finish(parsed, &rope, Duration::from_secs(5)).is_none());
+        assert!(!s.parsing());
+        let full = Syntax::new(lang, &rope).unwrap();
+        assert_eq!(s.tree.as_ref().unwrap().root_node().to_sexp(), full.tree.as_ref().unwrap().root_node().to_sexp());
+    }
+
+    /// An answer for a tree that stopped waiting (unloaded, or a newer job) is dropped.
+    #[test]
+    fn a_stale_parse_is_dropped() {
+        let lang = language_for_path("a.rs").unwrap();
+        let mut rope = Rope::from_str(&big_rust());
+        let mut s = Syntax::new(lang, &rope).unwrap();
+        type_at(&mut s, &mut rope, 0, "x ");
+        let job = s.reparse_within(&rope, Duration::ZERO).expect("over budget");
+        s.unload();
+        s.ensure_loaded(&rope);
+        let before = s.tree.as_ref().unwrap().root_node().to_sexp();
+        assert!(s.finish(job.run(), &rope, Duration::from_secs(5)).is_none());
+        assert_eq!(s.tree.as_ref().unwrap().root_node().to_sexp(), before);
+        assert!(!s.parsing());
     }
 }

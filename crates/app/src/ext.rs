@@ -438,26 +438,25 @@ pub fn language_for(path: &str) -> Option<Language> {
 
 /// Language server entries for `lsp.servers`, before the user's own (the user's entry for the same key wins). Each
 /// extension server is entered under every language it serves. Programs come from `PATH` where the files are, so they
-/// work over SSH too; a program shipped inside the package runs only through the broker (`ext_programs`) for now.
-pub fn server_entries() -> (Vec<(String, Option<crate::lsp::ServerSpec>)>, Vec<String>) {
-    let (mut out, mut warnings) = (Vec::new(), Vec::new());
+/// work over SSH too; a program inside the package (`./bin/server`) starts from the copy pushed to the workspace's host
+/// and checked by hash there (`ext_programs`), its platform's package fetched from `registries` when needed.
+pub fn server_entries(cfg_dir: Option<&Path>, registries: &[ext_core::registry::Registry]) -> Vec<(String, Option<crate::lsp::ServerSpec>)> {
+    let mut out = Vec::new();
     for ext in &current().active {
         for s in &ext.manifest.contributions.language_servers {
-            if s.command.contains('/') {
-                warnings.push(format!(
-                    "{}: {}",
-                    ext.id(),
-                    crate::i18n::tf("“{}” ships inside the package; this version only starts language servers found on PATH", &[&s.command])
-                ));
-                continue;
-            }
+            let program = ext_manifest::is_package_program(&s.command).then(|| crate::ext_programs::PackageServer {
+                extension: ext.id().to_string(),
+                dir: ext.dir.clone(),
+                programs: crate::ext_programs::of_extension(cfg_dir.map(Path::to_path_buf), registries.to_vec(), ext.manifest.id.clone(), ext.dir.clone()),
+            });
             for lang in &s.languages {
                 let key = crate::lsp::key_for_language(lang).unwrap_or(lang.as_str()).to_string();
-                out.push((key, Some(crate::lsp::ServerSpec::from((s.command.clone(), s.args.clone())))));
+                let spec = crate::lsp::ServerSpec { program: program.clone(), ..crate::lsp::ServerSpec::from((s.command.clone(), s.args.clone())) };
+                out.push((key, Some(spec)));
             }
         }
     }
-    (out, warnings)
+    out
 }
 
 /// JSON and YAML schema associations, to follow the user's own: (file globs, absolute path of the schema file). The files
