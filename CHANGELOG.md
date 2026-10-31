@@ -272,6 +272,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   list has a keyboard cursor (↑/↓/Home/End, ↵ opens the diff, Space stages or unstages, ←/→ fold and unfold groups,
   Delete or ⌘⌫ discards) that screen readers see as the focus. Actions from an old tree do nothing once the file has
   changed state or another repository is shown.
+- Right Arrow in the Explorer is now covered by tests for open folders that are empty, still loading, unreadable or
+  have children, and for a file, both for the selection and the accessibility focus (no behavior change: it enters a
+  child only when one is shown). Tests also cover the Rust command notices for a restricted workspace and an unavailable
+  language server.
 - Source Control builds only the change rows on screen, so a repository with thousands of changes (generated files,
   a large merge) scrolls and refreshes without delay. The list keeps its scroll position and focus when the status
   refreshes.
