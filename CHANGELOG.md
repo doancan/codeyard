@@ -427,6 +427,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `cyx dev` notes the sources before its first build, so a file saved while it builds, checks the extension or
+  starts Codeyard is rebuilt on the next poll instead of being missed until the next save.
+
 - Unit tests no longer start an installed language server from generic editor and workbench fixtures: under test
   `lsp.enabled` defaults to off and LSP integration tests turn it on explicitly. The shipped default stays on.
 - On a busy machine, closing a window could leave its terminals running for 5 minutes, and the last keys typed into a
