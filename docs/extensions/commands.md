@@ -2,7 +2,7 @@
 
 A code extension is a Rust crate built into a WebAssembly component. It adds commands to the palette, views to the sidebar, formatters, code actions and anything else that needs code. This page covers writing one; [testing.md](testing.md) covers testing it, and [reference/api.md](reference/api.md) lists every call. For TypeScript, see [typescript.md](typescript.md): the same API, with Promises.
 
-The SDK is **pre-release**: it is not on crates.io yet, so a new extension takes it from the Codeyard repository (see [The SDK dependency](#the-sdk-dependency)). Its API may still change before 1.0.
+The SDK is not on crates.io yet, so a new extension takes it from the Codeyard repository (see [The SDK dependency](#the-sdk-dependency)). It implements API 1.0, which later 1.x versions only add to ([Migrating to API 1.0](migrating-to-1.0.md)).
 
 <!-- toc -->
 - [Setup](#setup)
@@ -372,6 +372,7 @@ built by another tool.
 `cyx new command` writes:
 
 ```toml
+# Cargo.toml
 [dependencies]
 codeyard-extension = { git = "https://github.com/doancan/codeyard" }
 

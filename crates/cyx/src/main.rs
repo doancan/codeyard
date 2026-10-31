@@ -4,6 +4,7 @@
 //! cyx new <theme|snippets|keymap|language|language-server|command|view|pull-requests> <name> [--lang ts] [--publisher NAME] [--sdk PATH]
 //! cyx dev [FOLDER] [-- CODEYARD ARGS…]   run Codeyard with the extension loaded from FOLDER; rebuilt and reloaded on save (dev.rs)
 //! cyx check [FOLDER] [--fix]             every problem with its file, line and fix; --fix adds missing permissions (fix.rs)
+//! cyx explain CODE                       what an error code means and how to fix it (explain.rs)
 //! cyx package [FOLDER] [-o FILE] [--no-build] [--target TRIPLE]  build the code (build.rs), then a reproducible .cyx
 //!                                        (one per platform in native/ when the extension ships native programs)
 //! cyx test [FOLDER] [--fixtures FILE]    the built extension in codeyard-exthost against a scripted app (harness.rs)
@@ -19,6 +20,7 @@
 
 mod build;
 mod dev;
+mod explain;
 mod fix;
 mod fixtures;
 mod harness;
@@ -35,6 +37,8 @@ mod yard;
 #[cfg(test)]
 mod code_tests;
 #[cfg(test)]
+mod doc_tests;
+#[cfg(test)]
 mod tests;
 
 use std::path::{Path, PathBuf};
@@ -50,6 +54,7 @@ usage:
   cyx dev [FOLDER] [-- CODEYARD ARGS…]       run Codeyard with it loaded; it reloads when you save
   cyx check [FOLDER] [--fix]                 list every problem with its file, line and fix; --fix adds the
                                              missing permissions to codeyard-extension.toml
+  cyx explain CODE                           what an error code such as CY0201 means and how to fix it
   cyx package [FOLDER] [-o FILE|FOLDER]      build the code, then write a .cyx to install or publish
                                              (--no-build: package the extension.wasm already there;
                                              --target TRIPLE: one platform's package of an extension with
@@ -66,7 +71,7 @@ usage:
   cyx yard <keygen|sign|verify> …           the registry operator's commands (cyx yard help)
   cyx --version
 
-FOLDER defaults to the current folder. Docs: docs/extensions/developer-guide.md";
+FOLDER defaults to the current folder. Docs: docs/extensions/README.md";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -121,6 +126,13 @@ fn run(args: &[String]) -> Result<(), String> {
             }
             test(&folder(dir)?, fixtures.as_deref())
         }
+        "explain" => match rest {
+            [code] => {
+                println!("{}", explain::explain(code)?);
+                Ok(())
+            }
+            _ => Err("usage: cyx explain CODE (such as CY0201)".into()),
+        },
         "check" => {
             let fix = rest.iter().any(|a| a == "--fix");
             let dir = folder(rest.iter().find(|a| *a != "--fix"))?;

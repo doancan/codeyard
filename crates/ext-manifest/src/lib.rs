@@ -16,6 +16,8 @@ pub mod when;
 #[cfg(test)]
 mod fuzz_tests;
 #[cfg(test)]
+mod reference_tests;
+#[cfg(test)]
 mod tests;
 
 use std::cmp::Ordering;
@@ -24,7 +26,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 
 pub use core_commands::{CORE_COMMANDS, CoreCommand, core_command};
-pub use diagnostics::{Code, Diagnostic};
+pub use diagnostics::{Code, Diagnostic, ErrorDoc};
 pub use risk::{Clipboard, Level, Line, Permissions, Risk, is_package_program, net_allows, package_program_path, risk};
 
 /// The file name of the manifest at the root of an extension.

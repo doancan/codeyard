@@ -2,7 +2,7 @@
 
 A code extension can be written in TypeScript (or JavaScript) with `@codeyard/extension`. `cyx` bundles it with esbuild and builds a WebAssembly component with ComponentizeJS, so it runs in the same extension host, with the same permissions and limits, as a Rust one. The API has the same shape as the Rust SDK ([commands.md](commands.md)); every call that reaches Codeyard returns a Promise. [testing.md](testing.md) covers tests, and [reference/api.md](reference/api.md) lists every call.
 
-The SDK is **pre-release**: `@codeyard/extension` is not on npm yet (see [The SDK package](#the-sdk-package)). Its API may still change before 1.0.
+`@codeyard/extension` is not on npm yet (see [The SDK package](#the-sdk-package)). It implements API 1.0, which later 1.x versions only add to ([Migrating to API 1.0](migrating-to-1.0.md)).
 
 <!-- toc -->
 - [Setup](#setup)
@@ -127,11 +127,11 @@ ctx.pullRequests("gitea", {
       url: p.html_url,
     }));
   },
-  details: async (ctx, remote, id) => ({ summary: …, description: "…", checks: [], labels: [] }),
+  details: async (ctx, remote, id) => ({ summary: await pull(ctx, remote, id), description: "…", checks: [], labels: [] }),
   files: async (ctx, remote, id) => [{ path: "src/a.ts", status: "modified" }],
   contents: async (ctx, remote, id, file) => ({ base: "…", head: "…" }),
   comments: async (ctx, remote, id) => [],
-  addComment: async (ctx, remote, id, body) => { … },
+  addComment: async (ctx, remote, id, body) => {},
   checkout: async (ctx, remote, id) => ({ ref: `refs/pull/${id}/head`, branch: `pr-${id}` }),
 });
 ```

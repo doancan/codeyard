@@ -356,6 +356,41 @@ fn every_error_code_is_distinct() {
     }
 }
 
+/// Every code a manifest can produce, from a manifest that produces it, printed with a fix line. CY0700 and CY0701 come
+/// from the component (ext-pkg's component_tests). docs/extensions/reference/errors.md lists them all (cyx's tests).
+#[test]
+fn every_error_code_has_an_example_with_a_fix_line() {
+    let code = "[code]\nentry = \"Cargo.toml\"\n";
+    let command = "[[commands]]\nid = \"go\"\ntitle = \"Go\"\n";
+    let examples = [
+        (Code::Syntax, with("[permissions]\nnett = [\"a.example.com\"]\n")),
+        (Code::TooLarge, format!("{THEME}\n#{}", "x".repeat(limits::MANIFEST_BYTES))),
+        (Code::BadId, THEME.replace("you.midnight", "Midnight")),
+        (Code::BadVersion, THEME.replace("0.1.0", "0.1")),
+        (Code::BadText, THEME.replace("name    = \"Midnight\"", "name = \"\"")),
+        (Code::BadPath, THEME.replace("themes/midnight.json", "/etc/passwd")),
+        (Code::BadPermission, with("[permissions]\nnet = [\"https://a.example.com/x\"]\n")),
+        (Code::NotDeclared, with("[[language-servers]]\ncommand = \"taplo\"\nlanguages = [\"toml\"]\n")),
+        (Code::WhyRequired, with(&format!("{code}{command}[permissions]\nread = [\"**\"]\nnet = [\"a.example.com\"]\n"))),
+        (Code::BadContribution, with(&format!("{code}[[views]]\nid = \"v\"\ntitle = \"V\"\nlocation = \"top\"\n"))),
+        (Code::DuplicateId, with(&format!("{code}{command}{command}"))),
+        (Code::NeedsCode, with(command)),
+        (Code::NeverActivates, with(code)),
+        (Code::BadWhen, with(&format!("{code}[[commands]]\nid = \"go\"\ntitle = \"Go\"\nenablement = \"secret.key\"\n"))),
+        (Code::BadDependency, with("[dependencies]\n\"a.b\" = \"1\"\n")),
+    ];
+    for c in Code::ALL {
+        let Some((_, text)) = examples.iter().find(|(e, _)| *e == c) else {
+            assert!(matches!(c, Code::BadComponent | Code::NeedsNewerCodeyard), "{} has no example here", c.as_str());
+            continue;
+        };
+        let e = errors(text);
+        let d = e.iter().find(|d| d.code == c).unwrap_or_else(|| panic!("{}: got {:?}", c.as_str(), codes(text)));
+        assert!(d.render(FILE_NAME, text).contains("\n   = fix: "), "{}", c.as_str());
+        assert!(!c.summary().is_empty() && !c.fix().is_empty(), "{}", c.as_str());
+    }
+}
+
 #[test]
 fn when_expressions() {
     let ctx = |k: &str| match k {

@@ -85,19 +85,19 @@ Pickers and inputs without a scripted answer are dismissed. A request with no HT
 ## What the test can check
 
 ```rust
-host.notices()            // notice texts, in order
-host.fetched()            // every HTTP request sent
-host.ran()                // every program started
-host.read("out.txt")      // a file after the extension wrote it
-host.storage()            // the key-value store
-host.status_items()
-host.diagnostics("src/main.rs")
-host.invalidated()        // views asked to draw again
-host.applied_edits()
-host.secrets()            // the keychain entries (`secrets`), as the extension left them
-host.timers(), host.progress(), host.logs(), host.clipboard(), host.terminal()
-host.calls(), host.notes() // everything, as the SDK sent it
-host.denied()             // every refused call
+host.notices();           // notice texts, in order
+host.fetched();           // every HTTP request sent
+host.ran();               // every program started
+host.read("out.txt");     // a file after the extension wrote it
+host.storage();           // the key-value store
+host.status_items();
+host.diagnostics("src/main.rs");
+host.invalidated();       // views asked to draw again
+host.applied_edits();
+host.secrets();           // the keychain entries (`secrets`), as the extension left them
+host.timers(); host.progress(); host.logs(); host.clipboard(); host.terminal();
+host.calls(); host.notes();   // everything, as the SDK sent it
+host.denied();            // every refused call
 ```
 
 ## Permissions in tests
@@ -125,7 +125,7 @@ host.decline_sign_in("gitlab");   // the user picks Cancel: auth.session fails w
 host.signed_out("gitlab");        // after Sign Out: auth.fetch fails with "not signed in to GitLab; call auth.session …",
                                   // and the next auth.session signs in again
 host.sign_in("gitlab", "ada");    // signed in, with this account name
-host.instance("gitlab", "git.example.com")  // a self-managed instance the user added: account `gitlab@git.example.com`
+host.instance("gitlab", "git.example.com");  // a self-managed instance the user added: account `gitlab@git.example.com`
 ```
 
 TypeScript: `host.declineSignIn(provider)`, `host.signedOut(provider)`, `host.signIn(provider, label)`, `host.instance(provider, host)`. A token the service refuses is its answer, so give the request a `401` fixture.
@@ -231,7 +231,9 @@ test("says hello", async () => {
   await host.activate(extension);
   host.answerInput("Ada");
   assert.equal(await host.command("hello"), 1);
-  assert.deepEqual(host.notices(), ["Hello, Ada! (1 so far)"]);
+  host.dismissInput();
+  assert.equal(await host.command("hello"), 2);
+  assert.deepEqual(host.notices(), ["Hello, Ada! (1 so far)", "Hello, world! (2 so far)"]);
 });
 ```
 
