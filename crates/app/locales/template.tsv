@@ -2703,6 +2703,7 @@ expression to watch (e.g. total * 2, items.len())
 extensions.registries[{0}]: the name “{1}” is used twice	
 failed	
 failed (exit code {})	
+features: {}	
 fetches {} from {}	
 field	
 file	
@@ -2772,6 +2773,7 @@ namespace
 needs a path to a program	
 new value	
 no configuration directory	
+no default features	
 no file name	
 no item {} in the response	
 no upstream	
@@ -2792,6 +2794,7 @@ of {}
 only the first {} files were looked at (search.structural.maxFiles)	
 open	
 operator	
+output: {}	
 package	
 partly selected	
 passed	
