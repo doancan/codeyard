@@ -53,6 +53,21 @@ The tree, in the order a screen reader walks it:
   card's button, the permission switches (`Switch`, toggled while on), each recent denial with Copy fix, the crash
   card's buttons and the accounts' Sign Out, Remove and Add Instance…. A button drawn only on hover is in the tree
   while its row is laid out.
+- The pages, declared the same way, each in a group named after it: the merge editor (its title as a heading, each
+  conflict as a heading with its lines, each side as a `Document` whose value is the side's text, Accept Current,
+  Accept Incoming, Accept Both and Both, Incoming First with the conflict as description, Accept All, Save File and
+  Close); the folder comparison (the option chips as `CheckBox`es, Stop, Scan Again, Copy Report and Export, each row
+  a `TreeItem` with both sides and its status as description, expanded for a folder, with Copy to the right or left
+  and Delete from either side); the diff (a heading with the comparison and counts, Toggle inline view, every line
+  drawn as a `ListItem` "Added, line 3: text", side by side or inline); the large-file view (its header, every line
+  drawn as a `ListItem` "line 12: text", selected when it is the found line, Follow as a `CheckBox`, the new-lines
+  button, the find field as a `SearchInput` that takes the keyboard and its count); the Markdown preview (each
+  block as a `Heading` or `Paragraph` with its text, each link as a `Link` with its address that opens it as a click
+  does, and Code); the Welcome page (its tiles with their shortcuts, each recent folder as a `ListItem` with Pin and
+  Remove from Recent, More…); the data query bar (its field, status and Close); and the containers' pages (the
+  navigation, filters, Clear filters, Needs attention, Columns and each column, the sort headers, each container as a
+  `ListItem` with its image, status and usage, Logs and Actions, the search field, the detail tabs, Open files,
+  Terminal, Refresh details, each value's Copy with the value as description, the log lines and the log buttons).
 - One `Tree` per folder of the workspace: "Explorer", or "Explorer: name" when there are several. One `TreeItem` per
   row in a range of 1,000 rows: name, level, selected, expanded, set position in the whole tree. The range is centred
   on the selection while it is on screen, otherwise on the visible rows; the tree reports its scroll position in rows
