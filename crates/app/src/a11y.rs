@@ -48,6 +48,8 @@ const ABOUT_TAB: NodeId = NodeId(29);
 const ABOUT: NodeId = NodeId(30);
 const ABOUT_COPY: NodeId = NodeId(31);
 const SCM_REPOS: NodeId = NodeId(38);
+/// The change list of Source Control (scrolls its exposed range).
+const SCM_CHANGES: NodeId = NodeId(40);
 const ABOUT_DETAIL: u64 = 0xa0_0000;
 const EXT: NodeId = NodeId(41);
 const EXT_TABS: NodeId = NodeId(42);
@@ -196,6 +198,8 @@ pub enum FocusSnap {
     Picker,
     Terminal,
     ScmMessage,
+    /// The change list of Source Control (its cursor row is the focused node).
+    ScmChanges,
     /// The repository list of Source Control (the selected repository is the focused option).
     ScmRepos,
     AboutCopy,
@@ -305,7 +309,7 @@ pub struct Snapshot {
 
 /// First of the `len` items (explorer rows, editor lines) of `total` shown to AT, so snapshots stay bounded: centred on
 /// `focus` (selection, caret) while it is on screen, otherwise on the `visible` range (after a scroll).
-fn window_start(total: usize, len: usize, focus: Option<usize>, visible: Option<(usize, usize)>) -> usize {
+pub(crate) fn window_start(total: usize, len: usize, focus: Option<usize>, visible: Option<(usize, usize)>) -> usize {
     let centre = match (focus, visible) {
         (Some(f), Some((a, b))) if (a..=b).contains(&f) => f,
         (_, Some((a, b))) => (a + b) / 2,
@@ -790,6 +794,7 @@ impl Snapshot {
             FocusSnap::Editor if self.editor.is_some() => EDITOR,
             FocusSnap::Terminal if self.terminal.is_some() => TERMINAL,
             FocusSnap::ScmMessage if self.scm.as_ref().is_some_and(|s| s.view.root.is_some()) => SCM_MESSAGE,
+            FocusSnap::ScmChanges => self.scm.as_ref().map_or(ROOT, ScmSnap::focus_node),
             FocusSnap::ScmRepos => match self.scm.as_ref().map(|s| &s.view.repos).filter(|r| !r.is_empty()) {
                 Some(repos) => repos.iter().position(|r| r.selected).map_or(SCM_REPOS, |i| NodeId(SCM_REPO + i as u64)),
                 None => ROOT,
@@ -938,6 +943,8 @@ impl Workbench {
             FocusSnap::Explorer(k)
         } else if scm.as_ref().is_some_and(|s| s.view.message_focused) {
             FocusSnap::ScmMessage
+        } else if scm.as_ref().is_some_and(|s| s.view.list_focused && s.view.root.is_some()) {
+            FocusSnap::ScmChanges
         } else if exts.as_ref().is_some_and(|e| e.search_focused) {
             FocusSnap::ExtSearch
         } else if scm.as_ref().is_some_and(|s| s.view.repos_focused) {
@@ -1328,3 +1335,7 @@ mod geometry_tests;
 #[cfg(test)]
 #[path = "a11y_range_tests.rs"]
 mod range_tests;
+
+#[cfg(test)]
+#[path = "a11y_scm_tests.rs"]
+mod scm_tests;

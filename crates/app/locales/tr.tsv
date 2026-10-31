@@ -3412,3 +3412,5 @@ Reset the Rust setup in settings.jsonc?	settings.jsonc dosyasındaki Rust kurulu
 settings.jsonc already has the Rust setup.	settings.jsonc dosyasında Rust kurulumu zaten var.
 settings.jsonc has no Rust setup to reset.	settings.jsonc dosyasında sıfırlanacak Rust kurulumu yok.
 the file changed; try again	dosya değişti; yeniden deneyin
+Discard changes in {}	{} içindeki değişiklikleri at
+Mark {} as resolved	{} dosyasını çözüldü olarak işaretle

@@ -17,10 +17,17 @@ The tree, in the order a screen reader walks it:
   row in a range of 1,000 rows: name, level, selected, expanded, set position in the whole tree. The range is centred
   on the selection while it is on screen, otherwise on the visible rows; the tree reports its scroll position in rows
   and supports scroll up/down by a page, which moves the range. These trees are omitted while Explorer is hidden. Row actions resolve the current path rather than reusing an old row index.
-- While Source Control is visible, a `Group` with the branch, a writable `MultilineTextInput` for the commit message,
-  a correctly labeled/enabled commit button, change groups with expand/collapse buttons, file diff buttons and
-  Stage/Unstage buttons. Operation errors are assertive live regions; successful results are polite. The message
-  field's real focus is exposed. The graph, worktrees and sync controls are not exposed yet.
+- While Source Control is visible, a `Group` with the branch, a writable `MultilineTextInput` for the commit message
+  and the commit button, labeled with what it commits ("Commit (2)", "Commit All (3)") and disabled with "Nothing to
+  commit" as its description when there is nothing. Then a `List` "Changed files" of the change groups: each group a
+  `Group` with a header button ("Changes (12)", expanded or collapsed), each file a button that opens its diff (its
+  change, such as "Modified", as the description; its place in the group as set position and size) followed by a
+  "Stage …"/"Unstage …" button ("Mark … as resolved" for a conflict) and, for an unstaged change, "Discard changes in …",
+  which asks the same question as the painted button. The list exposes 500 lines (headers and files) around the
+  keyboard cursor while it is on screen, otherwise around the visible rows; it reports its scroll position in lines and
+  supports scroll up/down by a page. Operation errors are assertive live regions; successful results are polite. The
+  focus is exposed for the message field, the repository list and the change list, whose cursor row is the focused
+  node; `Focus` on a row puts the keyboard cursor there. The graph, worktrees and sync controls are not exposed yet.
 - While the Problems panel is open, a `List` labeled with the number of problems: a `Heading` per file and a `ListItem`
   per problem ("Error: …", with file, line and column as its description) or related location, each with `Click` to open
   it. At most 2,000 rows are exposed. With nothing to show, a polite `Status` says "No problems.". An activation from an
@@ -150,7 +157,8 @@ Actions: `Focus` on the explorer, a row, a tab, the editor, a find field, the te
 a suggestion or a dialog button; `Click` on a row (select and open), a tab (bring it to the front), a picker row (pick
 it), a suggestion (insert it), a find option (toggle) or button (run) and a dialog button; `SetTextSelection` on the
 editor, and `SetValue` on the Source Control message. Actions reject a changed workspace; Source Control also checks the
-repository, branch and file state, and committing checks the reviewed status and message. A tree may be a quarter of a second old.
+repository, branch and file state (a file action applies only to the same file in the same group and state), folding a
+group only toggles it from the state that was read, and committing checks the reviewed status and message. A tree may be a quarter of a second old.
 
 ### Without a tree
 

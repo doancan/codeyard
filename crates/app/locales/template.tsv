@@ -625,6 +625,7 @@ Discard
 Discard All Changes	
 Discard all changes	
 Discard changes	
+Discard changes in {}	
 Discard changes in {} files?	
 Discard changes in {}?	
 Discard mine, load from disk	
@@ -1243,6 +1244,7 @@ Mar
 Mark all as resolved (stage)	
 Mark as resolved (stage)	
 Mark prompts, commands and the folder in zsh, bash and fish	
+Mark {} as resolved	
 Markdown preview	
 Markdown: Open Preview	
 Market	
