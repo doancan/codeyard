@@ -88,15 +88,18 @@ The tree, in the order a screen reader walks it:
   menu, has the focus. `Click` chooses the item through the menu itself, exactly as a click on it does (the menu
   closes, focus returns, the command runs); it acts only on the same menu with the same item at that place. Escape
   is unchanged.
-- Row menus (for assistive technology): a Run and Debug variable (not a scope), call stack frame and line breakpoint, a Remote Explorer host and a
-  Ports row have the `ShowContextMenu` action and a "More Actions…" `Button` (a menu popup, the row's name as
+- Row menus (for assistive technology): a Run and Debug variable (not a scope), call stack frame and line breakpoint, a Remote Explorer host, a
+  Ports row and a file of Source Control's change list have the `ShowContextMenu` action and a "More Actions…" `Button` (a menu popup, the row's name as
   description) among their children. Both open the menu a right click on the row opens (Set Value…, Copy Value, Add to
   Watch; Restart Frame, Copy Call Stack; Edit Condition…, Disable Breakpoint; Connect, Edit Host…, Remove Host…;
-  Change Local Port…, Protocol, Retry, Stop Forwarding), at the bottom left of the row as last painted (the middle of
+  Change Local Port…, Protocol, Retry, Stop Forwarding; Open Changes, Open File, Stage or Unstage, Discard changes,
+  Copy Path), at the bottom left of the row as last painted (the middle of
   the window when the row is scrolled out of its list). The menu then takes the focus as described above and returns
   it when it closes. The macOS and Windows adapters do not forward `ShowContextMenu` yet, so the button is the way in
   for VoiceOver and Narrator today (with the keyboard alone, Shift+F10 on the focused row does the same). The request is refused unless the row is still the same variable, frame, breakpoint
-  (in the same enabled state), host (in the same state) or port forward at that place, in the same debug session.
+  (in the same enabled state), host (in the same state) or port forward at that place, in the same debug session, or
+  the same file of the same repository in the same group (a Source Control menu also puts the list's cursor on the file,
+  so closing the menu leaves the keyboard on it).
 - While the extension consent sheet is open and in front: a modal `AlertDialog` named "Install {name}?", described by where the
   package comes from, the High-risk line and the warnings, with one `Label` per line of the sheet (id, version and
   licence, source, description, permissions, the publisher's reason, contributions, warnings) and the Install and
@@ -266,8 +269,7 @@ probe as the workbench's lists (`painted.rs`).
   list as it is now: when rows change under it, it stays inside the list and the key acts on the row it is on (a row
   without a menu opens none).
 - System confirmation dialogs on Linux are drawn by GPUI inside the window (there is no Linux adapter, see below).
-- Scroll actions only on the Explorer, the editor and Source Control's change list; no `Blur`. Source Control's change
-  list has no context menu key yet. Explicit `Expand`/`Collapse` only in the Run and Debug, Testing and Remote Explorer
+- Scroll actions only on the Explorer, the editor and Source Control's change list; no `Blur`. Explicit `Expand`/`Collapse` only in the Run and Debug, Testing and Remote Explorer
   trees (elsewhere Click toggles).
 - The update window on macOS has no adapter of its own.
 - Linux (AT-SPI) is not implemented: it needs bounds, window events and an async D-Bus runtime.
