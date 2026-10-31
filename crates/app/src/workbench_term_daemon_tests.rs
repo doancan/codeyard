@@ -64,22 +64,30 @@ fn quit(wb: Entity<Workbench>, cx: &mut gpui::VisualTestContext) {
     close(wb, cx);
 }
 
+/// Wait until the window shows the notice `want`. Info notices leave after 8 s and `wait_ticking` moves the clock on
+/// by 300 ms per look, so a notice read once after a longer wait may already be gone.
+fn wait_notice(wb: &Entity<Workbench>, cx: &mut gpui::VisualTestContext, want: &str) {
+    wait_ticking(cx, &format!("the notice {want:?}"), |cx| wb.read_with(cx, |wb, _| wb.notice_for_test()).is_some_and(|(_, t)| t == want));
+}
+
 fn alive(pid: &str) -> bool {
     // SAFETY: signal 0 only checks whether the process exists.
     unsafe { libc::kill(pid.parse().unwrap(), 0) == 0 }
 }
 
-/// A window with one terminal on the daemon, and its shell's pid.
+/// A window with one terminal on the daemon, and its shell's pid (written to `pid_file` in `dir`, which must not exist
+/// yet: a pid left there by an earlier shell would be read instead).
 fn window_with_terminal<'a>(
     cx: &'a mut gpui::TestAppContext,
     home: &std::path::Path,
     dir: &std::path::Path,
     sock: &std::path::Path,
+    pid_file: &str,
 ) -> (Entity<Workbench>, &'a mut gpui::VisualTestContext, String) {
     let (wb, vcx) = window(cx, home, dir, sock);
     wb.update_in(vcx, |wb, window, cx| wb.new_terminal_launch(None, crate::terminal::Launch::default(), window, cx));
     wait_ticking(vcx, "its token is saved", |cx| wb.read_with(cx, |wb, cx| wb.terminals[0].read(cx).token().is_some()));
-    let pid = shell_pid(&wb, vcx, &dir.join("pid-1"));
+    let pid = shell_pid(&wb, vcx, &dir.join(pid_file));
     (wb, vcx, pid)
 }
 
@@ -102,10 +110,10 @@ fn a_terminal_outlives_its_window_and_the_next_window_takes_the_same_shell_back(
 
     let (wb, cx) = window(cx, &home, &dir, &sock);
     wait_ticking(cx, "the terminal taken back", |cx| wb.read_with(cx, |wb, _| wb.terminals.len() == 1));
+    wait_notice(&wb, cx, "Reconnected to terminal session");
     wait_ticking(cx, "the buffered output", |cx| text(&wb, cx).contains("printed-while-closed"));
     let shown = text(&wb, cx);
     assert!(shown.contains("Reconnected to terminal session") && !shown.contains("Previous session ended"), "{shown}");
-    assert!(wb.read_with(cx, |wb, _| wb.notice_for_test()).is_some_and(|(_, t)| t == "Reconnected to terminal session"), "announced");
     assert_eq!(shell_pid(&wb, cx, &dir.join("pid-2")), first, "the same shell process");
 }
 
@@ -144,21 +152,23 @@ fn a_token_that_does_not_match_brings_a_new_shell_and_ends_the_old_one(cx: &mut 
     });
 }
 
-/// Closing the window (or leaving the folder) is deliberate: the shell ends at once, as without the daemon.
+/// Closing the window is deliberate: the shell ends at once, as without the daemon. Opening another folder keeps the
+/// panel's terminals (as without the daemon), so their session stays until the window closes, and then ends at once.
 #[gpui::test]
-fn closing_the_window_or_the_folder_ends_its_terminals_at_once(cx: &mut gpui::TestAppContext) {
+fn closing_the_window_ends_its_terminals_at_once(cx: &mut gpui::TestAppContext) {
     let home = crate::qa_workbench_tests::fresh("termd-close-home");
     let dir = crate::qa_workbench_tests::project("termd-close");
     let other = crate::qa_workbench_tests::project("termd-close-other");
     let sock = daemon("close");
-    let (wb, vcx, pid) = window_with_terminal(cx, &home, &dir, &sock);
+    let (wb, vcx, pid) = window_with_terminal(cx, &home, &dir, &sock, "pid-1");
     close(wb, vcx);
     wait_ticking(vcx, "the closed window's shell ended", |_| !alive(&pid));
 
-    // Opening another folder in the window ends the first folder's terminals too.
-    let (wb, vcx, pid) = window_with_terminal(cx, &home, &dir, &sock);
+    let (wb, vcx, pid) = window_with_terminal(cx, &home, &dir, &sock, "pid-2");
     crate::qa_workbench_tests::open(&wb, &other, vcx);
-    wait_ticking(vcx, "the left folder's shell ended", |_| !alive(&pid));
+    assert!(alive(&pid), "the panel's terminal still runs in the other folder");
+    close(wb, vcx);
+    wait_ticking(vcx, "the closed window's shell ended after a folder switch", |_| !alive(&pid));
 }
 
 /// Another Codeyard instance holds the window's session: the window does not take it over. It starts new shells and
@@ -168,21 +178,30 @@ fn a_session_held_by_another_instance_is_not_taken_over(cx: &mut gpui::TestAppCo
     let home = crate::qa_workbench_tests::fresh("termd-held-home");
     let dir = crate::qa_workbench_tests::project("termd-held");
     let sock = daemon("held");
-    let (wb, vcx, pid) = window_with_terminal(cx, &home, &dir, &sock);
+    let (wb, vcx, pid) = window_with_terminal(cx, &home, &dir, &sock, "pid-1");
     let session = wb.read_with(vcx, |wb, _| wb.persist.term_daemon.as_ref().unwrap().session.clone());
     quit(wb, vcx);
-    // "Another instance" takes the session (as it would after its own restart) and keeps its connection.
-    let stream = std::os::unix::net::UnixStream::connect(&sock).unwrap();
-    let closer = stream.try_clone().unwrap();
-    let transport = host::Transport::pipes(Box::new(stream.try_clone().unwrap()), Box::new(stream));
-    let close_other = Box::new(move || drop(closer.shutdown(std::net::Shutdown::Both)));
-    let (other, resumed) = host::RemoteHost::attach_session(transport, close_other, &session, "Local").unwrap();
+    // "Another instance" takes the session (as it would after its own restart) and keeps its connection. The daemon
+    // refuses it until it has seen the quit window's connection end, which is not at once: try again meanwhile, as the
+    // app does.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let (other, resumed) = loop {
+        let stream = std::os::unix::net::UnixStream::connect(&sock).unwrap();
+        let closer = stream.try_clone().unwrap();
+        let transport = host::Transport::pipes(Box::new(stream.try_clone().unwrap()), Box::new(stream));
+        let close_other = Box::new(move || drop(closer.shutdown(std::net::Shutdown::Both)));
+        match host::RemoteHost::attach_session(transport, close_other, &session, "Local") {
+            Err(host::HostError::Op(proto::Error::PermissionDenied(_))) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            r => break r.unwrap(),
+        }
+    };
     assert!(resumed);
 
     let (wb, cx) = window(cx, &home, &dir, &sock);
+    wait_notice(&wb, cx, "Terminal session could not be restored: another Codeyard window has them; started new shells");
     wait_ticking(cx, "a new shell", |cx| wb.read_with(cx, |wb, cx| wb.terminals.len() == 1 && wb.terminals[0].read(cx).pty_handle().is_some()));
-    let notice = wb.read_with(cx, |wb, _| wb.notice_for_test()).map(|(_, t)| t).unwrap_or_default();
-    assert_eq!(notice, "Terminal session could not be restored: another Codeyard window has them; started new shells");
     assert_ne!(wb.read_with(cx, |wb, _| wb.persist.term_daemon.as_ref().map(|d| d.session.clone())), Some(session), "a session of its own");
     assert!(alive(&pid), "the other instance keeps its terminal");
     other.end_session();
@@ -262,7 +281,7 @@ fn a_timeout_of_zero_does_not_keep_terminals(cx: &mut gpui::TestAppContext) {
     let home = crate::qa_workbench_tests::fresh("termd-zero-home");
     let dir = crate::qa_workbench_tests::project("termd-zero");
     let sock = daemon("zero");
-    let (wb, vcx, pid) = window_with_terminal(cx, &home, &dir, &sock);
+    let (wb, vcx, pid) = window_with_terminal(cx, &home, &dir, &sock, "pid-1");
     vcx.update(|_, cx| {
         let mut s = cx.global::<Settings>().clone();
         s.terminal_persistent_session_timeout = 0;
