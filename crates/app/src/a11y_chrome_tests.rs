@@ -80,9 +80,10 @@ fn the_activity_bar_and_status_bar_act_like_their_clicks(cx: &mut TestAppContext
     assert_eq!(node.is_expanded(), Some(false));
     let snap = snapshot(&wb, cx);
     press(&wb, cx, &snap, resources);
-    let snap = snapshot(&wb, cx);
-    assert_eq!(get(&snap, Role::Button, "Resources").1.is_expanded(), Some(true));
-    assert!(snap.to_tree().nodes.iter().any(|(_, n)| n.role() == Role::Label && n.label().is_some_and(|l| l.starts_with("CPU: "))));
+    assert_eq!(get(&snapshot(&wb, cx), Role::Button, "Resources").1.is_expanded(), Some(true));
+    // The figures slide open (200 ms): the tree lists them once they are laid out.
+    let cpu = |snap: &Snapshot| snap.to_tree().nodes.iter().any(|(_, n)| n.role() == Role::Label && n.label().is_some_and(|l| l.starts_with("CPU: ")));
+    crate::qa_integration_tests::wait_ticking(cx, "the figures", |cx| cpu(&snapshot(&wb, cx)));
 }
 
 /// Page, diff and large-file tabs are tabs of the list; their Close buttons close them; a breadcrumb shows the file
