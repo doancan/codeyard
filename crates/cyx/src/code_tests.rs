@@ -205,8 +205,7 @@ codeyard_extension::export!(Counter);
     std::fs::copy(repo().join("examples/extensions/hello-view/Cargo.lock"), dir.join("Cargo.lock")).unwrap();
     build::build_in(&dir, Some(&target_dir())).unwrap();
     let manifest = build::manifest(&dir).unwrap();
-    let fixtures = crate::fixtures::Fixtures::load(&dir, None).unwrap();
-    let run = harness::run(&dir, &manifest, &exthost, &fixtures).unwrap();
+    let run = harness::run(&dir, &manifest, &exthost, &crate::fixtures::Fixtures::load(&dir, None).unwrap()).unwrap();
     let all = run.failures.join("\n");
     assert!(all.contains("view main is refused by Codeyard: the view is malformed: unknown field"), "{all}");
     assert!(!run.lines.iter().any(|l| l.contains("view main draws")), "{:?}", run.lines);
@@ -318,13 +317,13 @@ fn the_typescript_examples_build_package_and_pass_cyx_test() {
         let run = harness::run(&dir, &manifest, &exthost, &fixtures).unwrap();
         assert!(run.failures.is_empty(), "{name}: {:#?}", run.lines);
         assert!(run.lines.iter().any(|l| l.contains("activates")), "{:?}", run.lines);
-        for v in &manifest.contributions.views {
-            let draws = format!("view {} draws", v.id.rsplit('.').next().unwrap_or(&v.id));
-            assert!(run.lines.iter().any(|l| l.contains(&draws)), "{name}: {:#?}", run.lines);
-        }
         if name == "gitlab" {
             // #185: test/fixtures.json answers the provider's signed request, so its list runs in the real exthost.
             assert!(run.lines.iter().any(|l| l.contains("pull requests gitlab lists (1 open)")), "{:#?}", run.lines);
+        }
+        for v in &manifest.contributions.views {
+            let draws = format!("view {} draws", v.id.rsplit('.').next().unwrap_or(&v.id));
+            assert!(run.lines.iter().any(|l| l.contains(&draws)), "{name}: {:#?}", run.lines);
         }
         let _ = std::fs::remove_file(dir.join(ext_pkg::COMPONENT));
         let _ = std::fs::remove_file(dir.join(typescript::SOURCE_MAP));

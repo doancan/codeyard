@@ -6,6 +6,14 @@ use super::*;
 use crate::file_batch::{Clipboard, Operation, Progress};
 
 impl Workbench {
+    /// The host a file question names: the connection's alias, as the status bar shows it, else the host's label.
+    pub(super) fn file_host_name(&self) -> String {
+        match &self.remote.conn {
+            Conn::Connected { alias } if self.remote.host.is_remote() => alias.clone(),
+            _ => self.remote.host.label(),
+        }
+    }
+
     pub(super) fn set_file_clipboard(&mut self, paths: Vec<String>, cut: bool, cx: &App) {
         let paths = crate::file_batch::top_level(paths, &self.all_roots(cx));
         if !paths.is_empty() {
@@ -82,21 +90,9 @@ impl Workbench {
         self.roots.file_operation = Some(progress.clone());
         let host = self.remote.host.clone();
         let root = self.root(cx);
-        let verb = match &operation {
-            Operation::Copy(_) => crate::i18n::t("Copy"),
-            Operation::Move(_) => crate::i18n::t("Move"),
-            Operation::Delete { trash: true } => crate::i18n::t("Move to Trash"),
-            Operation::Delete { trash: false } => crate::i18n::t("Delete Permanently"),
-        };
+        let question = crate::file_batch::question(&operation, paths.len(), &self.file_host_name(), host.is_remote());
         let answer = if confirm || paths.len() > 1 {
-            let title = crate::i18n::tn("Apply a file operation to {} entry?", "Apply a file operation to {} entries?", paths.len(), &[]);
-            let mut detail = match &operation {
-                Operation::Copy(dir) | Operation::Move(dir) => {
-                    crate::i18n::tf("Destination: {0} on {1}. Existing files are never overwritten.", &[dir, &host.label()])
-                }
-                Operation::Delete { trash: true } => crate::i18n::t("You can restore it from the Trash.").to_string(),
-                Operation::Delete { trash: false } => crate::i18n::t("This can't be undone.").to_string(),
-            };
+            let mut detail = question.detail.clone();
             if matches!(operation, Operation::Delete { .. })
                 && self.all_editors().iter().any(|e| {
                     let e = e.read(cx);
@@ -111,8 +107,10 @@ impl Workbench {
             if paths.len() > 12 {
                 detail.push_str(&format!("\n{}", crate::i18n::t("The complete file list is available in Output.")));
             }
-            self.log_output(format!("{verb}:\n{}", paths.join("\n")));
-            Some(window.prompt(PromptLevel::Warning, &title, Some(&detail), &[verb, crate::i18n::t("Cancel")], cx))
+            self.log_output(format!("{}:\n{}", question.verb, paths.join("\n")));
+            let level = if question.destructive { PromptLevel::Critical } else { PromptLevel::Warning };
+            let buttons = [gpui::PromptButton::new(question.verb.clone()), gpui::PromptButton::cancel(crate::i18n::t("Cancel"))];
+            Some(window.prompt(level, &question.title, Some(&detail), &buttons, cx))
         } else {
             None
         };

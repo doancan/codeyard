@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Source Control's change list opens a file's right-click menu from the keyboard: Shift+F10 or the Menu key on the
+  cursor row shows it under the row, the arrows and Enter drive it, and Escape gives the keyboard back to the same row.
+  Screen readers get `ShowContextMenu` and a "More Actions…" button on each file, as the other lists' rows have.
 - Performance scenarios for extension views and hot reload, run by `scripts/perf/run.sh`: PageDown in a sidebar view
   with a list of 10 000 rows (`CODEYARD_PERF_VIEWS`, `views.keystroke_frame_ms`) and a 2 MB Rust component swapped in
   place in a dev window (`CODEYARD_PERF_RELOAD`, `extensions.hot_reload_ms`), each with a fixture extension that needs
@@ -304,6 +307,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of the `auth` line the manifest already has (#183). The SDKs fill in a manifest line only when Codeyard names just
   a permission (`net`); any other text it sends is kept.
 - `cyx package` leaves the `test/` and `tests/` folders at the top of an extension out of the package (#187).
+- Deleting in the Explorer on an SSH host says it is permanent: one entry asks "Permanently delete “name” on
+  host?", a selection "Permanently delete N items on host?", both say the host has no Trash, and the button is
+  "Delete Permanently" (a critical alert, Escape cancels). File questions name the connection's host. Bulk copy,
+  move and delete over SSH are covered by tests against a real `sshd`, including a name already taken in the
+  destination and a file that cannot be removed.
 - Source Control's change list is fully accessible: each file is a row with its change, its place in the group and its
   own Stage/Unstage (Mark as resolved) and Discard buttons (Discard asks first, as the painted button does), the commit
   button says why it is disabled, and a large status exposes a scrollable range of 500 lines instead of every row. The

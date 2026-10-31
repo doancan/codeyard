@@ -435,16 +435,29 @@ impl Workbench {
         } else {
             let what = if is_dir { crate::i18n::t("The folder and everything in it will be deleted.") } else { "" };
             let sep_what = if what.is_empty() { "" } else { " " };
-            (
-                crate::i18n::tf("Delete “{}” permanently?", &[&name]),
-                format!("{what}{sep_what}{}{sep}{unsaved}", crate::i18n::t("This can't be undone.")),
-                crate::i18n::t("Delete"),
-            )
+            match self.remote.host.is_remote() {
+                // An SSH host has no Trash: the question names the host and the button says it is permanent.
+                true => {
+                    let host = self.file_host_name();
+                    (
+                        crate::i18n::tf("Permanently delete “{0}” on {1}?", &[&name, &host]),
+                        format!("{what}{sep_what}{}{sep}{unsaved}", crate::i18n::tf("{} has no Trash: it is deleted at once and can't be restored.", &[&host])),
+                        crate::i18n::t("Delete Permanently"),
+                    )
+                }
+                false => (
+                    crate::i18n::tf("Delete “{}” permanently?", &[&name]),
+                    format!("{what}{sep_what}{}{sep}{unsaved}", crate::i18n::t("This can't be undone.")),
+                    crate::i18n::t("Delete"),
+                ),
+            }
         };
         // The trash is recoverable: if the setting is off, move without asking.
         let ask = !trash || cx.global::<Settings>().confirm_delete;
         let (host, root) = (self.remote.host.clone(), self.root(cx));
-        let answer = ask.then(|| window.prompt(PromptLevel::Warning, &title, Some(&detail), &[verb, crate::i18n::t("Cancel")], cx));
+        let level = if trash { PromptLevel::Warning } else { PromptLevel::Critical };
+        let buttons = [gpui::PromptButton::new(verb), gpui::PromptButton::cancel(crate::i18n::t("Cancel"))];
+        let answer = ask.then(|| window.prompt(level, &title, Some(&detail), &buttons, cx));
         cx.spawn_in(window, async move |this, cx| {
             if let Some(answer) = answer
                 && answer.await != Ok(0)

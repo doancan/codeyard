@@ -3,7 +3,8 @@
 //! The change list is a list holding the groups of its exposed range (`scm::ACCESS_LINES` lines around the
 //! cursor or the rows on screen). A group is a section with its header button; a file is a button that opens its diff,
 //! followed by one button to stage it (to mark a conflict resolved) or unstage it and, for an unstaged change, one to
-//! discard it behind the painted button's question. Ids: group `g` at `SCM_GROUP + 2g` (its header one above), file `k`
+//! discard it behind the painted button's question, and a "More Actions…" button that opens the menu a right click opens
+//! (as `ShowContextMenu` on the file does; the native adapters do not forward that action yet). Ids: group `g` at `SCM_GROUP + 2g` (its header one above), file `k`
 //! of the range at `SCM_FILE + 4k` (its actions above it). An action applies only to the same repository and to the
 //! same file in the same state as when the tree was read.
 
@@ -15,6 +16,7 @@ pub(super) mod ext;
 
 const STAGE: u64 = 1;
 const DISCARD: u64 = 2;
+const MENU: u64 = 3;
 
 fn group_id(g: usize) -> NodeId {
     NodeId(SCM_GROUP + g as u64 * 2)
@@ -173,6 +175,7 @@ impl ScmSnap {
                 open.set_size_of_set(group.total);
                 open.add_action(Action::Click);
                 open.add_action(Action::Focus);
+                open.add_action(Action::ShowContextMenu);
                 nodes.push((open_id, open));
                 rows.push(open_id);
                 let mut actions = vec![(
@@ -199,6 +202,13 @@ impl ScmSnap {
                     nodes.push((NodeId(open_id.0 + part), button));
                     rows.push(NodeId(open_id.0 + part));
                 }
+                let mut more = Node::new(Role::Button);
+                more.set_label(t("More Actions…"));
+                more.set_description(path.clone());
+                more.set_has_popup(accesskit::HasPopup::Menu);
+                more.add_action(Action::Click);
+                nodes.push((NodeId(open_id.0 + MENU), more));
+                rows.push(NodeId(open_id.0 + MENU));
             }
             section.set_children(rows);
             nodes.push((id, section));
@@ -286,6 +296,12 @@ impl Workbench {
                     }
                     (Action::Click, STAGE) if !current.busy => self.scm.update(cx, |s, cx| s.a11y_stage_toggle(&file, cx)),
                     (Action::Click, DISCARD) if !current.busy => self.scm.update(cx, |s, cx| s.a11y_discard(&file, window, cx)),
+                    // The menu opens under the row with the list focused on it, so closing it gives the list the keys.
+                    (Action::ShowContextMenu, 0) | (Action::Click, MENU) => self.scm.update(cx, |s, cx| {
+                        if s.focus_changes(Some(&file.key()), window, cx) {
+                            s.open_row_menu(Some(&file.key()), window, cx);
+                        }
+                    }),
                     _ => {}
                 }
             }
