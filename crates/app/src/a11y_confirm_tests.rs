@@ -102,14 +102,14 @@ fn closing_an_unsaved_editor_asks_and_cancel_keeps_the_keyboard(cx: &mut TestApp
     open(&wb, &dir.join("a.txt"), cx);
     cx.simulate_input("new ");
     assert_eq!(snapshot(&wb, cx).to_tree().focus, EDITOR);
-    cx.simulate_keystrokes("cmd-w");
+    close_editor(&wb, cx);
     assert!(cx.has_pending_prompt());
     cx.simulate_prompt_answer("Cancel");
     cx.run_until_parked();
     let snap = snapshot(&wb, cx);
     assert!(snap.editor.as_ref().is_some_and(|e| e.dirty), "still open, still unsaved");
     assert_eq!(snap.to_tree().focus, EDITOR, "the keyboard is back in the editor");
-    cx.simulate_keystrokes("cmd-w");
+    close_editor(&wb, cx);
     cx.simulate_prompt_answer("Save");
     cx.run_until_parked();
     assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "new disk\n");
@@ -136,4 +136,9 @@ fn a_settings_change_asks_and_cancel_changes_nothing(cx: &mut TestAppContext) {
 
 fn wait(cx: &mut VisualTestContext, what: &str, done: impl FnMut(&mut VisualTestContext) -> bool) {
     crate::qa_integration_tests::wait_ticking(cx, what, done);
+}
+
+/// "Editor: Close", as its key does on every platform.
+fn close_editor(wb: &Entity<Workbench>, cx: &mut VisualTestContext) {
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Editor: Close", window, cx));
 }
