@@ -7,6 +7,7 @@
 //   sdk         the folder of @codeyard/extension's sources that cyx ships (the SDK always matches the API cyx builds for)
 //   wit         a WIT folder whose `extension` world imports only the interfaces the manifest grants
 //   interfaces  those interfaces, by WIT name
+//   api         the version of codeyard:api in that WIT, such as 1.0.0
 //   bundle      where to write the bundle (its file name is what stack traces show)
 //   out         where to write extension.wasm
 //   map         where to write the bundle's source map (sources relative to the extension's folder)
@@ -33,7 +34,7 @@ const { build } = await import("esbuild");
 
 // The entry: the SDK's globals first (so the extension's modules see the SDK's `fetch`), then the extension, then the
 // granted interfaces, wired into the guest exports.
-const imports = job.interfaces.map((name, i) => `import * as i${i} from "codeyard:api/${name}@0.1.0";`);
+const imports = job.interfaces.map((name, i) => `import * as i${i} from "codeyard:api/${name}@${job.api}";`);
 const table = job.interfaces.map((name, i) => `${camel(name)}: i${i}`).join(", ");
 const entry = [
   `import "@codeyard/extension/globals";`,

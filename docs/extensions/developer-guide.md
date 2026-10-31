@@ -174,7 +174,7 @@ You don't have to write any activation code. The extension starts the first time
 | `untrusted` | — | `false` keeps your extension off in untrusted folders. By default it runs there, but it cannot send, write or run anything |
 | `l10n/<code>.tsv` | — | `English<TAB>Translation` per line. English is the fallback |
 
-Never write an engine version, an API version, `*` or `startup`. `cyx` works out the minimum Codeyard version from what you use.
+Never write an engine version, an API version, `*` or `startup`. `cyx` works out the minimum Codeyard version from the API items your code uses and `cyx check` prints it. The API is 1.0: a minor version only adds, and every item in the [reference](reference/api.md) says which version added it. Coming from 0.1? See [Migrating to API 1.0](migrating-to-1.0.md).
 
 ### Contributions that run your code
 

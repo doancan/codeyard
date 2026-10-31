@@ -479,6 +479,23 @@ impl Test {
     }
 }
 
+/// #147: a component built against API 0.1 still runs during the move to 1.0, but the registry refuses new uploads of one.
+#[test]
+fn a_0_1_component_is_refused() {
+    let t = Test::inviting("transition", &["you"]);
+    let manifest = manifest("you.code", "1.0.0", "Code", "[code]\nentry = \"main.ts\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n");
+    let entries = |component: &[u8]| {
+        vec![
+            ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: manifest.clone().into_bytes(), executable: false },
+            ext_pkg::Entry { path: "main.ts".into(), data: vec![], executable: false },
+            ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: component.to_vec(), executable: false },
+        ]
+    };
+    let e = t.publish(&ext_pkg::write(entries(ext_pkg::testing::COMPONENT_0_1)).unwrap(), &github(7, 42)).unwrap_err();
+    assert!(matches!(&e, Error::Invalid(m) if m.contains("built against API 0.1.0") && m.contains("migrating-to-1.0.md")), "{e:?}");
+    t.publish(&ext_pkg::write(entries(ext_pkg::testing::COMPONENT)).unwrap(), &github(7, 42)).unwrap();
+}
+
 /// #146: without an invitation the registry keeps Phase 1's policy: no code, and no native programs either.
 #[test]
 fn native_programs_need_an_invitation() {

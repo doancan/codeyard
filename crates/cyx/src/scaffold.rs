@@ -181,7 +181,7 @@ fn npm_sdk(sdk: Option<&str>) -> String {
 }
 
 /// The `@codeyard/extension` version a new TypeScript extension asks npm for.
-pub const NPM_SDK_VERSION: &str = "0.1.0";
+pub const NPM_SDK_VERSION: &str = "1.0.0";
 
 /// Where a generated code extension gets the SDK: the Codeyard repository (the SDK is pre-release and not on
 /// crates.io yet), or a local checkout of it.

@@ -379,7 +379,7 @@ export interface SearchQuery {
   max: number;
 }
 
-/// The imports, one object per interface (`import * as net from "codeyard:api/net@0.1.0"`). An interface the manifest
+/// The imports, one object per interface (`import * as net from "codeyard:api/net@1.0.0"`). An interface the manifest
 /// does not grant is left out of the component, so it is missing here; the SDK then refuses the call with the fix.
 export interface Bindings {
   log: { log(level: LogLevel, message: string): void };

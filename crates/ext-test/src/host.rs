@@ -361,7 +361,7 @@ impl Host for Shared {
     fn env(&mut self) -> Env {
         Env {
             codeyard_version: "0.5.0".into(),
-            api_version: "0.1.0".into(),
+            api_version: "1.0.0".into(),
             language: "en".into(),
             theme: ThemeKind::Dark,
             platform: if cfg!(target_os = "macos") {

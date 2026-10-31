@@ -132,6 +132,9 @@ fn run(args: &[String]) -> Result<(), String> {
                 eprintln!("{w}");
             }
             println!("{} {} is ready to package.", report.id, report.version);
+            if let Some(r) = &report.requires {
+                println!("{r}");
+            }
             Ok(())
         }
         "package" => {
@@ -419,6 +422,8 @@ pub struct CheckReport {
     pub id: String,
     pub version: String,
     pub warnings: Vec<String>,
+    /// For a built code extension: the oldest Codeyard it runs on, worked out from the API items its component uses.
+    pub requires: Option<String>,
 }
 
 /// Everything install and publish check, printed the way the guide shows: code, file:line, fix.
@@ -467,7 +472,33 @@ fn check_with(dir: &Path, options: ext_manifest::Options) -> Result<CheckReport,
     } else {
         check_files(dir, None, &m, &text)?;
     }
-    Ok(CheckReport { id: m.id.to_string(), version: m.version.to_string(), warnings })
+    let requires = match (&m.code, std::fs::read(dir.join(ext_pkg::COMPONENT))) {
+        (Some(_), Ok(wasm)) => ext_pkg::check_component(&wasm, &m).ok().map(|c| {
+            if c.in_transition() {
+                warnings.push(transition_warning(&c));
+            }
+            requires(&c)
+        }),
+        _ => None,
+    };
+    Ok(CheckReport { id: m.id.to_string(), version: m.version.to_string(), warnings, requires })
+}
+
+/// "It needs Codeyard 0.7.0 or newer (API 1.0.0: …)." for a component that passed the import check.
+pub(crate) fn requires(c: &ext_pkg::Component) -> String {
+    let codeyard = ext_api::codeyard_for(c.min_api).unwrap_or("(unreleased)");
+    format!("It needs Codeyard {codeyard} or newer (API {}, from the API items its code uses).", c.min_api)
+}
+
+/// A component built against a 0.x API, which Codeyard still runs during the move to 1.0.
+pub(crate) fn transition_warning(c: &ext_pkg::Component) -> String {
+    format!(
+        "warning: {} was built against API {}; Codeyard {} still runs it, but registries no longer take it and a later Codeyard will refuse it\n  --> {}\n   = fix: rebuild with the current SDK (`cyx package`); docs/extensions/migrating-to-1.0.md lists what changed",
+        ext_pkg::COMPONENT,
+        c.built_for,
+        env!("CARGO_PKG_VERSION"),
+        ext_pkg::COMPONENT
+    )
 }
 
 /// The platforms an extension with native programs has in `native/`; none is an error that says what to do.

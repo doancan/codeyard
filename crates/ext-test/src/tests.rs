@@ -92,6 +92,11 @@ impl Extension for Probe {
             ctx.state().set("tally", &n)?;
             Ok(json!({ "tally": n, "reason": ctx.activation_reason() }))
         });
+        ctx.command("untally", async |ctx, _args| {
+            let had = ctx.state().keys();
+            ctx.state().delete("tally");
+            Ok(json!({ "had": had, "has": ctx.state().keys() }))
+        });
         ctx.command("interval", async |ctx, _args| ctx.setting::<u32>("interval"));
         ctx.command("words", async |ctx, _args| {
             let doc = ctx.active_document().await?.ok_or("no document")?;
@@ -217,6 +222,9 @@ fn state_survives_a_hot_reload_only() {
     let h = host();
     h.command("tally", Value::Null).unwrap();
     assert_eq!(h.command("tally", Value::Null).unwrap(), json!({ "tally": 2, "reason": "command" }));
+    assert_eq!(h.command("untally", Value::Null).unwrap(), json!({ "had": ["tally"], "has": [] }));
+    h.command("tally", Value::Null).unwrap();
+    h.command("tally", Value::Null).unwrap();
     h.reload::<Probe>().unwrap();
     assert_eq!(h.command("tally", Value::Null).unwrap(), json!({ "tally": 3, "reason": "reload" }));
     // The snapshot is read once: it does not linger in storage.

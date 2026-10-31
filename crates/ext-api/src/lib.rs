@@ -8,15 +8,31 @@
 #![deny(clippy::unwrap_used, clippy::expect_used)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
+pub mod since;
+pub mod transition;
 pub mod value;
 
 use ext_manifest::Permissions;
 
 /// The WIT package name.
 pub const PACKAGE: &str = "codeyard:api";
-/// The API version this build implements. `0.x` while in beta: a minor may break, with a `cyx` error and a migration
-/// note.
-pub const VERSION: Version = Version(0, 1, 0);
+/// The API version this build implements. From 1.0 a minor only adds (docs/plugin-architecture.md §5.2): a component
+/// that uses only items this version has runs here, whichever 1.x it was built against.
+pub const VERSION: Version = Version(1, 0, 0);
+
+/// 0.x versions whose components this host still runs, during the move to 1.0. Their WIT has the same shape as 1.0.0,
+/// so the exthost renames their imports and exports to 1.0.0 before it compiles them (`transition::upgrade`). `cyx`
+/// warns about such a build and `cyx publish` refuses it.
+pub const TRANSITION: [Version; 1] = [Version(0, 1, 0)];
+
+/// The first Codeyard release with each API version, oldest first: what `cyx` reports as the minimum Codeyard. A
+/// release that ships a new minor adds its line here.
+pub const RELEASES: [(Version, &str); 1] = [(Version(1, 0, 0), "0.7.0")];
+
+/// The first Codeyard release that has API `api`; none for a version newer than this build knows of.
+pub fn codeyard_for(api: Version) -> Option<&'static str> {
+    RELEASES.iter().find(|(v, _)| *v >= api).map(|(_, c)| *c)
+}
 
 /// The package's WIT files, by name.
 pub const WIT: [(&str, &str); 6] = [
@@ -39,10 +55,20 @@ impl Version {
     }
 
     /// Whether a component built against `self` runs on a host implementing `host`: same major, and in `0.x` the
-    /// same minor too (a `0.x` minor may break), and not newer.
+    /// same minor too (a `0.x` minor may break), and not newer. A newer minor of the same major also runs when every
+    /// item the component uses is in `host` (see `ext_pkg::check_component`); this is the version check alone.
     pub fn runs_on(self, host: Version) -> bool {
-        let same_line = if self.0 == 0 { self.0 == host.0 && self.1 == host.1 } else { self.0 == host.0 };
-        same_line && self <= host
+        self.same_line(host) && self <= host
+    }
+
+    /// Same major, and in `0.x` the same minor: the versions a semver-compatible import may be bound to.
+    pub fn same_line(self, other: Version) -> bool {
+        if self.0 == 0 { other.0 == 0 && self.1 == other.1 } else { self.0 == other.0 }
+    }
+
+    /// One of the 0.x versions this host still runs (`TRANSITION`).
+    pub fn in_transition(self) -> bool {
+        TRANSITION.iter().any(|t| t.same_line(self) && self <= *t)
     }
 }
 
@@ -126,7 +152,7 @@ pub struct Interface {
 }
 
 const fn i(name: &'static str, need: Need) -> Interface {
-    Interface { name, since: Version(0, 1, 0), need }
+    Interface { name, since: Version(1, 0, 0), need }
 }
 
 /// Every interface of `codeyard:api`, in WIT order. A test keeps this in step with `wit/`.
@@ -168,7 +194,7 @@ pub fn interface(name: &str) -> Option<&'static Interface> {
     INTERFACES.iter().find(|i| i.name == name)
 }
 
-/// What a component import name (`codeyard:api/net@0.1.0`, `wasi:io/streams@0.2.6`) refers to.
+/// What a component import name (`codeyard:api/net@1.0.0`, `wasi:io/streams@0.2.6`) refers to.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Import<'a> {
     /// An interface of this package at some version (none when the import is unversioned).
@@ -206,5 +232,7 @@ pub fn classify(name: &str) -> Import<'_> {
     }
 }
 
+#[cfg(test)]
+mod compat_tests;
 #[cfg(test)]
 mod tests;

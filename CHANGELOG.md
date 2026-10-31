@@ -288,6 +288,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The extension API is `codeyard:api` 1.0.0 (#147), with the TypeScript SDK `@codeyard/extension` 1.0.0. From 1.0
+  a minor only adds: every interface, function and type carries `@since(version = …)`, the API reference shows it,
+  and a test in ext-api compares the WIT with the released copy in `crates/ext-api/released/1.0.0` and fails on a
+  removed or changed item (a new field or case counts as a change) or a new one without `@since`. `cyx check` prints
+  the oldest Codeyard an extension needs, worked out from the functions and types its component imports; a component
+  built against a newer 1.x runs when every item it uses is there, and one that uses an item this Codeyard lacks gets
+  `CY0701`. Components built against API 0.1 keep running (the exthost renames their imports to 1.0.0 before
+  compiling; the shape is the same), with a warning from `cyx check`; `cyx publish` and Yard refuse them. The API
+  review before the freeze kept the WIT's shape: its docs now say what a `denied` permission and an instance's
+  `remote.account` hold (#183, #184), and `code-action.edits` names its `uri`. In the Rust SDK `ctx.state().remove`
+  is now `delete`, and `keys` is new. Migration guide: docs/extensions/migrating-to-1.0.md.
 - The Pull Requests view's command is **Pull Requests: Show…** (was "GitHub: Pull Requests…"), since it lists every
   provider's requests; the palette still finds it by its old name and by "merge requests" (#186). When no remote is
   claimed, the message names the providers there are.
