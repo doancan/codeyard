@@ -80,7 +80,8 @@ pub(super) fn parse_secondary(text: &str) -> Vec<Panel> {
 impl Workbench {
     /// Whether `panel` is on screen, in either side bar.
     pub(super) fn view_shown(&self, panel: Panel) -> bool {
-        self.chrome.panel == Some(panel) || self.chrome.secondary == Some(panel) || self.in_view_window(panel)
+        // Zen mode keeps the secondary side bar's view for later but does not draw it.
+        self.chrome.panel == Some(panel) || (self.chrome.secondary == Some(panel) && self.chrome.zen.is_none()) || self.in_view_window(panel)
     }
 
     /// Asking for a view (`chrome.panel = Some(view)`) that lives in the secondary side bar opens it there; the primary
