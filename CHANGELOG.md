@@ -274,6 +274,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Typing in a large file could wait 60 ms or more per key for the syntax tree: an edit that makes tree-sitter recover
+  from an error across the whole file (stray words or a half-typed `->` between the items of a 10 000-line Rust file)
+  reparsed all of it before the key was drawn. A key now reparses for at most 4 ms; a longer reparse finishes in the
+  background and the colors catch up when it is done. This was most of what `typing.keystroke_frame_completion_ms`
+  measured (median 78 ms, the completion provider itself answers within a millisecond); it is now close to plain
+  typing.
 - A debug configuration with `"stopOnEntry": true` run with lldb-dap said "Paused on exception: signal SIGSTOP": the
   adapter reports the stop on entry as a signal. The first stop of such a session now reads "Paused on entry"; a
   SIGSTOP later on is still reported as an exception.
