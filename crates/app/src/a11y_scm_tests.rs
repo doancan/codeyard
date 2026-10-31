@@ -112,7 +112,7 @@ fn scm_discard_asks_first_and_stale_rows_are_refused(cx: &mut TestAppContext) {
     // The question comes first; Cancel keeps the file and the keyboard on the row.
     act(&wb, cx, &before, "Discard changes in untracked.txt", Action::Click);
     assert!(cx.has_pending_prompt(), "discarding asks first");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert!(dir.join("untracked.txt").exists());
     assert_eq!(snapshot(&wb, cx).to_tree().focus, file_row, "Cancel gives the keyboard back to the row");

@@ -802,7 +802,7 @@ fn qa_drag_and_drop_asks_and_cancel_keeps_the_file(cx: &mut TestAppContext) {
     open(&wb, &dir, cx);
     drag(&wb, cx, &dir.join("README.md"), &dir.join("dest"));
     assert!(cx.has_pending_prompt(), "must ask before moving by drag");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert!(dir.join("README.md").exists() && !dir.join("dest/README.md").exists());
 }
@@ -912,7 +912,7 @@ fn qa_opening_a_missing_recent_asks_to_remove_it(cx: &mut TestAppContext) {
     open_gone(&wb, cx);
     assert!(cx.has_pending_prompt(), "must ask before touching the list");
     assert_eq!(wb.read_with(cx, |w, cx| w.root_for_test(cx)), None, "nothing was opened");
-    cx.simulate_prompt_answer("Keep");
+    crate::question::cancel_keeps_focus(&wb, cx, "Keep");
     cx.run_until_parked();
     assert!(recent_paths(&wb, cx).iter().any(|(p, _)| *p == gone), "Keep keeps it");
     open_gone(&wb, cx);

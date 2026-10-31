@@ -188,6 +188,8 @@ mod qa_lsp_settings_tests;
 mod qa_workbench_tests;
 #[cfg(test)]
 mod qa_workspace_file_tests;
+mod question;
+mod questions;
 #[cfg(test)]
 mod reliability_data_tests;
 mod replace_apply;

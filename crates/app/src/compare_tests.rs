@@ -151,7 +151,7 @@ fn copying_asks_first_and_writes_only_what_the_scan_saw(cx: &mut TestAppContext)
     assert!(cx.has_pending_prompt(), "a copy is confirmed first");
     let (title, detail) = cx.pending_prompt().unwrap();
     assert!(title.contains("only-left") && detail.contains("This computer"), "{title} / {detail}");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert!(!r.join("only-left").exists(), "declining copies nothing");
 
@@ -201,6 +201,11 @@ fn delete_needs_a_writable_side_and_a_confirmation_that_names_the_host(cx: &mut 
     wait_secs(cx, 20, "the confirmation", |cx| cx.has_pending_prompt());
     let (title, detail) = cx.pending_prompt().unwrap();
     assert!(title.contains("only-right.txt") && title.contains("This computer") && detail.contains("deleted for good"), "{title} / {detail}");
+    // Cancel deletes nothing and leaves the keyboard where it was.
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
+    assert!(r.join("only-right.txt").exists());
+    wb.update_in(cx, |wb, window, cx| wb.delete_request_for_test(&view, "only-right.txt", Side::Right, window, cx));
+    wait_secs(cx, 20, "the confirmation again", |cx| cx.has_pending_prompt());
     // The file changes while the question is open: the delete is refused.
     write(&r, "only-right.txt", "changed while the prompt was open");
     cx.simulate_prompt_answer("Delete");

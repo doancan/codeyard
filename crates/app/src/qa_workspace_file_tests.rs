@@ -746,7 +746,7 @@ fn shared_tasks_run_in_the_active_folder_behind_trust(cx: &mut TestAppContext) {
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Tasks: Run Build Task", window, cx));
     cx.run_until_parked();
     assert!(cx.has_pending_prompt(), "the workspace is asked about");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert_eq!(wb.read_with(cx, |wb, _| wb.terminal_count()), 0, "Cancel runs nothing");
 

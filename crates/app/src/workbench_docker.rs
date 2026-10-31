@@ -68,15 +68,9 @@ impl Workbench {
     fn show_container_setup(&mut self, name: &str, url: &'static str, window: &mut Window, cx: &mut Context<Self>) {
         let detail = crate::i18n::tf("{} is not installed. Open the setup instructions, then try again.", &[&name]);
         self.notice = Some(Notice::Info(detail.clone().into()));
-        let answer = window.prompt(
-            PromptLevel::Info,
-            crate::i18n::t("Container setup required"),
-            Some(&detail),
-            &[crate::i18n::t("Open Setup Instructions"), crate::i18n::t("Cancel")],
-            cx,
-        );
+        let answer = crate::questions::container_setup(name).ask(window, cx);
         cx.spawn(async move |_, cx| {
-            if answer.await.ok() == Some(0) {
+            if answer.await == Some(0) {
                 cx.update(|cx| cx.open_url(url)).ok();
             }
         })
@@ -457,15 +451,9 @@ impl Workbench {
         if container.state == "running" {
             self.connect(alias, window, cx);
         } else if container.state == "exited" || container.state == "created" {
-            let answer = window.prompt(
-                PromptLevel::Info,
-                crate::i18n::t("Start this container?"),
-                Some(&container.name),
-                &[crate::i18n::t("Start and Connect"), crate::i18n::t("Cancel")],
-                cx,
-            );
+            let answer = crate::questions::start_container(&container.name).ask(window, cx);
             cx.spawn_in(window, async move |this, cx| {
-                if answer.await.ok() != Some(0) {
+                if answer.await != Some(0) {
                     return;
                 }
                 this.update_in(cx, |this, window, cx| {

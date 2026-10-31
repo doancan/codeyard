@@ -251,19 +251,9 @@ impl Workbench {
                     this.run_job(job, cx);
                     return;
                 }
-                let title = match existing.as_slice() {
-                    [one] => crate::i18n::tf("“{}” already exists. Replace it?", &[one]),
-                    many => crate::i18n::tn("{} item already exists. Replace it?", "{} items already exist. Replace them?", many.len(), &[]),
-                };
-                let answer = window.prompt(
-                    gpui::PromptLevel::Warning,
-                    &title,
-                    Some(crate::i18n::t("Files with the same name are overwritten; other files in the folder are kept.")),
-                    &[crate::i18n::t("Replace"), crate::i18n::t("Cancel")],
-                    cx,
-                );
+                let answer = crate::questions::replace_on_transfer(&existing).ask(window, cx);
                 cx.spawn(async move |this, cx| {
-                    if answer.await == Ok(0) {
+                    if answer.await == Some(0) {
                         this.update(cx, |this, cx| this.run_job(job, cx)).ok();
                     }
                 })
@@ -344,17 +334,9 @@ impl Workbench {
     /// Click on the transfer in the status bar: ask whether to cancel.
     pub(super) fn ask_cancel_transfer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(run) = self.remote.transfer.clone() else { return };
-        let answer = window.prompt(
-            gpui::PromptLevel::Warning,
-            &crate::i18n::tf("Cancel “{}”?", &[&run.label]),
-            Some(crate::i18n::t(
-                "A file that is only partly transferred is removed, and so is a new folder. A folder you merge into keeps what was already copied.",
-            )),
-            &[crate::i18n::t("Cancel Transfer"), crate::i18n::t("Keep Going")],
-            cx,
-        );
+        let answer = crate::questions::cancel_transfer(&run.label).ask(window, cx);
         cx.spawn(async move |_, _| {
-            if answer.await == Ok(0) {
+            if answer.await == Some(0) {
                 run.cancel.store(true, Ordering::Relaxed);
             }
         })

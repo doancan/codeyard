@@ -490,29 +490,10 @@ impl Workbench {
         let Some(root) = root.filter(|r| !self.is_trusted_root(r, cx)) else { return then(self, window, cx) };
         // A folder of the open workspace is asked about as the workspace, once for all of its folders.
         let (workspace, roots) = self.trust_scope(&root);
-        let (title, detail, button, name) = match workspace {
-            Some(name) => (
-                crate::i18n::t("Do you trust the authors of this workspace?"),
-                crate::i18n::tf(
-                    "“{}” and its folders can run programs through their tasks, debug configurations and project settings. Only continue if you trust where this workspace came from.",
-                    &[&name],
-                ),
-                crate::i18n::t("Trust Workspace and Continue"),
-                name,
-            ),
-            None => (
-                crate::i18n::t("Do you trust the authors of this folder?"),
-                crate::i18n::tf(
-                    "“{}” can run programs through its tasks, debug configurations and project settings. Only continue if you trust where this folder came from.",
-                    &[&ui::file_name(&root)],
-                ),
-                crate::i18n::t("Trust Folder and Continue"),
-                ui::file_name(&root).to_string(),
-            ),
-        };
-        let answer = window.prompt(PromptLevel::Warning, title, Some(&detail), &[button, crate::i18n::t("Cancel")], cx);
+        let answer = crate::questions::trust(workspace.as_deref(), ui::file_name(&root)).ask(window, cx);
+        let name = workspace.unwrap_or_else(|| ui::file_name(&root).to_string());
         cx.spawn_in(window, async move |this, cx| {
-            if answer.await == Ok(0) {
+            if answer.await == Some(0) {
                 this.update_in(cx, |this, window, cx| {
                     this.trust_roots(&roots, &name, window, cx);
                     then(this, window, cx);

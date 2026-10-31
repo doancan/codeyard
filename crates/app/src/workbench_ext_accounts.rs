@@ -330,12 +330,9 @@ impl Workbench {
                 Ok(t) => t,
                 Err(e) => return complete(Completion::Failed(v::Error::Other(e))),
             };
-            let answer = this.update_in(cx, |_, window, cx| {
-                let title = crate::i18n::tf("Let {0} act as your GitHub account {1}?", &[&ask.name, &format!("@{label}")]);
-                window.prompt(PromptLevel::Warning, &title, Some(&ask.detail()), &[crate::i18n::t("Allow"), crate::i18n::t("Cancel")], cx)
-            });
+            let answer = this.update_in(cx, |_, window, cx| crate::questions::github_account(&ask.name, &label, &ask.detail()).ask(window, cx));
             let Ok(answer) = answer else { return };
-            if answer.await != Ok(0) {
+            if answer.await != Some(0) {
                 return complete(Completion::Failed(v::Error::Cancelled));
             }
             let token = Token { access: token, refresh: None, expires: None, label, scopes: ask.scopes.clone() };
@@ -346,10 +343,9 @@ impl Workbench {
 
     /// An `[[oauth]]` provider: after the user agrees, the browser sign-in with PKCE; the callback finishes it.
     fn ask_oauth(&mut self, ask: Ask, o: ext_manifest::OAuthProvider, complete: Complete, window: &mut Window, cx: &mut Context<Self>) {
-        let title = crate::i18n::tf("Let {0} sign in to your {1} account?", &[&ask.name, &ask.provider.name]);
-        let answer = window.prompt(PromptLevel::Warning, &title, Some(&ask.detail()), &[crate::i18n::t("Sign In…"), crate::i18n::t("Cancel")], cx);
+        let answer = crate::questions::oauth_sign_in(&ask.name, &ask.provider.name, &ask.detail()).ask(window, cx);
         cx.spawn_in(window, async move |this, cx| {
-            if answer.await != Ok(0) {
+            if answer.await != Some(0) {
                 return complete(Completion::Failed(v::Error::Cancelled));
             }
             let _ = this.update(cx, |this, cx| {
@@ -591,10 +587,9 @@ impl Workbench {
             }
         };
         let ask = AddInstance { name: active.manifest.name.clone(), id: extension, publisher: self.extension_publisher(&active), instance };
-        let title = crate::i18n::tf("Let {0} use your account on {1}?", &[&ask.name, &ask.instance.host]);
-        let answer = window.prompt(PromptLevel::Warning, &title, Some(&ask.detail()), &[crate::i18n::t("Add Instance"), crate::i18n::t("Cancel")], cx);
+        let answer = crate::questions::add_instance(&ask.name, &ask.instance.host, &ask.detail()).ask(window, cx);
         cx.spawn_in(window, async move |this, cx| {
-            if answer.await != Ok(0) {
+            if answer.await != Some(0) {
                 return;
             }
             let _ = this.update(cx, |this, cx| {

@@ -892,7 +892,7 @@ fn restarting_with_unsaved_work_and_hot_exit_off_asks_first(cx: &mut TestAppCont
     assert_eq!(title, "You have unsaved changes");
     assert_eq!(detail, "Restarting loses everything since the last save.");
     assert_eq!(fake.count("relaunch") + fake.count("quit"), 0);
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert_eq!(fake.count("quit"), 0, "Cancel keeps everything as it was");
     press(&wb, cx, "Restart Now");
@@ -969,7 +969,7 @@ fn quitting_while_the_app_is_being_replaced_asks_first(cx: &mut TestAppContext) 
     cx.run_until_parked();
     let (title, _) = cx.pending_prompt().expect("the question");
     assert_eq!(title, "Codeyard is still installing an update");
-    cx.simulate_prompt_answer("Keep Waiting");
+    crate::question::cancel_keeps_focus(&wb, cx, "Keep Waiting");
     cx.run_until_parked();
     assert_eq!(fake.count("quit"), 0);
     cx.simulate_keystrokes("cmd-q");

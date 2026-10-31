@@ -150,11 +150,26 @@ The tree, in the order a screen reader walks it:
   gives them to its screen reader, with their title, text and buttons, and they are not part of this tree. The tree
   stays as it was while one is open. Cancel changes nothing and leaves the keyboard, and the tree's focus, where they
   were (the row or field the question came from); the confirming button acts and leaves the keyboard in the same view
-  (on the list when its row is gone). A failure afterwards is an assertive `Alert`. `a11y_confirm_tests.rs` and the
-  Source Control and Settings tests drive these paths from the tree: an Explorer row's menu → Delete (Cancel, Delete,
-  and a delete that fails), a Source Control file's Discard, closing an unsaved editor (Cancel, Save) and applying the
-  Rust setup to settings.jsonc (Cancel). The other questions go through the same `window.prompt` call and their own
-  functional tests; each is asked from a command, a menu item or a button the tree exposes.
+  (on the list when its row is gone). A failure afterwards is an assertive `Alert`. Every question (34 of them) is
+  built as data by `crate::questions` (`question::Question`: title, text, buttons in order, the Cancel button) and
+  asked with `Question::ask`, which marks the Cancel button ("Cancel", "Not Now", "Keep", "Keep Waiting", "Keep Going",
+  "Deny") as the platform's cancel button whatever the language, so Escape answers it on macOS and Windows (GPUI
+  recognised only the English word "Cancel"; a translated or differently worded one had no Escape and, on Windows, no
+  `IDCANCEL`). Return answers the first button; Discard puts Cancel first, so Return never discards. If something took
+  the keyboard while the question was open, Cancel gives it back to what had it. `questions_tests.rs` checks every
+  question's level, title, buttons, Cancel and Return without a window, an SSH configuration, Docker, a registry or
+  the network, and that Cancel gives the keyboard back. The questions a test can reach in a real workbench are
+  answered with Cancel through `question::cancel_keeps_focus`, which checks that the keyboard and the tree's focus are
+  where they were: deleting from an Explorer row (also from the tree), a batch delete, a move by drag, deleting for
+  good, Discard (from the tree), closing an unsaved editor (and its own window), closing the window or quitting with
+  unsaved changes, restarting for an update with unsaved changes, quitting while an update installs, the Rust setup,
+  uninstalling an extension, an extension's first use of a permission (Deny), its GitHub account and its OAuth
+  sign-in, adding an account instance, Workspace Trust (tasks and tests), a forgotten recent folder, opening a Market
+  link, a structural replace, copying and deleting in a folder comparison, a hard reset, a sync or other Git
+  confirmation, a multi-line terminal paste, closing a terminal with a running program, sending an `.http` request
+  and downloading a schema. The questions about `~/.ssh/config` (adding and removing a host, setting up key login),
+  Docker containers, transfers over SSH and macOS Full Disk Access are checked as data only, since a test cannot
+  touch the user's SSH configuration, Docker or the system settings.
 - While Extensions is visible, a `Group` with a `TabList` (Installed, Market), a `SearchInput` that controls the list
   and points at the highlighted row as its active descendant, a polite live `Status` that says how many extensions
   match (an `Alert` when the list cannot be read), and a `ListBox` of the rows (name; version, id and description).

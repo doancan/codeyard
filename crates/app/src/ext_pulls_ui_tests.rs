@@ -291,7 +291,7 @@ fn a_self_managed_instance_is_added_by_the_user_and_claims_its_host(cx: &mut Tes
         until(cx, "the consent dialog", |cx| cx.has_pending_prompt());
     };
     add(&wb, cx);
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert_eq!(wb.read_with(cx, |wb, _| wb.extension_accounts_for_test("you.probe")), ["acme"]);
 

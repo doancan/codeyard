@@ -63,8 +63,8 @@ animations* on Windows). `editor.cursorBlinking: "solid"` stops only the cursor.
   Quick Fix, whose fixes come as a picker;
 - Run and Debug, Testing, Remote Explorer and Ports, the Settings and Keyboard Shortcuts pages (a rejected value is said
   at once), and open context menus, which every list row (Explorer included) opens from a "More Actions…" button;
-- confirmations, which are the system's own dialogs: Cancel leaves the keyboard where it was, and a failure afterwards
-  interrupts speech;
+- confirmations, which are the system's own dialogs: Escape answers the button that changes nothing (in every
+  language), Cancel leaves the keyboard where it was, and a failure afterwards interrupts speech;
 - the command palette and every other picker (go to file, symbols, themes, branches…): the query, the list and the selected
   row, spoken as it changes. Activating a row picks it;
 - the terminal: the text on screen and the cursor position;

@@ -121,23 +121,9 @@ impl Workbench {
             }
             let (handle, gate) = (self.window_handle, gate.clone());
             cx.spawn(async move |this, cx| {
-                let detail = crate::i18n::tf(
-                    "A file you opened names a schema that is hosted on {}. Downloading it sends a request to that server (your IP address and the schema's address). Only allow it if you trust the file and the host.",
-                    &[&host],
-                );
-                let answer = cx
-                    .update_window(handle, |_, window, cx| {
-                        window.prompt(
-                            gpui::PromptLevel::Warning,
-                            &crate::i18n::tf("Download a schema from {}?", &[&host]),
-                            Some(&detail),
-                            &[crate::i18n::t("Download"), crate::i18n::t("Not Now")],
-                            cx,
-                        )
-                    })
-                    .ok();
+                let answer = cx.update_window(handle, |_, window, cx| crate::questions::schema_download(&host).ask(window, cx)).ok();
                 let allowed = match answer {
-                    Some(a) => a.await == Ok(0),
+                    Some(a) => a.await == Some(0),
                     None => false,
                 };
                 this.update(cx, |this, cx| {

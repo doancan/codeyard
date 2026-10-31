@@ -234,26 +234,12 @@ impl ScmPanel {
             Err(_) => None,
         };
         let deletes = changes.iter().any(|c| c.unstaged == Some(Mark::Untracked));
-        let title = match changes.as_slice() {
-            [one] => crate::i18n::tf("Discard changes in {}?", &[&format!("“{}”", ui::file_name(&one.path))]),
-            many => crate::i18n::tf("Discard changes in {} files?", &[&many.len()]),
-        };
-        let mut detail =
-            if deletes { crate::i18n::t("Untracked files will be deleted. This can't be undone.") } else { crate::i18n::t("This can't be undone.") }
-                .to_string();
-        if let Some(t) = target.as_ref().filter(|_| self.repos.len() > 1) {
-            // Several repositories: the question names the one it applies to.
-            detail = format!("{}\n{detail}", crate::i18n::tf("Repository: {}", &[&t.root]));
-        }
-        let answer = window.prompt(
-            PromptLevel::Warning,
-            &title,
-            Some(&detail),
-            &[gpui::PromptButton::cancel(crate::i18n::t("Cancel")), gpui::PromptButton::new(crate::i18n::t("Discard"))],
-            cx,
-        );
+        let names: Vec<&str> = changes.iter().map(|c| ui::file_name(&c.path)).collect();
+        // Several repositories: the question names the one it applies to.
+        let repository = target.as_ref().filter(|_| self.repos.len() > 1).map(|t| t.root.as_str());
+        let answer = crate::questions::discard(&names, deletes, repository).ask(window, cx);
         cx.spawn(async move |this, cx| {
-            if answer.await == Ok(1)
+            if answer.await == Some(1)
                 && let Some(target) = target
             {
                 this.update(cx, |this, cx| this.discard_target(target, changes, cx)).ok();

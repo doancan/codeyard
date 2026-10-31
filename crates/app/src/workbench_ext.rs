@@ -549,11 +549,9 @@ impl Workbench {
 
     /// Asks first: the extension's own storage goes with it.
     pub(super) fn uninstall_extension(&mut self, id: ExtId, window: &mut Window, cx: &mut Context<Self>) {
-        let title = crate::i18n::tf("Uninstall {}?", &[&id]);
-        let detail = crate::i18n::t("Its contributions are removed from every window, with the data it stored.");
-        let answer = window.prompt(PromptLevel::Warning, &title, Some(detail), &[crate::i18n::t("Uninstall"), crate::i18n::t("Cancel")], cx);
+        let answer = crate::questions::uninstall_extension(id.as_str()).ask(window, cx);
         cx.spawn_in(window, async move |this, cx| {
-            if answer.await != Ok(0) {
+            if answer.await != Some(0) {
                 return;
             }
             this.update_in(cx, |this, window, cx| {

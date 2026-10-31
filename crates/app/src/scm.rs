@@ -5,8 +5,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use gpui::{
-    App, Context, Entity, EventEmitter, FocusHandle, Focusable, MouseButton, MouseDownEvent, PromptLevel, SharedString, Subscription, UniformListScrollHandle,
-    Window, div, prelude::*, px,
+    App, Context, Entity, EventEmitter, FocusHandle, Focusable, MouseButton, MouseDownEvent, SharedString, Subscription, UniformListScrollHandle, Window, div,
+    prelude::*, px,
 };
 use host::Host;
 
@@ -1106,19 +1106,10 @@ impl ScmPanel {
         let Some(target) = repo.or_else(|| self.history.clone()).or_else(|| self.target(None).ok()) else { return };
         if op == CommitOp::Reset(graph::ResetMode::Hard) {
             let short = hash[..hash.len().min(7)].to_string();
-            let mut detail = crate::i18n::t("Commits after it leave this branch and every uncommitted change is lost. This can't be undone.").to_string();
-            if self.repos.len() > 1 {
-                detail = format!("{}\n{detail}", crate::i18n::tf("Repository: {}", &[&target.root]));
-            }
-            let answer = window.prompt(
-                PromptLevel::Warning,
-                &crate::i18n::tf("Hard reset to {}?", &[&short]),
-                Some(&detail),
-                &[crate::i18n::t("Reset"), crate::i18n::t("Cancel")],
-                cx,
-            );
+            let repository = (self.repos.len() > 1).then_some(target.root.as_str());
+            let answer = crate::questions::hard_reset(&short, repository).ask(window, cx);
             cx.spawn(async move |this, cx| {
-                if answer.await == Ok(0) {
+                if answer.await == Some(0) {
                     this.update(cx, |this, cx| this.run_commit_op(target, hash, op, cx)).ok();
                 }
             })

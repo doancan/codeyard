@@ -132,24 +132,12 @@ impl Workbench {
 
     fn ask_disk_access(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // macOS never lists an app here by itself: it has to be added with "+" (or dragged in) by hand.
-        let detail = format!(
-            "{}\n\n{}\n\n{}",
-            crate::i18n::t("Without Full Disk Access, Desktop, Documents or external drives may look empty."),
-            crate::i18n::t("In Privacy & Security, press + and add Codeyard, then turn it on."),
-            crate::i18n::t("Already listed after an update? Remove it with − and add it again.")
-        );
-        let answer = window.prompt(
-            gpui::PromptLevel::Info,
-            crate::i18n::t("Allow file access"),
-            Some(&detail),
-            &[crate::i18n::t("Open System Settings"), crate::i18n::t("Show Codeyard in Finder"), crate::i18n::t("Not Now")],
-            cx,
-        );
+        let answer = crate::questions::disk_access().ask(window, cx);
         cx.spawn_in(window, async move |_, cx| {
             match answer.await {
-                Ok(0) => cx.update(|_, cx| cx.open_url(crate::access::FULL_DISK_ACCESS_URL)).ok(),
+                Some(0) => cx.update(|_, cx| cx.open_url(crate::access::FULL_DISK_ACCESS_URL)).ok(),
                 // Both windows side by side: the app can be dragged straight from Finder into the list.
-                Ok(1) => cx
+                Some(1) => cx
                     .update(|_, cx| {
                         cx.open_url(crate::access::FULL_DISK_ACCESS_URL);
                         if let Some(bundle) = crate::access::app_bundle() {
