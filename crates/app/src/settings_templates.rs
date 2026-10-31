@@ -217,9 +217,27 @@ pub const TEMPLATE: &str = r##"// codeyard settings. Saved changes apply immedia
   // Keys: rust c go python typescript java csharp php ruby kotlin swift lua bash html css (opt-in: json yaml toml).
   // "lsp.servers": { "python": { "command": "pylsp", "args": [] }, "go": null },
   // Server settings, without replacing the server: "lsp.servers": { "rust": { "settings": { "rust-analyzer.check.command": "clippy" } } },
+  // "Preferences: Apply Rust Setup…" writes a common Rust setup here after showing the exact changes; "Preferences:
+  // Reset Rust Setup…" removes it again.
   "lsp.enabled": true,
 }
 "##;
+
+/// The optional Rust setup: (path into settings.jsonc, value). Clippy for checks, checks with the Cargo features Run and
+/// Debug build with (`rust.features`), rustfmt (through rust-analyzer) on save, and an output folder of its own for
+/// checks (inside the target directory, `rust.targetDir` or Cargo's) so they do not wait for builds. Reset removes these.
+pub fn rust_setup(s: &crate::settings::Settings) -> Vec<(Vec<&'static str>, serde_json::Value)> {
+    use serde_json::json;
+    let ra = |key| vec!["lsp.servers", "rust", "settings", key];
+    vec![
+        (ra("rust-analyzer.check.command"), json!("clippy")),
+        (ra("rust-analyzer.cargo.features"), json!(s.rust_build.features)),
+        (ra("rust-analyzer.cargo.noDefaultFeatures"), json!(s.rust_build.no_default_features)),
+        (ra("rust-analyzer.cargo.targetDir"), json!(true)),
+        (vec!["editor.formatters", "rust"], json!("lsp")),
+        (vec!["editor.formatOnSave"], json!(true)),
+    ]
+}
 
 pub const KEYBINDINGS_TEMPLATE: &str = r#"// codeyard keyboard shortcuts. These are added on top of the defaults.
 // "when" is optional: Editor, FileTree, Terminal, Picker, Workbench...

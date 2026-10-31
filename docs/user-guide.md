@@ -1316,6 +1316,11 @@ A Cargo folder needs no setup. Install `rust-analyzer` (`rustup component add ru
 the debugger can show the standard library's code, `rust-src` (`rustup component add rust-src`). In an SSH folder both are
 used from the server, with the toolchain the project's `rust-toolchain.toml` picks there.
 
+**Rust setup in one step.** "Preferences: Apply Rust Setup…" shows the exact lines it adds to `settings.jsonc` and
+writes them once you confirm: Clippy for checks, checks with the Cargo features Run and Debug build with
+(`rust.features`, `rust.noDefaultFeatures`), a check folder of its own, and rustfmt on save. Comments and other settings
+stay as they are; "Preferences: Reset Rust Setup…" removes exactly those lines again.
+
 **Check the way you build.** rust-analyzer runs `cargo check` when you save. Tell it to run Clippy instead, to analyse the
 code behind your Cargo features, or to keep a target folder of its own, in `lsp.servers` (no `command`: the default server
 keeps running, with these settings):

@@ -580,6 +580,73 @@ impl Workbench {
         }
         cx.notify();
     }
+
+    pub(super) fn apply_rust_setup(&mut self, _: &ApplyRustSetup, window: &mut Window, cx: &mut Context<Self>) {
+        self.change_rust_setup(false, window, cx);
+    }
+
+    pub(super) fn reset_rust_setup(&mut self, _: &ResetRustSetup, window: &mut Window, cx: &mut Context<Self>) {
+        self.change_rust_setup(true, window, cx);
+    }
+
+    /// Shows the exact change to `settings.jsonc` and writes it once confirmed, if the file did not change meanwhile.
+    fn change_rust_setup(&mut self, reset: bool, window: &mut Window, cx: &mut Context<Self>) {
+        let Some((spath, _)) = self.config_paths() else { return };
+        let text = match settings::ensure_file(&spath, settings::TEMPLATE).and_then(|_| std::fs::read_to_string(&spath)) {
+            Ok(text) => text,
+            Err(e) => {
+                self.notice = Some(Notice::Error(crate::i18n::tf("Could not read {0}: {1}", &[&spath.display(), &e]).into()));
+                return cx.notify();
+            }
+        };
+        let (new, diff) = rust_setup_change(&text, cx.global::<Settings>(), reset);
+        if diff.is_empty() {
+            let done =
+                if reset { crate::i18n::t("settings.jsonc has no Rust setup to reset.") } else { crate::i18n::t("settings.jsonc already has the Rust setup.") };
+            self.notice = Some(Notice::Info(done.into()));
+            return cx.notify();
+        }
+        let (title, button) = if reset {
+            (crate::i18n::t("Reset the Rust setup in settings.jsonc?"), crate::i18n::t("Reset"))
+        } else {
+            (crate::i18n::t("Apply the Rust setup to settings.jsonc?"), crate::i18n::t("Apply"))
+        };
+        let answer = window.prompt(gpui::PromptLevel::Info, title, Some(&diff), &[button, crate::i18n::t("Cancel")], cx);
+        cx.spawn_in(window, async move |this, cx| {
+            if answer.await != Ok(0) {
+                return;
+            }
+            this.update_in(cx, |this, window, cx| {
+                let unchanged = std::fs::read_to_string(&spath).is_ok_and(|now| now == text);
+                match if unchanged {
+                    crate::fsutil::write_atomic(&spath, new)
+                } else {
+                    Err(std::io::Error::other(crate::i18n::t("the file changed; try again")))
+                } {
+                    Ok(()) => {
+                        this.notice = None;
+                        this.reload_config(window, cx);
+                    }
+                    Err(e) => this.notice = Some(Notice::Error(crate::i18n::tf("Could not write {0}: {1}", &[&spath.display(), &e]).into())),
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+}
+
+gpui::actions!(workbench, [ApplyRustSetup, ResetRustSetup]);
+
+/// `text` with the Rust setup written (`reset`: removed), and the unified diff of that change (empty: no change).
+pub fn rust_setup_change(text: &str, s: &Settings, reset: bool) -> (String, String) {
+    let new = settings::rust_setup(s).iter().fold(text.to_string(), |t, (path, v)| settings::set_path_in(&t, path, (!reset).then_some(v)));
+    if new == text {
+        return (new, String::new());
+    }
+    let diff = similar::TextDiff::from_lines(text, &new).unified_diff().context_radius(1).to_string();
+    (new, diff)
 }
 
 /// Whether the byte is real JSON (`false` inside comments and strings), so a `]` or `}`
@@ -691,3 +758,7 @@ mod tests {
         assert_eq!(v.as_array().map(Vec::len), Some(2));
     }
 }
+
+#[cfg(test)]
+#[path = "rust_setup_tests.rs"]
+mod rust_setup_tests;

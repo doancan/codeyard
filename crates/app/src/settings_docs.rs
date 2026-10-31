@@ -70,6 +70,15 @@ pub const FILE_ONLY: &[(&str, &str, &str, &str)] = &[
         "Extension registries besides the public one, e.g. a company's own `yard`: a short `name`, its `https://` address, the hex public keys that sign its `root.json` and how many of them must (default: all). User settings only.",
     ),
     ("spelling.languages", "list of dictionary ids", "`[\"en\"]`", "Dictionaries used together; install more with *Spelling: Install Dictionary…*."),
+    ("rust.features", "list of feature names", "`[]`", "Cargo features Run and Debug build with, besides a target's required features."),
+    ("rust.noDefaultFeatures", "boolean", "`false`", "Build Run and Debug targets without the package's default features."),
+    ("rust.profile", "string", "Cargo's default (`dev`)", "Cargo profile Run and Debug build with, e.g. `release` or a custom `[profile.*]`."),
+    (
+        "rust.targetDir",
+        "path",
+        "Cargo's own",
+        "Output folder for Run and Debug builds (`--target-dir`); a relative path is resolved against the workspace folder on the machine that builds, also over SSH.",
+    ),
     ("workbench.colorCustomizations", "object", "`{}`", "Override single colour roles; an entry in `[Theme Name]` applies to that theme only."),
 ];
 
@@ -172,7 +181,7 @@ mod tests {
     /// Every key the settings parser reads is documented, either in the catalog or in `FILE_ONLY`.
     #[test]
     fn docs_reference_covers_every_parsed_setting() {
-        let src = concat!(include_str!("settings.rs"), include_str!("settings_terminal.rs"));
+        let src = concat!(include_str!("settings.rs"), include_str!("settings_terminal.rs"), include_str!("settings_rust.rs"));
         let mut parsed = std::collections::BTreeSet::new();
         for m in ["bool", "choice", "number", "integer", "numbers", "strings", "string", "code_actions", "scale"] {
             let needle = format!("r.{m}(\"");
