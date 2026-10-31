@@ -244,9 +244,11 @@ probe as the workbench's lists (`painted.rs`).
   what is visible; a row scrolled out of view has none), but individual Explorer rows, status items, Source Control
   controls, the buttons inside rows and text runs do not yet expose their painted frames. Text still needs `character_positions` and
   `character_widths`; precise character hit testing, caret highlighting and magnifier caret tracking remain unimplemented.
-- **Focus** was not observed live on macOS (`Focused="0"` in every dump: the test window was not key). The code path
-  (`TreeUpdate.focus`, `update_view_focus_state`) exists but is unverified.
-- The editor and the Explorer expose a bounded range, not the whole document or tree. Run offsets, the selection and
+- **Focus** was observed live on macOS only for Source Control: setting `AXFocused` on a change row of a dev build moved
+  the keyboard cursor there and the row reported `Focused="1"` as the application's `AXFocusedUIElement`. Other focus
+  paths (`TreeUpdate.focus`, `update_view_focus_state`) are covered by tests but not observed in a live window.
+- The editor, the Explorer and Source Control's change list expose a bounded range, not the whole document, tree or
+  list. Run offsets, the selection and
   set positions are document- or tree-relative, but the text value of the editor node starts at the range, so a
   client that counts characters from the node's value sees offsets relative to the first exposed line; the scroll
   position and description give that line. Primary selection only; no multi-cursor, folding, wrapped lines, RTL or CRLF handling.
@@ -257,14 +259,15 @@ probe as the workbench's lists (`painted.rs`).
   Explorer's Add, SSH config and Refresh buttons, and the Debug Console. Only the tabs of the focused editor group are
   listed, and diff, large-file and page tabs are not.
 - Keyboard: the Run and Debug lists (variables, watches, call stack, breakpoints), the Testing tree, the Remote
-  Explorer and the Ports list are tab stops with a cursor row (Up/Down/Home/End, Enter as a click on the row, the focus
+  Explorer, the Ports list and Source Control's change list are tab stops with a cursor row (Up/Down/Home/End, Enter as a click on the row, the focus
   colour on the list and the row). Shift+F10 and the Menu key (`list.showContextMenu`) open the row's menu under it; the
   menu returns the keyboard to the list. While such a list has the focus, the tree's focus is its cursor row. The same
   key opens the Explorer's menu for the selection and the editor's at the caret. The cursor always names a row of the
   list as it is now: when rows change under it, it stays inside the list and the key acts on the row it is on (a row
   without a menu opens none).
 - System confirmation dialogs on Linux are drawn by GPUI inside the window (there is no Linux adapter, see below).
-- No scroll actions, no `Blur`. Explicit `Expand`/`Collapse` only in the Run and Debug, Testing and Remote Explorer
+- Scroll actions only on the Explorer, the editor and Source Control's change list; no `Blur`. Source Control's change
+  list has no context menu key yet. Explicit `Expand`/`Collapse` only in the Run and Debug, Testing and Remote Explorer
   trees (elsewhere Click toggles).
 - The update window on macOS has no adapter of its own.
 - Linux (AT-SPI) is not implemented: it needs bounds, window events and an async D-Bus runtime.

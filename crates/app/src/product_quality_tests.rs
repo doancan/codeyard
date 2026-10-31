@@ -215,3 +215,49 @@ fn product_rust_manifest_lookup_does_not_escape_the_workspace(cx: &mut TestAppCo
     });
     assert!(wb.read_with(cx, |wb, cx| wb.active_path(cx)).unwrap().ends_with("/src/lib.rs"));
 }
+
+/// The Rust notice names the case: a restricted (untrusted) workspace, then a trusted one whose server is not running,
+/// and a file that is not Rust. Open Cargo.toml still works in each Rust case, without a server.
+#[gpui::test]
+fn product_rust_commands_tell_restricted_unavailable_and_non_rust_apart(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let dir = fresh("product-rust-cases");
+    std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"cases\"\nversion = \"0.1.0\"\n").unwrap();
+    std::fs::create_dir(dir.join("src")).unwrap();
+    let main = dir.join("src/main.rs");
+    std::fs::write(&main, "fn main() {}\n").unwrap();
+    std::fs::write(dir.join("notes.txt"), "notes\n").unwrap();
+    let (wb, cx) = setup(cx);
+    cx.update(|_, cx| {
+        let s = cx.global_mut::<crate::settings::Settings>();
+        s.workspace_trust = true;
+        // No Rust server at all, so nothing can answer whatever is installed on this machine.
+        s.lsp_servers.push(("rust".into(), None));
+    });
+    open(&wb, &dir, cx);
+    let notice = |wb: &Entity<Workbench>, cx: &mut VisualTestContext, command: &str| {
+        wb.update_in(cx, |wb, window, cx| {
+            wb.clear_notice_for_test();
+            wb.run_command_for_test(command, window, cx)
+        });
+        cx.run_until_parked();
+        wb.read_with(cx, |wb, _| wb.notice_for_test()).map(|(_, m)| m).unwrap_or_default()
+    };
+    wb.update_in(cx, |wb, window, cx| wb.open_in_root(&crate::ui::local_path(&main), window, cx));
+    cx.run_until_parked();
+    let restricted = notice(&wb, cx, "Rust: Expand Macro Recursively");
+    assert!(restricted.contains("until you trust it") && restricted.contains("Workspace: Trust This Folder"), "{restricted}");
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Workspace: Trust This Folder", window, cx));
+    cx.run_until_parked();
+    let unavailable = notice(&wb, cx, "Rust: Locate Parent Module");
+    assert!(unavailable.contains("not ready") && unavailable.contains("Restart Language Servers"), "{unavailable}");
+    // Without a server the manifest is still found.
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Rust: Open Cargo.toml", window, cx));
+    crate::qa_integration_tests::wait_ticking(cx, "the manifest", |cx| {
+        wb.read_with(cx, |wb, cx| wb.active_path(cx)).is_some_and(|p| p.ends_with("/Cargo.toml"))
+    });
+    // A file that is not Rust.
+    wb.update_in(cx, |wb, window, cx| wb.open_in_root(&crate::ui::local_path(&dir.join("notes.txt")), window, cx));
+    cx.run_until_parked();
+    assert_eq!(notice(&wb, cx, "Rust: Expand Macro Recursively"), "Open a Rust file first");
+}
