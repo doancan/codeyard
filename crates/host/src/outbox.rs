@@ -21,6 +21,7 @@ const POST_SLACK: usize = 8 * 1024 * 1024;
 const ROOM_TIMEOUT: Duration = Duration::from_secs(60);
 
 type Done = mpsc::Sender<io::Result<()>>;
+type Then = Box<dyn FnOnce() + Send>;
 
 struct Item {
     bytes: Vec<u8>,
@@ -35,6 +36,10 @@ struct State {
     closed: bool,
     /// The first write error: everything queued behind it is failed with it and nothing new is accepted.
     failed: Option<io::ErrorKind>,
+    /// Runs once the thread has stopped writing (`close_then`).
+    then: Option<Then>,
+    /// The thread has stopped: nothing more is written.
+    finished: bool,
 }
 
 #[derive(Default)]
@@ -81,6 +86,22 @@ impl Writer {
         self.shared.changed.notify_all();
     }
 
+    /// Like `close`, then `then` runs on the writer's thread once everything queued was written (or a write failed),
+    /// so ending the connection in `then` cannot cut off a frame queued before (a `Bye`, the last keystrokes). Runs at
+    /// once if the thread has already stopped.
+    pub(crate) fn close_then(&self, then: impl FnOnce() + Send + 'static) {
+        let mut st = self.shared.state.locked();
+        st.closed = true;
+        if st.finished {
+            drop(st);
+            then();
+            return;
+        }
+        st.then = Some(Box::new(then));
+        drop(st);
+        self.shared.changed.notify_all();
+    }
+
     fn enqueue(&self, bytes: Vec<u8>, deadline: Option<Instant>) -> io::Result<mpsc::Receiver<io::Result<()>>> {
         let len = bytes.len();
         let mut st = self.shared.state.locked();
@@ -119,7 +140,20 @@ impl Drop for Writer {
     }
 }
 
-fn run(shared: &Shared, mut w: BufWriter<Box<dyn Write + Send>>) {
+fn run(shared: &Shared, w: BufWriter<Box<dyn Write + Send>>) {
+    write_queue(shared, w);
+    let then = {
+        let mut st = shared.state.locked();
+        st.finished = true;
+        st.then.take()
+    };
+    if let Some(then) = then {
+        then();
+    }
+}
+
+/// Write queued frames until the writer is closed and the queue is empty, or a write fails.
+fn write_queue(shared: &Shared, mut w: BufWriter<Box<dyn Write + Send>>) {
     loop {
         let item = {
             let mut st = shared.state.locked();
@@ -191,5 +225,37 @@ mod tests {
         drop(release);
         assert_eq!(result.unwrap_err().kind(), io::ErrorKind::TimedOut);
         assert!(elapsed < Duration::from_secs(1), "30 ms queue timeout took {elapsed:?}");
+    }
+
+    #[test]
+    fn close_then_runs_after_everything_queued_was_written() {
+        struct Slow(Arc<Mutex<Vec<u8>>>);
+        impl Write for Slow {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                std::thread::sleep(Duration::from_millis(20));
+                self.0.locked().extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        let written = Arc::new(Mutex::new(Vec::new()));
+        let writer = Writer::start(BufWriter::with_capacity(0, Box::new(Slow(written.clone())))).unwrap();
+        for b in 0..5u8 {
+            writer.post(vec![b]).unwrap();
+        }
+        let (tx, rx) = mpsc::channel();
+        let seen = written.clone();
+        writer.close_then(move || {
+            let _ = tx.send(seen.locked().clone());
+        });
+        assert_eq!(rx.recv_timeout(Duration::from_secs(5)).unwrap(), vec![0, 1, 2, 3, 4], "all of it, before the hook");
+        // The thread has stopped: a later hook runs at once.
+        let (tx, rx) = mpsc::channel();
+        writer.close_then(move || {
+            let _ = tx.send(());
+        });
+        rx.try_recv().unwrap();
     }
 }

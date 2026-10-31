@@ -111,8 +111,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (with `window.restoreSession`, the default). Opening the folder again within 5 minutes brings the same shells back,
   with their output from meanwhile, and says "Reconnected to terminal session". A terminal that cannot be taken back is
   a new shell as before, and nothing is ever typed into it. Terminals no window takes back are ended after 5 minutes.
-  Closing the window or the folder, or opening another one, still ends them at once. Terminals another Codeyard
-  instance has open stay with it: the window starts new shells and says so. The agent protocol is version 16.
+  Closing the window still ends them at once; opening another folder or closing the folder keeps the panel's
+  terminals, as without the daemon, until the window closes. Terminals another Codeyard instance has open stay with it:
+  the window starts new shells and says so. The agent protocol is version 16.
 - The lists of the Run and Debug view, the Testing view, the Remote Explorer and the Ports panel work with the keyboard:
   Tab reaches them, Up/Down/Home/End move a cursor row shown in the focus colour, and Enter does what a click on the
   row does. Shift+F10 (and the Menu key) opens the focused row's menu under it and Escape returns to the row; the same
@@ -296,6 +297,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- On a busy machine, closing a window could leave its terminals running for 5 minutes, and the last keys typed into a
+  terminal before quitting could be lost: the connection to the terminal daemon was closed before the window's `Bye`
+  (or those keys) had been written. The connection now closes only after everything queued has gone out (at most 5
+  seconds for a daemon that stopped reading).
 - Views made from `cyx new view` (Rust and TypeScript) and the `hello-view` examples drew an error instead of their
   content: they wrote a `{ "type": "column", … }` shorthand that Codeyard refuses ("unknown field `type`"), while
   `cyx test` said "view main draws" (#182). Both SDKs now have `ui` functions that write the documented form
