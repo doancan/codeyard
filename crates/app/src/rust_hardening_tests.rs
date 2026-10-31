@@ -322,7 +322,12 @@ fn rust_debug_builds_the_picked_target_with_the_chosen_features_profile_and_outp
 
 #[gpui::test]
 fn rust_debug_build_options_apply_on_the_ssh_host(cx: &mut gpui::TestAppContext) {
-    let Some(_sshd) = crate::test_sshd::start("rust-debug-build-options-ssh") else { return };
+    let Some(sshd) = crate::test_sshd::start("rust-debug-build-options-ssh") else { return };
+    // The server's non-login shell must find `cargo` (CI runners keep `~/.cargo/bin` out of that PATH).
+    if sshd.run("command -v cargo").is_none() {
+        crate::test_sshd::skip_missing("cargo on the SSH server's PATH");
+        return;
+    }
     let Some(python) = fake_adapter_python() else { return };
     let dir = std::fs::canonicalize(two_target_workspace("rust-debug-build-options-ssh")).unwrap();
     let (wb, cx) = crate::qa_integration_tests::ssh_workbench(cx, &dir);
