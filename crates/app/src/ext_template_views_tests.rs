@@ -112,7 +112,9 @@ fn setup(cx: &mut TestAppContext, cfg: PathBuf) -> (Entity<Workbench>, &mut Visu
 /// Run the window until the view's `text` elements are `want` (the exthost is a real process), or fail with the view's
 /// error.
 fn wait_for(wb: &Entity<Workbench>, cx: &mut VisualTestContext, want: &[&str]) {
-    let deadline = Instant::now() + Duration::from_secs(60);
+    // The first start compiles the component (13 MB for TypeScript), which takes a while on a shared runner; CI's
+    // CODEYARD_TEST_TIMEOUT_SCALE stretches the limit.
+    let deadline = Instant::now() + Duration::from_secs(120 * crate::test_sshd::timeout_scale());
     while Instant::now() < deadline {
         cx.run_until_parked();
         let texts = wb.read_with(cx, |wb, _| wb.ext_view_texts_for_test(VIEW));
