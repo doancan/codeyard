@@ -21,7 +21,7 @@ fn the_explorer_range_follows_the_selection_and_scroll_actions(cx: &mut TestAppC
     open(&wb, &dir, cx);
     let tree = wb.read_with(cx, |wb, _| wb.roots.primary.clone());
     wait_ticking(cx, "rows", |cx| tree.read_with(cx, |t, _| t.row_names().len() == 3_000));
-    let path = dir.join("f2500.txt").to_string_lossy().into_owned();
+    let path = crate::ui::local_path(&dir.join("f2500.txt"));
     tree.update(cx, |t, cx| t.a11y_select(&path, false, cx));
     cx.run_until_parked();
     let snap = wb.update_in(cx, |wb, window, cx| wb.a11y_snapshot(window, cx));
