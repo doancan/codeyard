@@ -95,7 +95,11 @@ fn foreign_imports_and_missing_exports_are_refused() {
 
 /// A component built from the API's WIT as another version: `wit` edits each file's text (the version, items added).
 fn build_from(wit: impl Fn(&str) -> String, imports: &[&str], export: &str) -> (Vec<u8>, ext_api::since::Items) {
-    let files: Vec<(String, String)> = ext_api::WIT.iter().map(|(n, t)| (n.to_string(), wit(t))).collect();
+    let files: Vec<(String, String)> = ext_api::WIT
+        .iter()
+        // Windows checkouts may turn line ends into CRLF; the edits are written with LF.
+        .map(|(n, t)| (n.to_string(), wit(&t.replace("\r\n", "\n"))))
+        .collect();
     let mut map = wit_parser::SourceMap::new();
     for (n, t) in &files {
         map.push_str(n, t.clone());
