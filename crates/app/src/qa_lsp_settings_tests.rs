@@ -25,7 +25,7 @@ pub(crate) fn write_settings(cfg: &Path, fake: &FakeServer, entry: Value, top: V
     let (command, args) = fake.command();
     let mut server = json!({ "command": command, "args": args });
     server.as_object_mut().unwrap().extend(entry.as_object().cloned().unwrap_or_default());
-    let mut file = json!({ "lsp.servers": { "rust": server } });
+    let mut file = json!({ "lsp.enabled": true, "lsp.servers": { "rust": server } });
     file.as_object_mut().unwrap().extend(top.as_object().cloned().unwrap_or_default());
     std::fs::write(cfg.join("settings.jsonc"), file.to_string()).unwrap();
 }
@@ -256,7 +256,7 @@ fn qa_lsp_an_untrusted_project_cannot_configure_a_server(cx: &mut TestAppContext
     let Some(fake) = FakeServer::new(&d.join("server"), &json!({})) else { return };
     let cfg = d.join("config");
     std::fs::create_dir_all(&cfg).unwrap();
-    std::fs::write(cfg.join("settings.jsonc"), r#"{ "security.workspaceTrust.enabled": true }"#).unwrap();
+    std::fs::write(cfg.join("settings.jsonc"), r#"{ "security.workspaceTrust.enabled": true, "lsp.enabled": true }"#).unwrap();
     let project = d.join("project");
     std::fs::create_dir_all(project.join(".codeyard")).unwrap();
     let (command, args) = fake.command();
@@ -346,7 +346,7 @@ pub(crate) fn cargo_project(name: &str, lib: &str, features: &str) -> (PathBuf, 
 }
 
 fn write_rust_settings(cfg: &Path, settings: Value) {
-    let file = json!({ "lsp.servers": { "rust": { "settings": { "rust-analyzer": settings } } } });
+    let file = json!({ "lsp.enabled": true, "lsp.servers": { "rust": { "settings": { "rust-analyzer": settings } } } });
     std::fs::write(cfg.join("settings.jsonc"), file.to_string()).unwrap();
 }
 
@@ -407,7 +407,7 @@ fn qa_lsp_real_rust_analyzer_runs_clippy_when_configured(cx: &mut TestAppContext
         return;
     }
     let (project, cfg) = cargo_project("cy_clippy", "pub fn f() -> i32 {\n    let unused = 1;\n    return 1;\n}\n", "");
-    std::fs::write(cfg.join("settings.jsonc"), "{}").unwrap();
+    std::fs::write(cfg.join("settings.jsonc"), r#"{ "lsp.enabled": true }"#).unwrap();
     let (wb, cx) = setup_with_config(cx, &cfg);
     let file = open_project(&wb, cx, &project);
     let checked = |d: &crate::lsp::Diagnostic| d.source.as_deref() == Some("rustc") && d.message.contains("unused");

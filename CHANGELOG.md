@@ -336,6 +336,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Unit tests no longer start an installed language server from generic editor and workbench fixtures: under test
+  `lsp.enabled` defaults to off and LSP integration tests turn it on explicitly. The shipped default stays on.
 - On a busy machine, closing a window could leave its terminals running for 5 minutes, and the last keys typed into a
   terminal before quitting could be lost: the connection to the terminal daemon was closed before the window's `Bye`
   (or those keys) had been written. The connection now closes only after everything queued has gone out (at most 5

@@ -40,7 +40,8 @@ the 2026-10-27 local run passed 1,516 tests, with three documented manual/data-d
 
 1. **Hermetic.** Tests never touch the real home directory, config, state or cache and never use the network.
    Use `setup_with_config(cx, &fresh(...))` or `CODEYARD_CONFIG_DIR` / `CODEYARD_STATE_DIR`; services that download
-   (schemas, dictionaries) are disabled under `cfg!(test)`; LSP is turned off unless the test is about LSP.
+   (schemas, dictionaries) are disabled under `cfg!(test)`; `lsp.enabled` defaults to off under `cfg!(test)`, and
+   LSP integration tests turn it on explicitly.
 2. **No real external tools by accident.** A test that would start `clangd`, `gh` or a browser sets the feature off or
    uses a fake `Runner`.
 3. **Failure paths are tested as hard as success paths.** Every message that tells the user what to do has a test

@@ -394,6 +394,7 @@ fn extension_language_and_server_work_over_ssh(cx: &mut TestAppContext) {
     let root = cfg.join("project");
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("a.foo"), "# hello\n").unwrap();
+    std::fs::write(cfg.join("settings.jsonc"), r#"{ "lsp.enabled": true }"#).unwrap();
     let (wb, cx) = setup(cx, &cfg);
     assert!(cx.update(|_, cx| cx.global::<crate::settings::Settings>().lsp_servers.iter().any(|(k, _)| k == "foo")), "the server joins lsp.servers");
     wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
