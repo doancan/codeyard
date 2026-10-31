@@ -260,6 +260,8 @@ impl Workbench {
                     .into_any_element(),
             })
             .collect();
+        // Each row records where it is painted, for the accessibility tree.
+        let rows = rows.into_iter().enumerate().map(|(i, row)| div().relative().child(row).child(a11y::part_frame(a11y::Part::Problem(i), cx)));
         div().id("problems").size_full().overflow_y_scroll().children(rows).into_any_element()
     }
 
@@ -270,6 +272,27 @@ impl Workbench {
             problem_rows(&self.all_problems(), root.as_deref()).into_iter().nth(i)
         {
             self.open_location(path, line, col, window, cx);
+        }
+    }
+
+    /// "Quick Fix…" on Problems row `i`: the problem opens at its place, then its fixes are asked for there, as Quick
+    /// Fix at the caret does (a file that is still opening asks once it is in front).
+    pub(super) fn quick_fix_problem_row(&mut self, i: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let root = self.root(cx);
+        let Some(ProblemRow::Problem { path, line, col, .. }) = problem_rows(&self.all_problems(), root.as_deref()).into_iter().nth(i) else { return };
+        self.open_location(path.clone(), line, col, window, cx);
+        match &mut self.lsp.pending_reveal {
+            // Still opening: the fixes are asked for when it is in front.
+            Some((p, _, _, fix)) if *p == path => *fix = true,
+            _ => self.code_actions(&CodeActions, window, cx),
+        }
+    }
+
+    /// A location shown in its editor (`activate`), and its fixes asked for when Problems' Quick Fix… waits for them.
+    pub(super) fn reveal_location(&mut self, ed: Entity<EditorView>, (line, col): (u32, u32), fix: bool, window: &mut Window, cx: &mut Context<Self>) {
+        ed.update(cx, |e, cx| e.reveal_lsp(line, col, window, cx));
+        if fix {
+            self.code_actions(&CodeActions, window, cx);
         }
     }
 

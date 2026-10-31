@@ -896,6 +896,7 @@ Files
 Files are still unsaved. Resolve editor errors, then start debugging again.	
 Files of {0} that are missing or changed: {1}. Reinstall it.	
 Files to exclude	
+Files to include	
 Files to include (e.g. *.rs, src/**)	
 Files to include / exclude	
 Files were changed by a replacement since this search ran. Rerun to refresh.	
@@ -2164,6 +2165,8 @@ Stopping installation and cleaning temporary files…
 Storage information is unavailable.	
 Store secrets in your keychain	
 String interpolation is not supported	
+Structural pattern	
+Structural search	
 Structural search: the pattern is code; $X matches one node, $$$X several	
 Suggest words from the file when there is no language server	
 Suggestions	
@@ -2775,6 +2778,7 @@ latest {} open
 left	
 light	
 limit needs a whole number	
+line {0}, column {1}	
 line {0}: {1}	
 lines {0}–{1}	
 link target differs	

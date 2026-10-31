@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Screen readers can use the whole Search view and fix problems from the Problems panel: the query (typing from the
+  screen reader searches), its options as check boxes, the replacement, Replace All, the include/exclude fields, the
+  result line (a search or pattern error is announced at once) and the results as a tree of files and matches that
+  expand, collapse, open, and offer Replace in this file and Dismiss. Each problem has a Quick Fix… button that opens it
+  and lists its fixes in a picker; the problem counts are announced as they change. Search and Problems rows report the
+  frames they are drawn at.
 - Screen readers and magnifiers get where things are drawn, not only the main areas: Explorer rows, the editor tabs,
   the status bar's items, the find bar's fields and buttons, Source Control's message field, commit button, groups,
   files and their buttons, and the buttons inside Run and Debug, Testing, Remote Explorer and Ports rows each report

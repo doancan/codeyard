@@ -53,6 +53,11 @@ animations* on Windows). `editor.cursorBlinking: "solid"` stops only the cursor.
 - suggestions while typing: the selected suggestion is spoken as it changes, and can be inserted from the list;
 - the find bar: the search and replace fields, the match count ("3 of 12", spoken as it changes), the options with their
   state, and the buttons;
+- the Search view: the query, its options, the replacement and the include/exclude fields, the result line (an error
+  interrupts speech) and the results as a tree of files and matches. Activating a match opens it;
+- the Problems panel: the counts (spoken as they change), each problem with its file, line and column, opening it, and its
+  Quick Fix, whose fixes come as a picker;
+- Run and Debug, Testing, Remote Explorer and Ports, the Settings and Keyboard Shortcuts pages, and open context menus;
 - the command palette and every other picker (go to file, symbols, themes, branches…): the query, the list and the selected
   row, spoken as it changes. Activating a row picks it;
 - the terminal: the text on screen and the cursor position;
@@ -75,11 +80,9 @@ These are the important gaps, in rough order of how much they get in the way. Th
 - **On-screen positions.** The window, its main areas, the rows and controls on screen (Explorer, tabs, status bar,
   find bar, Source Control, Run and Debug, Testing, Remote Explorer, Ports, Settings and menus) and every character of
   the editor and terminal text have the bounds they are drawn at, at every zoom level and in windows of their own, so a
-  magnifier can follow the caret. Search, Problems and Extensions rows, pickers and suggestions do not have their own
-  positions yet.
-- **Some views are still silent:** search results, the Source Control graph, worktrees and sync controls, debug, testing and remote
-  views, the problems, output and ports panels, hover popups, the Settings and Keyboard Shortcuts pages, context
-  menus and dialogs other than the update dialog.
+  magnifier can follow the caret. Extensions rows, pickers and suggestions do not have their own positions yet.
+- **Some views are still silent:** the Source Control graph, worktrees and sync controls, hover and signature popups and
+  the Debug Console.
 - The editor exposes about 300 lines around the caret, not the whole file. Only the primary selection is exposed, not extra
   cursors. Folding and wrapped lines are not reflected. The terminal exposes the screen, not the scrollback.
 - Only editor and terminal text can be enlarged. The rest of the interface (sidebar, tabs, status bar, menus, dialogs) keeps a

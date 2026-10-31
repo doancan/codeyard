@@ -2062,13 +2062,13 @@ impl Workbench {
         if cx.global::<Settings>().auto_reveal {
             self.reveal_in_trees(&path, cx);
         }
-        if let Some((p, line, col)) = self.lsp.pending_reveal.take()
+        if let Some((p, line, col, fix)) = self.lsp.pending_reveal.take()
             && p == path
         {
             let ed = self.tabs.editors[ix].clone();
             self.refresh_active_flags(cx);
             self.tabs.open_error = None;
-            ed.update(cx, |e, cx| e.reveal_lsp(line, col, window, cx));
+            self.reveal_location(ed, (line, col), fix, window, cx);
             self.persist_session(cx);
             cx.notify();
             return;

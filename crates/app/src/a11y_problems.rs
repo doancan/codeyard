@@ -14,13 +14,20 @@ pub(super) use dialogs::{DIALOG_LINE, FIXED as DIALOG_FIXED};
 #[path = "a11y_row_menus.rs"]
 mod row_menus;
 pub(super) use row_menus::ROW_MENU;
+#[path = "a11y_search.rs"]
+mod search_side;
 #[path = "a11y_side_views.rs"]
 mod side;
+pub(in crate::workbench) use search_side::{FIXED as SEARCH_FIXED, SEARCH_ROW};
 pub(super) use side::{DEBUG_FIXED, DEBUG_ROW, FIXED as SIDE_FIXED, MENU_ITEM, REMOTE_ROW, TEST_ROW};
 
 const PROBLEMS: NodeId = NodeId(68);
 const PROBLEMS_EMPTY: NodeId = NodeId(69);
+/// The counts, a polite live region: a change is spoken.
+const PROBLEMS_COUNT: NodeId = NodeId(117);
 pub(super) const PROBLEM_ROW: u64 = 0x170_0000;
+/// A problem's "Quick Fix…" button (row `i` at `PROBLEM_FIX + i`).
+const PROBLEM_FIX: u64 = PROBLEM_ROW + BLOCK / 4;
 /// Rows exposed at most (the panel can hold thousands; the count says how many there are).
 const MAX_ROWS: usize = 2_000;
 
@@ -39,7 +46,7 @@ fn severity(s: u8) -> String {
 }
 
 impl ProblemsSnap {
-    pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>) -> NodeId {
+    pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>, geometry: &Geometry) -> NodeId {
         if self.rows.is_empty() {
             let mut empty = Node::new(Role::Status);
             empty.set_label(t("No problems."));
@@ -49,7 +56,12 @@ impl ProblemsSnap {
         }
         let mut list = Node::new(Role::List);
         list.set_label(tf("Problems: {}", &[&self.problems]));
-        let mut kids = Vec::new();
+        let count = |s: u8| self.rows.iter().filter(|r| matches!(r, ProblemRow::Problem { severity, .. } if *severity == s)).count();
+        let mut summary = Node::new(Role::Status);
+        summary.set_label(tf("{0} errors, {1} warnings", &[&count(1), &count(2)]));
+        summary.set_live(Live::Polite);
+        nodes.push((PROBLEMS_COUNT, summary));
+        let mut kids = vec![PROBLEMS_COUNT];
         for (i, row) in self.rows.iter().enumerate() {
             let id = NodeId(PROBLEM_ROW + i as u64);
             let mut n = Node::new(Role::ListItem);
@@ -62,6 +74,15 @@ impl ProblemsSnap {
                     n.set_label(format!("{}: {text}", severity(*s)));
                     n.set_description(tf("{0}, line {1}, column {2}", &[&crate::ui::file_name(path), &(line + 1), &(col + 1)]));
                     n.add_action(Action::Click);
+                    // Its fixes: the problem opens and Quick Fix lists them (a picker), as Quick Fix at the caret.
+                    let fix = NodeId(PROBLEM_FIX + i as u64);
+                    let mut b = Node::new(Role::Button);
+                    b.set_label(t("Quick Fix…"));
+                    b.set_description(text.clone());
+                    b.set_has_popup(accesskit::HasPopup::Listbox);
+                    b.add_action(Action::Click);
+                    nodes.push((fix, b));
+                    n.set_children(vec![fix]);
                 }
                 ProblemRow::Related { text, path, line, .. } => {
                     n.set_label(text.clone());
@@ -69,6 +90,7 @@ impl ProblemsSnap {
                     n.add_action(Action::Click);
                 }
             }
+            geometry.apply_part(Part::Problem(i), &mut n);
             nodes.push((id, n));
             kids.push(id);
         }
@@ -94,13 +116,18 @@ impl Workbench {
     /// An activation of a row: opened only if the panel still has that very row there.
     pub(super) fn a11y_problems_action(&mut self, req: &ActionRequest, last: &Snapshot, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let id = req.target_node.0;
-        if !(PROBLEM_ROW..PROBLEM_ROW + BLOCK).contains(&id) {
+        let fix = (PROBLEM_FIX..PROBLEM_FIX + MAX_ROWS as u64).contains(&id);
+        if !(PROBLEM_ROW..PROBLEM_ROW + MAX_ROWS as u64).contains(&id) && !fix {
             return false;
         }
-        let index = (id - PROBLEM_ROW) as usize;
+        let index = (id - if fix { PROBLEM_FIX } else { PROBLEM_ROW }) as usize;
         let (Some(old), Some(current)) = (last.views.problems.as_ref(), self.a11y_problems(cx)) else { return true };
         if req.action == Action::Click && old.rows.get(index).is_some_and(|row| current.rows.get(index) == Some(row)) {
-            self.open_problem_row(index, window, cx);
+            if fix {
+                self.quick_fix_problem_row(index, window, cx);
+            } else {
+                self.open_problem_row(index, window, cx);
+            }
         }
         true
     }
@@ -191,27 +218,15 @@ impl Workbench {
     }
 }
 
-/// The search side panel: status, then its rows (at most `MAX_SEARCH_ROWS`).
-#[derive(Clone, PartialEq, Debug)]
-pub(crate) struct SearchSideSnap {
-    status: String,
-    rows: Vec<(String, Option<(String, u32, u32)>)>,
-    total: usize,
-}
-
-const SEARCH_SIDE: NodeId = NodeId(52);
-const SEARCH_SIDE_STATUS: NodeId = NodeId(53);
-const SEARCH_SIDE_ROW: u64 = PANEL_TAB + 16;
 /// This module's fixed nodes, for the id layout check.
-pub(super) const FIXED: [NodeId; 6] = [PROBLEMS, PROBLEMS_EMPTY, PANEL_TABS, OUTPUT_LOG, SEARCH_SIDE, SEARCH_SIDE_STATUS];
-const MAX_SEARCH_ROWS: usize = 500;
+pub(super) const FIXED: [NodeId; 5] = [PROBLEMS, PROBLEMS_EMPTY, PROBLEMS_COUNT, PANEL_TABS, OUTPUT_LOG];
 
 /// The views exposed by this module, gathered so the main tree has one field and one action path for them.
 #[derive(Clone, PartialEq, Debug, Default)]
 pub(crate) struct ViewsSnap {
     pub(crate) problems: Option<ProblemsSnap>,
     pub(crate) panel: Option<PanelSnap>,
-    pub(crate) search: Option<SearchSideSnap>,
+    pub(crate) search: Option<search_side::SearchSnap>,
     pub(crate) pages: pages::PagesSnap,
     pub(crate) side: side::SideSnap,
     pub(crate) consent: Option<dialogs::ConsentSnap>,
@@ -221,36 +236,14 @@ pub(crate) struct ViewsSnap {
 
 impl ViewsSnap {
     pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>, kids: &mut Vec<NodeId>, geometry: &Geometry) {
-        if let Some(s) = &self.search {
-            let mut status = Node::new(Role::Status);
-            status.set_label(s.status.clone());
-            status.set_live(Live::Polite);
-            nodes.push((SEARCH_SIDE_STATUS, status));
-            let mut list = Node::new(Role::List);
-            list.set_label(t("Search results"));
-            list.set_size_of_set(s.total);
-            let mut ids = vec![SEARCH_SIDE_STATUS];
-            for (i, (label, key)) in s.rows.iter().enumerate() {
-                let id = NodeId(SEARCH_SIDE_ROW + i as u64);
-                let mut n = Node::new(if key.is_some() { Role::ListItem } else { Role::Heading });
-                n.set_label(label.clone());
-                n.set_position_in_set(i + 1);
-                n.set_size_of_set(s.total);
-                if key.is_some() {
-                    n.add_action(Action::Click);
-                }
-                nodes.push((id, n));
-                ids.push(id);
-            }
-            list.set_children(ids);
-            nodes.push((SEARCH_SIDE, list));
-            kids.push(SEARCH_SIDE);
+        if let Some(search) = &self.search {
+            kids.push(search.append_tree(nodes));
         }
         if let Some(panel) = &self.panel {
             kids.extend(panel.append_tree(nodes));
         }
         if let Some(problems) = &self.problems {
-            kids.push(problems.append_tree(nodes));
+            kids.push(problems.append_tree(nodes, geometry));
         }
         self.pages.append_tree(nodes, kids, geometry);
         self.side.append_tree(nodes, kids, geometry);
@@ -265,17 +258,19 @@ impl ViewsSnap {
             crate::workbench::a11y::RowFrame::Port => pages::port_node(ix),
             kind => side::row_node(kind, ix),
         });
-        self.consent.as_ref().and_then(dialogs::ConsentSnap::focus_node).or_else(|| self.side.focus_node()).or(row).or_else(|| self.pages.focus_node())
+        self.consent
+            .as_ref()
+            .and_then(dialogs::ConsentSnap::focus_node)
+            .or_else(|| self.side.focus_node())
+            .or(row)
+            .or_else(|| self.pages.focus_node())
+            .or_else(|| self.search.as_ref().and_then(search_side::SearchSnap::focus_node))
     }
 }
 
 impl Workbench {
     pub(super) fn a11y_views(&self, window: &Window, cx: &App) -> ViewsSnap {
-        // Wherever the view is: either side bar or a window of its own (whose tree takes it from here).
-        let search = self.view_shown(Panel::Search).then(|| {
-            let (status, rows, total) = self.search.read(cx).access_rows(MAX_SEARCH_ROWS);
-            SearchSideSnap { status, rows, total }
-        });
+        let search = self.a11y_search_view(window, cx);
         ViewsSnap {
             problems: self.a11y_problems(cx),
             panel: self.a11y_panel(),
@@ -288,15 +283,8 @@ impl Workbench {
     }
 
     pub(super) fn a11y_views_action(&mut self, req: &ActionRequest, last: &Snapshot, window: &mut Window, cx: &mut Context<Self>) -> bool {
-        let id = req.target_node.0;
-        if (SEARCH_SIDE_ROW..SEARCH_SIDE_ROW + MAX_SEARCH_ROWS as u64).contains(&id) {
-            let key = last.views.search.as_ref().and_then(|s| s.rows.get((id - SEARCH_SIDE_ROW) as usize)).and_then(|(_, k)| k.clone());
-            if let (Action::Click, Some(key)) = (req.action, key) {
-                self.search.update(cx, |s, cx| s.open_access_row(&key, cx));
-            }
-            return true;
-        }
-        self.a11y_consent_action(req, last.views.consent.as_ref(), window, cx)
+        self.a11y_search_view_action(req, last.views.search.as_ref(), window, cx)
+            || self.a11y_consent_action(req, last.views.consent.as_ref(), window, cx)
             || self.a11y_panel_action(req, last, cx)
             || self.a11y_problems_action(req, last, window, cx)
             || self.a11y_pages_action(req, &last.views.pages, window, cx)
@@ -407,7 +395,7 @@ mod tests {
         let statuses: Vec<_> = nodes.iter().filter(|(_, n)| n.role() == Role::Status).map(|(_, n)| n.label().map(str::to_string)).collect();
         // The same words as the panel's own status line.
         assert!(statuses.iter().any(|l| l.as_deref().is_some_and(|l| l.starts_with("1 result in "))), "status is announced: {statuses:?}");
-        let (row, _) = nodes.iter().find(|(_, n)| n.role() == Role::ListItem && n.label() == Some("2: let needle = 1;")).expect("the match row");
+        let (row, _) = nodes.iter().find(|(_, n)| n.role() == Role::TreeItem && n.label() == Some("let needle = 1;")).expect("the match row");
         let req = ActionRequest { action: Action::Click, target_tree: TreeId::ROOT, target_node: *row, data: None };
         wb.update_in(cx, |wb, window, cx| wb.a11y_action_for_test(&req, &snap, window, cx));
         crate::qa_integration_tests::wait_ticking(cx, "the match to open", |cx| wb.read_with(cx, |wb, _| wb.active_editor().is_some()));
