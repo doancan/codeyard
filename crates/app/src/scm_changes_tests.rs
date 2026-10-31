@@ -304,3 +304,48 @@ fn tab_goes_from_the_message_box_to_the_change_list(cx: &mut TestAppContext) {
     });
     assert_eq!(state, (true, false, false, false));
 }
+
+#[gpui::test]
+fn the_menu_key_asks_for_the_cursor_files_menu_under_its_row(cx: &mut TestAppContext) {
+    let (panel, cx) = panel(cx);
+    set(&panel, mixed(), cx);
+    let asked = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let sink = asked.clone();
+    cx.update(|_, cx| {
+        cx.subscribe(&panel, move |_, ev: &ScmEvent, _| {
+            if let ScmEvent::FileMenu(path, staged, at) = ev {
+                sink.borrow_mut().push((path.clone(), *staged, *at));
+            }
+        })
+        .detach()
+    });
+    let on = |key: ChangeKey, panel: &Entity<ScmPanel>, cx: &mut VisualTestContext| {
+        assert!(panel.update_in(cx, |p, window, cx| p.focus_changes(Some(&key), window, cx)));
+        cx.run_until_parked();
+    };
+    // A group header has no menu.
+    on(ChangeKey::Group(Group::Changes), &panel, cx);
+    cx.simulate_keystrokes("shift-f10");
+    assert!(asked.borrow().is_empty());
+    // Shift+F10 on the last row: its own menu, unstaged side, at the bottom left of the painted row.
+    on(ChangeKey::File(Group::Changes, path(2)), &panel, cx);
+    cx.simulate_keystrokes("shift-f10");
+    let (top, left) = panel.read_with(cx, |p, _| {
+        let bounds = p.change_scroll.0.borrow().base_handle.bounds();
+        (bounds.top(), bounds.left())
+    });
+    let lines = panel.read_with(cx, |p, _| p.current_lines(&mixed()));
+    let row = lines.iter().position(|l| *l == ChangeLine::File(Group::Changes, 2)).expect("the row");
+    assert_eq!(*asked.borrow(), [(path(2), false, gpui::point(left, top + gpui::px(layout::ROW_H * (row + 1) as f32)))]);
+    // The Menu key on the staged row of the same file asks for the staged side's menu.
+    on(ChangeKey::File(Group::Staged, path(1)), &panel, cx);
+    cx.simulate_keystrokes("menu");
+    assert_eq!(asked.borrow().last().map(|(p, s, _)| (p.clone(), *s)), Some((path(1), true)));
+    // The staged row went away: the key acts on the row the cursor is on now, never on the old file.
+    asked.borrow_mut().clear();
+    let changes = vec![change(0, None, Some(Mark::Conflict)), change(5, None, Some(Mark::Modified))];
+    set(&panel, Arc::new(Status { root: "/scm-changes-cursor".into(), changes, ..Default::default() }), cx);
+    assert_eq!(cursor(&panel, cx), Some(ChangeKey::File(Group::Changes, path(5))));
+    cx.simulate_keystrokes("shift-f10");
+    assert_eq!(asked.borrow().iter().map(|(p, s, _)| (p.clone(), *s)).collect::<Vec<_>>(), [(path(5), false)]);
+}

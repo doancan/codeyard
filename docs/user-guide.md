@@ -922,8 +922,9 @@ between changes. Commits made in the terminal show up on their own.
 
 The change list also works from the keyboard: Tab moves to it from the message box, ↑/↓/Home/End
 move its cursor, ↵ opens the file's diff (or folds the group), Space stages or unstages the file,
-← goes to the file's group (and folds it), → unfolds it and goes in, and Delete (⌘⌫ on macOS)
-discards the file's changes after asking.
+← goes to the file's group (and folds it), → unfolds it and goes in, Delete (⌘⌫ on macOS)
+discards the file's changes after asking, and Shift+F10 or the Menu key opens the file's right-click
+menu under it (Escape closes it and leaves the cursor on the file).
 
 **Graph:** the GRAPH section under the changes draws the history of every branch as lanes,
 with branch (blue), remote (green), tag (yellow) and HEAD labels; merges are hollow dots.

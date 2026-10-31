@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Source Control's change list opens a file's right-click menu from the keyboard: Shift+F10 or the Menu key on the
+  cursor row shows it under the row, the arrows and Enter drive it, and Escape gives the keyboard back to the same row.
+  Screen readers get `ShowContextMenu` and a "More Actions…" button on each file, as the other lists' rows have.
 - Performance scenarios for extension views and hot reload, run by `scripts/perf/run.sh`: PageDown in a sidebar view
   with a list of 10 000 rows (`CODEYARD_PERF_VIEWS`, `views.keystroke_frame_ms`) and a 2 MB Rust component swapped in
   place in a dev window (`CODEYARD_PERF_RELOAD`, `extensions.hot_reload_ms`), each with a fixture extension that needs
