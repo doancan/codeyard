@@ -263,7 +263,7 @@ impl Workbench {
     /// Where a menu opened without the pointer appears: at the bottom left of its row as last painted, else (the row is
     /// scrolled out of view) at the middle of the window.
     pub(super) fn row_anchor(&self, kind: RowFrame, ix: usize, window: &Window) -> gpui::Point<gpui::Pixels> {
-        match self.chrome.a11y_bounds.row(kind, ix) {
+        match self.chrome.a11y_bounds.row(window.window_handle().window_id(), kind, ix) {
             Some(bounds) => bounds.bottom_left(),
             None => {
                 let size = window.viewport_size();

@@ -6,13 +6,42 @@
 #   C  shown once, for a secure note in your password manager (Bitwarden); never left on disk
 #   A  on the first encrypted USB stick
 #   B  on the second encrypted USB stick, kept somewhere else
-# and writes yard-ceremony-record.txt here: the date, the public keys and where each private key is kept (no secret).
+# and writes yard-ceremony-record.txt here: the date, the public keys and where each private key is kept (no secret),
+# the line for the server and the app, and the sign-off lines the owner fills in.
+#
+# A rehearsal makes three throwaway keys in one folder, with no questions, and marks the record REHEARSAL:
+#   scripts/yard-root-ceremony.sh --rehearsal DIR
 # CYX names the cyx binary when it is not on PATH.
 set -eu
-a=${1:?usage: yard-root-ceremony.sh USB-A USB-B}
-b=${2:?usage: yard-root-ceremony.sh USB-A USB-B}
+usage="usage: yard-root-ceremony.sh USB-A USB-B   or   yard-root-ceremony.sh --rehearsal DIR"
 cyx=${CYX:-cyx}
 command -v "$cyx" >/dev/null || { echo "cyx not found: install it, or set CYX=/path/to/cyx" >&2; exit 1; }
+public() { sed -n 's/^public key //p'; }
+
+if [ "${1:-}" = --rehearsal ]; then
+	dir=${2:?$usage}
+	mkdir -p "$dir"
+	for k in a b c; do
+		[ ! -e "$dir/yard-root-$k.key" ] || { echo "$dir/yard-root-$k.key exists: use an empty folder" >&2; exit 1; }
+	done
+	pub_a=$("$cyx" yard keygen "$dir/yard-root-a.key" | public)
+	pub_b=$("$cyx" yard keygen "$dir/yard-root-b.key" | public)
+	pub_c=$("$cyx" yard keygen "$dir/yard-root-c.key" | public)
+	cat > "$dir/yard-ceremony-record.txt" <<EOF
+REHEARSAL: throwaway keys, never for a registry clients trust.
+Date: $(date -u '+%Y-%m-%d %H:%M UTC')
+Threshold: 2 of 3
+A  $pub_a  $dir/yard-root-a.key
+B  $pub_b  $dir/yard-root-b.key
+C  $pub_c  $dir/yard-root-c.key
+EOF
+	printf '%s\n%s\n%s\n' "$pub_a" "$pub_b" "$pub_c" > "$dir/root-keys.txt"
+	echo "Rehearsal keys in $dir (public keys in $dir/root-keys.txt)"
+	exit 0
+fi
+
+a=${1:?$usage}
+b=${2:?$usage}
 for d in "$a" "$b"; do
 	[ -d "$d" ] || { echo "$d is not a folder: insert and mount the USB stick" >&2; exit 1; }
 done
@@ -32,8 +61,6 @@ if command -v diskutil >/dev/null; then
 		fi
 	done
 fi
-public() { sed -n 's/^public key //p'; }
-
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/yard-ceremony.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT INT TERM
 pub_c=$("$cyx" yard keygen "$tmp/c.key" | public)
@@ -77,10 +104,30 @@ A  $pub_a  encrypted USB stick A ($key_a)
 B  $pub_b  encrypted USB stick B ($key_b), kept in another place
 C  $pub_c  Bitwarden secure note "Codeyard Yard root key C"
 
-On the server:
-  sudo -u yard yard init /srv/yard --registry REGISTRY-DOMAIN --root-keys $pub_a,$pub_b,$pub_c --threshold 2
+Machine: $(uname -sr), cyx $("$cyx" --version | sed 's/^cyx //')
+Network off during the ceremony: ____ (yes / no)
 
-In the app (crates/app/src/ext_registry.rs, PUBLIC): the three keys above, threshold 2.
+On the server (docs/registry-setup-checklist.md, step 5):
+  sudo -u yard yard init /srv/yard --registry yard.DOMAIN --root-keys $pub_a,$pub_b,$pub_c --threshold 2
+
+In the app (crates/app/src/ext_registry.rs), replacing \`None\`:
+  pub const PUBLIC: Option<(&str, &str, &[&str], usize)> = Some(("yard.DOMAIN", "https://yard.DOMAIN", &[
+      "$pub_a",
+      "$pub_b",
+      "$pub_c",
+  ], 2));
+
+In GitHub, environment and repository variable YARD_ROOT_KEYS:
+  $pub_a,$pub_b,$pub_c
+
+Checks after the ceremony (tick each):
+  [ ] Key C read back from the Bitwarden note (done by the script)
+  [ ] Stick A and stick B each open with their own password, on another day
+  [ ] root.json signed with two keys; \`cyx yard check https://yard.DOMAIN --root-key … --threshold 2\` passes
+  [ ] Stick B stored away from stick A (where: ______________________)
+
+Owner sign-off: I hold A, B and C as written above, and no copy of a private key exists elsewhere.
+  Name: ______________________   Date: ____________   Signature: ______________________
 EOF
 cat "$record"
 cat <<EOF

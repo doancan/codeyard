@@ -338,3 +338,45 @@ fn a_deprecated_version_names_its_replacement(cx: &mut TestAppContext) {
     assert_eq!(status(&wb, cx).standing, Standing::Deprecated { replacement: Some(replacement) });
     assert_eq!(active_version().as_deref(), Some("1.0.0"));
 }
+
+/// `codeyard --update-extensions`: the person asked now, so the registry is asked again although its index was
+/// fetched today, and a revoked version is stopped (recorded in revoked.json) without a window.
+#[test]
+fn update_extensions_asks_now_and_stops_a_revoked_version() {
+    let root = dir("check-now");
+    let mut y = Yard::new(&root, "checknow", &["1.0.0"], None);
+    let now = crate::ext_registry::now();
+    y.r.set_status("you.night", "1.0.0", Status::Revoked { reason: "Canary.".into() }, now);
+    let regs = crate::ext_registry::registries(&crate::settings::parse_layers(&std::fs::read_to_string(y.cfg.join("settings.jsonc")).unwrap(), &[]).unwrap().0);
+    // The daily check still uses this morning's copy and sees nothing.
+    let daily = crate::ext_updates::check(&y.cfg, &regs, ext_core::update::AutoUpdate::Install, now);
+    assert!(daily.stopped.is_empty(), "{:?}", daily.stopped);
+    let report = crate::ext_updates::check_now(&y.cfg, &regs, ext_core::update::AutoUpdate::Install, now);
+    assert!(report.errors.is_empty(), "{:?}", report.errors);
+    assert!(report.stopped.iter().any(|l| l.contains("Canary.")), "{:?}", report.stopped);
+    assert!(crate::ext::store(&y.cfg).revoked().values().any(|r| r.version.to_string() == "1.0.0"));
+}
+
+/// A public registry ships only with real ceremony keys: the check that runs when the app compiles.
+#[test]
+fn the_public_registry_refuses_placeholder_keys() {
+    use crate::ext_registry::public_problem;
+    let a = "3f9c2a71b8e04d56a1c7e9f02b4d68a35c1e7f90a2b4c6d8e0f1a3b5c7d9e1f3";
+    let b = "0a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0fedcba987654321";
+    let c = "e7d6c5b4a3928170f6e5d4c3b2a19087f6e5d4c3b2a1908776655443322110ff";
+    assert_eq!(public_problem(None), None, "no public registry before the ceremony");
+    assert_eq!(public_problem(Some(("yard.codeyard.dev", "https://yard.codeyard.dev", &[a, b, c], 2))), None);
+    let zeros = "0000000000000000000000000000000000000000000000000000000000000000";
+    for bad in [
+        Some(("yard.codeyard.dev", "https://yard.codeyard.dev", &[a, b, zeros][..], 2)),
+        Some(("yard.codeyard.dev", "https://yard.codeyard.dev", &[a, b, "<C>"][..], 2)),
+        Some(("yard.codeyard.dev", "https://yard.codeyard.dev", &[a, b, &a.to_uppercase()][..], 2)),
+        Some(("yard.codeyard.dev", "https://yard.codeyard.dev", &[a, a, c][..], 2)),
+        Some(("yard.codeyard.dev", "https://yard.codeyard.dev", &[a, b, c][..], 1)),
+        Some(("yard.codeyard.dev", "https://yard.codeyard.dev", &[a, b, c][..], 4)),
+        Some(("yard.codeyard.dev", "http://yard.codeyard.dev", &[a, b, c][..], 2)),
+        Some(("yard.example.dev", "https://yard.example.dev", &[a, b, c][..], 2)),
+    ] {
+        assert!(public_problem(bad).is_some(), "{bad:?}");
+    }
+}

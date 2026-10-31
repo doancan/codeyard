@@ -282,6 +282,8 @@ impl Workbench {
             })
             .collect();
         let hints = twin_hints(&rels);
+        // The accessibility tree lists the focused group's tabs: theirs are the frames it reports.
+        let focused_group = key.id == self.tabs.layout.focused();
         let (tab_icons, close_mode) = {
             let st = cx.global::<Settings>();
             (st.tab_icons, st.tab_close.clone())
@@ -315,6 +317,7 @@ impl Workbench {
                 let home = cx.entity().downgrade();
                 let drop_on = editors[ix].clone();
                 let accent = p.accent;
+                let frame = focused_group.then(|| a11y::part_frame(a11y::Part::EditorTab(ix), cx));
                 div()
                     .id(SharedString::from(format!("tab-{}-{ix}", key.id)))
                     .debug_selector(move || format!("tab-{}-{ix}", key.id))
@@ -329,6 +332,7 @@ impl Workbench {
                     }))
                     .group(group.clone())
                     .relative()
+                    .children(frame)
                     .flex()
                     .flex_none()
                     .items_center()

@@ -177,7 +177,10 @@ impl Render for Workbench {
         if self.view_shown(Panel::Containers) && cx.global::<Settings>().docker_enabled {
             self.show_containers(cx);
         }
-        self.chrome.a11y_bounds = Default::default();
+        let me = window.window_handle().window_id();
+        self.chrome.a11y_bounds.clear(me);
+        let open: Vec<gpui::WindowId> = std::iter::once(me).chain(self.chrome.view_windows.iter().map(|w| w.window.window_id())).collect();
+        self.chrome.a11y_bounds.retain(&open);
         self.step_panel_anim(window);
         // The repository search waits until Source Control is on screen (connecting opens a home folder: no scan unasked).
         if self.view_shown(Panel::Scm) {

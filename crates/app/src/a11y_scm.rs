@@ -9,14 +9,21 @@
 //! same file in the same state as when the tree was read.
 
 use super::*;
-use crate::scm::{AccessFile, ChangeKey};
+use crate::scm::{AccessFile, AccessFrame, ChangeKey};
 
 #[path = "a11y_scm_ext.rs"]
 pub(super) mod ext;
 
-const STAGE: u64 = 1;
-const DISCARD: u64 = 2;
+const STAGE: u64 = crate::scm::STAGE_BUTTON;
+const DISCARD: u64 = crate::scm::DISCARD_BUTTON;
 const MENU: u64 = 3;
+
+/// Where `frame` was painted, if it was.
+fn place(view: &crate::scm::AccessView, frame: &AccessFrame, node: &mut Node) {
+    if let Some(bounds) = view.frames.get(frame) {
+        node.set_bounds(*bounds);
+    }
+}
 
 fn group_id(g: usize) -> NodeId {
     NodeId(SCM_GROUP + g as u64 * 2)
@@ -99,6 +106,7 @@ impl ScmSnap {
             message.set_label(t("Message (↵ to commit)"));
             message.set_value(view.message.clone());
             message.add_action(Action::Focus);
+            place(view, &AccessFrame::Message, &mut message);
             if view.busy {
                 message.set_disabled();
             } else {
@@ -109,6 +117,7 @@ impl ScmSnap {
 
             let mut commit = Node::new(Role::Button);
             commit.set_label(view.commit_label.clone());
+            place(view, &AccessFrame::Commit, &mut commit);
             if view.can_commit {
                 commit.add_action(Action::Click)
             } else {
@@ -159,6 +168,7 @@ impl ScmSnap {
                 let mut header = Node::new(Role::Button);
                 header.set_label(format!("{} ({})", group.label, group.total));
                 header.set_expanded(group.expanded);
+                place(view, &AccessFrame::Line(ChangeKey::Group(group.group)), &mut header);
                 header.add_action(Action::Click);
                 header.add_action(Action::Focus);
                 nodes.push((header_id, header));
@@ -176,6 +186,7 @@ impl ScmSnap {
                 open.add_action(Action::Click);
                 open.add_action(Action::Focus);
                 open.add_action(Action::ShowContextMenu);
+                place(view, &AccessFrame::Line(file.key()), &mut open);
                 nodes.push((open_id, open));
                 rows.push(open_id);
                 let mut actions = vec![(
@@ -194,6 +205,7 @@ impl ScmSnap {
                 for (part, label) in actions {
                     let mut button = Node::new(Role::Button);
                     button.set_label(label);
+                    place(view, &AccessFrame::Button(file.key(), part), &mut button);
                     if view.busy {
                         button.set_disabled()
                     } else {

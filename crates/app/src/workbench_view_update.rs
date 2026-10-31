@@ -130,6 +130,8 @@ impl Workbench {
         div()
             .id("sb-update")
             .debug_selector(|| "sb-update".into())
+            .relative()
+            .child(super::a11y::part_frame(super::a11y::Part::Status(super::a11y::StatusPart::Update), cx))
             .flex_none()
             .min_w(px(32.))
             .h_full()

@@ -26,7 +26,8 @@ code they describe.
 | [core-workflows-delivery.md](core-workflows-delivery.md) | acceptance requirements and validation evidence for eleven core workflow deliveries |
 | [plugin-architecture.md](plugin-architecture.md) | **planned:** the extension platform design (runtime, permissions, registry, performance targets, roadmap) |
 | [extensions-spike.md](extensions-spike.md) | the Phase 2 exthost spike: cold start, memory and hot reload measured, and the decisions taken from them |
-| [registry.md](registry.md) | the extension registry: signed index format, client verification, operator commands |
+| [registry.md](registry.md) | the extension registry: signed index format, client verification, operator commands, running the public registry (hosting, keys, backups, canary, runbook) |
+| [registry-setup-checklist.md](registry-setup-checklist.md) | what the owner buys, creates and sends back to put the public registry online, and the go-live order |
 | [extensions/developer-guide.md](extensions/developer-guide.md) | **draft:** how to write, test and publish an extension |
 | [translating.md](translating.md) | adding a language, the translation file format, plurals, quality bar, adding UI text |
 | [releasing.md](releasing.md) | the manual release procedure |

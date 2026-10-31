@@ -18,7 +18,16 @@ fn snap() -> Snapshot {
         explorers: vec![ExplorerSnap {
             name: "d".into(),
             rows: vec![
-                RowSnap { id: row_id("/d/src").0, path: "/d/src".into(), name: "src".into(), depth: 0, is_dir: true, expanded: true, selected: false },
+                RowSnap {
+                    id: row_id("/d/src").0,
+                    path: "/d/src".into(),
+                    name: "src".into(),
+                    depth: 0,
+                    is_dir: true,
+                    expanded: true,
+                    selected: false,
+                    frame: None,
+                },
                 RowSnap {
                     id: row_id("/d/src/main.rs").0,
                     path: "/d/src/main.rs".into(),
@@ -27,6 +36,7 @@ fn snap() -> Snapshot {
                     is_dir: false,
                     expanded: false,
                     selected: true,
+                    frame: None,
                 },
             ],
             rows_total: 2,
@@ -160,6 +170,7 @@ fn find_bar_has_fields_live_status_and_option_states() {
         replacement: Some("start".into()),
         status: Some("1 of 1".into()),
         controls: vec![("Match case (⌥C)".into(), Some(true)), ("Next match (↵)".into(), None)],
+        frames: Vec::new(),
     });
     s.focus = FocusSnap::Find(1);
     let tree = accesskit_consumer::Tree::new(s.to_tree(), true);
@@ -205,7 +216,8 @@ fn terminal_rows_are_text_with_the_cursor_as_caret() {
 #[test]
 fn every_folder_of_the_workspace_has_its_own_tree() {
     let mut s = snap();
-    let row = RowSnap { id: row_id("/e/x.rs").0, path: "/e/x.rs".into(), name: "x.rs".into(), depth: 0, is_dir: false, expanded: false, selected: true };
+    let row =
+        RowSnap { id: row_id("/e/x.rs").0, path: "/e/x.rs".into(), name: "x.rs".into(), depth: 0, is_dir: false, expanded: false, selected: true, frame: None };
     s.explorers.push(ExplorerSnap { name: "e".into(), focused: Some(row.id), rows: vec![row], rows_total: 1, first: 0 });
     s.focus = FocusSnap::Explorer(1);
     let tree = accesskit_consumer::Tree::new(s.to_tree(), true);

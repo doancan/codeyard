@@ -193,6 +193,7 @@ impl DebugViewSnap {
         let mut ids = Vec::new();
         for (i, r) in self.vars.iter().enumerate() {
             let id = NodeId(VAR_ROW + i as u64);
+            let from = nodes.len();
             let mut n = Node::new(Role::TreeItem);
             n.set_label(r.name.clone());
             n.set_level(r.depth + 1);
@@ -214,6 +215,7 @@ impl DebugViewSnap {
             if r.parent != 0 && r.more.is_none() {
                 add_menu(nodes, &mut n, MenuRow::Variable, i, &r.name);
             }
+            geometry.apply_row_buttons(RowFrame::DebugVariable, i, id.0, &mut nodes[from..]);
             nodes.push((id, n));
             ids.push(id);
         }
@@ -229,11 +231,13 @@ impl DebugViewSnap {
         let mut ids = Vec::new();
         for (i, (expr, value)) in self.watch.iter().enumerate() {
             let id = NodeId(WATCH_ROW + 2 * i as u64);
+            let from = nodes.len();
             let mut n = Node::new(Role::ListItem);
             n.set_label(expr.clone());
             n.set_value(value.clone());
             n.set_children(vec![push_button(nodes, NodeId(id.0 + 1), t("Remove Expression"), Some(expr.clone()), true)]);
             geometry.apply_row(RowFrame::DebugWatch, i, &mut n);
+            geometry.apply_row_buttons(RowFrame::DebugWatch, i, id.0, &mut nodes[from..]);
             nodes.push((id, n));
             ids.push(id);
         }
@@ -247,6 +251,7 @@ impl DebugViewSnap {
         let mut ids = Vec::new();
         for (i, row) in self.stack.iter().enumerate() {
             let id = NodeId(STACK_ROW + i as u64);
+            let from = nodes.len();
             let mut n = Node::new(Role::TreeItem);
             match row {
                 StackRow::Session { name, status, current, .. } => {
@@ -284,6 +289,7 @@ impl DebugViewSnap {
                 }
             }
             geometry.apply_row(RowFrame::DebugStack, i, &mut n);
+            geometry.apply_row_buttons(RowFrame::DebugStack, i, id.0, &mut nodes[from..]);
             nodes.push((id, n));
             ids.push(id);
         }
@@ -302,6 +308,7 @@ impl DebugViewSnap {
         let mut ids = Vec::new();
         for (i, bp) in self.bps.iter().enumerate() {
             let id = NodeId(BP_ROW + 2 * i as u64);
+            let from = nodes.len();
             let data = t("Breaks when the value is written; for this debug session only.").to_string();
             let (label, enabled, detail) = match bp {
                 BpSnap::Data { desc, enabled, .. } => (tf("Data breakpoint: {}", &[desc]), *enabled, &data),
@@ -320,6 +327,7 @@ impl DebugViewSnap {
                 add_menu(nodes, &mut n, MenuRow::Breakpoint, i, &label);
             }
             geometry.apply_row(RowFrame::DebugBreakpoint, i, &mut n);
+            geometry.apply_row_buttons(RowFrame::DebugBreakpoint, i, id.0, &mut nodes[from..]);
             nodes.push((id, n));
             ids.push(id);
         }
