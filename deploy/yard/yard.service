@@ -3,6 +3,10 @@
 Description=Codeyard extension registry (yard)
 After=network-online.target
 Wants=network-online.target
+# Crashing 5 times in 10 minutes stops the restarts and alerts the owner.
+StartLimitIntervalSec=600
+StartLimitBurst=5
+OnFailure=yard-alert@%n.service
 
 [Service]
 User=yard

@@ -1,0 +1,23 @@
+#!/bin/sh
+# Daily copy of the registry to R2 (yard-backup.timer), beside Litestream's continuous copy of the database:
+#   files/      everything in /srv/yard but the database and the online key: packages, signatures, root.json and its
+#               signatures, yard.json. Copied, never synced, so a broken server cannot delete what is backed up.
+#   snapshots/  the database as of today (sqlite3 .backup), kept 35 days, in case Litestream's copy is unusable.
+# The online key (/srv/yard/keys) is never copied: after a restore the root key holders sign a new one.
+set -eu
+set -a
+# shellcheck disable=SC1091
+. /etc/yard/yard.env
+set +a
+export RCLONE_S3_PROVIDER=Cloudflare RCLONE_S3_ENDPOINT="$YARD_R2_ENDPOINT" RCLONE_S3_REGION=auto \
+	RCLONE_S3_ACCESS_KEY_ID="$YARD_R2_ACCESS_KEY_ID" RCLONE_S3_SECRET_ACCESS_KEY="$YARD_R2_SECRET_ACCESS_KEY" RCLONE_S3_NO_CHECK_BUCKET=true RCLONE_LOG_LEVEL=ERROR
+remote=":s3:$YARD_R2_BUCKET"
+rclone copy /srv/yard "$remote/files" --exclude "keys/**" --exclude "yard.sqlite*" --exclude "*.tmp*"
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+sqlite3 /srv/yard/yard.sqlite ".backup '$tmp/yard.sqlite'"
+[ "$(sqlite3 "$tmp/yard.sqlite" 'PRAGMA integrity_check;')" = ok ]
+gzip -9 "$tmp/yard.sqlite"
+rclone copyto "$tmp/yard.sqlite.gz" "$remote/snapshots/yard-$(date -u +%Y%m%d).sqlite.gz"
+rclone delete --min-age 35d "$remote/snapshots"
+echo "yard-backup: files and today's database snapshot are in $YARD_R2_BUCKET"

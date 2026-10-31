@@ -7,15 +7,19 @@ pub const MANIFEST_BYTES: usize = 64 * 1024;
 pub const ID_LEN: usize = 64;
 /// One part of an id (publisher, name, or a contribution's local id).
 pub const ID_PART_LEN: usize = 40;
+/// `extension.name`, the display name.
 pub const NAME_LEN: usize = 64;
+/// `extension.description`.
 pub const DESCRIPTION_LEN: usize = 300;
 /// The author's `why`, quoted on the consent sheet.
 pub const WHY_LEN: usize = 200;
+/// Entries of `extension.categories`.
 pub const CATEGORIES: usize = 5;
 /// Entries of one contribution kind (`[[commands]]`, `[[themes]]`, …).
 pub const CONTRIBUTIONS_PER_KIND: usize = 256;
 /// Entries of one permission list (`read`, `net`, `run`, …).
 pub const PERMISSION_ENTRIES: usize = 64;
+/// Entries of `[dependencies]`.
 pub const DEPENDENCIES: usize = 32;
 /// Length of a glob, host, program, path or title.
 pub const ITEM_LEN: usize = 256;
@@ -30,6 +34,7 @@ pub const PACKAGE_BYTES: u64 = 64 * 1024 * 1024;
 pub const TARGET_PACKAGE_BYTES: u64 = 128 * 1024 * 1024;
 /// A `.cyx` package, unpacked.
 pub const PACKAGE_UNPACKED_BYTES: u64 = 256 * 1024 * 1024;
+/// Files in a `.cyx` package.
 pub const PACKAGE_FILES: usize = 10_000;
 /// One file inside a package.
 pub const PACKAGE_FILE_BYTES: u64 = 64 * 1024 * 1024;

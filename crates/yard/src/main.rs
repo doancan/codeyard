@@ -1,12 +1,14 @@
 //! `yard`: run the registry's publish service, or act as its security role.
 //!
 //! ```text
-//! yard init FOLDER [--registry NAME] [--root-keys HEX,… --threshold N]
+//! yard init FOLDER [--registry NAME] [--root-keys HEX,… --threshold N] [--fulcio PEM --rekor PEM]
 //!                                              a new registry: keys, root.json, yard.json
 //! yard serve CONFIG                            answer publishers; sign the index now and daily
 //! yard rotate CONFIG                           the next online key and root.next.json, for the root key holders
 //! yard promote CONFIG                          check their signatures and put the new root and key in place
-//! yard resign CONFIG                           sign a fresh index once (for a scheduler instead of serve's timer)
+//! yard resign CONFIG [--expired]               sign a fresh index once (the daily timer); --expired: one that has
+//!                                              already expired, to see clients refuse it (staging and rehearsals)
+//! yard status CONFIG [--hours N] [--key-days N] the index's and online key's expiry; fails within N h (24) / days (14)
 //! yard revoke CONFIG ID VERSION REASON…        stop a version on every client, with the reason users see
 //! yard immediate CONFIG ID VERSION             let clients update to an advisory fix at once
 //! yard review list CONFIG                      first native programs waiting for a reviewer
@@ -24,13 +26,18 @@ use yard::{Config, Yard, http};
 const HELP: &str = "yard: the Codeyard extension registry
 
 usage:
-  yard init FOLDER [--registry NAME] [--root-keys HEX,HEX,… --threshold N]
+  yard init FOLDER [--registry NAME] [--root-keys HEX,HEX,… --threshold N] [--fulcio PEM --rekor PEM]
                                            create a registry (keys, root.json, yard.json); with the
-                                           production root keys the root waits for their signatures
+                                           production root keys the root waits for their signatures;
+                                           --fulcio/--rekor pin another Sigstore (a rehearsal's stand-in)
   yard serve CONFIG                        run the publish service
   yard rotate CONFIG                       start an online key rotation (root.next.json to sign)
   yard promote CONFIG                      finish it once the root key holders signed
-  yard resign CONFIG                       sign a fresh index once
+  yard resign CONFIG [--expired]           sign a fresh index once (--expired: one already past its
+                                           expiry, to check that clients refuse to install from it)
+  yard status CONFIG [--hours N] [--key-days N]
+                                           index and online key expiry and counts; fails when the
+                                           index expires within N hours (24) or the key within N days (14)
   yard revoke CONFIG ID VERSION REASON…    revoke a version everywhere
   yard immediate CONFIG ID VERSION         let clients update to an advisory fix at once
   yard review list CONFIG                  first native programs waiting for a reviewer
@@ -66,6 +73,8 @@ fn run(args: &[String]) -> Result<(), String> {
     match words.as_slice() {
         ["init", dir, rest @ ..] => {
             let (mut registry, mut keys, mut threshold) = ("localhost", None, None);
+            let (mut fulcio, mut rekor) = (yard::SIGSTORE_FULCIO.to_string(), yard::SIGSTORE_REKOR.to_string());
+            let read = |path: &str| std::fs::read_to_string(path).map_err(|e| format!("cannot read {path}: {e}"));
             let mut it = rest.iter();
             while let Some(flag) = it.next() {
                 let value = *it.next().ok_or(HELP)?;
@@ -76,12 +85,14 @@ fn run(args: &[String]) -> Result<(), String> {
                         keys = Some(parsed.ok_or("--root-keys: each key is 64 hex digits, separated by commas")?);
                     }
                     "--threshold" => threshold = Some(value.parse::<usize>().map_err(|_| format!("--threshold: '{value}' is not a number"))?),
+                    "--fulcio" => fulcio = read(value)?,
+                    "--rekor" => rekor = read(value)?,
                     _ => return Err(HELP.into()),
                 }
             }
             let trust = keys.map(|keys| ext_core::yard::RootKeys { threshold: threshold.unwrap_or(keys.len()), keys });
             let production = trust.is_some();
-            let cfg = yard::init(Path::new(dir), registry, yard::SIGSTORE_FULCIO, yard::SIGSTORE_REKOR, trust, http::now())?;
+            let cfg = yard::init(Path::new(dir), registry, &fulcio, &rekor, trust, http::now())?;
             let root = cfg.with_file_name("root.json");
             if production {
                 println!(
@@ -130,6 +141,42 @@ fn run(args: &[String]) -> Result<(), String> {
             let v = open(config)?.resign(http::now()).map_err(|e| e.to_string())?;
             println!("Signed index version {v}");
             Ok(())
+        }
+        ["resign", config, "--expired"] => {
+            // Signed as of a moment long enough ago that it has already expired; the next resign replaces it.
+            let at = http::now().saturating_sub(ext_core::yard::INDEX_LIFETIME_SECS + 3600);
+            let v = open(config)?.resign(at).map_err(|e| e.to_string())?;
+            println!("Signed index version {v}, already expired: clients refuse to install from it until the next `yard resign`");
+            Ok(())
+        }
+        ["status", config, opts @ ..] => {
+            let (mut hours, mut key_days) = (24, 14);
+            let mut it = opts.iter();
+            while let Some(flag) = it.next() {
+                let value = it.next().ok_or(HELP)?;
+                let n = value.parse::<u64>().map_err(|_| format!("{flag}: '{value}' is not a number"))?;
+                match *flag {
+                    "--hours" => hours = n,
+                    "--key-days" => key_days = n,
+                    _ => return Err(HELP.into()),
+                }
+            }
+            let h = open(config)?.health().map_err(|e| e.to_string())?;
+            let now = http::now();
+            println!(
+                "index version {}, expires in {} h; online key expires in {} days; {} extensions, {} versions ({} revoked); {} waiting for review",
+                h.index_version,
+                h.index_expires.saturating_sub(now) / 3600,
+                h.online_expires.saturating_sub(now) / 86400,
+                h.extensions,
+                h.versions,
+                h.revoked,
+                h.waiting_for_review
+            );
+            match h.problem(now, hours, key_days) {
+                Some(p) => Err(format!("yard: {p}")),
+                None => Ok(()),
+            }
         }
         ["revoke", config, id, version, reason @ ..] if !reason.is_empty() => {
             let (id, version) = id_version(id, version)?;

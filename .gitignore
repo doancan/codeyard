@@ -27,3 +27,9 @@ lcov.info
 *.crt
 *.mobileprovision
 *.provisionprofile
+
+# The registry server's setup inputs (deploy/yard/setup.sh): never committed.
+/deploy/yard/yard
+/deploy/yard/origin.pem
+/deploy/yard/origin.key
+/deploy/yard/yard.env

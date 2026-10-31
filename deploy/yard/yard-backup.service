@@ -1,9 +1,9 @@
-# Daily copy of everything but the database (packages, signatures, root.json, yard.json) to object storage. The
+# Daily copy to R2 (deploy/yard/backup): files and a database snapshot, beside Litestream's continuous copy. The
 # online key is not copied: after a restore the root key holders sign a new one (docs/registry.md, Restore).
 [Unit]
-Description=Copy the extension registry's files to the backup bucket
+Description=Copy the extension registry to the backup bucket
+OnFailure=yard-alert@%n.service
 
 [Service]
 Type=oneshot
-EnvironmentFile=/etc/yard/backup.env
-ExecStart=/usr/bin/rclone sync /srv/yard yardbackup:${YARD_BACKUP_BUCKET}/files --exclude "keys/**" --exclude "yard.sqlite*" --exclude "*.tmp*"
+ExecStart=/usr/local/bin/yard-backup

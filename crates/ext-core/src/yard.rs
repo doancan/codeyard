@@ -19,7 +19,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
-use ext_manifest::{ExtId, Version};
+use ext_manifest::{ErrorDoc, ExtId, Version};
 use ring::signature::{ED25519, Ed25519KeyPair, KeyPair as _, UnparsedPublicKey};
 use serde::{Deserialize, Serialize};
 
@@ -313,30 +313,65 @@ pub enum Error {
     WrongRegistry { root: String, index: String },
 }
 
+/// The registry index's codes in the `CY` catalogue (docs/extensions/reference/errors.md); the 08xx range is the
+/// registry's.
+pub const CODES: [ErrorDoc; 7] = [
+    ErrorDoc {
+        code: "CY0801",
+        summary: "A file of the registry index is larger than its limit.",
+        fix: "nothing was installed; the registry's files are damaged or were changed on the way, so try again later",
+    },
+    ErrorDoc {
+        code: "CY0802",
+        summary: "A file of the registry index is not valid JSON, or a field is missing, unknown or out of range.",
+        fix: "nothing was installed; the registry's files are damaged or were changed on the way, so try again later",
+    },
+    ErrorDoc {
+        code: "CY0803",
+        summary: "The registry index is written in a newer format than this Codeyard reads.",
+        fix: "update Codeyard to read this registry",
+    },
+    ErrorDoc {
+        code: "CY0804",
+        summary: "A file of the registry index is not signed by enough trusted keys.",
+        fix: "nothing was installed; the registry's files are damaged or were changed on the way, so try again later",
+    },
+    ErrorDoc {
+        code: "CY0805",
+        summary: "The registry's online signing key is past its expiry.",
+        fix: "the registry has not renewed its signing key; try again later or update Codeyard",
+    },
+    ErrorDoc {
+        code: "CY0806",
+        summary: "The registry served an older copy of its index than one already accepted.",
+        fix: "an older copy of the registry was served (by a cache or an attacker); try again later",
+    },
+    ErrorDoc {
+        code: "CY0807",
+        summary: "The registry index names another registry than its root.",
+        fix: "check the registry's address in extensions.registries",
+    },
+];
+
 impl Error {
-    /// Stable codes in the `CY` catalogue (docs/extensions/developer-guide.md); the 08xx range is the registry's.
+    pub fn doc(&self) -> &'static ErrorDoc {
+        &CODES[match self {
+            Error::TooLarge { .. } => 0,
+            Error::Malformed { .. } => 1,
+            Error::Format { .. } => 2,
+            Error::Signature { .. } => 3,
+            Error::KeyExpired { .. } => 4,
+            Error::Rollback { .. } => 5,
+            Error::WrongRegistry { .. } => 6,
+        }]
+    }
+
     pub fn code(&self) -> &'static str {
-        match self {
-            Error::TooLarge { .. } => "CY0801",
-            Error::Malformed { .. } => "CY0802",
-            Error::Format { .. } => "CY0803",
-            Error::Signature { .. } => "CY0804",
-            Error::KeyExpired { .. } => "CY0805",
-            Error::Rollback { .. } => "CY0806",
-            Error::WrongRegistry { .. } => "CY0807",
-        }
+        self.doc().code
     }
 
     pub fn fix(&self) -> &'static str {
-        match self {
-            Error::TooLarge { .. } | Error::Malformed { .. } | Error::Signature { .. } => {
-                "nothing was installed; the registry's files are damaged or were changed on the way, so try again later"
-            }
-            Error::Format { .. } => "update Codeyard to read this registry",
-            Error::KeyExpired { .. } => "the registry has not renewed its signing key; try again later or update Codeyard",
-            Error::Rollback { .. } => "an older copy of the registry was served (by a cache or an attacker); try again later",
-            Error::WrongRegistry { .. } => "check the registry's address in extensions.registries",
-        }
+        self.doc().fix
     }
 }
 
