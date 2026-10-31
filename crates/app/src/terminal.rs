@@ -475,6 +475,38 @@ impl TerminalView {
         (rows.into_iter().map(|r| r.trim_end().to_string()).collect(), cursor)
     }
 
+    /// For the accessibility tree: where the characters of `rows` (as `a11y_view` returns them) were drawn in the last
+    /// paint, one cell each (two for a wide character); `starts` is each row's first character in the exposed text.
+    /// Empty before the first paint.
+    pub fn a11y_layout(&self, rows: &[String], starts: &[usize]) -> Vec<crate::painted::TextLine> {
+        let (origin, cell_w) = self.grid;
+        if cell_w <= px(0.) {
+            return Vec::new();
+        }
+        let line_h = self.line_h();
+        let content = self.term.renderable_content();
+        let offset = content.display_offset as i32;
+        let mut cells: Vec<Vec<(usize, usize)>> = vec![Vec::new(); rows.len()];
+        for cell in content.display_iter {
+            let row = (cell.point.line.0 + offset) as usize;
+            if row < cells.len() && !cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
+                cells[row].push((cell.point.column.0, if cell.flags.contains(Flags::WIDE_CHAR) { 2 } else { 1 }));
+            }
+        }
+        rows.iter()
+            .zip(starts)
+            .zip(cells)
+            .enumerate()
+            .map(|(r, ((text, start), cells))| {
+                let n = text.chars().count().min(cells.len());
+                let mut xs: Vec<Pixels> = cells[..n].iter().map(|(col, _)| origin.x + cell_w * *col as f32).collect();
+                xs.push(origin.x + cell_w * cells[..n].last().map_or(0, |(col, w)| col + w) as f32);
+                let top = origin.y + line_h * r as f32;
+                crate::painted::TextLine { start: *start, xs, top, bottom: top + line_h, line_break: px(0.) }
+            })
+            .collect()
+    }
+
     fn on_key_down(&mut self, ev: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         // Typing in the find bar: those keys bubble up here but are not for the shell.
         if self.find_has_focus(window, cx) {

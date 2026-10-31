@@ -121,6 +121,8 @@ pub struct GraphData {
 }
 
 pub struct ScmPanel {
+    /// Where the controls and the change list's lines were painted in the last frame, for the accessibility tree.
+    a11y_frames: crate::painted::RowBounds<AccessFrame>,
     host: Arc<dyn Host>,
     status: Option<Arc<Status>>,
     message: Entity<TextField>,
@@ -192,7 +194,7 @@ pub use graph_ui::GraphOption;
 mod access;
 #[cfg(test)]
 pub(crate) use access::ACCESS_LINES;
-pub(crate) use access::{AccessExt, AccessFile, AccessView};
+pub(crate) use access::{AccessExt, AccessFile, AccessFrame, AccessView, DISCARD_BUTTON, STAGE_BUTTON};
 pub(crate) use changes_ui::ChangeKey;
 
 #[path = "scm_changes.rs"]
@@ -232,6 +234,7 @@ impl ScmPanel {
         let mut subs = subs;
         subs.push(cx.observe(&query, |_, _, cx| cx.notify()));
         ScmPanel {
+            a11y_frames: Default::default(),
             host,
             status: None,
             message,
@@ -479,9 +482,14 @@ impl ScmPanel {
         let group: SharedString = format!("scm-row-{staged}-{ix}").into();
         let path = change.path.clone();
         let menu_path = path.clone();
-        let action = |id: String, glyph: &'static str, tip: &'static str| {
+        let key = ChangeKey::File(repos_ui::Group::of(change, staged), change.path.clone());
+        let frames = (repo.is_none() || repo == self.selected_repo_key()).then(|| self.a11y_frames.clone());
+        let probe = |part: AccessFrame| frames.as_ref().map(|f| crate::painted::layout_probe(f, part));
+        let action = |id: String, glyph: &'static str, tip: &'static str, part: u64| {
             div()
                 .id(SharedString::from(id))
+                .relative()
+                .children(probe(AccessFrame::Button(key.clone(), part)))
                 .size(px(20.))
                 .flex()
                 .items_center()
@@ -494,7 +502,7 @@ impl ScmPanel {
         };
         let actions = if staged {
             let path = path.clone();
-            div().child(action(format!("unstage-{ix}"), "minus", crate::i18n::t("Unstage")).on_click(cx.listener(move |this, _, _, cx| {
+            div().child(action(format!("unstage-{ix}"), "minus", crate::i18n::t("Unstage"), STAGE_BUTTON).on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
                 this.unstage_in(repo, vec![path.clone()], cx);
             })))
@@ -504,16 +512,19 @@ impl ScmPanel {
             div()
                 .flex()
                 .when(!conflict, |d| {
-                    d.child(action(format!("discard-{ix}"), "undo-2", crate::i18n::t("Discard changes")).on_click(cx.listener(move |this, _, window, cx| {
-                        cx.stop_propagation();
-                        this.confirm_discard_in(repo, vec![ch.clone()], window, cx);
-                    })))
+                    d.child(action(format!("discard-{ix}"), "undo-2", crate::i18n::t("Discard changes"), DISCARD_BUTTON).on_click(cx.listener(
+                        move |this, _, window, cx| {
+                            cx.stop_propagation();
+                            this.confirm_discard_in(repo, vec![ch.clone()], window, cx);
+                        },
+                    )))
                 })
                 .child(
                     action(
                         format!("stage-{ix}"),
                         if conflict { "check" } else { "plus" },
                         if conflict { crate::i18n::t("Mark as resolved (stage)") } else { crate::i18n::t("Stage") },
+                        STAGE_BUTTON,
                     )
                     .on_click(cx.listener(move |this, _, _, cx| {
                         cx.stop_propagation();
@@ -523,6 +534,8 @@ impl ScmPanel {
         };
         div()
             .id(SharedString::from(format!("scm-{staged}-{ix}")))
+            .relative()
+            .children(probe(AccessFrame::Line(key.clone())))
             .group(group.clone())
             .w_full()
             .h(px(layout::ROW_H))
@@ -594,8 +607,15 @@ impl ScmPanel {
                 .child(icon(glyph, 14., p.text_muted))
                 .tooltip(move |_, cx| cx.new(|_| crate::workbench::Tooltip(tip.into())).into())
         };
+        let frame = repos_ui::Group::ALL
+            .into_iter()
+            .find(|g| g.id() == id)
+            .filter(|_| repo.is_none() || repo == self.selected_repo_key())
+            .map(|g| crate::painted::probe(&self.a11y_frames, AccessFrame::Line(ChangeKey::Group(g))));
         div()
             .id(el.clone())
+            .relative()
+            .children(frame)
             .group(el.clone())
             .w_full()
             .h(px(layout::ROW_H))
@@ -634,6 +654,7 @@ impl ScmPanel {
 
 impl Render for ScmPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.a11y_frames.borrow_mut().clear();
         if !self.worktrees.loaded {
             self.refresh_worktrees(cx);
         }
@@ -738,7 +759,10 @@ impl Render for ScmPanel {
             None => branch,
         };
         let graph_fills = !self.multi() && st.changes.is_empty() && self.sections.is_open("graph", true) && !self.sections.has_height("graph");
-        let field_box = ui::input_box("scm-message-box", &p, p.bg, self.message.focus_handle(cx).is_focused(window)).child(self.message.clone());
+        let field_box = ui::input_box("scm-message-box", &p, p.bg, self.message.focus_handle(cx).is_focused(window))
+            .relative()
+            .child(self.message.clone())
+            .child(crate::painted::probe(&self.a11y_frames, AccessFrame::Message));
         div()
             .key_context("ScmPanel")
             .track_focus(&self.focus_handle)
@@ -841,6 +865,8 @@ impl Render for ScmPanel {
                     .child(
                         div()
                             .id("scm-commit")
+                            .relative()
+                            .child(crate::painted::probe(&self.a11y_frames, AccessFrame::Commit))
                             .h(px(26.))
                             .flex()
                             .items_center()

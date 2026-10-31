@@ -287,6 +287,7 @@ impl PortsSnap {
         }
         for (i, row) in self.rows.iter().enumerate() {
             let base = PORT_ROW + i as u64 * PORT_IDS;
+            let from = nodes.len();
             let mut n = Node::new(Role::ListItem);
             n.set_label(row.label.clone());
             n.set_value(row.state.clone());
@@ -311,6 +312,7 @@ impl PortsSnap {
             n.set_children(buttons);
             add_menu(nodes, &mut n, MenuRow::Port, i, &row.label);
             geometry.apply_row(RowFrame::Port, i, &mut n);
+            geometry.apply_row_buttons(RowFrame::Port, i, base, &mut nodes[from..]);
             nodes.push((NodeId(base), n));
         }
         let mut list = Node::new(Role::List);

@@ -72,8 +72,11 @@ These are the important gaps, in rough order of how much they get in the way. Th
   every change, but no one has run a real VoiceOver, NVDA, JAWS or Narrator session against it. Expect rough edges and please
   report them.
 - **No screen reader on Linux.**
-- **Incomplete on-screen positions.** The window, primary Explorer viewport, active editor pane and status bar have
-  bounds. Individual controls, rows and characters still need geometry for precise cursor highlights and caret tracking.
+- **On-screen positions.** The window, its main areas, the rows and controls on screen (Explorer, tabs, status bar,
+  find bar, Source Control, Run and Debug, Testing, Remote Explorer, Ports, Settings and menus) and every character of
+  the editor and terminal text have the bounds they are drawn at, at every zoom level and in windows of their own, so a
+  magnifier can follow the caret. Search, Problems and Extensions rows, pickers and suggestions do not have their own
+  positions yet.
 - **Some views are still silent:** search results, the Source Control graph, worktrees and sync controls, debug, testing and remote
   views, the problems, output and ports panels, hover popups, the Settings and Keyboard Shortcuts pages, context
   menus and dialogs other than the update dialog.

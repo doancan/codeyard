@@ -148,10 +148,23 @@ The tree, in the order a screen reader walks it:
   tree belongs to the editor window and still lists the dialog, but the separate window has no adapter yet, so a screen
   reader reaches its title and nothing more there. The status bar item and *Help: Check for Updates…* are the way in.
 - Geometry: the window, primary Explorer viewport, focused text-editor pane and status bar expose their painted bounds,
-  and so do the rows of the Run and Debug view (variables, watches, call stack, breakpoints), the Testing view, the
-  Remote Explorer and the Ports panel while they are drawn (a row scrolled out of its list has none).
+  and so do the individual rows and controls drawn on screen: Explorer rows, the editor tabs of the focused group, the
+  status bar's items, the find bar's fields, status and buttons, Source Control's message field, commit button, group
+  headers, file rows and their Stage/Unstage and Discard buttons, the rows of the Run and Debug view (variables,
+  watches, call stack, breakpoints), the Testing view, the Remote Explorer and the Ports panel with the buttons inside
+  them, the Settings and Keyboard Shortcuts rows and the items of an open menu. A row scrolled out of its list, and an
+  item the status bar leaves out at the current width, has none. A row's buttons that appear while the pointer is over
+  the row have the place they appear at (recorded at layout, before painting); a "More Actions…" button the tree adds
+  to a row whose menu opens by right click has no control of its own on screen and therefore no frame.
   Bounds are clipped to the visible content mask and scaled from GPUI logical pixels to AccessKit physical pixels.
   Resizing, switching split-editor focus and hiding/restoring panels update or clear these coordinates.
+- Text positions: every text run of the editor and the terminal that is on screen has its bounds (the painted line's
+  top and bottom) and the position and advance width of each of its characters, taken from the line GPUI shaped and
+  painted (wide characters and non-ASCII text included; a wrapped line is split into a run per painted line). A
+  selected line end is as wide as the editor draws it. AccessKit computes the bounds of any range from these, so
+  `AXBoundsForRange` (VoiceOver, Zoom) and UI Automation's `GetBoundingRectangles` (Narrator, NVDA, magnifiers) return
+  the caret's and the selection's rectangles where they are drawn. A run that is not on screen (scrolled away or
+  folded) has no bounds, so a range that reaches into it has none either.
 
 Focus follows the keyboard: the selected explorer row, the editor (or its selected suggestion), a find field, the
 picker's combo box (its selected row), the terminal or a dialog button.
@@ -190,9 +203,12 @@ group only toggles it from the state that was read, and committing checks the re
    `update_if_active` only when it changed. On macOS it also reports window focus; the Windows adapter follows
    `WM_SETFOCUS` / `WM_KILLFOCUS` itself. Polling is a simplification; observer-driven updates are the planned
    replacement.
-4. **Geometry.** Three non-interactive canvas probes capture the primary Explorer viewport, focused editor body and status bar
-   during painting, without drawing, taking focus or scheduling another frame. The workbench clears these cached bounds
-   before each render, so hidden surfaces lose their coordinates. The window uses its content viewport. Geometry is part
+4. **Geometry.** Non-interactive canvas probes capture the primary Explorer viewport, focused editor body and status bar,
+   and each row and control listed above, without drawing, taking focus or scheduling another frame. Each window keeps
+   its own record (a side view in a window of its own is drawn by the workbench in that window's coordinates), cleared
+   when that window draws again, so hidden surfaces lose their coordinates. Views that draw themselves (the Explorer
+   tree, Source Control, the find bar, pages and menus) keep theirs in the view (`painted.rs`). Text positions come from
+   the editor's painted lines (`EditorView::a11y_layout`) and the terminal's grid (`TerminalView::a11y_layout`). The window uses its content viewport. Geometry is part
    of the snapshot comparison, so a layout or display-scale change reaches AccessKit even when text is unchanged.
 5. **Actions** may arrive on another thread (UI Automation does that). They go through an unbounded channel to a task on
    the main thread and run in a GPUI context through `AsyncApp::update_window`, so they never re-enter a GPUI borrow.
@@ -200,7 +216,7 @@ group only toggles it from the state that was read, and committing checks the re
 6. **Other windows.** An editor's or a terminal's own window gets the same adapter with its own snapshot
    (`a11y_windows.rs`): the window title, the editor as a text field with that window's caret and selection, its find
    bar, suggestions and the picker opened there, or the terminal's text and cursor. The editor fills the window, so its
-   bounds are the window's. Actions go to the workbench with that window, after making it the window commands act on.
+   bounds are the window's; its text runs carry the character positions painted in that window. Actions go to the workbench with that window, after making it the window commands act on.
    A side view's own window holds that view's part of the workbench's tree (taken with that window, so focus and row
    frames are its own), named after the view; the main window's tree leaves it out. An extension view's window holds
    that view's nodes, and clicks and focus from the screen reader go to the extension as in the side bar.
@@ -209,8 +225,10 @@ group only toggles it from the state that was read, and committing checks the re
    side bar and where the panel is docked, so moving a view by drag and drop is reflected without reading the screen.
 
 `CODEYARD_NO_A11Y=1` disables the adapter. `attach` is skipped under test because `TestWindow::window_handle()` is
-`unimplemented!()`. `scripts/a11y-probe/` holds the Swift tools (`axdump`, `axact`, `axpress`) that read the real
-tree with `AXUIElementCreateApplication(pid)`:
+`unimplemented!()`. `scripts/a11y-probe/` holds the Swift tools (`axdump`, `axact`, `axpress`, `axframes`) that read
+the real tree of one process with `AXUIElementCreateApplication(pid)`. `axframes <pid> --select 21 4 --shot out.png`
+sets the text area's selection, prints every element's frame and the selection's `AXBoundsForRange`, and draws them on
+a capture of that process's window:
 
 ```
 swiftc -O scripts/a11y-probe/axdump.swift -o /tmp/axdump
@@ -242,11 +260,10 @@ probe as the workbench's lists (`painted.rs`).
 
 - **No screen reader has been run.** VoiceOver (speech, rotor, VO cursor, "interact with text area") and NVDA, JAWS or
   Narrator on Windows. The Windows adapter builds and passes CI, but no UI Automation client has read its tree yet.
-- **Fine-grained bounds.** Landmark frames, the rows of the Run and Debug, Testing, Remote Explorer and Ports lists, the
-  rows of the Settings and Keyboard Shortcuts pages and the items of an open menu are available (painted, clipped to
-  what is visible; a row scrolled out of view has none), but individual Explorer rows, status items, Source Control
-  controls, the buttons inside rows and text runs do not yet expose their painted frames. Text still needs `character_positions` and
-  `character_widths`; precise character hit testing, caret highlighting and magnifier caret tracking remain unimplemented.
+- **Fine-grained bounds.** Rows, controls and text positions have their painted frames (see Geometry above). Not yet:
+  the buttons of the Settings page's rows, the Search, Problems and Extensions lists' rows, the Search Editor, pickers
+  and suggestion rows, the bottom panel's tabs, and the welcome and update dialogs' buttons keep only the bounds of
+  their landmark or none. Bidirectional (RTL) text is reported left to right.
 - **Focus** was observed live on macOS only for Source Control: setting `AXFocused` on a change row of a dev build moved
   the keyboard cursor there and the row reported `Focused="1"` as the application's `AXFocusedUIElement`. Other focus
   paths (`TreeUpdate.focus`, `update_view_focus_state`) are covered by tests but not observed in a live window.
@@ -254,7 +271,8 @@ probe as the workbench's lists (`painted.rs`).
   list. Run offsets, the selection and
   set positions are document- or tree-relative, but the text value of the editor node starts at the range, so a
   client that counts characters from the node's value sees offsets relative to the first exposed line; the scroll
-  position and description give that line. Primary selection only; no multi-cursor, folding, wrapped lines, RTL or CRLF handling.
+  position and description give that line. Primary selection only; no multi-cursor, RTL or CRLF handling. A wrapped
+  line is split into a run per painted line; a folded line is in the text but has no frame.
 - The terminal exposes the screen only, not the scrollback, and cannot be written to from the tree (typing goes through
   the keyboard as usual).
 - Not exposed: an installed extension's page, the Source Control graph, worktrees and sync controls, hover and
@@ -275,18 +293,19 @@ probe as the workbench's lists (`painted.rs`).
 - Linux (AT-SPI) is not implemented: it needs bounds, window events and an async D-Bus runtime.
 - Interface scale (`ui.scale`, zoom) is applied by GPUI at the window: the bounds reported to AccessKit are logical
   bounds × display scale × interface scale, so they match what is painted at every zoom level
-  (`accessibility_bounds_follow_the_interface_scale`). Not yet checked with VoiceOver, NVDA or Narrator at 150/200%.
+  (`accessibility_bounds_follow_the_interface_scale`, `a11y_frames_tests.rs`). Checked natively at 100% and 200% with
+  `axframes` (below); not yet with VoiceOver, NVDA or Narrator running, nor with UI Automation on Windows.
 
 ## Order of work
 
 1. Screen-reader passes (VoiceOver, NVDA, Narrator) on real machines; fix what they find.
-2. Per-control/text-run bounds and real focus tracking, observer-driven updates.
+2. Real focus tracking checked with screen readers, observer-driven updates.
 3. The remaining panels (search results, Source Control graph/worktrees/sync, problems), the Settings page, context menus and dialogs.
 4. The editor proper: visible lines only with shaped character positions, correct absolute offsets, scroll actions,
    multi-cursor policy, diagnostics announcements.
 5. The Linux adapter and regression tests against a real accessibility client.
 
-## Landmark geometry verification
+## Geometry verification
 
 Automated regressions exercise the real GPUI layout at narrow and wide window sizes, then pass the
 resulting tree to AccessKit's consumer and hit-test the Explorer, editor and status bar. Separate cases
@@ -300,3 +319,20 @@ profile, activated `main.rs` through its accessible Explorer row, and read non-z
 landmark at its own center. Resizing the window from 1280 to 920 points changed the editor width
 from 972 to 612 points and the status-bar width from 1280 to 920, and all three hit tests still
 passed. The probe did not run VoiceOver or validate per-character bounds.
+
+Rows, controls and text (Q05): `a11y_frames_tests.rs`, `a11y_row_frames_tests.rs` and the Source Control, find bar and
+terminal cases compare each node's bounds with the frame its probe recorded, hit-test the centre of each Explorer row,
+tab, status item, Source Control control and row button, find bar part and host row button, and ask AccessKit's
+consumer for the caret's and a selection's bounding boxes, which must match the editor's own IME caret rectangle at
+100% and 200%, in the main window and in an editor's own window (where the main window then reports no stale
+positions). A Remote Explorer moved into its own window reports its rows in that window's coordinates.
+
+A native macOS check on 2026-10-31 ran a dev build (`CODEYARD_DEV=1`, its own state and configuration folders, a
+throwaway project) and read only that process with `axframes`. At 100% the Explorer rows were 24 points tall and
+stacked under the outline's top edge, the tab and the status items sat where they are drawn, and after setting
+`AXSelectedTextRange` to "café" on line 2 its `AXBoundsForRange` (636.3, 270.0, 28.9 × 18.0 points) outlined exactly
+the drawn selection; the caret character's bounds were 7.2 points wide. At `ui.scale` 2 the same rows were 48 points
+tall, the selection's bounds 57.8 × 36.0 points, again on the drawn highlight; status items the bar leaves out at that
+width had no frame. With the editor moved into a window of its own the selection's bounds were on the highlight in
+that window at 100% and 200%, and the main window's leftover text area reported none. The captures with the frames
+drawn on them were checked by eye. VoiceOver itself was not run.

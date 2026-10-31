@@ -19,6 +19,18 @@ fn bounds(snapshot: &Snapshot, id: NodeId) -> Option<Rect> {
     snapshot.to_tree().nodes.into_iter().find(|(node_id, _)| *node_id == id).and_then(|(_, node)| node.bounds())
 }
 
+/// The landmark a hit node is part of (its rows, runs and items have frames of their own inside it).
+fn landmark_of(node: accesskit_consumer::NodeRef<'_>) -> Option<accesskit_consumer::NodeRef<'_>> {
+    let mut at = Some(node);
+    while let Some(n) = at {
+        if [EXPLORER, EDITOR, STATUS].contains(&n.locate().0) {
+            return Some(n);
+        }
+        at = n.parent();
+    }
+    None
+}
+
 fn run(wb: &Entity<Workbench>, cx: &mut VisualTestContext, command: &str) {
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test(command, window, cx));
     cx.run_until_parked();
@@ -42,7 +54,7 @@ fn accessibility_landmarks_have_painted_bounds(cx: &mut TestAppContext) {
             let center = Point::new((rect.x0 + rect.x1) / 2., (rect.y0 + rect.y1) / 2.);
             let state = tree.state();
             let hit = state.root().node_at_point(center, &|_| accesskit_consumer::FilterResult::Include).expect("landmark hit");
-            assert_eq!(hit.role(), role, "hit testing landmark {id:?} at {center:?}");
+            assert_eq!(landmark_of(hit).map(|n| n.role()), Some(role), "hit testing landmark {id:?} at {center:?}");
         }
     }
 }
@@ -107,7 +119,9 @@ fn accessibility_bounds_follow_the_interface_scale(cx: &mut TestAppContext) {
         // Against the layout: each reported rectangle is the element's painted logical bounds × display scale ×
         // interface scale, so assistive technology points at what is on screen.
         for (id, which) in [(EXPLORER, Landmark::Explorer), (EDITOR, Landmark::Editor), (STATUS, Landmark::Status)] {
-            let painted = wb.read_with(cx, |wb, _| wb.chrome.a11y_bounds.get(which)).unwrap_or_else(|| panic!("{id:?} painted at {scale}"));
+            let painted = cx
+                .update(|window, cx| wb.read(cx).chrome.a11y_bounds.get(window.window_handle().window_id(), which))
+                .unwrap_or_else(|| panic!("{id:?} painted at {scale}"));
             let rect = bounds(&snapshot, id).unwrap();
             let want = [painted.left(), painted.top(), painted.right(), painted.bottom()].map(|v| f64::from(v / px(1.)) * factor);
             for (got, want) in [rect.x0, rect.y0, rect.x1, rect.y1].into_iter().zip(want) {
@@ -125,7 +139,7 @@ fn accessibility_bounds_follow_the_interface_scale(cx: &mut TestAppContext) {
             let center = Point::new((rect.x0 + rect.x1) / 2., (rect.y0 + rect.y1) / 2.);
             let state = tree.state();
             let hit = state.root().node_at_point(center, &|_| accesskit_consumer::FilterResult::Include).expect("landmark hit");
-            assert_eq!(hit.role(), role, "hit testing landmark {id:?} at {center:?} and {scale}");
+            assert_eq!(landmark_of(hit).map(|n| n.role()), Some(role), "hit testing landmark {id:?} at {center:?} and {scale}");
         }
     }
 }

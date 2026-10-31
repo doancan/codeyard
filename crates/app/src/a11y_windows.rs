@@ -113,7 +113,8 @@ pub(super) fn view_window_snapshot(root: &Entity<ViewWindow>, window: &Window, c
     let mut full = wb.a11y_snapshot(window, cx);
     let mut snap = take_view(&mut full, &view);
     snap.generation = full.generation;
-    snap.geometry = Geometry::whole_window(window);
+    // What the workbench drew in this window (its rows and buttons), in this window's coordinates.
+    snap.geometry = std::mem::take(&mut full.geometry);
     snap.title = wb.view_window_title(&view);
     if wb.chrome.view_host == Some(window.window_handle()) {
         snap.picker = full.picker.take();
@@ -146,9 +147,10 @@ pub(in crate::workbench) const TERMINAL_WINDOW: Hooks = Hooks {
 /// when it was opened there.
 pub(super) fn editor_window_snapshot(root: &Entity<EditorWindow>, window: &Window, cx: &mut App) -> Snapshot {
     let (ed, slot, home) = root.read(cx).parts();
+    let scale = window.scale_factor();
     let (editor, find_bar, completion) = ed.update(cx, |e, _| {
         e.in_slot(slot, |e| {
-            let editor = EditorSnap::of(e);
+            let editor = EditorSnap::of(e, scale);
             let completion = e.a11y_completion(MAX_OPTIONS).map(|(rows, selected)| ListSnap { rows_total: rows.len(), selected: Some(selected), rows });
             (editor, e.find_bar(), completion)
         })
@@ -160,6 +162,7 @@ pub(super) fn editor_window_snapshot(root: &Entity<EditorWindow>, window: &Windo
             replacement: b.show_replace.then(|| b.replacement(cx)),
             status: b.status_text().map(str::to_string),
             controls: b.a11y_controls().into_iter().map(|(l, on)| (l.to_string(), on)).collect(),
+            frames: b.a11y_frames(window),
         }
     });
     // The picker belongs to this window while it is the one in use.
@@ -210,7 +213,7 @@ pub(super) fn terminal_window_snapshot(root: &Entity<DetachedTerminal>, window: 
     Snapshot {
         geometry: Geometry::whole_window(window),
         title: term.read(cx).title.to_string(),
-        terminal: Some(term_tab_access::terminal_snap(&term, 0, 1, cx)),
+        terminal: Some(term_tab_access::terminal_snap(&term, 0, 1, window.scale_factor(), cx)),
         focus: if focused { FocusSnap::Terminal } else { FocusSnap::Window },
         ..Default::default()
     }

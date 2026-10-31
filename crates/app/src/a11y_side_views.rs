@@ -144,6 +144,7 @@ impl TestingSnap {
         let mut ids = Vec::new();
         for (i, row) in self.rows.iter().enumerate() {
             let base = TEST_ROW + i as u64 * TEST_IDS;
+            let from = nodes.len();
             let mut n = Node::new(Role::TreeItem);
             match row {
                 TestRow::File { rel, outcome, open, count } => {
@@ -181,6 +182,7 @@ impl TestingSnap {
                 }
             }
             geometry.apply_row(RowFrame::Test, i, &mut n);
+            geometry.apply_row_buttons(RowFrame::Test, i, base, &mut nodes[from..]);
             nodes.push((NodeId(base), n));
             ids.push(NodeId(base));
         }
@@ -199,6 +201,7 @@ fn remote_tree(rows: &[RemoteRow], nodes: &mut Vec<(NodeId, Node)>, geometry: &G
     let mut ids = Vec::new();
     for (i, row) in rows.iter().enumerate() {
         let base = REMOTE_ROW + i as u64 * REMOTE_IDS;
+        let from = nodes.len();
         let mut n = Node::new(Role::TreeItem);
         match row {
             RemoteRow::Group { group, count, expanded } => {
@@ -278,6 +281,7 @@ fn remote_tree(rows: &[RemoteRow], nodes: &mut Vec<(NodeId, Node)>, geometry: &G
             }
         }
         geometry.apply_row(RowFrame::Remote, i, &mut n);
+        geometry.apply_row_buttons(RowFrame::Remote, i, base, &mut nodes[from..]);
         nodes.push((NodeId(base), n));
         ids.push(NodeId(base));
     }
@@ -350,8 +354,8 @@ impl SideSnap {
 
 impl Workbench {
     pub(super) fn a11y_side(&self, window: &Window, cx: &App) -> SideSnap {
-        let testing = (self.chrome.panel == Some(Panel::Testing)).then(|| self.a11y_testing(cx));
-        let remote = (self.chrome.panel == Some(Panel::Remote)).then(|| {
+        let testing = self.view_shown(Panel::Testing).then(|| self.a11y_testing(cx));
+        let remote = self.view_shown(Panel::Remote).then(|| {
             let mut rows = self.remote_rows(cx);
             rows.truncate(MAX_REMOTE);
             rows

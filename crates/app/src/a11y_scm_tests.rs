@@ -330,3 +330,34 @@ fn scm_file_menu_opens_from_the_keyboard_and_the_tree(cx: &mut TestAppContext) {
     cx.run_until_parked();
     assert!(on_row(staged, cx));
 }
+
+/// Source Control's message field, commit button, group header, file rows and their buttons have the frames they are
+/// painted at; a row's Stage and Discard buttons (shown while the pointer is over the row) are inside it and a hit
+/// test finds each where it is drawn. The menu button has no control of its own on screen and so no frame.
+#[gpui::test]
+fn scm_controls_and_rows_have_their_painted_frames(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let Some((_dir, wb, cx)) = repo("a11y-scm-frames", cx) else { return };
+    let snap = snapshot(&wb, cx);
+    let tree = accesskit_consumer::Tree::new(snap.to_tree(), true);
+    let state = tree.state();
+    let bounds = |label: &str| node(&snap, label).and_then(|(_, n)| n.bounds()).unwrap_or_else(|| panic!("{label} has a frame"));
+    let hit = |rect: accesskit::Rect| {
+        let at = accesskit::Point::new((rect.x0 + rect.x1) / 2., (rect.y0 + rect.y1) / 2.);
+        state.root().node_at_point(at, &|_| accesskit_consumer::FilterResult::Include).and_then(|n| n.label())
+    };
+    let message = snap.to_tree().nodes.into_iter().find(|(id, _)| *id == SCM_MESSAGE).and_then(|(_, n)| n.bounds()).expect("message frame");
+    let commit = bounds("Commit All (1)");
+    assert!(message.y1 <= commit.y0 + 0.01, "the field is above the button: {message:?} {commit:?}");
+    assert_eq!(hit(commit).as_deref(), Some("Commit All (1)"));
+    let header = bounds("Changes (2)");
+    let row = bounds("untracked.txt");
+    assert!(header.y1 <= row.y0 + 0.01, "the header is above its files");
+    assert_eq!(hit(row).as_deref(), Some("untracked.txt"));
+    for button in ["Stage untracked.txt", "Discard changes in untracked.txt"] {
+        let b = bounds(button);
+        assert!(b.x0 >= row.x0 - 0.01 && b.x1 <= row.x1 + 0.01 && b.y0 >= row.y0 - 0.01 && b.y1 <= row.y1 + 0.01, "{button} {b:?} in {row:?}");
+        assert_eq!(hit(b).as_deref(), Some(button));
+    }
+    assert!(snap.to_tree().nodes.iter().filter(|(_, n)| n.label() == Some("More Actions…")).all(|(_, n)| n.bounds().is_none()));
+}
