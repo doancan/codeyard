@@ -16,7 +16,7 @@ The tree, in the order a screen reader walks it:
 - One `Tree` per folder of the workspace: "Explorer", or "Explorer: name" when there are several. One `TreeItem` per
   row in a range of 1,000 rows: name, level, selected, expanded, set position in the whole tree. The range is centred
   on the selection while it is on screen, otherwise on the visible rows; the tree reports its scroll position in rows
-  and supports scroll up/down by a page, which moves the range. These trees are omitted while Explorer is hidden. Row actions resolve the current path rather than reusing an old row index.
+  and supports scroll up/down by a page, which moves the range. These trees are in the tree only while a side bar (or a window of its own) shows the Explorer: another view, a hidden side bar or zen mode takes them out, and focus, scroll and row actions from an older tree then do nothing. Row actions resolve the current path rather than reusing an old row index.
 - While Source Control is visible, a `Group` with the branch, a writable `MultilineTextInput` for the commit message
   and the commit button, labeled with what it commits ("Commit (2)", "Commit All (3)") and disabled with "Nothing to
   commit" as its description when there is nothing. Then a `List` "Changed files" of the change groups: each group a

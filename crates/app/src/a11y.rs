@@ -1339,3 +1339,7 @@ mod range_tests;
 #[cfg(test)]
 #[path = "a11y_scm_tests.rs"]
 mod scm_tests;
+
+#[cfg(test)]
+#[path = "a11y_visibility_tests.rs"]
+mod visibility_tests;
