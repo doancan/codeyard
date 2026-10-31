@@ -43,7 +43,7 @@ installed **on the server**. Change or disable one with `lsp.servers`; it is ign
 
 ## GitHub pull requests
 
-`GitHub: Pull Requests…` uses `gh` when it is installed and signed in, otherwise the public API (rate limited, no private
+`Pull Requests: Show…` uses `gh` when it is installed and signed in, otherwise the public API (rate limited, no private
 repositories): run `gh auth login` or set `GITHUB_TOKEN`. A checkout that refuses because of local changes tells you to commit or
 stash first.
 

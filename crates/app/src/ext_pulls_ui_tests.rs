@@ -115,7 +115,7 @@ fn choose(wb: &Entity<Workbench>, cx: &mut VisualTestContext, label: &str) {
 fn show_view(wb: &Entity<Workbench>, cx: &mut VisualTestContext) {
     wb.update_in(cx, |wb, window, cx| {
         wb.focus_tree(window, cx);
-        wb.run_command_for_test("GitHub: Pull Requests…", window, cx)
+        wb.run_command_for_test("Pull Requests: Show…", window, cx)
     });
 }
 
@@ -234,6 +234,91 @@ fn an_extensions_merge_requests_appear_and_its_token_never_reaches_it(cx: &mut T
     assert!(dir.join("pr.txt").exists());
     assert!(!frames_contain("acme_SECRET"));
 
+    for p in [&dir, &bare, &other] {
+        let _ = std::fs::remove_dir_all(p);
+    }
+}
+
+/// #184: the user adds a self-managed instance of the extension's provider on its page, after a dialog that names the
+/// host like a permission; remotes on that host then go to the provider with the instance's own account, which signs
+/// requests to that host only.
+#[gpui::test]
+fn a_self_managed_instance_is_added_by_the_user_and_claims_its_host(cx: &mut TestAppContext) {
+    if crate::ext_runtime::exthost_path().is_none() {
+        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+        return;
+    }
+    let cfg = config_dir("instance");
+    // The probe's provider, offering instances: every URL on acme.example.com, which `hosts` lists.
+    let manifest = MANIFEST.replace(
+        "hosts = [\"api.acme.example.com\"]\naccount-url = \"https://api.acme.example.com/me\"\n",
+        "hosts = [\"api.acme.example.com\", \"acme.example.com\"]\ninstances = true\n",
+    );
+    assert!(manifest.contains("instances = true"));
+    let entries = vec![
+        ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: manifest.into_bytes(), executable: false },
+        ext_pkg::Entry { path: "Cargo.toml".into(), data: Vec::new(), executable: false },
+        ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: PROBE.to_vec(), executable: false },
+    ];
+    let (bytes, _) = ext_pkg::write(entries).expect("the probe passes the import check");
+    crate::ext::store(&cfg).install(&bytes, ext_core::Source::File { path: "/downloads/probe.cyx".into() }).expect("installs");
+    let (dir, bare, other) = repo_with_remote("extinstance");
+    let dir = std::fs::canonicalize(dir).unwrap();
+    git_in(&dir, &["remote", "add", "corp", "https://git.corp.example/team/app.git"]);
+
+    cx.update(|cx| {
+        crate::bind_keys(cx);
+        cx.set_global(ActiveTheme(theme::DARK));
+        cx.set_global(crate::settings::Settings { lsp_enabled: false, workspace_trust: false, ..Default::default() });
+    });
+    let config = cfg.clone();
+    let (wb, cx) = cx.add_window_view(move |window, cx| Workbench::with_state(state::State::in_memory().ok(), Some(config), window, cx));
+    wb.update_in(cx, |wb, window, cx| wb.reload_config_for_test(window, cx));
+    crate::qa_workbench_tests::open(&wb, &dir, cx);
+    let server = Arc::new(Fake::default());
+    wb.update(cx, |wb, _| wb.use_test_accounts(server.clone(), "gho_unused"));
+
+    // Nobody claims git.corp.example yet: the view names the providers there are.
+    show_view(&wb, cx);
+    let wb2 = wb.clone();
+    until(cx, "the notice", move |cx| notice(&wb2, cx).contains("Acme (git.acme.example.com)"));
+
+    // Cancel stores nothing.
+    let add = |wb: &Entity<Workbench>, cx: &mut VisualTestContext| {
+        wb.update_in(cx, |wb, window, cx| wb.add_instance_for_test("you.probe", "acme", window, cx));
+        wb.update(cx, |wb, cx| wb.set_overlay_query_for_test("git.corp.example corp-client-1".into(), cx));
+        cx.simulate_keystrokes("enter");
+        until(cx, "the consent dialog", |cx| cx.has_pending_prompt());
+    };
+    add(&wb, cx);
+    cx.simulate_prompt_answer("Cancel");
+    cx.run_until_parked();
+    assert_eq!(wb.read_with(cx, |wb, _| wb.extension_accounts_for_test("you.probe")), ["acme"]);
+
+    // The dialog names the extension, its publisher, the host and the OAuth application, as a permission does.
+    add(&wb, cx);
+    let (title, detail) = cx.pending_prompt().unwrap();
+    assert!(title.contains("Probe") && title.contains("git.corp.example"), "{title}");
+    for want in ["you, installed from /downloads/probe.cyx", "corp-client-1", "codeyard://ext/you.probe/callback"] {
+        assert!(detail.contains(want), "{want}: {detail}");
+    }
+    cx.simulate_prompt_answer("Add Instance");
+    let wb2 = wb.clone();
+    until(cx, "the instance", move |cx| wb2.read_with(cx, |wb, _| wb.extension_accounts_for_test("you.probe")).len() == 2);
+    assert_eq!(wb.read_with(cx, |wb, _| wb.extension_accounts_for_test("you.probe")), ["acme", "acme@git.corp.example"]);
+
+    // The remote on the instance's host goes to the provider with the instance's account. The probe calls
+    // api.acme.example.com whatever the remote: the instance does not sign for a host other than its own.
+    show_view(&wb, cx);
+    until(cx, "the request", |_| frames_contain("acme@git.corp.example"));
+    let wb2 = wb.clone();
+    until(cx, "the list", move |cx| !notice(&wb2, cx).contains("Loading"));
+    assert!(server.sent().is_empty(), "nothing was signed or sent: {:?}", server.sent().iter().map(|s| s.url.clone()).collect::<Vec<_>>());
+
+    // Removing it on the page takes it away again.
+    wb.update(cx, |wb, cx| wb.remove_instance_for_test("you.probe", "acme@git.corp.example", cx));
+    cx.run_until_parked();
+    assert_eq!(wb.read_with(cx, |wb, _| wb.extension_accounts_for_test("you.probe")), ["acme"]);
     for p in [&dir, &bare, &other] {
         let _ = std::fs::remove_dir_all(p);
     }

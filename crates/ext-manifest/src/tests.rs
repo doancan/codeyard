@@ -602,6 +602,37 @@ fn an_oauth_provider_is_declared_and_named_in_auth() {
     assert_eq!(codes(&with(&format!("[permissions]\nauth = [\"acme\"]\n{ACME}{ACME}"))), vec![Code::DuplicateId]);
 }
 
+/// #184: a provider with `instances = true` can be copied onto a self-managed host with the user's client id.
+#[test]
+fn an_oauth_provider_with_instances_moves_to_another_host() {
+    let forge = "[[oauth]]\nid = \"forge\"\nname = \"Forge\"\nauthorize-url = \"https://forge.example.com/oauth/authorize\"\ntoken-url = \"https://forge.example.com/oauth/token\"\nclient-id = \"cy-1\"\nscopes = [\"api\"]\nhosts = [\"forge.example.com\"]\naccount-url = \"https://forge.example.com/api/user\"\ninstances = true\n";
+    let m = parse(&with(&format!("[permissions]\nauth = [\"forge\"]\nwhy = \"x\"\n{forge}"))).unwrap();
+    let p = m.oauth_provider("forge").unwrap();
+    assert!(p.instances);
+    assert_eq!(p.home().as_deref(), Some("forge.example.com"));
+    let i = p.instance("git.corp.example", "abc").unwrap();
+    assert_eq!(i.id, "forge@git.corp.example");
+    assert_eq!(i.name, "Forge (git.corp.example)");
+    assert_eq!(i.authorize_url, "https://git.corp.example/oauth/authorize");
+    assert_eq!(i.token_url, "https://git.corp.example/oauth/token");
+    assert_eq!(i.account_url.as_deref(), Some("https://git.corp.example/api/user"));
+    assert_eq!(
+        (i.client_id.as_str(), i.hosts.as_slice(), i.scopes.as_slice()),
+        ("abc", ["git.corp.example".to_string()].as_slice(), ["api".to_string()].as_slice())
+    );
+    assert_eq!(crate::split_account(&i.id), ("forge", Some("git.corp.example")));
+    assert_eq!(crate::split_account("forge"), ("forge", None));
+    // Without `instances`, nothing moves.
+    let acme = parse(&with(&format!("[permissions]\nauth = [\"acme\"]\nwhy = \"x\"\n{ACME}"))).unwrap();
+    assert!(acme.oauth_provider("acme").unwrap().instance("git.corp.example", "abc").is_none());
+    // The URLs must share one host that `hosts` lists: Acme's account URL is on another host.
+    let e = errors(&with(&format!("[permissions]\nauth = [\"acme\"]\nwhy = \"x\"\n{ACME}instances = true\n")));
+    assert_eq!(e[0].code, Code::BadContribution);
+    assert!(e[0].message.contains("instances = true"), "{}", e[0].message);
+    let unlisted = forge.replace("hosts = [\"forge.example.com\"]", "hosts = [\"api.forge.example.com\"]");
+    assert_eq!(codes(&with(&format!("[permissions]\nauth = [\"forge\"]\nwhy = \"x\"\n{unlisted}"))), vec![Code::BadContribution]);
+}
+
 #[test]
 fn oauth_urls_are_https_with_a_host_name() {
     let bad = [

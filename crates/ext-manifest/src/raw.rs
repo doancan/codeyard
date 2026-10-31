@@ -219,6 +219,8 @@ pub struct RawOAuth {
     pub scopes: Vec<S<String>>,
     pub hosts: Vec<S<String>>,
     pub account_url: Option<S<String>>,
+    /// The user may add self-managed instances of this provider (#184).
+    pub instances: Option<S<bool>>,
 }
 
 #[derive(Deserialize)]

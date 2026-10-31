@@ -18,6 +18,7 @@ use std::time::{Duration, Instant};
 
 use ext_api::value as v;
 use ext_core::Source;
+use ext_core::instances::Instance;
 use ext_manifest::{Manifest, OAuthProvider};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
@@ -246,13 +247,22 @@ pub struct Provider {
 
 pub const GITHUB_HOSTS: &[&str] = &["api.github.com", "uploads.github.com"];
 
-/// The provider `id` for this extension, if its manifest can use it.
-pub fn provider(m: &Manifest, id: &str) -> Option<Provider> {
+/// The provider `id` for this extension, if its manifest can use it: built in, an `[[oauth]]` table, or a
+/// self-managed instance of one the user added (`gitlab@git.example.com`, #184).
+pub fn provider(m: &Manifest, instances: &[Instance], id: &str) -> Option<Provider> {
     if id == "github" {
         return Some(Provider { id: id.into(), name: "GitHub".into(), hosts: GITHUB_HOSTS.iter().map(|h| h.to_string()).collect(), oauth: None });
     }
-    let p = m.oauth_provider(id)?;
-    Some(Provider { id: p.id.clone(), name: p.name.clone(), hosts: p.hosts.clone(), oauth: Some(p.clone()) })
+    let p = match ext_manifest::split_account(id) {
+        (base, Some(host)) => instances.iter().find(|i| i.provider == base && i.host == host)?.oauth(m)?,
+        (_, None) => m.oauth_provider(id)?.clone(),
+    };
+    Some(Provider { id: p.id.clone(), name: p.name.clone(), hosts: p.hosts.clone(), oauth: Some(p) })
+}
+
+/// The `[permissions] auth` entry an account id is granted by: an instance's is its provider's.
+pub fn granted_as(id: &str) -> &str {
+    ext_manifest::split_account(id).0
 }
 
 /// The scopes to ask for: what `auth.session` names, each declared in `[[oauth]] scopes`; all declared ones when it

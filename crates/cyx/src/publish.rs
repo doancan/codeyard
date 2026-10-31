@@ -61,6 +61,14 @@ pub fn publish(p: &Publish, ep: &Endpoints, token: impl FnOnce() -> Result<Strin
     let files = ext_pkg::collect_dir_for(p.dir, p.target).map_err(|e| format!("error: {e}"))?;
     let (bytes, digest) = ext_pkg::write(files).map_err(|e| format!("error: {e}"))?;
     let m = ext_pkg::read(&bytes).map_err(|e| format!("error: {e}"))?.manifest;
+    if let Some(o) = crate::placeholder_client_ids(&m).first() {
+        return Err(format!(
+            "error: the client id of [[oauth]] {} is a placeholder ({:?}), so every sign-in would fail\n   = fix: register an OAuth application with the provider and put its client id in {}",
+            o.id,
+            o.client_id,
+            ext_manifest::FILE_NAME
+        ));
+    }
     let mut notes = report.warnings;
     if let Some(t) = p.target {
         notes.push(format!(

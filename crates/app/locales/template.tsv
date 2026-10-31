@@ -55,6 +55,8 @@ Add Cursor Above
 Add Cursor Below	
 Add Expression…	
 Add Function Breakpoint…	
+Add Instance	
+Add Instance…	
 Add Next Occurrence	
 Add SSH Host…	
 Add SSH host…	
@@ -433,6 +435,7 @@ Copying files here needs the connection to {}, which failed: use Reconnect first
 Copying files here works with a connected SSH host: connect first (⌃R).	
 Copying…	
 Could not add the configuration: {}	
+Could not add the instance: {}	
 Could not be compared	
 Could not blame: {}	
 Could not change {}	
@@ -479,6 +482,7 @@ Could not read {}
 Could not read {}: {}	
 Could not read: {}	
 Could not refresh container data: {}. Check Docker access on the SSH host and retry.	
+Could not remove the instance: {}	
 Could not resolve “{}”: check the spelling and the network (the request ran on {}).	
 Could not run “{}”: {}	
 Could not save files before debugging: {}	
@@ -1008,7 +1012,6 @@ Git: View File History
 GitHub did not accept Codeyard's sign-in: run `gh auth login` in a terminal, then try again.	
 GitHub has no release with a checksum list yet, so there is nothing to compare this version with. You can look at the release page.	
 GitHub's rate limit for anonymous requests: sign in with `gh auth login` or set GITHUB_TOKEN	
-GitHub: Pull Requests…	
 Give the theme a name.	
 Go	
 Go back to version {}	
@@ -1068,6 +1071,7 @@ Highlight the line with the cursor
 Highlight the matching bracket	
 History is collected while monitoring is active. CPU can exceed 100% across cores. Rates need two samples; counter resets show no rate.	
 History of {}	
+Host and client id of your {} server, such as git.example.com 3f2a9c	
 Host name (from ~/.ssh/config) or user@host	
 Hover an option to preview the result.	
 Identical	
@@ -1111,6 +1115,7 @@ Install from File…
 Install from Folder…	
 Install on {}	
 Install podman-compose to open a Compose project with Podman, then try again.	
+Install the extension to add an instance; one in development has none.	
 Install which dictionary? (English is built in)	
 Install {}	
 Install {}?	
@@ -1136,6 +1141,7 @@ Invalid string
 It brings its own programs, built for each platform. They run on the computer that holds the workspace (this one, or the SSH server) with your rights.	
 It can't be moved to the Trash ({}). Deleting it permanently can't be undone.	
 It declares no permissions.	
+It may sign in to your account on {0} with the OAuth application you registered there (client id {1}, redirect URI {2}). Codeyard signs its requests to {0} with that account; the extension never sees the token. Remove it on the extension's page in Extensions.	
 It wants to read the text you copied, here or in other apps.	
 It wants to run {0} on the remote host {1}, with your account there.	
 Its contributions are removed from every window, with the data it stored.	
@@ -1196,6 +1202,7 @@ Let the language server format while typing }, ; or Enter
 Let {0} act as your GitHub account {1}?	
 Let {0} run programs on {1}?	
 Let {0} sign in to your {1} account?	
+Let {0} use your account on {1}?	
 Let {} read the clipboard?	
 Lifecycle: {}	
 Lightweight editing, on this machine or over SSH.	
@@ -1458,7 +1465,8 @@ Node.js program
 None	
 None in this session.	
 None of these commits is yours.	
-None of this repository's remotes is on github.com.	
+None of this repository's remotes is on github.com or on a host of {}.	
+None of this repository's remotes is on github.com, and no installed extension provides pull requests for their hosts.	
 None yet	
 None: it only adds data to Codeyard.	
 Not Now	
@@ -1688,6 +1696,7 @@ Published addresses belong to the SSH server. Use port forwarding to access remo
 Published to {}	
 Publishing branch…	
 Pull (Rebase)	
+Pull Requests: Show…	
 Pull also fetches all tags	
 Pull failed: {}	
 Pull from…	
@@ -2431,6 +2440,7 @@ Type a name from ~/.ssh/config or user@host
 Type a query and press Enter to search.	
 Type a query. Esc closes the bar.	
 Type into terminals	
+Type the host and the client id, separated by a space.	
 Type the shortcut for {} (e.g. cmd-shift-d), then save	
 Type {} to install it.	
 TypeScript {} · TypeScript Language Server {} · HTML/CSS {}	
@@ -2626,7 +2636,6 @@ Zoom Out
 `{}` is not installed or not on PATH	
 a comment is not closed	
 a field refers to a group the regular expression does not have	
-a host of the {0} account ({1}), not {2}	
 a key binding condition needs a context, not a constant	
 a program	
 a string is not closed	
@@ -2965,6 +2974,7 @@ your words
 {0} and {1} cannot be multiplied	
 {0} and {1} cannot be subtracted	
 {0} and {1} cannot have their containment checked	
+{0} can now sign in to {1}.	
 {0} cannot be used with {1}	
 {0} commit{1} only exist on this branch and will be lost (the reflog keeps them for a while).	
 {0} containers · {1} running · {2} need attention	

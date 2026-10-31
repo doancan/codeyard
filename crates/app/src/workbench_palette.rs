@@ -2,6 +2,17 @@
 
 use super::*;
 
+/// The Pull Requests view's command: forge-neutral, since extensions add GitLab, Gitea and others next to GitHub.
+pub(super) const PULL_REQUESTS_COMMAND: &str = "Pull Requests: Show…";
+
+/// Extra words the palette finds a command by: a former name, or another forge's word for the same thing.
+pub(super) fn search_keywords(label: &str) -> &'static str {
+    match label {
+        PULL_REQUESTS_COMMAND => "GitHub: Pull Requests… Merge Requests", // i18n-keep: search words, not shown
+        _ => "",
+    }
+}
+
 impl Workbench {
     pub(super) fn quick_open(&mut self, _: &QuickOpen, window: &mut Window, cx: &mut Context<Self>) {
         self.open_palette("", window, cx);
@@ -201,7 +212,8 @@ impl Workbench {
             Command::action("Test: Debug Test at Cursor", DebugTestAtCursor),
             Command::action("Tasks: Configure Tasks", ConfigureTasks),
             Command::action("Merge Conflict: Open Merge Editor", OpenMergeEditor),
-            Command::action("GitHub: Pull Requests…", ShowPullRequests),
+            // GitHub's and every extension provider's (#186); found by its old name and "Merge Requests" too.
+            Command::action(PULL_REQUESTS_COMMAND, ShowPullRequests),
             Command::action("HTTP: Send Request", SendRequest),
             Command::action("HTTP: Show Last Response Headers", ShowResponseHeaders),
             Command::action("Merge Conflict: Accept Current", editor::AcceptCurrentChange),
@@ -469,8 +481,14 @@ impl Workbench {
         commands.sort_by_key(|c| rank(&c.label));
         // Labels are shown in the UI language; search also matches the English name, identifiers (recents, tests) stay English.
         let shown: Vec<String> = commands.iter().map(Self::command_title).collect();
-        let aliases: Vec<SharedString> =
-            commands.iter().zip(&shown).map(|(c, s)| if *s == c.label { SharedString::default() } else { c.label.clone().into() }).collect();
+        let aliases: Vec<SharedString> = commands
+            .iter()
+            .zip(&shown)
+            .map(|(c, s)| {
+                let english = if *s == c.label { "" } else { c.label.as_str() };
+                format!("{english} {}", search_keywords(&c.label)).trim().to_string().into()
+            })
+            .collect();
         let items = commands
             .iter()
             .zip(shown)

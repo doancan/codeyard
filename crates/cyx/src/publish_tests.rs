@@ -170,6 +170,19 @@ fn dry_run_shows_the_install_sheet_and_sends_nothing() {
     assert!(w.index().extensions.is_empty());
 }
 
+/// #187: a placeholder `client-id` would fail every sign-in, so publishing refuses it (`cyx check` only warns).
+#[test]
+fn a_placeholder_client_id_is_not_published() {
+    let w = World::new("placeholder");
+    let dir = w.extension("forge", "1.0.0");
+    let m = dir.join(ext_manifest::FILE_NAME);
+    let oauth = "\n[permissions]\nauth = [\"forge\"]\nwhy = \"Signs in to the forge.\"\n\n[[oauth]]\nid = \"forge\"\nname = \"Forge\"\nauthorize-url = \"https://forge.example.com/a\"\ntoken-url = \"https://forge.example.com/t\"\nclient-id = \"your-client-id\"\nhosts = [\"forge.example.com\"]\n";
+    std::fs::write(&m, std::fs::read_to_string(&m).unwrap() + oauth).unwrap();
+    let e = w.publish(&dir, &github(7, 42), true, false).unwrap_err();
+    assert!(e.contains("the client id of [[oauth]] forge is a placeholder"), "{e}");
+    assert!(w.index().extensions.is_empty());
+}
+
 #[test]
 fn pre_releases_need_a_suffix() {
     let w = World::new("pre");

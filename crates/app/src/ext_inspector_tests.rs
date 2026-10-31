@@ -94,6 +94,13 @@ fn fixes_name_the_switch_or_nothing() {
     // Trust, not the manifest, fixes an untrusted folder; a path outside the workspace has no fix.
     assert_eq!(fix_line(&denial(r#"write = ["a.txt"]"#, v::Why::UntrustedWorkspace), &off), None);
     assert_eq!(fix_line(&denial("a path inside the workspace (not /etc/passwd)", v::Why::NotDeclared), &off), None);
+    // #183: a host outside the account's names the `[[oauth]]` table, not `auth`.
+    let host = ext_manifest::oauth_host_line("gitlab", "evil.example.org");
+    assert_eq!(
+        fix_line(&denial(&host, v::Why::NotDeclared), &off).as_deref(),
+        Some(r#"hosts = ["evil.example.org"]  # in the [[oauth]] table with id = "gitlab""#)
+    );
+    assert_eq!(fix_line(&denial(&ext_manifest::oauth_host_line("github", "example.com"), v::Why::NotDeclared), &off), None);
 }
 
 /// AC3: no file contents and no paths outside the extension.

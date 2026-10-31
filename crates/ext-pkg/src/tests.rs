@@ -383,9 +383,16 @@ fn folders_are_collected_without_litter_or_links() {
     std::fs::write(dir.join(".DS_Store"), "x").unwrap();
     // The package `cyx package` wrote last time is not packaged again.
     std::fs::write(dir.join("you.theme-0.1.0.cyx"), "x").unwrap();
+    // Tests stay out (#187), at the top only: a theme folder named `test` is the extension's.
+    std::fs::create_dir_all(dir.join("test")).unwrap();
+    std::fs::create_dir_all(dir.join("tests")).unwrap();
+    std::fs::create_dir_all(dir.join("themes/test")).unwrap();
+    std::fs::write(dir.join("test/fixtures.json"), "{}").unwrap();
+    std::fs::write(dir.join("tests/it.rs"), "").unwrap();
+    std::fs::write(dir.join("themes/test/t.json"), "{}").unwrap();
     let files = collect_dir(&dir).unwrap();
     let paths: Vec<_> = files.iter().map(|e| e.path.as_str()).collect();
-    assert_eq!(paths, vec![ext_manifest::FILE_NAME, "themes/midnight.json"]);
+    assert_eq!(paths, vec![ext_manifest::FILE_NAME, "themes/midnight.json", "themes/test/t.json"]);
     assert!(read(&write(files).unwrap().0).is_ok());
     #[cfg(unix)]
     {

@@ -1,4 +1,4 @@
-//! Workbench: the Pull Requests view. "GitHub: Pull Requests…" lists GitHub's open requests (read-only) and those of
+//! Workbench: the Pull Requests view. "Pull Requests: Show…" lists GitHub's open requests (read-only) and those of
 //! code extensions' `[[pull-requests]]` providers for the repository's remotes (`workbench_ext_pulls.rs`). Picking a
 //! GitHub request fetches its branch (`pull/N/head` → `pr-N`), opens it on GitHub, or copies the link or branch name.
 
@@ -65,7 +65,15 @@ impl Workbench {
         let found = remotes.iter().filter(|(n, _)| n == "origin").chain(remotes.iter()).find_map(|(n, u)| github::parse_remote(u).map(|r| (n.clone(), r)));
         let asked = self.ask_pull_providers(&remotes, window, cx);
         if found.is_none() && asked.is_empty() {
-            self.notice = Some(Notice::Error(crate::i18n::t("None of this repository's remotes is on github.com.").into()));
+            // Name every provider there is, so a GitLab or Gitea user learns what to install or which remote is off.
+            let others = self.pull_provider_names();
+            let msg = if others.is_empty() {
+                crate::i18n::t("None of this repository's remotes is on github.com, and no installed extension provides pull requests for their hosts.")
+                    .to_string()
+            } else {
+                crate::i18n::tf("None of this repository's remotes is on github.com or on a host of {}.", &[&others.join(", ")])
+            };
+            self.notice = Some(Notice::Error(msg.into()));
             cx.notify();
             return;
         }
