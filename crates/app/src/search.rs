@@ -658,6 +658,17 @@ impl Render for SearchPanel {
                         d.child(
                             div()
                                 .id("s-clear-field")
+                                .relative()
+                                .child(crate::a11y_controls::button_on(
+                                    cx,
+                                    crate::i18n::t("Search"),
+                                    "s-clear-field".into(),
+                                    crate::i18n::t("Clear the search field"),
+                                    |this, _, cx| {
+                                        this.clear_query(cx);
+                                        this.start(cx);
+                                    },
+                                ))
                                 .flex_none()
                                 .size(px(18.))
                                 .flex()
@@ -777,34 +788,91 @@ impl Render for SearchPanel {
                         .when(any, |d| {
                             d.child(
                                 ui::icon_button("s-prev", "arrow-up", crate::i18n::t("Previous result (⇧F4)"), &p)
+                                    .relative()
+                                    .child(crate::a11y_controls::button_on(
+                                        cx,
+                                        crate::i18n::t("Search"),
+                                        "s-prev".into(),
+                                        crate::i18n::t("Previous result (⇧F4)"),
+                                        |this, _, cx| this.step_result(-1, cx),
+                                    ))
                                     .on_click(cx.listener(|this, _, _, cx| this.step_result(-1, cx))),
                             )
                             .child(
                                 ui::icon_button("s-next", "arrow-down", crate::i18n::t("Next result (F4)"), &p)
+                                    .relative()
+                                    .child(crate::a11y_controls::button_on(
+                                        cx,
+                                        crate::i18n::t("Search"),
+                                        "s-next".into(),
+                                        crate::i18n::t("Next result (F4)"),
+                                        |this, _, cx| this.step_result(1, cx),
+                                    ))
                                     .on_click(cx.listener(|this, _, _, cx| this.step_result(1, cx))),
                             )
                             .child(if all_collapsed {
                                 ui::icon_button("s-expand", "chevrons-up-down", crate::i18n::t("Expand all results"), &p)
+                                    .relative()
+                                    .child(crate::a11y_controls::button_on(
+                                        cx,
+                                        crate::i18n::t("Search"),
+                                        "s-expand".into(),
+                                        crate::i18n::t("Expand all results"),
+                                        |this, _, cx| this.set_all_collapsed(false, cx),
+                                    ))
                                     .on_click(cx.listener(|this, _, _, cx| this.set_all_collapsed(false, cx)))
                             } else {
                                 ui::icon_button("s-collapse", "chevrons-down-up", crate::i18n::t("Collapse all results"), &p)
+                                    .relative()
+                                    .child(crate::a11y_controls::button_on(
+                                        cx,
+                                        crate::i18n::t("Search"),
+                                        "s-collapse".into(),
+                                        crate::i18n::t("Collapse all results"),
+                                        |this, _, cx| this.set_all_collapsed(true, cx),
+                                    ))
                                     .on_click(cx.listener(|this, _, _, cx| this.set_all_collapsed(true, cx)))
                             })
                         })
                         .child(
                             ui::icon_button("s-open-editor", "file-text", crate::i18n::t("Open in a Search Editor tab"), &p)
+                                .relative()
+                                .child(crate::a11y_controls::button_on(
+                                    cx,
+                                    crate::i18n::t("Search"),
+                                    "s-open-editor".into(),
+                                    crate::i18n::t("Open in a Search Editor tab"),
+                                    |this, _, cx| this.open_in_editor(cx),
+                                ))
                                 .on_click(cx.listener(|this, _, _, cx| this.open_in_editor(cx))),
                         )
                         .child(
                             ui::icon_button("s-rerun", "refresh-cw", crate::i18n::t("Run the search again"), &p)
+                                .relative()
+                                .child(crate::a11y_controls::button_on(
+                                    cx,
+                                    crate::i18n::t("Search"),
+                                    "s-rerun".into(),
+                                    crate::i18n::t("Run the search again"),
+                                    |this, _, cx| this.start(cx),
+                                ))
                                 .on_click(cx.listener(|this, _, _, cx| this.start(cx))),
                         )
-                        .child(ui::icon_button("s-clear", "x", crate::i18n::t("Clear the search"), &p).on_click(cx.listener(|this, _, _, cx| {
-                            this.clear_query(cx);
-                            this.results.clear();
-                            this.rebuild_rows();
-                            this.status = Status::Idle;
-                        }))),
+                        .child(
+                            ui::icon_button("s-clear", "x", crate::i18n::t("Clear the search"), &p)
+                                .relative()
+                                .child(crate::a11y_controls::button_on(
+                                    cx,
+                                    crate::i18n::t("Search"),
+                                    "s-clear".into(),
+                                    crate::i18n::t("Clear the search"),
+                                    |this, _, cx| {
+                                        this.clear_search(cx);
+                                        cx.notify();
+                                    },
+                                ))
+                                .on_click(cx.listener(|this, _, _, cx| this.clear_search(cx))),
+                        ),
                 )
             })
             .when_some(self.structural_note(cx).filter(|_| self.st.on), |d, n| {

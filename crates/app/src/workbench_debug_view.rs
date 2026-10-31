@@ -485,10 +485,17 @@ impl Workbench {
                             this.toggle_breakpoints_active(&super::ToggleBreakpointsActive, w, cx);
                         })),
                     )
-                    .child(ui::icon_button("dbg-bp-clear", "x", crate::i18n::t("Remove All Breakpoints"), p).on_click(cx.listener(|this, _, w, cx| {
-                        cx.stop_propagation();
-                        this.remove_all_breakpoints(&super::super::RemoveAllBreakpoints, w, cx);
-                    }))),
+                    .child(
+                        ui::icon_button("dbg-bp-clear", "x", crate::i18n::t("Remove All Breakpoints"), p)
+                            .relative()
+                            .child(self.ctl(crate::i18n::t("Run and Debug"), "dbg-bp-clear", crate::i18n::t("Remove All Breakpoints"), cx, |this, w, cx| {
+                                this.remove_all_breakpoints(&super::super::RemoveAllBreakpoints, w, cx)
+                            }))
+                            .on_click(cx.listener(|this, _, w, cx| {
+                                cx.stop_propagation();
+                                this.remove_all_breakpoints(&super::super::RemoveAllBreakpoints, w, cx);
+                            })),
+                    ),
                 _ => head,
             };
             view = view.child(head.on_click(cx.listener(move |this, _, _, cx| {
@@ -538,6 +545,17 @@ impl Workbench {
             .child(
                 div()
                     .id("dbg-create-launch")
+                    .relative()
+                    .child(crate::a11y_controls::control(
+                        crate::a11y_controls::Control::new(
+                            crate::i18n::t("Run and Debug"),
+                            "dbg-create-launch",
+                            accesskit::Role::Link,
+                            crate::i18n::t("Create a launch configuration"),
+                        )
+                        .description(crate::i18n::t("To customize Run and Debug, create a launch configuration."))
+                        .on_entity(cx.entity().downgrade(), |this: &mut Self, w, cx| this.open_launch_file(w, cx)),
+                    ))
                     .text_color(c(p.accent))
                     .cursor_pointer()
                     .hover(|d| d.underline())

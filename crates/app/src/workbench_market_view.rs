@@ -237,11 +237,18 @@ impl Workbench {
             actions = actions.child(action_button("market-install", label, p).on_click(cx.listener(|this, _, w, cx| this.install_from_market(w, cx))));
         }
         if let Some(v) = &installed {
-            let installed_id = id.to_string();
+            let (installed_id, tree_id) = (id.to_string(), id.to_string());
             actions = actions.child(div().text_color(c(p.text_muted)).child(crate::i18n::tf("Version {} is installed.", &[v]))).child(
-                action_button("market-show-installed", crate::i18n::t("Show Installed"), p).on_click(cx.listener(move |this, _, _, cx| {
-                    this.select_extension(&installed_id, cx);
-                })),
+                action_button("market-show-installed", crate::i18n::t("Show Installed"), p)
+                    .relative()
+                    .child(crate::a11y_controls::control(
+                        crate::a11y_controls::Control::button(crate::i18n::t("Market"), "market-show-installed", crate::i18n::t("Show Installed"), |_, _| {})
+                            .description(crate::i18n::tf("Version {} is installed.", &[v]))
+                            .on_entity(cx.entity().downgrade(), move |this: &mut Self, _, cx| this.select_extension(&tree_id, cx)),
+                    ))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        this.select_extension(&installed_id, cx);
+                    })),
             );
         }
         let why_not = if !installable {

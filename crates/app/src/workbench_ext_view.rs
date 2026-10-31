@@ -68,16 +68,36 @@ impl Workbench {
                         .gap(px(theme::SPACE[1]))
                         .child(
                             tool("ext-install-file", "file-plus", crate::i18n::t("Install from File…"))
+                                .relative()
+                                .child(self.ctl(crate::i18n::t("Extensions"), "ext-install-file", crate::i18n::t("Install from File…"), cx, |this, w, cx| {
+                                    this.install_extension_from_file(&InstallExtensionFromFile, w, cx)
+                                }))
                                 .on_click(cx.listener(|this, _, w, cx| this.install_extension_from_file(&InstallExtensionFromFile, w, cx))),
                         )
                         .child(
                             tool("ext-install-folder", "folder-plus", crate::i18n::t("Install from Folder…"))
+                                .relative()
+                                .child(self.ctl(
+                                    crate::i18n::t("Extensions"),
+                                    "ext-install-folder",
+                                    crate::i18n::t("Install from Folder…"),
+                                    cx,
+                                    |this, w, cx| this.install_extension_from_folder(&InstallExtensionFromFolder, w, cx),
+                                ))
                                 .on_click(cx.listener(|this, _, w, cx| this.install_extension_from_folder(&InstallExtensionFromFolder, w, cx))),
                         )
-                        .child(tool("ext-refresh", "refresh-cw", crate::i18n::t("Refresh")).on_click(cx.listener(|this, _, _, cx| {
-                            this.refresh_extension_list();
-                            cx.notify();
-                        }))),
+                        .child(
+                            tool("ext-refresh", "refresh-cw", crate::i18n::t("Refresh"))
+                                .relative()
+                                .child(self.ctl(crate::i18n::t("Extensions"), "ext-refresh", crate::i18n::t("Refresh"), cx, |this, _, cx| {
+                                    this.refresh_extension_list();
+                                    cx.notify();
+                                }))
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.refresh_extension_list();
+                                    cx.notify();
+                                })),
+                        ),
                 )
             });
         let market = !off && self.cfg.exts.tab == super::market_glue::ExtTab::Market;
@@ -247,6 +267,8 @@ impl Workbench {
         };
         let m = e.manifest.clone();
         let id = m.id.clone();
+        let surface = m.name.to_string();
+        let button = |key: &'static str, label: &'static str| crate::a11y_controls::Control::button(surface.clone(), key, label, |_, _| {});
         let actions = {
             let (on_id, un_id, back_id) = (id.clone(), id.clone(), id.clone());
             let verify_id = id.to_string();
@@ -256,57 +278,95 @@ impl Workbench {
                 .flex_wrap()
                 .gap(px(theme::SPACE[2]))
                 .pt(px(theme::SPACE[2]))
-                .child(
-                    action_button("ext-toggle", if enabled { crate::i18n::t("Disable") } else { crate::i18n::t("Enable") }, p)
-                        .on_click(cx.listener(move |this, _, w, cx| this.set_extension_enabled(on_id.clone(), !enabled, w, cx))),
-                )
-                .child(
-                    action_button("ext-uninstall", crate::i18n::t("Uninstall…"), p)
-                        .on_click(cx.listener(move |this, _, w, cx| this.uninstall_extension(un_id.clone(), w, cx))),
-                )
+                .child({
+                    let label = if enabled { crate::i18n::t("Disable") } else { crate::i18n::t("Enable") };
+                    self.pressable(action_button("ext-toggle", label, p), button("ext-toggle", label), cx, move |this, w, cx| {
+                        this.set_extension_enabled(on_id.clone(), !enabled, w, cx)
+                    })
+                })
+                .child(self.pressable(
+                    action_button("ext-uninstall", crate::i18n::t("Uninstall…"), p),
+                    button("ext-uninstall", crate::i18n::t("Uninstall…")),
+                    cx,
+                    move |this, w, cx| this.uninstall_extension(un_id.clone(), w, cx),
+                ))
                 .when_some(e.previous.clone(), |d, v| {
+                    let tip = crate::i18n::tf("Go back to version {}", &[&v]);
                     d.child(
-                        action_button("ext-rollback", crate::i18n::t("Roll Back"), p)
-                            .tooltip(move |_, cx| cx.new(|_| Tooltip(crate::i18n::tf("Go back to version {}", &[&v]).into())).into())
-                            .on_click(cx.listener(move |this, _, w, cx| this.roll_back_extension(back_id.clone(), w, cx))),
+                        self.pressable(
+                            action_button("ext-rollback", crate::i18n::t("Roll Back"), p)
+                                .tooltip(move |_, cx| cx.new(|_| Tooltip(crate::i18n::tf("Go back to version {}", &[&v]).into())).into()),
+                            button("ext-rollback", crate::i18n::t("Roll Back")).description(tip),
+                            cx,
+                            move |this, w, cx| this.roll_back_extension(back_id.clone(), w, cx),
+                        ),
                     )
                 })
-                .child(
-                    action_button("ext-verify", crate::i18n::t("Verify Files"), p)
-                        .on_click(cx.listener(move |this, _, _, cx| this.verify_extension(&verify_id, cx))),
-                )
+                .child(self.pressable(
+                    action_button("ext-verify", crate::i18n::t("Verify Files"), p),
+                    button("ext-verify", crate::i18n::t("Verify Files")),
+                    cx,
+                    move |this, _, cx| this.verify_extension(&verify_id, cx),
+                ))
                 .when(e.source.registry().is_some(), |d| {
                     let (pre_id, on) = (id.clone(), e.pre_release);
                     let label = if on { crate::i18n::t("Stop Pre-releases") } else { crate::i18n::t("Get Pre-releases") };
-                    d.child(
-                        action_button("ext-pre-release", label, p)
-                            .tooltip(move |_, cx| {
-                                let tip = if on {
-                                    crate::i18n::t("Get only releases of this extension from now on")
-                                } else {
-                                    crate::i18n::t("Also get its pre-releases, at once and before others get them")
-                                };
-                                cx.new(|_| Tooltip(tip.into())).into()
-                            })
-                            .on_click(cx.listener(move |this, _, w, cx| this.set_extension_pre_release(pre_id.clone(), !on, w, cx))),
-                    )
+                    let tip = if on {
+                        crate::i18n::t("Get only releases of this extension from now on")
+                    } else {
+                        crate::i18n::t("Also get its pre-releases, at once and before others get them")
+                    };
+                    d.child(self.pressable(
+                        action_button("ext-pre-release", label, p).tooltip(move |_, cx| cx.new(|_| Tooltip(tip.into())).into()),
+                        button("ext-pre-release", label).description(tip),
+                        cx,
+                        move |this, w, cx| this.set_extension_pre_release(pre_id.clone(), !on, w, cx),
+                    ))
                 })
         };
         let state: SharedString =
             if e.disabled { crate::i18n::t("Disabled: nothing it contributes applies.").into() } else { crate::i18n::t("Enabled").into() };
+        // The page's text for the tree: each part labelled where it is drawn.
+        let said = |key: &str, role: accesskit::Role, text: String, el: gpui::Div| {
+            el.relative().child(crate::a11y_controls::control(crate::a11y_controls::Control::text(surface.clone(), key.to_string(), role, text)))
+        };
+        let contributes = contribution_lines(&m);
+        let contributes_text = if contributes.is_empty() { crate::i18n::t("Nothing").to_string() } else { contributes.join("; ") };
+        let perms = permission_lines(&m.permissions);
+        let perms_text = high_risk_line(&m)
+            .into_iter()
+            .chain([if perms.is_empty() { crate::i18n::t("None: it only adds data to Codeyard.").to_string() } else { perms.join("; ") }])
+            .collect::<Vec<_>>()
+            .join(" ");
         page.child(
             column
-                .child(self.extension_heading(&m.name, &m, p))
-                .child(div().text_color(c(p.text_muted)).child(source_line(&e.source)))
-                .child(div().text_color(c(if e.disabled { p.warning } else { p.text_muted })).child(state))
-                .children(e.stopped.clone().map(|s| div().debug_selector(|| "ext-stopped".into()).text_color(c(p.danger)).child(s)))
-                .children(m.description.clone().map(|d| div().child(d)))
+                .child(said("heading", accesskit::Role::Heading, m.name.to_string(), self.extension_heading(&m.name, &m, p)))
+                .child(said("source", accesskit::Role::Label, source_line(&e.source), div().text_color(c(p.text_muted)).child(source_line(&e.source))))
+                .child(said(
+                    "state",
+                    accesskit::Role::Label,
+                    state.to_string(),
+                    div().text_color(c(if e.disabled { p.warning } else { p.text_muted })).child(state),
+                ))
+                .children(e.stopped.clone().map(|s| {
+                    said("stopped", accesskit::Role::Label, s.to_string(), div().debug_selector(|| "ext-stopped".into()).text_color(c(p.danger)).child(s))
+                }))
+                .children(m.description.clone().map(|d| said("description", accesskit::Role::Label, d.to_string(), div().child(d))))
                 .child(actions)
                 .children(self.extension_update_card(e, p, cx))
                 .children(self.extension_code_cards(e, p, cx))
-                .child(section_title(crate::i18n::t("Contributes"), p))
-                .child(line_list(contribution_lines(&m), crate::i18n::t("Nothing"), p))
-                .child(self.extension_permissions(&m, high_risk_line(&m), p))
+                .child(said(
+                    "contributes",
+                    accesskit::Role::Label,
+                    format!("{}: {contributes_text}", crate::i18n::t("Contributes")),
+                    div().child(section_title(crate::i18n::t("Contributes"), p)).child(line_list(contributes, crate::i18n::t("Nothing"), p)),
+                ))
+                .child(said(
+                    "permissions",
+                    accesskit::Role::Label,
+                    format!("{}: {perms_text}", crate::i18n::t("Permissions")),
+                    self.extension_permissions(&m, high_risk_line(&m), p),
+                ))
                 .children(self.extension_accounts_section(&m, p, cx)),
         )
         .into_any_element()
@@ -336,9 +396,11 @@ impl Workbench {
             _ => {}
         }
         let busy = self.cfg.exts.updates.busy.is_some();
-        let button = |key: &'static str, label: &'static str, run: fn(&mut Workbench, ExtId, &mut Window, &mut Context<Workbench>)| {
+        let surface = e.manifest.name.to_string();
+        let mut button = |key: &'static str, label: &'static str, run: fn(&mut Workbench, ExtId, &mut Window, &mut Context<Workbench>)| {
             let id = id.clone();
-            action_button(key, label, p).when(busy, |b| b.opacity(0.5)).on_click(cx.listener(move |this, _, w, cx| run(this, id.clone(), w, cx)))
+            let control = crate::a11y_controls::Control::button(surface.clone(), key, label, |_, _| {});
+            self.pressable(action_button(key, label, p).when(busy, |b| b.opacity(0.5)), control, cx, move |this, w, cx| run(this, id.clone(), w, cx))
         };
         let review = |this: &mut Workbench, id: ExtId, w: &mut Window, cx: &mut Context<Workbench>| {
             let Some(s) = this.cfg.exts.updates.status.get(&id) else { return };
