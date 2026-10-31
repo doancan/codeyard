@@ -2762,6 +2762,10 @@ Copy the files again on the current host before pasting.	Yapıştırmadan önce 
 Wait for the file operation to finish, or cancel it from the status bar.	Dosya işleminin bitmesini bekleyin veya durum çubuğundan iptal edin.
 Apply a file operation to {} entry?|Apply a file operation to {} entries?	{} öğeye dosya işlemi uygulansın mı?
 Destination: {0} on {1}. Existing files are never overwritten.	Hedef: {1} üzerindeki {0}. Mevcut dosyaların üzerine yazılmaz.
+Permanently delete {0} item on {1}?|Permanently delete {0} items on {1}?	{1} üzerindeki {0} öğe kalıcı olarak silinsin mi?
+{} has no Trash: the items are deleted at once and can't be restored.	{} üzerinde Çöp Kutusu yok: öğeler hemen silinir ve geri yüklenemez.
+Permanently delete “{0}” on {1}?	{1} üzerindeki “{0}” kalıcı olarak silinsin mi?
+{} has no Trash: it is deleted at once and can't be restored.	{} üzerinde Çöp Kutusu yok: hemen silinir ve geri yüklenemez.
 The complete file list is available in Output.	Dosyaların tam listesi Çıktı bölümünde bulunur.
 File operation: {0} completed, {1} failed, {2} not processed.	Dosya işlemi: {0} tamamlandı, {1} başarısız, {2} işlenmedi.
 Files: {0}/{1}	Dosyalar: {0}/{1}

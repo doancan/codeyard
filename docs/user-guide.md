@@ -135,7 +135,8 @@ keys are commands like any other (`rows.previous`, `rows.next`, `rows.first`, `r
 Right-click in the file tree for new file/folder, cut/copy/paste, rename, delete, copy path,
 favorites. Drag files and folders onto a folder to move them (an existing file is never
 overwritten). Deleting a file or folder deletes it permanently after asking; with
-`"files.enableTrash": true` local files go to the Trash instead (SSH hosts have no Trash). Right-click a tab for close others /
+`"files.enableTrash": true` local files go to the Trash instead. SSH hosts have no Trash: there the question says
+"Permanently delete … on <host>?" and the button is *Delete Permanently*. Right-click a tab for close others /
 to the right / saved, pin, copy path; drag tabs to reorder them or onto the other group.
 Right-click in the editor for go to definition / references, rename, cut/copy/paste,
 file history and blame. A single click in the tree opens a preview tab (italic) that the next
@@ -923,8 +924,9 @@ between changes. Commits made in the terminal show up on their own.
 
 The change list also works from the keyboard: Tab moves to it from the message box, ↑/↓/Home/End
 move its cursor, ↵ opens the file's diff (or folds the group), Space stages or unstages the file,
-← goes to the file's group (and folds it), → unfolds it and goes in, and Delete (⌘⌫ on macOS)
-discards the file's changes after asking.
+← goes to the file's group (and folds it), → unfolds it and goes in, Delete (⌘⌫ on macOS)
+discards the file's changes after asking, and Shift+F10 or the Menu key opens the file's right-click
+menu under it (Escape closes it and leaves the cursor on the file).
 
 **Graph:** the GRAPH section under the changes draws the history of every branch as lanes,
 with branch (blue), remote (green), tag (yellow) and HEAD labels; merges are hollow dots.
