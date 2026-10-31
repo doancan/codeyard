@@ -126,7 +126,7 @@ impl Workbench {
         // them off (`extensions.enabled`), not a project's.
         let ext_enabled = file.as_deref().is_none_or(|f| settings::parse_layers(f, &[]).map_or(true, |(s, _)| s.extensions_enabled));
         let ext_before = crate::ext::schema_entries();
-        let mut ext_problems = crate::ext::reload_with(self.cfg.dir.as_deref(), ext_enabled);
+        let ext_problems = crate::ext::reload_with(self.cfg.dir.as_deref(), ext_enabled);
         let ext_schemas_changed = ext_before != crate::ext::schema_entries();
         if self.cfg.dir.is_some() {
             self.reload_user_themes();
@@ -172,8 +172,7 @@ impl Workbench {
         // Extension language servers go in front of the user's `lsp.servers`: for the same key the user's entry wins, and
         // a change restarts servers the same way an edit of the settings file does.
         let mut new = new;
-        let (servers, server_warnings) = crate::ext::server_entries();
-        ext_problems.extend(server_warnings);
+        let servers = crate::ext::server_entries(self.cfg.dir.as_deref(), &crate::ext_registry::registries(&new));
         new.lsp_servers.splice(0..0, servers);
         warnings.extend(ext_problems);
         let old = cx.global::<Settings>().clone();

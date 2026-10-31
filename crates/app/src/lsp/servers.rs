@@ -16,13 +16,23 @@ pub struct ServerConfig {
     pub init_options: Option<Value>,
     /// Only default commands may resolve to an explicitly installed managed service.
     pub managed: Option<crate::language_services::Service>,
+    /// `command` is a program inside an extension's package: it starts from the copy pushed to the host.
+    pub program: Option<crate::ext_programs::PackageServer>,
 }
 
 #[cfg(test)]
 impl ServerConfig {
     /// A server with no configuration of its own.
     pub fn plain(language: &str, command: &str, args: Vec<String>) -> Self {
-        ServerConfig { language: language.into(), command: command.into(), args, settings: Arc::new(Value::Null), init_options: None, managed: None }
+        ServerConfig {
+            language: language.into(),
+            command: command.into(),
+            args,
+            settings: Arc::new(Value::Null),
+            init_options: None,
+            managed: None,
+            program: None,
+        }
     }
 }
 
@@ -35,6 +45,8 @@ pub struct ServerSpec {
     /// megabytes.
     pub settings: Arc<Value>,
     pub init_options: Option<Value>,
+    /// An extension's language server whose `command` is a program inside its package (`./bin/server`).
+    pub program: Option<crate::ext_programs::PackageServer>,
 }
 
 impl From<(String, Vec<String>)> for ServerSpec {
@@ -47,7 +59,7 @@ impl ServerSpec {
     /// Whether a reload from `self` to `new` needs the server process restarted: everything but `settings` is only read
     /// at start; `settings` reach a running server through `workspace/didChangeConfiguration`.
     fn restart_needed(&self, new: &ServerSpec) -> bool {
-        (&self.command, &self.args, &self.init_options) != (&new.command, &new.args, &new.init_options)
+        (&self.command, &self.args, &self.init_options, &self.program) != (&new.command, &new.args, &new.init_options, &new.program)
     }
 }
 
@@ -220,11 +232,12 @@ pub fn server_for(key: &str, overrides: &ServerOverrides) -> Option<ServerConfig
     let settings = spec.map_or_else(|| Arc::new(Value::Null), |s| s.settings.clone());
     let settings = managed.map_or_else(|| settings.clone(), |service| Arc::new(service.configuration(&settings)));
     let init_options = spec.and_then(|s| s.init_options.clone());
+    let program = spec.filter(|s| s.command.is_some()).and_then(|s| s.program.clone());
     let init_options = match managed {
         Some(service) => service.initialization_options(init_options.as_ref()),
         None => init_options,
     };
-    Some(ServerConfig { language: key.into(), command, args, settings, init_options, managed })
+    Some(ServerConfig { language: key.into(), command, args, settings, init_options, managed, program })
 }
 
 /// What a settings reload means for the running language servers.
@@ -387,7 +400,7 @@ mod tests {
     }
 
     fn spec(command: Option<&str>, settings: Value, init: Option<Value>) -> Option<ServerSpec> {
-        Some(ServerSpec { command: command.map(str::to_string), args: Vec::new(), settings: Arc::new(settings), init_options: init })
+        Some(ServerSpec { command: command.map(str::to_string), args: Vec::new(), settings: Arc::new(settings), init_options: init, program: None })
     }
 
     /// An entry with only `settings` keeps the default server and carries the settings; `command` replaces it.

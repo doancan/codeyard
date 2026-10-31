@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   locally and over SSH. The consent sheet asks for the extension's id to be typed before it installs one. Yard takes
   code and native programs only from publishers listed in `yard.json`'s `invited`, and a publisher's first native
   program stays unlisted until a reviewer runs `yard review approve` (`yard review list | approve | reject`).
+  A `[[language-servers]]` command inside the package (`command = "./bin/server"`) starts from the same pushed and
+  hash-checked copy, locally and over SSH, and is refused when the hash does not match. An update that adds a native
+  program opens the full sheet, which asks for the id to be typed as a first install does, instead of the permission
+  card. Screen readers find the sheet's id field (a text field with what to type, what is typed and the focus).
 
 - Code extensions can describe and complete: `[[hover]]` and `[[completion]]` (with optional `trigger-characters`)
   in the manifest, `request.hover` and `request.completion` in `codeyard:api` 0.1, `ctx.hover` and `ctx.completion`
@@ -259,6 +263,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Source Control builds only the change rows on screen, so a repository with thousands of changes (generated files,
   a large merge) scrolls and refreshes without delay. The list keeps its scroll position and focus when the status
   refreshes.
+- Screen readers reach every row of a large Explorer and every line of a long file: instead of the first 5,000 rows
+  and a window around the caret, the accessibility tree shows a range centred on the selection or caret, or on the
+  visible area after a scroll. Scroll up/down by a page moves it, and row positions and text offsets count from the
+  start of the tree or file.
 - Deleting a file or folder deletes it permanently after asking, instead of moving it to the Trash:
   `files.enableTrash` is now off by default. Turn it on to keep using the Trash for local files.
 - The settings and shortcuts import is "Preferences: Import Settings and Shortcuts from Another Editor", and its
@@ -280,6 +288,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cyx package` no longer puts the `.cyx` it wrote last time into the new package (it doubled in size on every run).
   New extensions from `cyx new` ignore `*.cyx` in git.
 - `cyx check` on a code extension that is not built yet says to run `cyx package` or `cyx test`, which build it.
+- Typing in a large file could wait 60 ms or more per key for the syntax tree: an edit that makes tree-sitter recover
+  from an error across the whole file (stray words or a half-typed `->` between the items of a 10 000-line Rust file)
+  reparsed all of it before the key was drawn. A key now reparses for at most 4 ms; a longer reparse finishes in the
+  background and the colors catch up when it is done. This was most of what `typing.keystroke_frame_completion_ms`
+  measured (median 78 ms, the completion provider itself answers within a millisecond); it is now close to plain
+  typing.
 - A debug configuration with `"stopOnEntry": true` run with lldb-dap said "Paused on exception: signal SIGSTOP": the
   adapter reports the stop on entry as a signal. The first stop of such a session now reads "Paused on entry"; a
   SIGSTOP later on is still reported as an exception.

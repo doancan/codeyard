@@ -78,7 +78,7 @@ The same goes for other no-code contributions: `keymap-preset`, `keybindings`, `
 
 - A key binding never takes a key a built-in shortcut uses; Codeyard leaves it out and says so. A keymap preset may, because the user picks it (`"keymap.preset": "you.emacs/Emacs"`).
 - A language you add applies to files no built-in language claims. It can borrow a built-in grammar for highlighting (`grammar = "toml"`).
-- A language server is a program on `PATH` where the files are, so it works over SSH too.
+- A language server is a program on `PATH` where the files are, or one inside your package ([Native programs](#native-programs)), so it works over SSH too.
 - Start Codeyard with `--no-extensions` to rule your extension out when something looks wrong.
 
 ## Your first command
@@ -530,9 +530,26 @@ It runs on the computer that holds the workspace: this one, or the SSH server. C
 package for that computer's platform, checks its SHA-256 there against the package's hash list before every run, and
 runs only that copy; the server downloads nothing. A platform you did not build for gets an error that names it.
 
-Users type your extension's id on the install sheet before a native program installs. Registries take native programs
-from invited publishers only, and your first one waits for a human review before it is listed (see [Publish](#publish)).
-Language servers (`[[language-servers]]`) still start only programs found on PATH.
+A language server can be one of these programs: name it in `run` and use the same path as its `command`.
+
+```toml
+[permissions]
+run = ["./bin/server"]
+why = "Starts its bundled language server for TOML files."
+
+[[language-servers]]
+command   = "./bin/server"
+args      = ["--stdio"]
+languages = ["toml"]
+```
+
+It starts from the copy on the workspace's computer, after the same hash check, locally and over SSH. A copy whose hash
+does not match is not started; the error says so.
+
+Users type your extension's id on the install sheet before a native program installs, and again on the full sheet when
+an update adds one (an update that only changes the program's build installs like any code update). Registries take
+native programs from invited publishers only, and your first one waits for a human review before it is listed (see
+[Publish](#publish)).
 
 ## Test and debug
 

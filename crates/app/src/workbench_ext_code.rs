@@ -130,12 +130,8 @@ impl Workbench {
         let eff = ext_core::trust::effective(&active.manifest, &revoked, trust);
         // Programs inside the package: the workspace host's platform's package, fetched from the registry when needed.
         let programs = active.manifest.has_native_programs().then(|| {
-            let (cfg, id, dir) = (self.cfg.dir.clone(), active.manifest.id.clone(), active.dir.clone());
             let registries = crate::ext_registry::registries(cx.global::<Settings>());
-            crate::ext_programs::Programs(Arc::new(move |target: &str, run: &str| {
-                let pkg = crate::ext_programs::package_dir(cfg.as_deref(), &registries, &id, &dir, target)?;
-                crate::ext_programs::read_program(&pkg, target, run)
-            }))
+            crate::ext_programs::of_extension(self.cfg.dir.clone(), registries, active.manifest.id.clone(), active.dir.clone())
         });
         Scope {
             extension: active.id().to_string(),

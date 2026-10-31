@@ -226,3 +226,62 @@ fn the_package_follows_the_hosts_platform() {
     assert_eq!(ext_programs::package_dir(None, &[], &id, &store, linux).unwrap(), store);
     assert!(ext_programs::package_dir(None, &[], &id, &store, "aarch64-apple-darwin").is_err());
 }
+
+/// A language server whose command is a program inside the package (`command = "./bin/server"`) starts from the copy
+/// pushed to the workspace's host, locally and over SSH; a copy changed there is replaced, and a program whose bytes no
+/// longer match its package's hash is refused, never started.
+#[cfg(unix)]
+#[test]
+fn a_package_language_server_starts_from_the_checked_copy() {
+    let Some(target) = ext_manifest::this_target() else { return };
+    let d = Dir::new("lsp");
+    let Some(fake) = crate::test_lsp::FakeServer::new(&d.0.join("fake"), &serde_json::json!({})) else { return };
+    let (python, args) = fake.command();
+    let script = format!("#!/bin/sh\nexec {python} {}\n", args.join(" "));
+    let manifest = format!(
+        "{}\n[[language-servers]]\ncommand = \"./bin/server\"\nlanguages = [\"toml\"]\n",
+        ext_core::testing::native_manifest("you.toml", "1.0.0").replace("./bin/hello", "./bin/server")
+    );
+    let entries = vec![
+        ext_pkg::Entry { path: ext_manifest::FILE_NAME.into(), data: manifest.into_bytes(), executable: false },
+        ext_pkg::Entry { path: "bin/server".into(), data: script.into_bytes(), executable: true },
+        ext_pkg::Entry { path: ext_pkg::TARGET.into(), data: format!("{target}\n").into_bytes(), executable: false },
+    ];
+    let cfg = d.0.join("cfg");
+    std::fs::create_dir_all(&cfg).unwrap();
+    let installed = crate::ext::store(&cfg).install(&ext_pkg::write(entries).unwrap().0, ext_core::Source::File { path: "t.cyx".into() }).unwrap();
+    crate::ext::reload(Some(&cfg));
+    let servers = crate::ext::server_entries(Some(&cfg), &[]);
+    let config = crate::lsp::server_for("toml", &servers).expect("the extension's server serves TOML");
+    assert_eq!(config.command, "./bin/server");
+    assert_eq!(config.program.as_ref().map(|p| p.extension.as_str()), Some("you.toml"));
+    let work = d.0.join("work").to_string_lossy().into_owned();
+    let start = |host: &Arc<Fixture>| {
+        let (tx, _rx) = std::sync::mpsc::channel();
+        crate::lsp::Client::start(host.clone(), config.clone(), &work, tx)
+    };
+    for remote in [false, true] {
+        let host = Fixture::new(&d.0.join(if remote { "ssh-home" } else { "home" }), remote);
+        let starts = fake.starts();
+        let client = start(&host).expect("starts from the pushed copy");
+        assert_eq!(fake.starts(), starts + 1);
+        let pushed = client.config.command.clone();
+        assert!(pushed.starts_with(&format!("{}/.cache/codeyard/programs/you.toml/", host.info().home)), "{pushed}");
+        assert!(host.scripts().iter().any(|s| s.contains("sha256sum") && s.contains("mv -f")), "pushed with the hash check");
+        client.shutdown();
+        // A copy changed on the host is replaced before the server starts.
+        std::fs::write(&pushed, "#!/bin/sh\necho changed\n").unwrap();
+        start(&host).expect("starts from a fresh copy").shutdown();
+        assert!(std::fs::read_to_string(&pushed).unwrap().contains("exec"), "the changed copy was replaced");
+    }
+    // The store's copy changed after install: refused on the host, and the server never starts.
+    let stored = crate::ext::store(&cfg).store_dir(&installed.digest).join("bin/server");
+    std::fs::set_permissions(&stored, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    std::fs::write(&stored, "#!/bin/sh\necho evil\n").unwrap();
+    let host = Fixture::new(&d.0.join("other-home"), true);
+    let starts = fake.starts();
+    let e = start(&host).err().expect("refused");
+    assert!(e.contains("does not match"), "{e}");
+    assert_eq!(fake.starts(), starts);
+    crate::ext::set_for_test(Vec::new());
+}

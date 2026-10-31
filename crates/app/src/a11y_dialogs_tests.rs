@@ -1,4 +1,4 @@
-use accesskit::{Action, ActionRequest, NodeId, Role, TreeId};
+use accesskit::{Action, ActionData, ActionRequest, NodeId, Role, TreeId};
 use gpui::{Entity, TestAppContext, VisualTestContext};
 
 use super::*;
@@ -9,7 +9,11 @@ fn snapshot(wb: &Entity<Workbench>, cx: &mut VisualTestContext) -> Snapshot {
 }
 
 fn act(wb: &Entity<Workbench>, cx: &mut VisualTestContext, snap: &Snapshot, id: NodeId, action: Action) {
-    let request = ActionRequest { action, target_tree: TreeId::ROOT, target_node: id, data: None };
+    act_with(wb, cx, snap, id, action, None);
+}
+
+fn act_with(wb: &Entity<Workbench>, cx: &mut VisualTestContext, snap: &Snapshot, id: NodeId, action: Action, data: Option<ActionData>) {
+    let request = ActionRequest { action, target_tree: TreeId::ROOT, target_node: id, data };
     wb.update_in(cx, |wb, window, cx| wb.a11y_action_for_test(&request, snap, window, cx));
     cx.run_until_parked();
 }
@@ -92,4 +96,49 @@ fn the_consent_sheet_cancel_button_acts_like_a_click(cx: &mut TestAppContext) {
     assert_eq!(sheet(&wb, cx), None);
     assert!(!wb.read_with(cx, |wb, _| wb.themes_for_test()).iter().any(|(t, _)| t.starts_with("ext:you.dawn/")), "nothing installed");
     assert_eq!(snapshot(&wb, cx).to_tree().focus, EXT_SEARCH);
+}
+
+/// #146: the sheet of a package with native programs exposes the field its id is typed into, labelled with what to
+/// type, with what is typed and the keyboard in it; a value set through the tree is typed, and Install then installs.
+#[gpui::test]
+fn the_consent_sheet_exposes_the_id_field(cx: &mut TestAppContext) {
+    let Some(here) = ext_manifest::this_target() else { return };
+    let root = dir("a11y-consent-typed");
+    let now = crate::ext_registry::now();
+    let (mut r, _fetch) = registry(&root, "typed", now);
+    r.publish(&ext_core::testing::native_package("you.hello", "1.0.0", here), &ext_core::testing::github(7, 42), now);
+    let cfg = root.join("cfg");
+    let (wb, cx) = setup(cx, &cfg);
+    review(&wb, cx, "you.hello");
+    let snap = snapshot(&wb, cx);
+    let consent = snap.views.consent.as_ref().expect("the sheet is in the tree");
+    assert_eq!(consent.typed, Some(("Type you.hello to install it.".to_string(), String::new())));
+    let update = snap.to_tree();
+    assert_eq!(update.focus, CONSENT_TYPED, "the keyboard is in the id field");
+    let tree = accesskit_consumer::Tree::new(update, true);
+    let state = tree.state();
+    let dialog = state.root().children().find(|n| n.role() == Role::AlertDialog).expect("an alert dialog");
+    let roles: Vec<_> = dialog.children().filter(|n| n.role() != Role::Label).map(|n| n.role()).collect();
+    assert_eq!(roles, [Role::TextInput, Role::Button, Role::Button], "the field comes before Install and Cancel");
+    let field = dialog.children().find(|n| n.role() == Role::TextInput).unwrap();
+    assert_eq!((field.label().as_deref(), field.value().as_deref()), (Some("Type you.hello to install it."), Some("")));
+    let focus = state.focus().expect("a focused node");
+    assert_eq!(focus.role(), Role::TextInput);
+
+    // Install from the tree with nothing typed installs nothing and keeps the keyboard in the field.
+    act(&wb, cx, &snap, CONSENT_INSTALL, Action::Click);
+    assert!(crate::ext::store(&cfg).locked().unwrap().is_empty());
+    assert_eq!(snapshot(&wb, cx).to_tree().focus, CONSENT_TYPED);
+    // A value set through the tree is what is typed.
+    let snap = snapshot(&wb, cx);
+    act_with(&wb, cx, &snap, CONSENT_TYPED, Action::SetValue, Some(ActionData::Value("you.hello".into())));
+    let snap = snapshot(&wb, cx);
+    assert_eq!(snap.views.consent.as_ref().and_then(|c| c.typed.clone()).map(|t| t.1).as_deref(), Some("you.hello"));
+    act(&wb, cx, &snap, CONSENT_INSTALL, Action::Click);
+    assert_eq!(sheet(&wb, cx), None);
+    assert!(crate::ext::store(&cfg).locked().unwrap().contains_key(&ext_manifest::ExtId::parse("you.hello").unwrap()));
+
+    // A sheet without native programs has no field.
+    review(&wb, cx, "you.dawn");
+    assert_eq!(snapshot(&wb, cx).views.consent.and_then(|c| c.typed), None);
 }
