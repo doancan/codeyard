@@ -61,6 +61,8 @@ mod emmet;
 mod encoding;
 #[cfg(test)]
 mod error_ui_tests;
+#[cfg(all(test, unix))]
+mod explorer_bulk_ssh_tests;
 #[cfg(test)]
 mod explorer_bulk_tests;
 mod ext;

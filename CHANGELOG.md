@@ -266,6 +266,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Deleting in the Explorer on an SSH host says it is permanent: one entry asks "Permanently delete “name” on
+  host?", a selection "Permanently delete N items on host?", both say the host has no Trash, and the button is
+  "Delete Permanently" (a critical alert, Escape cancels). File questions name the connection's host. Bulk copy,
+  move and delete over SSH are covered by tests against a real `sshd`, including a name already taken in the
+  destination and a file that cannot be removed.
 - Source Control's change list is fully accessible: each file is a row with its change, its place in the group and its
   own Stage/Unstage (Mark as resolved) and Discard buttons (Discard asks first, as the painted button does), the commit
   button says why it is disabled, and a large status exposes a scrollable range of 500 lines instead of every row. The
