@@ -530,6 +530,24 @@ impl FileTree {
         (rows, self.selected)
     }
 
+    /// First and last row on screen in the last layout.
+    pub fn visible_rows(&self) -> Option<(usize, usize)> {
+        let state = self.scroll.0.borrow();
+        let height = f32::from(state.last_item_size?.item.height);
+        let first = (-f32::from(state.base_handle.offset().y) / ROW_H).max(0.) as usize;
+        let last = (first + (height / ROW_H).ceil() as usize).saturating_sub(1).min(self.rows.len().saturating_sub(1));
+        Some((first.min(last), last))
+    }
+
+    /// Accessibility scroll action: move the view `pages` screens down (up when negative), the selection stays.
+    pub fn a11y_scroll(&mut self, pages: isize, cx: &mut Context<Self>) {
+        let Some((first, last)) = self.visible_rows() else { return };
+        let page = (last - first).max(1) as isize;
+        let max = self.rows.len().saturating_sub(1) as isize;
+        self.scroll.scroll_to_item_strict((first as isize + pages * page).clamp(0, max) as usize, ScrollStrategy::Top);
+        cx.notify();
+    }
+
     /// Resolve a snapshot's path again: a refresh may have inserted or removed rows since AT read it.
     pub fn a11y_select(&mut self, path: &str, activate: bool, cx: &mut Context<Self>) {
         let Some(ix) = self.rows.iter().position(|r| r.path == path) else { return };

@@ -308,6 +308,8 @@ impl std::fmt::Display for OpenError {
 /// Syntax highlighting is off above this size. The tree takes ~30x the source's size
 /// (1 MB -> ~30 MB), so it is cut off at 1 MB to meet the low-RAM target.
 const SYNTAX_MAX_BYTES: usize = 1024 * 1024;
+/// How long a keystroke may spend reparsing on the UI thread; a longer reparse finishes in the background.
+const SYNTAX_BUDGET: std::time::Duration = std::time::Duration::from_millis(4);
 
 pub struct Loaded {
     pub buffer: Buffer,
@@ -587,6 +589,8 @@ pub struct EditorView {
     /// Selection when the find bar opened (candidate scope for find in selection).
     find_origin: Option<Range<usize>>,
     word_cache: Option<(u64, usize, std::sync::Arc<[crate::lsp::CompletionItem]>)>,
+    /// A reparse too long for a keystroke, finishing in the background (`sync_syntax`).
+    syntax_task: Option<gpui::Task<()>>,
     conflicts_pending: u64,
     /// Line layout the popups are positioned on, and whether there are positioned items.
     popup_basis: ((usize, usize, Pixels), bool),
@@ -997,6 +1001,7 @@ impl EditorView {
             conflicts_version,
             conflicts_task: None,
             word_cache: None,
+            syntax_task: None,
             find_origin: None,
             conflicts_pending: u64::MAX,
             popup_basis: ((usize::MAX, 0, px(0.)), false),
@@ -1358,8 +1363,10 @@ impl EditorView {
         self.syntax.as_ref().map_or(crate::i18n::t("Plain Text"), |s| s.language_name())
     }
 
-    /// Apply the buffer's edits to the syntax tree, reparse the changed part.
-    fn sync_syntax(&mut self) {
+    /// Apply the buffer's edits to the syntax tree, reparse the changed part. A reparse that takes longer than
+    /// `SYNTAX_BUDGET` (an edit that makes tree-sitter recover from an error across the whole file) finishes in the
+    /// background: the key's frame is drawn with the old tree, moved by the edit, and the new one shows when ready.
+    fn sync_syntax(&mut self, cx: &mut Context<Self>) {
         self.sync_lsp();
         let Some(syntax) = &mut self.syntax else { return };
         let edits = self.buffer.take_edits();
@@ -1376,7 +1383,37 @@ impl EditorView {
                 new_end: e.new_end_point,
             });
         }
-        syntax.reparse(self.buffer.rope());
+        if let Some(job) = syntax.reparse_within(self.buffer.rope(), SYNTAX_BUDGET) {
+            self.parse_in_background(job, cx);
+        }
+    }
+
+    fn parse_in_background(&mut self, job: syntax::ParseJob, cx: &mut Context<Self>) {
+        let parsed = cx.background_executor().spawn(async move { job.run() });
+        self.syntax_task = Some(cx.spawn(async move |this, cx| {
+            let parsed = parsed.await;
+            this.update(cx, |e, cx| {
+                let Some(syntax) = &mut e.syntax else { return };
+                // Edits made while it ran are reparsed on top of it, again within the budget.
+                if let Some(job) = syntax.finish(parsed, e.buffer.rope(), SYNTAX_BUDGET) {
+                    e.parse_in_background(job, cx);
+                }
+                cx.notify();
+            })
+            .ok();
+        }));
+    }
+
+    /// The syntax tree is being rebuilt off the UI thread.
+    #[cfg(test)]
+    pub fn parsing_syntax_for_test(&self) -> bool {
+        self.syntax.as_ref().is_some_and(|s| s.parsing())
+    }
+
+    /// The colored spans in `bytes`, as the text is painted.
+    #[cfg(test)]
+    pub fn highlights_for_test(&self, bytes: Range<usize>) -> Vec<(Range<usize>, Role)> {
+        self.syntax.as_ref().map(|s| s.highlights(self.buffer.rope(), bytes)).unwrap_or_default()
     }
 
     pub fn cursor_count(&self) -> usize {
@@ -1616,7 +1653,7 @@ impl EntityInputHandler for EditorView {
             };
             self.buffer.set_selection(start + to_chars(sel.start)..start + to_chars(sel.end), false);
         }
-        self.sync_syntax();
+        self.sync_syntax(cx);
         let row = self.row_of_char(self.buffer.cursor());
         self.scroll.scroll_to_item(row, ScrollStrategy::Top);
         cx.emit(EditorEvent::Changed);

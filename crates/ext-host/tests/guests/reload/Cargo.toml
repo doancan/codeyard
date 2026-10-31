@@ -1,0 +1,29 @@
+[package]
+name = "reload"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# The extension scripts/perf/run.sh hot-reloads in development for `extensions.hot_reload_ms`: a Rust component of
+# about 2 MB (the Rust SDK with regex, toml and pulldown-cmark), built twice by scripts/build-exthost-fixtures.sh, with
+# and without the feature `b`, as crates/ext-host/testdata/reload-a.wasm and reload-b.wasm. The two differ in one
+# constant, like an author's edit. It needs no permission.
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[features]
+b = []
+
+[dependencies]
+codeyard-extension = { path = "../../../../ext-sdk" }
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+regex = "1"
+toml = "0.9"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = "debuginfo"
+
+[workspace]

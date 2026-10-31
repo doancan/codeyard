@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Performance scenarios for extension views and hot reload, run by `scripts/perf/run.sh`: PageDown in a sidebar view
+  with a list of 10 000 rows (`CODEYARD_PERF_VIEWS`, `views.keystroke_frame_ms`) and a 2 MB Rust component swapped in
+  place in a dev window (`CODEYARD_PERF_RELOAD`, `extensions.hot_reload_ms`), each with a fixture extension that needs
+  no permission and no WebAssembly toolchain at run time. Both rows stay warn-only until a baseline has them.
 - Native programs from packages (#146): an extension's `run` may name a program inside its package (`./bin/hello`),
   built per platform under `native/<triple>/` (static musl on Linux). `cyx package` writes one
   `<id>-<version>-<triple>.cyx` per platform (`--target` for one; up to 128 MiB each) and `cyx publish` uploads each.
@@ -18,7 +22,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   locally and over SSH. The consent sheet asks for the extension's id to be typed before it installs one. Yard takes
   code and native programs only from publishers listed in `yard.json`'s `invited`, and a publisher's first native
   program stays unlisted until a reviewer runs `yard review approve` (`yard review list | approve | reject`).
-
+  A `[[language-servers]]` command inside the package (`command = "./bin/server"`) starts from the same pushed and
+  hash-checked copy, locally and over SSH, and is refused when the hash does not match. An update that adds a native
+  program opens the full sheet, which asks for the id to be typed as a first install does, instead of the permission
+  card. Screen readers find the sheet's id field (a text field with what to type, what is typed and the focus).
+- "Preferences: Apply Rust Setup…" sets up a Rust project in one step: Clippy for checks, checks with the Cargo
+  features Run and Debug build with, a check folder of its own and rustfmt on save. It shows the exact changes to
+  `settings.jsonc` first, keeps your comments and other settings, and "Preferences: Reset Rust Setup…" removes it.
+- Rust debugging builds with your choice of Cargo features, profile and output folder: `rust.features`,
+  `rust.noDefaultFeatures`, `rust.profile` and `rust.targetDir`. The target picker shows them next to each detected
+  target, and a relative output folder is resolved in the workspace folder of the machine that builds, also over SSH.
 - Code extensions can describe and complete: `[[hover]]` and `[[completion]]` (with optional `trigger-characters`)
   in the manifest, `request.hover` and `request.completion` in `codeyard:api` 0.1, `ctx.hover` and `ctx.completion`
   in the Rust and TypeScript SDKs, and `hover` / `completion` in both mock hosts. Their text shows in the hover popup
@@ -148,7 +161,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A view's `when` in the manifest: a view is offered in the activity bar, the panel tabs and *Open View* only while
   its `when` holds, and an open view closes when it turns false.
 - `views.keystroke_frame_ms` (`CODEYARD_PERF`): a key that reaches an extension view, to the frame that shows it. The
-  row in `perf/metrics.json` is `warn` until `scripts/perf/run.sh` has a scenario for it.
+  row in `perf/metrics.json` is `warn` until a baseline has it.
 - What code extensions contribute reaches the same places as the core's: commands in the editor and file-tree menus
   (with `when` and `enablement`), on key bindings and on status bar items; formatters for *Format Document* and format
   on save (chosen per language with `editor.formatters`); code actions in *Quick Fix…*, whose edits change the document they were asked for and other files only within the
@@ -282,6 +295,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Source Control builds only the change rows on screen, so a repository with thousands of changes (generated files,
   a large merge) scrolls and refreshes without delay. The list keeps its scroll position and focus when the status
   refreshes.
+- Screen readers reach every row of a large Explorer and every line of a long file: instead of the first 5,000 rows
+  and a window around the caret, the accessibility tree shows a range centred on the selection or caret, or on the
+  visible area after a scroll. Scroll up/down by a page moves it, and row positions and text offsets count from the
+  start of the tree or file.
 - Deleting a file or folder deletes it permanently after asking, instead of moving it to the Trash:
   `files.enableTrash` is now off by default. Turn it on to keep using the Trash for local files.
 - The settings and shortcuts import is "Preferences: Import Settings and Shortcuts from Another Editor", and its
@@ -303,6 +320,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cyx package` no longer puts the `.cyx` it wrote last time into the new package (it doubled in size on every run).
   New extensions from `cyx new` ignore `*.cyx` in git.
 - `cyx check` on a code extension that is not built yet says to run `cyx package` or `cyx test`, which build it.
+- Typing in a large file could wait 60 ms or more per key for the syntax tree: an edit that makes tree-sitter recover
+  from an error across the whole file (stray words or a half-typed `->` between the items of a 10 000-line Rust file)
+  reparsed all of it before the key was drawn. A key now reparses for at most 4 ms; a longer reparse finishes in the
+  background and the colors catch up when it is done. This was most of what `typing.keystroke_frame_completion_ms`
+  measured (median 78 ms, the completion provider itself answers within a millisecond); it is now close to plain
+  typing.
 - A debug configuration with `"stopOnEntry": true` run with lldb-dap said "Paused on exception: signal SIGSTOP": the
   adapter reports the stop on entry as a signal. The first stop of such a session now reads "Paused on entry"; a
   SIGSTOP later on is still reported as an exception.

@@ -30,6 +30,7 @@ fn snap() -> Snapshot {
                 },
             ],
             rows_total: 2,
+            first: 0,
             focused: Some(row_id("/d/src/main.rs").0),
         }],
         tabs: vec![TabSnap { name: "lib.rs".into(), dirty: true }, TabSnap { name: "main.rs".into(), dirty: false }],
@@ -205,7 +206,7 @@ fn terminal_rows_are_text_with_the_cursor_as_caret() {
 fn every_folder_of_the_workspace_has_its_own_tree() {
     let mut s = snap();
     let row = RowSnap { id: row_id("/e/x.rs").0, path: "/e/x.rs".into(), name: "x.rs".into(), depth: 0, is_dir: false, expanded: false, selected: true };
-    s.explorers.push(ExplorerSnap { name: "e".into(), focused: Some(row.id), rows: vec![row], rows_total: 1 });
+    s.explorers.push(ExplorerSnap { name: "e".into(), focused: Some(row.id), rows: vec![row], rows_total: 1, first: 0 });
     s.focus = FocusSnap::Explorer(1);
     let tree = accesskit_consumer::Tree::new(s.to_tree(), true);
     let state = tree.state();
@@ -213,4 +214,13 @@ fn every_folder_of_the_workspace_has_its_own_tree() {
     assert_eq!(trees.len(), 2);
     assert_eq!(trees[1].label().as_deref(), Some("Explorer: e"));
     assert_eq!(state.focus().unwrap().label().as_deref(), Some("x.rs"));
+}
+
+#[test]
+fn the_range_centres_on_the_focus_while_it_is_on_screen() {
+    assert_eq!(window_start(10_000, 1_000, Some(5_000), Some((4_990, 5_010))), 4_500);
+    assert_eq!(window_start(10_000, 1_000, Some(5_000), Some((100, 120))), 0, "scrolled away: the visible rows");
+    assert_eq!(window_start(10_000, 1_000, Some(5_000), Some((8_000, 8_020))), 7_510);
+    assert_eq!(window_start(10_000, 1_000, Some(9_990), None), 9_000, "clamped at the end");
+    assert_eq!(window_start(50, 1_000, Some(40), None), 0, "everything fits");
 }

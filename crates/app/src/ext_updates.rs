@@ -5,7 +5,8 @@
 //! - `extensions.autoUpdate: install` installs a newer version when it is ready (data-only at once, code after 48 h)
 //!   and asks the same or fewer permissions from the same publisher. More permissions keep the installed version and
 //!   wait for the user's OK on a card that lists only what is new; another publisher, or a list older than 3 days,
-//!   needs the full consent sheet. `notify` only shows the version; `off` downloads nothing.
+//!   needs the full consent sheet. A version that adds a native program (a `run` entry inside the package) needs the
+//!   full sheet too, where its id is typed as on a first install (docs/plugin-architecture.md §6.3). `notify` only shows the version; `off` downloads nothing.
 //! - A yanked installed version goes back to the newest earlier one at once (from the store when it is still there).
 //! - A revoked version is recorded in `revoked.json` and stops, with its dependents, in every window (`ext::reload`).
 //!
@@ -31,6 +32,8 @@ pub enum Offer {
     Available { version: Version },
     /// Asks for more than the installed version: `added` is only what is new.
     MorePermissions { version: Version, added: Permissions },
+    /// Adds a native program (`added` is only what is new): the full sheet, where the id is typed (§6.3).
+    NativePrograms { version: Version, added: Permissions },
     /// Signed for another publisher than the one this extension came from: the full sheet.
     NewPublisher { version: Version, publisher: Publisher, was: Publisher },
     /// The registry's list is more than 3 days old: the user confirms on the full sheet.
@@ -45,6 +48,7 @@ impl Offer {
             Offer::Waiting { version, .. }
             | Offer::Available { version }
             | Offer::MorePermissions { version, .. }
+            | Offer::NativePrograms { version, .. }
             | Offer::NewPublisher { version, .. }
             | Offer::Stale { version }
             | Offer::Failed { version, .. } => version,
@@ -53,7 +57,7 @@ impl Offer {
 
     /// The full consent sheet answers it, not the card.
     pub fn needs_sheet(&self) -> bool {
-        matches!(self, Offer::NewPublisher { .. } | Offer::Stale { .. })
+        matches!(self, Offer::NativePrograms { .. } | Offer::NewPublisher { .. } | Offer::Stale { .. })
     }
 }
 
@@ -204,7 +208,8 @@ struct From<'a> {
 }
 
 /// Install `release` in place of the current version when nothing about it needs the user: the same publisher and no
-/// permission beyond the current version's (or `accepted`). The permission digest in the index says "the same" without
+/// permission beyond the current version's (or `accepted`), and no new native program, which only the full sheet
+/// accepts. The permission digest in the index says "the same" without
 /// a download; otherwise the version's page (its manifest, a small file) says what is new before the package is
 /// downloaded.
 fn install(from: &From, id: &ExtId, l: &Locked, current: &Manifest, release: &Release, accepted: Option<&Permissions>) -> Result<Option<Offer>, String> {
@@ -216,14 +221,17 @@ fn install(from: &From, id: &ExtId, l: &Locked, current: &Manifest, release: &Re
     }
     let more = |p: &Permissions| {
         let added = p.added_since(&current.permissions);
-        (!added.is_empty() && !accepted.is_some_and(|a| added.added_since(a).is_empty())).then_some(added)
+        if added.package_programs().next().is_some() {
+            return Some(Offer::NativePrograms { version: version.clone(), added });
+        }
+        (!added.is_empty() && !accepted.is_some_and(|a| added.added_since(a).is_empty())).then(|| Offer::MorePermissions { version: version.clone(), added })
     };
     if release.permissions != ext_core::yard::permission_digest(current) {
         let dir = registry::cache_dir(&cache_root(cfg_dir), reg);
         if let Ok(page) = with_fetch(|f| registry::page(reg, &dir, id, release, f))
-            && let Some(added) = more(&page.manifest.permissions)
+            && let Some(offer) = more(&page.manifest.permissions)
         {
-            return Ok(Some(Offer::MorePermissions { version, added }));
+            return Ok(Some(offer));
         }
     }
     // An extension with native programs stays on the platform it was installed for.
@@ -231,8 +239,8 @@ fn install(from: &From, id: &ExtId, l: &Locked, current: &Manifest, release: &Re
     let d =
         with_fetch(|f| registry::download_for(reg, v, id, Some(&release.version), release.is_pre_release(), platform, f, now)).map_err(|e| e.to_string())?;
     // The package decides, whatever the page said.
-    if let Some(added) = more(&d.manifest.permissions) {
-        return Ok(Some(Offer::MorePermissions { version, added }));
+    if let Some(offer) = more(&d.manifest.permissions) {
+        return Ok(Some(offer));
     }
     if d.manifest.code.is_some() {
         crate::ext_runtime::code_runs_here(id)?;

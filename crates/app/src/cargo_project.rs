@@ -81,12 +81,42 @@ pub struct CargoTarget {
     pub name: String,
     pub manifest: Option<String>,
     pub kind: TargetKind,
+    /// The target's `required-features`.
     pub features: Vec<String>,
+    /// The user's features, profile and output folder, set when the build starts.
+    pub build: BuildOptions,
+}
+
+/// How Cargo builds what is run or debugged: `rust.features`, `rust.noDefaultFeatures`, `rust.profile` and
+/// `rust.targetDir`. Cargo resolves a relative folder against the workspace root, on the machine that builds.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BuildOptions {
+    pub features: Vec<String>,
+    pub no_default_features: bool,
+    pub profile: Option<String>,
+    pub target_dir: Option<String>,
+}
+
+impl BuildOptions {
+    /// Short description for the configuration picker, e.g. "release · features: cli, tls"; `None` for Cargo's defaults.
+    pub fn summary(&self) -> Option<String> {
+        let mut parts: Vec<String> = self.profile.iter().cloned().collect();
+        if !self.features.is_empty() {
+            parts.push(crate::i18n::tf("features: {}", &[&self.features.join(", ")]));
+        }
+        if self.no_default_features {
+            parts.push(crate::i18n::t("no default features").into());
+        }
+        if let Some(dir) = &self.target_dir {
+            parts.push(crate::i18n::tf("output: {}", &[dir]));
+        }
+        (!parts.is_empty()).then(|| parts.join(" · "))
+    }
 }
 
 impl CargoTarget {
     pub fn binary(name: String) -> Self {
-        Self { package: name.clone(), name, manifest: None, kind: TargetKind::Binary, features: Vec::new() }
+        Self { package: name.clone(), name, manifest: None, kind: TargetKind::Binary, features: Vec::new(), build: BuildOptions::default() }
     }
 
     pub fn build_args(&self) -> Vec<String> {
@@ -103,8 +133,19 @@ impl CargoTarget {
                 }
             }
         }
-        if !self.features.is_empty() {
-            args.extend(["--features".into(), self.features.join(",")]);
+        let mut features = self.features.clone();
+        features.extend(self.build.features.iter().filter(|f| !self.features.contains(f)).cloned());
+        if !features.is_empty() {
+            args.extend(["--features".into(), features.join(",")]);
+        }
+        if self.build.no_default_features {
+            args.push("--no-default-features".into());
+        }
+        if let Some(profile) = &self.build.profile {
+            args.extend(["--profile".into(), profile.clone()]);
+        }
+        if let Some(dir) = &self.build.target_dir {
+            args.extend(["--target-dir".into(), dir.clone()]);
         }
         args
     }
@@ -157,7 +198,8 @@ pub fn parse_metadata(text: &str) -> Result<Vec<CargoTarget>, String> {
             let target_name = target["name"].as_str().filter(|s| !s.is_empty()).ok_or_else(|| crate::i18n::t("Cargo target has no name").to_string())?;
             let features =
                 target["required-features"].as_array().map(|a| a.iter().filter_map(|f| f.as_str().map(str::to_string)).collect()).unwrap_or_default();
-            let target = CargoTarget { package: name.into(), name: target_name.into(), manifest: Some(manifest.into()), kind, features };
+            let target =
+                CargoTarget { package: name.into(), name: target_name.into(), manifest: Some(manifest.into()), kind, features, build: BuildOptions::default() };
             if kind.is_test() { tests.push(target) } else { targets.push(target) }
         }
     }

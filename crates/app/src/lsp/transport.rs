@@ -158,6 +158,10 @@ pub struct Client {
 impl Client {
     /// Start the server and handshake. Error if the command is not found or fails to start.
     pub fn start(host: Arc<dyn Host>, mut config: ServerConfig, root: &str, events: mpsc::Sender<ServerEvent>) -> Result<Arc<Client>, String> {
+        // A program inside an extension's package runs from the copy on the host, after its hash is checked there.
+        if let Some(p) = &config.program {
+            config.command = crate::ext_programs::ready(host.as_ref(), &p.extension, &p.programs, &config.command)?;
+        }
         if let Some(service) = config.managed
             && let Ok(destination) = crate::language_service_install::destination(host.as_ref())
             && let Ok(Some(installed)) = crate::language_service_install::discover(host.as_ref(), &destination)

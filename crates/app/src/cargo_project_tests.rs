@@ -117,3 +117,19 @@ fn rust_hardening_real_virtual_workspace_respects_features_target_names_and_cust
     assert!(ran.ok());
     assert_eq!(ran.stdout_str().trim(), "cargo-target-ok");
 }
+
+#[test]
+fn the_chosen_features_profile_and_output_folder_reach_the_build() {
+    let mut target = parse_metadata(&metadata("bin").to_string()).unwrap().remove(0);
+    assert_eq!(target.build.summary(), None, "Cargo's defaults");
+    target.build = BuildOptions {
+        features: vec!["format".into(), "tls".into()],
+        no_default_features: true,
+        profile: Some("release".into()),
+        target_dir: Some("out dir".into()),
+    };
+    let args = target.build_args();
+    let tail = &args[args.iter().position(|a| a == "--features").unwrap()..];
+    assert_eq!(tail, ["--features", "cli,format,tls", "--no-default-features", "--profile", "release", "--target-dir", "out dir"]);
+    assert_eq!(target.build.summary().as_deref(), Some("release · features: format, tls · no default features · output: out dir"));
+}

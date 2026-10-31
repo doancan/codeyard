@@ -226,6 +226,8 @@ pub struct Settings {
     pub spelling: bool,
     pub spelling_comments: bool,
     pub spell_languages: Vec<String>,
+    /// `rust.features`, `rust.noDefaultFeatures`, `rust.profile`, `rust.targetDir`: how Run and Debug build with Cargo.
+    pub rust_build: crate::cargo_project::BuildOptions,
     // --- data ---
     /// Data lens: spaces per level in JSON and YAML output, and whether output keys are sorted.
     pub data_indent: usize,
@@ -403,6 +405,7 @@ impl Default for Settings {
             spelling: true,
             spelling_comments: true,
             spell_languages: vec!["en".into()],
+            rust_build: Default::default(),
             data_indent: 2,
             data_sort_keys: false,
             http_run_on: "workspace".into(),
@@ -442,13 +445,15 @@ impl Default for Settings {
 
 #[path = "settings_templates.rs"]
 mod templates;
-pub use templates::{KEYBINDINGS_TEMPLATE, TEMPLATE};
+pub use templates::{KEYBINDINGS_TEMPLATE, TEMPLATE, rust_setup};
 #[path = "settings_text.rs"]
 mod text;
-pub use text::{Seg, array_items, members, set_string_in, set_value_in, value_range};
+pub use text::{Seg, array_items, members, set_path_in, set_string_in, set_value_in, value_range};
 #[path = "settings_scope.rs"]
 mod scope;
 pub use scope::{Scope, ScopedLayer, Sources, is_user_only};
+#[path = "settings_rust.rs"]
+mod rust;
 #[path = "settings_scale.rs"]
 mod scale;
 #[path = "settings_terminal.rs"]
@@ -621,7 +626,7 @@ fn server_entry(lang: &str, cfg: &Value, warnings: &mut Vec<String>) -> Option<O
         }
     };
     let init_options = o.get("initializationOptions").filter(|v| !v.is_null()).cloned();
-    Some(Some(crate::lsp::ServerSpec { command, args, settings: std::sync::Arc::new(settings), init_options }))
+    Some(Some(crate::lsp::ServerSpec { command, args, settings: std::sync::Arc::new(settings), init_options, program: None }))
 }
 
 fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<String>) {
@@ -713,6 +718,7 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         s.compare_max_files = v as u32;
     }
     terminal::parse(&mut s, &mut r, obj);
+    rust::parse(&mut s, &mut r);
     if let Some(v) = r.bool("window.restoreSession") {
         s.restore_session = v;
     }
@@ -1154,6 +1160,10 @@ fn parse_object(obj: &Map<String, Value>, quiet: &[String]) -> (Settings, Vec<St
         "spelling.enabled",
         "spelling.checkComments",
         "spelling.languages",
+        "rust.features",
+        "rust.noDefaultFeatures",
+        "rust.profile",
+        "rust.targetDir",
         // --- data ---
         "data.indent",
         "data.sortKeys",

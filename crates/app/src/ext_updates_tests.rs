@@ -1,6 +1,7 @@
 //! Updates and version status (#69): a revoked version stops after one index fetch, a yanked one goes back without a
 //! restart, more permissions wait for the card, `autoUpdate: off` downloads nothing, code waits 48 h unless the user
-//! presses Update Now, another publisher needs the full sheet, and the pre-release channel is opt-in per extension.
+//! presses Update Now, another publisher or a new native program needs the full sheet, and the pre-release channel is
+//! opt-in per extension.
 //! The registry is a folder (`ext_core::testing::TestRegistry`); nothing touches the network.
 
 use std::path::{Path, PathBuf};
@@ -187,6 +188,51 @@ fn an_update_that_adds_a_permission_waits_for_the_card(cx: &mut TestAppContext) 
     cx.run_until_parked();
     assert_eq!(y.installed(), "1.1.0");
     assert_eq!(active_version().as_deref(), Some("1.1.0"));
+}
+
+/// #146: an update that adds a native program never installs by itself or from the card, even when the card's
+/// permissions were accepted: the full sheet asks for the id to be typed, as a first install does (§6.3).
+#[gpui::test]
+fn an_update_that_adds_a_native_program_needs_the_id_typed(cx: &mut TestAppContext) {
+    let Some(here) = ext_manifest::this_target() else { return };
+    let root = dir("native");
+    let mut y = Yard::new(&root, "native-update", &["1.0.0"], None);
+    let (wb, cx) = setup(cx, &y.cfg);
+    let now = crate::ext_registry::now();
+    y.r.publish(&ext_core::testing::native_package("you.night", "1.1.0", here), &github(7, 42), now);
+    // Cleared by the registry, so the check would install it at once if nothing else stopped it.
+    y.r.edit_release("you.night", "1.1.0", now, |r| r.immediate = true);
+    y.a_day_later();
+    check(&wb, cx);
+    let s = status(&wb, cx);
+    let Some(Offer::NativePrograms { version, added }) = &s.offer else { panic!("{s:?}") };
+    assert_eq!(version.to_string(), "1.1.0");
+    assert_eq!(added.run, ["./bin/hello"]);
+    assert_eq!(y.installed(), "1.0.0");
+    let (badge, _) = wb.read_with(cx, |wb, _| wb.extension_state_for_test("you.night")).unwrap();
+    assert_eq!(badge, "Update needs your OK");
+    // Agreeing to the new permissions as the card would is not enough.
+    let regs = crate::ext_registry::registries(&crate::settings::parse_layers(&std::fs::read_to_string(y.cfg.join("settings.jsonc")).unwrap(), &[]).unwrap().0);
+    let id = ext_manifest::ExtId::parse("you.night").unwrap();
+    let offer = crate::ext_updates::update_now(&y.cfg, &regs, &id, Some(added), now).unwrap();
+    assert!(matches!(offer, Some(Offer::NativePrograms { .. })), "{offer:?}");
+    assert_eq!(y.installed(), "1.0.0");
+    // Update Now opens the full sheet; it installs only once the id is typed.
+    wb.update_in(cx, |wb, window, cx| wb.update_extension_now_for_test("you.night", window, cx));
+    cx.run_until_parked();
+    assert!(wb.read_with(cx, |wb, _| wb.consent_source_for_test()).is_some(), "the full sheet: {:?}", notice(&wb, cx));
+    assert!(wb.update_in(cx, |wb, window, cx| wb.consent_typing_focused_for_test(window, cx)), "the id field takes the keyboard");
+    for typed in ["", "you.nigh"] {
+        assert!(!wb.update_in(cx, |wb, _, cx| wb.type_consent_id_for_test(typed, cx)));
+        wb.update_in(cx, |wb, window, cx| wb.answer_consent_for_test(true, window, cx));
+        cx.run_until_parked();
+        assert_eq!(y.installed(), "1.0.0", "installed with {typed:?}");
+        assert!(notice(&wb, cx).1.contains("Type you.night"), "{:?}", notice(&wb, cx));
+    }
+    assert!(wb.update_in(cx, |wb, _, cx| wb.type_consent_id_for_test("you.night", cx)));
+    wb.update_in(cx, |wb, window, cx| wb.answer_consent_for_test(true, window, cx));
+    cx.run_until_parked();
+    assert_eq!(y.installed(), "1.1.0");
 }
 
 /// AC4: with `autoUpdate: off` no update is downloaded (`notify` the same); the version shows, and Update Now

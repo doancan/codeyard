@@ -360,6 +360,11 @@ impl Workbench {
                 Some(added),
                 Some(button("ext-update-accept", crate::i18n::t("Update"), Workbench::accept_extension_update)),
             ),
+            Some(Offer::NativePrograms { version, added }) => (
+                Some(crate::i18n::tf("Version {} adds native programs; review it and type its id to install it:", &[version])),
+                Some(added),
+                Some(button("ext-update-review", crate::i18n::t("Review…"), review)),
+            ),
             Some(Offer::NewPublisher { version, publisher, was }) => (
                 Some(crate::i18n::tf("Version {0} is published by {1}, not {2} as before.", &[version, publisher, was])),
                 None,

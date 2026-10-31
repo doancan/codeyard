@@ -103,10 +103,12 @@ App: Quit
 Apple Container supports connecting, starting containers and viewing logs. Dev Container project creation is not supported by this adapter yet; connect to an existing Apple container.	
 Application details	
 Applied {}	
+Apply	
 Apply (keep the stash)	
 Apply .editorconfig files (indent, line endings, final newline…)	
 Apply Stash…	
 Apply a file operation to {} entry?|Apply a file operation to {} entries?	
+Apply the Rust setup to settings.jsonc?	
 Apply {0} {1}	
 Apr	
 Ask before .http requests and schema downloads leave this computer: never, remote (the first request to each new host per session) or always. Your own settings only; a folder cannot change it	
@@ -1637,6 +1639,7 @@ Ports
 Ports and storage	
 Ports below 1024 need extra privileges on this computer	
 Ports: {}	
+Preferences: Apply Rust Setup…	
 Preferences: Configure User Snippets	
 Preferences: Import Settings and Shortcuts from Another Editor	
 Preferences: Keyboard Shortcuts	
@@ -1644,6 +1647,7 @@ Preferences: Open Keyboard Shortcuts
 Preferences: Open Settings	
 Preferences: Open Settings (JSON)	
 Preferences: Open Workspace Settings	
+Preferences: Reset Rust Setup…	
 Preferences: Settings	
 Preserve case (⌥P)	
 Preserve case when replacing	
@@ -1860,6 +1864,7 @@ Reset Hard to Here…
 Reset Mixed to Here	
 Reset Soft to Here	
 Reset Zoom	
+Reset the Rust setup in settings.jsonc?	
 Reset to {0} ({1})	
 Resolve the file conflict before debugging.	
 Resolved {} conflict|Resolved {} conflicts	
@@ -2501,6 +2506,7 @@ Version
 Version {0} could not be installed: {1}	
 Version {0} is published by {1}, not {2} as before.	
 Version {0} runs code, so it installs by itself after {1}.	
+Version {} adds native programs; review it and type its id to install it:	
 Version {} asks for more than the version you have, which keeps running until you agree:	
 Version {} is available.	
 Version {} is installed.	
@@ -2711,6 +2717,7 @@ expression to watch (e.g. total * 2, items.len())
 extensions.registries[{0}]: the name “{1}” is used twice	
 failed	
 failed (exit code {})	
+features: {}	
 fetches {} from {}	
 field	
 file	
@@ -2780,6 +2787,7 @@ namespace
 needs a path to a program	
 new value	
 no configuration directory	
+no default features	
 no file name	
 no item {} in the response	
 no upstream	
@@ -2800,6 +2808,7 @@ of {}
 only the first {} files were looked at (search.structural.maxFiles)	
 open	
 operator	
+output: {}	
 package	
 partly selected	
 passed	
@@ -2837,6 +2846,8 @@ selected
 send the request named “{}” first	
 sends {} to {}	
 setting	
+settings.jsonc already has the Rust setup.	
+settings.jsonc has no Rust setup to reset.	
 size differs	
 skipped	
 source	
@@ -2869,6 +2880,7 @@ the environment variable {} is not set
 the extension stopped	
 the extension was reloaded	
 the file cannot be read right now ({})	
+the file changed; try again	
 the file is gone (deleted or moved); following continues if it comes back	
 the file is no longer readable (permission denied)	
 the file is not UTF-8 text	
@@ -2981,7 +2993,7 @@ your words
 {0} line matches “{1}”.|{0} lines match “{1}”.	
 {0} lines · {1}	
 {0} lines · {1} MB · read-only	
-{0} lines, showing from line {1}	
+{0} lines, showing lines {1}–{2}	
 {0} may again: {1}	
 {0} may no longer: {1}	
 {0} needs strings, got {1} and {2}	
@@ -3104,6 +3116,7 @@ your words
 {} incoming call|{} incoming calls	
 {} is a binary file: there is no text diff.	
 {} is a date:	
+{} is a platform extension programs are not built for	
 {} is a symbolic link; write the path it points to, so the upload can be confirmed	
 {} is already in .gitignore	
 {} is already in the workspace.	
@@ -3227,7 +3240,6 @@ your words
 “{}” is not supported	
 “{}” is not the command of an active extension	
 “{}” is still running in this terminal. Close it anyway?	
-“{}” ships inside the package; this version only starts language servers found on PATH	
 “{}” was not found in ~/.ssh/config	
 “{}”: {} = {}	
 … {} more	
