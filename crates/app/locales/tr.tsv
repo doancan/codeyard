@@ -3400,8 +3400,6 @@ Checks	Denetimler
 Description	Açıklama
 No description.	Açıklama yok.
 Comments ({})	Yorumlar ({})
-{} is a platform extension programs are not built for	{}, eklenti programlarının derlenmediği bir platform
-Version {} adds native programs; review it and type its id to install it:	{} sürümü yerel programlar ekliyor; kurmak için gözden geçirip kimliğini yazın:
 Pull Requests: Show…	Pull Request'ler: Göster…
 None of this repository's remotes is on github.com or on a host of {}.	Bu deponun uzak depolarından hiçbiri github.com veya {} sunucularından birinde değil.
 None of this repository's remotes is on github.com, and no installed extension provides pull requests for their hosts.	Bu deponun uzak depolarından hiçbiri github.com üzerinde değil ve kurulu hiçbir eklenti bunların sunucuları için pull request sağlamıyor.
