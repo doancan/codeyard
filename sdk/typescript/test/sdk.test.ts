@@ -239,6 +239,26 @@ test("files, processes and progress go through the permissions", async () => {
   h.dispose();
 });
 
+test("readMany, rename and createDirectory, as in the Rust SDK", async () => {
+  const h = new MockHost({ manifest: MANIFEST.replace('read = ["**/*.json"]', 'read = ["**/*.json"]\nwrite = ["data/**"]') });
+  h.file("data/a.json", "1").file("data/b.json", "2");
+  await h.activate({
+    activate(ctx) {
+      ctx.command("go", async (ctx) => {
+        const files = await ctx.readMany([h.uri("data/a.json"), h.uri("data/missing.json")]);
+        await ctx.createDirectory(h.uri("data/old"));
+        await ctx.rename(h.uri("data/b.json"), h.uri("data/old/b.json"));
+        const [a, missing] = files;
+        return { a: new TextDecoder().decode(a?.bytes), missing: missing?.error instanceof CodeyardError };
+      });
+    },
+  });
+  assert.deepEqual(await h.command("go"), { a: "1", missing: true });
+  assert.equal(h.read("data/b.json"), undefined);
+  assert.equal(new TextDecoder().decode(h.read("data/old/b.json")), "2");
+  h.dispose();
+});
+
 test("code lenses run their command with their arguments; hints cover the range asked", async () => {
   const h = host();
   const lines = (text: string, from: number, to: number) => text.split("\n").map((l, n) => [n, l] as const).slice(from, to);

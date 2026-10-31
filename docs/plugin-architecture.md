@@ -441,7 +441,7 @@ Author commands are `cyx new`, `cyx dev`, `cyx test`, `cyx publish [--dry-run|--
 commands `install|list|uninstall|sync`.
 
 `cyx` is a small GPUI-free console binary shipped in the app bundle (a Windows GUI exe cannot write to a
-terminal). **Extensions: Install cyx Command in PATH** adds it; CI uses `codeyard/setup-cyx`.
+terminal). **Extensions: Install cyx Command in PATH** adds it; CI uses `doancan/codeyard/actions/setup-cyx`.
 
 Errors have one format everywhere:
 

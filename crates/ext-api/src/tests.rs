@@ -169,6 +169,17 @@ fn every_api_version_has_its_codeyard_release() {
     assert!(RELEASES.windows(2).all(|w| w[0].0 < w[1].0));
 }
 
+/// This build has API `VERSION`, so its own version is that API's release or a preview of it, never a later release
+/// that would make `cyx` name the wrong minimum.
+#[test]
+fn this_build_is_the_release_of_its_api_or_a_preview_of_it() {
+    let release = codeyard_for(VERSION).unwrap();
+    let build = env!("CARGO_PKG_VERSION");
+    assert!(build == release || is_preview_of(build, release), "Codeyard {build} implements API {VERSION}, first released in {release}: fix RELEASES");
+    assert!(is_preview_of("0.6.0", "0.7.0") && !is_preview_of("0.7.0", "0.7.0") && !is_preview_of("0.8.1", "0.7.0"));
+    assert!(!is_preview_of("dev", "0.7.0"));
+}
+
 #[test]
 fn needs_follow_the_manifest() {
     use ext_manifest::Clipboard;

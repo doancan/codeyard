@@ -188,7 +188,27 @@ pub const NPM_SDK_VERSION: &str = "1.0.0";
 fn sdk_dependency(package: &str, folder: &str, sdk: Option<&str>) -> String {
     match sdk {
         Some(root) => format!("{package} = {{ path = \"{}/crates/{folder}\" }}", root.trim_end_matches('/')),
-        None => format!("# Pre-release: from the Codeyard repository until the SDK is on crates.io.\n{package} = {{ git = \"{}\" }}", SDK_REPOSITORY),
+        None => format!("{}\n{package} = {{ git = \"{SDK_REPOSITORY}\", {} }}", sdk_comment(BUILD), sdk_git_ref(BUILD)),
+    }
+}
+
+/// This cyx's version: the release whose SDK its templates are made for.
+const BUILD: &str = env!("CARGO_PKG_VERSION");
+
+/// The git reference a template takes the SDK at: the tag of `build`'s release, so the extension keeps building
+/// against the SDK it was written for. A preview build, before the first release with the SDK (its API's release in
+/// `ext_api::RELEASES`), has no such tag yet and follows `main`.
+pub fn sdk_git_ref(build: &str) -> String {
+    match ext_api::codeyard_for(ext_api::VERSION).filter(|r| ext_api::is_preview_of(build, r)) {
+        Some(_) => "branch = \"main\"".into(),
+        None => format!("tag = \"v{build}\""),
+    }
+}
+
+fn sdk_comment(build: &str) -> String {
+    match ext_api::codeyard_for(ext_api::VERSION).filter(|r| ext_api::is_preview_of(build, r)) {
+        Some(r) => format!("# Pre-release: the SDK from the Codeyard repository's main branch until v{r}, its first release, is tagged."),
+        None => format!("# Pre-release: the SDK of Codeyard {build} from its repository until the SDK is on crates.io."),
     }
 }
 

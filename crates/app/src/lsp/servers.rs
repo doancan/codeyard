@@ -308,6 +308,22 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    /// The ids `cyx check` and the contributions reference know (`ext_manifest::LANGUAGE_IDS`) are exactly the ones
+    /// Codeyard gives files: here and in snippets.
+    #[test]
+    fn language_ids_match_the_manifest_list() {
+        let files = [
+            "a.rs", "a.c", "a.cpp", "a.go", "a.py", "a.ts", "a.tsx", "a.js", "a.jsx", "a.java", "a.cs", "a.php", "a.rb", "Gemfile", "a.kt", "a.swift", "a.lua",
+            "a.sh", "a.zsh", "a.html", "a.vue", "a.css", "a.scss", "a.less", "a.json", "a.jsonc", "a.yaml", "a.toml", "a.md", "a.sql", "a.txt",
+        ];
+        let mut seen = std::collections::BTreeSet::new();
+        for f in files {
+            seen.insert(language_of(f).map_or("plaintext", |(id, _)| id));
+            seen.insert(crate::snippets::lang_of_path(f));
+        }
+        assert_eq!(seen.into_iter().collect::<Vec<_>>(), ext_manifest::LANGUAGE_IDS);
+    }
+
     #[test]
     fn managed_services_apply_only_to_enabled_default_commands() {
         for (key, service) in [

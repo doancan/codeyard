@@ -99,6 +99,23 @@ fn syntax_errors_point_at_the_line() {
     assert!(e[0].render(FILE_NAME, &text).starts_with("error[CY0101]: unknown field `titel`"));
 }
 
+/// Every unknown field at once, then the rest of the checks (e2e trial: one per run).
+#[test]
+fn every_unknown_field_is_reported_at_once() {
+    let text = with(
+        "[[commands]]\nid = \"x\"\ntitle = \"X\"\ncolour = \"red\"\n\n[[commands]]\nid = \"y\"\ntitle = \"Y\"\nicon = \"y\"\n\n[bogus]\nfoo = 1\nbar = 2\n\n[[snippets]]\nlanguage = \"rust\"\npath = \"/abs.json\"\n",
+    );
+    let e = errors(&text);
+    let unknown: Vec<_> = e.iter().filter(|d| d.code == Code::Syntax).map(|d| d.message.clone()).collect();
+    assert_eq!(unknown.len(), 3, "{unknown:?}");
+    assert!(unknown[0].contains("`colour`") && unknown[1].contains("`icon`") && unknown[2].contains("`bogus`"), "{unknown:?}");
+    // Each points at its own line in the author's text.
+    let lines: Vec<_> = e.iter().filter(|d| d.code == Code::Syntax).map(|d| d.line_col(&text).unwrap().0).collect();
+    assert!(lines.windows(2).all(|w| w[0] < w[1]), "{lines:?}");
+    // The problems after them are found too: the absolute snippet path.
+    assert!(e.iter().any(|d| d.code != Code::Syntax && d.message.contains("snippets path")), "{e:?}");
+}
+
 #[test]
 fn a_missing_extension_table_says_how_to_start() {
     let e = errors("[code]\nentry = \"Cargo.toml\"\n");
@@ -290,7 +307,7 @@ fn keybindings_resolve_their_command() {
     assert_eq!(cmds, vec!["a.b.go", "other.ext.open", "core:debug.start"]);
     assert_eq!(m.dependencies, vec![(ExtId::parse("other.ext").unwrap(), Version::parse("1.2.0").unwrap())]);
     assert_eq!(codes(&format!("{base}[[keybindings]]\nkey = \"cmd-x\"\ncommand = \"stranger.ext.x\"\n")), vec![Code::BadContribution]);
-    assert_eq!(codes(&format!("{base}[[keybindings]]\nkey = \"cmd--\"\ncommand = \"go\"\n")), vec![Code::BadContribution]);
+    assert_eq!(codes(&format!("{base}[[keybindings]]\nkey = \"cmd-\"\ncommand = \"go\"\n")), vec![Code::BadContribution]);
 }
 
 #[test]
@@ -847,4 +864,19 @@ fn scm_providers_claim_folders_by_marker_and_start_the_extension_there() {
     assert_eq!(codes(&with(&twice)), vec![Code::DuplicateId]);
     assert_eq!(codes(&with(&format!("{code}[[scm]]\nid = \"hg\"\nlabel = \"\"\nmarkers = [\".hg\"]\n"))), vec![Code::BadText]);
     assert_eq!(codes(&with(&format!("{code}[[scm]]\nid = \"hg\"\nmarkers = [\".hg\"]\n"))), vec![Code::Syntax]);
+}
+
+/// Key bindings name real modifiers and keys (e2e trial: "hyper-banana" passed `cyx check` and never fired).
+#[test]
+fn key_bindings_name_real_keys() {
+    use crate::validate::check_key;
+    for ok in ["cmd-shift-r", "ctrl-k ctrl-r", "ctrl--", "alt-f12", "secondary-/", "shift-enter", "pageup", "a", "cmd-alt-shift-z"] {
+        assert_eq!(check_key(ok), Ok(()), "{ok}");
+    }
+    for bad in ["hyper-banana", "cmd-banana", "ctrl-", "cmd--shift", "ctrl-k  ctrl-r", "", "f36", "cmd-shift"] {
+        assert!(check_key(bad).is_err(), "{bad}");
+    }
+    assert!(check_key("hyper-banana").unwrap_err().contains("'hyper', which is not a modifier"));
+    let text = with("[[keybindings]]\nkey = \"hyper-banana\"\ncommand = \"core:workbench.toggleZenMode\"\n");
+    assert_eq!(errors(&text).iter().map(|d| d.code).collect::<Vec<_>>(), [Code::BadContribution]);
 }
