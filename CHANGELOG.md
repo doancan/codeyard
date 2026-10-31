@@ -111,8 +111,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (with `window.restoreSession`, the default). Opening the folder again within 5 minutes brings the same shells back,
   with their output from meanwhile, and says "Reconnected to terminal session". A terminal that cannot be taken back is
   a new shell as before, and nothing is ever typed into it. Terminals no window takes back are ended after 5 minutes.
-  Closing the window or the folder, or opening another one, still ends them at once. Terminals another Codeyard
-  instance has open stay with it: the window starts new shells and says so. The agent protocol is version 16.
+  Closing the window still ends them at once; opening another folder or closing the folder keeps the panel's
+  terminals, as without the daemon, until the window closes. Terminals another Codeyard instance has open stay with it:
+  the window starts new shells and says so. The agent protocol is version 16.
 - The lists of the Run and Debug view, the Testing view, the Remote Explorer and the Ports panel work with the keyboard:
   Tab reaches them, Up/Down/Home/End move a cursor row shown in the focus colour, and Enter does what a click on the
   row does. Shift+F10 (and the Menu key) opens the focused row's menu under it and Escape returns to the row; the same
@@ -292,6 +293,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of the `auth` line the manifest already has (#183). The SDKs fill in a manifest line only when Codeyard names just
   a permission (`net`); any other text it sends is kept.
 - `cyx package` leaves the `test/` and `tests/` folders at the top of an extension out of the package (#187).
+- Source Control's change list is fully accessible: each file is a row with its change, its place in the group and its
+  own Stage/Unstage (Mark as resolved) and Discard buttons (Discard asks first, as the painted button does), the commit
+  button says why it is disabled, and a large status exposes a scrollable range of 500 lines instead of every row. The
+  list has a keyboard cursor (↑/↓/Home/End, ↵ opens the diff, Space stages or unstages, ←/→ fold and unfold groups,
+  Delete or ⌘⌫ discards) that screen readers see as the focus. Actions from an old tree do nothing once the file has
+  changed state or another repository is shown.
+- Right Arrow in the Explorer is now covered by tests for open folders that are empty, still loading, unreadable or
+  have children, and for a file, both for the selection and the accessibility focus (no behavior change: it enters a
+  child only when one is shown). Tests also cover the Rust command notices for a restricted workspace and an unavailable
+  language server.
 - Source Control builds only the change rows on screen, so a repository with thousands of changes (generated files,
   a large merge) scrolls and refreshes without delay. The list keeps its scroll position and focus when the status
   refreshes.
@@ -317,6 +328,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- On a busy machine, closing a window could leave its terminals running for 5 minutes, and the last keys typed into a
+  terminal before quitting could be lost: the connection to the terminal daemon was closed before the window's `Bye`
+  (or those keys) had been written. The connection now closes only after everything queued has gone out (at most 5
+  seconds for a daemon that stopped reading).
 - Views made from `cyx new view` (Rust and TypeScript) and the `hello-view` examples drew an error instead of their
   content: they wrote a `{ "type": "column", … }` shorthand that Codeyard refuses ("unknown field `type`"), while
   `cyx test` said "view main draws" (#182). Both SDKs now have `ui` functions that write the documented form
@@ -324,6 +339,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ViewNode` types the tree element by element (`Element`, which typed the shorthand, is now one element). The mock
   hosts' `render` and `cyx test` check a tree with Codeyard's own rules (the TypeScript mock with a copy generated
   from them and tested against the same cases), and `view_event` / `viewEvent` refuse an event Codeyard never sends, such as `{"click": "add"}`.
+- Zen mode no longer leaves a view of the secondary side bar (such as the Explorer) in the accessibility tree, or its
+  refreshes running, while it is not drawn; actions from an older tree on a hidden Explorer do nothing.
 - `cyx package` no longer puts the `.cyx` it wrote last time into the new package (it doubled in size on every run).
   New extensions from `cyx new` ignore `*.cyx` in git.
 - `cyx check` on a code extension that is not built yet says to run `cyx package` or `cyx test`, which build it.

@@ -79,7 +79,7 @@ fn take_view(snap: &mut Snapshot, view: &ViewRef) -> Snapshot {
         }
         Panel::Scm => {
             part.scm = snap.scm.take();
-            if matches!(snap.focus, FocusSnap::ScmMessage | FocusSnap::ScmRepos) {
+            if matches!(snap.focus, FocusSnap::ScmMessage | FocusSnap::ScmChanges | FocusSnap::ScmRepos) {
                 part.focus = std::mem::replace(&mut snap.focus, FocusSnap::Window);
             }
         }

@@ -666,6 +666,43 @@ impl Shared {
         Ok(())
     }
 
+    /// The host is dropped: stop writing and end the connection, but only after what was queued went out. Closing the
+    /// socket at once could cut off the `Bye` (the daemon would then keep the session and its shells) or the last
+    /// keystrokes, when the writer thread had not been scheduled yet (a loaded machine). A peer that stopped reading
+    /// cannot hold the connection open: it is ended after `CLOSE_LIMIT` anyway.
+    fn end_connection(&self) {
+        const CLOSE_LIMIT: std::time::Duration = std::time::Duration::from_secs(5);
+        let Some(close) = self.closer.locked().take() else {
+            self.clear_writer();
+            return;
+        };
+        let Some(w) = self.writer.locked().take() else {
+            close();
+            return;
+        };
+        // The writer thread signals when it is done; another thread ends the connection then, or after the limit.
+        let close = Arc::new(Mutex::new(Some(close)));
+        let run = |close: &Mutex<Option<Box<dyn FnOnce() + Send>>>| {
+            if let Some(close) = close.locked().take() {
+                close();
+            }
+        };
+        let (done, drained) = mpsc::channel::<()>();
+        let later = close.clone();
+        let spawned = std::thread::Builder::new().name("host-close".into()).spawn(move || {
+            let _ = drained.recv_timeout(CLOSE_LIMIT);
+            run(&later);
+        });
+        if spawned.is_ok() {
+            w.close_then(move || {
+                let _ = done.send(());
+            });
+        } else {
+            w.close();
+            run(&close);
+        }
+    }
+
     fn clear_writer(&self) {
         if let Some(w) = self.writer.locked().take() {
             w.close();
@@ -1225,10 +1262,7 @@ impl Drop for RemoteHost {
         {
             let _ = w.send_within(bytes, std::time::Duration::from_secs(1));
         }
-        self.shared.clear_writer();
-        if let Some(close) = self.shared.closer.locked().take() {
-            close();
-        }
+        self.shared.end_connection();
         if let Some(mut child) = self.shared.child.locked().take() {
             let _ = child.kill();
             let _ = child.wait();

@@ -168,3 +168,61 @@ fn explorer_a_deleted_expanded_folder_leaves_no_not_found_row(cx: &mut gpui::Tes
         assert!(!names.iter().any(|n| n == "b" || n == "f.txt"), "compact {compact}: {names:?}");
     }
 }
+
+/// Right Arrow (`Expand`) on folders in every load state: a closed folder opens and keeps the selection; an open folder
+/// moves into its first child only when it has a visible one; an empty, loading or unreadable open folder, and a file,
+/// keep the selection where it is.
+#[gpui::test]
+fn explorer_right_arrow_enters_only_a_visible_child(cx: &mut gpui::TestAppContext) {
+    crate::qa_workbench_tests::globals(cx);
+    let entry = |name: &str, kind| proto::DirEntry { name: name.into(), kind, target_kind: None };
+    let (tree, cx) = cx.add_window_view(|_, cx| {
+        let mut tree = FileTree::new(Arc::new(host::local()), cx);
+        // No compaction, so a folder with a single child stays a row of its own.
+        tree.opts.compact = false;
+        tree.root = Some("/right".into());
+        let dirs = ["broken", "closed", "empty", "full", "loading"];
+        let mut top: Vec<proto::DirEntry> = dirs.iter().map(|d| entry(d, proto::Kind::Dir)).collect();
+        top.push(entry("z.txt", proto::Kind::File));
+        tree.children.insert("/right".into(), Load::Loaded(top));
+        tree.children.insert("/right/broken".into(), Load::Failed("permission denied".into()));
+        tree.children.insert("/right/closed".into(), Load::Loaded(vec![entry("inner.txt", proto::Kind::File)]));
+        tree.children.insert("/right/empty".into(), Load::Loaded(Vec::new()));
+        tree.children.insert("/right/full".into(), Load::Loaded(vec![entry("a.txt", proto::Kind::File), entry("b.txt", proto::Kind::File)]));
+        tree.children.insert("/right/loading".into(), Load::Loading);
+        for d in ["broken", "empty", "full", "loading"] {
+            tree.expanded.insert(format!("/right/{d}"));
+        }
+        tree.rebuild();
+        tree
+    });
+    cx.run_until_parked();
+    let right_on = |path: &str, cx: &mut gpui::VisualTestContext| {
+        tree.update_in(cx, |t, window, cx| {
+            t.a11y_select(path, false, cx);
+            t.expand(&Expand, window, cx);
+        });
+        cx.run_until_parked();
+        tree.read_with(cx, |t, _| t.selected.and_then(|i| t.rows.get(i)).map(|r| r.path.clone()))
+    };
+    assert_eq!(tree.read_with(cx, |t, _| t.row_names()), ["broken", "closed", "empty", "full", "a.txt", "b.txt", "loading", "z.txt"]);
+    // Open with children: the first child.
+    assert_eq!(right_on("/right/full", cx).as_deref(), Some("/right/full/a.txt"));
+    // Open but empty, still loading or unreadable: no child row, so the folder stays selected (not the next sibling).
+    assert_eq!(right_on("/right/empty", cx).as_deref(), Some("/right/empty"));
+    assert_eq!(right_on("/right/loading", cx).as_deref(), Some("/right/loading"));
+    assert_eq!(right_on("/right/broken", cx).as_deref(), Some("/right/broken"));
+    // A file: nothing.
+    assert_eq!(right_on("/right/z.txt", cx).as_deref(), Some("/right/z.txt"));
+    // Closed: it opens and stays selected; a second Right goes in.
+    assert_eq!(right_on("/right/closed", cx).as_deref(), Some("/right/closed"));
+    assert!(tree.read_with(cx, |t, _| t.expanded.contains("/right/closed")));
+    tree.update_in(cx, |t, window, cx| t.expand(&Expand, window, cx));
+    assert_eq!(tree.read_with(cx, |t, _| t.selected.map(|i| t.rows[i].path.clone())).as_deref(), Some("/right/closed/inner.txt"));
+    // The loading folder's children arrive: now Right goes in.
+    tree.update(cx, |t, _| {
+        t.children.insert("/right/loading".into(), Load::Loaded(vec![entry("late.txt", proto::Kind::File)]));
+        t.rebuild();
+    });
+    assert_eq!(right_on("/right/loading", cx).as_deref(), Some("/right/loading/late.txt"));
+}
