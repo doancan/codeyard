@@ -103,8 +103,9 @@ fn default_text(key: &str) -> String {
     if let Some((_, mac, other)) = PLATFORM_DEFAULTS.iter().find(|(k, ..)| *k == key) {
         return format!("`{mac}` on macOS, `{other}` on Windows and Linux");
     }
-    // Tests run with the trust check off and the language forced to `en`; the shipped defaults are on and `auto`.
-    let s = Settings { workspace_trust: true, ui_language: "auto".into(), ..Settings::default() };
+    // Tests run with the trust check and language servers off and the language forced to `en`; the shipped defaults are
+    // on and `auto`.
+    let s = Settings { workspace_trust: true, lsp_enabled: true, ui_language: "auto".into(), ..Settings::default() };
     match current(&s, key) {
         serde_json::Value::Null => "detected".into(),
         serde_json::Value::String(t) if t.is_empty() => "empty".into(),

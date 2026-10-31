@@ -187,7 +187,8 @@ fn exclude_globs_like_vscode() {
 fn template_parses_cleanly() {
     let (s, w) = parse(TEMPLATE);
     assert!(w.is_empty(), "{w:?}");
-    assert_eq!(s, Settings::default());
+    // The template shows the shipped defaults; unit tests run with language servers off.
+    assert_eq!(s, Settings { lsp_enabled: true, ..Settings::default() });
     assert!(parse_keybindings(KEYBINDINGS_TEMPLATE).1.is_empty());
 }
 

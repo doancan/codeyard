@@ -188,6 +188,11 @@ impl Workbench {
         self.lsp.diagnostics.get(path).cloned().unwrap_or_default()
     }
 
+    /// Language-server slots (starting, running or failed): any entry means a server process was attempted.
+    pub fn lsp_server_keys_for_test(&self) -> Vec<String> {
+        self.lsp.servers.keys().cloned().collect()
+    }
+
     pub fn open_paths(&self, cx: &App) -> Vec<String> {
         self.tabs.editors.iter().map(|e| e.read(cx).path.clone()).collect()
     }

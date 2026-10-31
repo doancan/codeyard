@@ -375,7 +375,8 @@ impl Default for Settings {
             ports_auto_forward: true,
             ports_local_bind: host::forward::LocalBind::Loopback,
             ports_rules: Vec::new(),
-            lsp_enabled: true,
+            // Unit tests never launch an installed language server; LSP integration tests turn it on explicitly.
+            lsp_enabled: !cfg!(test),
             lsp_servers: Vec::new(),
             fallback_encoding: crate::encoding::Encoding::Windows1254,
             compact_folders: true,

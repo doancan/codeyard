@@ -256,7 +256,7 @@ fn qa_rust_commands_against_a_real_rust_analyzer(cx: &mut TestAppContext) {
     std::fs::create_dir_all(ws.join("b/src")).unwrap();
     std::fs::write(ws.join("b/Cargo.toml"), "[package]\nname = \"b\"\nversion = \"0.1.0\"\nedition = \"2021\"\n").unwrap();
     std::fs::write(ws.join("b/src/lib.rs"), "pub fn h() {}\n").unwrap();
-    std::fs::write(cfg.join("settings.jsonc"), "{}").unwrap();
+    std::fs::write(cfg.join("settings.jsonc"), r#"{ "lsp.enabled": true }"#).unwrap();
     let (wb, cx) = setup_with_config(cx, &cfg);
     open_project(&wb, cx, &ws);
     let open = |wb: &Entity<Workbench>, cx: &mut VisualTestContext, path: &Path, line: usize, col: usize| {
@@ -313,7 +313,7 @@ fn qa_rust_parent_module_over_ssh(cx: &mut TestAppContext) {
     else {
         return;
     };
-    let settings = crate::settings::Settings { lsp_servers: vec![("rust".into(), Some(fake.command().into()))], ..Default::default() };
+    let settings = crate::settings::Settings { lsp_enabled: true, lsp_servers: vec![("rust".into(), Some(fake.command().into()))], ..Default::default() };
     let (wb, cx) = crate::qa_integration_tests::setup_with(cx, settings);
     wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
     crate::qa_integration_tests::wait_secs(cx, 30, "connected", |cx| {

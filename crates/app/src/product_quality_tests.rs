@@ -231,6 +231,7 @@ fn product_rust_commands_tell_restricted_unavailable_and_non_rust_apart(cx: &mut
     cx.update(|_, cx| {
         let s = cx.global_mut::<crate::settings::Settings>();
         s.workspace_trust = true;
+        s.lsp_enabled = true;
         // No Rust server at all, so nothing can answer whatever is installed on this machine.
         s.lsp_servers.push(("rust".into(), None));
     });

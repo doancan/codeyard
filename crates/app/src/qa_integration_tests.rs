@@ -363,6 +363,7 @@ fn qa_lsp_crash_loop_by_signal_is_bounded(cx: &mut TestAppContext) {
     let starts = dir.join("starts.log");
     std::fs::write(dir.join("main.c"), "int main(void) { return 0; }\n").unwrap();
     let settings = Settings {
+        lsp_enabled: true,
         lsp_servers: vec![("c".into(), Some((script.to_string_lossy().into_owned(), vec![starts.to_string_lossy().into_owned()]).into()))],
         ..Settings::default()
     };
@@ -386,7 +387,7 @@ fn qa_lsp_crash_loop_by_signal_is_bounded(cx: &mut TestAppContext) {
 fn qa_lsp_missing_server_is_reported(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-lspmissing");
     std::fs::write(dir.join("main.c"), "int main(void) { return 0; }\n").unwrap();
-    let settings = Settings { lsp_servers: vec![("c".into(), Some(("/nonexistent/qa-ls".into(), vec![]).into()))], ..Settings::default() };
+    let settings = Settings { lsp_enabled: true, lsp_servers: vec![("c".into(), Some(("/nonexistent/qa-ls".into(), vec![]).into()))], ..Settings::default() };
     let (wb, cx) = setup_with(cx, settings);
     open(&wb, &dir.join("main.c"), cx);
     wait_ticking(cx, "missing server notice", |cx| notice(&wb, cx).contains("qa-ls"));
@@ -403,6 +404,7 @@ fn qa_lsp_new_language_keys_follow_settings(cx: &mut TestAppContext) {
     std::fs::write(dir.join("a.sh"), "echo hi\n").unwrap();
     std::fs::write(dir.join("Cargo.toml"), "[package]\n").unwrap();
     let settings = Settings {
+        lsp_enabled: true,
         lsp_servers: vec![("bash".into(), None), ("toml".into(), Some(("/nonexistent/qa-taplo".into(), vec!["lsp".into()]).into()))],
         ..Settings::default()
     };
@@ -430,7 +432,7 @@ fn qa_lsp_snippet_placeholder_is_selected(cx: &mut TestAppContext) {
     }
     let dir = qa_dir("qa-snippet");
     std::fs::write(dir.join("main.c"), "int topla(int a, int b) { return a + b; }\nint main(void) {\n    \n}\n").unwrap();
-    let (wb, cx) = setup_with(cx, Settings::default());
+    let (wb, cx) = setup_with(cx, Settings { lsp_enabled: true, ..Settings::default() });
     open(&wb, &dir.join("main.c"), cx);
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
     wait_for(cx, "server", |cx| ed.read_with(cx, |e, _| e.lsp_client().is_some()));
@@ -468,7 +470,7 @@ fn qa_lsp_format_on_save(cx: &mut TestAppContext) {
     }
     let dir = qa_dir("qa-fmtsave");
     std::fs::write(dir.join("main.c"), "int main(void){return 0;}\n").unwrap();
-    let settings = Settings { format_on_save: true, ..Settings::default() };
+    let settings = Settings { format_on_save: true, lsp_enabled: true, ..Settings::default() };
     let (wb, cx) = setup_with(cx, settings);
     open(&wb, &dir.join("main.c"), cx);
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -535,6 +537,7 @@ while True:
     std::fs::write(dir.join("main.c"), "int a;\n").unwrap();
     let settings = Settings {
         code_actions_on_save: vec!["source.organizeImports".into()],
+        lsp_enabled: true,
         lsp_servers: vec![("c".into(), Some((script.to_string_lossy().into_owned(), Vec::new()).into()))],
         ..Settings::default()
     };
@@ -634,7 +637,7 @@ fn qa_lsp_format_on_paste_is_off_by_default(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-fmtoff");
     let script = formatting_server(&dir);
     std::fs::write(dir.join("off.c"), "").unwrap();
-    let (wb, cx) = setup_with(cx, Settings { lsp_servers: c_server(&script), ..Settings::default() });
+    let (wb, cx) = setup_with(cx, Settings { lsp_enabled: true, lsp_servers: c_server(&script), ..Settings::default() });
     open(&wb, &dir.join("off.c"), cx);
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
     wait_for(cx, "server", |cx| ed.read_with(cx, |e, _| e.lsp_client().is_some()));
@@ -657,7 +660,7 @@ fn qa_lsp_format_on_paste_and_type(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-fmton");
     let script = formatting_server(&dir);
     std::fs::write(dir.join("main.c"), "").unwrap();
-    let settings = Settings { format_on_paste: true, format_on_type: true, lsp_servers: c_server(&script), ..Settings::default() };
+    let settings = Settings { format_on_paste: true, format_on_type: true, lsp_enabled: true, lsp_servers: c_server(&script), ..Settings::default() };
     let (wb, cx) = setup_with(cx, settings);
     open(&wb, &dir.join("main.c"), cx);
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -1379,6 +1382,7 @@ while True:
     #[cfg(unix)]
     crate::test_files::make_executable(&script);
     let settings = Settings {
+        lsp_enabled: true,
         lsp_servers: vec![("c".into(), Some((script.to_string_lossy().into_owned(), vec![log.to_string_lossy().into_owned()]).into()))],
         ..Settings::default()
     };
@@ -2252,6 +2256,7 @@ while True:
     let answers = dir.join("answers.log");
     std::fs::write(dir.join("main.c"), "int main(void) { return 0; }\n").unwrap();
     let settings = Settings {
+        lsp_enabled: true,
         lsp_servers: vec![("c".into(), Some((script.to_string_lossy().into_owned(), vec![answers.to_string_lossy().into_owned()]).into()))],
         ..Settings::default()
     };
@@ -2424,6 +2429,7 @@ fn lsp_inlay_hints_folding_links_prepare_rename_and_output(cx: &mut TestAppConte
     std::fs::write(dir.join("other.c"), "int other;\n").unwrap();
     std::fs::write(dir.join("moveme.c"), "int m;\n").unwrap();
     let settings = Settings {
+        lsp_enabled: true,
         lsp_servers: vec![(
             "c".into(),
             Some(
