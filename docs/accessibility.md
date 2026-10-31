@@ -359,3 +359,8 @@ tall, the selection's bounds 57.8 × 36.0 points, again on the drawn highlight; 
 width had no frame. With the editor moved into a window of its own the selection's bounds were on the highlight in
 that window at 100% and 200%, and the main window's leftover text area reported none. The captures with the frames
 drawn on them were checked by eye. VoiceOver itself was not run.
+
+Search (Q06), natively on the same kind of dev build: `axframes --set-value Search café` set the query through
+`AXValue`, the view searched, and the tree listed the status ("2 results in 1 file") and an `AXOutline` with the file
+row (its Replace in this file and Dismiss buttons at the place they appear on hover) and both matches, each frame on
+its drawn row; `AXPress` on the second match opened `text.rs` with the match selected and the text area focused.
