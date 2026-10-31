@@ -138,7 +138,7 @@ fn uninstall_asks_first_and_removes_it(cx: &mut TestAppContext) {
     wb.update_in(cx, |wb, window, cx| wb.uninstall_extension_for_test("you.night", window, cx));
     cx.run_until_parked();
     assert!(cx.has_pending_prompt(), "uninstall is confirmed first");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert_eq!(listed(&wb, cx).len(), 1, "Cancel keeps it");
     wb.update_in(cx, |wb, window, cx| wb.uninstall_extension_for_test("you.night", window, cx));

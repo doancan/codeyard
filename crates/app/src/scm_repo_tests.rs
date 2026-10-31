@@ -524,6 +524,14 @@ fn a_hard_reset_confirmed_after_the_selection_moved_stays_in_its_repository(cx: 
     });
     cx.run_until_parked();
     assert!(cx.has_pending_prompt());
+    // Cancel resets nothing and leaves the keyboard where it was; the question is asked again.
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
+    assert_ne!(head(&f.alpha).trim(), first, "Cancel resets nothing");
+    wb.update_in(cx, |wb, window, cx| {
+        wb.scm_panel().update(cx, |s, cx| s.commit_op(first.clone(), crate::graph::CommitOp::Reset(crate::graph::ResetMode::Hard), window, cx))
+    });
+    cx.run_until_parked();
+    assert!(cx.has_pending_prompt());
     let b = key(&scm, cx, &f.beta);
     select(&wb, cx, b);
     cx.simulate_prompt_answer("Reset");

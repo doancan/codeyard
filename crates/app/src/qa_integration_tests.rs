@@ -2649,7 +2649,7 @@ fn tests_wait_for_trust_before_building_or_running(cx: &mut TestAppContext) {
     for command in ["Test: Debug Test at Cursor", "Test: Run All Tests"] {
         run(&wb, cx, command);
         assert!(cx.has_pending_prompt(), "{command} must ask in an untrusted folder");
-        cx.simulate_prompt_answer("Cancel");
+        crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
         cx.run_until_parked();
         assert!(!wb.read_with(cx, |wb, _| wb.testing_busy_for_test()), "{command}: nothing runs after Cancel");
     }
@@ -2772,7 +2772,7 @@ fn untrusted_folder_asks_before_running_a_task(cx: &mut TestAppContext) {
     run(&wb, cx, "Tasks: Run Build Task");
     cx.run_until_parked();
     assert!(cx.has_pending_prompt(), "must ask before running a task of an untrusted folder");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert_eq!(wb.read_with(cx, |wb, _| wb.terminal_count()), 0, "Cancel starts nothing");
     assert!(!dir.join("ran.txt").exists());

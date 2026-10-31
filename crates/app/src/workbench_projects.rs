@@ -341,15 +341,9 @@ impl Workbench {
     pub(super) fn ask_forget_unreachable(&mut self, r: RecentWorkspace, why: String, window: &mut Window, cx: &mut Context<Self>) {
         let name = ui::file_name(&r.path).to_string();
         let place = r.host.as_ref().map_or(r.path.clone(), |h| format!("{h}:{}", r.path));
-        let answer = window.prompt(
-            gpui::PromptLevel::Warning,
-            &tf("“{}” can't be opened", &[&name]),
-            Some(&format!("{place}\n{why}\n\n{}", t("Remove it from Recent?"))),
-            &[t("Remove from Recent"), t("Keep")],
-            cx,
-        );
+        let answer = crate::questions::forget_recent(&name, &place, &why).ask(window, cx);
         cx.spawn_in(window, async move |this, cx| {
-            if answer.await == Ok(0) {
+            if answer.await == Some(0) {
                 this.update(cx, |this, cx| this.forget_recent(r, cx)).ok();
             }
         })

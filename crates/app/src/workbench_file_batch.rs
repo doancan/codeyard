@@ -108,16 +108,14 @@ impl Workbench {
                 detail.push_str(&format!("\n{}", crate::i18n::t("The complete file list is available in Output.")));
             }
             self.log_output(format!("{}:\n{}", question.verb, paths.join("\n")));
-            let level = if question.destructive { PromptLevel::Critical } else { PromptLevel::Warning };
-            let buttons = [gpui::PromptButton::new(question.verb.clone()), gpui::PromptButton::cancel(crate::i18n::t("Cancel"))];
-            Some(window.prompt(level, &question.title, Some(&detail), &buttons, cx))
+            Some(crate::questions::file_batch(&question.title, &detail, &question.verb, question.destructive).ask(window, cx))
         } else {
             None
         };
         cx.notify();
         cx.spawn_in(window, async move |this, cx| {
             let accepted = match answer {
-                Some(answer) => answer.await == Ok(0),
+                Some(answer) => answer.await == Some(0),
                 None => true,
             };
             this.update_in(cx, |this, window, cx| {

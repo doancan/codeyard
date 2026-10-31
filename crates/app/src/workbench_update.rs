@@ -1210,15 +1210,9 @@ impl Workbench {
         if !self.installing_anywhere(window, cx) {
             return false;
         }
-        let answer = window.prompt(
-            gpui::PromptLevel::Warning,
-            t("Codeyard is still installing an update"),
-            Some(t("Quitting now can leave the installation unfinished. It takes a few seconds.")),
-            &[t("Quit Anyway"), t("Keep Waiting")],
-            cx,
-        );
+        let answer = crate::questions::quit_while_installing().ask(window, cx);
         cx.spawn(async move |this, cx| {
-            if answer.await == Ok(0) {
+            if answer.await == Some(0) {
                 this.update(cx, |this, cx| this.finish_quit(mode, cx)).ok();
             }
         })

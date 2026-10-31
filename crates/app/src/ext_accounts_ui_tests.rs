@@ -161,9 +161,14 @@ fn an_extension_calls_github_as_the_user_without_the_token(cx: &mut TestAppConte
     ));
     let keychain = wb.update(cx, |wb, _| wb.use_test_accounts(server.clone(), TOKEN));
 
-    // First use asks, in a system dialog that names the publisher and the account.
+    // First use asks, in a system dialog that names the publisher and the account; Cancel stores nothing and leaves the
+    // keyboard where it was, and the next use asks again.
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Auth", window, cx));
     until(cx, |cx| cx.has_pending_prompt(), "the account prompt");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
+    assert!(keychain.keys().is_empty(), "nothing is stored after Cancel");
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Auth", window, cx));
+    until(cx, |cx| cx.has_pending_prompt(), "the account prompt again");
     let (title, detail) = cx.pending_prompt().unwrap();
     assert!(title.contains("Probe") && title.contains("@ada-lovelace-1815"), "{title}");
     assert!(detail.contains("you, installed from /downloads/probe.cyx") && detail.contains("api.github.com"), "{detail}");
@@ -217,6 +222,10 @@ fn an_oauth_sign_in_comes_back_only_to_its_extension(cx: &mut TestAppContext) {
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Auth Acme", window, cx));
     until(cx, |cx| cx.has_pending_prompt(), "the sign-in prompt");
     assert!(cx.pending_prompt().unwrap().0.contains("Acme"));
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
+    assert!(cx.opened_url().is_none(), "Cancel opens no browser");
+    wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Probe: Auth Acme", window, cx));
+    until(cx, |cx| cx.has_pending_prompt(), "the sign-in prompt again");
     cx.simulate_prompt_answer("Sign In…");
     cx.run_until_parked();
     let opened = cx.opened_url().expect("the browser opens the sign-in page");

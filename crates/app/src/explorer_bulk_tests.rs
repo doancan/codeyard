@@ -127,7 +127,7 @@ fn explorer_bulk_delete_has_one_confirmation_and_preserves_dirty_buffers(cx: &mu
     let paths = vec![crate::ui::local_path(&dir.join("a.txt")), crate::ui::local_path(&dir.join("b.txt"))];
     wb.update_in(cx, |wb, window, cx| wb.tree_event_for_test(TreeEvent::DeleteMany(paths.clone()), window, cx));
     cx.run_until_parked();
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     wait_idle(&wb, cx);
     assert!(dir.join("a.txt").exists() && dir.join("b.txt").exists());
     wb.update_in(cx, |wb, window, cx| wb.tree_event_for_test(TreeEvent::DeleteMany(paths), window, cx));

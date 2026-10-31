@@ -54,7 +54,7 @@ fn the_rust_setup_command_writes_after_confirmation_and_resets(cx: &mut gpui::Te
     let read = || std::fs::read_to_string(dir.join("settings.jsonc")).unwrap();
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Preferences: Apply Rust Setup…", window, cx));
     cx.run_until_parked();
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert_eq!(read(), USER, "nothing is written without confirmation");
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Preferences: Apply Rust Setup…", window, cx));

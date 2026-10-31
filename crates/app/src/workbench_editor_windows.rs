@@ -464,13 +464,7 @@ impl Workbench {
             return close(self, &ed, window, cx);
         }
         let name = ed.read(cx).name.clone();
-        let answer = window.prompt(
-            PromptLevel::Warning,
-            &crate::i18n::tf("Do you want to save the changes you made to {}?", &[&name]),
-            Some(crate::i18n::t("Your changes will be lost if you don't save them.")),
-            &[crate::i18n::t("Save"), crate::i18n::t("Don't Save"), crate::i18n::t("Cancel")],
-            cx,
-        );
+        let answer = crate::questions::save_before_closing(&name).ask(window, cx);
         let close = std::rc::Rc::new(close);
         let ed = ed.downgrade();
         cx.spawn_in(window, async move |this, cx| {
@@ -478,7 +472,7 @@ impl Workbench {
             this.update_in(cx, |this, window, cx| {
                 let Some(entity) = ed.upgrade() else { return };
                 match choice {
-                    Ok(0) => {
+                    Some(0) => {
                         let done = std::rc::Rc::new(std::cell::Cell::new(false));
                         cx.subscribe_in(&entity, window, move |this, e, ev: &EditorEvent, window, cx| {
                             if done.get() || !matches!(ev, EditorEvent::Saved) {
@@ -490,7 +484,7 @@ impl Workbench {
                         .detach();
                         entity.update(cx, |e, cx| e.save_now(cx));
                     }
-                    Ok(1) => close(this, &entity, window, cx),
+                    Some(1) => close(this, &entity, window, cx),
                     _ => {}
                 }
             })

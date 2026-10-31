@@ -866,7 +866,7 @@ fn sensitive_http_requests_ask_before_sending(cx: &mut TestAppContext) {
     ed.update(cx, |e, cx| e.set_cursor_line_col_for_test(0, 0, cx));
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("HTTP: Send Request", window, cx));
     assert!(cx.has_pending_prompt(), "environment access needs a yes");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert!(!crate::qa_integration_tests::notice(&wb, cx).contains("Sending"), "cancelled: nothing was sent");
 
@@ -909,7 +909,7 @@ fn http_confirm_always_asks_for_every_request(cx: &mut TestAppContext) {
     let (wb, cx) = crate::qa_workbench_tests::setup_with_config(cx, &config_with("http-confirm-always-cfg", r#"{ "http.confirmRequests": "always" }"#));
     send_at(&wb, &file, 0, cx);
     assert!(cx.has_pending_prompt(), "always asks, even for 127.0.0.1");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert!(!crate::qa_integration_tests::notice(&wb, cx).contains("Sending"), "cancelled: nothing was sent");
     send_at(&wb, &file, 0, cx);
@@ -919,7 +919,7 @@ fn http_confirm_always_asks_for_every_request(cx: &mut TestAppContext) {
     wait_ticking(cx, "idle", |cx| !wb.read_with(cx, |wb, _| wb.http_busy_for_test()));
     send_at(&wb, &file, 0, cx);
     assert!(cx.has_pending_prompt(), "approving once does not silence `always`");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     stop.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
@@ -940,14 +940,14 @@ fn http_confirm_remote_asks_once_per_new_host(cx: &mut TestAppContext) {
         assert!(cx.has_pending_prompt(), "{host}: a host that is not this computer is asked about first");
         let shown = cx.pending_prompt().map(|(msg, detail)| format!("{msg} {detail}")).unwrap_or_default();
         assert!(shown.contains(host), "the prompt names the real host {host}: {shown}");
-        cx.simulate_prompt_answer("Cancel");
+        crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
         cx.run_until_parked();
         assert!(!crate::qa_integration_tests::notice(&wb, cx).contains("Sending"), "{host}: cancelled, nothing was sent");
     }
     // Declining approves nothing: the same host asks again.
     send_at(&wb, &file, 2, cx);
     assert!(cx.has_pending_prompt());
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     // An unreadable host (a backslash hides where curl would connect) is asked about as well.
     let odd = dir.join("odd.http");
     std::fs::write(&odd, "GET http://good.example.test\\@bad.example.test/x\n").unwrap();
@@ -955,7 +955,7 @@ fn http_confirm_remote_asks_once_per_new_host(cx: &mut TestAppContext) {
     assert!(cx.has_pending_prompt(), "an address whose host cannot be read reliably asks");
     let shown = cx.pending_prompt().map(|(m, d)| format!("{m} {d}")).unwrap_or_default();
     assert!(shown.contains("cannot be read reliably"), "{shown}");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
 }
 
 /// Approving a remote host lets later requests to it go out without asking; `never` restores the old behaviour. Uses this
@@ -1012,7 +1012,7 @@ fn schema_download_hosts_are_asked_once(cx: &mut TestAppContext) {
     gate.request("declined.example.test");
     wb.update(cx, |wb, cx| wb.ask_schema_hosts_for_test(cx));
     cx.run_until_parked();
-    cx.simulate_prompt_answer("Not Now");
+    crate::question::cancel_keeps_focus(&wb, cx, "Not Now");
     cx.run_until_parked();
     assert!(gate.is_refused("declined.example.test"));
     gate.request("declined.example.test");

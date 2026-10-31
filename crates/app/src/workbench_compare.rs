@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use gpui::{Entity, PathPromptOptions, PromptLevel};
+use gpui::{Entity, PathPromptOptions};
 use host::{HashEvent, Host, HostError};
 use proto::Kind;
 
@@ -252,11 +252,10 @@ impl Workbench {
             detail.push(' ');
             detail.push_str(&crate::i18n::tn("{} entry is left out.", "{} entries are left out.", plan.skipped.len(), &[]));
         }
-        let title = crate::i18n::tf("Copy “{0}” to {1}?", &[&ui::file_name(&path), &to.label]);
-        let answer = window.prompt(PromptLevel::Warning, &title, Some(&detail), &[crate::i18n::t("Copy"), crate::i18n::t("Cancel")], cx);
+        let answer = crate::questions::compare_copy(ui::file_name(&path), &to.label, &detail).ask(window, cx);
         let alias = self.alias_for_transfers();
         cx.spawn_in(window, async move |this, cx| {
-            if answer.await != Ok(0) {
+            if answer.await != Some(0) {
                 return;
             }
             let Ok(cancel) = view.update(cx, |v, cx| v.begin_op(crate::i18n::t("Copying…").to_string(), cx)) else { return };
@@ -305,25 +304,10 @@ impl Workbench {
                     return;
                 }
             };
-            let answer = this
-                .update_in(cx, |_, window, cx| {
-                    let title = crate::i18n::tf("Delete “{0}” from {1}?", &[&ui::file_name(&path), &end.label]);
-                    let mut detail =
-                        crate::i18n::tf("{0} on {1} is deleted for good, with everything in it. It is not moved to the Trash.", &[&full, &end.label]);
-                    if hidden > 0 {
-                        detail.push(' ');
-                        detail.push_str(&crate::i18n::tn(
-                            "{} more entry that the comparison hides (ignored by .gitignore or the compare settings) goes too.",
-                            "{} more entries that the comparison hides (ignored by .gitignore or the compare settings) go too.",
-                            hidden,
-                            &[],
-                        ));
-                    }
-                    window.prompt(PromptLevel::Critical, &title, Some(&detail), &[crate::i18n::t("Delete"), crate::i18n::t("Cancel")], cx)
-                })
-                .ok();
+            let answer =
+                this.update_in(cx, |_, window, cx| crate::questions::compare_delete(ui::file_name(&path), &full, &end.label, hidden).ask(window, cx)).ok();
             let Some(answer) = answer else { return };
-            if answer.await != Ok(0) {
+            if answer.await != Some(0) {
                 return;
             }
             let _ = view.update(cx, |v, cx| v.begin_op(crate::i18n::t("Deleting…").to_string(), cx));

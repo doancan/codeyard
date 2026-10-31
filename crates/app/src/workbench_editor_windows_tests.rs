@@ -106,7 +106,7 @@ fn closing_the_last_view_of_a_changed_file_in_its_window_asks_first(cx: &mut gpu
     win.simulate_keystrokes("cmd-w");
     win.run_until_parked();
     assert!(vcx.has_pending_prompt(), "asks to save");
-    vcx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, vcx, "Cancel");
     vcx.run_until_parked();
     assert_eq!(wb.read_with(vcx, |wb, _| wb.chrome.editor_windows.len()), 1, "Cancel keeps it");
     let windows = window_count(vcx);

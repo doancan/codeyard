@@ -126,7 +126,7 @@ fn sync_asks_first_when_it_moves_commits_and_skips_the_question_when_off(cx: &mu
     let (title, detail) = cx.pending_prompt().unwrap();
     assert_eq!(title, "Sync changes?");
     assert!(detail.contains("origin/main"), "{detail}");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert!(!f.dir.join("b.txt").exists(), "cancelled: nothing pulled");
 

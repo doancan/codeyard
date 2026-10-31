@@ -318,7 +318,7 @@ fn delete_asks_first_and_closes_tab(cx: &mut TestAppContext) {
     wb.update_in(cx, |wb, window, cx| wb.focus_tree(window, cx));
     cx.simulate_keystrokes("down cmd-backspace");
     assert!(cx.has_pending_prompt(), "should ask before deleting");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert!(dir.join("a.txt").exists(), "cancelling must not delete");
 
@@ -2432,7 +2432,7 @@ fn a_multi_line_paste_asks_first_and_hidden_markers_are_removed(cx: &mut TestApp
 
     paste(cx, "echo first-line\necho second-line\n");
     assert!(cx.has_pending_prompt(), "several lines ask first");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     std::thread::sleep(std::time::Duration::from_millis(200));
     cx.run_until_parked();
@@ -2490,7 +2490,7 @@ fn terminals_ask_before_killing_a_program_split_where_the_shell_is_and_follow_pr
     std::thread::sleep(std::time::Duration::from_millis(300));
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Close", window, cx));
     wait_for(cx, "the question", |cx| cx.has_pending_prompt());
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert_eq!(wb.read_with(cx, |wb, _| wb.terminal_count()), 1, "still open");
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Terminal: Kill All Terminals", window, cx));
@@ -4273,7 +4273,7 @@ fn git_amend_undo_stash_and_discard_all(cx: &mut TestAppContext) {
     run(cx, "Git: Discard All Changes");
     cx.run_until_parked();
     assert!(cx.has_pending_prompt(), "should ask before discarding");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
     cx.run_until_parked();
     assert_eq!(std::fs::read_to_string(dir.join("README.md")).unwrap(), "# proje\nbir\n", "cancel keeps tracked edits");
     assert_eq!(std::fs::read_to_string(dir.join("yeni.txt")).unwrap(), "yeni\n", "cancel keeps untracked files");

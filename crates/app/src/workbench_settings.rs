@@ -606,14 +606,9 @@ impl Workbench {
             self.notice = Some(Notice::Info(done.into()));
             return cx.notify();
         }
-        let (title, button) = if reset {
-            (crate::i18n::t("Reset the Rust setup in settings.jsonc?"), crate::i18n::t("Reset"))
-        } else {
-            (crate::i18n::t("Apply the Rust setup to settings.jsonc?"), crate::i18n::t("Apply"))
-        };
-        let answer = window.prompt(gpui::PromptLevel::Info, title, Some(&diff), &[button, crate::i18n::t("Cancel")], cx);
+        let answer = crate::questions::rust_setup(reset, &diff).ask(window, cx);
         cx.spawn_in(window, async move |this, cx| {
-            if answer.await != Ok(0) {
+            if answer.await != Some(0) {
                 return;
             }
             this.update_in(cx, |this, window, cx| {

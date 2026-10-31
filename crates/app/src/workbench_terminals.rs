@@ -305,15 +305,9 @@ impl Workbench {
                 if busy.is_empty() && mode != "always" {
                     return close(this, window, cx);
                 }
-                let title = match busy.as_slice() {
-                    [] => crate::i18n::t("Close the terminal?").to_string(),
-                    [one] => crate::i18n::tf("“{}” is still running in this terminal. Close it anyway?", &[one]),
-                    many => crate::i18n::tf("{} terminals have programs running. Close them anyway?", &[&many.len()]),
-                };
-                let detail = crate::i18n::t("Closing a terminal ends the programs running in it.");
-                let answer = window.prompt(gpui::PromptLevel::Warning, &title, Some(detail), &[crate::i18n::t("Close"), crate::i18n::t("Cancel")], cx);
+                let answer = crate::questions::close_terminals(&busy).ask(window, cx);
                 cx.spawn_in(window, async move |this, cx| {
-                    if answer.await == Ok(0) {
+                    if answer.await == Some(0) {
                         this.update_in(cx, |this, window, cx| close(this, window, cx)).ok();
                     }
                 })

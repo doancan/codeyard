@@ -120,7 +120,12 @@ fn run(wb: &Entity<Workbench>, cx: &mut VisualTestContext, label: &str) -> Strin
 /// Answer the open dialog and wait for the probe's answer.
 fn reply(wb: &Entity<Workbench>, cx: &mut VisualTestContext, button: &str) -> String {
     let before = answer(wb, cx);
-    cx.simulate_prompt_answer(button);
+    if button == "Deny" {
+        // Deny is the question's Cancel button: nothing is allowed and the keyboard stays where it was.
+        crate::question::cancel_keeps_focus(wb, cx, button);
+    } else {
+        cx.simulate_prompt_answer(button);
+    }
     let wb2 = wb.clone();
     until(cx, move |cx| answer(&wb2, cx) != before, button);
     answer(wb, cx)

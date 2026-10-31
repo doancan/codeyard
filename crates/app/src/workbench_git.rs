@@ -2,7 +2,7 @@
 //! git runs where the files are (on the server over SSH); it can't prompt for a password,
 //! so missing credentials produce an error that points at the terminal.
 
-use gpui::{AppContext as _, Context, Focusable as _, PromptLevel, Window};
+use gpui::{AppContext as _, Context, Focusable as _, Window};
 
 use super::{InputPurpose, Notice, OverlayKind, Workbench};
 use crate::git;
@@ -891,10 +891,10 @@ impl Workbench {
         cx: &mut Context<Self>,
         then: impl FnOnce(&mut Self, &mut Context<Self>) + 'static,
     ) {
-        // Callers already pass title, detail and button in the UI language; only "Cancel" is translated here.
-        let answer = window.prompt(PromptLevel::Warning, title, Some(detail), &[verb, crate::i18n::t("Cancel")], cx);
+        // Callers already pass title, detail and button in the UI language.
+        let answer = crate::questions::git(title, detail, verb).ask(window, cx);
         cx.spawn(async move |this, cx| {
-            if answer.await == Ok(0) {
+            if answer.await == Some(0) {
                 this.update(cx, |this, cx| then(this, cx)).ok();
             }
         })

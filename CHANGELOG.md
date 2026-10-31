@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Every confirmation dialog marks its cancelling button for the system, whatever its wording or language, so Escape
+  answers "Not Now", "Keep", "Keep Waiting", "Keep Going", "Deny" and a translated "Cancel" on macOS and Windows; if
+  something took the keyboard while a question was open, cancelling gives it back to where it was.
+
 - Screen readers reach the rest of Source Control, the editor's popups and the Debug Console: the Sync / Publish
   button; the Worktrees section, whose checkouts open from the tree; the Graph with its buttons (search, fetch, pull,
   push with their counts, reload, its menu), filters, commit search and commits, which select, open and open their

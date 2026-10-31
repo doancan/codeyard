@@ -377,17 +377,10 @@ impl Workbench {
         if noop || !cx.global::<Settings>().confirm_drag_and_drop {
             return self.drop_entry(from, to_dir, window, cx);
         }
-        let title = crate::i18n::tf("Move “{0}” into “{1}”?", &[&ui::file_name(&from), &ui::file_name(&to_dir)]);
         let (host, root) = (self.remote.host.clone(), self.root(cx));
-        let answer = window.prompt(
-            PromptLevel::Info,
-            &title,
-            Some(crate::i18n::t("An existing file with the same name is never overwritten.")),
-            &[crate::i18n::t("Move"), crate::i18n::t("Cancel")],
-            cx,
-        );
+        let answer = crate::questions::move_into(ui::file_name(&from), ui::file_name(&to_dir)).ask(window, cx);
         cx.spawn_in(window, async move |this, cx| {
-            if answer.await == Ok(0) {
+            if answer.await == Some(0) {
                 this.update_in(cx, |this, window, cx| {
                     if Arc::ptr_eq(&host, &this.remote.host) && this.root(cx) == root {
                         this.drop_entry(from, to_dir, window, cx);
@@ -455,12 +448,10 @@ impl Workbench {
         // The trash is recoverable: if the setting is off, move without asking.
         let ask = !trash || cx.global::<Settings>().confirm_delete;
         let (host, root) = (self.remote.host.clone(), self.root(cx));
-        let level = if trash { PromptLevel::Warning } else { PromptLevel::Critical };
-        let buttons = [gpui::PromptButton::new(verb), gpui::PromptButton::cancel(crate::i18n::t("Cancel"))];
-        let answer = ask.then(|| window.prompt(level, &title, Some(&detail), &buttons, cx));
+        let answer = ask.then(|| crate::questions::delete_entry(&title, &detail, verb, trash).ask(window, cx));
         cx.spawn_in(window, async move |this, cx| {
             if let Some(answer) = answer
-                && answer.await != Ok(0)
+                && answer.await != Some(0)
             {
                 return;
             }
@@ -497,16 +488,9 @@ impl Workbench {
 
     pub(super) fn confirm_permanent_delete(&mut self, path: String, why: String, window: &mut Window, cx: &mut Context<Self>) {
         let name = ui::file_name(&path).to_string();
-        let detail = crate::i18n::tf("It can't be moved to the Trash ({}). Deleting it permanently can't be undone.", &[&why]);
-        let answer = window.prompt(
-            PromptLevel::Warning,
-            &crate::i18n::tf("Delete “{}” permanently?", &[&name]),
-            Some(&detail),
-            &[crate::i18n::t("Delete Permanently"), crate::i18n::t("Cancel")],
-            cx,
-        );
+        let answer = crate::questions::delete_permanently(&name, &why).ask(window, cx);
         cx.spawn_in(window, async move |this, cx| {
-            if answer.await != Ok(0) {
+            if answer.await != Some(0) {
                 return;
             }
             this.update_in(cx, |this, window, cx| {

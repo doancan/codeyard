@@ -320,6 +320,11 @@ fn replace_all_asks_first_and_then_writes_through_the_prompt(cx: &mut TestAppCon
     assert_eq!(title, "Replace 3 matches in 2 files with “baz($X, 0)”?");
     assert!(detail.contains("closed files are written to disk"), "{detail}");
     assert_eq!(disk(&a), b"fn a() { foo(1); foo(2); }\n", "read-only until the answer");
+    // Cancel writes nothing and leaves the keyboard where it was; asking again offers the same.
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
+    assert_eq!(disk(&a), b"fn a() { foo(1); foo(2); }\n", "Cancel writes nothing");
+    panel.update(cx, |s, cx| s.request_replace_all(cx));
+    wait(cx, "confirmation again", |cx| cx.pending_prompt().is_some());
     cx.simulate_prompt_answer("Replace");
     wait(cx, "written", |_| disk(&b) == b"fn b() { baz(3, 0); }\n");
     assert_eq!(disk(&a), b"fn a() { baz(1, 0); baz(2, 0); }\n");

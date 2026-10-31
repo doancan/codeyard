@@ -134,6 +134,85 @@ fn a_settings_change_asks_and_cancel_changes_nothing(cx: &mut TestAppContext) {
     assert_eq!(snapshot(&wb, cx).to_tree().focus, focus, "the keyboard is where it was");
 }
 
+/// The question a test expects, as `crate::questions` builds it: the dialog shows its title and text.
+fn shows(cx: &mut VisualTestContext, q: &crate::question::Question) {
+    let (title, detail) = cx.pending_prompt().expect("a question is open");
+    assert_eq!(title, q.title);
+    assert_eq!(Some(detail), q.detail);
+}
+
+/// A file the Trash refuses: deleting it for good asks; Cancel keeps it and the keyboard on its row, Delete
+/// Permanently removes it.
+#[gpui::test]
+fn deleting_for_good_asks_and_cancel_keeps_the_file(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let dir = fresh("a11y-confirm-permanent");
+    std::fs::write(dir.join("a.txt"), "a\n").unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir, cx);
+    let snap = snapshot(&wb, cx);
+    let (row, _) = explorer_row(&snap, "a.txt");
+    act(&wb, cx, &snap, row, Action::Focus);
+    let path = crate::ui::local_path(&dir.join("a.txt"));
+    for answer in ["Cancel", "Delete Permanently"] {
+        wb.update_in(cx, |wb, window, cx| wb.confirm_permanent_delete(path.clone(), "no Trash here".into(), window, cx));
+        cx.run_until_parked();
+        shows(cx, &crate::questions::delete_permanently("a.txt", "no Trash here"));
+        if answer == "Cancel" {
+            crate::question::cancel_keeps_focus(&wb, cx, answer);
+            assert!(dir.join("a.txt").exists());
+            assert_eq!(snapshot(&wb, cx).to_tree().focus, row);
+        } else {
+            cx.simulate_prompt_answer(answer);
+            wait(cx, "the delete", |_| !dir.join("a.txt").exists());
+        }
+    }
+}
+
+/// A link on a Market page asks before the browser opens it; Cancel opens nothing and leaves the keyboard alone.
+#[gpui::test]
+fn opening_a_link_asks_and_cancel_opens_nothing(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let (wb, cx) = setup(cx);
+    let url = "https://example.com/docs".to_string();
+    for answer in ["Cancel", "Open"] {
+        wb.update_in(cx, |wb, window, cx| wb.confirm_open_link(url.clone(), window, cx));
+        cx.run_until_parked();
+        shows(cx, &crate::questions::open_link(&url));
+        if answer == "Cancel" {
+            crate::question::cancel_keeps_focus(&wb, cx, answer);
+            assert_eq!(cx.opened_url(), None, "nothing opens");
+        } else {
+            cx.simulate_prompt_answer(answer);
+            cx.run_until_parked();
+            assert_eq!(cx.opened_url().as_deref(), Some(url.as_str()));
+        }
+    }
+}
+
+/// Closing the window or quitting with unsaved changes asks; Cancel keeps the window, the text and the keyboard in
+/// the editor.
+#[gpui::test]
+fn closing_or_quitting_with_unsaved_changes_asks_and_cancel_keeps_everything(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let dir = fresh("a11y-confirm-window");
+    std::fs::write(dir.join("a.txt"), "disk\n").unwrap();
+    let (wb, cx) = setup(cx);
+    open(&wb, &dir.join("a.txt"), cx);
+    cx.simulate_input("new ");
+    wb.update_in(cx, |wb, window, cx| wb.confirm_close(window, cx));
+    cx.run_until_parked();
+    shows(cx, &crate::questions::close_window_unsaved());
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
+    assert_eq!(snapshot(&wb, cx).to_tree().focus, EDITOR);
+    assert!(snapshot(&wb, cx).editor.is_some_and(|e| e.dirty), "still open, still unsaved");
+    wb.update_in(cx, |wb, window, cx| wb.confirm_quit(window, cx));
+    cx.run_until_parked();
+    shows(cx, &crate::questions::leave_unsaved(false));
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
+    assert_eq!(snapshot(&wb, cx).to_tree().focus, EDITOR);
+}
+
 fn wait(cx: &mut VisualTestContext, what: &str, done: impl FnMut(&mut VisualTestContext) -> bool) {
     crate::qa_integration_tests::wait_ticking(cx, what, done);
 }

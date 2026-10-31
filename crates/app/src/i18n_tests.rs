@@ -424,7 +424,7 @@ fn welcome_status_and_git_dialogs_are_translated(cx: &mut TestAppContext) {
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Git: Discard All Changes", window, cx));
     cx.run_until_parked();
     assert_eq!(cx.pending_prompt().unwrap().0, "Discard changes in “README.md”?");
-    cx.simulate_prompt_answer("Cancel");
+    crate::question::cancel_keeps_focus(&wb, cx, "Cancel");
 }
 
 /// Sample keys per surface and their expected Turkish equivalents (the table really covers these surfaces).

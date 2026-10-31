@@ -57,10 +57,9 @@ impl Workbench {
         let publisher = self.extension_publisher(active);
         let id = active.id().to_string();
         let (title, detail) = crate::ext_prompts::dialog(&kind, &active.manifest.name, &id, &publisher.shown, program.as_deref());
-        let buttons = [crate::i18n::t("Allow for this session"), crate::i18n::t("Deny")];
-        let answer = window.prompt(PromptLevel::Warning, &title, Some(&detail), &buttons, cx);
+        let answer = crate::questions::first_use(&title, &detail).ask(window, cx);
         cx.spawn_in(window, async move |this, cx| {
-            let allowed = answer.await == Ok(0);
+            let allowed = answer.await == Some(0);
             let _ = this.update_in(cx, |this, window, cx| this.on_first_use_answer(&id, &kind, allowed, window, cx));
         })
         .detach();

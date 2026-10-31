@@ -311,15 +311,9 @@ impl Workbench {
         if !crate::markdown::is_safe_link(&url) {
             return;
         }
-        let answer = window.prompt(
-            PromptLevel::Info,
-            crate::i18n::t("Open this link in your browser?"),
-            Some(&url),
-            &[crate::i18n::t("Open"), crate::i18n::t("Cancel")],
-            cx,
-        );
+        let answer = crate::questions::open_link(&url).ask(window, cx);
         cx.spawn(async move |_, cx| {
-            if answer.await == Ok(0) {
+            if answer.await == Some(0) {
                 cx.update(|cx| cx.open_url(&url)).ok();
             }
         })

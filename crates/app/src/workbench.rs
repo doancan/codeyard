@@ -6,8 +6,8 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Duration;
 
 use gpui::{
-    AnyElement, App, Context, Entity, FocusHandle, Focusable, MouseButton, PathPromptOptions, PromptLevel, SharedString, Subscription, Window, actions,
-    deferred, div, prelude::*, px,
+    AnyElement, App, Context, Entity, FocusHandle, Focusable, MouseButton, PathPromptOptions, SharedString, Subscription, Window, actions, deferred, div,
+    prelude::*, px,
 };
 use host::Host;
 use host::ssh::{AgentBundle, SshHost, Step};
@@ -2269,13 +2269,9 @@ impl Workbench {
             self.finish_quit(mode, cx);
             return;
         }
-        let (detail, leave) = match mode {
-            update_glue::QuitMode::Quit => (crate::i18n::t("Quitting loses everything since the last save."), crate::i18n::t("Quit without saving")),
-            update_glue::QuitMode::Restart(_) => (crate::i18n::t("Restarting loses everything since the last save."), crate::i18n::t("Restart without saving")),
-        };
-        let answer = window.prompt(PromptLevel::Warning, crate::i18n::t("You have unsaved changes"), Some(detail), &[leave, crate::i18n::t("Cancel")], cx);
+        let answer = crate::questions::leave_unsaved(matches!(mode, update_glue::QuitMode::Restart(_))).ask(window, cx);
         cx.spawn(async move |this, cx| {
-            if answer.await == Ok(0) {
+            if answer.await == Some(0) {
                 this.update(cx, |this, cx| this.finish_quit(mode, cx)).ok();
             }
         })
@@ -2284,15 +2280,9 @@ impl Workbench {
 
     /// Close the window (others stay open); asks if there are unsaved changes.
     pub fn confirm_close(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let answer = window.prompt(
-            PromptLevel::Warning,
-            crate::i18n::t("You have unsaved changes"),
-            Some(crate::i18n::t("Closing the window loses everything since the last save.")),
-            &[crate::i18n::t("Close without saving"), crate::i18n::t("Cancel")],
-            cx,
-        );
+        let answer = crate::questions::close_window_unsaved().ask(window, cx);
         cx.spawn_in(window, async move |_, cx| {
-            if answer.await == Ok(0) {
+            if answer.await == Some(0) {
                 cx.update(|window, _| window.remove_window()).ok();
             }
         })
