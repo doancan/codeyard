@@ -16,6 +16,8 @@ Working extensions built with the SDKs: Rust (`crates/ext-sdk`, [docs/extensions
 | `branch-status` | Rust: runs `git` (the `run` permission, with its `why`) and shows the branch in the status bar |
 | `jj-scm` | Rust: a source control provider (`[[scm]]`) for Jujutsu: changes in Source Control, gutter marks, commit and restore through `jj` |
 | `gitea-pulls` | Rust: a pull request provider for Codeberg (Gitea and Forgejo) that calls the forge with `auth`, tested with HTTP fixtures |
+| `vercel-status` | TypeScript: the latest Vercel deployment in the status bar, recent ones in a sidebar view, a refresh command and a timer; the token in `secrets`, `fetch` to one host |
+| `gitlab` | TypeScript: merge requests in the Pull Requests view (`[[pull-requests]]`) through a GitLab `[[oauth]]` account, gitlab.com or a self-managed instance |
 
 The `hello-*` examples are exactly what `cyx new` writes, with the SDK taken from this checkout; a test keeps them in step with the templates in `crates/cyx/templates`. After changing a template, delete the example and write it again from this folder:
 

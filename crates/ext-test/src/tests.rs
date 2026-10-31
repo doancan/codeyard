@@ -278,3 +278,26 @@ fn hover_and_completion_answer_for_a_position() {
     let dot = h.completion(doc, Position::new(0, 0), Some(".")).unwrap();
     assert_eq!(dot.items[1].insert_text.as_deref(), Some("len()$0"));
 }
+
+struct Keychain;
+
+impl Extension for Keychain {
+    fn activate(ctx: Context) -> Result<()> {
+        ctx.command("rotate", async |ctx, _args| {
+            let old = ctx.secret("token").await?.unwrap_or_default();
+            ctx.set_secret("token", &format!("{old}+1")).await?;
+            ctx.delete_secret("stale").await?;
+            Ok(Value::Null)
+        });
+        Ok(())
+    }
+}
+
+#[test]
+fn secrets_are_fixtures_and_can_be_checked() {
+    let host = MockHost::allow_all();
+    host.secret("token", "t").secret("stale", "x");
+    host.activate::<Keychain>().unwrap();
+    host.command("rotate", Value::Null).unwrap();
+    assert_eq!(host.secrets().into_iter().collect::<Vec<_>>(), [("token".to_string(), "t+1".to_string())]);
+}

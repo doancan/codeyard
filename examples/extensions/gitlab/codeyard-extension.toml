@@ -1,0 +1,58 @@
+[extension]
+id          = "codeyard.gitlab"
+version     = "0.1.0"
+name        = "GitLab"
+license     = "MIT"
+description = "Merge requests of GitLab repositories in the Pull Requests view: details, pipelines, diffs, comments and checkout."
+repository  = "https://github.com/doancan/codeyard"
+
+[code]
+entry = "src/extension.ts"
+
+# Codeyard signs every request to GitLab with the user's GitLab account; the extension never sees the token.
+[permissions]
+auth = ["gitlab"]
+why  = "Lists, shows and comments on merge requests of your GitLab repositories."
+
+# A GitLab OAuth application (User Settings › Applications on gitlab.com): not confidential, scope `api`, redirect
+# URI codeyard://ext/codeyard.gitlab/callback. PKCE replaces the client secret, so the id below is all Codeyard needs.
+[[oauth]]
+id            = "gitlab"
+name          = "GitLab"
+authorize-url = "https://gitlab.com/oauth/authorize"
+token-url     = "https://gitlab.com/oauth/token"
+client-id     = "your-gitlab-application-id"
+scopes        = ["api"]
+hosts         = ["gitlab.com"]
+account-url   = "https://gitlab.com/api/v4/user"
+
+[[commands]]
+id    = "sign-in"
+title = "GitLab: Sign In"
+
+# The remotes this provider answers for (origin = git@gitlab.com:group/app.git), and the account their requests use.
+[[pull-requests]]
+id    = "gitlab"
+label = "GitLab"
+hosts = ["gitlab.com"]
+auth  = "gitlab"
+
+# A self-managed GitLab: its own OAuth application and provider, under the id `gitlab-self-managed`, which the code
+# also registers. Uncomment, put in the instance's host and application id, add "gitlab-self-managed" to
+# [permissions] auth, then `cyx package` and install the .cyx (README.md).
+#
+# [[oauth]]
+# id            = "gitlab-self-managed"
+# name          = "GitLab (gitlab.example.com)"
+# authorize-url = "https://gitlab.example.com/oauth/authorize"
+# token-url     = "https://gitlab.example.com/oauth/token"
+# client-id     = "your-instance-application-id"
+# scopes        = ["api"]
+# hosts         = ["gitlab.example.com"]
+# account-url   = "https://gitlab.example.com/api/v4/user"
+#
+# [[pull-requests]]
+# id    = "gitlab-self-managed"
+# label = "GitLab (gitlab.example.com)"
+# hosts = ["gitlab.example.com"]
+# auth  = "gitlab-self-managed"
