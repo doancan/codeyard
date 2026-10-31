@@ -36,6 +36,21 @@ pub(in crate::workbench) enum Part {
     EditorTab(usize),
     /// A row of the Problems panel.
     Problem(usize),
+    /// A Search Editor tab of the focused group, by its index among the group's Search Editor tabs.
+    SearchTab(usize),
+    /// A terminal tab of the focused group, by its index among the group's terminal tabs.
+    TermTab(usize),
+    /// The update dialog (or the first-run question) drawn in the workbench's window.
+    UpdateDialog,
+    /// A button of the update dialog (or the first-run question), by its index in tab order.
+    DialogButton(usize),
+    /// A tab of the bottom panel.
+    PanelTab(super::Bottom),
+    /// The Extensions view's Installed tab, Market tab, search field and list (0 to 3).
+    ExtControl(u8),
+    /// A row of the Extensions view's Installed or Market list.
+    Extension(usize),
+    Market(usize),
     /// A button inside a row of a side view list: the row, and which of the row's buttons (in the tree's order).
     RowButton(RowFrame, usize, u8),
 }
@@ -89,6 +104,11 @@ impl PaintedBounds {
         self.windows.get(&window)?.rows.get(&(which, index)).copied()
     }
 
+    /// The visible part of a control as last laid out in `window`.
+    pub(in crate::workbench) fn part_in(&self, window: WindowId, which: Part) -> Option<Bounds<Pixels>> {
+        self.windows.get(&window)?.parts.get(&which).copied()
+    }
+
     fn frames(&mut self, window: WindowId) -> &mut Frames {
         self.windows.entry(window).or_default()
     }
@@ -108,7 +128,7 @@ impl PaintedBounds {
 
     /// The visible part of a control as last laid out in `window` (tests).
     pub(in crate::workbench) fn part(&self, window: WindowId, which: Part) -> Option<Bounds<Pixels>> {
-        self.windows.get(&window)?.parts.get(&which).copied()
+        self.part_in(window, which)
     }
 }
 
@@ -269,7 +289,11 @@ pub(in crate::workbench) fn row_frame(which: RowFrame, index: usize, cx: &Contex
 /// before painting, so a control that is laid out but hidden until the pointer hovers its row (a row's buttons) has
 /// the place it appears at.
 pub(in crate::workbench) fn part_frame(which: Part, cx: &Context<Workbench>) -> impl IntoElement + use<> {
-    let entity = cx.entity().downgrade();
+    part_frame_for(which, cx.entity().downgrade())
+}
+
+/// As `part_frame`, recorded by `entity` (for a part drawn outside the workbench's own render).
+pub(in crate::workbench) fn part_frame_for(which: Part, entity: gpui::WeakEntity<Workbench>) -> impl IntoElement + use<> {
     canvas(
         move |bounds, window, cx| {
             let bounds = bounds.intersect(&window.content_mask().bounds);

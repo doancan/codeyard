@@ -150,14 +150,22 @@ impl EditorView {
         self.buffer.selected_texts()
     }
 
-    /// For the accessibility tree: each line segment drawn in the last paint (a wrapped line is several), with the
-    /// shaped position of each character, in window coordinates. A selected line end is drawn 0.4 lines wide.
+    /// For the accessibility tree: each line segment drawn in the last paint (a wrapped line is several), with where
+    /// each character was drawn (right-to-left text where the platform placed it), in window coordinates. A selected
+    /// line end is drawn 0.4 lines wide, right of the text.
     pub fn a11y_layout(&self) -> Vec<crate::painted::TextLine> {
         self.visible
             .iter()
             .map(|v| {
-                let xs = v.text.char_indices().map(|(b, _)| b).chain(std::iter::once(v.text.len())).map(|b| v.text_left + v.layout.x_for_index(b)).collect();
-                crate::painted::TextLine { start: v.start, xs, top: v.bounds.top(), bottom: v.bounds.bottom(), line_break: v.bounds.size.height * 0.4 }
+                let cells = crate::painted::char_cells(&v.text, &v.layout).into_iter().map(|(l, r)| (v.text_left + l, v.text_left + r)).collect();
+                crate::painted::TextLine {
+                    start: v.start,
+                    cells,
+                    end: v.text_left + v.layout.width,
+                    top: v.bounds.top(),
+                    bottom: v.bounds.bottom(),
+                    line_break: v.bounds.size.height * 0.4,
+                }
             })
             .collect()
     }

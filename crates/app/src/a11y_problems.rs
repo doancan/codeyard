@@ -149,7 +149,7 @@ const PANEL_TAB: u64 = PROBLEM_ROW + BLOCK / 2;
 const MAX_OUTPUT_LINES: usize = 400;
 
 impl PanelSnap {
-    pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>) -> Vec<NodeId> {
+    pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>, geometry: &Geometry) -> Vec<NodeId> {
         let mut list = Node::new(Role::TabList);
         list.set_label(t("Bottom panel"));
         let mut kids = Vec::new();
@@ -162,6 +162,7 @@ impl PanelSnap {
             }
             n.set_selected(*tab == self.selected);
             n.add_action(Action::Click);
+            geometry.apply_part(Part::PanelTab(*tab), &mut n);
             nodes.push((id, n));
             kids.push(id);
         }
@@ -240,7 +241,7 @@ impl ViewsSnap {
             kids.push(search.append_tree(nodes));
         }
         if let Some(panel) = &self.panel {
-            kids.extend(panel.append_tree(nodes));
+            kids.extend(panel.append_tree(nodes, geometry));
         }
         if let Some(problems) = &self.problems {
             kids.push(problems.append_tree(nodes, geometry));

@@ -151,7 +151,7 @@ pub(super) fn editor_window_snapshot(root: &Entity<EditorWindow>, window: &Windo
     let (editor, find_bar, completion) = ed.update(cx, |e, _| {
         e.in_slot(slot, |e| {
             let editor = EditorSnap::of(e, scale);
-            let completion = e.a11y_completion(MAX_OPTIONS).map(|(rows, selected)| ListSnap { rows_total: rows.len(), selected: Some(selected), rows });
+            let completion = completion_snap(e, scale);
             (editor, e.find_bar(), completion)
         })
     });
@@ -170,16 +170,7 @@ pub(super) fn editor_window_snapshot(root: &Entity<EditorWindow>, window: &Windo
         let wb = wb.read(cx);
         (wb.chrome.editor_host == Some(slot)).then(|| wb.overlay.as_ref().map(|o| o.picker.clone())).flatten()
     });
-    let picker = picker_entity.as_ref().map(|p| {
-        let v = p.read(cx).a11y_view(MAX_OPTIONS);
-        PickerSnap {
-            label: v.placeholder,
-            message: v.message,
-            query: v.query,
-            list: ListSnap { rows: v.rows, rows_total: v.rows_total, selected: v.selected },
-            empty: v.empty,
-        }
-    });
+    let picker = picker_entity.as_ref().map(|p| PickerSnap::of(p.read(cx), window));
     let focused = ed.read(cx).slot_focus(slot).is_some_and(|f| f.is_focused(window));
     let focus = if picker_entity.as_ref().is_some_and(|p| p.focus_handle(cx).is_focused(window)) {
         FocusSnap::Picker

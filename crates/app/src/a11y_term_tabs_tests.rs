@@ -35,6 +35,13 @@ fn terminal_tabs_are_in_the_tab_list_and_a_click_selects_them(cx: &mut TestAppCo
     assert_eq!(tabs.len(), 2);
     assert!(tabs.iter().all(|t| t.role() == Role::Tab && t.label().is_some_and(|l| l.ends_with("(terminal)"))));
     assert!(tabs[1].is_selected() == Some(true) && tabs[0].is_selected() == Some(false));
+    // Each tab is where it is drawn, side by side, and AccessKit's hit test finds it there.
+    let frames: Vec<accesskit::Rect> = tabs.iter().map(|t| t.data().bounds().expect("the tab's frame")).collect();
+    assert!(frames[0].x1 <= frames[1].x0 + 0.5, "{frames:?}");
+    for (tab, f) in tabs.iter().zip(&frames) {
+        let at = accesskit::Point::new((f.x0 + f.x1) / 2., (f.y0 + f.y1) / 2.);
+        assert_eq!(state.root().node_at_point(at, &|_| accesskit_consumer::FilterResult::Include).map(|n| n.id()), Some(tab.id()));
+    }
 
     click(&wb, cx, &snap, NodeId(TERM_TAB));
     assert_eq!(wb.read_with(cx, |wb, _| wb.front_editor_terminal()), Some(terms[0].clone()), "the click selected it");

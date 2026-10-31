@@ -175,8 +175,15 @@ The tree, in the order a screen reader walks it:
   status bar's items, the find bar's fields, status and buttons, Source Control's message field, commit button, group
   headers, file rows and their Stage/Unstage and Discard buttons, the rows of the Run and Debug view (variables,
   watches, call stack, breakpoints), the Testing view, the Remote Explorer and the Ports panel with the buttons inside
-  them, the Settings and Keyboard Shortcuts rows and the items of an open menu. A row scrolled out of its list, and an
-  item the status bar leaves out at the current width, has none. A row's buttons that appear while the pointer is over
+  them, the Settings and Keyboard Shortcuts rows and the items of an open menu, the Settings page's search field,
+  categories, a choice's options, a changed setting's Reset button and the page's three buttons, the Extensions view's
+  Installed and Market rows, the picker (its dialog, query box, list and each row it draws), the suggestion list and each
+  suggestion, the bottom panel's tabs, the Search Editor (the page, its query, status, list, each row it draws, Apply
+  and Undo Replace) and the Search Editor and terminal tabs of the focused group, and the update dialog (or the
+  first-run question) drawn in the window with each of its buttons. A row scrolled out of its list (a picker or the
+  suggestion list draws only what fits), and an item the status bar leaves out at the current width, has none. The
+  picker reports its frames only to the window it is drawn in, and suggestions only while their editor was drawn in
+  that window's last frame. A row's buttons that appear while the pointer is over
   the row have the place they appear at (recorded at layout, before painting); a "More Actions…" button the tree adds
   to a row whose menu opens by right click has no control of its own on screen and therefore no frame.
   Bounds are clipped to the visible content mask and scaled from GPUI logical pixels to AccessKit physical pixels.
@@ -188,6 +195,17 @@ The tree, in the order a screen reader walks it:
   `AXBoundsForRange` (VoiceOver, Zoom) and UI Automation's `GetBoundingRectangles` (Narrator, NVDA, magnifiers) return
   the caret's and the selection's rectangles where they are drawn. A run that is not on screen (scrolled away or
   folded) has no bounds, so a range that reaches into it has none either.
+- Right-to-left and mixed text: each character's place comes from the glyphs the platform shaped and painted
+  (`painted::char_cells`), not from GPUI's `x_for_index`, which assumes left-to-right glyph order. A painted line is cut
+  into stretches whose characters follow each other on screen in one direction (`TextLine::stretches`); each stretch
+  becomes runs with that `TextDirection`, and a right-to-left run gives its character positions from its right edge, as
+  AccessKit expects. "abc אבג def" is three runs; a range inside the Hebrew is the rectangle of those letters where they
+  are drawn, and a range across the change of direction is a rectangle per stretch. A line break drawn at the line's
+  right end that does not follow the last character read (the line ends in right-to-left text) is a run of its own.
+  Characters sharing one glyph (a ligature, lam-alef) share its width in reading order. On macOS Core Text reorders
+  right-to-left text for display and the frames follow it; GPUI's Windows text path (DirectWrite with the bidi level
+  ignored) places a run's glyphs left to right in the order DirectWrite gives them, and the frames follow that too, so
+  on both platforms they are where the characters are on screen.
 
 Focus follows the keyboard: the selected explorer row, the editor (or its selected suggestion), a find field, the
 picker's combo box (its selected row), the terminal or a dialog button.
@@ -283,10 +301,16 @@ probe as the workbench's lists (`painted.rs`).
 
 - **No screen reader has been run.** VoiceOver (speech, rotor, VO cursor, "interact with text area") and NVDA, JAWS or
   Narrator on Windows. The Windows adapter builds and passes CI, but no UI Automation client has read its tree yet.
-- **Fine-grained bounds.** Rows, controls and text positions have their painted frames (see Geometry above). Not yet:
-  the buttons of the Settings page's rows, the Extensions list's rows, the Search Editor, pickers
-  and suggestion rows, the bottom panel's tabs, and the welcome and update dialogs' buttons keep only the bounds of
-  their landmark or none. Bidirectional (RTL) text is reported left to right.
+- **Right-to-left caret.** The tree reports right-to-left characters where they are drawn (see Text positions), and so
+  the caret and selection bounds AccessKit computes from them are on those characters. The editor itself still draws
+  its caret and selection inside right-to-left text with GPUI's `x_for_index`, which assumes glyphs in reading order:
+  there the drawn caret can be away from the character the tree (and a magnifier following it) points at. On Windows,
+  GPUI's DirectWrite renderer (`vendor/gpui/src/platform/windows/direct_write.rs`, `DrawGlyphRun`) ignores each run's
+  bidi level and places its glyphs left to right in the order DirectWrite gives them, so a Hebrew or Arabic run is drawn
+  in reading order from the left; the tree reports that drawing, not the visual order the script needs. Both are GPUI's
+  text layout, outside the tree; neither was checked with a right-to-left screen-reader user.
+- **Frames not recorded.** The update window on macOS (it has no adapter, see below) and an extension view's own nodes
+  (their frames are the extension's business; only the Extensions list's rows are the workbench's).
 - **Focus** was observed live on macOS only for Source Control: setting `AXFocused` on a change row of a dev build moved
   the keyboard cursor there and the row reported `Focused="1"` as the application's `AXFocusedUIElement`. Other focus
   paths (`TreeUpdate.focus`, `update_view_focus_state`) are covered by tests but not observed in a live window.
@@ -294,7 +318,7 @@ probe as the workbench's lists (`painted.rs`).
   list. Run offsets, the selection and
   set positions are document- or tree-relative, but the text value of the editor node starts at the range, so a
   client that counts characters from the node's value sees offsets relative to the first exposed line; the scroll
-  position and description give that line. Primary selection only; no multi-cursor, RTL or CRLF handling. A wrapped
+  position and description give that line. Primary selection only; no multi-cursor or CRLF handling (right-to-left text: see above). A wrapped
   line is split into a run per painted line; a folded line is in the text but has no frame.
 - The terminal exposes the screen only, not the scrollback, and cannot be written to from the tree (typing goes through
   the keyboard as usual).
@@ -364,3 +388,14 @@ Search (Q06), natively on the same kind of dev build: `axframes --set-value Sear
 `AXValue`, the view searched, and the tree listed the status ("2 results in 1 file") and an `AXOutline` with the file
 row (its Replace in this file and Dismiss buttons at the place they appear on hover) and both matches, each frame on
 its drawn row; `AXPress` on the second match opened `text.rs` with the match selected and the text area focused.
+
+More frames and right-to-left text, natively on a dev build (`CODEYARD_DEV=1`, its own state and config folders, a
+throwaway project, `axframes` against that process only; keys sent with `--do key:…`/`type:…` inside that window): the
+Extensions view with two installed extensions listed its tabs (59 × 24 and 48 × 24 points), search field, list and
+both rows (257 × 44) on what is drawn; the command palette its window, combo box and twelve drawn rows (586 × 24, one
+under the other); word suggestions after typing "me" their list and both rows under the caret's line; the Settings
+page its search field, categories, a choice's options ("off", "on") inside their row and the page's buttons; the
+bottom panel's tabs side by side; a Search Editor its tab, page, query, list and match rows. In "abc אבג def",
+`AXBoundsForRange` for א (character 4) was 621.8 and for ג (character 6) 607.4 points from the left, each 7.2 wide:
+leftwards in reading order, and the capture showed the rectangle on ג. A range over "c אבג d" was one 50.5-point
+rectangle over those letters. The editor's own drawn selection in that line was elsewhere (see "Right-to-left caret").

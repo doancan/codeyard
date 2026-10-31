@@ -32,7 +32,7 @@ pub(crate) struct TermTabSnap {
 }
 
 /// Append the terminal tabs after the `before` tabs of a list of `total`.
-pub(super) fn append_tabs(tabs: &[TermTabSnap], before: usize, total: usize, ids: &mut Vec<NodeId>, nodes: &mut Vec<(NodeId, Node)>) {
+pub(super) fn append_tabs(tabs: &[TermTabSnap], before: usize, total: usize, ids: &mut Vec<NodeId>, nodes: &mut Vec<(NodeId, Node)>, geometry: &Geometry) {
     for (i, s) in tabs.iter().enumerate() {
         let id = NodeId(TERM_TAB + i as u64);
         let mut tab = Node::new(Role::Tab);
@@ -42,6 +42,7 @@ pub(super) fn append_tabs(tabs: &[TermTabSnap], before: usize, total: usize, ids
         tab.set_size_of_set(total);
         tab.add_action(Action::Click);
         tab.add_action(Action::Focus);
+        geometry.apply_part(Part::TermTab(i), &mut tab);
         ids.push(id);
         nodes.push((id, tab));
     }

@@ -28,6 +28,11 @@ pub struct AccessPage {
     /// (label, count, selected) in `CATEGORIES` order.
     pub categories: Vec<(&'static str, usize, bool)>,
     pub heading: String,
+    /// Where the search field, each category, and the "Open settings.jsonc", "Keyboard Shortcuts" and "File icon
+    /// theme…" buttons were painted.
+    pub search_bounds: Option<accesskit::Rect>,
+    pub category_bounds: Vec<Option<accesskit::Rect>>,
+    pub button_bounds: [Option<accesskit::Rect>; 3],
     pub rows: Vec<AccessSetting>,
     /// Visible settings (`rows` holds the first ones).
     pub total: usize,
@@ -49,6 +54,22 @@ pub struct AccessSetting {
     pub source: Option<&'static str>,
     /// The row's painted, visible bounds (physical pixels); `None` while it is scrolled out of view.
     pub bounds: Option<accesskit::Rect>,
+    /// Where its Reset button and each of its options were painted.
+    pub reset_bounds: Option<accesskit::Rect>,
+    pub option_bounds: Vec<Option<accesskit::Rect>>,
+}
+
+/// A part of the page whose painted bounds the accessibility tree reports.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+enum SetFrame {
+    Row(&'static str),
+    Reset(&'static str),
+    Option(&'static str, usize),
+    Search,
+    Category(usize),
+    Json,
+    Keys,
+    Icons,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -151,7 +172,7 @@ pub struct SettingsPage {
     fields: HashMap<&'static str, Entity<TextField>>,
     errors: HashMap<&'static str, String>,
     /// Where each setting's row was painted in the last frame (accessibility).
-    bounds: crate::painted::RowBounds<&'static str>,
+    bounds: crate::painted::RowBounds<SetFrame>,
     focus_handle: FocusHandle,
     _subs: Vec<Subscription>,
 }
@@ -383,7 +404,14 @@ impl SettingsPage {
                     modified: Self::is_modified(s, key),
                     error: self.errors.get(key).cloned(),
                     source: source_note(key, cx),
-                    bounds: crate::painted::physical(&self.bounds, &key, window),
+                    bounds: crate::painted::physical(&self.bounds, &SetFrame::Row(key), window),
+                    reset_bounds: crate::painted::physical(&self.bounds, &SetFrame::Reset(key), window),
+                    option_bounds: match entry.map(|e| e.kind) {
+                        Some(Kind::Choice(opts)) => {
+                            (0..opts.len()).map(|k| crate::painted::physical(&self.bounds, &SetFrame::Option(key, k), window)).collect()
+                        }
+                        _ => Vec::new(),
+                    },
                 }
             })
             .collect();
@@ -414,6 +442,9 @@ impl SettingsPage {
             rows,
             total: keys.len(),
             focused,
+            search_bounds: crate::painted::physical(&self.bounds, &SetFrame::Search, window),
+            category_bounds: (0..CATEGORIES.len()).map(|i| crate::painted::physical(&self.bounds, &SetFrame::Category(i), window)).collect(),
+            button_bounds: [SetFrame::Json, SetFrame::Keys, SetFrame::Icons].map(|f| crate::painted::physical(&self.bounds, &f, window)),
         }
     }
 
@@ -474,6 +505,8 @@ impl SettingsPage {
                     let value = (*o).to_string();
                     div()
                         .id((SharedString::from(format!("opt-{key}")), oi))
+                        .relative()
+                        .child(crate::painted::probe(&self.bounds, SetFrame::Option(key, oi)))
                         .h(px(24.))
                         .px(px(theme::SPACE[4]))
                         .flex()
@@ -505,6 +538,8 @@ impl SettingsPage {
         let reset = modified.then(|| {
             div()
                 .id(("reset", ix))
+                .relative()
+                .child(crate::painted::probe(&self.bounds, SetFrame::Reset(key)))
                 .flex_none()
                 .cursor_pointer()
                 .text_size(px(text::XXS.0))
@@ -519,7 +554,7 @@ impl SettingsPage {
         div()
             .id(("setting", ix))
             .relative()
-            .child(crate::painted::probe(&self.bounds, key))
+            .child(crate::painted::probe(&self.bounds, SetFrame::Row(key)))
             .w_full()
             .flex()
             .flex_col()
@@ -576,6 +611,8 @@ impl Render for SettingsPage {
             let hot = *name == "Modified" && count > 0;
             div()
                 .id(("set-cat", i))
+                .relative()
+                .child(crate::painted::probe(&self.bounds, SetFrame::Category(i)))
                 .h(px(28.))
                 .px(px(theme::SPACE[5]))
                 .flex()
@@ -614,6 +651,8 @@ impl Render for SettingsPage {
                     .child(div().text_size(px(text::LG.0)).font_weight(gpui::FontWeight::SEMIBOLD).child(crate::i18n::t("Settings")))
                     .child(
                         crate::ui::input_box("settings-search-box", &p, p.surface, self.query.focus_handle(cx).is_focused(window))
+                            .relative()
+                            .child(crate::painted::probe(&self.bounds, SetFrame::Search))
                             .flex_1()
                             .max_w(px(520.))
                             .child(crate::ui::search_icon(&p))
@@ -623,6 +662,8 @@ impl Render for SettingsPage {
                     .child(
                         div()
                             .id("set-open-json")
+                            .relative()
+                            .child(crate::painted::probe(&self.bounds, SetFrame::Json))
                             .h(px(26.))
                             .px(px(theme::SPACE[4]))
                             .flex()
@@ -638,6 +679,8 @@ impl Render for SettingsPage {
                     .child(
                         div()
                             .id("set-open-keys")
+                            .relative()
+                            .child(crate::painted::probe(&self.bounds, SetFrame::Keys))
                             .h(px(26.))
                             .px(px(theme::SPACE[4]))
                             .flex()
@@ -671,6 +714,8 @@ impl Render for SettingsPage {
                             .child(
                                 div()
                                     .id("set-icon-theme")
+                                    .relative()
+                                    .child(crate::painted::probe(&self.bounds, SetFrame::Icons))
                                     .h(px(28.))
                                     .px(px(theme::SPACE[5]))
                                     .flex()

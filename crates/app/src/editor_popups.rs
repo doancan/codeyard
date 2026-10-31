@@ -3,6 +3,14 @@
 use super::*;
 use crate::i18n::{t, tf};
 
+/// A popup part whose painted bounds the accessibility tree reports.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum PopupFrame {
+    /// The suggestion list, and suggestion `i` (its index among all suggestions).
+    Suggestions,
+    Suggestion(usize),
+}
+
 impl EditorView {
     /// Minimap: each line 2 px, each character 1 px, in syntax color; the visible area
     /// is framed. Only lines that fit in the strip are drawn. Returns: first line.
@@ -77,6 +85,10 @@ impl EditorView {
     /// Completion and hover popups (absolutely positioned relative to the surface).
     pub(super) fn popups(&self, p: &Palette, font: SharedString, font_size: f32, line_h: f32, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
         let mut out = Vec::new();
+        // This view's popups record where they are painted in this frame.
+        let slot = self.slot;
+        self.a11y_popups.borrow_mut().retain(|(s, _), _| *s != slot);
+        let probe = |part: PopupFrame| crate::painted::probe(&self.a11y_popups, (slot, part));
         // To the right of the conflict header: "Accept Current | Accept Incoming | Accept Both" (like VS Code's CodeLens).
         for (ix, conflict) in self.conflicts.iter().enumerate() {
             let head = self.buffer.line_to_char(conflict.start);
@@ -184,6 +196,8 @@ impl EditorView {
                 let label = gpui::StyledText::new(it.label.clone()).with_highlights(highlights);
                 div()
                     .id(("completion", pos))
+                    .relative()
+                    .child(probe(PopupFrame::Suggestion(pos)))
                     .h(px(row_h))
                     .flex()
                     .items_center()
@@ -233,6 +247,7 @@ impl EditorView {
                     .shadow_md()
                     .font_family(font.clone())
                     .text_size(px(font_size))
+                    .child(probe(PopupFrame::Suggestions))
                     .children(rows)
                     .into_any_element(),
             );
@@ -421,6 +436,14 @@ impl EditorView {
             );
         }
         out
+    }
+
+    /// Where the suggestion list and the first `count` suggestions of this view were painted in its last frame
+    /// (physical pixels at `scale`; a suggestion scrolled out of the list has none).
+    pub fn a11y_completion_frames(&self, count: usize, scale: f32) -> (Option<accesskit::Rect>, Vec<Option<accesskit::Rect>>) {
+        let painted = self.a11y_popups.borrow();
+        let frame = |part| painted.get(&(self.slot, part)).and_then(|b| crate::painted::physical_scaled(*b, scale));
+        (frame(PopupFrame::Suggestions), (0..count).map(|i| frame(PopupFrame::Suggestion(i))).collect())
     }
 
     // --- Git gutter ---

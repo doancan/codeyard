@@ -104,9 +104,10 @@ impl Workbench {
             &send,
             None,
         )
+        .child(super::a11y::part_frame(super::a11y::Part::UpdateDialog, cx))
         .child(header)
         .child(update_body(self, &model, p, &send, false))
-        .child(update_footer(self, &model, p, &send, false, ui::keyboard_focus(cx)));
+        .child(update_footer(self, &model, p, &send, false, ui::keyboard_focus(cx), Some(cx.entity().downgrade())));
         Some(deferred(
             div()
                 .id("update-backdrop")
@@ -336,12 +337,24 @@ fn update_body(wb: &Workbench, model: &DialogModel, p: &Palette, send: &Dispatch
 }
 
 /// `ring`: draw the keyboard focus ring (shown only after the keyboard was used, in the dialog's own window and in the workbench).
-fn update_footer(wb: &Workbench, model: &DialogModel, p: &Palette, send: &Dispatch, native: bool, ring: bool) -> impl IntoElement + use<> {
+/// `frames`: the workbench that records where each button is laid out (the dialog drawn in its window).
+fn update_footer(
+    wb: &Workbench,
+    model: &DialogModel,
+    p: &Palette,
+    send: &Dispatch,
+    native: bool,
+    ring: bool,
+    frames: Option<gpui::WeakEntity<Workbench>>,
+) -> impl IntoElement + use<> {
     let draw = |ix: usize, b: &DialogButton| {
         let (action, send) = (b.action, send.clone());
-        update_button(ix, b, wb.update.focus.get(ix), p, native, ring).on_click(move |_, window, app| {
-            send(UpdateCmd::Action(action), window, app);
-        })
+        update_button(ix, b, wb.update.focus.get(ix), p, native, ring)
+            .relative()
+            .children(frames.clone().map(|wb| super::a11y::part_frame_for(super::a11y::Part::DialogButton(ix), wb)))
+            .on_click(move |_, window, app| {
+                send(UpdateCmd::Action(action), window, app);
+            })
     };
     let start = model.buttons.iter().enumerate().filter(|(_, b)| b.start).map(|(i, b)| draw(i, b)).collect::<Vec<_>>();
     let end = model.buttons.iter().enumerate().filter(|(_, b)| !b.start).map(|(i, b)| draw(i, b)).collect::<Vec<_>>();
@@ -404,7 +417,7 @@ pub(super) fn window_card(wb: &Workbench, model: &DialogModel, p: &Palette, send
                     .child(update_body(wb, model, p, send, true)),
             ),
     )
-    .child(update_footer(wb, model, p, send, true, keys.get()))
+    .child(update_footer(wb, model, p, send, true, keys.get(), None))
     .into_any_element()
 }
 

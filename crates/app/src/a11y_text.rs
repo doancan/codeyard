@@ -12,12 +12,13 @@ use crate::painted::TextLine;
 use accesskit::{Rect, TextDirection};
 
 /// Where a run was painted, in physical pixels: its bounds, and per character (the line break included) its position
-/// from the run's left edge and its advance width.
+/// from the run's starting edge (the left one, or the right one for a right-to-left run) and its advance width.
 #[derive(Clone, PartialEq, Debug)]
 pub struct RunFrame {
     pub bounds: Rect,
     pub positions: Vec<f32>,
     pub widths: Vec<f32>,
+    pub rtl: bool,
 }
 
 /// Split into runs: each line into runs of at most RUN_CHARS characters, the line ending in the last run.
@@ -26,11 +27,13 @@ pub(super) fn runs_for(lines: Vec<(usize, String)>, total_lines: usize, first_li
     runs_painted(lines, total_lines, first_line, &[], 1.)
 }
 
-/// As `runs_for`, also split where a painted line starts (a wrapped line's later segments) and with each painted run's
-/// frame from `painted` (drawn at `scale`).
+/// As `runs_for`, also split where a painted line starts (a wrapped line's later segments) and where its text changes
+/// direction on screen (a run reads one way, from one edge), with each painted run's frame from `painted` (drawn at
+/// `scale`). A line break not drawn right after the line's last run (it follows right-to-left text) is a run of its own.
 pub(super) fn runs_painted(lines: Vec<(usize, String)>, total_lines: usize, first_line: usize, painted: &[TextLine], scale: f32) -> Vec<RunSnap> {
-    let mut starts: Vec<usize> = painted.iter().map(|l| l.start).collect();
-    starts.sort_unstable();
+    let mut cuts: Vec<usize> = painted.iter().flat_map(|l| l.stretches().into_iter().map(move |s| l.start + s.start).chain([l.start])).collect();
+    cuts.sort_unstable();
+    cuts.dedup();
     let mut runs = Vec::new();
     for (i, (start, line)) in lines.into_iter().enumerate() {
         let last_in_doc = first_line + i + 1 >= total_lines;
@@ -38,17 +41,20 @@ pub(super) fn runs_painted(lines: Vec<(usize, String)>, total_lines: usize, firs
         let n = chars.len();
         let mut off = 0;
         loop {
-            // The next painted line start inside this line, if it comes before the run would end.
-            let wrap = starts.iter().map(|s| s.wrapping_sub(start)).find(|&s| s > off && s < n);
-            let end = (off + RUN_CHARS).min(n).min(wrap.unwrap_or(n));
-            let mut text: String = chars[off..end].iter().collect();
-            let mut count = end - off;
-            if end == n && !last_in_doc {
-                text.push('\n');
-                count += 1;
-            }
-            let frame = painted.iter().find_map(|l| run_frame(l, start + off, end - off, end == n && !last_in_doc, scale));
+            // The next cut inside this line (a painted line's start or a change of direction) before the run would end.
+            let cut = cuts.iter().filter_map(|s| s.checked_sub(start)).find(|&s| s > off && s < n);
+            let end = (off + RUN_CHARS).min(n).min(cut.unwrap_or(n));
+            let text: String = chars[off..end].iter().collect();
+            let on = painted.iter().find(|l| start + off >= l.start && start + end <= l.start + l.chars());
+            let line_end = end == n && !last_in_doc;
+            let joined = line_end && on.is_none_or(|l| l.break_follows(start + end - l.start));
+            let frame = on.and_then(|l| run_frame(l, start + off, end - off, joined, scale));
+            let (text, count) = if joined { (text + "\n", end - off + 1) } else { (text, end - off) };
             runs.push(RunSnap { start: start + off, chars: count, text, frame });
+            if line_end && !joined {
+                let frame = on.and_then(|l| run_frame(l, start + n, 0, true, scale));
+                runs.push(RunSnap { start: start + n, chars: 1, text: "\n".into(), frame });
+            }
             if end == n {
                 break;
             }
@@ -59,21 +65,32 @@ pub(super) fn runs_painted(lines: Vec<(usize, String)>, total_lines: usize, firs
 }
 
 /// The frame of the `chars` characters from document index `start` (followed by a line break when `line_break`) if
-/// they lie on painted line `line`.
+/// they lie on painted line `line`, read in one direction. The line break is drawn at the line's right end.
 fn run_frame(line: &TextLine, start: usize, chars: usize, line_break: bool, scale: f32) -> Option<RunFrame> {
     let k = start.checked_sub(line.start)?;
     if k + chars > line.chars() || !scale.is_finite() || scale <= 0. {
         return None;
     }
     let px = |p: gpui::Pixels| f64::from(p / gpui::px(1.)) * f64::from(scale);
-    let x0 = px(line.xs[k]);
+    let cells = &line.cells[k..k + chars];
+    let rtl = chars > 0 && line.stretches().iter().any(|s| s.rtl && s.start <= k && k + chars <= s.end);
+    let (x0, mut x1) = if rtl {
+        let left = cells.iter().map(|c| px(c.0)).reduce(f64::min).unwrap_or_default();
+        (left, cells.iter().map(|c| px(c.1)).reduce(f64::max).unwrap_or(left))
+    } else if line_break && chars == 0 {
+        (px(line.end), px(line.end))
+    } else {
+        match (cells.first(), cells.last()) {
+            (Some(first), Some(last)) => (px(first.0), px(last.1)),
+            _ => (px(line.end), px(line.end)),
+        }
+    };
     let mut positions = Vec::with_capacity(chars + 1);
     let mut widths = Vec::with_capacity(chars + 1);
-    for i in k..k + chars {
-        positions.push((px(line.xs[i]) - x0) as f32);
-        widths.push((px(line.xs[i + 1]) - px(line.xs[i])).max(0.) as f32);
+    for &(l, r) in cells {
+        positions.push((if rtl { x1 - px(r) } else { px(l) - x0 }) as f32);
+        widths.push((px(r) - px(l)).max(0.) as f32);
     }
-    let mut x1 = px(line.xs[k + chars]);
     if line_break {
         positions.push((x1 - x0) as f32);
         widths.push(px(line.line_break).max(0.) as f32);
@@ -85,7 +102,7 @@ fn run_frame(line: &TextLine, start: usize, chars: usize, line_break: bool, scal
     }
     let bounds = Rect::new(x0, px(line.top), x1, px(line.bottom));
     let finite = [bounds.x0, bounds.y0, bounds.x1, bounds.y1].into_iter().all(f64::is_finite) && positions.iter().chain(&widths).all(|v| v.is_finite());
-    (finite && bounds.height() > 0.).then_some(RunFrame { bounds, positions, widths })
+    (finite && bounds.height() > 0.).then_some(RunFrame { bounds, positions, widths, rtl })
 }
 
 fn word_starts(text: &str) -> Vec<u8> {
@@ -147,7 +164,7 @@ pub(super) fn run_nodes(runs: &[RunSnap], base: u64, nodes: &mut Vec<(NodeId, No
         run.set_value(r.text.clone());
         run.set_character_lengths(r.text.chars().map(|c| c.len_utf8() as u8).collect::<Vec<u8>>());
         run.set_word_starts(word_starts(&r.text));
-        run.set_text_direction(TextDirection::LeftToRight);
+        run.set_text_direction(if r.frame.as_ref().is_some_and(|f| f.rtl) { TextDirection::RightToLeft } else { TextDirection::LeftToRight });
         if let Some(frame) = &r.frame {
             run.set_bounds(frame.bounds);
             run.set_character_positions(frame.positions.clone());

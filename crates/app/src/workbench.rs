@@ -631,7 +631,7 @@ type NavPos = (String, u32, u32);
 const MAX_TERMINALS: usize = 8;
 
 /// What the bottom panel shows.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Bottom {
     Terminal,
     Problems,
@@ -1634,44 +1634,7 @@ impl Workbench {
                     .text_size(px(text::SM.0))
                     .line_height(px(text::SM.1))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child({
-                        let (errors, warnings) = self.problem_counts();
-                        panel_tab("problems-tab", crate::i18n::t("Problems").into(), self.chrome.bottom == Bottom::Problems, errors + warnings, p).on_click(
-                            cx.listener(|this, _, _, cx| {
-                                this.chrome.bottom = Bottom::Problems;
-                                cx.notify();
-                            }),
-                        )
-                    })
-                    .child(panel_tab("output-tab", crate::i18n::t("Output").into(), self.chrome.bottom == Bottom::Output, 0, p).on_click(cx.listener(
-                        |this, _, _, cx| {
-                            this.chrome.bottom = Bottom::Output;
-                            cx.notify();
-                        },
-                    )))
-                    .when(self.dbg.has_sessions(), |d| {
-                        d.child(panel_tab("debug-tab", crate::i18n::t("Debug Console").into(), self.chrome.bottom == Bottom::Debug, 0, p).on_click(
-                            cx.listener(|this, _, _, cx| {
-                                this.chrome.bottom = Bottom::Debug;
-                                cx.notify();
-                            }),
-                        ))
-                    })
-                    .child(panel_tab("ports-tab", crate::i18n::t("Ports").into(), self.chrome.bottom == Bottom::Ports, self.active_forwards(), p).on_click(
-                        cx.listener(|this, _, _, cx| {
-                            this.chrome.bottom = Bottom::Ports;
-                            cx.notify();
-                        }),
-                    ))
-                    .child(panel_tab("terminal-tab", crate::i18n::t("Terminal").into(), self.chrome.bottom == Bottom::Terminal, 0, p).on_click(cx.listener(
-                        |this, _, window, cx| {
-                            if this.terminals.is_empty() {
-                                this.new_terminal(&NewTerminal, window, cx);
-                            } else {
-                                this.focus_terminal(window, cx);
-                            }
-                        },
-                    )))
+                    .children(self.panel_tabs(p, cx))
                     .children(self.ext_view_panel_tabs(p, cx))
                     .child(div().flex_1())
                     // The terminal's own actions only while the terminal is the panel's view.
@@ -2579,22 +2542,4 @@ impl Render for Tooltip {
             .text_color(c(p.text))
             .child(self.0.clone())
     }
-}
-
-/// Panel views use quiet button backgrounds for selection and hover.
-fn panel_tab(id: &'static str, label: String, active: bool, badge: usize, p: &Palette) -> gpui::Stateful<gpui::Div> {
-    div()
-        .id(id)
-        .h(px(layout::VIEW_HEADER_H - 8.))
-        .flex()
-        .items_center()
-        .gap(px(theme::SPACE[2]))
-        .px(px(theme::SPACE[3]))
-        .cursor_pointer()
-        .rounded(px(theme::radius::SM))
-        .when(active, |d| d.bg(c(p.surface_active)))
-        .text_color(c(if active { p.text } else { p.text_muted }))
-        .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text))))
-        .child(label)
-        .when(badge > 0, |d| d.child(div().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).child(badge.to_string())))
 }

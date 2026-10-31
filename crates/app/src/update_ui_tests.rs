@@ -262,6 +262,30 @@ fn check_for_updates_opens_the_dialog_in_the_checking_state_whatever_the_policy(
     }
 }
 
+/// The dialog drawn in the window: the dialog and each of its buttons have the frame they are drawn at (the buttons
+/// in the dialog's footer), and AccessKit's hit test finds each button at its centre.
+#[gpui::test]
+fn the_dialog_and_its_buttons_have_their_painted_frames(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
+    let (wb, cx, fake) = rig(cx);
+    offered(&wb, cx, &fake, "9.0.0");
+    cx.run_until_parked();
+    let update = wb.update_in(cx, |wb, window, cx| wb.a11y_snapshot(window, cx)).to_tree();
+    let tree = accesskit_consumer::Tree::new(update, true);
+    let state = tree.state();
+    let dialog = state.root().children().find(|n| n.role() == accesskit::Role::Dialog).expect("the dialog is in the tree");
+    let outer = dialog.data().bounds().expect("the dialog's frame");
+    let buttons: Vec<_> = dialog.children().filter(|n| n.role() == accesskit::Role::Button).collect();
+    assert!(buttons.len() >= 2, "{} buttons", buttons.len());
+    for b in buttons {
+        let r = b.data().bounds().unwrap_or_else(|| panic!("{:?} has a frame", b.label()));
+        // (The test platform's wide stand-in font can push the last button past the dialog's right edge.)
+        assert!(r.x0 >= outer.x0 && r.x0 < outer.x1 && r.y0 >= outer.y0 && r.y1 <= outer.y1, "{r:?} in {outer:?}");
+        let at = accesskit::Point::new((r.x0 + r.x1) / 2., (r.y0 + r.y1) / 2.);
+        assert_eq!(state.root().node_at_point(at, &|_| accesskit_consumer::FilterResult::Include).map(|n| n.id()), Some(b.id()), "{:?}", b.label());
+    }
+}
+
 #[gpui::test]
 fn up_to_date_says_which_version_you_have(cx: &mut TestAppContext) {
     let (wb, cx, fake) = rig(cx);

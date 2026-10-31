@@ -478,6 +478,7 @@ impl Workbench {
                 div()
                     .id(SharedString::from(format!("tab-search-{}-{ix}", key.id)))
                     .relative()
+                    .children(focused_group.then(|| a11y::part_frame(a11y::Part::SearchTab(ix), cx)))
                     .flex()
                     .flex_none()
                     .items_center()

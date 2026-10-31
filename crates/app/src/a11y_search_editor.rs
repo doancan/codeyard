@@ -35,14 +35,22 @@ pub(crate) struct SearchTabSnap {
 impl SearchEdSnap {
     pub(super) fn append_tree(&self, nodes: &mut Vec<(NodeId, Node)>) {
         let v = &self.view;
+        let b = &v.bounds;
+        let place = |node: &mut Node, bounds: Option<accesskit::Rect>| {
+            if let Some(r) = bounds {
+                node.set_bounds(r);
+            }
+        };
         let mut group = Node::new(Role::Group);
         group.set_label(v.title.clone());
+        place(&mut group, b.page);
         let mut children = Vec::new();
 
         let mut query = Node::new(Role::SearchInput);
         query.set_label(t("Search"));
         query.set_value(v.query.clone());
         query.add_action(Action::Focus);
+        place(&mut query, b.query);
         nodes.push((SEARCH_ED_QUERY, query));
         children.push(SEARCH_ED_QUERY);
 
@@ -50,6 +58,7 @@ impl SearchEdSnap {
         status.set_label(v.status.clone());
         status.set_live(Live::Polite);
         status.set_live_atomic();
+        place(&mut status, b.status);
         nodes.push((SEARCH_ED_STATUS, status));
         children.push(SEARCH_ED_STATUS);
 
@@ -57,6 +66,7 @@ impl SearchEdSnap {
         list.set_label(if v.apply.is_some() { t("Replacement preview") } else { t("Search results") });
         list.set_size_of_set(v.rows_total);
         list.add_action(Action::Focus);
+        place(&mut list, b.list);
         let mut ids = Vec::new();
         for (i, (label, detail)) in v.rows.iter().enumerate() {
             let id = NodeId(SEARCH_ED_ROW + i as u64);
@@ -70,6 +80,7 @@ impl SearchEdSnap {
             o.set_size_of_set(v.rows_total);
             o.add_action(Action::Click);
             o.add_action(Action::Focus);
+            place(&mut o, b.rows.get(i).copied().flatten());
             ids.push(id);
             nodes.push((id, o));
         }
@@ -85,6 +96,7 @@ impl SearchEdSnap {
             } else {
                 apply.set_disabled();
             }
+            place(&mut apply, b.apply);
             nodes.push((SEARCH_ED_APPLY, apply));
             children.push(SEARCH_ED_APPLY);
         }
@@ -92,6 +104,7 @@ impl SearchEdSnap {
             let mut undo = Node::new(Role::Button);
             undo.set_label(t("Undo Replace"));
             undo.add_action(Action::Click);
+            place(&mut undo, b.undo);
             nodes.push((SEARCH_ED_UNDO, undo));
             children.push(SEARCH_ED_UNDO);
         }

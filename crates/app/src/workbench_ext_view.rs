@@ -82,13 +82,14 @@ impl Workbench {
             });
         let market = !off && self.cfg.exts.tab == super::market_glue::ExtTab::Market;
         let muted = |s: String| div().px(px(theme::SPACE[6])).py(px(theme::SPACE[2])).text_color(c(p.text_muted)).child(s);
-        let mut body = div().id("ext-list").flex().flex_col().flex_1().min_h_0().overflow_y_scroll();
+        let mut body = div().id("ext-list").flex().flex_col().flex_1().min_h_0().overflow_y_scroll().relative();
         if off {
             body = body
                 .child(muted(crate::i18n::t("Extensions are turned off for this session (--no-extensions). Start Codeyard without it to load them.").into()));
         } else if !market {
             let s = &self.cfg.exts;
             let rows = self.visible_extensions(cx);
+            body = body.child(a11y::part_frame(a11y::Part::ExtControl(3), cx));
             body = body.child(div().px(px(theme::SPACE[6])).child(section_title(&crate::i18n::tf("Installed ({})", &[&s.list.len()]), p)));
             if let Some(e) = &s.error {
                 body = body.child(muted(e.clone()).text_color(c(p.danger)));
@@ -97,8 +98,8 @@ impl Workbench {
             } else if rows.is_empty() {
                 body = body.child(muted(crate::i18n::t("No installed extension matches the search.").into()));
             }
-            for i in rows {
-                body = body.child(self.extension_row(i, &s.list[i], p, cx));
+            for (pos, i) in rows.into_iter().enumerate() {
+                body = body.child(self.extension_row(i, &s.list[i], p, cx).child(a11y::part_frame(a11y::Part::Extension(pos), cx)));
             }
             body = body.child(div().px(px(theme::SPACE[6])).child(section_title(crate::i18n::t("Built-in"), p))).child(muted(
                 crate::i18n::t("Themes, languages, language servers, snippets and key bindings that come with Codeyard are built in and always on.").into(),
@@ -125,13 +126,15 @@ impl Workbench {
                         .border_color(c(p.border_input))
                         .bg(c(p.bg))
                         .child(f)
+                        .relative()
+                        .child(a11y::part_frame(a11y::Part::ExtControl(2), cx))
                 }))
             })
             .when(!market, |d| d.child(body))
             .into_any_element()
     }
 
-    fn extension_row(&self, ix: usize, e: &ExtEntry, p: &Palette, cx: &mut Context<Self>) -> AnyElement {
+    fn extension_row(&self, ix: usize, e: &ExtEntry, p: &Palette, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
         let id = e.manifest.id.to_string();
         let selected = self.cfg.exts.selected.as_deref() == Some(id.as_str()) && matches!(self.tabs.page, Some(Page::Extension));
         let state = self.extension_badge(e);
@@ -164,7 +167,7 @@ impl Workbench {
             )
             .child(div().truncate().text_size(px(text::XS.0)).text_color(c(p.text_muted)).child(id.clone()))
             .on_click(cx.listener(move |this, _, _, cx| this.select_extension(&id, cx)))
-            .into_any_element()
+            .relative()
     }
 
     /// The page in the editor area: the consent sheet while a package waits for an answer, else the chosen extension.

@@ -8,7 +8,7 @@ use gpui::{Entity, TestAppContext, VisualTestContext};
 use crate::ui::ActiveTheme;
 use crate::workbench::Workbench;
 
-fn config_dir(name: &str) -> PathBuf {
+pub(crate) fn config_dir(name: &str) -> PathBuf {
     let d = std::env::temp_dir().join(format!("codeyard-extview-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
@@ -22,17 +22,17 @@ fn manifest(id: &str, version: &str, rest: &str) -> String {
 const THEME: &str = r##"{"name":"x","colors":{"editor.background":"#101418","editor.foreground":"#d0d6dc"}}"##;
 
 /// A theme extension's files: the theme is `ext:<id>/t`.
-fn theme_files(id: &str, version: &str) -> Vec<(String, String)> {
+pub(crate) fn theme_files(id: &str, version: &str) -> Vec<(String, String)> {
     vec![("codeyard-extension.toml".into(), manifest(id, version, "[[themes]]\nlabel = \"Night\"\npath = \"t.json\"\n")), ("t.json".into(), THEME.into())]
 }
 
-fn install(cfg: &Path, files: &[(String, String)]) -> ext_core::Installed {
+pub(crate) fn install(cfg: &Path, files: &[(String, String)]) -> ext_core::Installed {
     let entries = files.iter().map(|(p, t)| ext_pkg::Entry { path: p.clone(), data: t.as_bytes().to_vec(), executable: false }).collect();
     let (bytes, _) = ext_pkg::write(entries).expect("test package is valid");
     crate::ext::store(cfg).install(&bytes, ext_core::Source::File { path: "/downloads/test.cyx".into() }).expect("installs")
 }
 
-fn setup<'a>(cx: &'a mut TestAppContext, cfg: &Path) -> (Entity<Workbench>, &'a mut VisualTestContext) {
+pub(crate) fn setup<'a>(cx: &'a mut TestAppContext, cfg: &Path) -> (Entity<Workbench>, &'a mut VisualTestContext) {
     cx.update(|cx| {
         crate::bind_keys(cx);
         cx.set_global(ActiveTheme(theme::DARK));

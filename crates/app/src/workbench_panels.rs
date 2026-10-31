@@ -16,7 +16,64 @@ pub(crate) fn interface_scale_notice(scale: f32) -> String {
     crate::i18n::tf("Interface scale: {}%", &[&settings::ui_scale_percent(scale)])
 }
 
+/// Panel views use quiet button backgrounds for selection and hover; the tab records where it is laid out.
+fn panel_tab(tab: Bottom, label: String, active: bool, badge: usize, p: &Palette, cx: &Context<Workbench>) -> gpui::Stateful<gpui::Div> {
+    let id = match tab {
+        Bottom::Problems => "problems-tab",
+        Bottom::Output => "output-tab",
+        Bottom::Debug => "debug-tab",
+        Bottom::Ports => "ports-tab",
+        Bottom::Terminal => "terminal-tab",
+        Bottom::ExtView => "ext-view-tab",
+    };
+    div()
+        .id(id)
+        .relative()
+        .child(a11y::part_frame(a11y::Part::PanelTab(tab), cx))
+        .h(px(layout::VIEW_HEADER_H - 8.))
+        .flex()
+        .items_center()
+        .gap(px(theme::SPACE[2]))
+        .px(px(theme::SPACE[3]))
+        .cursor_pointer()
+        .rounded(px(theme::radius::SM))
+        .when(active, |d| d.bg(c(p.surface_active)))
+        .text_color(c(if active { p.text } else { p.text_muted }))
+        .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover)).text_color(c(p.text))))
+        .child(label)
+        .when(badge > 0, |d| d.child(div().px(px(theme::SPACE[2])).rounded(px(theme::radius::LG)).bg(c(p.surface_active)).child(badge.to_string())))
+}
+
 impl Workbench {
+    /// The bottom panel's own tabs (Problems, Output, Debug Console while debugging, Ports, Terminal).
+    pub(super) fn panel_tabs(&self, p: &Palette, cx: &mut Context<Self>) -> Vec<gpui::AnyElement> {
+        let (errors, warnings) = self.problem_counts();
+        let mut tabs = vec![(Bottom::Problems, crate::i18n::t("Problems"), errors + warnings), (Bottom::Output, crate::i18n::t("Output"), 0)];
+        if self.dbg.has_sessions() {
+            tabs.push((Bottom::Debug, crate::i18n::t("Debug Console"), 0));
+        }
+        tabs.push((Bottom::Ports, crate::i18n::t("Ports"), self.active_forwards()));
+        tabs.push((Bottom::Terminal, crate::i18n::t("Terminal"), 0));
+        tabs.into_iter()
+            .map(|(tab, label, badge)| {
+                panel_tab(tab, label.into(), self.chrome.bottom == tab, badge, p, cx)
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        if tab == Bottom::Terminal {
+                            if this.terminals.is_empty() {
+                                this.new_terminal(&NewTerminal, window, cx);
+                            } else {
+                                this.focus_terminal(window, cx);
+                            }
+                        } else {
+                            this.chrome.bottom = tab;
+                            cx.notify();
+                        }
+                    }))
+                    .into_any_element()
+            })
+            .collect()
+    }
+
     /// Zoom: the interface scale (`ui.scale`) of every window. The editor and terminal font sizes stay what the user
     /// set; the window scales them once together with everything else. The new value is written to the user's
     /// settings file once and applied right away; other windows follow through `App::set_ui_scale` and, when they

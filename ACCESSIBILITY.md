@@ -81,9 +81,11 @@ These are the important gaps, in rough order of how much they get in the way. Th
   report them.
 - **No screen reader on Linux.**
 - **On-screen positions.** The window, its main areas, the rows and controls on screen (Explorer, tabs, status bar,
-  find bar, Source Control, Run and Debug, Testing, Remote Explorer, Ports, Settings and menus) and every character of
-  the editor and terminal text have the bounds they are drawn at, at every zoom level and in windows of their own, so a
-  magnifier can follow the caret. Extensions rows, pickers and suggestions do not have their own positions yet.
+  find bar, Source Control, Run and Debug, Testing, Remote Explorer, Ports, Settings, Extensions, pickers, suggestions,
+  the panel's tabs, the Search Editor, the update dialog and menus) and every character of the editor and terminal
+  text, right-to-left text included, have the bounds they are drawn at, at every zoom level and in windows of their
+  own, so a magnifier can follow the caret. In right-to-left text the editor's own caret can be drawn away from the
+  character a magnifier follows.
 - **Some views are still silent:** the Source Control graph, worktrees and sync controls, hover and signature popups and
   the Debug Console.
 - The editor exposes about 300 lines around the caret, not the whole file. Only the primary selection is exposed, not extra

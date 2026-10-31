@@ -38,6 +38,7 @@ fn the_market_is_announced_and_driven_by_a_screen_reader(cx: &mut TestAppContext
     assert!(view.market && view.search_focused);
     assert_eq!((view.query.as_str(), view.status.as_str()), ("light", "1 extension"));
     assert_eq!(view.list.rows[0].0, "Dawn");
+    assert!(view.list.frames[0].is_some_and(|f| f.width() > 0. && f.height() > 0.), "the Market row has its painted frame");
     let update = snap.to_tree();
     assert_eq!(update.focus, EXT_SEARCH);
     let tree = accesskit_consumer::Tree::new(update, true);

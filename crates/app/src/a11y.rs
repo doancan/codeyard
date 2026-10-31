@@ -21,7 +21,7 @@ mod geometry;
 #[path = "a11y_text.rs"]
 mod text;
 pub use geometry::Geometry;
-pub(super) use geometry::{Landmark, MENU_BUTTON, PaintedBounds, Part, RowFrame, StatusPart, landmark, part_frame, row_button, row_frame};
+pub(super) use geometry::{Landmark, MENU_BUTTON, PaintedBounds, Part, RowFrame, StatusPart, landmark, part_frame, part_frame_for, row_button, row_frame};
 pub use text::RunFrame;
 #[cfg(test)]
 use text::runs_for;
@@ -183,12 +183,16 @@ impl FindSnap {
     }
 }
 
-/// A list of options: picker rows or suggestions.
-#[derive(Clone, PartialEq, Debug)]
+/// A list of options: picker rows, suggestions or extensions.
+#[derive(Clone, PartialEq, Debug, Default)]
 pub struct ListSnap {
     pub rows: Vec<(String, Option<String>)>,
     pub rows_total: usize,
     pub selected: Option<usize>,
+    /// Where each row was painted (physical pixels; `None` or missing: not on screen).
+    pub frames: Vec<Option<accesskit::Rect>>,
+    /// Where the list itself was painted.
+    pub bounds: Option<accesskit::Rect>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -198,6 +202,25 @@ pub struct PickerSnap {
     pub query: String,
     pub list: ListSnap,
     pub empty: Option<String>,
+    /// Where the picker and its query box were painted in this window.
+    pub bounds: Option<accesskit::Rect>,
+    pub input: Option<accesskit::Rect>,
+}
+
+impl PickerSnap {
+    /// The picker as drawn in `window` (no bounds when it was drawn in another window).
+    pub(super) fn of(picker: &crate::picker::Picker, window: &Window) -> Self {
+        let v = picker.a11y_view(MAX_OPTIONS, window);
+        PickerSnap {
+            label: v.placeholder,
+            message: v.message,
+            query: v.query,
+            list: ListSnap { rows: v.rows, rows_total: v.rows_total, selected: v.selected, frames: v.frames, bounds: v.list },
+            empty: v.empty,
+            bounds: v.bounds,
+            input: v.input,
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -380,6 +403,9 @@ fn list_nodes(list: &ListSnap, label: &str, base: u64, nodes: &mut Vec<(NodeId, 
             o.set_description(d.clone());
         }
         o.set_selected(list.selected == Some(i));
+        if let Some(b) = list.frames.get(i).copied().flatten() {
+            o.set_bounds(b);
+        }
         o.set_position_in_set(i + 1);
         o.set_size_of_set(list.rows_total);
         o.add_action(Action::Click);
@@ -388,7 +414,17 @@ fn list_nodes(list: &ListSnap, label: &str, base: u64, nodes: &mut Vec<(NodeId, 
         nodes.push((oid, o));
     }
     node.set_children(ids);
+    if let Some(b) = list.bounds {
+        node.set_bounds(b);
+    }
     node
+}
+
+/// The editor's suggestions, with where they were painted (at `scale`) in the editor's last frame.
+fn completion_snap(e: &crate::editor::EditorView, scale: f32) -> Option<ListSnap> {
+    let (rows, selected) = e.a11y_completion(MAX_OPTIONS)?;
+    let (bounds, frames) = e.a11y_completion_frames(rows.len(), scale);
+    Some(ListSnap { rows_total: rows.len(), selected: Some(selected), rows, frames, bounds })
 }
 
 /// Id of the selected option of a list (if it is among the exposed rows).
@@ -523,10 +559,11 @@ impl Snapshot {
                 tab.set_size_of_set(total);
                 tab.add_action(Action::Click);
                 tab.add_action(Action::Focus);
+                self.geometry.apply_part(Part::SearchTab(i), &mut tab);
                 tab_ids.push(id);
                 nodes.push((id, tab));
             }
-            term_tab_access::append_tabs(&self.term_tabs, before + self.search_tabs.len(), total, &mut tab_ids, &mut nodes);
+            term_tab_access::append_tabs(&self.term_tabs, before + self.search_tabs.len(), total, &mut tab_ids, &mut nodes, &self.geometry);
             list.set_children(tab_ids);
             nodes.push((TABS, list));
             kids.push(TABS);
@@ -691,7 +728,13 @@ impl Snapshot {
                 dialog.set_description(m.clone());
             }
             dialog.set_modal();
+            if let Some(b) = pk.bounds {
+                dialog.set_bounds(b);
+            }
             let mut input = Node::new(Role::EditableComboBox);
+            if let Some(b) = pk.input {
+                input.set_bounds(b);
+            }
             input.set_label(pk.label.clone());
             input.set_value(pk.query.clone());
             input.set_expanded(true);
@@ -717,6 +760,7 @@ impl Snapshot {
             dialog.set_label(d.title.clone());
             dialog.set_description(d.description.clone());
             dialog.set_modal();
+            self.geometry.apply_part(Part::UpdateDialog, &mut dialog);
             let mut children = Vec::new();
             if let Some(progress) = d.progress {
                 let mut bar = Node::new(Role::ProgressIndicator);
@@ -735,6 +779,7 @@ impl Snapshot {
                 b.set_label(label.clone());
                 b.add_action(Action::Click);
                 b.add_action(Action::Focus);
+                self.geometry.apply_part(Part::DialogButton(i), &mut b);
                 children.push(id);
                 nodes.push((id, b));
             }
@@ -892,25 +937,18 @@ impl Workbench {
                 frames: b.a11y_frames(window),
             }
         });
-        let completion = ed.and_then(|e| e.read(cx).a11y_completion(MAX_OPTIONS)).map(|(rows, selected)| ListSnap {
-            rows_total: rows.len(),
-            selected: Some(selected),
-            rows,
-        });
+        let mut completion = ed.and_then(|e| completion_snap(e.read(cx), window.scale_factor()));
+        // Painted positions only while the editor was drawn in this window's last frame.
+        if !geometry.editor_painted()
+            && let Some(list) = completion.as_mut()
+        {
+            (list.frames, list.bounds) = (Vec::new(), None);
+        }
         let shown = self.a11y_terminal(window, cx);
         let term = shown.as_ref().map(|(t, _, _)| t.clone());
         let terminal = shown.as_ref().map(|(term, ix, count)| term_tab_access::terminal_snap(term, *ix, *count, window.scale_factor(), cx));
         let picker_entity = self.overlay.as_ref().map(|o| o.picker.clone());
-        let picker = picker_entity.as_ref().map(|p| {
-            let v = p.read(cx).a11y_view(MAX_OPTIONS);
-            PickerSnap {
-                label: v.placeholder,
-                message: v.message,
-                query: v.query,
-                list: ListSnap { rows: v.rows, rows_total: v.rows_total, selected: v.selected },
-                empty: v.empty,
-            }
-        });
+        let picker = picker_entity.as_ref().map(|p| PickerSnap::of(p.read(cx), window));
 
         let (search_editor, search_tabs) = self.a11y_search_snap(window, cx);
         let scm = (self.view_shown(Panel::Scm)).then(|| ScmSnap { generation: self.lsp.generation, view: self.scm.read(cx).a11y_view(window, cx) });
@@ -1061,7 +1099,7 @@ impl Workbench {
                 let Some(picker) = self.overlay.as_ref().map(|o| o.picker.clone()) else { return };
                 // The tree may be a quarter of a second old: act only if the row still has the same label.
                 let label = last.picker.as_ref().and_then(|p| p.list.rows.get(index)).map(|(l, _)| l.clone());
-                if label.is_none() || picker.read(cx).a11y_view(index + 1).rows.get(index).map(|(l, _)| l) != label.as_ref() {
+                if label.is_none() || picker.read(cx).a11y_view(index + 1, window).rows.get(index).map(|(l, _)| l) != label.as_ref() {
                     return;
                 }
                 window.focus(&picker.focus_handle(cx));
@@ -1329,6 +1367,10 @@ mod frames_tests;
 #[cfg(test)]
 #[path = "a11y_row_frames_tests.rs"]
 mod row_frames_tests;
+
+#[cfg(test)]
+#[path = "a11y_list_frames_tests.rs"]
+mod list_frames_tests;
 
 #[cfg(test)]
 #[path = "a11y_confirm_tests.rs"]
