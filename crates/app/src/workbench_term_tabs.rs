@@ -246,10 +246,29 @@ impl Workbench {
                 .when(!active, |d| d.hover(|d| d.bg(c(p.surface_hover))))
                 .when(active, |d| d.bg(c(p.bg)).child(div().absolute().top_0().left_0().right_0().h(px(1.)).bg(c(p.accent))))
                 .child(icon("terminal", layout::ICON, if exited { p.text_muted } else { p.accent }))
-                .child(div().overflow_hidden().whitespace_nowrap().child(title))
+                .child(div().overflow_hidden().whitespace_nowrap().child(title.clone()))
                 .child(
                     div()
                         .id(SharedString::from(format!("tab-terminal-close-{}-{ix}", key.id)))
+                        .relative()
+                        .child({
+                            let close = close.clone();
+                            let surface = if key.id == self.tabs.layout.focused() {
+                                crate::i18n::t("Tab actions").to_string()
+                            } else {
+                                let n = self.tabs.layout.groups().iter().position(|g| *g == key.id).map_or(1, |i| i + 1);
+                                crate::i18n::tf("Editor group {}", &[&n])
+                            };
+                            crate::a11y_controls::control(
+                                crate::a11y_controls::Control::button(surface, format!("close-terminal:{ix}"), crate::i18n::t("Close"), |_, _| {})
+                                    .description(title.to_string())
+                                    .on_entity(cx.entity().downgrade(), move |this, window, cx| {
+                                        if this.ensure_group(key) {
+                                            this.return_editor_terminal(&close, window, cx);
+                                        }
+                                    }),
+                            )
+                        })
                         .size(px(20.))
                         .flex()
                         .items_center()

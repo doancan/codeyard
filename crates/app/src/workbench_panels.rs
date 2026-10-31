@@ -74,6 +74,12 @@ impl Workbench {
             .collect()
     }
 
+    /// The terminal profiles' menu from the tree: under the panel's Launch Profile button, where a click opens it.
+    pub(super) fn terminal_launch_menu_at_button(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let at = crate::a11y_controls::bounds_of(cx, window, "Panel", "panel-launch").map(|b| b.bottom_left());
+        self.open_terminal_launch_menu(at.unwrap_or_default(), window, cx);
+    }
+
     /// Zoom: the interface scale (`ui.scale`) of every window. The editor and terminal font sizes stay what the user
     /// set; the window scales them once together with everything else. The new value is written to the user's
     /// settings file once and applied right away; other windows follow through `App::set_ui_scale` and, when they

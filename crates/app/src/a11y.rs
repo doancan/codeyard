@@ -284,6 +284,8 @@ pub struct NoticeSnap {
     pub error: bool,
 }
 
+#[path = "a11y_chrome.rs"]
+mod chrome_access;
 #[path = "a11y_extensions.rs"]
 mod ext_access;
 #[path = "a11y_ext_views.rs"]
@@ -292,6 +294,7 @@ mod ext_views_access;
 mod ids;
 #[path = "a11y_inspector.rs"]
 mod inspector_access;
+pub(in crate::workbench) use chrome_access::view_part;
 #[path = "a11y_popups.rs"]
 mod popups_access;
 #[path = "a11y_problems.rs"]
@@ -336,6 +339,10 @@ pub struct Snapshot {
     pub completion: Option<ListSnap>,
     /// The editor's hover and signature popups.
     pub(crate) popups: Option<crate::editor::PopupsA11y>,
+    /// The activity bar, the title bar, the caption buttons and the side views' header buttons.
+    pub(crate) chrome: chrome_access::ChromeSnap,
+    /// Controls the views declared where they are drawn (`a11y_controls.rs`), in this window's last frame.
+    pub(crate) controls: Vec<crate::a11y_controls::ControlSnap>,
     pub terminal: Option<TerminalSnap>,
     pub(crate) scm: Option<ScmSnap>,
     pub(crate) views: problems_access::ViewsSnap,
@@ -352,6 +359,8 @@ pub struct Snapshot {
     pub picker: Option<PickerSnap>,
     pub notice: Option<NoticeSnap>,
     pub status: Vec<String>,
+    /// What each status item is (the same order as `status`).
+    pub(in crate::workbench) status_parts: Vec<StatusPart>,
     pub dialog: Option<DialogSnap>,
     pub focus: FocusSnap,
 }
@@ -448,6 +457,18 @@ impl Snapshot {
         root.set_label(self.title.clone());
         root.set_description(self.layout.clone());
         let mut kids = Vec::new();
+        self.chrome.append_tree(&mut nodes, &mut kids, &self.geometry);
+        // Painted controls by surface; the status bar's join its items below.
+        let (mut status_controls, mut tab_controls) = (Vec::new(), Vec::new());
+        for (surface, ids) in crate::a11y_controls::append_nodes(&self.controls, &mut nodes) {
+            if surface == t("Status bar") {
+                status_controls = ids;
+            } else if surface == t("Editor tabs") {
+                tab_controls = ids;
+            } else {
+                kids.push(crate::a11y_controls::group(surface, ids, &mut nodes));
+            }
+        }
         if let Some(view) = &self.services {
             services_access::append_tree(view, &mut nodes);
             kids.push(SERVICES);
@@ -522,7 +543,7 @@ impl Snapshot {
         }
 
         // Tabs
-        if !self.tabs.is_empty() || self.about.is_some() || !self.search_tabs.is_empty() || !self.term_tabs.is_empty() {
+        if !self.tabs.is_empty() || self.about.is_some() || !self.search_tabs.is_empty() || !self.term_tabs.is_empty() || !tab_controls.is_empty() {
             let total = self.tabs.len() + usize::from(self.about.is_some()) + self.search_tabs.len() + self.term_tabs.len();
             let mut list = Node::new(Role::TabList);
             list.set_label(t("Editor tabs"));
@@ -568,6 +589,8 @@ impl Snapshot {
                 nodes.push((id, tab));
             }
             term_tab_access::append_tabs(&self.term_tabs, before + self.search_tabs.len(), total, &mut tab_ids, &mut nodes, &self.geometry);
+            // The large-file, diff and page tabs, as painted.
+            tab_ids.extend(tab_controls);
             list.set_children(tab_ids);
             nodes.push((TABS, list));
             kids.push(TABS);
@@ -710,14 +733,21 @@ impl Snapshot {
         let mut items = Vec::new();
         for (i, t) in self.status.iter().enumerate() {
             let id = NodeId(STATUS_ITEM + i as u64);
-            let mut l = Node::new(Role::Label);
+            // Every item but the encoding opens something when clicked: a button that does the same.
+            let pressable = self.status_parts.get(i).is_some_and(|p| *p != StatusPart::Encoding);
+            let mut l = Node::new(if pressable { Role::Button } else { Role::Label });
             l.set_value(t.clone());
+            if pressable {
+                l.set_label(t.clone());
+                l.add_action(Action::Click);
+            }
             if let Some(bounds) = self.geometry.status_item(i) {
                 l.set_bounds(bounds);
             }
             items.push(id);
             nodes.push((id, l));
         }
+        items.extend(status_controls);
         status.set_children(items);
         nodes.push((STATUS, status));
         kids.push(STATUS);
@@ -809,6 +839,7 @@ impl Snapshot {
                 self.search_editor.as_ref().and_then(SearchEdSnap::focus_node).expect("focused search editor")
             }
             _ if self.views.focus_node().is_some() => self.views.focus_node().expect("focused view"),
+            _ if crate::a11y_controls::focus_node(&self.controls).is_some() => crate::a11y_controls::focus_node(&self.controls).expect("focused control"),
             _ if self.scm.as_ref().and_then(ScmSnap::history_focus).is_some() => self.scm.as_ref().and_then(ScmSnap::history_focus).expect("graph search"),
             FocusSnap::Picker if self.picker.is_some() => PICKER_INPUT,
             FocusSnap::Find(0) if self.find.is_some() => FIND_QUERY,
@@ -1009,6 +1040,8 @@ impl Workbench {
             find,
             completion,
             popups,
+            chrome: self.a11y_chrome(window, cx),
+            controls: crate::a11y_controls::snapshot(window, cx),
             terminal,
             scm,
             views: self.a11y_views(window, cx),
@@ -1022,6 +1055,7 @@ impl Workbench {
             picker,
             notice,
             status,
+            status_parts,
             dialog,
             focus,
         }
@@ -1033,6 +1067,9 @@ impl Workbench {
             return;
         }
         if self.a11y_services_action(req, last, window, cx) {
+            return;
+        }
+        if self.a11y_chrome_action(req, &last.chrome, window, cx) || self.a11y_control_action(req, &last.controls, window, cx) {
             return;
         }
         if self.a11y_scm_action(req, last, window, cx) {
@@ -1051,6 +1088,24 @@ impl Workbench {
             return;
         }
         match (req.action, req.target_node) {
+            (Action::Click, NodeId(n)) if (STATUS_ITEM..STATUS_ITEM + 32).contains(&n) => {
+                // The same item, still in the status bar: what a click on it does.
+                let Some(part) = last.status_parts.get((n - STATUS_ITEM) as usize).copied() else { return };
+                if !self.a11y_snapshot(window, cx).status_parts.contains(&part) {
+                    return;
+                }
+                match part {
+                    StatusPart::Remote => self.show_remote(&ShowRemote, window, cx),
+                    StatusPart::Branch => self.show_branch_picker(window, cx),
+                    StatusPart::Problems => self.show_problems(&ShowProblems, window, cx),
+                    StatusPart::Position => self.go_to_line(&GoToLine, window, cx),
+                    StatusPart::Indent => self.show_indent_picker(window, cx),
+                    StatusPart::LineEnding => self.show_eol_picker(window, cx),
+                    StatusPart::Language => self.show_language_picker(window, cx),
+                    StatusPart::Update => self.open_update_dialog(window, cx),
+                    StatusPart::Encoding => {}
+                }
+            }
             (Action::Focus | Action::Click, ABOUT_TAB) if last.about.is_some() => {
                 if let Some(Page::About(view)) = self.tabs.page.clone() {
                     self.tabs.page_active = true;
@@ -1392,6 +1447,10 @@ mod list_frames_tests;
 #[cfg(test)]
 #[path = "a11y_views_tests.rs"]
 mod views_tests;
+
+#[cfg(test)]
+#[path = "a11y_chrome_tests.rs"]
+mod chrome_tests;
 
 #[cfg(test)]
 #[path = "a11y_confirm_tests.rs"]

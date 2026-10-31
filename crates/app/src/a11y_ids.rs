@@ -107,10 +107,14 @@ const _: () = {
         &super::problems_access::SEARCH_FIXED,
         &super::problems_access::CONSOLE_FIXED,
         &super::popups_access::FIXED,
+        &super::chrome_access::FIXED,
         &super::scm_access::history::FIXED,
     ]);
     // Rows are ROW_BASE | 32-bit hash; editor and terminal runs sit above them.
     assert!(ROW_BASE + 0xffff_ffff < RUN_BASE && RUN_BASE + 0xffff_ffff < TERM_RUN_BASE);
+    // Painted controls and their surfaces' groups (`a11y_controls.rs`) sit above the terminal's runs.
+    assert!(TERM_RUN_BASE + 0xffff_ffff < crate::a11y_controls::CONTROL_BASE);
+    assert!(crate::a11y_controls::CONTROL_BASE + 0xffff_ffff < crate::a11y_controls::CONTROL_GROUP);
 };
 
 /// Every id of every list is below the blocks and appears once across all the lists.

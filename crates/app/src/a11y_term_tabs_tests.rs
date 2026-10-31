@@ -15,6 +15,7 @@ fn click(wb: &Entity<Workbench>, cx: &mut VisualTestContext, snap: &Snapshot, id
 /// click from before the tab moved away changes nothing.
 #[gpui::test]
 fn terminal_tabs_are_in_the_tab_list_and_a_click_selects_them(cx: &mut TestAppContext) {
+    let _en = crate::i18n::LangGuard::set("en");
     let (wb, cx) = crate::qa_workbench_tests::setup(cx);
     for _ in 0..2 {
         wb.update_in(cx, |wb, window, cx| {
@@ -30,7 +31,7 @@ fn terminal_tabs_are_in_the_tab_list_and_a_click_selects_them(cx: &mut TestAppCo
 
     let tree = accesskit_consumer::Tree::new(snap.to_tree(), true);
     let state = tree.state();
-    let list = state.root().children().find(|n| n.role() == Role::TabList).expect("the tab list");
+    let list = state.root().children().find(|n| n.role() == Role::TabList && n.label().as_deref() == Some("Editor tabs")).expect("the tab list");
     let tabs: Vec<_> = list.children().collect();
     assert_eq!(tabs.len(), 2);
     assert!(tabs.iter().all(|t| t.role() == Role::Tab && t.label().is_some_and(|l| l.ends_with("(terminal)"))));

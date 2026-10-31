@@ -44,6 +44,8 @@ pub(in crate::workbench) enum Part {
     UpdateDialog,
     /// A button of the update dialog (or the first-run question), by its index in tab order.
     DialogButton(usize),
+    /// A control of the window's chrome or a view's header, by its element id.
+    Control(&'static str),
     /// A tab of the bottom panel.
     PanelTab(super::Bottom),
     /// The Debug Console, its output and its expression field.

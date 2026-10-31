@@ -25,7 +25,15 @@ impl Workbench {
             Conn::Failed { alias, .. } => (crate::i18n::tf("{}: connection failed", &[alias]), Some(p.danger), p.on_accent, "circle-x"),
         };
         // One rhythm for every entry: same icon size, same icon-to-text gap, same side padding.
-        let item = || div().flex().flex_none().items_center().gap(px(SB_GAP)).px(px(SB_PAD)).min_w(px(28.)).h_full();
+        let item = || div().flex().flex_none().items_center().gap(px(SB_GAP)).px(px(SB_PAD)).min_w(px(28.)).h_full().relative();
+        // A status bar control for assistive technology: its name and what a click on it does.
+        let weak = cx.entity().downgrade();
+        let ctl = |key: &'static str, label: String, f: fn(&mut Workbench, &mut Window, &mut Context<Workbench>)| {
+            crate::a11y_controls::control(crate::a11y_controls::Control::button(crate::i18n::t("Status bar"), key, label, |_, _| {}).on_entity(weak.clone(), f))
+        };
+        let text = |key: &'static str, label: String| {
+            crate::a11y_controls::control(crate::a11y_controls::Control::text(crate::i18n::t("Status bar"), key, accesskit::Role::Label, label))
+        };
         let conflicts = self.active_editor().map_or(0, |e| e.read(cx).conflict_count());
         let editor_info = self.active_editor().map(|e| {
             let e = e.read(cx);
@@ -74,6 +82,9 @@ impl Workbench {
                         .id("file-operation-progress")
                         .cursor_pointer()
                         .child(ui::spinner("file-operation-spinner", SB_ICON, p.text_muted))
+                        .child(ctl("file-operation-progress", format!("{label}. {}", crate::i18n::t("Cancel file operation")), |this, w, cx| {
+                            this.cancel_file_operation(&CancelFileOperation, w, cx)
+                        }))
                         .child(label)
                         .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Cancel file operation").into())).into())
                         .on_click(cx.listener(|this, _, window, cx| this.cancel_file_operation(&CancelFileOperation, window, cx))),
@@ -134,6 +145,9 @@ impl Workbench {
                 .child(
                     item()
                         .id("sb-sync")
+                        .child(ctl("sb-sync", if sync.is_empty() { tip.to_string() } else { format!("{sync}. {tip}") }, |this, w, cx| {
+                            this.git_sync_auto(w, cx)
+                        }))
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
                         .child(if running {
@@ -174,15 +188,23 @@ impl Workbench {
             })
             // `cyx dev`: this window runs an extension straight from the author's folder.
             .when(crate::ext::dev_dir().is_some(), |d| {
-                d.child(item().id("extension-dev").text_color(c(p.warning)).child(crate::i18n::t("DEV")).tooltip(|_, cx| {
-                    cx.new(|_| Tooltip(crate::i18n::t("Extension in development: it reloads when you save a file in its folder").into())).into()
-                }))
+                d.child(
+                    item()
+                        .id("extension-dev")
+                        .child(text("extension-dev", crate::i18n::t("Extension in development: it reloads when you save a file in its folder").into()))
+                        .text_color(c(p.warning))
+                        .child(crate::i18n::t("DEV"))
+                        .tooltip(|_, cx| {
+                            cx.new(|_| Tooltip(crate::i18n::t("Extension in development: it reloads when you save a file in its folder").into())).into()
+                        }),
+                )
             })
             .when(self.active_forwards() > 0 && width >= 800., |d| {
                 let n = self.active_forwards();
                 d.child(
                     item()
                         .id("ports-indicator")
+                        .child(ctl("ports-indicator", crate::i18n::tf("{} forwarded", &[&n]), |this, w, cx| this.show_ports(&ShowPorts, w, cx)))
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
                         .child(icon("plug", SB_ICON, p.text_muted))
@@ -196,6 +218,7 @@ impl Workbench {
                     item()
                         .id("sb-extensions-off")
                         .debug_selector(|| "sb-extensions-off".into())
+                        .child(ctl("sb-extensions-off", crate::i18n::t("Extensions off").into(), |this, w, cx| this.show_extensions(&ShowExtensions, w, cx)))
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
                         .text_color(c(p.warning))
@@ -209,6 +232,9 @@ impl Workbench {
                 d.child(
                     item()
                         .id("sb-transfer")
+                        .child(ctl("sb-transfer", format!("{text}. {}", crate::i18n::t("File transfer in progress. Click to cancel.")), |this, w, cx| {
+                            this.ask_cancel_transfer(w, cx)
+                        }))
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
                         .text_color(c(p.text))
@@ -220,7 +246,11 @@ impl Workbench {
             })
             .when_some(self.lsp.progress.clone().filter(|_| detail_width >= 1000.), |d, t| {
                 d.child(
-                    item().flex_shrink().child(ui::spinner("lsp-progress", SB_ICON, p.text_muted)).child(div().min_w_0().max_w(px(180.)).truncate().child(t)),
+                    item()
+                        .flex_shrink()
+                        .child(text("lsp-progress", t.to_string()))
+                        .child(ui::spinner("lsp-progress", SB_ICON, p.text_muted))
+                        .child(div().min_w_0().max_w(px(180.)).truncate().child(t)),
                 )
             })
             .child(
@@ -237,6 +267,7 @@ impl Workbench {
             .child(
                 item()
                     .id("sb-terminal")
+                    .child(ctl("sb-terminal", crate::i18n::t("Toggle Panel (⌘J)").into(), |this, w, cx| this.toggle_panel(&TogglePanel, w, cx)))
                     .cursor_pointer()
                     .hover(|d| d.bg(c(p.surface_hover)))
                     .child(icon("terminal", SB_ICON, if self.chrome.panel_open { p.text } else { p.text_muted }))
@@ -248,20 +279,18 @@ impl Workbench {
                     item()
                         .id("sb-conflicts")
                         .debug_selector(|| "sb-conflicts".into())
+                        .child(ctl(
+                            "sb-conflicts",
+                            format!("{}. {}", crate::i18n::tn("{} conflict", "{} conflicts", conflicts, &[]), crate::i18n::t("Go to the next merge conflict")),
+                            |this, w, cx| this.next_conflict_from_status(w, cx),
+                        ))
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
                         .text_color(c(p.warning))
                         .child(icon("git-compare", SB_ICON, p.warning))
                         .when(labels, |d| d.child(div().max_w(px(80.)).truncate().child(crate::i18n::tn("{} conflict", "{} conflicts", conflicts, &[]))))
                         .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Go to the next merge conflict").into())).into())
-                        .on_click(cx.listener(|this, _, window, cx| {
-                            if let Some(ix) = this.tabs.active {
-                                this.activate(ix, window, cx);
-                            }
-                            if let Some(ed) = this.active_editor().cloned() {
-                                ed.update(cx, |e, cx| e.jump_conflict(true, cx));
-                            }
-                        })),
+                        .on_click(cx.listener(|this, _, window, cx| this.next_conflict_from_status(window, cx))),
                 )
             })
             // --- data ---
@@ -269,6 +298,9 @@ impl Workbench {
                 d.child(
                     item()
                         .id("sb-data-path")
+                        .child(ctl("sb-data-path", format!("{label}. {}", crate::i18n::t("Copy the path at the cursor")), |this, w, cx| {
+                            this.data_copy_path(&DataCopyPath, w, cx)
+                        }))
                         .cursor_pointer()
                         .hover(|d| d.bg(c(p.surface_hover)))
                         .child(div().max_w(px(140.)).truncate().child(label))
@@ -281,6 +313,7 @@ impl Workbench {
                     d.child(
                         item()
                             .id("sb-saving")
+                            .child(text("sb-saving", crate::i18n::t("Saving…").into()))
                             .child(ui::spinner("sb-saving", SB_ICON, p.text_muted))
                             .when(labels, |d| d.child(crate::i18n::t("Saving…")))
                             .tooltip(|_, cx| cx.new(|_| Tooltip(crate::i18n::t("Saving…").into())).into()),
@@ -291,6 +324,7 @@ impl Workbench {
                         item()
                             .id("sb-unsaved")
                             .debug_selector(|| "sb-unsaved".into())
+                            .child(text("sb-unsaved", crate::i18n::t("● Unsaved").into()))
                             .text_color(c(p.text))
                             .when(labels, |d| d.child(crate::i18n::t("● Unsaved")))
                             .when(!labels, |d| d.child(div().size(px(6.)).rounded_full().bg(c(p.text))))
@@ -348,5 +382,15 @@ impl Workbench {
                 })
             })
             .when_some(self.update_status_item(), |d, item| d.child(self.update_status_button(item, labels, p, cx)))
+    }
+
+    /// The status bar's conflict count: the next merge conflict of the editor in front.
+    fn next_conflict_from_status(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(ix) = self.tabs.active {
+            self.activate(ix, window, cx);
+        }
+        if let Some(ed) = self.active_editor().cloned() {
+            ed.update(cx, |e, cx| e.jump_conflict(true, cx));
+        }
     }
 }

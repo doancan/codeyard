@@ -31,6 +31,11 @@ impl Workbench {
                     d.child(
                         div()
                             .id("error-toast-reconnect")
+                            .relative()
+                            .child(crate::a11y_controls::control(
+                                crate::a11y_controls::Control::button(crate::i18n::t("Error"), "reconnect", crate::i18n::t("Reconnect"), |_, _| {})
+                                    .on_entity(cx.entity().downgrade(), |this, w, cx| this.reconnect_lost(w, cx)),
+                            ))
                             .flex_none()
                             .h(px(22.))
                             .px(px(theme::SPACE[4]))
@@ -49,6 +54,16 @@ impl Workbench {
                 .child(
                     div()
                         .id("error-toast-close")
+                        .relative()
+                        .child(crate::a11y_controls::control(
+                            crate::a11y_controls::Control::button(crate::i18n::t("Error"), "close", crate::i18n::t("Close"), |_, _| {}).on_entity(
+                                cx.entity().downgrade(),
+                                |this, _, cx| {
+                                    this.notice = None;
+                                    cx.notify();
+                                },
+                            ),
+                        ))
                         .flex_none()
                         .size(px(20.))
                         .flex()
@@ -171,6 +186,11 @@ impl Workbench {
     }
 }
 
+/// Every open window (closed windows' painted controls are dropped).
+fn open_all_windows(cx: &App) -> Vec<gpui::WindowId> {
+    cx.windows().iter().map(|w| w.window_id()).collect()
+}
+
 impl Render for Workbench {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // Accept restored legacy sidebar routes, but keep a single inventory surface.
@@ -181,6 +201,9 @@ impl Render for Workbench {
         self.chrome.a11y_bounds.clear(me);
         let open: Vec<gpui::WindowId> = std::iter::once(me).chain(self.chrome.view_windows.iter().map(|w| w.window.window_id())).collect();
         self.chrome.a11y_bounds.retain(&open);
+        crate::a11y_controls::Controls::clear(cx, me);
+        let all = open_all_windows(cx);
+        crate::a11y_controls::Controls::retain(cx, &all);
         self.step_panel_anim(window);
         // The repository search waits until Source Control is on screen (connecting opens a home folder: no scan unasked).
         if self.view_shown(Panel::Scm) {
@@ -367,6 +390,16 @@ impl Render for Workbench {
                     div()
                         .id("container-return-workspace")
                         .debug_selector(|| "container-return-workspace".into())
+                        .relative()
+                        .child(crate::a11y_controls::control(
+                            crate::a11y_controls::Control::button(
+                                crate::i18n::t("Containers"),
+                                "return-workspace",
+                                crate::i18n::t("Back to SSH workspace and container details"),
+                                |_, _| {},
+                            )
+                            .on_entity(cx.entity().downgrade(), |this, w, cx| this.return_from_container(w, cx)),
+                        ))
                         .w_full()
                         .min_h(px(30.))
                         .px(px(theme::SPACE[5]))

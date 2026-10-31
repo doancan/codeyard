@@ -66,6 +66,7 @@ impl Render for ViewBody {
         if let Some(home) = self.home.upgrade() {
             home.update(cx, |wb, _| wb.chrome.a11y_bounds.clear(me));
         }
+        crate::a11y_controls::Controls::clear(cx, me);
         let p = *palette(cx);
         let body = match self.view.panel {
             Panel::Scm => self.scm.clone().into_any_element(),

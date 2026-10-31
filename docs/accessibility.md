@@ -13,6 +13,29 @@ either yet (see "Not verified").
 The tree, in the order a screen reader walks it:
 
 - `Window` (title "Codeyard — folder").
+- The window's chrome (`a11y_chrome.rs`): on macOS the title bar's Back and Forward buttons (disabled when there is
+  nowhere to go) and the command center (its label, Go to File… as description; `Click` opens it); on Windows the
+  caption buttons the app draws (Minimize, Maximize or Restore, Close, which asks about unsaved changes as the system
+  close does); while the activity bar is shown, a `TabList` "Views" (Explorer, Search, Source Control, Run and Debug,
+  Testing, Remote Explorer, Extensions, Containers; the badge as description, the view shown selected; `Click` shows
+  or hides it as a click does, only from the state the tree showed) and the Manage button (menu popup). While Remote
+  Explorer is shown, a `Toolbar` with Add SSH Host…, Open SSH Config File and Refresh. Each has its painted frame.
+- Painted controls (`a11y_controls.rs`): a view declares a control where it draws it (`a11y_controls::control`), with
+  its role, name, state, focus and the function its click runs; the tree lists the controls laid out in the window's
+  last frame, gathered in a `Group` per surface, each with its painted frame, `Click` (run after the request, so it
+  may update any view) and `Focus` when it can take the keyboard. A press from an outdated tree acts only while the
+  same control with the same name is still drawn. Surfaces declared this way: the status bar's other items (file
+  operation progress, Sync, ports, Extensions off, transfer, language server progress, saving and unsaved marks, the
+  terminal toggle, merge conflicts, a data path, the web preview's Open and Stop) joined to the status bar's node; the
+  resource monitor (its "Resources" button, expanded while the figures show, each figure as a label, Pin and Close);
+  the error card's Reconnect and Close; the containers' "Back to SSH workspace" bar; the breadcrumbs (`Link`s that
+  show the folder or file in the Explorer); the menu bar the app draws on Windows and Linux (`MenuItem`s that open
+  their menu under them); the panel's buttons (New Terminal, Launch Profile…, Split Terminal, Kill Terminal, Move
+  Panel, Maximize or Restore, Hide Panel) and its list of terminals ("Terminals": a `Tab` each, selected while in
+  front, with Kill Terminal); the editor tabs' buttons ("Tab actions": Close, Unpin, Read, Preview HTML, with the
+  tab's name as description); the large-file, diff and page tabs (Settings, Welcome, Merge, Compare, Markdown,
+  Containers, the Inspector, Language Services…) as tabs of the "Editor tabs" list with their Close buttons; and
+  every other editor group's tabs in a group "Editor group 2", whose `Click` brings that group forward with the tab.
 - One `Tree` per folder of the workspace: "Explorer", or "Explorer: name" when there are several. One `TreeItem` per
   row in a range of 1,000 rows: name, level, selected, expanded, set position in the whole tree. The range is centred
   on the selection while it is on screen, otherwise on the visible rows; the tree reports its scroll position in rows
@@ -94,13 +117,16 @@ The tree, in the order a screen reader walks it:
   "Preferences: Open Keyboard Shortcuts" picker, which is exposed as a picker.
 - While Run and Debug is visible, a `Group` "Run and Debug": the "Start Debugging (F5)" `Button` (the configuration it
   starts as description), a `RadioGroup` of the launch configurations (`Click` selects, as the selector's menu does),
+  the selector itself (a `Button` with the configuration's name, "Launch configuration" as description, menu popup:
+  `Click` opens its menu under it),
   "Open Launch Configuration", a polite `Status` with the current session and its state ("app: paused on breakpoint",
   or "No debug session."), a `Tree` "Variables" (name as label, value as value, type as description, level for the
   nesting, `Expand`/`Collapse`/`Click` on a value with children, `Click` on "… n more"), a `List` "Watch" (expression
   and value, a Remove Expression button each) with "Add Expression…", a `Tree` "Call Stack" (sessions with their state
   when there are several, threads, frames with their place; the current ones selected; `Click` makes current, as a
   click on the row does) and a `List` "Breakpoints" of `CheckBox`es ("main.rs, line 3" or "name()", checked while
-  enabled, condition and binding failure as description, a Remove Breakpoint button each), then "Add Function
+  enabled, condition and binding failure as description, a Remove Breakpoint button each and, for a line breakpoint, Go
+  to Breakpoint, which opens its place as a click on the row does), then "Add Function
   Breakpoint…" and "Activate/Deactivate Breakpoints". At most 2,000 variables, frames and breakpoints. While a session
   is live (whichever view is shown), a `Toolbar` "Debug toolbar" with the floating toolbar's buttons: Continue or
   Pause, Step Over, Step Into, Step Out (disabled while not paused), Restart and Stop. Every action calls what the
@@ -200,7 +226,9 @@ The tree, in the order a screen reader walks it:
   popups close), so the text is reachable without the pointer.
 - While the terminal panel is open, a read-only `Terminal`: one text run per row on screen and the cursor as a collapsed
   selection.
-- `Status` "Status bar" (one label per item).
+- `Status` "Status bar": one item per entry; every entry that opens something on a click is a `Button` with the same
+  action (Remote, Branch, Problems, position, indentation, line ending, language, update), the encoding a label;
+  then the painted controls of the status bar (above).
 - The notice in the status bar is a live region of its own: an error (including a file that could not be opened) is an
   `Alert` with `Live::Assertive`, so it interrupts speech; an information notice is a `Status` with `Live::Polite`.
 - While a picker is open (command palette, go to file, go to symbol, themes, branches and every other list that opens
@@ -365,9 +393,7 @@ probe as the workbench's lists (`painted.rs`).
   line is split into a run per painted line; a folded line is in the text but has no frame.
 - The terminal exposes the screen only, not the scrollback, and cannot be written to from the tree (typing goes through
   the keyboard as usual).
-- Not exposed: an installed extension's page, the Run and Debug view's configuration selector's menu, opening a
-  breakpoint's place, the Testing filter field and the Remote Explorer's Add, SSH config and Refresh buttons. Only the tabs of the focused editor group are
-  listed, and diff, large-file and page tabs are not.
+- Not exposed: an installed extension's page and the Testing filter field.
 - Keyboard: the Run and Debug lists (variables, watches, call stack, breakpoints), the Testing tree, the Remote
   Explorer, the Ports list and Source Control's change list are tab stops with a cursor row (Up/Down/Home/End, Enter as a click on the row, the focus
   colour on the list and the row). Shift+F10 and the Menu key (`list.showContextMenu`) open the row's menu under it; the

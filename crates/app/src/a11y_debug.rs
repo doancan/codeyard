@@ -29,8 +29,10 @@ const DEBUG_INTO: NodeId = NodeId(85);
 const DEBUG_OUT: NodeId = NodeId(86);
 const DEBUG_RESTART: NodeId = NodeId(87);
 const DEBUG_STOP: NodeId = NodeId(88);
+/// The configuration selector (the menu it opens lists the configurations and Open Launch Configuration).
+const DEBUG_CHOOSE: NodeId = NodeId(159);
 /// This module's fixed nodes, for the id layout check.
-pub(in crate::workbench) const FIXED: [NodeId; 19] = [
+pub(in crate::workbench) const FIXED: [NodeId; 20] = [
     DEBUG,
     DEBUG_START,
     DEBUG_CONFIGS,
@@ -50,6 +52,7 @@ pub(in crate::workbench) const FIXED: [NodeId; 19] = [
     DEBUG_OUT,
     DEBUG_RESTART,
     DEBUG_STOP,
+    DEBUG_CHOOSE,
 ];
 
 /// The block of this module's rows; inside it: configurations, variables, watches (row and Remove), call stack rows,
@@ -60,6 +63,8 @@ const VAR_ROW: u64 = DEBUG_ROW + 0x1000;
 const WATCH_ROW: u64 = DEBUG_ROW + 0x2000;
 const STACK_ROW: u64 = DEBUG_ROW + 0x3000;
 const BP_ROW: u64 = DEBUG_ROW + 0x4000;
+/// A line or data breakpoint's "Go to Breakpoint" button (breakpoint `i` at `BP_OPEN + i`).
+const BP_OPEN: u64 = DEBUG_ROW + 0x8000;
 /// Rows exposed at most (a deep stack or a large value can have many more).
 const MAX_CONFIGS: usize = 256;
 const MAX_VARS: usize = 2_000;
@@ -71,7 +76,7 @@ const _: () = {
     assert!(VAR_ROW + MAX_VARS as u64 <= WATCH_ROW);
     assert!(WATCH_ROW + 2 * MAX_WATCHES as u64 <= STACK_ROW);
     assert!(STACK_ROW + MAX_STACK as u64 <= BP_ROW);
-    assert!(BP_ROW + 2 * MAX_BPS as u64 <= DEBUG_ROW + BLOCK);
+    assert!(BP_ROW + 2 * MAX_BPS as u64 <= BP_OPEN && BP_OPEN + MAX_BPS as u64 <= DEBUG_ROW + BLOCK);
 };
 
 /// A breakpoint row: where it is (line breakpoints) or its function, and whether it is enabled.
@@ -173,6 +178,19 @@ impl DebugViewSnap {
             group.set_children(ids);
             nodes.push((DEBUG_CONFIGS, group));
             kids.push(DEBUG_CONFIGS);
+        }
+        // The selector itself: its menu offers the configurations and Open Launch Configuration.
+        let chosen = self.configs.iter().find(|(_, s)| *s).map(|(n, _)| n.clone());
+        kids.push(push_button(
+            nodes,
+            DEBUG_CHOOSE,
+            &chosen.unwrap_or_else(|| t("Select a configuration").to_string()),
+            Some(t("Launch configuration").to_string()),
+            true,
+        ));
+        if let Some((_, n)) = nodes.last_mut() {
+            n.set_has_popup(accesskit::HasPopup::Menu);
+            geometry.apply_part(Part::Control("dbg-config"), n);
         }
         kids.push(push_button(nodes, DEBUG_OPEN_LAUNCH, t("Open Launch Configuration"), None, true));
         let mut state = Node::new(Role::Status);
@@ -322,7 +340,12 @@ impl DebugViewSnap {
                 n.set_description(detail.clone());
             }
             n.add_action(Action::Click);
-            n.set_children(vec![push_button(nodes, NodeId(id.0 + 1), t("Remove Breakpoint"), Some(label.clone()), true)]);
+            let mut buttons = vec![push_button(nodes, NodeId(id.0 + 1), t("Remove Breakpoint"), Some(label.clone()), true)];
+            if matches!(bp, BpSnap::Line { .. }) {
+                // A click on the row opens the place; in the tree the check box's Click toggles, so this button opens it.
+                buttons.push(push_button(nodes, NodeId(BP_OPEN + i as u64), t("Go to Breakpoint"), Some(label.clone()), true));
+            }
+            n.set_children(buttons);
             if matches!(bp, BpSnap::Line { .. } | BpSnap::Data { .. }) {
                 add_menu(nodes, &mut n, MenuRow::Breakpoint, i, &label);
             }
@@ -449,14 +472,14 @@ impl Workbench {
     /// An action on a node of this module; `false` if the node is not one of them.
     pub(super) fn a11y_debug_action(&mut self, req: &ActionRequest, last: &DebugSnap, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let id = req.target_node;
-        if FIXED[12..].contains(&id) {
+        if FIXED[12..19].contains(&id) {
             if req.action == Action::Click {
                 self.a11y_toolbar_action(id, last.toolbar.as_ref(), window, cx);
             }
             return true;
         }
         let menu_button = [MenuRow::Variable, MenuRow::Frame, MenuRow::Breakpoint].into_iter().any(|k| menu_request(req, k, |_| None).is_some());
-        if !(FIXED[..12].contains(&id) || (DEBUG_ROW..DEBUG_ROW + BLOCK).contains(&id.0) || menu_button) {
+        if !((FIXED[..12].contains(&id) || id == DEBUG_CHOOSE) || (DEBUG_ROW..DEBUG_ROW + BLOCK).contains(&id.0) || menu_button) {
             return false;
         }
         let Some(old) = last.view.as_ref() else { return true };
@@ -491,7 +514,19 @@ impl Workbench {
                 }
             }
             NodeId(n) if (STACK_ROW..BP_ROW).contains(&n) && click => self.a11y_stack_action((n - STACK_ROW) as usize, old, &now, cx),
-            NodeId(n) if (BP_ROW..DEBUG_ROW + BLOCK).contains(&n) && click => {
+            NodeId(n) if (BP_OPEN..BP_OPEN + MAX_BPS as u64).contains(&n) && click => {
+                // Only the same line breakpoint, still listed.
+                if let Some(BpSnap::Line { path, line, .. }) = old.bps.get((n - BP_OPEN) as usize)
+                    && now.bps.iter().any(|b| matches!(b, BpSnap::Line { path: p, line: l, .. } if p == path && l == line))
+                {
+                    self.open_location(path.clone(), *line as u32, 0, window, cx);
+                }
+            }
+            DEBUG_CHOOSE if click => {
+                let at = self.chrome.a11y_bounds.part_in(window.window_handle().window_id(), Part::Control("dbg-config")).map(|b| b.bottom_left());
+                self.open_config_menu(at.unwrap_or_default(), window, cx);
+            }
+            NodeId(n) if (BP_ROW..BP_OPEN).contains(&n) && click => {
                 let (index, part) = (((n - BP_ROW) / 2) as usize, (n - BP_ROW) % 2);
                 let Some(bp) = old.bps.get(index) else { return true };
                 // The breakpoint must still be listed as the tree showed it (a toggle from an old tree is not repeated).
@@ -536,8 +571,7 @@ impl Workbench {
                 let at = self.row_menu_anchor(MenuRow::Frame, i, window);
                 self.open_frame_menu(*index, at, window, cx);
             }
-        } else if let Some(i) = menu_request(req, MenuRow::Breakpoint, |id| rows(BP_ROW, DEBUG_ROW + BLOCK)(id).filter(|k| k.is_multiple_of(2)).map(|k| k / 2))
-        {
+        } else if let Some(i) = menu_request(req, MenuRow::Breakpoint, |id| rows(BP_ROW, BP_OPEN)(id).filter(|k| k.is_multiple_of(2)).map(|k| k / 2)) {
             match old.bps.get(i).filter(|b| now.bps.get(i) == Some(*b)) {
                 Some(BpSnap::Line { path, line, enabled, .. }) => {
                     let at = self.row_menu_anchor(MenuRow::Breakpoint, i, window);

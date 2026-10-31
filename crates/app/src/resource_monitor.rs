@@ -204,7 +204,15 @@ impl ResourceMonitor {
         let unavailable = || t("Unavailable").to_string();
         let bytes = |n: Option<u64>| n.map(crate::compare_logic::human_size).unwrap_or_else(unavailable);
         let stat = |label: &str, value: String, color: u32| {
+            let read = format!("{label}: {value}");
             div()
+                .relative()
+                .child(crate::a11y_controls::control(crate::a11y_controls::Control::text(
+                    t("Status bar"),
+                    format!("resources-{label}"),
+                    accesskit::Role::Label,
+                    read,
+                )))
                 .flex_none()
                 .flex()
                 .items_center()
@@ -232,9 +240,21 @@ impl ResourceMonitor {
             }
             None => (t("Measuring…").to_string(), p.text_muted),
         });
+        let weak = cx.entity().downgrade();
         let button = |id: &'static str, glyph: &'static str, tip: &'static str, on: bool, focus: &FocusHandle| {
+            let control = crate::a11y_controls::Control::button(t("Status bar"), id, tip, |_, _| {}).focus(focus.clone());
+            let control = match id {
+                "resources-pin" => control.toggled(on).on_entity(weak.clone(), |this: &mut Self, _, cx| {
+                    this.pinned = !this.pinned;
+                    this.dismiss = None;
+                    cx.notify();
+                }),
+                _ => control.on_entity(weak.clone(), |this: &mut Self, _, cx| this.close(cx)),
+            };
             div()
                 .id(id)
+                .relative()
+                .child(crate::a11y_controls::control(control))
                 .debug_selector(move || id.into())
                 .flex_none()
                 .size(px(20.))
@@ -355,6 +375,13 @@ impl Render for ResourceMonitor {
                 div()
                     .id("sb-resources")
                     .debug_selector(|| "sb-resources".into())
+                    .relative()
+                    .child(crate::a11y_controls::control(
+                        crate::a11y_controls::Control::button(t("Status bar"), "sb-resources", t("Resources"), |_, _| {})
+                            .expanded(shown && !closing)
+                            .focus(self.focus.clone())
+                            .on_entity(cx.entity().downgrade(), |this: &mut Self, window, cx| this.toggle(window, cx)),
+                    ))
                     .track_focus(&self.focus)
                     .tab_index(0)
                     .flex_none()

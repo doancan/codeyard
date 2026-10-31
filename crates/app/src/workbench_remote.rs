@@ -234,14 +234,20 @@ impl Workbench {
                     .gap(px(theme::SPACE[1]))
                     .child(
                         ui::icon_button("remote-add", "plus", crate::i18n::t("Add SSH Host…"), p)
+                            .relative()
+                            .child(a11y::part_frame(a11y::Part::Control("remote-add"), cx))
                             .on_click(cx.listener(|this, _, w, cx| this.add_ssh_host(&AddSshHost, w, cx))),
                     )
                     .child(
                         ui::icon_button("remote-config", "settings", crate::i18n::t("Open SSH Config File"), p)
+                            .relative()
+                            .child(a11y::part_frame(a11y::Part::Control("remote-config"), cx))
                             .on_click(cx.listener(|this, _, w, cx| this.edit_ssh_config(&EditSshConfig, w, cx))),
                     )
                     .child(
                         ui::icon_button("remote-refresh", "refresh-cw", crate::i18n::t("Refresh"), p)
+                            .relative()
+                            .child(a11y::part_frame(a11y::Part::Control("remote-refresh"), cx))
                             .on_click(cx.listener(|this, _, _, cx| this.refresh_remote_view(cx))),
                     ),
             );
