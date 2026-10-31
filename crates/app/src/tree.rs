@@ -565,6 +565,15 @@ impl FileTree {
         }
     }
 
+    /// For assistive technology: the menu of the row of `path`, as Shift+F10 on it opens it (the row is selected first).
+    pub fn a11y_context_menu(&mut self, path: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.rows.iter().any(|r| r.path == path) {
+            return;
+        }
+        self.a11y_select(path, false, cx);
+        self.show_context_menu(&crate::menu::ShowContextMenu, window, cx);
+    }
+
     #[cfg(test)]
     pub fn row_errors(&self) -> Vec<(String, String)> {
         self.rows.iter().filter_map(|r| r.error.as_ref().map(|e| (r.name.to_string(), e.to_string()))).collect()

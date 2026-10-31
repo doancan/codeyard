@@ -32,6 +32,7 @@ const _: () = {
         super::problems_access::MENU_ITEM,
         super::problems_access::ROW_MENU,
         super::problems_access::DIALOG_LINE,
+        EXPLORER_MENU,
         super::term_tab_access::TERM_TAB,
         ROW_BASE,
     ];

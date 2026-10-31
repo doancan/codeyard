@@ -64,11 +64,17 @@ fn settings_rows_show_their_values_and_change_like_the_pointer_does(cx: &mut gpu
     // A number field: the value is checked as Enter in the field checks it; the error is read with the field.
     let (snap, tree) = nodes(&wb, cx);
     let (size, _) = find(&tree, Role::TextInput, "Editor: Font Size");
+    act(&wb, &snap, size, Action::Focus, None, cx);
     act(&wb, &snap, size, Action::SetValue, Some(ActionData::Value("99".into())), cx);
     let (snap, tree) = nodes(&wb, cx);
     let (_, node) = find(&tree, Role::TextInput, "Editor: Font Size");
     assert_eq!(node.value(), Some("99"));
     assert_eq!(node.invalid(), Some(accesskit::Invalid::True));
+    // The rejection is said at once, with the setting it is about.
+    let (_, alert) = tree.iter().find(|(_, n)| n.role() == Role::Alert).cloned().expect("the error is an alert");
+    assert_eq!(alert.live(), Some(accesskit::Live::Assertive));
+    assert!(alert.label().is_some_and(|l| l.starts_with("Editor: Font Size: ")), "{:?}", alert.label());
+    assert_eq!(snap.to_tree().focus, size, "the keyboard stays in the field");
     act(&wb, &snap, size, Action::SetValue, Some(ActionData::Value("15".into())), cx);
     assert_eq!(cx.read_global(|s: &crate::settings::Settings, _| s.editor_font_size), 15.);
 
