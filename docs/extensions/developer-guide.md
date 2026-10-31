@@ -498,6 +498,42 @@ await ctx.withProgress("Building…", async () => {
 });
 ```
 
+### Native programs
+
+Your extension can bring its own program, such as a language server binary or a CLI, instead of asking users to
+install one. Name it in `run` as a path inside the package, starting with `./`:
+
+```toml
+[permissions]
+run = ["./bin/hello"]
+why = "Runs its bundled helper to read your project."
+```
+
+Build the program for each platform you support and put each build under `native/<triple>/`, at the path `run`
+names:
+
+```
+native/aarch64-apple-darwin/bin/hello
+native/x86_64-apple-darwin/bin/hello
+native/x86_64-unknown-linux-musl/bin/hello     # static (musl), so one build runs on every distribution
+native/aarch64-unknown-linux-musl/bin/hello
+native/x86_64-pc-windows-msvc/bin/hello.exe    # Windows builds end in .exe
+```
+
+Such an extension is packaged once per platform. `cyx package` writes `<id>-<version>-<triple>.cyx` for every folder
+in `native/` (`--target <triple>` writes one), and `cyx check` checks each. A per-platform package may be up to
+128 MiB; it holds everything else of the extension too, and a `TARGET` file naming its platform. Programs must be
+executable (`chmod 755`) except on Windows.
+
+Your code starts the program like any other, with its `run` entry: `ctx.spawn({ program: "./bin/hello", args })`.
+It runs on the computer that holds the workspace: this one, or the SSH server. Codeyard copies the program from the
+package for that computer's platform, checks its SHA-256 there against the package's hash list before every run, and
+runs only that copy; the server downloads nothing. A platform you did not build for gets an error that names it.
+
+Users type your extension's id on the install sheet before a native program installs. Registries take native programs
+from invited publishers only, and your first one waits for a human review before it is listed (see [Publish](#publish)).
+Language servers (`[[language-servers]]`) still start only programs found on PATH.
+
 ## Test and debug
 
 **Unit tests** run on your computer against a mock host with fake files, recorded processes, fixture HTTP and a virtual clock. The whole story is in [testing.md](testing.md).
@@ -548,6 +584,7 @@ Good to know:
 - **Themes, snippets and other no-code packs** reach users immediately.
 - **Updates with code** reach users after **48 hours**, and `cyx publish` tells you when. Users can press **Update now**. The registry reads whether a package has code from the package itself and marks it in its index.
 - **Code extensions on the public registry** are not accepted yet: for now it takes data-only extensions (themes, snippets, keymaps, languages, language servers). `cyx publish` says so when the registry refuses; share the `.cyx` from `cyx package` meanwhile, which installs from a file.
+- **Native programs** ([Native programs](#native-programs)) are accepted by invitation: the registry's operator lists your publisher name. `cyx publish` signs and uploads one package per platform in `native/` (`--target <triple>` publishes one; you can add a platform to a version later, with the same manifest and README). Your first native program stays unlisted until a reviewer approves it; `cyx publish` says so. After that your native programs are listed like any code update.
 - **Pre-releases** are versions with a suffix (`1.2.0-beta.1`). They go out at once, only to users who opted in for your extension. `cyx publish --pre-release` makes sure the version has one.
 - If a release is broken, `cyx yank 1.2.0` hides it from installs and users on it roll back right away; `cyx restore 1.2.0` brings it back. `cyx deprecate 1.2.0 --replacement you.other` points users elsewhere. Version numbers are never reused, so publish the fix as `1.2.1`.
 - `--registry URL` (or `CODEYARD_REGISTRY`) publishes to another registry, such as a local one from `yard init`.

@@ -18,6 +18,7 @@ fn release(version: &str, status: Status, downloads: u64) -> Release {
         downloads,
         immediate: false,
         details: None,
+        targets: Default::default(),
     }
 }
 

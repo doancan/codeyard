@@ -17,6 +17,7 @@
 mod db;
 pub mod http;
 pub mod names;
+mod review;
 
 #[cfg(test)]
 mod tests;
@@ -43,7 +44,8 @@ pub const ROTATE_WARNING_SECS: u64 = 14 * 86400;
 pub const STATEMENT_MAX_AGE_SECS: u64 = 15 * 60;
 /// Code waits this long before clients update to it.
 pub const CODE_WAIT_SECS: u64 = 48 * 3600;
-pub const MAX_UPLOAD_BYTES: usize = ext_manifest::limits::PACKAGE_BYTES as usize + publisher::MAX_BUNDLE_BYTES + 4;
+/// The largest upload: a per-platform package (the larger limit; `ext_pkg::read` holds others to theirs) and its bundle.
+pub const MAX_UPLOAD_BYTES: usize = ext_manifest::limits::TARGET_PACKAGE_BYTES as usize + publisher::MAX_BUNDLE_BYTES + 4;
 
 /// `yard.json`. Relative paths are relative to the file.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -63,6 +65,11 @@ pub struct Config {
     pub root_keys: Vec<PublicKey>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub threshold: Option<usize>,
+    /// Publisher names (the part of an id before the dot) invited to publish code: Wasm and native programs. Everyone
+    /// else may publish data-only extensions. Empty, the default, keeps the registry data-only (Phase 1). A
+    /// publisher's first native program waits for a reviewer (`yard review`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub invited: Vec<String>,
 }
 
 fn default_listen() -> String {
@@ -141,6 +148,9 @@ pub struct Published {
     /// Unix seconds from which clients update to it (now for data-only packages).
     pub available: u64,
     pub publisher: Publisher,
+    /// The publisher's first native program: it stays unlisted until a reviewer approves it (`yard review`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub review: bool,
 }
 
 pub struct Yard {
@@ -170,6 +180,16 @@ impl Yard {
 
     fn packages(&self) -> PathBuf {
         self.cfg.public.join("packages")
+    }
+
+    /// Packages waiting for a reviewer: beside the database, never in the folder the CDN serves.
+    fn review_dir(&self) -> PathBuf {
+        self.cfg.database.with_file_name("review")
+    }
+
+    /// Whether the publisher name `prefix` may publish code and native programs.
+    pub fn invited(&self, prefix: &str) -> bool {
+        self.cfg.invited.iter().any(|p| p == prefix)
     }
 
     /// Versions published before details files existed get theirs from the stored package; the next signing lists them.
@@ -205,8 +225,16 @@ impl Yard {
         // The package rules first: the same code `cyx check` and the app run.
         let pkg = ext_pkg::read(bytes).map_err(|e| Error::Invalid(e.to_string()))?;
         let m = &pkg.manifest;
-        if !m.is_declarative() {
+        // Code and native programs by invitation only; without one the registry stays data-only.
+        let invited = self.invited(m.id.publisher());
+        if !m.is_declarative() && !invited {
             return Err(Error::Invalid(format!("{} {} runs code; the registry accepts data-only extensions until code extensions ship", m.id, m.version)));
+        }
+        if m.has_native_programs() && !invited {
+            return Err(Error::Forbidden(format!(
+                "{} {} ships native programs; this registry takes them from invited publishers only (docs/registry.md)",
+                m.id, m.version
+            )));
         }
         let signed = publisher::verify_package(bundle, &m.id, &m.version, &pkg.digest, &self.pins, now).map_err(|e| Error::Forbidden(e.to_string()))?;
         let who = signed.publisher;
@@ -241,36 +269,106 @@ impl Yard {
                 }
             }
         }
+        let digest = pkg.digest.hex();
+        let details = yard::Details::of(&pkg).to_bytes();
+        if let Some(t) = &pkg.target
+            && let Some(release) = db::release_of(&tx, &m.id, &m.version).map_err(internal("database"))?
+        {
+            // Another platform of a version with native programs: the same manifest and README, a platform not there yet.
+            let p = self.add_platform(&tx, &pkg, (bytes, bundle), release, t, &details, &who, now)?;
+            tx.commit().map_err(internal("database"))?;
+            return Ok(p);
+        }
         if db::version_exists(&tx, &m.id, &m.version).map_err(internal("database"))? {
             return Err(Error::Conflict(format!("{} {} was published before; a version number is never reused, so raise it", m.id, m.version)));
         }
-        let digest = pkg.digest.hex();
-        let details = yard::Details::of(&pkg).to_bytes();
         let release = yard::Release {
             version: m.version.clone(),
             digest: digest.clone(),
             sha256: hex(&Sha256::digest(bytes)),
             size: bytes.len() as u64,
             permissions: yard::permission_digest(m),
-            code: !m.is_declarative(),
+            // Native programs are code too: their updates wait like a Wasm extension's.
+            code: !m.is_declarative() || m.has_native_programs(),
             published: now,
             status: Status::Ok,
             downloads: 0,
             immediate: false,
             details: Some(yard::Details::digest(&details)),
+            targets: pkg
+                .target
+                .iter()
+                .map(|t| (t.clone(), yard::TargetPackage { digest: digest.clone(), sha256: hex(&Sha256::digest(bytes)), size: bytes.len() as u64 }))
+                .collect(),
         };
         db::upsert_extension(&tx, m, &who).map_err(internal("database"))?;
         db::add_version(&tx, &m.id, &release).map_err(internal("database"))?;
+        if let Some(t) = &pkg.target {
+            db::add_target_package(&tx, &m.id, &m.version, t, &digest).map_err(internal("database"))?;
+        }
+        // A publisher's first native program waits, unlisted, for a reviewer; its files stay out of the public folder.
+        let review = m.has_native_programs() && !db::owner_reviewed(&tx, &owner).map_err(internal("database"))?;
+        if review {
+            db::queue_review(&tx, &m.id, &m.version, &owner, now).map_err(internal("database"))?;
+        }
         // The package lands before the index that lists it; a failure after this leaves an unlisted file, never a
         // listed one that is missing.
-        write_atomic(&self.cfg.public.join("packages").join(format!("{digest}.cyx")), bytes)?;
-        // Clients check the publisher's signature themselves; the registry only passes it on.
-        write_atomic(&self.cfg.public.join("packages").join(format!("{digest}.sigstore.json")), bundle)?;
-        write_atomic(&self.packages().join(format!("{digest}.details.json")), &details)?;
+        self.write_package(review, &digest, bytes, bundle, &details)?;
         self.sign_index(&tx, now)?;
         tx.commit().map_err(internal("database"))?;
         let available = if release.code { now + CODE_WAIT_SECS } else { now };
-        Ok(Published { id: m.id.clone(), version: m.version.clone(), digest, available, publisher: who })
+        Ok(Published { id: m.id.clone(), version: m.version.clone(), digest, available, publisher: who, review })
+    }
+
+    /// A package, its signature and its details file, in the public folder or (waiting for review) the review folder.
+    fn write_package(&self, review: bool, digest: &str, bytes: &[u8], bundle: &[u8], details: &[u8]) -> Result<(), Error> {
+        let dir = if review { self.review_dir() } else { self.packages() };
+        std::fs::create_dir_all(&dir).map_err(|e| Error::Internal(format!("cannot create {}: {e}", dir.display())))?;
+        write_atomic(&dir.join(format!("{digest}.cyx")), bytes)?;
+        // Clients check the publisher's signature themselves; the registry only passes it on.
+        write_atomic(&dir.join(format!("{digest}.sigstore.json")), bundle)?;
+        write_atomic(&dir.join(format!("{digest}.details.json")), details)
+    }
+
+    /// Add platform `target`'s package to a version published for other platforms.
+    #[allow(clippy::too_many_arguments)]
+    fn add_platform(
+        &self,
+        tx: &rusqlite::Transaction,
+        pkg: &ext_pkg::Package,
+        (bytes, bundle): (&[u8], &[u8]),
+        mut release: yard::Release,
+        target: &str,
+        details: &[u8],
+        who: &Publisher,
+        now: u64,
+    ) -> Result<Published, Error> {
+        let m = &pkg.manifest;
+        if release.targets.is_empty() {
+            return Err(Error::Conflict(format!("{} {} was published without native programs; raise the version", m.id, m.version)));
+        }
+        if release.targets.contains_key(target) {
+            return Err(Error::Conflict(format!("{} {} for {target} was published before; a version number is never reused, so raise it", m.id, m.version)));
+        }
+        if release.details.as_deref() != Some(yard::Details::digest(details).as_str()) || release.permissions != yard::permission_digest(m) {
+            return Err(Error::Conflict(format!(
+                "{} {} for {target} has another manifest or README than its other platforms; every platform's package of a version has the same ones",
+                m.id, m.version
+            )));
+        }
+        let review = match db::review(tx, &m.id, &m.version).map_err(internal("database"))? {
+            Some(db::Review::Rejected) => return Err(Error::Forbidden(format!("{} {} was rejected by a reviewer; raise the version", m.id, m.version))),
+            Some(db::Review::Pending) => true,
+            Some(db::Review::Approved) | None => false,
+        };
+        let digest = pkg.digest.hex();
+        release.targets.insert(target.into(), yard::TargetPackage { digest: digest.clone(), sha256: hex(&Sha256::digest(bytes)), size: bytes.len() as u64 });
+        db::put_release(tx, &m.id, &release).map_err(internal("database"))?;
+        db::add_target_package(tx, &m.id, &m.version, target, &digest).map_err(internal("database"))?;
+        self.write_package(review, &digest, bytes, bundle, details)?;
+        self.sign_index(tx, now)?;
+        let available = if release.code { release.published + CODE_WAIT_SECS } else { now };
+        Ok(Published { id: m.id.clone(), version: m.version.clone(), digest, available, publisher: who.clone(), review })
     }
 
     /// A publisher's yank, restore or deprecate: a framed bundle over a status statement, signed by the identity that
@@ -472,6 +570,7 @@ pub fn init(dir: &Path, registry: &str, fulcio: &str, rekor: &str, trust: Option
         listen: default_listen(),
         root_keys: trust.as_ref().map(|t| t.keys.clone()).unwrap_or_default(),
         threshold: trust.map(|t| t.threshold),
+        invited: Vec::new(),
     };
     std::fs::write(&cfg_path, serde_json::to_string_pretty(&cfg).map_err(|e| e.to_string())? + "\n").map_err(|e| e.to_string())?;
     Ok(cfg_path)

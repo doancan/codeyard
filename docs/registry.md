@@ -47,6 +47,10 @@ signature for one file never passes for the other. A `.sig` file is `{"signature
 - `downloads` counts every download of the version, updates included, per day and without logs.
 - `status` is `"ok"`, `{"deprecated": {"replacement": "id"}}`, `"yanked"` or `{"revoked": {"reason": "…"}}`.
 - A version with a suffix (`1.2.0-beta.1`) is a pre-release, offered only to users who opt in for that extension.
+- A version with native programs has `targets`: one package per platform, `{ "<triple>": { "digest", "sha256",
+  "size" } }` (`<id>-<version>-<triple>.cyx`). Its `digest`, `sha256` and `size` are those of the first platform
+  published, and `code` is true. The client installs the workspace host's platform and records every platform's
+  digest in the lock.
 - Versions are listed oldest first and never reused. Times are Unix seconds.
 
 ## What a client checks
@@ -134,8 +138,8 @@ accounts: the identity in the bundle's certificate is the publisher.
 
 A publish is accepted only when all of these hold:
 
-- The package passes the same checks as `cyx check` and the app (`ext-pkg`), and contains no code (code extensions
-  are accepted from Phase 2).
+- The package passes the same checks as `cyx check` and the app (`ext-pkg`), and contains no code and no native
+  program, unless its publisher name is invited (below).
 - The bundle is a valid publisher signature over this id, version and content digest (above).
 - The publisher name (the part of the id before the dot) is unclaimed, or claimed by the same owner: a GitHub owner
   (by numeric id) or a browser-login account. The first publish claims it. A name with the same look as another
@@ -144,6 +148,34 @@ A publish is accepted only when all of these hold:
 - A new extension id or display name does not look like another owner's.
 - An existing extension is published from the same repository and workflow as before.
 - The version number has never been used for this id, even if that version was yanked.
+
+### Native programs
+
+Code and native programs are accepted by invitation only. `yard.json` lists the invited publisher names:
+
+```json
+{ "invited": ["dogan"] }
+```
+
+Restart `yard serve` after a change. Without the list (the default) the registry takes data-only extensions, as in
+Phase 1. An invited publisher's packages may run code (Wasm), and may carry native programs:
+
+- One package per platform (`TARGET` names it), up to 128 MiB, uploaded one by one. A platform joins its version when
+  the version has native programs, the platform is new, and the manifest and README are the same as the others'. A
+  platform once published is never replaced.
+- **Review.** A publisher's first native program waits for a human. The upload is recorded and answered with
+  `"review": true`, but the version is left out of the index, and its files wait in `review/` beside the database, out
+  of the public folder. More platforms of that version wait with it. The reviewer works from the server's command line:
+
+```text
+yard review list CONFIG                       what waits: id, version, publisher, the install sheet's lines and each
+                                              platform's package, to inspect
+yard review approve CONFIG ID VERSION         move its files into the public folder and sign an index that lists it;
+                                              the publisher's later native programs are listed without review
+yard review reject CONFIG ID VERSION REASON…  never list it and delete its files; its version number stays used
+```
+
+Native programs are code: clients update to them after 48 h like any code update.
 
 Status statements are `codeyard-yard/v1/status
 <id> <version> <yank|restore|deprecate [replacement]>
@@ -168,6 +200,7 @@ yard promote CONFIG                          check their signatures, put the new
 yard resign CONFIG                           sign a fresh index once, for a scheduler instead of serve's timer
 yard revoke CONFIG ID VERSION REASON…        the security role: stop a version on every client, with the reason
 yard immediate CONFIG ID VERSION             the security role: let clients update to an advisory fix at once
+yard review list | approve | reject …        first native programs waiting for a reviewer (above)
 ```
 
 Without `--root-keys`, `yard init` signs the root with one development key made on the spot. With them no root key is
@@ -198,8 +231,14 @@ when fetched, the index's ETag) are kept in `<data>/extensions/registries/<name>
   that the signer is the publisher the index lists. Any failure installs nothing.
 - **Pinning.** The lock records `{ "kind": "registry", "registry": name, "publisher": … }`. A later install signed by
   another identity shows the full sheet with that called out; `--install-extension` refuses it. A lock with a
-  registry entry is format 2, one with a pre-release opt-in (`"pre-release": true`) format 3; a lock is written in the
-  lowest format that holds it, so an older Codeyard still reads it.
+  registry entry is format 2, one with a pre-release opt-in (`"pre-release": true`) format 3, one with per-platform
+  digests (`"targets": { "<triple>": "<digest>" }`, native programs) format 4; a lock is written in the lowest format
+  that holds it, so an older Codeyard still reads it.
+- **Native programs.** The client downloads the package for the workspace host's platform (this machine's, or the
+  SSH server's, from the agent's report) and checks it like any other, plus its `TARGET`. Another platform's package
+  is fetched when a workspace on that platform first runs the program, checked the same way and against the digest
+  the lock recorded for it. The program's bytes are copied to the workspace host with the agent install's steps (a
+  temporary file, `sha256sum`, then `mv`); the host downloads nothing, and each run first checks the copy's hash.
 - **Stale index.** Past its 72 h, installs and updates wait for the user to confirm on the sheet;
   `--install-extension` refuses. Installed extensions keep running.
 - **Updates and version status** (`ext_core::update` decides, `app/src/ext_updates.rs` acts). Each time the index is

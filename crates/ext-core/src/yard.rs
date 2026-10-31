@@ -225,9 +225,33 @@ pub struct Release {
     /// sha256 of `packages/<digest>.details.json`, for the Market's extension page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub details: Option<String>,
+    /// For an extension with native programs: one package per platform, by target triple (`<id>-<version>-<triple>.cyx`,
+    /// docs/plugin-architecture.md §7). `digest`, `sha256` and `size` above are those of the first one published. The
+    /// client installs the one for the workspace's host and checks it against these.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub targets: BTreeMap<String, TargetPackage>,
+}
+
+/// One platform's package of a release.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TargetPackage {
+    /// Content digest, as in the lock.
+    pub digest: String,
+    /// sha256 of the `.cyx` file as downloaded.
+    pub sha256: String,
+    pub size: u64,
 }
 
 impl Release {
+    /// The package for `target`: that platform's for a release with native programs (none if it was not built for it),
+    /// else the one package.
+    pub fn package_for(&self, target: &str) -> Option<TargetPackage> {
+        if self.targets.is_empty() {
+            return Some(TargetPackage { digest: self.digest.clone(), sha256: self.sha256.clone(), size: self.size });
+        }
+        self.targets.get(target).cloned()
+    }
+
     /// A pre-release is a version with a suffix (`1.2.0-beta.1`); users get it only when they opt in per extension.
     pub fn is_pre_release(&self) -> bool {
         self.version.pre.is_some()
@@ -444,6 +468,13 @@ fn check_index(index: &Index) -> Result<(), Error> {
             for (field, value) in [("digest", &r.digest), ("sha256", &r.sha256), ("permissions", &r.permissions)] {
                 if parse_hex::<32>(value).is_none() {
                     return Err(bad(format!("{id} {}: {field} is not 64 lowercase hex digits", r.version)));
+                }
+            }
+            // A platform this client does not know is skipped when downloading, not refused here: a registry may add
+            // platforms without a new format.
+            for (t, p) in &r.targets {
+                if t.len() > 64 || parse_hex::<32>(&p.digest).is_none() || parse_hex::<32>(&p.sha256).is_none() {
+                    return Err(bad(format!("{id} {}: the package for {t} has no hex digests", r.version)));
                 }
             }
             if r.details.as_deref().is_some_and(|d| parse_hex::<32>(d).is_none()) {

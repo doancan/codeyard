@@ -140,6 +140,8 @@ pub struct ScmPanel {
     collapsed_repos: HashSet<RepoKey>,
     repo_scroll: UniformListScrollHandle,
     repo_focus: FocusHandle,
+    /// The single-repository change list: kept across status refreshes, reset for another repository.
+    change_scroll: UniformListScrollHandle,
     /// Result of the last operation: (text, is error).
     result: Option<(SharedString, bool)>,
     focus_handle: FocusHandle,
@@ -187,6 +189,8 @@ pub use graph_ui::GraphOption;
 mod access;
 pub(crate) use access::{AccessExt, AccessView};
 
+#[path = "scm_changes.rs"]
+mod changes_ui;
 #[path = "scm_ops.rs"]
 mod ops;
 #[path = "scm_repos.rs"]
@@ -231,6 +235,7 @@ impl ScmPanel {
             repo_results: HashMap::new(),
             collapsed_repos: HashSet::new(),
             repo_scroll: UniformListScrollHandle::new(),
+            change_scroll: UniformListScrollHandle::new(),
             repo_focus: cx.focus_handle(),
             result: None,
             focus_handle: cx.focus_handle(),
@@ -276,6 +281,7 @@ impl ScmPanel {
             // Another repository: the history, stashes and commit details on screen belong to the previous one and
             // must not be acted on; they go at once, and the new repository's load replaces them.
             self.clear_history();
+            self.change_scroll = UniformListScrollHandle::new();
         }
         // Switching between repositories of the inventory: each keeps its own commit message draft and last result.
         // The draft follows the repository it was typed for, also when that one disappeared in between (it comes back
@@ -705,9 +711,6 @@ impl Render for ScmPanel {
                 .when(has_ext, |d| d.child(div().id("scm-ext-list").flex_1().min_h_0().overflow_y_scroll().children(ext)))
                 .when(multi, |d| d.child(self.repo_list(self.repo_focus.is_focused(window), cx)));
         };
-        let staged: Vec<Change> = st.staged().cloned().collect();
-        // Conflicts get their own section (VS Code: "Merge Changes"); staging means "resolved".
-        let (merge, unstaged): (Vec<Change>, Vec<Change>) = st.unstaged().cloned().partition(|c| c.unstaged == Some(Mark::Conflict));
         let (commit_label, can_commit) = self.commit_state(&st, cx);
         let sync_button = self.sync_button(&st, &p, cx);
         let commit_label: SharedString = commit_label.into();
@@ -723,12 +726,7 @@ impl Render for ScmPanel {
             Some(r) => format!("{} · {branch}", r.label),
             None => branch,
         };
-        let graph_fills = !self.multi()
-            && staged.is_empty()
-            && merge.is_empty()
-            && unstaged.is_empty()
-            && self.sections.is_open("graph", true)
-            && !self.sections.has_height("graph");
+        let graph_fills = !self.multi() && st.changes.is_empty() && self.sections.is_open("graph", true) && !self.sections.has_height("graph");
         let field_box = ui::input_box("scm-message-box", &p, p.bg, self.message.focus_handle(cx).is_focused(window)).child(self.message.clone());
         div()
             .key_context("ScmPanel")
@@ -855,26 +853,7 @@ impl Render for ScmPanel {
             .child(if self.multi() {
                 self.repo_list(self.repo_focus.is_focused(window), cx).into_any_element()
             } else {
-                div()
-                    .id("scm-list")
-                    // Nothing to commit: the list takes only its line and the graph gets the room (until its height is set by hand).
-                    .when(!graph_fills, |d| d.flex_1())
-                    .min_h(px(if graph_fills { 0. } else { 72. }))
-                    .overflow_y_scroll()
-                    .when(!merge.is_empty(), |d| {
-                        let rows: Vec<_> = if self.sections.is_open("scm-merge", true) { merge.iter().enumerate().map(|(i, ch)| self.row(1000 + i, ch, false, None, cx).into_any_element()).collect() } else { Vec::new() };
-                        d.child(self.group_header("scm-merge", crate::i18n::t("Merge Changes"), merge.len(), false, None, cx)).children(rows)
-                    })
-                    .when(!staged.is_empty(), |d| {
-                        let rows: Vec<_> = if self.sections.is_open("scm-staged", true) { staged.iter().enumerate().map(|(i, ch)| self.row(i, ch, true, None, cx).into_any_element()).collect() } else { Vec::new() };
-                        d.child(self.group_header("scm-staged", crate::i18n::t("Staged Changes"), staged.len(), true, None, cx)).children(rows)
-                    })
-                    .child(self.group_header("scm-changes", crate::i18n::t("Changes"), unstaged.len(), false, None, cx))
-                    .children(if self.sections.is_open("scm-changes", true) { unstaged.iter().enumerate().map(|(i, ch)| self.row(i, ch, false, None, cx).into_any_element()).collect::<Vec<_>>() } else { Vec::new() })
-                    .when(staged.is_empty() && unstaged.is_empty() && merge.is_empty(), |d| {
-                        d.child(div().px(px(theme::SPACE[6])).py(px(theme::SPACE[3])).text_color(c(p.text_muted)).child(crate::i18n::t("No changes.")))
-                    })
-                    .into_any_element()
+                self.change_list(st.clone(), graph_fills, cx).into_any_element()
             })
             .children(ext)
             .children(self.stash_section(cx))

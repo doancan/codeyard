@@ -4,7 +4,15 @@ use ext_manifest::{Clipboard, Permissions};
 use super::*;
 
 fn scope(p: Permissions) -> Scope {
-    Scope { extension: "you.ext".into(), permissions: p, roots: vec!["/work".into()], trusted: true, dependencies: vec![], revoked: Permissions::default() }
+    Scope {
+        extension: "you.ext".into(),
+        permissions: p,
+        roots: vec!["/work".into()],
+        trusted: true,
+        dependencies: vec![],
+        revoked: Permissions::default(),
+        programs: None,
+    }
 }
 
 fn spawn(program: &str) -> Start {

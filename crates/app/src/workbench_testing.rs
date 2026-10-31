@@ -788,6 +788,19 @@ impl Workbench {
         Some((ext_glue::source_line(&p.source), p.warnings.clone()))
     }
 
+    /// Type into the consent sheet's field for the extension id (native programs, §6.3); whether Install would act.
+    pub fn type_consent_id_for_test(&mut self, text: &str, cx: &mut Context<Self>) -> bool {
+        if let Some(f) = self.cfg.exts.consent_typed.clone() {
+            f.update(cx, |f, cx| f.set_text(text, cx));
+        }
+        self.consent_typed_ok(cx)
+    }
+
+    /// Whether the keyboard is in the consent sheet's id field.
+    pub fn consent_typing_focused_for_test(&self, window: &Window, cx: &App) -> bool {
+        self.cfg.exts.consent_typed.as_ref().is_some_and(|f| f.focus_handle(cx).is_focused(window))
+    }
+
     pub fn answer_consent_for_test(&mut self, install: bool, window: &mut Window, cx: &mut Context<Self>) {
         if install {
             self.confirm_consent(window, cx);

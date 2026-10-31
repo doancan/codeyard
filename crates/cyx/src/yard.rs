@@ -133,6 +133,7 @@ pub fn fixture(dir: &Path, n: usize, url: &str, now: u64) -> Result<String, Stri
                 downloads: next(5000) as u64,
                 immediate: false,
                 details: None,
+                targets: Default::default(),
             })
             .collect();
         let name = format!("{} {}", capitalize(w[0]), capitalize(w[1]));

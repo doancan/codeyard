@@ -111,11 +111,99 @@ fn executable_bits_survive() {
     let mut files = theme_files();
     files[1] = file(ext_manifest::FILE_NAME, &manifest);
     files.push(Entry { path: "bin/server".into(), data: b"\x7fELF".to_vec(), executable: true });
+    files.push(file(TARGET, "x86_64-unknown-linux-musl\n"));
     let p = read(&write(files.clone()).unwrap().0).unwrap();
     assert!(p.files["bin/server"].executable);
     assert!(!p.files["README.md"].executable);
-    files.last_mut().unwrap().executable = false;
+    files.iter_mut().find(|f| f.path == "bin/server").unwrap().executable = false;
     assert!(write(files).unwrap_err().to_string().contains("not executable"));
+}
+
+const NATIVE: &str = r#"[extension]
+id = "you.lsp"
+version = "1.0.0"
+name = "Lsp"
+license = "MIT"
+
+[permissions]
+run = ["./bin/server"]
+why = "Starts its own language server."
+
+[[language-servers]]
+command = "./bin/server"
+languages = ["rust"]
+"#;
+
+fn native(target: Option<&str>, program: Option<(&str, bool)>) -> Vec<Entry> {
+    let mut files = vec![file(ext_manifest::FILE_NAME, NATIVE)];
+    if let Some(t) = target {
+        files.push(file(TARGET, &format!("{t}\n")));
+    }
+    if let Some((path, executable)) = program {
+        files.push(Entry { path: path.into(), data: b"\x7fELF program".to_vec(), executable });
+    }
+    files
+}
+
+/// #146: a program inside the package makes a per-platform package, which names its platform in `TARGET`.
+#[test]
+fn native_programs_need_a_platform_package() {
+    let linux = "x86_64-unknown-linux-musl";
+    let p = read(&write(native(Some(linux), Some(("bin/server", true)))).unwrap().0).unwrap();
+    assert_eq!(p.target.as_deref(), Some(linux));
+    assert_eq!(p.program("./bin/server").unwrap().data, b"\x7fELF program");
+    assert!(p.manifest.has_native_programs());
+    // Without a platform, with an unknown one, or with a TARGET but no program, it is refused.
+    let e = write(native(None, Some(("bin/server", true)))).unwrap_err().to_string();
+    assert!(e.contains("--target"), "{e}");
+    assert!(write(native(Some("x86_64-unknown-plan9"), Some(("bin/server", true)))).unwrap_err().to_string().contains("target triple"));
+    assert!(write(native(Some(linux), None)).unwrap_err().to_string().contains("bin/server"));
+    let mut theme = theme_files();
+    theme.push(file(TARGET, &format!("{linux}\n")));
+    assert!(write(theme).unwrap_err().to_string().contains("lists no program"));
+    // Windows programs end in .exe and have no executable bit to check.
+    let win = "x86_64-pc-windows-msvc";
+    let p = read(&write(native(Some(win), Some(("bin/server.exe", false)))).unwrap().0).unwrap();
+    assert_eq!(p.program("./bin/server").unwrap().path, "bin/server.exe");
+    // Two platforms of one version differ in content, so each has its own digest.
+    let mac = write(native(Some("aarch64-apple-darwin"), Some(("bin/server", true)))).unwrap().1;
+    assert_ne!(mac, write(native(Some(linux), Some(("bin/server", true)))).unwrap().1);
+}
+
+/// The registry policy's size limits: 64 MiB for a package, 128 MiB for one platform's package.
+#[test]
+fn a_platform_package_may_be_larger() {
+    assert_eq!(ext_manifest::limits::TARGET_PACKAGE_BYTES, 128 << 20);
+    // Over the platform limit: refused before anything is decompressed.
+    let huge = vec![0x1f; ext_manifest::limits::TARGET_PACKAGE_BYTES as usize + 1];
+    assert!(read(&huge).unwrap_err().to_string().contains("128 MiB"));
+}
+
+#[test]
+fn a_folder_is_packaged_per_platform_from_native() {
+    let dir = std::env::temp_dir().join(format!("ext-pkg-native-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let linux = "x86_64-unknown-linux-musl";
+    std::fs::create_dir_all(dir.join("native").join(linux).join("bin")).unwrap();
+    std::fs::create_dir_all(dir.join("native/notes")).unwrap();
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), NATIVE).unwrap();
+    let server = dir.join("native").join(linux).join("bin/server");
+    std::fs::write(&server, b"\x7fELF program").unwrap();
+    #[cfg(unix)]
+    std::fs::set_permissions(&server, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    assert_eq!(native_targets(&dir), vec![linux.to_string()], "only known triples count");
+    // Without a platform, native/ is left out and the program is missing.
+    assert!(!collect_dir(&dir).unwrap().iter().any(|e| e.path.starts_with("native")));
+    let files = collect_dir_for(&dir, Some(linux)).unwrap();
+    assert!(files.iter().any(|e| e.path == "bin/server") && files.iter().any(|e| e.path == TARGET));
+    assert!(!files.iter().any(|e| e.path.starts_with("native")));
+    if cfg!(unix) {
+        let (bytes, _) = write(files).unwrap();
+        let p = read(&bytes).unwrap();
+        assert_eq!(file_name(&p.manifest, p.target.as_deref()), format!("you.lsp-1.0.0-{linux}.cyx"));
+    }
+    assert!(collect_dir_for(&dir, Some("aarch64-apple-darwin")).is_err(), "no folder for that platform");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
