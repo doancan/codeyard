@@ -1,0 +1,52 @@
+#!/bin/sh
+# Tell the owner that something on the registry's server needs them. Run by systemd when a unit fails
+# (OnFailure=yard-alert@%n.service), or by hand: yard-alert "subject" < body
+# Where it goes is set in /etc/yard/yard.env: YARD_ALERT_WEBHOOK, YARD_ALERT_SMTP_*, or both.
+set -eu
+what=${1:?usage: yard-alert UNIT-or-SUBJECT}
+set -a
+# shellcheck disable=SC1091
+. /etc/yard/yard.env
+set +a
+host=$(hostname)
+subject="[yard] $what failed on $host"
+body=""
+[ -t 0 ] || body=$(cat)
+[ -n "$body" ] || body=$(journalctl -u "$what" -n 40 --no-pager -o short-iso 2>&1 || echo "(no details)")
+text="$subject
+
+$body
+
+Runbook: docs/registry.md, \"Runbook\". Status: sudo -u yard yard status /srv/yard/yard.json"
+sent=0
+
+if [ -n "${YARD_ALERT_WEBHOOK:-}" ]; then
+	json=$(printf '%s' "$text" | python3 -I -c 'import json,sys; t=sys.stdin.read(); print(json.dumps({"text": t, "content": t[:1900]}))')
+	if curl -fsS --max-time 20 -H 'content-type: application/json' --data "$json" "$YARD_ALERT_WEBHOOK" >/dev/null; then
+		sent=1
+	else
+		echo "yard-alert: the webhook did not take it" >&2
+	fi
+fi
+
+if [ -n "${YARD_ALERT_SMTP_URL:-}" ] && [ -n "${YARD_ALERT_TO:-}" ]; then
+	mail=$(mktemp)
+	trap 'rm -f "$mail"' EXIT
+	{
+		printf 'From: %s\r\nTo: %s\r\nSubject: %s\r\nDate: %s\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n' \
+			"${YARD_ALERT_FROM:-$YARD_ALERT_TO}" "$YARD_ALERT_TO" "$subject" "$(date -R)"
+		printf '%s\n' "$text"
+	} > "$mail"
+	if curl -fsS --max-time 30 --ssl-reqd --url "$YARD_ALERT_SMTP_URL" \
+		--user "${YARD_ALERT_SMTP_USER:-}:${YARD_ALERT_SMTP_PASSWORD:-}" \
+		--mail-from "${YARD_ALERT_FROM:-$YARD_ALERT_TO}" --mail-rcpt "$YARD_ALERT_TO" --upload-file "$mail"; then
+		sent=1
+	else
+		echo "yard-alert: the mail server did not take it" >&2
+	fi
+fi
+
+if [ "$sent" = 0 ]; then
+	echo "yard-alert: no alert was sent (set YARD_ALERT_WEBHOOK or YARD_ALERT_SMTP_* in /etc/yard/yard.env): $subject" >&2
+	exit 1
+fi

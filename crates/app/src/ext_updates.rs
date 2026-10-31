@@ -172,6 +172,27 @@ pub fn check(cfg_dir: &Path, registries: &[Registry], auto: AutoUpdate, now: u64
     report
 }
 
+/// `codeyard --update-extensions`: the person asked now, so each registry an installed extension came from is asked
+/// once more (not only once a day), then [`check`] runs as usual. Registries no installed extension came from are not
+/// asked.
+pub fn check_now(cfg_dir: &Path, registries: &[Registry], auto: AutoUpdate, now: u64) -> Report {
+    let locked = crate::ext::store(cfg_dir).locked().unwrap_or_default();
+    let mut refresh_errors = Vec::new();
+    for reg in registries.iter().filter(|r| locked.values().any(|l| l.source.registry().is_some_and(|(name, _)| name == r.name))) {
+        let dir = registry::cache_dir(&cache_root(cfg_dir), reg);
+        if let Err(e) = with_fetch(|f| registry::index(reg, &dir, f, now, true)) {
+            refresh_errors.push(format!("{}: {e}", reg.name));
+        }
+    }
+    let mut report = check(cfg_dir, registries, auto, now);
+    for e in refresh_errors {
+        if !report.errors.contains(&e) {
+            report.errors.push(e);
+        }
+    }
+    report
+}
+
 fn standing_of(r: &Release) -> Standing {
     match &r.status {
         ext_core::yard::Status::Deprecated { replacement } => Standing::Deprecated { replacement: replacement.clone() },

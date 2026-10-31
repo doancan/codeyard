@@ -1,0 +1,8 @@
+# HTTPS from Cloudflare's current address list only (deploy/yard/firewall).
+[Unit]
+Description=Let HTTPS in from Cloudflare's addresses only
+OnFailure=yard-alert@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/yard-firewall

@@ -1,6 +1,7 @@
 # The registry's canary (docs/registry.md, "The canary"): publish a new version of codeyard.canary, revoke it on the
 # server, and measure how long until the revocation is in the signed index clients fetch. The minutes go to the run's
-# summary; a run fails if it takes longer than 2 hours. Does nothing until the YARD_URL variable is set.
+# summary and to canary.tsv on the yard-canary-log branch (one line per run, for the release notes); a run fails if it
+# takes longer than 2 hours. Does nothing until the YARD_URL variable is set.
 name: yard-canary
 on:
   schedule:
@@ -20,7 +21,7 @@ jobs:
     timeout-minutes: 150
     environment: yard
     permissions:
-      contents: read
+      contents: write # canary.tsv on the yard-canary-log branch
       id-token: write # the keyless publisher signature (Sigstore) for codeyard.canary
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node.js 24
@@ -41,6 +42,7 @@ jobs:
           sed -i "s/^version *= *\".*\"/version     = \"$version\"/" deploy/canary/codeyard-extension.toml
           target/release/cyx publish deploy/canary --registry "$YARD_URL"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          date +%s > published-at
       - name: Revoke it on the server
         env:
           SSH_KEY: ${{ secrets.YARD_CANARY_SSH_KEY }}
@@ -65,13 +67,36 @@ jobs:
           start=$(cat revoked-at)
           while :; do
             if target/release/cyx yard check "$YARD_URL" "$@" --threshold "${YARD_THRESHOLD:-2}" --revoked "codeyard.canary@$VERSION"; then
-              minutes=$(( ($(date +%s) - start + 59) / 60 ))
+              seen=$(date +%s)
+              minutes=$(( (seen - start + 59) / 60 ))
               echo "Canary codeyard.canary $VERSION: the revocation was in the signed index after $minutes min. Clients fetch the index at most once a day, so an online client stops it within 24 h of that." >> "$GITHUB_STEP_SUMMARY"
+              utc() { date -u -d "@$1" '+%Y-%m-%dT%H:%MZ'; }
+              printf '%s\t%s\t%s\t%s\t%s\t%s\tpass\n' "$GITHUB_RUN_NUMBER" "$VERSION" "$(utc "$(cat published-at)")" "$(utc "$start")" "$(utc "$seen")" "$minutes" > canary-result.tsv
               exit 0
             fi
             if [ $(( $(date +%s) - start )) -gt 7200 ]; then
               echo "Canary codeyard.canary $VERSION: not revoked in the index after 2 hours." >> "$GITHUB_STEP_SUMMARY"
+              printf '%s\t%s\t\t%s\t\t>120\tfail\n' "$GITHUB_RUN_NUMBER" "$VERSION" "$(date -u -d "@$start" '+%Y-%m-%dT%H:%MZ')" > canary-result.tsv
               exit 1
             fi
             sleep 60
           done
+      # Kept for the release notes (exit criterion 4: three runs in a row within 24 h): one line per run on the
+      # yard-canary-log branch, never on main. `git show origin/yard-canary-log:canary.tsv | tail -n 3`
+      - name: Record the result
+        if: always() && hashFiles('canary-result.tsv') != ''
+        run: |
+          git config user.name "yard-canary"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cp canary-result.tsv "$RUNNER_TEMP/line"
+          if git fetch --depth=1 origin yard-canary-log; then
+            git checkout -q -B yard-canary-log FETCH_HEAD
+          else
+            git checkout -q --orphan yard-canary-log
+            git rm -rq --cached .
+            printf 'run\tversion\tpublished\trevoked\tseen in index\tminutes\tresult\n' > canary.tsv
+          fi
+          cat "$RUNNER_TEMP/line" >> canary.tsv
+          git add canary.tsv
+          git commit -qm "Canary run $GITHUB_RUN_NUMBER"
+          git push -q origin HEAD:yard-canary-log

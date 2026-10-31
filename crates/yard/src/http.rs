@@ -8,6 +8,7 @@
 //! GET  /packages/<digest>.details.json     its manifest and README, for the Market's page (not a download)
 //! GET  /index.json, /index.json.sig, /root.json, /root.json.sig    the static files, for a registry without a CDN
 //! GET  /healthz
+//! GET  /metrics                   index version and expiry, online key expiry, counts (Prometheus text; local only)
 //! ```
 
 use std::convert::Infallible;
@@ -73,6 +74,17 @@ async fn handle(yard: Arc<Yard>, uploads: Arc<tokio::sync::Semaphore>, req: Requ
     let path = req.uri().path().to_string();
     let response = match (req.method().clone(), path.as_str()) {
         (Method::GET, "/healthz") => text(StatusCode::OK, "ok"),
+        // For the server's own monitoring; the proxy keeps it from the internet (deploy/yard/Caddyfile).
+        (Method::GET, "/metrics") => match tokio::task::spawn_blocking({
+            let yard = yard.clone();
+            move || yard.health()
+        })
+        .await
+        {
+            Ok(Ok(h)) => file(h.metrics().into_bytes(), "text/plain; version=0.0.4; charset=utf-8", "no-store"),
+            Ok(Err(e)) => error(e),
+            Err(e) => error(Error::Internal(e.to_string())),
+        },
         (Method::POST, "/v1/publish") => match body(req, &uploads).await {
             Ok((b, _turn)) => blocking(yard, move |y| y.publish(&b, now()).map(|p| serde_json::to_vec(&p).expect("serializes"))).await,
             Err(e) => error(e),

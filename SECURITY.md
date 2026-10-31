@@ -40,24 +40,28 @@ matter most are:
 - Extensions are in development and the current release loads none. The planned security model (WebAssembly in a sandboxed
   process, declared permissions enforced by the app, signed registry index, revocation) is in
   [plugin-architecture.md](docs/plugin-architecture.md#6-permissions-and-security). The registry's root is signed by two of
-  three root keys, all held by the maintainer until a second maintainer takes one (see below).
+  three root keys, all held by the owner until a second maintainer takes one (see below).
 
 ## Extension registry keys
 
-The public extension registry (docs/registry.md, "Running the public registry") is trusted through three Ed25519 root
-keys compiled into the app; any two of them sign its `root.json`, which names the online key that signs the index
-daily and expires after 90 days.
+The public extension registry ([docs/registry.md](docs/registry.md#running-the-public-registry)) is trusted through
+three Ed25519 root keys compiled into the app; any two of them sign its `root.json`, which names the online key that
+signs the index daily and expires after 90 days. Until the root key ceremony has run, the app trusts no public
+registry (`PUBLIC` in `crates/app/src/ext_registry.rs` is `None`), and no build compiles with placeholder keys there.
 
 | Key | Held by | Kept |
 |---|---|---|
-| Root A | the maintainer | an encrypted USB stick |
-| Root B | the maintainer (until a second maintainer takes it) | an encrypted USB stick in another place |
-| Root C | the maintainer | a password manager, with two-step login |
-| Online | the registry's server | `/srv/yard/keys/online.key`, readable by the service only; never backed up |
+| Root A | the owner (Doğancan) | an encrypted USB stick, at home: one of the two shares the owner signs with |
+| Root B | the owner, until a second maintainer takes it | an encrypted USB stick in another place: the offline backup share |
+| Root C | the owner | a Bitwarden secure note, with two-step login: the other share the owner signs with |
+| Online | the registry's server | `/srv/yard/keys/online.key`, readable by the service only; never backed up (a restore rotates it) |
+| Canary, deploy | GitHub Actions (environment `yard`, approved by the owner) | SSH keys that can each run one command on the server: revoke the canary extension, or install a `yard` binary that runs |
+| Backups | the server and the owner's Bitwarden | an R2 token for the backup bucket only, in `/etc/yard/yard.env` (root only) |
 
-No root key is ever on the server. The public keys and the date of the ceremony are recorded in
-`yard-ceremony-record.txt` with the release that ships them. A lost or stolen key is handled as in the registry's
-runbook; report a suspected compromise privately as above.
+No root key is ever on the server, and none is ever in this repository. The ceremony (`scripts/yard-root-ceremony.sh`)
+writes `yard-ceremony-record.txt` with the date, the three public keys and where each private key is kept; the owner
+signs it, and it is published with the release that first ships the keys, together with the keys in this section. A
+lost or stolen key is handled as in the registry's runbook; report a suspected compromise privately as above.
 
 ## Updates and signatures
 

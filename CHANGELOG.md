@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Running the public registry (#70, everything that needs no server): `deploy/yard/setup.sh` sets up a fresh Ubuntu
+  24.04 server behind Cloudflare (origin certificate, HTTPS from Cloudflare's addresses only, SSH by key) with one
+  secrets file (`yard.env.example`), a daily `yard resign` timer, an hourly check (`yard-watch`), alerts by webhook or
+  e-mail when a job fails or the index is within 24 h of expiry (`yard-alert`), daily backups to R2 beside
+  Litestream's continuous copy, a restore script and a weekly restore check, and journal rotation. `yard status`
+  prints the index's and online key's expiry and fails within 24 h / 14 days; `GET /metrics` gives the same in
+  Prometheus text (local only); `yard init --fulcio --rekor` pins another Sigstore and `yard resign --expired` signs an
+  already expired index, both for staging and rehearsals. The canary keeps each run's result in `canary.tsv` on the
+  `yard-canary-log` branch for the release notes. `scripts/yard-root-ceremony.sh` writes a fuller record (the lines
+  for the server, the app and GitHub, checks and the owner's sign-off) and has a `--rehearsal` mode; the build refuses
+  placeholder or malformed public registry keys. `deploy/rehearse.sh` runs ceremony, publish, install, revocation and
+  an expired index end to end on one machine, also in CI. docs/registry.md has the runbook (key rotation, revocation,
+  advisory wait, restore, inviting a publisher, reviewing a first native program, rotating the canary key, cost,
+  moving hosts) and docs/registry-setup-checklist.md what the owner provides and the go-live order.
+- `codeyard --update-extensions`: the extension update check without a window, asking the registries of installed
+  extensions now; it updates, rolls back and stops revoked versions as the daily check does, and prints what changed.
 - Screen readers and magnifiers get where things are drawn, not only the main areas: Explorer rows, the editor tabs,
   the status bar's items, the find bar's fields and buttons, Source Control's message field, commit button, groups,
   files and their buttons, and the buttons inside Run and Debug, Testing, Remote Explorer and Ports rows each report
