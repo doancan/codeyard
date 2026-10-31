@@ -2832,7 +2832,6 @@ unknown command “{}”	bilinmeyen komut “{}”
 “{}” is a built-in shortcut; an extension cannot change it	“{}” yerleşik bir kısayol; eklentiler onu değiştiremez
 {} is not a setting of an installed extension	{} kurulu bir eklentinin ayarı değil
 {0}: expected {1}	{0}: {1} bekleniyordu
-“{}” ships inside the package; this version only starts language servers found on PATH	“{}” paketin içinde geliyor; bu sürüm yalnızca PATH üzerindeki dil sunucularını başlatır
 language “{0}” names grammar “{1}”, which Codeyard does not have	“{0}” dili “{1}” dil bilgisini istiyor, Codeyard’da bu yok
 keymap preset “{0}” is not installed (installed: {1})	“{0}” kısayol düzeni kurulu değil (kurulu olanlar: {1})
 Extension in development not loaded: {}	Geliştirilen eklenti yüklenemedi: {}
@@ -3400,3 +3399,5 @@ Checks	Denetimler
 Description	Açıklama
 No description.	Açıklama yok.
 Comments ({})	Yorumlar ({})
+{} is a platform extension programs are not built for	{}, eklenti programlarının derlenmediği bir platform
+Version {} adds native programs; review it and type its id to install it:	{} sürümü yerel programlar ekliyor; kurmak için gözden geçirip kimliğini yazın:

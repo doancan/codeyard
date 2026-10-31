@@ -223,8 +223,7 @@ fn language_servers_and_schemas_join_the_users_settings() {
         ],
     );
     crate::ext::reload(Some(&cfg));
-    let (servers, warnings) = crate::ext::server_entries();
-    assert!(warnings.is_empty(), "{warnings:?}");
+    let servers = crate::ext::server_entries(Some(&cfg), &[]);
     let keys: Vec<&str> = servers.iter().map(|(k, _)| k.as_str()).collect();
     assert_eq!(keys, ["toml", "typescript"], "a language id maps to its server key");
     // The user's own entry for the same key comes later and wins.

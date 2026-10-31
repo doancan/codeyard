@@ -737,10 +737,11 @@ applies at once, in every open window, without a restart.
 
 **Native programs.** Some extensions bring their own programs (a language server or a command-line tool), built for
 each platform. Their sheet has a *Native programs* section, and *Install* does nothing until you type the extension's
-id (for example `you.hello`) into the field there. The programs run on the computer that holds the workspace: this
+id (for example `you.hello`) into the field there; a screen reader finds that field in the sheet, labelled with what
+to type. The programs run on the computer that holds the workspace: this
 one, or the SSH server. Codeyard installs the package for that computer's platform, copies the program there itself
 (the server downloads nothing) and checks its SHA-256 before every run, so a copy changed on disk is replaced, never
-run. A window on another platform fetches that platform's package the first time it needs it, checked against what
+run. A language server the extension brings starts the same way. A window on another platform fetches that platform's package the first time it needs it, checked against what
 was recorded at install. Registries take native programs only from publishers they invited, after a person reviewed
 the publisher's first one.
 
@@ -873,7 +874,8 @@ Opening an extension's page in the Market fetches that page once.
   gives the registry time to stop a bad one (the registry can clear an urgent fix sooner). *Update Now* on the
   extension's page skips the wait.
 - A version that asks for more keeps the one you have running and shows a card on the page with only what is new;
-  *Update* installs it. Another publisher, or a registry list more than 3 days old, opens the full sheet (*Review…*).
+  *Update* installs it. Another publisher, a version that adds a native program, or a registry list more than 3 days
+  old opens the full sheet (*Review…*); for a native program you type the extension's id there, as on a first install.
 - `notify` shows *Update available* in the list and the version on the page; you install it. `off` downloads nothing
   until you ask.
 - Whatever the setting, a version its publisher withdrew goes back to the newest earlier one at once (from the kept

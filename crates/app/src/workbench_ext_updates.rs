@@ -2,7 +2,7 @@
 //! runs in the background whenever settings load (which includes a change of the lock file) and once an hour; it
 //! is cheap within the day, when each registry's cached index is used. What it did is said in one notice, what needs
 //! the user is shown on the extension's page: a card with only the new permissions, **Update Now** (no 48 h wait),
-//! and the full consent sheet for another publisher or a list older than 3 days.
+//! and the full consent sheet for a new native program, another publisher or a list older than 3 days.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -53,7 +53,8 @@ impl Workbench {
                 u.status = report.status;
                 let mut ask = Vec::new();
                 for (id, s) in &u.status {
-                    if let Some(o) = s.offer.as_ref().filter(|o| matches!(o, Offer::MorePermissions { .. } | Offer::NewPublisher { .. }))
+                    if let Some(o) =
+                        s.offer.as_ref().filter(|o| matches!(o, Offer::MorePermissions { .. } | Offer::NativePrograms { .. } | Offer::NewPublisher { .. }))
                         && u.told.insert((id.clone(), o.version().clone()))
                     {
                         ask.push(crate::i18n::tf("{0} {1} waits for your OK in the Extensions view.", &[id, o.version()]));

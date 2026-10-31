@@ -282,7 +282,7 @@ impl Workbench {
             search,
             pages: self.a11y_pages(window, cx),
             side: self.a11y_side(window, cx),
-            consent: self.a11y_consent(window),
+            consent: self.a11y_consent(window, cx),
             row_focus: self.focused_row(window, cx),
         }
     }
