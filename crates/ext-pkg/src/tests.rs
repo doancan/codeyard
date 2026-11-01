@@ -472,3 +472,33 @@ fn a_named_file_that_is_left_out_says_why() {
     let e = Error::MissingFile { field: "themes.path".into(), path: "src/midnight.json".into() };
     assert!(e.to_string().contains("src/, test/ and tests/"), "{e}");
 }
+
+/// A folder with the midnight theme and the given `.cyxignore`; the error `collect_dir` gives.
+fn ignore_error(name: &str, ignore: &str) -> String {
+    let dir = std::env::temp_dir().join(format!("ext-pkg-ignore-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("themes")).unwrap();
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), MANIFEST).unwrap();
+    std::fs::write(dir.join("themes/midnight.json"), "{}").unwrap();
+    std::fs::write(dir.join(IGNORE_FILE), ignore).unwrap();
+    let e = collect_dir(&dir).unwrap_err().to_string();
+    std::fs::remove_dir_all(&dir).unwrap();
+    e
+}
+
+/// e2e trial 2: a `.cyxignore` line that took out a file the package needs gave "not in the package" with no rule
+/// named, or "the package has no codeyard-extension.toml" with an unrelated fix.
+#[test]
+fn a_cyxignore_that_takes_out_a_needed_file_names_its_line() {
+    let e = ignore_error("named", "# art\n*.psd\nthemes/\n");
+    assert!(e.contains("themes.path points to 'themes/midnight.json'") && e.contains(".cyxignore line 3 ('themes/')"), "{e}");
+    let e = ignore_error("all", "*\n");
+    assert!(e.contains("codeyard-extension.toml") && e.contains(".cyxignore line 1 ('*')") && !e.contains("kebab"), "{e}");
+    assert!(!e.contains("has no codeyard-extension.toml"), "{e}");
+}
+
+#[test]
+fn a_negation_in_cyxignore_is_an_error() {
+    let e = ignore_error("negation", "themes/*\n!themes/midnight.json\n");
+    assert!(e.contains(".cyxignore line 2") && e.contains("negation"), "{e}");
+}

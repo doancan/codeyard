@@ -495,6 +495,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Extension authoring polish from the second outside-author trial (#230):
+  - `cyx publish` no longer says a first publish waits 48 hours: the wait is for updates of users who already have an
+    earlier version, and a new install takes the newest version at once. The refusal of a 0.1 build says registries
+    take API 1.x builds, not "API 1.1.0". Installing an extension that has only pre-releases says so and names the
+    version to ask for.
+  - The install sheet shows `src/**/*.rs` and `notes/**` as written; only a glob that matches every file (`**`) reads
+    "all files in the workspace". `net` lines say "(any port)": the grant is the host, by design, and the developer
+    guide and the architecture say so.
+  - `.cyxignore`: a line that leaves out the manifest, the component or a file the manifest names is reported with its
+    line number, and a `!pattern` line is refused instead of ignored. `cyx package --dry-run` no longer builds, so it
+    does not rewrite `extension.wasm`.
+  - `cyx check` shows warnings after an error. Globs accept a leading `./` only, as globs.md now says.
+
 - Extension authoring, second outside-author trial:
   - In an untrusted folder a refused write, `net` or other sending call says the folder is untrusted, not that the user
     turned the permission off, and the fix line is the right one.

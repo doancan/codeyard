@@ -140,13 +140,13 @@ impl Permissions {
         let mut out = Vec::new();
         let list = |v: &[String]| v.join(", ");
         if !self.read.is_empty() {
-            out.push(if self.read.iter().any(|g| is_wide_glob(g)) { Line::ReadAll } else { Line::Read(list(&self.read)) });
+            out.push(if self.read.iter().any(|g| is_whole_workspace(g)) { Line::ReadAll } else { Line::Read(list(&self.read)) });
             if self.read.iter().any(|g| is_sensitive_glob(g)) {
                 out.push(Line::ReadSecrets);
             }
         }
         if !self.write.is_empty() {
-            out.push(if self.write.iter().any(|g| is_wide_glob(g)) { Line::ChangeAll } else { Line::Change(list(&self.write)) });
+            out.push(if self.write.iter().any(|g| is_whole_workspace(g)) { Line::ChangeAll } else { Line::Change(list(&self.write)) });
         }
         if !self.net.is_empty() {
             out.push(if self.net.iter().any(|h| is_wide_host(h)) { Line::ConnectAny } else { Line::Connect(list(&self.net)) });
@@ -235,7 +235,7 @@ impl Line {
             Line::ChangeAll => "Change all files in the workspace".into(),
             Line::Change(g) => format!("Change {g}"),
             Line::ConnectAny => "Connect to any website".into(),
-            Line::Connect(h) => format!("Connect to {h}"),
+            Line::Connect(h) => format!("Connect to {h} (any port)"),
             Line::ConnectSetting(k) => format!("Connect to a server you allow, named in its “{k}” setting"),
             Line::Account(a) => format!("Act as your {a} account"),
             Line::Secrets => "Store secrets in your keychain".into(),
@@ -290,6 +290,13 @@ pub fn is_wide_glob(glob: &str) -> bool {
     }
     let after = last.split_once('*').map_or("", |(_, a)| a);
     !(after.len() > 1 && after.starts_with('.'))
+}
+
+/// A glob that matches every file of the workspace (`**`, `**/*`): the only kind the sheet may call "all files".
+/// `src/**/*.rs` and `notes/**` are wide for the risk level but reach a part of it, so the sheet shows them as written.
+pub fn is_whole_workspace(glob: &str) -> bool {
+    let parts = segments(glob);
+    parts.contains(&"**") && parts.iter().all(|p| matches!(*p, "**" | "*"))
 }
 
 /// Folders and files that hold credentials, or that run code when a tool opens them. Reading them counts as reading

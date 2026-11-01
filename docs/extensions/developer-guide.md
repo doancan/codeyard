@@ -325,18 +325,22 @@ Not fixed, these need you:
 ```toml
 [permissions]
 read = ["vercel.json"]          # workspace globs (reference/globs.md); .env* and .git/ must be named explicitly
-net  = ["api.vercel.com"]       # HTTPS to these hosts
+net  = ["api.vercel.com"]       # HTTPS to these hosts, on any port
 run  = ["vercel"]               # these programs, any arguments
 commands = ["core:workbench.saveAll"]   # core commands your code runs (reference/core-commands.md)
 why  = "Shows your Vercel deployments next to the code."
 ```
+
+`net` names hosts, not ports: `net = ["example.com"]` also reaches `https://example.com:8443/`, and an entry cannot say
+otherwise. Connections are always HTTPS, never to private or local addresses, so a port does not reach anything on
+the user's machine or network. The install sheet says "(any port)" for this reason.
 
 A server the user chooses (a company GitHub Enterprise) cannot be in `net`; `net-from-setting` names the setting that
 holds it, and the user allows its host on the extension page ([commands.md](commands.md#network-files-and-programs)). That needs the packaged install, not `cyx dev`.
 
 **You don't need a permission for:** notices, quick picks, input boxes, progress, your own views, status items, storage and settings, `env`, your dependencies' commands, or opening an `https:` link after a user action. A command the user starts can read and edit the active document and selections until it returns.
 
-**What users see.** When someone installs your extension they get one sheet that lists your permissions in plain words ("Connect to api.vercel.com", "Run vercel with any arguments") and quotes your `why`. Some combinations count as high risk: anything that *reads* private data (a wide `read`, files like `.env` or `.git/`, clipboard, secrets, an account) together with anything that *sends* (`net`, `run`, `write`, terminal), and anything that can run code as the user (`run`, terminal, or writing build files and hooks). That sheet gets a red banner, and for those combinations `why` is required. Write it in one honest sentence, 200 characters at most.
+**What users see.** When someone installs your extension they get one sheet that lists your permissions in plain words ("Connect to api.vercel.com (any port)", "Run vercel with any arguments") and quotes your `why`. Some combinations count as high risk: anything that *reads* private data (a wide `read`, files like `.env` or `.git/`, clipboard, secrets, an account) together with anything that *sends* (`net`, `run`, `write`, terminal), and anything that can run code as the user (`run`, terminal, or writing build files and hooks). That sheet gets a red banner, and for those combinations `why` is required. Write it in one honest sentence, 200 characters at most.
 
 At run time, undeclared access is refused, never asked. Codeyard asks the user only on the first account use, the first clipboard read per session and the first program run on a remote (SSH) host per session; if they deny it, that call and the later ones of its kind fail with `revoked-by-user` until Codeyard quits, so handle that error and say what stops working.
 
@@ -624,7 +628,7 @@ The first publish claims your publisher name (the part of the id before the dot)
 
 Good to know:
 - **Themes, snippets and other no-code packs** reach users immediately.
-- **Updates with code** reach users after **48 hours**, and `cyx publish` tells you when. Users can press **Update now**. The registry reads whether a package has code from the package itself and marks it in its index.
+- **Updates with code** reach users who already have an earlier version after **48 hours**, and `cyx publish` tells you when. Users can press **Update now**. Someone installing the extension takes the newest version at once, so a first publish has no wait. The registry reads whether a package has code from the package itself and marks it in its index.
 - **Code extensions on the public registry** are not accepted yet: for now it takes data-only extensions (themes, snippets, keymaps, languages, language servers). `cyx publish` says so when the registry refuses; share the `.cyx` from `cyx package` meanwhile, which installs from a file.
 - **Native programs** ([Native programs](#native-programs)) are accepted by invitation: the registry's operator lists your publisher name. `cyx publish` signs and uploads one package per platform in `native/` (`--target <triple>` publishes one; you can add a platform to a version later, with the same manifest and README). Your first native program stays unlisted until a reviewer approves it; `cyx publish` says so. After that your native programs are listed like any code update.
 - **Pre-releases** are versions with a suffix (`1.2.0-beta.1`). They go out at once, only to users who opted in for your extension. `cyx publish --pre-release` makes sure the version has one.
@@ -634,7 +638,7 @@ Good to know:
 ### What goes into a package
 
 A package holds what Codeyard reads when it runs your extension, and nothing else: anyone can download a published
-package and read every file in it. `cyx package --dry-run` lists the files without writing anything, and `cyx check`,
+package and read every file in it. `cyx package --dry-run` lists the files without building or writing anything (a code extension is listed with the `extension.wasm` already in the folder), and `cyx check`,
 `cyx package` and `cyx publish` all apply the same rules, as does `cyx dev`.
 
 In the package:
@@ -660,7 +664,7 @@ Left out:
 
 To leave out more, list it in `.cyxignore`, one pattern per line (`#` starts a comment). `*` matches any characters but
 `/`; a pattern without `/` matches a name anywhere (`*.psd`, `drafts`), one with `/` the path from the top
-(`docs/internal`, `/notes.md`), and a trailing `/` matches folders only:
+(`docs/internal`, `/notes.md`), and a trailing `/` matches folders only. There is no `!pattern`: a line that starts with `!` is an error, because the file only lists what to leave out.
 
 ```text
 # design files and notes
@@ -670,7 +674,8 @@ drafts/
 ```
 
 A file the manifest names but a rule leaves out is an error that says which rule, so a theme in `src/` is caught
-before you publish.
+before you publish. When a `.cyxignore` line leaves out the manifest, the component or a file the manifest names, the
+error names that line.
 
 ## Coming from VS Code
 

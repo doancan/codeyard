@@ -266,7 +266,7 @@ URL on a `net` host.
 | Permission | Allows | Consent text |
 | --- | --- | --- |
 | `read` / `write` | workspace files matching globs, including open documents | "Read vercel.json" |
-| `net` | HTTPS to listed hosts. A wildcard directly under a public suffix counts as any host | "Connect to api.vercel.com" |
+| `net` | HTTPS to listed hosts, on any port: the grant is the host, by design (a port is not part of who the user trusts, and a service on another port of the same host is the same operator). A wildcard directly under a public suffix counts as any host | "Connect to api.vercel.com (any port)" |
 | `net-from-setting` | HTTPS to servers the user allows on the extension page, for a string setting that names one (a company GitHub Enterprise). Never from the setting's value alone | "Connect to a server you allow, named in its “server” setting" |
 | `auth` | requests signed by an account; the extension never sees the token | "Act as your GitHub account" |
 | `secrets` | its own keychain entries | "Store secrets in your keychain" |

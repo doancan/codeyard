@@ -375,7 +375,7 @@ Connect to a server you allow, named in its “{}” setting
 Connect to any website	
 Connect to which WSL distribution?	
 Connect to which running container?	
-Connect to {}	
+Connect to {} (any port)	
 Connected	
 Connected before	
 Connecting to {}	

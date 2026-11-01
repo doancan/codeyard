@@ -222,3 +222,26 @@ fn the_wait_is_said_in_whole_hours() {
     assert_eq!(when_available(NOW + 60, NOW), "now");
     assert_eq!(when_available(NOW - 60, NOW), "now");
 }
+
+/// e2e trial 2: the refusal said registries take only "API 1.1.0" builds, though a 1.0 build publishes fine.
+#[test]
+fn a_0_1_build_is_refused_with_the_line_registries_take() {
+    let w = World::new("old-api");
+    let dir = w.dir.join("old");
+    std::fs::create_dir_all(&dir).unwrap();
+    let manifest = "[extension]\nid = \"you.old\"\nversion = \"1.0.0\"\nname = \"Old\"\nlicense = \"MIT\"\ndescription = \"Built before 1.0.\"\n\n[code]\nentry = \"Cargo.toml\"\n\n[[commands]]\nid = \"go\"\ntitle = \"Old: Go\"\n";
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), manifest).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "").unwrap();
+    std::fs::write(dir.join(ext_pkg::COMPONENT), ext_pkg::testing::COMPONENT_0_1).unwrap();
+    let err = w.publish(&dir, &github(7, 42), true, false).unwrap_err();
+    assert!(err.contains("built against API 0.1.0, and registries take only API 1.x builds"), "{err}");
+}
+
+/// A new install takes the newest version at once; the registry's wait is for updates (e2e trial 2: a first publish
+/// said "Users get it in 48 hours").
+#[test]
+fn the_wait_is_said_to_be_for_updates() {
+    assert_eq!(super::availability("now"), "Users get it now.");
+    let later = super::availability("in 48 hours (updates that run code wait 48 h)");
+    assert!(later.starts_with("New installs get it now; users who have an earlier version are updated in 48 hours"), "{later}");
+}

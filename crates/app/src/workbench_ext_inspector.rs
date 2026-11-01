@@ -80,7 +80,7 @@ fn row_button(id: impl Into<gpui::ElementId>, label: &'static str, p: &Palette) 
         .focus(|d| d.border_color(c(p.focus_ring)))
 }
 
-/// The plain-words line of one switch ("Connect to api.example.com").
+/// The plain-words line of one switch ("Connect to api.example.com (any port)").
 fn entry_label(e: &Entry) -> String {
     let only = grants::switch(&Permissions::default(), e, false);
     permission_lines(&only).into_iter().next().unwrap_or_else(|| e.manifest_line())

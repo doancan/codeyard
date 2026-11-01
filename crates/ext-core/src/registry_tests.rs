@@ -284,3 +284,15 @@ fn a_native_release_is_downloaded_for_one_platform() {
     let e = download_for(&reg, &v, &id("you.hello"), None, false, mac, &s.fetch, NOW).unwrap_err();
     assert!(e.to_string().contains("platform"), "{e}");
 }
+
+/// e2e trial 2: with only pre-releases published, the install said "no version that can be installed".
+#[test]
+fn an_extension_with_only_pre_releases_says_so() {
+    let mut s = setup("pre-only");
+    s.yard.publish(&package("you.beta", "0.2.0-beta.1"), &github(7, 42), NOW);
+    let reg = s.yard.registry();
+    let v = index(&reg, &s.cache, &s.fetch, NOW, true).unwrap();
+    let e = download_for(&reg, &v, &id("you.beta"), None, false, "aarch64-apple-darwin", &s.fetch, NOW).unwrap_err().to_string();
+    assert!(e.contains("only pre-releases") && e.contains("you.beta@0.2.0-beta.1"), "{e}");
+    assert!(download_for(&reg, &v, &id("you.beta"), None, true, "aarch64-apple-darwin", &s.fetch, NOW).is_ok());
+}

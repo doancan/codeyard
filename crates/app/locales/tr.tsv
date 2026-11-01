@@ -2918,7 +2918,7 @@ Read files that can hold passwords and keys	Parola ve anahtar barındırabilecek
 Change all files in the workspace	Çalışma alanındaki tüm dosyaları değiştirme
 Change {}	{} değiştirme
 Connect to any website	Herhangi bir web sitesine bağlanma
-Connect to {}	{} adresine bağlanma
+Connect to {} (any port)	{} adresine bağlanma (herhangi bir port)
 Act as your {} account	{} hesabınız adına işlem yapma
 Store secrets in your keychain	Anahtar zincirinizde gizli bilgi saklama
 Run {} with any arguments	{} programını herhangi bir argümanla çalıştırma

@@ -19,7 +19,7 @@ usage:
                                              missing permissions to codeyard-extension.toml
   cyx explain CODE                           what an error code such as CY0201 means and how to fix it
   cyx package [FOLDER] [-o FILE|FOLDER]      build the code, then write a .cyx to install or publish
-                                             (--dry-run: list the files it would hold, write nothing;
+                                             (--dry-run: list the files it would hold; builds and writes nothing;
                                              --no-build: package the extension.wasm already there;
                                              --target TRIPLE: one platform's package of an extension with
                                              native programs in native/<TRIPLE>/; without it, every platform)

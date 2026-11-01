@@ -282,11 +282,11 @@ impl Yard {
         // A component built against a 0.x API still runs during the move to 1.0, but new uploads must be 1.x builds.
         if let Some(c) = pkg.component.as_ref().filter(|c| c.in_transition()) {
             return Err(Error::Invalid(format!(
-                "{} {} was built against API {}; the registry takes API {} builds (docs/extensions/migrating-to-1.0.md)",
+                "{} {} was built against API {}; the registry takes only API {}.x builds (docs/extensions/migrating-to-1.0.md)",
                 m.id,
                 m.version,
                 c.built_for,
-                ext_api::VERSION
+                ext_api::VERSION.0
             )));
         }
         if m.has_native_programs() && !invited {

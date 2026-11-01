@@ -69,7 +69,7 @@ fn check_runs_the_import_check_on_the_component() {
     assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
     assert!(report.warnings[0].starts_with("warning: extension.wasm was built against API 0.1.0;"), "{}", report.warnings[0]);
     assert!(report.warnings[0].contains("migrating-to-1.0.md"), "{}", report.warnings[0]);
-    let moving = format!("Codeyard still runs it while extensions move to API {}", ext_api::VERSION);
+    let moving = format!("Codeyard still runs it while extensions move to API {}.x", ext_api::VERSION.0);
     assert!(report.warnings[0].contains(&moving), "{}", report.warnings[0]);
     std::fs::write(dir.join(ext_pkg::COMPONENT), b"\0asm\x01\0\0\0").unwrap();
     let e = check(&dir).unwrap_err();
@@ -153,6 +153,21 @@ fn a_missing_file_is_named() {
     std::fs::remove_file(dir.join("themes/night.json")).unwrap();
     let e = check(&dir).unwrap_err();
     assert_eq!(e, "error: themes.path points to 'themes/night.json', which is not in the package");
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// e2e trial 2: an error hid every warning until it was fixed.
+#[test]
+fn an_error_shows_the_warnings_found_so_far() {
+    let root = tmp("error-and-warning");
+    let dir = root.join("lsp");
+    scaffold::create(&dir, Kind::LanguageServer, "lsp", "you").unwrap();
+    let path = dir.join(ext_manifest::FILE_NAME);
+    let text = std::fs::read_to_string(&path).unwrap().replace("run = [\"taplo\"]\n", "run = [\"taplo\"]\ncommands = [\"core:workbench.quit\"]\n");
+    std::fs::write(&path, text + "\n[[themes]]\nlabel = \"Night\"\npath = \"themes/night.json\"\n").unwrap();
+    let e = check(&dir).unwrap_err();
+    assert!(e.starts_with("error: themes.path points to 'themes/night.json'"), "{e}");
+    assert!(e.contains("warning: core:workbench.quit is not a core command"), "{e}");
     std::fs::remove_dir_all(&root).unwrap();
 }
 
@@ -444,5 +459,24 @@ fn native_programs_are_packaged_per_platform() {
     assert_eq!(one[0].1, written[1].1, "the same platform packages to the same digest");
     assert!(package_platforms(&dir, Some(&root.join("x.cyx")), None).unwrap_err().contains("--target"));
     assert!(package_platforms(&dir, Some(&out), Some("x86_64-pc-windows-msvc")).is_err(), "no folder for it");
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+/// e2e trial 2: `--dry-run` ran the build, which rewrites extension.wasm, while saying nothing was written.
+#[test]
+fn a_dry_run_neither_builds_nor_touches_the_component() {
+    let root = tmp("dry-run");
+    let dir = root.join("probe");
+    std::fs::create_dir_all(&dir).unwrap();
+    let manifest = "[extension]\nid = \"you.probe\"\nversion = \"1.0.0\"\nname = \"Probe\"\nlicense = \"MIT\"\ndescription = \"Tests the host.\"\n\n[code]\nentry = \"Cargo.toml\"\n\n[permissions]\nread = [\"a.txt\"]\nnet = [\"api.example.com\"]\nauth = [\"github\"]\nsecrets = true\nwhy = \"Tests every part of the host.\"\n\n[[commands]]\nid = \"notice\"\ntitle = \"Probe: Notice\"\n";
+    std::fs::write(dir.join(ext_manifest::FILE_NAME), manifest).unwrap();
+    // Not a crate: a build would fail, and a build that succeeded would replace the component.
+    std::fs::write(dir.join("Cargo.toml"), "").unwrap();
+    let wasm = include_bytes!("../../ext-host/testdata/probe.wasm");
+    std::fs::write(dir.join(ext_pkg::COMPONENT), wasm).unwrap();
+    let args: Vec<String> = [dir.to_str().unwrap(), "--dry-run"].map(String::from).to_vec();
+    run_package(&parse_package(&args).unwrap()).unwrap();
+    assert_eq!(std::fs::read(dir.join(ext_pkg::COMPONENT)).unwrap(), wasm);
+    assert!(std::fs::read_dir(&dir).unwrap().all(|e| !e.unwrap().file_name().to_string_lossy().ends_with(".cyx")));
     std::fs::remove_dir_all(&root).unwrap();
 }

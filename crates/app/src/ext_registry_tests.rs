@@ -162,7 +162,7 @@ fn the_command_line_needs_accept_permissions_for_what_a_version_asks() {
     let regs = crate::ext_registry::registries(&settings_of(&cfg));
     let e = crate::ext_registry::install_from_command_line(&cfg, &regs, "you.wide", false).unwrap_err();
     assert!(e.starts_with("you.wide 1.0.0 (From the cliperms registry, published by "), "{e}");
-    for line in ["  - Read all files in the workspace", "  - Connect to api.example.com", "  Why: Uploads the workspace.", "  High risk: "] {
+    for line in ["  - Read all files in the workspace", "  - Connect to api.example.com (any port)", "  Why: Uploads the workspace.", "  High risk: "] {
         assert!(e.contains(line), "{line}: {e}");
     }
     assert!(e.contains("--accept-permissions"), "{e}");

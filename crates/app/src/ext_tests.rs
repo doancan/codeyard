@@ -367,7 +367,7 @@ fn install_file_checks_like_the_view() {
     // #2 of the outside-author trials: what it asks for is printed, and only --accept-permissions installs it.
     let e = crate::ext::install_file(&store, &asks, false).unwrap_err();
     assert!(e.starts_with("you.asks 1.0.0 (Installed from the file "), "{e}");
-    assert!(e.contains("asks to:\n  - Connect to api.example.com\n"), "{e}");
+    assert!(e.contains("asks to:\n  - Connect to api.example.com (any port)\n"), "{e}");
     assert!(e.contains("--accept-permissions"), "{e}");
     assert!(!store.locked().unwrap().keys().any(|id| id.as_str() == "you.asks"), "nothing installed");
     if crate::ext_runtime::code_runs_here(&"tests").is_ok() {

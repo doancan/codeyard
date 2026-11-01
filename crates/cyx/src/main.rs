@@ -57,7 +57,7 @@ usage:
                                              missing permissions to codeyard-extension.toml
   cyx explain CODE                           what an error code such as CY0201 means and how to fix it
   cyx package [FOLDER] [-o FILE|FOLDER]      build the code, then write a .cyx to install or publish
-                                             (--dry-run: list the files it would hold, write nothing;
+                                             (--dry-run: list the files it would hold; builds and writes nothing;
                                              --no-build: package the extension.wasm already there;
                                              --target TRIPLE: one platform's package of an extension with
                                              native programs in native/<TRIPLE>/; without it, every platform)
@@ -152,33 +152,7 @@ fn run(args: &[String]) -> Result<(), String> {
             }
             Ok(())
         }
-        "package" => {
-            let p = parse_package(rest)?;
-            // A wrong -o fails now, not after a build that can take a while.
-            if let Some(o) = &p.out {
-                check_output(o)?;
-            }
-            if p.build {
-                build::build(&p.dir)?;
-            }
-            for w in check(&p.dir)?.warnings {
-                eprintln!("{w}");
-            }
-            if p.dry_run {
-                for (name, files) in package_contents(&p.dir, p.target.as_deref())? {
-                    println!("{name} would hold {} files:", files.len());
-                    for (path, size) in files {
-                        println!("  {path}  ({size} bytes)");
-                    }
-                }
-                println!("Nothing was written. docs/extensions/developer-guide.md (\"What goes into a package\") says what is left out.");
-                return Ok(());
-            }
-            for (path, digest) in package_checked(&p.dir, p.out.as_deref(), p.target.as_deref())? {
-                println!("Wrote {}\ncontent digest {digest}", path.display());
-            }
-            Ok(())
-        }
+        "package" => run_package(&parse_package(rest)?),
         "dev" => {
             let (folder_arg, extra) = match rest.iter().position(|a| a == "--") {
                 Some(i) => (rest[..i].first(), &rest[i + 1..]),
@@ -510,13 +484,15 @@ fn check_with(dir: &Path, options: ext_manifest::Options) -> Result<CheckReport,
     }
     // The package rules (files the manifest names, paths, sizes) as a full package build would apply them: for each
     // platform of an extension with native programs.
+    // An error does not hide the warnings found so far: they come after it, so the author fixes both in one pass.
     let mut secrets = Vec::new();
+    let with_warnings = |error: String| if warnings.is_empty() { error } else { format!("{error}\n\n{}", warnings.join("\n")) };
     if m.has_native_programs() {
-        for t in native_platforms(dir)? {
-            secrets.extend(check_files(dir, Some(&t), &m, &text)?);
+        for t in native_platforms(dir).map_err(with_warnings)? {
+            secrets.extend(check_files(dir, Some(&t), &m, &text).map_err(with_warnings)?);
         }
     } else {
-        secrets.extend(check_files(dir, None, &m, &text)?);
+        secrets.extend(check_files(dir, None, &m, &text).map_err(with_warnings)?);
     }
     secrets.sort();
     secrets.dedup();
@@ -558,10 +534,10 @@ fn requires_on(c: &ext_pkg::Component, build: &str) -> String {
 /// A component built against a 0.x API, which Codeyard still runs during the move to 1.0.
 pub(crate) fn transition_warning(c: &ext_pkg::Component) -> String {
     format!(
-        "warning: {} was built against API {}; Codeyard still runs it while extensions move to API {}, but registries no longer take it and a later Codeyard will refuse it\n  --> {}\n   = fix: rebuild with the current SDK (`cyx package`); docs/extensions/migrating-to-1.0.md lists what changed",
+        "warning: {} was built against API {}; Codeyard still runs it while extensions move to API {}.x, but registries no longer take it and a later Codeyard will refuse it\n  --> {}\n   = fix: rebuild with the current SDK (`cyx package`); docs/extensions/migrating-to-1.0.md lists what changed",
         ext_pkg::COMPONENT,
         c.built_for,
-        ext_api::VERSION,
+        ext_api::VERSION.0,
         ext_pkg::COMPONENT
     )
 }
@@ -661,6 +637,37 @@ fn render(errors: &[ext_manifest::Diagnostic], text: &str) -> String {
     let mut out: Vec<String> = errors.iter().map(|d| d.render(ext_manifest::FILE_NAME, text)).collect();
     out.push(format!("\n{} problem{} found", errors.len(), if errors.len() == 1 { "" } else { "s" }));
     out.join("\n\n")
+}
+
+/// `cyx package`. `--dry-run` writes nothing, so it does not build: the build would rewrite `extension.wasm`.
+fn run_package(p: &PackageArgs) -> Result<(), String> {
+    // A wrong -o fails now, not after a build that can take a while.
+    if let Some(o) = &p.out {
+        check_output(o)?;
+    }
+    if p.build && !p.dry_run {
+        build::build(&p.dir)?;
+    }
+    for w in check(&p.dir)?.warnings {
+        eprintln!("{w}");
+    }
+    if p.dry_run {
+        for (name, files) in package_contents(&p.dir, p.target.as_deref())? {
+            println!("{name} would hold {} files:", files.len());
+            for (path, size) in files {
+                println!("  {path}  ({size} bytes)");
+            }
+        }
+        if build::manifest(&p.dir)?.code.is_some() {
+            println!("{} is the one in the folder now: --dry-run does not build.", ext_pkg::COMPONENT);
+        }
+        println!("Nothing was built or written. docs/extensions/developer-guide.md (\"What goes into a package\") says what is left out.");
+        return Ok(());
+    }
+    for (path, digest) in package_checked(&p.dir, p.out.as_deref(), p.target.as_deref())? {
+        println!("Wrote {}\ncontent digest {digest}", path.display());
+    }
+    Ok(())
 }
 
 /// `cyx package`'s arguments.

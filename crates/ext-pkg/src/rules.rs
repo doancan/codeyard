@@ -198,7 +198,8 @@ pub fn left_out_because(rel: &str) -> Option<&'static str> {
 
 /// The patterns of a `.cyxignore`: one per line, `#` starts a comment. `*` matches any characters but `/`. A pattern
 /// without a `/` matches a name at any depth (`*.psd`, `drafts`); one with a `/` matches the path from the top
-/// (`docs/internal`, `/notes.md`). A trailing `/` matches folders only.
+/// (`docs/internal`, `/notes.md`). A trailing `/` matches folders only. The file only lists what to leave out: a
+/// `!pattern` line is an error, not a quiet no-op.
 #[derive(Clone, Debug, Default)]
 pub struct Ignore {
     patterns: Vec<Pattern>,
@@ -209,28 +210,68 @@ struct Pattern {
     glob: String,
     anchored: bool,
     dir_only: bool,
+    /// 1-based line in the file, and the line as written, for messages.
+    line: usize,
+    text: String,
+}
+
+/// The `.cyxignore` line that leaves a path out.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IgnoreHit {
+    pub line: usize,
+    pub pattern: String,
 }
 
 impl Ignore {
-    pub fn parse(text: &str) -> Ignore {
-        let patterns = text
-            .lines()
-            .map(str::trim)
-            .filter(|l| !l.is_empty() && !l.starts_with('#'))
-            .map(|l| {
-                let dir_only = l.ends_with('/');
-                let l = l.trim_end_matches('/');
-                let anchored = l.contains('/');
-                Pattern { glob: l.trim_start_matches('/').to_string(), anchored, dir_only }
-            })
-            .filter(|p| !p.glob.is_empty())
-            .collect();
-        Ignore { patterns }
+    pub fn parse(text: &str) -> Result<Ignore, String> {
+        let mut patterns = Vec::new();
+        for (i, raw) in text.lines().enumerate() {
+            let l = raw.trim();
+            if l.is_empty() || l.starts_with('#') {
+                continue;
+            }
+            if l.starts_with('!') {
+                return Err(format!(
+                    "{IGNORE_FILE} line {}: '{l}' is a negation, which is not supported: the file only lists what to leave out\n   = fix: remove the line, or narrow the pattern that leaves the file out",
+                    i + 1
+                ));
+            }
+            let dir_only = l.ends_with('/');
+            let trimmed = l.trim_end_matches('/');
+            let glob = trimmed.trim_start_matches('/').to_string();
+            if glob.is_empty() {
+                continue;
+            }
+            patterns.push(Pattern { glob, anchored: trimmed.contains('/'), dir_only, line: i + 1, text: l.to_string() });
+        }
+        Ok(Ignore { patterns })
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.patterns.is_empty()
     }
 
     fn matches(&self, rel: &str, is_dir: bool) -> bool {
+        self.hit(rel, is_dir).is_some()
+    }
+
+    fn hit(&self, rel: &str, is_dir: bool) -> Option<&Pattern> {
         let name = rel.rsplit('/').next().unwrap_or(rel);
-        self.patterns.iter().any(|p| (is_dir || !p.dir_only) && glob(&p.glob, if p.anchored { rel } else { name }))
+        self.patterns.iter().find(|p| (is_dir || !p.dir_only) && glob(&p.glob, if p.anchored { rel } else { name }))
+    }
+
+    /// The line that leaves the file `rel` out of a package: one that names it, or a folder above it.
+    pub fn explain(&self, rel: &str) -> Option<IgnoreHit> {
+        let mut end = 0;
+        for part in rel.split('/') {
+            end += part.len();
+            let is_dir = end < rel.len();
+            if let Some(p) = self.hit(&rel[..end], is_dir) {
+                return Some(IgnoreHit { line: p.line, pattern: p.text.clone() });
+            }
+            end += 1;
+        }
+        None
     }
 }
 
@@ -368,7 +409,7 @@ mod tests {
 
     #[test]
     fn cyxignore_leaves_out_what_it_names() {
-        let ignore = Ignore::parse("# drafts\n*.psd\ndrafts/\n/notes.md\ndocs/internal\n\n");
+        let ignore = Ignore::parse("# drafts\n*.psd\ndrafts/\n/notes.md\ndocs/internal\n\n").unwrap();
         let r = |rel: &str, dir: bool| rule(rel, dir, true, &ignore);
         assert_eq!(r("art/logo.psd", false), Rule::Skip);
         assert_eq!(r("drafts", true), Rule::Skip);
@@ -379,6 +420,17 @@ mod tests {
         assert_eq!(r("docs/internal", true), Rule::Skip);
         assert_eq!(r("docs/guide.md", false), Rule::Keep);
         assert!(glob("a*c", "abbc") && glob("*", "x") && !glob("*", "a/b") && !glob("a*", "b"));
+    }
+
+    #[test]
+    fn a_negation_is_refused_and_a_hit_names_its_line() {
+        let e = Ignore::parse("*.psd\n  !keep.psd\n").unwrap_err();
+        assert!(e.contains(".cyxignore line 2") && e.contains("'!keep.psd'") && e.contains("negation"), "{e}");
+        let ignore = Ignore::parse("# c\n\ndrafts/\n*.psd\n").unwrap();
+        assert_eq!(ignore.explain("drafts/a/b.json"), Some(IgnoreHit { line: 3, pattern: "drafts/".into() }));
+        assert_eq!(ignore.explain("art/x.psd"), Some(IgnoreHit { line: 4, pattern: "*.psd".into() }));
+        assert_eq!(ignore.explain("themes/a.json"), None);
+        assert_eq!(ignore.explain("drafts"), None, "a trailing / matches folders only, and `drafts` here is a file");
     }
 
     #[test]

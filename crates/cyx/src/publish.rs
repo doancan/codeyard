@@ -63,10 +63,10 @@ pub fn publish(p: &Publish, ep: &Endpoints, token: impl FnOnce() -> Result<Strin
     let package = ext_pkg::read(&bytes).map_err(|e| format!("error: {e}"))?;
     if let Some(c) = package.component.as_ref().filter(|c| c.in_transition()) {
         return Err(format!(
-            "error: {} was built against API {}, and registries take only API {} builds\n   = fix: rebuild with the current SDK (`cyx package`); docs/extensions/migrating-to-1.0.md lists what changed",
+            "error: {} was built against API {}, and registries take only API {}.x builds\n   = fix: rebuild with the current SDK (`cyx package`); docs/extensions/migrating-to-1.0.md lists what changed",
             ext_pkg::COMPONENT,
             c.built_for,
-            ext_api::VERSION
+            ext_api::VERSION.0
         ));
     }
     let m = package.manifest;
@@ -98,12 +98,13 @@ pub fn publish(p: &Publish, ep: &Endpoints, token: impl FnOnce() -> Result<Strin
         (false, true) => notes.push(format!("note: {} is a pre-release (it has a suffix): users get it only when they opt in to pre-releases", m.version)),
         _ => {}
     }
-    // The registry reads the `code` flag of its index from the package (a code extension waits 48 h); nothing to send.
+    // The registry reads the `code` flag of its index from the package (an update to a code extension waits 48 h);
+    // nothing to send.
     let code = !m.is_declarative();
     if code && p.pre_release {
         notes.push(format!("note: {} runs code: the index marks it as code; a pre-release installs at once for users who opted in", m.id));
     } else if code {
-        notes.push(format!("note: {} runs code: the index marks it as code, and users get each version 48 hours after it is published", m.id));
+        notes.push(format!("note: {} runs code: the index marks it as code, and users who have an earlier version get each update 48 hours after it is published; a new install takes it at once", m.id));
     }
     let mut out = notes.join("\n");
     if !out.is_empty() {
@@ -147,8 +148,13 @@ pub fn publish(p: &Publish, ep: &Endpoints, token: impl FnOnce() -> Result<Strin
         return Ok(out);
     }
     let when = when_available(published["available"].as_u64().unwrap_or(now), now);
-    out.push_str(&format!("Published {} {} as {}.\nUsers get it {when}.", m.id, m.version, signed.publisher));
+    out.push_str(&format!("Published {} {} as {}.\n{}", m.id, m.version, signed.publisher, availability(&when)));
     Ok(out)
+}
+
+/// What users get when: a new install takes the newest version at once; the registry's wait is for updates.
+fn availability(when: &str) -> String {
+    if when == "now" { "Users get it now.".into() } else { format!("New installs get it now; users who have an earlier version are updated {when}.") }
 }
 
 /// When users get a version the registry makes available at `available`: "now", or "in 48 hours (…)". The registry's
