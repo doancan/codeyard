@@ -19,6 +19,7 @@ pub enum SettingsEvent {
     PickIconTheme,
     OpenJson,
     OpenKeybindings,
+    ResetAll,
 }
 
 /// The page as assistive technology reads it ([`SettingsPage::access_view`]).
@@ -32,7 +33,7 @@ pub struct AccessPage {
     /// theme…" buttons were painted.
     pub search_bounds: Option<accesskit::Rect>,
     pub category_bounds: Vec<Option<accesskit::Rect>>,
-    pub button_bounds: [Option<accesskit::Rect>; 3],
+    pub button_bounds: [Option<accesskit::Rect>; 4],
     pub rows: Vec<AccessSetting>,
     /// Visible settings (`rows` holds the first ones).
     pub total: usize,
@@ -70,6 +71,7 @@ enum SetFrame {
     Json,
     Keys,
     Icons,
+    ResetAll,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -444,7 +446,7 @@ impl SettingsPage {
             focused,
             search_bounds: crate::painted::physical(&self.bounds, &SetFrame::Search, window),
             category_bounds: (0..CATEGORIES.len()).map(|i| crate::painted::physical(&self.bounds, &SetFrame::Category(i), window)).collect(),
-            button_bounds: [SetFrame::Json, SetFrame::Keys, SetFrame::Icons].map(|f| crate::painted::physical(&self.bounds, &f, window)),
+            button_bounds: [SetFrame::Json, SetFrame::Keys, SetFrame::Icons, SetFrame::ResetAll].map(|f| crate::painted::physical(&self.bounds, &f, window)),
         }
     }
 
@@ -692,6 +694,23 @@ impl Render for SettingsPage {
                             .text_size(px(text::XS.0))
                             .child(crate::i18n::t("Keyboard Shortcuts"))
                             .on_click(cx.listener(|_, _, _, cx| cx.emit(SettingsEvent::OpenKeybindings))),
+                    )
+                    .child(
+                        div()
+                            .id("set-reset-all")
+                            .relative()
+                            .child(crate::painted::probe(&self.bounds, SetFrame::ResetAll))
+                            .h(px(26.))
+                            .px(px(theme::SPACE[4]))
+                            .flex()
+                            .items_center()
+                            .rounded(px(theme::radius::SM))
+                            .bg(c(p.surface_hover))
+                            .cursor_pointer()
+                            .hover(|d| d.bg(c(p.surface_active)))
+                            .text_size(px(text::XS.0))
+                            .child(crate::i18n::t("Reset All Settings…"))
+                            .on_click(cx.listener(|_, _, _, cx| cx.emit(SettingsEvent::ResetAll))),
                     ),
             )
             .child(

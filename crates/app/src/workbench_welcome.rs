@@ -162,6 +162,7 @@ impl Workbench {
                     SettingsEvent::PickIconTheme => this.select_icon_theme(&SelectIconTheme, window, cx),
                     SettingsEvent::OpenJson => this.open_settings(&super::OpenSettings, window, cx),
                     SettingsEvent::OpenKeybindings => this.open_keybindings(&OpenKeybindings, window, cx),
+                    SettingsEvent::ResetAll => this.reset_settings(&super::settings_ui::ResetSettings, window, cx),
                 }));
                 self.tabs.page = Some(Page::Settings(view.clone()));
                 view

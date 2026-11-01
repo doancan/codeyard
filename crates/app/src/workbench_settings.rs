@@ -668,7 +668,7 @@ pub fn write_default_settings(path: &std::path::Path) -> std::io::Result<Option<
     } else {
         None
     };
-    crate::fsutil::write_atomic(path, settings::TEMPLATE.to_string())?;
+    crate::fsutil::write_atomic(path, settings::TEMPLATE)?;
     Ok(backup)
 }
 

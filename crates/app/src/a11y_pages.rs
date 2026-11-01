@@ -17,6 +17,7 @@ const SETTINGS_EMPTY: NodeId = NodeId(58);
 const SETTINGS_JSON: NodeId = NodeId(59);
 const SETTINGS_KEYS: NodeId = NodeId(60);
 const SETTINGS_ICONS: NodeId = NodeId(61);
+const SETTINGS_RESET_ALL: NodeId = NodeId(200);
 const SHORTCUTS: NodeId = NodeId(62);
 const SHORTCUTS_SEARCH: NodeId = NodeId(63);
 const SHORTCUTS_LIST: NodeId = NodeId(64);
@@ -26,7 +27,7 @@ const PORTS_EMPTY: NodeId = NodeId(67);
 /// A rejected setting value, as an assertive live region (said at once, as the field turns invalid).
 const SETTINGS_ERROR: NodeId = NodeId(118);
 /// This module's fixed nodes, for the id layout check.
-pub(in crate::workbench) const FIXED: [NodeId; 15] = [
+pub(in crate::workbench) const FIXED: [NodeId; 16] = [
     SETTINGS,
     SETTINGS_SEARCH,
     SETTINGS_CATEGORIES,
@@ -35,6 +36,7 @@ pub(in crate::workbench) const FIXED: [NodeId; 15] = [
     SETTINGS_JSON,
     SETTINGS_KEYS,
     SETTINGS_ICONS,
+    SETTINGS_RESET_ALL,
     SHORTCUTS,
     SHORTCUTS_SEARCH,
     SHORTCUTS_LIST,
@@ -247,7 +249,8 @@ impl SettingsSnap {
         kids.push(button(nodes, SETTINGS_JSON, t("Open settings.jsonc"), None));
         kids.push(button(nodes, SETTINGS_KEYS, t("Keyboard Shortcuts"), None));
         kids.push(button(nodes, SETTINGS_ICONS, t("File icon theme…"), None));
-        for (id, b) in [SETTINGS_JSON, SETTINGS_KEYS, SETTINGS_ICONS].into_iter().zip(v.button_bounds) {
+        kids.push(button(nodes, SETTINGS_RESET_ALL, t("Reset All Settings…"), None));
+        for (id, b) in [SETTINGS_JSON, SETTINGS_KEYS, SETTINGS_ICONS, SETTINGS_RESET_ALL].into_iter().zip(v.button_bounds) {
             place(nodes, id, b);
         }
         let mut page = Node::new(Role::Group);
@@ -452,7 +455,8 @@ impl Workbench {
     /// An action on a node of this module; `false` if the node is not one of them.
     pub(super) fn a11y_pages_action(&mut self, req: &ActionRequest, last: &PagesSnap, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let id = req.target_node;
-        let settings_node = [SETTINGS_SEARCH, SETTINGS_JSON, SETTINGS_KEYS, SETTINGS_ICONS].contains(&id) || (SET_CATEGORY..SHORTCUT_ROW).contains(&id.0);
+        let settings_node =
+            [SETTINGS_SEARCH, SETTINGS_JSON, SETTINGS_KEYS, SETTINGS_ICONS, SETTINGS_RESET_ALL].contains(&id) || (SET_CATEGORY..SHORTCUT_ROW).contains(&id.0);
         if settings_node {
             self.a11y_settings_action(req, last.settings.as_ref(), window, cx);
         } else if id == SHORTCUTS_SEARCH || (SHORTCUT_ROW..PORT_ROW).contains(&id.0) {
@@ -476,6 +480,7 @@ impl Workbench {
             (Action::Click, SETTINGS_JSON) => emit(SettingsEvent::OpenJson, cx),
             (Action::Click, SETTINGS_KEYS) => emit(SettingsEvent::OpenKeybindings, cx),
             (Action::Click, SETTINGS_ICONS) => emit(SettingsEvent::PickIconTheme, cx),
+            (Action::Click, SETTINGS_RESET_ALL) => emit(SettingsEvent::ResetAll, cx),
             (Action::Click, id) if (SET_CATEGORY..SET_ROW).contains(&id.0) => page.update(cx, |p, cx| p.select_category((id.0 - SET_CATEGORY) as usize, cx)),
             (action, id) if id.0 >= SET_ROW => {
                 let (index, part) = (((id.0 - SET_ROW) / ROW_IDS) as usize, (id.0 - SET_ROW) % ROW_IDS);

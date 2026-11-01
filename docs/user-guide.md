@@ -1337,7 +1337,7 @@ writes them once you confirm: Clippy for checks, checks with the Cargo features 
 (`rust.features`, `rust.noDefaultFeatures`), a check folder of its own, and rustfmt on save. Comments and other settings
 stay as they are; "Preferences: Reset Rust Setup…" removes exactly those lines again.
 
-If `settings.jsonc` is broken or left over from an old version, "Preferences: Reset Settings to Defaults…" replaces it with
+If `settings.jsonc` is broken or left over from an old version, "Reset All Settings…" on the Settings page (or "Preferences: Reset Settings to Defaults…") replaces it with
 the default file of the running version after you confirm. The old file stays next to it as
 `settings.backup-<time>.jsonc`.
 

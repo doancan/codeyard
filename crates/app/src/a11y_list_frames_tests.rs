@@ -136,7 +136,7 @@ fn settings_controls_have_their_painted_frames(cx: &mut TestAppContext) {
         .iter()
         .map(|l| find(&tree, Role::SearchInput, l).0)
         .chain(["Commonly Used", "Editor", "Modified"].iter().map(|l| find(&tree, Role::Tab, l).0))
-        .chain(["Open settings.jsonc", "Keyboard Shortcuts", "File icon theme…"].iter().map(|l| find(&tree, Role::Button, l).0))
+        .chain(["Open settings.jsonc", "Keyboard Shortcuts", "File icon theme…", "Reset All Settings…"].iter().map(|l| find(&tree, Role::Button, l).0))
         .collect();
     hit(&snap, &fixed, None);
     assert!(tree.iter().any(|(id, _)| *id == page));
