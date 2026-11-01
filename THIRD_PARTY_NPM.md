@@ -6,7 +6,7 @@ with Codeyard. `build`: what `cyx` installs into its cache folder to build TypeS
 embedded in every TypeScript extension's component. `dev`: the SDK's own development dependencies. The licence column
 is the `license` field of each package (from the lock file). Platform packages are listed for every platform.
 
-207 packages.
+208 packages.
 
 | Package | Version | Licence | Used for |
 | --- | --- | --- | --- |
@@ -72,6 +72,7 @@ is the `license` field of each package (from the lock file). Platform packages a
 | @esbuild/win32-ia32 | 0.28.2 | MIT | build |
 | @esbuild/win32-x64 | 0.28.2 | MIT | build |
 | @isaacs/fs-minipass | 4.0.1 | ISC | build |
+| @isaacs/nonrecursive-glob-match | 1.0.3 | BlueOak-1.0.0 | build |
 | @napi-rs/lzma | 1.5.1 | MIT | build |
 | @napi-rs/lzma-android-arm-eabi | 1.5.1 | MIT | build |
 | @napi-rs/lzma-android-arm64 | 1.5.1 | MIT | build |
@@ -184,7 +185,7 @@ is the `license` field of each package (from the lock file). Platform packages a
 | fflate | 0.8.3 | MIT | build |
 | ieee754 | 1.2.1 | BSD-3-Clause | build |
 | jsesc | 3.1.0 | MIT | build |
-| minimatch | 10.2.6 | BlueOak-1.0.0 | build |
+| minimatch | 11.0.1 | BlueOak-1.0.0 | build |
 | minipass | 7.1.3 | BlueOak-1.0.0 | build |
 | minizlib | 3.1.0 | MIT | build |
 | mkdirp | 3.0.1 | MIT | build |
