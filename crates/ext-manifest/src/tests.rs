@@ -443,9 +443,21 @@ fn consent_lines_use_plain_words() {
         run: vec!["vercel".into()],
         ..Default::default()
     };
-    assert_eq!(p.describe(), vec!["Read vercel.json", "Connect to api.vercel.com", "Act as your GitHub account", "Run vercel with any arguments"]);
+    assert_eq!(p.describe(), vec!["Read vercel.json", "Connect to api.vercel.com (any port)", "Act as your GitHub account", "Run vercel with any arguments"]);
     let wide = Permissions { read: vec!["**".into()], net: vec!["*.com".into()], ..Default::default() };
     assert_eq!(wide.describe(), vec!["Read all files in the workspace", "Connect to any website"]);
+}
+
+#[test]
+fn the_sheet_calls_only_a_whole_workspace_glob_all_files() {
+    for g in ["**", "**/*", "./**", "**/**"] {
+        let p = Permissions { read: vec![g.into()], write: vec![g.into()], ..Default::default() };
+        assert_eq!(p.describe(), vec!["Read all files in the workspace", "Change all files in the workspace"], "{g}");
+    }
+    let p = Permissions { read: vec!["src/**/*.rs".into(), "notes/**".into()], write: vec!["*/x.json".into()], ..Default::default() };
+    assert_eq!(p.describe(), vec!["Read src/**/*.rs, notes/**", "Change */x.json"]);
+    let p = Permissions { read: vec!["src/**/*.rs".into(), "**".into()], ..Default::default() };
+    assert_eq!(p.describe(), vec!["Read all files in the workspace"]);
 }
 
 // Regressions from the hardening review of #50: each input once rated too low or was accepted.
@@ -627,7 +639,7 @@ fn an_update_asks_only_for_what_is_new() {
     assert_eq!(added.describe(), ["Read *.lock", "Read the clipboard", "Type into terminals"]);
     // A narrower entry than before is still a new one: entries compare as written.
     let narrower = Permissions { net: vec!["v2.api.x.com".into()], ..Default::default() };
-    assert_eq!(narrower.added_since(&old).describe(), ["Connect to v2.api.x.com"]);
+    assert_eq!(narrower.added_since(&old).describe(), ["Connect to v2.api.x.com (any port)"]);
 }
 
 const ACME: &str = "[[oauth]]\nid = \"acme\"\nname = \"Acme\"\nauthorize-url = \"https://acme.example.com/oauth/authorize\"\ntoken-url = \"https://acme.example.com/oauth/token\"\nclient-id = \"cy-123\"\nscopes = [\"read\", \"deploy:write\"]\nhosts = [\"api.acme.example.com\"]\naccount-url = \"https://api.acme.example.com/me\"\n";

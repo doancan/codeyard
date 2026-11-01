@@ -9,7 +9,7 @@ The globs of `read`, `write`, `activation.workspace-contains` and `workspace.fin
 - `.env*` files and the `.git/` folder are reached only by a glob that names them in one of its parts (`.env`, `**/.env*`, `.git/config`), never by `**`.
 - A path is resolved before it is matched: `src/../../etc/passwd` and `src/%2e%2e/…` are outside the folder and refused, whatever the globs say.
 
-`cyx check` refuses what has no meaning here, instead of letting it match nothing: `{a,b}` alternatives (list each glob), a leading `!` (globs only allow), `**` inside a part (`src/**.rs`; write `src/**/*.rs`), and `.`, `..` or empty parts.
+`cyx check` refuses what has no meaning here, instead of letting it match nothing: `{a,b}` alternatives (list each glob), a leading `!` (globs only allow), `**` inside a part (`src/**.rs`; write `src/**/*.rs`), and `.`, `..` or empty parts. The one exception is a leading `./`, which means the same as no prefix (`./main.rs` is `main.rs`); a `.` anywhere else (`src/./a.rs`) is refused.
 
 | Glob | Path | Matches |
 | --- | --- | --- |

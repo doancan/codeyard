@@ -244,7 +244,16 @@ pub fn download_for(
     let entry = v.index.extensions.get(id).ok_or_else(|| Error::NotFound(format!("{id} is not in the {} registry", reg.name)))?;
     let release = match version {
         Some(ver) => v.index.release(id, ver).ok_or_else(|| Error::NotFound(format!("{id} has no version {ver}")))?,
-        None => v.index.latest(id, pre_release).ok_or_else(|| Error::NotFound(format!("{id} has no version that can be installed")))?,
+        None => v.index.latest(id, pre_release).ok_or_else(|| {
+            // Only pre-releases are left: say so, and how to take one.
+            match v.index.latest(id, true) {
+                Some(pre) => Error::NotFound(format!(
+                    "{id} has only pre-releases so far (the newest is {0}); install it with {id}@{0}, or opt the extension in to pre-releases on its page",
+                    pre.version
+                )),
+                None => Error::NotFound(format!("{id} has no version that can be installed")),
+            }
+        })?,
     };
     match &release.status {
         Status::Revoked { reason } => return Err(Error::NotFound(format!("{id} {} was revoked by the registry: {reason}", release.version))),

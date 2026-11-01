@@ -530,7 +530,7 @@ pub fn permission_lines(p: &ext_manifest::Permissions) -> Vec<String> {
             Line::ChangeAll => crate::i18n::t("Change all files in the workspace").to_string(),
             Line::Change(g) => crate::i18n::tf("Change {}", &[g]),
             Line::ConnectAny => crate::i18n::t("Connect to any website").to_string(),
-            Line::Connect(h) => crate::i18n::tf("Connect to {}", &[h]),
+            Line::Connect(h) => crate::i18n::tf("Connect to {} (any port)", &[h]),
             Line::ConnectSetting(k) => crate::i18n::tf("Connect to a server you allow, named in its “{}” setting", &[k]),
             Line::Account(a) => crate::i18n::tf("Act as your {} account", &[a]),
             Line::Secrets => crate::i18n::t("Store secrets in your keychain").to_string(),

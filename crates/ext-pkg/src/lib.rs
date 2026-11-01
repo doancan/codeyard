@@ -66,6 +66,13 @@ pub enum Error {
         field: String,
         path: String,
     },
+    /// A file the package needs, or the manifest names, is left out by a `.cyxignore` line.
+    Ignored {
+        /// The manifest field that names the file; none for a file every package needs (the manifest, the component).
+        field: Option<String>,
+        path: String,
+        by: rules::IgnoreHit,
+    },
     Io(std::io::Error),
 }
 
@@ -95,6 +102,18 @@ impl fmt::Display for Error {
                     None => Ok(()),
                 }
             }
+            Error::Ignored { field: Some(field), path, by } => write!(
+                f,
+                "{field} points to '{path}', which {IGNORE_FILE} line {} ('{}') leaves out of the package\n   = fix: remove or narrow that line, or stop naming the file in {}",
+                by.line,
+                by.pattern,
+                ext_manifest::FILE_NAME
+            ),
+            Error::Ignored { field: None, path, by } => write!(
+                f,
+                "'{path}' is left out of the package by {IGNORE_FILE} line {} ('{}'), and every package needs it\n   = fix: remove or narrow that line",
+                by.line, by.pattern
+            ),
             Error::Io(e) => write!(f, "{e}"),
         }
     }
@@ -237,10 +256,10 @@ fn canonical_tar(entries: &[Entry]) -> Result<Vec<u8>, Error> {
     Ok(out)
 }
 
-/// Every file the manifest names must be in the package.
-fn check_references(m: &Manifest, files: &BTreeMap<String, Entry>) -> Result<(), Error> {
+/// The files the manifest names, with the field that names each.
+fn named_files(m: &Manifest) -> Vec<(&'static str, &str)> {
     let c = &m.contributions;
-    let mut refs: Vec<(&str, &str)> = Vec::new();
+    let mut refs: Vec<(&'static str, &str)> = Vec::new();
     refs.extend(c.themes.iter().map(|t| ("themes.path", t.path.as_str())));
     refs.extend(c.keymap_presets.iter().map(|t| ("keymap-preset.path", t.path.as_str())));
     refs.extend(c.snippets.iter().map(|s| ("snippets.path", s.path.as_str())));
@@ -249,7 +268,12 @@ fn check_references(m: &Manifest, files: &BTreeMap<String, Entry>) -> Result<(),
     if let Some(i) = &m.icon {
         refs.push(("extension.icon", i));
     }
-    for (field, path) in refs {
+    refs
+}
+
+/// Every file the manifest names must be in the package.
+fn check_references(m: &Manifest, files: &BTreeMap<String, Entry>) -> Result<(), Error> {
+    for (field, path) in named_files(m) {
         if !files.contains_key(path) {
             return Err(Error::MissingFile { field: field.into(), path: path.into() });
         }
@@ -430,12 +454,13 @@ pub struct Collected {
 /// its name.
 pub fn collect(root: &Path, target: Option<&str>) -> Result<Collected, Error> {
     let ignore = match std::fs::read_to_string(root.join(IGNORE_FILE)) {
-        Ok(text) => rules::Ignore::parse(&text),
+        Ok(text) => rules::Ignore::parse(&text).map_err(Error::Contents)?,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => rules::Ignore::default(),
         Err(e) => return Err(Error::Io(e)),
     };
     let mut c = Collected { files: Vec::new(), secrets: Vec::new() };
     collect_tree(root, true, &ignore, &mut c)?;
+    check_not_ignored(root, &ignore, &c.files)?;
     if let Some(t) = target {
         if !ext_manifest::is_target(t) {
             return Err(Error::Path {
@@ -465,6 +490,33 @@ pub fn collect(root: &Path, target: Option<&str>) -> Result<Collected, Error> {
     }
     c.secrets.sort();
     Ok(c)
+}
+
+/// A file the package needs (the manifest, the component of a code extension, anything the manifest names) that a
+/// `.cyxignore` line leaves out is named with that line, instead of surfacing later as a missing file.
+fn check_not_ignored(root: &Path, ignore: &rules::Ignore, files: &[Entry]) -> Result<(), Error> {
+    if ignore.is_empty() {
+        return Ok(());
+    }
+    let mut needed: Vec<(Option<String>, String)> = vec![(None, ext_manifest::FILE_NAME.to_string())];
+    let manifest = std::fs::read_to_string(root.join(ext_manifest::FILE_NAME))
+        .ok()
+        .and_then(|text| ext_manifest::parse_with(&text, ext_manifest::Options { require_why: false }).ok());
+    if let Some(m) = &manifest {
+        if m.code.is_some() {
+            needed.push((None, COMPONENT.to_string()));
+        }
+        needed.extend(named_files(m).into_iter().map(|(field, path)| (Some(field.to_string()), path.to_string())));
+    }
+    for (field, path) in needed {
+        if files.iter().any(|e| e.path == path) {
+            continue;
+        }
+        if let Some(by) = ignore.explain(&path) {
+            return Err(Error::Ignored { field, path, by });
+        }
+    }
+    Ok(())
 }
 
 /// The target triples an extension folder has programs for (`native/<triple>/`), sorted.

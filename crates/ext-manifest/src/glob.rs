@@ -77,7 +77,7 @@ pub fn check(glob: &str) -> Result<(), String> {
     }
     let body = glob.strip_prefix("./").unwrap_or(glob);
     if body.split('/').any(|p| p.is_empty() || p == "." || p == "..") {
-        return Err("must not contain '.', '..' or empty parts".into());
+        return Err("must not contain '.', '..' or empty parts (only a leading './' is allowed)".into());
     }
     if body.split('/').any(|p| p.contains("**") && p != "**") {
         return Err("uses '**' inside a part; '**' must be a whole part, as in 'src/**/*.rs'".into());
@@ -145,6 +145,12 @@ mod tests {
         assert!(check("!secret.txt").unwrap_err().contains("'!'"));
         assert!(check("src/**.rs").unwrap_err().contains("whole part"));
         assert!(check("src/../etc").unwrap_err().contains(".."));
+        // A leading `./` means the same as none; a `.` part anywhere else is refused (globs.md says so).
+        assert!(check("./main.rs").is_ok());
+        assert!(path_matches("./main.rs", "main.rs"));
+        for bad in ["src/./a.rs", "././a.rs", "."] {
+            assert!(check(bad).unwrap_err().contains("only a leading './'"), "{bad}");
+        }
         assert!(check("/etc/passwd").is_err());
         assert!(check("C:/x").is_err());
     }
