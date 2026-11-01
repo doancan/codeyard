@@ -300,7 +300,20 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       - name: Windows native checks
         shell: pwsh
-        run: ./scripts/check-windows.ps1 -SkipStandalone
+        run: |
+          $log = "$env:RUNNER_TEMP\samples.txt"
+          $sampler = Start-Job -ArgumentList $log {
+            param($log)
+            while ($true) {
+              $os = Get-CimInstance Win32_OperatingSystem
+              $procs = Get-Process
+              "$(Get-Date -Format HH:mm:ss) free=$([int]($os.FreePhysicalMemory/1024))MB commitfree=$([int]($os.FreeVirtualMemory/1024))MB procs=$($procs.Count) handles=$(($procs | Measure-Object HandleCount -Sum).Sum)" | Add-Content $log
+              $procs | Group-Object ProcessName | Sort-Object Count -Descending | Select-Object -First 5 | ForEach-Object { "   x$($_.Count) $($_.Name)" } | Add-Content $log
+              $procs | Sort-Object CPU -Descending | Select-Object -First 5 | ForEach-Object { "   cpu=$([int]$_.CPU) ws=$([int]($_.WorkingSet64/1MB))MB $($_.ProcessName) $($_.Id)" } | Add-Content $log
+              Start-Sleep 60
+            }
+          }
+          try { ./scripts/check-windows.ps1 -SkipStandalone } finally { Stop-Job $sampler; Get-Content $log }
         # The wall-clock budgets of the tests get the same allowance for a shared runner as on macOS and Linux.
         env:
           CODEYARD_TEST_TIMEOUT_SCALE: "3"
