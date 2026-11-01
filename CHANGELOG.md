@@ -518,7 +518,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `cyx` names each secret it left out, and a file holding a private key stops packaging whatever its name.
   `.cyxignore` leaves out more, and `cyx package --dry-run` lists what a package would hold. The developer guide says
   what goes into a package.
-
+- `minimatch` 11.0.1 in the TypeScript build tools and the extension host benchmark guest
+  (GHSA-g3hv-75wg-m249): a pattern with many brace and glob parts could take unbounded time to expand.
 - `wasmtime` and `wasmtime-wasi` 50.0.1 in `codeyard-exthost` (RUSTSEC-2026-0420, RUSTSEC-2026-0422,
   RUSTSEC-2026-0423, RUSTSEC-2026-0424): fixes for typed functions with `i31` or `nullref` arguments, cross-engine
   struct types, resources passed between components and the WASI host. Each extension still runs in its own exthost

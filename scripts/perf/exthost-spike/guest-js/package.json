@@ -6,5 +6,8 @@
     "@octokit/core": "7.0.8",
     "zod": "4.6.7",
     "esbuild": "0.28.2"
+  },
+  "overrides": {
+    "minimatch": "11.0.1"
   }
 }
