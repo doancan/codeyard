@@ -182,3 +182,24 @@ let clicks: u32 = ctx.state().get("clicks").unwrap_or(0);       // in memory; ke
 ctx.state().set("clicks", &(clicks + 1))?;
     Ok(())
 }
+
+async fn editor_open_selection(ctx: Context, uri: String) -> Result<()> {
+ctx.open_in_editor(&uri, Some(Range::line(9, 0, 4))).await?;   // line 10, columns 0 to 4; None opens at the top
+Ok(())
+}
+
+fn watching(ctx: Context) -> Result<()> {
+ctx.on_documents(false, async |ctx, e| {
+    // DocumentChange::Opened (also for those open already), Changed (once typing pauses) or Saved
+    if e.change == DocumentChange::Saved {
+        ctx.log(LogLevel::Info, format!("saved {} (version {})", e.uri, e.version));
+    }
+})?;
+let watch = ctx.on_files("src/**/*.rs", async |ctx, events| {
+    for e in events {
+        // FileChange::Created, Changed or Deleted, with e.uri
+    }
+})?;
+watch.stop();
+Ok(())
+}

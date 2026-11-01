@@ -20,7 +20,9 @@ import {
   type Decoration,
   type Diagnostic,
   type Document,
+  type DocumentEvent,
   type Env,
+  type FileEvent,
   type FileStat,
   type FormatOptions,
   type Hover,
@@ -180,6 +182,40 @@ export class Context {
     return new Timer(id);
   }
 
+  /**
+   * Run `f` for each document the extension may read (`read`) that opens, changes or is saved: the documents already
+   * open arrive first as `opened`, and changes once typing pauses, with the latest version. With `{ text: true }` each
+   * event carries the document's whole text. An active watch keeps the extension running; stop it with `stop()`.
+   */
+  onDocuments(f: (ctx: Context, event: DocumentEvent) => Awaitable<void>, options: { text?: boolean } = {}): Watch {
+    const line = () => `read = ["<glob>"]`;
+    let id: bigint;
+    try {
+      id = optional("watch", line).documents(options.text ?? false);
+    } catch (e) {
+      throw thrown(e, line);
+    }
+    handlers.documentWatches.set(id, f);
+    return new Watch(id);
+  }
+
+  /**
+   * Run `f` with the files matching `glob` (relative to the workspace folders, as in `read`) that were created, changed
+   * or deleted, by Codeyard or anything else: one event per file, at most one batch a second, and only for files the
+   * extension may read. An active watch keeps the extension running; stop it with `stop()`.
+   */
+  onFiles(glob: string, f: (ctx: Context, events: FileEvent[]) => Awaitable<void>): Watch {
+    const line = () => `read = ["${glob}"]`;
+    let id: bigint;
+    try {
+      id = optional("watch", line).files(glob);
+    } catch (e) {
+      throw thrown(e, line);
+    }
+    handlers.fileWatches.set(id, f);
+    return new Watch(id);
+  }
+
   /** Run work in the background, such as work started from `activate`. A failure is logged with its stack. */
   background(work: Promise<unknown> | (() => unknown)): void {
     background(work);
@@ -322,6 +358,15 @@ export class Context {
     if (c.tag === "json") return c.val.trim() ? JSON.parse(c.val) : null;
     if (c.tag === "done") return null;
     throw unexpected(c);
+  }
+
+  /**
+   * Open a workspace file in the editor, with `selection` selected and scrolled into view. Runs `core:editor.open`, so
+   * the manifest lists it in `permissions.commands` and `read` covers the file.
+   */
+  async openInEditor(uri: Uri, selection?: Range): Promise<void> {
+    const at = (p: Position) => ({ line: p.line, character: p.character });
+    await this.execute("core:editor.open", selection ? { uri, selection: { start: at(selection.start), end: at(selection.end) } } : uri);
   }
 
   // ---- documents and languages -------------------------------------------------------------------------------------
@@ -518,9 +563,9 @@ export class Context {
 }
 
 /** A `{ payload }` thrown by an import that returns `result<_, error>`, as a CodeyardError. */
-export function thrown(e: unknown): unknown {
+export function thrown(e: unknown, line?: () => string): unknown {
   const payload = (e as { payload?: unknown } | undefined)?.payload;
-  if (payload && typeof payload === "object" && "tag" in payload) return fromWit(payload as Parameters<typeof fromWit>[0]);
+  if (payload && typeof payload === "object" && "tag" in payload) return fromWit(payload as Parameters<typeof fromWit>[0], line);
   return e;
 }
 
@@ -614,6 +659,21 @@ export class Progress {
     this.#ended = true;
     host().window.endProgress(this.#id);
     handlers.cancelledProgress.delete(this.#id);
+  }
+}
+
+/** A watch from `ctx.onDocuments` or `ctx.onFiles`. */
+export class Watch {
+  readonly #id: bigint;
+
+  constructor(id: bigint) {
+    this.#id = id;
+  }
+
+  stop(): void {
+    host().watch?.stop(this.#id);
+    handlers.documentWatches.delete(this.#id);
+    handlers.fileWatches.delete(this.#id);
   }
 }
 

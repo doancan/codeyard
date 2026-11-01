@@ -1,13 +1,17 @@
 //! Running components built against a 0.x API during the move to 1.0 (docs/plugin-architecture.md §5.2). API 0.1.0
 //! and 1.0.0 have the same WIT shape, so such a component differs only in the names of its `codeyard:api` imports
-//! and exports (`codeyard:api/net@0.1.0`). The exthost renames them to this build's version before it compiles the
-//! component; wasmtime then type-checks every import and export as usual, so a shape that did not match would fail
-//! there rather than run.
+//! and exports (`codeyard:api/net@0.1.0`). The exthost renames them to 1.0.0 before it compiles the component;
+//! wasmtime binds those names to this build's 1.x and type-checks every import and export as usual, so a shape that did
+//! not match would fail there rather than run.
 
 use crate::{PACKAGE, TRANSITION, VERSION, Version};
 
+/// The version a 0.x component is renamed to: the first 1.x, which has the same shape as 0.1. Later 1.x minors only
+/// add, and wasmtime binds a `@1.0.0` name to this host's `@1.x`.
+pub const UPGRADE_TO: Version = Version(1, 0, 0);
+
 /// `wasm` with every `codeyard:api/<interface>@<0.x>` import and export of the outer component renamed to
-/// `@<VERSION>`; none when it has no such name (built against 1.x, or not a component at all). Only the outer
+/// `@<UPGRADE_TO>`; none when it has no such name (built against 1.x, or not a component at all). Only the outer
 /// component's import and export sections are touched: nested components and modules are satisfied inside it.
 pub fn upgrade(wasm: &[u8]) -> Option<Vec<u8>> {
     const COMPONENT_HEADER: [u8; 8] = [0x00, 0x61, 0x73, 0x6d, 0x0d, 0x00, 0x01, 0x00];
@@ -16,7 +20,7 @@ pub fn upgrade(wasm: &[u8]) -> Option<Vec<u8>> {
     if !wasm.starts_with(&COMPONENT_HEADER) {
         return None;
     }
-    let to = VERSION.to_string();
+    let to = UPGRADE_TO.to_string();
     let mut out = wasm.to_vec();
     let mut changed = false;
     let mut at = COMPONENT_HEADER.len();

@@ -92,6 +92,43 @@ pub struct Document {
     pub text: String,
 }
 
+/// What happened to a document a [`Context::on_documents`] watch follows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum DocumentChange {
+    /// Opened in an editor, or already open when the watch started.
+    Opened,
+    /// Edited; debounced, so one event carries the latest version.
+    Changed,
+    Saved,
+}
+
+/// One event of a [`Context::on_documents`] watch.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DocumentEvent {
+    pub change: DocumentChange,
+    pub uri: Uri,
+    pub language: String,
+    /// As [`Document::version`]: edits made against it apply.
+    pub version: u32,
+    /// The whole text, when the watch asked for it and the document fits in one call.
+    pub text: Option<String>,
+}
+
+/// What happened to a file a [`Context::on_files`] watch follows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FileChange {
+    Created,
+    Changed,
+    Deleted,
+}
+
+/// One event of a [`Context::on_files`] watch.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FileEvent {
+    pub change: FileChange,
+    pub uri: Uri,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FileStat {
     pub is_dir: bool,

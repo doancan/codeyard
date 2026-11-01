@@ -241,6 +241,49 @@ impl Context {
         Timer { id }
     }
 
+    /// Run `f` for each document the extension may read (`read`) that opens, changes or is saved: the documents already
+    /// open arrive first as [`DocumentChange::Opened`], and changes once typing pauses, with the latest version. With
+    /// `text`, each event carries the document's whole text. An active watch keeps the extension running; stop it with
+    /// [`Watch::stop`].
+    ///
+    /// ```ignore
+    /// ctx.on_documents(false, async |ctx, e| {
+    ///     if e.change == DocumentChange::Saved {
+    ///         ctx.log(LogLevel::Info, format!("saved {}", e.uri));
+    ///     }
+    /// })?;
+    /// ```
+    pub fn on_documents<F>(&self, text: bool, f: F) -> Result<Watch>
+    where
+        F: AsyncFn(Context, DocumentEvent) + 'static,
+    {
+        let f = Rc::new(f);
+        let cb: guest::DocumentsFn = Rc::new(move |ctx, e| {
+            let f = f.clone();
+            Box::pin(async move { f(ctx, e).await })
+        });
+        let id = sys::watch_documents(text).map_err(|e| e.detailed(&|| r#"read = ["<glob>"]"#.to_string()))?;
+        guest::with(|h| h.document_watches.insert(id, cb));
+        Ok(Watch { id })
+    }
+
+    /// Run `f` with the files matching `glob` (relative to the workspace folders, as in `read`) that were created,
+    /// changed or deleted, by Codeyard or anything else: one event per file, at most one batch a second, and only for
+    /// files the extension may read. An active watch keeps the extension running; stop it with [`Watch::stop`].
+    pub fn on_files<F>(&self, glob: &str, f: F) -> Result<Watch>
+    where
+        F: AsyncFn(Context, Vec<FileEvent>) + 'static,
+    {
+        let f = Rc::new(f);
+        let cb: guest::FilesFn = Rc::new(move |ctx, events| {
+            let f = f.clone();
+            Box::pin(async move { f(ctx, events).await })
+        });
+        let id = sys::watch_files(glob).map_err(|e| e.detailed(&|| format!(r#"read = ["{glob}"]"#)))?;
+        guest::with(|h| h.file_watches.insert(id, cb));
+        Ok(Watch { id })
+    }
+
     /// Run a task in the background, such as work started from `activate`.
     pub fn background(&self, task: impl Future<Output = ()> + 'static) {
         runtime::spawn(task);
@@ -355,6 +398,22 @@ impl Context {
             Completion::Done => Ok(Value::Null),
             c => Err(unexpected(c)),
         }
+    }
+
+    /// Open a workspace file in the editor, with `selection` selected and scrolled into view. Runs
+    /// `core:editor.open`, so the manifest lists it in `permissions.commands` and `read` covers the file.
+    pub async fn open_in_editor(&self, uri: &str, selection: Option<Range>) -> Result<()> {
+        let args = match selection {
+            None => Value::String(uri.to_string()),
+            Some(r) => serde_json::json!({
+                "uri": uri,
+                "selection": {
+                    "start": { "line": r.start.line, "character": r.start.character },
+                    "end": { "line": r.end.line, "character": r.end.character },
+                },
+            }),
+        };
+        self.execute("core:editor.open", args).await.map(drop)
     }
 
     // ---- documents and languages ---------------------------------------------------------------------------------
@@ -627,6 +686,22 @@ impl Progress {
 impl Drop for Progress {
     fn drop(&mut self) {
         self.finish();
+    }
+}
+
+/// A watch from [`Context::on_documents`] or [`Context::on_files`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Watch {
+    id: u64,
+}
+
+impl Watch {
+    pub fn stop(self) {
+        sys::stop_watch(self.id);
+        guest::with(|h| {
+            h.document_watches.remove(&self.id);
+            h.file_watches.remove(&self.id);
+        });
     }
 }
 

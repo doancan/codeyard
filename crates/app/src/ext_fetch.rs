@@ -114,7 +114,9 @@ pub fn net_fetch(t: &dyn Transport, scope: &Scope, req: &v::HttpRequest, sink: &
         Err(e) => return Completion::Failed(e),
     };
     if !ext_manifest::net_allows(&scope.permissions.net, &host) {
-        return Completion::Failed(v::Error::Denied(v::Denied { permission: format!("net = [\"{host}\"]"), why: v::Why::NotDeclared }));
+        // With `net-from-setting`, the fix is the user's: they allow the host on the extension page.
+        let permission = if scope.permissions.net_from_setting.is_some() { ext_manifest::user_host_line(&host) } else { format!("net = [\"{host}\"]") };
+        return Completion::Failed(v::Error::Denied(v::Denied { permission, why: v::Why::NotDeclared }));
     }
     done(t.send(&scope.permissions.net, req, None, sink, cancel))
 }

@@ -106,9 +106,16 @@ impl Workbench {
     ) -> Result<Option<Completion>, v::Error> {
         match core.implies {
             Implies::ReadArgument => {
-                let uri = arg.as_str().ok_or_else(|| v::Error::Invalid(format!("core:{} takes a file:// URI", core.id)))?;
-                let path = scope.may_read(uri)?;
-                self.open_file(path, window, cx);
+                let (uri, selection) = file_location(arg).ok_or_else(|| v::Error::Invalid(format!("core:{} takes {}", core.id, core.argument.describe())))?;
+                let path = scope.may_read(&uri)?;
+                match selection {
+                    // Selected when its editor comes to the front (`select_for_extension`), loaded or not.
+                    Some(range) => {
+                        self.cfg.exts.open_selection = Some((path.clone(), range));
+                        self.open_location(path, range.0.0, range.0.1, window, cx);
+                    }
+                    None => self.open_file(path, window, cx),
+                }
                 return Ok(Some(Completion::Done));
             }
             Implies::RunTask if arg.is_string() => return Ok(None),
@@ -126,6 +133,14 @@ impl Workbench {
         let action = crate::commands::action_by_id(core.id).ok_or_else(|| v::Error::NotFound(format!("core:{} is not available", core.id)))?;
         window.defer(cx, move |window, cx| window.dispatch_action(action, cx));
         Ok(Some(Completion::Done))
+    }
+
+    /// The selection `core:editor.open` asked for, once `ed` (its file's editor) is in front.
+    pub(super) fn select_for_extension(&mut self, ed: &Entity<crate::editor::EditorView>, cx: &mut Context<Self>) {
+        let Some((path, range)) = self.cfg.exts.open_selection.take() else { return };
+        if ed.read(cx).path == path {
+            ed.update(cx, |e, cx| e.set_lsp_selection(range, cx));
+        }
     }
 
     /// `tasks.run` with a label: a task an extension provides runs in that extension; any other must be one program the
@@ -146,4 +161,20 @@ impl Workbench {
         self.run_task(task, window, cx);
         Completion::Done
     }
+}
+
+/// `core:editor.open`'s argument: a `file://` URI, or `{"uri": …, "selection": {"start": {"line", "character"}, "end": …}}`.
+fn file_location(arg: &serde_json::Value) -> Option<(String, Option<crate::lsp::Range16>)> {
+    if let Some(uri) = arg.as_str() {
+        return Some((uri.to_string(), None));
+    }
+    let uri = arg.get("uri")?.as_str()?.to_string();
+    let position = |p: &serde_json::Value| -> Option<(u32, u32)> {
+        Some((u32::try_from(p.get("line")?.as_u64()?).ok()?, u32::try_from(p.get("character")?.as_u64()?).ok()?))
+    };
+    let selection = match arg.get("selection") {
+        None | Some(serde_json::Value::Null) => None,
+        Some(s) => Some((position(s.get("start")?)?, position(s.get("end")?)?)),
+    };
+    Some((uri, selection))
 }

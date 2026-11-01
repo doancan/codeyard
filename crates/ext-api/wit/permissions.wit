@@ -1,4 +1,4 @@
-package codeyard:api@1.0.0;
+package codeyard:api@1.1.0;
 
 /// Reading workspace files. Needs `read` on the paths.
 @since(version = 1.0.0)
@@ -35,6 +35,28 @@ interface workspace {
   /// Streams `search-match` events, then completes with `done`.
   @since(version = 1.0.0)
   search: func(query: search-query) -> ticket;
+}
+
+/// Events about open documents and workspace files, delivered to the guest's `events` export (the SDKs call your
+/// handlers). Needs `read`: an event comes only for a path the extension may read, the same rule as for reading it.
+/// An active watch keeps the exthost running, like a timer.
+@since(version = 1.1.0)
+interface watch {
+  use types.{error};
+
+  /// Deliver `events.documents` when a document opens (the documents already open arrive first), changes or is saved.
+  /// Changes are debounced: one event with the latest version once typing pauses. With `text`, each event carries the
+  /// document's whole text. Returns the watch's id, or `invalid` past the limit of watches.
+  @since(version = 1.1.0)
+  documents: func(text: bool) -> result<u64, error>;
+  /// Deliver `events.files` when files matching `glob` (relative to the workspace folders, as in `read`) are created,
+  /// changed or deleted, by Codeyard or anything else. Coalesced: one event per file, at most one batch a second.
+  /// Returns the watch's id, or `invalid` for a bad glob or past the limit of watches.
+  @since(version = 1.1.0)
+  files: func(glob: string) -> result<u64, error>;
+  /// Stop a watch.
+  @since(version = 1.1.0)
+  stop: func(id: u64);
 }
 
 /// Changing workspace files. Needs `write` on the paths.

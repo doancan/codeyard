@@ -76,6 +76,8 @@ pub enum Note {
     },
     /// `scm.refresh`: the provider's local id.
     ScmRefresh(String),
+    /// `watch.stop`.
+    StopWatch(u64),
 }
 
 /// What the extension calls. Implementations must not call back into the SDK from these methods: queue results and
@@ -93,6 +95,16 @@ pub trait Host {
     fn every(&mut self, seconds: u32) -> u64;
     fn start_progress(&mut self, title: &str, cancellable: bool) -> u64;
     fn set_status_item(&mut self, item: StatusItem) -> Result<(), Error>;
+    /// `watch.documents` (API 1.1): the watch's id, or why it was refused. Deliver its events with [`documents`].
+    fn watch_documents(&mut self, text: bool) -> Result<u64, Error> {
+        let _ = text;
+        Err(Error::Invalid("this host has no watches".into()))
+    }
+    /// `watch.files` (API 1.1). Deliver its events with [`files`].
+    fn watch_files(&mut self, glob: &str) -> Result<u64, Error> {
+        let _ = glob;
+        Err(Error::Invalid("this host has no watches".into()))
+    }
 }
 
 thread_local! {
@@ -166,6 +178,16 @@ pub fn complete(ticket: Ticket, c: Completion) {
 
 pub fn event(ticket: Ticket, e: StreamEvent) {
     guest::event(ticket, e);
+}
+
+/// Deliver events of a [`Host::watch_documents`] watch.
+pub fn documents(watch: u64, events: Vec<DocumentEvent>) {
+    guest::documents(watch, events);
+}
+
+/// Deliver events of a [`Host::watch_files`] watch.
+pub fn files(watch: u64, events: Vec<FileEvent>) {
+    guest::files(watch, events);
 }
 
 // ---- the calls the SDK makes (same names as in wasm.rs) ------------------------------------------------------------
@@ -252,6 +274,18 @@ pub(crate) fn every(seconds: u32) -> u64 {
 
 pub(crate) fn clear_timer(id: u64) {
     note(Note::ClearTimer(id));
+}
+
+pub(crate) fn watch_documents(text: bool) -> Result<u64, Error> {
+    with(|h| h.watch_documents(text))
+}
+
+pub(crate) fn watch_files(glob: &str) -> Result<u64, Error> {
+    with(|h| h.watch_files(glob))
+}
+
+pub(crate) fn stop_watch(id: u64) {
+    note(Note::StopWatch(id));
 }
 
 pub(crate) fn invalidate(view: &str) {

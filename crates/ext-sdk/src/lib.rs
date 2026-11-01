@@ -58,7 +58,7 @@ pub use wasm as __wasm;
 #[cfg(target_arch = "wasm32")]
 use wasm as sys;
 
-pub use context::{Context, Progress, State, Storage, Timer};
+pub use context::{Context, Progress, State, Storage, Timer, Watch};
 pub use error::{Denied, Error, Result, Why};
 pub use guest::{RELOAD, RELOAD_STATE_KEY};
 pub use serde_json::{Value, json};

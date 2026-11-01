@@ -1,8 +1,10 @@
 //! `cyx test`: the built `extension.wasm` in the real `codeyard-exthost`, against a scripted app. It activates the
 //! extension, runs each declared command, draws each declared view (checking its tree as Codeyard does), asks each
 //! pull request provider for a list, and answers every call the way the app's broker would: checked against the
-//! manifest's permissions, with dismissed pickers and no network, files or programs. A refused call fails the test with
-//! its fix; so do a trap, an error from `activate`, a view Codeyard would not draw and a request left unanswered.
+//! manifest's permissions, with dismissed pickers and no network, files or programs. Each watch the extension starts
+//! (API 1.1) gets a document or file of its own to see open, change and be saved, or be created, changed and deleted. A
+//! refused call fails the test with its fix; so do a trap, an error from `activate`, a view Codeyard would not draw and
+//! a request left unanswered.
 
 use std::io::{BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -11,7 +13,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, channel};
 use std::time::{Duration, Instant};
 
-use ext_api::value::{Completion, Denied, EnvInfo, Error as ApiError, HttpHead, Notify, Platform, Request, Response, Start, StreamEvent, ThemeKind, Why};
+use ext_api::value::{
+    Completion, Denied, DocumentChange, DocumentEvent, EnvInfo, Error as ApiError, FileChange, FileEvent, HttpHead, Notify, Platform, Request, Response, Start,
+    StreamEvent, ThemeKind, Why,
+};
 use ext_manifest::{Code, Diagnostic, Manifest};
 use ext_proto::{Hello, Reader, ToApp, ToHost};
 use sha2::{Digest, Sha256};
@@ -184,6 +189,7 @@ fn run_in(work: &Path, dir: &Path, manifest: &Manifest, exthost: &Path, wasm: &[
             Some(Ok(other)) => report.fail(format!("{what} answered {other:?}")),
         }
     }
+    app.exercise_watches(&mut report);
     app.shutdown();
     // Every refusal fails the test, even one the extension caught.
     for d in std::mem::take(&mut app.denied) {
@@ -237,6 +243,9 @@ struct App {
     denied: Vec<String>,
     /// The exthost trapped or closed its pipe.
     dead: bool,
+    /// Watches the extension started: (id, the glob of a file watch, or none for a document watch, and whether it wants
+    /// the text).
+    watches: Vec<(u64, Option<String>, bool)>,
 }
 
 impl App {
@@ -260,7 +269,7 @@ impl App {
             }
         });
         ext_proto::write(&mut stdin, &ToHost::Hello(Box::new(hello))).map_err(|e| format!("error: {e}"))?;
-        let app = App { child, stdin, frames, manifest, folder, fixtures, next_id: 1, denied: Vec::new(), dead: false };
+        let app = App { child, stdin, frames, manifest, folder, fixtures, next_id: 1, denied: Vec::new(), dead: false, watches: Vec::new() };
         match app.frames.recv_timeout(WAIT) {
             Ok(Ok(ToApp::Ready { .. })) => Ok(app),
             Ok(Ok(ToApp::Mismatch { build, .. })) => Err(format!(
@@ -319,6 +328,9 @@ impl App {
                     }
                     report.lines.push(format!("    log: {message}"));
                 }
+                ToApp::Notify(Notify::WatchDocuments { id, text }) => self.watches.push((id, None, text)),
+                ToApp::Notify(Notify::WatchFiles { id, glob }) => self.watches.push((id, Some(glob), false)),
+                ToApp::Notify(Notify::StopWatch { id }) => self.watches.retain(|(w, ..)| *w != id),
                 ToApp::Trap(t) => {
                     let mut msg = format!("the extension trapped: {}", t.message);
                     for f in t.frames.iter().take(8) {
@@ -344,9 +356,12 @@ impl App {
             Start::WriteFile { uri, .. } | Start::Delete { uri } | Start::CreateDirectory { uri } if !p.allows_write(&rel(uri)) => {
                 Some(format!(r#"write = ["{}"]"#, rel(uri)))
             }
+            // `net-from-setting`: the host in the setting's default stands in for the one the user allows.
             Start::Fetch { request } => {
                 let host = host_of(&request.url);
-                (!p.allows_net(&host)).then(|| format!(r#"net = ["{host}"]"#))
+                let allowed = p.allows_net(&host) || self.setting_host().is_some_and(|h| h == host);
+                let line = if p.net_from_setting.is_some() { ext_manifest::user_host_line(&host) } else { format!(r#"net = ["{host}"]"#) };
+                (!allowed).then_some(line)
             }
             Start::Session { provider, .. } | Start::AuthFetch { provider, .. } if !p.auth.contains(provider) => Some(format!(r#"auth = ["{provider}"]"#)),
             // As the app does: an account signs requests to its own hosts only.
@@ -410,6 +425,56 @@ impl App {
         })
     }
 
+    /// The host named by the default of the setting `net-from-setting` names, if any.
+    fn setting_host(&self) -> Option<String> {
+        let key = self.manifest.permissions.net_from_setting.as_ref()?;
+        let setting = self.manifest.contributions.settings.iter().find(|s| &s.key == key)?;
+        let value = setting.default.as_ref()?.as_str()?.trim();
+        let value = if value.contains("://") { value.to_string() } else { format!("https://{value}") };
+        Some(host_of(&value)).filter(|h| !h.is_empty())
+    }
+
+    /// Give each watch the extension started a file of its own: a document watch sees it open, change and be saved, a
+    /// file watch sees it created, changed and deleted. Each then answers a request, so a trap in a handler fails here.
+    fn exercise_watches(&mut self, report: &mut Report) {
+        let first_read = self.manifest.permissions.read.first().cloned().unwrap_or_default();
+        for (id, glob, text) in std::mem::take(&mut self.watches) {
+            if self.dead || !report.failures.is_empty() {
+                return;
+            }
+            let path = example_path(glob.as_deref().unwrap_or(&first_read));
+            if !self.manifest.permissions.allows_read(&path) {
+                report.lines.push(format!("    watch {id}: no example file that `read` allows; not exercised"));
+                continue;
+            }
+            let uri = format!("{}/{path}", self.folder.trim_end_matches('/'));
+            let label = match &glob {
+                Some(glob) => {
+                    for change in [FileChange::Created, FileChange::Changed, FileChange::Deleted] {
+                        self.send(&ToHost::Files { watch: id, events: vec![FileEvent { change, uri: uri.clone() }] });
+                    }
+                    format!("file watch {glob} handles {path} created, changed and deleted")
+                }
+                None => {
+                    for (version, change) in [(1, DocumentChange::Opened), (2, DocumentChange::Changed), (2, DocumentChange::Saved)] {
+                        let text = text.then(|| "TODO: example\n".to_string());
+                        self.send(&ToHost::Documents {
+                            watch: id,
+                            events: vec![DocumentEvent { change, uri: uri.clone(), language: "plaintext".into(), version, text }],
+                        });
+                    }
+                    format!("document watch handles {path} opened, changed and saved")
+                }
+            };
+            // Answered at once by the SDKs and changes nothing: the events before it have been handled.
+            match self.request(report, Request::CancelProgress { id: u64::MAX }) {
+                Some(_) => report.pass(label),
+                None if self.dead => {}
+                None => report.fail(format!("{label}: the extension did not answer afterwards within {} s", WAIT.as_secs())),
+            }
+        }
+    }
+
     fn shutdown(&mut self) {
         self.send(&ToHost::Shutdown);
         let deadline = Instant::now() + Duration::from_secs(5);
@@ -429,4 +494,11 @@ fn host_of(url: &str) -> String {
     let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
     let host = authority.rsplit('@').next().unwrap_or(authority);
     host.split(':').next().unwrap_or(host).to_ascii_lowercase()
+}
+
+/// A workspace path that `glob` matches, for a watch to see: each wildcard part becomes `example`.
+fn example_path(glob: &str) -> String {
+    let parts: Vec<String> =
+        glob.trim_start_matches("./").split('/').filter(|p| *p != "**" && !p.is_empty()).map(|p| p.replace('*', "example").replace('?', "x")).collect();
+    if parts.is_empty() { "example.txt".into() } else { parts.join("/") }
 }

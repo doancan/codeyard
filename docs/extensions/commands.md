@@ -112,6 +112,13 @@ task's program in `run`:
 ctx.execute("core:editor.open", json!(format!("file://{root}/docs/guide.md"))).await?;
 ```
 
+`ctx.open_in_editor` runs `core:editor.open` with a range to select, so a view can jump to a line. It needs the same
+permissions, and Codeyard 0.7.0 (API 1.1):
+
+```rust
+ctx.open_in_editor(&uri, Some(Range::line(9, 0, 4))).await?;   // line 10, columns 0 to 4; None opens at the top
+```
+
 A command that is not in the list is refused with the fix, and so is one you have not listed or whose implied
 permission you lack. `cyx check` warns about a `core:` entry in `permissions.commands` that is not in the list.
 
@@ -178,6 +185,37 @@ ctx.set_decorations(&uri, "coverage", &decorations);
 ```
 
 Positions are zero-based lines and UTF-16 columns, as in the Language Server Protocol.
+
+## Watching documents and files
+
+An extension that keeps something up to date, such as a list of TODO comments, watches instead of polling. Watches
+need `read` and Codeyard 0.7.0 (API 1.1):
+
+```rust
+ctx.on_documents(false, async |ctx, e| {
+    // DocumentChange::Opened (also for those open already), Changed (once typing pauses) or Saved
+    if e.change == DocumentChange::Saved {
+        ctx.log(LogLevel::Info, format!("saved {} (version {})", e.uri, e.version));
+    }
+})?;
+let watch = ctx.on_files("src/**/*.rs", async |ctx, events| {
+    for e in events {
+        // FileChange::Created, Changed or Deleted, with e.uri
+    }
+})?;
+watch.stop();
+```
+
+- An event comes only for a path the extension may read, by the same rules as `read_file`. In an untrusted folder,
+  where code may still read what it declared, watches still get events.
+- A document event has the URI, language and version; pass `true` to get the whole text too (a document larger than
+  one call comes without it). Typing sends one `Changed` once it pauses.
+- A file watch's glob is relative to the workspace folders, as in `read`. It sees changes made by Codeyard and by
+  anything else (a terminal, `git checkout`), one event per file and at most one batch a second. Files `.gitignore`
+  ignores are not reported.
+- An active watch keeps the extension running, as a timer does. There is no activation event for watches: start them in
+  `activate`, and start the extension with a view, a command or `[activation] workspace-contains`.
+- An extension may have 16 watches at once; the numbers are in [reference/limits.md](reference/limits.md).
 
 ## Formatters and code actions
 
@@ -321,6 +359,22 @@ while let Some(chunk) = build.next().await {
     if let Chunk::Stdout(bytes) = chunk { ctx.log(LogLevel::Info, String::from_utf8_lossy(&bytes)); }
 }
 let code = build.wait().await?;            // dropping `build` before it ends kills the process
+```
+
+A server the user chooses, such as a company GitHub Enterprise, cannot be listed in `net` ahead of time. Declare the
+setting that names it with `net-from-setting`. Your code reads the setting as usual, and requests to the server are
+refused until the user allows its host on the extension page (**Allow Host…**, in a dialog Codeyard draws). A setting,
+a workspace or your code cannot allow a host by itself. Until the user has allowed it, the refusal tells you so; tell the
+user in the setting's description.
+
+```toml
+[permissions]
+net-from-setting = "server"
+
+[settings.server]
+type        = "string"
+default     = ""
+description = "Your GitHub Enterprise host, such as github.example.com. Allow it on the extension's page."
 ```
 
 Requests leave from the machine Codeyard runs on, and programs run where the workspace is (so also over SSH). `ctx.fetch_as("github", request)` signs a request with the user's account (`auth = ["github"]`); the extension never sees the token. `ctx.secret`, `ctx.read_clipboard` and `ctx.send_to_terminal` need `secrets`, `clipboard` and `terminal`.
