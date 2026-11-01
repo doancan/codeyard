@@ -382,7 +382,7 @@ fn pushed_diagnostics_are_declared_bounded_and_plain(cx: &mut TestAppContext) {
     use ext_manifest::limits;
     let ws = config_dir("pushed-diagnostics");
     std::fs::write(ws.join("a.toml"), "a = 1\n").unwrap();
-    let ws_s = std::fs::canonicalize(&ws).unwrap().to_string_lossy().replace('\\', "/");
+    let ws_s = crate::ui::canonical_for_test(&ws).to_string_lossy().into_owned();
     let active = |extra: &str| {
         let text = format!(
             "[extension]\nid = \"you.lint\"\nversion = \"1.0.0\"\nname = \"Lint\"\nlicense = \"MIT\"\n[code]\nentry = \"Cargo.toml\"\n[[commands]]\nid = \"go\"\ntitle = \"Go\"\n{extra}"

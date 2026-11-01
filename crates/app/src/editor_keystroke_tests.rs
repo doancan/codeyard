@@ -170,6 +170,8 @@ fn a_tree_that_lands_while_typing_waits_for_a_pause_to_draw(cx: &mut TestAppCont
     let (wb, cx) = setup(cx);
     let ed = open(&wb, &f, cx);
     ed.update(cx, |e, cx| e.set_cursor_for_test(0, cx));
+    // Every key's reparse that takes any time goes to the background, on any machine and build.
+    ed.update(cx, |e, _| e.set_syntax_budget_for_test(std::time::Duration::ZERO));
     cx.run_until_parked();
     // (a parse runs in the background, a frame drew the current tree's colors, a frame waits for a pause in typing)
     // Other things may draw a frame meanwhile (a file watcher, the cursor); only the frames the tree asks for count.
