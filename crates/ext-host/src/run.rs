@@ -161,7 +161,8 @@ impl Guest {
                         bt.frames()
                             .iter()
                             .map(|f| {
-                                let name = f.func_name().unwrap_or("<unknown>");
+                                // `{:#}` leaves out the hash: `probe::providers::command`.
+                                let name = f.func_name().map_or_else(|| "<unknown>".to_string(), |n| format!("{:#}", rustc_demangle::demangle(n)));
                                 match f.symbols().first().and_then(|s| Some((s.file()?, s.line()?))) {
                                     Some((file, line)) => format!("{name} ({file}:{line})"),
                                     None => name.to_string(),

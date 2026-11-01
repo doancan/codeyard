@@ -240,6 +240,7 @@ impl Workbench {
         let package_dir = active.dir.clone();
         let wasm_path = active.file(ext_pkg::COMPONENT);
         let granted = ext_runtime::granted_interfaces(&scope.permissions);
+        let status_items = active.manifest.status_item_ids();
         let untrusted = !scope.trusted;
         let tx = self.cfg.exts.code.tx.clone();
         let reason = reason.to_string();
@@ -267,6 +268,7 @@ impl Workbench {
                 env,
                 settings: settings_now,
                 folders,
+                status_items,
                 reason,
                 sandbox,
             };
@@ -446,12 +448,12 @@ impl Workbench {
             }
             Start::QuickPick { items, options } => self.extension_quick_pick(id, ticket, items, options, window, cx),
             Start::InputBox { options } => {
+                let placeholder = format!("{id}: {}", options.prompt.clone().or(options.title.clone()).unwrap_or_default());
+                let purpose = InputPurpose::ExtInput { extension: id.to_string(), ticket };
+                // A token the user pastes for `secrets` (docs/plugin-architecture.md §6.4) is masked as it is typed.
                 if options.password {
-                    let msg = "password input is not available; accounts go through `auth`, which never shows the extension a token";
-                    complete(&proc, Completion::Failed(v::Error::Invalid(msg.into())));
+                    self.show_secret_input(purpose, "OK", &placeholder, window, cx);
                 } else {
-                    let placeholder = format!("{id}: {}", options.prompt.clone().or(options.title.clone()).unwrap_or_default());
-                    let purpose = InputPurpose::ExtInput { extension: id.to_string(), ticket };
                     self.show_input(purpose, "OK", &placeholder, options.value.as_deref().unwrap_or(""), window, cx);
                 }
             }

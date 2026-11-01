@@ -92,6 +92,7 @@ impl MockHost {
             let json = setting.default.as_ref().and_then(|v| serde_json::to_string(v).ok());
             s.settings.entry(setting.key.clone()).or_insert(json);
         }
+        s.status_ids = Some(m.status_item_ids());
         s.permissions = Some(m.permissions);
         s.oauth = m.oauth.into_iter().map(|o| (o.id, (o.name, o.hosts))).collect();
         drop(s);
@@ -398,8 +399,10 @@ impl MockHost {
             *n += 1;
             *n
         };
+        self.state.borrow_mut().user_action = user_action(&request);
         native::handle(id, request);
         self.pump();
+        self.state.borrow_mut().user_action = false;
         self.state
             .borrow_mut()
             .responses
@@ -483,6 +486,12 @@ impl MockHost {
         self.state.borrow().diagnostics.get(&uri).cloned().unwrap_or_default()
     }
 
+    /// The decorations set on a file, by decoration set (`[[decorations]]` id), as the extension left them.
+    pub fn decorations(&self, path: &str) -> BTreeMap<String, Vec<Decoration>> {
+        let uri = self.uri(path);
+        self.state.borrow().decorations.get(&uri).cloned().unwrap_or_default()
+    }
+
     /// Views the extension asked to draw again.
     pub fn invalidated(&self) -> Vec<String> {
         self.state.borrow().notes.iter().filter_map(|n| if let Note::Invalidate(v) = n { Some(v.clone()) } else { None }).collect()
@@ -513,12 +522,21 @@ impl MockHost {
     }
 }
 
+/// Started by the user, so it may open links: as `ext_api::value::Request::is_user_action` decides in the app.
+fn user_action(request: &Request) -> bool {
+    use codeyard_extension::pulls::PullQuery as Q;
+    matches!(request, Request::Command { .. } | Request::UiEvent { .. } | Request::RunCodeAction(_) | Request::RunTask(_) | Request::OpenUri(_))
+        || matches!(request, Request::PullRequests(Q::AddComment { .. } | Q::Checkout { .. }))
+}
+
 impl Drop for MockHost {
     fn drop(&mut self) {
         native::uninstall();
     }
 }
 
+#[cfg(test)]
+mod parity_tests;
 #[cfg(test)]
 mod pulls_tests;
 #[cfg(test)]

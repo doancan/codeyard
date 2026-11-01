@@ -68,6 +68,9 @@ pub struct Hello {
     pub env: EnvInfo,
     pub settings: Vec<(String, Option<String>)>,
     pub folders: Vec<String>,
+    /// The local ids of the manifest's `[[status-bar]]` items: `set-status-item` refuses any other, as the app would
+    /// (`ext_manifest::calls::check_status_item`).
+    pub status_items: Vec<String>,
     /// Why it starts, passed to `guest.activate`.
     pub reason: String,
     /// Enter the OS sandbox before loading the code. True for everything installed; false only for `cyx dev`, which
@@ -168,8 +171,14 @@ impl From<io::Error> for Error {
 /// Write one frame. A message over `limits::FRAME_BYTES` is refused here, so a call that is too large fails at its
 /// sender with `TooLarge` instead of killing the connection.
 pub fn write<T: Serialize>(w: &mut impl Write, msg: &T) -> Result<(), Error> {
+    write_within(w, msg, limits::FRAME_BYTES)
+}
+
+/// [`write`], refusing a message whose encoding is over `max` bytes (at most `limits::FRAME_BYTES`) with `TooLarge`.
+/// The exthost holds an answer to `limits::CALL_BYTES` this way.
+pub fn write_within<T: Serialize>(w: &mut impl Write, msg: &T, max: usize) -> Result<(), Error> {
     let body = postcard::to_stdvec(msg).map_err(|e| Error::Decode(e.to_string()))?;
-    if body.len() > limits::FRAME_BYTES {
+    if body.len() > max.min(limits::FRAME_BYTES) {
         return Err(Error::TooLarge { len: body.len() });
     }
     let len = u32::try_from(body.len()).map_err(|_| Error::TooLarge { len: body.len() })?;

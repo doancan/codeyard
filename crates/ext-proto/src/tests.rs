@@ -30,6 +30,7 @@ fn hello() -> Hello {
         env: env(),
         settings: vec![("interval".into(), Some("60".into()))],
         folders: vec!["file:///work".into()],
+        status_items: vec!["deploys".into()],
         reason: "command:refresh".into(),
         sandbox: true,
     }

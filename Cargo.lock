@@ -2198,6 +2198,7 @@ dependencies = [
  "ext-proto",
  "landlock",
  "libc",
+ "rustc-demangle",
  "sha2 0.11.1",
  "tokio",
  "wasmtime",
@@ -2210,6 +2211,7 @@ name = "ext-manifest"
 version = "0.6.0"
 dependencies = [
  "serde",
+ "serde_json",
  "toml 1.1.8+spec-1.1.0",
 ]
 

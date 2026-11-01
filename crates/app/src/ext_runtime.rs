@@ -418,6 +418,8 @@ pub struct Start<'a> {
     pub env: EnvInfo,
     pub settings: Vec<(String, Option<String>)>,
     pub folders: Vec<String>,
+    /// `Manifest::status_item_ids`.
+    pub status_items: Vec<String>,
     pub reason: String,
     /// False only for the extension in development (`cyx dev`): the author's own folder, behind Wasm and the broker.
     pub sandbox: bool,
@@ -438,6 +440,7 @@ impl Start<'_> {
             env: self.env,
             settings: self.settings,
             folders: self.folders,
+            status_items: self.status_items,
             reason: self.reason,
             sandbox: self.sandbox,
         }

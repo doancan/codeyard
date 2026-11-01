@@ -57,6 +57,8 @@ export function activate(ctx: Context) {
 
 `activate` runs once, the first time someone uses one of the extension's commands or views. Register handlers in it and return; `ctx.activationReason` says why it started. An optional `export function deactivate(ctx)` runs before the extension stops.
 
+`activate` may be `async` (`export async function activate(ctx)`), for instance to read a configuration file first. Requests that arrive before its Promise settles wait for it, so a handler it registers after an `await` is found. If the Promise rejects, the activation fails: the extension's log shows `activate failed: …`, every request answers with that error, and `cyx test` and the mock host fail. Register handlers before the first `await` when they do not depend on it, so they work even when the rest fails.
+
 The complete templates, with their tests, are [examples/extensions/hello-command-ts](../../examples/extensions/hello-command-ts) and [examples/extensions/hello-view-ts](../../examples/extensions/hello-view-ts). [examples/extensions/octokit-repos-ts](../../examples/extensions/octokit-repos-ts) uses npm packages.
 
 ## How calls work

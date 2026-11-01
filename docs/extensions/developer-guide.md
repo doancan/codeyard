@@ -324,7 +324,7 @@ Not fixed, these need you:
 
 ```toml
 [permissions]
-read = ["vercel.json"]          # workspace globs; .env* and .git/ must be named explicitly
+read = ["vercel.json"]          # workspace globs (reference/globs.md); .env* and .git/ must be named explicitly
 net  = ["api.vercel.com"]       # HTTPS to these hosts
 run  = ["vercel"]               # these programs, any arguments
 commands = ["core:workbench.saveAll"]   # core commands your code runs (reference/core-commands.md)
@@ -435,7 +435,7 @@ Register `codeyard://ext/<your extension id>/callback` as the redirect URI with 
 
 **Self-managed servers.** A forge such as GitLab, Gitea or Forgejo also runs on servers of its own, each with its own OAuth application. With `instances = true`, the user adds one on your extension's page (Accounts › **Add Instance…**): its host and the client id of the application they registered there. Codeyard shows the host, the client id and the redirect URI, and asks first, as it does for a permission; nothing your extension or a workspace writes can add one. The instance is your `[[oauth]]` table with its URLs on that host, so `authorize-url`, `token-url` and `account-url` must all be on one host that `hosts` lists. It is an account of its own, `<id>@<host>` (`gitlab@git.example.com`): it signs requests to its host only, `auth = ["<id>"]` grants it, and turning that switch off turns it off. A `[[pull-requests]]` provider whose `auth` is that id claims the instance's remotes, which carry the instance's account; where `net` allows the `[[oauth]]` host, it allows the instance's too. Treat `remote.account` as opaque and build URLs from `remote.host`, and the same code serves every instance ([examples/extensions/gitlab](../../examples/extensions/gitlab)).
 
-**Secrets.** If a service has no OAuth, `secrets = true` gives your extension its own keychain entries. Use `secrets.set(key, value)`, `secrets.get(key)` and `secrets.delete(key)` (TypeScript: `ctx.setSecret`, `ctx.secret`, `ctx.deleteSecret`), and ask for the value with `ctx.input({ prompt, password: true })` so it is not shown as it is typed. Keys are `a-z A-Z 0-9 . _ -`, up to 128 characters. A value is at most 2048 bytes. The entries belong to your publisher identity, so a sideloaded copy of your extension cannot read them.
+**Secrets.** If a service has no OAuth, `secrets = true` gives your extension its own keychain entries. Use `secrets.set(key, value)`, `secrets.get(key)` and `secrets.delete(key)` (TypeScript: `ctx.setSecret`, `ctx.secret`, `ctx.deleteSecret`), and ask for the value with `ctx.input({ prompt, password: true })` (Rust: `InputOptions { password: true, .. }`): Codeyard masks it as it is typed. The value reaches your extension, which then sends it itself, so prefer `[[oauth]]` where the service supports PKCE. Keys are `a-z A-Z 0-9 . _ -`, up to 128 characters. A value is at most 2048 bytes. The entries belong to your publisher identity, so a sideloaded copy of your extension cannot read them.
 
 ### Tree view
 

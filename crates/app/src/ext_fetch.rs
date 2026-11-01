@@ -75,22 +75,10 @@ pub fn net_error(e: ext_net::Error) -> v::Error {
     }
 }
 
-/// The lowercase host of an `https://` URL, without port; ext-net checks the rest of the URL.
+/// The lowercase host of a URL an extension may request, without port: the rule ext-net, the mock hosts and `cyx test`
+/// share (`ext_manifest::calls::check_url`), so the message is the same everywhere.
 pub fn https_host(url: &str) -> Result<String, v::Error> {
-    let rest = url.trim().strip_prefix("https://").ok_or_else(|| v::Error::Invalid(format!("{url}: only https:// URLs can be fetched")))?;
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
-    if authority.contains('@') {
-        return Err(v::Error::Invalid(format!("{url}: a user name or password in the URL is not allowed")));
-    }
-    let host = match authority.rsplit_once(':') {
-        Some((h, p)) if p.bytes().all(|b| b.is_ascii_digit()) && !authority.starts_with('[') => h,
-        _ => authority,
-    };
-    let host = host.trim_end_matches('.').to_ascii_lowercase();
-    if host.is_empty() {
-        return Err(v::Error::Invalid(format!("{url}: no host")));
-    }
-    Ok(host)
+    ext_manifest::calls::check_url(url).map(|t| t.host).map_err(|e| v::Error::Invalid(e.message))
 }
 
 fn untrusted(permission: &str) -> v::Error {

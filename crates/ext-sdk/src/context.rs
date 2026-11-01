@@ -25,6 +25,24 @@ pub struct Context {
     _one_thread: PhantomData<*const ()>,
 }
 
+/// What a handler nobody waits for returns ([`Context::on_settings_changed`], [`Context::every`]): nothing, or a
+/// [`Result`] whose error is logged.
+pub trait Outcome {
+    fn report(self, what: &str);
+}
+
+impl Outcome for () {
+    fn report(self, _what: &str) {}
+}
+
+impl Outcome for Result<()> {
+    fn report(self, what: &str) {
+        if let Err(e) = self {
+            sys::log(LogLevel::Error, &format!("{what} failed: {e}"));
+        }
+    }
+}
+
 pub(crate) fn unexpected(c: Completion) -> Error {
     Error::Other(format!("the host answered with something unexpected: {c:?}"))
 }
@@ -212,29 +230,33 @@ impl Context {
         guest::with(|h| h.open_uri = Some(string_fn(f)));
     }
 
-    /// The extension's settings changed: their keys.
-    pub fn on_settings_changed<F>(&self, f: F)
+    /// The extension's settings changed: their keys. `f` returns nothing or a [`Result`], so `?` works in it; an
+    /// error goes to the extension's log, since nobody waits for the answer.
+    pub fn on_settings_changed<F, R>(&self, f: F)
     where
-        F: AsyncFn(Context, Vec<String>) + 'static,
+        F: AsyncFn(Context, Vec<String>) -> R + 'static,
+        R: Outcome,
     {
         let f = Rc::new(f);
         let cb: guest::KeysFn = Rc::new(move |ctx, keys| {
             let f = f.clone();
-            Box::pin(async move { f(ctx, keys).await })
+            Box::pin(async move { f(ctx, keys).await.report("the settings handler") })
         });
         guest::with(|h| h.settings_changed.push(cb));
     }
 
     /// Run `f` every `seconds` (at least 30), paused while the window is unfocused. An active timer keeps the
-    /// extension running.
-    pub fn every<F>(&self, seconds: u32, f: F) -> Timer
+    /// extension running. `f` returns nothing or a [`Result`], so `?` works in it; an error goes to the extension's
+    /// log.
+    pub fn every<F, R>(&self, seconds: u32, f: F) -> Timer
     where
-        F: AsyncFn(Context) + 'static,
+        F: AsyncFn(Context) -> R + 'static,
+        R: Outcome,
     {
         let f = Rc::new(f);
         let cb: guest::TickFn = Rc::new(move |ctx| {
             let f = f.clone();
-            Box::pin(async move { f(ctx).await })
+            Box::pin(async move { f(ctx).await.report("the timer") })
         });
         let id = sys::every(seconds);
         guest::with(|h| h.timers.insert(id, cb));

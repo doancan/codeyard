@@ -16,3 +16,8 @@ why = "Runs git branch --show-current in your workspace to show the branch."
 [[commands]]
 id    = "show"
 title = "Branch Status: Show the Current Branch"
+
+# The status bar item the command sets; Codeyard shows only the items declared here. A click runs the command again.
+[[status-bar]]
+id      = "branch"
+command = "show"

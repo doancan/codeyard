@@ -51,6 +51,10 @@ pub struct State {
     pub responses: HashMap<u64, Result<Response, Error>>,
     /// None: everything is allowed.
     pub permissions: Option<Permissions>,
+    /// The local ids of the manifest's `[[status-bar]]` items; none without a manifest.
+    pub status_ids: Option<Vec<String>>,
+    /// The request being handled is a user action (a command, a view event, …): it may open links.
+    pub user_action: bool,
     /// The manifest's `[[oauth]]` providers: id, then the name and the hosts `auth.fetch` may sign requests to.
     pub oauth: BTreeMap<String, (String, Vec<String>)>,
     pub accounts: BTreeMap<String, Account>,
@@ -75,6 +79,8 @@ pub struct State {
     pub progress: BTreeMap<u64, String>,
     pub status_items: BTreeMap<String, StatusItem>,
     pub diagnostics: BTreeMap<Uri, Vec<Diagnostic>>,
+    /// Decorations by file, then set.
+    pub decorations: BTreeMap<Uri, BTreeMap<String, Vec<Decoration>>>,
     // Records.
     pub calls: Vec<Call>,
     pub notes: Vec<Note>,
@@ -88,22 +94,18 @@ pub struct State {
 
 pub struct Shared(pub Rc<RefCell<State>>);
 
-/// The workspace-relative path of a uri, for `read` and `write` globs.
-fn relative(uri: &str) -> String {
-    match uri.strip_prefix(FOLDER) {
-        Some(rest) => rest.trim_start_matches('/').to_string(),
-        None => uri.split_once("://").map_or(uri, |(_, p)| p).trim_start_matches('/').to_string(),
-    }
+/// The workspace-relative path of a uri, as the app's broker makes it (`ext_manifest::relative`: `..` and `%2e`
+/// resolved); none when it is outside the workspace folder.
+fn relative(uri: &str) -> Option<String> {
+    ext_manifest::relative(&[FOLDER.to_string()], uri)
 }
 
 /// The hosts `auth.fetch` signs requests to for the built-in GitHub account.
 const GITHUB_HOSTS: &[&str] = &["api.github.com", "uploads.github.com"];
 
+/// The host of a request URL that passed `ext_manifest::calls::check_url` (calls that fail it never get this far).
 fn host_of(url: &str) -> String {
-    let rest = url.split_once("://").map_or(url, |(_, r)| r);
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
-    let host = authority.rsplit('@').next().unwrap_or(authority);
-    host.split(':').next().unwrap_or(host).to_ascii_lowercase()
+    ext_manifest::calls::check_url(url).map(|t| t.host).unwrap_or_default()
 }
 
 impl State {
@@ -117,14 +119,22 @@ impl State {
             }
             (sends && self.untrusted).then_some(Denied { permission: line, why: Why::UntrustedWorkspace })
         };
-        let path_line = |perm: &str, uri: &str| format!(r#"{perm} = ["{}"]"#, relative(uri));
+        // A path outside the workspace folder is refused whatever the globs say, as the app's broker refuses it.
+        let path = |perm: &str, uri: &str, sends: bool| match relative(uri) {
+            None if p.is_some() => Some(Denied { permission: ext_manifest::outside_line(uri), why: Why::NotDeclared }),
+            None => None,
+            Some(rel) => {
+                let ok = |p: &Permissions| if perm == "read" { p.allows_read(&rel) } else { p.allows_write(&rel) };
+                check(&ok, format!(r#"{perm} = ["{rel}"]"#), sends)
+            }
+        };
         match call {
-            Call::ReadFile(uri) | Call::Stat(uri) => check(&|p| p.allows_read(&relative(uri)), path_line("read", uri), false),
-            Call::ReadDocument(uri) if Some(uri.as_str()) != active => check(&|p| p.allows_read(&relative(uri)), path_line("read", uri), false),
+            Call::ReadFile(uri) | Call::Stat(uri) => path("read", uri, false),
+            Call::ReadDocument(uri) if Some(uri.as_str()) != active => path("read", uri, false),
             Call::FindFiles { glob, .. } => check(&|p| !p.read.is_empty(), format!(r#"read = ["{glob}"]"#), false),
-            Call::WriteFile { uri, .. } | Call::DeleteFile(uri) => check(&|p| p.allows_write(&relative(uri)), path_line("write", uri), true),
+            Call::WriteFile { uri, .. } | Call::DeleteFile(uri) => path("write", uri, true),
             // A command may edit the active document without `write` (docs/plugin-architecture.md §5.2).
-            Call::ApplyEdits { uri, .. } if Some(uri.as_str()) != active => check(&|p| p.allows_write(&relative(uri)), path_line("write", uri), true),
+            Call::ApplyEdits { uri, .. } if Some(uri.as_str()) != active => path("write", uri, true),
             Call::Fetch(r) => {
                 let host = host_of(&r.url);
                 check(&|p| p.allows_net(&host), format!(r#"net = ["{host}"]"#), true)
@@ -193,6 +203,11 @@ impl State {
             }
             Call::QuickPick { .. } => (none, Completion::Chosen(self.picks.pop_front().unwrap_or_default())),
             Call::InputBox(_) => (none, Completion::Text(self.inputs.pop_front().flatten())),
+            // As the app: a link opens only while the extension handles a user action.
+            Call::OpenExternal(_) if !self.user_action => {
+                (none, Completion::Failed(Error::Denied(Denied { permission: "a user action (a command or a link click)".into(), why: Why::NotDeclared })))
+            }
+            Call::OpenExternal(url) if !url.starts_with("https://") => (none, Completion::Failed(Error::Invalid("only https: links open".into()))),
             Call::OpenExternal(_) | Call::SetSelections { .. } => (none, Completion::Done),
             Call::Execute { command, .. } => (none, Completion::Json(self.command_results.get(&command).cloned().unwrap_or_else(|| "null".into()))),
             Call::ActiveDocument => (none, Completion::Document(self.active.clone())),
@@ -222,8 +237,16 @@ impl State {
                 Some(b) => (none, Completion::Stat(FileStat { is_dir: false, size: b.len() as u64, modified: 0 })),
                 None => (none, not_found(uri)),
             },
+            // As the app: files the glob matches and `read` allows.
             Call::FindFiles { glob, max } => {
-                let found = self.files.keys().filter(|u| ext_manifest::glob_match(&glob, &relative(u))).take(max as usize).cloned().collect();
+                let readable = |rel: &str| self.permissions.as_ref().is_none_or(|p| p.allows_read(rel));
+                let found = self
+                    .files
+                    .keys()
+                    .filter(|u| relative(u).is_some_and(|rel| ext_manifest::glob::path_matches(&glob, &rel) && readable(&rel)))
+                    .take(max as usize)
+                    .cloned()
+                    .collect();
                 (none, Completion::Uris(found))
             }
             Call::WriteFile { uri, contents } => {
@@ -315,6 +338,13 @@ impl Host for Shared {
         s.next_ticket += 1;
         let ticket = s.next_ticket;
         s.calls.push(call.clone());
+        // A URL Codeyard never fetches is `invalid` before any permission is looked at, as in the app.
+        if let Call::Fetch(r) | Call::AuthFetch { request: r, .. } = &call
+            && let Err(e) = ext_manifest::calls::check_url(&r.url)
+        {
+            s.queue.push_back(Delivery::Complete(ticket, Completion::Failed(Error::Invalid(e.message))));
+            return ticket;
+        }
         if let Some(d) = s.refusal(&call) {
             s.denied.push(d.clone());
             s.queue.push_back(Delivery::Complete(ticket, Completion::Failed(Error::Denied(d))));
@@ -332,7 +362,16 @@ impl Host for Shared {
         let mut s = self.0.borrow_mut();
         match &note {
             Note::Respond { id, result } => {
-                s.responses.insert(*id, result.clone());
+                // An answer over `CALL_BYTES` never reaches the app: the request fails, as from the exthost.
+                let bytes = match result {
+                    Ok(Response::Json(t) | Response::View(t) | Response::Text(Some(t))) => t.len(),
+                    _ => 0,
+                };
+                let result = match ext_manifest::calls::result_too_large(bytes) {
+                    Some(msg) => Err(Error::Invalid(msg)),
+                    None => result.clone(),
+                };
+                s.responses.insert(*id, result);
                 return;
             }
             Note::EndProgress(id) => {
@@ -353,6 +392,14 @@ impl Host for Shared {
                 }
                 None => s.diagnostics.clear(),
             },
+            Note::SetDecorations { uri, set, decorations } => {
+                let sets = s.decorations.entry(uri.clone()).or_default();
+                if decorations.is_empty() {
+                    sets.remove(set);
+                } else {
+                    sets.insert(set.clone(), decorations.clone());
+                }
+            }
             _ => {}
         }
         s.notes.push(note);
@@ -423,11 +470,15 @@ impl Host for Shared {
         id
     }
 
-    fn set_status_item(&mut self, item: StatusItem) -> Result<(), Error> {
-        if item.id.is_empty() {
-            return Err(Error::Invalid("a status item needs an id".into()));
-        }
-        self.0.borrow_mut().status_items.insert(item.id.clone(), item);
+    /// Refused as Codeyard refuses it (`ext_manifest::calls::check_status_item`): an id the manifest does not
+    /// declare in `[[status-bar]]`, an empty or too long text.
+    fn set_status_item(&mut self, mut item: StatusItem) -> Result<(), Error> {
+        let mut s = self.0.borrow_mut();
+        let ids = s.status_ids.clone();
+        let declared = |id: &str| ids.as_ref().is_some_and(|ids| ids.iter().any(|i| i == id));
+        let check: Option<&dyn Fn(&str) -> bool> = if ids.is_some() { Some(&declared) } else { None };
+        item.text = ext_manifest::calls::check_status_item(check, &item.id, &item.text, item.tooltip.as_deref()).map_err(Error::Invalid)?;
+        s.status_items.insert(item.id.clone(), item);
         Ok(())
     }
 }

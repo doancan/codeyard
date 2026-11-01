@@ -1,9 +1,10 @@
-//! Request URLs: `https://` only, a host name (never an IP address), no user info. Redirect locations are resolved
-//! against the URL that sent them and then go through the same check.
-
-use std::net::Ipv4Addr;
+//! Request URLs: `https://` only, a host name (never an IP address), no user info, as `ext_manifest::calls::check_url`
+//! decides for every copy of the rule. Redirect locations are resolved against the URL that sent them and then go
+//! through the same check.
 
 use hyper::Uri;
+
+use ext_manifest::calls::UrlProblem;
 
 use crate::{Error, Why};
 
@@ -34,41 +35,15 @@ impl Target {
 }
 
 pub(crate) fn parse(url: &str) -> Result<Target, Error> {
+    // The rules every copy shares (the mock hosts and `cyx test` too): scheme, user info, host name, port.
+    let checked = ext_manifest::calls::check_url(url).map_err(|e| match e.problem {
+        UrlProblem::NotHttps => Error::denied(Why::NotHttps, e.message),
+        UrlProblem::IpLiteral => Error::denied(Why::IpLiteral, e.message),
+        UrlProblem::Invalid => Error::Invalid(e.message),
+    })?;
     let url = url.trim();
     let url = url.split_once('#').map_or(url, |(u, _)| u);
-    let shown = shorten(url);
-    let invalid = |why: &str| Error::Invalid(format!("{shown}: {why}"));
-    let Some(scheme_end) = url.find("://") else { return Err(invalid("is not a URL; write it as https://host/path")) };
-    if !url[..scheme_end].eq_ignore_ascii_case("https") {
-        return Err(Error::denied(Why::NotHttps, format!("{shown}: only https:// URLs are allowed; use https://")));
-    }
-    let uri: Uri = url.parse().map_err(|e| invalid(&format!("is not a valid URL ({e})")))?;
-    let Some(authority) = uri.authority() else { return Err(invalid("has no host")) };
-    if authority.as_str().contains('@') {
-        return Err(invalid("must not contain a user name or password; send credentials in a header"));
-    }
-    let raw = authority.host();
-    if raw.starts_with('[') {
-        return Err(ip_literal(&shown));
-    }
-    let host = raw.to_ascii_lowercase();
-    let host = host.strip_suffix('.').unwrap_or(&host).to_string();
-    if host.is_empty() {
-        return Err(invalid("has no host"));
-    }
-    // What `net` can list. A name in another script is written in its `xn--` form.
-    if !host.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'.') || host.contains("..") {
-        return Err(invalid("has an invalid host name; use letters, digits, '-' and dots (xn-- for other scripts)"));
-    }
-    if is_numeric_host(&host) {
-        return Err(ip_literal(&shown));
-    }
-    let port = match authority.port_u16() {
-        Some(0) => return Err(invalid("has port 0")),
-        Some(p) => p,
-        None if authority.as_str().ends_with(':') => return Err(invalid("has an empty port")),
-        None => 443,
-    };
+    let uri: Uri = url.parse().map_err(|e| Error::Invalid(format!("{}: is not a valid URL ({e})", shorten(url))))?;
     let mut path = match uri.path() {
         p if p.starts_with('/') => p.to_string(),
         p => format!("/{p}"),
@@ -76,19 +51,7 @@ pub(crate) fn parse(url: &str) -> Result<Target, Error> {
     if let Some(q) = uri.query() {
         path = format!("{path}?{q}");
     }
-    Ok(Target { host, port, path })
-}
-
-/// `127.0.0.1` and the other spellings resolvers accept for an IPv4 address: `127.1`, `2130706433`, `0x7f.1`. A name
-/// whose labels are all numbers is one of them, and so is a name ending in a number (no top-level domain is numeric).
-fn is_numeric_host(host: &str) -> bool {
-    let number =
-        |l: &str| !l.is_empty() && (l.bytes().all(|b| b.is_ascii_digit()) || l.strip_prefix("0x").is_some_and(|h| h.bytes().all(|b| b.is_ascii_hexdigit())));
-    host.parse::<Ipv4Addr>().is_ok() || host.split('.').all(number) || host.rsplit('.').next().is_some_and(|l| l.bytes().all(|b| b.is_ascii_digit()))
-}
-
-fn ip_literal(shown: &str) -> Error {
-    Error::denied(Why::IpLiteral, format!("{shown}: names an IP address; extensions connect only to host names listed in `net`, so use the host name"))
+    Ok(Target { host: checked.host, port: checked.port, path })
 }
 
 /// The URL a `Location` header points to, relative to `base`. The result still goes through `parse`.

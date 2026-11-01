@@ -37,7 +37,7 @@ Every size, count and time limit of the extension platform. `cyx check` and the 
 
 | Limit | Value | What it covers |
 | --- | --- | --- |
-| `CALL_BYTES` | 8 MiB | The arguments or result of one API call (a file read, a fetch's request body, a view's tree). |
+| `CALL_BYTES` | 8 MiB | The arguments or result of one API call (a file read, a fetch's request body, a view's tree). A larger result fails its request with `invalid` ("the result is 20 MiB; at most 8 MiB"). |
 | `FRAME_BYTES` | 8,256 KiB | One frame between the app and an exthost: a call plus room for its envelope. A larger frame kills the exthost. |
 | `IPC_BYTES_PER_SECOND` | 32 MiB/s | Sustained bytes per second an exthost may send the app; going over kills it. |
 | `IPC_BURST_BYTES` | 64 MiB | Bytes an exthost may send in a burst above the sustained rate. |
@@ -48,7 +48,7 @@ Every size, count and time limit of the extension platform. `cyx check` and the 
 | `ACTIVATE_MILLIS` | 10 s | `activate` may take longer: language runtimes start there. |
 | `PROVIDER_DEADLINE_MILLIS` | 1 s | How long the app waits for a provider (formatter, code actions, tasks) to answer a request. A later answer is dropped and noted in the extension's log; the user's typing never waits for it. |
 | `PULL_REQUEST_DEADLINE_MILLIS` | 20 s | How long the Pull Requests view waits for a `[[pull-requests]]` provider, whose answers come from the network. A later answer is dropped like any provider's. |
-| `STATUS_TEXT_LEN` | 64 characters | Text of a status bar item. |
+| `STATUS_TEXT_LEN` | 64 characters | Text of a status bar item, in visible characters once trimmed. `set-status-item` refuses a longer or empty text, one with control, bidirectional or zero-width characters, and an id not declared in `[[status-bar]]`. |
 | `MARKS_PER_FILE` | 1,000 | Diagnostics or decorations one extension may set on one file; the rest are dropped. |
 | `NET_TIMEOUT_SECS` | 60 s | One `net` request, from the first connection to the last byte of the response, redirects included. |
 | `NET_REDIRECTS` | 5 | Redirects one `net` request follows; each is checked against `net` and the peer address rules again. |

@@ -5,7 +5,7 @@
 //!   `examples/extensions/doc-snippets` (Rust) and `doc-snippets-ts` (TypeScript).
 //! - `toml` snippets are manifests, checked by `ext-manifest`: whole ones must be valid, and fragments may only lack
 //!   what the rest of a manifest would add. A snippet whose first line is `# Cargo.toml` is checked as TOML.
-//! - `json` snippets parse; HTTP fixtures parse as fixtures (`ext-ui`'s tests check the view reference's).
+//! - `json` snippets parse; `cyx test` fixtures parse as fixtures (`ext-ui`'s tests check the view reference's).
 //! - `sh` snippets run only `cyx` commands and options that `cyx --help` lists.
 
 use std::path::{Path, PathBuf};
@@ -101,7 +101,7 @@ fn check_manifest(s: &Snippet) -> Result<(), String> {
 
 fn check_json(s: &Snippet) -> Result<(), String> {
     let value: serde_json::Value = serde_json::from_str(&s.text).map_err(|e| e.to_string())?;
-    if value.get("http").is_some() {
+    if ["http", "files", "commands"].iter().any(|k| value.get(k).is_some()) {
         crate::fixtures::Fixtures::parse(&s.text)?;
     }
     Ok(())

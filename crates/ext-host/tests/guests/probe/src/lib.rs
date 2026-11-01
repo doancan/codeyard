@@ -152,6 +152,13 @@ impl Guest for Probe {
                 let options = window::InputOptions { title: None, prompt: Some("Name?".into()), value: Some("x".into()), placeholder: None, password: false };
                 wait(window::input_box(&options), id)
             }
+            // A token for `secrets`: Codeyard masks it as it is typed.
+            "ask-secret" => {
+                let options = window::InputOptions { title: None, prompt: Some("Token?".into()), value: None, placeholder: None, password: true };
+                wait(window::input_box(&options), id)
+            }
+            // An answer over the 8 MiB call limit: the exthost fails the request instead of dropping it.
+            "huge" => reply(id, "x".repeat(20 << 20)),
             "doc" => wait(documents::active(), id),
             "auth" => wait(codeyard::api::auth::session("github", &[]), id),
             "auth-acme" => wait(codeyard::api::auth::session("acme", &[]), id),

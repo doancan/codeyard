@@ -1,0 +1,489 @@
+{
+  "allowed": [
+    {
+      "allowed": true,
+      "globs": [
+        "**"
+      ],
+      "path": "src/main.rs"
+    },
+    {
+      "allowed": false,
+      "globs": [
+        "**"
+      ],
+      "path": ".env"
+    },
+    {
+      "allowed": false,
+      "globs": [
+        "**"
+      ],
+      "path": "app/.env.local"
+    },
+    {
+      "allowed": false,
+      "globs": [
+        "**"
+      ],
+      "path": ".git/config"
+    },
+    {
+      "allowed": true,
+      "globs": [
+        "**"
+      ],
+      "path": ".gitignore"
+    },
+    {
+      "allowed": true,
+      "globs": [
+        ".env"
+      ],
+      "path": ".env"
+    },
+    {
+      "allowed": true,
+      "globs": [
+        "**/.env*"
+      ],
+      "path": "app/.env.local"
+    },
+    {
+      "allowed": true,
+      "globs": [
+        ".git/config"
+      ],
+      "path": ".git/config"
+    },
+    {
+      "allowed": false,
+      "globs": [
+        "**/*.git*"
+      ],
+      "path": ".git/config"
+    },
+    {
+      "allowed": false,
+      "globs": [
+        "main.rs"
+      ],
+      "path": "src/main.rs"
+    }
+  ],
+  "globs": [
+    {
+      "glob": "main.rs",
+      "matches": true,
+      "path": "main.rs"
+    },
+    {
+      "glob": "main.rs",
+      "matches": false,
+      "path": "src/main.rs"
+    },
+    {
+      "glob": "**/main.rs",
+      "matches": true,
+      "path": "src/main.rs"
+    },
+    {
+      "glob": "**/main.rs",
+      "matches": true,
+      "path": "main.rs"
+    },
+    {
+      "glob": "src/*.rs",
+      "matches": true,
+      "path": "src/lib.rs"
+    },
+    {
+      "glob": "src/*.rs",
+      "matches": false,
+      "path": "src/a/lib.rs"
+    },
+    {
+      "glob": "src/**/*.rs",
+      "matches": true,
+      "path": "src/a/b/lib.rs"
+    },
+    {
+      "glob": "src/**/*.rs",
+      "matches": true,
+      "path": "src/lib.rs"
+    },
+    {
+      "glob": "src/**",
+      "matches": true,
+      "path": "src"
+    },
+    {
+      "glob": "src/**",
+      "matches": true,
+      "path": "src/a/b"
+    },
+    {
+      "glob": "**",
+      "matches": true,
+      "path": "a/b"
+    },
+    {
+      "glob": "*",
+      "matches": true,
+      "path": ".env"
+    },
+    {
+      "glob": "?.md",
+      "matches": true,
+      "path": "a.md"
+    },
+    {
+      "glob": "?.md",
+      "matches": false,
+      "path": "ab.md"
+    },
+    {
+      "glob": "?.md",
+      "matches": true,
+      "path": "ğ.md"
+    },
+    {
+      "glob": "pages/[id].tsx",
+      "matches": true,
+      "path": "pages/[id].tsx"
+    },
+    {
+      "glob": "pages/[id].tsx",
+      "matches": false,
+      "path": "pages/i.tsx"
+    },
+    {
+      "glob": "./build/out",
+      "matches": true,
+      "path": "build/out"
+    },
+    {
+      "glob": "*.{rs,md}",
+      "matches": false,
+      "path": "a.rs"
+    },
+    {
+      "glob": "*a*a*a*a*a*a*a*a*a*a*a*a*a*a*b",
+      "matches": false,
+      "path": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "glob": "**/**/**/**/**/**/**/**/**/**/x",
+      "matches": false,
+      "path": "d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d"
+    },
+    {
+      "glob": "**/**/**/**/d",
+      "matches": true,
+      "path": "d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d/d"
+    }
+  ],
+  "limits": {
+    "CALL_BYTES": 8388608,
+    "DATA_DIR_BYTES": 52428800,
+    "ITEM_LEN": 256,
+    "STATUS_TEXT_LEN": 64,
+    "TIMER_MIN_SECONDS": 30
+  },
+  "paths": [
+    {
+      "folder": "file:///work",
+      "relative": "src/main.rs",
+      "uri": "file:///work/src/main.rs"
+    },
+    {
+      "folder": "file:///work",
+      "relative": "",
+      "uri": "file:///work"
+    },
+    {
+      "folder": "file:///work",
+      "relative": "",
+      "uri": "file:///work/"
+    },
+    {
+      "folder": "file:///work",
+      "relative": null,
+      "uri": "file:///work/src/../../etc/passwd"
+    },
+    {
+      "folder": "file:///work",
+      "relative": null,
+      "uri": "file:///work/src/%2e%2e/%2e%2e/etc/passwd"
+    },
+    {
+      "folder": "file:///work",
+      "relative": "src/b.rs",
+      "uri": "file:///work/src/./a/../b.rs"
+    },
+    {
+      "folder": "file:///work",
+      "relative": "a b.txt",
+      "uri": "file:///work/a%20b.txt"
+    },
+    {
+      "folder": "file:///work",
+      "relative": "İstanbul/ğ.txt",
+      "uri": "file:///work/%C4%B0stanbul/%C4%9F.txt"
+    },
+    {
+      "folder": "file:///work",
+      "relative": "İstanbul/ğ.txt",
+      "uri": "file:///work/İstanbul/ğ.txt"
+    },
+    {
+      "folder": "file:///work",
+      "relative": null,
+      "uri": "file:///work/a%00b"
+    },
+    {
+      "folder": "file:///work",
+      "relative": null,
+      "uri": "file:///work/a%zz"
+    },
+    {
+      "folder": "file:///work",
+      "relative": null,
+      "uri": "file:///workshop/a"
+    },
+    {
+      "folder": "file:///work",
+      "relative": null,
+      "uri": "file:///etc/passwd"
+    },
+    {
+      "folder": "file:///work",
+      "relative": null,
+      "uri": "src/main.rs"
+    },
+    {
+      "folder": "file:///work",
+      "relative": null,
+      "uri": "https://example.com/work/a"
+    }
+  ],
+  "results": [
+    {
+      "bytes": 0,
+      "error": null
+    },
+    {
+      "bytes": 8388608,
+      "error": null
+    },
+    {
+      "bytes": 8388609,
+      "error": "the result is 8.1 MiB; at most 8 MiB"
+    },
+    {
+      "bytes": 20971520,
+      "error": "the result is 20 MiB; at most 8 MiB"
+    }
+  ],
+  "statusItems": [
+    {
+      "declared": [
+        "deploys"
+      ],
+      "expect": {
+        "shown": "Ready ✓"
+      },
+      "id": "deploys",
+      "text": "  Ready ✓ ",
+      "tooltip": null
+    },
+    {
+      "declared": [
+        "deploys"
+      ],
+      "expect": {
+        "error": "status item \"other\" is not declared; add [[status-bar]] with id = \"other\" to the manifest"
+      },
+      "id": "other",
+      "text": "Ready",
+      "tooltip": null
+    },
+    {
+      "declared": null,
+      "expect": {
+        "shown": "Ready"
+      },
+      "id": "other",
+      "text": "Ready",
+      "tooltip": null
+    },
+    {
+      "declared": [
+        "deploys"
+      ],
+      "expect": {
+        "error": "a status item needs an id: the local id of a [[status-bar]] entry"
+      },
+      "id": "",
+      "text": "Ready",
+      "tooltip": null
+    },
+    {
+      "declared": [
+        "deploys"
+      ],
+      "expect": {
+        "error": "status item \"deploys\": its text must be 1 to 64 visible characters, without control, bidirectional or zero-width characters"
+      },
+      "id": "deploys",
+      "text": "   ",
+      "tooltip": null
+    },
+    {
+      "declared": [
+        "deploys"
+      ],
+      "expect": {
+        "error": "status item \"deploys\": its text must be 1 to 64 visible characters, without control, bidirectional or zero-width characters"
+      },
+      "id": "deploys",
+      "text": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "tooltip": null
+    },
+    {
+      "declared": [
+        "deploys"
+      ],
+      "expect": {
+        "shown": "ğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğ"
+      },
+      "id": "deploys",
+      "text": "ğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğğ",
+      "tooltip": "Vercel"
+    },
+    {
+      "declared": [
+        "deploys"
+      ],
+      "expect": {
+        "error": "status item \"deploys\": its text must be 1 to 64 visible characters, without control, bidirectional or zero-width characters"
+      },
+      "id": "deploys",
+      "text": "a‮b",
+      "tooltip": null
+    },
+    {
+      "declared": [
+        "deploys"
+      ],
+      "expect": {
+        "error": "status item \"deploys\": its tooltip must be at most 256 characters, without control, bidirectional or zero-width characters"
+      },
+      "id": "deploys",
+      "text": "ok",
+      "tooltip": "ttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt"
+    }
+  ],
+  "urls": [
+    {
+      "host": "api.example.com",
+      "port": 443,
+      "url": "https://api.example.com/x"
+    },
+    {
+      "host": "api.example.com",
+      "port": 443,
+      "url": "https://API.Example.com./x?y#z"
+    },
+    {
+      "host": "api.example.com",
+      "port": 8443,
+      "url": "https://api.example.com:8443/"
+    },
+    {
+      "message": "http://api.example.com/: only https:// URLs are allowed; use https://",
+      "problem": "not-https",
+      "url": "http://api.example.com/"
+    },
+    {
+      "message": "HTTP://api.example.com/: only https:// URLs are allowed; use https://",
+      "problem": "not-https",
+      "url": "HTTP://api.example.com/"
+    },
+    {
+      "message": "file:///etc/passwd: only https:// URLs are allowed; use https://",
+      "problem": "not-https",
+      "url": "file:///etc/passwd"
+    },
+    {
+      "message": "https://127.0.0.1/: names an IP address; extensions connect only to host names listed in `net`, so use the host name",
+      "problem": "ip-literal",
+      "url": "https://127.0.0.1/"
+    },
+    {
+      "message": "https://[::1]/: names an IP address; extensions connect only to host names listed in `net`, so use the host name",
+      "problem": "ip-literal",
+      "url": "https://[::1]/"
+    },
+    {
+      "message": "https://2130706433/: names an IP address; extensions connect only to host names listed in `net`, so use the host name",
+      "problem": "ip-literal",
+      "url": "https://2130706433/"
+    },
+    {
+      "message": "https://0x7f.1/: names an IP address; extensions connect only to host names listed in `net`, so use the host name",
+      "problem": "ip-literal",
+      "url": "https://0x7f.1/"
+    },
+    {
+      "message": "https://user:pw@api.example.com/: must not contain a user name or password; send credentials in a header",
+      "problem": "invalid",
+      "url": "https://user:pw@api.example.com/"
+    },
+    {
+      "message": "https://user@api.example.com/x: must not contain a user name or password; send credentials in a header",
+      "problem": "invalid",
+      "url": "https://user@api.example.com/x"
+    },
+    {
+      "message": "https://: has no host",
+      "problem": "invalid",
+      "url": "https://"
+    },
+    {
+      "message": "https://api.example.com:0/: has port 0",
+      "problem": "invalid",
+      "url": "https://api.example.com:0/"
+    },
+    {
+      "message": "https://api.example.com:/: has an empty port",
+      "problem": "invalid",
+      "url": "https://api.example.com:/"
+    },
+    {
+      "message": "https://api.example.com:99999/: has an invalid port",
+      "problem": "invalid",
+      "url": "https://api.example.com:99999/"
+    },
+    {
+      "message": "https://bad_host.example.com/: has an invalid host name; use letters, digits, '-' and dots (xn-- for other scripts)",
+      "problem": "invalid",
+      "url": "https://bad_host.example.com/"
+    },
+    {
+      "message": "https://ıstanbul.example.com/: has an invalid host name; use letters, digits, '-' and dots (xn-- for other scripts)",
+      "problem": "invalid",
+      "url": "https://ıstanbul.example.com/"
+    },
+    {
+      "message": "api.example.com/x: is not a URL; write it as https://host/path",
+      "problem": "invalid",
+      "url": "api.example.com/x"
+    },
+    {
+      "message": "javascript:alert(1): is not a URL; write it as https://host/path",
+      "problem": "invalid",
+      "url": "javascript:alert(1)"
+    }
+  ]
+}

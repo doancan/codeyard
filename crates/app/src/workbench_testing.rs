@@ -395,6 +395,11 @@ impl Workbench {
         self.overlay.as_ref().map(|o| o.picker.read(cx).query().to_string())
     }
 
+    /// The open overlay's query as the screen shows it (dots for a password).
+    pub fn overlay_query_shown_for_test(&self, cx: &App) -> Option<String> {
+        self.overlay.as_ref().map(|o| o.picker.read(cx).shown_query())
+    }
+
     pub fn set_overlay_query_for_test(&mut self, query: String, cx: &mut Context<Self>) {
         if let Some(o) = &self.overlay {
             o.picker.update(cx, |p, cx| p.set_query(query, cx));

@@ -41,7 +41,8 @@ pub const PACKAGE_FILE_BYTES: u64 = 64 * 1024 * 1024;
 /// An extension's own data directory (`storage`).
 pub const DATA_DIR_BYTES: u64 = 50 * 1024 * 1024;
 
-/// The arguments or result of one API call (a file read, a fetch's request body, a view's tree).
+/// The arguments or result of one API call (a file read, a fetch's request body, a view's tree). A larger result fails
+/// its request with `invalid` ("the result is 20 MiB; at most 8 MiB").
 pub const CALL_BYTES: usize = 8 * 1024 * 1024;
 /// One frame between the app and an exthost: a call plus room for its envelope. A larger frame kills the exthost.
 pub const FRAME_BYTES: usize = CALL_BYTES + 64 * 1024;
@@ -66,7 +67,8 @@ pub const PROVIDER_DEADLINE_MILLIS: u64 = 1_000;
 /// How long the Pull Requests view waits for a `[[pull-requests]]` provider, whose answers come from the network. A
 /// later answer is dropped like any provider's.
 pub const PULL_REQUEST_DEADLINE_MILLIS: u64 = 20_000;
-/// Text of a status bar item.
+/// Text of a status bar item, in visible characters once trimmed. `set-status-item` refuses a longer or empty text, one
+/// with control, bidirectional or zero-width characters, and an id not declared in `[[status-bar]]`.
 pub const STATUS_TEXT_LEN: usize = 64;
 /// Diagnostics or decorations one extension may set on one file; the rest are dropped.
 pub const MARKS_PER_FILE: usize = 1_000;

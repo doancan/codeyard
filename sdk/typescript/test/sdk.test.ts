@@ -9,7 +9,7 @@ import { describe as describeError, stackFrames } from "../src/errors.ts";
 import { start } from "../src/guest.ts";
 import { MockHost } from "../src/testing/index.ts";
 import { parseToml } from "../src/testing/toml.ts";
-import { globMatch } from "../src/testing/permissions.ts";
+import { pathMatches } from "../src/testing/rules.ts";
 import type { Bindings } from "../src/wit.ts";
 
 const MANIFEST = `
@@ -324,7 +324,8 @@ test("the manifest reader", () => {
   assert.equal(((m.settings as Record<string, Record<string, unknown>>).interval as Record<string, unknown>).default, 60);
   assert.equal(((m.commands as unknown[])[0] as Record<string, unknown>).id, "a");
   assert.deepEqual(parseToml('a = { b = [1, 2,], c = "\\u00e9" }\n'), { a: { b: [1, 2], c: "é" } });
-  assert.ok(globMatch("**/*.json", "apps/vercel.json") && globMatch("*.json", "a/b.json") && !globMatch("src/*.ts", "src/a/b.ts"));
+  // As in Codeyard, a glob is matched against the whole path: `*.json` is a file at the top of the folder.
+  assert.ok(pathMatches("**/*.json", "apps/vercel.json") && !pathMatches("*.json", "a/b.json") && !pathMatches("src/*.ts", "src/a/b.ts"));
 });
 
 test("a pull request provider answers every query through the signed fetch", async () => {
