@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Removed `.github/dependabot.yml`: version-update pull requests are off. Dependabot security alerts are unaffected.
+
 ### Added
 
 - docs/accessibility.md: a manual screen-reader checklist (VoiceOver, NVDA, Narrator, JAWS and Orca), step by step,
