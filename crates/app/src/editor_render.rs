@@ -305,12 +305,15 @@ impl Render for EditorView {
                                         if range.is_empty() || n_lines == 0 {
                                             return Vec::new();
                                         }
+                                        this.sync_tree(cx);
                                         let rope = this.buffer.rope().clone();
                                         let first_line = this.display.line_at_row(range.start).0;
                                         let last_line = (this.display.line_at_row(range.end - 1).0 + 1).min(n_lines);
                                         this.note_ext_view(first_line..last_line, cx);
-                                        let spans =
-                                            this.syntax.as_ref().map(|s| s.highlights(&rope, rope.line_to_byte(first_line)..rope.line_to_byte(last_line)));
+                                        let spans = this
+                                            .syntax
+                                            .as_ref()
+                                            .map(|s| s.highlights_shown(&rope, rope.line_to_byte(first_line)..rope.line_to_byte(last_line)));
                                         let folded = this.fold_headers();
                                         let bookmarks = this.bookmark_lines();
                                         let breakpoints = this.breakpoints();

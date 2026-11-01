@@ -217,6 +217,8 @@ mod render_glue;
 mod schema_glue;
 #[path = "editor_spell.rs"]
 mod spell_glue;
+#[path = "editor_syntax.rs"]
+mod syntax_glue;
 pub use schema_glue::SchemaBinding;
 
 pub enum EditorEvent {
@@ -592,8 +594,8 @@ pub struct EditorView {
     /// Selection when the find bar opened (candidate scope for find in selection).
     find_origin: Option<Range<usize>>,
     word_cache: Option<(u64, usize, std::sync::Arc<[crate::lsp::CompletionItem]>)>,
-    /// A reparse too long for a keystroke, finishing in the background (`sync_syntax`).
-    syntax_task: Option<gpui::Task<()>>,
+    /// Background reparses and the frames they ask for (`sync_syntax`).
+    parse: syntax_glue::ParseState,
     conflicts_pending: u64,
     /// Line layout the popups are positioned on, and whether there are positioned items.
     popup_basis: ((usize, usize, Pixels), bool),
@@ -1005,7 +1007,7 @@ impl EditorView {
             conflicts_version,
             conflicts_task: None,
             word_cache: None,
-            syntax_task: None,
+            parse: Default::default(),
             find_origin: None,
             conflicts_pending: u64::MAX,
             popup_basis: ((usize::MAX, 0, px(0.)), false),
@@ -1365,59 +1367,6 @@ impl EditorView {
     /// The language name for display (language names are proper names; only "Plain Text" is translated).
     pub fn language_label(&self) -> &'static str {
         self.syntax.as_ref().map_or(crate::i18n::t("Plain Text"), |s| s.language_name())
-    }
-
-    /// Apply the buffer's edits to the syntax tree, reparse the changed part. A reparse that takes longer than
-    /// `SYNTAX_BUDGET` (an edit that makes tree-sitter recover from an error across the whole file) finishes in the
-    /// background: the key's frame is drawn with the old tree, moved by the edit, and the new one shows when ready.
-    fn sync_syntax(&mut self, cx: &mut Context<Self>) {
-        self.sync_lsp();
-        let Some(syntax) = &mut self.syntax else { return };
-        let edits = self.buffer.take_edits();
-        if edits.is_empty() {
-            return;
-        }
-        for e in &edits {
-            syntax.edit(&syntax::Edit {
-                start_byte: e.start_byte,
-                old_end_byte: e.old_end_byte,
-                new_end_byte: e.new_end_byte,
-                start: e.start_point,
-                old_end: e.old_end_point,
-                new_end: e.new_end_point,
-            });
-        }
-        if let Some(job) = syntax.reparse_within(self.buffer.rope(), SYNTAX_BUDGET) {
-            self.parse_in_background(job, cx);
-        }
-    }
-
-    fn parse_in_background(&mut self, job: syntax::ParseJob, cx: &mut Context<Self>) {
-        let parsed = cx.background_executor().spawn(async move { job.run() });
-        self.syntax_task = Some(cx.spawn(async move |this, cx| {
-            let parsed = parsed.await;
-            this.update(cx, |e, cx| {
-                let Some(syntax) = &mut e.syntax else { return };
-                // Edits made while it ran are reparsed on top of it, again within the budget.
-                if let Some(job) = syntax.finish(parsed, e.buffer.rope(), SYNTAX_BUDGET) {
-                    e.parse_in_background(job, cx);
-                }
-                cx.notify();
-            })
-            .ok();
-        }));
-    }
-
-    /// The syntax tree is being rebuilt off the UI thread.
-    #[cfg(test)]
-    pub fn parsing_syntax_for_test(&self) -> bool {
-        self.syntax.as_ref().is_some_and(|s| s.parsing())
-    }
-
-    /// The colored spans in `bytes`, as the text is painted.
-    #[cfg(test)]
-    pub fn highlights_for_test(&self, bytes: Range<usize>) -> Vec<(Range<usize>, Role)> {
-        self.syntax.as_ref().map(|s| s.highlights(self.buffer.rope(), bytes)).unwrap_or_default()
     }
 
     pub fn cursor_count(&self) -> usize {

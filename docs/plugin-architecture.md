@@ -500,7 +500,7 @@ milliseconds. A waiver is one line in the release notes.
 | Metric | Stat | Budget / release | Ceiling |
 | --- | --- | --- | --- |
 | Startup cost of 100 installed, inactive extensions | p95 delta | +1 ms | 5 ms, 0 processes, 0 requests |
-| Keystroke to frame, 5 query packs + 2 decoration providers active | p95 | +10% | the same keys without extensions, same run, +10% |
+| Keystroke to frame, 2 decoration providers active (`typing.keystroke_frame_decorations_ms`) | p95 | +10% | the same keys without extensions, same run, +10% |
 | Idle memory, 100 installed, none active | median | +2 MB | welcome scene + 3 MB |
 | Activation, warm (process running, code cached) | p95 | +10% | 10 ms |
 | Activation, cold (spawn + sandbox + load) | p95 | +10% | macOS 150 ms, Windows 400 ms |

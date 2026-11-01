@@ -453,6 +453,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Typing words at the top of a large file no longer redraws the window behind the keys (#215). A key whose reparse
+  goes to the background (stray words make tree-sitter recover from the error across the whole file) used to redraw
+  the editor when that parse finished, often just as the next key came. Now the new tree is compared with the old
+  one only where they differ (`changed_ranges`) and only on the lines drawn; it asks for a frame only if something on
+  screen changes color, and only once typing pauses, since the next key's frame draws it anyway. Edits made while a
+  parse runs go to the next background parse instead of being reparsed on the UI thread, and the old tree (about
+  3 ms to free for a 10 000-line file in that state) is freed on a thread of its own. Painting applies any edit the
+  tree has not seen yet, whichever way it reached the buffer.
+
 - Extension authoring, from two outside-author trials: `cyx check` names the Codeyard release an extension needs
   without claiming that this preview build cannot run it, and names the API in "this Codeyard (API 1.0.0)"; a
   component built against an old API reports it once, not once per import. `cyx publish` says "in 48 hours", not 49,
@@ -462,6 +471,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and reports every unknown manifest field at once. `cyx check --fix` lists every missing permission it cannot add,
   and for TypeScript says what to add by hand. `cyx package -o` into a missing folder fails before the build. A list
   or table with too many rows says to show fewer, not to "send at most 10000 at a time".
+
 - `cyx dev` notes the sources before its first build, so a file saved while it builds, checks the extension or
   starts Codeyard is rebuilt on the next poll instead of being missed until the next save.
 
