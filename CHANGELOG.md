@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- docs/accessibility.md: a manual screen-reader checklist (VoiceOver, NVDA, Narrator, JAWS and Orca), step by step,
+  for the limits only a person with a screen reader can close: live focus, the editor's text, right-to-left text, the
+  single reported cursor, what leaving a control sends instead of `Blur`, and the missing Linux adapter.
+
 - `cyx test` asks every declared provider once (formatter, code actions, hover, completion, code lenses, inlay hints,
   tasks, source control) with a sample document, reads workspace files from `files` in `test/fixtures.json`, runs
   commands with the arguments in its `commands`, and starts the extension host again after a trap or a timeout, so one
