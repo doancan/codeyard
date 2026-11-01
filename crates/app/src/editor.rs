@@ -621,6 +621,8 @@ pub struct EditorView {
     display_key: Option<DisplayKey>,
     /// Hidden line ranges (folds) computed along with the mapping.
     hidden: Vec<Range<usize>>,
+    /// `fold_headers`, kept for the text and fold marks it was computed for.
+    fold_lines: std::cell::RefCell<Option<((usize, u64, usize, usize, u64), Vec<usize>)>>,
     /// Width of the text area at the last paint (the wrap column comes from here).
     text_width: Pixels,
     /// Settings at the last paint: (wrap enabled, tab width, width of one column).
@@ -1023,6 +1025,7 @@ impl EditorView {
             display: DisplayMap::identity(0),
             display_key: None,
             hidden: Vec::new(),
+            fold_lines: Default::default(),
             text_width: px(0.),
             layout_params: (false, 4, px(8.)),
         }

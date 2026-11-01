@@ -10,16 +10,10 @@ const PROBE: &[u8] = include_bytes!("../../ext-host/testdata/probe.wasm");
 
 /// The exthost cargo built beside the test binary; `cargo test --workspace` (CI) always builds it.
 fn exthost() -> Option<PathBuf> {
-    let p = exthost_path();
-    if p.is_none() {
-        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+    if !crate::ext_runtime::code_runs_for_test() {
         return None;
     }
-    if let Err(why) = sandbox() {
-        eprintln!("skipped: no sandbox here ({why})");
-        return None;
-    }
-    p
+    exthost_path()
 }
 
 fn env() -> EnvInfo {

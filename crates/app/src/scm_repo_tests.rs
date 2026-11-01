@@ -29,7 +29,7 @@ impl Drop for Fixture {
 }
 
 fn s(p: &Path) -> String {
-    p.to_string_lossy().into_owned()
+    crate::ui::local_path(p)
 }
 
 fn make_repo(dir: &Path) {
@@ -46,7 +46,7 @@ fn fixture(name: &str) -> Fixture {
     let w = std::env::temp_dir().join(format!("codeyard-multi-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&w);
     std::fs::create_dir_all(&w).unwrap();
-    let w = std::fs::canonicalize(&w).unwrap();
+    let w = crate::ui::canonical_for_test(&w);
     let (alpha, beta) = (w.join("alpha"), w.join("beta"));
     make_repo(&alpha);
     make_repo(&beta);
@@ -548,7 +548,7 @@ fn history_actions_of_linked_worktrees_stay_in_their_checkout(cx: &mut TestAppCo
     let w = std::env::temp_dir().join(format!("codeyard-multi-linked-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&w);
     std::fs::create_dir_all(&w).unwrap();
-    let w = std::fs::canonicalize(&w).unwrap();
+    let w = crate::ui::canonical_for_test(&w);
     // In the form the workbench opens folders (`C:/…/main` on Windows, not `\\?\C:\…`, which `git worktree add` rejects).
     let main = PathBuf::from(format!("{}/main", crate::ui::local_path(&w)));
     make_repo(&main);
@@ -630,7 +630,7 @@ fn polling_many_repositories_is_bounded(cx: &mut TestAppContext) {
     let w = std::env::temp_dir().join(format!("codeyard-multi-poll-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&w);
     std::fs::create_dir_all(&w).unwrap();
-    let w = std::fs::canonicalize(&w).unwrap();
+    let w = crate::ui::canonical_for_test(&w);
     for i in 0..24 {
         let d = w.join(format!("r{i:02}"));
         std::fs::create_dir_all(&d).unwrap();
@@ -822,7 +822,7 @@ fn a_large_inventory_is_bounded_and_virtualized(cx: &mut TestAppContext) {
     let w = std::env::temp_dir().join(format!("codeyard-multi-large-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&w);
     std::fs::create_dir_all(&w).unwrap();
-    let w = std::fs::canonicalize(&w).unwrap();
+    let w = crate::ui::canonical_for_test(&w);
     for i in 0..120 {
         let d = w.join(format!("r{i:03}"));
         std::fs::create_dir_all(&d).unwrap();

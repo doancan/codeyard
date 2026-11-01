@@ -20,14 +20,14 @@ fn base_dir() -> PathBuf {
     let base =
         std::env::var_os("QA_TMP").map(PathBuf::from).unwrap_or_else(|| std::env::temp_dir().join(format!("codeyard-qa-integration-{}", std::process::id())));
     std::fs::create_dir_all(&base).unwrap();
-    std::fs::canonicalize(base).unwrap()
+    crate::ui::canonical_for_test(base)
 }
 
 fn qa_dir(name: &str) -> PathBuf {
     let dir = base_dir().join(format!("{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    dir
+    crate::ui::canonical_for_test(&dir)
 }
 
 pub(crate) fn setup_with(cx: &mut TestAppContext, settings: Settings) -> (Entity<Workbench>, &mut VisualTestContext) {
@@ -46,7 +46,7 @@ fn setup(cx: &mut TestAppContext) -> (Entity<Workbench>, &mut VisualTestContext)
 }
 
 fn open(wb: &Entity<Workbench>, path: &Path, cx: &mut VisualTestContext) {
-    let p = path.to_string_lossy().into_owned();
+    let p = crate::ui::local_path(path);
     wb.update_in(cx, |wb, window, cx| wb.open_path(&p, window, cx));
     cx.run_until_parked();
 }
@@ -307,6 +307,8 @@ fn qa_git_repo_opened_at_subfolder(cx: &mut TestAppContext) {
 // --- Language servers ----------------------------------------------------
 
 /// A fake server that crashes with a signal shortly after a file is opened.
+/// Signals (SIGKILL) are Unix only.
+#[cfg(unix)]
 fn crashing_server(dir: &Path) -> PathBuf {
     let script = dir.join("crashing-ls.py");
     std::fs::write(
@@ -352,10 +354,10 @@ while True:
 /// A server that keeps crashing (segfault, abort, OOM kill = killed by a
 /// signal) must be restarted only a few times, then the user is told
 /// (VS Code: "The X server crashed 5 times in the last 3 minutes. It will not be restarted.").
+#[cfg(unix)]
 #[gpui::test]
 fn qa_lsp_crash_loop_by_signal_is_bounded(cx: &mut TestAppContext) {
-    if std::process::Command::new("python3").arg("-V").output().is_err() {
-        crate::test_sshd::skip_missing("python3");
+    if !crate::test_lsp::have_python() {
         return;
     }
     let dir = qa_dir("qa-lspcrash");
@@ -364,7 +366,7 @@ fn qa_lsp_crash_loop_by_signal_is_bounded(cx: &mut TestAppContext) {
     std::fs::write(dir.join("main.c"), "int main(void) { return 0; }\n").unwrap();
     let settings = Settings {
         lsp_enabled: true,
-        lsp_servers: vec![("c".into(), Some((script.to_string_lossy().into_owned(), vec![starts.to_string_lossy().into_owned()]).into()))],
+        lsp_servers: vec![("c".into(), Some(crate::test_lsp::python_program(&script, vec![crate::ui::local_path(&starts)]).into()))],
         ..Settings::default()
     };
     let (wb, cx) = setup_with(cx, settings);
@@ -488,8 +490,7 @@ fn qa_lsp_format_on_save(cx: &mut TestAppContext) {
 /// goes into the text written to disk; unrequested kinds (quickfix) are not applied.
 #[gpui::test]
 fn qa_lsp_code_actions_on_save(cx: &mut TestAppContext) {
-    if std::process::Command::new("python3").arg("-V").output().is_err() {
-        crate::test_sshd::skip_missing("python3");
+    if !crate::test_lsp::have_python() {
         return;
     }
     let dir = qa_dir("qa-actionsave");
@@ -538,7 +539,7 @@ while True:
     let settings = Settings {
         code_actions_on_save: vec!["source.organizeImports".into()],
         lsp_enabled: true,
-        lsp_servers: vec![("c".into(), Some((script.to_string_lossy().into_owned(), Vec::new()).into()))],
+        lsp_servers: vec![("c".into(), Some(crate::test_lsp::python_program(&script, Vec::new()).into()))],
         ..Settings::default()
     };
     let (wb, cx) = setup_with(cx, settings);
@@ -624,14 +625,13 @@ while True:
 }
 
 pub(crate) fn c_server(script: &Path) -> Vec<crate::settings::ServerOverride> {
-    vec![("c".into(), Some((script.to_string_lossy().into_owned(), Vec::new()).into()))]
+    vec![("c".into(), Some(crate::test_lsp::python_program(script, Vec::new()).into()))]
 }
 
 /// `editor.formatOnPaste` / `editor.formatOnType` are off by default: nothing is reformatted.
 #[gpui::test]
 fn qa_lsp_format_on_paste_is_off_by_default(cx: &mut TestAppContext) {
-    if std::process::Command::new("python3").arg("-V").output().is_err() {
-        crate::test_sshd::skip_missing("python3");
+    if !crate::test_lsp::have_python() {
         return;
     }
     let dir = qa_dir("qa-fmtoff");
@@ -653,8 +653,7 @@ fn qa_lsp_format_on_paste_is_off_by_default(cx: &mut TestAppContext) {
 /// Enabled: the pasted range goes to `rangeFormatting`, `;` to `onTypeFormatting`.
 #[gpui::test]
 fn qa_lsp_format_on_paste_and_type(cx: &mut TestAppContext) {
-    if std::process::Command::new("python3").arg("-V").output().is_err() {
-        crate::test_sshd::skip_missing("python3");
+    if !crate::test_lsp::have_python() {
         return;
     }
     let dir = qa_dir("qa-fmton");
@@ -687,7 +686,7 @@ fn qa_run_test_at_cursor_reports_the_failing_assert(cx: &mut TestAppContext) {
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
-    let lib = dir.join("src/lib.rs").to_string_lossy().into_owned();
+    let lib = crate::ui::local_path(&dir.join("src/lib.rs"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(lib.clone(), window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -763,8 +762,7 @@ fn qa_testing_view_stop_ends_the_run(cx: &mut TestAppContext) {
 /// stops there → continue ends the session and clears the yellow line.
 #[gpui::test]
 fn qa_debug_session_breakpoints_steps_and_end(cx: &mut TestAppContext) {
-    if std::process::Command::new("python3").arg("-V").output().is_err() {
-        crate::test_sshd::skip_missing("python3");
+    if !crate::test_lsp::have_python() {
         return;
     }
     let dir = qa_dir("qa-debug");
@@ -776,15 +774,16 @@ fn qa_debug_session_breakpoints_steps_and_end(cx: &mut TestAppContext) {
         dir.join(".vscode/launch.json"),
         format!(
             r#"{{ "configurations": [ {{ "name": "Fake", "type": "custom", "request": "launch", "program": "/bin/true",
-                "source": "${{workspaceFolder}}/main.c", "debugAdapter": {{ "command": "{}", "args": ["{}"] }} }} ] }}"#,
-            script.display(),
-            log.display()
+                "source": "${{workspaceFolder}}/main.c", "debugAdapter": {{ "command": "{}", "args": ["{}", "{}"] }} }} ] }}"#,
+            crate::test_lsp::python(),
+            crate::ui::local_path(&script),
+            crate::ui::local_path(&log)
         ),
     )
     .unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let main = dir.join("main.c").to_string_lossy().into_owned();
+    let main = crate::ui::local_path(&dir.join("main.c"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(main.clone(), window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -826,8 +825,7 @@ fn qa_debug_session_breakpoints_steps_and_end(cx: &mut TestAppContext) {
 /// A failed launch reports the adapter's own message instead of hanging in "starting".
 #[gpui::test]
 fn qa_debug_launch_failure_is_reported(cx: &mut TestAppContext) {
-    if std::process::Command::new("python3").arg("-V").output().is_err() {
-        crate::test_sshd::skip_missing("python3");
+    if !crate::test_lsp::have_python() {
         return;
     }
     let dir = qa_dir("qa-debugfail");
@@ -835,7 +833,7 @@ fn qa_debug_launch_failure_is_reported(cx: &mut TestAppContext) {
     std::fs::create_dir_all(dir.join(".vscode")).unwrap();
     std::fs::write(
         dir.join(".vscode/launch.json"),
-        format!(r#"{{ "configurations": [ {{ "name": "Bad", "type": "custom", "program": "/no/such", "fail": true, "debugAdapter": {{ "command": "{}", "args": ["{}"] }} }} ] }}"#, script.display(), dir.join("l.log").display()),
+        format!(r#"{{ "configurations": [ {{ "name": "Bad", "type": "custom", "program": "/no/such", "fail": true, "debugAdapter": {{ "command": "{}", "args": ["{}", "{}"] }} }} ] }}"#, crate::test_lsp::python(), crate::ui::local_path(&script), crate::ui::local_path(&dir.join("l.log"))),
     )
     .unwrap();
     let (wb, cx) = setup(cx);
@@ -848,6 +846,9 @@ fn qa_debug_launch_failure_is_reported(cx: &mut TestAppContext) {
 /// A failing preLaunchTask stops the start (the debugger never starts); its output reaches Problems.
 #[gpui::test]
 fn qa_debug_build_failure_fills_problems(cx: &mut TestAppContext) {
+    if !crate::test_sshd::posix_shell() {
+        return;
+    }
     let dir = qa_dir("qa-debugbuild");
     std::fs::create_dir_all(dir.join(".vscode")).unwrap();
     std::fs::write(dir.join(".vscode/tasks.json"), r#"{ "tasks": [ { "label": "build", "command": "printf 'src/a.c:2:3: error: nope\\n' >&2; exit 1" } ] }"#)
@@ -888,7 +889,7 @@ fn qa_debug_real_lldb_dap_session(cx: &mut TestAppContext) {
     .unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let main = std::fs::canonicalize(dir.join("main.c")).unwrap().to_string_lossy().into_owned();
+    let main = crate::ui::canonical_for_test(dir.join("main.c")).to_string_lossy().into_owned();
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(main.clone(), window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -934,7 +935,7 @@ fn qa_debug_real_cargo_project_without_config(cx: &mut TestAppContext) {
     std::fs::write(dir.join("src/main.rs"), src).unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let main = std::fs::canonicalize(dir.join("src/main.rs")).unwrap().to_string_lossy().into_owned();
+    let main = crate::ui::canonical_for_test(dir.join("src/main.rs")).to_string_lossy().into_owned();
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(main.clone(), window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -958,8 +959,7 @@ fn qa_debug_real_cargo_project_without_config(cx: &mut TestAppContext) {
 /// is skipped, a logpoint prints instead of stopping.
 #[gpui::test]
 fn qa_debug_conditional_and_logpoints(cx: &mut TestAppContext) {
-    if std::process::Command::new("python3").arg("-V").output().is_err() {
-        crate::test_sshd::skip_missing("python3");
+    if !crate::test_lsp::have_python() {
         return;
     }
     let dir = qa_dir("qa-debugcond");
@@ -971,15 +971,16 @@ fn qa_debug_conditional_and_logpoints(cx: &mut TestAppContext) {
         dir.join(".vscode/launch.json"),
         format!(
             r#"{{ "configurations": [ {{ "name": "Fake", "type": "custom", "program": "x", "source": "${{workspaceFolder}}/main.c",
-                "debugAdapter": {{ "command": "{}", "args": ["{}"] }} }} ] }}"#,
-            script.display(),
-            log.display()
+                "debugAdapter": {{ "command": "{}", "args": ["{}", "{}"] }} }} ] }}"#,
+            crate::test_lsp::python(),
+            crate::ui::local_path(&script),
+            crate::ui::local_path(&log)
         ),
     )
     .unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let main = dir.join("main.c").to_string_lossy().into_owned();
+    let main = crate::ui::local_path(&dir.join("main.c"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(main.clone(), window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -1033,7 +1034,7 @@ fn qa_debug_real_conditional_breakpoint_and_inline_values(cx: &mut TestAppContex
         .unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let main = std::fs::canonicalize(dir.join("main.c")).unwrap().to_string_lossy().into_owned();
+    let main = crate::ui::canonical_for_test(dir.join("main.c")).to_string_lossy().into_owned();
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(main.clone(), window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -1087,7 +1088,7 @@ fn qa_debug_real_debugpy_session(cx: &mut TestAppContext) {
     std::fs::write(dir.join("app.py"), src).unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let app = std::fs::canonicalize(dir.join("app.py")).unwrap().to_string_lossy().into_owned();
+    let app = crate::ui::canonical_for_test(dir.join("app.py")).to_string_lossy().into_owned();
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(app.clone(), window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -1122,7 +1123,7 @@ fn qa_debug_real_delve_session(cx: &mut TestAppContext) {
     std::fs::write(dir.join("main.go"), src).unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let main = std::fs::canonicalize(dir.join("main.go")).unwrap().to_string_lossy().into_owned();
+    let main = crate::ui::canonical_for_test(dir.join("main.go")).to_string_lossy().into_owned();
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(main.clone(), window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -1161,7 +1162,7 @@ fn qa_debug_real_node_session(cx: &mut TestAppContext) {
     std::fs::write(dir.join("app.js"), src).unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let app = std::fs::canonicalize(dir.join("app.js")).unwrap().to_string_lossy().into_owned();
+    let app = crate::ui::canonical_for_test(dir.join("app.js")).to_string_lossy().into_owned();
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(app.clone(), window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -1189,8 +1190,8 @@ fn qa_workspace_file_opens_its_first_folder(cx: &mut TestAppContext) {
     std::fs::write(base.join("mono.code-workspace"), r#"{ "folders": [ { "path": "missing" }, { "path": "api" } ] }"#).unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &base.join("mono.code-workspace"), cx);
-    let want = std::fs::canonicalize(base.join("api")).unwrap();
-    assert_eq!(wb.read_with(cx, |wb, cx| wb.root_for_test(cx)).map(|r| std::fs::canonicalize(r).unwrap()), Some(want));
+    let want = crate::ui::canonical_for_test(base.join("api"));
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.root_for_test(cx)).map(crate::ui::canonical_for_test), Some(want));
 
     // File without a folder: the root doesn't change, clear error.
     std::fs::write(base.join("empty.code-workspace"), r#"{ "folders": [ { "path": "nope" } ] }"#).unwrap();
@@ -1255,7 +1256,7 @@ fn qa_debug_program_finishing_without_a_hit_explains_itself(cx: &mut TestAppCont
         .unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let main = std::fs::canonicalize(dir.join("main.c")).unwrap().to_string_lossy().into_owned();
+    let main = crate::ui::canonical_for_test(dir.join("main.c")).to_string_lossy().into_owned();
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(main, window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -1270,9 +1271,9 @@ fn qa_debug_program_finishing_without_a_hit_explains_itself(cx: &mut TestAppCont
 /// it, roots resolve per file, the extra folder survives switching projects, and it can be removed.
 #[gpui::test]
 fn qa_multi_root_explorer_open_persist_remove(cx: &mut TestAppContext) {
-    let api = std::fs::canonicalize(qa_dir("qa-mr-api")).unwrap();
-    let web = std::fs::canonicalize(qa_dir("qa-mr-web")).unwrap();
-    let other = std::fs::canonicalize(qa_dir("qa-mr-other")).unwrap();
+    let api = crate::ui::canonical_for_test(qa_dir("qa-mr-api"));
+    let web = crate::ui::canonical_for_test(qa_dir("qa-mr-web"));
+    let other = crate::ui::canonical_for_test(qa_dir("qa-mr-other"));
     std::fs::write(api.join("main.go"), "package main\n").unwrap();
     std::fs::create_dir_all(web.join("src")).unwrap();
     std::fs::write(web.join("src/app.ts"), "export {}\n").unwrap();
@@ -1315,7 +1316,7 @@ fn qa_multi_root_explorer_open_persist_remove(cx: &mut TestAppContext) {
 /// Opening a .code-workspace file now puts every folder in this window.
 #[gpui::test]
 fn qa_workspace_file_adds_all_folders_to_this_window(cx: &mut TestAppContext) {
-    let base = std::fs::canonicalize(qa_dir("qa-mr-file")).unwrap();
+    let base = crate::ui::canonical_for_test(qa_dir("qa-mr-file"));
     for d in ["one", "two", "three"] {
         std::fs::create_dir_all(base.join(d)).unwrap();
         std::fs::write(base.join(d).join("f.txt"), d).unwrap();
@@ -1333,18 +1334,19 @@ fn qa_workspace_file_adds_all_folders_to_this_window(cx: &mut TestAppContext) {
 /// the root of the active file, and each root gets its own language server.
 #[gpui::test]
 fn qa_multi_root_search_quick_open_tasks_and_lsp(cx: &mut TestAppContext) {
-    if std::process::Command::new("python3").arg("-V").output().is_err() {
-        crate::test_sshd::skip_missing("python3");
+    if !crate::test_lsp::have_python() {
         return;
     }
-    let api = std::fs::canonicalize(qa_dir("qa-mr2-api")).unwrap();
-    let web = std::fs::canonicalize(qa_dir("qa-mr2-web")).unwrap();
+    let api = crate::ui::canonical_for_test(qa_dir("qa-mr2-api"));
+    let web = crate::ui::canonical_for_test(qa_dir("qa-mr2-web"));
     std::fs::write(api.join("main.c"), "int needle_api;\n").unwrap();
     std::fs::create_dir_all(web.join("src")).unwrap();
     std::fs::write(web.join("src/app.c"), "int needle_web;\n").unwrap();
     std::fs::create_dir_all(web.join(".codeyard")).unwrap();
-    std::fs::write(web.join(".codeyard/tasks.jsonc"), r#"[ { "label": "build", "command": "pwd > cwd.txt && echo ${workspaceFolderBasename} > base.txt" } ]"#)
-        .unwrap();
+    // Tasks run in cmd on Windows, where `cd` alone prints the folder.
+    let pwd = if cfg!(windows) { "cd" } else { "pwd" };
+    let tasks = format!(r#"[ {{ "label": "build", "command": "{pwd} > cwd.txt && echo ${{workspaceFolderBasename}} > base.txt" }} ]"#);
+    std::fs::write(web.join(".codeyard/tasks.jsonc"), tasks).unwrap();
     // Server: logs the rootUri from initialize.
     let log = api.join("roots.log");
     let script = api.join("root-ls.py");
@@ -1383,12 +1385,12 @@ while True:
     crate::test_files::make_executable(&script);
     let settings = Settings {
         lsp_enabled: true,
-        lsp_servers: vec![("c".into(), Some((script.to_string_lossy().into_owned(), vec![log.to_string_lossy().into_owned()]).into()))],
+        lsp_servers: vec![("c".into(), Some(crate::test_lsp::python_program(&script, vec![crate::ui::local_path(&log)]).into()))],
         ..Settings::default()
     };
     let (wb, cx) = setup_with(cx, settings);
     open(&wb, &api, cx);
-    let w = web.to_string_lossy().into_owned();
+    let w = crate::ui::local_path(&web);
     wb.update_in(cx, |wb, window, cx| wb.add_workspace_folder_now(w.clone(), window, cx));
     cx.run_until_parked();
 
@@ -1408,13 +1410,13 @@ while True:
     // Go to file: the extra-folder file resolves as `web › src/app.c`.
     assert_eq!(
         wb.read_with(cx, |wb, _| wb.palette_path_for_test(&api.to_string_lossy(), &format!("{label} › src/app.c"))),
-        web.join("src/app.c").to_string_lossy()
+        crate::ui::local_path(&web.join("src/app.c"))
     );
-    assert_eq!(wb.read_with(cx, |wb, _| wb.palette_path_for_test(&api.to_string_lossy(), "main.c")), api.join("main.c").to_string_lossy());
+    assert_eq!(wb.read_with(cx, |wb, _| wb.palette_path_for_test(&crate::ui::local_path(&api), "main.c")), crate::ui::local_path(&api.join("main.c")));
 
     // Language servers: one process per root, each with its own rootUri.
-    let main_c = api.join("main.c").to_string_lossy().into_owned();
-    let app_c = web.join("src/app.c").to_string_lossy().into_owned();
+    let main_c = crate::ui::local_path(&api.join("main.c"));
+    let app_c = crate::ui::local_path(&web.join("src/app.c"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(main_c.clone(), window, cx));
     cx.run_until_parked();
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(app_c.clone(), window, cx));
@@ -1427,7 +1429,7 @@ while True:
     // Task: the active file is in the extra folder, so the command runs there.
     run(&wb, cx, "Tasks: Run Build Task");
     wait_for(cx, "task ran in the web root", |_| web.join("cwd.txt").exists() && web.join("base.txt").exists());
-    assert_eq!(std::fs::read_to_string(web.join("cwd.txt")).unwrap().trim(), web.to_string_lossy());
+    assert_eq!(std::fs::read_to_string(web.join("cwd.txt")).unwrap().trim().replace('\\', "/"), crate::ui::local_path(&web));
     assert_eq!(std::fs::read_to_string(web.join("base.txt")).unwrap().trim(), web.file_name().unwrap().to_str().unwrap());
     assert!(!api.join("cwd.txt").exists(), "must not run in the first root");
 }
@@ -1435,24 +1437,24 @@ while True:
 /// Source Control follows the folder of the file you are in: two repos, one window.
 #[gpui::test]
 fn qa_multi_root_source_control_follows_the_active_file(cx: &mut TestAppContext) {
-    let api = std::fs::canonicalize(repo("qa-mr3-api")).unwrap();
-    let web = std::fs::canonicalize(repo("qa-mr3-web")).unwrap();
+    let api = crate::ui::canonical_for_test(repo("qa-mr3-api"));
+    let web = crate::ui::canonical_for_test(repo("qa-mr3-web"));
     std::fs::write(web.join("README.md"), "# web değişti\n").unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &api, cx);
     wait_ticking(cx, "api status", |cx| changes(&wb, cx).is_some_and(|c| c.is_empty()));
-    let w = web.to_string_lossy().into_owned();
+    let w = crate::ui::local_path(&web);
     wb.update_in(cx, |wb, window, cx| wb.add_workspace_folder_now(w.clone(), window, cx));
     // Active file in web: Source Control shows the web repo (README changed).
-    let readme = web.join("README.md").to_string_lossy().into_owned();
+    let readme = crate::ui::local_path(&web.join("README.md"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(readme.clone(), window, cx));
     wait_ticking(cx, "scm shows the web repo", |cx| changes(&wb, cx).is_some_and(|c| c.iter().any(|(p, ..)| p == "README.md")));
-    assert_eq!(wb.read_with(cx, |wb, _| wb.git_status().map(|g| std::fs::canonicalize(&g.root).unwrap())), Some(web.clone()));
+    assert_eq!(wb.read_with(cx, |wb, _| wb.git_status().map(|g| crate::ui::canonical_for_test(&g.root))), Some(web.clone()));
     // Active file in api: back to the clean api repo.
-    let lib = api.join("src/lib.rs").to_string_lossy().into_owned();
+    let lib = crate::ui::local_path(&api.join("src/lib.rs"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(lib.clone(), window, cx));
     wait_ticking(cx, "scm back on the api repo", |cx| {
-        wb.read_with(cx, |wb, _| wb.git_status().is_some_and(|g| std::fs::canonicalize(&g.root).unwrap() == api))
+        wb.read_with(cx, |wb, _| wb.git_status().is_some_and(|g| crate::ui::canonical_for_test(&g.root) == api))
             && changes(&wb, cx).is_some_and(|c| c.is_empty())
     });
 }
@@ -1460,17 +1462,17 @@ fn qa_multi_root_source_control_follows_the_active_file(cx: &mut TestAppContext)
 /// Tabs and bookmarks of files in an extra folder survive leaving the project and coming back.
 #[gpui::test]
 fn qa_multi_root_tabs_and_bookmarks_are_restored(cx: &mut TestAppContext) {
-    let api = std::fs::canonicalize(qa_dir("qa-mr4-api")).unwrap();
-    let web = std::fs::canonicalize(qa_dir("qa-mr4-web")).unwrap();
-    let other = std::fs::canonicalize(qa_dir("qa-mr4-other")).unwrap();
+    let api = crate::ui::canonical_for_test(qa_dir("qa-mr4-api"));
+    let web = crate::ui::canonical_for_test(qa_dir("qa-mr4-web"));
+    let other = crate::ui::canonical_for_test(qa_dir("qa-mr4-other"));
     std::fs::write(api.join("main.go"), "package main\n").unwrap();
     std::fs::write(web.join("app.ts"), "a\nb\nc\nd\n").unwrap();
     std::fs::write(other.join("o.txt"), "o\n").unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &api, cx);
-    let w = web.to_string_lossy().into_owned();
+    let w = crate::ui::local_path(&web);
     wb.update_in(cx, |wb, window, cx| wb.add_workspace_folder_now(w.clone(), window, cx));
-    let ts = web.join("app.ts").to_string_lossy().into_owned();
+    let ts = crate::ui::local_path(&web.join("app.ts"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(ts.clone(), window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -1489,7 +1491,7 @@ fn qa_multi_root_tabs_and_bookmarks_are_restored(cx: &mut TestAppContext) {
 /// The workspace holds up to 32 extra folders; the next one is refused with a clear message.
 #[gpui::test]
 fn qa_multi_root_has_a_clear_limit(cx: &mut TestAppContext) {
-    let base = std::fs::canonicalize(qa_dir("qa-mr-limit")).unwrap();
+    let base = crate::ui::canonical_for_test(qa_dir("qa-mr-limit"));
     let first = base.join("first");
     std::fs::create_dir_all(&first).unwrap();
     let (wb, cx) = setup(cx);
@@ -1497,11 +1499,11 @@ fn qa_multi_root_has_a_clear_limit(cx: &mut TestAppContext) {
     for i in 0..32 {
         let d = base.join(format!("extra-{i}"));
         std::fs::create_dir_all(&d).unwrap();
-        assert!(wb.update_in(cx, |wb, window, cx| wb.add_workspace_folder_now(d.to_string_lossy().into_owned(), window, cx)), "folder {i}");
+        assert!(wb.update_in(cx, |wb, window, cx| wb.add_workspace_folder_now(crate::ui::local_path(&d), window, cx)), "folder {i}");
     }
     let over = base.join("one-too-many");
     std::fs::create_dir_all(&over).unwrap();
-    assert!(!wb.update_in(cx, |wb, window, cx| wb.add_workspace_folder_now(over.to_string_lossy().into_owned(), window, cx)));
+    assert!(!wb.update_in(cx, |wb, window, cx| wb.add_workspace_folder_now(crate::ui::local_path(&over), window, cx)));
     assert!(notice(&wb, cx).contains("At most 32"), "{}", notice(&wb, cx));
     assert_eq!(wb.read_with(cx, |wb, cx| wb.all_roots(cx).len()), 33);
 }
@@ -1510,8 +1512,8 @@ fn qa_multi_root_has_a_clear_limit(cx: &mut TestAppContext) {
 /// the file, the first folder is untouched, and editing the settings file re-reads them.
 #[gpui::test]
 fn qa_multi_root_folder_settings_apply_per_file(cx: &mut TestAppContext) {
-    let api = std::fs::canonicalize(qa_dir("qa-mr5-api")).unwrap();
-    let web = std::fs::canonicalize(qa_dir("qa-mr5-web")).unwrap();
+    let api = crate::ui::canonical_for_test(qa_dir("qa-mr5-api"));
+    let web = crate::ui::canonical_for_test(qa_dir("qa-mr5-web"));
     std::fs::create_dir_all(web.join(".vscode")).unwrap();
     std::fs::write(
         web.join(".vscode/settings.json"),
@@ -1571,8 +1573,7 @@ fn qa_multi_root_folder_settings_apply_per_file(cx: &mut TestAppContext) {
 /// paused reaches the adapter, and the choice is remembered for the next session.
 #[gpui::test]
 fn qa_debug_exception_filters_are_sent_and_remembered(cx: &mut TestAppContext) {
-    if std::process::Command::new("python3").arg("-V").output().is_err() {
-        crate::test_sshd::skip_missing("python3");
+    if !crate::test_lsp::have_python() {
         return;
     }
     let dir = qa_dir("qa-debugexc");
@@ -1582,12 +1583,12 @@ fn qa_debug_exception_filters_are_sent_and_remembered(cx: &mut TestAppContext) {
     std::fs::create_dir_all(dir.join(".vscode")).unwrap();
     std::fs::write(
         dir.join(".vscode/launch.json"),
-        format!(r#"{{ "configurations": [ {{ "name": "Fake", "type": "custom", "program": "x", "source": "${{workspaceFolder}}/main.c", "debugAdapter": {{ "command": "{}", "args": ["{}"] }} }} ] }}"#, script.display(), log.display()),
+        format!(r#"{{ "configurations": [ {{ "name": "Fake", "type": "custom", "program": "x", "source": "${{workspaceFolder}}/main.c", "debugAdapter": {{ "command": "{}", "args": ["{}", "{}"] }} }} ] }}"#, crate::test_lsp::python(), crate::ui::local_path(&script), crate::ui::local_path(&log)),
     )
     .unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let main = dir.join("main.c").to_string_lossy().into_owned();
+    let main = crate::ui::local_path(&dir.join("main.c"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(main.clone(), window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -1626,7 +1627,7 @@ fn qa_debug_real_debugpy_breaks_on_a_caught_exception(cx: &mut TestAppContext) {
     std::fs::write(dir.join("app.py"), src).unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let app = std::fs::canonicalize(dir.join("app.py")).unwrap().to_string_lossy().into_owned();
+    let app = crate::ui::canonical_for_test(dir.join("app.py")).to_string_lossy().into_owned();
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(app.clone(), window, cx));
     cx.run_until_parked();
     wb.update(cx, |wb, _| wb.set_exception_filters_for_test(Some(vec!["raised".into()])));
@@ -1641,8 +1642,7 @@ fn qa_debug_real_debugpy_breaks_on_a_caught_exception(cx: &mut TestAppContext) {
 /// configuration starts through the same flow with the `attach` request.
 #[gpui::test]
 fn qa_debug_threads_and_attach_configuration(cx: &mut TestAppContext) {
-    if std::process::Command::new("python3").arg("-V").output().is_err() {
-        crate::test_sshd::skip_missing("python3");
+    if !crate::test_lsp::have_python() {
         return;
     }
     let dir = qa_dir("qa-debugthreads");
@@ -1652,12 +1652,12 @@ fn qa_debug_threads_and_attach_configuration(cx: &mut TestAppContext) {
     std::fs::create_dir_all(dir.join(".vscode")).unwrap();
     std::fs::write(
         dir.join(".vscode/launch.json"),
-        format!(r#"{{ "configurations": [ {{ "name": "Attach", "type": "custom", "request": "attach", "pid": 1234, "source": "${{workspaceFolder}}/main.c", "debugAdapter": {{ "command": "{}", "args": ["{}"] }} }} ] }}"#, script.display(), log.display()),
+        format!(r#"{{ "configurations": [ {{ "name": "Attach", "type": "custom", "request": "attach", "pid": 1234, "source": "${{workspaceFolder}}/main.c", "debugAdapter": {{ "command": "{}", "args": ["{}", "{}"] }} }} ] }}"#, crate::test_lsp::python(), crate::ui::local_path(&script), crate::ui::local_path(&log)),
     )
     .unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let main = dir.join("main.c").to_string_lossy().into_owned();
+    let main = crate::ui::local_path(&dir.join("main.c"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(main.clone(), window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -1706,7 +1706,7 @@ fn qa_debug_real_debugpy_attach_and_threads(cx: &mut TestAppContext) {
     .unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let file = std::fs::canonicalize(dir.join("loop.py")).unwrap().to_string_lossy().into_owned();
+    let file = crate::ui::canonical_for_test(dir.join("loop.py")).to_string_lossy().into_owned();
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(file.clone(), window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -1759,7 +1759,7 @@ fn qa_debug_real_data_breakpoint(cx: &mut TestAppContext) {
         .unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let main = std::fs::canonicalize(dir.join("main.c")).unwrap().to_string_lossy().into_owned();
+    let main = crate::ui::canonical_for_test(dir.join("main.c")).to_string_lossy().into_owned();
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(main, window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -1805,6 +1805,9 @@ pub(crate) fn type_line(cx: &mut VisualTestContext, s: &str) {
 
 #[gpui::test]
 fn qa_terminal_ctrl_c_interrupts(cx: &mut TestAppContext) {
+    if !crate::test_sshd::posix_shell() {
+        return;
+    }
     let dir = qa_dir("qa-termctrlc");
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
@@ -1821,6 +1824,9 @@ fn qa_terminal_ctrl_c_interrupts(cx: &mut TestAppContext) {
 /// The pty size must match what is drawn (`stty size` rows == visible rows).
 #[gpui::test]
 fn qa_terminal_pty_size_matches_grid(cx: &mut TestAppContext) {
+    if !crate::test_sshd::posix_shell() {
+        return;
+    }
     let dir = qa_dir("qa-termsize");
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
@@ -1849,6 +1855,9 @@ fn qa_terminal_pty_size_matches_grid(cx: &mut TestAppContext) {
 /// VS Code does this), otherwise the wheel does nothing in `less`.
 #[gpui::test]
 fn qa_terminal_wheel_in_alternate_screen_sends_arrows(cx: &mut TestAppContext) {
+    if !crate::test_sshd::posix_shell() {
+        return;
+    }
     let dir = qa_dir("qa-termaltscroll");
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
@@ -1887,6 +1896,9 @@ fn echoed(cx: &mut VisualTestContext, term: &Entity<crate::terminal::TerminalVie
 /// receive clicks (VS Code forwards them).
 #[gpui::test]
 fn qa_terminal_mouse_reporting_reaches_program(cx: &mut TestAppContext) {
+    if !crate::test_sshd::posix_shell() {
+        return;
+    }
     let dir = qa_dir("qa-termmouse");
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
@@ -1906,6 +1918,9 @@ fn qa_terminal_mouse_reporting_reaches_program(cx: &mut TestAppContext) {
 #[cfg(target_os = "macos")]
 #[gpui::test]
 fn qa_terminal_macos_line_editing_keys(cx: &mut TestAppContext) {
+    if !crate::test_sshd::posix_shell() {
+        return;
+    }
     let dir = qa_dir("qa-termlineedit");
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
@@ -1932,6 +1947,9 @@ fn qa_terminal_macos_line_editing_keys(cx: &mut TestAppContext) {
 /// Escape closes it and the shell has the keys again.
 #[gpui::test]
 fn qa_terminal_find_counts_selects_and_closes(cx: &mut TestAppContext) {
+    if !crate::test_sshd::posix_shell() {
+        return;
+    }
     let dir = qa_dir("qa-termfind");
     let (wb, cx) = setup(cx);
     let term = terminal(&wb, &dir, cx);
@@ -2022,7 +2040,7 @@ pub(crate) fn ssh_workbench<'a>(cx: &'a mut TestAppContext, dir: &Path) -> (Enti
 
 /// Opens `file` over ssh and returns its editor.
 pub(crate) fn ssh_open_file(wb: &Entity<Workbench>, cx: &mut VisualTestContext, file: &Path) -> Entity<crate::editor::EditorView> {
-    let path = std::fs::canonicalize(file).unwrap().to_string_lossy().into_owned();
+    let path = crate::ui::canonical_for_test(file).to_string_lossy().into_owned();
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(path, window, cx));
     wait_secs(cx, 20, "file opened over ssh", |cx| {
         cx.executor().advance_clock(Duration::from_secs(1));
@@ -2207,8 +2225,7 @@ fn qa_ssh_debug_node_over_forward(cx: &mut TestAppContext) {
 /// the choice goes back to the server, Esc returns `null` (the server is never left without a reply).
 #[gpui::test]
 fn qa_lsp_question_is_asked_and_answered(cx: &mut TestAppContext) {
-    if std::process::Command::new("python3").arg("-V").output().is_err() {
-        crate::test_sshd::skip_missing("python3");
+    if !crate::test_lsp::have_python() {
         return;
     }
     let dir = qa_dir("qa-lspask");
@@ -2257,7 +2274,7 @@ while True:
     std::fs::write(dir.join("main.c"), "int main(void) { return 0; }\n").unwrap();
     let settings = Settings {
         lsp_enabled: true,
-        lsp_servers: vec![("c".into(), Some((script.to_string_lossy().into_owned(), vec![answers.to_string_lossy().into_owned()]).into()))],
+        lsp_servers: vec![("c".into(), Some(crate::test_lsp::python_program(&script, vec![crate::ui::local_path(&answers)]).into()))],
         ..Settings::default()
     };
     let (wb, cx) = setup_with(cx, settings);
@@ -2293,7 +2310,7 @@ while True:
 #[gpui::test]
 fn qa_hung_git_status_is_abandoned_and_refresh_recovers(cx: &mut TestAppContext) {
     let Some(dir) = crate::tests::git_repo("qa-githang") else { return };
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     let (wb, cx) = setup_with(cx, Settings::default());
     wb.update(cx, |wb, _| wb.git_status_hangs = true);
     open(&wb, &dir, cx);
@@ -2418,8 +2435,7 @@ while True:
 
 #[gpui::test]
 fn lsp_inlay_hints_folding_links_prepare_rename_and_output(cx: &mut TestAppContext) {
-    if std::process::Command::new("python3").arg("-V").output().is_err() {
-        crate::test_sshd::skip_missing("python3");
+    if !crate::test_lsp::have_python() {
         return;
     }
     let dir = qa_dir("lsp-extras");
@@ -2433,15 +2449,11 @@ fn lsp_inlay_hints_folding_links_prepare_rename_and_output(cx: &mut TestAppConte
         lsp_servers: vec![(
             "c".into(),
             Some(
-                (
-                    script.to_string_lossy().into_owned(),
-                    vec![
-                        seen.to_string_lossy().into_owned(),
-                        dir.join("main.c").to_string_lossy().into_owned(),
-                        dir.join("other.c").to_string_lossy().into_owned(),
-                    ],
+                crate::test_lsp::python_program(
+                    &script,
+                    vec![crate::ui::local_path(&seen), crate::ui::local_path(&dir.join("main.c")), crate::ui::local_path(&dir.join("other.c"))],
                 )
-                    .into(),
+                .into(),
             ),
         )],
         ..Settings::default()
@@ -2484,7 +2496,7 @@ fn lsp_inlay_hints_folding_links_prepare_rename_and_output(cx: &mut TestAppConte
     wait_ticking(cx, "executeCommand", |_| std::fs::read_to_string(&seen).unwrap().contains("workspace/executeCommand"));
     // File move: the server's willRenameFiles edit is applied before the move.
     wb.update_in(cx, |wb, window, cx| {
-        wb.move_path_for_test(dir.join("moveme.c").to_string_lossy().into_owned(), dir.join("moved.c").to_string_lossy().into_owned(), window, cx)
+        wb.move_path_for_test(crate::ui::local_path(&dir.join("moveme.c")), crate::ui::local_path(&dir.join("moved.c")), window, cx)
     });
     wait_ticking(cx, "willRename edit + move", |_| {
         dir.join("moved.c").exists() && std::fs::read_to_string(dir.join("other.c")).is_ok_and(|t| t.starts_with("// imports updated"))
@@ -2525,6 +2537,9 @@ fn diff_inline_toggle_renders_both_modes(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn terminal_split_shows_two_and_caps_the_count(cx: &mut TestAppContext) {
+    if !crate::test_sshd::posix_shell() {
+        return;
+    }
     let dir = qa_dir("qa-termsplit");
     let (wb, cx) = setup(cx);
     let first = terminal(&wb, &dir, cx);
@@ -2641,7 +2656,7 @@ fn tests_wait_for_trust_before_building_or_running(cx: &mut TestAppContext) {
     open(&wb, &dir, cx);
     run(&wb, cx, "View: Testing");
     wait_secs(cx, 30, "tests found", |cx| wb.read_with(cx, |wb, _| !wb.testing_rows_for_test().is_empty()));
-    let lib = dir.join("src/lib.rs").to_string_lossy().into_owned();
+    let lib = crate::ui::local_path(&dir.join("src/lib.rs"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(lib.clone(), window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -2717,7 +2732,7 @@ fn the_response_file_is_private_and_removed_at_quit(cx: &mut TestAppContext) {
 #[gpui::test]
 fn trusting_a_local_folder_does_not_trust_the_same_path_on_a_server(cx: &mut TestAppContext) {
     let dir = qa_dir("qa-trust-per-host");
-    let root = dir.to_string_lossy().into_owned();
+    let root = crate::ui::local_path(&dir);
     let (wb, cx) = setup_trusting(cx, "qa-trust-per-host");
     open(&wb, &dir, cx);
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Workspace: Trust This Folder", window, cx));

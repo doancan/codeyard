@@ -127,8 +127,7 @@ fn pick_request(wb: &Entity<Workbench>, cx: &mut VisualTestContext) {
 
 #[gpui::test]
 fn an_extensions_merge_requests_appear_and_its_token_never_reaches_it(cx: &mut TestAppContext) {
-    if crate::ext_runtime::exthost_path().is_none() {
-        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+    if !crate::ext_runtime::code_runs_for_test() {
         return;
     }
     let cfg = config_dir("view");
@@ -244,8 +243,7 @@ fn an_extensions_merge_requests_appear_and_its_token_never_reaches_it(cx: &mut T
 /// requests to that host only.
 #[gpui::test]
 fn a_self_managed_instance_is_added_by_the_user_and_claims_its_host(cx: &mut TestAppContext) {
-    if crate::ext_runtime::exthost_path().is_none() {
-        eprintln!("skipped: codeyard-exthost is not built (cargo build -p ext-host)");
+    if !crate::ext_runtime::code_runs_for_test() {
         return;
     }
     let cfg = config_dir("instance");

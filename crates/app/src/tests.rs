@@ -36,7 +36,7 @@ fn setup_with_settings(cx: &mut TestAppContext, settings: crate::settings::Setti
 }
 
 fn open(wb: &Entity<Workbench>, path: &std::path::Path, cx: &mut VisualTestContext) {
-    let p = path.to_string_lossy().into_owned();
+    let p = crate::ui::local_path(path);
     wb.update_in(cx, |wb, window, cx| wb.open_path(&p, window, cx));
     cx.run_until_parked();
 }
@@ -130,7 +130,7 @@ fn remote_host_same_flow(cx: &mut TestAppContext) {
     std::thread::spawn(move || agent::serve(req_r, resp_w));
     let remote: Arc<dyn Host> = Arc::new(RemoteHost::from_streams(Box::new(resp_r), Box::new(req_w), "ssh://test").unwrap());
 
-    let dir = file.parent().unwrap().to_string_lossy().into_owned();
+    let dir = crate::ui::local_path(file.parent().unwrap());
     wb.update_in(cx, |wb, window, cx| {
         wb.attach_host(remote, "test".into(), window, cx);
         wb.set_root(dir, cx);
@@ -279,7 +279,7 @@ fn new_file_is_created_and_opened(cx: &mut TestAppContext) {
     let dir = single_file_dir("newfile");
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let d = dir.to_string_lossy().into_owned();
+    let d = crate::ui::local_path(&dir);
     wb.update_in(cx, |wb, window, cx| wb.start_create(d, false, window, cx));
     cx.simulate_input("yeni.rs");
     cx.simulate_keystrokes("enter");
@@ -585,6 +585,9 @@ fn case_transforms_and_block_comment_work_on_the_selection(cx: &mut TestAppConte
 /// Comparisons, last edit location, scratch file, and running the selected text in the terminal.
 #[gpui::test]
 fn compare_last_edit_scratch_and_run_selected_text(cx: &mut TestAppContext) {
+    if !crate::test_sshd::posix_shell() {
+        return;
+    }
     let cfg = config_dir("extras");
     let dir = project("extras");
     std::fs::write(dir.join("run.sh"), "echo run-$((20+22))\nsecond line\n").unwrap();
@@ -892,17 +895,17 @@ fn local_history_keeps_a_copy_per_save(cx: &mut TestAppContext) {
 /// Clicking the empty space below the tree clears the selection; a new file goes to the root.
 #[gpui::test]
 fn blank_space_in_the_tree_selects_the_root_for_new_files(cx: &mut TestAppContext) {
-    let dir = std::fs::canonicalize(project("blank")).unwrap();
+    let dir = crate::ui::canonical_for_test(project("blank"));
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     wait_ticking(cx, "kök", |cx| wb.read_with(cx, |wb, cx| wb.tree_names(cx).contains(&"src".to_string())));
-    let main = dir.join("src/main.rs").to_string_lossy().into_owned();
+    let main = crate::ui::local_path(&dir.join("src/main.rs"));
     wb.update_in(cx, |wb, window, cx| wb.open_in_root(&main, window, cx));
     cx.run_until_parked();
-    let src = dir.join("src").to_string_lossy().into_owned();
+    let src = crate::ui::local_path(&dir.join("src"));
     assert_eq!(wb.read_with(cx, |wb, cx| wb.tree_target_for_test(cx)), Some(src), "selected file's folder");
     wb.update(cx, |wb, cx| wb.tree_clear_selection_for_test(cx));
-    assert_eq!(wb.read_with(cx, |wb, cx| wb.tree_target_for_test(cx)), Some(dir.to_string_lossy().into_owned()), "blank area: root");
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.tree_target_for_test(cx)), Some(crate::ui::local_path(&dir)), "blank area: root");
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("File: New File…", window, cx));
     cx.simulate_input("rootfile.txt");
     cx.simulate_keystrokes("enter");
@@ -990,11 +993,11 @@ fn snippets_expand_on_tab_and_walk_the_tab_stops(cx: &mut TestAppContext) {
 #[gpui::test]
 fn inline_blame_shows_the_author_of_the_cursor_line(cx: &mut TestAppContext) {
     let Some(dir) = git_repo("blame") else { return };
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     wait_for(cx, "git", |cx| wb.read_with(cx, |wb, _| wb.git_status().is_some()));
-    let main = dir.join("src/main.rs").to_string_lossy().into_owned();
+    let main = crate::ui::local_path(&dir.join("src/main.rs"));
     wb.update_in(cx, |wb, window, cx| wb.open_in_root(&main, window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -1119,7 +1122,7 @@ fn command_palette_finds_the_pull_requests_view_by_any_forge_word(cx: &mut TestA
 fn torture_random_commands_and_keys_never_panic(cx: &mut TestAppContext) {
     let _guard = crate::snippets::TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let cfg = config_dir("torture");
-    let dir = std::fs::canonicalize(git_repo("torture").unwrap_or_else(|| project("torture"))).unwrap();
+    let dir = crate::ui::canonical_for_test(git_repo("torture").unwrap_or_else(|| project("torture")));
     std::fs::write(dir.join("a.json"), "{\"k\":[1,2,{\"x\":null}]}\n").unwrap();
     std::fs::write(dir.join("b.md"), "# T\n\n- a\n- b\n\n| x | y |\n|---|---|\n| 1 | 2 |\n").unwrap();
     std::fs::write(dir.join("c.py"), "def f():\n    return 1\n\nclass K:\n    pass\n").unwrap();
@@ -1522,7 +1525,7 @@ fn preview_tab_is_reused_until_edited(cx: &mut TestAppContext) {
     let dir = project("preview");
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let p = |f: &str| dir.join(f).to_string_lossy().into_owned();
+    let p = |f: &str| crate::ui::local_path(&dir.join(f));
     wb.update_in(cx, |w, window, cx| w.preview_file(&p("README.md"), window, cx));
     cx.run_until_parked();
     wb.update_in(cx, |w, window, cx| w.preview_file(&p("src/main.rs"), window, cx));
@@ -1540,11 +1543,11 @@ fn preview_tab_is_reused_until_edited(cx: &mut TestAppContext) {
 fn pin_and_bulk_close_keep_pinned_and_dirty_tabs(cx: &mut TestAppContext) {
     let home = home_dir("tabs");
     // Canonical paths, as in the tree and ⌘P (/var → /private/var symlink).
-    let dir = std::fs::canonicalize(project("tabs")).unwrap();
+    let dir = crate::ui::canonical_for_test(project("tabs"));
     let (wb, cx) = setup_persistent(cx, &home);
     open(&wb, &dir, cx);
     let open_tab = |cx: &mut VisualTestContext, f: &str| {
-        let p = dir.join(f).to_string_lossy().into_owned();
+        let p = crate::ui::local_path(&dir.join(f));
         wb.update_in(cx, |w, window, cx| w.open_in_root(&p, window, cx));
         cx.run_until_parked();
     };
@@ -1762,7 +1765,7 @@ pub(crate) fn git_repo(name: &str) -> Option<PathBuf> {
 #[gpui::test]
 fn git_status_marks_tree_and_gutter(cx: &mut TestAppContext) {
     let Some(dir) = git_repo("gitstatus") else { return };
-    let dir = std::fs::canonicalize(dir).unwrap(); // the path is canonicalized when the folder is opened
+    let dir = crate::ui::canonical_for_test(dir); // the path is canonicalized when the folder is opened
     std::fs::write(dir.join("src/lib.rs"), (1..=10).map(|i| if i == 3 { "// değişti\n".to_string() } else { format!("// satır {i}\n") }).collect::<String>())
         .unwrap();
     std::fs::write(dir.join("yeni.txt"), "yeni\n").unwrap();
@@ -1772,7 +1775,7 @@ fn git_status_marks_tree_and_gutter(cx: &mut TestAppContext) {
     let st = wb.read_with(cx, |wb, _| wb.git_status()).unwrap();
     assert_eq!(st.branch.as_deref(), Some("main"));
     let marks = st.marks();
-    let abs = |p: &str| dir.join(p).to_string_lossy().into_owned();
+    let abs = |p: &str| crate::ui::local_path(&dir.join(p));
     assert_eq!(marks.get(&abs("src/lib.rs")), Some(&crate::git::Mark::Modified));
     assert_eq!(marks.get(&abs("src")), Some(&crate::git::Mark::Modified), "folder mark");
     assert_eq!(marks.get(&abs("yeni.txt")), Some(&crate::git::Mark::Untracked));
@@ -1802,7 +1805,7 @@ fn git_status_marks_tree_and_gutter(cx: &mut TestAppContext) {
 fn source_control_graph_follows_refs_that_do_not_move_head(cx: &mut TestAppContext) {
     use crate::graph::RefKind;
     let Some(dir) = git_repo("scmgraphrefs") else { return };
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     cx.simulate_keystrokes("ctrl-shift-g");
@@ -1827,7 +1830,7 @@ fn source_control_graph_follows_refs_that_do_not_move_head(cx: &mut TestAppConte
 #[gpui::test]
 fn source_control_graph_menu_toggles_view_and_filters(cx: &mut TestAppContext) {
     let Some(dir) = git_repo("scmgraphmenu") else { return };
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     cx.simulate_keystrokes("ctrl-shift-g");
@@ -1860,7 +1863,7 @@ fn source_control_graph_menu_toggles_view_and_filters(cx: &mut TestAppContext) {
 #[gpui::test]
 fn source_control_graph_shows_branches_and_opens_commit_files(cx: &mut TestAppContext) {
     let Some(dir) = git_repo("scmgraph") else { return };
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     git_in(&dir, &["checkout", "-q", "-b", "feature"]);
     std::fs::write(dir.join("f.txt"), "f\n").unwrap();
     git_in(&dir, &["add", "-A"]);
@@ -1908,7 +1911,7 @@ fn source_control_graph_shows_branches_and_opens_commit_files(cx: &mut TestAppCo
 #[gpui::test]
 fn source_control_graph_details_filter_scope_and_commit_operations(cx: &mut TestAppContext) {
     let Some(dir) = git_repo("scmgraph2") else { return };
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     git_in(&dir, &["config", "user.name", "Test"]);
     git_in(&dir, &["config", "user.email", "t@example.com"]);
     git_in(&dir, &["checkout", "-q", "-b", "side"]);
@@ -1997,7 +2000,7 @@ fn source_control_graph_details_filter_scope_and_commit_operations(cx: &mut Test
 #[gpui::test]
 fn explorer_recursive_expand_persists_and_timeline_follows_the_file(cx: &mut TestAppContext) {
     let Some(dir) = git_repo("explorer2") else { return };
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     git_in(&dir, &["config", "user.name", "Test"]);
     git_in(&dir, &["config", "user.email", "t@example.com"]);
     std::fs::create_dir_all(dir.join("a/b/c")).unwrap();
@@ -2052,7 +2055,7 @@ fn explorer_recursive_expand_persists_and_timeline_follows_the_file(cx: &mut Tes
 #[gpui::test]
 fn source_control_stage_diff_commit(cx: &mut TestAppContext) {
     let Some(dir) = git_repo("scm") else { return };
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     std::fs::write(dir.join("README.md"), "# proje\nikinci satır\n").unwrap();
     std::fs::write(dir.join("yeni.txt"), "yeni\n").unwrap();
     let (wb, cx) = setup(cx);
@@ -2111,7 +2114,7 @@ fn language_server_diagnostics_follow_edits(cx: &mut TestAppContext) {
     let dir = std::env::temp_dir().join(format!("codeyard-e2e-lsp-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     std::fs::write(dir.join("main.c"), "int main(void) {\n    return yok;\n}\n").unwrap();
     let (wb, cx) = setup_with_settings(cx, crate::settings::Settings { lsp_enabled: true, ..Default::default() });
     open(&wb, &dir.join("main.c"), cx);
@@ -2119,7 +2122,7 @@ fn language_server_diagnostics_follow_edits(cx: &mut TestAppContext) {
     wait_for(cx, "tanı", |cx| ed.read_with(cx, |e, _| !e.diagnostics().is_empty()));
     let d = ed.read_with(cx, |e, _| e.diagnostics()[0].clone());
     assert_eq!((d.severity, d.start.0), (1, 1), "{d:?}");
-    assert_eq!(wb.read_with(cx, |wb, _| wb.problems()), vec![(dir.join("main.c").to_string_lossy().into_owned(), 1)]);
+    assert_eq!(wb.read_with(cx, |wb, _| wb.problems()), vec![(crate::ui::local_path(&dir.join("main.c")), 1)]);
 
     // ⇧⌘M: Problems panel; instead of clicking the row, the same path: go to the location.
     cx.simulate_keystrokes("cmd-shift-m");
@@ -2145,7 +2148,7 @@ fn language_server_completion_hover_definition(cx: &mut TestAppContext) {
     let dir = std::env::temp_dir().join(format!("codeyard-e2e-lsp2-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     let src = "struct nokta { int xeksen; int yeksen; };\n/* iki sayıyı toplar */\nint topla(int a, int b) { return a + b; }\nint main(void) {\n    struct nokta n = {1, 2};\n    return topla(n.xeksen, 0);\n}\n";
     std::fs::write(dir.join("main.c"), src).unwrap();
     let (wb, cx) = setup_with_settings(cx, crate::settings::Settings { lsp_enabled: true, ..Default::default() });
@@ -2185,9 +2188,9 @@ fn split_editor_groups(cx: &mut TestAppContext) {
     let dir = project("split");
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     let open_in = |cx: &mut VisualTestContext, f: &str| {
-        let p = dir.join(f).to_string_lossy().into_owned();
+        let p = crate::ui::local_path(&dir.join(f));
         wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(p, window, cx));
         cx.run_until_parked();
     };
@@ -2290,7 +2293,7 @@ fn same_file_in_two_groups_has_its_own_cursor(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn split_via_palette_keeps_tabs(cx: &mut TestAppContext) {
-    let dir = std::fs::canonicalize(project("split2")).unwrap();
+    let dir = crate::ui::canonical_for_test(project("split2"));
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     let groups = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, cx| wb.groups(cx));
@@ -2451,7 +2454,7 @@ fn a_multi_line_paste_asks_first_and_hidden_markers_are_removed(cx: &mut TestApp
 #[gpui::test]
 fn terminals_ask_before_killing_a_program_split_where_the_shell_is_and_follow_profiles(cx: &mut TestAppContext) {
     let dir = single_file_dir("term-profiles");
-    let elsewhere = std::fs::canonicalize(std::env::temp_dir()).unwrap().to_string_lossy().into_owned();
+    let elsewhere = crate::ui::canonical_for_test(std::env::temp_dir()).to_string_lossy().into_owned();
     let mut settings = crate::settings::Settings::default();
     let profile = crate::terminal_profiles::Profile {
         name: "plain".into(),
@@ -2684,7 +2687,7 @@ fn zsh_reports_commands_and_its_folder_with_shell_integration(cx: &mut TestAppCo
         name: "zsh".into(),
         path: "/bin/zsh".into(),
         args: None,
-        env: vec![("CODEYARD_USER_ZDOTDIR".into(), user.to_string_lossy().into_owned())],
+        env: vec![("CODEYARD_USER_ZDOTDIR".into(), crate::ui::local_path(&user))],
         color: None,
     };
     settings.terminal_profiles.insert(crate::terminal_profiles::os_key(std::env::consts::OS).into(), vec![profile]);
@@ -2693,7 +2696,7 @@ fn zsh_reports_commands_and_its_folder_with_shell_integration(cx: &mut TestAppCo
     open(&wb, &dir, cx);
     cx.simulate_keystrokes("ctrl-`");
     let term = wb.read_with(cx, |wb, _| wb.active_terminal()).expect("terminal");
-    let elsewhere = std::fs::canonicalize(std::env::temp_dir()).unwrap().to_string_lossy().into_owned();
+    let elsewhere = crate::ui::canonical_for_test(std::env::temp_dir()).to_string_lossy().into_owned();
     cx.simulate_input(&format!("cd {elsewhere}; echo marked-output\n"));
     wait_for(cx, "the first command", |cx| {
         term.read_with(cx, |t, _| t.command_count_for_test()) >= 1 && t_out(&term, cx).is_some_and(|o| o.contains("marked-output"))
@@ -2722,7 +2725,7 @@ fn explorer_compacts_chains_sorts_and_types_ahead(cx: &mut TestAppContext) {
     std::fs::write(dir.join("zeta.txt"), "z\n").unwrap();
     std::fs::write(dir.join("Alpha.rs"), "a\n").unwrap();
     std::fs::write(dir.join("beta.txt"), "b\n").unwrap();
-    let dir = std::fs::canonicalize(&dir).unwrap();
+    let dir = crate::ui::canonical_for_test(&dir);
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     let names = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, cx| wb.tree_names(cx));
@@ -2779,12 +2782,12 @@ fn explorer_compacts_chains_sorts_and_types_ahead(cx: &mut TestAppContext) {
 #[gpui::test]
 fn ssh_connect_asks_which_folder_to_open(cx: &mut TestAppContext) {
     let Some(_sshd) = crate::test_sshd::start("folder") else { return };
-    let base = std::fs::canonicalize(std::env::temp_dir()).unwrap().join(format!("codeyard-e2e-pick-{}", std::process::id()));
+    let base = crate::ui::canonical_for_test(std::env::temp_dir()).join(format!("codeyard-e2e-pick-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(base.join("alpha/inner")).unwrap();
     std::fs::create_dir_all(base.join("beta")).unwrap();
     std::fs::write(base.join("alpha/readme.txt"), "x").unwrap();
-    let base_s = base.to_string_lossy().into_owned();
+    let base_s = crate::ui::local_path(&base);
 
     let (wb, cx) = setup(cx);
     wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
@@ -2894,7 +2897,7 @@ fn language_server_rename_references_symbols_fix_format_signature(cx: &mut TestA
     let dir = std::env::temp_dir().join(format!("codeyard-e2e-lsp3-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     std::fs::write(dir.join("lib.h"), "int topla(int a, int b);\n").unwrap();
     std::fs::write(dir.join("main.c"), "#include \"lib.h\"\nint main(void){int x=topla(1,2);return x}\n").unwrap();
     std::fs::write(dir.join("lib.c"), "#include \"lib.h\"\nint topla(int a, int b) { return a + b; }\n").unwrap();
@@ -3018,12 +3021,12 @@ fn language_server_rename_references_symbols_fix_format_signature(cx: &mut TestA
 
 #[gpui::test]
 fn replace_in_files_preserve_case(cx: &mut TestAppContext) {
-    let dir = std::fs::canonicalize(project("replace-case")).unwrap();
+    let dir = crate::ui::canonical_for_test(project("replace-case"));
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     std::fs::write(dir.join("README.md"), "oldName OldName OLDNAME old_name Old_Name\n").unwrap();
     let q = proto::SearchQuery {
-        root: dir.to_string_lossy().into_owned(),
+        root: crate::ui::local_path(&dir),
         pattern: "old".into(),
         regex: false,
         case_sensitive: false,
@@ -3033,7 +3036,7 @@ fn replace_in_files_preserve_case(cx: &mut TestAppContext) {
         max_results: 2000,
     };
     let q2 = proto::SearchQuery { pattern: "oldname".into(), ..q.clone() };
-    let files = vec![dir.join("README.md").to_string_lossy().into_owned()];
+    let files = vec![crate::ui::local_path(&dir.join("README.md"))];
     wb.update(cx, |wb, cx| wb.replace_in_files_with(files.clone(), q2, "newname".into(), true, cx));
     wait_for(cx, "disk", |cx| {
         cx.run_until_parked();
@@ -3052,11 +3055,11 @@ fn replace_in_files_preserve_case(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn replace_in_files_open_and_closed(cx: &mut TestAppContext) {
-    let dir = std::fs::canonicalize(project("replace")).unwrap();
+    let dir = crate::ui::canonical_for_test(project("replace"));
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     let lib = dir.join("src/lib.rs");
-    wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(lib.to_string_lossy().into_owned(), window, cx));
+    wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(crate::ui::local_path(&lib), window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
     std::fs::write(dir.join("README.md"), "# proje\nsatır 7 burada\n").unwrap();
@@ -3073,9 +3076,9 @@ fn replace_in_files_open_and_closed(cx: &mut TestAppContext) {
         search.read_with(cx, |s, _| !s.is_searching() && s.result_summary().len() == 2)
     });
     // The UI path reviews in a Search Editor (search_editor_tests); this drives the shared apply path directly.
-    let files = vec![lib.to_string_lossy().into_owned(), dir.join("README.md").to_string_lossy().into_owned()];
+    let files = vec![crate::ui::local_path(&lib), crate::ui::local_path(&dir.join("README.md"))];
     let q = proto::SearchQuery {
-        root: dir.to_string_lossy().into_owned(),
+        root: crate::ui::local_path(&dir),
         pattern: r"satır (\d+)".into(),
         regex: true,
         case_sensitive: false,
@@ -3101,13 +3104,13 @@ fn replace_in_files_open_and_closed(cx: &mut TestAppContext) {
 /// A closed file with mixed line endings keeps the endings of the lines the replacement did not touch.
 #[gpui::test]
 fn replace_in_closed_files_keeps_mixed_line_endings(cx: &mut TestAppContext) {
-    let dir = std::fs::canonicalize(project("replace-eol")).unwrap();
+    let dir = crate::ui::canonical_for_test(project("replace-eol"));
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     let mixed = dir.join("mixed.txt");
     std::fs::write(&mixed, "x = 1\nfoo\r\nbar\r\n").unwrap();
     let q = proto::SearchQuery {
-        root: dir.to_string_lossy().into_owned(),
+        root: crate::ui::local_path(&dir),
         pattern: "x".into(),
         regex: false,
         case_sensitive: true,
@@ -3116,7 +3119,7 @@ fn replace_in_closed_files_keeps_mixed_line_endings(cx: &mut TestAppContext) {
         exclude: vec![],
         max_results: 2000,
     };
-    wb.update(cx, |wb, cx| wb.replace_in_files(vec![mixed.to_string_lossy().into_owned()], q, "y".into(), cx));
+    wb.update(cx, |wb, cx| wb.replace_in_files(vec![crate::ui::local_path(&mixed)], q, "y".into(), cx));
     wait_for(cx, "diskteki dosya", |cx| {
         cx.run_until_parked();
         std::fs::read(&mixed).unwrap().starts_with(b"y = 1")
@@ -3251,14 +3254,14 @@ fn workspace_symbols_find_rust_functions(cx: &mut TestAppContext) {
     let dir = std::env::temp_dir().join(format!("codeyard-e2e-ra-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("src")).unwrap();
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"ra_deneme\"\nversion = \"0.1.0\"\nedition = \"2021\"\n").unwrap();
     std::fs::write(dir.join("src/main.rs"), "mod yardim;\nfn main() { yardim::hesapla_toplam(1); }\n").unwrap();
     std::fs::write(dir.join("src/yardim.rs"), "pub struct Kutu;\n\npub fn hesapla_toplam(x: i32) -> i32 {\n    x + 1\n}\n").unwrap();
     // `setup` turns language servers off for every other test; this one needs rust-analyzer running.
     let (wb, cx) = setup_with_settings(cx, crate::settings::Settings { lsp_enabled: true, ..Default::default() });
     open(&wb, &dir, cx);
-    wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(dir.join("src/main.rs").to_string_lossy().into_owned(), window, cx));
+    wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(crate::ui::local_path(&dir.join("src/main.rs")), window, cx));
     cx.run_until_parked();
 
     cx.simulate_keystrokes("cmd-t");
@@ -3427,14 +3430,14 @@ fn selection_and_line_commands(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn navigation_history_reopen_new_file_and_save_as(cx: &mut TestAppContext) {
-    let dir = std::fs::canonicalize(project("nav")).unwrap();
+    let dir = crate::ui::canonical_for_test(project("nav"));
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     let active = |cx: &mut VisualTestContext| {
         wb.read_with(cx, |wb, cx| wb.active_editor_entity().map(|e| (crate::ui::file_name(&e.read(cx).path).to_string(), e.read(cx).cursor_position())))
     };
     let open_in = |cx: &mut VisualTestContext, f: &str| {
-        let p = dir.join(f).to_string_lossy().into_owned();
+        let p = crate::ui::local_path(&dir.join(f));
         wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(p, window, cx));
         cx.run_until_parked();
     };
@@ -3507,11 +3510,11 @@ fn navigation_history_reopen_new_file_and_save_as(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn active_file_is_revealed_in_tree(cx: &mut TestAppContext) {
-    let dir = std::fs::canonicalize(project("reveal")).unwrap();
+    let dir = crate::ui::canonical_for_test(project("reveal"));
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     assert!(!wb.read_with(cx, |wb, cx| wb.tree_names(cx)).contains(&"lib.rs".to_string()), "src starts collapsed");
-    let lib = dir.join("src/lib.rs").to_string_lossy().into_owned();
+    let lib = crate::ui::local_path(&dir.join("src/lib.rs"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(lib.clone(), window, cx));
     cx.run_until_parked();
     assert!(wb.read_with(cx, |wb, cx| wb.tree_names(cx)).contains(&"lib.rs".to_string()), "src expanded");
@@ -3539,7 +3542,7 @@ fn git_in(dir: &std::path::Path, args: &[&str]) -> String {
 #[gpui::test]
 fn git_branches_push_pull_against_a_local_remote(cx: &mut TestAppContext) {
     let Some(dir) = git_repo("gitsync") else { return };
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     let bare = dir.with_extension("origin.git");
     let _ = std::fs::remove_dir_all(&bare);
     git_in(dir.parent().unwrap(), &["init", "-q", "--bare", bare.to_str().unwrap()]);
@@ -3600,11 +3603,11 @@ fn images_open_in_a_preview(cx: &mut TestAppContext) {
         137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84,
         120, 218, 99, 100, 96, 248, 95, 15, 0, 2, 135, 1, 128, 235, 71, 186, 146, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
     ];
-    let dir = std::fs::canonicalize(project("image")).unwrap();
+    let dir = crate::ui::canonical_for_test(project("image"));
     std::fs::write(dir.join("logo.png"), PNG).unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let p = dir.join("logo.png").to_string_lossy().into_owned();
+    let p = crate::ui::local_path(&dir.join("logo.png"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(p, window, cx));
     cx.run_until_parked();
     let view = wb.read_with(cx, |wb, _| wb.large_view()).expect("preview opened");
@@ -3619,11 +3622,11 @@ fn an_image_too_large_to_decode_is_refused(cx: &mut TestAppContext) {
     png.extend(30_000u32.to_be_bytes());
     png.extend(30_000u32.to_be_bytes());
     png.extend([8, 6, 0, 0, 0, 0, 0, 0, 0]);
-    let dir = std::fs::canonicalize(project("huge-image")).unwrap();
+    let dir = crate::ui::canonical_for_test(project("huge-image"));
     std::fs::write(dir.join("bomb.png"), &png).unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let p = dir.join("bomb.png").to_string_lossy().into_owned();
+    let p = crate::ui::local_path(&dir.join("bomb.png"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(p, window, cx));
     cx.run_until_parked();
     let view = wb.read_with(cx, |wb, _| wb.large_view()).expect("preview opened");
@@ -3683,7 +3686,7 @@ fn new_window_opens_an_empty_workbench(cx: &mut TestAppContext) {
     assert!(open.is_empty(), "new window opens empty");
 
     // Picking in B the folder open in A doesn't open a second copy: B stays empty, A comes to the front.
-    let dir = std::fs::canonicalize(project("windows-same")).unwrap().to_string_lossy().into_owned();
+    let dir = crate::ui::canonical_for_test(project("windows-same")).to_string_lossy().into_owned();
     a.update(cx, |wb, window, cx| wb.open_path(&dir, window, cx)).unwrap();
     cx.run_until_parked();
     let recent = state::RecentWorkspace { host: None, path: dir.clone(), last_opened_at: 0 };
@@ -3696,8 +3699,8 @@ fn new_window_opens_an_empty_workbench(cx: &mut TestAppContext) {
 #[gpui::test]
 fn projects_switcher_and_favorites(cx: &mut TestAppContext) {
     let cfg = config_dir("projects");
-    let a = std::fs::canonicalize(project("proj-a")).unwrap();
-    let b = std::fs::canonicalize(project("proj-b")).unwrap();
+    let a = crate::ui::canonical_for_test(project("proj-a"));
+    let b = crate::ui::canonical_for_test(project("proj-b"));
     let (wb, cx) = setup_with_config(cx, &cfg);
     let run = |cx: &mut VisualTestContext, label: &str| wb.update_in(cx, |wb, window, cx| wb.run_command_for_test(label, window, cx));
     let labels = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, cx| wb.overlay_labels(cx)).unwrap_or_default();
@@ -3722,10 +3725,10 @@ fn projects_switcher_and_favorites(cx: &mut TestAppContext) {
     cx.simulate_input("ana");
     cx.simulate_keystrokes("enter");
     cx.run_until_parked();
-    assert_eq!(wb.read_with(cx, |wb, cx| wb.root_for_test(cx)), Some(a.to_string_lossy().into_owned()));
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.root_for_test(cx)), Some(crate::ui::local_path(&a)));
 
     // Favorites: the active file → in the list; renaming in the tree makes the path follow.
-    let lib = a.join("src/lib.rs").to_string_lossy().into_owned();
+    let lib = crate::ui::local_path(&a.join("src/lib.rs"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(lib.clone(), window, cx));
     cx.run_until_parked();
     run(cx, "Favorites: Toggle Active File");
@@ -3751,10 +3754,10 @@ fn bookmarks_follow_edits_and_persist(cx: &mut TestAppContext) {
     let home = std::env::temp_dir().join(format!("codeyard-e2e-bm-home-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&home);
     std::fs::create_dir_all(&home).unwrap();
-    let dir = std::fs::canonicalize(project("bookmarks")).unwrap();
+    let dir = crate::ui::canonical_for_test(project("bookmarks"));
     let (wb, cx) = setup_persistent(cx, &home);
     open(&wb, &dir, cx);
-    let lib = dir.join("src/lib.rs").to_string_lossy().into_owned();
+    let lib = crate::ui::local_path(&dir.join("src/lib.rs"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(lib.clone(), window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -3791,7 +3794,7 @@ fn bookmarks_follow_edits_and_persist(cx: &mut TestAppContext) {
 #[cfg(unix)]
 #[gpui::test]
 fn tasks_from_makefile_run_in_a_named_terminal(cx: &mut TestAppContext) {
-    let dir = std::fs::canonicalize(project("tasks")).unwrap();
+    let dir = crate::ui::canonical_for_test(project("tasks"));
     std::fs::write(dir.join("Makefile"), "selam:\n\t@echo görev-çalıştı-$$((40+2))\n.PHONY: selam\n").unwrap();
     let (wb, cx) = setup(cx);
     wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
@@ -3876,7 +3879,7 @@ fn editor_context_menu_runs_editor_actions(cx: &mut TestAppContext) {
 #[gpui::test]
 fn ssh_workflow_git_graph_explorer_search_and_menu(cx: &mut TestAppContext) {
     let Some(_sshd) = crate::test_sshd::start("workflow") else { return };
-    let repo = std::fs::canonicalize(std::env::temp_dir()).unwrap().join(format!("codeyard-e2e-sshwf-{}", std::process::id()));
+    let repo = crate::ui::canonical_for_test(std::env::temp_dir()).join(format!("codeyard-e2e-sshwf-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&repo);
     std::fs::create_dir_all(repo.join("deep/er/est")).unwrap();
     std::fs::write(repo.join("deep/er/est/note.txt"), "// TODO: remote todo\n").unwrap();
@@ -3898,7 +3901,7 @@ fn ssh_workflow_git_graph_explorer_search_and_menu(cx: &mut TestAppContext) {
     git_in(&repo, &["add", "staged.txt"]);
     std::fs::write(repo.join("a.txt"), "a changed\n").unwrap();
     std::fs::write(repo.join("untracked.txt"), "u\n").unwrap();
-    let repo_s = repo.to_string_lossy().into_owned();
+    let repo_s = crate::ui::local_path(&repo);
 
     let (wb, cx) = setup(cx);
     wb.update_in(cx, |wb, window, cx| wb.connect(crate::test_sshd::ALIAS.into(), window, cx));
@@ -3935,11 +3938,11 @@ fn ssh_workflow_git_graph_explorer_search_and_menu(cx: &mut TestAppContext) {
     // Explorer: single-subfolder chain as one row; type-to-search works remotely too.
     cx.simulate_keystrokes("cmd-shift-e");
     let names = |cx: &mut VisualTestContext| wb.read_with(cx, |wb, cx| wb.tree_names(cx));
-    let deep = repo.join("deep").to_string_lossy().into_owned();
+    let deep = crate::ui::local_path(&repo.join("deep"));
     wb.update(cx, |wb, cx| wb.tree_reveal_dir_for_test(&deep, cx));
     wait_ticking(cx, "uzak zincir", |cx| names(cx).contains(&"deep/er/est".to_string()) && names(cx).contains(&"note.txt".to_string()));
     cx.simulate_input("g");
-    assert_eq!(wb.read_with(cx, |wb, cx| wb.tree_selected_for_test(cx)), Some(repo.join("g.txt").to_string_lossy().into_owned()));
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.tree_selected_for_test(cx)), Some(crate::ui::local_path(&repo.join("g.txt"))));
 
     // TODO search runs on the agent.
     wb.update_in(cx, |wb, window, cx| wb.run_command_for_test("Search: Find TODO Comments", window, cx));
@@ -3949,8 +3952,7 @@ fn ssh_workflow_git_graph_explorer_search_and_menu(cx: &mut TestAppContext) {
 
     // Context menu on a remote file: duplicate (cp on the server), compare, terminal.
     let menu_on = |cx: &mut VisualTestContext, path: &std::path::Path, is_dir: bool| {
-        let ev =
-            crate::tree::TreeEvent::ContextMenu { path: path.to_string_lossy().into_owned(), is_dir, position: gpui::point(gpui::px(100.), gpui::px(100.)) };
+        let ev = crate::tree::TreeEvent::ContextMenu { path: crate::ui::local_path(path), is_dir, position: gpui::point(gpui::px(100.), gpui::px(100.)) };
         wb.update_in(cx, |wb, window, cx| wb.tree_event_for_test(ev, window, cx));
     };
     menu_on(cx, &repo.join("a.txt"), false);
@@ -3985,14 +3987,14 @@ fn ssh_workflow_git_graph_explorer_search_and_menu(cx: &mut TestAppContext) {
 #[gpui::test]
 fn ssh_restore_failure_and_reopen(cx: &mut TestAppContext) {
     let Some(_sshd) = crate::test_sshd::start("restore") else { return };
-    let base = std::fs::canonicalize(std::env::temp_dir()).unwrap().join(format!("codeyard-e2e-sshrestore-{}", std::process::id()));
+    let base = crate::ui::canonical_for_test(std::env::temp_dir()).join(format!("codeyard-e2e-sshrestore-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(base.join("one")).unwrap();
     std::fs::create_dir_all(base.join("two")).unwrap();
     std::fs::write(base.join("one/a.txt"), "1\n").unwrap();
     std::fs::write(base.join("two/b.txt"), "2\n").unwrap();
-    let one = base.join("one").to_string_lossy().into_owned();
-    let two = base.join("two").to_string_lossy().into_owned();
+    let one = crate::ui::local_path(&base.join("one"));
+    let two = crate::ui::local_path(&base.join("two"));
     let home = home_dir("sshrestore");
 
     let (wb, cx) = setup_persistent(cx, &home);
@@ -4034,7 +4036,7 @@ fn ssh_restore_failure_and_reopen(cx: &mut TestAppContext) {
 /// TODO search: regex and case-sensitive, finds files containing TODO.
 #[gpui::test]
 fn editor_switcher_zen_mode_and_todo_search(cx: &mut TestAppContext) {
-    let dir = std::fs::canonicalize(project("switcher")).unwrap();
+    let dir = crate::ui::canonical_for_test(project("switcher"));
     std::fs::write(dir.join("src/main.rs"), "fn main() {\n    // TODO: finish\n}\n").unwrap();
     std::fs::write(dir.join("src/lib.rs"), "// todo lowercase is not a marker\n// FIXME: broken\n").unwrap();
     let (wb, cx) = setup(cx);
@@ -4170,7 +4172,7 @@ fn editor_decorations_render_and_sticky_scroll_follows_scope(cx: &mut TestAppCon
 /// Explorer context menu: duplicate, open side by side, compare, open a terminal in a folder.
 #[gpui::test]
 fn explorer_menu_duplicates_compares_and_opens_terminals(cx: &mut TestAppContext) {
-    let dir = std::fs::canonicalize(project("explorermenu")).unwrap();
+    let dir = crate::ui::canonical_for_test(project("explorermenu"));
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     wait_for(cx, "ağaç", |cx| wb.read_with(cx, |wb, cx| wb.tree_names(cx)).contains(&"README.md".to_string()));
@@ -4224,7 +4226,7 @@ fn explorer_menu_duplicates_compares_and_opens_terminals(cx: &mut TestAppContext
 #[gpui::test]
 fn git_amend_undo_stash_and_discard_all(cx: &mut TestAppContext) {
     let Some(dir) = git_repo("gitmore") else { return };
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     let scm = wb.read_with(cx, |wb, _| wb.scm_panel());
@@ -4289,7 +4291,7 @@ fn git_amend_undo_stash_and_discard_all(cx: &mut TestAppContext) {
 #[gpui::test]
 fn explorer_copy_cut_paste_and_drag_move(cx: &mut TestAppContext) {
     use crate::tree::TreeEvent;
-    let dir = std::fs::canonicalize(project("clipboard")).unwrap();
+    let dir = crate::ui::canonical_for_test(project("clipboard"));
     let d = |p: &str| crate::ui::local_path(&dir.join(p));
     std::fs::create_dir_all(dir.join("hedef")).unwrap();
     let (wb, cx) = setup(cx);
@@ -4421,12 +4423,12 @@ fn settings_and_shortcuts_pickers_write_the_files(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn tabs_reorder_and_move_between_groups_by_dragging(cx: &mut TestAppContext) {
-    let dir = std::fs::canonicalize(project("tabdrag")).unwrap();
+    let dir = crate::ui::canonical_for_test(project("tabdrag"));
     std::fs::write(dir.join("a.txt"), "a\n").unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     for f in ["README.md", "src/main.rs", "src/lib.rs"] {
-        let p = dir.join(f).to_string_lossy().into_owned();
+        let p = crate::ui::local_path(&dir.join(f));
         wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(p, window, cx));
         cx.run_until_parked();
     }
@@ -4443,7 +4445,7 @@ fn tabs_reorder_and_move_between_groups_by_dragging(cx: &mut TestAppContext) {
     assert_eq!(groups(cx).0, s(&["lib.rs", "README.md", "main.rs"]));
     drop(cx, true, "README.md", true, None);
     assert_eq!(groups(cx).0, s(&["lib.rs", "main.rs", "README.md"]));
-    assert_eq!(wb.read_with(cx, |wb, cx| wb.active_path(cx)), Some(dir.join("README.md").to_string_lossy().into_owned()));
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.active_path(cx)), Some(crate::ui::local_path(&dir.join("README.md"))));
 
     // To the other group: while split, main.rs to the start of the right group.
     cx.simulate_keystrokes("cmd-\\"); // README also opens on the right
@@ -4457,7 +4459,7 @@ fn tabs_reorder_and_move_between_groups_by_dragging(cx: &mut TestAppContext) {
 #[gpui::test]
 fn merge_conflicts_resolve_navigate_and_guard_staging(cx: &mut TestAppContext) {
     let Some(dir) = git_repo("merge") else { return };
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     let base: String = (1..=12).map(|i| format!("satır {i}\n")).collect();
     std::fs::write(dir.join("a.txt"), &base).unwrap();
     git_in(&dir, &["add", "-A"]);
@@ -4485,7 +4487,7 @@ fn merge_conflicts_resolve_navigate_and_guard_staging(cx: &mut TestAppContext) {
     assert!(scm.read_with(cx, |s, _| s.result_text()).unwrap().contains("still has merge conflict markers"));
     assert!(conflict_marked(cx));
 
-    let p = dir.join("a.txt").to_string_lossy().into_owned();
+    let p = crate::ui::local_path(&dir.join("a.txt"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(p, window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -4548,12 +4550,12 @@ fn merge_conflicts_resolve_navigate_and_guard_staging(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn conflict_markers_written_from_outside_are_picked_up(cx: &mut TestAppContext) {
-    let dir = std::fs::canonicalize(project("conflict-reload")).unwrap();
+    let dir = crate::ui::canonical_for_test(project("conflict-reload"));
     let f = dir.join("b.txt");
     std::fs::write(&f, "bir\niki\n").unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
-    let p = f.to_string_lossy().into_owned();
+    let p = crate::ui::local_path(&f);
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(p, window, cx));
     cx.run_until_parked();
     let ed = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap();
@@ -4567,7 +4569,7 @@ fn conflict_markers_written_from_outside_are_picked_up(cx: &mut TestAppContext) 
 #[gpui::test]
 fn file_history_follows_renames_and_blame_sees_unsaved_lines(cx: &mut TestAppContext) {
     let Some(dir) = git_repo("history") else { return };
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     std::fs::write(dir.join("a.rs"), "fn bir() {}\n").unwrap();
     git_in(&dir, &["add", "-A"]);
     git_in(&dir, &["commit", "-q", "-m", "a eklendi"]);
@@ -4581,7 +4583,7 @@ fn file_history_follows_renames_and_blame_sees_unsaved_lines(cx: &mut TestAppCon
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     wait_ticking(cx, "git", |cx| wb.read_with(cx, |wb, _| wb.git_status().is_some()));
-    let p = dir.join("b.rs").to_string_lossy().into_owned();
+    let p = crate::ui::local_path(&dir.join("b.rs"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(p, window, cx));
     cx.run_until_parked();
     let run = |cx: &mut VisualTestContext, label: &str| wb.update_in(cx, |wb, window, cx| wb.run_command_for_test(label, window, cx));
@@ -4599,7 +4601,7 @@ fn file_history_follows_renames_and_blame_sees_unsaved_lines(cx: &mut TestAppCon
     assert!(view.read_with(cx, |v, _| v.label.to_string()).contains("iki eklendi"));
 
     // Blame: add an unsaved line at the top; "fn iki" (now line 3) still maps to the right commit.
-    let p = dir.join("b.rs").to_string_lossy().into_owned();
+    let p = crate::ui::local_path(&dir.join("b.rs"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(p, window, cx));
     cx.run_until_parked();
     cx.simulate_keystrokes("cmd-up");
@@ -4617,7 +4619,10 @@ fn file_history_follows_renames_and_blame_sees_unsaved_lines(cx: &mut TestAppCon
 
 #[gpui::test]
 fn terminal_cmd_click_opens_file_locations(cx: &mut TestAppContext) {
-    let dir = std::fs::canonicalize(project("termlink")).unwrap();
+    if !crate::test_sshd::posix_shell() {
+        return;
+    }
+    let dir = crate::ui::canonical_for_test(project("termlink"));
     let (wb, cx) = setup(cx);
     open(&wb, &dir, cx);
     wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
@@ -4643,7 +4648,7 @@ fn terminal_cmd_click_opens_file_locations(cx: &mut TestAppContext) {
     // ⌘-click: the file opens at line 3, column 2.
     cx.simulate_click(on_link, Modifiers::secondary_key());
     wait_for(cx, "dosya açıldı", |cx| wb.read_with(cx, |wb, cx| wb.active_path(cx)).is_some());
-    assert_eq!(wb.read_with(cx, |wb, cx| wb.active_path(cx)), Some(dir.join("src/lib.rs").to_string_lossy().into_owned()));
+    assert_eq!(wb.read_with(cx, |wb, cx| wb.active_path(cx)), Some(crate::ui::local_path(&dir.join("src/lib.rs"))));
     wait_for(cx, "konum", |cx| wb.read_with(cx, |wb, cx| wb.active_cursor(cx)) == Some((3, 2)));
 
     // A file not in the project: it says so, nothing opens.
@@ -4657,7 +4662,7 @@ fn terminal_cmd_click_opens_file_locations(cx: &mut TestAppContext) {
 #[gpui::test]
 fn stage_and_revert_change_at_cursor(cx: &mut TestAppContext) {
     let Some(dir) = git_repo("hunkcmd") else { return };
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     let lib = dir.join("src/lib.rs");
     let edited: String = (1..=10).map(|i| if i == 3 || i == 9 { format!("// DEĞİŞTİ {i}\n") } else { format!("// satır {i}\n") }).collect();
     std::fs::write(&lib, &edited).unwrap();
@@ -4693,7 +4698,7 @@ fn stage_and_revert_change_at_cursor(cx: &mut TestAppContext) {
 #[gpui::test]
 fn next_change_wraps_and_close_saved_keeps_dirty(cx: &mut TestAppContext) {
     let Some(dir) = git_repo("nextchange") else { return };
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     let lib = dir.join("src/lib.rs");
     let edited: String = (1..=10).map(|i| if i == 3 || i == 8 { format!("// X{i}\n") } else { format!("// satır {i}\n") }).collect();
     std::fs::write(&lib, &edited).unwrap();
@@ -4724,7 +4729,7 @@ fn next_change_wraps_and_close_saved_keeps_dirty(cx: &mut TestAppContext) {
 #[gpui::test]
 fn git_branch_commands_through_the_palette(cx: &mut TestAppContext) {
     let Some(dir) = git_repo("branchcmds") else { return };
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     let git = |args: &[&str]| crate::test_git::git().args(args).current_dir(&dir).output().unwrap();
     git(&["branch", "side"]);
     let (wb, cx) = setup(cx);
@@ -4772,7 +4777,7 @@ fn open_as_hex_creates_a_dump_tab(cx: &mut TestAppContext) {
     open(&wb, &dir.join("blob.txt"), cx);
     // A file containing a NUL byte doesn't open as text: an error page, hex from there.
     assert!(wb.read_with(cx, |wb, _| wb.open_error_text()).is_some_and(|m| m.contains("binary file")));
-    wb.update_in(cx, |wb, window, cx| wb.open_hex_of_for_test(dir.join("blob.txt").to_string_lossy().into_owned(), window, cx));
+    wb.update_in(cx, |wb, window, cx| wb.open_hex_of_for_test(crate::ui::local_path(&dir.join("blob.txt")), window, cx));
     wait_for(cx, "hex sekmesi", |cx| wb.read_with(cx, |wb, cx| wb.active_path(cx)).is_some_and(|p| p.ends_with(".hex.txt")));
     let text = wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap().read_with(cx, |e, _| e.text());
     assert!(text.starts_with("00000000  41 42 00 01"), "{text}");
@@ -4799,7 +4804,7 @@ fn open_with_picker_lists_alternatives(cx: &mut TestAppContext) {
 #[gpui::test]
 fn git_tag_with_a_message_is_annotated_and_open_file_head_shows_the_commit(cx: &mut TestAppContext) {
     let Some(dir) = git_repo("refscmds") else { return };
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     let (wb, cx) = setup(cx);
     open(&wb, &dir.join("README.md"), cx);
     wait_for(cx, "git durumu", |cx| wb.read_with(cx, |wb, _| wb.git_status().is_some()));
@@ -4821,7 +4826,7 @@ fn git_tag_with_a_message_is_annotated_and_open_file_head_shows_the_commit(cx: &
 #[gpui::test]
 fn git_add_to_gitignore_and_named_stash_through_the_palette(cx: &mut TestAppContext) {
     let Some(dir) = git_repo("refsignore") else { return };
-    let dir = std::fs::canonicalize(dir).unwrap();
+    let dir = crate::ui::canonical_for_test(dir);
     std::fs::write(dir.join("secret.env"), "k=1\n").unwrap();
     let (wb, cx) = setup(cx);
     open(&wb, &dir.join("secret.env"), cx);

@@ -9,14 +9,6 @@ use crate::qa_integration_tests::wait_secs;
 use crate::qa_workbench_tests::{open, project, restart_with, setup_persistent};
 use crate::workbench::Workbench;
 
-fn have_python() -> bool {
-    if std::process::Command::new("python3").arg("-V").output().is_err() {
-        crate::test_sshd::skip_missing("python3");
-        return false;
-    }
-    true
-}
-
 /// A project with a 12-line `main.c` and a launch configuration that runs the scripted adapter; returns the log path.
 fn fake_project(name: &str) -> (PathBuf, PathBuf) {
     let dir = project(name);
@@ -28,9 +20,10 @@ fn fake_project(name: &str) -> (PathBuf, PathBuf) {
         dir.join(".codeyard/launch.jsonc"),
         format!(
             r#"{{ "configurations": [ {{ "name": "Fake", "type": "custom", "request": "launch", "program": "/bin/true",
-                "source": "${{workspaceFolder}}/main.c", "debugAdapter": {{ "command": "{}", "args": ["{}"] }} }} ] }}"#,
-            script.display(),
-            log.display()
+                "source": "${{workspaceFolder}}/main.c", "debugAdapter": {{ "command": "{}", "args": ["{}", "{}"] }} }} ] }}"#,
+            crate::test_lsp::python(),
+            crate::ui::local_path(&script),
+            crate::ui::local_path(&log)
         ),
     )
     .unwrap();
@@ -42,7 +35,7 @@ fn run(wb: &Entity<Workbench>, cx: &mut VisualTestContext, label: &str) {
 }
 
 fn open_main(wb: &Entity<Workbench>, dir: &Path, cx: &mut VisualTestContext) -> (String, Entity<crate::editor::EditorView>) {
-    let main = dir.join("main.c").to_string_lossy().into_owned();
+    let main = crate::ui::local_path(&dir.join("main.c"));
     wb.update_in(cx, |wb, window, cx| wb.open_file_in_root(main.clone(), window, cx));
     cx.run_until_parked();
     (main, wb.read_with(cx, |wb, _| wb.active_editor_entity()).unwrap())
@@ -80,7 +73,7 @@ fn breakpoints_keep_their_state_across_a_restart(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn disabled_and_deactivated_breakpoints_are_not_sent_and_results_come_back(cx: &mut TestAppContext) {
-    if !have_python() {
+    if !crate::test_lsp::have_python() {
         return;
     }
     let home = project("dbg-send-home");
@@ -124,7 +117,7 @@ fn disabled_and_deactivated_breakpoints_are_not_sent_and_results_come_back(cx: &
 
 #[gpui::test]
 fn the_run_and_debug_view_shows_the_paused_program(cx: &mut TestAppContext) {
-    if !have_python() {
+    if !crate::test_lsp::have_python() {
         return;
     }
     let home = project("dbg-view-home");
@@ -158,7 +151,7 @@ fn the_run_and_debug_view_shows_the_paused_program(cx: &mut TestAppContext) {
 /// Restart Frame.
 #[gpui::test]
 fn values_pages_stack_pages_set_value_completion_and_restart_frame(cx: &mut TestAppContext) {
-    if !have_python() {
+    if !crate::test_lsp::have_python() {
         return;
     }
     let home = project("dbg-depth-home");
@@ -229,9 +222,10 @@ fn write_launch(dir: &Path, log: &Path, configs: &[(&str, &str)], rest: &str) {
         .map(|(name, extra)| {
             format!(
                 r#"{{ "name": "{name}", "type": "custom", "request": "launch", "program": "/bin/true", "source": "${{workspaceFolder}}/main.c",
-                   "debugAdapter": {{ "command": "{}", "args": ["{}"] }} {extra} }}"#,
-                script.display(),
-                log.display()
+                   "debugAdapter": {{ "command": "{}", "args": ["{}", "{}"] }} {extra} }}"#,
+                crate::test_lsp::python(),
+                crate::ui::local_path(&script),
+                crate::ui::local_path(log)
             )
         })
         .collect();
@@ -240,13 +234,15 @@ fn write_launch(dir: &Path, log: &Path, configs: &[(&str, &str)], rest: &str) {
 
 #[gpui::test]
 fn run_without_debugging_sends_no_breakpoints_and_the_post_debug_task_runs(cx: &mut TestAppContext) {
-    if !have_python() {
+    if !crate::test_lsp::have_python() {
         return;
     }
     let home = project("dbg-nodebug-home");
     let (dir, log) = fake_project("dbg-nodebug");
     let marker = dir.join("post-task-ran");
-    std::fs::write(dir.join(".codeyard/tasks.jsonc"), format!(r#"[ {{ "label": "after", "command": "touch {}" }} ]"#, marker.display())).unwrap();
+    // `echo … > "…"` works in every task shell (sh, PowerShell, cmd).
+    std::fs::write(dir.join(".codeyard/tasks.jsonc"), format!(r#"[ {{ "label": "after", "command": "echo x > \"{}\"" }} ]"#, crate::ui::local_path(&marker)))
+        .unwrap();
     write_launch(&dir, &log, &[("Fake", r#", "postDebugTask": "after""#)], "");
     let (wb, cx) = setup_persistent(cx, &home);
     wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
@@ -265,7 +261,7 @@ fn run_without_debugging_sends_no_breakpoints_and_the_post_debug_task_runs(cx: &
 
 #[gpui::test]
 fn run_to_cursor_stops_there_once(cx: &mut TestAppContext) {
-    if !have_python() {
+    if !crate::test_lsp::have_python() {
         return;
     }
     let home = project("dbg-cursor-home");
@@ -288,7 +284,7 @@ fn run_to_cursor_stops_there_once(cx: &mut TestAppContext) {
 /// lldb-dap reports `stopOnEntry` as an exception "signal SIGSTOP": the console says it paused on entry.
 #[gpui::test]
 fn the_stop_on_entry_is_not_reported_as_an_exception(cx: &mut TestAppContext) {
-    if !have_python() {
+    if !crate::test_lsp::have_python() {
         return;
     }
     let home = project("dbg-entry-home");
@@ -311,7 +307,7 @@ fn the_stop_on_entry_is_not_reported_as_an_exception(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn a_compound_starts_its_sessions_together_and_stop_all_stops_them(cx: &mut TestAppContext) {
-    if !have_python() {
+    if !crate::test_lsp::have_python() {
         return;
     }
     let home = project("dbg-compound-home");
@@ -332,13 +328,13 @@ fn a_compound_starts_its_sessions_together_and_stop_all_stops_them(cx: &mut Test
 /// An adapter (or whatever answered on its port) asking to run a program in a terminal that was never offered is refused.
 #[gpui::test]
 fn a_terminal_that_was_not_offered_is_refused(cx: &mut TestAppContext) {
-    if !have_python() {
+    if !crate::test_lsp::have_python() {
         return;
     }
     let home = project("dbg-sneak-home");
     let (dir, log) = fake_project("dbg-sneak");
     let marker = dir.join("terminal-ran");
-    write_launch(&dir, &log, &[("Fake", &format!(r#", "sneak": true, "marker": "{}""#, marker.display()))], "");
+    write_launch(&dir, &log, &[("Fake", &format!(r#", "sneak": true, "marker": "{}""#, crate::ui::local_path(&marker)))], "");
     let (wb, cx) = setup_persistent(cx, &home);
     wb.update(cx, |wb, _| wb.set_shell("/bin/sh"));
     open(&wb, &dir, cx);
@@ -355,7 +351,10 @@ fn a_terminal_that_was_not_offered_is_refused(cx: &mut TestAppContext) {
 
 #[gpui::test]
 fn inputs_are_asked_before_the_start_and_the_program_can_run_in_a_terminal(cx: &mut TestAppContext) {
-    if !have_python() {
+    if !crate::test_sshd::posix_shell() {
+        return;
+    }
+    if !crate::test_lsp::have_python() {
         return;
     }
     let home = project("dbg-inputs-home");
@@ -364,7 +363,10 @@ fn inputs_are_asked_before_the_start_and_the_program_can_run_in_a_terminal(cx: &
     write_launch(
         &dir,
         &log,
-        &[("Fake", &format!(r#", "args": ["${{input:level}}", "${{input:name}}"], "console": "integratedTerminal", "marker": "{}""#, marker.display()))],
+        &[(
+            "Fake",
+            &format!(r#", "args": ["${{input:level}}", "${{input:name}}"], "console": "integratedTerminal", "marker": "{}""#, crate::ui::local_path(&marker)),
+        )],
         r#", "inputs": [ { "id": "name", "type": "promptString", "description": "Your name" }, { "id": "level", "type": "pickString", "description": "Level", "options": ["low", "high"] } ]"#,
     );
     let (wb, cx) = setup_persistent(cx, &home);
@@ -389,7 +391,7 @@ fn inputs_are_asked_before_the_start_and_the_program_can_run_in_a_terminal(cx: &
 /// deactivated), removed, and belongs to its session only.
 #[gpui::test]
 fn data_breakpoints_from_a_variable_are_listed_toggled_removed_and_end_with_the_session(cx: &mut TestAppContext) {
-    if !have_python() {
+    if !crate::test_lsp::have_python() {
         return;
     }
     let home = project("dbg-data-home");

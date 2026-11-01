@@ -12,7 +12,7 @@ fn base(name: &str) -> PathBuf {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     // Paths as git prints them (macOS: /private/var/... for /var/...), so worktrees and git dirs compare as strings.
-    std::fs::canonicalize(&dir).unwrap()
+    crate::ui::canonical_for_test(&dir)
 }
 
 fn git(dir: &Path, args: &[&str]) -> String {
@@ -30,8 +30,9 @@ fn repo_at(dir: &Path) {
     git(dir, &["commit", "-q", "-m", "init"]);
 }
 
+/// A local folder as the workbench gives it to discovery (`ui::local_path`: `/` on Windows too).
 fn s(p: &Path) -> String {
-    p.to_string_lossy().into_owned()
+    crate::ui::local_path(p)
 }
 
 fn run(roots: &[String], limits: Limits) -> Discovery {
