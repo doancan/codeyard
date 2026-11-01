@@ -11,7 +11,7 @@ What an extension adds to Codeyard. Each kind is an array of tables (`[[commands
 - [`[[languages]]`](#languages): A language for files no built-in language claims.
 - [`[[json-schemas]]`](#json-schemas): A JSON schema for the JSON files that match.
 - [`[[yaml-schemas]]`](#yaml-schemas): A JSON schema for the YAML files that match.
-- [`[settings.<key>]`](#settings): A setting, as `[settings.<key>]`. The user sets it as `<extension id>.<key>`; code reads it by its key.
+- [`[settings.<key>]`](#settings): A setting, as `[settings.<key>]`. The user sets it as `ext.<extension id>.<key>` in settings.jsonc; code reads it by its key.
 - [`[[language-servers]]`](#language-servers): A language server: a program that speaks the Language Server Protocol. It runs where the files are, so it works over SSH.
 - [`[[commands]]`](#commands): A command in the palette. Needs `[code]`; the code registers its handler with the same id.
 - [`[[views]]`](#views): A view drawn from built-in elements (reference/ui.md). Needs `[code]`.
@@ -101,7 +101,7 @@ What an extension adds to Codeyard. Each kind is an array of tables (`[[commands
 
 ## settings
 
-`[settings.<key>]`: A setting, as `[settings.<key>]`. The user sets it as `<extension id>.<key>`; code reads it by its key.
+`[settings.<key>]`: A setting, as `[settings.<key>]`. The user sets it as `ext.<extension id>.<key>` in settings.jsonc; code reads it by its key.
 
 | Field | Type | Required | What it does |
 | --- | --- | --- | --- |

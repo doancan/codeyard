@@ -2,7 +2,7 @@
 
 A code extension is a Rust crate built into a WebAssembly component. It adds commands to the palette, views to the sidebar, formatters, code actions and anything else that needs code. This page covers writing one; [testing.md](testing.md) covers testing it, and [reference/api.md](reference/api.md) lists every call. For TypeScript, see [typescript.md](typescript.md): the same API, with Promises.
 
-The SDK is not on crates.io yet, so a new extension takes it from the Codeyard repository (see [The SDK dependency](#the-sdk-dependency)). It implements API 1.0, which later 1.x versions only add to ([Migrating to API 1.0](migrating-to-1.0.md)).
+The SDK is not on crates.io yet, so a new extension takes it from the Codeyard repository (see [The SDK dependency](#the-sdk-dependency)). It implements API 1.1, which later 1.x versions only add to ([Migrating to API 1.0](migrating-to-1.0.md)).
 
 <!-- toc -->
 - [Setup](#setup)
@@ -364,7 +364,7 @@ let code = build.wait().await?;            // dropping `build` before it ends ki
 A server the user chooses, such as a company GitHub Enterprise, cannot be listed in `net` ahead of time. Declare the
 setting that names it with `net-from-setting`. Your code reads the setting as usual, and requests to the server are
 refused until the user allows its host on the extension page (**Allow Host…**, in a dialog Codeyard draws). A setting,
-a workspace or your code cannot allow a host by itself. Until the user has allowed it, the refusal tells you so; tell the
+a workspace or your code cannot allow a host by itself. The dialog is part of the packaged install: an extension run with `cyx dev` has no **Allow Host…**, so to try a server, `cyx package` it and install the `.cyx`. A manifest with `net-from-setting` needs API 1.1. Until the user has allowed it, the refusal tells you so; tell the
 user in the setting's description.
 
 ```toml

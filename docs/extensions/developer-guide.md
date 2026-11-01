@@ -83,7 +83,7 @@ The same goes for other no-code contributions: `keymap-preset`, `keybindings`, `
 
 ## Your first command
 
-Commands, views, formatters, code actions, hover and completion need code, which `cyx` builds into a WebAssembly component. Write it in TypeScript (you need Node.js 22.18 or newer) or in Rust (you need Rust and `rustup target add wasm32-wasip2`). Both SDKs have the same API, 1.0; the full guides are [typescript.md](typescript.md) and [commands.md](commands.md).
+Commands, views, formatters, code actions, hover and completion need code, which `cyx` builds into a WebAssembly component. Write it in TypeScript (you need Node.js 22.18 or newer) or in Rust (you need Rust and `rustup target add wasm32-wasip2`). Both SDKs have the same API, 1.1; the full guides are [typescript.md](typescript.md) and [commands.md](commands.md).
 
 ```sh
 cyx new command hello --lang ts   # or: cyx new view hello --lang ts; leave out --lang ts for Rust
@@ -174,7 +174,7 @@ You don't have to write any activation code. The extension starts the first time
 | `untrusted` | — | `false` keeps your extension off in untrusted folders. By default it runs there, but it cannot send, write or run anything |
 | `l10n/<code>.tsv` | — | `English<TAB>Translation` per line. English is the fallback |
 
-Never write an engine version, an API version, `*` or `startup`. `cyx` works out the minimum Codeyard version from the API items your code uses and `cyx check` prints it. The API is 1.0: a minor version only adds, and every item in the [reference](reference/api.md) says which version added it. Coming from 0.1? See [Migrating to API 1.0](migrating-to-1.0.md).
+Never write an engine version, an API version, `*` or `startup`. `cyx` works out the minimum Codeyard version from the API items your code uses and `cyx check` prints it. The API is 1.1: a minor version only adds, and every item in the [reference](reference/api.md) says which version added it. Coming from 0.1? See [Migrating to API 1.0](migrating-to-1.0.md).
 
 ### Contributions that run your code
 
@@ -332,7 +332,7 @@ why  = "Shows your Vercel deployments next to the code."
 ```
 
 A server the user chooses (a company GitHub Enterprise) cannot be in `net`; `net-from-setting` names the setting that
-holds it, and the user allows its host on the extension page ([commands.md](commands.md#network-files-and-programs)).
+holds it, and the user allows its host on the extension page ([commands.md](commands.md#network-files-and-programs)). That needs the packaged install, not `cyx dev`.
 
 **You don't need a permission for:** notices, quick picks, input boxes, progress, your own views, status items, storage and settings, `env`, your dependencies' commands, or opening an `https:` link after a user action. A command the user starts can read and edit the active document and selections until it returns.
 
@@ -645,10 +645,12 @@ In the package:
 - for native programs, the platform's files from `native/<triple>/`.
 
 Left out:
-- **Secrets**, wherever they are: `.env` and `.env.*`, `*.key`, `*.pem`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, SSH
-  keys (`id_rsa`, `id_ed25519`, …), `.npmrc`, `.netrc`, `.pypirc`, `.git-credentials` and `credentials.json`. `cyx`
-  names each one it left out, so you know it is in the folder. A file whose contents hold a private key
-  (`-----BEGIN … PRIVATE KEY-----`) stops packaging whatever its name: move it out of the folder.
+- **Secrets**, wherever they are: `.env` and `.env.*`, `*.key`, `*.pem`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`, `*.ppk`, `*.p8`, SSH
+  keys (`id_rsa`, `id_ed25519`, …), `.npmrc`, `.netrc`, `.pypirc`, `.git-credentials`, `credentials.json`, and
+  `secret.*` and `secrets.*` files. `cyx` names each one it left out, so you know it is in the folder. A text file
+  that holds a whole private key block (PEM, PGP or PuTTY) or an obvious GitHub, AWS or Slack token stops packaging
+  whatever its name: move it out of the folder, or list it in `.cyxignore`. `extension.wasm`, `extension.js.map` and
+  documents (`README`, `LICENSE`, `CHANGELOG`, `*.md`) are not scanned.
 - **Hidden files and folders** (`.git`, `.github`, `.gitignore`, `.vscode`), and `target`, `node_modules`, OS litter.
 - **Source and build input**: `src/` at the top of the folder, `*.rs` and `*.ts` files, `Cargo.toml`, `Cargo.lock`,
   `build.rs`, `package.json`, `package-lock.json`, other lock files and `tsconfig.json`. Your code reaches users as

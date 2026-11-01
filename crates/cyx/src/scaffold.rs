@@ -52,8 +52,10 @@ const KEYMAP: &str = r#"[
 "#;
 
 /// Publishing on a tag push (`.github/workflows/publish.yml`): the identity the registry pins is this repository and
-/// this file, so it keeps one name. Both actions are pinned to a commit: the job can sign releases, so a moved tag must
-/// not change the code it runs. `docs/releasing.md` says when to move the publish action's pin.
+/// this file, so it keeps one name. The job can sign releases, so a moved tag must not change the code it runs: the
+/// checkout action is pinned to a commit, and the publish action to the release's commit. Until the first release that can
+/// publish API 1.1 code is tagged there is no such commit, so the publish action follows `main` (as the SDK does,
+/// `sdk_git_ref`). `docs/releasing.md` says how a release builds re-pin it.
 pub const PUBLISH_WORKFLOW: &str = r#"# Publishes this extension to the Codeyard registry when you push a tag: git tag v0.2.0 && git push --tags
 # No secrets: the job's identity token signs the release (keyless), so only this repository can publish it.
 name: Publish
@@ -68,7 +70,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: doancan/codeyard/actions/publish@37795bde68030b5bf12c3eb3a6068a938d7b84fa # v0.6.0
+      # Pre-release: main until the first Codeyard release that publishes API 1.1 code is tagged (v0.6.0 cannot). Release builds of
+      # cyx pin this to that release's commit; replace main with it then, so a moved branch cannot change what signs.
+      - uses: doancan/codeyard/actions/publish@main
 "#;
 
 const README: &str = "# NAME\n\nA Codeyard extension. Run it with `cyx dev`, check it with `cyx check`, publish it with `cyx publish` or by pushing a tag (`git tag v0.1.0 && git push --tags`).\n";

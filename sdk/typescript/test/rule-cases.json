@@ -271,6 +271,104 @@
       }
     ]
   },
+  "editorOpen": {
+    "arguments": [
+      {
+        "arg": "file:///work/a.rs",
+        "uri": "file:///work/a.rs"
+      },
+      {
+        "arg": {
+          "uri": "file:///work/a.rs"
+        },
+        "uri": "file:///work/a.rs"
+      },
+      {
+        "arg": {
+          "selection": {
+            "end": {
+              "character": 4,
+              "line": 3
+            },
+            "start": {
+              "character": 2,
+              "line": 1
+            }
+          },
+          "uri": "file:///work/a.rs"
+        },
+        "uri": "file:///work/a.rs"
+      },
+      {
+        "arg": {
+          "selection": null,
+          "uri": "file:///work/a.rs"
+        },
+        "uri": "file:///work/a.rs"
+      },
+      {
+        "arg": {
+          "selection": {
+            "end": {
+              "character": 0,
+              "line": 0
+            },
+            "start": {
+              "character": 0,
+              "line": -1
+            }
+          },
+          "uri": "file:///work/a.rs"
+        },
+        "uri": null
+      },
+      {
+        "arg": {
+          "selection": {
+            "start": {
+              "character": 0,
+              "line": 0
+            }
+          },
+          "uri": "file:///work/a.rs"
+        },
+        "uri": null
+      },
+      {
+        "arg": {
+          "uri": 1
+        },
+        "uri": null
+      },
+      {
+        "arg": {},
+        "uri": null
+      },
+      {
+        "arg": [],
+        "uri": null
+      },
+      {
+        "arg": [
+          "file:///work/a.rs"
+        ],
+        "uri": null
+      },
+      {
+        "arg": 7,
+        "uri": null
+      },
+      {
+        "arg": null,
+        "uri": null
+      },
+      {
+        "arg": true,
+        "uri": null
+      }
+    ],
+    "message": "core:editor.open takes a `file://` URI, or `{\"uri\": …, \"selection\": range}` (required)"
+  },
   "globs": [
     {
       "glob": "main.rs",

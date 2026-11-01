@@ -957,6 +957,13 @@ fn parse_args_from(argv: impl Iterator<Item = String>, dev: bool) -> Args {
     args
 }
 
+/// `--accept-permissions` grants what a package being installed asks for. An update that asks for more is reviewed in the
+/// Extensions view, so the flag does nothing there: say so rather than ignore it.
+fn accept_permissions_misuse(args: &Args) -> Option<&'static str> {
+    (args.accept_permissions && args.install.is_empty())
+        .then_some("--accept-permissions only goes with --install-extension; an update that asks for more permissions is reviewed in the Extensions view")
+}
+
 #[cfg(test)]
 mod args_tests {
     use super::parse_args_from;
@@ -992,6 +999,10 @@ mod args_tests {
         assert!(accepted.accept_permissions && accepted.path.is_none());
         let up = parse(false, &["--update-extensions"]);
         assert!(up.update_extensions && up.path.is_none());
+        // The flag grants installs only: with an update, or alone, it is refused instead of ignored.
+        assert!(super::accept_permissions_misuse(&parse(false, &["--update-extensions", "--accept-permissions"])).is_some());
+        assert!(super::accept_permissions_misuse(&accepted).is_none());
+        assert!(super::accept_permissions_misuse(&up).is_none());
     }
 }
 
@@ -1181,6 +1192,10 @@ fn main() {
     // Windows and Linux start Codeyard with an extension's sign-in address: hand it to the running one.
     if let Some(url) = args.path.as_deref().filter(|p| p.starts_with("codeyard://")) {
         std::process::exit(workbench::forward_callback_from_command_line(url));
+    }
+    if let Some(message) = accept_permissions_misuse(&args) {
+        eprintln!("{message}");
+        std::process::exit(2);
     }
     if !args.install.is_empty() || args.update_extensions {
         let mut status = 0;

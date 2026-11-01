@@ -452,9 +452,17 @@ fn secrets_and_build_input_stay_out_of_the_package() {
     assert_eq!(c.secrets, vec![".env", ".env.production", "signing.key", "themes/id_ed25519"]);
     assert!(read(&write(c.files).unwrap().0).is_ok());
     // A private key under any name is refused, not quietly packaged.
-    std::fs::write(dir.join("themes/backup.txt"), "-----BEGIN OPENSSH PRIVATE KEY-----\nb3Bl\n-----END OPENSSH PRIVATE KEY-----\n").unwrap();
+    std::fs::write(dir.join("themes/backup.txt"), "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZWQyNTUxOQ\n-----END OPENSSH PRIVATE KEY-----\n").unwrap();
     let e = collect_dir(&dir).unwrap_err().to_string();
     assert!(e.contains("themes/backup.txt") && e.contains("private key"), "{e}");
+    // So is an obvious token, and the error names the waiver.
+    std::fs::write(dir.join("themes/backup.txt"), "AWS_KEY=AKIAIOSFODNN7EXAMPLE\n").unwrap();
+    let e = collect_dir(&dir).unwrap_err().to_string();
+    assert!(e.contains("themes/backup.txt") && e.contains("AWS access token") && e.contains(".cyxignore"), "{e}");
+    // A build output or a README that only mentions a key is packaged.
+    std::fs::write(dir.join("themes/backup.txt"), "ok").unwrap();
+    std::fs::write(dir.join("README.md"), "Never commit -----BEGIN RSA PRIVATE KEY----- files.").unwrap();
+    assert!(collect_dir(&dir).is_ok());
     std::fs::remove_dir_all(&dir).unwrap();
 }
 

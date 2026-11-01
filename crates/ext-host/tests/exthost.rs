@@ -355,6 +355,16 @@ fn an_untrusted_folder_refuses_sending() {
 }
 
 #[test]
+fn an_untrusted_folder_names_trust_when_the_app_already_masked_the_grant() {
+    // The app masks grants by trust before sending them, so a sending interface is simply absent in an untrusted
+    // folder. The reason must still be the folder, not a switch the user turned off.
+    let d = dir("untrusted-masked");
+    let (c, sha) = compile(&d);
+    let mut h = Host::start(hello(&d, &c, sha, &["workspace"], true)).ready();
+    assert_eq!(h.json("fetch", "https://api.example.com/x"), "denied net Why::UntrustedWorkspace");
+}
+
+#[test]
 fn pull_request_queries_reach_the_provider_and_its_forge_calls_go_through_auth() {
     use ext_api::value::{ChangedFile, FileStatus, PullAnswer, PullQuery, PullRemote, StreamEvent};
     let d = dir("pulls");

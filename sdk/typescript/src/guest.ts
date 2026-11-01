@@ -6,6 +6,7 @@ import { Context } from "./context.ts";
 import { CodeyardError, describe, toWit } from "./errors.ts";
 import { fetch, FetchHeaders, FetchResponse } from "./fetch.ts";
 import { handlers, resetHandlers } from "./handlers.ts";
+import { CALL_BYTES, resultTooLarge } from "./limits.ts";
 import { answerPullRequests } from "./pulls.ts";
 import { background, complete, event, host, install } from "./runtime.ts";
 import { toWitScmState, type ScmState } from "./scm.ts";
@@ -75,6 +76,27 @@ export function installGlobals(): () => void {
   return () => {
     for (const [k, v] of Object.entries(before)) set(k, v);
   };
+}
+
+/** The message of the timers the engine has but never runs: nothing drives its event loop between calls. */
+const NO_TIMERS = "is not available in a Codeyard extension: it has no event loop of its own, so a timer would never fire. Await a Codeyard call, or run work on a schedule with ctx.every(seconds, f) (at least 30 seconds)";
+
+/**
+ * Replace the engine's `setTimeout` and `setInterval`, which return and never fire (an `await new Promise(r =>
+ * setTimeout(r, 50))` would hang forever), with functions that throw, saying what to use. Only the component installs
+ * them: the mock host runs in Node, whose own timers its test runner needs.
+ */
+export function refuseTimers(): () => void {
+  const g = globalThis as Record<string, unknown>;
+  const names = ["setTimeout", "setInterval"] as const;
+  const before = names.map((n) => g[n]);
+  names.forEach((name) => {
+    const refuse = () => {
+      throw new Error(`${name} ${NO_TIMERS}`);
+    };
+    Object.defineProperty(g, name, { value: refuse, writable: true, configurable: true, enumerable: false });
+  });
+  return () => names.forEach((n, i) => Object.defineProperty(g, n, { value: before[i], writable: true, configurable: true, enumerable: false }));
 }
 
 /**
@@ -201,7 +223,14 @@ function answer<T>(id: bigint, work: () => T | Promise<T>, map: (v: T) => Respon
 }
 
 function json(v: unknown): string {
-  return JSON.stringify(v === undefined ? null : v);
+  const text = JSON.stringify(v === undefined ? null : v);
+  // An answer over the call limit never reaches Codeyard; fail it here with the same words the host uses. Counted only
+  // when it can be over (a character is at most 3 bytes): moving a huge string out of the engine would run out of time.
+  if (text.length * 3 > CALL_BYTES) {
+    const tooBig = resultTooLarge(new TextEncoder().encode(text).length);
+    if (tooBig) throw CodeyardError.invalid(tooBig);
+  }
+  return text;
 }
 
 function codeAction(a: CodeAction): WitCodeAction {

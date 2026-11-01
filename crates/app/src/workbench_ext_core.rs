@@ -112,8 +112,8 @@ impl Workbench {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let Some((uri, selection)) = file_location(arg) else {
-            return done(self, Completion::Failed(v::Error::Invalid(format!("core:{} takes {}", core.id, core.argument.describe()))), cx);
+        let Some((uri, selection)) = ext_manifest::file_location(arg) else {
+            return done(self, Completion::Failed(v::Error::Invalid(core.bad_argument())), cx);
         };
         let host = self.remote.host.clone();
         let checked = cx.background_executor().spawn(async move { crate::ext_broker::may_read_on_disk(host.as_ref(), &scope, &uri) });
@@ -196,20 +196,4 @@ impl Workbench {
         self.run_task(task, window, cx);
         Completion::Done
     }
-}
-
-/// `core:editor.open`'s argument: a `file://` URI, or `{"uri": …, "selection": {"start": {"line", "character"}, "end": …}}`.
-fn file_location(arg: &serde_json::Value) -> Option<(String, Option<crate::lsp::Range16>)> {
-    if let Some(uri) = arg.as_str() {
-        return Some((uri.to_string(), None));
-    }
-    let uri = arg.get("uri")?.as_str()?.to_string();
-    let position = |p: &serde_json::Value| -> Option<(u32, u32)> {
-        Some((u32::try_from(p.get("line")?.as_u64()?).ok()?, u32::try_from(p.get("character")?.as_u64()?).ok()?))
-    };
-    let selection = match arg.get("selection") {
-        None | Some(serde_json::Value::Null) => None,
-        Some(s) => Some((position(s.get("start")?)?, position(s.get("end")?)?)),
-    };
-    Some((uri, selection))
 }

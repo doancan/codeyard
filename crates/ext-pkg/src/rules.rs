@@ -49,20 +49,112 @@ pub enum Rule {
 pub fn is_secret_name(name: &str) -> bool {
     let n = name.to_ascii_lowercase();
     let ssh_key = n.starts_with("id_") && !n.contains('.');
+    let secrets_file = n.rsplit_once('.').is_some_and(|(stem, _)| matches!(stem, "secret" | "secrets"));
     n == ".env"
         || n.starts_with(".env.")
         || n.ends_with(".env")
-        || ["key", "pem", "p12", "pfx", "jks", "keystore"].iter().any(|x| n.rsplit_once('.').is_some_and(|(_, e)| e == *x))
+        || ["key", "pem", "p12", "pfx", "jks", "keystore", "ppk", "p8"].iter().any(|x| n.rsplit_once('.').is_some_and(|(_, e)| e == *x))
         || ssh_key
+        || secrets_file
         || matches!(n.as_str(), ".npmrc" | ".netrc" | ".pypirc" | ".git-credentials" | "credentials.json")
 }
 
-/// The marker every PEM private key carries (`-----BEGIN RSA PRIVATE KEY-----`, `… OPENSSH PRIVATE KEY-----`).
-const PRIVATE_KEY_MARKER: &[u8] = b"PRIVATE KEY-----";
+/// What a file's contents give away.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Leak {
+    PrivateKey,
+    /// An access token of this kind (`GitHub`, `AWS`, `Slack`).
+    Token(&'static str),
+}
 
-/// Whether a file's contents hold a PEM private key, whatever its name.
-pub fn holds_private_key(data: &[u8]) -> bool {
-    data.windows(PRIVATE_KEY_MARKER.len()).any(|w| w == PRIVATE_KEY_MARKER)
+/// Files whose contents are never scanned: build outputs (they carry strings from dependencies and from the
+/// extension's own messages) and documents (they talk about keys).
+fn is_unscanned(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    matches!(n.as_str(), "extension.wasm" | "extension.js.map")
+        || n.ends_with(".md")
+        || ["readme", "license", "licence", "copying", "changelog", "notice"].iter().any(|d| n.starts_with(d))
+}
+
+/// What the contents of the file called `name` give away, whatever its name says: a private key block or an
+/// obvious access token. Build outputs and documents are not looked at.
+pub fn leak_in(name: &str, data: &[u8]) -> Option<Leak> {
+    if is_unscanned(name) {
+        return None;
+    }
+    let text = String::from_utf8_lossy(data);
+    if has_private_key_block(&text) {
+        return Some(Leak::PrivateKey);
+    }
+    // Tokens are looked for in text only: binary data produces matches by chance.
+    if std::str::from_utf8(data).is_ok() {
+        return token_kind(&text).map(Leak::Token);
+    }
+    None
+}
+
+/// Whether the text holds a whole PEM or PGP private key block (a BEGIN line, a base64 body, an END line) or a
+/// PuTTY key file. A line that only mentions the BEGIN line is not one.
+fn has_private_key_block(text: &str) -> bool {
+    const BEGIN: &str = "-----BEGIN ";
+    const DASHES: &str = "-----";
+    if text.starts_with("PuTTY-User-Key-File-") && text.contains("Private-Lines:") {
+        return true;
+    }
+    let mut rest = text;
+    while let Some(at) = rest.find(BEGIN) {
+        rest = &rest[at + BEGIN.len()..];
+        let Some(label_end) = rest.find(DASHES) else { break };
+        let label = &rest[..label_end];
+        if label.contains('\n') || !label.contains("PRIVATE KEY") {
+            continue;
+        }
+        let body = &rest[label_end + DASHES.len()..];
+        let Some(end) = body.find(&format!("-----END {label}-----")) else { continue };
+        let mut payload = 0;
+        let mut plain = true;
+        for line in body[..end].lines().map(str::trim).filter(|l| !l.is_empty()) {
+            // Encrypted PEM and PGP carry `Key: value` header lines before the body.
+            if line.contains(':') {
+                continue;
+            }
+            plain &= line.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'=' | b'-' | b'_'));
+            payload += line.len();
+        }
+        if plain && payload >= MIN_KEY_BODY {
+            return true;
+        }
+    }
+    false
+}
+
+/// A real key body is hundreds of characters; this only separates one from the placeholders in prose and tests.
+const MIN_KEY_BODY: usize = 32;
+
+/// The kind of the first access token in `text`: GitHub (`ghp_`, `github_pat_`), AWS (`AKIA`) or Slack (`xoxb-`).
+fn token_kind(text: &str) -> Option<&'static str> {
+    let tokens = [("GitHub", "ghp_", 36, 36), ("GitHub", "github_pat_", 22, usize::MAX), ("AWS", "AKIA", 16, 16), ("Slack", "xoxb-", 20, usize::MAX)];
+    for (kind, prefix, min, max) in tokens {
+        for (at, _) in text.match_indices(prefix) {
+            // Part of a longer word (`MAKIA...`) is not a token.
+            let before = text[..at].chars().next_back();
+            if before.is_some_and(|c| c.is_ascii_alphanumeric()) {
+                continue;
+            }
+            let body = text[at + prefix.len()..]
+                .bytes()
+                .take_while(|b| match prefix {
+                    "AKIA" => b.is_ascii_uppercase() || b.is_ascii_digit(),
+                    "xoxb-" => b.is_ascii_alphanumeric() || *b == b'-',
+                    _ => b.is_ascii_alphanumeric() || *b == b'_',
+                })
+                .count();
+            if body >= min && body <= max {
+                return Some(kind);
+            }
+        }
+    }
+    None
 }
 
 /// The rule for `rel` (a path under the folder, with `/`), a folder when `is_dir`. `top` is false inside
@@ -170,8 +262,69 @@ mod tests {
         for name in ["id_ed25519.pub", "id_map.json", "keymap.json", "monkey.json", "README.md", "environment.json"] {
             assert_ne!(keep(name, false), Rule::Secret, "{name}");
         }
-        assert!(holds_private_key(b"x\n-----BEGIN OPENSSH PRIVATE KEY-----\nabc"));
-        assert!(!holds_private_key(b"-----BEGIN CERTIFICATE-----"));
+    }
+
+    const KEY_BODY: &str = "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZWQyNTUxOQ";
+
+    #[test]
+    fn more_secret_names_are_caught() {
+        for name in ["putty.ppk", "AuthKey.p8", "secrets.json", "secret.txt", "Secrets.YAML", "secret.json"] {
+            assert_eq!(keep(name, false), Rule::Secret, "{name}");
+        }
+        for name in ["secretary.txt", "secret", "my-secrets-list.md", "secrets"] {
+            assert_ne!(keep(name, false), Rule::Secret, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_whole_private_key_block_is_found_whatever_the_name() {
+        let pem = format!("x\n-----BEGIN OPENSSH PRIVATE KEY-----\n{KEY_BODY}\n-----END OPENSSH PRIVATE KEY-----\n");
+        let pgp = format!("-----BEGIN PGP PRIVATE KEY BLOCK-----\nVersion: GnuPG\n\n{KEY_BODY}\n=abcd\n-----END PGP PRIVATE KEY BLOCK-----");
+        let ppk = "PuTTY-User-Key-File-3: ssh-ed25519\nEncryption: none\nPrivate-Lines: 1\nPrivate-MAC: 00";
+        for (what, data) in [("pem", pem.as_str()), ("pgp", pgp.as_str()), ("ppk", ppk)] {
+            assert_eq!(leak_in("notes.txt", data.as_bytes()), Some(Leak::PrivateKey), "{what}");
+        }
+    }
+
+    #[test]
+    fn talk_about_keys_is_not_a_key() {
+        let begin = "-----BEGIN RSA PRIVATE KEY-----";
+        for text in [
+            format!("starts with {begin}"),
+            format!("{begin} then prose, no end"),
+            format!("{begin}\nnot a body at all, just words\n-----END RSA PRIVATE KEY-----"),
+            format!("{begin}\nabc\n-----END RSA PRIVATE KEY-----"),
+            "-----BEGIN CERTIFICATE-----".to_string(),
+        ] {
+            assert_eq!(leak_in("main.js", text.as_bytes()), None, "{text}");
+        }
+        // Build outputs and documents are never looked at, even with a whole block in them.
+        let whole = format!("{begin}\n{KEY_BODY}\n-----END RSA PRIVATE KEY-----");
+        for name in ["extension.wasm", "extension.js.map", "README.md", "LICENSE", "CHANGELOG", "guide.MD"] {
+            assert_eq!(leak_in(name, whole.as_bytes()), None, "{name}");
+        }
+    }
+
+    #[test]
+    fn obvious_tokens_are_found_in_text_only() {
+        // Built here so no whole token sits in the source for secret scanners to flag.
+        let slack = format!("SLACK={}-1234567890-abcdefghijklmnop", ["xox", "b"].concat());
+        let ghp = format!("token = \"ghp_{}\"", "a1B2".repeat(9));
+        for (text, kind) in [
+            (ghp.as_str(), "GitHub"),
+            ("github_pat_11ABCDEFG0abcdefghijkl_mnopqrstuvwxyz", "GitHub"),
+            ("key=AKIAIOSFODNN7EXAMPLE", "AWS"),
+            (slack.as_str(), "Slack"),
+        ] {
+            assert_eq!(leak_in("config.txt", text.as_bytes()), Some(Leak::Token(kind)), "{text}");
+        }
+        for text in ["ghp_short", "MAKIAIOSFODNN7EXAMPLE", "AKIAlowercaseisnotakey12", "github_pat_x"] {
+            assert_eq!(leak_in("config.txt", text.as_bytes()), None, "{text}");
+        }
+        let mut binary = vec![0xff, 0xfe];
+        binary.extend_from_slice(b"AKIAIOSFODNN7EXAMPLE");
+        assert_eq!(leak_in("blob.bin", &binary), None);
+        assert_eq!(leak_in("README.md", b"AKIAIOSFODNN7EXAMPLE"), None);
     }
 
     #[test]
