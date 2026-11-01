@@ -491,6 +491,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Typing in a large file with every region folded took about twice as long as with nothing folded (22 ms against
+  11 ms a key in a 50 000-line file): the folded lines were worked out again from the fold marks several times per
+  key, and the fold ends were found by looking up every line anew. The folded lines are now kept until the text or
+  the folds change and the fold ends come from one pass over the lines (15 ms a key; moving down 10 ms → 4 ms).
+
 - A command or view answer over 8 MiB fails its request with `invalid: the result is 20 MiB; at most 8 MiB`; it was
   dropped, the request waited until its deadline and the extension was counted as crashed.
 - `cyx test` no longer passes a command that throws, has no handler, or returns any error: an error is an answer only

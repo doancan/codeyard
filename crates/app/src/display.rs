@@ -196,8 +196,13 @@ pub fn line_indent_of(buffer: &Buffer, line: usize, tab: usize) -> Option<usize>
 }
 
 fn line_indent(buffer: &Buffer, line: usize, tab: usize) -> Option<usize> {
+    chars_indent(buffer.rope().line(line).chars(), tab)
+}
+
+/// Indentation width of a line's text; `None` for a blank line.
+fn chars_indent(chars: impl Iterator<Item = char>, tab: usize) -> Option<usize> {
     let mut w = 0;
-    for c in buffer.rope().line(line).chars() {
+    for c in chars {
         match c {
             ' ' => w += 1,
             '\t' => w += tab.max(1),
@@ -234,8 +239,10 @@ fn fold_ends_indent(buffer: &Buffer, headers: &[usize], tab: usize) -> Vec<Optio
     // Stack: (header index, base indent).
     let mut stack: Vec<(usize, usize)> = Vec::new();
     let mut next = 0;
-    for line in first..buffer.len_lines() {
-        let Some(indent) = line_indent(buffer, line, tab) else { continue };
+    // One pass over the lines with the rope's line iterator: looking each line up again is a tree walk per line.
+    let lines = buffer.rope().lines_at(first).take(buffer.len_lines().saturating_sub(first));
+    for (line, text) in (first..).zip(lines) {
+        let Some(indent) = chars_indent(text.chars(), tab) else { continue };
         while stack.last().is_some_and(|&(_, base)| base >= indent) {
             stack.pop();
         }
