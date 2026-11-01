@@ -30,6 +30,10 @@ id = "deploys"
 
 [[hover]]
 languages = ["rust"]
+
+[[diagnostics]]
+id = "lint"
+languages = ["rust", "toml"]
 `;
 
 const extension = {
@@ -38,6 +42,10 @@ const extension = {
     ctx.command("find", (ctx, glob: string) => ctx.findFiles(glob));
     ctx.command("fetch", async (_ctx, url: string) => (await fetch(url)).status);
     ctx.command("status", (ctx, item: { id: string; text: string }) => ctx.setStatusItem({ ...item, tone: "neutral" }));
+    ctx.command("diagnose", (ctx, a: { uri: string; messages: string[] }) =>
+      ctx.setDiagnostics(a.uri, a.messages.map((message) => ({ range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } }, severity: "warning", message }))),
+    );
+    ctx.command("clear", (ctx, uri: string) => ctx.clearDiagnostics(uri));
     ctx.command("huge", () => "x".repeat(20 << 20));
     ctx.command("open", (ctx) => ctx.openExternal("https://example.com/"));
     ctx.hover(async (ctx) => {
@@ -135,4 +143,63 @@ test("an async activate that rejects fails the activation, and requests wait for
     },
   });
   assert.equal(await working.command("read"), "late");
+});
+
+const warned = (h: MockHost, what: string) => h.logs().some(([level, m]) => level === "warn" && m.includes(what));
+
+test("diagnostics follow Codeyard's rules", async (t) => {
+  const h = await host(t);
+  const messages = () => h.diagnostics("src/lib.rs").map((d) => d.message);
+  await h.command("diagnose", { uri: "file:///work/src/lib.rs", messages: ["  unused import ", "", "   "] });
+  assert.deepEqual(messages(), ["unused import"]);
+  assert.ok(warned(h, "2 with an empty message or hidden characters dropped"), JSON.stringify(h.logs()));
+  await h.command("diagnose", { uri: "file:///work/src/lib.rs", messages: ["a\u202eb", "c\u200bd", "line one\n\tline two"] });
+  assert.deepEqual(messages(), ["line one\n\tline two"]);
+  await h.command("diagnose", { uri: "file:///work/src/lib.rs", messages: ["ğ".repeat(5000)] });
+  assert.equal([...messages()[0]!].length, 4097);
+  assert.ok(messages()[0]!.endsWith("…"));
+  await h.command("diagnose", { uri: "file:///work/main.go", messages: ["no"] });
+  assert.deepEqual(h.diagnostics("main.go"), []);
+  assert.ok(warned(h, "does not list its language, go"), JSON.stringify(h.logs()));
+  await h.command("diagnose", { uri: "file:///work/notes.md", messages: ["no"] });
+  assert.ok(warned(h, "does not list its language, plaintext"), "Codeyard has no markdown language id");
+  await h.command("diagnose", { uri: "file:///etc/hosts.rs", messages: ["no"] });
+  assert.deepEqual(h.diagnostics("file:///etc/hosts.rs"), []);
+  assert.ok(warned(h, "neither in the workspace nor open in an editor"));
+  h.activeDocument("file:///elsewhere/lib.rs", "rust", "fn main() {}");
+  await h.command("diagnose", { uri: "file:///elsewhere/lib.rs", messages: ["fine"] });
+  assert.equal(h.diagnostics("file:///elsewhere/lib.rs").length, 1);
+});
+
+test("diagnostics need a declaration and stop at a thousand files", async (t) => {
+  const bare = new MockHost({ manifest: MANIFEST.replace('[[diagnostics]]\nid = "lint"\nlanguages = ["rust", "toml"]\n', "") });
+  t.after(() => bare.dispose());
+  await bare.activate(extension);
+  await bare.command("diagnose", { uri: "file:///work/a.rs", messages: ["x"] });
+  assert.deepEqual(bare.diagnostics("a.rs"), []);
+  assert.ok(warned(bare, "declares no [[diagnostics]]"), JSON.stringify(bare.logs()));
+
+  const h = await host(t);
+  for (let i = 0; i < 1000; i++) await h.command("diagnose", { uri: `file:///work/f${i}.rs`, messages: ["x"] });
+  await h.command("diagnose", { uri: "file:///work/one-too-many.rs", messages: ["x"] });
+  assert.deepEqual(h.diagnostics("one-too-many.rs"), []);
+  assert.ok(warned(h, "1000 files already"));
+  await h.command("diagnose", { uri: "file:///work/f0.rs", messages: ["y"] });
+  assert.equal(h.diagnostics("f0.rs")[0]?.message, "y");
+  await h.command("clear", "file:///work/f1.rs");
+  await h.command("diagnose", { uri: "file:///work/one-too-many.rs", messages: ["x"] });
+  assert.equal(h.diagnostics("one-too-many.rs").length, 1);
+});
+
+test("an extension's own language counts for diagnostics", async (t) => {
+  const h = new MockHost({
+    manifest: MANIFEST.replace('languages = ["rust", "toml"]', 'languages = ["acme"]').replace("[[hover]]", '[[languages]]\nid = "acme"\nextensions = ["acme"]\n\n[[hover]]'),
+  });
+  t.after(() => h.dispose());
+  await h.activate(extension);
+  await h.command("diagnose", { uri: "file:///work/a.acme", messages: ["fine"] });
+  assert.equal(h.diagnostics("a.acme").length, 1, JSON.stringify(h.logs()));
+  await h.command("diagnose", { uri: "file:///work/a.rs", messages: ["no"] });
+  assert.deepEqual(h.diagnostics("a.rs"), []);
+  assert.ok(warned(h, "does not list its language, rust"));
 });

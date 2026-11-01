@@ -343,6 +343,78 @@ codeyard_extension::export!(AllProblems);
     std::fs::remove_dir_all(&root).unwrap();
 }
 
+/// Diagnostics are judged as Codeyard judges them: a `[[diagnostics]]` declaration listing the file's language, a file in
+/// the workspace, messages without hidden characters. Codeyard shows nothing otherwise, so `cyx test` fails.
+#[test]
+fn cyx_test_fails_diagnostics_codeyard_would_not_show() {
+    let Some(exthost) = toolchain() else { return };
+    let root = tmp("marks");
+    let dir = root.join("marker");
+    scaffold::create_with(&dir, Kind::Command, "marker", "you", Some(&repo().to_string_lossy())).unwrap();
+    let manifest_path = dir.join(ext_manifest::FILE_NAME);
+    let base = std::fs::read_to_string(&manifest_path).unwrap();
+    let mut more = String::new();
+    for id in ["fine", "other-language", "hidden", "outside", "read-outside", "fetch-ip"] {
+        more.push_str(&format!("\n[[commands]]\nid    = \"{id}\"\ntitle = \"{id}\"\n"));
+    }
+    let declared = format!("{base}{more}\n[permissions]\nread = [\"src/lib.rs\"]\nnet  = [\"api.example.com\"]\n");
+    let code = r#"use codeyard_extension::prelude::*;
+
+struct Marker;
+
+fn mark(ctx: &Context, file: &str, message: &str) {
+    let folder = ctx.folders().first().cloned().unwrap_or_default();
+    let d = Diagnostic::new(Range::line(0, 0, 1), DiagnosticSeverity::Warning, message);
+    ctx.set_diagnostics(&format!("{folder}/{file}"), &[d]);
+}
+
+impl Extension for Marker {
+    fn activate(ctx: Context) -> Result<()> {
+        ctx.command("hello", async |_ctx, _args| Ok(()));
+        ctx.command("fine", async |ctx, _args| Ok(mark(&ctx, "src/lib.rs", "unused import")));
+        ctx.command("other-language", async |ctx, _args| Ok(mark(&ctx, "Cargo.toml", "odd")));
+        ctx.command("hidden", async |ctx, _args| Ok(mark(&ctx, "src/lib.rs", "safe\u{202e}evil")));
+        ctx.command("outside", async |ctx, _args| {
+            ctx.set_diagnostics("file:///etc/hosts.rs", &[Diagnostic::new(Range::line(0, 0, 1), DiagnosticSeverity::Hint, "x")]);
+            Ok(())
+        });
+        // What no manifest entry can allow: a file outside the workspace, a request to an IP address.
+        ctx.command("read-outside", async |ctx, _args| Ok(ctx.read_text("file:///etc/passwd").await.is_err()));
+        ctx.command("fetch-ip", async |ctx, _args| Ok(ctx.fetch(Request::get("https://127.0.0.1/")).await.is_err()));
+        Ok(())
+    }
+}
+
+codeyard_extension::export!(Marker);
+"#;
+    std::fs::write(dir.join("src/lib.rs"), code).unwrap();
+    std::fs::copy(repo().join("examples/extensions/hello-command/Cargo.lock"), dir.join("Cargo.lock")).unwrap();
+    // The components are the same whatever `[[diagnostics]]` says: build once, test with each manifest.
+    std::fs::write(&manifest_path, &declared).unwrap();
+    build::build_in(&dir, Some(&target_dir())).unwrap();
+    let run_with = |text: &str| {
+        std::fs::write(&manifest_path, text).unwrap();
+        let manifest = build::manifest(&dir).unwrap();
+        harness::run(&dir, &manifest, &exthost, &Default::default()).unwrap().failures.join("\n")
+    };
+    let none = run_with(&declared);
+    assert!(none.contains("set-diagnostics on") && none.contains("the manifest declares no [[diagnostics]]"), "{none}");
+    assert!(none.contains(r#"= fix: add [[diagnostics]] with languages = ["rust"]"#), "{none}");
+    let listed = run_with(&format!("{declared}\n[[diagnostics]]\nid        = \"lint\"\nlanguages = [\"rust\"]\n"));
+    assert!(listed.contains("Cargo.toml is refused by Codeyard: [[diagnostics]] does not list its language, toml"), "{listed}");
+    assert!(listed.contains(r#"= fix: add "toml" to the languages of [[diagnostics]]"#), "{listed}");
+    assert!(listed.contains("Codeyard drops 1 of 1 diagnostics"), "{listed}");
+    assert!(listed.contains("file:///etc/hosts.rs is refused by Codeyard: it is neither in the workspace nor open in an editor"), "{listed}");
+    assert_eq!(listed.matches("src/lib.rs is refused").count(), 0, "{listed}");
+    // No line to add for what no entry allows: the fix says so, as the SDKs do.
+    assert!(listed.contains("workspace/read-file is refused, and no permission can allow it"), "{listed}");
+    assert!(listed.contains("= fix: none: this cannot be granted, the file is outside the workspace"), "{listed}");
+    assert!(listed.contains("net/fetch is refused, and no permission can allow it"), "{listed}");
+    assert!(listed.contains("= fix: none: this cannot be granted, it is an IP address, and net lists host names only"), "{listed}");
+    assert!(!listed.contains("unused import"), "the fine command is not a failure: {listed}");
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
 /// An `async activate` that rejects after an `await` fails the activation; a command that throws is a failure, not an
 /// answer; the JavaScript engine's own file is named without the folder it was built in.
 #[test]

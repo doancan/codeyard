@@ -57,7 +57,21 @@ import type {
 import { fromWitCodeLens, fromWitDiagnostic, toWitCodeLens, toWitDiagnostic } from "../types.ts";
 import type * as W from "../wit.ts";
 import { allowsNet, permissionsOf, type Permissions } from "./permissions.ts";
-import { checkStatusItem, checkUrl, globsAllow, ipAddressLine, LIMITS, outsideLine, pathMatches, relative as relativeTo, resultTooLarge } from "./rules.ts";
+import {
+  checkDiagnosticsTarget,
+  checkStatusItem,
+  checkUrl,
+  globsAllow,
+  ipAddressLine,
+  languageId,
+  LIMITS,
+  normalize as normalizePath,
+  outsideLine,
+  pathMatches,
+  relative as relativeTo,
+  resultTooLarge,
+  shownDiagnosticMessage,
+} from "./rules.ts";
 import { parseToml, type Table } from "./toml.ts";
 import { checkEvent, checkView } from "./view-check.ts";
 
@@ -133,6 +147,10 @@ export class MockHost {
   #permissions: Permissions | undefined;
   /** The local ids of the manifest's `[[status-bar]]` items; undefined without a manifest. */
   #statusIds: string[] | undefined;
+  /** The manifest's own `[[languages]]`, which name files no built-in language claims. */
+  #ownLanguages: { id: string; extensions: string[]; filenames: string[] }[] = [];
+  /** The `languages` of each of the manifest's `[[diagnostics]]`; undefined without a manifest. */
+  #diagnosticLanguages: string[][] | undefined;
   /** The request being handled is a user action: it may open links. */
   #userAction = false;
   #pumping: Promise<void> | undefined;
@@ -208,6 +226,8 @@ export class MockHost {
   #allowAll(): MockHost {
     this.#permissions = undefined;
     this.#statusIds = undefined;
+    this.#diagnosticLanguages = undefined;
+    this.#ownLanguages = [];
     return this;
   }
 
@@ -217,6 +237,10 @@ export class MockHost {
     this.#permissions = permissionsOf(m);
     const bar = (Array.isArray(m["status-bar"]) ? m["status-bar"] : []) as Table[];
     this.#statusIds = bar.map((b) => String(b.id));
+    const list = (v: unknown) => (Array.isArray(v) ? v.map(String) : []);
+    this.#ownLanguages = ((Array.isArray(m.languages) ? m.languages : []) as Table[]).map((l) => ({ id: String(l.id), extensions: list(l.extensions), filenames: list(l.filenames) }));
+    const diagnostics = (Array.isArray(m.diagnostics) ? m.diagnostics : []) as Table[];
+    this.#diagnosticLanguages = diagnostics.map((d) => (Array.isArray(d.languages) ? (d.languages as unknown[]).map(String) : []));
     this.#oauth.clear();
     for (const o of (Array.isArray(m.oauth) ? m.oauth : []) as Table[]) {
       const hosts = Array.isArray(o.hosts) ? (o.hosts as unknown[]).map(String) : [];
@@ -818,6 +842,35 @@ export class MockHost {
     return Object.fromEntries(this.#secrets);
   }
 
+  /**
+   * As Codeyard: refused with a warning in the extension's log (`logs()`) unless the manifest declares `[[diagnostics]]`
+   * for the file's language and the file is in the workspace or open; messages that could disguise what they say are
+   * dropped, long ones cut, and one extension has diagnostics on at most `DIAGNOSTIC_FILES` files.
+   */
+  #setDiagnostics(uri: string, diagnostics: W.Diagnostic[]): void {
+    const doc = this.#documents.get(uri) ?? (this.#active?.uri === uri ? this.#active : undefined);
+    // By the file's name, wherever it is, as Codeyard does (it gives an open document the language of its file name too,
+    // whatever the test said it was).
+    const language = languageId(this.#ownLanguages, normalizePath(uri) ?? "");
+    const others = [...this.#diagnostics.keys()].filter((u) => u !== uri).length;
+    const why = checkDiagnosticsTarget(this.#diagnosticLanguages, language, relative(uri) !== undefined || doc !== undefined, others);
+    if (why !== undefined) {
+      this.#logs.push(["warn", `set-diagnostics on ${uri} refused: ${why}`]);
+      return;
+    }
+    const kept: Diagnostic[] = [];
+    for (const d of diagnostics.map(fromWitDiagnostic)) {
+      const m = shownDiagnosticMessage(d.message);
+      if (m) kept.push({ ...d, message: m.shown });
+    }
+    if (kept.length < diagnostics.length) {
+      this.#logs.push(["warn", `set-diagnostics on ${uri}: ${diagnostics.length - kept.length} with an empty message or hidden characters dropped`]);
+    }
+    kept.length = Math.min(kept.length, LIMITS.MARKS_PER_FILE);
+    if (kept.length === 0) this.#diagnostics.delete(uri);
+    else this.#diagnostics.set(uri, kept);
+  }
+
   /** The status bar items the extension set, by id. */
   statusItems(): Record<string, StatusItem> {
     return Object.fromEntries(this.#statusItems);
@@ -1119,7 +1172,7 @@ export class MockHost {
         setSelections: (uri, selections) => this.#start("documents/set-selections", [uri, selections], () => [[], done]),
       },
       languages: {
-        setDiagnostics: (uri, diagnostics) => void this.#diagnostics.set(uri, diagnostics.map(fromWitDiagnostic)),
+        setDiagnostics: (uri, diagnostics) => this.#setDiagnostics(uri, diagnostics),
         clearDiagnostics: (uri) => (uri === undefined ? this.#diagnostics.clear() : void this.#diagnostics.delete(uri)),
         setDecorations: () => {},
       },

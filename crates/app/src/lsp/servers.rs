@@ -322,6 +322,10 @@ mod tests {
             seen.insert(crate::snippets::lang_of_path(f));
         }
         assert_eq!(seen.into_iter().collect::<Vec<_>>(), ext_manifest::LANGUAGE_IDS);
+        // The mock hosts and `cyx test` decide a file's language with the manifest crate's copy of the table.
+        for f in files.iter().chain(&["a.mjs", "b/c.PY", "x.hxx", "Rakefile", "a.gemspec", "a.phtml", "a.yml", "a.zzz", "noext", "dir.d/noext"]) {
+            assert_eq!(ext_manifest::builtin_language(f), language_of(f).map(|(id, _)| id).filter(|_| crate::ext::language_for(f).is_none()), "{f}");
+        }
     }
 
     #[test]
