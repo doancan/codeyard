@@ -6,7 +6,8 @@
 //!   pre-release the user opted into). **Update now** skips the wait.
 //! - A yanked installed version goes back to the newest earlier one at once; that is not an update, so `off` does not
 //!   stop it.
-//! - A revoked installed version stops (with its dependents, see [`crate::stopped`]) until a newer version replaces it.
+//! - A revoked installed version stops (with its dependents, see [`crate::stopped`]) until another version replaces it:
+//!   a newer one that may install now, else the newest earlier one that is not withdrawn, as for a yanked version.
 
 use ext_manifest::ExtId;
 use serde::{Deserialize, Serialize};
@@ -62,7 +63,7 @@ pub enum Standing {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Next {
     Nothing,
-    /// The installed version was yanked: go back to this one now.
+    /// The installed version was yanked or revoked: go back to this one now.
     RollBack(Release),
     /// A newer version, which may install by itself from `ready_at` (Unix seconds) on.
     Update {
@@ -97,8 +98,10 @@ pub fn check(index: &Index, id: &ExtId, locked: &Locked, now: u64) -> Check {
     let newer = index.latest(id, locked.pre_release).filter(|r| r.version > locked.version);
     let update = newer.map(|r| Next::Update { release: r.clone(), ready_at: ready_at(r) });
     let next = match (&standing, update) {
-        // A yanked version is left at once: forward when the newer one may install now, else back.
-        (Standing::Yanked, update) if !update.as_ref().is_some_and(|u| matches!(u, Next::Update { ready_at, .. } if *ready_at <= now)) => {
+        // A yanked or revoked version is left at once: forward when the newer one may install now, else back.
+        (Standing::Yanked | Standing::Revoked { .. }, update)
+            if !update.as_ref().is_some_and(|u| matches!(u, Next::Update { ready_at, .. } if *ready_at <= now)) =>
+        {
             let versions = index.extensions.get(id).map(|e| e.versions.as_slice()).unwrap_or_default();
             let earlier = versions
                 .iter()

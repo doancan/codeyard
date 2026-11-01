@@ -126,6 +126,51 @@ fn daemon_stops_on_sigterm_even_if_parent_ignored_it() {
     }
 }
 
+/// Started from a thread that blocks SIGTERM (as macOS dispatch threads do, where the app starts its terminal daemon),
+/// the daemon still stops on SIGTERM: the signal mask is inherited across exec, so the daemon clears it.
+#[test]
+fn daemon_stops_on_sigterm_even_if_its_starter_blocked_it() {
+    let dir = std::env::temp_dir().join(format!("codeyard-mask-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let sock = dir.join("d.sock");
+    let agent = env!("CARGO_BIN_EXE_codeyard-agent").to_string();
+    let s = sock.clone();
+    // A thread of its own, so the mask stays with it.
+    std::thread::spawn(move || {
+        // SAFETY: plain libc calls on a set on this thread's stack; the mask is this thread's only.
+        unsafe {
+            let mut set: libc::sigset_t = std::mem::zeroed();
+            libc::sigemptyset(&mut set);
+            libc::sigaddset(&mut set, libc::SIGTERM);
+            libc::sigaddset(&mut set, libc::SIGINT);
+            assert_eq!(libc::pthread_sigmask(libc::SIG_BLOCK, &set, std::ptr::null_mut()), 0);
+        }
+        let mut c = Command::new(&agent).arg("--attach").arg(&s).stdin(Stdio::piped()).stdout(Stdio::null()).spawn().unwrap();
+        drop(c.stdin.take());
+        let _ = c.wait();
+    })
+    .join()
+    .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !sock.exists() {
+        assert!(Instant::now() < deadline, "daemon did not start");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let pids = Command::new("pgrep").arg("-f").arg(format!("codeyard-agent --daemon {}", sock.display())).output().unwrap();
+    let pid = String::from_utf8_lossy(&pids.stdout).trim().lines().next().unwrap_or_default().to_string();
+    assert!(!pid.is_empty());
+    assert!(Command::new("kill").arg(&pid).status().unwrap().success());
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Command::new("kill").arg("-0").arg(&pid).status().unwrap().success() {
+        if Instant::now() >= deadline {
+            let _ = Command::new("kill").arg("-9").arg(&pid).status();
+            panic!("daemon did not stop on SIGTERM");
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
 /// Also works when the unix socket path limit (~104 bytes) is exceeded (long home directory or
 /// CODEYARD_REMOTE_DIR). Caught by the real ssh test.
 #[test]

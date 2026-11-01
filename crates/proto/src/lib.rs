@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 pub const EXCLUSIVE_SESSION: &str = "x-";
 
 /// Compared in the handshake; on mismatch the agent is reinstalled.
-pub const VERSION: u32 = 17;
+pub const VERSION: u32 = 18;
 
 /// Max size of one frame. Larger files are read in chunks.
 pub const MAX_FRAME: usize = 64 * 1024 * 1024;
@@ -217,6 +217,12 @@ pub enum Request {
     KeepFor {
         secs: u64,
     },
+    /// Where each path really is (`RealPaths`): every symbolic link followed, the link at the end too when its target
+    /// does not exist, and missing parts appended to their nearest existing folder, so a check on the answer holds for
+    /// what reading or writing the path would reach. One result per path, in order.
+    RealPaths {
+        paths: Vec<String>,
+    },
 }
 
 /// What `TaskSpawn` runs.
@@ -375,6 +381,7 @@ pub enum Response {
         dropped: u64,
     },
     PtyList(Vec<u32>),
+    RealPaths(Vec<std::result::Result<String, Error>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

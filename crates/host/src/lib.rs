@@ -391,6 +391,15 @@ pub trait Host: Send + Sync + 'static {
         }
     }
 
+    /// Where each path really is, every symbolic link followed (`Request::RealPaths`): one result per path, in order.
+    fn real_paths(&self, paths: Vec<String>) -> Result<Vec<std::result::Result<String, proto::Error>>> {
+        let n = paths.len();
+        match self.call(Request::RealPaths { paths })? {
+            Response::RealPaths(list) if list.len() == n => Ok(list),
+            other => Err(unexpected(other)),
+        }
+    }
+
     /// Files under the root (relative), honouring .gitignore.
     fn list_files(&self, root: &str, limit: u32) -> Result<FileList> {
         match self.call(Request::ListFiles { root: root.into(), limit })? {

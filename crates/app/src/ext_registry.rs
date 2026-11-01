@@ -324,9 +324,10 @@ pub fn fetch_target(cfg_dir: &Path, registries: &[Registry], id: &ext_manifest::
     store.add_target(id, &d.bytes).map_err(|e| e.to_string())
 }
 
-/// `codeyard --install-extension publisher.name[@version]`: running it is the consent, but a changed publisher or a
-/// stale index needs the Extensions view, where the user sees why.
-pub fn install_from_command_line(cfg_dir: &Path, registries: &[Registry], spec: &str) -> Result<ext_manifest::Manifest, String> {
+/// `codeyard --install-extension publisher.name[@version]`: a version that asks for permissions installs only with
+/// `accepted` (`--accept-permissions`), after its sheet was printed; a changed publisher or a stale index needs the
+/// Extensions view, where the user sees why.
+pub fn install_from_command_line(cfg_dir: &Path, registries: &[Registry], spec: &str, accepted: bool) -> Result<ext_manifest::Manifest, String> {
     let found = find(cfg_dir, registries, spec, ext_manifest::this_target().unwrap_or("unknown"), now())?;
     if let Pin::Changed { was } = &found.pin {
         return Err(crate::i18n::tf(
@@ -337,6 +338,8 @@ pub fn install_from_command_line(cfg_dir: &Path, registries: &[Registry], spec: 
     if found.stale {
         return Err(crate::i18n::tf("the {} registry's list is more than 3 days old; install from the Extensions view to confirm", &[&found.registry.name]));
     }
+    let source = ext_core::Source::Registry { registry: found.registry.name.clone(), publisher: found.download.signed.publisher.clone() };
+    crate::ext::command_line_consent(&found.download.manifest, &source, accepted)?;
     install(cfg_dir, &found).map(|i| i.manifest)
 }
 

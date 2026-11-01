@@ -292,7 +292,13 @@ signed package; a language server wrapper is therefore a normal High-risk extens
 - **Wasm.** A component can call only what it imports; imports must fit permissions. One function in `ext-pkg`
   checks this and is called by `cyx`, the registry and the installer. Revoked permissions link to stubs.
 - **Broker (app).** Every file, network, process, account and command call is checked against
-  grants ∩ workspace trust, then the path, host or program, before `Host` is called.
+  grants ∩ workspace trust, then the path, host or program, before `Host` is called. A path is checked as written
+  and again where it really leads: the workspace's host resolves it with every symbolic link followed
+  (`RealPaths`, protocol 18), the result must be inside a workspace root and match the rules too, and the call
+  reaches that resolved path. So a link in the workspace cannot reach a file outside it (`src/out -> /etc`) or a
+  file the globs leave out (`src/settings.txt -> ../.env`, which must be named); listings and search results leave
+  such files out. A path outside the workspace, or an IP address for `net`, cannot be granted at all, and the
+  denial says so instead of naming a line to add.
 - **Processes.** The broker resolves the program to an absolute path on the target host, refuses paths under
   a workspace root, and passes an explicit environment (on Unix hosts the program runs under `env -i` with only
   the variables the extension passed and a minimal PATH, HOME and LANG; the agent needs nothing new).

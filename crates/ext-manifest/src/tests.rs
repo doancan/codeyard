@@ -866,6 +866,20 @@ fn scm_providers_claim_folders_by_marker_and_start_the_extension_there() {
     assert_eq!(codes(&with(&format!("{code}[[scm]]\nid = \"hg\"\nmarkers = [\".hg\"]\n"))), vec![Code::Syntax]);
 }
 
+#[test]
+fn a_denial_no_entry_can_lift_names_its_reason() {
+    let line = crate::ungrantable_line("read file:///etc/passwd", "the file is outside the workspace");
+    assert_eq!(line, "read file:///etc/passwd (cannot be granted: the file is outside the workspace)");
+    assert_eq!(crate::parse_ungrantable_line(&line), Some(("read file:///etc/passwd", "the file is outside the workspace")));
+    assert_eq!(crate::parse_ungrantable_line("net = [\"api.example.com\"]"), None);
+    for ip in ["127.0.0.1", "[::1]", "::1", "127.1", "2130706433", "0x7f.1", "0x7f.0x1", "10.0.0.256"] {
+        assert!(crate::is_ip_address(ip), "{ip}");
+    }
+    for name in ["api.example.com", "1password.com", "x1.example.org", "a.b.c0m"] {
+        assert!(!crate::is_ip_address(name), "{name}");
+    }
+}
+
 /// `net-from-setting`: a string setting names the server; the sheet says so, and it counts as sending.
 #[test]
 fn net_from_setting_names_a_string_setting() {

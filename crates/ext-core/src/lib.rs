@@ -488,10 +488,14 @@ impl Store {
     }
 
     /// Record what the indexes say: `Some` marks a digest revoked, `None` clears it. Digests no version in the lock
-    /// refers to any more are dropped. Returns whether the file changed.
+    /// refers to any more are dropped; while the lock cannot be read (a hand edit), those of the packages in the store
+    /// are kept instead, so a revocation never waits for the lock to be fixed. Returns whether the file changed.
     pub fn set_revoked(&self, changes: &[(ContentDigest, Option<Revoked>)]) -> Result<bool, Error> {
         let _guard = self.guard()?;
-        let (lock, _) = self.read_lock()?;
+        let keep: BTreeSet<String> = match self.read_lock() {
+            Ok((lock, _)) => lock.digests().map(|d| d.hex()).collect(),
+            Err(_) => self.packages().iter().map(ContentDigest::hex).collect(),
+        };
         let before = self.revoked();
         let mut map = before.clone();
         for (d, r) in changes {
@@ -500,7 +504,6 @@ impl Store {
                 None => map.remove(&d.hex()),
             };
         }
-        let keep: BTreeSet<String> = lock.digests().map(|d| d.hex()).collect();
         map.retain(|d, _| keep.contains(d));
         if map == before {
             return Ok(false);
@@ -572,6 +575,13 @@ impl Store {
                 }
             }
         }
+    }
+
+    /// The content digests of the packages in the store, whatever the lock says: what a revocation is checked against
+    /// when the lock cannot be read.
+    pub fn packages(&self) -> Vec<ContentDigest> {
+        let Ok(entries) = std::fs::read_dir(self.root.join("store")) else { return Vec::new() };
+        entries.flatten().filter_map(|e| ContentDigest::parse(&e.file_name().to_string_lossy())).collect()
     }
 
     /// Every installed extension's lock entry, by id.

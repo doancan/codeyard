@@ -48,7 +48,13 @@ pub(super) struct AccountsState {
 impl Default for AccountsState {
     fn default() -> Self {
         let (tx, rx) = mpsc::channel();
-        let keychain: Arc<dyn Keychain> = if cfg!(test) { Arc::new(acc::MemoryKeychain::default()) } else { Arc::new(WindowKeychain(Mutex::new(tx))) };
+        let keychain: Arc<dyn Keychain> = if cfg!(test) {
+            Arc::new(acc::MemoryKeychain::default())
+        } else {
+            // A profile with its own state folder keeps its own entries (`acc::profile_key`).
+            let profile = std::env::var_os("CODEYARD_STATE_DIR").map(|d| std::path::absolute(&d).unwrap_or_else(|_| d.into()));
+            Arc::new(WindowKeychain { ops: Mutex::new(tx), profile })
+        };
         AccountsState {
             keychain,
             keychain_rx: Some(rx),
@@ -89,12 +95,20 @@ enum KeychainOp {
 
 /// The system keychain, reached through the window: GPUI's credential calls need the app, and accounts are used from
 /// background threads.
-struct WindowKeychain(Mutex<mpsc::Sender<KeychainOp>>);
+struct WindowKeychain {
+    ops: Mutex<mpsc::Sender<KeychainOp>>,
+    /// `CODEYARD_STATE_DIR`, when set: this profile's entries are kept apart from the user's (`acc::profile_key`).
+    profile: Option<std::path::PathBuf>,
+}
 
 impl WindowKeychain {
+    fn key(&self, key: &str) -> String {
+        acc::profile_key(key, self.profile.as_deref())
+    }
+
     fn ask<T>(&self, op: impl FnOnce(mpsc::Sender<Result<T, String>>) -> KeychainOp) -> Result<T, String> {
         let (tx, rx) = mpsc::channel();
-        self.0.lock().unwrap_or_else(|p| p.into_inner()).send(op(tx)).map_err(|_| crate::i18n::t("the window closed").to_string())?;
+        self.ops.lock().unwrap_or_else(|p| p.into_inner()).send(op(tx)).map_err(|_| crate::i18n::t("the window closed").to_string())?;
         // The system may ask the user to unlock the keychain first.
         rx.recv_timeout(Duration::from_secs(120)).map_err(|_| crate::i18n::t("the keychain did not answer").to_string())?
     }
@@ -102,13 +116,13 @@ impl WindowKeychain {
 
 impl Keychain for WindowKeychain {
     fn read(&self, key: &str) -> Result<Option<Vec<u8>>, String> {
-        self.ask(|tx| KeychainOp::Read(key.to_string(), tx))
+        self.ask(|tx| KeychainOp::Read(self.key(key), tx))
     }
     fn write(&self, key: &str, value: &[u8]) -> Result<(), String> {
-        self.ask(|tx| KeychainOp::Write(key.to_string(), value.to_vec(), tx))
+        self.ask(|tx| KeychainOp::Write(self.key(key), value.to_vec(), tx))
     }
     fn delete(&self, key: &str) -> Result<(), String> {
-        self.ask(|tx| KeychainOp::Delete(key.to_string(), tx))
+        self.ask(|tx| KeychainOp::Delete(self.key(key), tx))
     }
 }
 

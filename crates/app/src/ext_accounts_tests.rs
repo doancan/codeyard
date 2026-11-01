@@ -218,3 +218,17 @@ fn a_second_codeyard_hands_the_callback_to_the_running_one() {
     assert!(forward_callback("codeyard://other", &file).is_err(), "only sign-in answers are handed over");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// #6 of the outside-author trials: a profile with its own state folder (`CODEYARD_STATE_DIR`) keeps its keychain
+/// entries apart from the user's; the user's own keys are unchanged.
+#[test]
+fn a_profile_with_its_own_state_folder_has_its_own_keychain_entries() {
+    let key = "codeyard-ext:0123456789ab/you.deploy/secret/token";
+    assert_eq!(profile_key(key, None), key, "the user's profile keeps the keys it always had");
+    let test = profile_key(key, Some(std::path::Path::new("/tmp/run-1/state")));
+    let other = profile_key(key, Some(std::path::Path::new("/tmp/run-2/state")));
+    assert!(test.starts_with("codeyard-ext@") && test.ends_with(":0123456789ab/you.deploy/secret/token"), "{test}");
+    assert_ne!(test, key);
+    assert_ne!(test, other, "two profiles do not share entries either");
+    assert_eq!(test, profile_key(key, Some(std::path::Path::new("/tmp/run-1/state"))), "stable across starts");
+}

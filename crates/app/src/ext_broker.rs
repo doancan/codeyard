@@ -65,7 +65,7 @@ impl Scope {
     }
 
     pub fn may_read(&self, path: &str) -> Result<String, v::Error> {
-        let rel = self.relative(path).ok_or_else(|| outside(path))?;
+        let rel = self.relative(path).ok_or_else(|| outside("read", path))?;
         if Self::allowed(&self.permissions.read, &rel) {
             Ok(normalize(path).unwrap_or_default())
         } else {
@@ -74,7 +74,7 @@ impl Scope {
     }
 
     pub fn may_write(&self, path: &str) -> Result<String, v::Error> {
-        let rel = self.relative(path).ok_or_else(|| outside(path))?;
+        let rel = self.relative(path).ok_or_else(|| outside("write", path))?;
         if Self::allowed(&self.permissions.write, &rel) {
             Ok(normalize(path).unwrap_or_default())
         } else {
@@ -134,8 +134,79 @@ impl Scope {
     }
 }
 
-fn outside(path: &str) -> v::Error {
-    v::Error::Denied(v::Denied { permission: format!("a path inside the workspace (not {path})"), why: v::Why::NotDeclared })
+/// No entry reaches outside the workspace, so the denial says that instead of a line to add.
+fn outside(kind: &str, path: &str) -> v::Error {
+    let reason = "the file is outside the workspace, and extensions reach only files inside its folders";
+    v::Error::Denied(v::Denied { permission: ext_manifest::ungrantable_line(&format!("{kind} {path}"), reason), why: v::Why::NotDeclared })
+}
+
+/// A path inside the workspace whose symbolic links lead out of it.
+fn leads_outside(kind: &str, path: &str, real: &str) -> v::Error {
+    let reason = format!("it leads through a symbolic link to {real}, outside the workspace, and extensions reach only files inside its folders");
+    v::Error::Denied(v::Denied { permission: ext_manifest::ungrantable_line(&format!("{kind} {path}"), &reason), why: v::Why::NotDeclared })
+}
+
+/// The workspace as it is on the host's disk. A path is allowed as written (`Scope::may_read` …) and then again where it
+/// really leads, every symbolic link followed on the workspace's host: a link inside the workspace must not reach out of
+/// it (`src/link-out -> /etc`), or a file the rules do not allow (`src/settings.txt -> ../.env`, which must be named).
+/// The call then reaches the resolved path, so what was checked is what is read or written.
+struct OnDisk {
+    /// The scope with its roots where they really are.
+    scope: Scope,
+}
+
+impl OnDisk {
+    /// Resolve the roots and `paths` in one round trip to the host.
+    fn resolve(host: &dyn Host, scope: &Scope, paths: &[String]) -> (OnDisk, Vec<Result<String, v::Error>>) {
+        let mut ask = scope.roots.clone();
+        ask.extend(paths.iter().cloned());
+        let mut answers: Vec<Result<String, v::Error>> = match host.real_paths(ask) {
+            Ok(list) => list.into_iter().map(|r| r.map_err(|e| host_error(host::HostError::Op(e)))).collect(),
+            Err(e) => {
+                let e = host_error(e);
+                std::iter::repeat_with(|| Err(e.clone())).take(scope.roots.len() + paths.len()).collect()
+            }
+        };
+        let rest = answers.split_off(scope.roots.len());
+        // A root that cannot be resolved is left out: nothing is allowed through it.
+        let roots = answers.into_iter().filter_map(|r| r.ok().and_then(|r| normalize(&r))).collect();
+        let real = rest.into_iter().map(|r| r.and_then(|p| normalize(&p).ok_or(v::Error::NotFound(p)))).collect();
+        (OnDisk { scope: Scope { roots, ..scope.clone() } }, real)
+    }
+
+    /// `path` (allowed as written) where it really is, allowed there too: by `read` or by `write`.
+    fn check(&self, write: bool, path: &str, real: Result<String, v::Error>) -> Result<String, v::Error> {
+        let real = real?;
+        let kind = if write { "write" } else { "read" };
+        if self.scope.relative(&real).is_none() {
+            return Err(leads_outside(kind, path, &real));
+        }
+        if write { self.scope.may_write(&real) } else { self.scope.may_read(&real) }
+    }
+
+    /// `path` checked as [`check`](Self::check), with one round trip of its own.
+    fn one(host: &dyn Host, scope: &Scope, write: bool, path: &str) -> Result<String, v::Error> {
+        let (disk, mut real) = Self::resolve(host, scope, &[path.to_string()]);
+        disk.check(write, path, real.remove(0))
+    }
+
+    /// The entry `path` names (allowed as written), not what it points to, for a delete or rename: its folder where it
+    /// really is, then its name, so deleting a link removes the link and renaming one moves it.
+    fn entry(host: &dyn Host, scope: &Scope, path: &str) -> Result<String, v::Error> {
+        let (folder, name) = path.rsplit_once('/').ok_or_else(|| outside("write", path))?;
+        // `/` and `C:/` keep their slash.
+        let folder = if folder.is_empty() || folder.ends_with(':') { format!("{folder}/") } else { folder.to_string() };
+        let (disk, mut real) = Self::resolve(host, scope, &[folder]);
+        let real = real.remove(0).map(|f| format!("{}/{name}", f.trim_end_matches('/')));
+        disk.check(true, path, real)
+    }
+}
+
+/// `may_read`, then the same check where `uri` really leads on the host (symbolic links followed): what a core command
+/// that opens a file needs. Blocking: run it on a background thread.
+pub fn may_read_on_disk(host: &dyn Host, scope: &Scope, uri: &str) -> Result<String, v::Error> {
+    let path = scope.may_read(uri)?;
+    OnDisk::one(host, scope, false, &path).map(|_| path)
 }
 
 /// A `file://` URI or a plain path → an absolute path with `/` separators and no `.`/`..` parts, or none.
@@ -206,45 +277,59 @@ pub trait Sink: Send + Sync {
 /// workbench (notices, documents, commands, clipboard, terminal) or another component (`net`, `auth`).
 pub fn run(host: &dyn Host, scope: &Scope, call: &Start, sink: &dyn Sink, cancel: &AtomicBool) -> Option<Completion> {
     let done = |r: Result<Completion, v::Error>| Some(r.unwrap_or_else(Completion::Failed));
+    let read_one = |uri: &str| scope.may_read(uri).and_then(|p| OnDisk::one(host, scope, false, &p));
+    let write_one = |uri: &str| scope.may_write(uri).and_then(|p| OnDisk::one(host, scope, true, &p));
+    let entry = |uri: &str| scope.may_write(uri).and_then(|p| OnDisk::entry(host, scope, &p));
     match call {
-        Start::ReadFile { uri } => done(scope.may_read(uri).and_then(|p| read(host, &p).map(Completion::Bytes))),
+        Start::ReadFile { uri } => done(read_one(uri).and_then(|p| read(host, &p).map(Completion::Bytes))),
         Start::ReadMany { uris } => {
+            let uris: Vec<&String> = uris.iter().take(ext_manifest::limits::PERMISSION_ENTRIES * 16).collect();
+            let written: Vec<Result<String, v::Error>> = uris.iter().map(|u| scope.may_read(u)).collect();
+            let allowed: Vec<String> = written.iter().filter_map(|w| w.as_ref().ok().cloned()).collect();
+            let (disk, real) = OnDisk::resolve(host, scope, &allowed);
+            let mut real = real.into_iter();
             let files = uris
-                .iter()
-                .take(ext_manifest::limits::PERMISSION_ENTRIES * 16)
-                .map(|u| v::FileResult { uri: u.clone(), contents: scope.may_read(u).and_then(|p| read(host, &p)) })
+                .into_iter()
+                .zip(written)
+                .map(|(u, w)| {
+                    let contents = w.and_then(|p| disk.check(false, &p, real.next().unwrap_or_else(|| Err(v::Error::NotFound(p.clone())))));
+                    v::FileResult { uri: u.clone(), contents: contents.and_then(|p| read(host, &p)) }
+                })
                 .collect();
             Some(Completion::Files(files))
         }
-        Start::Stat { uri } => done(scope.may_read(uri).and_then(|p| {
+        Start::Stat { uri } => done(read_one(uri).and_then(|p| {
             let m = host.stat(&p).map_err(host_error)?;
             Ok(Completion::Stat(v::FileStat { is_dir: m.kind == proto::Kind::Dir, size: m.size, modified: m.mtime_ms.max(0) as u64 }))
         })),
         Start::FindFiles { glob, max } => {
-            let mut out = Vec::new();
+            let mut found = Vec::new();
             for root in &scope.roots {
                 let Ok(list) = host.list_files(root, 50_000) else { continue };
                 for rel in list.paths {
-                    if out.len() >= *max as usize {
+                    if found.len() >= *max as usize {
                         break;
                     }
                     if crate::globs::path_matches(glob, &rel) && Scope::allowed(&scope.permissions.read, &rel) {
-                        out.push(uri(&format!("{}/{rel}", root.trim_end_matches('/'))));
+                        found.push(format!("{}/{rel}", root.trim_end_matches('/')));
                     }
                 }
             }
+            // A link among them is listed only when where it leads may be read too.
+            let (disk, real) = OnDisk::resolve(host, scope, &found);
+            let out = found.into_iter().zip(real).filter(|(p, r)| disk.check(false, p, r.clone()).is_ok()).map(|(p, _)| uri(&p)).collect();
             Some(Completion::Uris(out))
         }
         Start::Search { query } => done(search(host, scope, query, sink, cancel)),
         Start::WriteFile { uri, contents } => {
-            done(scope.may_write(uri).and_then(|p| host.write(&p, contents.clone(), None).map(|_| Completion::Done).map_err(host_error)))
+            done(write_one(uri).and_then(|p| host.write(&p, contents.clone(), None).map(|_| Completion::Done).map_err(host_error)))
         }
-        Start::Delete { uri } => done(scope.may_write(uri).and_then(|p| host.delete(&p).map(|()| Completion::Done).map_err(host_error))),
-        Start::Rename { from, to } => done(scope.may_write(from).and_then(|f| {
-            let t = scope.may_write(to)?;
+        Start::Delete { uri } => done(entry(uri).and_then(|p| host.delete(&p).map(|()| Completion::Done).map_err(host_error))),
+        Start::Rename { from, to } => done(entry(from).and_then(|f| {
+            let t = entry(to)?;
             host.rename(&f, &t).map(|()| Completion::Done).map_err(host_error)
         })),
-        Start::CreateDirectory { uri } => done(scope.may_write(uri).and_then(|p| host.create_dir(&p).map(|()| Completion::Done).map_err(host_error))),
+        Start::CreateDirectory { uri } => done(write_one(uri).and_then(|p| host.create_dir(&p).map(|()| Completion::Done).map_err(host_error))),
         Start::Spawn { command } => done(spawn(host, scope, command, sink, cancel)),
         _ => None,
     }
@@ -277,10 +362,19 @@ fn search(host: &dyn Host, scope: &Scope, q: &v::SearchQuery, sink: &dyn Sink, c
                 proto::Response::SearchChunk(files) => files,
                 _ => break,
             };
-            for f in files {
-                let rel = f.path.trim_start_matches('/').to_string();
-                // Only what the extension may read: a search is a read of every file it reports.
-                if !Scope::allowed(&scope.permissions.read, &rel) {
+            // Only what the extension may read: a search is a read of every file it reports, where it really is.
+            let files: Vec<(String, proto::FileMatches)> = files
+                .into_iter()
+                .map(|f| (format!("{}/{}", root.trim_end_matches('/'), f.path.trim_start_matches('/')), f))
+                .filter(|(_, f)| Scope::allowed(&scope.permissions.read, f.path.trim_start_matches('/')))
+                .collect();
+            if files.is_empty() {
+                continue;
+            }
+            let paths: Vec<String> = files.iter().map(|(p, _)| p.clone()).collect();
+            let (disk, real) = OnDisk::resolve(host, scope, &paths);
+            for ((path, f), real) in files.into_iter().zip(real) {
+                if disk.check(false, &path, real).is_err() {
                     continue;
                 }
                 for m in f.matches {
@@ -291,7 +385,7 @@ fn search(host: &dyn Host, scope: &Scope, q: &v::SearchQuery, sink: &dyn Sink, c
                     let width = m.ranges.first().map_or(0, |(a, b)| b.saturating_sub(*a));
                     let line = m.line.saturating_sub(1);
                     let range = v::Range { start: v::Position { line, character: m.column }, end: v::Position { line, character: m.column + width } };
-                    let uri = uri(&format!("{}/{rel}", root.trim_end_matches('/')));
+                    let uri = uri(&path);
                     sink.event(StreamEvent::SearchMatch(v::SearchMatch { uri, range, line: m.preview }));
                     sent += 1;
                 }
@@ -311,7 +405,7 @@ fn spawn(host: &dyn Host, scope: &Scope, c: &v::Command, sink: &dyn Sink, cancel
         return Err(v::Error::Denied(v::Denied { permission: format!("a program outside the workspace ({program} is inside it)"), why: v::Why::NotDeclared }));
     }
     let cwd = match &c.cwd {
-        Some(u) => Some(scope.may_read(u).or_else(|_| normalize(u).filter(|p| scope.relative(p).is_some()).ok_or_else(|| outside(u)))?),
+        Some(u) => Some(scope.may_read(u).or_else(|_| normalize(u).filter(|p| scope.relative(p).is_some()).ok_or_else(|| outside("run in", u)))?),
         None => scope.roots.first().cloned(),
     };
     // Only what the extension passes reaches the program, never the user's environment (tokens live there).

@@ -337,7 +337,7 @@ fn install_file_checks_like_the_view() {
     let store = crate::ext::store(&cfg);
     let good = cfg.join("good.cyx");
     std::fs::write(&good, pkg(manifest("you.night", "[[themes]]\nlabel = \"Night\"\npath = \"t.json\"\n"), vec![("t.json", THEME)])).unwrap();
-    let m = crate::ext::install_file(&store, &good).unwrap();
+    let m = crate::ext::install_file(&store, &good, false).unwrap();
     assert_eq!(m.id.as_str(), "you.night");
     assert!(store.locked().unwrap().contains_key(&m.id));
     let code = cfg.join("code.cyx");
@@ -353,7 +353,7 @@ fn install_file_checks_like_the_view() {
     std::fs::write(&code, ext_pkg::write(code_pkg).unwrap().0).unwrap();
     // Code without permissions installs (it runs in codeyard-exthost); with permissions it needs the consent sheet.
     if crate::ext_runtime::code_runs_here(&"tests").is_ok() {
-        assert_eq!(crate::ext::install_file(&store, &code).unwrap().id.as_str(), "you.code");
+        assert_eq!(crate::ext::install_file(&store, &code, false).unwrap().id.as_str(), "you.code");
     }
     let asks = cfg.join("asks.cyx");
     let manifest_text =
@@ -364,10 +364,18 @@ fn install_file_checks_like_the_view() {
         ext_pkg::Entry { path: ext_pkg::COMPONENT.into(), data: ext_pkg::testing::COMPONENT.to_vec(), executable: false },
     ];
     std::fs::write(&asks, ext_pkg::write(asks_pkg).unwrap().0).unwrap();
-    assert!(crate::ext::install_file(&store, &asks).unwrap_err().contains("asks for permissions"));
+    // #2 of the outside-author trials: what it asks for is printed, and only --accept-permissions installs it.
+    let e = crate::ext::install_file(&store, &asks, false).unwrap_err();
+    assert!(e.starts_with("you.asks 1.0.0 (Installed from the file "), "{e}");
+    assert!(e.contains("asks to:\n  - Connect to api.example.com\n"), "{e}");
+    assert!(e.contains("--accept-permissions"), "{e}");
+    assert!(!store.locked().unwrap().keys().any(|id| id.as_str() == "you.asks"), "nothing installed");
+    if crate::ext_runtime::code_runs_here(&"tests").is_ok() {
+        assert_eq!(crate::ext::install_file(&store, &asks, true).unwrap().id.as_str(), "you.asks");
+    }
     let junk = cfg.join("junk.cyx");
     std::fs::write(&junk, b"not a package").unwrap();
-    assert!(crate::ext::install_file(&store, &junk).unwrap_err().contains("no gzip header"));
+    assert!(crate::ext::install_file(&store, &junk, false).unwrap_err().contains("no gzip header"));
 }
 
 /// Local and SSH are the same (#35, exit criterion 5): over SSH a file in an extension's language gets that language, and
@@ -428,10 +436,10 @@ fn a_built_folder_installs_like_a_package() {
     std::fs::write(dir.join("Cargo.toml"), "").unwrap();
     std::fs::write(dir.join(ext_pkg::COMPONENT), include_bytes!("../../ext-host/testdata/decorator.wasm")).unwrap();
     let store = crate::ext::store(&cfg);
-    let m = crate::ext::install_file(&store, &dir).expect("installs");
+    let m = crate::ext::install_file(&store, &dir, false).expect("installs");
     assert_eq!(m.id.to_string(), "perf.decorations");
-    // Code that asks for a permission needs the consent sheet, from a folder as from a file.
+    // Code that asks for a permission prints its sheet and needs --accept-permissions, from a folder as from a file.
     std::fs::write(dir.join(ext_manifest::FILE_NAME), manifest("perf.decorations", &format!("[permissions]\nread = [\"a.txt\"]\n{code}"))).unwrap();
-    let e = crate::ext::install_file(&store, &dir).unwrap_err();
-    assert!(e.contains("asks for permissions"), "{e}");
+    let e = crate::ext::install_file(&store, &dir, false).unwrap_err();
+    assert!(e.contains("asks to:\n  - Read a.txt") && e.contains("--accept-permissions"), "{e}");
 }
