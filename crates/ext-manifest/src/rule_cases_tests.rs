@@ -175,9 +175,22 @@ fn cases() -> Value {
     })
 }
 
+/// Keys sorted, whether or not another crate in the build turned on serde_json's `preserve_order`.
+fn canonical(v: &Value) -> Value {
+    match v {
+        Value::Object(m) => {
+            let mut keys: Vec<&String> = m.keys().collect();
+            keys.sort();
+            Value::Object(keys.into_iter().map(|k| (k.clone(), canonical(&m[k]))).collect())
+        }
+        Value::Array(a) => Value::Array(a.iter().map(canonical).collect()),
+        other => other.clone(),
+    }
+}
+
 #[test]
 fn rule_cases_reference() {
-    let want = serde_json::to_string_pretty(&cases()).unwrap() + "\n";
+    let want = serde_json::to_string_pretty(&canonical(&cases())).unwrap() + "\n";
     let path = format!("{}/../../{FILE}", env!("CARGO_MANIFEST_DIR"));
     if std::env::var_os("UPDATE_DOCS").is_some() {
         std::fs::write(&path, &want).unwrap();
